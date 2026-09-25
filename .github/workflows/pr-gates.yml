@@ -1,15 +1,20 @@
 name: pr-gates
 # Mirrors the local hooks for PRs opened any other way: no AI attribution, a learnings entry, and a
 # review attestation for the exact head sha (written by .claude/scripts/record-review.py --attest).
+# The attestation is an honesty check against forgetting to review, not an access control: anyone who
+# can edit the PR body could paste it. The access control is branch protection plus human review.
 on:
   pull_request:
     branches: [dev, main]
     types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+permissions:
+  contents: read
+
 jobs:
   attribution:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0 }
       - name: No AI authorship in commits or PR text
         env:
@@ -25,21 +30,24 @@ jobs:
           exit $bad
   learnings:
     runs-on: ubuntu-latest
-    if: github.head_ref != 'dev'   # a dev→main promotion carries its constituent PRs' entries
+    # A same-repo dev → main promotion carries its constituent PRs' entries. The repo check stops a
+    # fork branch that happens to be named 'dev' from skipping the gate.
+    if: ${{ !(github.head_ref == 'dev' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0 }
       - name: Branch adds a .claude/learnings/ entry (or is labelled no-learning)
         if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-learning') }}
         run: |
-          added=$(git diff --name-only --diff-filter=A "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- .claude/learnings/ \
-                  | grep -Ev '/(README|_TEMPLATE|INDEX)\.md$' || true)
+          added=$(git diff --name-only --diff-filter=AM "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- .claude/learnings/ \
+                  | grep -E '^\.claude/learnings/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+\.md$' || true)
           if [ -z "$added" ]; then
-            echo "::error::no new .claude/learnings/ entry — run /record-learnings (or label the PR no-learning if it taught nothing)"; exit 1; fi
+            echo "::error::no added or extended .claude/learnings/ entry — run /record-learnings (or label the PR no-learning if it taught nothing)"; exit 1; fi
           echo "$added"
   review-attested:
     runs-on: ubuntu-latest
-    if: github.head_ref != 'dev'   # promotions are gated by a second person's approval on main instead
+    # Same-repo dev → main promotions are gated by a second person's approval on main instead.
+    if: ${{ !(github.head_ref == 'dev' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) }}
     steps:
       - name: PR body attests an APPROVE review of the head sha
         env:

@@ -4,17 +4,16 @@ on:
     branches: [dev, main]
   push:
     branches: [dev, main]
+permissions:
+  contents: read
+
 jobs:
   claude-tooling:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Roster lint (agents, skills, commands, references, settings)
-        run: python3 .claude/scripts/lint_tooling.py
-      - name: Learnings index is current and well-formed
-        run: python3 .claude/scripts/learnings_index.py --check
-      - name: Hook case tables
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: make tooling (roster lint, roster + learnings indexes, backlog hygiene, hook case tables)
         run: |
           git config --global user.email ci@example.invalid
           git config --global user.name ci
-          for t in .claude/hooks/tests/*.sh; do echo "== $t"; bash "$t" | tail -1; bash "$t" >/dev/null || exit 1; done
+          make tooling

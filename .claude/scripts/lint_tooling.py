@@ -12,6 +12,7 @@ Checks:
   settings.json      every hook command points at an executable file under .claude/hooks/
   roster floor       ≥ 25 agents and ≥ 25 skills (project target 25–150 of each)
 """
+
 from __future__ import annotations
 
 import json
@@ -23,13 +24,53 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 C = ROOT / ".claude"
 KNOWN_TOOLS = {
-    "Read", "Write", "Edit", "MultiEdit", "Grep", "Glob", "Bash", "WebFetch", "WebSearch",
-    "NotebookEdit", "Task", "Agent", "TodoWrite", "Skill",
+    "Read",
+    "Write",
+    "Edit",
+    "MultiEdit",
+    "Grep",
+    "Glob",
+    "Bash",
+    "WebFetch",
+    "WebSearch",
+    "NotebookEdit",
+    "Task",
+    "Agent",
+    "TodoWrite",
+    "Skill",
 }
 WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 READ_ONLY_SUFFIXES = ("-reviewer", "-auditor", "-guardian", "-methodologist")
 FLOOR = 25
 REF = re.compile(r"\.claude/(skills/([a-z0-9-]+)/SKILL\.md|agents/([a-z0-9-]+)\.md)")
+# A backticked kebab-case name ending in a role suffix is an agent name, path or not.
+ROLE_SUFFIXES = (
+    "-reviewer",
+    "-auditor",
+    "-guardian",
+    "-methodologist",
+    "-engineer",
+    "-tester",
+    "-keeper",
+    "-analyst",
+    "-manager",
+    "-writer",
+    "-designer",
+    "-researcher",
+    "-recorder",
+    "-miner",
+    "-crawler",
+    "-importer",
+    "-profiler",
+    "-translator",
+    "-fuzzer",
+    "-validator",
+    "-evaluator",
+)
+BACKTICK_NAME = re.compile(r"`([a-z0-9]+(?:-[a-z0-9]+)+)`")
+BACKTICK_CMD = re.compile(r"`/([a-z][a-z0-9-]*)(?:[ `])")
+# Files where a `/name` is always a slash command (elsewhere it may be a URL route, e.g. /search).
+COMMAND_CONTEXT = ("commands", "CLAUDE.md", "CONTRIBUTING.md", "review-gates", "pr-workflow", "learnings")
 
 errors: list[str] = []
 
@@ -47,11 +88,15 @@ def frontmatter(path: Path) -> tuple[dict[str, str], str]:
     if end < 0:
         err(f"{path.relative_to(ROOT)}: unterminated frontmatter")
         return {}, text
-    meta = {}
+    meta: dict[str, str] = {}
+    key = None
     for line in text[4:end].splitlines():
-        if ":" in line and not line.startswith(" "):
+        if line.startswith((" ", "\t")) and key:  # continuation of a folded (>) or literal (|) scalar
+            meta[key] = (meta[key] + " " + line.strip()).strip()
+        elif ":" in line:
             k, v = line.split(":", 1)
-            meta[k.strip()] = v.strip().strip('"')
+            key, v = k.strip(), v.strip()
+            meta[key] = "" if v in (">", "|", ">-", "|-") else v.strip('"')
     return meta, text[end + 4 :]
 
 
@@ -105,9 +150,10 @@ def lint_commands() -> None:
             err(f"{p.relative_to(ROOT)}: description is required")
 
 
-def lint_refs(agents: set[str], skills: set[str]) -> None:
+def lint_refs(agents: set[str], skills: set[str], commands: set[str]) -> None:
     referenced: set[str] = set()
-    sources = list(C.rglob("*.md")) + [ROOT / "CLAUDE.md"]
+    agent_refs: set[str] = set()
+    sources = [*C.rglob("*.md"), ROOT / "CLAUDE.md", ROOT / "CONTRIBUTING.md"]
     for p in sources:
         if not p.exists() or "learnings" in p.parts:
             continue
@@ -119,8 +165,22 @@ def lint_refs(agents: set[str], skills: set[str]) -> None:
                 err(f"{p.relative_to(ROOT)}: references missing agent '{agent}'")
             if skill and (p.parent.name != skill):  # a skill citing itself doesn't count
                 referenced.add(skill)
+            if agent and p.stem != agent:
+                agent_refs.add(agent)
+        text = p.read_text(encoding="utf-8")
+        for name in BACKTICK_NAME.findall(text):
+            if name.endswith(ROLE_SUFFIXES) and name not in agents and name not in skills:
+                err(f"{p.relative_to(ROOT)}: names unknown agent `{name}`")
+            if name in agents and p.stem != name:
+                agent_refs.add(name)
+        if any(c in str(p) for c in COMMAND_CONTEXT):
+            for cmd in BACKTICK_CMD.findall(text + " "):
+                if cmd not in commands:
+                    err(f"{p.relative_to(ROOT)}: names unknown command `/{cmd}`")
     for s in sorted(skills - referenced):
         err(f".claude/skills/{s}: orphan — no agent, command or CLAUDE.md references it")
+    for a in sorted(agents - agent_refs):
+        err(f".claude/agents/{a}.md: orphan — no command, skill, other agent or CLAUDE.md names it")
 
 
 def lint_settings() -> None:
@@ -141,7 +201,8 @@ def lint_settings() -> None:
 def main() -> None:
     agents, skills = lint_agents(), lint_skills()
     lint_commands()
-    lint_refs(agents, skills)
+    commands = {p.stem for p in (C / "commands").glob("*.md")}
+    lint_refs(agents, skills, commands)
     lint_settings()
     if len(agents) < FLOOR:
         err(f"roster: {len(agents)} agents < floor {FLOOR}")

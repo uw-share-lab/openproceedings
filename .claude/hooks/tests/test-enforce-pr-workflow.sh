@@ -102,6 +102,7 @@ check feature/wip allow 'git merge x'
 
 echo "read-only lookalikes are not merges:"
 check main allow 'git merge-base origin/main feature/x'
+# shellcheck disable=SC2016  # the $(...) must reach the hook unexpanded — that is the case under test
 check main allow 'git diff $(git merge-base main feat) HEAD'
 check main allow 'git status'
 check main allow 'git log --oneline -3'
@@ -224,8 +225,8 @@ check_warn dev  'bash deploy.sh'                                   # opaque wrap
 check main  allow 'bash -c "git status"'                          # -c form is still parsed, not opaque
 check feature/wip allow 'bash script.sh'                          # off main: no main-mutation at risk, no warn
 check main  allow 'bash script.sh --no-op'                        # positional flags still count as opaque
-out=$(cd "$REPO" && printf '%s' "$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]}}))' 'bash')" | "$HOOK" 2>&1)
-if [ $? -eq 0 ] && ! printf '%s' "$out" | grep -q "Review gate warning"; then
+if out=$(cd "$REPO" && printf '%s' "$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]}}))' 'bash')" | "$HOOK" 2>&1) \
+   && ! printf '%s' "$out" | grep -q "Review gate warning"; then
   pass=$((pass + 1)); printf '  ok   [main] %-52s -> allow, no warn (no script arg)\n' 'bash'
 else
   fail=$((fail + 1)); printf '  FAIL [main] %-52s -> unexpected warn/block\n' 'bash'

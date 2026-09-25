@@ -4,31 +4,27 @@ on:
     branches: [dev, main]
   push:
     branches: [dev, main]
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Shell hooks parse
-        run: for f in .claude/hooks/*.sh .claude/hooks/tests/*.sh .githooks/* scripts/*.sh; do bash -n "$f"; done
-      - uses: astral-sh/setup-uv@v6
-        if: hashFiles('backend/pyproject.toml') != ''
-      - name: Backend — ruff, format, mypy
-        if: hashFiles('backend/pyproject.toml') != ''
-        working-directory: backend
-        run: |
-          uv sync --dev
-          uv run ruff check .
-          uv run ruff format --check .
-          uv run mypy --strict src
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: hashFiles('frontend/package.json') != ''
         with: { node-version: 22 }
-      - name: Frontend — eslint, tsc, prettier
-        if: hashFiles('frontend/package.json') != ''
-        working-directory: frontend
+      - name: Install shellcheck and actionlint
         run: |
-          npm ci
-          npm run lint
-          npx tsc --noEmit
-          npx prettier --check .
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+      - name: Sync workspace (ruff, mypy)
+        run: |
+          uv sync --frozen
+          if [ -f frontend/package.json ]; then (cd frontend && npm ci); fi
+      - name: make lint (same target as the pre-push hook)
+        run: make lint
+      - name: actionlint
+        run: ./actionlint -color

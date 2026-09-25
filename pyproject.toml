@@ -1,0 +1,35 @@
+# Root of the openproceedings monorepo: a uv workspace plus repo-wide tool config.
+# Python packages live in workspace members (backend/ joins in M1; later packages such as a separate
+# eval/ can join the same way) and share one uv.lock. The frontend is an npm workspace (frontend/).
+[project]
+name = "openproceedings-monorepo"
+version = "0.0.0"
+requires-python = ">=3.12"
+description = "Workspace root (not a package): dev tooling shared across the monorepo."
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = []   # "backend" is added when backend/ is created (M1)
+
+[dependency-groups]
+dev = ["ruff>=0.13", "mypy>=1.18"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["data", "frontend", "backlog"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = [
+    "E501",    # line length is handled by the formatter
+    "B008",    # FastAPI Depends/Query in argument defaults is intentional
+    "RUF001",  # ambiguous-unicode in strings: our docs and messages use → and – on purpose
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.format]
+quote-style = "double"

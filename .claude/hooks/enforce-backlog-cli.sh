@@ -15,6 +15,7 @@ input=$(cat)
 path=''
 tool=''
 parsed=''
+# shellcheck disable=SC2016  # single quotes are deliberate: this is Python source, not shell
 eval "$(printf '%s' "$input" | python3 -c 'import json,sys,shlex
 # Emit nothing on failure -> `parsed` stays empty -> the guard below fails closed.
 d = json.load(sys.stdin)

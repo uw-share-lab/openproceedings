@@ -6,7 +6,7 @@
 root="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 index="$root/.claude/learnings/INDEX.md"
 [ -f "$index" ] || exit 0
-entries=$(grep -c '^- ' "$index" 2>/dev/null || echo 0)
+entries=$(grep -c '^- ' "$index" 2>/dev/null); entries=${entries:-0}
 echo "=== openproceedings learnings ($entries entries) — read the relevant ones before non-trivial work ==="
 # Newest first, capped so a long journal cannot flood the context; the full index is one Read away.
 grep '^- ' "$index" | head -40

@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
 # PreToolUse(Bash) review gate: nothing leaves this machine unreviewed, and no PR opens without a lesson.
 #
-# 1. `git push` of a branch (not a deletion) is blocked unless the commit being pushed has an APPROVE
-#    review record at  $(git rev-parse --git-common-dir)/op-reviews/<sha>  — written ONLY by
+# 1. `git push` of any ref (not a pure deletion) is blocked unless every commit being pushed has an
+#    APPROVE review record at  $(git rev-parse --git-common-dir)/op-reviews/<sha>  — written ONLY by
 #    `.claude/scripts/record-review.py` after `/review-gate` ran the reviewers on that exact commit and
 #    every finding was dispositioned (fixed / task-NNN / rejected with a reason). A new commit after the
-#    review has a new sha, so it needs a new review: the gate cannot be satisfied by an older approval.
-# 2. `gh pr create` is blocked unless (1) holds for HEAD AND the branch adds a `.claude/learnings/`
-#    entry relative to the PR base (default `dev`). Opt out only for a PR that genuinely taught nothing
-#    (e.g. a typo fix) by passing `--label no-learning`; CI (pr-gates.yml) applies the same rule.
+#    review has a new sha, so it needs a new review: an older approval can never satisfy the gate.
+#    Sources checked: each refspec's source (deletions `:dst` skipped, others still checked), HEAD when
+#    no refspec is given, and every local branch for --all / --mirror.
+# 2. `gh pr create` (and its alias `gh pr new`) is blocked unless (1) holds for the PR head AND the branch
+#    adds or extends a `.claude/learnings/` entry relative to the PR base (default: the repo default
+#    branch, `dev`). Opt out only for a PR that genuinely taught nothing by passing `--label no-learning`;
+#    CI (pr-gates.yml) applies the same rule.
+# 3. A dev → main promotion PR (`--base main --head dev`) is exempt from both checks, as in CI: its
+#    constituent PRs were each reviewed and each carried a learning; main's own gate is a second
+#    person's approval.
 #
-# Pushes/deletions that touch main/dev are enforce-pr-workflow.sh's job; this gate only adds the review
+# Writing/deleting main or dev directly is enforce-pr-workflow.sh's job; this gate adds the review
 # requirement on top. Guardrail, not a security boundary (see lib/cmdparse.py). Exit 2 blocks.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 input=$(cat)
@@ -19,15 +25,15 @@ import os, re, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
 from cmdparse import ParseError, gh_subcommand, git, git_subcommand, opt_value, opt_values, read_payload, simple_commands
 
-LEARNING_EXEMPT = {"README.md", "_TEMPLATE.md", "INDEX.md"}
+ENTRY_NAME = re.compile(r"^\.claude/learnings/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$")  # same rule as learnings_index.py
+PUSH_VALUE_OPTS = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
 
 def review_status(directory, sha):
     common = git(directory, "rev-parse", "--path-format=absolute", "--git-common-dir")
     if not common or not sha:
         return "missing"
-    path = os.path.join(common, "op-reviews", sha)
     try:
-        with open(path, encoding="utf-8") as fh:
+        with open(os.path.join(common, "op-reviews", sha), encoding="utf-8") as fh:
             first = fh.readline().strip()
     except OSError:
         return "missing"
@@ -49,48 +55,77 @@ def need_review(directory, sha, what):
             "Any commit made after the review needs a fresh review — approvals are per-sha by design.",
         ])
 
+def push_positionals(args):
+    """Positional args of `git push`, skipping the values of options that take one."""
+    pos, skip = [], False
+    for a in args:
+        if skip:
+            skip = False
+            continue
+        if a in PUSH_VALUE_OPTS:
+            skip = True
+            continue
+        if a.startswith("-"):
+            continue
+        pos.append(a)
+    return pos
+
+def strip_owner(ref):
+    return ref.split(":", 1)[1] if ref and ":" in ref else ref
+
 cmd, cwd = read_payload()
 if not cmd or not re.search(r"\b(git|gh)\b", cmd):
     sys.exit(0)
 try:
     commands = list(simple_commands(cmd, cwd))
 except ParseError:
-    sys.exit(0)  # enforce-pr-workflow.sh already fails closed on unparseable git commands
+    sys.exit(0)  # unbalanced quotes: bash refuses to run it; enforce-pr-workflow.sh fails closed anyway
 
 for argv, d in commands:
     g = git_subcommand(argv, d)
     if g and g[0] == "push":
         _, args, eff = g
         flags = [a for a in args if a.startswith("-")]
-        pos = [a for a in args if not a.startswith("-")]
-        refspecs = pos[1:]
-        if "--delete" in flags or "-d" in flags or any(r.lstrip("+").startswith(":") for r in refspecs):
-            continue  # deleting a remote ref pushes no code
-        if "--tags" in flags and not refspecs:
+        if "--delete" in flags or "-d" in flags:
+            continue  # every named ref is deleted; no code is pushed
+        if "--all" in flags or "--mirror" in flags or "--branches" in flags:
+            heads = git(eff, "for-each-ref", "--format=%(refname:short) %(objectname)", "refs/heads")
+            for line in heads.splitlines():
+                name, sha = line.rsplit(" ", 1)
+                need_review(eff, sha, f"`git push --all` (branch {name})")
             continue
-        sources = [r.lstrip("+").split(":", 1)[0] for r in refspecs] or ["HEAD"]
-        for src in sources:
-            sha = git(eff, "rev-parse", "--verify", f"{src}^{{commit}}")
+        refspecs = push_positionals(args)[1:]
+        pushed = [r.lstrip("+").split(":", 1)[0] for r in refspecs if not r.lstrip("+").startswith(":")]
+        if not refspecs:
+            pushed = ["HEAD"]
+        if not pushed and ("--tags" in flags or "--follow-tags" in flags):
+            continue
+        for src in pushed:
+            sha = git(eff, "rev-parse", "--verify", "--quiet", f"{src}^{{commit}}")
             need_review(eff, sha, f"`git push` of {src}")
     h = gh_subcommand(argv)
     if h and h[0] == "pr" and h[1] == "create":
         args = h[2]
-        head = opt_value(args, "--head", "-H")
-        sha = git(d, "rev-parse", "--verify", f"{head or 'HEAD'}^{{commit}}")
-        need_review(d, sha, "`gh pr create`")
-        labels = ",".join(opt_values(args, "--label", "-l")).split(",")
-        if "no-learning" in [l.strip() for l in labels]:
-            continue
+        head = strip_owner(opt_value(args, "--head", "-H"))
         base = opt_value(args, "--base", "-B") or "dev"
+        if base == "main" and head == "dev":
+            continue  # promotion: see header §3
+        head_ref = head or "HEAD"
+        sha = git(d, "rev-parse", "--verify", "--quiet", f"{head_ref}^{{commit}}")
+        need_review(d, sha, "`gh pr create`")
+        labels = [l.strip() for v in opt_values(args, "--label", "-l") for l in v.split(",")]
+        if "no-learning" in labels:
+            continue
         git(d, "fetch", "--quiet", "origin", base)
-        added = git(d, "diff", "--name-only", "--diff-filter=A", f"origin/{base}...{head or 'HEAD'}", "--", ".claude/learnings/")
-        entries = [p for p in added.splitlines() if os.path.basename(p) not in LEARNING_EXEMPT]
+        changed = git(d, "diff", "--name-only", "--diff-filter=AM", f"origin/{base}...{head_ref}", "--", ".claude/learnings/")
+        entries = [p for p in changed.splitlines() if ENTRY_NAME.match(p)]
         if not entries:
             block([
-                f"Learnings gate: this branch adds no .claude/learnings/ entry relative to origin/{base}.",
-                "Run /record-learnings (the learning-recorder agent) so the next session doesn't repeat",
-                "this one's dead ends, commit the entry (plus the regenerated INDEX.md), re-run /review-gate,",
-                "then open the PR. Only if the change taught nothing at all, add:  --label no-learning",
+                f"Learnings gate: this branch neither adds nor extends a .claude/learnings/ entry vs origin/{base}.",
+                "Run /record-learnings (the learning-recorder agent) so the next session doesn't repeat this",
+                "one's dead ends — it writes a new entry or appends a dated addendum to an existing one. Commit it",
+                "(plus the regenerated INDEX.md), re-run /review-gate, then open the PR.",
+                "Only if the change taught nothing at all, add:  --label no-learning",
             ])
 sys.exit(0)
 PY
