@@ -1,0 +1,52 @@
+name: pr-gates
+# Mirrors the local hooks for PRs opened any other way: no AI attribution, a learnings entry, and a
+# review attestation for the exact head sha (written by .claude/scripts/record-review.py --attest).
+on:
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+jobs:
+  attribution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: No AI authorship in commits or PR text
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          re='co-authored-by:.*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com'
+          bad=0
+          if git log --format=%B "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" | grep -Eiq "$re"; then
+            echo "::error::a commit message carries AI attribution"; bad=1; fi
+          if printf '%s\n%s' "$PR_TITLE" "$PR_BODY" | grep -Eiq "$re"; then
+            echo "::error::the PR title/body carries AI attribution"; bad=1; fi
+          exit $bad
+  learnings:
+    runs-on: ubuntu-latest
+    if: github.head_ref != 'dev'   # a dev→main promotion carries its constituent PRs' entries
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Branch adds a .claude/learnings/ entry (or is labelled no-learning)
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-learning') }}
+        run: |
+          added=$(git diff --name-only --diff-filter=A "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- .claude/learnings/ \
+                  | grep -Ev '/(README|_TEMPLATE|INDEX)\.md$' || true)
+          if [ -z "$added" ]; then
+            echo "::error::no new .claude/learnings/ entry — run /record-learnings (or label the PR no-learning if it taught nothing)"; exit 1; fi
+          echo "$added"
+  review-attested:
+    runs-on: ubuntu-latest
+    if: github.head_ref != 'dev'   # promotions are gated by a second person's approval on main instead
+    steps:
+      - name: PR body attests an APPROVE review of the head sha
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if printf '%s' "$PR_BODY" | grep -q "<!-- op-review: $HEAD_SHA APPROVE -->"; then
+            echo "attested for $HEAD_SHA"; exit 0; fi
+          echo "::error::no review attestation for head $HEAD_SHA — run /review-gate on the new head, then record-review.py APPROVE <file> --attest"
+          exit 1

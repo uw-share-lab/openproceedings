@@ -1,0 +1,20 @@
+name: claude-tooling
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+jobs:
+  claude-tooling:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Roster lint (agents, skills, commands, references, settings)
+        run: python3 .claude/scripts/lint_tooling.py
+      - name: Learnings index is current and well-formed
+        run: python3 .claude/scripts/learnings_index.py --check
+      - name: Hook case tables
+        run: |
+          git config --global user.email ci@example.invalid
+          git config --global user.name ci
+          for t in .claude/hooks/tests/*.sh; do echo "== $t"; bash "$t" | tail -1; bash "$t" >/dev/null || exit 1; done
