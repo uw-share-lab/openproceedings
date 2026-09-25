@@ -19,14 +19,15 @@ openproceedings/
 │   │   └── cli.py               # `op` entry point
 │   └── tests/{unit,golden,differential,contract,fixtures}/
 ├── frontend/                    # 05: Next.js app
-├── docs/{specs,plans,results,decisions}/
+├── docs/{specs,plans,results}/         # decisions live in backlog/decisions (Backlog.md CLI)
+├── backlog/                     # Backlog.md: tasks, docs, decisions — CLI only
 ├── deploy/                      # Dockerfiles, compose.yml
 └── data/                        # gitignored: cache/, snapshots/, indexes/, records.sqlite
 ```
 
 ## CLI (`op`)
 
-`op ingest …` · `op snapshot build|diff` · `op index build [--snapshot]` · `op search "<q>" [--explain]
+`op ingest …` · `op snapshot build|diff` · `op index build [--snapshot]` · `op search "<q>" [--explain] [--engine tantivy|reference]
 [--mode scholar] [--ids]` · `op export "<q>" --format ris` · `op serve` · `op embed build` · `op eval
 scholar|coverage|audit`. The CLI and the API call the same functions, and the CLI is enough on its own to
 run a whole review.
@@ -40,12 +41,20 @@ run a whole review.
 | `e2e` | Playwright against `op serve` over the fixture index |
 | `bench` | pytest-benchmark, comparing against the main branch |
 | `nightly` | Differential@50k, full-index benchmarks, tokenizer parity over the full corpus |
-| `claude-tooling` | Frontmatter lint for every agent and skill (name, description, tools), plus the hook test scripts |
+| `claude-tooling` | Roster lint (`.claude/scripts/lint_tooling.py`), learnings index `--check`, every hook case table |
+| `pr-gates` | `attribution` (no AI authorship in commits/PR), `learnings` (branch adds an entry unless labelled `no-learning`), `review-attested` (PR body attests APPROVE for the head sha) |
 
 ## Git and PR rules (enforced by hooks)
 
-- `feature → PR → main`. No direct commits or pushes to `main`. Before pushing, run `/code-review` and fix
-  the must-fix findings.
+- `feature → PR → dev → PR → main`. No direct commits, pushes or merges on `dev` or `main`
+  (`enforce-pr-workflow.sh`, inherited from Kreate with its 105-case table). `main` also needs a second
+  person's approval.
+- **Review before push:** `/review-gate` routes the diff to the required reviewers (`review-gates` skill),
+  every finding is dispositioned, and `record-review.py` writes an APPROVE record for the exact HEAD sha.
+  `require-review.sh` blocks `git push`/`gh pr create` without one. `/open-pr` attests it in the PR body
+  for CI.
+- **Learnings every time:** a PR must add a `.claude/learnings/` entry (`/record-learnings`), and every
+  session starts with the index loaded (`load-learnings.sh`).
 - **No AI authorship:** commits and PRs must not contain `Co-Authored-By: Claude`, `Generated with Claude
   Code`, or similar trailers. `.claude/` is committed. This is a project decision (2026-09-25).
 - Secrets (OpenReview credentials) live only in `.env`, which is gitignored. `data/` is never committed.
@@ -71,10 +80,10 @@ Kreate splits `.claude/` per project. Our parts are not independent projects (th
 so we use **one root `.claude/`** and prefix names by area. Every agent's description says *when* to use
 it. Every reviewer agent is read-only (`tools: Read, Grep, Glob, Bash`).
 
-Target for M0: **40 agents, 42 skills** (inside the 25–150 range). New ones are added when a
+Built in M0: **41 agents, 43 skills** (the original 40/42 plus `learning-recorder` and `review-gates`) (inside the 25–150 range). New ones are added when a
 milestone brings a new recurring task, never speculatively.
 
-### Agents (40)
+### Agents (41)
 
 **Global roles (8, adapted from Kreate)**
 | Agent | Role |
@@ -87,6 +96,7 @@ milestone brings a new recurring task, never speculatively.
 | `docs-writer` | Docs as built, in the repo's voice |
 | `docs-reviewer` | Docs vs code accuracy, staleness, links |
 | `project-manager` | Turns specs into tracked tasks with acceptance criteria |
+| `learning-recorder` | Writes or extends the learnings entry that closes every task (required before a PR) |
 
 **Ingestion (6)**
 | `openreview-crawler` | Builds and maintains the API v1/v2 crawlers and per-year schema adapters |
@@ -136,11 +146,11 @@ milestone brings a new recurring task, never speculatively.
 | `ci-engineer` | Workflows, caching, the claude-tooling lint |
 | `release-manager` | Versioning, changelog, deploy runbook, snapshot/index promotion |
 
-### Skills (42)
+### Skills (43)
 
 | Area | Skills |
 |---|---|
-| Repo (6) | `repo-conventions`, `pr-workflow`, `no-ai-attribution`, `spec-writing`, `learnings` (dated journal, as in Kreate), `decision-records` |
+| Repo (7) | `repo-conventions`, `pr-workflow`, `review-gates` (routing table, severity, dispositions), `no-ai-attribution`, `spec-writing`, `learnings` (dated journal, as in Kreate), `decision-records` |
 | Engineering (5) | `python-standards`, `typescript-standards`, `testing-standards`, `property-testing`, `error-diagnostics` (one shape for errors and diagnostics across layers) |
 | Ingestion (8) | `openreview-api` (v1 vs v2, auth, 429s, venueid is authoritative), `openreview-venueids` (all known forms), `pmlr-proceedings`, `neurips-proceedings`, `record-schema`, `track-taxonomy`, `dedup-rules`, `snapshots` |
 | Query (5) | `query-grammar`, `token-contract` (the 02 normalization rules), `wildcards-and-expansion`, `scholar-syntax-compat`, `default-filters` |
@@ -150,17 +160,30 @@ milestone brings a new recurring task, never speculatively.
 | Research and eval (3) | `prisma-reporting`, `scholar-comparison-protocol`, `coverage-reporting` |
 | Semantic (1) | `specter2-embeddings` (model pinning, the "never changes the set" rule) |
 
-### Commands (≈12)
+### Commands (18)
 
-`/code-review`, `/review-pr`, `/security-review`, `/audit`, `/write-docs`, `/plan`, `/exactness-check`
-(runs `exactness-guardian` + `differential-tester`), `/coverage`, `/scholar-compare`, `/review-export`,
-`/log-learning`, `/new-spec`.
+Gate and workflow: `/review-gate`, `/open-pr`, `/record-learnings`, `/review-pr`, `/plan`, `/new-spec`.
+Reviews: `/security-review`, `/audit`, `/review-docs`, `/exactness-check` (runs `exactness-guardian` +
+`differential-tester`), `/review-export`, `/ux-review`. Work: `/write-docs`, `/coverage`, `/scholar-compare`.
+(The gate command is `/review-gate` rather than Kreate's `/code-review`, because a built-in `/code-review`
+exists and could shadow the project command.)
 
-### Hooks (each with a test script under `.claude/hooks/tests/`, as in Kreate)
+### Hooks (each with a case table under `.claude/hooks/tests/`, as in Kreate)
 
 | Hook | Event | Blocks / does |
 |---|---|---|
-| `enforce-pr-workflow.sh` | PreToolUse Bash | `git commit`/`push`/`merge` on `main` |
-| `block-ai-attribution.sh` | PreToolUse Bash | Any `git commit`/`gh pr create` whose message or body contains Claude co-author or "Generated with" lines |
-| `protect-data-dir.sh` | PreToolUse Write/Edit | Writes into `data/snapshots/` or `data/indexes/` (immutable) and `git add -f data/` |
-| `remind-token-contract.sh` | PostToolUse Edit | Touching `normalize.py` or the tokenizer → reminds you to bump `TOKENIZER_VERSION` and run parity tests |
+| `enforce-pr-workflow.sh` | PreToolUse Bash | `git commit`/`push`/`merge` on `main` or `dev`, and any write to those remote refs (from Kreate) |
+| `require-review.sh` | PreToolUse Bash | `git push` / `gh pr create` without an APPROVE record for the exact sha; `gh pr create` without a new learnings entry |
+| `block-ai-attribution.sh` | PreToolUse Bash | Any `git commit`/`gh pr create|edit` whose message or body has a Claude co-author trailer or a "Generated with" footer (`.githooks/commit-msg` covers editor commits) |
+| `enforce-backlog-cli.sh` | PreToolUse Write/Edit | Hand edits under `backlog/` (from Kreate; decision bodies are Edit-only) |
+| `protect-data-dir.sh` | PreToolUse Write/Edit/Bash | Writes to `data/snapshots/` or `data/indexes/` (immutable), `rm` of them, and `git add -f data/` |
+| `remind-token-contract.sh` | PostToolUse Edit | Touching `normalize.py` or the tokenizer → reminder to bump `TOKENIZER_VERSION` and run parity and differential tests |
+| `load-learnings.sh` | SessionStart | Puts `.claude/learnings/INDEX.md` into every session's context |
+
+### Branch protection (GitHub)
+
+`dev` and `main` require a PR, with these checks green: `lint`, `test`, `claude-tooling`, `attribution`,
+`learnings`, `review-attested`. No force-push, no deletion, and admins are included. `main` additionally
+requires 1 approving review. Applied 2026-09-25, after the repo was made public (free-plan orgs can't
+protect private repos). `dev` is the default branch, and merged feature branches are deleted
+automatically.

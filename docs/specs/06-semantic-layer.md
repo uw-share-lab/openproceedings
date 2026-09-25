@@ -19,7 +19,7 @@ lacks.
 - **SPECTER2** (`allenai/specter2_base` plus the proximity adapter) over `title [SEP] abstract`. The
   model's name and revision are pinned in config and folded into `semantic_version`.
 - Embeddings are computed offline per snapshot (`op embed build`). They are about 80k × 768 float16, around
-  120 MB. They are stored as `.npy` next to the index and loaded into memory. Exact cosine search is done
+  120 MB. They are stored at `data/embeddings/<index_version>/<semantic_version>.npy`, beside the index rather than inside it (`data/indexes/` is immutable), and loaded into memory. Exact cosine search is done
   with numpy (a brute-force matrix product takes milliseconds at this scale). No vector database and no ANN
   are needed, so results are deterministic.
 - Records with no abstract are embedded from the title alone and flagged.

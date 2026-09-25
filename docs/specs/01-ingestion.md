@@ -33,7 +33,7 @@ build.
 |---|---|
 | `main` | `<Venue>.cc/<Y>/Conference` (accepted), PMLR main ICML volume, NeurIPS main proceedings |
 | `datasets_benchmarks` | `NeurIPS.cc/<Y>/Track/Datasets_and_Benchmarks` or `…/Datasets_and_Benchmarks_Track`; NeurIPS ≤2023 proceedings `Datasets_and_Benchmarks` aliased to `_Track` (scholarmend fix) |
-| `position` | ICML position-paper track |
+| `position` | ICML position-paper track; NeurIPS position-paper track (verify the venueid form at M4) |
 | `workshop` | `<Venue>.cc/<Y>/Workshop/…`, including satellite paths like `Workshop_Mexico_City/…` |
 | `competition` | NeurIPS Competition Track, PMLR competition volumes |
 | `tiny_papers` | ICLR Tiny Papers (2023–2024) |
@@ -70,7 +70,10 @@ auto-removed). This lets the team use the engine for the live review before the 
 4. **Deduplicate.** The same paper appears on OpenReview and in the proceedings (NeurIPS, ICML 2023+).
    Merge on (a) an identical forum ID, then (b) a normalized title with the same venue and year. Two
    records are merged **only** when venue and year agree. That lesson comes from venuetriage: records
-   with no year must never merge on `(title, "")`. Merges are written to `merges.csv` for audit.
+   with no year must never merge on `(title, "")`. **Two OpenReview records with different forum IDs are
+   never merged**: a main-track paper and its same-year workshop version can share a title. Title
+   matching only links records *across* sources (OpenReview ↔ proceedings). Merges are written to
+   `merges.csv` for audit.
 5. **Snapshot.** Write `data/snapshots/<date>-<shorthash>/records.jsonl` (sorted by `id`) and
    `manifest.json`. The manifest holds counts per venue × year × track × status, source versions,
    the crawl date and the snapshot hash. Snapshots are immutable. `data/` is gitignored.

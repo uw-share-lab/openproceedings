@@ -81,6 +81,14 @@ For every search, also compute the size of the matched set **with the default fi
 the difference down by filter, e.g. `{"track": {"workshop": 212, "competition": 4}, "status": {"rejected": 88}}`.
 The API exposes this as `excluded` (04). It maps directly onto PRISMA's "records removed before screening".
 
+Counting rules (so the PRISMA number is never double-counted):
+- `excluded.total = |matched without default filters| − |matched with them|`.
+- Buckets are assigned **in a fixed order, track first, then status**. A paper that is both a workshop
+  paper and rejected counts once, under `track.workshop`. So the buckets always add up to `excluded.total`.
+- Only the **default** filters (02 §Default filters) produce exclusions. A filter the user wrote (for
+  example `year:2023..2026`, or an explicit `track:`) is part of the search itself, not an automatic
+  removal, so it is never counted in `excluded`.
+
 ## Versioning
 
 ```

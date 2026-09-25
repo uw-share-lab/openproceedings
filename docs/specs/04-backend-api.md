@@ -14,6 +14,10 @@ reviews without the UI.
   `frontend/src/api/schema.ts` via codegen, so the two sides can't drift. CI fails if the generated file is
   stale.
 - Every response carries `index_version` and `tokenizer_version`.
+- **Span units:** every span (`highlights`, diagnostic `span`) is a half-open `[start, end)` range of
+  **Unicode code points** over the *raw* stored text (not the normalized text). The frontend converts to
+  UTF-16 indices exactly once, in one helper (`nextjs-conventions` skill). A golden contract test covers a
+  title containing an astral-plane character.
 - Errors use one shape: `{error: {code, message, diagnostics?: [Diagnostic]}}`. A parse error is a `422`
   with 02's diagnostics, spans included.
 - No authentication in v1. Rate limiting is per IP (a token bucket in the app, set in config). CORS
@@ -56,7 +60,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
 ## Exports (built to be imported into Covidence)
 
 - **RIS:** `TY JOUR`/`CPAPER`, `TI`, `AB` (full), `AU` (one line each), `PY`, `T2` (for example "International
-  Conference on Learning Representations (ICLR 2025)"), `UR` (forum then pdf), `DO` if present, `KW`
+  Conference on Learning Representations (ICLR 2025)"), `UR` (forum then pdf), `DO` if present, `ID` (the openproceedings paper id, so exports round-trip), `KW`
   track, and `N1` = `openproceedings <index_version> · query <canonical_hash> · <UTC date>`. Checked against
   the RIS parser venuetriage already uses, plus one fixture imported into Covidence by hand.
 - **CSV:** one row per paper, the columns of the schema in 01, UTF-8 with a BOM (so Excel opens it
@@ -74,6 +78,9 @@ the query:
 - Same `index_version` available: re-run, and assert `ids_hash` matches. The status is `reproduced`.
 - Only a newer index available: run on the current one and report `drifted`, with `+added / −removed`
   counts and a link to the diff.
+- Same `index_version` but a different `ids_hash`: status `mismatch`. This breaks guarantee 4, so it is
+  logged as an error and treated as a bug. It is never shown as a normal outcome.
+- The diff behind `drifted` is served by `GET /records/{id}/diff` (added and removed ids, with titles).
 
 The record page (05) is what a methods section cites. Records are stored in `data/records.sqlite`
 (append-only, backed up with the snapshots).
