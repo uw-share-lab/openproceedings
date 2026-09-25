@@ -13,18 +13,46 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 5. **Ranking never changes membership.** That includes BM25 and embeddings.
 6. **Transparent.** Expansions, warnings and exclusion counts are always shown.
 
-## Layout
-`backend/` (Python package `openproceedings`: `ingest/ query/ engine/ api/ semantic/ eval/`) ·
-`frontend/` (Next.js) · `docs/{specs,plans,results}` · `backlog/` (Backlog.md, CLI only) ·
-`.claude/` (agents, skills, commands, hooks, learnings, all committed) · `data/` (gitignored; snapshots
-and indexes are immutable).
+## Layout (monorepo)
+- Root: `pyproject.toml` is the **uv workspace** root, with repo-wide ruff config and one `uv.lock`.
+  `Makefile` has `sync`, `fmt`, `lint`, `tooling`, `test` and `hooks`.
+- `backend/` (planned, M1): the uv workspace member, Python package `openproceedings`, with
+  `ingest/ query/ engine/ api/ semantic/ eval/`.
+- `frontend/` (planned, M3): Next.js, an npm workspace.
+- `docs/specs` · `docs/{plans,results,design,usability,research}` (created as needed).
+- `backlog/`: Backlog.md, CLI only.
+- `.claude/`: agents, skills, commands, hooks and learnings, all committed. The roster is in
+  `.claude/README.md`.
+- `data/`: gitignored; snapshots and indexes are immutable.
+
+## Environment
+- **uv** for Python. `uv sync` at the repo root; never `pip install` into the workspace.
+- **npm** for the frontend.
+- `scripts/setup-dev.sh` once per clone (git hooks, `.env`).
 
 ## Tooling (`.claude/`)
 - **Agents** (`.claude/agents/`) do work. Reviewer, auditor and guardian agents are read-only.
 - **Skills** (`.claude/skills/`) hold the standards and domain knowledge that agents cite.
 - **Commands** (`.claude/commands/`) are entry points: `/review-gate`, `/open-pr`, `/record-learnings`,
   `/plan`, `/exactness-check`, …
-- The roster is linted in CI (`python3 .claude/scripts/lint_tooling.py`). A new agent or skill must pass it.
+- The roster is linted in CI (`make tooling`). A new agent, skill or command must pass the lint and be
+  given an area in `.claude/scripts/roster_index.py`, which regenerates `.claude/README.md`.
+
+## Keep everything current (rule, 2026-09-25; `.claude/skills/task-hygiene/SKILL.md`)
+- **Backlog tasks, docs, specs, READMEs and every `.md` are updated continuously**, in the same commit as
+  the change they describe. Never in a later catch-up PR.
+- Tick acceptance criteria as you meet them. Create follow-up tasks when you find them.
+- **When a task is Done, run `backlog task complete <id>`**, which moves it to `backlog/completed/`. CI fails
+  on a Done task left in `backlog/tasks/`.
+- `docs-reviewer` runs on every diff.
+
+## Code quality
+- **Autolint** (`.claude/skills/autolint/SKILL.md`): `autofix.sh` formats and fixes each file as it's edited
+  (ruff, prettier, eslint, shellcheck).
+- `make lint` is exactly what CI and the pre-push hook run. `make fmt` fixes the whole repo.
+- **Logging** (`.claude/skills/logging-standards/SKILL.md`): structured JSON, one line per unit of work, and
+  no query text, abstracts, credentials or personal data. `observability-reviewer` checks every
+  `backend/src/**` diff.
 
 ## Enforced gates (hooks in `.claude/hooks/`, case tables in `.claude/hooks/tests/`)
 | Hook | Enforces |
@@ -36,17 +64,20 @@ and indexes are immutable).
 | `protect-data-dir.sh` | `data/snapshots/` and `data/indexes/` are immutable. `data/` is never committed. |
 | `remind-token-contract.sh` | Reminds you to bump `TOKENIZER_VERSION` and run the parity and differential suites after a tokenizer edit. |
 | `load-learnings.sh` | Every session starts with `.claude/learnings/INDEX.md` in context. |
+| `autofix.sh` | After every edit: formats and fixes the file, then reports what it couldn't fix. Never blocks. |
 
 After editing any hook, run its test table: `for t in .claude/hooks/tests/*.sh; do bash "$t"; done`.
 
 ## Closing workflow (required, in this order; approvals are per-commit)
-1. **Tests green** locally (`uv run pytest`, `npm test` where relevant). Never claim a pass you didn't run.
-2. **Backlog updated** via the CLI: acceptance criteria checked, notes added, status set.
-3. **Docs brought to as-built** when behaviour changed (`docs-writer`). Specs change only by PR.
+1. **Tests and lint green** locally (`make test`, `make lint`, `make tooling`). Never claim a pass you didn't run.
+2. **Backlog current**: acceptance criteria checked and a final summary written. For finished tasks, run
+   `backlog task complete <id>`.
+3. **Docs as-built** in the same branch: specs, READMEs, skills and `.claude/README.md` (`docs-writer`).
 4. **Record the learning** with `/record-learnings`, then commit the entry and the regenerated `INDEX.md`.
 5. **`/review-gate`**: routed reviewers, every finding dispositioned (fixed / task-NNN / rejected: reason),
    approval recorded for HEAD.
-6. **Push, then `/open-pr`** into `dev`. CI must pass: lint, test, claude-tooling, pr-gates.
+6. **Push, then `/open-pr`** into `dev`. CI must pass: `lint`, `test`, `claude-tooling`, `attribution`,
+   `learnings`, `review-attested`.
 
 "Noted as non-blocking" is not a disposition. A finding you don't fix becomes a Backlog task or a written
 rejection.

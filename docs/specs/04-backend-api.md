@@ -13,9 +13,14 @@ reviews without the UI.
 - Base path `/api/v1`. JSON. Pydantic v2 models are the contract. The OpenAPI schema is exported to
   `frontend/src/api/schema.ts` via codegen, so the two sides can't drift. CI fails if the generated file is
   stale.
-- Every response carries `index_version` and `tokenizer_version`.
-- **Span units:** every span (`highlights`, diagnostic `span`) is a half-open `[start, end)` range of
-  **Unicode code points** over the *raw* stored text (not the normalized text). The frontend converts to
+- Every response carries `index_version`, `tokenizer_version` and `query_version`. `query_version` versions
+  the query *semantics* that live outside the index: the parser, the compiler (NEAR/slop, wildcard rules),
+  the default-filter set and the `source:` alias table. It is bumped by the same rule as
+  `TOKENIZER_VERSION` (03): whenever some query could mean something different.
+- **Span units:** every span is a half-open `[start, end)` range of **Unicode code points** over the *raw
+  source string*. For `highlights` that is the stored title or abstract. For diagnostic `span`s it is the
+  query input `q`. Spans are never over normalized text: NFKC can change lengths, so `normalize()` returns an
+  offset map that highlight computation uses. The frontend converts to
   UTF-16 indices exactly once, in one helper (`nextjs-conventions` skill). A golden contract test covers a
   title containing an astral-plane character.
 - Errors use one shape: `{error: {code, message, diagnostics?: [Diagnostic]}}`. A parse error is a `422`
@@ -30,9 +35,10 @@ reviews without the UI.
 | `POST` | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations). Called as you type, debounced. |
 | `GET` | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | `GET` | `/papers/{id}` | The full record, provenance included |
-| `GET` | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl` → a stream of the **entire** matched set, in a stable order |
+| `GET` | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl`, optional `record_id` **or** `index_version` → a stream of the **entire** matched set, ordered by `id`, served from the pinned index |
 | `POST` | `/records` | Freezes a search as an immutable **search record** → `{record_id, url}` |
 | `GET` | `/records/{id}` | The stored record, plus a replay check (see below) |
+| `GET` | `/records/{id}/diff` | For a `drifted` record: added and removed ids (with titles), and which `index_version` inputs changed |
 | `GET` | `/coverage` | Counts per venue × year × track × status, abstract-missing counts, snapshot date |
 | `GET` | `/meta` | Current and available `index_version`s, the field and track vocabularies (these feed the UI's autocomplete) |
 | `GET` | `/healthz` | Liveness and whether the index is loaded |
@@ -63,24 +69,40 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   Conference on Learning Representations (ICLR 2025)"), `UR` (forum then pdf), `DO` if present, `ID` (the openproceedings paper id, so exports round-trip), `KW`
   track, and `N1` = `openproceedings <index_version> · query <canonical_hash> · <UTC date>`. Checked against
   the RIS parser venuetriage already uses, plus one fixture imported into Covidence by hand.
-- **CSV:** one row per paper, the columns of the schema in 01, UTF-8 with a BOM (so Excel opens it
+- **CSV:** one row per paper, the columns of the schema in 01 plus `index_version` and `canonical_hash`
+  provenance columns, UTF-8 with a BOM (so Excel opens it
   correctly).
 - **BibTeX:** `@inproceedings`. Keys are `<firstauthorlast><year><firsttitleword>`, de-duplicated with a/b.
+  Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC date>}`.
   Output must pass refaudit's parser.
-- Exports stream, and are not paginated or truncated. The response header `X-Total` equals the search's
-  `total`.
+- Exports stream, and are not paginated or truncated. The response headers `X-Total` (equal to the search's
+  `total`) and `X-Index-Version` say exactly which set was exported. An export started during an index
+  hot-swap finishes on the index it began on.
 
 ## Search records (reproducibility, PRISMA)
 
-`POST /records` stores the input, canonical string, mode, `index_version`, UTC timestamp, `total`,
-`excluded`, and `ids_hash = sha256(sorted matched ids)`. It returns a short ID. `GET /records/{id}` replays
-the query:
-- Same `index_version` available: re-run, and assert `ids_hash` matches. The status is `reproduced`.
-- Only a newer index available: run on the current one and report `drifted`, with `+added / −removed`
-  counts and a link to the diff.
-- Same `index_version` but a different `ids_hash`: status `mismatch`. This breaks guarantee 4, so it is
-  logged as an error and treated as a bug. It is never shown as a normal outcome.
-- The diff behind `drifted` is served by `GET /records/{id}/diff` (added and removed ids, with titles).
+`POST /records` freezes everything a methods section needs to cite and a replay needs to check:
+
+| Field | Why |
+|---|---|
+| `input`, `mode`, `canonical`, `canonical_hash`, `identification_query` | what was searched, and the string that reproduces "identified" |
+| `index_version`, `tokenizer_version`, `query_version`, `snapshot_hash`, `crawl_dates` (per source, from the manifest) | the database version and when its contents were collected |
+| `searched_at` (UTC) | the search date, which is separate from the crawl date |
+| `total`, `excluded` (with `unknown` itemised) | the counts cited in PRISMA |
+| `expansions`, `translations`, `warnings` | how the query was interpreted (PRISMA-S) |
+| `ids` (sorted) and `ids_hash = sha256(ids)` | membership, for replay and for the diff |
+| `dedup` (`merged`, `ambiguous_not_merged` counts from the manifest) | the dedup process, for PRISMA-S |
+| `semantic_version` (if the near-miss panel was open) | the audit trail for query revisions it prompted |
+
+It returns a short id. `GET /records/{id}` replays the query and returns HTTP 200 with a `status`:
+- **`reproduced`**: same `index_version` and `query_version` are available, and both `ids_hash` **and**
+  `excluded` match.
+- **`drifted`**: only a different index or query version is available. The response names *which* inputs
+  changed (`snapshot_hash` = corpus drift; tokenizer, schema, ranking or query version = method drift) and
+  gives `+added / −removed`. `+0 / −0` is reported as "membership-identical", not hidden.
+- **`mismatch`**: same `index_version` and `query_version`, but `ids_hash` or `excluded` differ. This breaks
+  guarantee 4, so it is logged at ERROR with code `API_REPLAY_MISMATCH` and treated as a bug. The record page
+  shows it as "do not cite" (05).
 
 The record page (05) is what a methods section cites. Records are stored in `data/records.sqlite`
 (append-only, backed up with the snapshots).

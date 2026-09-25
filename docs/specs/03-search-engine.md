@@ -77,17 +77,24 @@ terms.
 
 ## Exclusion accounting (guarantee 6, PRISMA)
 
-For every search, also compute the size of the matched set **with the default filters removed**, and break
-the difference down by filter, e.g. `{"track": {"workshop": 212, "competition": 4}, "status": {"rejected": 88}}`.
+For every search, also compute the size of the matched set **with the default filters removed** (the
+`identification_query` of 02 §Default filters), and break the difference down by filter, e.g. `{"track": {"workshop": 212, "competition": 4}, "status": {"rejected": 88}}`.
 The API exposes this as `excluded` (04). It maps directly onto PRISMA's "records removed before screening".
 
 Counting rules (so the PRISMA number is never double-counted):
 - `excluded.total = |matched without default filters| − |matched with them|`.
 - Buckets are assigned **in a fixed order, track first, then status**. A paper that is both a workshop
   paper and rejected counts once, under `track.workshop`. So the buckets always add up to `excluded.total`.
-- Only the **default** filters (02 §Default filters) produce exclusions. A filter the user wrote (for
-  example `year:2023..2026`, or an explicit `track:`) is part of the search itself, not an automatic
-  removal, so it is never counted in `excluded`.
+- Only **default** filters produce exclusions, and a default is recognised by content (02 §Default
+  filters): a typed conjunct identical to a default counts as the default. Any other filter the user wrote
+  (for example `year:2023..2026`, or a different `track:` set) is part of the search itself, not an
+  automated removal, and is never counted in `excluded`.
+- "Identified" is therefore **conditional on the user's own limits.** The defaults-removed set keeps every
+  user-written filter (year, venue, …). The methods text says so (05).
+- **Unclassified is not ineligible.** Records removed because their `track` or `status` is `unknown` are
+  itemised separately (`excluded.track.unknown`, `excluded.status.unknown`) and are never folded into
+  another bucket. The UI and the methods text show them on their own line, so a review can choose to report
+  them or screen them.
 
 ## Versioning
 

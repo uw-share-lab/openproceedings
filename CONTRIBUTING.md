@@ -2,18 +2,23 @@
 
 ## Setup
 ```bash
-scripts/setup-dev.sh          # git hooks (.githooks), executable tooling, .env skeleton
+scripts/setup-dev.sh          # git hooks (.githooks: commit-msg, pre-push), executable tooling, .env skeleton
+uv sync                       # the root uv workspace: dev tools now, backend once it exists
 npm i -g backlog.md           # task tracking — https://github.com/MrLesk/Backlog.md
+brew install shellcheck       # or apt-get install shellcheck — used by make lint
 ```
+`make help` lists the entry points: `fmt` fixes the whole repo, `lint` is exactly what CI checks, and
+`tooling` runs the roster, backlog and hook checks.
 Put OpenReview credentials in `.env` (gitignored). The anonymous API rate-limits almost immediately.
 
 ## Flow: `feature → PR → dev → PR → main`
 1. Pick or create a task: `backlog task list --plain`, `backlog task create "…" --ac "…"`.
    Never hand-edit files under `backlog/`.
-2. Branch off `dev`: `git switch dev && git pull && git switch -c <initials>/<area>-<topic>`.
+2. Branch off `dev`: `git switch dev && git pull && git switch -c <type>/<slug>` (e.g. `feat/wildcard-expansion`; types: feat, fix, chore, docs, test).
 3. Work test-first. Keep changes inside one spec's scope. If the spec is wrong, change the spec in the same PR.
 4. Close out, in this order (approvals are per-commit, so the order matters):
-   - tests green → Backlog updated → docs as-built
+   - `make test`, `make lint` and `make tooling` green → Backlog current (acceptance criteria ticked; finished
+     tasks moved with `backlog task complete <id>`) → docs, specs and READMEs as-built in the same branch
    - `/record-learnings` → commit the entry and `INDEX.md`
    - `/review-gate`. Every finding gets a disposition: `fixed <sha>`, `task-NNN`, or `rejected: <reason>`.
      A must-fix can only be fixed.

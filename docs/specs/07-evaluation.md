@@ -40,9 +40,15 @@ added, and check the track). The rest goes to `review.csv` for a person to decid
 ## C. Coverage (report plus a soft gate at M4)
 
 For each venue × year × track: indexed accepted count compared with the official accepted count (the table
-of sources lives in `docs/results/coverage-sources.md`, each with a citation). The M4 gate is within ±1%
-per main-track cell. Also report missing-abstract and `unknown`-track counts. `/coverage` in the UI renders
-the same data.
+of sources lives in `docs/results/coverage-sources.md`, each with a citation).
+
+**The M4 gate:** every **main-track and D&B cell for which an official accepted count exists** is within
+±1%. Cells with no official count are reported but not gated. The same definition appears in 00 and in the
+`coverage-reporting` skill. Also report, per cell: missing-abstract count, `unknown`-track count, and
+**statuses indexed**, meaning which statuses the sources for that venue-year can even contain. For example,
+pre-2021 NeurIPS and ICML 2020–22 come from proceedings only, so no rejected papers exist there to exclude.
+The methods text cites the coverage report (with its snapshot hash) as the database-scope caveat.
+`/coverage` in the UI renders the same data.
 
 ## D. Classification audit (report)
 

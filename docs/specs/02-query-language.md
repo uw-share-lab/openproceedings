@@ -76,10 +76,25 @@ Rules:
 | `status:` | filter | `accepted`, `rejected`, `withdrawn`, … |
 | `source:` | compat | Scholar-style. Mapped to `venue:` through an alias table ("neural information processing systems", "PMLR" → ICML *with a warning* because PMLR hosts other venues). Unknown values are errors, never silent substrings. |
 
-**Default filters.** When a query has no `track:` clause, the parser adds
-`track:(main OR datasets_benchmarks OR position)`. When it has no `status:` clause, it adds
+### Default filters
+
+When a query has no **top-level** `track:` clause, the parser adds
+`track:(main OR datasets_benchmarks OR position)`. When it has no top-level `status:` clause, it adds
 `status:accepted`. Defaults are **made explicit in the canonical string**, so the saved string shows them.
 The UI toggles edit these same clauses; they are not a separate state.
+
+- **A default is recognised by its content, not by where it came from.** A top-level AND conjunct that
+  exactly equals a default clause is treated as the automated default, whether the parser inserted it,
+  the user typed it, or it came from pasting a canonical string back in. So `trust`, its canonical string,
+  and a replay of that string all give the same `excluded` (03). Golden cases pin input → canonical →
+  re-parse → toggle-off-and-on.
+- **Only top-level AND conjuncts suppress a default.** A `track:`/`status:` clause nested inside an `OR`
+  branch (`(track:workshop AND x) OR y`) does not suppress it. The parser adds the default anyway and raises
+  the warning `WARN_NESTED_FILTER`: "the default track filter still applies to the whole query; add a
+  top-level `track:` clause to override it".
+- **Identification string.** `identification_query` is the canonical string with the default conjuncts
+  removed. It is what PRISMA's "records identified" count is computed from (03 §Exclusion accounting, 05
+  §Save search record). The API returns and search records store both strings.
 
 ## Compatibility input modes
 

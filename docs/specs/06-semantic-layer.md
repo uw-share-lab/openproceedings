@@ -40,6 +40,10 @@ your top results".
    benchmark terms; misses the trust group").
 4. The UI shows these as "Papers your query may have missed". Each term chip has a "+ add to group …"
    action that **edits `q`**, so any change to the set is still made by the user, lexically.
+5. For reporting: papers found by *revising `q`* from a chip are database records from the revised string.
+   The revision belongs in the search-development narrative, not under "other methods". Only a paper added
+   outside `q` counts as "other methods" in PRISMA. Search records store `semantic_version` whenever the
+   panel was open.
 
 ## Guardrails
 

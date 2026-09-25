@@ -26,7 +26,7 @@ outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copyin
 | `/` | Search home: the editor, example queries (the review's strings), a coverage summary line |
 | `/search` | The main workspace (below) |
 | `/paper/[id]` | Full record: abstract with the current query's highlights, all links, provenance table |
-| `/record/[id]` | Search-record page: canonical query, index version, date, total, exclusions, replay status (`reproduced`/`drifted`), a "Copy methods text" button, export buttons |
+| `/record/[id]` | Search-record page: the identification string and the default clauses, full index version, search date and crawl date, total, exclusions (`unknown` on its own line), replay status (`reproduced` / `drifted` with its reason / `mismatch`), a "Copy methods text" button, and export buttons pinned to the record's index. On `mismatch` the page is a blocking **"do not cite — replay mismatch"** state with no methods text and no export |
 | `/coverage` | Venue × year × track table with source and snapshot date, missing-abstract counts, `unknown` counts |
 | `/help/syntax` | Language reference generated from the 02 golden table (it cannot drift from the tests) |
 
@@ -67,15 +67,22 @@ outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copyin
    builder shows "this query is too complex for the builder" and stays read-only.
 4. **Filter sidebar.** Venue, year range, track, status. Workshop is **off by default**. Each control shows
    its count and **edits the `track:`/`status:` clauses in `q`**.
-5. **Exclusion banner.** "212 workshop · 4 competition · 88 rejected excluded by filters", with a one-click
-   "include" for each, and a tooltip explaining the PRISMA mapping.
+5. **Exclusion banner.** "212 workshop · 4 competition · 88 rejected excluded by default filters", with
+   `unknown` itemised on its own line ("3 unclassified"). Each has an "include" action, and **its label shows
+   the number that clicking it will actually add**. That number is the facet count, which differs from the
+   bucket count when a paper fails both defaults (for example, a rejected workshop paper). The tooltip explains
+   the PRISMA mapping and the fixed bucket order (track, then status; 03).
 6. **Result list.** Title and abstract with highlights taken exactly from the API spans (never re-matched
    on the client). Venue/year/track badges. Links to OpenReview, PDF and proceedings. Uses infinite scroll
    or pages (decided at implementation time; both keep the ordering stable).
 7. **Export menu.** RIS (Covidence), CSV, BibTeX, JSONL. Shows the count before downloading.
-8. **Save search record.** Creates `/records` and shows the permanent link plus generated methods text:
-   *"Searched openproceedings (index a1b2c3, 2026-09-25) with `<canonical>`; 412 records; 304 removed
-   before screening by track/status filters."*
+8. **Save search record.** Creates `/records` and shows the permanent link plus generated methods text
+   that says which string reproduces which number:
+   *"We searched openproceedings on 2026-09-25 (index `a1b2c3d4e5f6`, built from a crawl of 2026-09-20) with
+   the string `<identification_query>`, which identified 716 records. Default filters `track:(main OR
+   datasets_benchmarks OR position)` and `status:accepted` removed 304 of them before screening (212
+   workshop, 4 competition, 88 rejected); 0 were unclassified. 412 records were screened. Search record:
+   <url>."* It always gives the **full** `index_version`, never a prefix.
 
 ## Non-functional requirements
 
