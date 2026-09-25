@@ -5,13 +5,13 @@ description: The monorepo's auto-format and lint setup (modelled on the naturals
 
 # Autolint
 
-Three layers, each catching what the one before could not:
+Four layers, each catching what the one before could not:
 
 | Layer | When | What | Mode |
 |---|---|---|---|
 | `.claude/hooks/autofix.sh` | after every Write/Edit by Claude | the edited file only | **fix** (format + safe autofixes), then report whatever remains |
 | `make fmt` / `make lint` | whenever you like; `make lint` = CI | the whole repo | fmt fixes, lint checks |
-| `.githooks/pre-push` | every `git push` | `make lint` | check: a push never surprises CI |
+| `.githooks/pre-push` | every `git push` | `make lint` + `make tooling` | check: a push never surprises CI (`lint` and `claude-tooling`) |
 | CI `lint` job | every PR to dev/main | `make lint` | check (required status) |
 
 ## Tool per file type
@@ -21,6 +21,9 @@ Three layers, each catching what the one before could not:
 | `frontend/**/*.{ts,tsx,js,jsx,json,css,md}` | `prettier --write`, `eslint --fix` (ts/tsx/js/jsx) | `prettier --check`, `eslint`, `tsc --noEmit` |
 | `*.sh`, `.githooks/*` | none; shellcheck cannot fix | `shellcheck` |
 | `*.yml` workflows | none | `actionlint` if installed (CI installs it) |
+
+The `Makefile` runs Python tools with `uv run --locked` (never re-resolving the lock) and frontend tools
+with `npx --no-install` (never fetching a package).
 
 Ruff's configuration lives once, in the root `pyproject.toml` (the uv workspace root). Workspace members
 inherit it. Don't add per-package ruff sections unless a member truly needs different rules; if one does,
@@ -34,6 +37,13 @@ record it as a decision.
 - **Degrades gracefully.** If a tool isn't available yet (no `frontend/node_modules`, uv not synced), it
   says so once and skips. It never fails an edit because the toolchain isn't set up.
 - Formats **only the file that was edited**, so an edit never produces a sweeping diff across unrelated files.
+- **Runs tools straight from the workspace.** Ruff is `.venv/bin/ruff`, never `uv run`, which may sync and
+  fetch or build packages an agent just added to `pyproject.toml`. Frontend tools run with
+  `npx --no-install`.
+- **Skips eslint while its config or `frontend/package.json` differs from HEAD**, because eslint executes
+  its (JS) config; it says so, and `make lint` covers it once the change is reviewed.
+- **Compares real paths**, so a symlink or `..` cannot take it outside the repo. File names are passed
+  after `--` so a name is never read as an option.
 
 ## When lint fails
 1. Run `make fmt`, then `make lint`. Most failures are gone after that.

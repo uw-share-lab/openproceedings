@@ -14,9 +14,12 @@ class Diagnostic(BaseModel):  # frozen, extra="forbid"
 ```
 - `ParseResult.warnings`, `.errors`, `.translations` are all `list[Diagnostic]`. Non-empty `errors` ⇒ no
   search runs.
-- API errors: `{ "error": { "code", "message", "diagnostics"?: [Diagnostic] } }`. A parse error is **422**
-  carrying 02's diagnostics with spans. Other codes: 400 bad parameter, 404 unknown record/paper, 409 a
-  pinned `index_version` not available, 429 rate limited.
+- API errors: `{ "error": { "code", "message", "diagnostics"?: [Diagnostic] } }`. Statuses and codes are
+  exactly spec 04 §Error handling, which is the only table: 422 `PARSE_*` (a query that does not parse,
+  carrying 02's diagnostics with spans), 422 `API_BAD_PARAM`, 404 `API_PAPER_NOT_FOUND` /
+  `API_RECORD_NOT_FOUND`, 409 `API_INDEX_VERSION_UNAVAILABLE`, 409 `API_RECORD_MISMATCH` (export of a
+  `mismatch` record), 429 `API_RATE_LIMITED` (with `Retry-After`), 503 `API_INDEX_NOT_LOADED`, 500
+  `API_INTERNAL`. A new or changed pair is a spec 04 change first (and breaking once released).
 - The frontend uses the generated `Diagnostic` type and draws squiggles directly from `span`. It never
   recomputes positions (`typescript-standards`).
 
@@ -25,16 +28,19 @@ class Diagnostic(BaseModel):  # frozen, extra="forbid"
   and a generated table in the syntax help page (`/help/syntax`) lists them, so docs can't drift.
 - Codes are `AREA_SNAKE_NAME`, stable forever once released — scripts match on them. Retire a code; never
   reuse or rename it.
+
 | Prefix | Area | Examples (from 02 §Error handling) |
 |---|---|---|
 | `PARSE_` | grammar | `PARSE_UNBALANCED_PAREN`, `PARSE_EMPTY_GROUP`, `PARSE_ALL_NEGATIVE` |
 | `WILDCARD_` | expansion | `WILDCARD_STEM_TOO_SHORT`, `WILDCARD_TOO_MANY_EXPANSIONS` (>200) |
 | `FIELD_` | fields/filters | `FIELD_UNKNOWN`, `FIELD_UNKNOWN_VALUE` (lists valid `track:` values), `FIELD_RANGE_INVERTED` |
-| `WARN_` | warnings | `WARN_LOWERCASE_OPERATOR` ("did you mean OR?"), `WARN_MIXED_AND_OR`, `WARN_NESTED_FILTER` (spec 02 §Default filters): a `track:`/`status:` clause nested inside an `OR` branch does not suppress the default, e.g. `(track:workshop AND x) OR y` → "the default track filter still applies to the whole query; add a top-level `track:` clause to override it", span on the nested clause |
+| `WARN_` | warnings | `WARN_LOWERCASE_OPERATOR` ("did you mean OR?"), `WARN_MIXED_AND_OR`, `WARN_NESTED_FILTER` (spec 02 §Default filters): a `track:`/`status:` clause nested inside an `OR` branch does not suppress the default, e.g. `(track:workshop AND x) OR y` → "the default track/status filter still applies to the whole query; add a top-level `track:`/`status:` clause to override it", span on the nested clause |
 | `COMPAT_` | translations | `COMPAT_SOURCE_ALIAS` (`source:PMLR` → `venue:ICML`), `COMPAT_POP_DOLLAR` |
-| `API_` | HTTP layer | `API_BAD_PARAM`, `API_RECORD_NOT_FOUND`, `API_INDEX_UNAVAILABLE`, `API_RATE_LIMITED`, `API_REPLAY_MISMATCH` (logged; the replay *status* field value stays `mismatch`) |
-Exact names are set when the registry is created; the prefixes and the rule are the standard. A code a
+| `API_` | HTTP layer | the codes of spec 04 §Error handling, plus `API_REPLAY_MISMATCH` (a log code only, never an HTTP error: the replay is a `200` whose `status` field is `mismatch`) |
 
+Exact names for the parse-time prefixes are set when the registry is created; the prefixes and the rule
+are the standard. The `API_` codes, and their HTTP statuses, are already fixed by spec 04 §Error handling:
+use them exactly as named there.
 
 ## Span rules
 - Offsets are half-open `[start, end)` ranges of **Unicode code points** over the query input `q` the user

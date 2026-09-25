@@ -18,7 +18,7 @@ lacks.
 
 - **SPECTER2** (`allenai/specter2_base` plus the proximity adapter) over `title [SEP] abstract`. The
   model's name and revision are pinned in config and folded into `semantic_version`.
-- Embeddings are computed offline per snapshot (`op embed build`). They are about 80k × 768 float16, around
+- Embeddings are computed offline per `index_version` (`op embed build`). They are about 80k × 768 float16, around
   120 MB. They are stored at `data/embeddings/<index_version>/<semantic_version>.npy`, beside the index rather than inside it (`data/indexes/` is immutable), and loaded into memory. Exact cosine search is done
   with numpy (a brute-force matrix product takes milliseconds at this scale). No vector database and no ANN
   are needed, so results are deterministic.
@@ -53,6 +53,16 @@ your top results".
 - If embeddings are missing or out of date for the current `index_version`, the feature is **disabled**
   with a visible notice. It must never run against a mismatched snapshot.
 
+## Error handling
+
+- Missing or stale embeddings for the current `index_version` disable the feature with a visible notice
+  (§Guardrails). `sort=semantic` is then refused with 422 `API_BAD_PARAM`, never silently served as
+  relevance order.
+- A `semantic_version` mismatch at load time is logged at ERROR and keeps the feature off. `/search`,
+  exports and records are unaffected, because they never depend on 06.
+- A failure inside `/near-misses` returns its own error envelope (04 §Error handling) and never fails or
+  alters the `/search` response.
+
 ## Evaluation (connects to 07)
 
 - **Invariant test (CI gate):** for random queries, `/search` totals, IDs and exports are identical with the
@@ -61,3 +71,10 @@ your top results".
   strings, measure how many included papers the lexical query missed, and how many of those the near-miss
   panel surfaced in its top 25 (recall@25 of near-misses). If this doesn't beat a BM25-on-OR-of-all-terms
   baseline, the feature doesn't ship.
+
+## Testing
+
+The suites live in 07: the semantic invariant gate (§A, identical `/search` totals, ids and exports with
+06 on and off) and the near-miss usefulness report (§F). Unit tests add: the load-time version guard (a
+stale `.npy` disables the feature), deterministic ordering with its BM25 → `id` tie-breaks, and the
+title-only flag.

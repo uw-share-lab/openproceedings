@@ -7,6 +7,15 @@ Status: **draft for review** · depends on: all parts · owns: the evidence that
 Turn each guarantee in 00 into something that can be checked. Some checks are CI gates (they fail the
 build). Others are reports (they're regenerated and committed as dated results, never quoted from memory).
 
+## Error handling
+
+- A gate that cannot run (a missing fixture snapshot, a crashed oracle) **fails** the build; it is never
+  skipped or reported as passed.
+- A report whose inputs are missing (no Scholar set, no official count for a cell) says so in the report
+  and leaves that cell unscored; it never fills in an estimate.
+- An **our bug** row in the Scholar comparison (§B) or a differential counterexample (§A) opens a Backlog
+  task with the query and the shrunk AST before the report is committed.
+
 ## A. Exactness (CI gates)
 
 | Suite | What | Gate |

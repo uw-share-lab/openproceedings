@@ -53,9 +53,6 @@ In the dispositions file, one line per finding:
 `[must]` can only be `fixed` (the commit must be an ancestor of HEAD and not already on `dev`).
 **Every `[should]` is fixed in the same round too** (project rule, 2026-09-25). `task-NNN` is only for
 work that genuinely can't be done yet (for example, it needs code that doesn't exist), and the task says
-why. `rejected:` needs a real reason.
-**Every `[should]` is fixed in the same round too** (project rule, 2026-09-25). `task-NNN` is only for
-work that genuinely can't be done yet (for example, it needs code that doesn't exist), and the task says
 why. `rejected:` needs a real reason. "Noted as non-blocking" is not a
 disposition — it produces no artifact and the finding is lost (inherited Kreate lesson).
 

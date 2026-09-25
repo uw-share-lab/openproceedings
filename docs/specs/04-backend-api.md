@@ -35,7 +35,7 @@ reviews without the UI.
 | `POST` | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations). Called as you type, debounced. |
 | `GET` | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | `GET` | `/papers/{id}` | The full record, provenance included |
-| `GET` | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl`, optional `record_id` **or** `index_version` → a stream of the **entire** matched set, ordered by `id`, served from the pinned index |
+| `GET` | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl`, optional `record_id` **or** `index_version` → a stream of the **entire** matched set, ordered by `id`, served from the pinned index. A `record_id` whose replay status is `mismatch` is refused (409 `API_RECORD_MISMATCH`) |
 | `POST` | `/records` | Freezes a search as an immutable **search record** → `{record_id, url}` |
 | `GET` | `/records/{id}` | The stored record, plus a replay check (see below) |
 | `GET` | `/records/{id}/diff` | For a `drifted` record: added and removed ids (with titles), and which `index_version` inputs changed |
@@ -48,17 +48,26 @@ reviews without the UI.
 
 ```jsonc
 {
-  "query": { "input": "...", "canonical": "...", "canonical_hash": "…", "warnings": [], "translations": [],
+  "query": { "input": "...", "canonical": "...", "canonical_hash": "…", "identification_query": "...",
+             "warnings": [], "translations": [],
              "expansions": { "benchmark*": ["benchmark","benchmarking","benchmarks"] } },
   "index_version": "a1b2c3d4e5f6",
+  "tokenizer_version": "…",
+  "query_version": "…",
   "total": 412,
-  "excluded": { "track": { "workshop": 212, "competition": 4 }, "status": { "rejected": 88 } },
+  "excluded": { "total": 304,
+                "track": { "workshop": 212, "competition": 4, "unknown": 0 },
+                "status": { "rejected": 88, "unknown": 0 } },
   "facets": { "venue": {...}, "year": {...}, "track": {...} },
   "hits": [ { "id": "...", "title": "...", "abstract": "...", "authors": [...], "venue": "ICLR",
               "year": 2025, "track": "main", "presentation": "poster", "score": 12.3,
               "highlights": { "title": [[0,5]], "abstract": [[102,114]] }, "urls": {...} } ]
 }
 ```
+
+`excluded` always has this shape: `total` (= the `identification_query` count − `total`, 03 §Exclusion
+accounting) plus a `track` and a `status` map whose buckets sum to it. Each map always carries an `unknown`
+key, even when 0, so unclassified records are itemised and never folded into another bucket.
 
 `facets` are disjunctive: each facet field is counted over the matched set with every filter applied **except that field's own**. So the track facet still shows how many workshop papers you would get by including them. Clicking a facet in the UI
 rewrites the query (guarantee 3). No hidden facet state exists.
@@ -74,10 +83,13 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   correctly).
 - **BibTeX:** `@inproceedings`. Keys are `<firstauthorlast><year><firsttitleword>`, de-duplicated with a/b.
   Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC date>}`.
-  Output must pass refaudit's parser.
+  Every entry carries `openproceedings_id = {<id>}`, so a round-trip recovers the id of every record,
+  proceedings-only (PMLR, NeurIPS) ones included. Output must pass refaudit's parser.
 - Exports stream, and are not paginated or truncated. The response headers `X-Total` (equal to the search's
   `total`) and `X-Index-Version` say exactly which set was exported. An export started during an index
   hot-swap finishes on the index it began on.
+- An export pinned by `record_id` to a record whose replay status is `mismatch` is refused with 409
+  `API_RECORD_MISMATCH` (§Error handling): a set that breaks guarantee 4 is never handed to screening.
 
 ## Search records (reproducibility, PRISMA)
 
@@ -91,7 +103,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
 | `total`, `excluded` (with `unknown` itemised) | the counts cited in PRISMA |
 | `expansions`, `translations`, `warnings` | how the query was interpreted (PRISMA-S) |
 | `ids` (sorted) and `ids_hash = sha256(ids)` | membership, for replay and for the diff |
-| `dedup` (`merged`, `ambiguous_not_merged` counts from the manifest) | the dedup process, for PRISMA-S |
+| `dedup` (`merged`, `ambiguous_not_merged` counts from the manifest) | the PRISMA-S item 16 deduplication-process statement (corpus-wide ingest merges, never a per-search removal count) |
 | `semantic_version` (if the near-miss panel was open) | the audit trail for query revisions it prompted |
 
 It returns a short id. `GET /records/{id}` replays the query and returns HTTP 200 with a `status`:
@@ -107,16 +119,40 @@ It returns a short id. `GET /records/{id}` replays the query and returns HTTP 20
 The record page (05) is what a methods section cites. Records are stored in `data/records.sqlite`
 (append-only, backed up with the snapshots).
 
+## Error handling
+
+Every error uses the one envelope `{error: {code, message, diagnostics?}}`. Codes come from the registry in
+`backend/src/openproceedings/diagnostics.py` (error-diagnostics skill), and a status/code pair never changes
+once released: changing one is a breaking change under `/api/v1`.
+
+| Situation | HTTP | `code` |
+|---|---|---|
+| Query does not parse | 422 | `PARSE_*` (diagnostics carry the spans) |
+| A query parameter is invalid (bad `sort`, `limit` > 200, unknown `format`, malformed `record_id`) | 422 | `API_BAD_PARAM` |
+| Paper or search record not found | 404 | `API_PAPER_NOT_FOUND` / `API_RECORD_NOT_FOUND` |
+| A pinned `index_version` is not available on this instance | 409 | `API_INDEX_VERSION_UNAVAILABLE` |
+| Export requested for a record whose replay status is `mismatch` | 409 | `API_RECORD_MISMATCH` |
+| Rate limit exceeded | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
+| No index loaded yet (startup, failed swap) | 503 | `API_INDEX_NOT_LOADED` |
+| Anything unexpected | 500 | `API_INTERNAL` (logged at ERROR with the request id; message never echoes input) |
+
+A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "mismatch"`, logged as
+`API_REPLAY_MISMATCH` (§Search records).
+
 ## Implementation notes
 
 - The app loads the index once at startup. Hot-swapping to a new `index_version` is an atomic pointer
   swap. Handlers are sync functions (Tantivy is CPU-bound), run in the thread pool.
-- Logging: structured JSON with request ID, canonical hash, latency and total. **Raw query text is not
-  logged by default**, in case it contains unpublished review designs. This is set in config.
+- Logging: structured JSON with request ID, canonical hash, latency and total. **Neither `q` nor the
+  canonical or identification strings are logged by default**, in case they contain unpublished review
+  designs. This is set in config.
 
 ## Testing
 
 - Contract tests for each endpoint using an in-process `TestClient` over the 5k-record fixture index.
 - Export round-trips: parse the RIS/CSV/BibTeX output back and get the same IDs and fields.
-- Search-record replay tests for both the reproduced and the drifted paths.
+- Search-record replay tests for the reproduced, drifted and mismatch paths. The mismatch path uses a
+  fixture record inserted with a wrong `ids_hash` or `excluded` (the store stays append-only), and asserts a `200` with
+  `status: "mismatch"` plus one `API_REPLAY_MISMATCH` ERROR log line.
+- An export with `record_id` of a `mismatch` record returns 409 `API_RECORD_MISMATCH` and streams nothing.
 - An OpenAPI snapshot test, so any contract change shows up in the PR diff.

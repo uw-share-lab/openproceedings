@@ -16,8 +16,8 @@ description: The default-filter rule (guarantee 3) — `track:(main OR datasets_
   `exactness-guardian` treats it as a Must.
 - **Only top-level AND conjuncts suppress a default** (spec 02 §Default filters). A `track:`/`status:`
   clause nested inside an `OR` branch (`(track:workshop AND x) OR y`) does not suppress it: the parser adds
-  the default anyway and raises the warning `WARN_NESTED_FILTER`: "the default track filter still applies to the
-  whole query; add a top-level `track:` clause to override it". Pin this with a golden case.
+  the default anyway and raises the warning `WARN_NESTED_FILTER`: "the default track/status filter still
+  applies to the whole query; add a top-level `track:`/`status:` clause to override it". Pin this with a golden case.
 - **A default is recognised by its content, not by where it came from.** A top-level AND conjunct that
   exactly equals a default clause is treated as the automated default, whether the parser inserted it, the
   user typed it, or it came from pasting a canonical string back in. So `trust`, its canonical string, and a
@@ -41,7 +41,9 @@ result set. If a toggle and the string can disagree, that is a bug.
 For every search, the engine also evaluates the `identification_query` (the query **with the default
 clauses removed**) and reports how the difference breaks down:
 ```json
-"excluded": {"track": {"workshop": 212, "competition": 4}, "status": {"rejected": 88}}
+"excluded": {"total": 304,
+             "track": {"workshop": 212, "competition": 4, "unknown": 0},
+             "status": {"rejected": 88, "unknown": 0}}
 ```
 - Only **default** clauses are accounted, recognised by content: a typed top-level conjunct identical to a
   default counts as the default. Any other filter the user wrote (for example `year:2023..2026`, or a

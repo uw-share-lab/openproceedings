@@ -28,7 +28,7 @@ openproceedings/
 ├── frontend/                    # (M3) Next.js app, npm workspace
 ├── docs/{specs,plans,results,design,usability,research}/   # created as needed
 ├── backlog/                     # Backlog.md: tasks, completed, docs, decisions — CLI only
-├── deploy/                      # Dockerfiles, compose.yml
+├── deploy/                      # (M6, planned) Dockerfiles, compose.yml
 └── data/                        # gitignored: cache/, snapshots/, indexes/, embeddings/, research/, records.sqlite
 ```
 
@@ -45,12 +45,30 @@ into one `.venv` from one `uv.lock`. New Python packages join by adding their di
 | `op index build [--snapshot <id>]` · `op index retire <index_version>` | build an immutable index; retire an old one (refuses if any search record pins it) |
 | `op search "<q>" [--mode scholar] [--explain] [--engine tantivy\|reference] [--ids]` | search; `--engine reference` runs the oracle |
 | `op export "<q>" --format ris\|csv\|bibtex\|jsonl [--index-version <v>]` | export the full matched set |
+| `op record save "<q>" [--mode scholar]` · `op record replay <id>` | freeze a search as a search record (the same function as `POST /records`); replay one and print its status, `reproduced` / `drifted` / `mismatch` (the same function as `GET /records/{id}`) |
 | `op serve` | run the API |
 | `op embed build` | build embeddings for the current index (06) |
 | `op eval scholar [--query <name>]` · `op eval coverage` · `op eval audit` · `op eval near-miss` | the 07 reports; `near-miss` is 06's recall@25 |
 | `op openapi` | print the OpenAPI schema (feeds the frontend type codegen) |
 
 The CLI and the API call the same functions, so the CLI alone is enough to run a whole review.
+
+## Error handling
+
+- `op` exits non-zero on any error and prints the same `{code, message}` (with diagnostics and spans for a
+  parse error) that the API would return (04 §Error handling). It never prints a stack trace for bad input.
+- `op record replay` exits non-zero on `mismatch` (`API_REPLAY_MISMATCH` is logged at ERROR) and zero on
+  `reproduced` or `drifted`, so a script can tell a bug from drift.
+- A gate hook blocks with exit 2 and says why on stderr. The formatting and reminder hooks (`autofix.sh`,
+  `remind-token-contract.sh`) never block; they report back to the agent instead.
+- `make lint`, `make tooling` and every CI job fail on the first error; nothing is retried silently.
+
+## Testing
+
+- Every hook has a case table under `.claude/hooks/tests/`, run by `make tooling` and CI `claude-tooling`.
+- `make tooling` also runs the roster lint and the `.claude/README.md`, learnings-index and backlog checks.
+- CLI commands are covered by the suites of the spec they call (07); the CLI adds only argument-parsing
+  and exit-code tests.
 
 ## Code quality: autolint (skill: `autolint`)
 

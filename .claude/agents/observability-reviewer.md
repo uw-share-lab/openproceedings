@@ -26,7 +26,7 @@ main session fixes.
    (latency budget, spec 03) and a Should elsewhere.
 4. **Privacy (Must):** trace every logged field to its source. Query text, abstracts, author names,
    credentials, tokens, `.env` values, request bodies, or URLs that might embed credentials → Must.
-   Grep for `extra=` fields named `q`, `query`, `input`, `abstract`, `password`, `token`, `authorization`.
+   Grep for `extra=` fields named `q`, `query`, `input`, `canonical`, `identification_query`, `abstract`, `password`, `token`, `authorization`.
 5. **Structure:** messages must be snake_case event constants with structured fields. Flag f-string
    messages and `%s` formatting of variable data.
 6. **Config:** `basicConfig`, `addHandler`, `setLevel` or `print` outside `logs.py`/`cli.py`/app startup →

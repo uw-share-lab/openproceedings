@@ -18,7 +18,7 @@ A search record is the citable artifact of a review search: "we ran *this* canon
 | `total`, `excluded` (with `unknown` itemised) | the counts cited in PRISMA; `excluded` is 03's per-filter breakdown, verbatim |
 | `expansions`, `translations`, `warnings` | how the query was interpreted (PRISMA-S) |
 | `ids` (sorted) and `ids_hash` | membership, for replay and for the diff; see below |
-| `dedup` (`merged`, `ambiguous_not_merged` counts from the manifest) | the dedup process, for PRISMA-S |
+| `dedup` (`merged`, `ambiguous_not_merged` counts from the manifest) | the PRISMA-S item 16 deduplication-process statement (corpus-wide ingest merges, never a per-search removal count; `prisma-reporting`) |
 | `semantic_version` | optional. Set only if the near-miss panel was open when the record was made (spec 06). **Never** an input to `ids_hash`. |
 
 Store the full sorted id list as well as the hash, compressed if needed. The diff cannot say *which*
@@ -41,7 +41,8 @@ Every replay returns **HTTP 200** with a `status`:
 | Same `index_version` and `query_version`, but `ids_hash` or `excluded` differ | `mismatch` | This breaks guarantee 4: log at ERROR with code `API_REPLAY_MISMATCH` and treat it as a Must bug. Never report it as `drifted`. The record page shows "do not cite" (05) |
 
 The diff behind `drifted` is `GET /api/v1/records/{id}/diff`: added and removed ids (with titles), and
-which `index_version` inputs changed. Replay re-parses `canonical`, not `input`, so compatibility
+which `index_version` inputs changed. An export pinned to a `mismatch` record (`/export?record_id=`) is
+refused with 409 `API_RECORD_MISMATCH` (spec 04 §Error handling). Replay re-parses `canonical`, not `input`, so compatibility
 translations that changed later cannot alter the replay.
 
 ## Store: `data/records.sqlite`

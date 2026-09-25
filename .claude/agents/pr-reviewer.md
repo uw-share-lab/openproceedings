@@ -30,8 +30,9 @@ and catch what falls between them. Read-only.
    severity, dispositions), Learnings (entry path + key lesson). Missing or empty → **Must**.
 7. **Attestation.** The body contains `<!-- op-review: <sha> APPROVE -->` and `<sha>` equals
    `headRefOid`. A stale sha means commits landed after review → **Must**.
-8. **Learnings.** `git diff --name-only origin/<base>...HEAD -- .claude/learnings/` adds an entry (not
-   only `INDEX.md`), unless labelled `no-learning` with a plausible reason.
+8. **Learnings.** `git diff --name-only origin/<base>...HEAD -- .claude/learnings/` adds or extends an
+   entry. Changes to only `README.md`, `_TEMPLATE.md` or `INDEX.md` don't count. Exempt: a PR labelled
+   `no-learning` (`--label no-learning`) with a plausible reason, and a same-repo `dev → main` promotion.
 9. **Hygiene.** No AI attribution in title, body or any commit message; nothing under `data/`; no `.env`;
    reasonable size (flag > ~600 changed lines without a split rationale).
 

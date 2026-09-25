@@ -90,8 +90,8 @@ The UI toggles edit these same clauses; they are not a separate state.
   re-parse → toggle-off-and-on.
 - **Only top-level AND conjuncts suppress a default.** A `track:`/`status:` clause nested inside an `OR`
   branch (`(track:workshop AND x) OR y`) does not suppress it. The parser adds the default anyway and raises
-  the warning `WARN_NESTED_FILTER`: "the default track filter still applies to the whole query; add a
-  top-level `track:` clause to override it".
+  the warning `WARN_NESTED_FILTER`: "the default track/status filter still applies to the whole query; add
+  a top-level `track:`/`status:` clause to override it".
 - **Identification string.** `identification_query` is the canonical string with the default conjuncts
   removed. It is what PRISMA's "records identified" count is computed from (03 §Exclusion accounting, 05
   §Save search record). The API returns and search records store both strings.

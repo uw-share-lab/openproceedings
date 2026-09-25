@@ -58,7 +58,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 | Hook | Enforces |
 |---|---|
 | `enforce-pr-workflow.sh` | `main` and `dev` take no direct commits, pushes or merges. Flow: `feature → PR → dev → PR → main`. |
-| `require-review.sh` | `git push` / `gh pr create` need an **APPROVE record for the exact HEAD sha**, written by `record-review.py` after `/review-gate`. `gh pr create` also needs a new learnings entry. |
+| `require-review.sh` | `git push` / `gh pr create` need an **APPROVE record for the exact HEAD sha**, written by `record-review.py` after `/review-gate`. `gh pr create` also needs an added or extended learnings entry. |
 | `block-ai-attribution.sh` | No `Co-Authored-By: Claude` or "Generated with Claude Code" in commits or PRs. `.claude/` is committed; authorship is not. |
 | `enforce-backlog-cli.sh` | No hand edits under `backlog/`. Use the `backlog` CLI. (Decision *bodies* may be edited, since the CLI can't write them.) |
 | `protect-data-dir.sh` | `data/snapshots/` and `data/indexes/` are immutable. `data/` is never committed. |

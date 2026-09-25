@@ -8,7 +8,7 @@ description: The openproceedings usability-test standard — the study plan/prot
 ## Plan template (`docs/usability/<YYYY-MM-DD>-<flow>/plan.md`)
 ```
 # <Flow> usability study
-Ethics: not submitted | submitted <date> | cleared <file #>   ← no sessions before "cleared"
+Ethics: not submitted | submitted <date> | cleared <file #> | not required (ORE confirmed <date>)   ← no sessions before "cleared" or "not required"
 Decision this informs: …          Personas: …          Moderated | unmoderated, remote | in person
 Environment: op serve (fixture index <index_version>), frontend build <sha>, fresh records.sqlite
 Tasks: (table: id, goal as given to participant, start URL, success criterion, max time)

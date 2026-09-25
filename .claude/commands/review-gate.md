@@ -22,7 +22,7 @@ Extra reviewers requested: $ARGUMENTS
 4. **Consolidate.** Merge duplicate findings; keep the highest severity. Show the user the table.
 5. **Fix and re-review.** Fix **every Must and every Should** in this round (Nits too when cheap). Only work
    that genuinely can't be done yet becomes a `task-NNN`, with the reason stated. Commit, and re-run **only
-   the reviewers whose paths the fixes touched** plus `code-reviewer` and `docs-reviewer`. Repeat until no Must is open.
+   the reviewers whose paths the fixes touched** plus `code-reviewer` and `docs-reviewer`. Repeat until no Must or Should is open.
 6. **Disposition everything.** Write the dispositions file (outside the repo, e.g. the scratchpad):
    every finding → `fixed <sha>` | `task-NNN` (create with `backlog task create`) | `rejected: <reason>`.
 7. **Record.** `python3 .claude/scripts/record-review.py APPROVE <dispositions.md>` — add `--attest` if the

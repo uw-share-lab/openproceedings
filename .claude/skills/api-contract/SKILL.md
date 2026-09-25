@@ -11,7 +11,7 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 | POST | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations). Debounced, called as the user types. |
 | GET | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | GET | `/papers/{id}` | full record with provenance |
-| GET | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl`, optional `record_id` **or** `index_version` → a stream of the **entire** matched set, ordered by `id`, served from the pinned index |
+| GET | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl`, optional `record_id` **or** `index_version` → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; a `mismatch` record's `record_id` → 409 `API_RECORD_MISMATCH` |
 | POST | `/records` | freeze a search as an immutable search record → `{record_id, url}` (`.claude/skills/search-records/SKILL.md`) |
 | GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`) |
 | GET | `/records/{id}/diff` | for a `drifted` record: added and removed ids (with titles), and which `index_version` inputs changed |
@@ -21,7 +21,8 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 | GET | `/near-misses` | M5 only, a separate resource (`.claude/skills/specter2-embeddings/SKILL.md`) |
 
 ## `SearchResponse`
-`query {input, canonical, canonical_hash, warnings[], translations[], expansions{pattern: [terms]}}`,
+`query {input, canonical, canonical_hash, identification_query, warnings[], translations[],
+expansions{pattern: [terms]}}`,
 `index_version`, `tokenizer_version`, `query_version`, `total`, `excluded`, `facets`, `hits[]`. Each hit
 has `id, title, abstract, authors, venue, year, track, presentation, score, highlights{field:
 [[start,end]]}, urls`.
@@ -31,9 +32,14 @@ has `id, title, abstract, authors, venue, year, track, presentation, score, high
 
 - **`total`** is the size of the lexical matched set. It never depends on `sort`, `offset`, `limit`
   or the semantic layer (guarantee 5).
-- **`excluded`** is 03's exclusion accounting: `{filter_field: {value: count}}` for what the **default
-  filters** removed, for example `{"track": {"workshop": 212}, "status": {"rejected": 88}}`. It is
-  always present, even when empty, because it is PRISMA's "records removed before screening".
+- **`excluded`** is 03's exclusion accounting for what the **default filters** removed, with a pinned
+  shape: `{"total": N, "track": {…, "unknown": n}, "status": {…, "unknown": n}}`, for example
+  `{"total": 304, "track": {"workshop": 212, "competition": 4, "unknown": 0}, "status": {"rejected": 88,
+  "unknown": 0}}`. The buckets sum to `total`, and both `unknown` keys are always present (even when 0) so
+  unclassified records are itemised. It is always present, even when empty, because it is PRISMA's
+  "records removed before screening".
+- **`identification_query`** is the canonical string minus the default conjuncts (02 §Default filters);
+  its count is `total + excluded.total`.
 - **`expansions`** always lists every wildcard's terms (guarantee 6). It is never omitted when non-empty.
 - **Highlights** are spans computed from the AST, never from a snippet generator.
 
@@ -49,8 +55,13 @@ astral-plane character.
 For each facet field F, count over the set matched by the query with every filter applied **except F's
 own**. The track facet therefore still shows the workshop count while workshops are filtered out. A facet
 click rewrites `q` in the UI (guarantee 3), so no facet state is held server-side and none is passed
-as a parameter. Remove F's filter only where it is a top-level conjunct. Spec 04 does not define a
-filter nested under `OR`. Raise that with `query-semantics-reviewer` rather than guessing.
+as a parameter. Remove F's filter only where it is a top-level conjunct. How a filter nested under `OR`
+is treated is still open: task-001 AC #6 owns the decision. Until it is decided, raise it with
+`query-semantics-reviewer` rather than guessing.
+
+## Errors
+Statuses and codes are exactly spec 04 §Error handling (the only table; the registry is in
+`.claude/skills/error-diagnostics/SKILL.md`). Changing a released status/code pair is a breaking change.
 
 ## Exports are contract too
 The response headers `X-Total` (equal to the `/search` `total` for the same `q`) and `X-Index-Version`

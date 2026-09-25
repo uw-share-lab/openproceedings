@@ -11,7 +11,7 @@ description: How openproceedings output maps onto a PRISMA 2020 flow diagram and
 | Records identified from databases (n) | the count of `identification_query` (the canonical string minus the default conjuncts, 02 §Default filters) = `total + excluded.total` | 03 §Exclusion accounting |
 | Records removed before screening: *marked as ineligible by automation tools* (n) | the default-filter buckets except `unknown`, itemized: `track: workshop 212, competition 4`; `status: rejected 88` | `SearchResponse.excluded` |
 | Unclassified (`excluded.track.unknown`, `excluded.status.unknown`) | on its **own line**, never folded into "ineligible". Unclassified is not ineligible: the review chooses to report them or screen them | 03 §Exclusion accounting |
-| Records removed before screening: duplicates (n) | the ingest dedup counts from the manifest: `dedup.merged` and `dedup.ambiguous_not_merged` (stored in the search record). Cross-database duplicates are removed later in Covidence | 01 §Pipeline, 04 §Search records |
+| Records removed before screening: duplicates (n) | **0 at this stage** — cross-source duplicates were merged at ingest, before indexing (01 §Pipeline). Duplicates against other databases are removed later in Covidence | 01 §Pipeline |
 | Records screened (n) | `total` (what the export contains, `X-Total`) | 04 §Exports |
 
 Name the database as "openproceedings (index `<index_version>`)", not as "OpenReview": the index is the
@@ -32,8 +32,14 @@ order (track, then status; spec 03), and the tooltip says so. A breakdown that d
 Database name and version (the **full** `index_version`, `tokenizer_version`, `query_version`) · the
 **full search string**: the `identification_query` plus the default clauses · date searched (UTC,
 `searched_at`) and, separately, the crawl date (`crawl_dates`) · limits (years, venues, tracks, statuses) ·
-the number of records · expansions, translations and warnings · the dedup counts · whether the search was
-re-run (replay status) · a stable link to the search record.
+the number of records · expansions, translations and warnings · the deduplication process (item 16) ·
+whether the search was re-run (replay status) · a stable link to the search record.
+
+**Deduplication (PRISMA-S item 16) is a process statement, not a removal count.** The corpus-wide
+`dedup.merged` and `dedup.ambiguous_not_merged` counts from the manifest (stored in the search record's
+`dedup`, 04 §Search records) describe how the database was built: cross-source records merged at ingest,
+before indexing. Report them only in that statement. Never put them in the flow diagram's duplicates box or
+present them as removed by this search.
 
 ## Search record fields (04 §Search records) — all required
 The full table is in `.claude/skills/search-records/SKILL.md`: `input`, `mode`, `canonical`,
@@ -51,10 +57,19 @@ original.
 The text says **which string reproduces which number**, gives the **full** `index_version` (never a
 prefix), and keeps the search date separate from the crawl date:
 > We searched openproceedings on 2026-09-25 (index `a1b2c3d4e5f6`, built from a crawl of 2026-09-20) with
-> the string `<identification_query>`, which identified 716 records. Default filters `track:(main OR
-> datasets_benchmarks OR position)` and `status:accepted` removed 304 of them before screening (212
-> workshop, 4 competition, 88 rejected); 0 were unclassified. 412 records were screened. Search record:
-> <url>.
+> the string `<identification_query>`, which identified 716 records within the limits it states
+> (`year:2020..2026`). Default filters `track:(main OR datasets_benchmarks OR position)` and
+> `status:accepted` removed 304 of them before screening (212 workshop, 4 competition, 88 rejected); that
+> count includes 0 unclassified records (track or status unknown), itemised separately. Cross-source
+> duplicates were merged at ingest, before indexing (see the coverage report). Database scope: coverage
+> report for snapshot `<snapshot_hash>`. 412 records were screened. Search record: <url>.
+
+- **Unclassified** records are inside the removed count, and itemised in it.
+- The **limits clause** names every filter the user wrote (`year:`, `venue:`, a non-default `track:` set):
+  "identified" is conditional on them (03 §Exclusion accounting). With none it reads "with no limits".
+- The **coverage report**, cited with its snapshot hash, is the database-scope caveat (07 §C).
+- A review may instead report the default filters as limits, citing the canonical string; the record
+  stores both strings, so either framing can be cited.
 
 Not generated for a `mismatch` record.
 

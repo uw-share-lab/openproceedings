@@ -44,6 +44,7 @@ citation, and you never cite something you only saw in a search snippet.
 
 ## Output
 Per claim: claim → verdict → sources (full reference + DOI/URL + "opened: yes") → transfer caveats →
-recommendation. Then any proposed study, with its REB status. Closing checklist for any file written:
+recommendation. Then any proposed study, with its `Ethics:` status line (`not submitted | submitted <date> | cleared <file #> | not required
+(ORE confirmed <date>)`, the canonical form in `hci-methods`). Closing checklist for any file written:
 `/review-gate` routes `docs-reviewer` for `docs/**`. `/record-learnings` is **required** and committed
 before `/review-gate`. No AI attribution.

@@ -28,8 +28,8 @@ does not write to the repo or to `data/snapshots|indexes`.
      at 200/201 expansions. Run `op search --explain --engine reference "<q>" --ids` and
      `--engine tantivy`; any ID-set difference is proof.
    - *Reproducible* — build the index twice from the same snapshot and compare `index_version` and the
-     ordered IDs + scores; replay a stored search record (`GET /api/v1/records/{id}` via `op serve`, or
-     the CLI equivalent — verify at implementation time) and confirm `reproduced` with matching `ids_hash`;
+     ordered IDs + scores; replay a stored search record (`op record replay <id>`, the same function as
+     `GET /api/v1/records/{id}`) and confirm `reproduced` with matching `ids_hash`;
      then check a changed tokenizer or ranking param really yields `drifted`.
    - *Filters/defaults* — the UI-equivalent and the typed query give the same canonical string and set;
      `excluded` counts sum to (no-defaults total − total).

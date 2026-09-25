@@ -1,6 +1,6 @@
 ---
 name: specter2-embeddings
-description: The semantic-layer standard (spec 06, M5) — SPECTER2 base plus proximity adapter pinned by revision, semantic_version, one float16 .npy per snapshot with its metadata, deterministic brute-force cosine, the title-only flag, the query centroid, and the rule that embeddings never change membership and are disabled on any version mismatch. Use when working in backend/src/openproceedings/semantic/, on `op embed build`, sort=semantic or /near-misses, or reviewing anything that lets embeddings near a result set.
+description: The semantic-layer standard (spec 06, M5) — SPECTER2 base plus proximity adapter pinned by revision, semantic_version, one float16 .npy per index_version with its metadata, deterministic brute-force cosine, the title-only flag, the query centroid, and the rule that embeddings never change membership and are disabled on any version mismatch. Use when working in backend/src/openproceedings/semantic/, on `op embed build`, sort=semantic or /near-misses, or reviewing anything that lets embeddings near a result set.
 ---
 
 # SPECTER2 embeddings (spec 06)

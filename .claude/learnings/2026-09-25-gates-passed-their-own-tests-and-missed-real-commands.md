@@ -49,3 +49,23 @@ Run the new review gate on its own tooling: five routed reviewers (code, securit
 - `.claude/agents/qa-auditor.md` (mutation-test gate tables), `.claude/skills/review-gates/SKILL.md`
   (hooks, scripts and CI are now routed to `qa-auditor` too), `.claude/hooks/lib/cmdparse.py` docstring.
 - Test rows: every finding from this round is a row in `test-openproceedings-gates.sh`.
+
+## Addendum — 2026-09-25 (review round 2)
+
+- **Git exports `GIT_DIR` into hooks run from a linked worktree.** The pre-push hook ran the case tables with
+  it still set, so their throwaway `git init --bare` / `git -C` calls hit the *real* repo (`core.bare=true`,
+  stray branches). Every hook and test script now clears repo-local git variables first
+  (`unset $(git rev-parse --local-env-vars)`).
+- **A row blocked by two barriers proves neither.** The `--base '--upload-pack=…'` injection row stayed
+  green with validation deleted, because an unreviewed HEAD blocked first, and the explicit fetch refspec
+  also neutralised it. Each row must isolate one barrier (here: approved HEAD + `--label no-learning`, so
+  validation is the only thing left).
+- **"Fails for the wrong reason" looks like coverage.** Tooling rows expected an error that a *stale index*
+  produced anyway. The check they claimed to test could be deleted with no effect. These rows now regenerate
+  the index first, so only the rule under test can fail.
+- **Result:** 72 mutants across the four tables; 71 are killed. The survivor (redirect tokens left in the PR
+  gate's token stream) is equivalent: redirect targets are never compared as refs, so no input tells the
+  versions apart. Runner: parallel mutation script, one mutant per piece of logic, a baseline copy first.
+- **Wrong-shaped command parsing kept recurring** (whitespace-only, then keywords, then wrappers, then
+  process substitution). Parse like bash from the start: separators, reserved words, per-wrapper option
+  tables, basenames, quote- and comment-aware heredocs.

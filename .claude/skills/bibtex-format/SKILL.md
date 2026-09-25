@@ -16,6 +16,7 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
   doi       = {…},
   abstract  = {…},
   keywords  = {main},
+  openproceedings_id = {op:iclr:2024:iilhN2MycO},
   note      = {openproceedings a1b2c3d4e5f6 · query 9f8e7d… · 2026-09-25}
 }
 ```
@@ -26,6 +27,9 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
   the track. Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC
   date>}` (spec 04 §Exports), the same line as RIS `N1`: `·` is U+00B7, the date `YYYY-MM-DD` UTC. Omit `doi`, `url` and `abstract` when they
   are absent. Never write an empty field.
+- `openproceedings_id = {<id>}` is on **every** entry (spec 04 §Exports), so a round-trip recovers the id
+  of every record, proceedings-only ones (PMLR, NeurIPS `nips-<hash>`) included, which have no forum `url`
+  to parse. refaudit's field regex `(\w+)\s*=` accepts the underscore.
 - `author`: `Last, First` joined by ` and `. Brace a name that contains the word `and` or a comma, or
   that is an organisation (`{OpenAI Team}`).
 
@@ -44,7 +48,7 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
    Past `z`, continue with `aa`.
 
 Keys are unique **within one file** only. The same paper can get a different key in a different query's
-export. Never present a key as a stable identifier. The id lives in `url`.
+export. Never present a key as a stable identifier. The id lives in `openproceedings_id`.
 
 ## Escaping
 Abstracts contain real LaTeX (`$\epsilon$-DP`, `\textbf{63.7\%}`). Keep it; escaping it would change the
@@ -67,6 +71,6 @@ text screeners see.
 ## Tests (`backend/tests/contract/`)
 Parse the exported file with refaudit's `parse_string` (as a test-only dependency or a vendored copy;
 decide at implementation time) and assert: the entry count equals `X-Total`, keys are unique, the ids
-recovered from `url` equal `match_ids`, `title` (minus its protective outer braces), `author`, `year` and `abstract`
+recovered from `openproceedings_id` equal `match_ids` (a PMLR-only fixture record included), `title` (minus its protective outer braces), `author`, `year` and `abstract`
 round-trip after whitespace normalisation, and the unbalanced-brace, `%`, `@` and non-ASCII-author fixtures parse into the right
 number of entries.

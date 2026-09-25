@@ -13,12 +13,14 @@ a task that is Done does not stay in `backlog/tasks/`.
 | When | Do |
 |---|---|
 | Starting work | `backlog task edit <id> -s "In Progress" -a @<you>`; add a plan (`--plan`) |
-| As you go | Tick acceptance criteria as each is met (`--check-ac <n>`); add notes (`--notes`) when you learn something that changes the plan; create a new task for any follow-up **when you find it** |
+| As you go | Tick acceptance criteria as each is met (`--check-ac <n>`); add notes (`--append-notes`; `--notes` replaces them) when you learn something that changes the plan; create a new task for any follow-up **when you find it** |
 | Scope changes | Edit the description/ACs so they match what you're actually doing; a stale AC is a lie |
 | Done | All ACs checked → `backlog task edit <id> -s Done --final-summary "…"` → **`backlog task complete <id>`**, which moves it into `backlog/completed/` |
 
-`backlog task complete` is the only way a task leaves `backlog/tasks/`. Never move files by hand
-(`enforce-backlog-cli.sh` blocks it). Archive (`backlog task archive`) is only for tasks that were dropped
+`backlog task complete` is the only way a task leaves `backlog/tasks/`. Never move files by hand: editor
+writes under `backlog/` are blocked by `enforce-backlog-cli.sh`, Bash `mv`/`git mv`/`rm` of files under
+`backlog/` are blocked by `protect-data-dir.sh`, and CI's `check_backlog.py` catches a Done task left
+behind in `tasks/`. Archive (`backlog task archive`) is only for tasks that were dropped
 unfinished. Give the reason in the notes first.
 
 ## Docs, specs, READMEs, every `.md`
@@ -36,7 +38,8 @@ exactly this, and a stale doc is a **Should** at minimum (**Must** if it would s
 
 ## Enforcement
 - **CI `claude-tooling`:**
-  - fails if any task file in `backlog/tasks/` has `status: Done` (it should have been completed);
+  - fails if any task file in `backlog/tasks/` has `status: Done` (it should have been completed;
+    `.claude/scripts/check_backlog.py`);
   - fails if `.claude/README.md` or `.claude/learnings/INDEX.md` is stale;
   - fails if the roster lint finds any reference to a missing agent, skill or command.
 - **`/review-gate`:** `docs-reviewer` always runs.

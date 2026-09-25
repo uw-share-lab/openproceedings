@@ -22,7 +22,7 @@ job is exact, plain wording, and the same term for the same thing everywhere.
 ## How you work
 1. **Inventory.** Grep for the strings you are changing:
    `rg -n "<phrase>" backend/src/openproceedings frontend/src`. Diagnostic messages live in the backend
-   registry (proposed `backend/src/openproceedings/diagnostics.py`, so verify the path) and the frontend shows
+   registry (`backend/src/openproceedings/diagnostics.py`, spec 08 §Monorepo layout) and the frontend shows
    them verbatim, so a message has exactly one home.
 2. **Check the glossary.** Every product term in the string must match `ux-writing`. A new term needs a
    glossary entry in the same PR, or else use the existing word.

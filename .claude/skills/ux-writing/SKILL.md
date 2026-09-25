@@ -49,12 +49,14 @@ These are drafts. The registry holds the shipped text, and golden tests pin it (
 | translation | a Scholar/PoP construct rewritten to native syntax, with the reason | conversion, auto-fix |
 | warning / error | read-with-caveat / not searched | issue, problem |
 | search record | the frozen, citable search at `/record/[id]` | saved search, bookmark |
-| reproduced / drifted | replay status: same ids on the same index / newer index with `+added / −removed` | passed, changed |
-| mismatch | same index, different ids: a bug, shown as an error | — |
+| reproduced | replay status: the same `index_version` and `query_version` were available, and `ids_hash` and `excluded` are equal | passed, verified |
+| drifted | replay status: only a different index or query version is available; always shown with the reason (which inputs changed) and `+added / −removed` | changed, outdated |
+| mismatch | replay status: the same versions, but the ids or `excluded` differ. A bug, shown as "do not cite" | failed, error |
 | near-miss suggestion | phase 2 panel, never part of the set | result, recommendation |
 Never write "stemmed", "fuzzy", "about", "~", "400+", or "results may vary".
 
 ## Standing strings
-- Exclusion banner: `excluded: 212 workshop · 4 competition · 88 rejected`, and `excluded: none` when 0.
+- Exclusion banner: `excluded: 212 workshop · 4 competition · 88 rejected`, with the unclassified line
+  under it (`3 unclassified`, spec 05 §Components 5), and `excluded: none` when 0.
 - Zero results: "0 papers match `<canonical>`." Then the banner, then "Check the expansions and the tree."
 - Methods text: spec 05 §8 verbatim (`prisma-reporting`). Change it only by spec PR.

@@ -71,7 +71,10 @@ outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copyin
    `unknown` itemised on its own line ("3 unclassified"). Each has an "include" action, and **its label shows
    the number that clicking it will actually add**. That number is the facet count, which differs from the
    bucket count when a paper fails both defaults (for example, a rejected workshop paper). The tooltip explains
-   the PRISMA mapping and the fixed bucket order (track, then status; 03).
+   the PRISMA mapping and the fixed bucket order (track, then status; 03). Clicking "include" writes a
+   non-default `track:`/`status:` set into `q`. That set is no longer a default, so its exclusions stop
+   being automation removals and become user limits in the identification string, and the methods text
+   changes to match (03 §Exclusion accounting). The tooltip says so before the click.
 6. **Result list.** Title and abstract with highlights taken exactly from the API spans (never re-matched
    on the client). Venue/year/track badges. Links to OpenReview, PDF and proceedings. Uses infinite scroll
    or pages (decided at implementation time; both keep the ordering stable).
@@ -79,10 +82,27 @@ outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copyin
 8. **Save search record.** Creates `/records` and shows the permanent link plus generated methods text
    that says which string reproduces which number:
    *"We searched openproceedings on 2026-09-25 (index `a1b2c3d4e5f6`, built from a crawl of 2026-09-20) with
-   the string `<identification_query>`, which identified 716 records. Default filters `track:(main OR
-   datasets_benchmarks OR position)` and `status:accepted` removed 304 of them before screening (212
-   workshop, 4 competition, 88 rejected); 0 were unclassified. 412 records were screened. Search record:
-   <url>."* It always gives the **full** `index_version`, never a prefix.
+   the string `<identification_query>`, which identified 716 records within the limits it states
+   (`year:2020..2026`). Default filters `track:(main OR datasets_benchmarks OR position)` and
+   `status:accepted` removed 304 of them before screening (212 workshop, 4 competition, 88 rejected); that
+   count includes 0 unclassified records (track or status unknown), itemised separately. Cross-source
+   duplicates were merged at ingest, before indexing (see the coverage report). Database scope: coverage
+   report for snapshot `<snapshot_hash>`. 412 records were screened. Search record: <url>."*
+   It always gives the **full** `index_version`, never a prefix. The limits clause names every filter the
+   user wrote (03 §Exclusion accounting: "identified" is conditional on them) and reads "with no limits"
+   when there are none. The coverage report is cited with its snapshot hash as the database-scope caveat
+   (07 §C). A review may instead report the default filters as limits, citing the canonical string; the
+   record stores both strings, so either framing can be cited.
+
+## Error handling
+
+- API errors are shown from the envelope's `code` and `message` (04 §Error handling), never as a raw
+  status or a generic "something went wrong". A parse `422` draws its diagnostics as squiggles at their
+  spans, and the search view keeps the last good result set, marked as stale.
+- `429 API_RATE_LIMITED` shows the wait from `Retry-After`. `503 API_INDEX_NOT_LOADED` shows a
+  "search index is loading" state with a retry.
+- A `mismatch` replay is the blocking "do not cite" state of `/record/[id]` (§Pages), not a toast.
+- Nothing is retried silently in a way that could change the displayed set without the user seeing it.
 
 ## Non-functional requirements
 

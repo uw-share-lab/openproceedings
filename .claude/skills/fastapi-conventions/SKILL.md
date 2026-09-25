@@ -8,8 +8,8 @@ description: How the openproceedings FastAPI service is built — /api/v1 base p
 ## App shape
 - One app factory, `create_app(config) -> FastAPI`, in `backend/src/openproceedings/api/`. Routers per
   resource (`search`, `parse`, `papers`, `export`, `records`, `coverage`, `meta`, `health`, and
-  `near_misses` at M5), all mounted under **`/api/v1`**. Nothing is served outside it except `/healthz`
-  if the deploy probe needs it; verify against `deploy/compose.yml` at implementation time.
+  `near_misses` at M5), all mounted under **`/api/v1`**, `/healthz` included (spec 04 §Endpoints: liveness and whether the
+  index is loaded). Nothing is served outside `/api/v1`.
 - The CLI (`op search`, `op export`, `op serve`) and the routers call **the same functions**. A router
   parses the request, calls the shared function, and shapes the response. No search logic lives in a router.
 - Pydantic v2 models are the contract (`.claude/skills/api-contract/SKILL.md`). Every response model
@@ -23,7 +23,7 @@ the engine blocks every other request. Exports use a **sync generator** in `Stre
 ## Index lifecycle
 1. **Startup:** load `data/indexes/current` (a symlink to `data/indexes/<index_version>/`) once, in the
    lifespan handler. `/healthz` reports `index_loaded: false` until that finishes; search routes return
-   `503` with code `index_not_loaded` meanwhile.
+   `503` with code `API_INDEX_NOT_LOADED` meanwhile.
 2. **Hot swap:** on SIGHUP, build the new `TantivyEngine` off to the side, then replace the single
    `state.engine` reference in one assignment. Never mutate the live engine.
 3. **One engine per request.** A handler reads `engine = state.engine` **once** and uses that object for
@@ -33,14 +33,15 @@ the engine blocks every other request. Exports use a **sync generator** in `Stre
    `data/indexes/` is immutable; the app never writes there.
 
 ## Errors: one shape everywhere
-`{"error": {"code": "<snake_case>", "message": "<human text>", "diagnostics": [Diagnostic]?}}`
-| Situation | Status | code |
-|---|---|---|
-| Query parse error (02 diagnostics, spans included) | 422 | `parse_error` |
-| Bad parameter (`limit` > 200, unknown `sort`/`format`) | 422 | `invalid_parameter` (reject it, never clamp silently) |
-| Unknown paper or record | 404 | `not_found` |
-| Rate limited | 429 + `Retry-After` | `rate_limited` |
-| Index not loaded / requested `index_version` absent | 503 | `index_not_loaded` / `index_unavailable` |
+`{"error": {"code": "<CODE>", "message": "<human text>", "diagnostics": [Diagnostic]?}}`
+
+Statuses and codes are **exactly** spec 04 §Error handling; this skill keeps no table of its own. In short:
+422 `PARSE_*` (02 diagnostics, spans included), 422 `API_BAD_PARAM` (bad `sort`, `limit` > 200, unknown
+`format`, malformed `record_id`: reject it, never clamp silently), 404 `API_PAPER_NOT_FOUND` /
+`API_RECORD_NOT_FOUND`, 409 `API_INDEX_VERSION_UNAVAILABLE`, 409 `API_RECORD_MISMATCH` (export of a
+`mismatch` record), 429 `API_RATE_LIMITED` + `Retry-After`, 503 `API_INDEX_NOT_LOADED`, 500 `API_INTERNAL`
+(logged at ERROR with the request id; the message never echoes input). A replay `mismatch` is a `200`, not
+an error. Codes come from the registry (`.claude/skills/error-diagnostics/SKILL.md`).
 
 **Gotcha:** FastAPI's built-in `RequestValidationError` and `HTTPException` handlers emit `{"detail": …}`.
 Override both, or the contract has two error shapes. See `.claude/skills/error-diagnostics/SKILL.md`.
@@ -53,7 +54,8 @@ Override both, or the contract has two error shapes. See `.claude/skills/error-d
   `.claude/skills/logging-standards/SKILL.md` §API access line (the `request` event: `request_id`,
   `method`, route template, `status`, `ms`, `index_version`, `canonical_hash` for search/export, `total`;
   health checks at DEBUG). Don't define a second field list here.
-- **Neither the raw `q` nor the canonical string is logged by default.** Both reveal an unpublished review
+- **Neither `q` nor the canonical or identification strings are logged by default** (spec 04
+  §Implementation notes). All three reveal an unpublished review
   design. Config `log_query_text` (default `false`) is the only switch. Also keep query text out of
   exception messages and tracebacks that reach the log.
 
