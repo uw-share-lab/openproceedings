@@ -30,14 +30,91 @@ from collections.abc import Iterator
 SEP_CHARS = set(";&|()\n")
 PUNCT = ";&|()\n<>"
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
-WRAPPERS = {"env", "command", "builtin", "exec", "time", "nohup", "nice", "sudo"}
+# Wrappers that run the rest of the line as a command, with the options of EACH that consume the next word
+# (review round 2: one shared set made `sudo -n git push` skip `git`). A wrapper not listed takes none.
+WRAPPER_VALUE_OPTS: dict[str, set[str]] = {
+    "env": {"-u", "-C", "-S"},
+    "command": set(),
+    "builtin": set(),
+    "exec": {"-a"},
+    "time": {"-f", "-o"},
+    "nohup": set(),
+    "nice": {"-n"},
+    "sudo": {"-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T"},
+    "timeout": {"-s", "-k", "--signal", "--kill-after"},
+    "stdbuf": {"-i", "-o", "-e"},
+    "xargs": {
+        "-a",
+        "-d",
+        "-E",
+        "-I",
+        "-L",
+        "-n",
+        "-P",
+        "-s",
+        "--arg-file",
+        "--delimiter",
+        "--max-args",
+        "--max-procs",
+    },
+    "watch": {"-n", "-d", "--interval"},
+}
+WRAPPERS = set(WRAPPER_VALUE_OPTS)
+# Shell reserved words that can start a simple command without being the command (review 2026-09-25:
+# `if …; then git push; fi`, `{ git push; }`, `! gh pr create` slipped past).
+RESERVED = {
+    "{",
+    "}",
+    "!",
+    "if",
+    "then",
+    "elif",
+    "else",
+    "fi",
+    "for",
+    "while",
+    "until",
+    "do",
+    "done",
+    "case",
+    "esac",
+    "select",
+    "function",
+}
 GIT_VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
 GH_VALUE_OPTS = {"-R", "--repo"}
 HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)([A-Za-z_][\w-]*)\1")
+
+
+def _unquoted(line: str) -> str:
+    """`line` with quoted spans blanked and any `#` comment removed, so heredoc detection only sees
+    shell syntax (a `<<EOF` inside a quoted message is text, not a heredoc)."""
+    out, quote, i = [], None, 0
+    while i < len(line):
+        c = line[i]
+        if quote:
+            if c == "\\" and quote == '"' and i + 1 < len(line):
+                out.append("  ")
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+            out.append(" ")
+        elif c in "'\"":
+            quote = c
+            out.append(" ")
+        elif c == "#" and (i == 0 or line[i - 1] in " \t;&|("):
+            break
+        else:
+            out.append(c)
+        i += 1
+    return "".join(out)
+
+
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 
-class ParseError(Exception):
+class ParseError(ValueError):
     pass
 
 
@@ -54,6 +131,25 @@ def read_payload() -> tuple[str, str]:
     return cmd, cwd
 
 
+def strip_comments(cmd: str) -> str:
+    """Drop unquoted `#` comments the way bash does: `#` starts a comment only at the start of a word, so
+    `git push origin feat  # publish` loses the comment but `a#b` and a quoted `"x # y"` do not."""
+    lines = []
+    for line in cmd.split("\n"):
+        quote, cut = None, None
+        for i, c in enumerate(line):
+            if quote:
+                if c == quote and not (quote == '"' and i and line[i - 1] == "\\"):
+                    quote = None
+            elif c in "'\"":
+                quote = c
+            elif c == "#" and (i == 0 or line[i - 1] in " \t;&|()"):
+                cut = i
+                break
+        lines.append(line if cut is None else line[:cut])
+    return "\n".join(lines)
+
+
 def strip_heredocs(cmd: str) -> str:
     """Remove heredoc bodies (the lines after a `<<DELIM` up to a line that is exactly DELIM)."""
     lines = cmd.split("\n")
@@ -65,12 +161,13 @@ def strip_heredocs(cmd: str) -> str:
                 pending.pop(0)
             continue
         out.append(line)
-        pending.extend(m.group(2) for m in HEREDOC.finditer(line))
+        bare = _unquoted(line).replace("<<<", "   ")  # a herestring is not a heredoc
+        pending.extend(m.group(2) for m in HEREDOC.finditer(bare))
     return "\n".join(out)
 
 
 def tokenize(cmd: str) -> list[str]:
-    text = strip_heredocs(cmd).replace("\\\n", " ")
+    text = strip_comments(strip_heredocs(cmd).replace("\\\n", " "))
     lex = shlex.shlex(text, posix=True, punctuation_chars=PUNCT)
     lex.whitespace = " \t\r"
     lex.whitespace_split = True
@@ -82,26 +179,45 @@ def tokenize(cmd: str) -> list[str]:
 
 
 def is_separator(tok: str) -> bool:
-    return bool(tok) and set(tok) <= SEP_CHARS
+    """`;` `&&` `||` `|` `&` `(` `)` newline — and process substitution `<(` / `>(`, whose contents are a
+    command in their own right (`diff <(git push …)`)."""
+    if not tok:
+        return False
+    if set(tok) <= SEP_CHARS:
+        return True
+    return "(" in tok and set(tok) <= SEP_CHARS | {"<", ">"}
 
 
 def _resolve(candidate: str, base: str) -> str:
     return candidate if os.path.isabs(candidate) else os.path.normpath(os.path.join(base, candidate))
 
 
+def base(word: str) -> str:
+    """Command name without its directory, so `/usr/bin/git` is `git`."""
+    return os.path.basename(word) if "/" in word else word
+
+
 def _strip_prefixes(argv: list[str]) -> list[str]:
     i = 0
     while i < len(argv):
         a = argv[i]
-        if ASSIGNMENT.match(a):
+        if a in RESERVED or ASSIGNMENT.match(a):
             i += 1
-        elif a in WRAPPERS:
+        elif base(a) in WRAPPERS:
+            name = base(a)
             i += 1
-            while i < len(argv) and argv[i].startswith("-"):  # env -i, nice -n 5, sudo -u x
-                i += 2 if argv[i] in ("-u", "-n", "-g") else 1
+            while i < len(argv) and argv[i].startswith("-"):  # env -i, nice -n 5, sudo -u x, timeout -s KILL
+                opt = argv[i].split("=", 1)[0]
+                takes_value = opt in WRAPPER_VALUE_OPTS[name] and "=" not in argv[i]
+                i += 2 if takes_value else 1
+            if name == "timeout" and i < len(argv):  # the duration
+                i += 1
         else:
             break
-    return argv[i:]
+    rest = argv[i:]
+    if rest:
+        rest = [base(rest[0]), *rest[1:]]
+    return rest
 
 
 def is_redirect(tok: str) -> bool:
@@ -160,6 +276,8 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[list[str], str, list
                 yield [], state["dir"], redirects
             continue
         head = argv[0]
+        if head in ("for", "select", "case"):  # loop/case headers carry no command
+            continue
         if head == "cd" and len(argv) > 1 and not argv[1].startswith("-"):
             state["dir"] = _resolve(argv[1], state["dir"])
             continue

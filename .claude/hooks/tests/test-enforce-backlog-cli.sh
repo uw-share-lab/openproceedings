@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Never inherit a repo from the caller: git exports GIT_DIR etc. to hooks (e.g. pre-push from a worktree),
+# which would point this table's throwaway git calls at the real repository.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
 set -u
 
 # Case table for enforce-backlog-cli.sh — the hook that gates WRITES to Backlog.md-managed files.

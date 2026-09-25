@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Case table for enforce-pr-workflow.sh. Runs the real hook against a throwaway git repo so the
 # branch check exercises real `git rev-parse` rather than a mock. Usage: ./test-enforce-pr-workflow.sh
+# Never inherit a repo from the caller: git exports GIT_DIR etc. to hooks (e.g. pre-push from a worktree),
+# which would point this table's throwaway git calls at the real repository.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
 set -u
 
 HOOK="$(cd "$(dirname "$0")/.." && pwd)/enforce-pr-workflow.sh"
@@ -162,6 +165,15 @@ check main block 'bash -icl "git push origin main"'
 check main block 'sh -cx "git commit -m x"'
 check main block 'dash -cx "git push origin main"'
 check main  allow 'bash -c "git status"'                   # positive control: wrapper != auto-block
+# openproceedings round 2 (security review): shapes a whitespace-only split missed
+check feature/x block 'if true; then git push origin HEAD:dev; fi'      # reserved words + unspaced ;
+check feature/x block 'git push origin HEAD:dev;'                       # trailing ; must not become part of the ref
+check feature/x block '/usr/bin/git push origin HEAD:main'              # absolute path to git
+check feature/x block 'git status;git push origin HEAD:main'            # unspaced ; between commands
+check feature/x block 'git status
+git push origin HEAD:main'                                             # newline between commands
+check main  block 'timeout 60 git commit -m x'                          # wrapper prefix
+check main  block '{ git commit -m x; }'                                # brace group
 check main  allow 'bash --norc -c "git status"'            # positive control: long opt + safe cmd
 check main  allow 'bash -cx "git status"'                  # positive control: cluster + safe cmd
 

@@ -15,6 +15,7 @@ Checks:
 
 from __future__ import annotations
 
+import difflib
 import json
 import os
 import re
@@ -155,7 +156,7 @@ def lint_refs(agents: set[str], skills: set[str], commands: set[str]) -> None:
     agent_refs: set[str] = set()
     sources = [*C.rglob("*.md"), ROOT / "CLAUDE.md", ROOT / "CONTRIBUTING.md"]
     for p in sources:
-        if not p.exists() or "learnings" in p.parts:
+        if not p.exists() or p.is_relative_to(C / "learnings"):  # the journal, not the learnings skill
             continue
         for m in REF.finditer(p.read_text(encoding="utf-8")):
             skill, agent = m.group(2), m.group(3)
@@ -169,11 +170,16 @@ def lint_refs(agents: set[str], skills: set[str], commands: set[str]) -> None:
                 agent_refs.add(agent)
         text = p.read_text(encoding="utf-8")
         for name in BACKTICK_NAME.findall(text):
-            if name.endswith(ROLE_SUFFIXES) and name not in agents and name not in skills:
+            if name in agents or name in skills or name in commands:
+                pass
+            elif name.endswith(ROLE_SUFFIXES):
                 err(f"{p.relative_to(ROOT)}: names unknown agent `{name}`")
+            elif near := difflib.get_close_matches(name, sorted(agents | skills), n=1, cutoff=0.88):
+                # A typo of a real name (`qa-auditer`) silently drops a reviewer from routing.
+                err(f"{p.relative_to(ROOT)}: `{name}` is not an agent or skill — did you mean `{near[0]}`?")
             if name in agents and p.stem != name:
                 agent_refs.add(name)
-        if any(c in str(p) for c in COMMAND_CONTEXT):
+        if any(c in p.relative_to(ROOT).parts or c == p.name for c in COMMAND_CONTEXT):
             for cmd in BACKTICK_CMD.findall(text + " "):
                 if cmd not in commands:
                     err(f"{p.relative_to(ROOT)}: names unknown command `/{cmd}`")

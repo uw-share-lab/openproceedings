@@ -16,13 +16,19 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: hashFiles('frontend/package.json') != ''
         with: { node-version: 22 }
-      - name: Install shellcheck and actionlint
+      - name: Install shellcheck and actionlint (pinned release, checksum-verified)
+        env:
+          ACTIONLINT_VERSION: "1.7.7"
+          ACTIONLINT_SHA256: "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
-          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          f="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfLo "$f" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/$f"
+          echo "${ACTIONLINT_SHA256}  $f" | sha256sum -c -
+          tar -xzf "$f" actionlint
       - name: Sync workspace (ruff, mypy)
         run: |
-          uv sync --frozen
+          uv sync --locked
           if [ -f frontend/package.json ]; then (cd frontend && npm ci); fi
       - name: make lint (same target as the pre-push hook)
         run: make lint

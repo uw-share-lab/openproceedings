@@ -14,10 +14,10 @@ input=$(cat)
 HOOK_INPUT="$input" python3 - "$HOOK_DIR" <<'PY'
 import os, re, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import ParseError, gh_subcommand, git_subcommand, opt_values, read_payload, simple_commands
+from cmdparse import ParseError, gh_subcommand, git_subcommand, opt_values, read_payload, redirect_targets, simple_commands
 
 PATTERN = re.compile(
-    r"co-authored-by:[^\n]*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com",
+    r"co-authored-by[:=][^\n]*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com",
     re.IGNORECASE,
 )
 GIT_MSG = {"commit", "merge", "tag", "notes", "revert", "cherry-pick"}
@@ -62,6 +62,14 @@ for argv, d in commands:
     if h and h[0] == "pr" and h[1] in GH_PR_WRITE:
         relevant = True
         texts += [file_text(f, d) for f in opt_values(h[2], "--body-file", "-F")]
+if relevant:
+    # A message fed on stdin: `git commit -F - < msg.txt` (input redirect) or `cat msg.txt | git commit -F -`.
+    for op, target, d in redirect_targets(cmd, cwd):
+        if "<" in op and target:
+            texts.append(file_text(target, d))
+    for argv, d in commands:
+        if argv and argv[0] == "cat":
+            texts += [file_text(a, d) for a in argv[1:] if not a.startswith("-")]
 if relevant and (PATTERN.search(cmd) or any(PATTERN.search(t) for t in texts)):
     blocked()
 sys.exit(0)

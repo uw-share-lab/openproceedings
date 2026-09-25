@@ -68,8 +68,25 @@ except Exception:
 [ -n "$hook_cwd" ] || hook_cwd="$PWD"
 branch=$(git -C "$hook_cwd" rev-parse --abbrev-ref HEAD 2>/dev/null)
 
-verdict=$(HOOK_INPUT="$input" HOOK_CWD="$hook_cwd" python3 <<'PY' 2>/dev/null
-import json, os, shlex, subprocess
+verdict=$(HOOK_INPUT="$input" HOOK_CWD="$hook_cwd" HOOK_LIB="$(cd "$(dirname "$0")" && pwd)/lib" python3 <<'PY' 2>/dev/null
+import json, os, shlex, subprocess, sys
+
+# openproceedings: tokenize with the shared cmdparse tokenizer so unspaced `;`/`&&`, newlines, `(`/`)` and
+# redirects are separate tokens (security review round 2: `if true; then git push origin HEAD:dev; fi` and
+# `git push origin HEAD:dev;` read `dev;` as the ref), and compare command names by basename
+# (`/usr/bin/git`).
+sys.path.insert(0, os.environ.get("HOOK_LIB", ""))
+from cmdparse import base as _base, is_redirect as _is_redirect, is_separator as _is_sep, tokenize as _tokenize
+
+def _split(text):
+    """Punctuation-aware tokens; separators normalised into SEPARATORS, redirect operators dropped."""
+    out = []
+    for t in _tokenize(text):
+        if _is_sep(t):
+            out.append(";")
+        elif not _is_redirect(t):
+            out.append(t)
+    return out
 
 HOOK_CWD = os.environ.get("HOOK_CWD") or os.getcwd()
 
@@ -78,7 +95,7 @@ try:
 except Exception:
     cmd = ""
 
-SEPARATORS = {"&&", "||", ";", "|", "&"}
+SEPARATORS = {"&&", "||", ";", "|", "&"}  # _split() maps every separator (incl. newline, parens) to ";"
 # git's own options that take a value; skip the value when hunting for the subcommand.
 VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
@@ -173,8 +190,8 @@ def analyze(tokens, state):
             i = j
             continue
 
-        if tok in SHELLS or tok in SOURCE_CMDS:  # bash -c "..." / sh -lc '...' / . file / source file
-            supports_c = tok in SHELLS
+        if _base(tok) in SHELLS or tok in SOURCE_CMDS:  # bash -c "..." / sh -lc '...' / . file / source file
+            supports_c = _base(tok) in SHELLS
             j = i + 1
             found_c = False
             first_positional = None
@@ -196,7 +213,7 @@ def analyze(tokens, state):
                     found_c = True
                     if j + 1 < len(tokens):
                         try:
-                            inner = shlex.split(tokens[j + 1], posix=True)
+                            inner = _split(tokens[j + 1])
                         except ValueError:
                             return "parse-fail"
                         v = analyze(inner, state)
@@ -223,7 +240,7 @@ def analyze(tokens, state):
                 parts.append(tokens[j])
                 j += 1
             try:
-                inner = shlex.split(" ".join(parts), posix=True)
+                inner = _split(" ".join(parts))
             except ValueError:
                 return "parse-fail"
             v = analyze(inner, state)
@@ -232,7 +249,7 @@ def analyze(tokens, state):
             i = j
             continue
 
-        if tok != "git":
+        if _base(tok) != "git":
             i += 1
             continue
 
@@ -288,8 +305,8 @@ if not cmd:
     print("allow")
 else:
     try:
-        tokens = shlex.split(cmd, posix=True)
-    except ValueError:
+        tokens = _split(cmd)
+    except Exception:
         # Unbalanced quotes — bash rejects the same syntax before running, so nothing executes,
         # but hand it to the conservative shell-level fallback rather than silently allowing.
         print("parse-fail")

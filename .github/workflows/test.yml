@@ -16,17 +16,16 @@ jobs:
         if: hashFiles('backend/pyproject.toml') != ''
       - name: Backend — unit, golden, differential (2k), contract
         if: hashFiles('backend/pyproject.toml') != ''
-        working-directory: backend
         run: |
-          uv sync --dev
-          uv run pytest -q --hypothesis-profile=ci
+          uv sync --locked
+          uv run --locked pytest -q --hypothesis-profile=ci
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: hashFiles('frontend/package.json') != ''
         with: { node-version: 22 }
       - name: OpenAPI → TS types are fresh
         if: hashFiles('backend/pyproject.toml') != '' && hashFiles('frontend/package.json') != ''
         run: |
-          (cd backend && uv run op openapi > ../frontend/openapi.json)
+          uv run --locked op openapi > frontend/openapi.json
           (cd frontend && npm ci && npm run gen:api && git diff --exit-code src/api/schema.ts)
       - name: Frontend — vitest
         if: hashFiles('frontend/package.json') != ''

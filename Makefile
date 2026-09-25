@@ -1,7 +1,7 @@
 # openproceedings monorepo — common entry points. Standard: .claude/skills/autolint/SKILL.md
 .PHONY: help sync fmt lint tooling test hooks
 
-SHELL_FILES := $(wildcard .claude/hooks/*.sh .claude/hooks/tests/*.sh scripts/*.sh) .githooks/commit-msg .githooks/pre-push
+SHELL_FILES := $(wildcard .claude/hooks/*.sh .claude/hooks/tests/*.sh .claude/scripts/tests/*.sh scripts/*.sh .githooks/*)
 PY_TARGETS  := .claude $(wildcard backend)
 
 help:
@@ -13,30 +13,30 @@ help:
 	@echo "hooks    - install git hooks (commit-msg, pre-push) via scripts/setup-dev.sh"
 
 sync:
-	uv sync
+	uv sync --locked
 	@if [ -f frontend/package.json ]; then cd frontend && npm ci; fi
 
 fmt:
-	uv run ruff format $(PY_TARGETS)
-	uv run ruff check --fix $(PY_TARGETS)
-	@if [ -d frontend/node_modules ]; then cd frontend && npx prettier --write . && npx eslint --fix .; fi
+	uv run --locked ruff format $(PY_TARGETS)
+	uv run --locked ruff check --fix $(PY_TARGETS)
+	@if [ -d frontend/node_modules ]; then cd frontend && npx --no-install prettier --write . && npx --no-install eslint --fix .; fi
 
 lint:
-	uv run ruff format --check $(PY_TARGETS)
-	uv run ruff check $(PY_TARGETS)
-	@if [ -d backend/src ]; then uv run mypy --strict backend/src; fi
+	uv run --locked ruff format --check $(PY_TARGETS)
+	uv run --locked ruff check $(PY_TARGETS)
+	@if [ -d backend/src ]; then uv run --locked mypy --strict backend/src; fi
 	shellcheck -x $(SHELL_FILES)
-	@if [ -d frontend/node_modules ]; then cd frontend && npx prettier --check . && npx eslint . && npx tsc --noEmit; fi
+	@if [ -d frontend/node_modules ]; then cd frontend && npx --no-install prettier --check . && npx --no-install eslint . && npx --no-install tsc --noEmit; fi
 
 tooling:
 	python3 .claude/scripts/lint_tooling.py
 	python3 .claude/scripts/roster_index.py --check
 	python3 .claude/scripts/learnings_index.py --check
 	python3 .claude/scripts/check_backlog.py
-	@for t in .claude/hooks/tests/*.sh; do out=$$(bash "$$t") || { echo "$$out"; exit 1; }; echo "$$t: $$(echo "$$out" | tail -1)"; done
+	@for t in .claude/hooks/tests/*.sh .claude/scripts/tests/*.sh; do out=$$(bash "$$t") || { echo "$$out"; exit 1; }; echo "$$t: $$(echo "$$out" | tail -1)"; done
 
 test:
-	@if [ -d backend ]; then uv run pytest -q; fi
+	@if [ -d backend ]; then uv run --locked pytest -q; fi
 	@if [ -f frontend/package.json ]; then cd frontend && npm test -- --run; fi
 
 hooks:

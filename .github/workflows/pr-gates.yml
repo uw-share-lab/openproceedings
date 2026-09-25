@@ -21,7 +21,7 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          re='co-authored-by:.*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com'
+          re='co-authored-by[:=].*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com'
           bad=0
           if git log --format=%B "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" | grep -Eiq "$re"; then
             echo "::error::a commit message carries AI attribution"; bad=1; fi

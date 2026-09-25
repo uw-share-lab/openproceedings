@@ -75,7 +75,7 @@ def check_disposition(level: str, disp: str, root: Path, head: str) -> str | Non
             return "a [must] finding cannot be rejected — fix it or escalate"
         words = re.findall(r"[A-Za-z]{2,}", m.group(1))
         return None if len(words) >= 3 else "a rejection needs a real reason (at least three words)"
-    return f"unrecognised disposition '{disp}' (use: fixed <sha> | task-NNN | rejected: <reason ≥10 chars>)"
+    return f"unrecognised disposition '{disp}' (use: fixed <sha> | task-NNN | rejected: <reason of at least three words>)"
 
 
 def main() -> None:

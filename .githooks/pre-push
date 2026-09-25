@@ -3,5 +3,10 @@
 # Installed by scripts/setup-dev.sh (core.hooksPath=.githooks). Skip once with: git push --no-verify
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
+# Git exports GIT_DIR (and friends) to hooks run from a linked worktree. Left set, the hook-test tables'
+# throwaway `git init`/`git -C` calls act on THIS repository instead (review round 2: core.bare=true and
+# stray branches). Clear every repo-local git variable before running anything.
+# shellcheck disable=SC2046  # word-splitting the variable names is intended
+unset $(git rev-parse --local-env-vars)
 echo "pre-push: make lint" && make --no-print-directory lint
 echo "pre-push: make tooling" && make --no-print-directory tooling

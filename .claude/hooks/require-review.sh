@@ -73,6 +73,17 @@ def push_positionals(args):
 def strip_owner(ref):
     return ref.split(":", 1)[1] if ref and ":" in ref else ref
 
+def safe_branch(name, what):
+    """A --base/--head value becomes a git argument, so it must be a plain branch name. A value such as
+    `--upload-pack=<cmd>` would otherwise be read by `git fetch` as an option and run a command inside this
+    hook (security review round 2)."""
+    if name is None:
+        return None
+    ok = (not name.startswith("-")) and git(".", "check-ref-format", "--branch", name) != ""
+    if not ok:
+        block([f"Review gate: {what} {name!r} is not a valid branch name — refusing to pass it to git."])
+    return name
+
 cmd, cwd = read_payload()
 if not cmd or not re.search(r"\b(git|gh)\b", cmd):
     sys.exit(0)
@@ -106,19 +117,29 @@ for argv, d in commands:
     h = gh_subcommand(argv)
     if h and h[0] == "pr" and h[1] == "create":
         args = h[2]
-        head = strip_owner(opt_value(args, "--head", "-H"))
-        base = opt_value(args, "--base", "-B") or "dev"
-        if base == "main" and head == "dev":
-            continue  # promotion: see header §3
+        raw_head = opt_value(args, "--head", "-H")
+        head = safe_branch(strip_owner(raw_head), "--head")
+        base = safe_branch(opt_value(args, "--base", "-B"), "--base") or "dev"
+        other_repo = any(a in ("-R", "--repo") or a.startswith("--repo=") for a in argv)
+        if base == "main" and raw_head == "dev" and not other_repo:
+            continue  # promotion of THIS repo's dev (not owner:dev, not --repo other): see header §3
         head_ref = head or "HEAD"
         sha = git(d, "rev-parse", "--verify", "--quiet", f"{head_ref}^{{commit}}")
         need_review(d, sha, "`gh pr create`")
         labels = [l.strip() for v in opt_values(args, "--label", "-l") for l in v.split(",")]
         if "no-learning" in labels:
             continue
-        git(d, "fetch", "--quiet", "origin", base)
-        changed = git(d, "diff", "--name-only", "--diff-filter=AM", f"origin/{base}...{head_ref}", "--", ".claude/learnings/")
-        entries = [p for p in changed.splitlines() if ENTRY_NAME.match(p)]
+        git(d, "fetch", "--quiet", "origin", f"+refs/heads/{base}:refs/remotes/origin/{base}")
+        # Added, modified or renamed entries count only if they add lines (a chmod-only or delete-only
+        # change is not a lesson). --numstat gives "<added>\t<deleted>\t<path>"; renames print "old => new".
+        numstat = git(d, "diff", "--numstat", "--find-renames", "--diff-filter=AMR", f"origin/{base}...{head_ref}", "--", ".claude/learnings/")
+        entries = []
+        for line in numstat.splitlines():
+            parts = line.split("\t")
+            if len(parts) == 3 and parts[0].isdigit() and int(parts[0]) > 0:
+                path = re.sub(r"\{[^{}]* => ([^{}]*)\}", r"\1", parts[2]).split(" => ")[-1]
+                if ENTRY_NAME.match(path):
+                    entries.append(path)
         if not entries:
             block([
                 f"Learnings gate: this branch neither adds nor extends a .claude/learnings/ entry vs origin/{base}.",

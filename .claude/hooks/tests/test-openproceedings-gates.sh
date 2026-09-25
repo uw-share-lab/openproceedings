@@ -4,6 +4,9 @@
 # Runs the real hooks against a throwaway repo with a bare "origin", so git resolution is real.
 # Every reviewer finding from the 2026-09-25 review round is a row here: a gate bug is fixed only when
 # a row that failed before now passes. Usage: ./test-openproceedings-gates.sh
+# Never inherit a repo from the caller: git exports GIT_DIR etc. to hooks (e.g. pre-push from a worktree),
+# which would point this table's throwaway git calls at the real repository.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
 set -u
 HOOKS="$(cd "$(dirname "$0")/.." && pwd)"
 RECORD="$(cd "$HOOKS/../scripts" && pwd)/record-review.py"
@@ -101,6 +104,20 @@ check $R block "FOO=1 git push"                       "$(payload_bash 'FOO=1 git
 check $R block "env X=0 git push"                     "$(payload_bash 'env X=0 git push origin feat')"
 check $R block "command git push"                     "$(payload_bash 'command git push origin feat')"
 check $R block "time git push"                        "$(payload_bash 'time git push origin feat')"
+check $R block "timeout 60 git push"                  "$(payload_bash 'timeout 60 git push origin feat')"
+check $R block "if …; then git push; fi"              "$(payload_bash 'if true; then git push origin feat; fi')"
+check $R block "{ git push; }"                        "$(payload_bash '{ git push origin feat; }')"
+check $R block "for …; do git push; done"             "$(payload_bash 'for b in feat; do git push origin feat; done')"
+check $R block "/usr/bin/git push"                    "$(payload_bash '/usr/bin/git push origin feat')"
+check $R block "/bin/bash -c \"git push\""            "$(payload_bash '/bin/bash -c "git push origin feat"')"
+check $R block "! gh pr create"                       "$(payload_bash '! gh pr create --fill')"
+check $R block "sudo -u x nice -n 5 git push"         "$(payload_bash 'sudo -u me nice -n 5 git push origin feat')"
+check $R block "push after a <<< herestring line"     "$(payload_bash 'cat <<<x
+git push origin feat')"
+check $R block "push after a quoted <<EOF mention"    "$(payload_bash 'echo "use <<EOF"
+git push origin feat')"
+check $R block "--base option injection refused"      "$(payload_bash "gh pr create --fill --base '--upload-pack=touch $TMP/PWNED;false'")"
+if [ -e "$TMP/PWNED" ]; then fail=$((fail+1)); echo "  FAIL injected command ran"; else pass=$((pass+1)); echo "  ok   injected command did not run"; fi
 check $R allow "deleting a remote branch"             "$(payload_bash 'git push origin --delete feat')"
 check $R allow "deleting via :ref only"               "$(payload_bash 'git push origin :old')"
 git -C "$REPO" worktree add -q "$TMP/wt-other" other2
@@ -208,9 +225,85 @@ check $P block "> redirect into an index"             "$(payload_bash 'echo x > 
 check $P block ">> redirect, no spaces"               "$(payload_bash 'echo x>>data/indexes/abc/meta.json')"
 check $P block "sed --in-place on a snapshot"         "$(payload_bash 'sed --in-place s/a/b/ data/snapshots/s1/records.jsonl')"
 check $P block "tee into an index"                    "$(payload_bash 'echo x | tee data/indexes/abc/meta.json')"
+check $P block "timeout 5 rm -rf data/snapshots"       "$(payload_bash 'timeout 5 rm -rf data/snapshots')"
+check $P block "if …; then rm -rf data/snapshots; fi" "$(payload_bash 'if true; then rm -rf data/snapshots; fi')"
+check $P block "/bin/rm -rf data/indexes"             "$(payload_bash '/bin/rm -rf data/indexes')"
+check $P block "rm after a <<< herestring line"       "$(payload_bash 'cat <<<x
+rm -rf data/snapshots')"
+check $P block "mv a task file by hand"               "$(payload_bash 'mv "backlog/tasks/task-001 - x.md" backlog/completed/')"
+check $P block "git mv a task file"                   "$(payload_bash 'git mv "backlog/tasks/task-001 - x.md" backlog/completed/')"
+check $P block "rm a task file"                       "$(payload_bash 'rm "backlog/tasks/task-001 - x.md"')"
+check $P block "redirect into backlog/"               "$(payload_bash 'echo x > backlog/tasks/new.md')"
+check $P allow "the backlog CLI itself"               "$(payload_bash 'backlog task complete 1')"
+check $P allow "reading backlog files"                "$(payload_bash 'cat backlog/tasks/*.md')"
 check $P allow "sed read-only on a snapshot"          "$(payload_bash 'sed -n 1p data/snapshots/s1/records.jsonl')"
 check $P allow "cp OUT of a snapshot"                 "$(payload_bash 'cp data/snapshots/s1/records.jsonl /tmp/x')"
 check $P allow "rm data/cache"                        "$(payload_bash 'rm -rf data/cache')"
+
+echo "== round-2 mutation rows (each row fails if one specific piece of gate logic is removed)"
+g switch -q -c mut dev
+printf '# m\n\n**Key lesson:** mutation branch\n' > "$REPO/.claude/learnings/2026-09-26-mut.md"; g add -A; g commit -qm mut
+approve                                    # HEAD (mut) approved; other2 is never reviewed
+check $R allow "heredoc body is not a command"        "$(payload_bash 'cat <<EOF
+git push origin other2
+EOF')"
+check $R allow "2>&1 is not a refspec (fd digit)"     "$(payload_bash 'git push origin mut 2>&1 | tail -5')"
+check $R allow "trailing # comment is not a refspec"  "$(payload_bash 'git push -u origin mut  # publish the branch')"
+check $R block "sudo -u <value> then git push"        "$(payload_bash 'sudo -u me git push origin other2')"
+check $R block "eval recursion"                       "$(payload_bash 'eval "git push origin other2"')"
+check $R block "gh -R repo pr create (unreviewed)"    "$(payload_bash 'gh -R me/op pr create --head other2 --fill --label no-learning')"
+check $R block "attached -Hother2 is honoured"        "$(payload_bash 'gh pr create -Hother2 --fill --label no-learning')"
+check $R block "promotion needs head dev, not feat"   "$(payload_bash 'gh pr create --base main --head other2 --fill')"
+check $R block "promotion: owner:dev is not ours"     "$(payload_bash 'gh pr create --base main --head someone:dev --fill')"
+check $R block "promotion: --repo other is not ours"  "$(payload_bash 'gh pr create --repo other/fork --base main --head dev --fill')"
+check $R block "process substitution <(git push)"     "$(payload_bash 'diff <(git push origin other2) /dev/null')"
+check $R block "--base injection, validation only barrier" "$(payload_bash "gh pr create --fill --label no-learning --base '--upload-pack=touch $TMP/PWNED2;false'")"
+if [ -e "$TMP/PWNED2" ]; then fail=$((fail+1)); echo "  FAIL injected command ran (approved + no-learning path)"; else pass=$((pass+1)); echo "  ok   injected command did not run (approved + no-learning path)"; fi
+check $R allow "-d deletes every named ref"           "$(payload_bash 'git push -d origin other2')"
+check $R allow "base defaults to dev"                 "$(payload_bash 'gh pr create --fill')"
+check $R allow "comma-split labels (bug,no-learning)" "$(payload_bash 'gh pr create --base dev --head mut --fill -l bug,no-learning')"
+g switch -q -c mut-del dev
+git -C "$REPO" rm -q ".claude/learnings/2026-01-01-old.md"; g commit -qm del
+approve
+check $R block "deleting an entry is not a lesson"    "$(payload_bash 'gh pr create --base dev --fill')"
+check $R allow "comma-split label bug,no-learning"    "$(payload_bash 'gh pr create --base dev --fill -l bug,no-learning')"
+g switch -q -c mut-chmod dev
+chmod +x "$REPO/.claude/learnings/2026-01-01-old.md"; g commit -qam chmod
+approve
+check $R block "chmod-only change is not a lesson"    "$(payload_bash 'gh pr create --base dev --fill')"
+g switch -q mut
+check $A block "gh pr edit body trailer"              "$(payload_bash "gh pr edit 1 --body \"x $TRAILER\"")"
+check $A block "git tag -m trailer"                   "$(payload_bash "git tag -a v1 -m \"rel $TRAILER\"")"
+printf 'Summary\n\n%s\n' "$TRAILER" > "$TMP/body.md"
+check $A block "--body-file with trailer"             "$(payload_bash "gh pr create --fill --body-file '$TMP/body.md'")"
+check $A block "unbalanced quote still scanned"       "$(payload_bash "git commit -m \"x $TRAILER")"
+check $A block "-F - < file (stdin redirect)"         "$(payload_bash "git commit -F - < '$TMP/msg.txt'")"
+check $A block "cat file | git commit -F -"           "$(payload_bash "cat '$TMP/msg.txt' | git commit -F -")"
+check $A block "--trailer Co-authored-by=Claude"      "$(payload_bash 'git commit --trailer "Co-authored-by=Claude <x@y>" -m x')"
+check $P block "rm -rf data/* (glob)"                 "$(payload_bash 'rm -rf data/*')"
+check $P block "rm -rf data/snap* (glob)"             "$(payload_bash 'rm -rf data/snap*')"
+check $P allow "rm -rf data/cache/* (mutable)"        "$(payload_bash 'rm -rf data/cache/*')"
+check $P block "git clean -fdx"                       "$(payload_bash 'git clean -fdx')"
+check $P block "git clean -fdX"                       "$(payload_bash 'git clean -fdX')"
+check $P allow "git clean -ndx (dry run)"             "$(payload_bash 'git clean -ndx')"
+check $P allow "git clean -fd (no ignored files)"     "$(payload_bash 'git clean -fd')"
+check $P block "git stash --all"                      "$(payload_bash 'git stash --all')"
+check $P block "dd of= into an index"                 "$(payload_bash 'dd if=/dev/zero of=data/indexes/abc/x bs=1 count=1')"
+check $P block "rsync --delete onto data/indexes/"    "$(payload_bash 'rsync -a --delete empty/ data/indexes/')"
+check $P block "cp into data/indexes/ (the dir)"      "$(payload_bash 'cp x data/indexes/')"
+check $P block "truncate a snapshot"                  "$(payload_bash 'truncate -s0 data/snapshots/s1/records.jsonl')"
+check $P block "find -execdir rm in snapshots"        "$(payload_bash 'find data/snapshots -name x -execdir rm {} \;')"
+check $P block "sed -Ei (clustered in-place)"         "$(payload_bash 'sed -Ei s/a/b/ data/snapshots/s1/records.jsonl')"
+nb=$(python3 -c 'import json,sys; print(json.dumps({"tool_name":"NotebookEdit","cwd":sys.argv[1],"tool_input":{"notebook_path":sys.argv[1]+"/data/indexes/abc/n.ipynb"}}))' "$REPO")
+check $P block "NotebookEdit into an index"           "$nb"
+mkdir -p "$REPO/backlog/completed"; : > "$REPO/backlog/completed/task-555 - done.md"
+g add -A; g commit -qm completed-task
+printf -- '- [should] a.py:1 slow → task-555\n' > "$TMP/d11.md"
+check_cmd ok  "task found in backlog/completed/"      python3 "$RECORD" APPROVE "$TMP/d11.md"
+printf -- '- [must] a.py:1 wrong → task-555\n' > "$TMP/d12.md"
+check_cmd err "APPROVE refused: must → task"          python3 "$RECORD" APPROVE "$TMP/d12.md"
+check_cmd ok  "REQUEST_CHANGES with an open must"     python3 "$RECORD" REQUEST_CHANGES "$TMP/d12.md"
+check $R block "…and that record does not approve"    "$(payload_bash 'git push origin mut')"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")
@@ -220,6 +313,7 @@ if [ -z "$out" ]; then pass=$((pass+1)); echo "  ok   silent on api/app.py"; els
 
 echo "== autofix.sh (non-blocking; fixes in place, reports what it can't)"
 cp "$HOOKS/../../pyproject.toml" "$REPO/pyproject.toml" 2>/dev/null
+ln -s "$(cd "$HOOKS/../.." && pwd)/.venv" "$REPO/.venv" 2>/dev/null   # autofix runs ruff from the workspace venv, never via uv run
 printf 'import os,sys\nx=1\n' > "$REPO/fmt_me.py"
 ( cd "$REPO" && payload_file Edit "$REPO/fmt_me.py" | CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1 ); rc=$?
 if [ $rc -eq 0 ] && grep -q '^x = 1$' "$REPO/fmt_me.py"; then pass=$((pass+1)); echo "  ok   python file formatted in place (exit 0)"; else fail=$((fail+1)); echo "  FAIL python not formatted / nonzero exit ($rc)"; fi
@@ -231,10 +325,29 @@ printf 'x=1\n' > "$REPO/data/cache.py"
 payload_file Edit "$REPO/data/cache.py" | CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
 if grep -q '^x=1$' "$REPO/data/cache.py"; then pass=$((pass+1)); echo "  ok   data/ is never touched"; else fail=$((fail+1)); echo "  FAIL autofix rewrote a file under data/"; fi
 
+rm -f "$REPO/.venv"
+printf 'x=1\n' > "$REPO/novenv.py"
+out=$(payload_file Edit "$REPO/novenv.py" | CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" 2>/dev/null)
+case "$out" in *".venv/bin/ruff not found"*) pass=$((pass+1)); echo "  ok   no venv → skipped with a note, never uv run";; *) fail=$((fail+1)); echo "  FAIL no-venv case: $out";; esac
+mkdir -p "$TMP/outside"; printf 'x=1\n' > "$TMP/outside/o.py"; ln -s "$TMP/outside/o.py" "$REPO/link.py"
+ln -s "$(cd "$HOOKS/../.." && pwd)/.venv" "$REPO/.venv" 2>/dev/null
+mkdir -p "$REPO/sub"; printf 'x=1\n' > "$TMP/outside/dots.py"
+payload_file Edit "$REPO/sub/../../outside/dots.py" | CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
+if grep -q '^x=1$' "$TMP/outside/dots.py"; then pass=$((pass+1)); echo "  ok   a ../ path out of the repo is not touched"; else fail=$((fail+1)); echo "  FAIL autofix followed ../ out of the repo"; fi
+rm -f "$REPO/.venv"
+payload_file Edit "$REPO/link.py" | CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
+if grep -q '^x=1$' "$TMP/outside/o.py"; then pass=$((pass+1)); echo "  ok   symlink to a file outside the repo is not touched"; else fail=$((fail+1)); echo "  FAIL autofix followed a symlink out of the repo"; fi
+
 echo "== load-learnings.sh"
 mkdir -p "$TMP/empty/.claude/learnings"; printf '# Learnings index\n\n_No entries yet._\n' > "$TMP/empty/.claude/learnings/INDEX.md"
 out=$(CLAUDE_PROJECT_DIR="$TMP/empty" "$HOOKS/load-learnings.sh" 2>&1)
 case "$out" in *"(0 entries)"*) case "$out" in *"integer expected"*) fail=$((fail+1)); echo "  FAIL empty index errors";; *) pass=$((pass+1)); echo "  ok   empty index reports 0 cleanly";; esac;; *) fail=$((fail+1)); echo "  FAIL empty index: $out";; esac
+
+mkdir -p "$TMP/big/.claude/learnings"
+{ printf '# Learnings index\n\n'; for i in $(seq 1 45); do printf -- '- 2026-01-%02d [t%d](x.md) — k\n' $(( (i % 28) + 1 )) "$i"; done; } > "$TMP/big/.claude/learnings/INDEX.md"
+out=$(CLAUDE_PROJECT_DIR="$TMP/big" "$HOOKS/load-learnings.sh" 2>&1)
+lines=$(printf '%s\n' "$out" | grep -c '^- ')
+case "$out" in *"5 older entries"*) if [ "$lines" -eq 40 ]; then pass=$((pass+1)); echo "  ok   index capped at 40 lines with an 'older entries' note"; else fail=$((fail+1)); echo "  FAIL cap printed $lines lines"; fi;; *) fail=$((fail+1)); echo "  FAIL no older-entries note";; esac
 
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]

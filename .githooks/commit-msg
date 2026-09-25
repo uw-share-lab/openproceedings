@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # git commit-msg hook: no AI authorship in commit messages (project decision 2026-09-25).
 # Covers commits made outside Claude Code (editor commits, other tools). Install: scripts/setup-dev.sh
-if grep -Eiq 'co-authored-by:.*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com' "$1"; then
+if grep -Eiq 'co-authored-by[:=].*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com' "$1"; then
   echo "commit-msg: remove the AI co-author trailer / 'Generated with' footer — openproceedings commits are authored by people." >&2
   exit 1
 fi
