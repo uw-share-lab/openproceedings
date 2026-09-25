@@ -1,0 +1,20 @@
+# corpus, caches, indexes, search records — never committed (see docs/specs/01, 08)
+data/
+.env
+.env.*
+!.env.example
+# python
+__pycache__/
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+# node
+node_modules/
+.next/
+# os / editor
+.DS_Store
+.claude/settings.local.json
+.claude/worktrees/

@@ -1,0 +1,8 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "words": ["openproceedings", "NeurIPS", "Neur", "ICLR", "ICML", "PMLR", "OpenReview", "venueid", "venueids",
+    "Covidence", "PRISMA", "Evals", "scholarmend", "venuetriage", "venuescout", "refaudit", "Kreate", "dedup",
+    "NFKC", "stopword", "stopwords", "lemmatization", "EBNF", "Tantivy", "pydantic", "SPECTER", "Lezer",
+    "EMNLP", "NAACL", "FAccT", "CSCW", "visionlanguage", "trustworth", "Hypothesis", "tfidf", "uvicorn", "shadcn"]
+}

@@ -1,0 +1,95 @@
+# 05 — Frontend
+
+Status: **draft for review** · depends on: 04 (generated API types) · consumed by: people
+
+## Purpose
+
+A research tool, not a consumer search box. It helps a reviewer write a precise query, see exactly how
+it was read, trust the result set, and move that set into screening. Hosting is not tied to Vercel: build
+with `output: "standalone"` so it runs in the Docker image (08).
+
+## Stack
+
+Next.js (App Router) + TypeScript (strict). Tailwind + shadcn/ui for components. CodeMirror 6 for the query
+editor. TanStack Query for API state. Types are generated from 04's OpenAPI schema, not written by hand.
+Tests: Vitest + Testing Library (units), Playwright (e2e against the fixture API).
+
+## URL is state (guarantee 3)
+
+`/search?q=<input>&mode=native|scholar&sort=relevance&page=2`. Nothing that affects the result set lives
+outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copying the URL copies the search.
+
+## Pages
+
+| Route | Content |
+|---|---|
+| `/` | Search home: the editor, example queries (the review's strings), a coverage summary line |
+| `/search` | The main workspace (below) |
+| `/paper/[id]` | Full record: abstract with the current query's highlights, all links, provenance table |
+| `/record/[id]` | Search-record page: canonical query, index version, date, total, exclusions, replay status (`reproduced`/`drifted`), a "Copy methods text" button, export buttons |
+| `/coverage` | Venue × year × track table with source and snapshot date, missing-abstract counts, `unknown` counts |
+| `/help/syntax` | Language reference generated from the 02 golden table (it cannot drift from the tests) |
+
+## `/search` layout
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│ [ Text | Builder ]   mode: [native ▾]                              [Search] │
+│ ┌────────────────────────────────────────────────────────────────────────┐ │
+│ │ ("foundation model" OR LLM) AND trustworth* AND benchmark …            │ │ ← CodeMirror
+│ └────────────────────────────────────────────────────────────────────────┘ │
+│ ⚠ AND/OR mixed without parentheses — read as: (A AND B) OR C   [show tree] │ ← diagnostics
+│ trustworth* → trustworthy, trustworthiness                                  │ ← expansion chips
+├──────────────┬─────────────────────────────────────────────────────────────┤
+│ Venue  ☑☑☑   │ 412 papers · index a1b2c3 · excluded: 212 workshop, 88      │
+│ Year [2023–] │   rejected [include ▸]      [Export ▾] [Save search record] │
+│ Track        │ ─────────────────────────────────────────────────────────── │
+│  ☑ main      │ **TrustLLM**: Trustworthiness in Large Language Models       │
+│  ☑ D&B       │ ICML 2024 · main · poster                                   │
+│  ☐ workshop  │ …evaluate the **trustworthiness** of **LLMs** across six… │
+│ Status       │                                                             │
+└──────────────┴─────────────────────────────────────────────────────────────┘
+```
+
+## Components
+
+1. **Query editor (CodeMirror 6).** Syntax highlighting from a Lezer grammar that mirrors 02. Colour for
+   operators, fields, phrases and wildcards. Inline squiggles from `/parse` diagnostics (debounced 250 ms)
+   using the spans the server returns. Autocomplete for fields and for the `track:`/`venue:` values from
+   `/meta`. The **server's parser is authoritative.** The client grammar only highlights, it never
+   decides.
+2. **"How we read your query."** A collapsible tree view of the AST, with the default filters shown in grey
+   as explicit clauses.
+3. **Query builder.** Mirrors how the review's strings are structured: **concept groups** (rows). Terms
+   inside a row are ORed, and rows are ANDed, e.g. AI-system terms × trust terms × benchmark terms. Each
+   term can be a word, phrase or wildcard, with a per-term field scope. The builder round-trips through the
+   AST. Switching from text to builder is allowed only when the AST fits the group shape; otherwise the
+   builder shows "this query is too complex for the builder" and stays read-only.
+4. **Filter sidebar.** Venue, year range, track, status. Workshop is **off by default**. Each control shows
+   its count and **edits the `track:`/`status:` clauses in `q`**.
+5. **Exclusion banner.** "212 workshop · 4 competition · 88 rejected excluded by filters", with a one-click
+   "include" for each, and a tooltip explaining the PRISMA mapping.
+6. **Result list.** Title and abstract with highlights taken exactly from the API spans (never re-matched
+   on the client). Venue/year/track badges. Links to OpenReview, PDF and proceedings. Uses infinite scroll
+   or pages (decided at implementation time; both keep the ordering stable).
+7. **Export menu.** RIS (Covidence), CSV, BibTeX, JSONL. Shows the count before downloading.
+8. **Save search record.** Creates `/records` and shows the permanent link plus generated methods text:
+   *"Searched openproceedings (index a1b2c3, 2026-09-25) with `<canonical>`; 412 records; 304 removed
+   before screening by track/status filters."*
+
+## Non-functional requirements
+
+- Accessibility: WCAG 2.2 AA. The editor, builder and results work by keyboard alone. Highlights never rely
+  on colour alone (they also use bold or underline).
+- Performance: search view interactive in under 1 s on the fixture API. Diagnostics feel instant (≤300 ms
+  including the round trip).
+- Light and dark themes. Layout usable at 360 px wide (reading on a phone is allowed; writing queries on
+  a phone is not a goal).
+
+## Testing
+
+- Unit: builder ↔ AST round-trip, and the URL↔state reducer (facet click → exact `q` rewrite).
+- e2e (Playwright): type one of the review's strings → see the tree → toggle workshops → count and `q`
+  change → export RIS → the file parses and has `total` records → save a record → the record page shows
+  `reproduced`.
+- Visual regression on the search view (both themes).
