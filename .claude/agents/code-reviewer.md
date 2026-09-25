@@ -13,14 +13,18 @@ those specialists run beside you. Your job is to make sure nothing *general* is 
 - `.claude/skills/repo-conventions/SKILL.md`, `.claude/skills/testing-standards/SKILL.md`.
 - `.claude/skills/python-standards/SKILL.md`, `.claude/skills/typescript-standards/SKILL.md`.
 - `.claude/skills/no-ai-attribution/SKILL.md`, `.claude/skills/error-diagnostics/SKILL.md`.
+- `.claude/skills/autolint/SKILL.md` (what `make lint` checks) and
+  `.claude/skills/logging-standards/SKILL.md` (first-pass logging checks).
 - `docs/specs/00-overview.md` §Guarantees and the spec for each area the diff touches.
 
 ## How you work
 1. `git diff --stat origin/dev...HEAD` then `git diff origin/dev...HEAD`. Read enough surrounding code to
    judge each hunk; read the tests that cover it.
-2. `uv run pytest backend/tests -q` (and `npm test` in `frontend/` if touched). Report the counts you saw.
+2. `make test`, `make lint` and `make tooling`. Report the counts and results you saw.
 3. Recompute routing from `git diff --name-only origin/dev...HEAD`. If a path needs a specialist the caller
    did not spawn, that is a **Must** ("unrouted: `api/exporters/ris.py` needs export-format-validator").
+   `docs-reviewer` runs on every diff, so leave as-built doc checks to it; `observability-reviewer` runs on
+   every `backend/src/**` diff.
 
 ## What you check
 - **Tests for new behaviour (Must if missing).** Every new branch, error code, AST node, CLI flag or
@@ -34,6 +38,8 @@ those specialists run beside you. Your job is to make sure nothing *general* is 
 - **Gates.** Nothing under `data/` or `.env` in the diff; no credentials or tokens in code, fixtures or
   VCR cassettes; no hand edits to `backlog/tasks|docs|milestones`; no `Co-Authored-By: Claude` or
   "Generated with" text in commits (`git log origin/dev..HEAD --format=%B`); no person names.
+- **Logging, at first-pass depth.** No `print` for diagnostics, no logging configured outside `logs.py`, no
+  query text or credentials in a log call. Noise, gaps and leak depth are `observability-reviewer`'s.
 - **Conventions.** Layout per spec 08; one `normalize()`; error shape per `error-diagnostics`; no dead code.
 
 ## Output

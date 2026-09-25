@@ -13,7 +13,7 @@ description: How the openproceedings FastAPI service is built — /api/v1 base p
 - The CLI (`op search`, `op export`, `op serve`) and the routers call **the same functions**. A router
   parses the request, calls the shared function, and shapes the response. No search logic lives in a router.
 - Pydantic v2 models are the contract (`.claude/skills/api-contract/SKILL.md`). Every response model
-  carries `index_version` and `tokenizer_version`.
+  carries `index_version`, `tokenizer_version` and `query_version` (spec 04 §Conventions).
 
 ## Handlers are `def`, not `async def`
 Tantivy search, `match_ids`, facets and exclusion accounting are CPU-bound and release no event loop.
@@ -46,10 +46,16 @@ the engine blocks every other request. Exports use a **sync generator** in `Stre
 Override both, or the contract has two error shapes. See `.claude/skills/error-diagnostics/SKILL.md`.
 
 ## Logging
-One structured JSON line per request: `request_id`, route, status, `latency_ms`, `canonical_hash`,
-`total`, `index_version`. **Neither the raw `q` nor the canonical string is logged by default.** Both
-reveal an unpublished review design. Config `log_query_text` (default `false`) is the only switch.
-Also keep query text out of exception messages and tracebacks that reach the log.
+- Logging is configured **only** in `backend/src/openproceedings/logs.py` (`configure_logging`, called
+  from the API's startup). The app factory, routers and middleware never call `basicConfig`, add handlers
+  or set levels.
+- Exactly one access line per request, with the fields defined in
+  `.claude/skills/logging-standards/SKILL.md` §API access line (the `request` event: `request_id`,
+  `method`, route template, `status`, `ms`, `index_version`, `canonical_hash` for search/export, `total`;
+  health checks at DEBUG). Don't define a second field list here.
+- **Neither the raw `q` nor the canonical string is logged by default.** Both reveal an unpublished review
+  design. Config `log_query_text` (default `false`) is the only switch. Also keep query text out of
+  exception messages and tracebacks that reach the log.
 
 ## Rate limit and CORS
 - An in-app token bucket per client IP, with capacity and refill set in config. Behind Caddy, take the
@@ -62,5 +68,6 @@ Also keep query text out of exception messages and tracebacks that reach the log
 ## Checklist for an API change
 - [ ] handler is `def`, reads the engine once
 - [ ] errors go through the shared shape; no `{"detail"}` leaks (contract test)
-- [ ] no query text in logs (a test asserts it on a captured log line)
+- [ ] every response carries `index_version`, `tokenizer_version` and `query_version`
+- [ ] no query text in logs (a test asserts it on a captured log line); one access line per request
 - [ ] OpenAPI snapshot and `frontend/src/api/schema.ts` regenerated (`api-contract`)

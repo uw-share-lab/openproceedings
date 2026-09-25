@@ -1,6 +1,6 @@
 ---
 name: search-records-keeper
-description: Owns openproceedings search records — the POST/GET /records endpoints, the append-only data/records.sqlite store, the ids_hash function, reproduced-vs-drifted replay against pinned index versions, and the drift report of added and removed papers. Use when changing backend/src/openproceedings/api/records.py or the records schema, when an index_version is retired, or when a replay reports anything but reproduced on its own version.
+description: Owns openproceedings search records — the POST/GET /records endpoints, the append-only data/records.sqlite store, the ids_hash function, reproduced / drifted / mismatch replay against pinned index and query versions, and the GET /records/{id}/diff report of added and removed papers. Use when changing backend/src/openproceedings/api/records.py or the records schema, when an index_version is retired, or when a replay reports anything but reproduced on its own version.
 tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
@@ -22,15 +22,17 @@ the replay must tell the truth: `reproduced` only when the ids are provably iden
    spec change first.
 2. **Protect old records.** Before touching `ids_hash`, the canonical form or the schema, ask what every
    existing record will replay as afterwards. A change that turns valid records into `drifted` or
-   `replay_mismatch` is a Must unless it is versioned, with a migration note and a decision record.
+   `mismatch` is a Must unless it is versioned, with a migration note and a decision record.
 3. **Test first** in `backend/tests/contract/test_records.py`: `ids_hash` known-answer vectors; the
    reproduced path on the fixture index; the drifted path against a second fixture index with known
-   added and removed ids (exact counts); the tamper test (corrupted hash → `replay_mismatch`, never
-   `drifted`); and `UPDATE` and `DELETE` rejected by the triggers.
+   added and removed ids (exact counts, and the changed inputs named); the mismatch path (corrupted
+   `ids_hash` or `excluded` → HTTP 200 status `mismatch`, logged ERROR `API_REPLAY_MISMATCH`, never
+   `drifted`); `GET /records/{id}/diff`; and `UPDATE` and `DELETE` rejected by the triggers.
 4. **Implement.** `POST /records` re-runs the query server-side and never trusts client counts. It
    writes one `INSERT` in a transaction. Replay re-parses the stored `canonical`, loads the pinned
-   `index_version` read-only if it is present, and otherwise runs on current and diffs the stored id
-   list.
+   `index_version` read-only if it is present, and compares both `ids_hash` and `excluded`. If the
+   pinned index or query version is gone, it runs on what is available, reports `drifted` with the
+   changed inputs, and diffs the stored id list.
 5. **Run it.** `uv run pytest backend/tests/contract -q -k record`, then a manual loop with `op serve`:
    create a record, replay it, swap `data/indexes/current` to another fixture version, and replay again.
 6. **Retention.** Before any index version is deleted, list the records pinned to it
@@ -39,7 +41,7 @@ the replay must tell the truth: `reproduced` only when the ids are provably iden
 
 ## Output
 The diff summary. The replay matrix you ran (reproduced / drifted / mismatch, with counts). Test commands
-with real counts. Any spec gaps raised, such as the diff endpoint or the mismatch status. Then the
+with real counts. Then the
 closing checklist: `/review-gate` routing (`api-contract-reviewer`, `security-reviewer`, and
 `review-methodologist` if what a record means changed), `docs-writer` if behaviour changed, and
 `/record-learnings` **required**, committed before `/review-gate`.

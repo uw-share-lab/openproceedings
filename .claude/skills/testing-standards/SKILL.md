@@ -12,7 +12,7 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 | Golden tokens | `backend/tests/golden/test_tokens.py` | 02 table + ≥100 cases | 100% pass |
 | Golden queries | `backend/tests/golden/` | hand-built **200-record** fixture | 100% pass, exact ID sets |
 | Differential | `backend/tests/differential/` | **5k fixture snapshot** | `TantivyEngine == ReferenceEngine`, 0 counterexamples in 2,000 (CI) / 50k (nightly) |
-| Contract | `backend/tests/contract/` | 5k fixture index via `TestClient` | every endpoint, OpenAPI snapshot, export round-trips, record replay (reproduced + drifted) |
+| Contract | `backend/tests/contract/` | 5k fixture index via `TestClient` | every endpoint, OpenAPI snapshot, export round-trips, record replay (reproduced + drifted + mismatch) |
 | Frontend unit | `frontend/**/*.test.ts(x)` (Vitest) | mocked API from generated types | builder↔AST, URL reducer |
 | e2e | Playwright | `op serve` over the fixture index | the 05 §Testing flow end to end |
 | Bench | pytest-benchmark | fixture index (CI), full index (nightly) | >20% relative regression fails |

@@ -23,7 +23,8 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
   different escaping rules, and one convention keeps the escaping code small.
 - `title` gets an inner brace pair so that bibliography styles keep its capitalisation.
 - `booktitle` is the same venue string as RIS `T2` (`.claude/skills/ris-format/SKILL.md`). `keywords` is
-  the track. `note` is the same provenance line as RIS `N1`. Omit `doi`, `url` and `abstract` when they
+  the track. Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC
+  date>}` (spec 04 §Exports), the same line as RIS `N1`: `·` is U+00B7, the date `YYYY-MM-DD` UTC. Omit `doi`, `url` and `abstract` when they
   are absent. Never write an empty field.
 - `author`: `Last, First` joined by ` and `. Brace a name that contains the word `and` or a comma, or
   that is an organisation (`{OpenAI Team}`).
@@ -43,7 +44,7 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
    Past `z`, continue with `aa`.
 
 Keys are unique **within one file** only. The same paper can get a different key in a different query's
-export. Never present a key as a stable identifier. The id lives in `url` (and in the proposed id carrier).
+export. Never present a key as a stable identifier. The id lives in `url`.
 
 ## Escaping
 Abstracts contain real LaTeX (`$\epsilon$-DP`, `\textbf{63.7\%}`). Keep it; escaping it would change the

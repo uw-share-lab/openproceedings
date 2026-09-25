@@ -20,18 +20,19 @@ not behaviour. If a response differs from what `op search` or `op export` return
 
 ## How you work
 1. **Pin the task** (`backlog task view <id> --plain`, then set it In Progress). Map each acceptance
-   criterion to a spec 04 section. If 04 is silent (a nested-filter facet, the replay mismatch, the
-   near-miss disabled shape), stop and propose a spec PR. Don't invent a public shape.
+   criterion to a spec 04 section. If 04 is silent (a nested-filter facet, the
+   near-miss disabled shape), stop and propose a spec PR. Replay (`reproduced` / `drifted` / `mismatch`,
+   all HTTP 200) and `GET /records/{id}/diff` are defined in 04 §Search records; follow them. Don't invent a public shape.
 2. **Contract first.** Write or change the pydantic model, regenerate the OpenAPI snapshot and
    `frontend/src/api/schema.ts`, and read the diff. If it is breaking under the `api-contract` rules, it
    needs `/api/v2` or a decision record.
 3. **Test first** in `backend/tests/contract/`, using an in-process `TestClient` over the 5k-record
    fixture index. For every new route: the success shape, each error code in the shared shape (no
-   `{"detail"}`), `index_version` and `tokenizer_version` present, and a captured log line containing
+   `{"detail"}`), `index_version`, `tokenizer_version` and `query_version` present, and a captured log line containing
    no query text.
 4. **Implement thin.** `def` handlers. Read `engine = state.engine` once per request. Call the shared
-   function from `engine/` or `api/exporters/`. Exports run `match_ids` first, set `X-Total`, then stream
-   in the stable order from a sync generator. Never clamp `limit`: reject over 200 with a 422.
+   function from `engine/` or `api/exporters/`. Exports run `match_ids` first, set `X-Total` and
+   `X-Index-Version`, then stream ordered by `id` from a sync generator, on the pinned index. Never clamp `limit`: reject over 200 with a 422.
 5. **Guarantee checks in the PR:** `total` independent of `sort`/`limit`; `excluded` always present;
    `expansions` never dropped; the facet rule is disjunctive and computed server-side from the AST, with
    no facet state in parameters.

@@ -32,8 +32,11 @@ the main session fixes.
   translation is shown with server wording, exclusion banner present with every non-zero bucket, default
   filters visible in the tree.
 - **Highlights and counts from the API only;** no regex or tokenizer in `frontend/src`.
-- Export count shown before download; record page shows canonical, `index_version`, date, total,
-  exclusions, `reproduced`/`drifted`, methods text as spec 05 §8.
+- Export count shown before download; record page shows the identification string and the default
+  clauses, the full `index_version`, search date and crawl date, total, exclusions (`unknown` on its own
+  line), replay status `reproduced` / `drifted` (with its reason) / `mismatch`, methods text as spec 05 §8.
+  On `mismatch` the page is a blocking **"do not cite — replay mismatch"** state with no methods text and
+  no export; anything less is a Must.
 **Should** — errors without a fix hint, read-only builder not saying why, ambiguous copy, lost query on
 toggle, marketing tone, approximate numbers.
 **Nit** — density, alignment, wording.

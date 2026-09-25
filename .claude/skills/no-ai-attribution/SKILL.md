@@ -20,9 +20,9 @@ matter: the paper's methods and the lab's records name the people responsible.
 ## What enforces it
 | Layer | Where | Catches |
 |---|---|---|
-| PreToolUse hook | `.claude/hooks/block-ai-attribution.sh` | `git commit -m/--message/-F/--file` and `gh pr create\|edit\|comment\|review\|merge` with `--title/--body/--body-file` whose text matches |
-| git `commit-msg` hook | `.githooks/commit-msg` (installed by `scripts/setup-dev.sh`) | Messages written in an editor, which the PreToolUse hook can't see. Verify at implementation time that setup has been run (`git config core.hooksPath` → `.githooks`) |
-| CI | `pr-gates` workflow | Every commit message in the PR range and the PR body; the backstop for anything local hooks missed |
+| PreToolUse hook | `.claude/hooks/block-ai-attribution.sh` | Any Bash call containing a message-writing git command (`commit`, `merge`, `tag`, `notes`, `revert`, `cherry-pick`) or a PR-writing gh command (`pr create`/`new`/`edit`/`comment`/`review`/`merge`): the **whole raw command text** is scanned, not individual flags, so `-m`, `-am`, `-qm`, `--message=`, `--trailer`, `--title`/`--body`, heredoc bodies (`-F - <<EOF`, `-m "$(cat <<'EOF' …)"`) are all covered, plus the contents of any `-F`/`--file`/`--body-file` that is a regular file (≤ 1 MB) |
+| git `commit-msg` hook | `.githooks/commit-msg` (installed by `scripts/setup-dev.sh`) | Backstop for messages written in an editor (`git commit` with no message), which the PreToolUse hook can't see. Check `git config core.hooksPath` → `.githooks` |
+| CI | `attribution` job in `pr-gates.yml` | Every commit message in the PR range and the PR title/body; the final backstop for anything local hooks missed |
 
 The shared pattern (case-insensitive):
 ```
@@ -49,7 +49,9 @@ After any rewrite the sha changes, so the review record no longer matches: re-ru
 `record-review.py … --attest` before pushing again.
 
 ## Gotchas
-- Scrub `--body-file` files and HEREDOCs too; the hook reads files passed with `-F`.
+- Scrub `--body-file` files and heredocs too: the hook scans heredoc bodies as part of the raw command and
+  reads regular files passed with `-F`/`--file`/`--body-file`. Because the whole command is scanned, a
+  marker anywhere in a chained command (`git add … && git commit …`) blocks the call.
 - Don't disguise the marker (different casing, zero-width characters, splitting across lines) to get past
   the pattern. That is a Must in review and defeats the decision.
 - Mentioning the rule in docs (like this file) is fine; the checks scan commit messages and PR text, not

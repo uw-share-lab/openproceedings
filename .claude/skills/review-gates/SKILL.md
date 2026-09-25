@@ -23,15 +23,17 @@ minutes; a missed one costs a wrong search result in someone's systematic review
 
 | Paths changed | Reviewers (in addition to `code-reviewer`) |
 |---|---|
+| **any change at all** | `docs-reviewer`: docs, specs, READMEs and tasks must be as-built in the same commit (`.claude/skills/task-hygiene/SKILL.md`) |
+| `backend/src/**` | `observability-reviewer` (logging: noise, gaps, leaks; `.claude/skills/logging-standards/SKILL.md`) |
 | `backend/src/openproceedings/query/**` | `exactness-guardian`, `query-semantics-reviewer` |
 | `backend/src/openproceedings/engine/**` | `exactness-guardian` (+ `performance-profiler` if compile/rank/index build changed) |
 | `backend/src/openproceedings/ingest/**` | `track-classifier-auditor`, `dedup-auditor`, `security-reviewer` (crawlers make network calls) |
 | `backend/src/openproceedings/api/**` | `api-contract-reviewer`, `security-reviewer`; exporters → `export-format-validator` |
 | `backend/src/openproceedings/semantic/**` | `near-miss-evaluator` (the membership invariant) |
-| `frontend/**` | `ux-reviewer`, `accessibility-auditor` |
-| `docs/specs/**` | `review-methodologist`, `docs-reviewer` |
-| other `docs/**`, `*.md`, `.claude/**/*.md` | `docs-reviewer` |
-| `.claude/hooks/**`, `.github/**`, `deploy/**`, lockfiles, `pyproject.toml`, `package.json` | `security-reviewer` |
+| `frontend/**` | `ux-reviewer`, `usability-auditor`, `accessibility-auditor` |
+| `docs/design/**`, `docs/usability/**`, `docs/research/**` | `ux-reviewer`, `usability-auditor`, `hci-researcher` (evidence and ethics) |
+| `docs/specs/**` | `review-methodologist` |
+| `.claude/hooks/**`, `.claude/scripts/**`, `.github/**`, `.githooks/**`, `deploy/**`, `Makefile`, lockfiles, `pyproject.toml`, `package.json` | `security-reviewer`, `qa-auditor` (gates must provably catch what they claim) |
 | any `src/**` change > 150 changed lines, or any change claiming "exact"/"reproducible"/"fixed" | `qa-auditor` |
 | a PR as a whole (after the above) | `pr-reviewer` folds all verdicts together |
 
@@ -48,7 +50,13 @@ In the dispositions file, one line per finding:
 - [should] api/export.py:88 CSV lacks BOM → task-014
 - [nit] query/lexer.py:10 name shadows builtin → rejected: matches the stdlib-parallel naming in lexer
 ```
-`[must]` can only be `fixed` (commit must be an ancestor of HEAD). "Noted as non-blocking" is not a
+`[must]` can only be `fixed` (the commit must be an ancestor of HEAD and not already on `dev`).
+**Every `[should]` is fixed in the same round too** (project rule, 2026-09-25). `task-NNN` is only for
+work that genuinely can't be done yet (for example, it needs code that doesn't exist), and the task says
+why. `rejected:` needs a real reason.
+**Every `[should]` is fixed in the same round too** (project rule, 2026-09-25). `task-NNN` is only for
+work that genuinely can't be done yet (for example, it needs code that doesn't exist), and the task says
+why. `rejected:` needs a real reason. "Noted as non-blocking" is not a
 disposition — it produces no artifact and the finding is lost (inherited Kreate lesson).
 
 ## Recording

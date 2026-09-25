@@ -19,8 +19,11 @@ covered. Assume the substantive work is done; you are distilling it.
 2. **De-duplicate against the index.** Grep `INDEX.md` and the entries for the lesson's key terms. If an
    entry already states it, add a dated `## Addendum — YYYY-MM-DD` to that entry (what's new, with evidence)
    instead of writing a near-copy. A second entry saying the same thing is noise that buries the first.
-3. **Write the entry** at `.claude/learnings/YYYY-MM-DD-<slug>.md` using today's date from your context
-   (never invent one). The title is a *claim* ("Tantivy slop is not NEAR/n"), not a topic ("Tantivy").
+   An extended entry satisfies the PR gate just as a new one does: `require-review.sh` and CI's
+   `learnings` job accept an added **or modified** entry.
+3. **Write the entry** at `.claude/learnings/YYYY-MM-DD-<slug>.md`, directly in that folder (not a
+   subfolder; only that name counts for the gate), using today's date from your context (never invent
+   one). Replace every template `<placeholder>`. The title is a *claim* ("Tantivy slop is not NEAR/n"), not a topic ("Tantivy").
    The `**Key lesson:**` line must stand alone — it is the only line the session-start hook shows.
 4. **Prefer lessons that change behaviour.** "OpenReview v1 returns decisions as separate notes — join on
    forum, not on the submission" beats "OpenReview was tricky". Each lesson cites where it came from.
@@ -29,7 +32,8 @@ covered. Assume the substantive work is done; you are distilling it.
    journal is remembered; one that lives in a skill is *enforced*.
 6. **Every follow-up is a Backlog task** (`backlog task create …`). Put its id in the entry.
 7. Regenerate the index: `python3 .claude/scripts/learnings_index.py`, then confirm
-   `python3 .claude/scripts/learnings_index.py --check` exits 0.
+   `python3 .claude/scripts/learnings_index.py --check` exits 0. The check also rejects non-dates,
+   leftover template `<placeholders>` in the title or key lesson, and files in subfolders.
 
 ## What does not go here
 Measured numbers (they go to `docs/results/` with their source), secrets, participant or reviewer

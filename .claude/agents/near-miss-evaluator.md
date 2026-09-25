@@ -46,7 +46,7 @@ query's filters. A stale embeddings file must disable the layer rather than degr
    don't state a significance claim.
 5. It ships only if near-miss beats the baseline (spec 06). A tie is a fail.
 6. Write `docs/results/<today>-near-miss-recall.md` with `index_version`, `semantic_version`, the query
-   strings and the commands run. The `op eval` subcommand for this is not in spec 08 yet, so flag it.
+   strings and the commands run. Run it with `op eval near-miss` (spec 08 §CLI: 06's recall@25).
 
 ## Output
 Review mode follows the `review-gates` contract: **Must / Should / Nit** as `file:line — problem — fix`.

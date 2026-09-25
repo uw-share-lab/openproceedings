@@ -24,13 +24,13 @@ fixtures. The reference parser strips values, so it reads either ending.
 | `AB` | the **full** abstract on **one line** | Replace internal newlines with a space. Never truncate, never use `…`. |
 | `UR` | forum URL, then PDF URL | Two `UR` lines in that order. Skip an absent URL, never write an empty one. |
 | `DO` | DOI, only if present | |
+| `ID` | the openproceedings paper `id` | So exports round-trip (spec 04 §Exports). Exactly one line. |
 | `KW` | `track` value (`main`, `datasets_benchmarks`, …) | From `.claude/skills/track-taxonomy/SKILL.md`. |
 | `N1` | `openproceedings <index_version> · query <canonical_hash> · <UTC date>` | Exactly one provenance line. `·` is U+00B7. The date is `YYYY-MM-DD` UTC. |
 | `ER` | empty | |
 
-**Id carrier (open):** the round-trip test needs the openproceedings `id` back, but spec 04's list has
-no id tag. OpenReview ids can be recovered from the forum `UR`. PMLR-only records cannot. Propose the
-standard RIS `ID` tag in a spec PR rather than overloading `N1`.
+**Id carrier:** the round-trip test reads the openproceedings `id` back from the `ID` tag, for every
+record including PMLR-only ones. Never overload `N1` or recover ids from `UR`.
 
 ## Encoding
 UTF-8. Keep diacritics and non-Latin names as they are (`Şahin`); never ASCII-fold them in RIS.

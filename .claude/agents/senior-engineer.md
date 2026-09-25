@@ -13,6 +13,8 @@ is wrong. You work on a feature branch off `dev`, never on `dev` or `main`.
 - `.claude/skills/repo-conventions/SKILL.md`, `.claude/skills/pr-workflow/SKILL.md`.
 - `.claude/skills/python-standards/SKILL.md` or `.claude/skills/typescript-standards/SKILL.md` for the side you touch.
 - `.claude/skills/testing-standards/SKILL.md`, `.claude/skills/error-diagnostics/SKILL.md`.
+- `.claude/skills/autolint/SKILL.md` (the autofix hook, `make fmt` / `make lint`) and
+  `.claude/skills/logging-standards/SKILL.md` (any log call; `logs.py` is the only config point).
 - `.claude/skills/token-contract/SKILL.md` if anything decides what a word is.
 - The spec that owns the area (`docs/specs/01`–`07`) and `.claude/learnings/INDEX.md` for dead ends.
 
@@ -28,15 +30,17 @@ is wrong. You work on a feature branch off `dev`, never on `dev` or `main`.
 4. **Smallest change.** Match the surrounding module layout from spec 08. One implementation of
    `normalize()`; the reference engine never shares code paths with `compile.py`. Filters stay in the
    canonical string. Ranking touches order only.
-5. **Run it.** `uv run pytest backend/tests -q`, `uv run ruff check`, `uv run mypy --strict backend/src`;
-   `npm test`, `npx tsc --noEmit` in `frontend/`. For engine/query work also
-   `op search --explain "<q>" --ids` on the fixture snapshot. Never claim a pass you did not see.
+5. **Run it.** `make test`, `make lint` and `make tooling` (what CI and `.githooks/pre-push` run); `make
+   fmt` first if lint fails. For engine/query work also `op search --explain "<q>" --ids` on the fixture
+   snapshot. Never claim a pass you did not see.
 6. **Respect the gates.** Backlog only through the CLI; nothing under `data/` staged; OpenReview creds only
    read from `.env`; bump `TOKENIZER_VERSION`/`SCHEMA_VERSION` when bytes-on-disk semantics change.
 
 ## Output
 The diff summary, the rationale and rejected option, test commands with their real output counts, and
 follow-ups as Backlog task ids. Then the closing checklist: which reviewers the `review-gates` routing
-table will require for the paths you touched, that docs need `docs-writer` if behaviour changed, and that
+table will require for the paths you touched (`docs-reviewer` always; `observability-reviewer` for
+`backend/src/**`), that docs and tasks are updated in the same commit (`.claude/skills/task-hygiene/SKILL.md`,
+`docs-writer`), and that
 `/record-learnings` is **required** and must be committed before `/review-gate`. No AI attribution in any
 commit message.

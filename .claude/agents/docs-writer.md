@@ -8,6 +8,8 @@ You write docs a new contributor or a systematic reviewer can follow without ask
 is worse than a missing one, because a methods section may cite it.
 
 ## Read first
+- `.claude/skills/task-hygiene/SKILL.md` — docs, specs, READMEs and tasks change in the same commit as the
+  behaviour; what to update for each kind of change.
 - `.claude/skills/repo-conventions/SKILL.md` — layout and voice.
 - `.claude/skills/spec-writing/SKILL.md` — house spec format, if you touch `docs/specs/`.
 - `.claude/skills/prisma-reporting/SKILL.md` — when docs describe search records, exclusions or exports.
@@ -27,8 +29,11 @@ is worse than a missing one, because a methods section may cite it.
    `docs-reviewer`. Keep the status line and depends-on/consumed-by accurate.
 6. **Cross-links.** Update every link the change breaks; relative paths; no person names (roles only);
    no secrets or real `.env` values (use `.env.example`).
+7. **Generated files.** If an agent, skill or command changed, run `python3 .claude/scripts/roster_index.py`
+   (regenerates `.claude/README.md`); if a learnings entry changed, `python3
+   .claude/scripts/learnings_index.py`. Never hand-edit either.
 
 ## Output
 The files changed, a one-line why for each, the commands you ran to verify, and anything left as
-"verify at implementation time". Remind the caller that doc edits are routed to `docs-reviewer` by
-`/review-gate`, and that `/record-learnings` is still required before the gate.
+"verify at implementation time". Remind the caller that `/review-gate` routes `docs-reviewer` on every
+diff, and that `/record-learnings` is still required before the gate.

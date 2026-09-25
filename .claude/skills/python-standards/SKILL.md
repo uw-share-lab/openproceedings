@@ -1,17 +1,24 @@
 ---
 name: python-standards
-description: The backend Python standard for openproceedings — Python 3.12 with uv, ruff + ruff-format, mypy --strict, pydantic v2 models as contracts, pure functions in query/ and engine/, no module-level mutable state, typed exceptions mapped to Diagnostics, and logging rules. Use when writing or reviewing any code under backend/, adding a dependency, or fixing a lint/type failure in CI.
+description: The backend Python standard for openproceedings — Python 3.12 with the root uv workspace, ruff + ruff-format (configured once in the root pyproject.toml, applied by the autofix hook and make fmt/lint), mypy --strict, pydantic v2 models as contracts, pure functions in query/ and engine/, no module-level mutable state, typed exceptions mapped to Diagnostics in the diagnostics.py registry, and logging per logging-standards. Use when writing or reviewing any code under backend/, adding a dependency, or fixing a lint/type failure in CI.
 ---
 
 # Python standards (backend/)
 
-## Toolchain — uv only
-- `uv sync` to install; `uv run <cmd>` to run (`uv run pytest`, `uv run op search …`); `uv add <pkg>` /
-  `uv add --dev <pkg>` to add deps. Never `pip install`, never a hand-edited lock. `uv.lock` is committed
-  and a lockfile change routes to `security-reviewer`.
+## Toolchain — uv workspace only
+- The root `pyproject.toml` is the **uv workspace root** (dev group: ruff, mypy); `backend/` joins as a
+  member in M1. One `uv.lock`, at the root.
+- `uv sync` **at the repo root** to install every member and the dev tools into one `.venv`; `uv run <cmd>`
+  to run (`uv run pytest`, `uv run op search …`); `uv add <pkg>` (in the member) / `uv add --dev <pkg>` to
+  add deps. Never `pip install` into the workspace, never a hand-edited lock. `uv.lock` is committed and a
+  lockfile or `pyproject.toml` change routes to `security-reviewer` and `qa-auditor`.
 - Python **3.12**. Use `type X = …` aliases, `StrEnum`, `match` where it clarifies AST dispatch.
-- CI `lint` runs: `uv run ruff check`, `uv run ruff format --check`, `uv run mypy --strict backend/src`.
-  Run all three locally before committing.
+- Ruff's configuration lives **only** in the root `pyproject.toml`; members inherit it. No per-package
+  ruff sections without a recorded decision (`.claude/skills/autolint/SKILL.md`).
+- `autofix.sh` (PostToolUse) runs `ruff format` and `ruff check --fix` on each file as it's edited and
+  reports what remains. `make fmt` fixes the whole repo.
+- CI `lint` runs `make lint`: `ruff format --check`, `ruff check`, and `mypy --strict backend/src` (once it
+  exists). Run `make lint` locally before committing; `.githooks/pre-push` runs it too.
 
 ## Typing
 - `mypy --strict` with no blanket ignores. A `# type: ignore[code]` needs the specific code and a comment
@@ -39,7 +46,8 @@ description: The backend Python standard for openproceedings — Python 3.12 wit
 
 ## Errors
 - A typed hierarchy per area (e.g. `QueryError`, `IngestError`, `EngineError`; never names that shadow
-  builtins such as `IndexError`), each carrying a code from the registry (`error-diagnostics`).
+  builtins such as `IndexError`), each carrying a code from the registry in
+  `backend/src/openproceedings/diagnostics.py` (`error-diagnostics`).
 - User-facing problems are **values** (`Diagnostic` in `ParseResult.errors`), not exceptions: the parser
   never raises on bad input.
 - Never bare `except:` or `except Exception: pass`. Catch the narrowest type, add context, re-raise or
@@ -47,9 +55,12 @@ description: The backend Python standard for openproceedings — Python 3.12 wit
 - Unknown values stay `unknown` and are logged; never guessed (01 §Error handling).
 
 ## Logging
-Structured JSON via the stdlib `logging` with a JSON formatter; fields: request id, canonical hash,
-latency, total. **Never log raw query text by default** (unpublished review designs). No `print` outside
-`cli.py`.
+Follow `.claude/skills/logging-standards/SKILL.md`. In short: stdlib `logging` with one JSON formatter,
+configured **only** in `backend/src/openproceedings/logs.py` (called by `cli.py` and API startup; library
+code never configures logging); `log = logging.getLogger(__name__)` per module; `event` constants with
+structured fields; one INFO line per unit of work, no per-record INFO. **Never log raw query text by
+default** (unpublished review designs), abstracts, credentials or personal data. No `print` outside
+`cli.py` user output. `observability-reviewer` checks every `backend/src/**` diff.
 
 ## Style
 Small functions, docstrings on public functions stating the invariant they keep, no clever

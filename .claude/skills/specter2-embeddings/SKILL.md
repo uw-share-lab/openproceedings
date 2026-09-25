@@ -26,9 +26,10 @@ on or off. Nothing in `semantic/` may be imported by `engine/` or by the export 
   ids sorted as `str`. A sidecar metadata file records `ids` (the row order), `index_version`,
   `snapshot_hash`, `semantic_version`, a per-row `title_only` flag, a sha256 of the `.npy` bytes, and
   the torch and adapter library versions.
-- Spec 06 says "next to the index", but `data/indexes/<v>/` is immutable and `protect-data-dir.sh`
-  guards it. Settle the exact location (written at index-build time, or a sibling
-  `data/embeddings/<index_version>/<semantic_version>/`) in a decision record before the first build.
+- Location (spec 06 §Model and storage): the matrix is the file
+  `data/embeddings/<index_version>/<semantic_version>.npy`, with its sidecar metadata beside it as
+  `<semantic_version>.json`. It lives beside the index rather than inside it, because
+  `data/indexes/<v>/` is immutable and `protect-data-dir.sh` guards it.
 - Records with no abstract are embedded from the title alone and get `title_only = true`. The near-miss
   response surfaces the flag so the UI can label the suggestion.
 - A build is not bit-identical across hardware (GPU against CPU kernels). Reproducibility is pinned at

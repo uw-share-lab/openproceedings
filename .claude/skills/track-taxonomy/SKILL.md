@@ -26,9 +26,13 @@ segments in `.claude/skills/neurips-proceedings/SKILL.md` and `.claude/skills/pm
 (`Rejected_Submission` or a reject decision) · `withdrawn` · `desk_rejected` · `unknown`. The default
 filter adds `status:accepted`.
 
+**RIS-imported records** (spec 01 §Sources, the RIS importer row): `status` comes from a claim only. An
+OpenReview venueid claim → its status; a proceedings-page claim → `accepted`; no claim → `unknown`. Never
+infer `accepted` from a paper appearing in Scholar (rule 2: unknown stays unknown).
+
 ## The default filter (spec 02)
-If a query has no `track:` clause, the parser adds `track:(main OR datasets_benchmarks OR position)`. If
-it has no `status:` clause, it adds `status:accepted`. Both are **written into the canonical string**
+If a query has no top-level `track:` conjunct, the parser adds `track:(main OR datasets_benchmarks OR
+position)`. If it has no top-level `status:` conjunct, it adds `status:accepted`. Both are **written into the canonical string**
 (guarantee 3), and the per-filter exclusion counts are shown (guarantee 6). Consequences for ingestion:
 - A wrong `main` puts a workshop paper into every default search. That is the exact failure the project
   exists to prevent (spec 07 §D: ≥99% workshop vs non-workshop accuracy).

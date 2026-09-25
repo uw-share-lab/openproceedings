@@ -15,6 +15,15 @@ index_version = sha256( snapshot_hash, TOKENIZER_VERSION, SCHEMA_VERSION, rankin
 - `canonical_hash = sha256(canonical + TOKENIZER_VERSION)` identifies the *query*. `index_version`
   identifies the *index*. A search record stores both, plus `ids_hash = sha256(sorted matched ids)`.
 
+## `query_version` (spec 04 §Conventions)
+`query_version` versions the query *semantics* that live **outside** the index: the parser, the compiler
+(NEAR/slop, wildcard rules), the default-filter set and the `source:` alias table. It is not an input to
+`index_version`, so a parser or compiler change never changes the index id; it changes `query_version`
+instead. It is bumped by the same rule as `TOKENIZER_VERSION`: whenever some query could mean something
+different. `TOKENIZER_VERSION` covers normalization (shared by both sides, and inside `index_version`);
+`query_version` covers everything the query side adds on top. Every response carries all three:
+`index_version`, `tokenizer_version`, `query_version`, and a search record stores all three.
+
 ## Layout and lifecycle
 ```
 data/indexes/<index_version>/   immutable Tantivy dir + manifest
@@ -27,7 +36,14 @@ data/indexes/current            symlink → the served version
   old version.
 - Keep every version referenced by a search record in `data/records.sqlite`. Check before deleting any.
 - The API loads a **pinned** older version to replay a record (`.claude/skills/search-records/SKILL.md`).
-  Same version available and `ids_hash` equal → `reproduced`. Otherwise → `drifted`, with a diff.
+  Replay returns HTTP 200 with one of three statuses (spec 04 §Search records):
+  - **`reproduced`**: the same `index_version` **and** `query_version` are available, and both `ids_hash`
+    **and** `excluded` match.
+  - **`drifted`**: only a different index or query version is available. Name *which* inputs changed
+    (`snapshot_hash` = corpus drift; tokenizer, schema, ranking or query version = method drift) and give
+    `+added / −removed`. `+0 / −0` is reported as "membership-identical", not hidden.
+  - **`mismatch`**: same `index_version` and `query_version`, but `ids_hash` or `excluded` differ. This
+    breaks guarantee 4: log at ERROR with code `API_REPLAY_MISMATCH` and treat it as a bug.
 
 ## Bump rules
 | Change | Bump |
@@ -36,6 +52,7 @@ data/indexes/current            symlink → the served version
 | Index field set, field type, index options (positions, freqs), stored layout, analyzer registration, how a field is populated (e.g. missing abstract → `""`) | `SCHEMA_VERSION` |
 | Weights, k1, b, sort definitions | nothing to bump. They are in `ranking_params` already, so `index_version` changes |
 | A tantivy-py upgrade | `SCHEMA_VERSION`, unless the determinism and differential suites prove identical IDs, order and scores |
+| Parser, compiler (NEAR/slop, wildcard rules), default-filter set, `source:` alias table: any change that could make some query mean something different | `query_version` (not part of `index_version`) |
 | New snapshot | nothing to bump; `snapshot_hash` changes |
 | Pure refactor proven identical by parity + determinism | none |
 
@@ -46,5 +63,5 @@ a systematic review.
 ## Checklist
 - [ ] the serialization test still passes, or the change is intentional and noted in a decision record
 - [ ] the manifest records all four inputs and the tantivy-py version
-- [ ] responses carry `index_version` and `tokenizer_version` (spec 04)
+- [ ] responses carry `index_version`, `tokenizer_version` and `query_version` (spec 04)
 - [ ] a record replay test covers the path the change touched

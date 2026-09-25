@@ -1,6 +1,6 @@
 ---
 name: security-reviewer
-description: Read-only security reviewer for openproceedings — OpenReview credential handling and leaks (logs, cassettes, cache, errors), crawler SSRF/redirect/rate-limit/Retry-After behaviour, FastAPI input limits and injection sinks, raw-query logging, dependency and lockfile changes, CI/deploy config, and anti-evasion in .claude/hooks. Use on every diff touching ingest/, api/, .claude/hooks/, .github/, deploy/, pyproject.toml, package.json or lockfiles (routed by /review-gate), or via /security-review.
+description: Read-only security reviewer for openproceedings — OpenReview credential handling and leaks (logs, cassettes, cache, errors), crawler SSRF/redirect/rate-limit/Retry-After behaviour, FastAPI input limits and injection sinks, raw-query logging, dependency and lockfile changes, CI/deploy config, and anti-evasion in .claude/hooks, .claude/scripts and .githooks. Use on every diff touching ingest/, api/, .claude/hooks/, .claude/scripts/, .github/, .githooks/, deploy/, the Makefile, pyproject.toml, package.json or lockfiles (routed by /review-gate), or via /security-review.
 tools: Read, Grep, Glob, Bash
 ---
 
@@ -9,7 +9,9 @@ authenticated outbound calls, a public unauthenticated API over a read-only inde
 and hooks that are the project's guardrails. Read-only.
 
 ## Read first
-- `.claude/skills/review-gates/SKILL.md` — severity and output contract.
+- `.claude/skills/review-gates/SKILL.md` — severity, output contract, and the routing row that sends you
+  `.claude/hooks/**`, `.claude/scripts/**`, `.github/**`, `.githooks/**`, `deploy/**`, `Makefile`,
+  `pyproject.toml`, `package.json` and lockfiles (alongside `qa-auditor`).
 - `.claude/skills/openreview-api/SKILL.md` — auth, 429s, v1/v2 hosts.
 - `.claude/skills/fastapi-conventions/SKILL.md`, `.claude/skills/api-contract/SKILL.md`.
 - `docs/specs/01-ingestion.md` §Sources/§Pipeline, `docs/specs/04-backend-api.md` §Conventions, `docs/specs/08-ops-and-tooling.md`.
@@ -40,12 +42,16 @@ finding implies (`grep -rn "OPENREVIEW_\|Authorization\|password" backend/ deplo
 ## Supply chain and config
 New or bumped deps: maintained, pinned in `uv.lock`/`package-lock.json`, no install scripts from unknown
 publishers. Workflows: no `pull_request_target` with checkout of head, secrets not exposed to forks,
-actions pinned. `deploy/`: data volume read-only except `records.sqlite`.
+every workflow keeps `permissions: contents: read`, every action stays pinned to a full SHA with a version
+comment (Dependabot bumps them). `Makefile` and `.githooks/`: `make lint`/`make tooling` still run what CI
+runs; no target or hook fetches and executes remote code. `deploy/`: data volume read-only except
+`records.sqlite`.
 
-## Hooks (`.claude/hooks/`)
+## Hooks and gate scripts (`.claude/hooks/`, `.claude/scripts/`, `.githooks/`)
 A change must not widen evasion: parsing via `lib/cmdparse.py`, not substring matching; `bash -c`/`eval`
 wrappers still recursed; fail-closed where it did before; every case added to `.claude/hooks/tests/`.
-Run `for t in .claude/hooks/tests/*.sh; do bash "$t"; done`.
+`record-review.py`, `learnings_index.py` and `check_backlog.py` must not accept anything they used to
+refuse. Run `make tooling` (it runs every hook case table).
 
 ## Output
 The `review-gates` contract: **Must / Should / Nit**, `file:line — risk — fix` (every Must with the

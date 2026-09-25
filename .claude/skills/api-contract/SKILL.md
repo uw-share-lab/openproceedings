@@ -11,9 +11,10 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 | POST | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations). Debounced, called as the user types. |
 | GET | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | GET | `/papers/{id}` | full record with provenance |
-| GET | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl` → stream of the **entire** matched set |
-| POST | `/records` | freeze a search → `{record_id, url}` (`.claude/skills/search-records/SKILL.md`) |
-| GET | `/records/{id}` | stored record + replay status |
+| GET | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl`, optional `record_id` **or** `index_version` → a stream of the **entire** matched set, ordered by `id`, served from the pinned index |
+| POST | `/records` | freeze a search as an immutable search record → `{record_id, url}` (`.claude/skills/search-records/SKILL.md`) |
+| GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`) |
+| GET | `/records/{id}/diff` | for a `drifted` record: added and removed ids (with titles), and which `index_version` inputs changed |
 | GET | `/coverage` | counts per venue × year × track × status, abstract-missing counts, snapshot date |
 | GET | `/meta` | current and available `index_version`s, field and track vocabularies |
 | GET | `/healthz` | liveness, index loaded |
@@ -21,8 +22,12 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 
 ## `SearchResponse`
 `query {input, canonical, canonical_hash, warnings[], translations[], expansions{pattern: [terms]}}`,
-`index_version`, `tokenizer_version`, `total`, `excluded`, `facets`, `hits[]`. Each hit has `id, title,
-abstract, authors, venue, year, track, presentation, score, highlights{field: [[start,end]]}, urls`.
+`index_version`, `tokenizer_version`, `query_version`, `total`, `excluded`, `facets`, `hits[]`. Each hit
+has `id, title, abstract, authors, venue, year, track, presentation, score, highlights{field:
+[[start,end]]}, urls`.
+
+**Every response** (not only `/search`) carries `index_version`, `tokenizer_version` and `query_version`
+(spec 04 §Conventions; `.claude/skills/index-versioning/SKILL.md`).
 
 - **`total`** is the size of the lexical matched set. It never depends on `sort`, `offset`, `limit`
   or the semantic layer (guarantee 5).
@@ -32,6 +37,14 @@ abstract, authors, venue, year, track, presentation, score, highlights{field: [[
 - **`expansions`** always lists every wildcard's terms (guarantee 6). It is never omitted when non-empty.
 - **Highlights** are spans computed from the AST, never from a snippet generator.
 
+## Span units (spec 04 §Conventions)
+Every span is a half-open `[start, end)` range of **Unicode code points** over the **raw source string**:
+the stored title or abstract for `highlights`, the query input `q` for diagnostic `span`s. Never over
+normalized text: NFKC can change lengths, so `normalize()` returns an offset map that highlight computation
+uses. The frontend converts to UTF-16 exactly once, in one helper
+(`.claude/skills/nextjs-conventions/SKILL.md`). A golden contract test covers a title containing an
+astral-plane character.
+
 ## Facets are disjunctive
 For each facet field F, count over the set matched by the query with every filter applied **except F's
 own**. The track facet therefore still shows the workshop count while workshops are filtered out. A facet
@@ -40,9 +53,12 @@ as a parameter. Remove F's filter only where it is a top-level conjunct. Spec 04
 filter nested under `OR`. Raise that with `query-semantics-reviewer` rather than guessing.
 
 ## Exports are contract too
-`X-Total` equals the `/search` `total` for the same `q`. Exports are in a stable order and are never
-paginated or truncated. The field mapping of each format is pinned in `.claude/skills/ris-format/SKILL.md`
-and `.claude/skills/bibtex-format/SKILL.md`. CSV uses the 01 schema columns, UTF-8 **with BOM**.
+The response headers `X-Total` (equal to the `/search` `total` for the same `q`) and `X-Index-Version`
+say exactly which set was exported. Exports are ordered by `id` and are never paginated or truncated. An
+export started during an index hot-swap finishes on the index it began on. The field mapping of each
+format is pinned in `.claude/skills/ris-format/SKILL.md` and `.claude/skills/bibtex-format/SKILL.md`. CSV
+is one row per paper: the 01 schema columns plus `index_version` and `canonical_hash` provenance columns,
+UTF-8 **with BOM**.
 
 ## Versioning rules
 Allowed within `v1` (additive): a new endpoint, a new **optional** response field, a new enum value in

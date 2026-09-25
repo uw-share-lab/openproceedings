@@ -51,8 +51,10 @@ Keys: `["meta"]` (long `staleTime`), `["parse", q, mode]`, `["search", q, mode, 
 flash. A 422 is data, not an exception: render its `diagnostics` (spec 04 error shape).
 
 ## Gotchas
-- Python API spans are **code-point** offsets (verify); JS strings index UTF-16 units. Convert once in
-  `src/api/spans.ts` or astral characters (math letters, emoji) shift every later highlight.
+- API spans are half-open `[start, end)` **code-point** offsets over the raw source string (spec 04
+  §Conventions): the stored title/abstract for highlights, `q` for diagnostics. JS strings index UTF-16
+  units. Convert exactly once, in the one helper `src/api/spans.ts`, or astral characters (math letters,
+  emoji) shift every later highlight.
 - Export links carry the same `q`/`mode`; compare `X-Total` and `index_version` with the shown search and
   warn on mismatch (index swapped between the two).
 - Next 15+ passes `searchParams` as a Promise to pages — check the pinned version.

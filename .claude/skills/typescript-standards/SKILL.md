@@ -1,6 +1,6 @@
 ---
 name: typescript-standards
-description: The frontend TypeScript standard for openproceedings — strict tsconfig, API types generated from the backend OpenAPI schema into frontend/src/api/schema.ts (never hand-written), eslint/tsc/prettier gates, no client-side re-matching or re-parsing, and URL-as-state typing. Use when writing or reviewing code under frontend/, touching API calls or response types, or fixing the lint/tsc/freshness checks in CI.
+description: The frontend TypeScript standard for openproceedings — strict tsconfig, API types generated from the backend OpenAPI schema into frontend/src/api/schema.ts (never hand-written), eslint/tsc/prettier gates (autofix hook, make fmt/lint, npm workspace), no client-side re-matching or re-parsing, and URL-as-state typing. Use when writing or reviewing code under frontend/, touching API calls or response types, or fixing the lint/tsc/freshness checks in CI.
 ---
 
 # TypeScript standards (frontend/)
@@ -9,8 +9,12 @@ description: The frontend TypeScript standard for openproceedings — strict tsc
 - `tsconfig.json`: `"strict": true` plus `noUncheckedIndexedAccess`, `noImplicitOverride`,
   `exactOptionalPropertyTypes` (verify at implementation time that the Next.js/shadcn setup tolerates the
   last one; if not, record why in the PR).
-- CI `lint` runs `eslint`, `tsc --noEmit`, `prettier --check`. Run `npm run lint && npx tsc --noEmit`
-  before committing.
+- `frontend/` is an **npm workspace** (M3); `make sync` runs `npm ci` there. Use npm, not another client.
+- `autofix.sh` (PostToolUse) runs `prettier --write` and `eslint --fix` on each edited frontend file (once
+  `frontend/node_modules` exists) and reports what remains; `make fmt` does the whole repo
+  (`.claude/skills/autolint/SKILL.md`).
+- CI `lint` runs `make lint`: `prettier --check`, `eslint`, `tsc --noEmit`. Run `make lint` before
+  committing; `.githooks/pre-push` runs it too.
 - No `any`. `unknown` + a narrowing function at trust boundaries. No `as` casts on API data; no non-null
   `!` on values that can be absent in a response.
 - No `// @ts-ignore`; `// @ts-expect-error <reason>` only in tests.

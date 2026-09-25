@@ -1,6 +1,6 @@
 ---
 name: default-filters
-description: The default-filter rule (guarantee 3) — `track:(main OR datasets_benchmarks OR position)` and `status:accepted` are added when a query has no track:/status: clause, always made explicit in the canonical string, edited by the UI toggles as the same clauses, and accounted for in `excluded` (PRISMA "removed before screening"). Use when touching default-filter insertion, canonical filter rendering, the filter toggles, exclusion accounting, or any report of removed records.
+description: The default-filter rule (guarantee 3) — `track:(main OR datasets_benchmarks OR position)` and `status:accepted` are added when a query has no top-level track:/status: conjunct (nested ones raise `WARN_NESTED_FILTER`), recognised by content not origin, always made explicit in the canonical string, edited by the UI toggles as the same clauses, and accounted for in `excluded` (PRISMA "removed before screening"). Use when touching default-filter insertion, canonical filter rendering, the filter toggles, exclusion accounting, or any report of removed records.
 ---
 
 # Default filters (spec 02 §Fields and filters, spec 03 §Exclusion accounting)
@@ -8,20 +8,29 @@ description: The default-filter rule (guarantee 3) — `track:(main OR datasets_
 ## The rule
 | Clause absent from the query | Parser adds |
 |---|---|
-| no `track:` anywhere | `track:(main OR datasets_benchmarks OR position)` |
-| no `status:` anywhere | `status:accepted` |
+| no top-level `track:` conjunct | `track:(main OR datasets_benchmarks OR position)` |
+| no top-level `status:` conjunct | `status:accepted` |
 
 - Added clauses are ANDed at the top level and **made explicit in `canonical`**. The saved string shows them.
   A default that is applied but missing from the canonical string is a guarantee-3 violation. The
   `exactness-guardian` treats it as a Must.
-- "Absent" means no clause of that field **anywhere** in the AST. A user who writes
-  `(track:workshop AND x) OR y` has opted out of the track default for the whole query, and the `y` branch
-  is then unfiltered by track. The spec doesn't settle whether this needs a warning. Record the decision,
-  and pin the behaviour with a golden case.
-- The default value set comes from the 01 track taxonomy. `workshop` and `competition` are excluded by
-  default. NeurIPS Datasets & Benchmarks is main-line content and stays in (`datasets_benchmarks`).
+- **Only top-level AND conjuncts suppress a default** (spec 02 §Default filters). A `track:`/`status:`
+  clause nested inside an `OR` branch (`(track:workshop AND x) OR y`) does not suppress it: the parser adds
+  the default anyway and raises the warning `WARN_NESTED_FILTER`: "the default track filter still applies to the
+  whole query; add a top-level `track:` clause to override it". Pin this with a golden case.
+- **A default is recognised by its content, not by where it came from.** A top-level AND conjunct that
+  exactly equals a default clause is treated as the automated default, whether the parser inserted it, the
+  user typed it, or it came from pasting a canonical string back in. So `trust`, its canonical string, and a
+  replay of that string all give the same `excluded`. Golden cases pin input → canonical → re-parse →
+  toggle-off-and-on.
+- The default value set comes from the 01 track taxonomy. Every non-default track is excluded by default:
+  `workshop`, `competition`, `tiny_papers`, `blogpost`, `other` and `unknown`. NeurIPS Datasets &
+  Benchmarks is main-line content and stays in (`datasets_benchmarks`).
 - Idempotence: parsing a canonical string that already contains the defaults adds nothing. The clauses are
-  present, so no default fires.
+  present, so no default fires, and by content recognition they still count as the defaults.
+- **Identification string.** `identification_query` is the canonical string with the default conjuncts
+  removed. PRISMA's "records identified" is computed from it. The API returns, and search records store,
+  both `canonical` and `identification_query`.
 
 ## UI toggles are the same clauses
 The frontend "include workshops" and "include rejected" toggles **edit the query's `track:`/`status:`
@@ -29,13 +38,16 @@ clauses** (through the AST round-trip). They are not separate state. `/search?q=
 result set. If a toggle and the string can disagree, that is a bug.
 
 ## Exclusion accounting (guarantee 6)
-For every search, the engine also evaluates the query **with the default clauses removed** and reports how
-the difference breaks down:
+For every search, the engine also evaluates the `identification_query` (the query **with the default
+clauses removed**) and reports how the difference breaks down:
 ```json
 "excluded": {"track": {"workshop": 212, "competition": 4}, "status": {"rejected": 88}}
 ```
-- Only defaults that were **added** are accounted. A clause the user wrote is their filter, not an automated
-  exclusion.
+- Only **default** clauses are accounted, recognised by content: a typed top-level conjunct identical to a
+  default counts as the default. Any other filter the user wrote (for example `year:2023..2026`, or a
+  different `track:` set) is part of the search, not an automated exclusion.
+- `unknown` is itemised separately (`excluded.track.unknown`, `excluded.status.unknown`) and never folded
+  into another bucket: unclassified is not ineligible (spec 03).
 - A record can fail both defaults (a rejected workshop paper). **Decided in spec 03 §Exclusion
   accounting:** buckets are assigned in a fixed order, track first and then status, so that paper counts
   once, under `track.workshop`. The buckets always add up to `excluded.total = |unfiltered| − |filtered|`,

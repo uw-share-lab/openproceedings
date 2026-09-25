@@ -57,6 +57,10 @@ record before M4):
 All claims are kept, including the losing ones. Two same-rank sources that disagree produce a
 `conflicts.csv` row.
 
+**RIS-imported records** (spec 01 §Sources): `provenance.source = "ris"`. `status` comes from a claim
+only: an OpenReview venueid claim → its status; a proceedings-page claim → `accepted`; no claim →
+`unknown`. It is **never** inferred from the paper appearing in Scholar.
+
 ## content_hash
 `sha256` of the canonical JSON of the **searchable and filterable** fields: `title`, `abstract`,
 `venue`, `year`, `track`, `status`, plus any further field spec 02's `FIELD` list makes filterable (it

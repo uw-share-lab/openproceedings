@@ -46,8 +46,9 @@ its source span so diagnostics and the UI parse tree point at the input.
 `canonical` is: fully parenthesised, uppercase operators (`|` → `OR`, juxtaposition → `AND`, `-` → `NOT`),
 default filters made explicit (`.claude/skills/default-filters/SKILL.md`), filters sorted, wildcards kept
 **unexpanded** (`benchmark*`, not its expansion — the expansion belongs to an `index_version`).
-Pick one deterministic filter order and one spelling per value (e.g. `venue:NeurIPS`), record it in
-`docs/decisions/`, and pin it with snapshot tests.
+Pick one deterministic filter order and one spelling per value (e.g. `venue:NeurIPS`), record it as a
+Backlog.md decision (`backlog decision create`, `.claude/skills/decision-records/SKILL.md`), and pin it
+with snapshot tests.
 
 **Idempotence (property-tested):** `parse(canonical).canonical == canonical`, and AST → string → AST is the
 identity. A change that alters any existing canonical string changes every saved record's hash: treat it as

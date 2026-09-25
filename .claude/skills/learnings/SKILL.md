@@ -7,10 +7,17 @@ description: How openproceedings records and reuses process lessons — the .cla
 
 ## Why it is enforced, not optional
 A lesson nobody reads is a lesson re-learned. So the loop is closed mechanically:
-- **Write:** `require-review.sh` blocks `gh pr create` unless the branch adds an entry (escape hatch
-  `--label no-learning` only for changes that taught nothing, e.g. a typo). CI `pr-gates` mirrors it.
+- **Write:** `require-review.sh` blocks `gh pr create` unless the branch **adds or extends** an entry
+  (escape hatch `--label no-learning` only for changes that taught nothing, e.g. a typo). CI's `learnings`
+  job (`pr-gates.yml`) applies the same rule; a same-repo `dev → main` promotion is exempt from both.
+  - Only a file named `YYYY-MM-DD-<slug>.md` **directly in** `.claude/learnings/` counts. `README.md`,
+    `_TEMPLATE.md`, `INDEX.md`, subfolders and other files don't.
+  - A modified entry counts as much as a new one: extending an existing entry with a dated
+    `## Addendum — YYYY-MM-DD` satisfies the gate.
 - **Read:** `load-learnings.sh` (SessionStart) prints `INDEX.md` into every session's context.
-- **Index:** `.claude/scripts/learnings_index.py` regenerates `INDEX.md`; CI fails if it is stale.
+- **Index:** `.claude/scripts/learnings_index.py` regenerates `INDEX.md`. Its `--check` (CI, `make tooling`)
+  fails if the index is stale, and also rejects an entry whose date isn't a real date, one that still has
+  template `<placeholders>` in its title or key lesson, and any file in a subfolder.
 
 ## At session start
 Scan the index lines in your context. For the area you're about to touch, open the matching entries and

@@ -13,6 +13,8 @@ is marked Done that is not merged. You never hand-write files under `backlog/` �
   task-creation` before creating tasks.
 - `.claude/skills/decision-records/SKILL.md`, `.claude/skills/spec-writing/SKILL.md`.
 - `.claude/skills/repo-conventions/SKILL.md`.
+- `.claude/skills/task-hygiene/SKILL.md` — tasks change in the same commit as the work; Done tasks leave
+  `backlog/tasks/`.
 - `docs/specs/00-overview.md` §Milestones and §Open questions, and the specs in scope.
 
 ## How you work
@@ -26,13 +28,18 @@ is marked Done that is not merged. You never hand-write files under `backlog/` �
    spec section; include the guarantee-bearing ACs explicitly (golden rows added, differential green,
    `TOKENIZER_VERSION` bumped or parity proven, `index_version` in responses). Size: ½–1 day; split
    anything larger.
-4. **Standard DoD** on implementation tasks: tests green; docs as-built; `/record-learnings` entry;
-   `/review-gate` approved for HEAD; PR into `dev`.
+4. **Standard DoD** on implementation tasks: tests green; ACs ticked; docs as-built in the same commit;
+   `/record-learnings` entry; `/review-gate` approved for HEAD; PR into `dev`; `backlog task complete
+   <id>`.
 5. **Design detail** → `backlog doc create "<title>" -t specification`. **Irreversible choices** (open
    questions in 00, e.g. rejected-ICLR indexing, earliest year, hosting) → `backlog decision create
    "<title>"`, then Edit the created file's Context / Decision / Consequences body.
-6. **Status hygiene.** `backlog task edit <id> -s "In Progress"|"Done" --check-ac <n> --notes "…"`; Done only
-   when the PR merged. Blockers go in `--comment`.
+6. **Status hygiene** (`.claude/skills/task-hygiene/SKILL.md`). Tick each AC with `--check-ac <n>` as it
+   is met, not at the end; keep ACs matching the real scope. Create a follow-up task the moment one is
+   found, never "noted for later". `backlog task edit <id> -s "In Progress"|"Done" --notes "…"`. When a
+   task is Done (final summary written), run **`backlog task complete <id>`** so it moves to
+   `backlog/completed/`; CI's `check_backlog.py` fails on a Done task left in `backlog/tasks/`. Blockers go
+   in `--comment`.
 
 ## Output
 A table of created or updated ids (epic → children, milestone, dependencies), the spec sections left

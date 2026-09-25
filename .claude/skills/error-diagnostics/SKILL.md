@@ -7,10 +7,10 @@ description: The single Diagnostic shape ({code, message, span}) used for parse 
 
 ## The shape (spec 02 §Outputs, spec 04 §Conventions)
 ```python
-class Diagnostic(BaseModel):            # frozen, extra="forbid"
-    code: DiagnosticCode                # StrEnum from the registry
-    message: str                        # human sentence, includes the fix hint
-    span: tuple[int, int] | None        # [start, end) character offsets into the *input* string
+class Diagnostic(BaseModel):  # frozen, extra="forbid"
+    code: DiagnosticCode  # StrEnum from the registry
+    message: str  # human sentence, includes the fix hint
+    span: tuple[int, int] | None  # half-open [start, end) code-point offsets into the query input q
 ```
 - `ParseResult.warnings`, `.errors`, `.translations` are all `list[Diagnostic]`. Non-empty `errors` ⇒ no
   search runs.
@@ -21,9 +21,8 @@ class Diagnostic(BaseModel):            # frozen, extra="forbid"
   recomputes positions (`typescript-standards`).
 
 ## Registry
-- One module defines every code (verify the path at implementation time; proposed
-  `backend/src/openproceedings/diagnostics.py`), and a generated table in the syntax help page
-  (`/help/syntax`) lists them, so docs can't drift.
+- One module defines every code: `backend/src/openproceedings/diagnostics.py` (spec 08 §Monorepo layout),
+  and a generated table in the syntax help page (`/help/syntax`) lists them, so docs can't drift.
 - Codes are `AREA_SNAKE_NAME`, stable forever once released — scripts match on them. Retire a code; never
   reuse or rename it.
 | Prefix | Area | Examples (from 02 §Error handling) |
@@ -31,16 +30,18 @@ class Diagnostic(BaseModel):            # frozen, extra="forbid"
 | `PARSE_` | grammar | `PARSE_UNBALANCED_PAREN`, `PARSE_EMPTY_GROUP`, `PARSE_ALL_NEGATIVE` |
 | `WILDCARD_` | expansion | `WILDCARD_STEM_TOO_SHORT`, `WILDCARD_TOO_MANY_EXPANSIONS` (>200) |
 | `FIELD_` | fields/filters | `FIELD_UNKNOWN`, `FIELD_UNKNOWN_VALUE` (lists valid `track:` values), `FIELD_RANGE_INVERTED` |
-| `WARN_` | warnings | `WARN_LOWERCASE_OPERATOR` ("did you mean OR?"), `WARN_MIXED_AND_OR` |
+| `WARN_` | warnings | `WARN_LOWERCASE_OPERATOR` ("did you mean OR?"), `WARN_MIXED_AND_OR`, `WARN_NESTED_FILTER` (spec 02 §Default filters): a `track:`/`status:` clause nested inside an `OR` branch does not suppress the default, e.g. `(track:workshop AND x) OR y` → "the default track filter still applies to the whole query; add a top-level `track:` clause to override it", span on the nested clause |
 | `COMPAT_` | translations | `COMPAT_SOURCE_ALIAS` (`source:PMLR` → `venue:ICML`), `COMPAT_POP_DOLLAR` |
-| `API_` | HTTP layer | `API_BAD_PARAM`, `API_RECORD_NOT_FOUND`, `API_INDEX_UNAVAILABLE`, `API_RATE_LIMITED` |
-Exact names are set when the registry is created; the prefixes and the rule are the standard.
+| `API_` | HTTP layer | `API_BAD_PARAM`, `API_RECORD_NOT_FOUND`, `API_INDEX_UNAVAILABLE`, `API_RATE_LIMITED`, `API_REPLAY_MISMATCH` (logged; the replay *status* field value stays `mismatch`) |
+Exact names are set when the registry is created; the prefixes and the rule are the standard. A code a
+
 
 ## Span rules
-- Offsets are into the **raw input** the user typed (not the canonical string, not normalized text), in
-  Python `str` indices (code points). The UI must convert to its editor's units — CodeMirror uses UTF-16;
-  an astral character (emoji, some math symbols) shifts every later span if unconverted. Test it.
-- Half-open `[start, end)`; zero-width spans allowed for "expected X here" at end of input.
+- Offsets are half-open `[start, end)` ranges of **Unicode code points** over the query input `q` the user
+  typed (not the canonical string, not normalized text): Python `str` indices (spec 04 §Conventions). The
+  UI converts to its editor's units exactly once, in one helper (`src/api/spans.ts`) — CodeMirror uses
+  UTF-16; an astral character (emoji, some math symbols) shifts every later span if unconverted. Test it.
+- Zero-width spans allowed for "expected X here" at end of input.
 - Scholar-mode translations point at the source token that was translated.
 - `span: None` only for whole-query conditions (e.g. an all-negative query may span the whole input
   instead — prefer a span when one exists).

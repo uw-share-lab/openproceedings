@@ -47,8 +47,10 @@ Colours come from `ui-design-system` tokens so both themes pass contrast.
   drop any response whose doc no longer equals the text that was sent.
 - Map `errors → "error"`, `warnings → "warning"`, `translations → "info"`; message = server message +
   fix hint verbatim. Never rewrite server wording.
-- Spans: convert server offsets (code points; verify) to CodeMirror positions (UTF-16). Clamp to doc
-  length; a zero-width span gets width 1 so it is visible.
+- Spans: diagnostic spans are half-open `[start, end)` code-point offsets over `q` (spec 04
+  §Conventions). Convert them to CodeMirror positions (UTF-16) with the one shared helper
+  (`src/api/spans.ts`, `.claude/skills/nextjs-conventions/SKILL.md`), never a second conversion. Clamp to
+  doc length; a zero-width span gets width 1 so it is visible.
 - Network failure → one "info" diagnostic "parser unavailable", not silence and not client-side guessing.
 
 ## Autocomplete (`@codemirror/autocomplete`)
