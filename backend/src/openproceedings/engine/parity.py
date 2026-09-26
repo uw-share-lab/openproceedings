@@ -24,6 +24,7 @@ from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import tantivy
 
@@ -50,8 +51,11 @@ class ParityReport:
     phrases: int  # fields read back by position
 
 
-def check_parity(index: Path, snapshot: Path, workers: int | None = None) -> ParityReport:
-    manifest = verify_index(index)
+def check_parity(
+    index: Path, snapshot: Path, workers: int | None = None, manifest: dict[str, Any] | None = None
+) -> ParityReport:
+    """`manifest`: the index's, from a `verify_index` the caller already ran (so files aren't hashed twice)."""
+    manifest = manifest if manifest is not None else verify_index(index)
     snapshot_hash = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))["snapshot_hash"]
     if manifest["snapshot_hash"] != snapshot_hash:
         raise ParityError(

@@ -118,7 +118,9 @@ def test_the_dictionary_is_checked_both_ways(
         check_parity(*built, workers=1)
 
 
-@pytest.mark.parametrize("change", ["missing", "extra-last", "extra-first"])
+@pytest.mark.parametrize(
+    "change", ["missing", "extra-last", "extra-first", "missing-middle", "two-missing", "extra-middle"]
+)
 def test_documents_on_one_side_only_are_named(
     built: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, change: str
 ) -> None:
@@ -128,6 +130,12 @@ def test_documents_on_one_side_only_are_named(
         docs = list(real(searcher))  # type: ignore[arg-type]
         if change == "missing":
             docs = docs[1:]
+        elif change == "missing-middle":
+            docs = docs[:2] + docs[3:]
+        elif change == "two-missing":
+            docs = docs[:2] + docs[4:]
+        elif change == "extra-middle":
+            docs.insert(2, (docs[1][0] + "a", {"title": "", "abstract": ""}))  # sorts between docs 1 and 2
         elif change == "extra-last":
             docs.append(("op:zz:2099:Zzzz", {"title": "", "abstract": ""}))
         else:
@@ -139,6 +147,9 @@ def test_documents_on_one_side_only_are_named(
         "missing": r"op:\S+: in the snapshot, not in the index",
         "extra-last": r"op:zz:2099:Zzzz: in the index, not in the snapshot",
         "extra-first": r"op:aa:2000:Aaaa: in the index, not in the snapshot",
+        "missing-middle": r"op:\S+: in the snapshot, not in the index",
+        "two-missing": r"op:\S+: in the snapshot, not in the index",
+        "extra-middle": r"op:\S+a: in the index, not in the snapshot",
     }[change]
     with pytest.raises(ParityError, match=message):
         check_parity(*built, workers=1)
@@ -198,3 +209,46 @@ def test_a_failure_prints_the_token_but_never_logs_it(
     assert all(
         "leakedtoken" not in r.getMessage() and "leakedtoken" not in str(r.__dict__) for r in caplog.records
     )
+
+
+def test_check_parity_reads_positions_back(built: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch) -> None:
+    # tokens with the same set and order-free counts, two neighbours swapped: only the phrase read-back (at
+    # slop 0) can tell, so the stored-text step is silenced to reach it
+    title = next(r.title for r in records() if len(set(normalize(r.title))) >= 4)
+
+    def swapped(text: str) -> list[str]:
+        tokens = normalize(text)
+        return [tokens[0], tokens[2], tokens[1], *tokens[3:]] if text == title else tokens
+
+    monkeypatch.setattr(index_module, "normalize", swapped)
+    monkeypatch.setattr(parity, "_first_difference", lambda *_args: None)
+    with pytest.raises(ParityError, match="aren't at consecutive positions"):
+        check_parity(*built, workers=1)
+
+
+def test_the_cli_verifies_the_index_before_reading_its_manifest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import shutil
+
+    from tests.unit.engine.test_exclusions import tantivy_of as build
+
+    engine = build(list(fixture_records()[:5]), tmp_path / "b")
+    copy = tmp_path / "copy"
+    shutil.copytree(tmp_path / "b" / "indexes" / engine.index_version, copy)
+    copy.chmod(0o755)  # an index is sealed read-only; this copy may change
+    (copy / "manifest.json").chmod(0o644)
+    (copy / "manifest.json").unlink()
+    args = [
+        "--data-dir",
+        str(tmp_path),
+        "index",
+        "parity",
+        "--index",
+        str(copy),
+        "--snapshot",
+        str(tmp_path / "b" / "snap"),
+    ]
+    assert main(args) == 1
+    err = capsys.readouterr().err
+    assert "op index parity:" in err and "Traceback" not in err and "KeyError" not in err
