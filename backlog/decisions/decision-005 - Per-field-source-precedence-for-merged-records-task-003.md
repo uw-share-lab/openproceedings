@@ -40,3 +40,13 @@ the same study twice; both titles stay in the record's claims.
   snapshot, so a search pinned to an `index_version` stays reproducible; a later edit appears only in a
   new snapshot, as a `snapshot diff` change.
 - Changing this table changes `content_hash` for affected records, so it is an `index_version` change.
+
+## Open evidence question (2026-09-26)
+
+scholarmend (`ledger.py`) ranks the proceedings abstract above OpenReview's on the grounds that "a
+camera-ready revision can leave [the OpenReview note] behind"; the review lead's sources say OpenReview is
+the more current. A cache comparison was inconclusive (17 prefix-matched pairs, several of them different
+papers). The review lead is running an authenticated check of OpenReview revision history for the papers
+whose abstracts differ. If OpenReview proves stale for camera-ready abstracts, the `title`/`abstract`/
+`authors` row flips to proceedings-first here, with the evidence recorded. scholarmend is not changed
+either way while the Trust-Evals screening that used its output is in progress.
