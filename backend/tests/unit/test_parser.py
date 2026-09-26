@@ -460,11 +460,22 @@ def test_parsing_is_linear_in_the_query_length() -> None:
             best = min(best, time.perf_counter() - start)
         return best
 
-    for unit in ("w ", "$x ", "$a b ", "a. b ", "a(b)", "a|", ")a"):  # incl. space-free runs
+    for unit in (
+        "w ",
+        "$x ",
+        "$a b ",
+        "a. b ",
+        "a(b)",
+        "a|",
+        ")a",
+        "\\((",
+        "\\(|",
+        "(\\(",
+    ):  # every shape found
         n = 2000 // len(unit) - 1
         small, large = cost(unit * (n // 5)), cost(unit * n)  # 5x the input
         assert large < small * 15 + 0.01, (unit, small, large)  # quadratic would be ~25x
-    for q in ('"' + "$x " * 666 + '"', "a " * 999):
+    for q in ('"' + "$x " * 666 + '"', "a " * 999, "\\((" * 666):  # the last was 11.8 s without run caching
         start = time.perf_counter()
         parse(q, "scholar")
         assert time.perf_counter() - start < 0.5, q[:10]  # was 11 s before the M1 gate fix

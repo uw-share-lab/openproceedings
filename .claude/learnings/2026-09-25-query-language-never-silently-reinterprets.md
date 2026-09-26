@@ -105,3 +105,7 @@ form whose hash identifies a query.
 - **Reviewers reading the live tree see mid-edit states.** Three "failures" in a reviewer's 50k run were
   golden rows between edits. Point reviewers at `git archive <sha>`, and run the final 50k on a commit
   the tree won't move from.
+- Correction (same day, final verification): the addendum's claim that the timing test covered `\((` was
+  false when written: that shape was only in a probe script, and disabling the run cache left every unit
+  test green. It is in the timing test now, and a mutant check proved it fails without the cache. Verify
+  "the test covers X" by breaking X, not by reading the test.

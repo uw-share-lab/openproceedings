@@ -3,13 +3,13 @@
 Lexical rules, in the order they are tried at the start of each lexeme:
 
 - Whitespace (any Unicode space) separates. `(`, `)` and `|` are single-character lexemes (`|` is `OR`).
-- A double quote (`"`, `“`, `”`, `„`, `‟`, `＂`, `«`, `»`, `「`, `」`, `『`, `』`) opens a phrase that runs to the
-  next unescaped quote of the same family (English-style double quotes are one family; `«…»`, `「…」` and
-  `『…』` pair only with themselves), so a foreign quote inside a phrase is punctuation. Its parts are split
-  on whitespace, and operators inside it are ordinary words. A quote touching a letter or digit on the
-  outside (`a"b c"`, `"trust in "AI"`) is PARSE_AMBIGUOUS_QUOTE; a `(` glued to a preceding word or a `)`
-  glued to a following one (`model(s)`) is PARSE_PAREN_TOUCHES_WORD. With no closing quote
-  the phrase runs to the end of `q` and PARSE_UNTERMINATED_PHRASE is raised.
+- A double quote (`"`, `“`, `”`, `„`, `‟`, `＂`, `«`, `»`, `「`, `」`, `『`, `』`, `〝`, `〞`, `〟`, `″`) opens a phrase
+  that runs to the next unescaped quote of the same family (English-style double quotes are one family;
+  `«…»`/`»…«`, `「…」`, `『…』`, `〝…〞`/`〝…〟` and `″…″` pair only with themselves), so a foreign quote inside
+  a phrase is punctuation. Its parts are split on whitespace, and operators inside it are ordinary words.
+  A quote touching a letter, mark or number on the outside (`a"b c"`, `"trust in "AI"`, a possessive
+  `"GPT-4"'s`, a decomposed accent) is PARSE_AMBIGUOUS_QUOTE, once per unbroken run; a `(` glued to a
+  preceding word or phrase, or a `)` to a following one (`model(s)`), is PARSE_PAREN_TOUCHES_WORD.
 - `-` is `NOT` when it starts the query or follows whitespace, `(`, `|` or a field's `:`, and a primary
   follows it directly. Any other word that starts with `-` (`a - b`, `"x"-based`, `--x`) is
   PARSE_AMBIGUOUS_MINUS: it would otherwise silently mean either NOT or a literal hyphen.
@@ -34,8 +34,9 @@ from the Unicode database.
 
 Warnings, raised where an operator would have made sense: a lowercase `and`/`or`/`not`/`near/n` between
 two terms (WARN_LOWERCASE_OPERATOR); a word that starts with a dash or single quote that only looks like
-an operator (`−bias`, `‘trust`: WARN_LOOKALIKE_OPERATOR); a word whose trailing `+`/`#` is dropped by the
-tokenizer (`C++` → `c`: WARN_SYMBOLS_DROPPED). Bad input is a diagnostic, never an exception.
+an operator (`−bias`, `‘trust`, a paired `’…’`: WARN_LOOKALIKE_OPERATOR); a word or phrase part that loses
+something to the tokenizer (`C++` → `c`, `.NET` → `net`, a bare `\\epsilon` or an empty `\\alpha{}` outside
+math: WARN_SYMBOLS_DROPPED); CJK text, which is not split into words (WARN_CJK_RUN). Bad input is a diagnostic, never an exception.
 """
 
 from __future__ import annotations
@@ -283,7 +284,7 @@ class _Lexer:
             )
         end = j + 1 if closed else n
         possessive = end + 1 < n and q[end] in "'’" and _wordy(q[end + 1])  # `"GPT-4"'s`
-        if closed and end < n and (_wordy(q[end]) or possessive):
+        if closed and end < n and (_wordy(q[end]) or possessive) and not self.quote_flagged_since(j):
             follower = q[end : self.next_stop[end]]
             operator = unicodedata.normalize("NFKC", follower)
             if operator in _OPERATORS:
@@ -346,6 +347,8 @@ class _Lexer:
         """The whitespace- and quote-delimited run holding word start `i`: its start, end and LaTeX math
         regions (start → end), computed once per run and reused by every word in it, so that text like
         `\\((\\((…` stays linear. Words are lexed left to right, so the last run is the only one to cache."""
+        # A word never starts at a run's end or before its start, so either bound alone would do; both keep
+        # the check obviously right.
         if self._chunk is not None and self._chunk[0] <= i < self._chunk[1]:
             return self._chunk
         q, n = self.q, len(self.q)
@@ -502,7 +505,8 @@ class _Lexer:
                 start,
                 end,
             )
-        elif raw.startswith(_SINGLE_QUOTES):
+        elif raw.startswith(_SINGLE_QUOTES) and (raw[0] != "’" or "’" in self.q[start + 1 :]):
+            # `’` alone at a word start is usually an elision (`’80s`); it looks like a quote only when paired
             self.warn(
                 DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
                 f'`{clip(raw)}` starts with a single quote, which does not make a phrase — use double quotes: `"…"`.',
@@ -513,14 +517,20 @@ class _Lexer:
     def check_dropped(self, raw: str, stem: str, start: int, end: int) -> None:
         """WARN_SYMBOLS_DROPPED when part of a word or phrase part silently disappears: leading or trailing
         symbols (`C++`, `.NET`), or a bare LaTeX command outside math (`\\epsilon-greedy` → `greedy`)."""
+        symbols = stem.endswith(("+", "#")) or stem.startswith((".", "#", "+", "@"))
+        if not symbols and not _COMMAND.search(stem):
+            return  # the common case: no tokenizing at all (it is a full LaTeX scan)
         toks = tokenize(stem)
         if not toks:
             return  # nothing left at all: an error or the phrase-part warning says so
         searched = " ".join(t.text for t in toks)
-        if stem.endswith(("+", "#")) or stem.startswith((".", "#", "+", "@")):
+        if symbols:
             dropped = "symbols such as `+`, `#` and `.` are not indexed"
         elif self.bare_command(stem):
-            dropped = "a LaTeX command outside math is not indexed (write it inside `$…$` to search its name)"
+            dropped = (
+                "a LaTeX command outside math is not indexed (type the character itself, or put a math command "
+                "inside `$…$` to search its name)"
+            )
         else:
             return
         self.warn(
@@ -532,13 +542,16 @@ class _Lexer:
 
     @staticmethod
     def bare_command(stem: str) -> bool:
-        """A `\\cmd` outside math that isn't an accent macro or `\\cmd{…}` (whose content is kept)."""
-        regions = math_regions(stem)
+        """A `\\cmd` outside math that isn't an accent macro or `\\cmd{…}` with content (which is kept);
+        `\\cmd{}` keeps nothing, so it counts as bare (`\\alpha{}-divergence` → `divergence`)."""
+        regions: list[tuple[int, int]] | None = None  # computed only once a command is found
         for m in _COMMAND.finditer(stem):
-            inside_math = any(a <= m.start() < b for a, b in regions)
             accent = len(m.group(1)) == 1 and m.group(1) in "uvHcdbrkij"
-            braced = m.end() < len(stem) and stem[m.end()] == "{"
-            if not (inside_math or accent or braced):
+            braced = stem[m.end() : m.end() + 1] == "{" and stem[m.end() + 1 : m.end() + 2] != "}"
+            if accent or braced:
+                continue
+            regions = math_regions(stem) if regions is None else regions
+            if not any(a <= m.start() < b for a, b in regions):
                 return True
         return False
 

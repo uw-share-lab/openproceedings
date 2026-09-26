@@ -139,8 +139,9 @@ Rules:
     `NEAR/n` takes n ≤ 100.
   - A word or phrase part that loses something to the tokenizer raises `WARN_SYMBOLS_DROPPED`: leading
     or trailing symbols (`C++` → `c`, `.NET` → `net`) or a bare LaTeX command outside math
-    (`\epsilon-greedy` → `greedy`; `\cmd{X}` keeps `X` and accent macros are part of the word, so neither
-    warns). A word starting with `‘`, `’` or `` ` `` raises `WARN_LOOKALIKE_OPERATOR`.
+    (`\epsilon-greedy` → `greedy`, and `\alpha{}-divergence`, since empty braces keep nothing; `\cmd{X}`
+    keeps `X` and accent macros are part of the word, so neither warns). A word starting with `‘` or `` ` ``,
+    or a `’` that a later `’` pairs with, raises `WARN_LOOKALIKE_OPERATOR` (a lone `’80s` is an elision).
 - `NEAR/n` works within one field, is unordered, and allows at most n intervening words. Tantivy's slop
   semantics are documented in 03 and must agree with the reference matcher. Its two operands are words,
   wildcards or phrases (not groups or filters) in the same field, and `NEAR` does not chain

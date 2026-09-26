@@ -305,7 +305,7 @@ WARNINGS: list[tuple[str, DiagnosticCode, list[tuple[int, int]]]] = [
     ("\\textbf{Adam}", C.WARN_SYMBOLS_DROPPED, []),  # \\cmd{X} keeps X: nothing is lost
     ('G\\"odel', C.WARN_SYMBOLS_DROPPED, []),  # an accent macro is part of the word
     ("$\\epsilon$-DP", C.WARN_SYMBOLS_DROPPED, []),  # inside math the command is searched
-    ("’trust in AI", C.WARN_LOOKALIKE_OPERATOR, [(0, 6)]),
+    ("’trust in AI", C.WARN_LOOKALIKE_OPERATOR, []),  # an unpaired `’` is usually an elision (`’80s`)
     (".NET code", C.WARN_SYMBOLS_DROPPED, [(0, 4)]),  # leading symbols too
     ('"\\epsilon greedy"', C.WARN_SYMBOLS_DROPPED, [(1, 9)]),  # a part with nothing searchable
     ("信頼", C.WARN_CJK_RUN, [(0, 2)]),
@@ -500,3 +500,37 @@ def test_hangul_and_kana_are_cjk() -> None:
 def test_quote_flagged_since_counts_only_quote_errors() -> None:
     result = lex('ab* "x"y"z"')  # a stem error in the same run must not hide the quote error
     assert C.PARSE_AMBIGUOUS_QUOTE in [e.code for e in result.errors]
+
+
+def test_m1_final_verification_rows() -> None:
+    """Rows from the M1 gate's last verification pass, each pinning a behaviour a mutant broke."""
+    # the run cache: a quote ends the run, and math offsets are absolute
+    assert [(x.kind, x.start, x.end) for x in lex('x\\a"b c"').lexemes] == [
+        (Kind.WORD, 0, 3),
+        (Kind.PHRASE, 3, 8),
+    ]
+    assert [(x.kind, x.start, x.end) for x in lex("trust f$(x)$").lexemes] == [
+        (Kind.WORD, 0, 5),
+        (Kind.WORD, 6, 12),
+    ]
+    assert lex("trust f$(x)$").errors == ()
+    # a possessive needs a letter after the apostrophe
+    assert lex('"x"\' y').errors == ()
+    # one ambiguous-quote error per unbroken run, from either side
+    assert [e.code for e in lex('ab"c"d').errors] == [C.PARSE_AMBIGUOUS_QUOTE]
+    # empty braces keep nothing; accent macros and dotless i/j are part of the word
+    for q in ("\\alpha{}-divergence", "\\epsilon{}-greedy", "Stra\\ss e"):
+        assert C.WARN_SYMBOLS_DROPPED in [w.code for w in lex(q).warnings], q
+    assert lex('na\\"{\\i}ve').warnings == ()
+    assert "type the character itself" in lex("Stra\\ss e").warnings[0].message
+    # 〞 opens a family that 〟 also closes
+    assert shape("〞trust〟") == ["PHRASE:trust"]
+    # the glued run ends at any whitespace, including U+3000
+    assert [e.span for e in lex('"x"y　z').errors] == [(2, 4)]
+    # an operator glued to a quote is read after NFKC
+    assert "put a space before `OR`" in lex('"trust"ＯＲ "bias"').errors[0].message
+    # a combining mark after a closing quote is touching too
+    assert [e.code for e in lex('"x"́y').errors] == [C.PARSE_AMBIGUOUS_QUOTE]
+    # `’` warns only when paired
+    assert lex("’80s").warnings == ()
+    assert [w.code for w in lex("’trust in AI’").warnings] == [C.WARN_LOOKALIKE_OPERATOR]
