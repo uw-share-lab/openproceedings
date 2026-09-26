@@ -186,6 +186,9 @@ check feature/x block "cat <<'EOF'
 x \\
 EOF
 git push origin HEAD:dev"                                              # body ending in a backslash keeps its delimiter
+check feature/x block "n=\$((echo a) | wc -l)
+# don't worry
+git push origin HEAD:dev"                                              # \$((cmd) | …) is not arithmetic: fail closed
 check feature/x allow 'git push origin feat
 echo main'                                                              # separators split commands: 'main' is not a refspec
 check main  allow 'bash --norc -c "git status"'            # positive control: long opt + safe cmd

@@ -116,8 +116,19 @@ for argv, d in commands:
                 excludes.append(args[k + 1]); k += 2; continue
             if a_.startswith("--exclude="):
                 excludes.append(a_.split("=", 1)[1]); k += 1; continue
-            if a_.startswith("-e") and not a_.startswith("--") and len(a_) > 2:
-                excludes.append(a_[2:]); k += 1; continue
+            if a_.startswith("-") and not a_.startswith("--") and "e" in a_[1:]:
+                # A short cluster is read letter by letter, as git does: `-fdxenode_modules` is -f -d -x and
+                # -e node_modules, so only the letters BEFORE `e` are flags (review round 5).
+                pre, _, val = a_[1:].partition("e")
+                if pre:
+                    flags.append("-" + pre)
+                if val:
+                    excludes.append(val); k += 1
+                elif k + 1 < len(args):
+                    excludes.append(args[k + 1]); k += 2
+                else:
+                    k += 1
+                continue
             if a_ == "--":
                 pathspecs += args[k + 1 :]; break
             (flags if a_.startswith("-") else pathspecs).append(a_); k += 1

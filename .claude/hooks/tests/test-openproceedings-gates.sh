@@ -409,6 +409,24 @@ check $R allow "'EOF ' (trailing space) is not the end" "$(payload_bash "$(print
 check $R block "line continuation joins a push"        "$(payload_bash 'git push origin \
 other2')"
 
+echo "== round-5 rows (arithmetic depth, clustered -e, partly quoted delimiters, continuation parity)"
+g switch -q mut
+approve
+check $R block "\$((cmd) | …) is a subst, not arithmetic" "$(payload_bash "n=\$((echo a) | wc -l)
+# don't worry
+git push origin other2
+echo '")"  # the closing quote pairs with don't and would hide the push without the end-of-input net
+check $R allow "\$((1+(2*3))) nested parens, approved"  "$(payload_bash 'x=$((1+(2*3))) && git push origin mut')"
+check $R allow "nested parens keep << a shift, approved" "$(payload_bash 'x=$(( (a+(b)) << c )) && git push origin mut')"
+check $P block "git clean -fdxenode_modules (clustered -e)" "$(payload_bash 'git clean -fdxenode_modules')"
+check $P allow "git clean -fdxedata (clustered -e data)"    "$(payload_bash 'git clean -fdxedata')"
+check $R block "<<E\"OF\" partly quoted delimiter"      "$(payload_bash 'cat <<E"OF"
+x
+EOF
+git push origin other2
+E')"  # a later line "E" would otherwise close the misread heredoc and swallow the push
+check $R block "odd trailing backslashes continue"      "$(payload_bash "$(printf 'echo a\\\\\\\\\\\\\ngit push origin other2')")"
+
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")
 case "$out" in *TOKENIZER_VERSION*) pass=$((pass+1)); echo "  ok   reminder on normalize.py";; *) fail=$((fail+1)); echo "  FAIL no reminder on normalize.py";; esac

@@ -536,12 +536,6 @@
   "new": "            return any_rel("
  },
  {
-  "label": "git clean attached -e value read as flags",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            if a_.startswith(\"-e\") and not a_.startswith(\"--\") and len(a_) > 2:",
-  "new": "            if False:"
- },
- {
   "label": "heredoc stripping disabled",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "            if not arith and line.startswith(\"<<\", i) and (m := HEREDOC.match(line, i)):",
@@ -576,5 +570,35 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "            if (line.lstrip(\"\\t\") if dash else line) == delim:",
   "new": "            if line.strip() == delim:"
+ },
+ {
+  "label": "git clean -e cluster read as flags",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if a_.startswith(\"-\") and not a_.startswith(\"--\") and \"e\" in a_[1:]:",
+  "new": "            if False:"
+ },
+ {
+  "label": "arithmetic inner parens not tracked",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if arith and c == \")\" and inner:",
+  "new": "            if False and inner:"
+ },
+ {
+  "label": "unterminated arithmetic/heredoc not refused",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if arith or pending:\n",
+  "new": "    if False:\n"
+ },
+ {
+  "label": "partly quoted heredoc delimiter accepted",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                if m.end() < n and line[m.end()] not in \" \\t;&|<>()\":",
+  "new": "                if False:"
+ },
+ {
+  "label": "continuation by trailing \\\\ parity ignored",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        continues = trailing % 2 == 1 and quote != \"'\" and not pending",
+  "new": "        continues = trailing >= 1 and quote != \"'\" and not pending"
  }
 ]

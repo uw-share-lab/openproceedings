@@ -142,6 +142,7 @@ def preprocess(cmd: str) -> str:
     quote: str | None = None
     pending: list[tuple[str, bool]] = []  # (delimiter, dash)
     arith = 0  # depth of $(( … )) / (( … )) arithmetic, where << is a shift
+    inner = 0  # plain ( ) nesting inside the current arithmetic
     joining = False
     for line in cmd.split("\n"):
         if pending:
@@ -182,6 +183,16 @@ def preprocess(cmd: str) -> str:
                 kept.append(line[i : i + step])
                 i += step
                 continue
+            if arith and c == "(":
+                inner += 1
+                kept.append(c)
+                i += 1
+                continue
+            if arith and c == ")" and inner:
+                inner -= 1
+                kept.append(c)
+                i += 1
+                continue
             if arith and line.startswith("))", i):
                 arith -= 1
                 kept.append("))")
@@ -192,6 +203,8 @@ def preprocess(cmd: str) -> str:
                 i += 3
                 continue
             if not arith and line.startswith("<<", i) and (m := HEREDOC.match(line, i)):
+                if m.end() < n and line[m.end()] not in " \t;&|<>()":
+                    raise ParseError(f"heredoc delimiter not understood near {line[i : m.end() + 3]!r}")
                 pending.append((m.group("delim"), m.group("dash") == "-"))
                 kept.append(m.group(0))
                 i = m.end()
@@ -200,7 +213,8 @@ def preprocess(cmd: str) -> str:
             i += 1
         text = "".join(kept)
         # line continuation: a trailing unescaped backslash outside single quotes, not starting a heredoc
-        continues = text.endswith("\\") and not text.endswith("\\\\") and quote != "'" and not pending
+        trailing = len(text) - len(text.rstrip("\\"))
+        continues = trailing % 2 == 1 and quote != "'" and not pending
         if continues:
             text = text[:-1]
         if joining and out_lines:
@@ -208,6 +222,13 @@ def preprocess(cmd: str) -> str:
         else:
             out_lines.append(text)
         joining = continues
+    if arith or pending:
+        # Unclosed arithmetic or a heredoc that never ends: the scan's model of this command has diverged
+        # from bash's, so every later line may be misread. Raise; every gate treats that as BLOCK when the
+        # command looks like what it guards (review round 5: `$((cmd) | …)`, `<<E"OF"`).
+        raise ParseError(
+            "unterminated arithmetic or heredoc" if arith else f"heredoc {pending[0][0]!r} never ends"
+        )
     return "\n".join(out_lines)
 
 

@@ -90,3 +90,19 @@ Run the new review gate on its own tooling: five routed reviewers (code, securit
   runner (`make mutate`, `mutate-changed`, `--match`) does the full set in minutes and a targeted re-check
   in seconds. `make tooling` now runs its tables in parallel (about 15 s). Reviews use `mutate-changed`;
   the nightly workflow runs everything.
+
+## Addendum — 2026-09-25 (review rounds 4–5)
+
+- **A partial bash parser never converges edge case by edge case.** Rounds 4–5 found `$((1<<n))`,
+  `$((cmd) | …)`, `<<E"OF"`, a heredoc body ending in `\`, and clustered `-fdxe…`, each one another place
+  where the scan's model of the command diverged from bash's. The fix that ends that class is structural: if the
+  scan ends inside arithmetic or a heredoc, or meets a delimiter it can't fully read, `preprocess` raises,
+  and every gate treats the error as **block**. The specific fixes stay, but the net is what makes future
+  misreads fail safe.
+- **Advice in an error message is code.** The hook told users to "add -e data", and `git clean -X -e data`
+  is exactly what deletes `data/`. Every suggestion a gate prints needs its own test row.
+- **Layered defences need one isolating row per layer.** With paren tracking, delimiter checks and the
+  end-of-input net all present, each mutant survived, because the other layers caught it. Each layer now has
+  a row where it is the only barrier.
+- **Test inputs with trailing whitespace must be built with `printf`.** Files lose trailing spaces, and the
+  `'EOF '` row silently tested nothing until it was rebuilt that way.
