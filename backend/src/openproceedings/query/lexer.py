@@ -48,9 +48,9 @@ from enum import StrEnum
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip
 from openproceedings.query.normalize import first_math_end, math_regions, tokenize
-from openproceedings.vocab import FILTER_FIELDS, TEXT_FIELDS
+from openproceedings.vocab import QUERY_FILTER_FIELDS, TEXT_FIELDS
 
-FIELDS = TEXT_FIELDS + FILTER_FIELDS  # FILTER_FIELDS includes Scholar's `source:` (vocab.py)
+FIELDS = TEXT_FIELDS + QUERY_FILTER_FIELDS  # incl. Scholar's `source:` (vocab.py)
 OPERATOR_WORDS = frozenset({"and", "or", "not"})  # lowercase: searched as words, with a warning
 MIN_STEM = 3  # letters or digits a wildcard stem keeps after normalisation (spec 02, decision-001)
 MAX_NEAR = 100
@@ -99,6 +99,7 @@ class Kind(StrEnum):
     RANGE = "RANGE"
 
 
+_TERMS = (Kind.WORD, Kind.PHRASE)  # what a glued parenthesis would silently AND with
 _OPERATORS = {"AND": Kind.AND, "OR": Kind.OR, "NOT": Kind.NOT}
 _ENDS_A_TERM = frozenset({Kind.WORD, Kind.PHRASE, Kind.RPAREN, Kind.RANGE})
 _STARTS_A_TERM = frozenset({Kind.WORD, Kind.PHRASE, Kind.LPAREN, Kind.FIELD, Kind.NOT, Kind.RANGE})
@@ -168,6 +169,15 @@ class _Lexer:
         self.next_quote = [len(q)] * (len(q) + 1)
         for k in range(len(q) - 1, -1, -1):
             self.next_quote[k] = k if q[k] in QUOTES else self.next_quote[k + 1]
+        # next_stop[k]: the first whitespace, quote, parenthesis or `|` at or after k; next_mathish[k]: the first
+        # `$` or backslash. When no `$`/backslash comes before the stop, a word simply ends there (word_end's
+        # fast path, which keeps space-free text such as `a(b)a(b)…` linear).
+        self.next_stop = [len(q)] * (len(q) + 1)
+        self.next_mathish = [len(q)] * (len(q) + 1)
+        for k in range(len(q) - 1, -1, -1):
+            c = q[k]
+            self.next_stop[k] = k if c.isspace() or c in QUOTES or c in _BREAKS else self.next_stop[k + 1]
+            self.next_mathish[k] = k if c in "$\\" else self.next_mathish[k + 1]
         # Every unescaped `$` that ends an inline-math scan, found once so math_run is a lookup, not a scan:
         # one followed by `$` stops it without closing (`$$` inside inline math); one preceded by a non-space
         # and not followed by a digit closes it (Pandoc). normalize.first_math_end is the one-scan reference
@@ -312,6 +322,9 @@ class _Lexer:
         """End of the word at `i`: a whole LaTeX math run, or the next break (except inside LaTeX math within
         the same chunk)."""
         q, n = self.q, len(self.q)
+        stop, mathish = self.next_stop[i], self.next_mathish[i]
+        if mathish >= stop:  # fast path: no `$` or `\\` before the next break, so no math and no escapes
+            return stop
         limit = self.next_quote[i]
         if (end := self.math_run(i, limit)) > 0:
             return end
@@ -422,9 +435,9 @@ class _Lexer:
         elif toks[-1].end < len(stem):
             self.error(
                 DiagnosticCode.PARSE_WILDCARD_DETACHED,
-                f"The `{wildcard}` in `{clip(raw)}` follows `{stem[toks[-1].end :]}`, not a letter or digit, so it would "
-                f"match any word starting `{toks[-1].text}` — put it straight after the stem, e.g. "
-                f"`{stem[: toks[-1].end]}{wildcard}`.",
+                f"The `{wildcard}` in `{clip(raw)}` follows `{clip(stem[toks[-1].end :])}`, not a letter or digit, so it "
+                f"would match any word starting `{clip(toks[-1].text)}` — put it straight after the stem, e.g. "
+                f"`{clip(stem[: toks[-1].end])}{wildcard}`.",
                 start,
                 end,
             )
@@ -497,15 +510,15 @@ class _Lexer:
         for x, y in zip(self.out, self.out[1:], strict=False):
             if x.end != y.start:
                 continue
-            if (x.kind is Kind.WORD and y.kind is Kind.LPAREN and x.text[0] not in MINUSES) or (
-                x.kind is Kind.RPAREN and y.kind is Kind.WORD and y.text[0] not in MINUSES
+            if (x.kind in _TERMS and y.kind is Kind.LPAREN and x.text[0] not in MINUSES) or (
+                x.kind is Kind.RPAREN and y.kind in _TERMS and y.text[0] not in MINUSES
             ):
                 glued = (x.start, y.end)
             else:
                 continue
             self.error(
                 DiagnosticCode.PARSE_PAREN_TOUCHES_WORD,
-                f"`{self.q[glued[0] : glued[1]]}`: a parenthesis touching a word would be read as AND (`model(s)` "
+                f"`{clip(self.q[glued[0] : glued[1]])}`: a parenthesis touching a word would be read as AND (`model(s)` "
                 "means `model AND s`) — for a plural write `model$`, for a group put a space: `model (s)`.",
                 *glued,
             )

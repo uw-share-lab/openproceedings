@@ -35,7 +35,7 @@ Code: `backend/src/openproceedings/query/{lexer,parser,ast,canonical}.py`.
 | A WORD that normalizes to 0 tokens | `PARSE_EMPTY_TERM` with a span (`a ~ b`); a bare `-`/`--` is `PARSE_AMBIGUOUS_MINUS` instead. |
 | Phrases and `NEAR/n` | One field only; never across title and abstract. |
 | Nothing silently reinterpreted | `a - b`, `"x"-based`, `--x` → `PARSE_AMBIGUOUS_MINUS`; `behavio$r` → `PARSE_WILDCARD_NOT_SUFFIX`; `vision-*` → `PARSE_WILDCARD_DETACHED`; bare `NEAR` → `PARSE_BAD_NEAR`; `year:2023 OR 2024` → `WARN_FILTER_SCOPE`; `C++` → `WARN_SYMBOLS_DROPPED`; NFKC look-alikes (`（`, `－`, `＂`) act as syntax. Spec 02 §Grammar lists them all. |
-| Lexing (`lexer.py`) | `"`, `“ ”`, `„ ‟`, `＂`, `« »`, `「 」`, `『 』` delimit phrases, unpaired (unterminated → `PARSE_UNTERMINATED_PHRASE`); `\` keeps the next char in the word; field names are case-insensitive; `NEAR/` without a number → `PARSE_BAD_NEAR`. |
+| Lexing (`lexer.py`) | `"`, `“ ”`, `„ ‟`, `＂`, `« »`, `「 」`, `『 』` delimit phrases, each closing only with its own family (`"“”„‟＂` are one family; `« »`, `「 」`, `『 』` pair with themselves); unterminated → `PARSE_UNTERMINATED_PHRASE`, a quote touching a word outside → `PARSE_AMBIGUOUS_QUOTE`, `model(s)` → `PARSE_PAREN_TOUCHES_WORD`; `\` keeps the next char in the word; field names are case-insensitive; `NEAR/` without a number → `PARSE_BAD_NEAR`. |
 | Ranges | `year:2020..2026` inclusive; start > end is an error. |
 
 ## Fields

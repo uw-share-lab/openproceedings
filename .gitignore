@@ -18,3 +18,9 @@ node_modules/
 .DS_Store
 .claude/settings.local.json
 .claude/worktrees/
+
+# test coverage output (never committed: it holds absolute local paths)
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml

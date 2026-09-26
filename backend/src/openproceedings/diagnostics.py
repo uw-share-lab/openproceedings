@@ -94,6 +94,7 @@ def clip(text: str, width: int = 40) -> str:
 
 
 def by_position(d: Diagnostic) -> tuple[int, int]:
+    """Sort key: diagnostics are reported in the order of the input they point at."""
     return d.span or (0, 0)
 
 

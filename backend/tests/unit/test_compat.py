@@ -48,7 +48,10 @@ def test_the_primary_string_is_pinned() -> None:
         C.COMPAT_SOURCE_ALIAS
     ] * 9
     [stemming] = [t for t in result.translations if t.code is C.COMPAT_NO_STEMMING]
-    assert "`llm`" in stemming.message and "and 3 more" in stemming.message and "llm$" in stemming.message
+    assert "`llm`" in stemming.message and "and 3 more" in stemming.message
+    assert "`model$`" in stemming.message  # the hint uses the query's own first term (`foundation model`)
+    [single] = [t for t in scholar("trust").translations if t.code is C.COMPAT_NO_STEMMING]
+    assert "`trust` matches only" in single.message and "`trust$`" in single.message
 
 
 def test_pop_string_reads_items_as_phrases() -> None:

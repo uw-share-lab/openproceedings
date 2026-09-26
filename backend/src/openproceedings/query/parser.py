@@ -24,6 +24,7 @@ mode (`mode="scholar"`) is `compat.py` plus the `source:` branch below.
 
 from __future__ import annotations
 
+import bisect
 import unicodedata
 from typing import Literal, cast
 
@@ -125,8 +126,8 @@ def _value_key(text: str) -> str:
 def filter_value(field: FilterField, v: Lexeme) -> str | YearRange | None:
     """The canonical value `v` spells for `field`, or None if it is not a valid one."""
     if field == "year":
-        if v.kind is Kind.RANGE and v.range is not None:
-            lo, hi = v.range
+        if v.kind is Kind.RANGE and v.range is not None and all(len(p) <= 4 for p in v.text.split("..")):
+            lo, hi = v.range  # a year is at most four digits as written, in a range as on its own
         elif (
             v.kind is Kind.WORD
             and v.wildcard is None
@@ -276,10 +277,16 @@ class _Parser:
         """WARN_FILTER_SCOPE for `year:2023 OR 2024`: an OR branch that is just a bare value of the field of
         a filter in another branch of the same OR."""
         fields = sorted({n.field for n in nodes if isinstance(n, Filter)})
+        if not fields:
+            return  # nothing a bare word could be mistaken for
         terms = [t for t in toks if t.kind in (Kind.WORD, Kind.PHRASE)]
+        starts = [t.start for t in terms]  # in order: each branch's lexemes by binary search (linear overall)
         for n in nodes:
-            inside = [t for t in terms if n.span[0] <= t.start and t.end <= n.span[1]]  # `2024` or `(2024)`
-            bare = isinstance(n, Term | Phrase) and n.field is None and len(inside) == 1
+            if not (isinstance(n, Term | Phrase) and n.field is None):
+                continue
+            lo, hi = bisect.bisect_left(starts, n.span[0]), bisect.bisect_left(starts, n.span[1])
+            inside = [t for t in terms[lo:hi] if t.end <= n.span[1]]  # `2024` or `(2024)`
+            bare = len(inside) == 1
             tok = inside[0] if bare else None
             if tok is None:
                 continue
@@ -750,8 +757,10 @@ def _stemming_notice(ast: Node, end: int) -> list[Diagnostic]:
     return [
         Diagnostic(
             code=DiagnosticCode.COMPAT_NO_STEMMING,
-            message=f"Google Scholar stems words; openproceedings matches them exactly, so {shown} match only "
-            "those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `llm$`).",
+            message=f"Google Scholar stems words; openproceedings matches them exactly, so {shown} "
+            + ("matches" if len(terms) == 1 else "match")
+            + " only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. "
+            f"`{clip(terms[0].split()[-1])}$`).",
             span=(0, end),
         )
     ]

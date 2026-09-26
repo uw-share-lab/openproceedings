@@ -33,7 +33,7 @@ universe `U` = all record ids in the snapshot.
 | `Wildcard` | any expansion (`.claude/skills/wildcards-and-expansion/SKILL.md`) matches as a `Term` |
 | `And` / `Or` | set intersection / union |
 | `Not x` | `U − eval(x)`, so `a OR NOT b` is well-defined |
-| `Filter venue/track/status` | exact equality with the record's value (`venue` compared case-insensitively) |
+| `Filter venue/track/status` | exact equality with the record's value (filter values are canonical vocabulary: the AST validates them) |
 | `Filter year a..b` | `a ≤ year ≤ b`, inclusive |
 
 The oracle does **not** add default filters. They are already explicit in the AST
@@ -55,7 +55,7 @@ It implements the same `Engine` protocol: `match_ids`, `expand`, `facets`, and a
   evaluated, so the 200 cap never depends on which records are reached (and a 5k differential run stays
   O(corpus)). An empty snapshot expands nothing and matches nothing.
 - Facets judge "top-level" after flattening nested ANDs, as on the canonical tree. `track`/`status`
-  compare exactly; `venue` case-insensitively.
+  compare exactly (values are canonical vocabulary, validated by the AST).
 - Exclusion accounting (`excluded`) is task-026; it evaluates `ParseResult.identification_ast`.
 
 ## When the two disagree

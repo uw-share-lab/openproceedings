@@ -91,10 +91,12 @@ outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copyin
    If `identification_query` is `""` the text reads "all indexed records"; if it is all-negative, the text
    cites `canonical` instead (prisma-reporting skill). Counts always come from `identification_ast`. The
    text also cites the input string as typed when it differs from the identification string, and when
-   `mode` is `scholar` it adds: "The string was entered in Google Scholar syntax and translated as
-   recorded: `source:` values became `venue:` filters; unquoted multi-word `|` items were read as phrases
-   (openproceedings decision-002), unlike Google Scholar; `$` was read as the Web of Science zero-or-one
-   wildcard; openproceedings does not stem (terms listed in the record)."
+   `mode` is `scholar` it adds "The string was entered in Google Scholar syntax and translated as
+   recorded:" followed by one clause per kind of translation **actually recorded** (never a fixed list):
+   `COMPAT_SOURCE_ALIAS` → "`source:` values became `venue:` filters"; `COMPAT_POP_PHRASE` → "unquoted
+   multi-word `|` items were read as phrases (openproceedings decision-002), unlike Google Scholar";
+   `COMPAT_POP_DOLLAR` → "`$` was read as the Web of Science zero-or-one wildcard"; `COMPAT_NO_STEMMING` →
+   "openproceedings does not stem (terms listed in the record)".
    It always gives the **full** `index_version`, never a prefix. The limits clause names every filter the
    user wrote (03 §Exclusion accounting: "identified" is conditional on them) and reads "with no limits"
    when there are none. The coverage report is cited with its snapshot hash as the database-scope caveat

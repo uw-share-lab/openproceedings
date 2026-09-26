@@ -33,9 +33,10 @@ ID, or goes to `review.csv`.
 | Only in openproceedings, because… | Automated test |
 |---|---|
 | `scholar_cap` | Scholar's result count for the string hit its 1,000-result cap, or the record was truncated. |
+| `compat_reading` | Scholar mode read the string differently from Scholar (decision-002 phrases, `$` as a WoS wildcard) and that reading matches the record; re-running with Scholar's reading written natively doesn't. |
 | `scholar_missed` | Otherwise. Goes to `review.csv` to confirm the exact token really is in title/abstract. |
 
-**Order matters:** test `our_bug` (oracle vs engine) first, then `filtered`, `coverage_gap`, `stemming`,
+**Order matters:** test `our_bug` (oracle vs engine) first, then `filtered`, `compat_reading`, `coverage_gap`, `stemming`,
 and only then `full_text`. Assigning `full_text` without the oracle check hides bugs.
 
 ## review.csv (next to the report)

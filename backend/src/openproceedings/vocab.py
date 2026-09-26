@@ -20,10 +20,10 @@ TRACKS = (
 )
 STATUSES = ("accepted", "rejected", "withdrawn", "desk_rejected", "unknown")
 TEXT_FIELDS = ("title", "abstract")
-FILTER_FIELDS = (
+QUERY_FILTER_FIELDS = (  # every filter field a query may name, incl. Scholar's `source:` (cf. ast.FILTER_FIELDS)
     "venue",
     "year",
     "track",
     "status",
     "source",
-)  # `source:` is Scholar syntax (FIELD_COMPAT_ONLY)
+)

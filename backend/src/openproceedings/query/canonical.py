@@ -19,6 +19,7 @@ token that spells an operator in lowercase is quoted (`"and"`), so re-parsing ra
 from __future__ import annotations
 
 import hashlib
+import json
 
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import (
@@ -93,12 +94,12 @@ def _merge_filters(children: list[Node]) -> list[Node]:
 
 
 def _dedupe(children: list[Node]) -> list[Node]:
-    seen: list[object] = []
+    seen: set[str] = set()  # hashable keys, so a wide AND/OR stays linear
     out = []
     for c in children:
-        key = structure(c)
+        key = json.dumps(structure(c), sort_keys=True)
         if key not in seen:
-            seen.append(key)
+            seen.add(key)
             out.append(c)
     return out
 

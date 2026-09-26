@@ -453,3 +453,8 @@ def test_m1_gate_mutant_rows() -> None:
     assert lex("$abc$*").lexemes[0].wildcard == "*"
     assert [e.code for e in lex('"a. b*"').errors] == [C.WILDCARD_STEM_TOO_SHORT]  # `.` is not a letter
     assert [x.text for x in lex("$a b$(c)").lexemes] == ["$a b$", "(", "c", ")"]  # math ends at `(`
+
+
+def test_a_parenthesis_glued_to_a_phrase_is_an_error_too() -> None:
+    assert [e.code for e in lex('"a b"(c)').errors] == [C.PARSE_PAREN_TOUCHES_WORD]
+    assert [e.code for e in lex('(c)"a b"').errors] == [C.PARSE_PAREN_TOUCHES_WORD]

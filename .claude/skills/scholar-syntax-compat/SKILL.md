@@ -46,7 +46,7 @@ or not), their `$` gets no PoP notice, and `source:ICLR OR PMLR` warns (`WARN_FI
 | Input | Native | Notice |
 |---|---|---|
 | `a \| b` | `a OR b` | none needed (`|` is in the native EBNF) |
-| `model$` | WoS zero-or-one wildcard | "PoP `$` interpreted as zero-or-one character" |
+| `model$` | WoS zero-or-one wildcard | `COMPAT_POP_DOLLAR`: "`$` has no documented wildcard meaning in Google Scholar; openproceedings reads it as the Web of Science zero-or-one wildcard …" |
 | lowercase `or` | term `or` + warning | same as native |
 | an operator we don't support (e.g. Scholar's `intitle:`, `allintitle:`) | error, never ignored | built: `intitle:`/`allintitle:` are `FIELD_UNKNOWN` with a hint pointing to `title:` |
 

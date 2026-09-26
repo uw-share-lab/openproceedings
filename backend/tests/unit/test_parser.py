@@ -410,9 +410,43 @@ def test_diagnostics_are_capped_per_code() -> None:
 
 
 def test_messages_quote_at_most_40_characters_of_input() -> None:
-    long_word = "x" * 500
-    [warning] = parse("trust −" + long_word).warnings
-    assert len(warning.message) < 250 and "…" in warning.message
+    """Every message template, fed a long word, stays bounded (spec 02: no diagnostic grows with the input)."""
+    w = "x" * 600
+    inputs = [
+        "trust −" + w,
+        w + "(s)",
+        "ab-" + w + "-*",
+        w + "* " + w,
+        "foo" + w + ":x",
+        "a " + w + "$b",
+        '"' + w,
+        "a NEAR/" + w,
+        "a " + w[:3] + "*",
+        "track:" + w,
+        "venue:" + w,
+        "year:" + w,
+        "(" + w,
+        w + ")",
+        "C++" + w,
+        "a " + w + " OR b c",
+        "and " + w + " or x",
+        ":" + w,
+        "--" + w,
+        '"a"' + w,
+        w + '"a"',
+        "1.." + w,
+        "title:(abstract:" + w + ")",
+        "source:" + w,
+    ]
+    for q in inputs:
+        for mode in ("native", "scholar"):
+            result = parse(q[:2000], mode)  # type: ignore[arg-type]
+            for d in result.errors + result.warnings + result.translations:
+                assert len(d.message) < 500, (
+                    q[:20],
+                    d.code,
+                    len(d.message),
+                )  # longest fixed text: the source list
 
 
 def test_parsing_is_linear_in_the_query_length() -> None:
@@ -426,7 +460,7 @@ def test_parsing_is_linear_in_the_query_length() -> None:
             best = min(best, time.perf_counter() - start)
         return best
 
-    for unit in ("w ", "$x ", "$a b ", "a. b "):  # plain words, unclosed math openers, math with spaces
+    for unit in ("w ", "$x ", "$a b ", "a. b ", "a(b)", "a|", ")a"):  # incl. space-free runs
         n = 2000 // len(unit) - 1
         small, large = cost(unit * (n // 5)), cost(unit * n)  # 5x the input
         assert large < small * 15 + 0.01, (unit, small, large)  # quadratic would be ~25x
@@ -455,3 +489,8 @@ def test_m1_gate_mutant_rows() -> None:
     partial = parse("trust track:main")  # a partial track set is the user's own limit, never the default
     assert partial.defaults == ["status"]
     assert partial.identification_query == "(trust AND track:main)"
+
+
+def test_a_year_is_at_most_four_digits_alone_or_in_a_range() -> None:
+    assert [e.code for e in parse("year:02024").errors] == [DiagnosticCode.FIELD_UNKNOWN_VALUE]
+    assert [e.code for e in parse("year:00002020..2024").errors] == [DiagnosticCode.FIELD_UNKNOWN_VALUE]

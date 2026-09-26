@@ -49,7 +49,8 @@ tokens that share its span (`½` → `1`, `2`). The full case list is `backend/t
 
 - **CJK has no word segmentation.** A run of Chinese, Japanese or Korean characters is one token, so
   `信頼` does not match inside `信頼性`. Search the whole run, or use a wildcard on a stem of at least
-  three characters (`信頼性*`); `WARN_CJK_RUN` flags every CJK term.
+  three characters (`信頼性*`); `WARN_CJK_RUN` flags every CJK term. Japanese corner brackets that touch
+  text (`深層学習「…」モデル`) are `PARSE_AMBIGUOUS_QUOTE`: put spaces around a quoted part.
 - **Hebrew and Arabic vowel points fold**, so a vocalised and an unvocalised spelling match each other.
   That is intended (points are optional in normal writing), but it is a fold, not an exact match.
 - **Latin, Greek and Cyrillic accents fold** (`resume` ≡ `résumé`), as in every mainstream search engine.
@@ -111,8 +112,13 @@ Rules:
   abstract.
 - **Lexical details** (`query/lexer.py`; the module docstring is the full list). Nothing in a query is
   silently reinterpreted: every ambiguous spelling is an error or a warning.
-  - Double quotes delimit phrases: `"`, `“ ”`, `„ ‟`, `＂`, `« »`, `「 」`, `『 』`. They need not pair: any of
-    them closes a phrase opened by any other. A backslash keeps the next character in the word
+  - Double quotes delimit phrases: `"`, `“ ”`, `„ ‟`, `＂`, `« »`, `「 」`, `『 』`. A phrase closes only with a
+    quote of its opener's family (the English-style double quotes `"“”„‟＂` are one family and close each
+    other; `« »`/`» «`, `「 」` and `『 』` pair only with themselves), so a foreign quote inside a phrase is
+    punctuation (`"trust 「in」 AI"` is one phrase). A quote touching a letter or digit on the outside
+    (`"trust in "AI"`, `a"b c"`) is `PARSE_AMBIGUOUS_QUOTE`, and a parenthesis glued to a word or phrase
+    (`model(s)`, `"a"(b)`) is `PARSE_PAREN_TOUCHES_WORD`: both would otherwise silently split a query.
+    A backslash keeps the next character in the word
     (`G\"odel`). Characters whose NFKC form is a syntax character (full-width `（ ）｜：－＊＂`, …) act as
     it, because the tokenizer applies NFKC too; super/subscript parentheses are notation, not grouping.
   - `-` is `NOT` when it starts a primary (after whitespace, `(`, `|` or a field's `:`) and touches what
@@ -236,7 +242,7 @@ ParseResult = {               # `query/parser.py`; every Optional below is None 
   defaults: [ "track" | "status" ],   # fields whose top-level clause is the default
   warnings: [Diagnostic],      # {code, message, span:[start,end]}
   errors: [Diagnostic],        # non-empty ⇒ no search
-  translations: [Diagnostic],  # Scholar-mode rewrites
+  translations: [Diagnostic],  # Scholar-mode rewrites and notices (e.g. COMPAT_NO_STEMMING)
 }
 ```
 
