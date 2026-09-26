@@ -17,8 +17,8 @@ one mistake gives one error (an error already reported inside a span suppresses 
 - A query with no positive part (`NOT a`, `a OR NOT b`) is PARSE_ALL_NEGATIVE; `NOT NOT a` is positive.
   This is checked before default filters are added (task-014), which would otherwise hide it.
 
-`ParseResult.canonical` and `.canonical_hash` come from `canonical.py`. Default filters and Scholar mode
-are layered on top (tasks 014–015).
+`ParseResult.canonical`/`.canonical_hash` come from `canonical.py` and the default filters, with
+`effective_ast`, `identification_query` and `defaults`, from `defaults.py`. Scholar mode is task-015.
 """
 
 from __future__ import annotations
@@ -45,7 +45,8 @@ from openproceedings.query.ast import (
     Wildcard,
     YearRange,
 )
-from openproceedings.query.canonical import canonical_hash, canonicalize, render
+from openproceedings.query.canonical import canonical_hash, render
+from openproceedings.query.defaults import apply_defaults
 from openproceedings.query.lexer import FIELDS, Kind, Lexeme, lex
 from openproceedings.query.normalize import tokenize
 from openproceedings.vocab import STATUSES, TEXT_FIELDS, TRACKS, VENUES
@@ -64,9 +65,16 @@ _VALID: dict[str, tuple[str, ...]] = {"venue": tuple(VENUES.values()), "track": 
 class ParseResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    ast: Node | None
-    canonical: str | None = None  # None exactly when there are errors
+    ast: Node | None  # the tree as typed, spans into q (the UI's parse tree)
+    effective_ast: Node | None = None  # canonical, with default filters: what the engine runs
+    canonical: str | None = (
+        None  # render(effective_ast); every Optional here is None exactly when there are errors
+    )
     canonical_hash: str | None = None
+    identification_query: str | None = None  # canonical without the default conjuncts; "" = every record
+    defaults: list[
+        FilterField
+    ] = []  # fields whose top-level clause is the default (spec 03 §Exclusion accounting)
     warnings: list[Diagnostic]
     errors: list[Diagnostic]
     translations: list[Diagnostic] = []
@@ -622,11 +630,15 @@ def parse(q: str) -> ParseResult:
         ]
     if errors or ast is None:
         return ParseResult(ast=None, warnings=warnings, errors=errors)
-    canonical = render(canonicalize(ast))
+    d = apply_defaults(ast, len(q))
+    canonical = render(d.effective)
     return ParseResult(
         ast=ast,
+        effective_ast=d.effective,
         canonical=canonical,
         canonical_hash=canonical_hash(canonical),
-        warnings=warnings,
+        identification_query=render(d.identification) if d.identification is not None else "",
+        defaults=list(d.defaults),
+        warnings=sorted([*warnings, *d.warnings], key=_by_position),
         errors=errors,
     )

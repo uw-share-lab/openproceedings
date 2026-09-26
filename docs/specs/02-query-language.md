@@ -173,6 +173,17 @@ The UI toggles edit these same clauses; they are not a separate state.
 - **Identification string.** `identification_query` is the canonical string with the default conjuncts
   removed. It is what PRISMA's "records identified" count is computed from (03 §Exclusion accounting, 05
   §Save search record). The API returns and search records store both strings.
+- **As built** (`query/defaults.py`). "Top-level" is judged on the canonical tree, so `(a track:x) b` has
+  `track:x` at the top level. A top-level `NOT track:x` is the user's own track clause and also suppresses
+  the default. A default-equal clause is the default only when it is the **only** top-level clause of its
+  field (the parser would not add a default next to `track:workshop`, so a typed default-equal clause
+  there is the user's). `ParseResult.ast` is the tree as typed; `effective_ast` is the canonical tree with
+  the defaults (inserted ones have the zero-width span `(len(q), len(q))`), which the engine runs;
+  `defaults` names the fields whose top-level clause is the default, for the exclusion buckets.
+  `identification_query` is `""` when the query was nothing but defaults (every record). If a query's only
+  positive clause was a default (`status:accepted NOT track:workshop`), `identification_query` is
+  all-negative (`NOT track:workshop`): a well-defined set the engine counts from the tree, but not a
+  string that parses on its own. Records reproduce it by replaying `canonical`.
 
 ## Compatibility input modes
 

@@ -15,10 +15,11 @@ from openproceedings.query.parser import parse
 
 
 def canon(q: str) -> str:
+    """The canonical form of the tree as typed (default filters are task-014's, in test_defaults.py)."""
     result = parse(q)
     assert result.errors == [], result.errors
-    assert result.canonical is not None
-    return result.canonical
+    assert result.ast is not None
+    return render(canonicalize(result.ast))
 
 
 GOLDEN: list[tuple[str, str]] = [
@@ -93,7 +94,8 @@ def test_errors_have_no_canonical() -> None:
 
 
 def test_hash_is_sha256_of_canonical_and_tokenizer_version() -> None:
-    c = canon("trust calibration")
+    c = parse("trust calibration").canonical
+    assert c is not None
     expected = hashlib.sha256(f"{c}\x00{TOKENIZER_VERSION}".encode()).hexdigest()
     assert canonical_hash(c) == expected == parse("trust calibration").canonical_hash
     assert canonical_hash("a1") != canonical_hash("a")  # the separator keeps (canonical, version) unambiguous
@@ -188,5 +190,9 @@ def test_canonical_of_any_valid_input_reparses_to_the_same_tree(q: str) -> None:
     assume(result.ast is not None)
     assert result.canonical is not None
     again = parse(result.canonical)
-    assert again.ast is not None, (q, result.canonical, again.errors)
-    assert structure(canonicalize(again.ast)) == structure(canonicalize(result.ast))
+    assert again.effective_ast is not None and result.effective_ast is not None, (
+        q,
+        result.canonical,
+        again.errors,
+    )
+    assert structure(again.effective_ast) == structure(result.effective_ast)
