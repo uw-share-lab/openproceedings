@@ -534,3 +534,9 @@ def test_m1_final_verification_rows() -> None:
     # `’` warns only when paired
     assert lex("’80s").warnings == ()
     assert [w.code for w in lex("’trust in AI’").warnings] == [C.WARN_LOOKALIKE_OPERATOR]
+
+
+def test_m1_final_nits() -> None:
+    assert lex("’80s AI’s role").warnings == ()  # an in-word apostrophe does not pair with the leading `’`
+    assert C.WARN_SYMBOLS_DROPPED in [w.code for w in lex("\\alpha{{}}-divergence").warnings]  # nested empty
+    assert lex('"a b').errors[0].code is C.PARSE_UNTERMINATED_PHRASE

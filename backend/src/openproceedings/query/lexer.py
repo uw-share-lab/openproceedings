@@ -5,8 +5,9 @@ Lexical rules, in the order they are tried at the start of each lexeme:
 - Whitespace (any Unicode space) separates. `(`, `)` and `|` are single-character lexemes (`|` is `OR`).
 - A double quote (`"`, `“`, `”`, `„`, `‟`, `＂`, `«`, `»`, `「`, `」`, `『`, `』`, `〝`, `〞`, `〟`, `″`) opens a phrase
   that runs to the next unescaped quote of the same family (English-style double quotes are one family;
-  `«…»`/`»…«`, `「…」`, `『…』`, `〝…〞`/`〝…〟` and `″…″` pair only with themselves), so a foreign quote inside
+  `«…»`/`»…«`, `「…」`, `『…』`, `〝…〞`/`〝…〟`/`〞…〟` and `″…″` pair only with themselves), so a foreign quote inside
   a phrase is punctuation. Its parts are split on whitespace, and operators inside it are ordinary words.
+  With no closing quote the phrase runs to the end of `q` and PARSE_UNTERMINATED_PHRASE is raised.
   A quote touching a letter, mark or number on the outside (`a"b c"`, `"trust in "AI"`, a possessive
   `"GPT-4"'s`, a decomposed accent) is PARSE_AMBIGUOUS_QUOTE, once per unbroken run; a `(` glued to a
   preceding word or phrase, or a `)` to a following one (`model(s)`), is PARSE_PAREN_TOUCHES_WORD.
@@ -151,6 +152,7 @@ def _is_cjk(c: str) -> bool:
 
 
 _COMMAND = re.compile(r"\\([A-Za-z]+)")
+_EMPTY_BRACES = re.compile(r"\{[{}]*\}")  # `{}`, `{{}}`: braces that keep nothing
 
 
 def _wordy(c: str) -> bool:
@@ -505,7 +507,7 @@ class _Lexer:
                 start,
                 end,
             )
-        elif raw.startswith(_SINGLE_QUOTES) and (raw[0] != "’" or "’" in self.q[start + 1 :]):
+        elif raw.startswith(_SINGLE_QUOTES) and (raw[0] != "’" or self.closing_apostrophe_after(start)):
             # `’` alone at a word start is usually an elision (`’80s`); it looks like a quote only when paired
             self.warn(
                 DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
@@ -540,6 +542,14 @@ class _Lexer:
             end,
         )
 
+    def closing_apostrophe_after(self, start: int) -> bool:
+        """Whether a later `’` ends a word (the next character is not a letter, mark or number), i.e. could
+        close a `’…’` quote; a `’` inside a word (`AI’s`) is an apostrophe."""
+        q = self.q
+        return any(
+            q[k] == "’" and (k + 1 == len(q) or not _wordy(q[k + 1])) for k in range(start + 1, len(q))
+        )
+
     @staticmethod
     def bare_command(stem: str) -> bool:
         """A `\\cmd` outside math that isn't an accent macro or `\\cmd{…}` with content (which is kept);
@@ -547,7 +557,7 @@ class _Lexer:
         regions: list[tuple[int, int]] | None = None  # computed only once a command is found
         for m in _COMMAND.finditer(stem):
             accent = len(m.group(1)) == 1 and m.group(1) in "uvHcdbrkij"
-            braced = stem[m.end() : m.end() + 1] == "{" and stem[m.end() + 1 : m.end() + 2] != "}"
+            braced = stem[m.end() : m.end() + 1] == "{" and not _EMPTY_BRACES.match(stem, m.end())
             if accent or braced:
                 continue
             regions = math_regions(stem) if regions is None else regions
