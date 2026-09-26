@@ -19,10 +19,17 @@ build). Others are reports (they're regenerated and committed as dated results, 
 | Determinism | Same canonical query + `index_version` → identical order and scores | 0 diffs |
 
 As built (task-028): the differential is `backend/tests/differential/`, on a synthetic 5k corpus generated
-in memory (decision-004). It compares match sets, wildcard expansions (or refusals), disjunctive facets, and
-`total` for every sort, over any tree an engine may get, all-negative ones included. It ran 0 counterexamples
-in 2,000 examples in ~2.5 min. Shrunk counterexamples are kept in
-`differential-regressions.json` and replayed on every run. The 50k nightly job is task-057.
+in memory and hash-pinned (decision-004), with a Zipfian vocabulary: rare terms, hapaxes, and stems that
+pass the 200-term cap. Trees are drawn from the corpus's own dictionary. For any tree an engine may get,
+all-negative ones included, it compares:
+- match sets;
+- wildcard expansions, or the refusal;
+- disjunctive facets;
+- `total` for every sort, and the `year_asc` order;
+- for trees that parse, the exclusion counts.
+
+Shrunk counterexamples are kept in `differential-regressions.json` and replayed on every run. The 50k
+nightly job is task-057.
 
 ## B. Scholar comparison (report, `op eval scholar`)
 
