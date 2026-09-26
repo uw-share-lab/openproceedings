@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any
 
 import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
 from openproceedings.query import QUERY_VERSION
-from openproceedings.query.ast import Node
+from openproceedings.query.ast import structure
 from openproceedings.query.canonical import canonical_hash, canonicalize, render
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import parse
@@ -69,8 +68,11 @@ GOLDEN: list[tuple[str, str]] = [
     ),  # a single-field OR group merges
     ("(venue:ICLR OR track:main) trust", "((venue:ICLR OR track:main) AND trust)"),  # mixed fields: untouched
     ("(a venue:ICLR) OR b", "((a AND venue:ICLR) OR b)"),  # filters sort within every AND
-    ('source:"neural information processing systems"', 'source:"neural information processing systems"'),
-    ("source:PMLR", "source:PMLR"),
+    # a lone token spelling a lowercase operator is quoted, so the canonical string raises no warning
+    ('trust "and" calibration', '(trust AND "and" AND calibration)'),
+    ('"or"', '"or"'),
+    ('"trust and safety"', '"trust and safety"'),
+    ("NOT NOT a b", "(NOT NOT a AND b)"),
 ]
 
 
@@ -102,20 +104,13 @@ def test_equivalent_queries_hash_equal() -> None:
     assert len({parse(q).canonical_hash for q in same}) == 1
 
 
+def test_canonical_strings_reparse_without_warnings() -> None:
+    for q in ('trust "and" calibration', '"or" x', "a b c"):
+        assert parse(canon(q)).warnings == []
+
+
 def test_query_version_is_defined() -> None:
     assert QUERY_VERSION == "1"
-
-
-def _no_spans(x: Any) -> Any:
-    if isinstance(x, dict):
-        return {k: _no_spans(v) for k, v in x.items() if k != "span"}
-    if isinstance(x, list | tuple):
-        return [_no_spans(v) for v in x]
-    return x
-
-
-def shape(n: Node) -> Any:
-    return _no_spans(n.model_dump())
 
 
 @pytest.mark.parametrize("q", [q for q, _ in GOLDEN])
@@ -125,7 +120,7 @@ def test_ast_to_string_to_ast_is_the_identity(q: str) -> None:
     normal = canonicalize(ast)
     again = parse(render(normal)).ast
     assert again is not None
-    assert shape(canonicalize(again)) == shape(normal)
+    assert structure(canonicalize(again)) == structure(normal)
 
 
 WORDS = st.sampled_from(
@@ -194,4 +189,4 @@ def test_canonical_of_any_valid_input_reparses_to_the_same_tree(q: str) -> None:
     assert result.canonical is not None
     again = parse(result.canonical)
     assert again.ast is not None, (q, result.canonical, again.errors)
-    assert shape(canonicalize(again.ast)) == shape(canonicalize(result.ast))
+    assert structure(canonicalize(again.ast)) == structure(canonicalize(result.ast))

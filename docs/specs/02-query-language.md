@@ -103,13 +103,26 @@ Rules:
   usual "use a longer stem" error. (Decision-001 records rules 1–3 of this list.)
 - **Phrases** keep word order and adjacency within **one field**. A phrase never spans the title and the
   abstract.
-- **Lexical details** (`query/lexer.py`): straight `"` and curly `“ ”` quotes both delimit phrases. A
-  backslash keeps the next character in the word (`G\"odel` is one word, not a phrase opener). `-` is
-  `NOT` only directly before a primary (`-bias`, `-(…)`, `-"…"`); `vision-language` and a lone `-` are
-  words. Field names are case-insensitive (`Title:` ≡ `title:`); letters followed by `:` at the start of a
-  primary are always a field, so an unknown one (`intitle:`) is an error rather than a silent search. A `*`
-  not at the end of a word is an error, and a trailing `$` is a wildcard only when it does not close a
-  `$…$` math pair (`$\epsilon$` is math).
+- **Lexical details** (`query/lexer.py`; the module docstring is the full list). Nothing in a query is
+  silently reinterpreted: every ambiguous spelling is an error or a warning.
+  - Double quotes delimit phrases: `"`, `“ ”`, `„ ‟`. A backslash keeps the next character in the word
+    (`G\"odel`). Characters whose NFKC form is a syntax character (full-width `（ ）｜：－＊＂`, …) act as
+    it, because the tokenizer applies NFKC too; super/subscript parentheses are notation, not grouping.
+  - `-` is `NOT` when it starts a primary (after whitespace, `(`, `|` or a field's `:`) and touches what
+    it excludes. A word that starts with `-` anywhere else (`a - b`, `"x"-based`, `--x`) is
+    `PARSE_AMBIGUOUS_MINUS`. A word starting with a look-alike dash (`−bias`, `–bias`) or a single quote
+    is searched as written with `WARN_LOOKALIKE_OPERATOR`.
+  - A field is a letter, then letters/digits/underscores, then `:`; names are case-insensitive, so an
+    unknown one (`intitle:`, `título:`) is an error rather than a silent search. `title: trust` is fine;
+    `title :trust` is `PARSE_STRAY_COLON`. `source:` is Scholar syntax: in native mode it is
+    `FIELD_COMPAT_ONLY` (Scholar mode translates it to `venue:`).
+  - Wildcards: `*` or `$` at the end of a word, directly after a letter or digit (`vision-*` is
+    `PARSE_WILDCARD_DETACHED`). A `*` or `$` elsewhere (`behavio$r`, `model$*`) is
+    `PARSE_WILDCARD_NOT_SUFFIX`, except inside LaTeX math (found exactly as the tokenizer finds it, so
+    `$f(x)$-DP` is one word) and a `$` before a digit (currency, `US$5`).
+  - A bare uppercase `NEAR` between terms is `PARSE_BAD_NEAR` (Web of Science reads it as `NEAR/15`);
+    `NEAR/n` takes n ≤ 100.
+  - A word whose trailing `+`/`#` the tokenizer drops (`C++` → `c`) raises `WARN_SYMBOLS_DROPPED`.
 - `NEAR/n` works within one field, is unordered, and allows at most n intervening words. Tantivy's slop
   semantics are documented in 03 and must agree with the reference matcher. Its two operands are words,
   wildcards or phrases (not groups or filters) in the same field, and `NEAR` does not chain
@@ -122,6 +135,12 @@ Rules:
   checked against `backend/src/openproceedings/vocab.py` (spec 01's vocabularies) and are case-insensitive;
   `venue:` values take their canonical spelling (`neurips` → `NeurIPS`).
 - Groups and `NOT`s nest at most 64 deep (`PARSE_TOO_DEEP`).
+- `year:` values are four-digit years (1000–9999). A bare value OR-joined to a filter of its field
+  (`year:2023 OR 2024`, `venue:ICLR OR NeurIPS`) is searched as text, as written, and raises
+  `WARN_FILTER_SCOPE` suggesting `year:(2023 OR 2024)`.
+- `NOT NOT a` means `a`, so it is not all-negative. A one-word group counts as a word for `NEAR`.
+- One mistake gives one error: an error already reported inside a span suppresses follow-on errors there,
+  while separate mistakes are each reported.
 
 ## Fields and filters (guarantee 3: filters live in the query)
 
@@ -199,8 +218,10 @@ minimum is hyphen-joined to the tokens before it (`gpt-4*` → `"gpt-4*"`). Sema
 Every error has a span and a fix hint: unbalanced parentheses, an empty group, a wildcard stem that is too
 short or not at the end of a word, an unterminated phrase, `NEAR/` without a whole-number distance or
 with a bad operand, a missing operand (`a OR`), a word or phrase with no letters or digits (`a - b`), a
-nested text field, a malformed filter group, nesting deeper than 64, an unknown field, an unknown `track:` value (listing the valid values), a range with start > end, or an
-all-negative query. The codes are in `diagnostics.py`.
+nested text field, a malformed filter group, nesting deeper than 64, an ambiguous `-`, a stray `:`, a
+detached or mid-word wildcard, `source:` outside Scholar mode, an unknown field, an unknown filter value
+(listing the valid ones), a range with start > end, or an all-negative query. The codes are in
+`diagnostics.py`.
 
 ## Testing
 

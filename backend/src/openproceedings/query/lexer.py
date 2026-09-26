@@ -3,37 +3,60 @@
 Lexical rules, in the order they are tried at the start of each lexeme:
 
 - Whitespace (any Unicode space) separates. `(`, `)` and `|` are single-character lexemes (`|` is `OR`).
-- A quote (`"`, `“` or `”`) opens a phrase that runs to the next unescaped quote; its parts are split on
-  whitespace, and operators inside it are ordinary words. With no closing quote, the phrase runs to the
-  end of `q` and PARSE_UNTERMINATED_PHRASE is raised.
-- `-` directly before a primary (not before a space, `)` or `|`) is `NOT`. Elsewhere it is part of a word.
-- Letters followed by `:` are a field (case-insensitive). An unknown name is FIELD_UNKNOWN, but it is
-  still emitted as a field so the parser can go on.
-- Anything else runs to the next whitespace, parenthesis, `|` or quote. A backslash keeps the character
-  after it in the word, so LaTeX such as `G\\"odel` survives. The word `AND`, `OR` or `NOT` (uppercase
-  only) is an operator; `NEAR/n` is proximity; `2020..2026` is a range; everything else is a WORD.
-- A WORD (or a phrase part) ending in an unescaped `*`, or in a `$` that is not closing a `$…$` math pair,
-  is a wildcard. Its stem must keep at least 3 letters or digits after normalisation (decision-001), and a
-  `*` anywhere else outside math is PARSE_WILDCARD_NOT_SUFFIX.
+- A double quote (`"`, `“`, `”`, `„`, `‟`) opens a phrase that runs to the next unescaped double quote;
+  its parts are split on whitespace, and operators inside it are ordinary words. With no closing quote
+  the phrase runs to the end of `q` and PARSE_UNTERMINATED_PHRASE is raised.
+- `-` is `NOT` when it starts the query or follows whitespace, `(`, `|` or a field's `:`, and a primary
+  follows it directly. Any other word that starts with `-` (`a - b`, `"x"-based`, `--x`) is
+  PARSE_AMBIGUOUS_MINUS: it would otherwise silently mean either NOT or a literal hyphen.
+- A letter, then letters/digits/underscores, then `:` is a field (case-insensitive). An unknown name is
+  FIELD_UNKNOWN but is still emitted as a field so the parser can go on. `title: trust` (a space after
+  the colon) is accepted; `title :trust` is PARSE_STRAY_COLON.
+- Anything else runs to the next whitespace, parenthesis, `|` or double quote, except that LaTeX math
+  (`$f(x)$`, found exactly as the tokenizer finds it) keeps its parentheses and bars. A backslash keeps
+  the character after it in the word (`G\\"odel`). The words `AND`, `OR`, `NOT` (uppercase only) are
+  operators; `NEAR/n` (n ≤ 100) is proximity, and a bare `NEAR` between terms is PARSE_BAD_NEAR;
+  `2020..2026` is a range; everything else is a WORD.
+- A WORD (or phrase part) ending in `*` or in a `$` outside math is a wildcard. Its stem must keep at
+  least 3 letters or digits after normalisation (decision-001), and the wildcard must directly follow a
+  letter or digit (`vision-*` is PARSE_WILDCARD_DETACHED). A `*` or `$` anywhere else outside math is
+  PARSE_WILDCARD_NOT_SUFFIX, except a `$` before a digit (currency, `US$5`).
 
-A lowercase `and`/`or`/`not`/`near/n` between two terms is searched as a word and raises
-WARN_LOWERCASE_OPERATOR. Bad input is a diagnostic, never an exception.
+Characters whose NFKC form is one of these syntax characters (full-width `（`, `－`, `＂`, `＊`, …) act as
+that character, since the tokenizer applies NFKC too. Super/subscript parentheses (math notation) and the
+full-width backslash (ordinary text, spec 02) are deliberately excluded; a test re-derives this table
+from the Unicode database.
+
+Warnings, raised where an operator would have made sense: a lowercase `and`/`or`/`not`/`near/n` between
+two terms (WARN_LOWERCASE_OPERATOR); a word that starts with a dash or single quote that only looks like
+an operator (`−bias`, `‘trust`: WARN_LOOKALIKE_OPERATOR); a word whose trailing `+`/`#` is dropped by the
+tokenizer (`C++` → `c`: WARN_SYMBOLS_DROPPED). Bad input is a diagnostic, never an exception.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
-from openproceedings.query.normalize import normalize
+from openproceedings.query.normalize import math_regions, tokenize
 
 FIELDS = ("title", "abstract", "venue", "year", "track", "status", "source")
 MIN_STEM = 3  # letters or digits a wildcard stem keeps after normalisation (spec 02, decision-001)
-QUOTES = frozenset('"“”')
-_DELIMITERS = frozenset("()|") | QUOTES
-_FIELD = re.compile(r"[A-Za-z]+:")
+MAX_NEAR = 100
+QUOTES = frozenset('"“”„‟＂')
+LPARENS = frozenset("(（﹙︵")
+RPARENS = frozenset(")）﹚︶")
+PIPES = frozenset("|｜")
+COLONS = frozenset(":：﹕︓")
+MINUSES = frozenset("-－﹣")
+STARS = frozenset("*＊﹡")
+DOLLARS = frozenset("$＄﹩")  # only the ASCII `$` can delimit LaTeX math (spec 02 §Token semantics)
+_LOOKALIKE_MINUS = frozenset("−–—")  # minus sign, en dash, em dash: not operators, but easily meant as `-`
+_SINGLE_QUOTES = ("‘", "`")
+_BREAKS = LPARENS | RPARENS | PIPES
+_FIELD = re.compile(r"([^\W\d_]\w*)[:：﹕︓]")
 _NEAR = re.compile(r"NEAR/([0-9]+)")
 _RANGE = re.compile(r"([0-9]+)\.\.([0-9]+)")
 
@@ -64,193 +87,293 @@ class Lexeme:
     start: int
     end: int
     text: str
-    stem: str = ""  # WORD: `text` without its wildcard
+    stem: str | None = None  # WORD: `text` without its wildcard
     wildcard: str | None = None  # WORD: "*" or "$"
     field: str | None = None  # FIELD: the lowercased name, known or not
     near: int | None = None  # NEAR: the distance n
     range: tuple[int, int] | None = None  # RANGE: (start, end) as written
     parts: tuple[Lexeme, ...] = ()  # PHRASE: its WORDs, in order
+    closed: bool = True  # PHRASE: False when the closing quote is missing
 
 
 @dataclass(frozen=True, slots=True)
 class LexResult:
-    lexemes: list[Lexeme] = field(default_factory=list)
-    warnings: list[Diagnostic] = field(default_factory=list)
-    errors: list[Diagnostic] = field(default_factory=list)
+    lexemes: tuple[Lexeme, ...]
+    warnings: tuple[Diagnostic, ...]
+    errors: tuple[Diagnostic, ...]
 
 
-def _err(code: DiagnosticCode, message: str, start: int, end: int) -> Diagnostic:
+def _diag(code: DiagnosticCode, message: str, start: int, end: int) -> Diagnostic:
     return Diagnostic(code=code, message=message, span=(start, end))
 
 
-def _word(q: str, start: int, end: int, errors: list[Diagnostic]) -> Lexeme:
-    """A WORD over `q[start:end]`, with its wildcard split off and checked."""
-    raw = q[start:end]
-    dollars: list[int] = []  # offsets in `raw` of unescaped `$`
-    stars: list[int] = []  # offsets in `raw` of unescaped `*`
-    k = 0
-    while k < len(raw):
-        if raw[k] == "\\":
-            k += 2
-            continue
-        if raw[k] == "$":
-            dollars.append(k)
-        elif raw[k] == "*":
-            stars.append(k)
-        k += 1
-    wildcard = None
-    if stars and stars[-1] == len(raw) - 1:
-        wildcard = "*"
-        stars.pop()
-    elif dollars and dollars[-1] == len(raw) - 1 and len(dollars) % 2 == 1:
-        wildcard = "$"  # an odd count: the last `$` closes no math pair
-        dollars.pop()
-    stem = raw[:-1] if wildcard else raw
-    math = list(zip(dollars[::2], dollars[1::2], strict=False))
-    stray = [s for s in stars if not any(a < s < b for a, b in math)]
-    if stray:
-        s = stray[0]
-        errors.append(
-            _err(
-                DiagnosticCode.PARSE_WILDCARD_NOT_SUFFIX,
-                f"`*` can only end a word, but `{raw}` has one inside it — use `{raw[:s]}*` or search the whole word.",
-                start + s,
-                start + s + 1,
-            )
-        )
-    elif wildcard and len("".join(normalize(stem))) < MIN_STEM:
-        errors.append(
-            _err(
-                DiagnosticCode.WILDCARD_STEM_TOO_SHORT,
-                f"The wildcard `{raw}` keeps fewer than {MIN_STEM} letters or digits before `{wildcard}`, so it would "
-                "match too many words — use a longer stem (e.g. `bench*`, not `be*`).",
-                start,
-                end,
-            )
-        )
-    return Lexeme(Kind.WORD, start, end, raw, stem=stem, wildcard=wildcard)
+def _step(q: str, j: int) -> int:
+    """The index after the character at `j`; a backslash also takes the (non-space) character after it."""
+    return j + 2 if q[j] == "\\" and j + 1 < len(q) and not q[j + 1].isspace() else j + 1
 
 
-def _phrase(q: str, i: int, errors: list[Diagnostic]) -> Lexeme:
-    """The phrase whose opening quote is at `i`."""
-    n = len(q)
-    j = i + 1
-    while j < n and q[j] not in QUOTES:
-        j += 2 if q[j] == "\\" else 1
-    j = min(j, n)
-    if j >= n:
-        errors.append(
-            _err(
+class _Lexer:
+    def __init__(self, q: str) -> None:
+        self.q = q
+        self.out: list[Lexeme] = []
+        self.errors: list[Diagnostic] = []
+        self.warnings: list[Diagnostic] = []
+
+    def error(self, code: DiagnosticCode, message: str, start: int, end: int) -> None:
+        self.errors.append(_diag(code, message, start, end))
+
+    def warn(self, code: DiagnosticCode, message: str, start: int, end: int) -> None:
+        self.warnings.append(_diag(code, message, start, end))
+
+    def run(self) -> None:
+        q, n, i = self.q, len(self.q), 0
+        while i < n:
+            c = q[i]
+            if c.isspace():
+                i += 1
+            elif c in _BREAKS:
+                kind = Kind.LPAREN if c in LPARENS else Kind.RPAREN if c in RPARENS else Kind.OR
+                self.out.append(Lexeme(kind, i, i + 1, c))
+                i += 1
+            elif c in QUOTES:
+                i = self.phrase(i)
+            elif c in MINUSES and self.negates(i):
+                self.out.append(Lexeme(Kind.NOT, i, i + 1, c))
+                i += 1
+            elif m := _FIELD.match(q, i):
+                self.field(i, m)
+                i = m.end()
+            else:
+                i = self.word_or_operator(i)
+        self.after_pass()
+
+    def negates(self, i: int) -> bool:
+        """Whether the `-` at `i` is NOT: at a primary's start, directly followed by what it excludes."""
+        q = self.q
+        prev = q[i - 1] if i else " "
+        nxt = q[i + 1] if i + 1 < len(q) else " "
+        starts = prev.isspace() or prev in LPARENS or prev in PIPES or prev in COLONS
+        return starts and not nxt.isspace() and nxt not in RPARENS and nxt not in PIPES and nxt not in MINUSES
+
+    def field(self, i: int, m: re.Match[str]) -> None:
+        name = m.group(1).lower()
+        if name not in FIELDS:
+            valid = ", ".join(f"`{f}:`" for f in FIELDS)
+            self.error(
+                DiagnosticCode.FIELD_UNKNOWN,
+                f"`{m.group()}` is not a field — use one of {valid}, or quote the text to search for it.",
+                i,
+                m.end(),
+            )
+        self.out.append(Lexeme(Kind.FIELD, i, m.end(), m.group(), field=name))
+
+    def phrase(self, i: int) -> int:
+        q, n = self.q, len(self.q)
+        j = i + 1
+        while j < n and q[j] not in QUOTES:
+            j = _step(q, j)
+        j = min(j, n)
+        closed = j < n
+        if not closed:
+            self.error(
                 DiagnosticCode.PARSE_UNTERMINATED_PHRASE,
                 f'The phrase starting `{q[i : i + 20]}` has no closing quote — add a closing `"`.',
                 i,
                 n,
             )
-        )
-        end = n
-    else:
-        end = j + 1
-    parts = []
-    k = i + 1
-    while k < j:
-        if q[k].isspace():
-            k += 1
-            continue
-        m = k
-        while m < j and not q[m].isspace():
-            m += 1
-        parts.append(_word(q, k, m, errors))
-        k = m
-    return Lexeme(Kind.PHRASE, i, end, q[i:end], parts=tuple(parts))
+        end = j + 1 if closed else n
+        parts = []
+        k = i + 1
+        while k < j:
+            if q[k].isspace():
+                k += 1
+                continue
+            m = k
+            while m < j and not q[m].isspace():
+                m += 1
+            parts.append(self.word(k, m, in_phrase=True))
+            k = m
+        self.out.append(Lexeme(Kind.PHRASE, i, end, q[i:end], parts=tuple(parts), closed=closed))
+        return end
 
+    def word_end(self, i: int) -> int:
+        """End of the word at `i`: the next break, except inside LaTeX math within the same chunk."""
+        q, n = self.q, len(self.q)
+        chunk_end = i
+        while chunk_end < n and not q[chunk_end].isspace() and q[chunk_end] not in QUOTES:
+            chunk_end = _step(q, chunk_end)
+        chunk_end = min(chunk_end, n)
+        math_ends = {i + a: i + b for a, b in math_regions(q[i:chunk_end])}
+        j = i
+        while j < chunk_end:
+            if j in math_ends:
+                j = math_ends[j]
+            elif q[j] in _BREAKS:
+                break
+            else:
+                j = _step(q, j)
+        return min(j, chunk_end)
 
-def _word_end(q: str, i: int) -> int:
-    j = i
-    while j < len(q) and not q[j].isspace() and q[j] not in _DELIMITERS:
-        j += 2 if q[j] == "\\" and j + 1 < len(q) and not q[j + 1].isspace() else 1
-    return j
-
-
-def _lowercase_warnings(lexemes: list[Lexeme]) -> list[Diagnostic]:
-    warnings = []
-    for before, x, after in zip(lexemes, lexemes[1:], lexemes[2:], strict=False):
-        if x.kind is not Kind.WORD or before.kind not in _ENDS_A_TERM or after.kind not in _STARTS_A_TERM:
-            continue
-        upper = x.text.upper()
-        if x.text == upper:
-            continue
-        if upper in _OPERATORS:
-            message = f"`{x.text}` is searched as a word — write `{upper}` to combine terms (operators are uppercase only)."
-        elif _NEAR.fullmatch(upper):
-            message = f"`{x.text}` is searched as words — write `{upper}` for a proximity search (operators are uppercase only)."
+    def word_or_operator(self, i: int) -> int:
+        j = self.word_end(i)
+        raw = self.q[i:j]
+        if raw in _OPERATORS:
+            self.out.append(Lexeme(_OPERATORS[raw], i, j, raw))
+        elif (near := _NEAR.fullmatch(raw)) and int(near.group(1)) <= MAX_NEAR:
+            self.out.append(Lexeme(Kind.NEAR, i, j, raw, near=int(near.group(1))))
+        elif raw.startswith("NEAR/"):
+            self.error(
+                DiagnosticCode.PARSE_BAD_NEAR,
+                f"`{raw}` needs a whole-number distance up to {MAX_NEAR} — write e.g. `NEAR/3` (at most 3 words "
+                "apart).",
+                i,
+                j,
+            )
+        elif rng := _RANGE.fullmatch(raw):
+            self.out.append(Lexeme(Kind.RANGE, i, j, raw, range=(int(rng.group(1)), int(rng.group(2)))))
         else:
-            continue
-        warnings.append(_err(DiagnosticCode.WARN_LOWERCASE_OPERATOR, message, x.start, x.end))
-    return warnings
+            self.out.append(self.word(i, j, in_phrase=False))
+        return j
+
+    def word(self, start: int, end: int, *, in_phrase: bool) -> Lexeme:
+        """A WORD over `q[start:end]`, with its wildcard split off and checked."""
+        raw = self.q[start:end]
+        regions = math_regions(raw)
+        wild: list[int] = []  # offsets in `raw` of `*`/`$` that act as wildcards (outside math, not currency)
+        k = 0
+        while k < len(raw):
+            c = raw[k]
+            if c == "\\":
+                k += 2
+                continue
+            in_math = any(a <= k < b for a, b in regions)
+            currency = c in DOLLARS and k + 1 < len(raw) and raw[k + 1].isdigit()
+            if (c in STARS or c in DOLLARS) and not in_math and not currency:
+                wild.append(k)
+            k += 1
+        wildcard = None
+        if wild and wild[-1] == len(raw) - 1:
+            wildcard = "*" if raw[-1] in STARS else "$"
+            wild.pop()
+        stem = raw[:-1] if wildcard else raw
+        if wild:
+            s = wild[0]
+            self.error(
+                DiagnosticCode.PARSE_WILDCARD_NOT_SUFFIX,
+                f"`{raw}` has a `{raw[s]}` inside it, but a wildcard can only end a word (e.g. `bench*`, "
+                "`model$`) — search the whole word instead; for LaTeX, keep `$…$` together without spaces.",
+                start + s,
+                start + s + 1,
+            )
+        elif wildcard:
+            self.check_stem(raw, stem, wildcard, start, end)
+        if not in_phrase:
+            self.check_word(raw, stem, start, end)
+        return Lexeme(Kind.WORD, start, end, raw, stem=stem, wildcard=wildcard)
+
+    def check_stem(self, raw: str, stem: str, wildcard: str, start: int, end: int) -> None:
+        toks = tokenize(stem)
+        if len("".join(t.text for t in toks)) < MIN_STEM:
+            self.error(
+                DiagnosticCode.WILDCARD_STEM_TOO_SHORT,
+                f"The wildcard `{raw}` keeps fewer than {MIN_STEM} letters or digits before `{wildcard}`, so it "
+                "would match too many words — use a longer stem (e.g. `bench*`, not `be*`).",
+                start,
+                end,
+            )
+        elif toks[-1].end < len(stem):
+            self.error(
+                DiagnosticCode.PARSE_WILDCARD_DETACHED,
+                f"The `{wildcard}` in `{raw}` follows `{stem[toks[-1].end :]}`, not a letter or digit, so it would "
+                f"match any word starting `{toks[-1].text}` — put it straight after the stem, e.g. "
+                f"`{stem[: toks[-1].end]}{wildcard}`.",
+                start,
+                end,
+            )
+
+    def check_word(self, raw: str, stem: str, start: int, end: int) -> None:
+        """Checks for a top-level WORD (not a phrase part, where these characters are plainly literal)."""
+        if raw[0] in MINUSES:
+            self.error(
+                DiagnosticCode.PARSE_AMBIGUOUS_MINUS,
+                f"`{raw}`: to exclude a word, put one `-` straight before it after a space (`trust -bias`); to "
+                "search a hyphenated term, quote it.",
+                start,
+                end,
+            )
+        elif raw[0] in COLONS:
+            self.error(
+                DiagnosticCode.PARSE_STRAY_COLON,
+                f"`{raw}` starts with a colon — a field name must touch its colon, e.g. `title:trust`.",
+                start,
+                end,
+            )
+        elif raw[0] in _LOOKALIKE_MINUS:
+            self.warn(
+                DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+                f"`{raw}` starts with `{raw[0]}`, which is not an operator, so the word is searched — to exclude "
+                f"it, type an ASCII hyphen: `-{raw[1:]}`.",
+                start,
+                end,
+            )
+        elif raw.startswith(_SINGLE_QUOTES):
+            self.warn(
+                DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+                f'`{raw}` starts with a single quote, which does not make a phrase — use double quotes: `"…"`.',
+                start,
+                end,
+            )
+        if stem.endswith(("+", "#")) and (toks := tokenize(stem)):
+            searched = " ".join(t.text for t in toks)
+            self.warn(
+                DiagnosticCode.WARN_SYMBOLS_DROPPED,
+                f"`{raw}` is searched as `{searched}`: symbols such as `+` and `#` are not indexed, so it matches "
+                f"every `{searched}`.",
+                start,
+                end,
+            )
+
+    def after_pass(self) -> None:
+        """Diagnostics that depend on the neighbouring lexemes: words that look like operators."""
+        for before, x, after in zip(self.out, self.out[1:], self.out[2:], strict=False):
+            if x.kind is not Kind.WORD or before.kind not in _ENDS_A_TERM or after.kind not in _STARTS_A_TERM:
+                continue
+            upper = x.text.upper()
+            if x.text == "NEAR":
+                self.error(
+                    DiagnosticCode.PARSE_BAD_NEAR,
+                    "`NEAR` needs a distance — write e.g. `NEAR/3` (Web of Science's bare `NEAR` means `NEAR/15`).",
+                    x.start,
+                    x.end,
+                )
+            elif upper in _OPERATORS:
+                self.warn(
+                    DiagnosticCode.WARN_LOWERCASE_OPERATOR,
+                    f"`{x.text}` is searched as a word — write `{upper}` to combine terms (operators are uppercase "
+                    "only).",
+                    x.start,
+                    x.end,
+                )
+            elif _NEAR.fullmatch(upper):
+                self.warn(
+                    DiagnosticCode.WARN_LOWERCASE_OPERATOR,
+                    f"`{x.text}` is searched as words — write `{upper}` for a proximity search (operators are "
+                    "uppercase only).",
+                    x.start,
+                    x.end,
+                )
+
+
+def _by_position(d: Diagnostic) -> tuple[int, int]:
+    return d.span or (0, 0)
 
 
 def lex(q: str) -> LexResult:
-    """Split `q` into lexemes. Never raises: problems come back as `errors` and `warnings`."""
-    out: list[Lexeme] = []
-    errors: list[Diagnostic] = []
-    n = len(q)
-    i = 0
-    after_dash = False  # a `-` just became NOT; a second one is part of the word
-    while i < n:
-        c = q[i]
-        if c.isspace():
-            i += 1
-            after_dash = False
-            continue
-        dash, after_dash = after_dash, False
-        if c in "()|":
-            kind = {"(": Kind.LPAREN, ")": Kind.RPAREN, "|": Kind.OR}[c]
-            out.append(Lexeme(kind, i, i + 1, c))
-            i += 1
-            continue
-        if c in QUOTES:
-            out.append(_phrase(q, i, errors))
-            i = out[-1].end
-            continue
-        if c == "-" and not dash and i + 1 < n and not q[i + 1].isspace() and q[i + 1] not in ")|":
-            out.append(Lexeme(Kind.NOT, i, i + 1, c))
-            i += 1
-            after_dash = True
-            continue
-        m = _FIELD.match(q, i)
-        if m:
-            name = m.group()[:-1].lower()
-            if name not in FIELDS:
-                valid = ", ".join(f"`{f}:`" for f in FIELDS)
-                errors.append(
-                    _err(
-                        DiagnosticCode.FIELD_UNKNOWN,
-                        f"`{m.group()}` is not a field — use one of {valid}, or quote the text to search for it.",
-                        i,
-                        m.end(),
-                    )
-                )
-            out.append(Lexeme(Kind.FIELD, i, m.end(), m.group(), field=name))
-            i = m.end()
-            continue
-        j = _word_end(q, i)
-        raw = q[i:j]
-        if raw in _OPERATORS:
-            out.append(Lexeme(_OPERATORS[raw], i, j, raw))
-        elif near := _NEAR.fullmatch(raw):
-            out.append(Lexeme(Kind.NEAR, i, j, raw, near=int(near.group(1))))
-        elif raw.startswith("NEAR/"):
-            errors.append(
-                _err(
-                    DiagnosticCode.PARSE_BAD_NEAR,
-                    f"`{raw}` needs a whole-number distance — write e.g. `NEAR/3` (at most 3 words apart).",
-                    i,
-                    j,
-                )
-            )
-        elif rng := _RANGE.fullmatch(raw):
-            out.append(Lexeme(Kind.RANGE, i, j, raw, range=(int(rng.group(1)), int(rng.group(2)))))
-        else:
-            out.append(_word(q, i, j, errors))
-        i = j
-    return LexResult(out, _lowercase_warnings(out), errors)
+    """Split `q` into lexemes. Never raises: problems come back as `errors` and `warnings`, in order."""
+    lexer = _Lexer(q)
+    lexer.run()
+    return LexResult(
+        tuple(lexer.out),
+        tuple(sorted(lexer.warnings, key=_by_position)),
+        tuple(sorted(lexer.errors, key=_by_position)),
+    )

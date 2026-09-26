@@ -1,16 +1,21 @@
 """The query parser (spec 02 §Grammar, §Error handling; decision-001): lexemes → AST plus diagnostics.
 
 Recursive descent over the EBNF, with NOT > AND > OR and juxtaposition as AND. `parse` never raises: every
-problem is a Diagnostic with a span, and `ast` is None exactly when there are errors (nothing to search).
+problem is a Diagnostic with a span, `ast` is None exactly when there are errors (nothing to search), and
+one mistake gives one error (an error already reported inside a span suppresses follow-on errors there).
 
-- A level that mixes AND and OR without parentheses parses by precedence and raises WARN_MIXED_AND_OR.
+- A level that mixes AND and OR without parentheses parses by precedence and raises WARN_MIXED_AND_OR,
+  showing how it was read.
+- A bare word or range OR-joined to a filter that is a valid value of that filter's field
+  (`year:2023 OR 2024`) is searched as text, as written, and raises WARN_FILTER_SCOPE.
 - A word that normalises to several tokens is a Phrase; a wildcard word's wildcard goes on its last token
   (`gpt-4*` → Phrase[gpt, Wildcard(4*)]). Phrase parts that normalise to nothing are skipped.
-- `title:`/`abstract:` push their field down to every leaf of what follows; filter fields take one value
-  or an OR group of values, checked against `vocab.py`.
-- NEAR/n joins two leaves (words, wildcards or phrases) in the same field, once.
-- A query with no positive part (`NOT a`, `a OR NOT b`) is PARSE_ALL_NEGATIVE. This is checked before
-  default filters are added (task-014), which would otherwise hide it.
+- `title:`/`abstract:` apply their field to every leaf of what follows; filter fields take one value or
+  an OR group of values, checked against `vocab.py`. `source:` is Scholar syntax: FIELD_COMPAT_ONLY here.
+- NEAR/n joins two leaves (words, wildcards or phrases; a one-word group counts as a word) in the same
+  field, once.
+- A query with no positive part (`NOT a`, `a OR NOT b`) is PARSE_ALL_NEGATIVE; `NOT NOT a` is positive.
+  This is checked before default filters are added (task-014), which would otherwise hide it.
 
 `ParseResult.canonical` and `.canonical_hash` come from `canonical.py`. Default filters and Scholar mode
 are layered on top (tasks 014–015).
@@ -24,6 +29,8 @@ from pydantic import BaseModel, ConfigDict
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.query.ast import (
+    MAX_YEAR,
+    MIN_YEAR,
     And,
     Filter,
     FilterField,
@@ -50,8 +57,8 @@ _EXAMPLES = {
     "year": "year:2020..2026",
     "track": "track:main",
     "status": "status:accepted",
-    "source": 'source:"neural information processing systems"',
 }
+_VALID: dict[str, tuple[str, ...]] = {"venue": tuple(VENUES.values()), "track": TRACKS, "status": STATUSES}
 
 
 class ParseResult(BaseModel):
@@ -72,7 +79,7 @@ class _TooDeep(Exception):
 def _positive(n: Node) -> bool:
     """Whether `n` restricts the corpus to something (rather than matching everything except something)."""
     if isinstance(n, Not):
-        return False
+        return isinstance(n.child, Not) and _positive(n.child.child)
     if isinstance(n, And):
         return any(_positive(c) for c in n.children)
     if isinstance(n, Or):
@@ -80,20 +87,35 @@ def _positive(n: Node) -> bool:
     return True
 
 
-def _leaf_field(n: Leaf) -> TextField | None:
-    return n.items[0].field if isinstance(n, Phrase) else n.field
+def filter_value(field: FilterField, v: Lexeme) -> str | YearRange | None:
+    """The canonical value `v` spells for `field`, or None if it is not a valid one."""
+    if field == "year":
+        if v.kind is Kind.RANGE and v.range is not None:
+            lo, hi = v.range
+        elif v.kind is Kind.WORD and v.wildcard is None and v.text.isascii() and v.text.isdigit():
+            lo = hi = int(v.text)
+        else:
+            return None
+        return YearRange(lo=lo, hi=hi) if MIN_YEAR <= lo <= hi <= MAX_YEAR else None
+    if v.kind is not Kind.WORD or v.wildcard is not None:
+        return None
+    key = v.text.lower()
+    if field == "venue":
+        return VENUES.get(key)
+    return key if key in _VALID[field] else None
 
 
 class _Parser:
-    def __init__(self, q: str, lexemes: list[Lexeme]) -> None:
+    def __init__(self, q: str, lexemes: tuple[Lexeme, ...], lex_errors: tuple[Diagnostic, ...]) -> None:
         self.q = q
         self.toks = lexemes
         self.i = 0
         self.depth = 0
+        self.lex_errors = lex_errors
         self.errors: list[Diagnostic] = []
         self.warnings: list[Diagnostic] = []
 
-    # --- cursor -------------------------------------------------------------------------------------
+    # --- cursor and diagnostics ---------------------------------------------------------------------
     def peek(self) -> Lexeme | None:
         return self.toks[self.i] if self.i < len(self.toks) else None
 
@@ -108,6 +130,13 @@ class _Parser:
         tok = self.toks[self.i]
         self.i += 1
         return tok
+
+    def reported(self, start: int, end: int) -> bool:
+        """Whether an error already covers part of [start, end), so a second one would repeat it."""
+        return any(
+            e.span is not None and e.span[0] < max(end, start + 1) and start < max(e.span[1], e.span[0] + 1)
+            for e in (*self.lex_errors, *self.errors)
+        )
 
     def error(self, code: DiagnosticCode, message: str, start: int, end: int) -> None:
         self.errors.append(Diagnostic(code=code, message=message, span=(start, end)))
@@ -124,14 +153,15 @@ class _Parser:
             raise _TooDeep
 
     # --- grammar ------------------------------------------------------------------------------------
-    def run(self, lex_errors: bool) -> Node | None:
+    def run(self) -> Node | None:
         if not self.toks:
-            self.error(
-                DiagnosticCode.PARSE_EXPECTED_TERM,
-                "The query is empty — type a word or phrase to search for.",
-                0,
-                len(self.q),
-            )
+            if not self.lex_errors:
+                self.error(
+                    DiagnosticCode.PARSE_EXPECTED_TERM,
+                    "The query is empty — type a word or phrase to search for.",
+                    0,
+                    len(self.q),
+                )
             return None
         node = self.or_expr(None)
         while self.i < len(self.toks):
@@ -143,22 +173,23 @@ class _Parser:
                     tok.start,
                     tok.end,
                 )
-            else:
+            elif not self.reported(tok.start, tok.end):  # never drop part of a query silently
                 self.error(
                     DiagnosticCode.PARSE_EXPECTED_TERM, f"Unexpected `{tok.text}` here.", tok.start, tok.end
                 )
             if self.starts():
                 self.or_expr(None)  # keep going, so later errors are reported too
-        if node is not None and not self.errors and not lex_errors and not _positive(node):
+        if node is not None and not self.errors and not self.lex_errors and not _positive(node):
             self.error(
                 DiagnosticCode.PARSE_ALL_NEGATIVE,
-                "Every part of this query is excluded (`NOT …`), so it would match almost everything — add something "
-                "to search for, e.g. `trust NOT bias`.",
+                "Every part of this query is excluded (`NOT …`), so it would match almost everything — add "
+                "something to search for, e.g. `trust NOT bias`.",
                 *node.span,
             )
         return node
 
     def or_expr(self, field: TextField | None) -> Node | None:
+        start = self.i
         branches = [self.and_expr(field)]
         while self.at(Kind.OR):
             op = self.advance()
@@ -180,7 +211,27 @@ class _Parser:
                     span=(nodes[0].span[0], nodes[-1].span[1]),
                 )
             )
+        if len(branches) > 1:
+            self.filter_scope(self.toks[start : self.i], nodes)
         return self.combine(Or, nodes)
+
+    def filter_scope(self, toks: tuple[Lexeme, ...], nodes: list[Node]) -> None:
+        """WARN_FILTER_SCOPE for `year:2023 OR 2024`: an OR branch that is just a bare value of the field of
+        a filter in another branch of the same OR."""
+        fields = sorted({n.field for n in nodes if isinstance(n, Filter)})
+        words = {(t.start, t.end): t for t in toks if t.kind is Kind.WORD}
+        for n in nodes:
+            tok = words.get(n.span) if isinstance(n, Term) else None  # a field-prefixed term never matches
+            f = next((f for f in fields if tok and filter_value(f, tok) is not None), None)
+            if tok and f:
+                self.warnings.append(
+                    Diagnostic(
+                        code=DiagnosticCode.WARN_FILTER_SCOPE,
+                        message=f"`{tok.text}` is searched as text in any paper, not as a {f} — to OR it into the "
+                        f"filter, write `{f}:(… OR {tok.text})`.",
+                        span=(tok.start, tok.end),
+                    )
+                )
 
     def and_expr(self, field: TextField | None) -> tuple[Node | None, bool]:
         children = [self.not_expr(field)]
@@ -213,16 +264,24 @@ class _Parser:
             self.depth -= 1
         return Not(span=(op.start, child.span[1]), child=child) if child is not None else None
 
+    def operand(self, field: TextField | None) -> tuple[Node | None, bool]:
+        """A primary, and whether it failed with an error already reported (so NEAR needn't add one)."""
+        i0, n0 = self.i, len(self.errors)
+        node = self.primary(field)
+        if node is not None or self.i == i0:
+            return node, False
+        return None, len(self.errors) > n0 or self.reported(self.toks[i0].start, self.toks[self.i - 1].end)
+
     def near_or_primary(self, field: TextField | None) -> Node | None:
-        left = self.primary(field)
+        left, left_failed = self.operand(field)
         if not self.at(Kind.NEAR):
             return left
         op = self.advance()
-        right = self.primary(field) if self.starts() else None
+        right, right_failed = self.operand(field) if self.starts() else (None, False)
         node: Node | None = None
         leaves = (Term, Wildcard, Phrase)
         if not isinstance(left, leaves) or not isinstance(right, leaves):
-            if left is not None or right is not None or not self.errors:
+            if not (left_failed or right_failed):
                 self.error(
                     DiagnosticCode.PARSE_BAD_NEAR,
                     f"`{op.text}` joins two words or phrases, e.g. `trust {op.text} calibration`; it can't take a "
@@ -230,7 +289,7 @@ class _Parser:
                     op.start,
                     op.end,
                 )
-        elif _leaf_field(left) != _leaf_field(right):
+        elif left.field != right.field:
             self.error(
                 DiagnosticCode.PARSE_BAD_NEAR,
                 f"Both sides of `{op.text}` must be in the same field — write e.g. `title:(a {op.text} b)`.",
@@ -241,15 +300,18 @@ class _Parser:
             assert op.near is not None
             node = Near(span=(left.span[0], right.span[1]), left=left, right=right, distance=op.near)
         if self.at(Kind.NEAR):
-            op2 = self.advance()
+            op2 = self.peek()
+            assert op2 is not None
             self.error(
                 DiagnosticCode.PARSE_BAD_NEAR,
                 f"`NEAR` can't be chained — join the pairs with AND, e.g. `(a {op.text} b) AND (b {op2.text} c)`.",
                 op2.start,
                 op2.end,
             )
-            if self.starts():
-                self.primary(field)
+            while self.at(Kind.NEAR):
+                self.advance()
+                if self.starts():
+                    self.primary(field)
             return None
         return node
 
@@ -284,6 +346,7 @@ class _Parser:
             )
             return None
         if tok.kind in (Kind.AND, Kind.OR):
+            self.advance()  # consumed here, so the operator loops don't report it a second time
             self.error(
                 DiagnosticCode.PARSE_EXPECTED_TERM,
                 f"`{tok.text}` needs a word, phrase or group before it — add one, or remove `{tok.text}`.",
@@ -323,9 +386,18 @@ class _Parser:
     def field_term(self, outer: TextField | None) -> Node | None:
         tok = self.advance()
         name = tok.field or ""
-        if name not in FIELDS:  # the lexer has reported FIELD_UNKNOWN; parse what follows for more errors
-            if self.starts():
-                self.primary(outer)
+        if name not in FIELDS:  # FIELD_UNKNOWN is the lexer's; what follows is parsed by the caller's loop
+            return None
+        if name == "source":
+            self.error(
+                DiagnosticCode.FIELD_COMPAT_ONLY,
+                f"`{tok.text}` is Google Scholar syntax — write `venue:NeurIPS`, `venue:ICLR` or `venue:ICML` "
+                "(Scholar-mode input translates it automatically).",
+                tok.start,
+                tok.end,
+            )
+            if self.at(Kind.WORD, Kind.PHRASE, Kind.RANGE):
+                self.advance()  # its value: not a mistake of its own (a group is parsed for real errors)
             return None
         if name not in TEXT_FIELDS:
             return self.filter(tok, cast(FilterField, name))
@@ -338,9 +410,11 @@ class _Parser:
                 tok.end,
             )
         if not self.at(Kind.WORD, Kind.PHRASE, Kind.LPAREN):
+            follows = "another field" if self.at(Kind.FIELD) else "an operator" if self.peek() else "nothing"
             self.error(
                 DiagnosticCode.PARSE_EXPECTED_TERM,
-                f"`{tok.text}` must be followed by a word, a phrase or a (group), e.g. `{tok.text}trust`.",
+                f"`{tok.text}` must be followed by a word, a phrase or a (group), not {follows} — e.g. "
+                f"`{tok.text}trust`.",
                 tok.start,
                 tok.end,
             )
@@ -349,7 +423,6 @@ class _Parser:
         return node.model_copy(update={"span": (tok.start, node.span[1])}) if node is not None else None
 
     def filter(self, tok: Lexeme, name: FilterField) -> Node | None:
-        syntax = f"`{tok.text}(…)` takes values joined by OR, e.g. `{tok.text}(a OR b)`."
         if not self.at(Kind.LPAREN):
             v = self.peek()
             if v is None or v.kind not in (Kind.WORD, Kind.PHRASE, Kind.RANGE):
@@ -372,8 +445,8 @@ class _Parser:
                 rp.end,
             )
             return None
+        syntax = f"`{tok.text}(…)` takes values joined by OR, e.g. `{tok.text}(a OR b)`."
         values: list[str | YearRange] = []
-        ok = True
         while True:
             v = self.peek()
             if v is None:
@@ -389,9 +462,7 @@ class _Parser:
                 self.skip_group()
                 return None
             value = self.value(name, self.advance())
-            if value is None:
-                ok = False
-            else:
+            if value is not None:
                 values.append(value)
             nxt = self.peek()
             if nxt is None:
@@ -410,46 +481,36 @@ class _Parser:
                 self.skip_group()
                 return None
             self.advance()
-        return Filter(span=(tok.start, end), field=name, values=tuple(values)) if ok else None
+        if self.reported(lp.start, end):
+            return None
+        return Filter(span=(tok.start, end), field=name, values=tuple(values))
 
     def value(self, name: FilterField, v: Lexeme) -> str | YearRange | None:
+        found = filter_value(name, v)
+        if found is not None or self.reported(v.start, v.end):
+            return found
         if name == "year":
-            if v.kind is Kind.RANGE and v.range is not None:
+            if v.kind is Kind.RANGE and v.range is not None and v.range[0] > v.range[1]:
                 lo, hi = v.range
-                if lo <= hi:
-                    return YearRange(lo=lo, hi=hi)
                 self.error(
                     DiagnosticCode.FIELD_RANGE_INVERTED,
                     f"`{v.text}` runs backwards — write `{hi}..{lo}`.",
                     v.start,
                     v.end,
                 )
-                return None
-            if v.kind is Kind.WORD and v.wildcard is None and v.text.isascii() and v.text.isdigit():
-                return YearRange(lo=int(v.text), hi=int(v.text))
-            self.error(
-                DiagnosticCode.FIELD_UNKNOWN_VALUE,
-                f"`{v.text}` is not a year — `year:` takes a year or an inclusive range, e.g. `year:2024` or "
-                "`year:2020..2026`.",
-                v.start,
-                v.end,
-            )
+            else:
+                self.error(
+                    DiagnosticCode.FIELD_UNKNOWN_VALUE,
+                    f"`{v.text}` is not a year — `year:` takes a four-digit year or an inclusive range, e.g. "
+                    "`year:2024` or `year:2020..2026`.",
+                    v.start,
+                    v.end,
+                )
             return None
-        if name == "source" and v.kind is Kind.PHRASE:
-            return " ".join(p.text for p in v.parts)
-        if v.kind is Kind.WORD and v.wildcard is None:
-            key = v.text.lower()
-            if name == "source":
-                return v.text
-            if name == "venue" and key in VENUES:
-                return VENUES[key]
-            if (name == "track" and key in TRACKS) or (name == "status" and key in STATUSES):
-                return key
-        valid = {"venue": tuple(VENUES.values()), "track": TRACKS, "status": STATUSES, "source": ()}[name]
         self.error(
             DiagnosticCode.FIELD_UNKNOWN_VALUE,
             f"`{v.text}` is not a {name} (values take no wildcards or quotes) — use one of "
-            + ", ".join(f"`{x}`" for x in valid)
+            + ", ".join(f"`{x}`" for x in _VALID[name])
             + ".",
             v.start,
             v.end,
@@ -471,7 +532,7 @@ class _Parser:
     # --- leaves -------------------------------------------------------------------------------------
     def items(self, w: Lexeme, field: TextField | None) -> list[Term | Wildcard]:
         """The normalised tokens of one word, with the wildcard (if any) on the last."""
-        toks = tokenize(w.stem)
+        toks = tokenize(w.stem or "")
         items: list[Term | Wildcard] = [
             Term(span=(w.start + t.start, w.start + t.end), token=t.text, field=field) for t in toks
         ]
@@ -481,16 +542,16 @@ class _Parser:
             items[-1] = Wildcard(span=(w.start + last.start, w.end), stem=last.text, op=op, field=field)
         return items
 
-    def leaf(self, tok: Lexeme, items: list[Term | Wildcard]) -> Leaf:
+    def leaf(self, tok: Lexeme, items: list[Term | Wildcard], field: TextField | None) -> Leaf:
         if len(items) == 1:
-            return items[0].model_copy(update={"span": (tok.start, tok.end)})
-        return Phrase(span=(tok.start, tok.end), items=tuple(items))
+            return items[0].model_copy(update={"span": (tok.start, tok.end), "field": field})
+        return Phrase(span=(tok.start, tok.end), items=tuple(items), field=field)
 
     def word(self, tok: Lexeme, field: TextField | None) -> Node | None:
-        items = self.items(tok, field)
+        items = self.items(tok, None)
         if items:
-            return self.leaf(tok, items)
-        if not tok.wildcard:  # a wildcard with no stem was already reported by the lexer
+            return self.leaf(tok, items, field)
+        if not self.reported(tok.start, tok.end):
             self.error(
                 DiagnosticCode.PARSE_EMPTY_TERM,
                 f"`{tok.text}` has no letters or digits, so it can't match anything — remove it (to exclude a word, "
@@ -501,15 +562,16 @@ class _Parser:
         return None
 
     def phrase(self, tok: Lexeme, field: TextField | None) -> Node | None:
-        items = [item for part in tok.parts for item in self.items(part, field)]
+        items = [item for part in tok.parts for item in self.items(part, None)]
         if items:
-            return self.leaf(tok, items)
-        self.error(
-            DiagnosticCode.PARSE_EMPTY_TERM,
-            f"The phrase `{tok.text}` has no letters or digits — put words inside the quotes.",
-            tok.start,
-            tok.end,
-        )
+            return self.leaf(tok, items, field)
+        if not self.reported(tok.start, tok.end):
+            self.error(
+                DiagnosticCode.PARSE_EMPTY_TERM,
+                f"The phrase `{tok.text}` has no letters or digits — put words inside the quotes.",
+                tok.start,
+                tok.end,
+            )
         return None
 
     # --- helpers ------------------------------------------------------------------------------------
@@ -540,15 +602,16 @@ def _by_position(d: Diagnostic) -> tuple[int, int]:
 
 
 def parse(q: str) -> ParseResult:
-    """Parse `q`. Never raises; `ast` is None exactly when `errors` is non-empty."""
+    """Parse `q`. Never raises; `ast`, `canonical` and `canonical_hash` are None exactly when `errors` is
+    non-empty."""
     lexed = lex(q)
-    p = _Parser(q, lexed.lexemes)
+    p = _Parser(q, lexed.lexemes, lexed.errors)
     try:
-        ast = p.run(bool(lexed.errors))
+        ast = p.run()
     except _TooDeep:
         ast = None
-    errors = sorted(lexed.errors + p.errors, key=_by_position)
-    warnings = sorted(lexed.warnings + p.warnings, key=_by_position)
+    errors = sorted([*lexed.errors, *p.errors], key=_by_position)
+    warnings = sorted([*lexed.warnings, *p.warnings], key=_by_position)
     if ast is None and not errors:  # defensive: every path that drops the tree reports why
         errors = [
             Diagnostic(

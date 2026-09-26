@@ -31,10 +31,10 @@ class Diagnostic(BaseModel):  # frozen, extra="forbid"
 
 | Prefix | Area | Examples (from 02 §Error handling) |
 |---|---|---|
-| `PARSE_` | grammar | `PARSE_UNBALANCED_PAREN`, `PARSE_EMPTY_GROUP`, `PARSE_ALL_NEGATIVE`, `PARSE_UNTERMINATED_PHRASE`, `PARSE_BAD_NEAR`, `PARSE_WILDCARD_NOT_SUFFIX`, `PARSE_EXPECTED_TERM`, `PARSE_EMPTY_TERM`, `PARSE_NESTED_FIELD`, `PARSE_TOO_DEEP` |
+| `PARSE_` | grammar | `PARSE_UNBALANCED_PAREN`, `PARSE_EMPTY_GROUP`, `PARSE_ALL_NEGATIVE`, `PARSE_UNTERMINATED_PHRASE`, `PARSE_BAD_NEAR`, `PARSE_WILDCARD_NOT_SUFFIX`, `PARSE_EXPECTED_TERM`, `PARSE_EMPTY_TERM`, `PARSE_NESTED_FIELD`, `PARSE_TOO_DEEP`, `PARSE_WILDCARD_DETACHED`, `PARSE_AMBIGUOUS_MINUS`, `PARSE_STRAY_COLON` |
 | `WILDCARD_` | expansion | `WILDCARD_STEM_TOO_SHORT`, `WILDCARD_TOO_MANY_EXPANSIONS` (>200) |
-| `FIELD_` | fields/filters | `FIELD_UNKNOWN`, `FIELD_UNKNOWN_VALUE` (lists valid `track:` values), `FIELD_RANGE_INVERTED`, `FIELD_FILTER_SYNTAX` |
-| `WARN_` | warnings | `WARN_LOWERCASE_OPERATOR` ("did you mean OR?"), `WARN_MIXED_AND_OR`, `WARN_NESTED_FILTER` (spec 02 §Default filters): a `track:`/`status:` clause nested inside an `OR` branch does not suppress the default, e.g. `(track:workshop AND x) OR y` → "the default track/status filter still applies to the whole query; add a top-level `track:`/`status:` clause to override it", span on the nested clause |
+| `FIELD_` | fields/filters | `FIELD_UNKNOWN`, `FIELD_UNKNOWN_VALUE` (lists valid `track:` values), `FIELD_RANGE_INVERTED`, `FIELD_FILTER_SYNTAX`, `FIELD_COMPAT_ONLY` (`source:` outside Scholar mode) |
+| `WARN_` | warnings | `WARN_LOWERCASE_OPERATOR` ("did you mean OR?"), `WARN_LOOKALIKE_OPERATOR` (`−bias`, `‘x`), `WARN_SYMBOLS_DROPPED` (`C++` → `c`), `WARN_FILTER_SCOPE` (`year:2023 OR 2024`), `WARN_MIXED_AND_OR`, `WARN_NESTED_FILTER` (spec 02 §Default filters): a `track:`/`status:` clause nested inside an `OR` branch does not suppress the default, e.g. `(track:workshop AND x) OR y` → "the default track/status filter still applies to the whole query; add a top-level `track:`/`status:` clause to override it", span on the nested clause |
 | `COMPAT_` | translations | `COMPAT_SOURCE_ALIAS` (`source:PMLR` → `venue:ICML`), `COMPAT_POP_DOLLAR` |
 | `API_` | HTTP layer | the codes of spec 04 §Error handling, plus `API_REPLAY_MISMATCH` (a log code only, never an HTTP error: the replay is a `200` whose `status` field is `mismatch`) |
 

@@ -9,7 +9,9 @@ The review's existing strings must work **unchanged**, or come back with a preci
 is a front end to the native grammar. It never changes what a native query means.
 
 ## Contract
-- `parse(q, mode="scholar")` accepts `OR` / `|`, `source:`, quoted phrases and `-` negation.
+- `parse(q, mode="scholar")` accepts `OR` / `|`, `source:`, quoted phrases and `-` negation. In native
+  mode `source:` is already an error (`FIELD_COMPAT_ONLY`, suggesting `venue:`), so Scholar mode's job is
+  to translate it, never to let it through untranslated.
 - Output is a **native** AST and a native canonical string. `mode` is recorded with the input (search
   records, `/search?mode=`), but the canonical string contains no compat syntax. Property:
   `parse(parse(q, "scholar").canonical, "native").canonical == parse(q, "scholar").canonical`.

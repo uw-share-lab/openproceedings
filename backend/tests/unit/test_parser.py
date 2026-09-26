@@ -17,8 +17,7 @@ def show(n: Node) -> str:
     if isinstance(n, Wildcard):
         return f"{n.field + ':' if n.field else ''}{n.stem}{n.op}"
     if isinstance(n, Phrase):
-        field = {getattr(i, "field", None) for i in n.items}.pop()
-        return f'{field + ":" if field else ""}"' + " ".join(show(i).split(":")[-1] for i in n.items) + '"'
+        return f'{n.field + ":" if n.field else ""}"' + " ".join(show(i) for i in n.items) + '"'
     if isinstance(n, Near):
         return f"(NEAR/{n.distance} {show(n.left)} {show(n.right)})"
     if isinstance(n, Not):
@@ -92,7 +91,11 @@ GOLDEN: list[tuple[str, str]] = [
     ("status:accepted", "status:accepted"),
     ("venue:ICLR", "venue:ICLR"),
     ("trust NOT track:workshop", "(AND trust (NOT track:workshop))"),
-    ('source:"neural information processing systems"', "source:neural information processing systems"),
+    ("year:2024..2024", "year:2024"),
+    ("NOT NOT a", "(NOT (NOT a))"),  # positive: not all-negative
+    ("a OR NOT NOT b", "(OR a (NOT (NOT b)))"),
+    ("a NEAR/3 (b)", "(NEAR/3 a b)"),  # a one-word group counts as a word
+    ("title: trust", "title:trust"),
     ("title:(trust venue:ICLR)", "(AND title:trust venue:ICLR)"),
     # lowercase operators are words
     ("trust and calibration", "(AND trust and calibration)"),
@@ -137,6 +140,33 @@ def test_mixed_and_or_warns(q: str, span: tuple[int, int]) -> None:
     assert "parenthes" in result.warnings[0].message
 
 
+def test_mixed_warning_shows_the_reading() -> None:
+    assert "`(a b) OR c`" in parse("a b OR c").warnings[0].message
+    assert "`a OR (b c)`" in parse("a OR b c").warnings[0].message
+
+
+SCOPE = [
+    ("year:2023 OR 2024", [(13, 17)]),
+    ("venue:ICLR OR NeurIPS", [(14, 21)]),
+    ("(venue:ICLR OR icml) trust", [(15, 19)]),
+    ("venue:ICLR OR trust", []),
+    ("year:2023 OR (trust 2024)", []),  # only a bare branch is flagged
+    ("2024 OR trust", []),  # no filter in the OR
+]
+
+
+@pytest.mark.parametrize(("q", "spans"), SCOPE, ids=[q for q, _ in SCOPE])
+def test_filter_scope_warning(q: str, spans: list[tuple[int, int]]) -> None:
+    result = parse(q)
+    assert result.errors == []
+    got = [w.span for w in result.warnings if w.code is DiagnosticCode.WARN_FILTER_SCOPE]
+    assert got == spans
+    if spans:
+        assert (
+            ":(… OR" in next(w for w in result.warnings if w.code is DiagnosticCode.WARN_FILTER_SCOPE).message
+        )
+
+
 @pytest.mark.parametrize("q", ["a OR b OR c", "(a b) OR c", "a (b OR c)", "a b c", "a NEAR/3 b OR c"])
 def test_unmixed_levels_do_not_warn(q: str) -> None:
     assert parse(q).warnings == []
@@ -178,12 +208,35 @@ ERRORS: list[tuple[str, DiagnosticCode, tuple[int, int]]] = [
     ("status:accept*", DiagnosticCode.FIELD_UNKNOWN_VALUE, (7, 14)),
     ("year:abc", DiagnosticCode.FIELD_UNKNOWN_VALUE, (5, 8)),
     ("venue:(ICLR AND ICML)", DiagnosticCode.FIELD_FILTER_SYNTAX, (12, 15)),
+    ("track:(main OR foo)", DiagnosticCode.FIELD_UNKNOWN_VALUE, (15, 18)),
     ("venue:(ICLR ICML)", DiagnosticCode.FIELD_FILTER_SYNTAX, (12, 16)),
     ("venue:(NOT ICLR)", DiagnosticCode.FIELD_FILTER_SYNTAX, (7, 10)),
     ("venue:()", DiagnosticCode.PARSE_EMPTY_GROUP, (6, 8)),
     ("venue:(ICLR", DiagnosticCode.PARSE_UNBALANCED_PAREN, (6, 7)),
     ("title:(abstract:x)", DiagnosticCode.PARSE_NESTED_FIELD, (7, 16)),
-    ("a - b", DiagnosticCode.PARSE_EMPTY_TERM, (2, 3)),
+    ("a - b", DiagnosticCode.PARSE_AMBIGUOUS_MINUS, (2, 3)),  # the lexer's; the parser adds nothing
+    ("a &", DiagnosticCode.PARSE_EMPTY_TERM, (2, 3)),
+    ("title:--", DiagnosticCode.PARSE_AMBIGUOUS_MINUS, (6, 8)),
+    ("title:title:a", DiagnosticCode.PARSE_EXPECTED_TERM, (0, 6)),
+    ("AND", DiagnosticCode.PARSE_EXPECTED_TERM, (0, 3)),  # one error, not one per loop that sees it
+    ("|", DiagnosticCode.PARSE_EXPECTED_TERM, (0, 1)),
+    ("AND b", DiagnosticCode.PARSE_EXPECTED_TERM, (0, 3)),
+    ("() NEAR/3 a", DiagnosticCode.PARSE_EMPTY_GROUP, (0, 2)),  # the operand's error, not a NEAR one too
+    ("a NEAR/3 ()", DiagnosticCode.PARSE_EMPTY_GROUP, (9, 11)),
+    ("a NEAR/3 --", DiagnosticCode.PARSE_AMBIGUOUS_MINUS, (9, 11)),
+    ("-- NEAR/3 a", DiagnosticCode.PARSE_AMBIGUOUS_MINUS, (0, 2)),
+    ("a NEAR/3 b NEAR/2 c NEAR/1 d", DiagnosticCode.PARSE_BAD_NEAR, (11, 17)),
+    ("a NEAR/3 NOT b", DiagnosticCode.PARSE_BAD_NEAR, (2, 8)),
+    ("NOT ab*", DiagnosticCode.WILDCARD_STEM_TOO_SHORT, (4, 7)),  # no ALL_NEGATIVE on top of a lexer error
+    ("year:²⁰²⁴", DiagnosticCode.FIELD_UNKNOWN_VALUE, (5, 9)),
+    ("year:0", DiagnosticCode.FIELD_UNKNOWN_VALUE, (5, 6)),
+    ("year:2020..99999999999999999999", DiagnosticCode.FIELD_UNKNOWN_VALUE, (5, 31)),
+    ("year:2020-2026", DiagnosticCode.FIELD_UNKNOWN_VALUE, (5, 14)),
+    ("source:PMLR", DiagnosticCode.FIELD_COMPAT_ONLY, (0, 7)),
+    ('source:"neural information processing systems"', DiagnosticCode.FIELD_COMPAT_ONLY, (0, 7)),
+    ("source:(PMLR OR NeurIPS) trust", DiagnosticCode.FIELD_COMPAT_ONLY, (0, 7)),
+    ("source:2020..2021", DiagnosticCode.FIELD_COMPAT_ONLY, (0, 7)),  # its value is not a second mistake
+    ("track:ab*", DiagnosticCode.WILDCARD_STEM_TOO_SHORT, (6, 9)),  # one error for the value, not two
     ('a ""', DiagnosticCode.PARSE_EMPTY_TERM, (2, 4)),
     ("NEAR/3 a", DiagnosticCode.PARSE_BAD_NEAR, (0, 6)),
     ("a NEAR/3", DiagnosticCode.PARSE_BAD_NEAR, (2, 8)),
@@ -201,6 +254,33 @@ def test_error_code_and_span(q: str, code: DiagnosticCode, span: tuple[int, int]
     result = parse(q)
     assert [(e.code, e.span) for e in result.errors] == [(code, span)]
     assert result.ast is None  # non-empty errors ⇒ nothing to search
+
+
+def test_unknown_field_chains_do_not_recurse() -> None:
+    result = parse("x:" * 2000 + "a")
+    assert {e.code for e in result.errors} == {DiagnosticCode.FIELD_UNKNOWN}
+
+
+def test_resync_after_a_stray_paren_reports_later_errors() -> None:
+    assert [(e.code, e.span) for e in parse("a ) b OR").errors] == [
+        (DiagnosticCode.PARSE_UNBALANCED_PAREN, (2, 3)),
+        (DiagnosticCode.PARSE_EXPECTED_TERM, (6, 8)),
+    ]
+
+
+def test_separate_mistakes_are_each_reported() -> None:
+    assert [e.code for e in parse("source:(PMLR").errors] == [
+        DiagnosticCode.FIELD_COMPAT_ONLY,
+        DiagnosticCode.PARSE_UNBALANCED_PAREN,
+    ]
+    assert [e.code for e in parse("title:venue:foo").errors] == [
+        DiagnosticCode.PARSE_EXPECTED_TERM,
+        DiagnosticCode.FIELD_UNKNOWN_VALUE,
+    ]
+
+
+def test_two_empty_phrases_around_near_give_two_errors_and_no_near_error() -> None:
+    assert [e.code for e in parse('"" NEAR/3 ""').errors] == [DiagnosticCode.PARSE_EMPTY_TERM] * 2
 
 
 def test_too_deep_is_an_error_not_a_crash() -> None:
@@ -225,6 +305,14 @@ def test_unknown_values_list_the_valid_ones() -> None:
     assert "NeurIPS" in parse("venue:NIPS").errors[0].message
 
 
+def test_collapsed_and_inner_spans() -> None:
+    assert parse('"trust"').ast.span == (0, 7)  # type: ignore[union-attr]
+    ast = parse("gpt-4*").ast
+    assert isinstance(ast, Phrase) and ast.items[1].span == (4, 6)
+    ast = parse("title:vision-language").ast
+    assert isinstance(ast, Phrase) and ast.field == "title" and all(i.field is None for i in ast.items)
+
+
 def test_spans_include_parentheses_and_field_prefixes() -> None:
     q = "x title:(a OR b)"
     ast = parse(q).ast
@@ -247,6 +335,12 @@ QUERYISH = st.lists(
             "2020..2024",
             "ICLR",
             "vision-x",
+            "x:",
+            "source:",
+            "track:",
+            "main",
+            "--",
+            "2024",
         ]
     ),
     max_size=25,

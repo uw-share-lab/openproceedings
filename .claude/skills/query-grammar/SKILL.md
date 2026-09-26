@@ -34,6 +34,7 @@ Code: `backend/src/openproceedings/query/{lexer,parser,ast,canonical}.py`.
 | A wildcard WORD that normalizes to >1 token | A phrase with the wildcard on its last token: `gpt-4*` ≡ `"gpt 4*"`. |
 | A WORD that normalizes to 0 tokens | Error with a span (e.g. a bare `--`). Verify the exact code at implementation time. |
 | Phrases and `NEAR/n` | One field only; never across title and abstract. |
+| Nothing silently reinterpreted | `a - b`, `"x"-based`, `--x` → `PARSE_AMBIGUOUS_MINUS`; `behavio$r` → `PARSE_WILDCARD_NOT_SUFFIX`; `vision-*` → `PARSE_WILDCARD_DETACHED`; bare `NEAR` → `PARSE_BAD_NEAR`; `year:2023 OR 2024` → `WARN_FILTER_SCOPE`; `C++` → `WARN_SYMBOLS_DROPPED`; NFKC look-alikes (`（`, `－`, `＂`) act as syntax. Spec 02 §Grammar lists them all. |
 | Lexing (`lexer.py`) | `"` and `“ ”` delimit phrases (unterminated → `PARSE_UNTERMINATED_PHRASE`); `\\` keeps the next char in the word; field names are case-insensitive; `NEAR/` without a number → `PARSE_BAD_NEAR`. |
 | Ranges | `year:2020..2026` inclusive; start > end is an error. |
 
@@ -48,8 +49,9 @@ Every node keeps its source span (groups include their parentheses and field pre
 the UI parse tree point at the input. Text leaves carry `field` (`title`/`abstract`/None); there is no
 field node. `Term.token` and `Wildcard.stem` are single normalised tokens; a multi-token word is a
 `Phrase`. `Filter.values` holds canonical strings, or `YearRange`s for `year`. `parse()` (`query/parser.py`)
-returns `ast=None` exactly when `errors` is non-empty, never raises (property-tested at 50k), and reports
-one error per mistake, sorted by position.
+returns `ast=None` exactly when `errors` is non-empty, never raises (property-tested: 2k examples in CI,
+50k nightly), and reports one error per mistake, sorted by position. `Phrase` and `Near` carry the field;
+`structure(node)` compares meaning without spans; validators enforce every invariant (`test_ast.py`).
 
 ## Canonical form
 `canonical` (`query/canonical.py`, spec 02 §Outputs) is: flattened, fully parenthesised, uppercase operators (`|` → `OR`, juxtaposition → `AND`, `-` → `NOT`),

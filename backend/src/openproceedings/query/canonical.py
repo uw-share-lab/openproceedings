@@ -11,7 +11,8 @@
 `render` prints it fully parenthesised with uppercase operators and a field prefix on every leaf, in a
 form that re-parses to the same tree: `parse(canonical).canonical == canonical` (property-tested). A
 wildcard whose last token is shorter than the stem minimum is hyphen-joined to the tokens before it
-(`gpt-4*` → `"gpt-4*"`, not `"gpt 4*"`, which the lexer would reject).
+(`gpt-4*` → `"gpt-4*"`, not `"gpt 4*"`, which the lexer would reject), and a lone token that spells an
+operator in lowercase is quoted (`"and"`), so re-parsing raises no lowercase-operator warning.
 
 `canonical_hash` = sha256 of the canonical string and TOKENIZER_VERSION joined by a NUL byte.
 """
@@ -19,7 +20,6 @@ wildcard whose last token is shorter than the stem minimum is hyphen-joined to t
 from __future__ import annotations
 
 import hashlib
-import re
 
 from openproceedings.query.ast import (
     And,
@@ -38,7 +38,7 @@ from openproceedings.query.lexer import MIN_STEM
 from openproceedings.query.normalize import TOKENIZER_VERSION
 
 FILTER_ORDER = ("venue", "year", "track", "status")
-_PLAIN_VALUE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.\-]*")
+_OPERATOR_WORDS = frozenset({"and", "or", "not"})
 
 
 def _filter_key(n: Node) -> tuple[int, str, int, str] | None:
@@ -69,12 +69,12 @@ def canonicalize(n: Node) -> Node:
         return n
     children: list[Node] = []
     for c in (canonicalize(c) for c in n.children):
-        children.extend(c.children if type(c) is type(n) else (c,))  # type: ignore[union-attr]
+        children.extend(c.children if isinstance(c, And | Or) and type(c) is type(n) else (c,))
     if isinstance(n, Or) and all(isinstance(c, Filter) for c in children):
         fields = {c.field for c in children if isinstance(c, Filter)}
         if len(fields) == 1:
             values = tuple(v for c in children if isinstance(c, Filter) for v in c.values)
-            return Filter(span=n.span, field=fields.pop(), values=_sorted_values(values))  # type: ignore[arg-type]
+            return Filter(span=n.span, field=fields.pop(), values=_sorted_values(values))
     if isinstance(n, And):
         text = [c for c in children if _filter_key(c) is None]
         filters = sorted(
@@ -104,30 +104,29 @@ def _phrase_body(items: tuple[Term | Wildcard, ...]) -> str:
     return " ".join(words)
 
 
-def _render_value(field: str, v: str | YearRange) -> str:
+def _render_value(v: str | YearRange) -> str:
     if isinstance(v, YearRange):
         return str(v.lo) if v.lo == v.hi else f"{v.lo}..{v.hi}"
-    if field != "source" or _PLAIN_VALUE.fullmatch(v):
-        return v
-    return f'"{v}"'
+    return v
 
 
 def render(n: Node) -> str:
     """The canonical string of an already canonicalized node."""
     if isinstance(n, Term):
-        return f"{_prefix(n.field)}{n.token}"
+        token = f'"{n.token}"' if n.token in _OPERATOR_WORDS else n.token
+        return f"{_prefix(n.field)}{token}"
     if isinstance(n, Wildcard):
         return (
             f"{_prefix(n.field)}{n.stem}{n.op}"  # a lone wildcard always has a full stem (the lexer checks)
         )
     if isinstance(n, Phrase):
-        return f'{_prefix(n.items[0].field)}"{_phrase_body(n.items)}"'
+        return f'{_prefix(n.field)}"{_phrase_body(n.items)}"'
     if isinstance(n, Near):
         return f"({render(n.left)} NEAR/{n.distance} {render(n.right)})"
     if isinstance(n, Not):
         return f"NOT {render(n.child)}"
     if isinstance(n, Filter):
-        values = [_render_value(n.field, v) for v in n.values]
+        values = [_render_value(v) for v in n.values]
         return f"{n.field}:{values[0]}" if len(values) == 1 else f"{n.field}:({' OR '.join(values)})"
     op = " AND " if isinstance(n, And) else " OR "
     return "(" + op.join(render(c) for c in n.children) + ")"

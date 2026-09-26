@@ -63,6 +63,13 @@ def test_codes_named_by_the_specs_exist() -> None:
         "PARSE_NESTED_FIELD",
         "PARSE_TOO_DEEP",
         "FIELD_FILTER_SYNTAX",
+        "PARSE_WILDCARD_DETACHED",
+        "PARSE_AMBIGUOUS_MINUS",
+        "PARSE_STRAY_COLON",
+        "FIELD_COMPAT_ONLY",
+        "WARN_FILTER_SCOPE",
+        "WARN_LOOKALIKE_OPERATOR",
+        "WARN_SYMBOLS_DROPPED",
         *SPEC_04,
     ):
         assert DiagnosticCode(name)

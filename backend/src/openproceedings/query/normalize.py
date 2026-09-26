@@ -138,11 +138,13 @@ def _find(text: str, start: int, closer: str) -> int:
     return -1
 
 
-def _latex_mask(text: str) -> list[int]:
+def _latex_mask(text: str, regions: list[tuple[int, int]] | None = None) -> list[int]:
     """Classify every raw character for step 4: KEEP, SEP (LaTeX syntax that separates) or JOIN (markup
     inside a word, such as an accent macro or `\\-`). Math regions: `$…$` (Pandoc rule), `$$…$$`, `\\(…\\)`,
-    `\\[…\\]`; inside them a command name is a word, outside it is dropped."""
+    `\\[…\\]`; inside them a command name is a word, outside it is dropped. Each math region found is
+    appended to `regions` as a half-open span from its opening delimiter to the end of its closing one."""
     n = len(text)
+    opened = -1  # where the current math region's opening delimiter starts
     mask = [KEEP] * n
     math_until = -1  # index where the current math region's closing delimiter starts, or -1
     close_len = 0  # length of that delimiter: 1 for `$`, 2 for `$$`, `\\)`, `\\]`
@@ -153,6 +155,8 @@ def _latex_mask(text: str) -> list[int]:
             for k in range(i, i + close_len):
                 mask[k] = SEP
             i += close_len
+            if regions is not None:
+                regions.append((opened, i))
             math_until, close_len = -1, 0
             continue
         in_math = i < math_until
@@ -162,7 +166,7 @@ def _latex_mask(text: str) -> list[int]:
                 close = _find(text, i + 2, "\\)" if nxt == "(" else "\\]")
                 if close >= 0:
                     mask[i] = mask[i + 1] = SEP
-                    math_until, close_len = close, 2
+                    math_until, close_len, opened = close, 2, i
                     i += 2
                     continue
             if nxt == "-":
@@ -215,15 +219,23 @@ def _latex_mask(text: str) -> list[int]:
                 close = _find(text, i + 2, "$$")
                 mask[i + 1] = SEP
                 if close >= 0:
-                    math_until, close_len = close, 2
+                    math_until, close_len, opened = close, 2, i
                 i += 2
                 continue
             if not in_math:
                 close = _find_closing_dollar(text, i)
                 if close >= 0:
-                    math_until, close_len = close, 1
+                    math_until, close_len, opened = close, 1, i
         i += 1
     return mask
+
+
+def math_regions(text: str) -> list[tuple[int, int]]:
+    """The LaTeX math regions of `text` exactly as step 4 finds them (half-open, delimiters included).
+    The query lexer uses this so that it and the tokenizer never disagree about what `$…$` is."""
+    regions: list[tuple[int, int]] = []
+    _latex_mask(text, regions)
+    return regions
 
 
 def tokenize(text: str) -> list[Token]:
