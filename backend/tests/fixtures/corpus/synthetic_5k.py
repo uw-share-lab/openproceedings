@@ -9,7 +9,7 @@ shared by many words, and a few roots whose short stems expand past the 200-term
 track × status combination occurs, and some records have no abstract.
 
 `vocab()` is the corpus's own term dictionary as a strategy vocabulary (`tests.strategies.Vocab`): rare terms
-(df 1-3) and stems past the 200-term cap are weighted in.
+(df 1-3), a few absent terms, and stems past the 200-term cap are weighted in.
 """
 
 from __future__ import annotations
@@ -54,19 +54,21 @@ def _pseudo_words(rng: random.Random) -> list[str]:
 
 
 @cache
-def records() -> tuple[Rec, ...]:
+def records(size: int = SIZE, abstract_words: tuple[int, int] = (8, 60)) -> tuple[Rec, ...]:
+    """The corpus; the defaults are the pinned 5k differential corpus. The benchmark report scales it up
+    (80k, abstracts of realistic length) with the same generator."""
     rng = random.Random(20260926)
     ranked = [*VOCABULARY, *ODDITIES, *_pseudo_words(rng)]
     cumulative = list(itertools.accumulate(1 / (rank + 1) ** 1.05 for rank in range(len(ranked))))
     combos = list(itertools.product(VENUES, YEARS, TRACKS, STATUSES))  # each at least once
     out = []
-    for i in range(SIZE):
+    for i in range(size):
         venue, year, track, status = combos[i] if i < len(combos) else rng.choice(combos)
         out.append(
             Rec(
                 id=f"fx:{i:04d}",
                 title=_text(rng, ranked, cumulative, 2, 9),
-                abstract=None if i % 17 == 0 else _text(rng, ranked, cumulative, 8, 60),
+                abstract=None if i % 17 == 0 else _text(rng, ranked, cumulative, *abstract_words),
                 venue=venue,
                 year=year,
                 track=track,
@@ -104,4 +106,6 @@ def vocab() -> Vocab:
     wide = tuple(s for s in stems if sum(t.startswith(s) for t in terms) > 200)  # `*` over them is refused
     sample = random.Random(1).sample(sorted(ngrams), 5_000)
     common = sorted(sorted(terms, key=lambda t: (-df[t], t))[:600])  # so most trees match something
-    return Vocab(tuple(common), tuple(stems), tuple(sample), tuple(t for t in terms if df[t] <= 3), wide)
+    absent = ("zzqabsent", "notacorpusword", "trustq")  # terms no record holds: empty matches from a leaf
+    rare = tuple(t for t in terms if df[t] <= 3) + absent
+    return Vocab(tuple(common), tuple(stems), tuple(sample), rare, wide)

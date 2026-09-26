@@ -86,7 +86,8 @@ def agree(engines: tuple[ReferenceEngine, TantivyEngine], ast: Node) -> None:
     parsed = parse(render(ast))
     if parsed.effective_ast is not None:  # a tree the parser accepts: its exclusion counts agree too
         total = len(tantivy.match_ids(parsed.effective_ast))
-        assert excluded(tantivy, parsed, total).to_json() == brute_excluded(reference, parsed, got, ast), q
+        got_json = json.dumps(excluded(tantivy, parsed, total).to_json())  # order-sensitive: spec 04 pins it
+        assert got_json == json.dumps(brute_excluded(reference, parsed, got, ast)), q
 
 
 def brute_excluded(
@@ -95,7 +96,9 @@ def brute_excluded(
     """Exclusion counts record by record, independent of exclusions.py. Identified: the oracle's set for the
     identification tree (the tree's own set, already known, when that is just the canonical tree). Matched:
     the identified records that pass every default filter. Each identified record not matched is bucketed by
-    the first default, track then status, it fails."""
+    the first default, track then status, it fails. It trusts `parse()` for `identification_ast` and
+    `defaults` (defaults.py has its own tests); what it checks is the engines' bucketing, and the bucket order
+    spec 04 pins (by count, ties by name, `unknown` last)."""
     ast = parsed.identification_ast
     if ast is None:
         identified = set(BY_ID)
@@ -113,7 +116,10 @@ def brute_excluded(
             value = getattr(r, failed[0])
             buckets[failed[0]][value] = buckets[failed[0]].get(value, 0) + 1
     shaped = {
-        f: {**{v: n for v, n in b.items() if v != "unknown"}, "unknown": b.get("unknown", 0)}
+        f: {
+            **{v: n for v, n in sorted(b.items(), key=lambda kv: (-kv[1], kv[0])) if v != "unknown"},
+            "unknown": b.get("unknown", 0),
+        }
         for f, b in buckets.items()
     }
     return {"total": sum(sum(b.values()) for b in buckets.values()), **shaped}

@@ -462,5 +462,51 @@
    ]
   },
   "note": "seed: an all-negative tree the parser refuses but an engine must evaluate"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    24
+   ],
+   "kind": "and",
+   "children": [
+    {
+     "span": [
+      0,
+      4
+     ],
+     "kind": "term",
+     "token": "cado",
+     "field": null
+    },
+    {
+     "span": [
+      9,
+      24
+     ],
+     "kind": "filter",
+     "field": "status",
+     "values": [
+      "accepted"
+     ]
+    }
+   ]
+  },
+  "note": "verification (task-028): a typed default is stripped from identification: the oracle branch of brute_excluded (cado AND status:accepted)"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    15
+   ],
+   "kind": "filter",
+   "field": "status",
+   "values": [
+    "accepted"
+   ]
+  },
+  "note": "verification (task-028): only a default: identification is the whole corpus (status:accepted)"
  }
 ]
