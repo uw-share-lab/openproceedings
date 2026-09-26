@@ -268,6 +268,31 @@ def _title_ranks(snapshot: Path) -> dict[str, int]:
     return {rid: rank for rank, (_, rid) in enumerate(sorted(keys))}
 
 
+def normalized(snapshot: Path, workers: int) -> Iterator[tuple[PaperRecord, dict[str, list[str]]]]:
+    """The snapshot's records (in id order, verified), each with its `normalize()`d title and abstract (a
+    missing abstract is ""), a chunk at a time, across `workers` processes once the corpus is big enough to
+    repay starting them. Shared by the build and the parity check, so both normalize alike."""
+    pool = None
+    try:
+        for chunk in _chunks(iter_records(snapshot)):
+            pairs = [(r.title, r.abstract or "") for r in chunk]
+            if pool is None and workers > 1 and len(pairs) >= PARALLEL_FROM:
+                pool = ProcessPoolExecutor(
+                    max_workers=workers, mp_context=multiprocessing.get_context("spawn")
+                )
+            if pool is None:
+                results = [_normalize_pair(p) for p in pairs]
+            else:  # results come back in order: deterministic
+                results = list(pool.map(_normalize_pair, pairs, chunksize=64))
+            for r, (title, abstract) in zip(chunk, results, strict=True):
+                yield r, {"title": title, "abstract": abstract}
+    except BrokenProcessPool:
+        raise IndexBuildError("a normalizing worker process died (out of memory?); try again") from None
+    finally:
+        if pool is not None:
+            pool.shutdown(cancel_futures=True)
+
+
 def _add_all(
     snapshot: Path,
     writer: Any,
@@ -276,40 +301,18 @@ def _add_all(
     ids: Any,
     commit_every: int | None = None,
 ) -> int:
-    """Stream the snapshot's records (in id order, verified) through normalize() into the writer, across
-    `workers` processes when there is more than one."""
+    """Stream the snapshot's records through normalize() into the writer."""
     ranks = _title_ranks(snapshot)
-    pool = None
     added = 0
-    try:
-        for chunk in _chunks(iter_records(snapshot)):
-            pairs = [(r.title, r.abstract or "") for r in chunk]  # a missing abstract indexes as ""
-            if pool is None and workers > 1 and len(pairs) >= PARALLEL_FROM:
-                # started only once the corpus is big enough to repay it (a small one never pays the cost)
-                pool = ProcessPoolExecutor(
-                    max_workers=workers, mp_context=multiprocessing.get_context("spawn")
-                )
-            if pool is None:
-                normalized = [_normalize_pair(p) for p in pairs]
-            else:  # results come back in order: deterministic
-                normalized = list(pool.map(_normalize_pair, pairs, chunksize=64))
-            for r, (title, abstract) in zip(chunk, normalized, strict=True):
-                fields = {"title": title, "abstract": abstract}
-                _check_tokens(r, fields, exact)
-                if r.id not in ranks:  # can't happen for a valid line; refuse rather than guess a rank
-                    raise IndexBuildError(
-                        f"{r.id}: no title rank (the snapshot's lines didn't read the same twice)"
-                    )
-                writer.add_document(_document(r, fields, added, ranks[r.id]))
-                if commit_every and (added + 1) % commit_every == 0:
-                    writer.commit()  # tests: several segments
-                ids.write(r.id + "\n")
-                added += 1
-    except BrokenProcessPool:
-        raise IndexBuildError("a normalizing worker process died (out of memory?); build again") from None
-    finally:
-        if pool is not None:
-            pool.shutdown(cancel_futures=True)
+    for r, fields in normalized(snapshot, workers):
+        _check_tokens(r, fields, exact)
+        if r.id not in ranks:  # can't happen for a valid line; refuse rather than guess a rank
+            raise IndexBuildError(f"{r.id}: no title rank (the snapshot's lines didn't read the same twice)")
+        writer.add_document(_document(r, fields, added, ranks[r.id]))
+        if commit_every and (added + 1) % commit_every == 0:
+            writer.commit()  # tests: several segments
+        ids.write(r.id + "\n")
+        added += 1
     return added
 
 

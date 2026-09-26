@@ -37,12 +37,16 @@ and through `normalize.py` gives identical token streams across the whole corpus
 a token over 65,530 UTF-8 bytes, so the build refuses a record with one rather than index less than the
 reference engine matches (`engine/index.py`, `op index build`).
 
-As built (task-029, `engine/parity.py`, `op index parity`): parity is read back from a built index, not
-from what the build meant to write. Each document's stored field is run through `exact_v1` and must equal
-`normalize()` of the snapshot record's raw text, in id order. Each term's document frequency in the term
-dictionary must equal the count from `normalize()`. The first difference fails, naming the record, field and
-token (or the term). It runs on the synthetic 5k corpus in CI. On the real Trust-Evals corpus it runs
-locally: 1,805 records, 17,780 terms, 0 differences (2026-09-26).
+As built (task-029, `engine/parity.py`, `op index parity`): record by record, in id order, against
+`normalize()` of the snapshot's raw text:
+- the stored field through `exact_v1` gives the same tokens (the text round-trips);
+- the positions Tantivy indexed are read back with a phrase query over each field of 2+ tokens,
+  restricted to the record;
+- each term's document frequency in the term dictionary matches, in both directions.
+
+Term frequencies are checked only as far as the phrase read-back implies. The first difference fails,
+naming the record, field and token (or the term). That message quotes tokens: it is local terminal output,
+never logged. It runs on the synthetic 5k corpus in CI; on the real corpus it runs locally (decision-004).
 
 ## Index schema
 
