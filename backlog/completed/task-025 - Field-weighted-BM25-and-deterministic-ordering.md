@@ -1,10 +1,10 @@
 ---
 id: TASK-025
 title: Field-weighted BM25 and deterministic ordering
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 20:38'
+updated_date: '2026-09-26 20:39'
 labels:
   - engine
 milestone: m-2
