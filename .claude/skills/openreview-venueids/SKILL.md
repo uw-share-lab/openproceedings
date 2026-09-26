@@ -31,7 +31,7 @@ accepted paper the bare venue path and keeps a `Submission` suffix on everything
 | `ICLR.cc/<Y>/TinyPapers` (2023–2024) | `tiny_papers` | `accepted` | verify spelling |
 | `ICLR.cc/<Y>/BlogPosts` | `blogpost` | `accepted` | verify spelling |
 | NeurIPS Competition Track path | `competition` | per suffix | verify |
-| `NeurIPS.cc/<Y>/Track/Creative_AI` (and the proceedings token `Creative_AI_Track`) | `other` | per suffix | seen in proceedings claims |
+| `NeurIPS.cc/<Y>/Track/Creative_AI` | `other` | per suffix | verify (only the proceedings token `Creative_AI_Track` has been seen) |
 | any other `<Org>.cc/<Y>/<rest>` that parses | `other` | per suffix | keep `venue_id_raw` |
 | anything that does not match the grammar | `unknown` | `unknown` | log, show on coverage |
 
@@ -42,8 +42,11 @@ fixture, and the checked forum id goes in the test's comment.
 1. **Workshop wins.** Any segment `Workshop` or `Workshop_<anything>` makes the track `workshop`, whatever
    follows. A workshop venueid must never classify as `main`: that is the failure this project exists to
    prevent (spec 07 §D target ≥99%).
-2. **Suffix is status, not track.** Strip the trailing `*_Submission` / `Submission` to get the track
-   path; map the suffix to status. Keep `venue_id_raw` verbatim either way.
+2. **Suffix is status, not track.** Strip a trailing `Submission`, `Rejected_Submission`,
+   `Withdrawn_Submission` or `Desk_Rejected_Submission` and map it to status; any other status-like last
+   segment (`Blind_Submission`, `Rejected_Submissions`, `Withdrawn`, `Desk_Rejected`, `Post_Decision`) is
+   stripped with status `unknown`, never `accepted`. A suffix needs a track in front of it; a `-` segment
+   (an invitation path) or a year outside 2013–2099 doesn't parse. Keep `venue_id_raw` verbatim.
 3. **Venue and year from the venueid must agree with the crawl scope.** A note found while crawling
    ICLR 2024 whose venueid says `ICLR.cc/2023/…` is a conflict, never silently re-yeared.
 4. **Aliases collapse to one track.** `Datasets_and_Benchmarks` and `Datasets_and_Benchmarks_Track`
@@ -51,6 +54,10 @@ fixture, and the checked forum id goes in the test's comment.
 5. **Never default.** Unknown stays `unknown`; `other` is only for a form that parses but is not in the
    taxonomy. Neither is ever included by the default filter.
 6. **Never from an invitation** (see `.claude/skills/openreview-api/SKILL.md`, `zkNCWtw2fd`).
+
+The code (`classify.py` `_TRACKS`) matches each track path as an **exact tuple per organisation**: only
+the rows above reach a default-filter track, and any other path that parses (a different order, another
+organisation's track, an unseen spelling) is `other`. Aliases not in the table are not accepted.
 
 ## Table test
 Code: `backend/src/openproceedings/ingest/classify.py` (`classify_venueid`, `classify_proceedings`).

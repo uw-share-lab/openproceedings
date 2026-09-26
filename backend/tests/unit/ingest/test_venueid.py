@@ -73,6 +73,14 @@ NEVER_PARSE: list[str] = [
     "iclr.cc/2024/Conference",  # the org is case-sensitive
     "ICLR/2024/Conference",
     "",
+    "ICLR.cc/2024/Conference/",  # an empty segment
+    "ICLR.cc/2024//Conference",
+    "ICLR.cc/2024/Submission",  # a status with no track in front of it
+    "ICLR.cc/2024/Rejected_Submission",
+    "ICLR.cc/2024/Conference/-/Blind_Submission",  # an invitation path, never a venueid (rule 6)
+    "ICLR.cc/2024/Conference/-/Withdrawn_Submission",
+    "ICML.cc/0000/Conference",  # a year outside 2013–2099
+    "ICML.cc/2100/Conference",
 ]
 
 
@@ -92,7 +100,8 @@ def test_unparseable_is_unknown_never_main(venueid: str, caplog: pytest.LogCaptu
     with caplog.at_level(logging.DEBUG, logger="openproceedings"):
         c = classify_venueid(venueid)
     assert (c.track, c.status, c.parsed) == ("unknown", "unknown", False)
-    assert any("venueid_unparsed" in r.getMessage() for r in caplog.records)  # logged (DEBUG: per record)
+    [r] = [r for r in caplog.records if r.getMessage() == "venueid_unparsed"]
+    assert r.levelno == logging.DEBUG and r.venue_id_raw == venueid  # type: ignore[attr-defined]  # per record
 
 
 @pytest.mark.parametrize(
@@ -112,8 +121,49 @@ def test_segments_match_whole_never_as_substrings() -> None:
     assert classify_venueid("ICLR.cc/2024/Conferences").track == "other"
     assert classify_venueid("ICLR.cc/2024/WorkshopX/y").track == "other"  # `Workshop_` needs the underscore
     assert (
-        classify_venueid("ICLR.cc/2024/Conference/Rejected_Submissions").status == "accepted"
-    )  # not a suffix
+        classify_venueid("ICML.cc/2024/Workshop/SafeSubmission").status == "accepted"
+    )  # a name, not a status
+    assert classify_venueid("ICML.cc/2024/Workshop/AlignDecision").status == "accepted"
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    ["Rejected_Submissions", "Blind_Submission", "Withdrawn", "Desk_Rejected", "Post_Decision", "Rejected"],
+)
+def test_an_unmapped_status_is_unknown_never_accepted(suffix: str) -> None:
+    c = classify_venueid(f"ICLR.cc/2024/Conference/{suffix}")
+    assert (c.track, c.status) == ("main", "unknown")  # the track path is still exact
+
+
+@pytest.mark.parametrize(
+    "venueid",
+    [
+        "ICLR.cc/2024/Datasets_and_Benchmarks",  # D&B is NeurIPS's track
+        "ICML.cc/2024/Track/Datasets_and_Benchmarks",
+        "NeurIPS.cc/2024/Round1/Datasets_and_Benchmarks",  # order matters
+        "NeurIPS.cc/2024/Track/Track/Datasets_and_Benchmarks_Track",
+        "NeurIPS.cc/2024/Track/Datasets_and_Benchmarks/Creative_AI",
+        "NeurIPS.cc/2024/Track/Datasets_and_Benchmarks_Track/Round1",
+        "NeurIPS.cc/2024/Position",  # position is ICML's Position_Paper_Track only
+        "ICLR.cc/2024/Track/Position",
+        "ICML.cc/2025/Position_Paper_Track/Track",
+        "ICML.cc/2025/Position_Paper_Track/X",
+        "ICML.cc/2025/Position",
+        "ICLR.cc/2024/Tiny_Papers",  # unseen spellings
+        "ICLR.cc/2024/BlogPost",
+        "NeurIPS.cc/2022/Competition_Track",
+        "ICML.cc/2023/TinyPapers",  # TinyPapers is ICLR's
+        "ICLR.cc/2024/Conference/Blind_Submission/Extra",
+        "ICLR.cc/2024/Conference/Main",
+    ],
+)
+def test_forms_outside_the_table_are_other(venueid: str) -> None:
+    assert classify_venueid(venueid).track == "other"
+
+
+def test_workshop_is_recognised_in_any_case() -> None:
+    assert classify_venueid("ICLR.cc/2024/workshop/X").track == "workshop"
+    assert classify_proceedings("Workshop/X").track == "workshop"
 
 
 PROCEEDINGS = [
@@ -131,4 +181,5 @@ PROCEEDINGS = [
 def test_proceedings_claims(token: str, track: str) -> None:
     c = classify_proceedings(token)
     assert c.track == track
+    assert c.parsed is (token != "")
     assert c.status == "accepted"  # a proceedings listing means accepted (spec 01; decision-005)
