@@ -27,10 +27,11 @@ accepted paper the bare venue path and keeps a `Submission` suffix on everything
 | `<Org>.cc/<Y>/Workshop/<name>` | `workshop` | `accepted` | validated |
 | `<Org>.cc/<Y>/Workshop_<City>/<name>` (e.g. `NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM`) | `workshop` | `accepted` | validated |
 | `<Org>.cc/<Y>/Workshop/<name>/Submission` or `/Rejected_Submission` | `workshop` | per suffix | verify |
-| ICML position-paper track | `position` | per suffix | verify: whether it is its own path (e.g. `…/Position_Paper_Track`) or `Conference` + a `content.venue` label |
+| `ICML.cc/<Y>/Position_Paper_Track` | `position` | per suffix | seen (Trust-Evals gold venueids, 2026-09-26) |
 | `ICLR.cc/<Y>/TinyPapers` (2023–2024) | `tiny_papers` | `accepted` | verify spelling |
 | `ICLR.cc/<Y>/BlogPosts` | `blogpost` | `accepted` | verify spelling |
 | NeurIPS Competition Track path | `competition` | per suffix | verify |
+| `NeurIPS.cc/<Y>/Track/Creative_AI` (and the proceedings token `Creative_AI_Track`) | `other` | per suffix | seen in proceedings claims |
 | any other `<Org>.cc/<Y>/<rest>` that parses | `other` | per suffix | keep `venue_id_raw` |
 | anything that does not match the grammar | `unknown` | `unknown` | log, show on coverage |
 
@@ -52,6 +53,7 @@ fixture, and the checked forum id goes in the test's comment.
 6. **Never from an invitation** (see `.claude/skills/openreview-api/SKILL.md`, `zkNCWtw2fd`).
 
 ## Table test
+Code: `backend/src/openproceedings/ingest/classify.py` (`classify_venueid`, `classify_proceedings`).
 `backend/tests/unit/ingest/test_venueid.py` is a parametrised table: every validated venueid from
 scholarmend's 90 cases plus one row per form above. Add a row for every new form seen in a crawl log;
 never delete one.
