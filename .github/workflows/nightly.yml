@@ -1,6 +1,7 @@
 name: nightly
-# Full mutation run of every gate and tooling check (make mutate). Reviews run only `make mutate-changed`;
-# this catches anything that slipped. Differential@50k and full-corpus parity join this job in M1/M2.
+# Every property test at 50,000 examples, the exhaustive tokenizer check, and the full mutation run of every
+# gate and tooling check (make mutate). Reviews run only `make mutate-changed`; this catches anything that
+# slipped. Differential@50k and full-corpus parity join this job with the Tantivy engine (task-057).
 on:
   schedule:
     - cron: "17 7 * * *"
@@ -11,7 +12,7 @@ permissions:
 jobs:
   mutate:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
@@ -19,6 +20,8 @@ jobs:
         run: uv sync --locked
       - name: Exhaustive tokenizer check (every Unicode code point, 8 contexts)
         run: OP_EXHAUSTIVE=1 uv run --locked pytest -q backend/tests/unit/test_normalize_exhaustive.py
+      - name: Property tests at 50,000 examples
+        run: uv run --locked pytest -q --hypothesis-profile=nightly -k "not exhaustive"
       - name: make mutate (every mutant must be killed, or documented as equivalent)
         run: |
           git config --global user.email ci@example.invalid

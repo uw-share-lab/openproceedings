@@ -158,6 +158,11 @@ NESTED = [
     ("(track:workshop AND x) OR y", "track", (1, 15)),
     ("x OR status:rejected", "status", (5, 20)),
     ("trust NOT (track:workshop OR x)", "track", (11, 25)),
+    (
+        "trust (trust OR track:main)",
+        "track",
+        (16, 26),
+    ),  # Hypothesis counterexample (task-017), kept as golden
 ]
 
 

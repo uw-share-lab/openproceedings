@@ -13,6 +13,8 @@ from openproceedings.query.canonical import canonical_hash, canonicalize, render
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import parse
 
+from tests.strategies import queries
+
 
 def canon(q: str) -> str:
     """The canonical form of the tree as typed (default filters are task-014's, in test_defaults.py)."""
@@ -24,6 +26,7 @@ def canon(q: str) -> str:
 
 GOLDEN: list[tuple[str, str]] = [
     ("trust", "trust"),
+    ("0", "0"),  # Hypothesis counterexample (task-013 property), kept as golden
     ("Trust", "trust"),
     ("trust calibration", "(trust AND calibration)"),
     ("a b c", "(a AND b AND c)"),
@@ -159,54 +162,6 @@ def test_ast_to_string_to_ast_is_the_identity(q: str) -> None:
     again = parse(render(normal)).ast
     assert again is not None
     assert structure(canonicalize(again)) == structure(normal)
-
-
-WORDS = st.sampled_from(
-    [
-        "trust",
-        "Calibration",
-        "vision-language",
-        "gpt-4*",
-        "model$",
-        "bench*",
-        "naïve",
-        "GPT-4o",
-        "a-b-c*",
-        "LLM",
-        "x",
-    ]
-)
-PHRASES = st.lists(WORDS, min_size=1, max_size=4).map(lambda ws: '"' + " ".join(ws) + '"')
-FILTERS = st.sampled_from(
-    [
-        "venue:ICLR",
-        "venue:(neurips OR ICML)",
-        "year:2024",
-        "year:2019..2021",
-        "track:main",
-        "status:accepted",
-        "track:(workshop OR main)",
-    ]
-)
-
-
-@st.composite
-def queries(draw: st.DrawFn, depth: int = 0) -> str:
-    leaf = st.one_of(
-        WORDS, PHRASES, FILTERS, WORDS.map(lambda w: f"title:{w}"), PHRASES.map(lambda p: f"abstract:{p}")
-    )
-    if depth >= 3 or draw(st.booleans()):
-        return draw(leaf)
-    parts = draw(st.lists(queries(depth + 1), min_size=2, max_size=4))
-    op = draw(st.sampled_from([" ", " AND ", " OR ", " | "]))
-    body = op.join(parts)
-    if draw(st.booleans()):
-        body = f"({body})"
-    if draw(st.integers(0, 4)) == 0:
-        body = f"trust NOT {body}"
-    if draw(st.integers(0, 5)) == 0:
-        body = f"{body} x NEAR/2 y"
-    return body
 
 
 @given(queries())
