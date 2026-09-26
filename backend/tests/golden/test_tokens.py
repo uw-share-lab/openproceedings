@@ -197,6 +197,12 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ("سؤال", ["سؤال"]),  # Arabic hamza on a seat is spelling, not a vowel point
     ("أسئلة", ["أسئلة"]),
     ("ป\\%́x", ["ป", "x"]),  # a LaTeX separator resets the base: the mark is stray, dropped
+    # --- OpenReview abstracts carry LaTeX/Markdown markup that PMLR pages don't; both must give the same
+    #     tokens, so OpenReview-first precedence (decision-005) never changes what matches
+    ("reaches \\textbf{63.7\\%} accuracy", ["reaches", "63", "7", "accuracy"]),
+    ("reaches 63.7% accuracy", ["reaches", "63", "7", "accuracy"]),
+    ("*Can LLMs judge?*", ["can", "llms", "judge"]),
+    ("**bold** claim", ["bold", "claim"]),
     # --- emoji and symbols are separators ---------------------------------------------------------------
     ("trust 🤖 benchmark", ["trust", "benchmark"]),
     ("trust→benchmark", ["trust", "benchmark"]),

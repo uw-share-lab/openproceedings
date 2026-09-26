@@ -56,3 +56,10 @@ dedup never merges (a workshop note never merges into a proceedings record). Ope
 The sample is small; the local real-corpus checks (decision-004) will report any title/abstract
 conflicts at scale through `conflicts.csv`. scholarmend is left unchanged while the Trust-Evals screening
 that used its output is in progress.
+
+A second, independent check the same day (another session, recorded in the scholarmend notes) matched on
+exact titles: the 243 cached OpenReview and 1,633 cached proceedings abstracts share only 2 papers, both
+identical; and 22 ICML 2024/25 abstracts on OpenReview match the public PMLR pages in wording (13 exactly,
+7 up to punctuation/whitespace, 2 up to markup such as `\textbf{63.7\%}` vs `63.7%`). That markup
+tokenizes identically (golden rows in `tests/golden/test_tokens.py`), so OpenReview-first never changes
+what a query matches; only the displayed text differs.
