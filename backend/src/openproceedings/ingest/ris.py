@@ -254,13 +254,38 @@ def _record(
     )  # fmt: skip
 
 
-def import_ris(mended: Path, resolved: Path | None = None) -> tuple[list[PaperRecord], ImportReport]:
-    """Records and counts from one scholarmend output (`mended.ris` + its `resolved.json`)."""
+def _check_shape(name: str, entries: object) -> list[dict[str, Any]]:
+    """resolved.json must be a list of entries, each with a string title and a list of claims whose
+    field, source and evidence are strings; anything else is a ValueError naming the entry, not its text."""
+    if not isinstance(entries, list):
+        raise ValueError(f"{name}: resolved.json is not a list of entries")
+    for i, e in enumerate(entries):
+        claims = e.get("claims") if isinstance(e, dict) else None
+        if not isinstance(e, dict) or not isinstance(e.get("title"), str) or not isinstance(claims, list):
+            raise ValueError(f"{name}: resolved.json entry {i} lacks a title or a claims list")
+        for c in claims:
+            if (
+                not isinstance(c, dict)
+                or "value" not in c
+                or not all(isinstance(c.get(k), str) for k in ("field", "source", "evidence"))
+            ):
+                raise ValueError(f"{name}: resolved.json entry {i} has a malformed claim")
+    return entries
+
+
+def import_ris(
+    mended: Path, resolved: Path | None = None, name: str | None = None
+) -> tuple[list[PaperRecord], ImportReport]:
+    """Records and counts from one scholarmend output (`mended.ris` + its `resolved.json`). `name` is how
+    reports and errors refer to it (default `<its directory>/mended.ris`)."""
     resolved = resolved or mended.with_name("resolved.json")
+    name = name or f"{mended.parent.name}/{mended.name}"
     ris = parse_file(mended)
     resolved_bytes = resolved.read_bytes()
-    entries = json.loads(resolved_bytes.decode("utf-8"))
-    name = f"{mended.parent.name}/{mended.name}"
+    try:
+        entries = _check_shape(name, json.loads(resolved_bytes.decode("utf-8")))
+    except UnicodeDecodeError as e:
+        raise ValueError(f"{name}: resolved.json is not UTF-8") from e
     if len(entries) != len(ris):
         raise ValueError(f"{name}: {len(ris)} RIS records but {len(entries)} resolved entries")
     skipped: Counter[str] = Counter(dict.fromkeys(SKIP_REASONS, 0))

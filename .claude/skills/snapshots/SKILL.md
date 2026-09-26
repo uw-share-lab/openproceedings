@@ -53,13 +53,21 @@ and version, page counts) in M4. The manifest may hold build times; `records.jso
 a no-op; different files under a cached name are refused (a snapshot may already cite them).
 
 ## Immutability
-- Build into a `.tmp-` directory next to the target, fsync the files and the directory, rename it into
-  place, then make it read-only (files 0444, directory 0555: a read-only directory can't be renamed). A
+- A build or ingest holds an exclusive `flock` on `<dir>/.lock` in the directory it writes into, so
+  concurrent runs take turns and a sweep never touches a live run's staging directory.
+- Build into a `.tmp-` directory next to the target, fsync the files and the directory (`F_FULLFSYNC` on
+  macOS), rename it into place, check it holds what was written, then make it read-only (files 0444,
+  directory 0555: a read-only directory can't be renamed). To delete a cache or scratch copy by hand,
+  `chmod -R u+w` it first. A
   crash never leaves a half snapshot under the final name; the next build sweeps `.tmp-` leftovers, and
   a hidden or `.tmp-` cache entry is never read as a source. The cache (`op ingest ris`) is written the
-  same way, all inputs or none, as the exact bytes that were checked.
-- If the target exists and its `records.jsonl` re-hashes to this snapshot's hash (never trusting the
-  manifest), report it and exit 0 with no rewrite (`created: false`); otherwise **refuse**. A target that
+  same way, all inputs or none, as the exact bytes that were checked; a cache name that differs from
+  another only in case or Unicode form is refused (macOS folds both), and a symlinked input is read from
+  where it points. `resolved.json`'s shape is checked, so bad input is a one-line refusal.
+- If the target exists, is complete, its `records.jsonl` re-hashes to this snapshot's hash (never
+  trusting the manifest) and its manifest names that hash and the current `format_version`, report it
+  and exit 0 with no rewrite (`created: false`), re-locking it if a crash left it writable; otherwise
+  **refuse** and say to retire it (an old-format snapshot is retired and rebuilt, never patched). A target that
   appears while building is judged the same way.
 - Reading a snapshot (`load_records`, used by `diff`) requires a manifest whose `snapshot_hash` matches
   `records.jsonl`, unique ids and valid records; errors name the line and the error kind, never text.

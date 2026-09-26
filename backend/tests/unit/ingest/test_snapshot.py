@@ -54,6 +54,11 @@ def cache(tmp_path: Path) -> Path:
     return tmp_path / "cache"
 
 
+def entries(directory: Path) -> list[str]:
+    """What a directory holds, apart from its `.lock` file."""
+    return sorted(p.name for p in directory.iterdir() if p.name != ".lock")
+
+
 def writable_copy(snapshot: Path, out: Path) -> Path:
     shutil.copytree(snapshot, out)
     for p in [out, *out.iterdir()]:
@@ -108,7 +113,7 @@ def test_ingest_is_all_or_nothing(tmp_path: Path) -> None:
     bad = source(tmp_path, "search-b", edit=lambda t: "[]" if t.startswith("[") else t)
     with pytest.raises(ValueError, match="RIS records but"):
         ingest_ris([good, bad], tmp_path / "cache")
-    assert [p.name for p in (tmp_path / "cache" / "ris").iterdir()] == []  # nothing cached, no leftovers
+    assert entries(tmp_path / "cache" / "ris") == []  # nothing cached, no leftovers
 
 
 def test_ingest_places_nothing_when_a_later_import_fails(
@@ -117,16 +122,16 @@ def test_ingest_places_nothing_when_a_later_import_fails(
     calls = []
     real = snap.import_ris
 
-    def flaky(path: Path) -> Any:
+    def flaky(path: Path, **kw: Any) -> Any:
         calls.append(path)
         if len(calls) == 2:
             raise OSError(5, "disk error")
-        return real(path)
+        return real(path, **kw)
 
     monkeypatch.setattr(snap, "import_ris", flaky)
     with pytest.raises(OSError):
         ingest_ris([source(tmp_path, "search-a"), source(tmp_path, "search-b")], tmp_path / "cache")
-    assert list((tmp_path / "cache" / "ris").iterdir()) == []
+    assert entries(tmp_path / "cache" / "ris") == []
 
 
 def test_ingest_needs_distinct_named_directories(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -146,6 +151,66 @@ def test_leftover_temp_and_hidden_directories_are_never_sources(cache: Path, tmp
     assert [r.file for r in reports] == ["search-a/mended.ris"]
     ingest_ris([tmp_path / "src" / "search-a" / "mended.ris"], cache)
     assert not (cache / "ris" / ".tmp-crashed").exists()  # swept
+
+
+def test_reports_and_errors_name_the_cache_entry_not_the_staging_dir(tmp_path: Path) -> None:
+    [report] = ingest_ris([source(tmp_path)], tmp_path / "cache")
+    assert report.file == "search-a/mended.ris"
+    bad = source(tmp_path / "b", "search-b", edit=lambda t: "[]" if t.startswith("[") else t)
+    with pytest.raises(ValueError, match=r"^search-b/mended\.ris: 12 RIS records but 0"):
+        ingest_ris([bad], tmp_path / "cache")
+
+
+@pytest.mark.parametrize(
+    ("resolved", "message"),
+    [("{}", "not a list"), ("[{}]", "entry 0 lacks"), ('[{"title": "x", "claims": [{}]}]', "malformed claim"),
+     ('[{"title": 1, "claims": []}]', "entry 0 lacks"), ("[1]", "entry 0 lacks")],
+)  # fmt: skip
+def test_a_malformed_resolved_json_is_a_clear_refusal(tmp_path: Path, resolved: str, message: str) -> None:
+    src = source(tmp_path)
+    (src.parent / "resolved.json").write_text(resolved, encoding="utf-8")
+    with pytest.raises(ValueError, match=message):
+        ingest_ris([src], tmp_path / "cache")
+
+
+def test_names_that_differ_only_in_case_clash(tmp_path: Path) -> None:
+    with pytest.raises(SnapshotError, match="ignoring case"):
+        ingest_ris([source(tmp_path / "1", "CaseX"), source(tmp_path / "2", "casex")], tmp_path / "cache")
+    ingest_ris([source(tmp_path / "3", "Search")], tmp_path / "cache")
+    with pytest.raises(SnapshotError, match="only in case"):
+        ingest_ris([source(tmp_path / "4", "search")], tmp_path / "cache")
+
+
+def test_a_symlinked_input_reads_both_files_from_its_target(tmp_path: Path) -> None:
+    real = source(tmp_path, "real-dir")
+    link_dir = tmp_path / "links"
+    link_dir.mkdir()
+    (link_dir / "mended.ris").symlink_to(real)
+    [report] = ingest_ris([link_dir / "mended.ris"], tmp_path / "cache")
+    assert report.file == "real-dir/mended.ris"
+
+
+def test_concurrent_builds_take_turns(cache: Path, tmp_path: Path) -> None:
+    import threading
+
+    results: list[Any] = []
+    errors: list[BaseException] = []
+
+    def run() -> None:
+        try:
+            results.append(build(cache, tmp_path / "snapshots", BUILT))
+        except BaseException as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=run) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors
+    assert sorted(r.created for r in results) == [False, False, False, True]
+    [snapshot] = [p for p in (tmp_path / "snapshots").iterdir() if p.name != ".lock"]
+    assert load_records(snapshot)  # complete and valid
 
 
 def test_an_empty_cache_is_refused(tmp_path: Path) -> None:
@@ -288,6 +353,38 @@ def test_a_target_that_appears_during_the_build(
     assert not list((tmp_path / "b").glob(".tmp-*"))
 
 
+def test_an_old_format_snapshot_is_refused_with_advice(cache: Path, tmp_path: Path) -> None:
+    first = build(cache, tmp_path / "snapshots", BUILT).path
+    first.chmod(0o755)
+    (first / "manifest.json").chmod(0o644)
+    manifest = json.loads((first / "manifest.json").read_text())
+    del manifest["format_version"]
+    (first / "manifest.json").write_text(json.dumps(manifest))
+    with pytest.raises(SnapshotError, match="retire it"):
+        build(cache, tmp_path / "snapshots", BUILT)
+
+
+def test_a_complete_but_writable_snapshot_is_locked_on_rebuild(cache: Path, tmp_path: Path) -> None:
+    first = build(cache, tmp_path / "snapshots", BUILT).path
+    first.chmod(0o755)  # as if a crash hit between placing and locking
+    again = build(cache, tmp_path / "snapshots", BUILT)
+    assert not again.created and stat.S_IMODE(first.stat().st_mode) == 0o555
+
+
+def test_a_placed_snapshot_is_checked_before_it_is_reported(
+    cache: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = snap.os.rename
+
+    def lossy(src: Any, dst: Any) -> None:
+        (Path(src) / "records.jsonl").write_text("lost\n")
+        real(src, dst)
+
+    monkeypatch.setattr(snap.os, "rename", lossy)
+    with pytest.raises(SnapshotError, match="doesn't hold what was written"):
+        build(cache, tmp_path / "snapshots", BUILT)
+
+
 def test_a_build_sweeps_what_a_crashed_build_left(cache: Path, tmp_path: Path) -> None:
     leftover = tmp_path / "snapshots" / ".tmp-crashed"
     leftover.mkdir(parents=True)
@@ -311,7 +408,7 @@ def test_a_failed_write_leaves_no_target_and_no_temp(
     monkeypatch.setattr(Path, "write_bytes", failing)
     with pytest.raises(OSError):
         build(cache, tmp_path / "snapshots", BUILT)
-    assert list((tmp_path / "snapshots").iterdir()) == []
+    assert entries(tmp_path / "snapshots") == []
 
 
 # --- reading and diffing ---------------------------------------------------------------------------------
@@ -489,7 +586,11 @@ def test_cli_never_prints_record_text(
     assert "invalid record" in err and "made-up" not in err and "Synthetic" not in err
 
 
-@pytest.mark.parametrize("argv", [["snapshot", "build", "--form", "x"], ["--bogus", "search"]])
+@pytest.mark.parametrize(
+    "argv",
+    [["snapshot", "build", "--form", "x"], ["--bogus", "search"], ["--bogus", "search", "--bogus"],
+     ["ingest", "--bogus", "openreview"]],
+)  # fmt: skip
 def test_cli_rejects_unknown_options(argv: list[str]) -> None:
     with pytest.raises(SystemExit) as exc:
         cli.main(argv)

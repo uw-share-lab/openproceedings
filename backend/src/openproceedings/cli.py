@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import sys
+from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -118,6 +119,17 @@ def _snapshot_diff(ns: argparse.Namespace) -> int:
     return 0
 
 
+def _stub_tail_holds(args: list[str], ns: argparse.Namespace, extra: list[str]) -> bool:
+    """A stub takes any future arguments, but only after its own name (`op search --x`, not
+    `op --x search` or `op ingest --x openreview`); a real command takes none it doesn't declare."""
+    if not hasattr(ns, "stub"):
+        return False
+    k = -1
+    for word in ns.stub[0].split():  # e.g. "ingest openreview": find each word in turn
+        k = args.index(word, k + 1)
+    return not Counter(extra) - Counter(args[k + 1 :])
+
+
 def _reason(e: Exception) -> str:
     """A refusal's one-line reason, never record text: our errors name a file and a record index; a
     pydantic error quotes its input, so only its error types are shown; an OS error its kind and path."""
@@ -139,9 +151,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = list(sys.argv[1:] if argv is None else argv)
     ns, extra = parser.parse_known_args(args)
-    # a stub takes any future arguments after its name; a real command, or anything before it, doesn't
-    after = args[args.index(ns.command) + 1 :] if ns.command in args else []
-    if extra and (not hasattr(ns, "stub") or any(e not in after for e in extra)):
+    if extra and not _stub_tail_holds(args, ns, extra):
         parser.error(f"unrecognized arguments: {' '.join(extra)}")
     ns.data_dir = ns.data_dir or default_data_dir()
     configure_logging(ns.log_level, ns.log_format)
