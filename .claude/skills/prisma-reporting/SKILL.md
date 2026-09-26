@@ -29,7 +29,9 @@ itemized breakdown must sum to the difference; an overlapping paper goes to the 
 order (track, then status; spec 03), and the tooltip says so. A breakdown that double-counts misreports the flow diagram.
 
 ## PRISMA-S items the tool must make reportable
-Database name and version (the **full** `index_version`, `tokenizer_version`, `query_version`) · the
+Database name and version (the **full** `index_version`, `tokenizer_version`, `query_version`) (a
+review of non-English titles also states the tokenizer's known limits, spec 02 §Known limits: CJK runs
+are one token; Latin/Greek/Cyrillic accents and Hebrew/Arabic vowel points fold) · the
 **full search string**: the `identification_query` plus the default clauses · date searched (UTC,
 `searched_at`) and, separately, the crawl date (`crawl_dates`) · limits (years, venues, tracks, statuses) ·
 the number of records · expansions, translations and warnings · the deduplication process (item 16) ·
@@ -63,6 +65,17 @@ prefix), and keeps the search date separate from the crawl date:
 > count includes 0 unclassified records (track or status unknown), itemised separately. Cross-source
 > duplicates were merged at ingest, before indexing (merge counts are in the search record). Database scope: coverage
 > report for snapshot `<snapshot_hash>`. 412 records were screened. Search record: <url>.
+
+**When `identification_query` can't be cited as a search** (spec 02 §Default filters, as built): if it is
+`""` (the query was nothing but defaults) the text says "all indexed records"; if
+it is all-negative (the only positive clause was a default, e.g. `NOT track:workshop`) the text cites
+`canonical` as the string searched and describes the identified set as "`canonical` without its default
+filters". Counts always come from `identification_ast`, never from re-parsing the string.
+
+**Scholar-mode strings** (spec 05 §Save search record): the methods text cites the input as typed, states
+that it was translated, and names the translations: `source:` → `venue:`, decision-002's phrase reading
+of `|` items (unlike Google Scholar), `$` as the WoS zero-or-one wildcard, and the no-stemming terms
+(`COMPAT_NO_STEMMING`). PRISMA-S asks for search strategies "exactly as run"; the record stores both.
 
 - **Unclassified** records are inside the removed count, and itemised in it.
 - The **limits clause** names every filter the user wrote (`year:`, `venue:`, a non-default `track:` set):

@@ -20,6 +20,7 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `backend/src/openproceedings/semantic/` | 06 (phase 2) | Never imported by `query/` or `engine/` matching code |
 | `backend/src/openproceedings/eval/` | 07 report generators | Writes to `docs/results/` |
 | `backend/src/openproceedings/diagnostics.py` | The error-code registry (`error-diagnostics`) | |
+| `backend/src/openproceedings/vocab.py` | Venue, track and status vocabularies (spec 01), shared by ingest and the query language | Pure |
 | `backend/src/openproceedings/logs.py` | The only place logging is configured (`logging-standards`) | |
 | `backend/src/openproceedings/cli.py` | `op` entry point | Thin: calls the same functions as the API |
 | `backend/tests/{unit,golden,differential,contract,fixtures}/` | Tests by kind (`testing-standards`) | |

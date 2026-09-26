@@ -32,7 +32,7 @@ reviews without the UI.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations). Called as you type, debounced. |
+| `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side). Called as you type, debounced. |
 | `GET` | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | `GET` | `/papers/{id}` | The full record, provenance included |
 | `GET` | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl`, optional `record_id` **or** `index_version` → a stream of the **entire** matched set, ordered by `id`, served from the pinned index. A `record_id` whose replay status is `mismatch` is refused (409 `API_RECORD_MISMATCH`) |
@@ -65,11 +65,11 @@ reviews without the UI.
 }
 ```
 
-`excluded` always has this shape: `total` (= the `identification_query` count − `total`, 03 §Exclusion
+`excluded` always has this shape: `total` (= the `identification_ast` count − `total`, 03 §Exclusion
 accounting) plus a `track` and a `status` map whose buckets sum to it. Each map always carries an `unknown`
 key, even when 0, so unclassified records are itemised and never folded into another bucket.
 
-`facets` are disjunctive: each facet field is counted over the matched set with every filter applied **except that field's own**. So the track facet still shows how many workshop papers you would get by including them. Clicking a facet in the UI
+`facets` are disjunctive: each facet field is counted over the matched set with every filter applied **except that field's own top-level conjuncts** (a filter nested under an `OR` stays applied; decision-001). So the track facet still shows how many workshop papers you would get by including them. Clicking a facet in the UI
 rewrites the query (guarantee 3). No hidden facet state exists.
 
 ## Exports (built to be imported into Covidence)
@@ -84,7 +84,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
 - **BibTeX:** `@inproceedings`. Keys are `<firstauthorlast><year><firsttitleword>`, de-duplicated with a/b.
   Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC date>}`.
   Every entry carries `openproceedings_id = {<id>}`, so a round-trip recovers the id of every record,
-  proceedings-only (PMLR, NeurIPS) ones included. Output must pass refaudit's parser.
+  proceedings-only (PMLR, NeurIPS) ones included. Output must pass `refaudit.bibtex.parse_string` (the pinned `refaudit` PyPI package).
 - Exports stream, and are not paginated or truncated. The response headers `X-Total` (equal to the search's
   `total`) and `X-Index-Version` say exactly which set was exported. An export started during an index
   hot-swap finishes on the index it began on.
@@ -127,7 +127,7 @@ once released: changing one is a breaking change under `/api/v1`.
 
 | Situation | HTTP | `code` |
 |---|---|---|
-| Query does not parse | 422 | `PARSE_*` (diagnostics carry the spans) |
+| Query does not parse, uses an unknown field or value, or has a bad wildcard (incl. more than 200 expansions) | 422 | `PARSE_*`, `FIELD_*`, `WILDCARD_*` (diagnostics carry the spans); a query over 2,000 code points is `PARSE_TOO_LONG`, rejected before parsing |
 | A query parameter is invalid (bad `sort`, `limit` > 200, unknown `format`, malformed `record_id`) | 422 | `API_BAD_PARAM` |
 | Paper or search record not found | 404 | `API_PAPER_NOT_FOUND` / `API_RECORD_NOT_FOUND` |
 | A pinned `index_version` is not available on this instance | 409 | `API_INDEX_VERSION_UNAVAILABLE` |

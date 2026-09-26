@@ -55,6 +55,28 @@ def test_codes_named_by_the_specs_exist() -> None:
         "PARSE_UNBALANCED_PAREN",
         "PARSE_EMPTY_GROUP",
         "PARSE_ALL_NEGATIVE",
+        "PARSE_UNTERMINATED_PHRASE",
+        "PARSE_BAD_NEAR",
+        "PARSE_WILDCARD_NOT_SUFFIX",
+        "PARSE_EXPECTED_TERM",
+        "PARSE_EMPTY_TERM",
+        "PARSE_NESTED_FIELD",
+        "PARSE_TOO_DEEP",
+        "FIELD_FILTER_SYNTAX",
+        "PARSE_WILDCARD_DETACHED",
+        "PARSE_AMBIGUOUS_MINUS",
+        "PARSE_STRAY_COLON",
+        "PARSE_AMBIGUOUS_QUOTE",
+        "PARSE_PAREN_TOUCHES_WORD",
+        "PARSE_TOO_LONG",
+        "FIELD_COMPAT_ONLY",
+        "WARN_FILTER_SCOPE",
+        "WARN_LOOKALIKE_OPERATOR",
+        "WARN_SYMBOLS_DROPPED",
+        "WARN_SOURCE_PARTIAL",
+        "COMPAT_POP_PHRASE",
+        "COMPAT_NO_STEMMING",
+        "WARN_CJK_RUN",
         *SPEC_04,
     ):
         assert DiagnosticCode(name)
@@ -107,3 +129,13 @@ def test_typed_error_survives_pickling() -> None:
 def test_span_is_strict_about_types(span: object) -> None:
     with pytest.raises(ValidationError):
         Diagnostic(code=DiagnosticCode.PARSE_EMPTY_GROUP, message="x", span=span)
+
+
+def test_every_code_a_parse_can_return_as_an_error_is_a_422() -> None:
+    from openproceedings.diagnostics import http_status
+
+    for code in DiagnosticCode:
+        if code.startswith(("PARSE_", "FIELD_", "WILDCARD_")):
+            assert http_status(code) == 422, code
+        if code.startswith(("WARN_", "COMPAT_")):
+            assert http_status(code) is None, code  # warnings and notices never fail a request

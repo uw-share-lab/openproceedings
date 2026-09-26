@@ -30,6 +30,18 @@ Hypothesis example database (`.hypothesis/`) is gitignored; CI failures are repr
 - **Query strings:** render ASTs (native and Scholar mode), plus arbitrary `st.text()` for totality.
 - **Records (dedup):** pairs that differ only in venue, only in year, or with a missing year.
 
+**As built (task-017):** `backend/tests/strategies.py` has `asts()` (valid trees with a positive
+anchor; every node type, wildcard phrase items, NEAR with same-field leaves, filters from the real
+vocabularies), `negative_asts()`, `leaves()`, `filters()` and `queries()` (strings). Tokens come from the
+200-record fixture's real term dictionary plus awkward extras (operator words, filter values as text,
+digits, Thai, kana, CJK). Import it as `from tests.strategies import …`. Properties over them live in
+`tests/unit/test_properties.py` (round-trip without printing-caused warnings, match-set preservation by
+the oracle, all-negative rejection, Scholar mode reads canonical strings identically). CI runs the `ci`
+profile (2,000); the nightly workflow runs every property at `nightly` (50,000), split into an
+oracle-backed job and the rest (about 35 and 20 minutes locally). Counterexamples found so
+far are golden rows (`("0", "0")` in test_canonical.py; `trust (trust OR track:main)` in test_defaults.py).
+Not yet: stems near the 200-expansion cap (needs the 5k fixture, task-057).
+
 ## Properties that must hold
 1. **Parser totality:** `parse(s)` never raises for any `str`; bad input yields `errors`.
 2. **Canonical idempotence:** `parse(parse(s).canonical).canonical == parse(s).canonical`.

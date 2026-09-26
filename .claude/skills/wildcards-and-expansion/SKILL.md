@@ -16,12 +16,13 @@ Normalize the stem first with `normalize.py` (`LLM$` → stem `llm`). Then, for 
 | `stem*` | `t.startswith(stem)` (includes `t == stem`) | `benchmark*` → benchmark, benchmarks, benchmarking, benchmarked |
 | `stem$` | `t == stem` or (`len(t) == len(stem)+1` and `t.startswith(stem)`) | `model$` → model, models (and `modelx` if it exists; `$` is any one letter or digit) |
 
-- Stem before `*` must be **≥ 3 characters** after normalization; shorter → error with a hint. The spec
-  states the minimum for `*`; whether `$` shares it is a decision to record (`LLM$` has a 3-char stem, so
-  the Trust-Evals strings don't settle it).
+- The stem before `*` **or** `$` must keep **≥ 3 letters or digits** after normalization, counting the
+  earlier words of a phrase (decision-001, amended by decision-002); shorter → error with a hint.
 - Suffix only. `*bench`, `be*ch` or `$` mid-word → error, never a silent literal.
-- A stem that normalizes to several tokens (`vision-lang*`) or a wildcard inside a phrase is not settled by
-  the spec. Error until a decision record says otherwise.
+- A stem that normalizes to several tokens is a phrase with the wildcard on its last token
+  (`gpt-4*` ≡ `"gpt 4*"`), and a wildcard inside a phrase expands at its position (decision-001).
+  `ReferenceEngine.expand` (`engine/reference.py`) is the definition; it raises
+  `WILDCARD_TOO_MANY_EXPANSIONS` above 200.
 
 ## Expansion
 - Expand against the **term dictionary of the `index_version` being searched**: the union of `title` and

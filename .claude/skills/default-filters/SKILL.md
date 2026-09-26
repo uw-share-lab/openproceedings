@@ -29,8 +29,19 @@ description: The default-filter rule (guarantee 3) — `track:(main OR datasets_
 - Idempotence: parsing a canonical string that already contains the defaults adds nothing. The clauses are
   present, so no default fires, and by content recognition they still count as the defaults.
 - **Identification string.** `identification_query` is the canonical string with the default conjuncts
-  removed. PRISMA's "records identified" is computed from it. The API returns, and search records store,
-  both `canonical` and `identification_query`.
+  removed. PRISMA's "records identified" is computed from the same set as a tree,
+  `ParseResult.identification_ast` (the string can be `""` or all-negative). The API returns, and search
+  records store, both `canonical` and `identification_query`.
+
+## As built (`backend/src/openproceedings/query/defaults.py`, `test_defaults.py`)
+- Judged on the canonical tree's top-level conjuncts. A top-level `NOT track:x` suppresses the track
+  default (it is the user's track clause).
+- A default-equal clause is the default only if it is the **only** top-level clause of its field.
+- `ParseResult`: `ast` (as typed), `effective_ast` (canonical + defaults: what the engine runs),
+  `canonical`, `canonical_hash`, `identification_query` (`""` = every record; may be all-negative when the
+  only positive clause was a default; it is reproduced by replaying `canonical`), `defaults` (fields whose
+  top-level clause is the default, in track, status order: task-026's buckets).
+- Mutation-tested: 10/10 mutants of `defaults.py` killed.
 
 ## UI toggles are the same clauses
 The frontend "include workshops" and "include rejected" toggles **edit the query's `track:`/`status:`

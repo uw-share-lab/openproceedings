@@ -8,6 +8,6 @@ Exact, reproducible Boolean search over **NeurIPS, ICLR and ICML** titles and ab
 - **Reproducible.** Every result carries an index version. Saved search records can be replayed.
 - **Review-ready exports.** RIS (for Covidence), CSV and BibTeX, with full abstracts.
 
-Status: **design phase.** Start with [`docs/specs/00-overview.md`](docs/specs/00-overview.md).
+Status: **M1 built** (query language and reference oracle); ingestion, the search engine, API and UI come next. Start with [`docs/specs/00-overview.md`](docs/specs/00-overview.md).
 
 MIT © SHARE Lab, University of Waterloo

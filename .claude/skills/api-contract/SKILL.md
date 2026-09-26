@@ -55,9 +55,8 @@ astral-plane character.
 For each facet field F, count over the set matched by the query with every filter applied **except F's
 own**. The track facet therefore still shows the workshop count while workshops are filtered out. A facet
 click rewrites `q` in the UI (guarantee 3), so no facet state is held server-side and none is passed
-as a parameter. Remove F's filter only where it is a top-level conjunct. How a filter nested under `OR`
-is treated is still open: task-001 AC #6 owns the decision. Until it is decided, raise it with
-`query-semantics-reviewer` rather than guessing.
+as a parameter. Remove F's filter only where it is a top-level conjunct; a filter nested under `OR`
+stays applied (decision-001, matching the default-filter rule).
 
 ## Errors
 Statuses and codes are exactly spec 04 §Error handling (the only table; the registry is in

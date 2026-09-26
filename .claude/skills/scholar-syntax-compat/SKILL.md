@@ -9,7 +9,9 @@ The review's existing strings must work **unchanged**, or come back with a preci
 is a front end to the native grammar. It never changes what a native query means.
 
 ## Contract
-- `parse(q, mode="scholar")` accepts `OR` / `|`, `source:`, quoted phrases and `-` negation.
+- `parse(q, mode="scholar")` accepts `OR` / `|`, `source:`, quoted phrases and `-` negation. In native
+  mode `source:` is already an error (`FIELD_COMPAT_ONLY`, suggesting `venue:`), so Scholar mode's job is
+  to translate it, never to let it through untranslated.
 - Output is a **native** AST and a native canonical string. `mode` is recorded with the input (search
   records, `/search?mode=`), but the canonical string contains no compat syntax. Property:
   `parse(parse(q, "scholar").canonical, "native").canonical == parse(q, "scholar").canonical`.
@@ -32,13 +34,21 @@ not).
 Unknown value → **error** listing the known aliases. Several `source:` clauses OR'd together (the review ran
 one export per source) collapse to one `venue:(… OR …)` clause, with one notice per clause.
 
+## Multi-word `|` items are phrases (decision-002)
+`(large language model$ | LLM | …)`: a run of 2+ juxtaposed unquoted words with `|`/`OR` on at least one
+side, bounded by `|`/`OR`, a parenthesis or the query edge, is one phrase (`COMPAT_POP_PHRASE` notice).
+Scholar itself would have ORed only the neighbouring words; the review meant phrases (review lead,
+2026-09-25). In a phrase the earlier words count toward a wildcard's stem, so `generative AI$` is valid.
+A lowercase `and`/`or`/`not` or a symbol-only word ends a run. `source:` values take no wildcards (quoted
+or not), their `$` gets no PoP notice, and `source:ICLR OR PMLR` warns (`WARN_FILTER_SCOPE`).
+
 ## Other rewrites
 | Input | Native | Notice |
 |---|---|---|
 | `a \| b` | `a OR b` | none needed (`|` is in the native EBNF) |
-| `model$` | WoS zero-or-one wildcard | "PoP `$` interpreted as zero-or-one character" |
+| `model$` | WoS zero-or-one wildcard | `COMPAT_POP_DOLLAR`: "`$` has no documented wildcard meaning in Google Scholar; openproceedings reads it as the Web of Science zero-or-one wildcard …" |
 | lowercase `or` | term `or` + warning | same as native |
-| an operator we don't support (e.g. Scholar's `intitle:`, `allintitle:`) | error, never ignored | verify the exact list at implementation time; add a fix hint pointing to `title:` |
+| an operator we don't support (e.g. Scholar's `intitle:`, `allintitle:`) | error, never ignored | built: `intitle:`/`allintitle:` are `FIELD_UNKNOWN` with a hint pointing to `title:` |
 
 ## What compat mode does not do
 - It adds no stemming. Scholar matched `benchmarks` for `benchmark`. We don't, and the 07 Scholar comparison
@@ -48,8 +58,8 @@ one export per source) collapse to one `venue:(… OR …)` clause, with one not
   (`.claude/skills/default-filters/SKILL.md`).
 
 ## Fixtures
-- The six Trust-Evals protocol variants (main, narrow, human-centred, LLM-as-judge, including **Most
-  Updated**) must parse without errors, with their canonical forms snapshot-tested under
+- The ten Trust-Evals protocol strings in `backend/tests/fixtures/queries/trust-evals.txt` (seven main
+  variants including **Most Updated**, plus narrow, human-centred and LLM-as-judge) must parse without errors, with their canonical forms snapshot-tested under
   `backend/tests/golden/`. Copy the strings verbatim from the protocol document. Never retype them from memory.
 - Every source value above gets a translation fixture, including `"proceedings of machine learning
   research"`, which returned 0 hits in Scholar for 2020–2024 but must still translate (with the PMLR warning).

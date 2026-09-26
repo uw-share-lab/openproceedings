@@ -14,8 +14,8 @@ Give it:
    user gave one).
 2. The standards: `.claude/skills/ris-format/SKILL.md`, `.claude/skills/bibtex-format/SKILL.md`, and
    `.claude/skills/api-contract/SKILL.md` §Exports.
-3. The read-only reference parsers: venuetriage's `parse.py` in `Trust-Evals-LitReview` and refaudit's
-   `bibtex.py`. Neither repo may be modified.
+3. The independent reference parsers from the pinned PyPI packages: `scholarmend.parse.parse_ris` (RIS)
+   and `refaudit.bibtex.parse_string` (BibTeX).
 4. The instruction to write any missing fixtures and tests under `backend/tests/fixtures/exports/` and
    `backend/tests/contract/`, and to run `uv run pytest backend/tests/contract -q -k export`.
 

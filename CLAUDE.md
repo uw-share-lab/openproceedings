@@ -17,8 +17,9 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 - Root: `pyproject.toml` is the **uv workspace** root, with repo-wide ruff config and one `uv.lock`.
   `Makefile` has `sync`, `fmt`, `lint`, `tooling`, `test` and `hooks`.
 - `backend/`: the uv workspace member, Python package `openproceedings` (`cli.py` → `op`, `logs.py`,
-  `diagnostics.py`; `ingest/ query/ engine/ api/ semantic/ eval/` arrive with their tasks). Tests in
-  `backend/tests/`; `uv run pytest` from the root.
+  `diagnostics.py`, `vocab.py`, `query/`, `engine/` (`protocol.py`, `reference.py`); `ingest/ api/
+  semantic/ eval/` and the Tantivy engine arrive with their
+  tasks). Tests in `backend/tests/`; `uv run pytest` from the root.
 - `frontend/` (planned, M3): Next.js, an npm workspace.
 - `docs/specs` · `docs/{plans,results,design,usability,research}` (created as needed).
 - `backlog/`: Backlog.md, CLI only.
@@ -46,6 +47,14 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 - **When a task is Done, run `backlog task complete <id>`**, which moves it to `backlog/completed/`. CI fails
   on a Done task left in `backlog/tasks/`.
 - `docs-reviewer` runs on every diff.
+
+## Tests never call real APIs (rule, 2026-09-25)
+No test, fixture, CI job or review script reaches OpenReview, Semantic Scholar, PMLR, Scholar or any other
+live service. `backend/tests/conftest.py` refuses every non-loopback connection and DNS lookup for the whole
+session (`NetworkBlockedError`, no opt-out): TCP and UDP to non-loopback addresses and every name lookup, forward or reverse.
+It does not reach subprocesses or `multiprocessing` spawn children, so tests don't spawn network clients.
+Its mutants are in `.claude/scripts/mutants/gates.json` (case table `test-network-guard.sh`). Crawler and client code is tested against recorded HTTP
+fixtures under `backend/tests/fixtures/`; recording them is a separate, manual `op ingest` run, never a test.
 
 ## Code quality
 - **Autolint** (`.claude/skills/autolint/SKILL.md`): `autofix.sh` formats and fixes each file as it's edited

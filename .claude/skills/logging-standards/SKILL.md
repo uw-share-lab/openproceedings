@@ -44,7 +44,8 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 - **Query text is not logged by default** (spec 04). Log `canonical_hash`, token count and total. The config
   flag `log_query_text=false` can be switched on only on a local dev instance.
 - Never log abstracts, author lists, OpenReview credentials, tokens, cookies, `.env` values, or request
-  bodies. Never log IPs beyond what the rate limiter needs in memory.
+  bodies. Never log `Diagnostic.message` or `OpenProceedingsError.message`: they quote user input. Log
+  the `code` (a `UserInputError` at DEBUG, an `InternalError` at ERROR with the traceback). Never log IPs beyond what the rate limiter needs in memory.
 - Exceptions from HTTP clients can carry URLs with credentials or tokens. `logs.py` scrubs `user:pass@` and
   secret-looking query parameters (`token`, `key`, `secret`, `password`, `auth`, `sig`) from every string
   value and from exception and stack text, and redacts secret-shaped keys (starting or ending with a secret word: `password…`, `…_token`, `auth_…`,

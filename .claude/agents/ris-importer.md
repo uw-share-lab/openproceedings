@@ -17,15 +17,18 @@ scholarmend removed. Your job is to carry its evidence across faithfully, not to
 - `docs/specs/01-ingestion.md`, `CLAUDE.md` §Closing workflow, `.claude/learnings/INDEX.md`.
 
 ## How you work
-1. **Parse strictly.** Read `TY … ER` blocks and keep the raw record for the evidence string. Use `TI`,
+1. **Parse strictly.** Use `scholarmend.parse.parse_ris` from the pinned `scholarmend` PyPI package (a
+   backend dependency added with task-019) rather than a second RIS parser. Keep the raw record for the
+   evidence string. Use `TI`,
    `AB`, `AU` (in order), `PY` (take the 4-digit year: Scholar writes `2025///`), `JF`, and `UR`
    (multi-valued).
 2. **Identity.** Mine `UR` values. An `openreview.net/forum?id=<x>` URL gives the forum id. A
    `paper_files` NeurIPS path gives `nips-<sha>` plus the venue, year and track. `proceedings.mlr.press/v<N>/<key>`
    gives `pmlr-v<N>-<key>` (volume looked up in the config table). A record with none of these can't be
    given a stable id: report it and don't mint one.
-3. **Track and status.** Use scholarmend's venueid claim when the record carries one, parsed through the
-   same `classify.py` table the crawler uses. Otherwise use the proceedings path segment. Otherwise
+3. **Track and status.** Use scholarmend's venueid claim when the record carries one
+   (`scholarmend.resolvers.openreview.parse_venueid` shows the claim shape), parsed through the same
+   `classify.py` table the crawler uses. Otherwise use the proceedings path segment. Otherwise
    `unknown`. Never infer anything from `JF` text alone, since that's Scholar's venue string.
 4. **Abstract.** Take `AB` only if it contains no `…`, because Scholar snippets are fragments. Otherwise set
    `abstract=null` and count it.

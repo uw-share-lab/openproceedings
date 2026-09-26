@@ -1,6 +1,6 @@
 # 02 — Query language
 
-Status: **draft for review** · depends on: nothing · consumed by: 03, 04, 05
+Status: **as-built (2026-09-25, M1)** · depends on: 01 (the venue/track/status vocabularies, `vocab.py`) · consumed by: 03, 04, 05
 
 ## Purpose
 
@@ -14,12 +14,53 @@ The query side and the index side run the **same** normalization function (`norm
 `TOKENIZER_VERSION`):
 
 1. Unicode NFKC, then case-fold (`LLM` ≡ `llm`).
-2. Fold diacritics (`naïve` ≡ `naive`). This changes characters, not words, so it is not stemming.
-3. LaTeX: `\cmd{X}` → `X`. Math `$…$` keeps its inner alphanumerics (`$\epsilon$-DP` → `epsilon dp`).
-4. Split on anything that is not a letter or digit. `vision-language` → `vision` `language` at
-   consecutive positions. `GPT-4o` → `gpt` `4o`. `model's` → `model` `s`.
+2. Fold marks that only decorate a word: NFD, drop combining marks (canonical combining class ≠ 0)
+   whose base character's Unicode name begins with LATIN, GREEK, CYRILLIC, HEBREW, ARABIC or EXTENDED
+   ARABIC, or which is an ASCII digit, then recompose with NFC. (By name, so Coptic, IPA and phonetic letters
+   follow their script: IPA `ɓ` is Latin and folds; Coptic `ϣ` does not.) So `naïve` ≡ `naive`, `ά` ≡ `α`, and Hebrew and Arabic vowel points fold (`שָׁלוֹם` ≡ `שלום`). Marks
+   that spell a *different letter* are kept: Cyrillic breve (`мой` ≠ `мои`), Arabic hamza (`سؤال`), Thai
+   tone marks (`ป่า` "forest" ≠ `ปา` "throw"), kana voicing (`が` ≠ `か`), and Indic viramas and vowel
+   signs. A stray mark with no base letter is dropped, and a run made only of marks (a lone vowel sign) is not a
+   token.
+3. LaTeX, by classifying characters (so raw offsets survive):
+   - `\cmd{X}` → `X`; a bare `\cmd` outside math is dropped.
+   - Math regions are `$…$` (Pandoc's rule: the opening `$` is followed by a non-space, the closing `$` is
+     preceded by a non-space and not followed by a digit, so `$5` and `US$ 5` are currency), `$$…$$`,
+     `\(…\)` and `\[…\]`. Inside math a command name is a word (`$\epsilon$-DP` → `epsilon dp`).
+   - `\%`, `\&`, `\$`, `\\` are separators; `\$` never opens math.
+   - Accent macros join the word: `G\"odel`, `G\"{o}del`, `Erd\H{o}s`, `na\"{\i}ve` → `godel`, `erdos`, `naive`
+     (BibTeX's dotless `{\i}`/`{\j}` inside an accent is the letter). `\-` (the
+     discretionary hyphen) joins: `bench\-mark` → `benchmark`.
+   - Full-width `＄` and `＼` are ordinary text, not LaTeX.
+4. Split on anything that is not a letter, digit or (non-combining) mark. `vision-language` → `vision`
+   `language` at consecutive positions. `GPT-4o` → `gpt` `4o`. `model's` → `model` `s`. Invisible
+   characters **join** rather than split: all format characters (Cf: soft hyphen, zero-width
+   space/joiner/non-joiner, direction marks, BOM), variation selectors (`❤️`, `葛󠄀`), enclosing marks
+   (keycaps: `1️⃣` → `1`) and the combining grapheme joiner. The invisible math operators U+2061–2064
+   (function application, times, separator, plus) **separate**.
 5. **Nothing else.** No stemming, no lemmatization, no stopword removal, no synonyms, no spelling
    correction.
+
+`tokenize(text)` returns each token with the half-open code-point span of the **raw** text it came from
+(spec 04 §Conventions); `normalize(text)` is just the token strings. One raw character can yield two
+tokens that share its span (`½` → `1`, `2`). The full case list is `backend/tests/golden/test_tokens.py`.
+
+### Known limits (state these in a methods section when they matter)
+
+- **CJK has no word segmentation.** A run of Chinese, Japanese or Korean characters is one token, so
+  `信頼` does not match inside `信頼性`. Search the whole run, or use a wildcard on a stem of at least
+  three characters (`信頼性*`); `WARN_CJK_RUN` flags every CJK term. Japanese corner brackets that touch
+  text (`深層学習「…」モデル`) are `PARSE_AMBIGUOUS_QUOTE`: put spaces around a quoted part.
+- **Hebrew and Arabic vowel points fold**, so a vocalised and an unvocalised spelling match each other.
+  That is intended (points are optional in normal writing), but it is a fold, not an exact match.
+- **Latin, Greek and Cyrillic accents fold** (`resume` ≡ `résumé`), as in every mainstream search engine.
+- **No stemming.** `benchmark` does not match `benchmarks`, and `LLM` does not match `LLMs`; plurals and
+  other endings count only through an explicit `$` or `*`. Google Scholar stems, so a Scholar string run
+  unchanged identifies fewer records here; in Scholar mode `COMPAT_NO_STEMMING` lists the terms affected.
+- **Title and abstract only.** Scholar also searches full text; openproceedings never does (guarantee 2).
+
+Everything else is exact: a token matches only the identical normalised token. The corpus is
+overwhelmingly English, so these limits rarely bite, but a review of non-English titles should say so.
 
 Consequences, which are also golden tests:
 
@@ -56,13 +97,70 @@ Rules:
   subtract from.
 - **Wildcards are opt-in and suffix-only:** `benchmark*` means zero or more characters.
   `model$` means zero or one character (Web of Science semantics, so `model$` → model, models). The
-  stem before `*` must be at least 3 characters. Every wildcard is expanded against the index's term
-  dictionary. The expansion list is returned to the user. More than 200 expansions is an error that
-  suggests a longer stem.
+  stem before `*` **or** `$` must be at least 3 characters. Every wildcard is expanded against the index's
+  term dictionary. The expansion list is returned to the user. More than 200 expansions (per wildcard) is
+  an error that suggests a longer stem.
+- **A wildcard inside a phrase** is allowed and expanded per position: `"large language model$"` matches
+  the phrase with `model` or `models` last (the Trust-Evals strings rely on this).
+- **A wildcard stem that normalises to several tokens** becomes a phrase whose last token carries the
+  wildcard: `gpt-4*` ≡ `"gpt 4*"`. The 3-character minimum counts the letters and digits of the whole stem
+  after normalisation, and inside a phrase the earlier words count too (`gpt-4*`, `"gpt 4*"` and
+  `"generative AI$"` pass; `a-b*` and `"a b*"` have 2 and fail);
+  the 200-expansion cap still applies to the last token's expansions (`4*`), and exceeding it is the
+  usual "use a longer stem" error. (Decision-001 records rules 1–3 of this list.)
 - **Phrases** keep word order and adjacency within **one field**. A phrase never spans the title and the
   abstract.
+- **Lexical details** (`query/lexer.py`; the module docstring is the full list). Nothing in a query is
+  silently reinterpreted: every ambiguous spelling is an error or a warning.
+  - Double quotes delimit phrases: `"`, `“ ”`, `„ ‟`, `＂`, `« »`, `「 」`, `『 』`, `〝 〞 〟`, `″`. A phrase closes only with a
+    quote of its opener's family (the English-style double quotes `"“”„‟＂` are one family and close each
+    other; `« »`/`» «`, `「 」` and `『 』` pair only with themselves), so a foreign quote inside a phrase is
+    punctuation (`"trust 「in」 AI"` is one phrase). A quote touching a letter or digit on the outside
+    (`"trust in "AI"`, `a"b c"`, a possessive `"GPT-4"'s`, a decomposed accent `cafe\u0301"x"`) is
+    `PARSE_AMBIGUOUS_QUOTE` (its span covers the rest of the glued text: one mistake, one error), and a parenthesis glued to a word or phrase
+    (`model(s)`, `"a"(b)`) is `PARSE_PAREN_TOUCHES_WORD`: both would otherwise silently split a query.
+    A backslash keeps the next character in the word
+    (`G\"odel`). Characters whose NFKC form is a syntax character (full-width `（ ）｜：－＊＂`, …) act as
+    it, because the tokenizer applies NFKC too; super/subscript parentheses are notation, not grouping.
+  - `-` is `NOT` when it starts a primary (after whitespace, `(`, `|` or a field's `:`) and touches what
+    it excludes. A word that starts with `-` anywhere else (`a - b`, `"x"-based`, `--x`) is
+    `PARSE_AMBIGUOUS_MINUS`. A word starting with a look-alike dash (any Unicode dash other than the
+    ASCII-equivalent hyphen-minus, or the minus sign `−`) or with `‘` or `` ` `` is searched as written with
+    `WARN_LOOKALIKE_OPERATOR`. An ASCII `'` is an apostrophe and raises nothing.
+  - A field is a letter, then letters/digits/underscores, then `:`; names are case-insensitive, so an
+    unknown one (`intitle:`, `título:`) is an error rather than a silent search. `title: trust` is fine;
+    `title :trust` is `PARSE_STRAY_COLON`. `source:` is Scholar syntax: in native mode it is
+    `FIELD_COMPAT_ONLY` (Scholar mode translates it to `venue:`).
+  - Wildcards: `*` or `$` at the end of a word, directly after a letter or digit (`vision-*` is
+    `PARSE_WILDCARD_DETACHED`). A `*` or `$` elsewhere (`behavio$r`, `model$*`) is
+    `PARSE_WILDCARD_NOT_SUFFIX`, except inside LaTeX math (found exactly as the tokenizer finds it, so
+    `$f(x)$-DP` is one word) and a `$` before a digit (currency, `US$5`).
+  - A bare uppercase `NEAR` between terms is `PARSE_BAD_NEAR` (Web of Science reads it as `NEAR/15`);
+    `NEAR/n` takes n ≤ 100.
+  - A word or phrase part that loses something to the tokenizer raises `WARN_SYMBOLS_DROPPED`: leading
+    or trailing symbols (`C++` → `c`, `.NET` → `net`) or a bare LaTeX command outside math
+    (`\epsilon-greedy` → `greedy`, and `\alpha{}-divergence`, since empty braces keep nothing; `\cmd{X}`
+    keeps `X` and accent macros are part of the word, so neither warns). A word starting with `‘` or `` ` ``,
+    or a `’` that a later `’` pairs with, raises `WARN_LOOKALIKE_OPERATOR` (a lone `’80s` is an elision).
 - `NEAR/n` works within one field, is unordered, and allows at most n intervening words. Tantivy's slop
-  semantics are documented in 03 and must agree with the reference matcher.
+  semantics are documented in 03 and must agree with the reference matcher. Its two operands are words,
+  wildcards or phrases (not groups or filters) in the same field, and `NEAR` does not chain
+  (`a NEAR/3 b NEAR/2 c` is an error; join pairs with `AND`).
+- `title:`/`abstract:` apply to every term in what follows (`title:(a OR b)`); a different text field
+  nested inside (`title:(abstract:x)`) is an error. Filters may appear anywhere (inside a text field's group
+  they raise `WARN_FILTER_SCOPE`, since they filter whole papers), including inside a text
+  field's group.
+- A filter takes one value or an `OR` group of values of that field only (`venue:(NeurIPS OR ICLR)`);
+  `AND`, `NOT` or juxtaposition inside a filter group is an error, and values take no wildcards. Values are
+  checked against `backend/src/openproceedings/vocab.py` (spec 01's vocabularies) and are case-insensitive;
+  `venue:` values take their canonical spelling (`neurips` → `NeurIPS`).
+- Groups and `NOT`s nest at most 64 deep (`PARSE_TOO_DEEP`).
+- `year:` values are four-digit years (1000–9999). A bare value OR-joined to a filter of its field
+  (`year:2023 OR 2024`, `venue:ICLR OR NeurIPS`) is searched as text, as written, and raises
+  `WARN_FILTER_SCOPE` suggesting `year:(2023 OR 2024)`.
+- `NOT NOT a` means `a`, so it is not all-negative. A one-word group counts as a word for `NEAR`.
+- One mistake gives one error: an error already reported inside a span suppresses follow-on errors there,
+  while separate mistakes are each reported.
 
 ## Fields and filters (guarantee 3: filters live in the query)
 
@@ -95,39 +193,92 @@ The UI toggles edit these same clauses; they are not a separate state.
 - **Identification string.** `identification_query` is the canonical string with the default conjuncts
   removed. It is what PRISMA's "records identified" count is computed from (03 §Exclusion accounting, 05
   §Save search record). The API returns and search records store both strings.
+- **As built** (`query/defaults.py`). "Top-level" is judged on the canonical tree, so `(a track:x) b` has
+  `track:x` at the top level. A top-level `NOT track:x` is the user's own track clause and also suppresses
+  the default. A default-equal clause is the default only when it is the **only** top-level clause of its
+  field (the parser would not add a default next to `track:workshop`, so a typed default-equal clause
+  there is the user's). `ParseResult.ast` is the tree as typed; `effective_ast` is the canonical tree with
+  the defaults (inserted ones have the zero-width span `(len(q), len(q))`), which the engine runs;
+  `defaults` names the fields whose top-level clause is the default, for the exclusion buckets.
+  `identification_query` is `""` when the query was nothing but defaults (every record). If a query's only
+  positive clause was a default (`status:accepted NOT track:workshop`), `identification_query` is
+  all-negative (`NOT track:workshop`): a well-defined set the engine counts from the tree, but not a
+  string that parses on its own. Records reproduce it by replaying `canonical`, and exclusion accounting
+  uses `ParseResult.identification_ast` (the same set as a tree; None = every record), never the string.
+  `WARN_NESTED_FILTER` fires whenever a default applies, whether inserted, typed or replayed, once per
+  nested clause of that field.
 
 ## Compatibility input modes
 
 The review's existing strings must work **unchanged** or come back with a precise explanation:
-- **Scholar/PoP mode:** accepts `OR` / `|`, `source:` and quoted phrases. PoP's `$` is interpreted as the
-  WoS zero-or-one wildcard, and the parser says so in a notice.
+- **Scholar/PoP mode** (`parse(q, "scholar")`, `query/compat.py`): accepts `OR` / `|`, `source:` and
+  quoted phrases. PoP's `$` is interpreted as the WoS zero-or-one wildcard, and the parser says so in a
+  notice (`COMPAT_POP_DOLLAR`). `source:` values translate through an exact alias table (never a
+  substring match; every value in the review's 17 corpus exports is covered) to `venue:`, with a
+  `COMPAT_SOURCE_ALIAS` notice each; PMLR also raises `WARN_SOURCE_PARTIAL`; an unknown value is an error.
+  An OR of sources collapses to one `venue:(…)` clause. A wildcard in a `source:` value (quoted or not)
+  is an error, and a bare source name OR-joined to a `source:` filter (`source:ICLR OR PMLR`) raises
+  `WARN_FILTER_SCOPE`. **Decision-002:** a run of two or more
+  juxtaposed unquoted words forming one `|`/`OR` item is a phrase (a lowercase `and`/`or`/`not` or a
+  word with no letters or digits ends the run instead of joining it) (`(large language model$ | LLM)` →
+  `("large language model$" OR llm)`, `COMPAT_POP_PHRASE`), as the review intended; Google Scholar itself
+  binds `|` tighter. The output is native: the canonical string re-parses in native mode unchanged.
 - The parser returns `translations[]`, for example: "`source:PMLR` → `venue:ICML` (PMLR also hosts other
   venues; only ICML is indexed)."
 
-Fixture: every string in the Trust-Evals protocol (the six variants of the main, narrow,
-human-centred and LLM-as-judge strings) parses without errors, and its canonical form is snapshot-tested.
+Fixture (snapshots in `backend/tests/golden/trust_evals_canonical.json`; the review's primary string is
+`main-7-most-updated`): every string in the Trust-Evals protocol (`backend/tests/fixtures/queries/trust-evals.txt`: the
+seven variants of the main string, the last marked "Most Updated", plus the narrow, human-centred and
+LLM-as-judge strings) parses without errors, and its canonical form is snapshot-tested.
 
 ## Outputs
 
 ```python
 parse(q: str, mode="native"|"scholar") -> ParseResult
-ParseResult = {
-  ast: Node,                 # discriminated union: Or, And, Not, Term, Phrase, Near, Wildcard, Filter
-  canonical: str,            # fully parenthesised, uppercase operators, defaults made explicit, sorted filters
-  warnings: [Diagnostic],    # {code, message, span:[start,end]}
-  errors: [Diagnostic],      # non-empty ⇒ no search
-  translations: [Diagnostic],
+ParseResult = {               # `query/parser.py`; every Optional below is None exactly when errors is non-empty
+  mode: "native" | "scholar",
+  ast: Node | None,            # the tree as typed (spans into q): Or, And, Not, Term, Phrase, Near, Wildcard, Filter
+  effective_ast: Node | None,  # canonical tree with the default filters: what the engine runs
+  canonical: str | None,       # render(effective_ast): fully parenthesised, uppercase operators, defaults
+                               #   explicit, filters ordered venue, year, track, status (§Canonical form)
+  canonical_hash: str | None,
+  identification_query: str | None,  # canonical without default conjuncts; "" = every record
+  identification_ast: Node | None,    # the same set as a tree (None = every record): what counts use
+  defaults: [ "track" | "status" ],   # fields whose top-level clause is the default
+  warnings: [Diagnostic],      # {code, message, span:[start,end]}
+  errors: [Diagnostic],        # non-empty ⇒ no search
+  translations: [Diagnostic],  # Scholar-mode rewrites and notices (e.g. COMPAT_NO_STEMMING)
 }
 ```
 
 `canonical` is deterministic: `parse(canonical).canonical == canonical`. That idempotence is tested with
-property tests. `canonical_hash = sha256(canonical + TOKENIZER_VERSION)`.
+property tests. `canonical_hash = sha256(canonical + "\0" + TOKENIZER_VERSION + "\0" + QUERY_VERSION)` (decision-003):
+NUL separators keep the parts apart, and a query-semantics bump changes the hash. `canonical` and `canonical_hash` are None when there are errors.
+
+Canonical form (`query/canonical.py`) is a normal form: nested `AND`/`OR` are flattened; in every `AND`,
+text conjuncts keep their written order and filter conjuncts follow in the decision-001 order (a
+positive filter before a negated one of the same field); an `OR` of filters on one field becomes one
+filter (in any OR, at the first one's position); values are sorted and deduplicated, and overlapping or
+adjacent year ranges merge; duplicate conjuncts and disjuncts are dropped; `NOT NOT x` is `x`; OR branches
+keep their written order; a bare term that a sibling filter's field could read as a value is quoted
+(`venue:ICLR OR "neurips"`); every text leaf carries its field prefix
+(`title:(a OR b)` → `(title:a OR title:b)`). `gpt-4*` prints as `"gpt 4*"` (in a phrase the earlier
+words count toward a wildcard's stem). Semantically equal spellings
+(`trust venue:ICLR`, `venue:iclr Trust`) therefore share one hash. `QUERY_VERSION`
+(`openproceedings.query`) is `"1"`.
 
 ## Error handling
 
 Every error has a span and a fix hint: unbalanced parentheses, an empty group, a wildcard stem that is too
-short, an unknown field, an unknown `track:` value (listing the valid values), a range with start > end,
-or an all-negative query.
+short or not at the end of a word, an unterminated phrase, `NEAR/` without a whole-number distance or
+with a bad operand, a missing operand (`a OR`), a word or phrase with no letters or digits (`a ~ b`), a
+nested text field, a malformed filter group, nesting deeper than 64, an ambiguous `-`, a stray `:`, a
+detached or mid-word wildcard, `source:` outside Scholar mode, an unknown field, an unknown filter value
+(listing the valid ones), a range with start > end, an all-negative query, a quote or parenthesis glued
+to a word (`"trust in "AI"`, `model(s)`), or a query longer than 2,000 code points (`PARSE_TOO_LONG`,
+checked before any other work). Diagnostics are capped at 20 per code ("… and N more"), and user text
+quoted in a message is clipped to 40 characters, so no diagnostic grows with the input. The codes are in
+`diagnostics.py`; the `PARSE_*`, `FIELD_*` and `WILDCARD_*` errors are 422s (spec 04).
 
 ## Testing
 

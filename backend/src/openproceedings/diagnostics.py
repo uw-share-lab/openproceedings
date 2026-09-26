@@ -19,6 +19,19 @@ class DiagnosticCode(StrEnum):
     PARSE_UNBALANCED_PAREN = "PARSE_UNBALANCED_PAREN"
     PARSE_EMPTY_GROUP = "PARSE_EMPTY_GROUP"
     PARSE_ALL_NEGATIVE = "PARSE_ALL_NEGATIVE"
+    PARSE_UNTERMINATED_PHRASE = "PARSE_UNTERMINATED_PHRASE"
+    PARSE_BAD_NEAR = "PARSE_BAD_NEAR"
+    PARSE_WILDCARD_NOT_SUFFIX = "PARSE_WILDCARD_NOT_SUFFIX"
+    PARSE_EXPECTED_TERM = "PARSE_EXPECTED_TERM"
+    PARSE_EMPTY_TERM = "PARSE_EMPTY_TERM"
+    PARSE_NESTED_FIELD = "PARSE_NESTED_FIELD"
+    PARSE_TOO_DEEP = "PARSE_TOO_DEEP"
+    PARSE_WILDCARD_DETACHED = "PARSE_WILDCARD_DETACHED"
+    PARSE_AMBIGUOUS_MINUS = "PARSE_AMBIGUOUS_MINUS"
+    PARSE_STRAY_COLON = "PARSE_STRAY_COLON"
+    PARSE_AMBIGUOUS_QUOTE = "PARSE_AMBIGUOUS_QUOTE"
+    PARSE_PAREN_TOUCHES_WORD = "PARSE_PAREN_TOUCHES_WORD"
+    PARSE_TOO_LONG = "PARSE_TOO_LONG"
     # wildcard expansion
     WILDCARD_STEM_TOO_SHORT = "WILDCARD_STEM_TOO_SHORT"
     WILDCARD_TOO_MANY_EXPANSIONS = "WILDCARD_TOO_MANY_EXPANSIONS"
@@ -26,13 +39,22 @@ class DiagnosticCode(StrEnum):
     FIELD_UNKNOWN = "FIELD_UNKNOWN"
     FIELD_UNKNOWN_VALUE = "FIELD_UNKNOWN_VALUE"
     FIELD_RANGE_INVERTED = "FIELD_RANGE_INVERTED"
+    FIELD_FILTER_SYNTAX = "FIELD_FILTER_SYNTAX"
+    FIELD_COMPAT_ONLY = "FIELD_COMPAT_ONLY"
     # warnings (shown, never auto-fixed; they do not change what a query means)
     WARN_LOWERCASE_OPERATOR = "WARN_LOWERCASE_OPERATOR"
     WARN_MIXED_AND_OR = "WARN_MIXED_AND_OR"
     WARN_NESTED_FILTER = "WARN_NESTED_FILTER"
+    WARN_FILTER_SCOPE = "WARN_FILTER_SCOPE"
+    WARN_LOOKALIKE_OPERATOR = "WARN_LOOKALIKE_OPERATOR"
+    WARN_SYMBOLS_DROPPED = "WARN_SYMBOLS_DROPPED"
+    WARN_SOURCE_PARTIAL = "WARN_SOURCE_PARTIAL"
+    WARN_CJK_RUN = "WARN_CJK_RUN"
     # scholar/PoP compatibility translations
     COMPAT_SOURCE_ALIAS = "COMPAT_SOURCE_ALIAS"
     COMPAT_POP_DOLLAR = "COMPAT_POP_DOLLAR"
+    COMPAT_POP_PHRASE = "COMPAT_POP_PHRASE"
+    COMPAT_NO_STEMMING = "COMPAT_NO_STEMMING"
     # HTTP layer (spec 04 §Error handling)
     API_BAD_PARAM = "API_BAD_PARAM"
     API_PAPER_NOT_FOUND = "API_PAPER_NOT_FOUND"
@@ -61,9 +83,19 @@ def http_status(code: DiagnosticCode) -> int | None:
     """The HTTP status an error with this code is returned with, or None if it is never an HTTP error."""
     if code in _API_STATUS:
         return _API_STATUS[code]
-    if code.startswith("PARSE_"):
+    if code.startswith(("PARSE_", "FIELD_", "WILDCARD_")):  # a query that can't be run as written
         return 422
     return None
+
+
+def clip(text: str, width: int = 40) -> str:
+    """User text quoted in a message, shortened so a diagnostic never grows with the input."""
+    return text if len(text) <= width else text[: width - 1] + "…"
+
+
+def by_position(d: Diagnostic) -> tuple[int, int]:
+    """Sort key: diagnostics are reported in the order of the input they point at."""
+    return d.span or (0, 0)
 
 
 class Diagnostic(BaseModel):
@@ -91,7 +123,8 @@ class Diagnostic(BaseModel):
 
 
 class OpenProceedingsError(Exception):
-    """Base for internal failures. Each carries a registry code; the API edge maps it to an error envelope."""
+    """Base for every typed failure. Each carries a registry code; the API edge maps it to an error envelope
+    with `http_status`. Log the code, never `message`: messages quote user input (logging-standards)."""
 
     def __init__(self, code: DiagnosticCode, message: str) -> None:
         super().__init__(code, message)  # both args, so the error pickles across processes
@@ -100,3 +133,11 @@ class OpenProceedingsError(Exception):
 
     def __str__(self) -> str:
         return f"{self.code}: {self.message}"
+
+
+class UserInputError(OpenProceedingsError):
+    """The request can't be served as asked (a 4xx): logged at DEBUG with its code only."""
+
+
+class InternalError(OpenProceedingsError):
+    """Something broke on our side (a 5xx): logged at ERROR with the traceback, never the message's input."""

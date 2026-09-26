@@ -27,8 +27,9 @@ class Engine(Protocol):
 
 ## Tokenizer
 
-A custom Tantivy analyzer named `exact_v1`: a tokenizer that splits on non-alphanumerics → lower-case →
-ASCII/diacritic folding. There is **no stemmer and no stopword filter.** The query side does not use
+A custom Tantivy analyzer named `exact_v1` that **only splits on whitespace**. It does no lower-casing
+beyond a no-op, **no ASCII or diacritic folding** (that would turn `ørsted` into `orsted`, which the token
+contract keeps distinct), no stemmer and no stopword filter. The query side does not use
 Tantivy's query parser. We compile our own AST. To keep the two sides from drifting, the index is fed
 **pre-normalized text** from `normalize.py` (02). Tantivy then only needs to split on whitespace, so the
 Rust side contains no normalization logic of its own. A test asserts that tokenizing through the index
@@ -77,8 +78,9 @@ terms.
 
 ## Exclusion accounting (guarantee 6, PRISMA)
 
-For every search, also compute the size of the matched set **with the default filters removed** (the
-`identification_query` of 02 §Default filters), and break the difference down by filter, e.g. `{"total": 304, "track": {"workshop": 212, "competition": 4, "unknown": 0}, "status": {"rejected": 88, "unknown": 0}}` (the shape pinned in 04).
+For every search, also compute the size of the matched set **with the default filters removed**
+(`ParseResult.identification_ast` of 02 §Default filters; the string form, `identification_query`, can be
+`""` or all-negative, so counts never re-parse it), and break the difference down by filter, e.g. `{"total": 304, "track": {"workshop": 212, "competition": 4, "unknown": 0}, "status": {"rejected": 88, "unknown": 0}}` (the shape pinned in 04).
 The API exposes this as `excluded` (04). It maps directly onto PRISMA's "records removed before screening".
 
 Counting rules (so the PRISMA number is never double-counted):

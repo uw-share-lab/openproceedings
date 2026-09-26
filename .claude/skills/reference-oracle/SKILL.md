@@ -33,7 +33,7 @@ universe `U` = all record ids in the snapshot.
 | `Wildcard` | any expansion (`.claude/skills/wildcards-and-expansion/SKILL.md`) matches as a `Term` |
 | `And` / `Or` | set intersection / union |
 | `Not x` | `U − eval(x)`, so `a OR NOT b` is well-defined |
-| `Filter venue/track/status` | exact equality with the record's value (`venue` compared case-insensitively) |
+| `Filter venue/track/status` | exact equality with the record's value (filter values are canonical vocabulary: the AST validates them) |
 | `Filter year a..b` | `a ≤ year ≤ b`, inclusive |
 
 The oracle does **not** add default filters. They are already explicit in the AST
@@ -43,6 +43,20 @@ added default clauses removed, the same way the engine does.
 ## Contract surface
 It implements the same `Engine` protocol: `match_ids`, `expand`, `facets`, and a `search` whose order is
 `id` only. The oracle does not rank, and ranking never changes membership anyway.
+
+## As built (task-016)
+- `backend/src/openproceedings/engine/reference.py`; the protocol and `Searchable` record shape are in
+  `engine/protocol.py` (types only, so sharing it shares no logic).
+- `tests/unit/test_reference.py` has one row per rule above, plus import-isolation tests (the oracle's
+  allowed imports; `api/` never imports it). `tests/golden/test_reference_200.py` runs 44 queries over a
+  200-record fixture whose expected sets come from an independent evaluator
+  (`tests/fixtures/corpus/make_reference_200.py`), and a property that canonical form never changes a match set.
+- Every wildcard in a query (phrase items and NEAR operands too) is expanded once, before any record is
+  evaluated, so the 200 cap never depends on which records are reached (and a 5k differential run stays
+  O(corpus)). An empty snapshot expands nothing and matches nothing.
+- Facets judge "top-level" after flattening nested ANDs, as on the canonical tree. `track`/`status`
+  compare exactly (values are canonical vocabulary, validated by the AST).
+- Exclusion accounting (`excluded`) is task-026; it evaluates `ParseResult.identification_ast`.
 
 ## When the two disagree
 Assume the Tantivy side is wrong until the oracle is shown to contradict spec 02 or 03. If the oracle is

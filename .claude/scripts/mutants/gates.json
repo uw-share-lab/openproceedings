@@ -612,5 +612,89 @@
   "file": ".claude/hooks/require-review.sh",
   "old": "if not cmd:  # no raw-text prefilter: `gi\\<newline>t push` only becomes `git` after parsing (review round 6)",
   "new": "if not cmd or not re.search(r\"\\b(git|gh)\\b\", cmd):"
+ },
+ {
+  "label": "guard: connect not patched",
+  "file": "backend/tests/conftest.py",
+  "old": "    socket.socket.connect = _connect  # type: ignore[method-assign]\n",
+  "new": ""
+ },
+ {
+  "label": "guard: connect_ex not patched",
+  "file": "backend/tests/conftest.py",
+  "old": "    socket.socket.connect_ex = _connect_ex  # type: ignore[method-assign]\n",
+  "new": ""
+ },
+ {
+  "label": "guard: connect_ex lets everything through",
+  "file": "backend/tests/conftest.py",
+  "old": "def _connect_ex(self: socket.socket, address: Any) -> int:\n    if not _allowed(self, address):",
+  "new": "def _connect_ex(self: socket.socket, address: Any) -> int:\n    if False:"
+ },
+ {
+  "label": "guard: sendto not patched",
+  "file": "backend/tests/conftest.py",
+  "old": "    socket.socket.sendto = _sendto  # type: ignore[method-assign, assignment]\n",
+  "new": ""
+ },
+ {
+  "label": "guard: sendmsg not patched",
+  "file": "backend/tests/conftest.py",
+  "old": "    socket.socket.sendmsg = _sendmsg  # type: ignore[method-assign]\n",
+  "new": ""
+ },
+ {
+  "label": "guard: getaddrinfo not patched",
+  "file": "backend/tests/conftest.py",
+  "old": "    socket.getaddrinfo = _lookup(_real_getaddrinfo)\n",
+  "new": ""
+ },
+ {
+  "label": "guard: gethostbyname not patched",
+  "file": "backend/tests/conftest.py",
+  "old": "    socket.gethostbyname = _lookup(_real_gethostbyname)\n",
+  "new": ""
+ },
+ {
+  "label": "guard: gethostbyname_ex not patched",
+  "file": "backend/tests/conftest.py",
+  "old": "    socket.gethostbyname_ex = _lookup(_real_gethostbyname_ex)\n",
+  "new": ""
+ },
+ {
+  "label": "guard: gethostbyaddr not patched",
+  "file": "backend/tests/conftest.py",
+  "old": "    socket.gethostbyaddr = _lookup(_real_gethostbyaddr)\n",
+  "new": ""
+ },
+ {
+  "label": "guard: every address allowed",
+  "file": "backend/tests/conftest.py",
+  "old": "    return sock.family == socket.AF_UNIX or (isinstance(address, tuple) and address[0] in _LOOPBACK)",
+  "new": "    return True"
+ },
+ {
+  "label": "guard: loopback refused",
+  "file": "backend/tests/conftest.py",
+  "old": "    return sock.family == socket.AF_UNIX or (isinstance(address, tuple) and address[0] in _LOOPBACK)",
+  "new": "    return sock.family == socket.AF_UNIX"
+ },
+ {
+  "label": "guard: sendto reads flags as the address",
+  "file": "backend/tests/conftest.py",
+  "old": "    address = rest[-1]",
+  "new": "    address = rest[0]"
+ },
+ {
+  "label": "guard: getnameinfo not patched",
+  "file": "backend/tests/conftest.py",
+  "old": "    socket.getnameinfo = _reverse_lookup\n",
+  "new": ""
+ },
+ {
+  "label": "guard: getnameinfo allows every address",
+  "file": "backend/tests/conftest.py",
+  "old": "    if isinstance(sockaddr, tuple) and sockaddr[0] in _LOOPBACK:\n        return _real_getnameinfo(sockaddr, flags)",
+  "new": "    if True:\n        return _real_getnameinfo(sockaddr, flags)"
  }
 ]

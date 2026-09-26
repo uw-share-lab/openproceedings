@@ -4,6 +4,7 @@ title: 'Exports: RIS, CSV, BibTeX, JSONL pinned to an index'
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
+updated_date: '2026-09-26 01:35'
 labels:
   - api
 milestone: m-3
@@ -25,3 +26,9 @@ Spec 04 §Exports (ris-format, bibtex-format skills).
 - [ ] #2 BibTeX parses with refaudit; note carries provenance
 - [ ] #3 X-Total and X-Index-Version headers; record_id or index_version pins the source index
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Validate BibTeX with refaudit.bibtex.parse_string and RIS with scholarmend.parse.parse_ris, both from PyPI, pinned as root dev dependencies (refaudit 0.4.9 at 2026-09-25).
+<!-- SECTION:NOTES:END -->

@@ -61,7 +61,7 @@ text screeners see.
   the whole file, not only at line starts. Write `@` in values as `{@}`.
 - Collapse newlines inside values to spaces (refaudit normalises whitespace anyway).
 
-## refaudit's parser (`refaudit/src/refaudit/bibtex.py`, read-only reference)
+## refaudit's parser (`refaudit.bibtex`, from the pinned `refaudit` PyPI package)
 - Entries match `@(\w+)\s*[{(]\s*([^,\s{}]+)\s*,`. `@comment`, `@preamble` and `@string` are skipped.
   Macros are **not** expanded, so never emit `@string` or bare macro values (`booktitle = neurips`).
 - Field names match `(\w+)\s*=`, lower-cased. A field repeated in one entry keeps the **last** value.
@@ -69,8 +69,8 @@ text screeners see.
 - Files are read as UTF-8 with `errors="replace"`, so bad bytes turn into U+FFFD instead of failing.
 
 ## Tests (`backend/tests/contract/`)
-Parse the exported file with refaudit's `parse_string` (as a test-only dependency or a vendored copy;
-decide at implementation time) and assert: the entry count equals `X-Total`, keys are unique, the ids
+Parse the exported file with `refaudit.bibtex.parse_string` (`refaudit` is a pinned root dev dependency,
+added with task-036; never vendored) and assert: the entry count equals `X-Total`, keys are unique, the ids
 recovered from `openproceedings_id` equal `match_ids` (a PMLR-only fixture record included), `title` (minus its protective outer braces), `author`, `year` and `abstract`
 round-trip after whitespace normalisation, and the unbalanced-brace, `%`, `@` and non-ASCII-author fixtures parse into the right
 number of entries.
