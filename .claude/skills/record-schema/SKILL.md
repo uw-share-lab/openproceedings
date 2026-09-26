@@ -5,8 +5,10 @@ description: The PaperRecord contract from spec 01 — every field with its type
 
 # Record schema (spec 01 §Record schema)
 
-`PaperRecord` is a pydantic v2 model (`extra="forbid"`, frozen). It is the only thing the index build
-(spec 03) reads.
+`PaperRecord` is a pydantic v2 model (`extra="forbid"`, frozen) in
+`backend/src/openproceedings/ingest/record.py`, with `Claim`, `Urls` and `content_hash`. It is the only
+thing the index build (spec 03) reads. Build one with `PaperRecord.build(**fields)`, which computes the
+hash; loading a record whose stored hash doesn't match its fields fails (a hash can never go stale).
 
 ## Fields
 | Field | Rule |

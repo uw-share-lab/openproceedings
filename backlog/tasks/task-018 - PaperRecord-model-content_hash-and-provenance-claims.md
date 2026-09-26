@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 15:49'
+updated_date: '2026-09-26 15:52'
 labels:
   - ingest
 milestone: m-2
@@ -22,7 +22,7 @@ Spec 01 §Record schema (record-schema skill).
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 pydantic v2 model with every spec 01 field; id scheme op:<venue>:<year>:<native>
-- [ ] #2 content_hash over searchable and filterable fields only (provenance excluded)
-- [ ] #3 Claims ledger per field (source, url, fetched_at, evidence)
+- [x] #1 pydantic v2 model with every spec 01 field; id scheme op:<venue>:<year>:<native>
+- [x] #2 content_hash over searchable and filterable fields only (provenance excluded)
+- [x] #3 Claims ledger per field (source, url, fetched_at, evidence)
 <!-- AC:END -->
