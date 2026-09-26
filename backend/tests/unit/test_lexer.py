@@ -127,6 +127,15 @@ GOLDEN: list[tuple[str, list[str]]] = [
     # --- whitespace of any kind separates
     ("a b　c\td", ["WORD:a", "WORD:b", "WORD:c", "WORD:d"]),
     ("😀 trust", ["WORD:😀", "WORD:trust"]),
+    # --- review of task-013: NFKC operator words, more quote styles, LaTeX math with spaces
+    ("a ＯＲ b", ["WORD:a", "OR", "WORD:b"]),
+    ("a ＡＮＤ b", ["WORD:a", "AND", "WORD:b"]),
+    ("a ＮＥＡＲ/3 b", ["WORD:a", "NEAR:3", "WORD:b"]),
+    ("«trust in AI»", ["PHRASE:trust|in|AI"]),
+    ("「trust」", ["PHRASE:trust"]),
+    ("$\\alpha + \\beta$ x", ["WORD:$\\alpha + \\beta$", "WORD:x"]),  # math with spaces stays one word
+    ('"$\\alpha + \\beta$ x"', ["PHRASE:$\\alpha + \\beta$|x"]),
+    ("title﹕x", ["FIELD:title", "WORD:x"]),
     ("", []),
     ("   ", []),
 ]
@@ -176,6 +185,8 @@ ERRORS: list[tuple[str, DiagnosticCode, tuple[int, int]]] = [
     ("a NEAR/x b", C.PARSE_BAD_NEAR, (2, 8)),
     (f"a NEAR/{MAX_NEAR + 1} b", C.PARSE_BAD_NEAR, (2, 10)),
     ("trust NEAR calibration", C.PARSE_BAD_NEAR, (6, 10)),  # WoS's bare NEAR
+    ("NEAR trust", C.PARSE_BAD_NEAR, (0, 4)),  # at the edges too
+    ("trust NEAR", C.PARSE_BAD_NEAR, (6, 10)),
     # fields
     ("foo:bar", C.FIELD_UNKNOWN, (0, 4)),
     ("intitle:trust", C.FIELD_UNKNOWN, (0, 8)),
@@ -199,12 +210,18 @@ def test_error_code_and_span(q: str, code: DiagnosticCode, span: tuple[int, int]
     assert "`" in errors[0].message  # quotes the offending text and says how to fix it
 
 
+def test_mid_word_dollars_never_pair_across_words_as_math() -> None:
+    spans = [(e.code, e.span) for e in lex("behavio$r colo$r").errors]
+    assert spans == [(C.PARSE_WILDCARD_NOT_SUFFIX, (7, 8)), (C.PARSE_WILDCARD_NOT_SUFFIX, (14, 15))]
+
+
 def test_messages_carry_a_fix_hint() -> None:
     assert "longer stem" in lex("be*").errors[0].message
     assert "closing" in lex('"a').errors[0].message
     assert "NEAR/3" in lex("a NEAR/x b").errors[0].message
     assert "title" in lex("foo:x").errors[0].message and "venue" in lex("foo:x").errors[0].message
     assert "`vision*`" in lex("vision-*").errors[0].message
+    assert "a `$`" in lex("model$*").errors[0].message
 
 
 def test_long_enough_stems_are_fine() -> None:
@@ -258,6 +275,11 @@ WARNINGS: list[tuple[str, DiagnosticCode, list[tuple[int, int]]]] = [
     ("trust –bias", C.WARN_LOOKALIKE_OPERATOR, [(6, 11)]),  # en dash
     ("‘trust in AI’", C.WARN_LOOKALIKE_OPERATOR, [(0, 6)]),
     ("C++ code", C.WARN_SYMBOLS_DROPPED, [(0, 3)]),
+    ("++ code", C.WARN_SYMBOLS_DROPPED, []),  # nothing is left to search, so nothing to warn about
+    ("trust —bias", C.WARN_LOOKALIKE_OPERATOR, [(6, 11)]),  # em dash
+    ("trust ‐bias", C.WARN_LOOKALIKE_OPERATOR, [(6, 11)]),  # U+2010 hyphen
+    ("trust ﹘bias", C.WARN_LOOKALIKE_OPERATOR, [(6, 11)]),
+    ("``trust in AI''", C.WARN_LOOKALIKE_OPERATOR, [(0, 7)]),
     ("F# code", C.WARN_SYMBOLS_DROPPED, [(0, 2)]),
     ('"C++ code"', C.WARN_SYMBOLS_DROPPED, []),  # phrase parts are not checked
 ]
@@ -315,6 +337,11 @@ def test_nfkc_lookalike_table_is_derived_from_unicode() -> None:
         target = unicodedata.normalize("NFKC", c)
         if c != target and target in syntax and c not in excluded:
             assert c in syntax[target], f"U+{cp:04X} {unicodedata.name(c, '')} should act as {target!r}"
+
+
+def test_lookalike_dashes_are_derived_from_unicode() -> None:
+    dashes = {chr(c) for c in range(sys.maxunicode + 1) if unicodedata.category(chr(c)) == "Pd"}
+    assert (dashes - lexer.MINUSES) | {"\u2212"} == lexer._LOOKALIKE_MINUS
 
 
 FRAGMENTS = [

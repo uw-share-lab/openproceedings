@@ -222,13 +222,16 @@ ParseResult = {
 ```
 
 `canonical` is deterministic: `parse(canonical).canonical == canonical`. That idempotence is tested with
-property tests. `canonical_hash = sha256(canonical + "\0" + TOKENIZER_VERSION)`: the NUL separator keeps
-(`a`, `12`) and (`a1`, `2`) apart. `canonical` and `canonical_hash` are None when there are errors.
+property tests. `canonical_hash = sha256(canonical + "\0" + TOKENIZER_VERSION + "\0" + QUERY_VERSION)` (decision-003):
+NUL separators keep the parts apart, and a query-semantics bump changes the hash. `canonical` and `canonical_hash` are None when there are errors.
 
 Canonical form (`query/canonical.py`) is a normal form: nested `AND`/`OR` are flattened; in every `AND`,
 text conjuncts keep their written order and filter conjuncts follow in the decision-001 order (a
 positive filter before a negated one of the same field); an `OR` of filters on one field becomes one
-filter; values are sorted and deduplicated; every text leaf carries its field prefix
+filter (in any OR, at the first one's position); values are sorted and deduplicated, and overlapping or
+adjacent year ranges merge; duplicate conjuncts and disjuncts are dropped; `NOT NOT x` is `x`; OR branches
+keep their written order; a bare term that a sibling filter's field could read as a value is quoted
+(`venue:ICLR OR "neurips"`); every text leaf carries its field prefix
 (`title:(a OR b)` → `(title:a OR title:b)`). A wildcard whose last token is shorter than the stem
 minimum is hyphen-joined to the tokens before it (`gpt-4*` → `"gpt-4*"`). Semantically equal spellings
 (`trust venue:ICLR`, `venue:iclr Trust`) therefore share one hash. `QUERY_VERSION`

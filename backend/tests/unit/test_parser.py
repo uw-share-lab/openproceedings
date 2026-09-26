@@ -92,6 +92,7 @@ GOLDEN: list[tuple[str, str]] = [
     ("venue:ICLR", "venue:ICLR"),
     ("trust NOT track:workshop", "(AND trust (NOT track:workshop))"),
     ("year:2024..2024", "year:2024"),
+    ("year:1000", "year:1000"),
     ("NOT NOT a", "(NOT (NOT a))"),  # positive: not all-negative
     ("a OR NOT NOT b", "(OR a (NOT (NOT b)))"),
     ("a NEAR/3 (b)", "(NEAR/3 a b)"),  # a one-word group counts as a word
@@ -152,7 +153,14 @@ SCOPE = [
     ("venue:ICLR OR trust", []),
     ("year:2023 OR (trust 2024)", []),  # only a bare branch is flagged
     ("2024 OR trust", []),  # no filter in the OR
+    ("year:2023 OR (2024)", [(14, 18)]),  # a parenthesised value too
+    ("(venue:ICLR OR year:2023 OR 2024)", [(28, 32)]),  # any filter field in the OR, not just the first
 ]
+
+
+def test_filter_inside_a_text_field_warns() -> None:
+    result = parse("title:(trust venue:ICLR)")
+    assert [(w.code, w.span) for w in result.warnings] == [(DiagnosticCode.WARN_FILTER_SCOPE, (13, 19))]
 
 
 @pytest.mark.parametrize(("q", "spans"), SCOPE, ids=[q for q, _ in SCOPE])
@@ -227,7 +235,14 @@ ERRORS: list[tuple[str, DiagnosticCode, tuple[int, int]]] = [
     ("-- NEAR/3 a", DiagnosticCode.PARSE_AMBIGUOUS_MINUS, (0, 2)),
     ("a NEAR/3 b NEAR/2 c NEAR/1 d", DiagnosticCode.PARSE_BAD_NEAR, (11, 17)),
     ("a NEAR/3 NOT b", DiagnosticCode.PARSE_BAD_NEAR, (2, 8)),
-    ("NOT ab*", DiagnosticCode.WILDCARD_STEM_TOO_SHORT, (4, 7)),  # no ALL_NEGATIVE on top of a lexer error
+    ("NOT ab*", DiagnosticCode.WILDCARD_STEM_TOO_SHORT, (4, 7)),
+    ("NOT NOT NOT a", DiagnosticCode.PARSE_ALL_NEGATIVE, (0, 13)),
+    ("venue:(bogus) x", DiagnosticCode.FIELD_UNKNOWN_VALUE, (7, 12)),
+    (
+        '"*"',
+        DiagnosticCode.WILDCARD_STEM_TOO_SHORT,
+        (1, 2),
+    ),  # one error for an empty phrase  # no ALL_NEGATIVE on top of a lexer error
     ("year:²⁰²⁴", DiagnosticCode.FIELD_UNKNOWN_VALUE, (5, 9)),
     ("year:0", DiagnosticCode.FIELD_UNKNOWN_VALUE, (5, 6)),
     ("year:2020..99999999999999999999", DiagnosticCode.FIELD_UNKNOWN_VALUE, (5, 31)),

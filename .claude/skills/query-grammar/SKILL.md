@@ -65,7 +65,7 @@ records this; snapshot tests pin it.
 identity. A change that alters any existing canonical string changes every saved record's hash: treat it as
 a breaking change with a decision record.
 
-`canonical_hash = sha256(canonical + TOKENIZER_VERSION)`.
+`canonical_hash = sha256(canonical + "\0" + TOKENIZER_VERSION + "\0" + QUERY_VERSION)` (decision-003).
 
 ## Diagnostics
 `{code, message, span:[start,end]}` in `warnings`, `errors` (non-empty ⇒ no search) or `translations`.

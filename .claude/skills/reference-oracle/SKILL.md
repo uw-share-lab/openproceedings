@@ -44,6 +44,15 @@ added default clauses removed, the same way the engine does.
 It implements the same `Engine` protocol: `match_ids`, `expand`, `facets`, and a `search` whose order is
 `id` only. The oracle does not rank, and ranking never changes membership anyway.
 
+## As built (task-016)
+- `backend/src/openproceedings/engine/reference.py`; the protocol and `Searchable` record shape are in
+  `engine/protocol.py` (types only, so sharing it shares no logic).
+- `tests/unit/test_reference.py` has one row per rule above, plus import-isolation tests (the oracle's
+  allowed imports; `api/` never imports it). `tests/golden/test_reference_200.py` runs 40 queries over a
+  200-record fixture whose expected sets come from an independent evaluator
+  (`tests/fixtures/corpus/make_reference_200.py`), and a property that canonical form never changes a match set.
+- Exclusion accounting (`excluded`) is task-026.
+
 ## When the two disagree
 Assume the Tantivy side is wrong until the oracle is shown to contradict spec 02 or 03. If the oracle is
 wrong, fix it in its own reviewed change, with a golden case quoting the spec sentence. Never "fix" it to

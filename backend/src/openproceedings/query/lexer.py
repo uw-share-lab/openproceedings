@@ -37,6 +37,7 @@ tokenizer (`C++` → `c`: WARN_SYMBOLS_DROPPED). Bad input is a diagnostic, neve
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -46,7 +47,7 @@ from openproceedings.query.normalize import math_regions, tokenize
 FIELDS = ("title", "abstract", "venue", "year", "track", "status", "source")
 MIN_STEM = 3  # letters or digits a wildcard stem keeps after normalisation (spec 02, decision-001)
 MAX_NEAR = 100
-QUOTES = frozenset('"“”„‟＂')
+QUOTES = frozenset('"“”„‟＂«»「」『』')
 LPARENS = frozenset("(（﹙︵")
 RPARENS = frozenset(")）﹚︶")
 PIPES = frozenset("|｜")
@@ -54,7 +55,12 @@ COLONS = frozenset(":：﹕︓")
 MINUSES = frozenset("-－﹣")
 STARS = frozenset("*＊﹡")
 DOLLARS = frozenset("$＄﹩")  # only the ASCII `$` can delimit LaTeX math (spec 02 §Token semantics)
-_LOOKALIKE_MINUS = frozenset("−–—")  # minus sign, en dash, em dash: not operators, but easily meant as `-`
+# Every dash (Unicode category Pd) that is not an ASCII-equivalent MINUSES entry, plus the minus sign
+# U+2212: not operators, but easily meant as `-`. A test re-derives this set from the Unicode database.
+_LOOKALIKE_MINUS = frozenset(
+    "\u058a\u05be\u1400\u1806\u2010\u2011\u2012\u2013\u2014\u2015\u2e17\u2e1a\u2e3a\u2e3b\u2e40\u2e5d"
+    "\u301c\u3030\u30a0\ufe31\ufe32\ufe58\U00010ead\u2212"
+)
 _SINGLE_QUOTES = ("‘", "`")
 _BREAKS = LPARENS | RPARENS | PIPES
 _FIELD = re.compile(r"([^\W\d_]\w*)[:：﹕︓]")
@@ -190,18 +196,37 @@ class _Lexer:
             if q[k].isspace():
                 k += 1
                 continue
-            m = k
-            while m < j and not q[m].isspace():
-                m += 1
+            m = self.math_run(k, j)
+            if m < 0:
+                m = k
+                while m < j and not q[m].isspace():
+                    m += 1
             before = sum(len(t.text) for p in parts for t in tokenize(p.text))  # letters of earlier words
             parts.append(self.word(k, m, in_phrase=True, before=before))
             k = m
         self.out.append(Lexeme(Kind.PHRASE, i, end, q[i:end], parts=tuple(parts), closed=closed))
         return end
 
+    def math_run(self, i: int, limit: int) -> int:
+        """If LaTeX math opens at `i` and closes before `limit` at the end of a word (`$\\alpha + \\beta$`),
+        the index after it; else -1. So math with spaces stays one word, while `behavio$r colo$r` (the `$`
+        not at a word's start) never pairs across words."""
+        if self.q[i] != "$":
+            return -1
+        ends = [b for a, b in math_regions(self.q[i:limit]) if a == 0]
+        if not ends:
+            return -1
+        end = i + ends[0]
+        at_boundary = end == limit or self.q[end].isspace() or self.q[end] in _BREAKS | QUOTES
+        return end if at_boundary else -1
+
     def word_end(self, i: int) -> int:
-        """End of the word at `i`: the next break, except inside LaTeX math within the same chunk."""
+        """End of the word at `i`: a whole LaTeX math run, or the next break (except inside LaTeX math within
+        the same chunk)."""
         q, n = self.q, len(self.q)
+        limit = next((k for k in range(i, n) if q[k] in QUOTES), n)
+        if (end := self.math_run(i, limit)) > 0:
+            return end
         chunk_end = i
         while chunk_end < n and not q[chunk_end].isspace() and q[chunk_end] not in QUOTES:
             chunk_end = _step(q, chunk_end)
@@ -220,11 +245,12 @@ class _Lexer:
     def word_or_operator(self, i: int) -> int:
         j = self.word_end(i)
         raw = self.q[i:j]
-        if raw in _OPERATORS:
-            self.out.append(Lexeme(_OPERATORS[raw], i, j, raw))
-        elif (near := _NEAR.fullmatch(raw)) and int(near.group(1)) <= MAX_NEAR:
+        key = unicodedata.normalize("NFKC", raw)  # `ＯＲ` is `OR`, as the tokenizer would read it
+        if key in _OPERATORS:
+            self.out.append(Lexeme(_OPERATORS[key], i, j, raw))
+        elif (near := _NEAR.fullmatch(key)) and int(near.group(1)) <= MAX_NEAR:
             self.out.append(Lexeme(Kind.NEAR, i, j, raw, near=int(near.group(1))))
-        elif raw.startswith("NEAR/"):
+        elif key.startswith("NEAR/"):
             self.error(
                 DiagnosticCode.PARSE_BAD_NEAR,
                 f"`{raw}` needs a whole-number distance up to {MAX_NEAR} — write e.g. `NEAR/3` (at most 3 words "
@@ -232,7 +258,7 @@ class _Lexer:
                 i,
                 j,
             )
-        elif rng := _RANGE.fullmatch(raw):
+        elif rng := _RANGE.fullmatch(key):
             self.out.append(Lexeme(Kind.RANGE, i, j, raw, range=(int(rng.group(1)), int(rng.group(2)))))
         else:
             self.out.append(self.word(i, j, in_phrase=False))
@@ -264,8 +290,8 @@ class _Lexer:
             s = wild[0]
             self.error(
                 DiagnosticCode.PARSE_WILDCARD_NOT_SUFFIX,
-                f"`{raw}` has a `{raw[s]}` inside it, but a wildcard can only end a word (e.g. `bench*`, "
-                "`model$`) — search the whole word instead; for LaTeX, keep `$…$` together without spaces.",
+                f"`{raw}` has a `{raw[s]}` that is neither a wildcard at the end of a word (e.g. `bench*`, "
+                "`model$`) nor closed LaTeX math (`$x$`) — search the whole word, or close the math.",
                 start + s,
                 start + s + 1,
             )
@@ -339,18 +365,22 @@ class _Lexer:
 
     def after_pass(self) -> None:
         """Diagnostics that depend on the neighbouring lexemes: words that look like operators."""
-        for before, x, after in zip(self.out, self.out[1:], self.out[2:], strict=False):
-            if x.kind is not Kind.WORD or before.kind not in _ENDS_A_TERM or after.kind not in _STARTS_A_TERM:
-                continue
-            upper = x.text.upper()
-            if x.text == "NEAR":
+        for x in self.out:
+            if x.kind is Kind.WORD and unicodedata.normalize("NFKC", x.text) == "NEAR":
                 self.error(
                     DiagnosticCode.PARSE_BAD_NEAR,
-                    "`NEAR` needs a distance — write e.g. `NEAR/3` (Web of Science's bare `NEAR` means `NEAR/15`).",
+                    "`NEAR` needs a distance — write e.g. `NEAR/3` (Web of Science's bare `NEAR` means `NEAR/15`); "
+                    'to search the word, write `near` or `"NEAR"`.',
                     x.start,
                     x.end,
                 )
-            elif upper in _OPERATORS:
+        for before, x, after in zip(self.out, self.out[1:], self.out[2:], strict=False):
+            if x.kind is not Kind.WORD or before.kind not in _ENDS_A_TERM or after.kind not in _STARTS_A_TERM:
+                continue
+            upper = unicodedata.normalize("NFKC", x.text).upper()
+            if upper == "NEAR":
+                continue
+            if upper in _OPERATORS:
                 self.warn(
                     DiagnosticCode.WARN_LOWERCASE_OPERATOR,
                     f"`{x.text}` is searched as a word — write `{upper}` to combine terms (operators are uppercase "

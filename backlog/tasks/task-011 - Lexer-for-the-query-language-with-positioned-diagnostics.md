@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 02:00'
+updated_date: '2026-09-26 03:09'
 labels:
   - query
 milestone: m-1
@@ -37,3 +37,9 @@ Tokens for uppercase operators, |, -, phrases, fields, ranges, * and $ wildcards
 3. query/lexer.py: lex(q) -> LexResult(lexemes, warnings, errors); one frozen Lexeme type; pure, stdlib + normalize.
 4. Spec 02 §Grammar lexical rules as built; query-grammar skill; decision-001 stem wording (letters and digits after normalisation).
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Review dispositions: 'split Lexeme into per-kind types' (task-011 and task-013 reviews, Nit) → rejected: Lexeme is internal to lexer.py/parser.py and built in one place; a union would add isinstance ceremony to every parser branch without catching any bug the reviews found. Everything else from both reviews is fixed (commits 106811f and the task-013 review round).
+<!-- SECTION:NOTES:END -->

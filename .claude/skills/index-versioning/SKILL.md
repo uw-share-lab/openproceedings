@@ -12,7 +12,8 @@ index_version = sha256( snapshot_hash, TOKENIZER_VERSION, SCHEMA_VERSION, rankin
 - Hash a **canonical serialization** of the four inputs (for example, JSON with sorted keys and no
   whitespace, and ranking floats written the same way every time). Pin the serialization with a unit test
   on known inputs. If it changes, every version id changes.
-- `canonical_hash = sha256(canonical + TOKENIZER_VERSION)` identifies the *query*. `index_version`
+- `canonical_hash = sha256(canonical + "\0" + TOKENIZER_VERSION + "\0" + QUERY_VERSION)` (decision-003)
+  identifies the *query*. `index_version`
   identifies the *index*. A search record stores both, plus `ids_hash = sha256(sorted matched ids)`.
 
 ## `query_version` (spec 04 §Conventions)

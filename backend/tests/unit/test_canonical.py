@@ -34,7 +34,7 @@ GOLDEN: list[tuple[str, str]] = [
     ("a b OR c", "((a AND b) OR c)"),
     ("a -b", "(a AND NOT b)"),
     ("NOT (a OR b) c", "(NOT (a OR b) AND c)"),
-    ("a NOT NOT b", "(a AND NOT NOT b)"),
+    ("a NOT NOT b", "(a AND b)"),
     ("vision-language", '"vision language"'),
     ('"trust in AI"', '"trust in ai"'),
     ('"trust"', "trust"),
@@ -69,11 +69,40 @@ GOLDEN: list[tuple[str, str]] = [
     ),  # a single-field OR group merges
     ("(venue:ICLR OR track:main) trust", "((venue:ICLR OR track:main) AND trust)"),  # mixed fields: untouched
     ("(a venue:ICLR) OR b", "((a AND venue:ICLR) OR b)"),  # filters sort within every AND
+    # review of task-013: each row kills a mutant or pins a normalisation
+    ("venue:ICLR venue:ICML", "(venue:ICLR AND venue:ICML)"),  # AND of filters is never merged into an OR
+    ("x track:workshop track:main", "(x AND track:main AND track:workshop)"),  # same field: by rendered text
+    ("year:(2019..2022 OR 2020..2021)", "year:2019..2022"),  # overlapping ranges merge
+    ("year:(2020 OR 2021 OR 2023)", "year:(2020..2021 OR 2023)"),  # adjacent years merge
+    ("year:(2020 OR 2020..2021)", "year:2020..2021"),
+    (
+        "trust NOT (venue:ICML OR venue:ICLR)",
+        "(trust AND NOT venue:(ICLR OR ICML))",
+    ),  # NOT's child is canonical
+    ("venue:ICLR OR trust", "(venue:ICLR OR trust)"),  # OR branches keep their written order
+    ("(venue:ICLR OR venue:ICML OR x)", "(venue:(ICLR OR ICML) OR x)"),  # same-field filters merge in any OR
+    ("(venue:ICLR OR x OR venue:ICML)", "(venue:(ICLR OR ICML) OR x)"),  # at the first one's position
+    ("a a", "a"),  # duplicate conjuncts
+    ("venue:ICLR venue:ICLR trust", "(trust AND venue:ICLR)"),
+    ("(a OR b) OR a", "(a OR b)"),
+    ("near x", "(near AND x)"),  # only and/or/not are quoted
+    ("NOT NOT NOT a b", "(NOT a AND b)"),
+    ('"ab abc*"', '"ab abc*"'),
+    # a bare value next to a filter of its field is quoted, so the canonical string re-parses silently
+    ('venue:ICLR OR "NeurIPS"', '(venue:ICLR OR "neurips")'),
+    ('year:2024 OR "2023"', '(year:2024 OR "2023")'),
+    ('track:main OR "workshop"', '(track:main OR "workshop")'),
+    ("venue:ICLR OR title:neurips", "(venue:ICLR OR title:neurips)"),  # a fielded term can't be mistaken
+    (
+        "x NOT track:main track:workshop",
+        "(x AND track:workshop AND NOT track:main)",
+    ),  # positive before negated
+    ("venue:ICLR OR trust", "(venue:ICLR OR trust)"),
     # a lone token spelling a lowercase operator is quoted, so the canonical string raises no warning
     ('trust "and" calibration', '(trust AND "and" AND calibration)'),
     ('"or"', '"or"'),
     ('"trust and safety"', '"trust and safety"'),
-    ("NOT NOT a b", "(NOT NOT a AND b)"),
+    ("NOT NOT a b", "(a AND b)"),
 ]
 
 
@@ -93,10 +122,10 @@ def test_errors_have_no_canonical() -> None:
     assert (result.canonical, result.canonical_hash) == (None, None)
 
 
-def test_hash_is_sha256_of_canonical_and_tokenizer_version() -> None:
+def test_hash_is_sha256_of_canonical_and_both_versions() -> None:
     c = parse("trust calibration").canonical
     assert c is not None
-    expected = hashlib.sha256(f"{c}\x00{TOKENIZER_VERSION}".encode()).hexdigest()
+    expected = hashlib.sha256(f"{c}\x00{TOKENIZER_VERSION}\x00{QUERY_VERSION}".encode()).hexdigest()
     assert canonical_hash(c) == expected == parse("trust calibration").canonical_hash
     assert canonical_hash("a1") != canonical_hash("a")  # the separator keeps (canonical, version) unambiguous
 
@@ -107,7 +136,14 @@ def test_equivalent_queries_hash_equal() -> None:
 
 
 def test_canonical_strings_reparse_without_warnings() -> None:
-    for q in ('trust "and" calibration', '"or" x', "a b c"):
+    for q in (
+        'trust "and" calibration',
+        '"or" x',
+        "a b c",
+        'venue:ICLR OR "NeurIPS"',
+        'year:2024 OR "2023"',
+        'trust "not" x',
+    ):
         assert parse(canon(q)).warnings == []
 
 

@@ -20,7 +20,10 @@ from __future__ import annotations
 
 import hashlib
 
+from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import (
+    MAX_YEAR,
+    MIN_YEAR,
     And,
     Filter,
     Near,
@@ -32,21 +35,26 @@ from openproceedings.query.ast import (
     TextField,
     Wildcard,
     YearRange,
+    structure,
 )
 from openproceedings.query.normalize import TOKENIZER_VERSION
+from openproceedings.vocab import STATUSES, TRACKS, VENUES
 
 FILTER_ORDER = ("venue", "year", "track", "status")
 _OPERATOR_WORDS = frozenset({"and", "or", "not"})
+_VALUE_WORDS = {  # tokens a bare word could be mistaken for, next to a filter of that field (WARN_FILTER_SCOPE)
+    "venue": frozenset(VENUES),
+    "track": frozenset(TRACKS),
+    "status": frozenset(STATUSES),
+}
 
 
-def _filter_key(n: Node) -> tuple[int, str, int, str] | None:
+def _filter_key(n: Node) -> tuple[int, int, str] | None:
     """Sort key for a filter conjunct, or None if `n` is not one."""
-    neg = isinstance(n, Not)
     f = n.child if isinstance(n, Not) else n
     if not isinstance(f, Filter):
         return None
-    rank = FILTER_ORDER.index(f.field) if f.field in FILTER_ORDER else len(FILTER_ORDER)
-    return (rank, f.field, int(neg), render(f))
+    return (FILTER_ORDER.index(f.field), int(isinstance(n, Not)), render(f))
 
 
 def _value_key(v: str | YearRange) -> tuple[int, int, str]:
@@ -54,13 +62,52 @@ def _value_key(v: str | YearRange) -> tuple[int, int, str]:
 
 
 def _sorted_values(values: tuple[str | YearRange, ...]) -> tuple[str | YearRange, ...]:
-    return tuple(sorted(set(values), key=_value_key))
+    ordered = sorted(set(values), key=_value_key)
+    if not all(isinstance(v, YearRange) for v in ordered):
+        return tuple(ordered)
+    merged: list[YearRange] = []  # overlapping or adjacent year ranges are one range
+    for v in ordered:
+        assert isinstance(v, YearRange)
+        if merged and v.lo <= merged[-1].hi + 1:
+            merged[-1] = YearRange(lo=merged[-1].lo, hi=max(merged[-1].hi, v.hi))
+        else:
+            merged.append(v)
+    return tuple(merged)
+
+
+def _merge_filters(children: list[Node]) -> list[Node]:
+    """In an OR, positive filters on one field become one filter, at the first one's position."""
+    out: list[Node] = []
+    first: dict[str, int] = {}
+    for c in children:
+        if isinstance(c, Filter) and c.field in first:
+            i = first[c.field]
+            prev = out[i]
+            assert isinstance(prev, Filter)
+            out[i] = prev.model_copy(update={"values": _sorted_values(prev.values + c.values)})
+        else:
+            if isinstance(c, Filter):
+                first[c.field] = len(out)
+            out.append(c)
+    return out
+
+
+def _dedupe(children: list[Node]) -> list[Node]:
+    seen: list[object] = []
+    out = []
+    for c in children:
+        key = structure(c)
+        if key not in seen:
+            seen.append(key)
+            out.append(c)
+    return out
 
 
 def canonicalize(n: Node) -> Node:
     """The normal form of `n` (see the module docstring). Spans are kept from the input nodes."""
     if isinstance(n, Not):
-        return n.model_copy(update={"child": canonicalize(n.child)})
+        child = canonicalize(n.child)
+        return child.child if isinstance(child, Not) else n.model_copy(update={"child": child})
     if isinstance(n, Filter):
         return n.model_copy(update={"values": _sorted_values(n.values)})
     if not isinstance(n, And | Or):
@@ -68,17 +115,17 @@ def canonicalize(n: Node) -> Node:
     children: list[Node] = []
     for c in (canonicalize(c) for c in n.children):
         children.extend(c.children if isinstance(c, And | Or) and type(c) is type(n) else (c,))
-    if isinstance(n, Or) and all(isinstance(c, Filter) for c in children):
-        fields = {c.field for c in children if isinstance(c, Filter)}
-        if len(fields) == 1:
-            values = tuple(v for c in children if isinstance(c, Filter) for v in c.values)
-            return Filter(span=n.span, field=fields.pop(), values=_sorted_values(values))
-    if isinstance(n, And):
+    if isinstance(n, Or):
+        children = _merge_filters(children)
+    else:
         text = [c for c in children if _filter_key(c) is None]
         filters = sorted(
             (c for c in children if _filter_key(c) is not None), key=lambda c: _filter_key(c) or ()
         )
         children = text + filters
+    children = _dedupe(children)
+    if len(children) == 1:
+        return children[0]
     return n.model_copy(update={"children": tuple(children)})
 
 
@@ -96,11 +143,19 @@ def _render_value(v: str | YearRange) -> str:
     return v
 
 
-def render(n: Node) -> str:
-    """The canonical string of an already canonicalized node."""
+def _mistakable(token: str, fields: set[str]) -> bool:
+    """Whether a bare `token` next to filters on `fields` would re-parse with WARN_FILTER_SCOPE."""
+    if "year" in fields and token.isascii() and token.isdigit() and MIN_YEAR <= int(token) <= MAX_YEAR:
+        return True
+    return any(token in _VALUE_WORDS.get(f, ()) for f in fields)
+
+
+def render(n: Node, quote: frozenset[str] = frozenset()) -> str:
+    """The canonical string of an already canonicalized node. `quote`: filter fields among the node's OR
+    siblings, whose values a bare term must be quoted to not be mistaken for."""
     if isinstance(n, Term):
-        token = f'"{n.token}"' if n.token in _OPERATOR_WORDS else n.token
-        return f"{_prefix(n.field)}{token}"
+        plain = n.token not in _OPERATOR_WORDS and not (n.field is None and _mistakable(n.token, set(quote)))
+        return f"{_prefix(n.field)}{n.token if plain else f'"{n.token}"'}"
     if isinstance(n, Wildcard):
         return (
             f"{_prefix(n.field)}{n.stem}{n.op}"  # a lone wildcard always has a full stem (the lexer checks)
@@ -114,9 +169,12 @@ def render(n: Node) -> str:
     if isinstance(n, Filter):
         values = [_render_value(v) for v in n.values]
         return f"{n.field}:{values[0]}" if len(values) == 1 else f"{n.field}:({' OR '.join(values)})"
-    op = " AND " if isinstance(n, And) else " OR "
-    return "(" + op.join(render(c) for c in n.children) + ")"
+    if isinstance(n, And):
+        return "(" + " AND ".join(render(c) for c in n.children) + ")"
+    siblings = frozenset(str(c.field) for c in n.children if isinstance(c, Filter))
+    return "(" + " OR ".join(render(c, siblings) for c in n.children) + ")"
 
 
 def canonical_hash(canonical: str) -> str:
-    return hashlib.sha256(f"{canonical}\x00{TOKENIZER_VERSION}".encode()).hexdigest()
+    """sha256 over the canonical string and both versions it depends on (decision-003)."""
+    return hashlib.sha256(f"{canonical}\x00{TOKENIZER_VERSION}\x00{QUERY_VERSION}".encode()).hexdigest()

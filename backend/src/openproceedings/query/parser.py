@@ -241,9 +241,10 @@ class _Parser:
         """WARN_FILTER_SCOPE for `year:2023 OR 2024`: an OR branch that is just a bare value of the field of
         a filter in another branch of the same OR."""
         fields = sorted({n.field for n in nodes if isinstance(n, Filter)})
-        words = {(t.start, t.end): t for t in toks if t.kind is Kind.WORD}
+        words = [t for t in toks if t.kind is Kind.WORD]
         for n in nodes:
-            tok = words.get(n.span) if isinstance(n, Term) else None  # a field-prefixed term never matches
+            inside = [t for t in words if n.span[0] <= t.start and t.end <= n.span[1]]  # `2024` or `(2024)`
+            tok = inside[0] if isinstance(n, Term) and n.field is None and len(inside) == 1 else None
             f = next((f for f in fields if tok and filter_value(f, tok) is not None), None)
             if tok and f:
                 self.warnings.append(
@@ -428,6 +429,15 @@ class _Parser:
                 self.advance()  # its value: not a mistake of its own (a group is parsed for real errors)
             return None
         if name not in TEXT_FIELDS:
+            if outer is not None:
+                self.warnings.append(
+                    Diagnostic(
+                        code=DiagnosticCode.WARN_FILTER_SCOPE,
+                        message=f"`{tok.text}` inside `{outer}:(…)` filters whole papers, not the {outer} — move it "
+                        "out of the group to make that clear.",
+                        span=(tok.start, tok.end),
+                    )
+                )
             return self.filter(tok, cast(FilterField, name))
         if outer is not None and name != outer:
             self.error(
