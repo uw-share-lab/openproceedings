@@ -4,8 +4,6 @@ import pytest
 from openproceedings import cli
 
 PLANNED = {
-    "ingest": "task-022",
-    "snapshot": "task-022",
     "index": "task-023",
     "search": "task-030",
     "export": "task-030",
@@ -23,7 +21,7 @@ def test_help_lists_every_planned_subcommand(capsys: pytest.CaptureFixture[str])
     assert exc.value.code == 0
     out = capsys.readouterr().out
     listed = {line.split()[0] for line in out.splitlines() if line.startswith("    ") and line.split()}
-    assert set(PLANNED) <= listed
+    assert set(PLANNED) | {"ingest", "snapshot"} <= listed
 
 
 @pytest.mark.parametrize(("name", "task"), sorted(PLANNED.items()))
@@ -33,6 +31,22 @@ def test_stub_exits_2_and_names_its_task(name: str, task: str, capsys: pytest.Ca
     assert f"op {name}" in err
     assert task in err
     assert "not implemented yet" in err
+
+
+@pytest.mark.parametrize(("source", "task"), [("openreview", "task-050"), ("proceedings", "task-052")])
+def test_planned_ingest_sources_name_their_task(
+    source: str, task: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["ingest", source, "--venue", "ICLR"]) == 2
+    err = capsys.readouterr().err
+    assert f"op ingest {source}" in err and task in err and "not implemented yet" in err
+
+
+@pytest.mark.parametrize("argv", [["ingest"], ["snapshot"], ["ingest", "ris"], ["snapshot", "diff", "a"]])
+def test_implemented_commands_need_their_arguments(argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(argv)
+    assert exc.value.code == 2
 
 
 def test_no_subcommand_prints_help_and_exits_2(capsys: pytest.CaptureFixture[str]) -> None:

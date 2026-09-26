@@ -87,10 +87,14 @@ auto-removed). This lets the team use the engine for the live review before the 
 ```
 op ingest openreview --venue ICLR --years 2020-2026
 op ingest proceedings --venue NeurIPS --years 2020-2025
-op ingest ris <file.ris>...
+op ingest ris <mended.ris>...           # cache scholarmend outputs (resolved.json beside each)
 op snapshot build [--from <cache>]      # merge sources → new immutable snapshot
 op snapshot diff <a> <b>                # added / removed / changed records
 ```
+
+As built (task-022): `ingest ris`, `snapshot build` and `snapshot diff`; the crawler sources are stubs
+naming task-050/052. Every command takes `--data-dir` (default `./data`, gitignored); results go to
+stdout as JSON, a refusal exits 1 with its reason.
 
 ## Error handling
 

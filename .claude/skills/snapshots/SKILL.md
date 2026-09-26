@@ -34,11 +34,20 @@ questions 1).
   builds twice from fixtures and compares the bytes.
 
 ## manifest.json
-Includes: `snapshot_hash`; `crawl_date`; `built_at`; `record_count`; `counts` nested venue → year →
-track → status; `abstract_missing` per venue-year; `unknown_track` per venue-year; `merges` and
-`conflicts` totals; and `sources` (for each source, the crawl window, API host and version, and the
-PMLR/NeurIPS page counts). The manifest may hold build times; `records.jsonl` may not. `/coverage`
+As built (`backend/src/openproceedings/ingest/snapshot.py`, `render`): `snapshot_hash`; `crawl_date` (the
+newest claim's fetch date, which also names the directory); `built_at` (the only build-time value);
+`record_count`; `counts` nested venue → year → track → status; `abstract_missing` and `unknown_track`
+per venue → year; `merges` and `conflicts` (a `total` plus a count per rule / resolution kind); and
+`sources` — for RIS, one `ImportReport.to_manifest()` per cached file (both inputs' sha256, the
+scholarmend version, read / imported / skipped by reason, abstract_missing, unknown_track,
+status_overrides, track × status). The crawlers add their own source entries (crawl window, API host
+and version, page counts) in M4. The manifest may hold build times; `records.jsonl` may not. `/coverage`
 (spec 04) and `coverage-auditor` read these counts directly.
+
+## The cache
+`op ingest ris <mended.ris>...` checks each scholarmend output imports cleanly, then copies it and the
+`resolved.json` beside it to `<data-dir>/cache/ris/<its directory name>/`. Re-ingesting identical files is
+a no-op; different files under a cached name are refused (a snapshot may already cite them).
 
 ## Immutability
 - Build into a temporary directory next to the target and `os.replace` it into place. A crash never
@@ -52,9 +61,10 @@ PMLR/NeurIPS page counts). The manifest may hold build times; `records.jsonl` ma
   hand while a search record references them.
 
 ## CLI
-- `op snapshot build [--from <cache>]` merges all cached sources, then classify → dedup → write. It never
-  fetches, so it works offline.
-- `op snapshot diff <a> <b>` prints the ids **added**, **removed** and **changed** (where `content_hash`
+- `op [--data-dir data] snapshot build [--from <cache>] [--out <snapshots>]` imports all cached sources,
+  then dedup → write. It never fetches, so it works offline. It prints `{path, snapshot_hash, created}`;
+  `created: false` means a snapshot with that hash already existed and nothing was written.
+- `op snapshot diff <a> <b>` prints (JSON) the ids **added**, **removed** and **changed** (where `content_hash`
   differs, with the changed fields named), plus separate counts of **display-only** changes (`authors`,
   `urls`, `keywords`, `presentation` or `venue_id_raw` differ but the hash doesn't) and provenance-only
   changes. Every
