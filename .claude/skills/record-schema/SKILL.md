@@ -84,5 +84,14 @@ It **excludes** `provenance`, `urls`, `keywords`, `presentation`, `authors` and 
 that only refreshes fetch times must not change the hash. `op snapshot diff` uses it to tell a real change
 from a display-only or provenance-only change.
 
-`PaperRecord.build` computes the hash, `model_copy(update=...)` re-validates and recomputes it, and
-loading a record re-checks it. Never use `model_construct` on a record: it skips every check.
+`PaperRecord.build` computes the hash, `model_copy(update=...)` re-validates and recomputes it (both
+ask for that through the validation context, which stored data can't reach), and loading a record
+re-checks it. Never use `model_construct` on a record: it skips every check. Load stored records with
+`model_validate_json` (the strict claims take tuples and datetimes from JSON, not from a Python dict of
+lists and strings).
+
+Every string field (title, abstract, authors, keywords, venue_id_raw, urls, and a claim's value, url and
+evidence) must be valid Unicode (no lone surrogates), so a snapshot can always be written. A title has
+no control characters; an abstract has no leading or trailing whitespace (importers strip it, and it is
+hashed). A claim's value must fit its field: `year` an int, `authors`/`keywords` a tuple, every other
+field a string. A forum-id native is 4–64 of `[A-Za-z0-9_-]` with at least one letter or digit.

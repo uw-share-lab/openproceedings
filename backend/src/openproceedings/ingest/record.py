@@ -4,7 +4,8 @@
 with a Scholar snippet for an abstract, or with an id that disagrees with its venue, year or native-id
 form cannot be built. `content_hash` covers exactly the searchable and filterable fields (title, abstract,
 venue, year, track, status). It is computed when a record is built (`PaperRecord.build`), recomputed by
-`model_copy(update=...)`, and re-checked when a record is loaded, so a hash can never go stale.
+`model_copy(update=...)` (both ask for it through the validation context, which stored data can't
+reach), and re-checked when a record is loaded, so a hash can never go stale.
 `model_construct` skips validation and must never be used on records. `provenance` keeps every claim
 (one per field and source), in a fixed order, including the ones precedence overruled (decision-005).
 """
@@ -14,11 +15,22 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    StrictStr,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from openproceedings.vocab import Status, Track, Venue
 
@@ -31,7 +43,6 @@ ClaimField = Literal[
     "title", "abstract", "authors", "venue", "year", "track", "status", "presentation", "venue_id_raw",
     "keywords", "urls.forum", "urls.pdf", "urls.proceedings", "urls.doi",
 ]  # fmt: skip
-type ClaimValue = StrictStr | StrictInt | tuple[StrictStr, ...] | None
 
 _ID = re.compile(r"op:(neurips|iclr|icml):([0-9]{4}):(\S+)")
 # Native ids (record-schema skill): an OpenReview forum id, or a proceedings form tied to its venue.
@@ -40,11 +51,12 @@ _PROCEEDINGS_NATIVE = {
     "nips": (re.compile(r"nips-[0-9a-f]{32}"), "NeurIPS"),
     "iclr": (re.compile(r"iclr-[0-9a-f]{32}"), "ICLR"),
 }
-_FORUM_ID = re.compile(r"[A-Za-z0-9_-]{4,}")
+_FORUM_ID = re.compile(r"(?=.*[A-Za-z0-9])[A-Za-z0-9_-]{4,64}")
 _SNIPPET = (
     "…"  # a Scholar snippet starts or ends with an ellipsis; a real abstract may contain one (`x₁, …, x_n`)
 )
-_PENDING = "pending"  # content_hash placeholder used only inside `build` and `model_copy`
+_REHASH = "rehash"  # validation-context key: only `build` and `model_copy` set it
+_HASH_PLACEHOLDER = "0" * 64
 
 
 def _utf8(v: str) -> str:
@@ -53,6 +65,13 @@ def _utf8(v: str) -> str:
     except UnicodeEncodeError as e:  # a lone surrogate
         raise ValueError("text must be valid Unicode (no lone surrogates)") from e
     return v
+
+
+# Every string a record or claim holds: strict, and encodable, so a snapshot can always be written.
+Text = Annotated[StrictStr, AfterValidator(_utf8)]
+type ClaimValue = Text | StrictInt | tuple[Text, ...] | None
+# What each claim field's value must be (a claim with the wrong kind of value says nothing reliable).
+_CLAIM_KINDS: dict[str, type] = {"year": int, "authors": tuple, "keywords": tuple}
 
 
 class Claim(BaseModel):
@@ -64,9 +83,9 @@ class Claim(BaseModel):
     field: ClaimField
     value: ClaimValue
     source: Source
-    url: str | None = None
+    url: Text | None = None
     fetched_at: datetime
-    evidence: str | None = None  # e.g. `venueid=ICLR.cc/2024/Conference`
+    evidence: Text | None = None  # e.g. `venueid=ICLR.cc/2024/Conference`
 
     @field_validator("fetched_at")
     @classmethod
@@ -75,18 +94,26 @@ class Claim(BaseModel):
             raise ValueError("fetched_at must be timezone-aware (a cache entry's time)")
         return v.astimezone(UTC)
 
+    @model_validator(mode="after")
+    def _kind(self) -> Self:
+        kind = _CLAIM_KINDS.get(self.field, str)
+        if not isinstance(self.value, kind):  # StrictInt already refuses bool
+            raise ValueError(f"a {self.field} claim's value must be a {kind.__name__}")
+        return self
+
     def sort_key(self) -> tuple[str, str, str, str]:
-        """A total order (a `None` url sorts first), used for provenance and snapshot files."""
+        """The provenance order (a `None` url sorts first). Total within a record, which rejects two claims
+        for one (field, source); dedup adds its own tie-break when it merges claims."""
         return (self.field, self.source, self.url or "", self.fetched_at.isoformat())
 
 
 class Urls(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    forum: str | None = None
-    pdf: str | None = None
-    proceedings: str | None = None
-    doi: str | None = None
+    forum: Text | None = None
+    pdf: Text | None = None
+    proceedings: Text | None = None
+    doi: Text | None = None
 
 
 def content_hash(*, title: str, abstract: str | None, venue: str, year: int, track: str, status: str) -> str:
@@ -110,23 +137,25 @@ class PaperRecord(BaseModel):
     id: str  # op:<venue lower-case>:<year>:<native>; never changes once a snapshot has shipped it
     title: StrictStr
     abstract: StrictStr | None
-    authors: tuple[StrictStr, ...]
+    authors: tuple[Text, ...]
     venue: Venue
-    year: StrictInt = Field(ge=1000, le=9999)
+    year: StrictInt = Field(ge=1000)  # the id's four digits bound it above
     track: Track
     status: Status
     presentation: Presentation | None = None
-    venue_id_raw: str | None = None
+    venue_id_raw: Text | None = None
     urls: Urls = Urls()
-    keywords: tuple[StrictStr, ...] = ()  # stored and shown, never indexed as text (guarantee 2)
+    keywords: tuple[Text, ...] = ()  # stored and shown, never indexed as text (guarantee 2)
     provenance: tuple[Claim, ...] = ()
-    content_hash: str
+    content_hash: str  # checked against the fields on every load; only build/model_copy compute it
 
     @field_validator("title")
     @classmethod
     def _title(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("a record needs a title")
+        if any(unicodedata.category(c) == "Cc" for c in v):
+            raise ValueError("title contains a control character")
         if v != " ".join(v.split()):
             raise ValueError(
                 "title must be whitespace-collapsed (raw text otherwise: no search normalization)"
@@ -140,7 +169,9 @@ class PaperRecord(BaseModel):
             return None
         if not v.strip():
             raise ValueError("an absent abstract is None, not an empty string")
-        if v.strip().startswith(_SNIPPET) or v.strip().endswith(_SNIPPET):
+        if v != v.strip():
+            raise ValueError("abstract has leading or trailing whitespace (importers strip it; it is hashed)")
+        if v.startswith(_SNIPPET) or v.endswith(_SNIPPET):
             raise ValueError("abstract starts or ends with `…`: a Scholar snippet, never a real abstract")
         return _utf8(v)
 
@@ -155,7 +186,7 @@ class PaperRecord(BaseModel):
         return tuple(sorted(v, key=Claim.sort_key))  # equality and snapshots never depend on input order
 
     @model_validator(mode="after")
-    def _consistent(self) -> Self:
+    def _consistent(self, info: ValidationInfo) -> Self:
         m = _ID.fullmatch(self.id)
         if m is None:
             raise ValueError(f"id {self.id!r} is not op:<venue>:<year>:<native>")
@@ -179,7 +210,7 @@ class PaperRecord(BaseModel):
             track=self.track,
             status=self.status,
         )
-        if self.content_hash == _PENDING:
+        if info.context and info.context.get(_REHASH):
             object.__setattr__(
                 self, "content_hash", expected
             )  # build / model_copy: hash the validated values
@@ -230,16 +261,17 @@ class PaperRecord(BaseModel):
                 "urls": urls or Urls(),
                 "keywords": keywords,
                 "provenance": provenance,
-                "content_hash": _PENDING,
-            }
+                "content_hash": _HASH_PLACEHOLDER,
+            },
+            context={_REHASH: True},
         )
 
     def model_copy(self, *, update: Mapping[str, Any] | None = None, deep: bool = False) -> Self:
         """A validated copy: every invariant is re-checked and the hash recomputed for the new fields."""
         data = self.model_dump()
         data.update(update or {})
-        data["content_hash"] = _PENDING
-        return self.model_validate(data)
+        data["content_hash"] = _HASH_PLACEHOLDER
+        return self.model_validate(data, context={_REHASH: True})
 
     def claims(self, field: ClaimField) -> tuple[Claim, ...]:
         """Every claim about `field`, including the ones precedence overruled."""

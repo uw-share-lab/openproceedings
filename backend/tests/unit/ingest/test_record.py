@@ -103,6 +103,22 @@ def test_a_stale_hash_is_rejected_on_load() -> None:
         PaperRecord.model_validate(data)
 
 
+@pytest.mark.parametrize("fake", ["pending", "0" * 64, "", "ABC"])
+def test_stored_data_can_never_ask_for_a_new_hash(fake: str) -> None:
+    line = (
+        record()
+        .model_dump_json()
+        .replace(record().content_hash, fake)
+        .replace("Trust Calibration", "Tampered")
+    )
+    with pytest.raises(ValidationError):
+        PaperRecord.model_validate_json(line)
+
+
+def test_a_four_character_native_id_is_a_forum_id() -> None:
+    assert record(id="op:iclr:2024:abcd").forum_id == "abcd"
+
+
 def test_round_trips_through_json() -> None:
     r = record()
     assert PaperRecord.model_validate_json(r.model_dump_json()) == r
@@ -138,6 +154,26 @@ INVALID: list[tuple[str, dict[str, Any]]] = [
     ("year below 1000", {"year": 999, "id": "op:iclr:0999:iilhN2MycO"}),
     ("year as a string", {"year": "2024"}),
     ("lone surrogate", {"title": "Trust \ud800"}),
+    ("lone surrogate in authors", {"authors": ("a\ud800",)}),
+    ("lone surrogate in keywords", {"keywords": ("a\ud800",)}),
+    ("lone surrogate in venue_id_raw", {"venue_id_raw": "a\ud800"}),
+    ("control character in the title", {"title": "Trust\x00AI"}),
+    ("abstract with trailing whitespace", {"abstract": "We study trust.\n"}),
+    ("snippet ending before whitespace", {"abstract": "We study …\n"}),
+    (
+        "nips hash with a tail",
+        {"id": "op:neurips:2024:nips-0123456789abcdef0123456789abcdefx", "venue": "NeurIPS"},
+    ),
+    (
+        "nips hash of 31 digits",
+        {"id": "op:neurips:2024:nips-0123456789abcdef0123456789abcde", "venue": "NeurIPS"},
+    ),
+    ("iclr id that isn't a hash", {"id": "op:iclr:2024:iclr-zzz"}),
+    ("pmlr id without a volume number", {"id": "op:icml:2024:pmlr-vX-foo", "venue": "ICML"}),
+    ("native id of three characters", {"id": "op:iclr:2024:abc"}),
+    ("native id of only punctuation", {"id": "op:iclr:2024:----"}),
+    ("native id over 64 characters", {"id": "op:iclr:2024:" + "a" * 65}),
+    ("full-width year digits", {"id": "op:iclr:２０２４:iilhN2MycO"}),
 ]
 
 
@@ -220,6 +256,27 @@ def test_claims_and_urls_forbid_extras_and_are_frozen() -> None:
 @pytest.mark.parametrize("source", ["openreview_v2", "openreview_v1", "neurips_proceedings", "pmlr", "ris"])
 def test_every_source_can_claim(source: str) -> None:
     assert claim("title", "x", source).source == source
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("year", "2024"), ("year", True), ("authors", "A. Author"), ("keywords", "trust"), ("title", 5), ("title", None),
+     ("title", ("a",)), ("title", "a\ud800")],
+)  # fmt: skip
+def test_a_claim_value_must_fit_its_field(field: str, value: Any) -> None:
+    with pytest.raises(ValidationError):
+        claim(field, value)
+
+
+def test_claim_text_must_be_valid_unicode_and_times_real_datetimes() -> None:
+    with pytest.raises(ValidationError):
+        claim("title", "x", url="https://x/\ud800")
+    with pytest.raises(ValidationError):
+        claim("title", "x", evidence="\ud800")
+    with pytest.raises(ValidationError):
+        Claim(field="title", value="x", source="ris", fetched_at="2026-09-20T12:00:00Z")  # type: ignore[arg-type]
+    with pytest.raises(ValidationError):
+        Urls(pdf="\ud800")
 
 
 def test_claim_fields_and_values_are_strict() -> None:
