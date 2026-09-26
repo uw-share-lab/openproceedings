@@ -1,11 +1,11 @@
 ---
 id: TASK-020
 title: Track and status classification from venueid and proceedings claims
-status: In Progress
+status: Done
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 18:33'
+updated_date: '2026-09-26 18:34'
 labels:
   - ingest
 milestone: m-2
@@ -34,3 +34,9 @@ Review (2026-09-26): track paths are now exact tuples per organisation (only the
 
 Verification round (2026-09-26): accepted only for a table path or a workshop (other paths take a mapped suffix's status, else unknown); status words any case, \w*_ prefix; the segment after Workshop is the name; unseen proceedings tokens unknown (Creative_AI_Track explicit other); rows for every organisation-ownership and year-bound mutant; skills updated.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Track/status classifier (ingest/classify.py): venueids parsed exactly against per-organisation track tuples; workshop wins; unmapped statuses and unknown forms never become accepted; proceedings tokens mapped explicitly. Verified: parametrised table tests including every reviewer form, two review rounds with mutation passes, and a read-only check of the Trust-Evals corpus forms (all classify as expected).
+<!-- SECTION:FINAL_SUMMARY:END -->
