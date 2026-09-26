@@ -19,7 +19,8 @@ description: The exact normalization contract shared by the query parser and the
    `leq`, `\not\in` → `notin`), and `^`/`_` join one ASCII letter/digit or a braced run of them (`$n^2$` →
    `n2`); a fourth mask state, SUB, marks those commands, and a Greek letter right after another command's
    name starts a new word (`\hat\theta` → `hat θ`); accent macros (`\"o`, `\H{o}`, `\"{\i}`) and `\-` join the word; `\%` `\&` `\$` `\\`
-   separate.
+   separate. The scan is linear (task-070): each opener's closer comes from a table built in one right-to-left
+   pass (`_Closers`), so an opener that never closes costs a lookup, not a scan to the end of the text.
 5. **Split** on every char that is not a Unicode letter, digit or non-combining mark; a Unicode operator
    in `mathsyms.OPERATORS`, looked up **after NFKC** (so `∬` → `int int`, `𝛁` → `nabla`, `ŀ` → `l cdot`), is
    a token of its own, its LaTeX name (`×` → `times`); a U+0338 slash composes with the character before

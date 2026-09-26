@@ -168,6 +168,47 @@ def _find(text: str, start: int, closer: str) -> int:
     return -1
 
 
+class _Closers:
+    """`_find` and `_find_closing_dollar` for every start at once (task-070). Each scan's walk from a
+    position is fixed (a backslash skips the character after it), so one right-to-left pass gives every
+    position's answer: an unclosed opener costs a lookup instead of a scan to the end of the text. Built
+    per closer, only when an opener needs it."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.tables: dict[str, list[int]] = {}
+
+    def find(self, start: int, closer: str) -> int:
+        """`_find(text, start, closer)`."""
+        if closer not in self.tables:
+            text, n = self.text, len(self.text)
+            res = [-1] * (n + 2)
+            for p in range(n - 1, -1, -1):
+                res[p] = p if text.startswith(closer, p) else res[p + (2 if text[p] == "\\" else 1)]
+            self.tables[closer] = res
+        return self.tables[closer][start] if start < len(self.text) else -1
+
+    def dollar(self, i: int) -> int:
+        """`_find_closing_dollar(text, i)`."""
+        text, n = self.text, len(self.text)
+        if i + 1 >= n or text[i + 1].isspace():
+            return -1
+        if "$" not in self.tables:
+            res = [-1] * (n + 2)
+            for p in range(n - 1, 0, -1):  # a walk starts after an opener, so never at 0
+                c = text[p]
+                if c == "\\":
+                    res[p] = res[p + 2]
+                elif c == "$" and p + 1 < n and text[p + 1] == "$":
+                    res[p] = -1
+                elif c == "$" and not text[p - 1].isspace() and not (p + 1 < n and text[p + 1].isdigit()):
+                    res[p] = p
+                else:
+                    res[p] = res[p + 1]
+            self.tables["$"] = res
+        return self.tables["$"][i + 1]
+
+
 def _script_join(text: str, i: int) -> int:
     """Inside math, `^`/`_` at `i` joins what it raises or lowers when that is one ASCII letter or digit,
     or a braced run of them (`n^2`, `x_{ij}`), as NFKC joins `n²` and `xᵢⱼ`. (Not `x^\\alpha`: NFKC reads
@@ -216,6 +257,7 @@ def _latex_mask(
     starts a new word because another command's name ends right before it: `\\hat\\theta` → `hat θ`)."""
     name_end = -1  # where the last kept command name (a word inside math) ended
     n = len(text)
+    closers = _Closers(text)
     opened = -1  # where the current math region's opening delimiter starts
     mask = [KEEP] * n
     math_until = -1  # index where the current math region's closing delimiter starts, or -1
@@ -235,7 +277,7 @@ def _latex_mask(
         if c == "\\" and i + 1 < n:
             nxt = text[i + 1]
             if not in_math and nxt in "([":
-                close = _find(text, i + 2, "\\)" if nxt == "(" else "\\]")
+                close = closers.find(i + 2, "\\)" if nxt == "(" else "\\]")
                 if close >= 0:
                     mask[i] = mask[i + 1] = SEP
                     math_until, close_len, opened = close, 2, i
@@ -319,14 +361,14 @@ def _latex_mask(
         elif c == "$":
             mask[i] = SEP
             if not in_math and i + 1 < n and text[i + 1] == "$":
-                close = _find(text, i + 2, "$$")
+                close = closers.find(i + 2, "$$")
                 mask[i + 1] = SEP
                 if close >= 0:
                     math_until, close_len, opened = close, 2, i
                 i += 2
                 continue
             if not in_math:
-                close = _find_closing_dollar(text, i)
+                close = closers.dollar(i)
                 if close >= 0:
                     math_until, close_len, opened = close, 1, i
         i += 1
