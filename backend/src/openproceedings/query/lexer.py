@@ -531,7 +531,7 @@ class _Lexer:
         elif self.bare_command(stem):
             dropped = (
                 "a LaTeX command outside math is not indexed (type the character itself, or put a math command "
-                "inside `$…$` to search its name)"
+                "inside `$…$` to search it)"
             )
         else:
             return

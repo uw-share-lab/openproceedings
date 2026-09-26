@@ -26,13 +26,19 @@ The query side and the index side run the **same** normalization function (`norm
    - `\cmd{X}` → `X`; a bare `\cmd` outside math is dropped.
    - Math regions are `$…$` (Pandoc's rule: the opening `$` is followed by a non-space, the closing `$` is
      preceded by a non-space and not followed by a digit, so `$5` and `US$ 5` are currency), `$$…$$`,
-     `\(…\)` and `\[…\]`. Inside math a command name is a word (`$\epsilon$-DP` → `epsilon dp`).
+     `\(…\)` and `\[…\]`. Inside math a command name is a word (`$\mathcal{L}$` → `mathcal l`), except
+     that math spelled in LaTeX gives the token its Unicode spelling gives (decision-006): a Greek command
+     is its letter (`$\epsilon$-DP` → `ε dp`, like `ε-DP`), an operator command its operator's name
+     (`$\le$` → `leq`, like `≤`), and `^`/`_` before one letter or digit, or a braced run of them, join
+     it (`$O(n^2)$` → `o n2`, like `O(n²)`).
    - `\%`, `\&`, `\$`, `\\` are separators; `\$` never opens math.
    - Accent macros join the word: `G\"odel`, `G\"{o}del`, `Erd\H{o}s`, `na\"{\i}ve` → `godel`, `erdos`, `naive`
      (BibTeX's dotless `{\i}`/`{\j}` inside an accent is the letter). `\-` (the
      discretionary hyphen) joins: `bench\-mark` → `benchmark`.
    - Full-width `＄` and `＼` are ordinary text, not LaTeX.
-4. Split on anything that is not a letter, digit or (non-combining) mark. `vision-language` → `vision`
+4. Split on anything that is not a letter, digit or (non-combining) mark, except that a Unicode operator
+   or relation (`×`, `≤`, `→`, `∈`, …; the table is in decision-006) is a token of its own, its LaTeX name
+   (`5×3` → `5` `times` `3`). `vision-language` → `vision`
    `language` at consecutive positions. `GPT-4o` → `gpt` `4o`. `model's` → `model` `s`. Invisible
    characters **join** rather than split: all format characters (Cf: soft hyphen, zero-width
    space/joiner/non-joiner, direction marks, BOM), variation selectors (`❤️`, `葛󠄀`), enclosing marks
@@ -58,6 +64,9 @@ tokens that share its span (`½` → `1`, `2`). The full case list is `backend/t
   other endings count only through an explicit `$` or `*`. Google Scholar stems, so a Scholar string run
   unchanged identifies fewer records here; in Scholar mode `COMPAT_NO_STEMMING` lists the terms affected.
 - **Title and abstract only.** Scholar also searches full text; openproceedings never does (guarantee 2).
+- **Math is matched by its Unicode spelling** (decision-006): a Greek letter is searched as the letter
+  (`α`, not `alpha`), an operator by its LaTeX name (`times`, `leq`), and some names are also ordinary
+  words (`in`, `times`, `sum`), so searching the word also finds the symbol.
 
 Everything else is exact: a token matches only the identical normalised token. The corpus is
 overwhelmingly English, so these limits rarely bite, but a review of non-English titles should say so.

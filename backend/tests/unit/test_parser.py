@@ -67,7 +67,7 @@ GOLDEN: list[tuple[str, str]] = [
     ('"trust in AI"', '"trust in ai"'),
     ('"trust"', "trust"),
     ('"trust - AI"', '"trust ai"'),
-    ("$\\epsilon$-DP", '"epsilon dp"'),
+    ("$\\epsilon$-DP", '"ε dp"'),
     # text fields push down to the leaves
     ("title:trust", "title:trust"),
     ("title:(a OR b)", "(OR title:a title:b)"),

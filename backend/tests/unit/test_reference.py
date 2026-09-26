@@ -49,7 +49,8 @@ ROWS = [
     ("title:trust", ["a", "e"]),
     ("abstract:calibration", ["f"]),
     ("naive", ["f"]),
-    ("epsilon", ["f"]),
+    ("ε", ["f"]),  # `$\\epsilon$` is indexed as ε (decision-006)
+    ("epsilon", []),  # the spelled word is its own token
     # Wildcards over the snapshot vocabulary
     ("benchmark*", ["a", "b"]),
     ("model$", ["b", "d", "e"]),  # model, models

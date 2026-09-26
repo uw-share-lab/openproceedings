@@ -5,6 +5,7 @@ import unicodedata
 
 from hypothesis import given
 from hypothesis import strategies as st
+from openproceedings.query.mathsyms import OPERATORS
 from openproceedings.query.normalize import TOKENIZER_VERSION, Token, normalize, tokenize
 
 # Text without LaTeX syntax: the whole-string reference below doesn't model LaTeX.
@@ -53,6 +54,7 @@ def _invisible(c: str) -> bool:
 
 def reference(text: str) -> list[str]:
     """The token contract stated as simply as possible, over the whole string (no LaTeX)."""
+    text = "".join(f" {OPERATORS[c]} " if c in OPERATORS else c for c in text)  # an operator is its own word
     s = unicodedata.normalize("NFD", unicodedata.normalize("NFKC", text).casefold())
     kept, base = [], None
     for c in s:

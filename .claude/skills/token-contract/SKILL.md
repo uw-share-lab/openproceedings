@@ -14,9 +14,13 @@ description: The exact normalization contract shared by the query parser and the
 4. **LaTeX** (a three-state mask — keep / separate / join — so offsets survive): `\cmd{X}` → `X`; a bare
    `\cmd` outside math is dropped; math is `$…$` (Pandoc rule: opener followed by a non-space, closer
    preceded by a non-space and not followed by a digit), `$$…$$`, `\(…\)`, `\[…\]`, and inside it a
-   command name is a word; accent macros (`\"o`, `\H{o}`, `\"{\i}`) and `\-` join the word; `\%` `\&` `\$` `\\`
+   command name is a word — except math with a Unicode spelling (decision-006, `query/mathsyms.py`): a
+   Greek command is its letter (`$\alpha$` → `α`), an operator command its operator's name (`$\le$` →
+   `leq`), and `^`/`_` join one letter/digit or a braced run (`$n^2$` → `n2`); a fourth mask state, SUB,
+   marks those commands; accent macros (`\"o`, `\H{o}`, `\"{\i}`) and `\-` join the word; `\%` `\&` `\$` `\\`
    separate.
-5. **Split** on every char that is not a Unicode letter, digit or non-combining mark. Invisible characters
+5. **Split** on every char that is not a Unicode letter, digit or non-combining mark; a Unicode operator
+   in `mathsyms.OPERATORS` is a token of its own, its LaTeX name (`×` → `times`). Invisible characters
    **join** (Cf, variation selectors, enclosing marks, CGJ); the invisible math operators U+2061–2064
    **separate**.
 

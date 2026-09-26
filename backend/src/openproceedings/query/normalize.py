@@ -12,9 +12,14 @@ about what a "word" is. In this order, and nothing else:
 4. LaTeX: `\\cmd{X}` → `X`; a bare `\\cmd` outside math is dropped. Math regions are `$…$` (Pandoc's
    tex_math_dollars rule: the opener is followed by a non-space, the closer is preceded by a non-space and
    not followed by a digit, so `$5` and `US$ 5` are currency), `$$…$$`, `\\(…\\)` and `\\[…\\]`; inside
-   them a command name is a word (`$\\epsilon$` → `epsilon`). `\\%`, `\\&`, `\\$`, `\\\\` are separators and
-   `\\$` never opens math. Accent macros (`G\\"odel`, `Erd\\H{o}s`, `na\\"{\\i}ve`) and `\\-` join the word.
-5. Split on every character that is not a letter, digit or (non-combining) mark. Invisible characters join
+   them a command name is a word (`$\\mathcal$` → `mathcal`), except that math spelled in LaTeX gives the
+   token its Unicode spelling gives (decision-006, `mathsyms.py`): a Greek command is its letter
+   (`$\\epsilon$` → `ε`, like `ε`), an operator command is its operator's name (`$\\le$` → `leq`, like `≤`),
+   and `^`/`_` before one letter or digit, or a braced run of them, join it (`$n^2$` → `n2`, like `n²`).
+   `\\%`, `\\&`, `\\$`, `\\\\` are separators and `\\$` never opens math. Accent macros (`G\\"odel`,
+   `Erd\\H{o}s`, `na\\"{\\i}ve`) and `\\-` join the word.
+5. Split on every character that is not a letter, digit or (non-combining) mark. A Unicode operator or
+   relation in `mathsyms.OPERATORS` is a token of its own, its LaTeX name (`5×3` → `5`, `times`, `3`). Invisible characters join
    (format characters such as the soft hyphen and zero-width joiner, variation selectors, enclosing marks,
    the combining grapheme joiner), so `bench\\u00admark` stays one word; the invisible math operators
    U+2061–2064 separate.
@@ -32,7 +37,9 @@ from __future__ import annotations
 import unicodedata
 from dataclasses import dataclass
 
-TOKENIZER_VERSION = "1"
+from openproceedings.query.mathsyms import GREEK, OPERATOR_COMMANDS, OPERATORS
+
+TOKENIZER_VERSION = "2"  # 2: math spelled in LaTeX or Unicode gives one token (decision-006)
 # Base letters whose combining marks fold (accents, optional vowel points): matched on the Unicode name.
 FOLDING_SCRIPTS = ("LATIN", "GREEK", "CYRILLIC", "HEBREW", "ARABIC", "EXTENDED ARABIC", "DIGIT")
 # Marks that spell a distinct letter even in those scripts, so they are kept: Cyrillic breve (й ≠ и) and
@@ -45,7 +52,9 @@ KEPT_MARKS = {
 # Invisible math operators (function application, times, separator, plus) separate words.
 INVISIBLE_SEPARATORS = frozenset("\u2061\u2062\u2063\u2064")
 
-KEEP, SEP, JOIN = 0, 1, 2  # LaTeX mask values: a normal char, a separator, markup that joins its neighbours
+# LaTeX mask values: a normal char, a separator, markup that joins its neighbours, and a math command that
+# stands for a Unicode spelling (its replacement is in the `subs` map, keyed by the backslash's index)
+KEEP, SEP, JOIN, SUB = 0, 1, 2, 3
 ACCENT_SYMBOLS = frozenset("'`^\"~=.")  # \'e \`e \^e \"o \~n \=a \.z
 ACCENT_LETTERS = frozenset("uvHcdbrk")  # \u{a} \v{c} \H{o} \c{c} \d{a} \b{a} \r{a} \k{a}
 
@@ -138,11 +147,34 @@ def _find(text: str, start: int, closer: str) -> int:
     return -1
 
 
-def _latex_mask(text: str, regions: list[tuple[int, int]] | None = None) -> list[int]:
+def _script_join(text: str, i: int) -> int:
+    """Inside math, `^`/`_` at `i` joins what it raises or lowers when that is one ASCII letter or digit,
+    or a braced run of them (`n^2`, `x_{ij}`), as NFKC joins `n²` and `xᵢⱼ`. (Not `x^\\alpha`: NFKC reads
+    `ᵅ` as the Latin `ɑ`, so no Unicode spelling agrees with it.) Returns
+    the index of the closing `}` to join too, `i` when there is none, or -1 when it doesn't join."""
+    if i + 1 >= len(text):
+        return -1
+    nxt = text[i + 1]
+    if nxt.isascii() and nxt.isalnum():
+        return i
+    if nxt == "{":
+        k = text.find("}", i + 2)
+        inner = text[i + 2 : k] if k > 0 else ""
+        return k if inner and inner.isascii() and inner.isalnum() else -1
+    return -1
+
+
+def _latex_mask(
+    text: str,
+    regions: list[tuple[int, int]] | None = None,
+    subs: dict[int, tuple[str, bool, int]] | None = None,
+) -> list[int]:
     """Classify every raw character for step 4: KEEP, SEP (LaTeX syntax that separates) or JOIN (markup
     inside a word, such as an accent macro or `\\-`). Math regions: `$…$` (Pandoc rule), `$$…$$`, `\\(…\\)`,
     `\\[…\\]`; inside them a command name is a word, outside it is dropped. Each math region found is
-    appended to `regions` as a half-open span from its opening delimiter to the end of its closing one."""
+    appended to `regions` as a half-open span from its opening delimiter to the end of its closing one. A
+    math command with a Unicode spelling is SUB at its backslash and JOIN over its name; `subs` maps the
+    backslash's index to (the spelling, whether it is an operator token, the command's end)."""
     n = len(text)
     opened = -1  # where the current math region's opening delimiter starts
     mask = [KEEP] * n
@@ -196,6 +228,16 @@ def _latex_mask(text: str, regions: list[tuple[int, int]] | None = None) -> list
                 j = i + 1
                 while j < n and text[j].isascii() and text[j].isalpha():
                     j += 1
+                name = text[i + 1 : j]
+                if in_math and (name in GREEK or name in OPERATOR_COMMANDS):
+                    mask[i] = SUB
+                    for k in range(i + 1, j):
+                        mask[k] = JOIN
+                    if subs is not None:
+                        op = name not in GREEK
+                        subs[i] = (OPERATOR_COMMANDS[name] if op else GREEK[name], op, j)
+                    i = j
+                    continue
                 mask[i] = SEP
                 if not in_math:  # a command name outside math is markup, not content
                     for k in range(i + 1, j):
@@ -213,6 +255,12 @@ def _latex_mask(text: str, regions: list[tuple[int, int]] | None = None) -> list
             continue
         if c == "\\":
             mask[i] = SEP
+        elif in_math and c in "^_" and (close := _script_join(text, i)) >= 0:
+            mask[i] = JOIN
+            if close > i:  # a braced run: the braces join too
+                mask[i + 1] = mask[close] = JOIN
+                i += 2
+                continue
         elif c == "$":
             mask[i] = SEP
             if not in_math and i + 1 < n and text[i + 1] == "$":
@@ -253,7 +301,8 @@ def math_regions(text: str) -> list[tuple[int, int]]:
 
 def tokenize(text: str) -> list[Token]:
     """Tokens of `text` with their raw code-point spans."""
-    latex = _latex_mask(text)
+    subs: dict[int, tuple[str, bool, int]] = {}
+    latex = _latex_mask(text, subs=subs)
     out: list[Token] = []
     buf: list[str] = []
     start = end = 0
@@ -269,6 +318,24 @@ def tokenize(text: str) -> list[Token]:
             buf = []
 
     for i, c in enumerate(text):
+        if latex[i] == SUB:  # a math command with a Unicode spelling
+            spelling, operator, stop = subs[i]
+            if operator:  # a token of its own
+                close()
+                out.append(Token(spelling, i, stop))
+                base = None
+                continue
+            folded, base = _fold(spelling, base)  # a Greek letter: part of the word, like the letter itself
+            if not buf:
+                start = i
+            buf.extend(folded)
+            end = stop
+            continue
+        if latex[i] == KEEP and c in OPERATORS:  # a Unicode operator: a token of its own, its LaTeX name
+            close()
+            out.append(Token(OPERATORS[c], i, i + 1))
+            base = None
+            continue
         if latex[i] == SEP:
             close()
             base = None

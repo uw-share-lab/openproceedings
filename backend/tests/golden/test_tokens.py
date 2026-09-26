@@ -14,7 +14,7 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ("naïve Bayes", ["naive", "bayes"]),
     ("GPT-4o", ["gpt", "4o"]),
     ("model's", ["model", "s"]),
-    ("$\\epsilon$-DP", ["epsilon", "dp"]),
+    ("$\\epsilon$-DP", ["ε", "dp"]),
     ("\\textit{TrustLLM}", ["trustllm"]),
     ("ﬁne-tuning", ["fine", "tuning"]),  # ligature
     ("STRASSE", ["strasse"]),
@@ -118,17 +118,17 @@ GOLDEN: list[tuple[str, list[str]]] = [
     # --- LaTeX -------------------------------------------------------------------------------------------
     ("\\emph{trustworthy} models", ["trustworthy", "models"]),
     ("\\textbf{LLM}-as-a-judge", ["llm", "as", "a", "judge"]),
-    ("$\\alpha$-divergence", ["alpha", "divergence"]),
-    ("$x_i$", ["x", "i"]),
-    ("$O(n^2)$", ["o", "n", "2"]),
+    ("$\\alpha$-divergence", ["α", "divergence"]),
+    ("$x_i$", ["xi"]),  # a subscript joins, as NFKC joins xᵢ
+    ("$O(n^2)$", ["o", "n2"]),
     ("$\\mathcal{L}_{\\text{KL}}$", ["mathcal", "l", "text", "kl"]),  # inside math, command names are words
     ("error of 5\\%", ["error", "of", "5"]),
     ("R\\&D", ["r", "d"]),
     ("\\cite{smith2020} shows", ["smith2020", "shows"]),
     ("trust\\\\benchmark", ["trust", "benchmark"]),  # \\ line break
     ("a \\newline b", ["a", "b"]),  # bare command outside math is dropped
-    ("$\\epsilon$", ["epsilon"]),
-    ("$\\epsilon$-differentially private", ["epsilon", "differentially", "private"]),
+    ("$\\epsilon$", ["ε"]),
+    ("$\\epsilon$-differentially private", ["ε", "differentially", "private"]),
     ("cost \\$5", ["cost", "5"]),  # escaped dollar is not a math delimiter
     # --- non-Latin scripts are words, split only on non-letters -------------------------------------------
     ("可信的人工智能", ["可信的人工智能"]),  # CJK: no word segmentation, one run
@@ -155,15 +155,15 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ("from $10 to $20", ["from", "10", "to", "20"]),
     ("$x$ costs $5", ["x", "costs", "5"]),
     # --- inline math per Pandoc's tex_math_dollars rule (task-010 review round 2)
-    ("a $2$-approximation with $\\epsilon$-DP", ["a", "2", "approximation", "with", "epsilon", "dp"]),
-    ("$1$ and $\\alpha$", ["1", "and", "alpha"]),
+    ("a $2$-approximation with $\\epsilon$-DP", ["a", "2", "approximation", "with", "ε", "dp"]),
+    ("$1$ and $\\alpha$", ["1", "and", "α"]),
     ("$10^{-3}$ lr and \\textsc{Adam}", ["10", "3", "lr", "and", "adam"]),
     ("US$ 5 and \\emph{x}", ["us", "5", "and", "x"]),
     ("cost \\$5 via \\textbf{x}", ["cost", "5", "via", "x"]),
     ("$a\\$b$", ["a", "b"]),
-    ("$$\\alpha$$", ["alpha"]),
-    ("\\(\\epsilon\\)-DP", ["epsilon", "dp"]),
-    ("\\[\\alpha\\]", ["alpha"]),
+    ("$$\\alpha$$", ["α"]),
+    ("\\(\\epsilon\\)-DP", ["ε", "dp"]),
+    ("\\[\\alpha\\]", ["α"]),
     ("＄\\alpha＄", []),  # full-width dollar is not a math delimiter (LaTeX never sees it)
     ("$x$\\emph{w}$ end", ["x", "w", "end"]),  # a closing $ must never re-open math
     ("$$x$$\\emph{w}$$", ["x", "w"]),  # nor a closing $$
@@ -172,7 +172,7 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ("$5 via \\textbf{y} $x", ["5", "via", "y", "x"]),  # a closer cannot follow a space
     ("costs 5 $ \\textbf{b}$", ["costs", "5", "b"]),  # an opener cannot be followed by a space
     ("$a\\$ \\textbf{b}$", ["a", "textbf", "b"]),  # an escaped `\$` never closes
-    ("\\(x\\\\)\\alpha y\\)", ["x", "alpha", "y"]),  # an escaped backslash never closes `\(`
+    ("\\(x\\\\)\\alpha y\\)", ["x", "α", "y"]),  # an escaped backslash never closes `\(`
     # --- LaTeX accent macros and the discretionary hyphen join the word
     ('na\\"{\\i}ve', ["naive"]),  # BibTeX dotless i
     ("\\v{\\j}", ["j"]),
@@ -205,10 +205,41 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ("**bold** claim", ["bold", "claim"]),
     # --- emoji and symbols are separators ---------------------------------------------------------------
     ("trust 🤖 benchmark", ["trust", "benchmark"]),
-    ("trust→benchmark", ["trust", "benchmark"]),
+    ("trust→benchmark", ["trust", "rightarrow", "benchmark"]),  # an operator is its LaTeX name
     ("trust•benchmark", ["trust", "benchmark"]),
     ("α-β", ["α", "β"]),
     ("\u00b5-law", ["\u03bc", "law"]),  # micro sign → NFKC → Greek small mu
+    # --- math spelled in LaTeX or Unicode gives one token (decision-006): Greek letters are the letter,
+    #     operators their LaTeX name, super/subscripts join; each pair pinned both ways
+    ("5.7$\\times$", ["5", "7", "times"]),
+    ("5.7×", ["5", "7", "times"]),
+    ("$\\leq$ 3", ["leq", "3"]),
+    ("$\\le$ 3", ["leq", "3"]),  # an alias gives its operator's one name
+    ("≤ 3", ["leq", "3"]),
+    ("$\\alpha$-DP", ["α", "dp"]),
+    ("α-DP", ["α", "dp"]),
+    ("alpha-DP", ["alpha", "dp"]),  # the spelled word stays its own token
+    ("$O(n^2)$ time", ["o", "n2", "time"]),
+    ("O(n²) time", ["o", "n2", "time"]),
+    ("$x_{ij}$", ["xij"]),
+    ("xᵢⱼ", ["xij"]),
+    ("$\\Delta$", ["δ"]),  # case folds
+    ("$\\varepsilon$ and $\\epsilon$", ["ε", "and", "ε"]),
+    ("ϵ and ε", ["ε", "and", "ε"]),  # NFKC folds the lunate form
+    ("$\\alpha\\beta$", ["αβ"]),
+    ("αβ", ["αβ"]),
+    ("$\\alpha_1$", ["α1"]),
+    ("$a \\to b$", ["a", "rightarrow", "b"]),
+    ("$a \\rightarrow b$", ["a", "rightarrow", "b"]),
+    ("a → b", ["a", "rightarrow", "b"]),
+    ("5×3", ["5", "times", "3"]),  # an operator splits the word it sits in
+    ("x ∈ S", ["x", "in", "s"]),  # collides with the word `in` (decision-006)
+    ("$10^{-3}$", ["10", "3"]),  # a braced run that isn't letters or digits doesn't join
+    ("10⁻³", ["10", "3"]),
+    ("$x^\\alpha$", ["x", "α"]),  # no join: NFKC reads ᵅ as the Latin ɑ, so nothing could agree
+    ("\\alpha outside math", ["outside", "math"]),  # a command outside math is still markup
+    ("snake_case and a^b", ["snake", "case", "and", "a", "b"]),  # ^ and _ join only inside math
+    ("$\\mathcal{L}$", ["mathcal", "l"]),  # a command with no Unicode spelling is still its name
 ]
 
 
