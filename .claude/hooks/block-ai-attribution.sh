@@ -43,7 +43,7 @@ def blocked():
     sys.exit(2)
 
 cmd, cwd = read_payload()
-if not cmd or not re.search(r"\b(git|gh)\b", cmd):
+if not cmd:  # no raw-text prefilter: `gi\<newline>t push` only becomes `git` after parsing (review round 6)
     sys.exit(0)
 try:
     commands = list(simple_commands(cmd, cwd))

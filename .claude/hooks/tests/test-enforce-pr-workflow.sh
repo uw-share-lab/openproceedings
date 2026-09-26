@@ -189,6 +189,8 @@ git push origin HEAD:dev"                                              # body en
 check feature/x block "n=\$((echo a) | wc -l)
 # don't worry
 git push origin HEAD:dev"                                              # \$((cmd) | …) is not arithmetic: fail closed
+check feature/x block "$(printf 'git pu\\\nsh origin HEAD:dev')"      # backslash-newline joins with nothing
+check feature/x block "$(printf 'git push origin HEAD:d\\\nev')"     # ... even inside the ref
 check feature/x allow 'git push origin feat
 echo main'                                                              # separators split commands: 'main' is not a refspec
 check main  allow 'bash --norc -c "git status"'            # positive control: long opt + safe cmd

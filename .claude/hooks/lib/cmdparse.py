@@ -218,7 +218,7 @@ def preprocess(cmd: str) -> str:
         if continues:
             text = text[:-1]
         if joining and out_lines:
-            out_lines[-1] += " " + text
+            out_lines[-1] += text  # bash deletes backslash-newline and inserts nothing (review round 6)
         else:
             out_lines.append(text)
         joining = continues

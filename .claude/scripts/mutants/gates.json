@@ -600,5 +600,17 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "        continues = trailing % 2 == 1 and quote != \"'\" and not pending",
   "new": "        continues = trailing >= 1 and quote != \"'\" and not pending"
+ },
+ {
+  "label": "continuation joined with a space",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            out_lines[-1] += text  # bash deletes backslash-newline and inserts nothing (review round 6)",
+  "new": "            out_lines[-1] += \" \" + text"
+ },
+ {
+  "label": "require-review raw-text git prefilter restored",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "if not cmd:  # no raw-text prefilter: `gi\\<newline>t push` only becomes `git` after parsing (review round 6)",
+  "new": "if not cmd or not re.search(r\"\\b(git|gh)\\b\", cmd):"
  }
 ]

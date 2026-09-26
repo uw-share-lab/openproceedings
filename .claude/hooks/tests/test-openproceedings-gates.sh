@@ -425,7 +425,11 @@ x
 EOF
 git push origin other2
 E')"  # a later line "E" would otherwise close the misread heredoc and swallow the push
-check $R block "odd trailing backslashes continue"      "$(payload_bash "$(printf 'echo a\\\\\\\\\\\\\ngit push origin other2')")"
+check $R block "even trailing backslashes don't continue" "$(payload_bash "$(printf 'echo a\\\\\ngit push origin other2')")"
+check $R allow "odd trailing backslashes continue (all echo)" "$(payload_bash "$(printf 'echo a\\\\\\\ngit push origin other2')")"
+check $R block "continuation splits a word: git pu\\sh" "$(payload_bash "$(printf 'git pu\\\nsh origin other2')")"
+check $R block "continuation splits the command: gi\\t" "$(payload_bash "$(printf 'gi\\\nt push origin other2')")"
+check $P block "continuation splits a flag: -fd\\x" "$(payload_bash "$(printf 'git clean -fd\\\nx')")"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")
