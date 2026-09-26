@@ -24,7 +24,9 @@ import os
 import shutil
 import tempfile
 import time
+from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib.metadata import version
@@ -35,7 +37,7 @@ import tantivy
 
 from openproceedings import storage
 from openproceedings.ingest.record import PaperRecord
-from openproceedings.ingest.snapshot import load_records
+from openproceedings.ingest.snapshot import iter_records
 from openproceedings.query.normalize import TOKENIZER_VERSION, normalize
 
 log = logging.getLogger("openproceedings.engine.index")
@@ -68,6 +70,15 @@ class IndexBuildResult:
     created: bool  # False when this index version already existed (and verified)
 
 
+def _floats(value: Any) -> Any:
+    """Numbers as floats, so `2` and `2.0` in ranking params give one index id."""
+    if isinstance(value, dict):
+        return {k: _floats(v) for k, v in value.items()}
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return float(value)
+    return value
+
+
 def index_version(
     snapshot_hash: str,
     tokenizer_version: str = TOKENIZER_VERSION,
@@ -76,7 +87,7 @@ def index_version(
 ) -> str:
     """The index's id: sha256 of the canonical JSON of its four inputs, first 12 hex digits."""
     body = {
-        "ranking_params": RANKING_PARAMS if ranking_params is None else ranking_params,
+        "ranking_params": _floats(RANKING_PARAMS if ranking_params is None else ranking_params),
         "schema_version": schema_version,
         "snapshot_hash": snapshot_hash,
         "tokenizer_version": tokenizer_version,
@@ -92,7 +103,8 @@ def analyzer() -> tantivy.TextAnalyzer:
 
 
 def schema() -> tantivy.Schema:
-    """Spec 03 §Index schema."""
+    """Spec 03 §Index schema. `record` is stored bytes (canonical JSON), not a JSON field: tantivy-py
+    indexes a JSON field's text by default, and the record must never be searchable (guarantee 2)."""
     b = tantivy.SchemaBuilder()
     b.add_text_field("id", stored=True, tokenizer_name="raw")
     for field in TEXT:
@@ -100,7 +112,7 @@ def schema() -> tantivy.Schema:
     for field in FACETS:
         b.add_text_field(field, stored=True, fast=True, tokenizer_name="raw")
     b.add_unsigned_field("year", stored=True, indexed=True, fast=True)
-    b.add_json_field("record", stored=True)  # display data only: never indexed (guarantee 2)
+    b.add_bytes_field("record", stored=True, indexed=False)
     return b.build()
 
 
@@ -111,22 +123,25 @@ def open_index(path: Path) -> tantivy.Index:
     return index
 
 
+def record_of(stored: bytes) -> dict[str, Any]:
+    """The display record stored with a document (its original title and abstract, authors, urls, …)."""
+    value: dict[str, Any] = json.loads(stored.decode("utf-8"))
+    return value
+
+
 PARALLEL_FROM = 2_000  # below this many records, normalizing in one process is faster than starting workers
+CHUNK = 4_096  # records normalized and added per step: memory stays flat whatever the corpus size
 
 
 def _normalize_pair(pair: tuple[str, str]) -> tuple[list[str], list[str]]:
     return normalize(pair[0]), normalize(pair[1])
 
 
-def _normalize_all(records: list[PaperRecord], workers: int | None) -> list[tuple[list[str], list[str]]]:
-    """Every record's (title, abstract) tokens, in order. `normalize()` is pure Python and dominates the
-    build, so a large corpus is split across processes (results come back in order: deterministic)."""
-    pairs = [(r.title, r.abstract or "") for r in records]  # a missing abstract indexes as ""
-    workers = workers if workers is not None else os.cpu_count() or 1
-    if workers <= 1 or len(pairs) < PARALLEL_FROM:
-        return [_normalize_pair(p) for p in pairs]
-    with ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn")) as pool:
-        return list(pool.map(_normalize_pair, pairs, chunksize=256))
+def _cpus() -> int:
+    """CPUs this process may use (a container's quota, not the host's count)."""
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0))
+    return os.cpu_count() or 1
 
 
 def _document(r: PaperRecord, fields: dict[str, list[str]]) -> tantivy.Document:
@@ -137,22 +152,21 @@ def _document(r: PaperRecord, fields: dict[str, list[str]]) -> tantivy.Document:
     for field in FACETS:
         doc.add_text(field, getattr(r, field))
     doc.add_unsigned("year", r.year)
-    doc.add_json(
-        "record",
-        {
-            "title": r.title,  # display text: the indexed fields hold tokens, never shown
-            "abstract": r.abstract,
-            "authors": list(r.authors),
-            "urls": r.urls.model_dump(),
-            "presentation": r.presentation,
-            "keywords": list(r.keywords),
-            "venue_id_raw": r.venue_id_raw,
-        },
-    )
+    display = {
+        "title": r.title,  # display text: the indexed fields hold tokens, never shown
+        "abstract": r.abstract,
+        "authors": list(r.authors),
+        "urls": r.urls.model_dump(),
+        "presentation": r.presentation,
+        "keywords": list(r.keywords),
+        "venue_id_raw": r.venue_id_raw,
+    }
+    doc.add_bytes("record", json.dumps(display, sort_keys=True, ensure_ascii=False).encode("utf-8"))
     return doc
 
 
 def _check_tokens(r: PaperRecord, fields: dict[str, list[str]], exact: tantivy.TextAnalyzer) -> None:
+    # id and facets (the `raw` fields) can't reach the limit: PaperRecord bounds ids and the vocabulary facets
     for field, tokens in fields.items():
         if any(len(t.encode("utf-8")) > MAX_TOKEN_BYTES for t in tokens):
             raise IndexBuildError(
@@ -173,11 +187,18 @@ def _file_hashes(path: Path) -> dict[str, str]:
 
 
 def verify_index(path: Path) -> dict[str, Any]:
-    """The manifest of a complete, unchanged index: every file re-hashed, the doc count re-read."""
+    """The manifest of a complete, unchanged index: its id recomputed from the manifest's four inputs and
+    matched to the manifest and the directory name, every file re-hashed, the doc count re-read."""
     try:
         manifest: dict[str, Any] = json.loads((path / MANIFEST).read_text(encoding="utf-8"))
-    except (OSError, ValueError) as e:
+        recomputed = index_version(
+            manifest["snapshot_hash"], manifest["tokenizer_version"], manifest["schema_version"],
+            manifest["ranking_params"],
+        )  # fmt: skip
+    except (OSError, ValueError, KeyError, TypeError) as e:
         raise IndexBuildError(f"{path.name} is not an index ({type(e).__name__})") from None
+    if not recomputed == manifest.get("index_version") == path.name:
+        raise IndexBuildError(f"{path.name}: its manifest's inputs don't give its index_version (changed)")
     if _file_hashes(path) != manifest.get("files"):
         raise IndexBuildError(f"{path.name}: its files don't match its manifest (changed or incomplete)")
     if open_index(path).searcher().num_docs != manifest.get("doc_count"):
@@ -192,19 +213,65 @@ def _seal(path: Path) -> None:
             p.chmod(0o444)
 
 
+def _chunks(records: Iterator[PaperRecord]) -> Iterator[list[PaperRecord]]:
+    chunk: list[PaperRecord] = []
+    for r in records:
+        chunk.append(r)
+        if len(chunk) == CHUNK:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
+def _add_all(snapshot: Path, writer: Any, exact: tantivy.TextAnalyzer, workers: int) -> int:
+    """Stream the snapshot's records (in id order, verified) through normalize() into the writer, across
+    `workers` processes when there is more than one."""
+    pool = None
+    added = 0
+    try:
+        for chunk in _chunks(iter_records(snapshot)):
+            pairs = [(r.title, r.abstract or "") for r in chunk]  # a missing abstract indexes as ""
+            if pool is None and workers > 1 and (added > 0 or len(pairs) >= PARALLEL_FROM):
+                # started only once the corpus is big enough to repay it (a small one never pays the cost)
+                pool = ProcessPoolExecutor(
+                    max_workers=workers, mp_context=multiprocessing.get_context("spawn")
+                )
+            if pool is None:
+                normalized = [_normalize_pair(p) for p in pairs]
+            else:  # results come back in order: deterministic
+                normalized = list(pool.map(_normalize_pair, pairs, chunksize=64))
+            for r, (title, abstract) in zip(chunk, normalized, strict=True):
+                fields = {"title": title, "abstract": abstract}
+                _check_tokens(r, fields, exact)
+                writer.add_document(_document(r, fields))
+            added += len(chunk)
+    except BrokenProcessPool:
+        raise IndexBuildError("a normalizing worker process died (out of memory?); build again") from None
+    finally:
+        if pool is not None:
+            pool.shutdown(cancel_futures=True)
+    return added
+
+
 def build_index(
     snapshot: Path, indexes: Path, built_at: datetime | None = None, workers: int | None = None
 ) -> IndexBuildResult:
-    """Build `indexes/<index_version>/` from a snapshot, or verify and report the one that exists."""
+    """Build `indexes/<index_version>/` from a snapshot, or verify and report the one that exists. Records
+    stream through in chunks, so memory doesn't grow with the corpus."""
     began = time.monotonic()
-    snapshot_manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
-    records = load_records(snapshot)  # refuses a snapshot whose records don't verify
-    version_id = index_version(snapshot_manifest["snapshot_hash"])
+    try:
+        snapshot_manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+        snapshot_hash = snapshot_manifest["snapshot_hash"]
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise IndexBuildError(f"{snapshot.name} is not a snapshot ({type(e).__name__})") from None
+    version_id = index_version(snapshot_hash)
     target = indexes / version_id
     with storage.exclusive(indexes):
         storage.sweep(indexes)
         if target.exists():
             verify_index(target)
+            _seal(target)  # a crash between placing and sealing left it writable
             log.info("index_exists", extra={"index_version": version_id})
             return IndexBuildResult(target, version_id, created=False)
         tmp = Path(tempfile.mkdtemp(dir=indexes, prefix=storage.TMP))
@@ -213,21 +280,17 @@ def build_index(
             exact = analyzer()
             index.register_tokenizer(ANALYZER, exact)
             writer = index.writer(num_threads=1)  # one thread: documents keep id order, deterministically
-            ordered = [records[rid] for rid in sorted(records)]
-            for r, (title, abstract) in zip(ordered, _normalize_all(ordered, workers), strict=True):
-                fields = {"title": title, "abstract": abstract}
-                _check_tokens(r, fields, exact)
-                writer.add_document(_document(r, fields))
+            added = _add_all(snapshot, writer, exact, workers if workers is not None else _cpus())
             writer.commit()
             writer.wait_merging_threads()
             index.reload()
             count = index.searcher().num_docs
-            if count != len(records):
-                raise IndexBuildError(f"the index holds {count} documents, the snapshot {len(records)}")
+            if count != added:
+                raise IndexBuildError(f"the index holds {count} documents, the snapshot {added}")
             manifest = {
                 "index_version": version_id,
                 "snapshot": snapshot.name,
-                "snapshot_hash": snapshot_manifest["snapshot_hash"],
+                "snapshot_hash": snapshot_hash,
                 "tokenizer_version": TOKENIZER_VERSION,
                 "schema_version": SCHEMA_VERSION,
                 "ranking_params": RANKING_PARAMS,
@@ -246,7 +309,10 @@ def build_index(
             except OSError as e:
                 raise IndexBuildError(f"could not place {version_id} ({type(e).__name__})") from None
             _seal(target)
-            verify_index(target)
+            try:
+                verify_index(target)
+            except IndexBuildError as e:
+                raise IndexBuildError(f"{e}; the placed index is broken: retire it and build again") from None
         finally:
             if tmp.exists():
                 storage.writable(tmp)

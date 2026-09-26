@@ -117,7 +117,8 @@ def test_stored_display_text_and_the_unindexed_record(built: Path) -> None:
     [(_, address)] = searcher.search(tantivy.Query.term_query(index.schema, "title", "ørsted"), 1).hits
     doc = searcher.doc(address).to_dict()
     assert doc["title"] == ["trust in ørsted s models"]  # the indexed field stores the token stream
-    [record] = doc["record"]
+    [stored] = doc["record"]
+    record = idx.record_of(stored)
     assert record["title"] == "Trust in Ørsted's Models"  # the display text lives in the stored record
     assert doc["year"] == [2024]
 
@@ -227,7 +228,7 @@ def test_cli_index_build(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> 
 def stored(path: Path) -> dict[str, tuple[Any, Any]]:
     index = open_index(path)
     searcher = index.searcher()
-    docs = [searcher.doc(a).to_dict() for _, a in searcher.search(tantivy.Query.all_query(), 100).hits]
+    docs = [searcher.doc(a).to_dict() for _, a in searcher.search(tantivy.Query.all_query(), 10_000).hits]
     return {d["id"][0]: (d["title"], d["abstract"]) for d in docs}
 
 
@@ -238,3 +239,130 @@ def test_parallel_normalizing_builds_the_same_index(tmp_path: Path, monkeypatch:
     parallel = build_index(snap, tmp_path / "two", BUILT, workers=2)
     assert serial.index_version == parallel.index_version
     assert stored(serial.path) == stored(parallel.path) and len(stored(serial.path)) == 3
+
+
+# --- review rows (task-023 review, 2026-09-26) ---------------------------------------------------------------
+
+
+def test_the_record_field_is_never_indexed(built: Path) -> None:
+    index = open_index(built)
+    with pytest.raises(ValueError, match="not indexed"):
+        index.searcher().search(tantivy.Query.term_query(index.schema, "record", b"trust"), 1)
+
+
+def rewrite_manifest(path: Path, change: dict[str, Any]) -> None:
+    manifest_path = path / "manifest.json"
+    manifest_path.chmod(0o644)
+    manifest = json.loads(manifest_path.read_text())
+    manifest_path.write_text(json.dumps({**manifest, **change}))
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [({"snapshot_hash": "1" * 64}, "inputs don't give"), ({"ranking_params": {"bm25": {}}}, "inputs don't give"),
+     ({"index_version": "000000000000"}, "inputs don't give"), ({"doc_count": 99}, "document count")],
+)  # fmt: skip
+def test_a_changed_manifest_is_refused(built: Path, change: dict[str, Any], message: str) -> None:
+    rewrite_manifest(built, change)
+    with pytest.raises(IndexBuildError, match=message):
+        verify_index(built)
+
+
+def test_a_rebuild_reseals_a_writable_index(built: Path, tmp_path: Path) -> None:
+    victim = next(p for p in built.iterdir() if p.suffix == ".store")
+    victim.chmod(0o644)  # as if a crash hit between placing and sealing
+    build_index(tmp_path / "snap", tmp_path / "indexes", BUILT)
+    assert stat.S_IMODE(victim.stat().st_mode) == 0o444
+
+
+def test_the_token_limit_counts_utf8_bytes(tmp_path: Path) -> None:
+    kept = paper("AbCd1234", "ø" * (MAX_TOKEN_BYTES // 2))  # 65,530 bytes
+    built = build_index(snapshot_of([kept], tmp_path / "a"), tmp_path / "ia", BUILT).path
+    assert hits(open_index(built), "title", "ø" * (MAX_TOKEN_BYTES // 2)) == 1
+    over = paper("AbCd1234", "ø" * (MAX_TOKEN_BYTES // 2) + "x")  # 65,531 bytes, but only 32,766 characters
+    with pytest.raises(IndexBuildError, match="over 65530 bytes"):
+        build_index(snapshot_of([over], tmp_path / "b"), tmp_path / "ib", BUILT)
+
+
+def test_records_out_of_id_order_are_refused(tmp_path: Path) -> None:
+    snap = snapshot_of(CORPUS, tmp_path / "snap")
+    lines = (snap / "records.jsonl").read_text(encoding="utf-8").splitlines(keepends=True)
+    data = "".join(reversed(lines)).encode("utf-8")
+    (snap / "records.jsonl").write_bytes(data)
+    rewrite_manifest(snap, {"snapshot_hash": __import__("hashlib").sha256(data).hexdigest()})
+    with pytest.raises(Exception, match="not sorted by id"):
+        build_index(snap, tmp_path / "indexes", BUILT)
+
+
+def many(n: int) -> list[PaperRecord]:
+    words = ["trust", "calibration", "reliance", "benchmark", "judge", "agent"]
+    return [
+        paper(
+            f"Id{i:06d}",
+            f"{words[i % 6]} {words[(i * 7) % 6]} study {i}",
+            abstract=f"We {words[i % 5]} it {i}.",
+        )
+        for i in range(n)
+    ]
+
+
+def test_parallel_chunks_keep_every_record_in_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    snap = snapshot_of(many(600), tmp_path / "snap")
+    serial = stored(build_index(snap, tmp_path / "one", BUILT, workers=1).path)
+    monkeypatch.setattr(idx, "PARALLEL_FROM", 1)
+    monkeypatch.setattr(idx, "CHUNK", 128)  # several chunks, several pool.map calls
+    parallel = stored(build_index(snap, tmp_path / "two", BUILT, workers=3).path)
+    assert parallel == serial and len(parallel) == 600
+
+
+def test_two_builds_give_the_same_scores(tmp_path: Path) -> None:
+    snap = snapshot_of(many(300), tmp_path / "snap")
+
+    def scores(path: Path) -> dict[str, float]:
+        index = open_index(path)
+        searcher = index.searcher()
+        q = tantivy.Query.term_query(index.schema, "title", "trust")
+        return {searcher.doc(a).to_dict()["id"][0]: s for s, a in searcher.search(q, 500).hits}
+
+    a, b = (
+        scores(build_index(snap, tmp_path / "one", BUILT).path),
+        scores(build_index(snap, tmp_path / "two", BUILT).path),
+    )
+    assert a == b and len(a) > 10
+
+
+def test_a_dead_worker_is_a_refusal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from concurrent.futures.process import BrokenProcessPool
+
+    class Dying:
+        def __init__(self, **kw: Any) -> None:
+            pass
+
+        def map(self, *a: Any, **kw: Any) -> Any:
+            raise BrokenProcessPool("killed")
+
+        def shutdown(self, **kw: Any) -> None:
+            pass
+
+    monkeypatch.setattr(idx, "ProcessPoolExecutor", Dying)
+    monkeypatch.setattr(idx, "PARALLEL_FROM", 1)
+    with pytest.raises(IndexBuildError, match="worker process died"):
+        build_index(snapshot_of(CORPUS, tmp_path / "snap"), tmp_path / "indexes", BUILT, workers=2)
+    assert [p.name for p in (tmp_path / "indexes").iterdir() if p.name != ".lock"] == []
+
+
+def test_ranking_numbers_are_canonical() -> None:
+    as_int = {"bm25": {"b": 0.75, "k1": 1.2}, "field_weights": {"abstract": 1, "title": 2}}
+    assert index_version("0" * 64, "2", "1", as_int) == index_version("0" * 64, "2", "1", RANKING_PARAMS)
+
+
+def test_cli_hash_prefix_never_matches_a_staging_dir(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    snaps = tmp_path / "data" / "snapshots"
+    snap = snapshot_of(CORPUS, snaps / "2026-09-01-abc")
+    import shutil
+
+    shutil.copytree(snap, snaps / ".tmp-crashed")  # a crashed build's leftover with the same hash
+    prefix = json.loads((snap / "manifest.json").read_text())["snapshot_hash"][:8]
+    assert cli.resolve_snapshot(prefix, snaps) == snap

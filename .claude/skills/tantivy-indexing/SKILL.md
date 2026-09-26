@@ -13,7 +13,7 @@ description: The Tantivy index standard for openproceedings — the schema table
 | `abstract` | text, freqs + positions | ✓ | ✓ | | same; a missing abstract is `""`, never omitted |
 | `venue`, `track`, `status` | text, `raw` (facet) | ✓ | ✓ | ✓ | one spelling per value, fixed by the ingest vocabulary |
 | `year` | u64 | ✓ | ✓ | ✓ | `RangeQuery` target |
-| `record` | JSON (authors, urls, presentation, keywords) | | ✓ | | **never indexed** (guarantee 2) |
+| `record` | bytes: canonical JSON (display title and abstract, authors, urls, presentation, keywords, venue_id_raw) | | ✓ | | **never indexed** (guarantee 2): not a JSON field, which tantivy-py indexes by default; read with `record_of` |
 
 Positions are mandatory on `title`/`abstract` (phrases, NEAR, highlights). Any change to this table bumps
 `SCHEMA_VERSION` (`.claude/skills/index-versioning/SKILL.md`).
@@ -46,25 +46,30 @@ Positions are mandatory on `title`/`abstract` (phrases, NEAR, highlights). Any c
 2. Compute `index_version` **before** building. If `data/indexes/<index_version>/` already exists, verify it
    and stop. Never rebuild in place.
 3. Under an exclusive lock on `data/indexes/`, build into a `.tmp-` staging directory. Normalize titles and
-   abstracts (split across processes above 2,000 records: `normalize()` is the whole cost; results come
-   back in order), then add documents in `id` order through a one-thread writer. Commit, then wait for
-   merges.
+   abstracts, streaming the snapshot's records in id order (`iter_records`: hashed first, then read line
+   by line, ids strictly ascending) in chunks of 4,096, so memory stays flat. `normalize()` is the whole
+   cost, so from the first full chunk a process pool shares it (results come back in order); then add
+   documents through a one-thread writer. Commit, then wait for merges.
 4. Check the doc count. Write a manifest (`index_version`, snapshot name and hash, `TOKENIZER_VERSION`,
    `SCHEMA_VERSION`, ranking params, tantivy-py version, doc count, build time and ms, and the sha256 of
    every index file).
 5. Sync and rename the staging directory to `data/indexes/<index_version>/`, make every file read-only
    except Tantivy's lock files (readers take `.tantivy-meta.lock`, so the directory itself stays
-   writable), and verify it: `verify_index` re-hashes every file and re-reads the doc count, and a build
-   that finds its version already present verifies it instead of rebuilding. Moving `current` is a
+   writable), and verify it: `verify_index` recomputes the id from the manifest's four inputs (it must
+   equal the manifest's and the directory's), re-hashes every file and re-reads the doc count. A build
+   that finds its version already present verifies and re-seals it instead of rebuilding. The directory
+   must be writable to open (Tantivy's reader lock), so an index can't be served from a read-only mount
+   (task-065). Moving `current` is a
    separate release step.
 
 `data/indexes/` is immutable. `protect-data-dir.sh` blocks Write/Edit there, so builds go through the CLI
 only.
 
 ## Budgets
-Build in < 2 min and < 500 MB on the ~80k M4 corpus (CI bench plus nightly). Measured 2026-09-26 on an
-8-core laptop with 80k synthetic records (the real corpus's text repeated): 32.9 s and 187 MB (129.9 s
-before normalizing in parallel).
+Build in < 2 min, and an index under 500 MB on disk (spec 03), on the ~80k M4 corpus (CI bench plus
+nightly). Measured 2026-09-26 on an 8-core laptop with 80k synthetic records (the real corpus's text
+repeated): 33 s, a 45 MB index, peak memory 355 MB (129.9 s before normalizing in parallel; 2 GB before
+streaming). The token-parity test that reads indexed terms back through the term/position API is task-029.
 
 ## Gotchas
 - Stored `title`/`abstract` hold normalized text. Keep the original display text in `record` (or the

@@ -134,6 +134,8 @@ def resolve_snapshot(spec: str, snapshots: Path) -> Path:
         return snapshots / spec
     found = []
     for d in sorted(snapshots.glob("*")) if snapshots.is_dir() else []:
+        if d.name.startswith("."):
+            continue  # a `.tmp-` leftover or the lock file: never a snapshot
         try:
             if json.loads((d / "manifest.json").read_text(encoding="utf-8"))["snapshot_hash"].startswith(
                 spec

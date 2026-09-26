@@ -28,7 +28,7 @@ import tempfile
 import time
 import unicodedata
 from collections import Counter
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import astuple, dataclass, fields
 from datetime import UTC, datetime
 from pathlib import Path
@@ -265,27 +265,42 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
     return BuildResult(target, snapshot_hash, created=created)
 
 
-def load_records(snapshot: Path) -> dict[str, PaperRecord]:
-    """A snapshot's records by id. It must be a snapshot (a manifest whose hash matches records.jsonl), its
-    ids unique, and every record valid (so a stale content_hash is caught). Errors name the line only."""
+def iter_records(snapshot: Path) -> Iterator[PaperRecord]:
+    """A snapshot's records in file order, streamed (memory stays flat for any corpus). It must be a
+    snapshot: a manifest whose `snapshot_hash` matches `records.jsonl` (hashed in blocks before anything is
+    yielded), ids strictly ascending (so unique), and every record valid (so a stale content_hash is
+    caught). Errors name the line only, never its text."""
     try:
         manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
-        data = (snapshot / "records.jsonl").read_bytes()
+        digest = hashlib.sha256()
+        with (snapshot / "records.jsonl").open("rb") as fh:
+            for block in iter(lambda: fh.read(1 << 20), b""):
+                digest.update(block)
     except (OSError, ValueError) as e:
         raise SnapshotError(f"{snapshot.name} is not a snapshot ({type(e).__name__})") from None
-    if not isinstance(manifest, dict) or manifest.get("snapshot_hash") != _sha256(data):
+    if not isinstance(manifest, dict) or manifest.get("snapshot_hash") != digest.hexdigest():
         raise SnapshotError(f"{snapshot.name}: records.jsonl doesn't match its manifest's snapshot_hash")
-    records: dict[str, PaperRecord] = {}
-    for n, line in enumerate(data.decode("utf-8").splitlines(), start=1):
-        try:
-            r = PaperRecord.model_validate_json(line)
-        except ValidationError as e:
-            kinds = sorted({str(err["type"]) for err in e.errors(include_input=False)})
-            raise SnapshotError(f"{snapshot.name} line {n}: invalid record ({', '.join(kinds)})") from None
-        if r.id in records:
-            raise SnapshotError(f"{snapshot.name} line {n}: duplicate id")
-        records[r.id] = r
-    return records
+    previous = ""
+    with (snapshot / "records.jsonl").open(encoding="utf-8") as fh:
+        for n, line in enumerate(fh, start=1):
+            try:
+                r = PaperRecord.model_validate_json(line)
+            except ValidationError as e:
+                kinds = sorted({str(err["type"]) for err in e.errors(include_input=False)})
+                raise SnapshotError(
+                    f"{snapshot.name} line {n}: invalid record ({', '.join(kinds)})"
+                ) from None
+            if r.id == previous:
+                raise SnapshotError(f"{snapshot.name} line {n}: duplicate id")
+            if r.id < previous:
+                raise SnapshotError(f"{snapshot.name} line {n}: records are not sorted by id")
+            previous = r.id
+            yield r
+
+
+def load_records(snapshot: Path) -> dict[str, PaperRecord]:
+    """A snapshot's records by id (all in memory; `iter_records` streams them)."""
+    return {r.id: r for r in iter_records(snapshot)}
 
 
 def diff(a: Path, b: Path) -> dict[str, Any]:
