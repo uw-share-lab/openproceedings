@@ -6,15 +6,21 @@ name = "openproceedings-monorepo"
 version = "0.0.0"
 requires-python = ">=3.12"
 description = "Workspace root (not a package): dev tooling shared across the monorepo."
+dependencies = ["openproceedings"]
 
 [tool.uv]
 package = false
+# Pin the build backend so building the wheel is reproducible (hatchling is fetched at build time).
+build-constraint-dependencies = ["hatchling==1.27.0"]
+
+[tool.uv.sources]
+openproceedings = { workspace = true }
 
 [tool.uv.workspace]
-members = []   # "backend" is added when backend/ is created (M1)
+members = ["backend"]
 
 [dependency-groups]
-dev = ["ruff>=0.13", "mypy>=1.18"]
+dev = ["ruff>=0.13", "mypy>=1.18", "pytest>=8.3", "hypothesis>=6.112"]
 
 [tool.ruff]
 line-length = 110
@@ -33,3 +39,13 @@ ignore = [
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+addopts = "-ra --strict-markers"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = "backend/src"

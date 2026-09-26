@@ -14,7 +14,10 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   code never calls `basicConfig`, never adds handlers, never sets levels.
 - Every module: `log = logging.getLogger(__name__)`. No `print()` outside CLI user output, and CLI output
   that's meant for the user (results, tables) goes to stdout, not through logging.
-- Format: one JSON object per line (`ts`, `level`, `logger`, `event`, then fields). `event` is a short
+- Format: one JSON object per line (`ts`, `level`, `logger`, `event`, then fields). `op --log-format text`
+  renders the same fields as one readable line (values JSON-escaped) for local reading only; JSON is the
+  default and the only format anything collects. A field named like a core key is emitted as
+  `field_<key>`, so it can never overwrite the line's shape. `event` is a short
   **snake_case constant** (`crawl_page_fetched`, `index_built`), not a sentence. Variable data goes in
   fields: `log.info("index_built", extra={"index_version": v, "docs": n, "secs": t})`. Never build it
   into the message with an f-string.
@@ -42,7 +45,12 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   flag `log_query_text=false` can be switched on only on a local dev instance.
 - Never log abstracts, author lists, OpenReview credentials, tokens, cookies, `.env` values, or request
   bodies. Never log IPs beyond what the rate limiter needs in memory.
-- Exceptions from HTTP clients can carry URLs with credentials or tokens. Scrub them before logging.
+- Exceptions from HTTP clients can carry URLs with credentials or tokens. `logs.py` scrubs `user:pass@` and
+  secret-looking query parameters (`token`, `key`, `secret`, `password`, `auth`, `sig`) from every string
+  value and from exception and stack text, and redacts secret-shaped keys (starting or ending with a secret word: `password…`, `…_token`, `auth_…`,
+  `secret…`, `bearer…`, `…api_key`) case-insensitively at any depth, while ordinary fields like
+  `tokenizer_version`, `token_count` and `author_count` stay visible.
+  That is a backstop, not permission: still never pass credentials to a log call.
 
 ## API access line (INFO, exactly one per request)
 `request` event with: `request_id`, `method`, `route` (the template, e.g. `/api/v1/papers/{id}`, not the
