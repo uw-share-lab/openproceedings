@@ -2,6 +2,7 @@
 whole-string definition of the token contract (spec 02 §Token semantics)."""
 
 import unicodedata
+from itertools import pairwise
 
 import pytest
 from hypothesis import given
@@ -269,7 +270,26 @@ def test_script_join_is_linear() -> None:
         ('a \\"{\\i}ve', [(0, 1), (2, 10)]),
         ('G\\"odel', [(0, 7)]),  # inside a word: unchanged
         ("\\-mark", [(0, 6)]),
+        ("$n\\leq5$", [(1, 2), (3, 6), (6, 7)]),  # after an operator command, a word starts after its name
+        ("$\\neq1$", [(2, 5), (5, 6)]),
+        ("$\\not=x$", [(2, 6), (6, 7)]),
+        ("$3\\times10^5$", [(1, 2), (3, 8), (8, 12)]),
     ],
 )
 def test_leading_accent_markup_is_in_the_word_span(text: str, spans: list[tuple[int, int]]) -> None:
     assert [(t.start, t.end) for t in tokenize(text)] == spans
+
+
+LATEX_PIECES = ["$", "\\(", "\\)", " ", "a", "O", "5", "{", "}", "^", "_", '\\"', "\\'", "\\v", "\\H", "\\-",
+                "\\leq", "\\times", "\\alpha", "\\not", "=", "\\in", "\u0301", "\u200b", "中", "é", "-"]  # fmt: skip
+
+
+@given(st.lists(st.sampled_from(LATEX_PIECES), max_size=12).map("".join))
+def test_token_spans_are_valid_and_never_overlap(text: str) -> None:
+    tokens = tokenize(text)
+    for t in tokens:
+        assert 0 <= t.start < t.end <= len(text), (text, t)
+    for a, b in pairwise(tokens):
+        # pieces of one code point that folds to several (`½`, `⑴`) share its span; nothing else overlaps
+        shared = b.start < a.end and a.end - b.start <= 1 and not text[b.start : a.end].isascii()
+        assert b.start >= a.end or shared, (text, a, b)

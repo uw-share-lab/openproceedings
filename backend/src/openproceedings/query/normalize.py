@@ -434,7 +434,8 @@ def tokenize(text: str) -> list[Token]:
                 buf.extend(p for p in folded if isinstance(p, str))
                 end = cmd_end
             lead = None
-            i += 1
+            # an operator's name is its own token's: skip it, so no word after it starts inside it (`\\leq5`)
+            i = cmd_end if operator else i + 1
             continue
         if latex[i] == SEP:
             close()
