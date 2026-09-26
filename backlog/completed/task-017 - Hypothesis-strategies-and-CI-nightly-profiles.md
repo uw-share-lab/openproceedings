@@ -1,11 +1,11 @@
 ---
 id: TASK-017
 title: Hypothesis strategies and CI/nightly profiles
-status: In Progress
+status: Done
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 03:12'
+updated_date: '2026-09-26 03:33'
 labels:
   - engine
   - query
@@ -33,3 +33,9 @@ Strategies for tokens, query strings and ASTs over a corpus vocabulary (property
 <!-- SECTION:NOTES:BEGIN -->
 Stems near the 200-expansion cap need the 5k fixture: carried by task-057 (differential@50k).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+tests/strategies.py (asts, negative_asts, leaves, filters, queries over the fixture vocabulary, n-grams and real prefixes) and tests/unit/test_properties.py; ci 2,000 / nightly 50,000 with every property in the nightly workflow; counterexamples kept as golden rows; a coverage guard keeps properties non-vacuous. Cap-adjacent stems carried to task-057.
+<!-- SECTION:FINAL_SUMMARY:END -->

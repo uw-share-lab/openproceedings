@@ -1,11 +1,11 @@
 ---
 id: TASK-011
 title: Lexer for the query language with positioned diagnostics
-status: In Progress
+status: Done
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 03:09'
+updated_date: '2026-09-26 03:33'
 labels:
   - query
 milestone: m-1
@@ -43,3 +43,9 @@ Tokens for uppercase operators, |, -, phrases, fields, ranges, * and $ wildcards
 <!-- SECTION:NOTES:BEGIN -->
 Review dispositions: 'split Lexeme into per-kind types' (task-011 and task-013 reviews, Nit) → rejected: Lexeme is internal to lexer.py/parser.py and built in one place; a union would add isinstance ceremony to every parser branch without catching any bug the reviews found. Everything else from both reviews is fixed (commits 106811f and the task-013 review round).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+query/lexer.py: lexemes with code-point spans; nothing silently reinterpreted (ambiguous minus, mid-word/detached wildcards, stray colon, bare NEAR are errors; look-alike operators, lowercase operators, dropped symbols warn); NFKC look-alikes act as syntax (table re-derived from Unicode); LaTeX math regions come from the tokenizer. Three review rounds; mutants killed or documented equivalent; properties clean at 50k.
+<!-- SECTION:FINAL_SUMMARY:END -->

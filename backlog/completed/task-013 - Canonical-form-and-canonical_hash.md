@@ -1,11 +1,11 @@
 ---
 id: TASK-013
 title: Canonical form and canonical_hash
-status: In Progress
+status: Done
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 03:09'
+updated_date: '2026-09-26 03:33'
 labels:
   - query
 milestone: m-1
@@ -27,3 +27,9 @@ Fully parenthesised, uppercase operators, sorted filters, defaults explicit (spe
 - [x] #3 Golden (decision-001): filters canonicalise in order venue, year, track, status, then others alphabetically; values in a single-field OR group are sorted
 - [x] #4 canonical_hash = sha256(canonical NUL TOKENIZER_VERSION NUL QUERY_VERSION) (decision-003); QUERY_VERSION constant defined
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+query/canonical.py: flattened, deduplicated, filters after text in venue/year/track/status order, same-field OR filters merged, year ranges merged, NOT NOT collapsed, mistakable values and operator words quoted; canonical_hash = sha256(canonical NUL TOKENIZER_VERSION NUL QUERY_VERSION) (decision-003). Idempotence and match-set preservation property-tested (oracle on the 200-record fixture).
+<!-- SECTION:FINAL_SUMMARY:END -->

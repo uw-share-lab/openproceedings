@@ -1,11 +1,11 @@
 ---
 id: TASK-012
 title: 'Parser to AST with precedence, warnings and errors'
-status: In Progress
+status: Done
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 02:08'
+updated_date: '2026-09-26 03:33'
 labels:
   - query
 milestone: m-1
@@ -27,3 +27,9 @@ EBNF of spec 02 → typed AST (Or, And, Not, Term, Phrase, Near, Wildcard, Filte
 - [x] #3 Wildcard stem < 3 chars is an error (per task-001's decision on $)
 - [x] #4 Golden (decision-001): `gpt-4*` parses as Phrase[gpt, Wildcard(4*)]; `"large language model$"` as a Phrase whose last element is a Wildcard
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+query/ast.py (validated discriminated union, structure()) and query/parser.py: NOT > AND > OR, WARN_MIXED_AND_OR with the reading, WARN_FILTER_SCOPE, all-negative check, NEAR rules, filter vocabularies (vocab.py), depth cap, one error per mistake while separate mistakes are all reported; ast None iff errors. Reviewed twice.
+<!-- SECTION:FINAL_SUMMARY:END -->
