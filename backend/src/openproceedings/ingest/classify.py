@@ -32,7 +32,7 @@ _STATUS_SUFFIX = {
 }
 # A last segment that names a status but not one we map: its status is unknown (never accepted).
 # Whole words only, so a workshop named `SafeSubmission` or `AlignDecision` keeps its status.
-_STATUS_LIKE = re.compile(r"(?:\w+_)?(?:Submissions?|Withdrawn|Desk_Rejected|Rejected|Post_Decision)")
+_STATUS_LIKE = re.compile(r"(?:\w*_)?(?:Submissions?|Withdrawn|Rejected|Post_Decision)", re.IGNORECASE)
 # Exact track paths (segments after the year, status suffix removed), per organisation; None = any.
 # Rows follow the openreview-venueids skill's table; add one only for a form seen on a live note.
 _TRACKS: dict[tuple[str | None, tuple[str, ...]], str] = {
@@ -47,12 +47,15 @@ _TRACKS: dict[tuple[str | None, tuple[str, ...]], str] = {
     ("ICLR", ("TinyPapers",)): "tiny_papers",
     ("ICLR", ("BlogPosts",)): "blogpost",
 }
-# Proceedings track tokens (scholarmend's `proceedings_url` claim values, all seen in the corpus).
+# Proceedings track tokens (scholarmend's `proceedings_url` claim values). All seen in the Trust-Evals
+# corpus except `Datasets_and_Benchmarks`, scholarmend's alias for NeurIPS 2023 and earlier. An unseen
+# token is `unknown`, never guessed.
 _PROCEEDINGS = {
     "Conference": "main",
     "Datasets_and_Benchmarks_Track": "datasets_benchmarks",
-    "Datasets_and_Benchmarks": "datasets_benchmarks",  # NeurIPS 2023 and earlier omit `_Track`
+    "Datasets_and_Benchmarks": "datasets_benchmarks",
     "Position_Paper_Track": "position",
+    "Creative_AI_Track": "other",
 }
 
 
@@ -82,18 +85,23 @@ def classify_venueid(venueid: str) -> Classification:
     segments = m.group(3).split("/") if m else []
     if m is None or not all(segments) or "-" in segments or int(m.group(2)) not in _YEARS:
         return _unparsed(venueid)
-    venue, status = m.group(1), "accepted"  # an accepted paper has the bare venue path (skill: rule 2)
+    venue, suffix = m.group(1), None
     last = segments[-1]
-    if last in _STATUS_SUFFIX or _STATUS_LIKE.fullmatch(last):
+    workshop_name = len(segments) >= 2 and _is_workshop(segments[-2])  # `Workshop/Rejected` is a name
+    if not workshop_name and (last in _STATUS_SUFFIX or _STATUS_LIKE.fullmatch(last)):
         if len(segments) == 1:
             return _unparsed(venueid)  # a status with no track in front of it
-        status = _STATUS_SUFFIX.get(last, "unknown")
+        suffix = last
         segments = segments[:-1]
     if any(_is_workshop(s) for s in segments):
         track = "workshop"  # rule 1: workshop wins, whatever follows
     else:
         path = tuple(segments)
         track = _TRACKS.get((venue, path)) or _TRACKS.get((None, path)) or "other"
+    if suffix is not None:
+        status = _STATUS_SUFFIX.get(suffix, "unknown")
+    else:  # the bare path means accepted only for a form we know (skill: rule 2); `other` stays unknown
+        status = "accepted" if track != "other" else "unknown"
     return Classification(track=track, status=status, venue=venue, year=int(m.group(2)), venue_id_raw=venueid)
 
 
@@ -104,4 +112,5 @@ def classify_proceedings(track_token: str) -> Classification:
         return Classification(track="unknown", status="accepted", parsed=False)
     if any(_is_workshop(s) for s in track_token.split("/")):
         return Classification(track="workshop", status="accepted")
-    return Classification(track=_PROCEEDINGS.get(track_token, "other"), status="accepted")
+    track = _PROCEEDINGS.get(track_token, "unknown")
+    return Classification(track=track, status="accepted", parsed=track != "unknown")

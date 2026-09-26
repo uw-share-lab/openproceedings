@@ -10,7 +10,7 @@ description: The track and status enums from spec 01 with the source signal that
 |---|---|---|
 | `main` | venueid `<Org>.cc/<Y>/Conference`; a PMLR volume listed as `main` in the volume table; NeurIPS path `-Conference` | **yes** |
 | `datasets_benchmarks` | venueid `NeurIPS.cc/<Y>/Track/Datasets_and_Benchmarks` or `…_Track`; NeurIPS path `Datasets_and_Benchmarks(_Track)` (≤2023 alias) | **yes** |
-| `position` | ICML position-paper track (venueid form: verify); NeurIPS `Position_Paper_Track` (verify mapping) | **yes** |
+| `position` | ICML position-paper track (venueid `ICML.cc/<Y>/Position_Paper_Track`, seen); the proceedings token `Position_Paper_Track` (seen); a NeurIPS venueid form is unverified and classifies as `other` | **yes** |
 | `workshop` | any venueid segment `Workshop` or `Workshop_<City>`; a PMLR workshop volume | no |
 | `competition` | NeurIPS Competition Track; PMLR competition volumes | no |
 | `tiny_papers` | ICLR Tiny Papers (2023–2024) | no |

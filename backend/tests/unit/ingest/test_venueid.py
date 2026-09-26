@@ -55,13 +55,26 @@ UNVERIFIED: list[tuple[str, str | None, int | None, str, str]] = [
     ("ICLR.cc/2023/TinyPapers", "ICLR", 2023, "tiny_papers", "accepted"),
     ("ICLR.cc/2024/BlogPosts", "ICLR", 2024, "blogpost", "accepted"),
     ("NeurIPS.cc/2022/Track/Competition", "NeurIPS", 2022, "competition", "accepted"),
+    ("NeurIPS.cc/2023/Track/Creative_AI", "NeurIPS", 2023, "other", "unknown"),  # parses, not in the taxonomy
     (
-        "NeurIPS.cc/2023/Track/Creative_AI",
+        "NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round1",
         "NeurIPS",
-        2023,
-        "other",
+        2021,
+        "datasets_benchmarks",
         "accepted",
-    ),  # parses, not in the taxonomy
+    ),
+    ("ICLR.cc/2013/Conference", "ICLR", 2013, "main", "accepted"),  # the first year that parses
+    (
+        "ICML.cc/2024/Workshop/Rejected",
+        "ICML",
+        2024,
+        "workshop",
+        "accepted",
+    ),  # a workshop's name, not a status
+    ("ICML.cc/2024/Workshop/Data_Submission", "ICML", 2024, "workshop", "accepted"),
+    ("ICML.cc/2024/Workshop/Post_Decision_Theory", "ICML", 2024, "workshop", "accepted"),
+    ("ICLR.cc/2024/Conference/rejected_submission", "ICLR", 2024, "main", "unknown"),  # status words any case
+    ("ICLR.cc/2024/Conference/_Submission", "ICLR", 2024, "main", "unknown"),
 ]
 
 NEVER_PARSE: list[str] = [
@@ -81,6 +94,8 @@ NEVER_PARSE: list[str] = [
     "ICLR.cc/2024/Conference/-/Withdrawn_Submission",
     "ICML.cc/0000/Conference",  # a year outside 2013–2099
     "ICML.cc/2100/Conference",
+    "ICLR.cc/2012/Conference",
+    "ICLR.cc/2024/Blind_Submission",  # a status with no track in front of it
 ]
 
 
@@ -92,7 +107,7 @@ NEVER_PARSE: list[str] = [
 def test_table(venueid: str, venue: str, year: int, track: str, status: str) -> None:
     c = classify_venueid(venueid)
     assert (c.venue, c.year, c.track, c.status) == (venue, year, track, status)
-    assert c.venue_id_raw == venueid
+    assert c.venue_id_raw == venueid and c.parsed
 
 
 @pytest.mark.parametrize("venueid", NEVER_PARSE, ids=[v or "<empty>" for v in NEVER_PARSE])
@@ -158,6 +173,25 @@ def test_an_unmapped_status_is_unknown_never_accepted(suffix: str) -> None:
     ],
 )
 def test_forms_outside_the_table_are_other(venueid: str) -> None:
+    c = classify_venueid(venueid)
+    assert (c.track, c.status) == ("other", "unknown")  # never accepted without a known form
+
+
+@pytest.mark.parametrize(
+    "venueid",
+    [
+        "NeurIPS.cc/2025/Position_Paper_Track",  # each row belongs to one organisation
+        "ICLR.cc/2024/Datasets_and_Benchmarks_Track",
+        "ICML.cc/2024/Track/Datasets_and_Benchmarks_Track",
+        "ICML.cc/2021/Track/Datasets_and_Benchmarks/Round2",
+        "ICLR.cc/2024/Track/Competition",
+        "ICML.cc/2024/BlogPosts",
+        "ICLR.cc/2024/Conference/Rejected_Submission_2",
+        "ICLR.cc/2024/Conference/Under_Review",
+        "ICLR.cc/2024/Conference/Rejected_Submission/Conference",
+    ],
+)
+def test_rows_belong_to_their_organisation(venueid: str) -> None:
     assert classify_venueid(venueid).track == "other"
 
 
@@ -173,6 +207,8 @@ PROCEEDINGS = [
     ("Position_Paper_Track", "position"),
     ("Creative_AI_Track", "other"),
     ("", "unknown"),
+    ("conference", "unknown"),  # an unseen token is never guessed
+    ("Main", "unknown"),
     ("Workshop", "workshop"),
 ]
 
@@ -181,5 +217,5 @@ PROCEEDINGS = [
 def test_proceedings_claims(token: str, track: str) -> None:
     c = classify_proceedings(token)
     assert c.track == track
-    assert c.parsed is (token != "")
+    assert c.parsed is (track != "unknown")
     assert c.status == "accepted"  # a proceedings listing means accepted (spec 01; decision-005)

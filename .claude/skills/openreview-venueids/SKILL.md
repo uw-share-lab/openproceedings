@@ -31,8 +31,9 @@ accepted paper the bare venue path and keeps a `Submission` suffix on everything
 | `ICLR.cc/<Y>/TinyPapers` (2023–2024) | `tiny_papers` | `accepted` | verify spelling |
 | `ICLR.cc/<Y>/BlogPosts` | `blogpost` | `accepted` | verify spelling |
 | NeurIPS Competition Track path | `competition` | per suffix | verify |
-| `NeurIPS.cc/<Y>/Track/Creative_AI` | `other` | per suffix | verify (only the proceedings token `Creative_AI_Track` has been seen) |
-| any other `<Org>.cc/<Y>/<rest>` that parses | `other` | per suffix | keep `venue_id_raw` |
+| `NeurIPS.cc/<Y>/Track/Creative_AI` | `other` | per suffix, else `unknown` | verify (only the proceedings token `Creative_AI_Track` has been seen) |
+| any other `<Org>.cc/<Y>/<rest>` that parses | `other` | a mapped suffix's status, else `unknown` (a bare path means `accepted` only for a form in this table) | keep `venue_id_raw` |
+| `<Org>.cc/<Y>/Workshop/<name>` whose name looks like a status (`Rejected`, `Data_Submission`) | `workshop` | `accepted` (the segment after `Workshop` is always the name) | rule |
 | anything that does not match the grammar | `unknown` | `unknown` | log, show on coverage |
 
 Rows marked **verify** must be checked against a live note (by forum id, authenticated) before they get a
@@ -45,7 +46,9 @@ fixture, and the checked forum id goes in the test's comment.
 2. **Suffix is status, not track.** Strip a trailing `Submission`, `Rejected_Submission`,
    `Withdrawn_Submission` or `Desk_Rejected_Submission` and map it to status; any other status-like last
    segment (`Blind_Submission`, `Rejected_Submissions`, `Withdrawn`, `Desk_Rejected`, `Post_Decision`) is
-   stripped with status `unknown`, never `accepted`. A suffix needs a track in front of it; a `-` segment
+   stripped with status `unknown`, never `accepted` (status words match in any case). A suffix needs a
+   track in front of it, and the segment right after a `Workshop*` segment is the workshop's name, never a
+   status. A bare path is `accepted` only for a form in the table; `other` is `unknown`. A `-` segment
    (an invitation path) or a year outside 2013–2099 doesn't parse. Keep `venue_id_raw` verbatim.
 3. **Venue and year from the venueid must agree with the crawl scope.** A note found while crawling
    ICLR 2024 whose venueid says `ICLR.cc/2023/…` is a conflict, never silently re-yeared.

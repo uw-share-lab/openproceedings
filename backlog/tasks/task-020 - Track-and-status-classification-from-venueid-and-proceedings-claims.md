@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 17:16'
+updated_date: '2026-09-26 18:33'
 labels:
   - ingest
 milestone: m-2
@@ -31,4 +31,6 @@ Spec 01 §Track taxonomy (track-taxonomy, openreview-venueids skills).
 
 <!-- SECTION:NOTES:BEGIN -->
 Review (2026-09-26): track paths are now exact tuples per organisation (only the skill's rows reach a default-filter track; unseen aliases dropped); an unmapped status-like suffix is unknown, never accepted; a bare suffix, an invitation path (-) or a year outside 2013-2099 doesn't parse; workshop matched in any case. Note: AC #3 was reworded in 5f43f3f from venuescout's 92 workshop calls to the Trust-Evals 90 hand-verified venueids (forms only), because the venuescout calls are private data that can't be committed; the 90 venueids' forms are the seeded rows.
+
+Verification round (2026-09-26): accepted only for a table path or a workshop (other paths take a mapped suffix's status, else unknown); status words any case, \w*_ prefix; the segment after Workshop is the name; unseen proceedings tokens unknown (Creative_AI_Track explicit other); rows for every organisation-ownership and year-bound mutant; skills updated.
 <!-- SECTION:NOTES:END -->
