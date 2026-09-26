@@ -67,7 +67,7 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ("trust －bias", ["WORD:trust", "NOT", "WORD:bias"]),  # full-width hyphen-minus is `-` (NFKC)
     # --- parentheses, including their NFKC look-alikes
     ("(a OR b) c", ["LPAREN", "WORD:a", "OR", "WORD:b", "RPAREN", "WORD:c"]),
-    ("a(b)", ["WORD:a", "LPAREN", "WORD:b", "RPAREN"]),
+    ("a (b)", ["WORD:a", "LPAREN", "WORD:b", "RPAREN"]),
     ("((", ["LPAREN", "LPAREN"]),
     ("（a｜b）", ["LPAREN", "WORD:a", "OR", "WORD:b", "RPAREN"]),
     ("x⁽²⁾", ["WORD:x⁽²⁾"]),  # superscript parentheses are notation, not grouping
@@ -102,7 +102,11 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ('"a OR b"', ["PHRASE:a|OR|b"]),
     ('"(x)"', ["PHRASE:(x)"]),
     ('""', ["PHRASE:"]),
-    ('a"b c"d', ["WORD:a", "PHRASE:b|c", "WORD:d"]),
+    ('a "b c" d', ["WORD:a", "PHRASE:b|c", "WORD:d"]),
+    ('"trust 「in」 AI"', ["PHRASE:trust|「in」|AI"]),  # a foreign quote inside a phrase is punctuation
+    ("「trust “in” AI」", ["PHRASE:trust|“in”|AI"]),
+    ("»trust in AI«", ["PHRASE:trust|in|AI"]),  # Danish/Swedish guillemets
+    ("”trust in AI”", ["PHRASE:trust|in|AI"]),  # the protocol's main-5 spelling
     ('"G\\"odel prize"', ['PHRASE:G\\"odel|prize']),  # an escaped quote does not close the phrase
     ('"state -of- art"', ["PHRASE:state|-of-|art"]),  # inside a phrase a leading `-` is literal
     # --- wildcards: a suffix `*` or `$`; LaTeX math and currency are not wildcards
@@ -200,6 +204,15 @@ ERRORS: list[tuple[str, DiagnosticCode, tuple[int, int]]] = [
     ('"large language model"-based', C.PARSE_AMBIGUOUS_MINUS, (22, 28)),
     ("(LLM|VLM)-based", C.PARSE_AMBIGUOUS_MINUS, (9, 15)),
     ('"x"-y', C.PARSE_AMBIGUOUS_MINUS, (3, 5)),
+    # a quote touching a word on the outside: does it open or close? (M1 gate)
+    ('"human “trust” in AI"', C.PARSE_AMBIGUOUS_QUOTE, (7, 8)),
+    ('"trust in "AI" systems"', C.PARSE_AMBIGUOUS_QUOTE, (10, 11)),
+    ('a"b c"', C.PARSE_AMBIGUOUS_QUOTE, (1, 2)),
+    # a parenthesis glued to a word would silently mean AND
+    ("model(s)", C.PARSE_PAREN_TOUCHES_WORD, (0, 6)),
+    ("LLM(s)", C.PARSE_PAREN_TOUCHES_WORD, (0, 4)),
+    ("(a)b", C.PARSE_PAREN_TOUCHES_WORD, (2, 4)),
+    ("a(-a)", C.PARSE_PAREN_TOUCHES_WORD, (0, 2)),
 ]
 
 
@@ -382,3 +395,12 @@ def test_random_input_never_raises_and_spans_are_sound(q: str) -> None:
         covered.update(range(*d.span))
     # every visible character belongs to some lexeme or to an error that explains it
     assert all(i in covered for i, c in enumerate(q) if not c.isspace())
+
+
+def test_long_digit_runs_never_raise_in_the_lexer() -> None:
+    for q in ("a NEAR/" + "9" * 5000 + " b", "year:1.." + "9" * 5000, "1.." + "9" * 5000):
+        lex(q)  # lex() has no length cap of its own, so the conversions must be bounded
+
+
+def test_words_can_still_touch_parentheses_that_hold_math() -> None:
+    assert lex("$f(x)$ trust").errors == ()

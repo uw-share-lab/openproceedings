@@ -24,11 +24,12 @@ mode (`mode="scholar"`) is `compat.py` plus the `source:` branch below.
 
 from __future__ import annotations
 
+import unicodedata
 from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
-from openproceedings.diagnostics import Diagnostic, DiagnosticCode
+from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip
 from openproceedings.query.ast import (
     MAX_YEAR,
     MIN_YEAR,
@@ -60,6 +61,8 @@ from openproceedings.query.normalize import tokenize
 from openproceedings.vocab import STATUSES, TEXT_FIELDS, TRACKS, VENUES
 
 Mode = Literal["native", "scholar"]
+MAX_QUERY_LENGTH = 2000  # code points (spec 02 §Error handling); longer is PARSE_TOO_LONG, before lexing
+MAX_PER_CODE = 20  # diagnostics of one code shown before "… and N more"
 MAX_DEPTH = 64  # nested groups and NOTs; deeper is PARSE_TOO_DEEP, so recursion can never overflow
 _STARTS = frozenset({Kind.WORD, Kind.PHRASE, Kind.LPAREN, Kind.FIELD, Kind.NOT, Kind.RANGE})
 _EXAMPLES = {
@@ -108,19 +111,34 @@ def _positive(n: Node) -> bool:
     return True
 
 
+def _is_year(text: str) -> bool:
+    return text.isascii() and text.isdigit() and len(text) <= 4
+
+
+def _value_key(text: str) -> str:
+    """A filter value as compared with the vocabulary: NFKC, case-folded, accents dropped (`ＩＣＬＲ`,
+    `İCLR`, `Main` → `iclr`, `iclr`, `main`), but not split like the token contract (`datasets_benchmarks`)."""
+    folded = unicodedata.normalize("NFD", unicodedata.normalize("NFKC", text).casefold())
+    return unicodedata.normalize("NFC", "".join(c for c in folded if not unicodedata.combining(c)))
+
+
 def filter_value(field: FilterField, v: Lexeme) -> str | YearRange | None:
     """The canonical value `v` spells for `field`, or None if it is not a valid one."""
     if field == "year":
         if v.kind is Kind.RANGE and v.range is not None:
             lo, hi = v.range
-        elif v.kind is Kind.WORD and v.wildcard is None and v.text.isascii() and v.text.isdigit():
-            lo = hi = int(v.text)
+        elif (
+            v.kind is Kind.WORD
+            and v.wildcard is None
+            and _is_year(key := unicodedata.normalize("NFKC", v.text))
+        ):
+            lo = hi = int(key)
         else:
             return None
         return YearRange(lo=lo, hi=hi) if MIN_YEAR <= lo <= hi <= MAX_YEAR else None
     if v.kind is not Kind.WORD or v.wildcard is not None:
         return None
-    key = v.text.lower()
+    key = _value_key(v.text)
     if field == "venue":
         return VENUES.get(key)
     return key if key in _VALID[field] else None
@@ -138,6 +156,10 @@ class _Parser:
         self.i = 0
         self.depth = 0
         self.lex_errors = lex_errors
+        self.covered = bytearray(len(q) + 2)  # 1 where an error already points: O(1) "already reported?"
+        for e in lex_errors:
+            if e.span is not None:
+                self.cover(*e.span)
         self.errors: list[Diagnostic] = []
         self.warnings: list[Diagnostic] = []
 
@@ -159,13 +181,14 @@ class _Parser:
 
     def reported(self, start: int, end: int) -> bool:
         """Whether an error already covers part of [start, end), so a second one would repeat it."""
-        return any(
-            e.span is not None and e.span[0] < max(end, start + 1) and start < max(e.span[1], e.span[0] + 1)
-            for e in (*self.lex_errors, *self.errors)
-        )
+        return self.covered.find(1, start, max(end, start + 1)) != -1
+
+    def cover(self, start: int, end: int) -> None:
+        self.covered[start : max(end, start + 1)] = b"\x01" * (max(end, start + 1) - start)
 
     def error(self, code: DiagnosticCode, message: str, start: int, end: int) -> None:
         self.errors.append(Diagnostic(code=code, message=message, span=(start, end)))
+        self.cover(start, end)
 
     def enter(self, tok: Lexeme) -> None:
         self.depth += 1
@@ -201,7 +224,10 @@ class _Parser:
                 )
             elif not self.reported(tok.start, tok.end):  # never drop part of a query silently
                 self.error(
-                    DiagnosticCode.PARSE_EXPECTED_TERM, f"Unexpected `{tok.text}` here.", tok.start, tok.end
+                    DiagnosticCode.PARSE_EXPECTED_TERM,
+                    f"Unexpected `{clip(tok.text)}` here.",
+                    tok.start,
+                    tok.end,
                 )
             if self.starts():
                 self.or_expr(None)  # keep going, so later errors are reported too
@@ -262,8 +288,8 @@ class _Parser:
             self.warnings.append(
                 Diagnostic(
                     code=DiagnosticCode.WARN_FILTER_SCOPE,
-                    message=f"`{tok.text}` is searched as text in any paper, not as a {field} — to OR it into the "
-                    f"filter, write `{fix}:(… OR {tok.text})`.",
+                    message=f"`{clip(tok.text)}` is searched as text in any paper, not as a {field} — to OR it into the "
+                    f"filter, write `{fix}:(… OR {clip(tok.text)})`.",
                     span=(tok.start, tok.end),
                 )
             )
@@ -294,7 +320,7 @@ class _Parser:
             if not self.starts():
                 self.error(
                     DiagnosticCode.PARSE_EXPECTED_TERM,
-                    f"`{op.text}` needs something to exclude after it, e.g. `trust NOT bias`.",
+                    f"`{clip(op.text)}` needs something to exclude after it, e.g. `trust NOT bias`.",
                     op.start,
                     op.end,
                 )
@@ -324,7 +350,7 @@ class _Parser:
             if not (left_failed or right_failed):
                 self.error(
                     DiagnosticCode.PARSE_BAD_NEAR,
-                    f"`{op.text}` joins two words or phrases, e.g. `trust {op.text} calibration`; it can't take a "
+                    f"`{clip(op.text)}` joins two words or phrases, e.g. `trust {clip(op.text)} calibration`; it can't take a "
                     "group, a filter or nothing.",
                     op.start,
                     op.end,
@@ -332,7 +358,7 @@ class _Parser:
         elif left.field != right.field:
             self.error(
                 DiagnosticCode.PARSE_BAD_NEAR,
-                f"Both sides of `{op.text}` must be in the same field — write e.g. `title:(a {op.text} b)`.",
+                f"Both sides of `{clip(op.text)}` must be in the same field — write e.g. `title:(a {clip(op.text)} b)`.",
                 op.start,
                 op.end,
             )
@@ -344,7 +370,7 @@ class _Parser:
             assert op2 is not None
             self.error(
                 DiagnosticCode.PARSE_BAD_NEAR,
-                f"`NEAR` can't be chained — join the pairs with AND, e.g. `(a {op.text} b) AND (b {op2.text} c)`.",
+                f"`NEAR` can't be chained — join the pairs with AND, e.g. `(a {clip(op.text)} b) AND (b {clip(op2.text)} c)`.",
                 op2.start,
                 op2.end,
             )
@@ -371,7 +397,7 @@ class _Parser:
             self.advance()
             self.error(
                 DiagnosticCode.PARSE_EXPECTED_TERM,
-                f"A range needs a field — write `year:{tok.text}`.",
+                f"A range needs a field — write `year:{clip(tok.text)}`.",
                 tok.start,
                 tok.end,
             )
@@ -380,7 +406,7 @@ class _Parser:
             self.advance()
             self.error(
                 DiagnosticCode.PARSE_BAD_NEAR,
-                f"`{tok.text}` needs a word or phrase on both sides, e.g. `trust {tok.text} calibration`.",
+                f"`{clip(tok.text)}` needs a word or phrase on both sides, e.g. `trust {clip(tok.text)} calibration`.",
                 tok.start,
                 tok.end,
             )
@@ -389,7 +415,7 @@ class _Parser:
             self.advance()  # consumed here, so the operator loops don't report it a second time
             self.error(
                 DiagnosticCode.PARSE_EXPECTED_TERM,
-                f"`{tok.text}` needs a word, phrase or group before it — add one, or remove `{tok.text}`.",
+                f"`{clip(tok.text)}` needs a word, phrase or group before it — add one, or remove `{clip(tok.text)}`.",
                 tok.start,
                 tok.end,
             )
@@ -432,7 +458,7 @@ class _Parser:
             self.warnings.append(
                 Diagnostic(
                     code=DiagnosticCode.WARN_FILTER_SCOPE,
-                    message=f"`{tok.text}` inside `{outer}:(…)` filters whole papers, not the {outer} — move it "
+                    message=f"`{clip(tok.text)}` inside `{outer}:(…)` filters whole papers, not the {outer} — move it "
                     "out of the group to make that clear.",
                     span=(tok.start, tok.end),
                 )
@@ -446,7 +472,7 @@ class _Parser:
         if name == "source":
             self.error(
                 DiagnosticCode.FIELD_COMPAT_ONLY,
-                f"`{tok.text}` is Google Scholar syntax — write `venue:NeurIPS`, `venue:ICLR` or `venue:ICML` "
+                f"`{clip(tok.text)}` is Google Scholar syntax — write `venue:NeurIPS`, `venue:ICLR` or `venue:ICML` "
                 "(Scholar-mode input translates it automatically).",
                 tok.start,
                 tok.end,
@@ -459,7 +485,7 @@ class _Parser:
         if outer is not None and name != outer:
             self.error(
                 DiagnosticCode.PARSE_NESTED_FIELD,
-                f"`{tok.text}` can't be used inside `{outer}:(…)`: a term is searched in one field — move it out of "
+                f"`{clip(tok.text)}` can't be used inside `{outer}:(…)`: a term is searched in one field — move it out of "
                 "the group.",
                 tok.start,
                 tok.end,
@@ -468,8 +494,8 @@ class _Parser:
             follows = "another field" if self.at(Kind.FIELD) else "an operator" if self.peek() else "nothing"
             self.error(
                 DiagnosticCode.PARSE_EXPECTED_TERM,
-                f"`{tok.text}` must be followed by a word, a phrase or a (group), not {follows} — e.g. "
-                f"`{tok.text}trust`.",
+                f"`{clip(tok.text)}` must be followed by a word, a phrase or a (group), not {follows} — e.g. "
+                f"`{clip(tok.text)}trust`.",
                 tok.start,
                 tok.end,
             )
@@ -483,7 +509,7 @@ class _Parser:
             if v is None or v.kind not in (Kind.WORD, Kind.PHRASE, Kind.RANGE):
                 self.error(
                     DiagnosticCode.PARSE_EXPECTED_TERM,
-                    f"`{tok.text}` must be followed by a value, e.g. `{_EXAMPLES[name]}`.",
+                    f"`{clip(tok.text)}` must be followed by a value, e.g. `{_EXAMPLES[name]}`.",
                     tok.start,
                     tok.end,
                 )
@@ -500,7 +526,7 @@ class _Parser:
                 rp.end,
             )
             return None
-        syntax = f"`{tok.text}(…)` takes values joined by OR, e.g. `{tok.text}(a OR b)`."
+        syntax = f"`{clip(tok.text)}(…)` takes values joined by OR, e.g. `{clip(tok.text)}(a OR b)`."
         values: list[str | YearRange] = []
         while True:
             v = self.peek()
@@ -556,7 +582,7 @@ class _Parser:
                 known = ", ".join(f"`{k}`" for k in SOURCE_ALIASES)
                 self.error(
                     DiagnosticCode.FIELD_UNKNOWN_VALUE,
-                    f"`{v.text}` is not a known `source:` (matched exactly, not as a substring) — use one of {known}, "
+                    f"`{clip(v.text)}` is not a known `source:` (matched exactly, not as a substring) — use one of {known}, "
                     "or write `venue:` directly.",
                     v.start,
                     v.end,
@@ -565,7 +591,7 @@ class _Parser:
         self.translations.append(
             Diagnostic(
                 code=DiagnosticCode.COMPAT_SOURCE_ALIAS,
-                message=f"`source:{v.text}` is read as `venue:{venue}`.",
+                message=f"`source:{clip(v.text)}` is read as `venue:{venue}`.",
                 span=(v.start, v.end),
             )
         )
@@ -573,7 +599,7 @@ class _Parser:
             self.warnings.append(
                 Diagnostic(
                     code=DiagnosticCode.WARN_SOURCE_PARTIAL,
-                    message=f"`{v.text}` also hosts other venues; only ICML is indexed, so it matches ICML papers only.",
+                    message=f"`{clip(v.text)}` also hosts other venues; only ICML is indexed, so it matches ICML papers only.",
                     span=(v.start, v.end),
                 )
             )
@@ -590,14 +616,14 @@ class _Parser:
                 lo, hi = v.range
                 self.error(
                     DiagnosticCode.FIELD_RANGE_INVERTED,
-                    f"`{v.text}` runs backwards — write `{hi}..{lo}`.",
+                    f"`{clip(v.text)}` runs backwards — write `{hi}..{lo}`.",
                     v.start,
                     v.end,
                 )
             else:
                 self.error(
                     DiagnosticCode.FIELD_UNKNOWN_VALUE,
-                    f"`{v.text}` is not a year — `year:` takes a four-digit year or an inclusive range, e.g. "
+                    f"`{clip(v.text)}` is not a year — `year:` takes a four-digit year or an inclusive range, e.g. "
                     "`year:2024` or `year:2020..2026`.",
                     v.start,
                     v.end,
@@ -605,7 +631,7 @@ class _Parser:
             return None
         self.error(
             DiagnosticCode.FIELD_UNKNOWN_VALUE,
-            f"`{v.text}` is not a {name} (values take no wildcards or quotes) — use one of "
+            f"`{clip(v.text)}` is not a {name} (values take no wildcards or quotes) — use one of "
             + ", ".join(f"`{x}`" for x in _VALID[name])
             + ".",
             v.start,
@@ -650,7 +676,7 @@ class _Parser:
         if not self.reported(tok.start, tok.end):
             self.error(
                 DiagnosticCode.PARSE_EMPTY_TERM,
-                f"`{tok.text}` has no letters or digits, so it can't match anything — remove it (to exclude a word, "
+                f"`{clip(tok.text)}` has no letters or digits, so it can't match anything — remove it (to exclude a word, "
                 "write `-word` with no space).",
                 tok.start,
                 tok.end,
@@ -664,7 +690,7 @@ class _Parser:
         if not self.reported(tok.start, tok.end):
             self.error(
                 DiagnosticCode.PARSE_EMPTY_TERM,
-                f"The phrase `{tok.text}` has no letters or digits — put words inside the quotes.",
+                f"The phrase `{clip(tok.text)}` has no letters or digits — put words inside the quotes.",
                 tok.start,
                 tok.end,
             )
@@ -676,7 +702,7 @@ class _Parser:
         error), and say whether an operand follows after all."""
         self.error(
             DiagnosticCode.PARSE_EXPECTED_TERM,
-            f"`{op.text}` needs a word, phrase or group after it — add one, or remove `{op.text}`.",
+            f"`{clip(op.text)}` needs a word, phrase or group after it — add one, or remove `{clip(op.text)}`.",
             op.start,
             op.end,
         )
@@ -693,13 +719,36 @@ class _Parser:
         return cls(span=(nodes[0].span[0], nodes[-1].span[1]), children=tuple(nodes))
 
 
-def _by_position(d: Diagnostic) -> tuple[int, int]:
-    return d.span or (0, 0)
+def _capped(diagnostics: list[Diagnostic]) -> list[Diagnostic]:
+    """At most MAX_PER_CODE diagnostics of each code, then one "and N more" covering the rest."""
+    seen: dict[DiagnosticCode, list[Diagnostic]] = {}
+    out: list[Diagnostic] = []
+    for d in diagnostics:
+        group = seen.setdefault(d.code, [])
+        group.append(d)
+        if len(group) <= MAX_PER_CODE:
+            out.append(d)
+    for code, group in seen.items():
+        if len(group) > MAX_PER_CODE:
+            rest = group[MAX_PER_CODE:]
+            first, last = rest[0].span or (0, 0), rest[-1].span or (0, 0)
+            out.append(
+                Diagnostic(code=code, message=f"… and {len(rest)} more like these.", span=(first[0], last[1]))
+            )
+    return sorted(out, key=by_position)
 
 
 def parse(q: str, mode: Mode = "native") -> ParseResult:
     """Parse `q`. Never raises; `ast`, `canonical` and `canonical_hash` are None exactly when `errors` is
     non-empty. `mode="scholar"` accepts Scholar/PoP syntax and reports every rewrite in `translations`."""
+    if len(q) > MAX_QUERY_LENGTH:  # checked before any work, so an oversized query costs nothing
+        too_long = Diagnostic(
+            code=DiagnosticCode.PARSE_TOO_LONG,
+            message=f"The query is {len(q)} characters long; the limit is {MAX_QUERY_LENGTH} — split it into "
+            "several searches.",
+            span=(MAX_QUERY_LENGTH, len(q)),
+        )
+        return ParseResult(mode=mode, ast=None, warnings=[], errors=[too_long])
     lexed = lex(q)
     lexemes, lex_errors = lexed.lexemes, lexed.errors
     translations: list[Diagnostic] = []
@@ -716,9 +765,9 @@ def parse(q: str, mode: Mode = "native") -> ParseResult:
         ast = p.run()
     except _TooDeep:
         ast = None
-    errors = sorted([*lex_errors, *p.errors], key=_by_position)
-    warnings = sorted([*lexed.warnings, *p.warnings], key=_by_position)
-    notes = sorted([*translations, *p.translations], key=_by_position)
+    errors = _capped(sorted([*lex_errors, *p.errors], key=by_position))
+    warnings = _capped(sorted([*lexed.warnings, *p.warnings], key=by_position))
+    notes = _capped(sorted([*translations, *p.translations], key=by_position))
     if ast is None and not errors:  # defensive: every path that drops the tree reports why
         errors = [
             Diagnostic(
@@ -741,6 +790,6 @@ def parse(q: str, mode: Mode = "native") -> ParseResult:
         identification_query=render(d.identification) if d.identification is not None else "",
         identification_ast=d.identification,
         defaults=list(d.defaults),
-        warnings=sorted([*warnings, *d.warnings], key=_by_position),
+        warnings=sorted([*warnings, *d.warnings], key=by_position),
         errors=errors,
     )

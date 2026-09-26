@@ -13,7 +13,7 @@ and produces a native AST and canonical string. It never changes what a native q
 
 from __future__ import annotations
 
-from openproceedings.diagnostics import Diagnostic, DiagnosticCode
+from openproceedings.diagnostics import Diagnostic, DiagnosticCode, clip
 from openproceedings.query.lexer import MIN_STEM, Kind, Lexeme
 from openproceedings.query.normalize import normalize
 
@@ -95,7 +95,7 @@ def group_phrases(
             notices.append(
                 Diagnostic(
                     code=DiagnosticCode.COMPAT_POP_PHRASE,
-                    message=f'`{text}` is read as the phrase `"{text}"`, as the `|` list intends — Google Scholar '
+                    message=f'`{clip(text)}` is read as the phrase `"{clip(text)}"`, as the `|` list intends — Google Scholar '
                     "itself would have ORed only the neighbouring words.",
                     span=(start, end),
                 )

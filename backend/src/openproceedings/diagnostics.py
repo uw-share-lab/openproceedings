@@ -29,6 +29,9 @@ class DiagnosticCode(StrEnum):
     PARSE_WILDCARD_DETACHED = "PARSE_WILDCARD_DETACHED"
     PARSE_AMBIGUOUS_MINUS = "PARSE_AMBIGUOUS_MINUS"
     PARSE_STRAY_COLON = "PARSE_STRAY_COLON"
+    PARSE_AMBIGUOUS_QUOTE = "PARSE_AMBIGUOUS_QUOTE"
+    PARSE_PAREN_TOUCHES_WORD = "PARSE_PAREN_TOUCHES_WORD"
+    PARSE_TOO_LONG = "PARSE_TOO_LONG"
     # wildcard expansion
     WILDCARD_STEM_TOO_SHORT = "WILDCARD_STEM_TOO_SHORT"
     WILDCARD_TOO_MANY_EXPANSIONS = "WILDCARD_TOO_MANY_EXPANSIONS"
@@ -81,6 +84,15 @@ def http_status(code: DiagnosticCode) -> int | None:
     if code.startswith("PARSE_"):
         return 422
     return None
+
+
+def clip(text: str, width: int = 40) -> str:
+    """User text quoted in a message, shortened so a diagnostic never grows with the input."""
+    return text if len(text) <= width else text[: width - 1] + "…"
+
+
+def by_position(d: Diagnostic) -> tuple[int, int]:
+    return d.span or (0, 0)
 
 
 class Diagnostic(BaseModel):

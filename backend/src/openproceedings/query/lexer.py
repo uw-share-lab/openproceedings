@@ -3,8 +3,12 @@
 Lexical rules, in the order they are tried at the start of each lexeme:
 
 - Whitespace (any Unicode space) separates. `(`, `)` and `|` are single-character lexemes (`|` is `OR`).
-- A double quote (`"`, `“`, `”`, `„`, `‟`) opens a phrase that runs to the next unescaped double quote;
-  its parts are split on whitespace, and operators inside it are ordinary words. With no closing quote
+- A double quote (`"`, `“`, `”`, `„`, `‟`, `＂`, `«`, `»`, `「`, `」`, `『`, `』`) opens a phrase that runs to the
+  next unescaped quote of the same family (English-style double quotes are one family; `«…»`, `「…」` and
+  `『…』` pair only with themselves), so a foreign quote inside a phrase is punctuation. Its parts are split
+  on whitespace, and operators inside it are ordinary words. A quote touching a letter or digit on the
+  outside (`a"b c"`, `"trust in "AI"`) is PARSE_AMBIGUOUS_QUOTE; a `(` glued to a preceding word or a `)`
+  glued to a following one (`model(s)`) is PARSE_PAREN_TOUCHES_WORD. With no closing quote
   the phrase runs to the end of `q` and PARSE_UNTERMINATED_PHRASE is raised.
 - `-` is `NOT` when it starts the query or follows whitespace, `(`, `|` or a field's `:`, and a primary
   follows it directly. Any other word that starts with `-` (`a - b`, `"x"-based`, `--x`) is
@@ -41,13 +45,24 @@ import unicodedata
 from dataclasses import dataclass
 from enum import StrEnum
 
-from openproceedings.diagnostics import Diagnostic, DiagnosticCode
+from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip
 from openproceedings.query.normalize import math_regions, tokenize
 
 FIELDS = ("title", "abstract", "venue", "year", "track", "status", "source")
 MIN_STEM = 3  # letters or digits a wildcard stem keeps after normalisation (spec 02, decision-001)
 MAX_NEAR = 100
 QUOTES = frozenset('"“”„‟＂«»「」『』')
+_ENGLISH_QUOTES = frozenset('"“”„‟＂')
+# A phrase closes only with a quote of its opener's family, so a foreign quote inside it (`"trust 「in」 AI"`)
+# is ordinary punctuation. English-style double quotes are one family (pasted text mixes them freely).
+CLOSERS = {q: _ENGLISH_QUOTES for q in _ENGLISH_QUOTES} | {
+    "«": frozenset("»"),
+    "»": frozenset("«»"),  # Danish/Swedish »…« and »…»
+    "「": frozenset("」"),
+    "」": frozenset("」"),
+    "『": frozenset("』"),
+    "』": frozenset("』"),
+}
 LPARENS = frozenset("(（﹙︵")
 RPARENS = frozenset(")）﹚︶")
 PIPES = frozenset("|｜")
@@ -114,6 +129,12 @@ def _diag(code: DiagnosticCode, message: str, start: int, end: int) -> Diagnosti
     return Diagnostic(code=code, message=message, span=(start, end))
 
 
+def _small_int(digits: str, max_len: int) -> int | None:
+    """`int(digits)` if it has at most `max_len` significant digits, else None (never a 4,300-digit int)."""
+    significant = digits.lstrip("0") or "0"
+    return int(significant) if len(significant) <= max_len else None
+
+
 def _step(q: str, j: int) -> int:
     """The index after the character at `j`; a backslash also takes the (non-space) character after it."""
     return j + 2 if q[j] == "\\" and j + 1 < len(q) and not q[j + 1].isspace() else j + 1
@@ -122,6 +143,11 @@ def _step(q: str, j: int) -> int:
 class _Lexer:
     def __init__(self, q: str) -> None:
         self.q = q
+        # next_quote[k]: index of the first quote at or after k (len(q) if none), computed once so lexing
+        # stays linear however many words the query has
+        self.next_quote = [len(q)] * (len(q) + 1)
+        for k in range(len(q) - 1, -1, -1):
+            self.next_quote[k] = k if q[k] in QUOTES else self.next_quote[k + 1]
         self.out: list[Lexeme] = []
         self.errors: list[Diagnostic] = []
         self.warnings: list[Diagnostic] = []
@@ -143,6 +169,8 @@ class _Lexer:
                 self.out.append(Lexeme(kind, i, i + 1, c))
                 i += 1
             elif c in QUOTES:
+                if i and q[i - 1].isalnum() and not self.quote_flagged_since(i):
+                    self.ambiguous_quote(i, "follows a letter or digit directly")
                 i = self.phrase(i)
             elif c in MINUSES and self.negates(i):
                 self.out.append(Lexeme(Kind.NOT, i, i + 1, c))
@@ -169,7 +197,7 @@ class _Lexer:
             hint = " (Scholar's `intitle:` is `title:` here)" if name in ("intitle", "allintitle") else ""
             self.error(
                 DiagnosticCode.FIELD_UNKNOWN,
-                f"`{m.group()}` is not a field{hint} — use one of {valid}, or quote the text to search for it.",
+                f"`{clip(m.group())}` is not a field{hint} — use one of {valid}, or quote the text to search for it.",
                 i,
                 m.end(),
             )
@@ -178,7 +206,8 @@ class _Lexer:
     def phrase(self, i: int) -> int:
         q, n = self.q, len(self.q)
         j = i + 1
-        while j < n and q[j] not in QUOTES:
+        closers = CLOSERS[q[i]]
+        while j < n and q[j] not in closers:
             j = _step(q, j)
         j = min(j, n)
         closed = j < n
@@ -190,6 +219,8 @@ class _Lexer:
                 n,
             )
         end = j + 1 if closed else n
+        if closed and end < n and q[end].isalnum():
+            self.ambiguous_quote(j, "is followed directly by a letter or digit")
         parts: list[Lexeme] = []
         k = i + 1
         while k < j:
@@ -224,7 +255,7 @@ class _Lexer:
         """End of the word at `i`: a whole LaTeX math run, or the next break (except inside LaTeX math within
         the same chunk)."""
         q, n = self.q, len(self.q)
-        limit = next((k for k in range(i, n) if q[k] in QUOTES), n)
+        limit = self.next_quote[i]
         if (end := self.math_run(i, limit)) > 0:
             return end
         chunk_end = i
@@ -248,18 +279,24 @@ class _Lexer:
         key = unicodedata.normalize("NFKC", raw)  # `ＯＲ` is `OR`, as the tokenizer would read it
         if key in _OPERATORS:
             self.out.append(Lexeme(_OPERATORS[key], i, j, raw))
-        elif (near := _NEAR.fullmatch(key)) and int(near.group(1)) <= MAX_NEAR:
-            self.out.append(Lexeme(Kind.NEAR, i, j, raw, near=int(near.group(1))))
+        elif (
+            (near := _NEAR.fullmatch(key))
+            and (n := _small_int(near.group(1), 3)) is not None
+            and n <= MAX_NEAR
+        ):
+            self.out.append(Lexeme(Kind.NEAR, i, j, raw, near=n))
         elif key.startswith("NEAR/"):
             self.error(
                 DiagnosticCode.PARSE_BAD_NEAR,
-                f"`{raw}` needs a whole-number distance up to {MAX_NEAR} — write e.g. `NEAR/3` (at most 3 words "
+                f"`{clip(raw)}` needs a whole-number distance up to {MAX_NEAR} — write e.g. `NEAR/3` (at most 3 words "
                 "apart).",
                 i,
                 j,
             )
         elif rng := _RANGE.fullmatch(key):
-            self.out.append(Lexeme(Kind.RANGE, i, j, raw, range=(int(rng.group(1)), int(rng.group(2)))))
+            lo, hi = _small_int(rng.group(1), 9), _small_int(rng.group(2), 9)
+            bounds = (lo, hi) if lo is not None and hi is not None else None  # None: too long to be a year
+            self.out.append(Lexeme(Kind.RANGE, i, j, raw, range=bounds))
         else:
             self.out.append(self.word(i, j, in_phrase=False))
         return j
@@ -290,7 +327,7 @@ class _Lexer:
             s = wild[0]
             self.error(
                 DiagnosticCode.PARSE_WILDCARD_NOT_SUFFIX,
-                f"`{raw}` has a `{raw[s]}` that is neither a wildcard at the end of a word (e.g. `bench*`, "
+                f"`{clip(raw)}` has a `{raw[s]}` that is neither a wildcard at the end of a word (e.g. `bench*`, "
                 "`model$`) nor closed LaTeX math (`$x$`) — search the whole word, or close the math.",
                 start + s,
                 start + s + 1,
@@ -306,7 +343,7 @@ class _Lexer:
         if not toks or before + len("".join(t.text for t in toks)) < MIN_STEM:
             self.error(
                 DiagnosticCode.WILDCARD_STEM_TOO_SHORT,
-                f"The wildcard `{raw}` keeps fewer than {MIN_STEM} letters or digits before `{wildcard}`, so it "
+                f"The wildcard `{clip(raw)}` keeps fewer than {MIN_STEM} letters or digits before `{wildcard}`, so it "
                 "would match too many words — use a longer stem (e.g. `bench*`, not `be*`).",
                 start,
                 end,
@@ -314,7 +351,7 @@ class _Lexer:
         elif toks[-1].end < len(stem):
             self.error(
                 DiagnosticCode.PARSE_WILDCARD_DETACHED,
-                f"The `{wildcard}` in `{raw}` follows `{stem[toks[-1].end :]}`, not a letter or digit, so it would "
+                f"The `{wildcard}` in `{clip(raw)}` follows `{stem[toks[-1].end :]}`, not a letter or digit, so it would "
                 f"match any word starting `{toks[-1].text}` — put it straight after the stem, e.g. "
                 f"`{stem[: toks[-1].end]}{wildcard}`.",
                 start,
@@ -326,7 +363,7 @@ class _Lexer:
         if raw[0] in MINUSES:
             self.error(
                 DiagnosticCode.PARSE_AMBIGUOUS_MINUS,
-                f"`{raw}`: to exclude a word, put one `-` straight before it after a space (`trust -bias`); to "
+                f"`{clip(raw)}`: to exclude a word, put one `-` straight before it after a space (`trust -bias`); to "
                 "search a hyphenated term, quote it.",
                 start,
                 end,
@@ -334,22 +371,22 @@ class _Lexer:
         elif raw[0] in COLONS:
             self.error(
                 DiagnosticCode.PARSE_STRAY_COLON,
-                f"`{raw}` starts with a colon — a field name must touch its colon, e.g. `title:trust`.",
+                f"`{clip(raw)}` starts with a colon — a field name must touch its colon, e.g. `title:trust`.",
                 start,
                 end,
             )
         elif raw[0] in _LOOKALIKE_MINUS:
             self.warn(
                 DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
-                f"`{raw}` starts with `{raw[0]}`, which is not an operator, so the word is searched — to exclude "
-                f"it, type an ASCII hyphen: `-{raw[1:]}`.",
+                f"`{clip(raw)}` starts with `{raw[0]}`, which is not an operator, so the word is searched — to exclude "
+                f"it, type an ASCII hyphen: `-{clip(raw[1:])}`.",
                 start,
                 end,
             )
         elif raw.startswith(_SINGLE_QUOTES):
             self.warn(
                 DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
-                f'`{raw}` starts with a single quote, which does not make a phrase — use double quotes: `"…"`.',
+                f'`{clip(raw)}` starts with a single quote, which does not make a phrase — use double quotes: `"…"`.',
                 start,
                 end,
             )
@@ -357,14 +394,50 @@ class _Lexer:
             searched = " ".join(t.text for t in toks)
             self.warn(
                 DiagnosticCode.WARN_SYMBOLS_DROPPED,
-                f"`{raw}` is searched as `{searched}`: symbols such as `+` and `#` are not indexed, so it matches "
-                f"every `{searched}`.",
+                f"`{clip(raw)}` is searched as `{clip(searched)}`: symbols such as `+` and `#` are not indexed, so it matches "
+                f"every `{clip(searched)}`.",
                 start,
                 end,
             )
 
+    def quote_flagged_since(self, i: int) -> bool:
+        """Whether an ambiguous quote was already reported in the unbroken run of text that ends at `i`
+        (`"x “trust” y"` is one mistake, however many of its quotes touch a word)."""
+        start = i
+        while start > 0 and not self.q[start - 1].isspace():
+            start -= 1
+        return any(
+            e.code is DiagnosticCode.PARSE_AMBIGUOUS_QUOTE and e.span is not None and start <= e.span[0] < i
+            for e in self.errors
+        )
+
+    def ambiguous_quote(self, k: int, why: str) -> None:
+        self.error(
+            DiagnosticCode.PARSE_AMBIGUOUS_QUOTE,
+            f"The quote `{self.q[k]}` {why}, so it is unclear whether it opens or closes a phrase — put a space "
+            "between them, or drop the inner quotes (a phrase cannot contain the same kind of quote).",
+            k,
+            k + 1,
+        )
+
     def after_pass(self) -> None:
-        """Diagnostics that depend on the neighbouring lexemes: words that look like operators."""
+        """Diagnostics that depend on the neighbouring lexemes: words that look like operators, and a
+        parenthesis glued to a word, which would silently mean AND (`model(s)` → `model AND s`)."""
+        for x, y in zip(self.out, self.out[1:], strict=False):
+            if x.end != y.start:
+                continue
+            if (x.kind is Kind.WORD and y.kind is Kind.LPAREN and x.text[0] not in MINUSES) or (
+                x.kind is Kind.RPAREN and y.kind is Kind.WORD and y.text[0] not in MINUSES
+            ):
+                glued = (x.start, y.end)
+            else:
+                continue
+            self.error(
+                DiagnosticCode.PARSE_PAREN_TOUCHES_WORD,
+                f"`{self.q[glued[0] : glued[1]]}`: a parenthesis touching a word would be read as AND (`model(s)` "
+                "means `model AND s`) — for a plural write `model$`, for a group put a space: `model (s)`.",
+                *glued,
+            )
         for x in self.out:
             if x.kind is Kind.WORD and unicodedata.normalize("NFKC", x.text) == "NEAR":
                 self.error(
@@ -383,7 +456,7 @@ class _Lexer:
             if upper in _OPERATORS:
                 self.warn(
                     DiagnosticCode.WARN_LOWERCASE_OPERATOR,
-                    f"`{x.text}` is searched as a word — write `{upper}` to combine terms (operators are uppercase "
+                    f"`{clip(x.text)}` is searched as a word — write `{upper}` to combine terms (operators are uppercase "
                     "only).",
                     x.start,
                     x.end,
@@ -391,15 +464,11 @@ class _Lexer:
             elif _NEAR.fullmatch(upper):
                 self.warn(
                     DiagnosticCode.WARN_LOWERCASE_OPERATOR,
-                    f"`{x.text}` is searched as words — write `{upper}` for a proximity search (operators are "
+                    f"`{clip(x.text)}` is searched as words — write `{upper}` for a proximity search (operators are "
                     "uppercase only).",
                     x.start,
                     x.end,
                 )
-
-
-def _by_position(d: Diagnostic) -> tuple[int, int]:
-    return d.span or (0, 0)
 
 
 def lex(q: str) -> LexResult:
@@ -408,6 +477,6 @@ def lex(q: str) -> LexResult:
     lexer.run()
     return LexResult(
         tuple(lexer.out),
-        tuple(sorted(lexer.warnings, key=_by_position)),
-        tuple(sorted(lexer.errors, key=_by_position)),
+        tuple(sorted(lexer.warnings, key=by_position)),
+        tuple(sorted(lexer.errors, key=by_position)),
     )

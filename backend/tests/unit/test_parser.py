@@ -93,6 +93,11 @@ GOLDEN: list[tuple[str, str]] = [
     ("trust NOT track:workshop", "(AND trust (NOT track:workshop))"),
     ("year:2024..2024", "year:2024"),
     ("year:1000", "year:1000"),
+    ("year:²⁰²⁴", "year:2024"),  # NFKC, like every other look-alike (M1 gate)
+    ("year:２０２４", "year:2024"),
+    ("venue:ＩＣＬＲ", "venue:ICLR"),
+    ("venue:İCLR", "venue:ICLR"),
+    ("track:ＭＡＩＮ", "track:main"),
     ("NOT NOT a", "(NOT (NOT a))"),  # positive: not all-negative
     ("a OR NOT NOT b", "(OR a (NOT (NOT b)))"),
     ("a NEAR/3 (b)", "(NEAR/3 a b)"),  # a one-word group counts as a word
@@ -243,7 +248,6 @@ ERRORS: list[tuple[str, DiagnosticCode, tuple[int, int]]] = [
         DiagnosticCode.WILDCARD_STEM_TOO_SHORT,
         (1, 2),
     ),  # one error for an empty phrase  # no ALL_NEGATIVE on top of a lexer error
-    ("year:²⁰²⁴", DiagnosticCode.FIELD_UNKNOWN_VALUE, (5, 9)),
     ("year:0", DiagnosticCode.FIELD_UNKNOWN_VALUE, (5, 6)),
     ("year:2020..99999999999999999999", DiagnosticCode.FIELD_UNKNOWN_VALUE, (5, 31)),
     ("year:2020-2026", DiagnosticCode.FIELD_UNKNOWN_VALUE, (5, 14)),
@@ -272,7 +276,7 @@ def test_error_code_and_span(q: str, code: DiagnosticCode, span: tuple[int, int]
 
 
 def test_unknown_field_chains_do_not_recurse() -> None:
-    result = parse("x:" * 2000 + "a")
+    result = parse("x:" * 999 + "a")  # just under the length cap
     assert {e.code for e in result.errors} == {DiagnosticCode.FIELD_UNKNOWN}
 
 
@@ -303,7 +307,7 @@ def test_too_deep_is_an_error_not_a_crash() -> None:
     result = parse(q)
     assert [e.code for e in result.errors] == [DiagnosticCode.PARSE_TOO_DEEP]
     assert parsed("(" * MAX_DEPTH + "a" + ")" * MAX_DEPTH) == "a"
-    assert [e.code for e in parse("NOT " * 5000 + "a").errors] == [DiagnosticCode.PARSE_TOO_DEEP]
+    assert [e.code for e in parse("NOT " * 450 + "a").errors] == [DiagnosticCode.PARSE_TOO_DEEP]
 
 
 def test_several_errors_are_all_reported_sorted_by_position() -> None:
@@ -370,3 +374,56 @@ def test_random_input_never_raises(q: str) -> None:
         assert d.span is not None and 0 <= d.span[0] <= d.span[1] <= len(q)
     if result.ast is not None:
         assert 0 <= result.ast.span[0] <= result.ast.span[1] <= len(q)
+
+
+BIG = [
+    ("a NEAR/" + "9" * 50 + " b", DiagnosticCode.PARSE_BAD_NEAR),
+    ("a NEAR/" + "0" * 50 + "3 b", None),  # leading zeros are not significant: NEAR/3
+    ("year:1.." + "9" * 50, DiagnosticCode.FIELD_UNKNOWN_VALUE),
+    ("year:" + "9" * 50, DiagnosticCode.FIELD_UNKNOWN_VALUE),
+    ("1.." + "9" * 50, DiagnosticCode.PARSE_EXPECTED_TERM),
+]
+
+
+@pytest.mark.parametrize(("q", "code"), BIG, ids=[q[:12] for q, _ in BIG])
+def test_long_digit_runs_are_diagnostics_never_exceptions(q: str, code: DiagnosticCode | None) -> None:
+    assert [e.code for e in parse(q).errors] == ([code] if code else [])
+
+
+def test_a_long_bare_number_next_to_a_year_filter_is_quoted_not_converted() -> None:
+    result = parse("year:2020 OR " + "9" * 50)
+    assert result.canonical is not None and '"' + "9" * 50 + '"' not in result.canonical  # not a year value
+
+
+def test_the_length_cap_is_checked_before_any_work() -> None:
+    result = parse("w " * 1001)
+    assert [(e.code, e.span) for e in result.errors] == [(DiagnosticCode.PARSE_TOO_LONG, (2000, 2002))]
+    assert parse("w " * 1000).errors == []
+
+
+def test_diagnostics_are_capped_per_code() -> None:
+    result = parse("C++ " * 50)
+    symbols = [w for w in result.warnings if w.code is DiagnosticCode.WARN_SYMBOLS_DROPPED]
+    assert len(symbols) == 21 and symbols[-1].message == "… and 30 more like these."
+    assert all(len(d.message) < 200 for d in result.warnings)
+
+
+def test_messages_quote_at_most_40_characters_of_input() -> None:
+    long_word = "x" * 500
+    [warning] = parse("trust −" + long_word).warnings
+    assert len(warning.message) < 250 and "…" in warning.message
+
+
+def test_parsing_is_linear_in_the_query_length() -> None:
+    import time
+
+    def cost(q: str) -> float:
+        best = float("inf")
+        for _ in range(3):
+            start = time.perf_counter()
+            parse(q)
+            best = min(best, time.perf_counter() - start)
+        return best
+
+    small, large = cost("w " * 200), cost("w " * 999)  # 5x the input
+    assert large < small * 15, (small, large)  # quadratic would be ~25x; generous for noise

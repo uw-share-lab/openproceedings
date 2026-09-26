@@ -23,7 +23,6 @@ import hashlib
 
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import (
-    MAX_YEAR,
     MIN_YEAR,
     And,
     Filter,
@@ -146,7 +145,13 @@ def _render_value(v: str | YearRange) -> str:
 
 def _mistakable(token: str, fields: set[str]) -> bool:
     """Whether a bare `token` next to filters on `fields` would re-parse with WARN_FILTER_SCOPE."""
-    if "year" in fields and token.isascii() and token.isdigit() and MIN_YEAR <= int(token) <= MAX_YEAR:
+    if (
+        "year" in fields
+        and token.isascii()
+        and token.isdigit()
+        and len(token) <= 4
+        and int(token) >= MIN_YEAR
+    ):
         return True
     return any(token in _VALUE_WORDS.get(f, ()) for f in fields)
 
