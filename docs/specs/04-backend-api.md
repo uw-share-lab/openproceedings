@@ -99,7 +99,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
     balance and none is escaped; otherwise they are dropped, since BibTeX and other parsers disagree on
     `\{`, and a misread entry swallows the next. `&`, `%` and `#` are escaped. A value never ends on a
     backslash.
-  - **JSONL:** one object per record.
+  - **JSONL:** one object per record: the lossless format (CSV's formula guard adds a `'` to some cells).
 
   Each format is checked round-trip to its ids; BibTeX also against the pinned `refaudit==0.4.9`. `op
   export` counts what it wrote against the query's total before renaming its temporary file into place.

@@ -332,6 +332,16 @@ def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:
     return ReferenceEngine(load_records(snapshot).values())
 
 
+def _file_mode(path: Path) -> int:
+    """The mode a shell redirect would give `path`: the existing file's, else 0666 less the umask."""
+    try:
+        return path.stat().st_mode & 0o777
+    except FileNotFoundError:
+        umask = os.umask(0)
+        os.umask(umask)
+        return 0o666 & ~umask
+
+
 def _export(ns: argparse.Namespace) -> int:
     from datetime import UTC, datetime
 
@@ -348,6 +358,8 @@ def _export(ns: argparse.Namespace) -> int:
     assert ast is not None and result.canonical_hash is not None
     if ns.out is not None and ns.out.is_dir():
         raise ValueError(f"--out {ns.out} is a directory; name a file")
+    if ns.out is not None and not ns.out.parent.is_dir():
+        raise ValueError(f"--out {ns.out}: no directory {ns.out.parent}")
     engine = TantivyEngine(_index_path(ns))
     total, documents = engine.documents(ast)
     provenance = Provenance(engine.index_version, result.canonical_hash, datetime.now(UTC).date().isoformat())
@@ -362,6 +374,7 @@ def _export(ns: argparse.Namespace) -> int:
     else:  # a temporary file beside the target, renamed once complete and counted: never a partial file
         fd, name = tempfile.mkstemp(dir=ns.out.parent, prefix=f".{ns.out.name}.", suffix=".partial")
         partial = Path(name)
+        os.fchmod(fd, _file_mode(ns.out))  # mkstemp makes it owner-only; `> file` wouldn't
         try:
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as out:
                 n = write(ns.format, documents, provenance, out)

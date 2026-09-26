@@ -37,10 +37,12 @@ CORPUS: list[PaperRecord] = [
     paper("AbCd0006", "Trusta ends here", abstract="=HYPERLINK(1)", authors=("Jo Smith",), venue="ICLR",
           year=2024, keywords=("trust", "calibration")),
     paper("AbCd0007", "Trust Q&A 100% #1 \\", abstract="-lead", authors=("Jo Smith",), venue="ICLR", year=2024),
+    paper("AbCd0008", "Trust set \\{x\\} notation", abstract=None, authors=("Jo Smith",), venue="ICLR", year=2024),
+    paper("AbCd0009", "Trust } swapped {", abstract=None, authors=("Jo Smith",), venue="ICLR", year=2024),
 ]  # fmt: skip
 PROVENANCE = Provenance("abcdef123456", "0" * 64, "2026-09-26")
 ALL = "(trust OR trusta) track:(main OR workshop)"  # every record but AbCd0005 (all accepted)
-MATCHED = ["AbCd0001", "AbCd0002", "AbCd0003", "AbCd0004", "AbCd0006", "AbCd0007"]
+MATCHED = ["AbCd0001", "AbCd0002", "AbCd0003", "AbCd0004", "AbCd0006", "AbCd0007", "AbCd0008", "AbCd0009"]
 
 
 @pytest.fixture(scope="module")
@@ -71,7 +73,7 @@ def natives(ids: list[str]) -> list[str]:
 def test_ris_round_trips_every_id_in_id_order(data_dir: Path) -> None:
     text, n = exported(data_dir, "ris")
     records = [r for r in text.split("ER  - \n") if r.strip()]
-    assert n == len(records) == 6
+    assert n == len(records) == 8
     ids = [line[6:] for line in text.splitlines() if line.startswith("ID  - ")]
     assert ids == sorted(ids) and sorted(natives(ids)) == MATCHED
     first = records[[i.endswith("AbCd0001") for i in ids].index(True)]
@@ -88,7 +90,7 @@ def test_csv_has_a_bom_the_columns_provenance_and_no_formulas(data_dir: Path) ->
     text, n = exported(data_dir, "csv")
     assert text.startswith("\ufeff")
     rows = list(csv.DictReader(io.StringIO(text[1:])))
-    assert n == len(rows) == 6 and tuple(rows[0]) == export.CSV_COLUMNS
+    assert n == len(rows) == 8 and tuple(rows[0]) == export.CSV_COLUMNS
     assert [r["id"] for r in rows] == sorted(r["id"] for r in rows)
     by = {r["id"].rsplit(":", 1)[1]: r for r in rows}
     assert by["AbCd0001"]["authors"] == "Jo Smith; Ana Pérez"
@@ -104,22 +106,25 @@ def test_csv_has_a_bom_the_columns_provenance_and_no_formulas(data_dir: Path) ->
 def test_bibtex_passes_refaudit_one_entry_per_record(data_dir: Path) -> None:
     text, n = exported(data_dir, "bibtex")
     entries = parse_string(text)
-    assert n == len(entries) == 6 and all(e.entry_type == "inproceedings" for e in entries)
+    assert n == len(entries) == 8 and all(e.entry_type == "inproceedings" for e in entries)
     assert sorted(natives([e.fields["openproceedings_id"] for e in entries])) == MATCHED
     keys = [e.key for e in entries]
-    assert len(set(keys)) == 6  # `smith2024trusta` is both a suffixed key and a real one: never twice
+    assert len(set(keys)) == 8  # `smith2024trusta` is both a suffixed key and a real one: never twice
     by = {e.fields["openproceedings_id"].rsplit(":", 1)[1]: e.fields for e in entries}
     assert by["AbCd0001"]["title"] == "Trust in {BERT} models"  # balanced braces keep their meaning
     assert by["AbCd0001"]["url"].endswith("forum?id=AbCd0001") and by["AbCd0001"]["note"] == PROVENANCE.line()
     assert by["AbCd0003"]["title"] == "Trust a unbalanced title"  # an unbalanced brace is dropped
     assert by["AbCd0007"]["title"] == "Trust Q\\&A 100\\% \\#1 \\"  # escaped; its closing brace not swallowed
     assert by["AbCd0002"]["doi"] == "10.1234/abcd"
+    # balanced but escaped: parsers disagree on `\\{`, so the braces go
+    assert by["AbCd0008"]["title"] == "Trust set \\x\\ notation"
+    assert by["AbCd0009"]["title"] == "Trust swapped"  # `}` before `{` never balances
 
 
 def test_jsonl_is_one_record_per_line(data_dir: Path) -> None:
     text, n = exported(data_dir, "jsonl")
     rows = [json.loads(line) for line in text.splitlines()]
-    assert n == len(rows) == 6 and [r["id"] for r in rows] == sorted(r["id"] for r in rows)
+    assert n == len(rows) == 8 and [r["id"] for r in rows] == sorted(r["id"] for r in rows)
     assert all(r["canonical_hash"] == "0" * 64 and r["index_version"] == "abcdef123456" for r in rows)
     assert rows[0]["authors"] == ["Jo Smith", "Ana Pérez"] and rows[0]["urls"]["pdf"].endswith("AbCd0001")
 
@@ -144,9 +149,9 @@ def test_op_export_writes_the_file_whole(
 ) -> None:
     out = tmp_path / "out.jsonl"
     assert run(data_dir, "export", "trust", "--format", "jsonl", "--out", str(out)) == 0
-    assert len(out.read_text().splitlines()) == 4  # the defaults leave out the workshop paper
+    assert len(out.read_text().splitlines()) == 6  # the defaults leave out the workshop paper
     assert sorted(p.name for p in tmp_path.iterdir()) == ["out.jsonl"]  # no temporary file left
-    assert "exported 4 records (jsonl)" in capsys.readouterr().err
+    assert "exported 6 records (jsonl)" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("failure", ["write", "count"])
@@ -183,7 +188,7 @@ def test_op_export_refuses_a_directory(
 def test_op_export_to_stdout(data_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert run(data_dir, "export", "trust status:(accepted OR rejected)", "--format", "ris") == 0
     out = capsys.readouterr().out
-    assert out.count("ER  - \n") == 4 and "search_run" not in out  # stdout is data only
+    assert out.count("ER  - \n") == 6 and "search_run" not in out  # stdout is data only
 
 
 def test_a_closed_pipe_stops_quietly(
@@ -202,7 +207,7 @@ def test_op_search_ranks_and_reports_exclusions(data_dir: Path, capsys: pytest.C
     assert run(data_dir, "search", "trust", "--limit", "3") == 0
     out = capsys.readouterr().out.splitlines()
     assert out[0].startswith(
-        "total 4 · excluded by default filters 1 (track: workshop 1, unknown 0; status: unknown 0)"
+        "total 6 · excluded by default filters 1 (track: workshop 1, unknown 0; status: unknown 0)"
     )
     assert [line.split()[0] for line in out[2:]] == ["1.", "2.", "3."]
     scores = [float(line.split()[1]) for line in out[2:]]
@@ -249,3 +254,44 @@ def test_diagnostics_go_to_stderr_and_one_search_run_line_is_logged(
     assert {"index_version", "canonical_hash", "total", "ms", "mode", "command", "engine"} <= runs[0].keys()
     assert "calibration" not in json.dumps(runs[0])  # never the query text
     assert captured.out.strip().splitlines() == ["op:iclr:2024:AbCd0002"]
+
+
+def test_the_stdout_export_is_counted_and_an_internal_error_logs_at_error(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    real = TantivyEngine.documents
+
+    def short(self: TantivyEngine, ast: object) -> tuple[int, object]:
+        total, documents = real(self, ast)  # type: ignore[arg-type]
+        return total, list(documents)[1:]
+
+    monkeypatch.setattr(TantivyEngine, "documents", short)
+    assert run(data_dir, "export", "trust", "--format", "jsonl") == 1
+    err = capsys.readouterr().err
+    logged = [json.loads(line) for line in err.splitlines() if line.startswith("{")]
+    refused = [e for e in logged if e.get("event") == "cli_refused"]
+    assert "but 6 match" in err and refused and refused[0]["level"] == "ERROR"
+
+
+def test_op_export_keeps_the_mode_a_redirect_would_give(data_dir: Path, tmp_path: Path) -> None:
+    import os
+    import stat
+
+    fresh, kept = tmp_path / "fresh.ris", tmp_path / "kept.ris"
+    kept.write_text("")
+    kept.chmod(0o640)
+    old = os.umask(0o022)
+    try:
+        for out in (fresh, kept):
+            assert run(data_dir, "export", "trust", "--format", "ris", "--out", str(out)) == 0
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE(fresh.stat().st_mode) == 0o644 and stat.S_IMODE(kept.stat().st_mode) == 0o640
+
+
+def test_op_export_names_a_missing_directory(
+    data_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert run(data_dir, "export", "trust", "--format", "ris", "--out", str(tmp_path / "nope" / "x.ris")) == 1
+    err = capsys.readouterr().err
+    assert "no directory" in err and ".partial" not in err

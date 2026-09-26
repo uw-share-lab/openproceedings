@@ -148,6 +148,10 @@ def bibtex_key(r: dict[str, Any]) -> str:
     return f"{last or 'anon'}{r['year']}{words[0] if words else 'untitled'}"
 
 
+_ODD_BACKSLASHES = r"(?<!\\)\\(?:\\\\)*"  # an odd run of backslashes: the next character is escaped
+_EVEN_BACKSLASHES = r"(?<!\\)((?:\\\\)*)"  # an even run (or none): the next character is not
+
+
 def _braced(text: str) -> str:
     """A BibTeX `{…}` value every parser reads the same way. Braces stay when they balance and none is
     escaped (LaTeX such as `{BERT}` keeps its meaning); otherwise they are dropped, since BibTeX counts braces
@@ -155,13 +159,14 @@ def _braced(text: str) -> str:
     can swallow the next. `&`, `%` and `#` are escaped (they break LaTeX and BibTeX); `$…$` math stays. A
     value never ends on a backslash, which would escape the closing brace."""
     text = _one_line(text)
-    depth, balanced = 0, "\\{" not in text and "\\}" not in text
+    escaped = re.search(_ODD_BACKSLASHES + r"[{}]", text) is not None  # `\\{`, not `\\\\{`
+    depth, balanced = 0, not escaped
     for ch in text:
         depth += {"{": 1, "}": -1}.get(ch, 0)
         balanced = balanced and depth >= 0
     if not (balanced and depth == 0):
         text = _one_line(text.replace("{", "").replace("}", ""))
-    text = re.sub(r"(?<!\\)([&%#])", r"\\\1", text)
+    text = re.sub(_EVEN_BACKSLASHES + r"([&%#])", r"\1\\\2", text)  # `&` → `\\&`, `\\\\&` → `\\\\\\&`
     if text.endswith("\\"):
         text += " "
     return "{" + text + "}"
