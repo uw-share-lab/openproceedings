@@ -20,10 +20,10 @@ Positions are mandatory on `title`/`abstract` (phrases, NEAR, highlights). Any c
 
 ## Analyzer: `exact_v1`
 - The index is fed the output of `query/normalize.py::normalize()` joined by single spaces
-  (`.claude/skills/token-contract/SKILL.md`). The registered analyzer only splits on whitespace (and
-  lower-cases, which is a no-op on normalized input). Spec 03 describes `exact_v1` as split → lower-case →
-  ASCII fold. On pre-normalized input these are equivalent. Keep the Rust side doing **nothing** that
-  `normalize.py` doesn't already do.
+  (`.claude/skills/token-contract/SKILL.md`). The registered analyzer **only splits on whitespace**
+  (spec 03 §Tokenizer). Never add an ASCII-folding or lower-casing filter: normalized tokens keep letters
+  such as `ø`, `ł`, `æ`, `đ` that ASCII folding would change, so the index would match what
+  ReferenceEngine doesn't. Keep the Rust side doing **nothing** that `normalize.py` doesn't already do.
 - **Never** use the built-in `default` or `en_stem` analyzers. `en_stem` stems. `default` also applies a
   **long-token filter** (verify the current limit in the pinned tantivy version), which drops long tokens
   the oracle keeps, and that is a silent membership difference. Build the analyzer explicitly and check the

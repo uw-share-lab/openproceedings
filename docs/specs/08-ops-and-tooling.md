@@ -16,8 +16,8 @@ openproceedings/
 │   ├── pyproject.toml
 │   ├── src/openproceedings/
 │   │   ├── ingest/              # 01: sources/, classify.py, dedup.py, snapshot.py, ris.py
-│   │   ├── query/               # 02: normalize.py, lexer.py, parser.py, ast.py, canonical.py, compat.py
-│   │   ├── engine/              # 03: reference.py, tantivy_engine.py, compile.py, rank.py, highlight.py
+│   │   ├── query/               # 02: normalize.py, lexer.py, parser.py, ast.py, canonical.py, defaults.py, compat.py
+│   │   ├── engine/              # 03: protocol.py, reference.py (built); tantivy_engine.py, compile.py, rank.py, highlight.py
 │   │   ├── semantic/            # 06 (phase 2)
 │   │   ├── api/                 # 04: FastAPI app, routers, exporters/, records.py
 │   │   ├── eval/                # 07 report generators
@@ -99,7 +99,7 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 | `test` → `test` | pytest (unit, golden, differential@2k, contract); vitest; OpenAPI → TS types freshness |
 | `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`), every hook case table (`.claude/hooks/tests/`) and the tooling-script table (`.claude/scripts/tests/test-tooling-scripts.sh`) |
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha |
-| `nightly` (scheduled, not a PR check) | `make mutate`: every mutant in `.claude/scripts/mutants/*.json` must be killed or documented as equivalent. Differential@50k and full-corpus parity join it in M1/M2 |
+| `nightly` (scheduled, not a PR check) | The exhaustive tokenizer check (`OP_EXHAUSTIVE=1`), every property test at 50,000 examples, and `make mutate` (every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent). Differential@50k and full-corpus parity join it with the Tantivy engine (task-057, M4) |
 | *(planned, M1+)* `e2e`, `bench` | Playwright; pytest-benchmark vs main |
 
 `review-attested` is an **honesty check** against forgetting to review, not an access control. Anyone who

@@ -42,7 +42,7 @@ venues.
 ## Guarantees (the invariants every part must uphold)
 
 1. **Exactness.** A document matches a term only if that exact normalized token appears in the
-   searched field. Normalization means case-folding, Unicode NFKC, diacritic folding, and splitting on
+   searched field. Normalization means case-folding, Unicode NFKC, mark folding (02 §Token semantics), and splitting on
    punctuation, as defined in [02](02-query-language.md). No step may add a match that the reference
    matcher in [03](03-search-engine.md) would not.
 2. **Title and abstract only.** No other text field is ever searched by default. Metadata is reachable

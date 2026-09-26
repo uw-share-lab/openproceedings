@@ -1,4 +1,4 @@
-"""ReferenceEngine against 40 queries on a 200-record fixture whose expected id sets were computed by an
+"""ReferenceEngine against 44 queries on a 200-record fixture whose expected id sets were computed by an
 independent evaluator (task-016 AC2; `fixtures/corpus/make_reference_200.py`)."""
 
 from __future__ import annotations

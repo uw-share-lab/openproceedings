@@ -13,7 +13,8 @@ form that re-parses to the same tree: `parse(canonical).canonical == canonical` 
 `gpt-4*` prints as `"gpt 4*"` (in a phrase the earlier words count toward a wildcard's stem), and a lone
 token that spells an operator in lowercase is quoted (`"and"`), so re-parsing raises no warning.
 
-`canonical_hash` = sha256 of the canonical string and TOKENIZER_VERSION joined by a NUL byte.
+`canonical_hash` = sha256 of the canonical string, TOKENIZER_VERSION and QUERY_VERSION joined by NUL bytes
+(decision-003).
 """
 
 from __future__ import annotations

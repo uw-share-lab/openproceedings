@@ -38,7 +38,7 @@ class Diagnostic(BaseModel):  # frozen, extra="forbid"
 | `COMPAT_` | translations | `COMPAT_SOURCE_ALIAS` (`source:PMLR` → `venue:ICML`), `COMPAT_POP_DOLLAR`, `COMPAT_POP_PHRASE` (decision-002) |
 | `API_` | HTTP layer | the codes of spec 04 §Error handling, plus `API_REPLAY_MISMATCH` (a log code only, never an HTTP error: the replay is a `200` whose `status` field is `mismatch`) |
 
-Exact names for the parse-time prefixes are set when the registry is created; the prefixes and the rule
+The registry is `diagnostics.py` (built in M1): the table above names every parse-time code; the prefixes and the rule
 are the standard. The `API_` codes, and their HTTP statuses, are already fixed by spec 04 §Error handling:
 use them exactly as named there.
 

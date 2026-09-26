@@ -48,7 +48,7 @@ It implements the same `Engine` protocol: `match_ids`, `expand`, `facets`, and a
 - `backend/src/openproceedings/engine/reference.py`; the protocol and `Searchable` record shape are in
   `engine/protocol.py` (types only, so sharing it shares no logic).
 - `tests/unit/test_reference.py` has one row per rule above, plus import-isolation tests (the oracle's
-  allowed imports; `api/` never imports it). `tests/golden/test_reference_200.py` runs 40 queries over a
+  allowed imports; `api/` never imports it). `tests/golden/test_reference_200.py` runs 44 queries over a
   200-record fixture whose expected sets come from an independent evaluator
   (`tests/fixtures/corpus/make_reference_200.py`), and a property that canonical form never changes a match set.
 - Every wildcard in a query (phrase items and NEAR operands too) is expanded once, before any record is

@@ -83,3 +83,9 @@ form whose hash identifies a query.
 - **Golden expected sets need an independent source.** The 200-record fixture's expected ids come from a
   separate regex evaluator in `make_reference_200.py`, and all 40 queries agreed with ReferenceEngine
   on the first run. Random word order almost never forms phrases, so the generator seeds some.
+
+## Corrections 2026-09-25 (M1 review gate)
+- "Canonical form prints `"gpt-4*"` instead" (What we learned) is superseded: once a phrase's earlier
+  words count toward a wildcard's stem, canonical form prints `"gpt 4*"`, as decision-001 first wrote it.
+- Commit 62dd486 in the first addendum was amended to 15e2294 before any push; 62dd486 no longer exists.
+- The 200-record golden set has 44 queries, not 40, after the task-016 review added boundary rows.

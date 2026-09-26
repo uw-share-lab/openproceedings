@@ -56,3 +56,9 @@ Implement the token contract with a raw↔normalized offset map for highlights, 
 - **Check a decision against its own examples.** The first draft of decision-001 put the stem minimum on the
   last token, which would have rejected `gpt-4*`, the rule's own motivating example. It now counts the whole
   written stem.
+
+## Corrections 2026-09-25 (M1 review gate)
+- The bullet above saying the Devanagari virama is dropped (`विश्वास` → `विशवास`) describes the first draft.
+  As built, marks are folded only on Latin, Greek, Cyrillic, Hebrew and Arabic bases, so
+  `normalize("विश्वास") == ["विश्वास"]` (spec 02 §Token semantics).
+- The artifacts line's "132 rows" is out of date: `test_tokens.py` has 176 golden rows.

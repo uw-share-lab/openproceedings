@@ -29,8 +29,9 @@ description: The default-filter rule (guarantee 3) — `track:(main OR datasets_
 - Idempotence: parsing a canonical string that already contains the defaults adds nothing. The clauses are
   present, so no default fires, and by content recognition they still count as the defaults.
 - **Identification string.** `identification_query` is the canonical string with the default conjuncts
-  removed. PRISMA's "records identified" is computed from it. The API returns, and search records store,
-  both `canonical` and `identification_query`.
+  removed. PRISMA's "records identified" is computed from the same set as a tree,
+  `ParseResult.identification_ast` (the string can be `""` or all-negative). The API returns, and search
+  records store, both `canonical` and `identification_query`.
 
 ## As built (`backend/src/openproceedings/query/defaults.py`, `test_defaults.py`)
 - Judged on the canonical tree's top-level conjuncts. A top-level `NOT track:x` suppresses the track

@@ -33,6 +33,8 @@ Put OpenReview credentials in `.env` (gitignored). The anonymous API rate-limits
 - **No AI authorship** in commits or PRs: no `Co-Authored-By: Claude` and no "Generated with …" footers.
   The `.claude/` tooling is committed, but people author the work.
 - **`data/` is never committed.** Snapshots and indexes are immutable. Build new ones rather than editing.
+- **Tests never call real APIs.** `backend/tests/conftest.py` refuses every non-loopback connection and DNS
+  lookup (`NetworkBlockedError`); crawlers are tested against recorded fixtures.
 - **Exactness is the product.** Any change to `query/` or `engine/` goes through `exactness-guardian`,
   and the differential suite (Tantivy vs the reference oracle) must stay green.
 

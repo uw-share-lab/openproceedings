@@ -1,6 +1,6 @@
 # 02 — Query language
 
-Status: **draft for review** · depends on: nothing · consumed by: 03, 04, 05
+Status: **as-built (2026-09-25, M1)** · depends on: 01 (the venue/track/status vocabularies, `vocab.py`) · consumed by: 03, 04, 05
 
 ## Purpose
 
@@ -106,13 +106,15 @@ Rules:
   abstract.
 - **Lexical details** (`query/lexer.py`; the module docstring is the full list). Nothing in a query is
   silently reinterpreted: every ambiguous spelling is an error or a warning.
-  - Double quotes delimit phrases: `"`, `“ ”`, `„ ‟`. A backslash keeps the next character in the word
+  - Double quotes delimit phrases: `"`, `“ ”`, `„ ‟`, `＂`, `« »`, `「 」`, `『 』`. They need not pair: any of
+    them closes a phrase opened by any other. A backslash keeps the next character in the word
     (`G\"odel`). Characters whose NFKC form is a syntax character (full-width `（ ）｜：－＊＂`, …) act as
     it, because the tokenizer applies NFKC too; super/subscript parentheses are notation, not grouping.
   - `-` is `NOT` when it starts a primary (after whitespace, `(`, `|` or a field's `:`) and touches what
     it excludes. A word that starts with `-` anywhere else (`a - b`, `"x"-based`, `--x`) is
-    `PARSE_AMBIGUOUS_MINUS`. A word starting with a look-alike dash (`−bias`, `–bias`) or a single quote
-    is searched as written with `WARN_LOOKALIKE_OPERATOR`.
+    `PARSE_AMBIGUOUS_MINUS`. A word starting with a look-alike dash (any Unicode dash other than the
+    ASCII-equivalent hyphen-minus, or the minus sign `−`) or with `‘` or `` ` `` is searched as written with
+    `WARN_LOOKALIKE_OPERATOR`. An ASCII `'` is an apostrophe and raises nothing.
   - A field is a letter, then letters/digits/underscores, then `:`; names are case-insensitive, so an
     unknown one (`intitle:`, `título:`) is an error rather than a silent search. `title: trust` is fine;
     `title :trust` is `PARSE_STRAY_COLON`. `source:` is Scholar syntax: in native mode it is
@@ -129,7 +131,8 @@ Rules:
   wildcards or phrases (not groups or filters) in the same field, and `NEAR` does not chain
   (`a NEAR/3 b NEAR/2 c` is an error; join pairs with `AND`).
 - `title:`/`abstract:` apply to every term in what follows (`title:(a OR b)`); a different text field
-  nested inside (`title:(abstract:x)`) is an error. Filters may appear anywhere, including inside a text
+  nested inside (`title:(abstract:x)`) is an error. Filters may appear anywhere (inside a text field's group
+  they raise `WARN_FILTER_SCOPE`, since they filter whole papers), including inside a text
   field's group.
 - A filter takes one value or an `OR` group of values of that field only (`venue:(NeurIPS OR ICLR)`);
   `AND`, `NOT` or juxtaposition inside a filter group is an error, and values take no wildcards. Values are
@@ -216,14 +219,19 @@ LLM-as-judge strings) parses without errors, and its canonical form is snapshot-
 
 ```python
 parse(q: str, mode="native"|"scholar") -> ParseResult
-ParseResult = {
-  ast: Node,                 # discriminated union: Or, And, Not, Term, Phrase, Near, Wildcard, Filter
-  canonical: str,            # fully parenthesised, uppercase operators, defaults made explicit, sorted filters
-                             #   (top-level filters ordered venue, year, track, status, then others
-                             #   alphabetically; values in a single-field OR group sorted)
-  warnings: [Diagnostic],    # {code, message, span:[start,end]}
-  errors: [Diagnostic],      # non-empty ⇒ no search
-  translations: [Diagnostic],
+ParseResult = {               # `query/parser.py`; every Optional below is None exactly when errors is non-empty
+  mode: "native" | "scholar",
+  ast: Node | None,            # the tree as typed (spans into q): Or, And, Not, Term, Phrase, Near, Wildcard, Filter
+  effective_ast: Node | None,  # canonical tree with the default filters: what the engine runs
+  canonical: str | None,       # render(effective_ast): fully parenthesised, uppercase operators, defaults
+                               #   explicit, filters ordered venue, year, track, status (§Canonical form)
+  canonical_hash: str | None,
+  identification_query: str | None,  # canonical without default conjuncts; "" = every record
+  identification_ast: Node | None,    # the same set as a tree (None = every record): what counts use
+  defaults: [ "track" | "status" ],   # fields whose top-level clause is the default
+  warnings: [Diagnostic],      # {code, message, span:[start,end]}
+  errors: [Diagnostic],        # non-empty ⇒ no search
+  translations: [Diagnostic],  # Scholar-mode rewrites
 }
 ```
 
@@ -238,8 +246,8 @@ filter (in any OR, at the first one's position); values are sorted and deduplica
 adjacent year ranges merge; duplicate conjuncts and disjuncts are dropped; `NOT NOT x` is `x`; OR branches
 keep their written order; a bare term that a sibling filter's field could read as a value is quoted
 (`venue:ICLR OR "neurips"`); every text leaf carries its field prefix
-(`title:(a OR b)` → `(title:a OR title:b)`). A wildcard whose last token is shorter than the stem
-minimum is hyphen-joined to the tokens before it (`gpt-4*` → `"gpt-4*"`). Semantically equal spellings
+(`title:(a OR b)` → `(title:a OR title:b)`). `gpt-4*` prints as `"gpt 4*"` (in a phrase the earlier
+words count toward a wildcard's stem). Semantically equal spellings
 (`trust venue:ICLR`, `venue:iclr Trust`) therefore share one hash. `QUERY_VERSION`
 (`openproceedings.query`) is `"1"`.
 
@@ -247,7 +255,7 @@ minimum is hyphen-joined to the tokens before it (`gpt-4*` → `"gpt-4*"`). Sema
 
 Every error has a span and a fix hint: unbalanced parentheses, an empty group, a wildcard stem that is too
 short or not at the end of a word, an unterminated phrase, `NEAR/` without a whole-number distance or
-with a bad operand, a missing operand (`a OR`), a word or phrase with no letters or digits (`a - b`), a
+with a bad operand, a missing operand (`a OR`), a word or phrase with no letters or digits (`a ~ b`), a
 nested text field, a malformed filter group, nesting deeper than 64, an ambiguous `-`, a stray `:`, a
 detached or mid-word wildcard, `source:` outside Scholar mode, an unknown field, an unknown filter value
 (listing the valid ones), a range with start > end, or an all-negative query. The codes are in

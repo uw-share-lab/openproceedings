@@ -48,7 +48,7 @@ or not), their `$` gets no PoP notice, and `source:ICLR OR PMLR` warns (`WARN_FI
 | `a \| b` | `a OR b` | none needed (`|` is in the native EBNF) |
 | `model$` | WoS zero-or-one wildcard | "PoP `$` interpreted as zero-or-one character" |
 | lowercase `or` | term `or` + warning | same as native |
-| an operator we don't support (e.g. Scholar's `intitle:`, `allintitle:`) | error, never ignored | verify the exact list at implementation time; add a fix hint pointing to `title:` |
+| an operator we don't support (e.g. Scholar's `intitle:`, `allintitle:`) | error, never ignored | built: `intitle:`/`allintitle:` are `FIELD_UNKNOWN` with a hint pointing to `title:` |
 
 ## What compat mode does not do
 - It adds no stemming. Scholar matched `benchmarks` for `benchmark`. We don't, and the 07 Scholar comparison
