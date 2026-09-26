@@ -72,14 +72,14 @@ class TantivyEngine:
             raise EngineInputError(DiagnosticCode.API_BAD_PARAM, f"facet fields must be among {FACET_FIELDS}")
         self.expansions(ast)  # the cap applies even when no facet field is asked for
         out: dict[str, dict[str, int]] = {}
+        compiled: dict[str, tantivy.Query] = {}  # one compile per distinct kept set (verification is costly)
         for f in fields:
             kept = [c for c in _conjuncts(ast) if _filter_field(c) != f]
-            if not kept:
-                query = tantivy.Query.all_query()
-            else:
-                query = self.compile(
-                    kept[0] if len(kept) == 1 else And(span=(0, 0), children=tuple(kept))
-                ).query
+            key = "\x00".join(c.model_dump_json() for c in kept)
+            if key not in compiled:
+                node = kept[0] if len(kept) == 1 else And(span=(0, 0), children=tuple(kept)) if kept else None
+                compiled[key] = tantivy.Query.all_query() if node is None else self.compile(node).query
+            query = compiled[key]
             result = self.searcher.aggregate(query, {"f": {"terms": {"field": f, "size": 100_000}}})
             out[f] = dict(sorted((str(b["key"]), int(b["doc_count"])) for b in result["f"]["buckets"]))
         return out

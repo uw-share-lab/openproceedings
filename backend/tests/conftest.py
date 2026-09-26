@@ -10,8 +10,10 @@ Select with HYPOTHESIS_PROFILE or `--hypothesis-profile`: `dev` (local default),
 `@reproduce_failure` blob; the example database (`.hypothesis/`) is gitignored.
 """
 
+import logging
 import os
 import socket
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -102,3 +104,16 @@ def pytest_configure(config: pytest.Config) -> None:
     socket.gethostbyname_ex = _lookup(_real_gethostbyname_ex)
     socket.gethostbyaddr = _lookup(_real_gethostbyaddr)
     socket.getnameinfo = _reverse_lookup
+
+
+@pytest.fixture(autouse=True)
+def _reset_openproceedings_logging() -> Iterator[None]:
+    """`cli.main` binds the `openproceedings` logger to the stream it runs with (a test's captured stderr).
+    Undo that after every test, so no later test logs into a closed capture."""
+    yield
+    logger = logging.getLogger("openproceedings")
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+        handler.close()
+    logger.propagate = True
+    logger.setLevel(logging.NOTSET)

@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from hypothesis import assume, given, settings
+from hypothesis import given, settings
 from hypothesis import strategies as st
 from openproceedings.engine.index import build_index
 from openproceedings.engine.reference import ReferenceEngine
@@ -64,13 +64,20 @@ def test_golden(engine: TantivyEngine, case: dict[str, object]) -> None:
 REFERENCE = ReferenceEngine(RECORDS)
 
 
+def combined(parts: list[str], op: str) -> str:
+    return op.join(f"({p})" for p in parts) if op != " NEAR/2 " else op.join(parts)
+
+
 @settings(max_examples=150, deadline=None)
 @given(
-    st.lists(st.sampled_from([c["q"] for c in GOLDEN]), min_size=1, max_size=3),
-    st.sampled_from([" ", " OR ", " AND NOT ", " NEAR/2 "]),
+    st.tuples(
+        st.lists(st.sampled_from([c["q"] for c in GOLDEN]), min_size=1, max_size=3),
+        st.sampled_from([" ", " OR ", " AND NOT ", " NEAR/2 "]),
+    ).filter(
+        lambda t: parse(combined(*t)).ast is not None
+    )  # only strings that parse, chosen while generating
 )
-def test_combinations_agree_with_the_oracle(engine: TantivyEngine, parts: list[str], op: str) -> None:
-    result = parse(op.join(f"({p})" for p in parts) if op != " NEAR/2 " else op.join(parts))
-    assume(result.ast is not None)
+def test_combinations_agree_with_the_oracle(engine: TantivyEngine, case: tuple[list[str], str]) -> None:
+    result = parse(combined(*case))
     assert result.ast is not None
     assert sorted(BACK[i] for i in engine.match_ids(result.ast)) == sorted(REFERENCE.match_ids(result.ast))

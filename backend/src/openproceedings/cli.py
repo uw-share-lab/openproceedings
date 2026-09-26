@@ -172,7 +172,11 @@ def _search(ns: argparse.Namespace) -> int:
     from openproceedings.query.parser import parse
 
     indexes = ns.data_dir / "indexes"
-    path = Path(ns.index) if ns.index and Path(ns.index).is_dir() else indexes / (ns.index or "current")
+    name = ns.index or "current"
+    path = indexes / name if (indexes / name).exists() or not Path(name).is_dir() else Path(name)
+    if not path.exists():
+        print(f"op search: no index at {path}; build one with `op index build --snapshot …`", file=sys.stderr)
+        return 1
     result = parse(ns.query, ns.mode)
     lines = [f"input: {ns.query}"]
     lines += [f"{d.code}: {d.message}" for d in [*result.errors, *result.warnings]]
@@ -224,6 +228,7 @@ def _reason(e: Exception) -> str:
 
 def main(argv: Sequence[str] | None = None) -> int:
     from openproceedings.engine.index import IndexBuildError
+    from openproceedings.engine.protocol import EngineError
     from openproceedings.ingest.snapshot import SnapshotError
 
     parser = build_parser()
@@ -245,7 +250,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     name = " ".join(filter(None, (ns.command, getattr(ns, "source", None), getattr(ns, "action", None))))
     try:
         code: int = ns.run(ns)
-    except (SnapshotError, IndexBuildError, ValueError, OSError) as e:
+    except (SnapshotError, IndexBuildError, EngineError, ValueError, OSError) as e:
         reason = _reason(e)
         log.warning("cli_refused", extra={"command": name, "error": type(e).__name__})
         print(f"op {name}: {reason}", file=sys.stderr)

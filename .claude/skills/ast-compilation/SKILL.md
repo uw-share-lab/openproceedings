@@ -18,9 +18,9 @@ documentation.
 | `Phrase p` | `PhraseQuery(title, p) OR PhraseQuery(abstract, p)` | **never** across fields; field-scoped phrases → one side only |
 | `Near(a, b, n)`, two **different** single terms | per field: `PhraseQuery([a,b], slop=n) OR PhraseQuery([b,a], slop=n)` | unordered; ≤ n intervening words (measured, see gotcha 2) |
 | `Near` with a phrase or wildcard operand, or a term with itself; a phrase with a wildcard item | candidate filter: every item `MUST` in the same field, then positions verified in Python over the candidates' stored token streams (the indexed text split on spaces); the verified ids become a `TermSetQuery` on `id`, kept with the candidate query for scoring | the documented fallback; `--explain` lists each verified clause |
-| `Wildcard w` | `Boolean(SHOULD term…)` of the expanded terms, per field | expansion from the term dictionary, returned to the caller (`.claude/skills/wildcards-and-expansion/SKILL.md`) |
+| `Wildcard w` | `Boolean(SHOULD term…)` of the expanded terms, per field (never a `TermSetQuery`, which scores every match 1) | expansion from the term dictionary, returned to the caller (`.claude/skills/wildcards-and-expansion/SKILL.md`); scores exactly as the explicit OR of its terms (tested) |
 | `And` / `Or` | `BooleanQuery` MUST / SHOULD | |
-| `Not x` | `Boolean(MUST all_docs, MUST_NOT x)` | see gotcha 1 |
+| `Not x` | `Boolean(MUST ConstScore(all_docs, 0), MUST_NOT x)` | see gotcha 1; the all-docs clause adds no score (`AllQuery` scores 1, which under an OR would lift some documents) |
 | `Filter` | `TermQuery`/`RangeQuery` on fast fields, non-scoring | `venue:` value mapped to the stored spelling |
 
 ## Gotchas
@@ -47,7 +47,11 @@ and `engine/tantivy_engine.py` (`TantivyEngine`: expansion from the term diction
 `terms_with_prefix` over both fields, the 200 cap before compiling; match sets read back through the
 `ord` fast column and `ids.txt`; disjunctive facets by a terms aggregation; ranking is task-025, so
 `search` returns id order until then). Filters are `ConstScoreQuery(…, 0.0)`: they never change a score
-(tested). Checked: the 44 golden queries of the 200-record fixture, a row per table line against
+(tested). The verified fallback finds each operand's occurrences from a token→positions map and pairs NEAR
+operands by binary search (each operand's width is fixed), so its cost is linear in the candidates' text:
+on an 80k index the worst stopword queries take 2–11 s (the reference engine 27–45 s); its candidate
+query holds each distinct item once, so a repeated term isn't scored twice. `facets` compiles each distinct
+filter-free query once. How verified clauses score is settled in task-025. Checked: the 44 golden queries of the 200-record fixture, a row per table line against
 ReferenceEngine, and (locally) the ten Trust-Evals protocol strings on the real corpus, identical sets.
 
 ## `op search --explain`

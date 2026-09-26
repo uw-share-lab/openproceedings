@@ -44,7 +44,7 @@ into one `.venv` from one `uv.lock`. New Python packages join by adding their di
 | `op ingest openreview\|proceedings\|ris … [--offline]` | fetch sources (`--offline`: cache only, no network) |
 | `op snapshot build` · `op snapshot diff <a> <b>` | build an immutable snapshot, or compare two |
 | `op index build [--snapshot <id>]` · `op index retire <index_version>` | build an immutable index; retire an old one (refuses if any search record pins it) |
-| `op search "<q>" [--mode scholar] [--explain] [--engine tantivy\|reference] [--ids]` | search; `--engine reference` runs the oracle |
+| `op search "<q>" [--mode scholar] (--explain \| --ids) [--index <dir\|version>]` | as built (task-024): the compiled query, or the sorted id set, from the Tantivy index; ranked output and `--engine reference` (the oracle) arrive with task-030 |
 | `op export "<q>" --format ris\|csv\|bibtex\|jsonl [--index-version <v>]` | export the full matched set |
 | `op record save "<q>" [--mode scholar]` · `op record replay <id>` | freeze a search as a search record (the same function as `POST /records`); replay one and print its status, `reproduced` / `drifted` / `mismatch` (the same function as `GET /records/{id}`) |
 | `op serve` | run the API |

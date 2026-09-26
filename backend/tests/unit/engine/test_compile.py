@@ -71,6 +71,8 @@ def both(engines: tuple[TantivyEngine, ReferenceEngine], q: str) -> set[str]:
         ("alpha NEAR/1 alpha", {"Ab05"}),  # two distinct occurrences: `alpha q alpha`, never one alone
         ("alpha NEAR/0 alpha", set()),
         ('"alpha x" NEAR/1 beta', {"Ab03"}),  # a phrase operand takes the verified fallback
+        ('"alpha x" NEAR/0 beta', {"Ab03"}),  # adjacent after the phrase: alpha x | beta
+        ('beta NEAR/0 "x y"', {"Ab03"}),  # adjacent before: alpha x y | beta in the abstract (x y beta)
         ('"alpha x*" NEAR/2 beta', {"Ab03", "Ab04"}),
         ('"trust*" language', {"Ab06"}),
         ('"in lang*"', {"Ab06"}),  # a wildcard phrase item is verified by position
@@ -142,9 +144,12 @@ def test_explain_shows_the_tree_expansions_and_fallbacks(
 
 
 def test_facets_agree_with_the_oracle(engines: tuple[TantivyEngine, ReferenceEngine]) -> None:
-    for q in ("gamma", "gamma venue:ICLR", "alpha -year:2024", "alpha OR gamma"):
-        ast = parse(q).ast
-        assert engines[0].facets(ast) == engines[1].facets(ast), q  # type: ignore[arg-type]
+    for q in ("gamma", "gamma venue:ICLR", "alpha -year:2024", "alpha OR gamma", "(gamma venue:ICLR) delta"):
+        result = parse(q)
+        for ast in (result.ast, result.effective_ast):  # as typed, and with the default filters the API runs
+            assert engines[0].facets(ast) == engines[1].facets(ast), q  # type: ignore[arg-type]
+    # a nested AND is flattened: the venue filter inside it is still venue's own conjunct
+    assert engines[0].facets(parse("(gamma venue:ICLR) delta").ast)["venue"] == {"ICLR": 1, "NeurIPS": 1}  # type: ignore[arg-type]
 
 
 def test_search_pages_in_id_order(engines: tuple[TantivyEngine, ReferenceEngine]) -> None:
@@ -179,3 +184,47 @@ def test_cli_search_explain_and_ids(tmp_path: Path, capsys: pytest.CaptureFixtur
     assert capsys.readouterr().out.split() == ["op:neurips:2023:Ab01", "op:neurips:2023:Ab02"]
     assert cli.main(["--data-dir", str(data), "search", "trust NOT", "--ids"]) == 1  # a parse error
     assert "PARSE_" in capsys.readouterr().err
+
+
+def scores(engine: TantivyEngine, q: str) -> dict[str, float]:
+    query = engine.compile(parse(q).ast).query  # type: ignore[arg-type]
+    hits = engine.searcher.search(query, 50).hits
+    ords = engine.searcher.fast_field_values("ord", [a for _, a in hits])
+    return {engine.ids[o]: round(s, 6) for (s, _), o in zip(hits, ords, strict=True)}  # type: ignore[index]
+
+
+def test_not_adds_no_score(engines: tuple[TantivyEngine, ReferenceEngine]) -> None:
+    assert scores(engines[0], "alpha -zeta") == scores(engines[0], "alpha")
+    # under an OR, a NOT branch that matches must add nothing either (Ab05: alpha, no beta, no gamma)
+    ab05 = next(i for i in engines[0].ids if i.endswith("Ab05"))
+    assert scores(engines[0], "alpha AND (gamma OR NOT beta)")[ab05] == scores(engines[0], "alpha")[ab05]
+
+
+def test_each_wildcard_expansion_scores_as_its_own_term(
+    engines: tuple[TantivyEngine, ReferenceEngine],
+) -> None:
+    # a wildcard scores exactly as the explicit OR of its expansions, never a flat constant per match
+    explicit = "trust OR trusted OR trusts OR trustworthy OR trustx"
+    assert scores(engines[0], "trust*") == scores(engines[0], explicit)
+
+
+def test_a_verified_clause_scores_each_item_once(engines: tuple[TantivyEngine, ReferenceEngine]) -> None:
+    ab05 = next(i for i in engines[0].ids if i.endswith("Ab05"))
+    near = scores(engines[0], "alpha NEAR/1 alpha")[ab05]  # verified in the abstract only
+    assert near == scores(engines[0], "abstract:alpha")[ab05]  # alpha counted once, the id check adds 0
+
+
+def test_cli_search_refuses_an_over_cap_wildcard(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import openproceedings.engine.tantivy_engine as te
+    from openproceedings import cli
+
+    index = build_index(snapshot_of(CORPUS, tmp_path / "snap"), tmp_path / "indexes", BUILT).path
+    monkeypatch.setattr(te, "MAX_EXPANSIONS", 3)
+    for what in ("--ids", "--explain"):
+        assert cli.main(["--data-dir", str(tmp_path), "search", "trust*", what, "--index", index.name]) == 1
+        err = capsys.readouterr().err
+        assert "WILDCARD_TOO_MANY_EXPANSIONS" in err and "Traceback" not in err
+    assert cli.main(["--data-dir", str(tmp_path / "empty"), "search", "trust", "--ids"]) == 1
+    assert "op index build" in capsys.readouterr().err
