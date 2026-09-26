@@ -58,6 +58,11 @@ def test_codes_named_by_the_specs_exist() -> None:
         "PARSE_UNTERMINATED_PHRASE",
         "PARSE_BAD_NEAR",
         "PARSE_WILDCARD_NOT_SUFFIX",
+        "PARSE_EXPECTED_TERM",
+        "PARSE_EMPTY_TERM",
+        "PARSE_NESTED_FIELD",
+        "PARSE_TOO_DEEP",
+        "FIELD_FILTER_SYNTAX",
         *SPEC_04,
     ):
         assert DiagnosticCode(name)

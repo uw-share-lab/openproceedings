@@ -43,8 +43,13 @@ Code: `backend/src/openproceedings/query/{lexer,parser,ast,canonical}.py`.
 (compat alias, see `.claude/skills/scholar-syntax-compat/SKILL.md`). Anything else before `:` → unknown-field error.
 
 ## AST
-Discriminated union (pydantic v2): `Or, And, Not, Term, Phrase, Near, Wildcard, Filter`. Every node keeps
-its source span so diagnostics and the UI parse tree point at the input.
+Discriminated union (pydantic v2, `query/ast.py`): `Or, And, Not, Term, Phrase, Near, Wildcard, Filter`.
+Every node keeps its source span (groups include their parentheses and field prefix) so diagnostics and
+the UI parse tree point at the input. Text leaves carry `field` (`title`/`abstract`/None); there is no
+field node. `Term.token` and `Wildcard.stem` are single normalised tokens; a multi-token word is a
+`Phrase`. `Filter.values` holds canonical strings, or `YearRange`s for `year`. `parse()` (`query/parser.py`)
+returns `ast=None` exactly when `errors` is non-empty, never raises (property-tested at 50k), and reports
+one error per mistake, sorted by position.
 
 ## Canonical form
 `canonical` is: fully parenthesised, uppercase operators (`|` → `OR`, juxtaposition → `AND`, `-` → `NOT`),

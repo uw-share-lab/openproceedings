@@ -111,7 +111,17 @@ Rules:
   not at the end of a word is an error, and a trailing `$` is a wildcard only when it does not close a
   `$…$` math pair (`$\epsilon$` is math).
 - `NEAR/n` works within one field, is unordered, and allows at most n intervening words. Tantivy's slop
-  semantics are documented in 03 and must agree with the reference matcher.
+  semantics are documented in 03 and must agree with the reference matcher. Its two operands are words,
+  wildcards or phrases (not groups or filters) in the same field, and `NEAR` does not chain
+  (`a NEAR/3 b NEAR/2 c` is an error; join pairs with `AND`).
+- `title:`/`abstract:` apply to every term in what follows (`title:(a OR b)`); a different text field
+  nested inside (`title:(abstract:x)`) is an error. Filters may appear anywhere, including inside a text
+  field's group.
+- A filter takes one value or an `OR` group of values of that field only (`venue:(NeurIPS OR ICLR)`);
+  `AND`, `NOT` or juxtaposition inside a filter group is an error, and values take no wildcards. Values are
+  checked against `backend/src/openproceedings/vocab.py` (spec 01's vocabularies) and are case-insensitive;
+  `venue:` values take their canonical spelling (`neurips` → `NeurIPS`).
+- Groups and `NOT`s nest at most 64 deep (`PARSE_TOO_DEEP`).
 
 ## Fields and filters (guarantee 3: filters live in the query)
 
@@ -177,8 +187,9 @@ property tests. `canonical_hash = sha256(canonical + TOKENIZER_VERSION)`.
 ## Error handling
 
 Every error has a span and a fix hint: unbalanced parentheses, an empty group, a wildcard stem that is too
-short or not at the end of a word, an unterminated phrase, `NEAR/` without a whole-number distance, an
-unknown field, an unknown `track:` value (listing the valid values), a range with start > end, or an
+short or not at the end of a word, an unterminated phrase, `NEAR/` without a whole-number distance or
+with a bad operand, a missing operand (`a OR`), a word or phrase with no letters or digits (`a - b`), a
+nested text field, a malformed filter group, nesting deeper than 64, an unknown field, an unknown `track:` value (listing the valid values), a range with start > end, or an
 all-negative query. The codes are in `diagnostics.py`.
 
 ## Testing

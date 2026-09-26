@@ -22,6 +22,7 @@ openproceedings/
 │   │   ├── api/                 # 04: FastAPI app, routers, exporters/, records.py
 │   │   ├── eval/                # 07 report generators
 │   │   ├── diagnostics.py       # error-code registry (one Diagnostic shape; error-diagnostics skill)
+│   │   ├── vocab.py             # venue/track/status vocabularies (spec 01), shared by ingest and query
 │   │   ├── logs.py              # the only place logging is configured (logging-standards skill)
 │   │   └── cli.py               # `op` entry point
 │   └── tests/{unit,golden,differential,contract,fixtures}/
