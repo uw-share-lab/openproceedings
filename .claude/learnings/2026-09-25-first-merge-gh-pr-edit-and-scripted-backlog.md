@@ -11,7 +11,8 @@ Merge the M0 tooling PR into `dev`, close M0, and create the M0–M6 backlog.
 ## What we learned
 - **`gh pr edit` is unusable here.** Every call fails with `GraphQL: Projects (classic) is being deprecated … (repository.pullRequest.projectCards)`,
   so `record-review.py --attest` crashed after `gh pr create` on PR #1. The REST endpoint works:
-  `gh api -X PATCH repos/{owner}/{repo}/pulls/<n> -F body=@file`. `--attest` now uses it. The
+  `gh api -X PATCH repos/{owner}/{repo}/pulls/<n> -f body=<text>` (`-f` sends a raw string; `-F` would
+  coerce types and read `@file`). `--attest` now uses it and prints gh's error if the call fails. The
   `review-attested` check then re-ran on the `edited` event and passed within about 20 s.
 - **A check that runs before its input exists fails once, and that's fine.** `review-attested` ran at PR
   creation, before the attestation existed, and failed. Editing the body re-triggered it. `/open-pr` already
@@ -25,6 +26,8 @@ Merge the M0 tooling PR into `dev`, close M0, and create the M0–M6 backlog.
 
 ## Dead ends — don't repeat these
 - Don't retry `gh pr edit`; it fails the same way every time. Go straight to `gh api`.
+- **`backlog task edit --dep` replaces the dependency list; it doesn't append.** Adding the Q2/Q3 decisions to
+  task-050 silently dropped its dependency on task-002 and task-022. Pass the full list (old plus new) every time.
 
 ## Decisions (and what would change them)
 - Merge commits into `dev`, for the traceability above. If history gets noisy, squash only the PRs whose

@@ -4,12 +4,15 @@ title: OpenReview API v2 crawler
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
+updated_date: '2026-09-26 01:09'
 labels:
   - ingest
 milestone: m-4
 dependencies:
-  - TASK-022
   - TASK-002
+  - TASK-022
+  - TASK-048
+  - TASK-049
 ordinal: 49000
 ---
 

@@ -4,14 +4,16 @@ title: Coverage report and the M4 gate
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
+updated_date: '2026-09-26 01:09'
 labels:
   - eval
 milestone: m-4
 dependencies:
+  - TASK-048
+  - TASK-049
   - TASK-051
   - TASK-052
   - TASK-053
-  - TASK-049
 ordinal: 53000
 ---
 

@@ -152,7 +152,7 @@ def main() -> None:
         body += f"\n\n<!-- op-review: {head} APPROVE -->"
         # REST, not `gh pr edit`: gh pr edit queries the retired Projects (classic) API and fails
         # (PR #1, 2026-09-25). {owner}/{repo} is filled in by gh from the current repository.
-        subprocess.run(
+        patch = subprocess.run(
             [
                 "gh",
                 "api",
@@ -162,9 +162,11 @@ def main() -> None:
                 "-f",
                 f"body={body}",
             ],
-            check=True,
             capture_output=True,
+            text=True,
         )
+        if patch.returncode != 0:
+            fail(f"could not attest PR #{number.strip()}: {patch.stderr.strip() or patch.stdout.strip()}")
         print(f"PR #{number.strip()} body attested for {head[:10]}")
 
 

@@ -4,12 +4,14 @@ title: OpenReview API v1 adapters per year
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
+updated_date: '2026-09-26 01:09'
 labels:
   - ingest
 milestone: m-4
 dependencies:
-  - TASK-050
   - TASK-048
+  - TASK-049
+  - TASK-050
 ordinal: 50000
 ---
 
