@@ -1,10 +1,10 @@
 ---
 id: TASK-070
-title: 'Make the tokenizer''s LaTeX scan linear for unclosed \( \[ $$ openers'
+title: 'Make the tokenizer''s LaTeX scan linear for unclosed $ \( \[ openers'
 status: In Progress
 assignee: []
 created_date: '2026-09-26 06:11'
-updated_date: '2026-09-26 20:43'
+updated_date: '2026-09-26 20:59'
 labels:
   - query
   - performance
@@ -29,4 +29,6 @@ M1 gate verification: normalize._latex_mask scans to the end of the text for eve
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented normalize._Closers: _find and _find_closing_dollar answered for every start from one right-to-left pass per closer (built lazily, only when an opener needs it); _latex_mask uses it. The old scans stay for first_math_end (a single scan) and as the property test's oracle. TOKENIZER_VERSION unchanged. Checked: a Hypothesis property that tables == scans for every start; OP_EXHAUSTIVE=1 passes; a one-off differential of the previous normalize.py vs the new one on 300,000 random LaTeX-heavy texts + the 200-record fixture gave identical tokens; timing test (parse at the 2,000-char cap < 0.25 s, tokenize at 40,000 chars < 2 s for $1, \(, \[, $$1) fails on the old scan. Mutants 7/8 killed; the survivor (start < n-1 guard) is equivalent because every closer is two characters.
+
+Review (APPROVE; 0 mismatches over ~2M adversarial texts incl. every string up to length 6 over the LaTeX alphabet) fixes: the timing test is a doubling ratio (tokenize at 2k vs 8k chars < 8x; quadratic is ~16x) plus the parse bound at the cap, so it's machine-independent and the old scan fails it in ~11 s total (was minutes); the $$1 case is dropped and the title corrected ($$ was never quadratic: it closes at the next $$); the Pandoc dollar table has its own attribute, so find(…, "$") can't collide with it. Rejected: a compact array('i') table (peak 1.9 MB at 40k chars; abstracts are far shorter).
 <!-- SECTION:NOTES:END -->

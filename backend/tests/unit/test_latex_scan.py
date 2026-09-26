@@ -5,7 +5,9 @@ tables must agree with the scans exactly, or a token changes (the exhaustive sui
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 from openproceedings.query.normalize import _Closers, _find, _find_closing_dollar, tokenize
@@ -25,17 +27,19 @@ def test_the_tables_answer_exactly_what_the_scans_do(text: str) -> None:
             assert closers.dollar(i) == _find_closing_dollar(text, i), (text, i)
 
 
-def fastest(f: object, arg: str) -> float:
+def fastest(f: Callable[[str], object], arg: str) -> float:
     best = float("inf")
     for _ in range(3):
         t = time.perf_counter()
-        f(arg)  # type: ignore[operator]
+        f(arg)
         best = min(best, time.perf_counter() - t)
     return best
 
 
-def test_unclosed_openers_are_linear() -> None:
-    # quadratic before task-070: 0.56-0.78 s for `$1` at the 2,000-character query cap, ~200 s at 40,000
-    for unit in ("$1", "\\(", "\\[", "$$1"):
-        assert fastest(parse, unit * (2_000 // len(unit))) < 0.25, unit
-        assert fastest(tokenize, unit * (40_000 // len(unit))) < 2.0, unit
+@pytest.mark.parametrize("unit", ["$1", "\\(", "\\["])  # `$$` never was quadratic: it closes at the next `$$`
+def test_unclosed_openers_are_linear(unit: str) -> None:
+    # quadratic before task-070. Quadrupling the text costs ~4x when linear, ~16x when quadratic; the
+    # ratio doesn't depend on the machine, and the old scan fails it in about 4 s per opener
+    small, large = (fastest(tokenize, unit * (n // len(unit))) for n in (2_000, 8_000))
+    assert large / small < 8, (unit, small, large)
+    assert fastest(parse, unit * (2_000 // len(unit))) < 0.25, unit  # at the query cap

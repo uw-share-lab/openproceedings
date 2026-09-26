@@ -176,7 +176,8 @@ class _Closers:
 
     def __init__(self, text: str) -> None:
         self.text = text
-        self.tables: dict[str, list[int]] = {}
+        self.tables: dict[str, list[int]] = {}  # `find`'s, per closer string
+        self.dollars: list[int] | None = None  # `dollar`'s: the Pandoc rule, not a closer string
 
     def find(self, start: int, closer: str) -> int:
         """`_find(text, start, closer)`."""
@@ -193,7 +194,7 @@ class _Closers:
         text, n = self.text, len(self.text)
         if i + 1 >= n or text[i + 1].isspace():
             return -1
-        if "$" not in self.tables:
+        if self.dollars is None:
             res = [-1] * (n + 2)
             for p in range(n - 1, 0, -1):  # a walk starts after an opener, so never at 0
                 c = text[p]
@@ -205,8 +206,8 @@ class _Closers:
                     res[p] = p
                 else:
                     res[p] = res[p + 1]
-            self.tables["$"] = res
-        return self.tables["$"][i + 1]
+            self.dollars = res
+        return self.dollars[i + 1]
 
 
 def _script_join(text: str, i: int) -> int:
