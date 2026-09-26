@@ -41,6 +41,10 @@ however large the speed-up. Every optimisation you suggest has to keep the diffe
 5. Save measured numbers under `docs/results/<date>-bench.md` with machine, commit and index_version. Never
    quote numbers from memory.
 
+Read timings only from a quiet machine (no tests, reviews or builds running) with enough rounds that
+the p95 isn't the slowest round (200 warm searches in the 80k report). A 20-round p95 under load read 147 ms
+for a search whose quiet 200-round p95 is 62–95 ms across runs, and a task was filed, then archived, on it (2026-09-26).
+
 ## Output
 A table of benchmark · branch · main · Δ% · budget · pass/fail, each regression's cause with a profile
 excerpt, and a recommended fix with its differential status. Then the closing workflow for any benchmarks

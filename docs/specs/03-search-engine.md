@@ -175,9 +175,9 @@ as "current" and can load a pinned older version to replay a search record.
   a query's result depend on the corpus's size and break replaying search records; task-031 measures these
   cases, and an engine caches each verified clause, so facets and repeats don't pay again.
 - Measured (task-031, `docs/results/2026-09-26-bench.md`, a synthetic 80k corpus, quiet machine): build 33 s,
-  99 MB, 401 MB peak in the build process. Every Trust-Evals string's search and `match_ids` + exclusions is
-  within budget, except `main-2-pop` (wildcard phrases) when cold: 10 s, the exception above. Its warm search
-  is 63 ms p95.
+  99 MB, 386 MB peak in the largest single process. Every Trust-Evals string's search and `match_ids` +
+  exclusions is within budget, except `main-2-pop` (wildcard phrases) when cold: 10 s, the exception above.
+  Its warm search is 69 ms p95 over 200 runs, a thin margin that task-076 widens.
 
 ## Testing
 

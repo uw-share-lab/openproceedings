@@ -2,7 +2,8 @@
 
 Benchmarks are off in ordinary runs (`--benchmark-disable` in pyproject's addopts: each function then runs
 once, as a test). The `bench` workflow runs `--benchmark-enable --benchmark-only` on a pull request's base
-and head, fails a regression of the minimum over 20% (the least noise-prone statistic), and these tests assert the budgets from the timings measured:
+and head, fails a regression of the minimum over 20% (the least noise-prone statistic), and these tests
+assert the budgets from the timings measured:
 - a search returning the first 50 hits: p95 < 100 ms (every Trust-Evals protocol string, Scholar mode);
 - `match_ids` with exclusion accounting: p95 < 300 ms;
 - a wildcard expansion of up to 200 terms: p95 < 50 ms.

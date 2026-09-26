@@ -78,8 +78,8 @@ The 03 budgets are measured with `pytest-benchmark` on the fixture index in CI (
 As built (task-031): `backend/tests/bench/test_bench.py` runs on the synthetic 5k index. It covers every
 Trust-Evals string (a 50-hit search and `match_ids` with exclusions, cold cache) and the widest expansion
 under the cap and one past it, and asserts each budget on the p95 of 30 rounds. In ordinary runs benchmarks
-are disabled and run once as tests; the `bench` workflow enables them and compares the head with the base (the minimum time, the statistic least
-moved by runner noise). The search benchmark is warm after one warm-up round; `match_ids` clears the
+are disabled and run once as tests; the `bench` workflow enables them and compares the head with the base
+(the minimum time, the statistic least moved by runner noise). The search benchmark is warm after one warm-up round; `match_ids` clears the
 verified-clause cache every round, so it is cold.
 The ~80k numbers, and the position-verified cases spec 03 exempts, are a report
 (`backend/tests/bench/report_80k.py` → `docs/results/<date>-bench.md`), from the same synthetic generator at

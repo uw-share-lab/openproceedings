@@ -29,7 +29,8 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parents[3]
 SIZE = 80_000
-ROUNDS = 40  # so the p95 isn't simply the slowest round
+ROUNDS = 40  # cold rounds (match_ids + exclusions): each clears the verified-clause cache
+WARM_ROUNDS = 200  # warm searches are cheap, and a p95 over fewer swings with one slow round
 VERIFIED = [
     "the NEAR/5 the",
     '"the*" NEAR/5 model',
@@ -104,14 +105,12 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
         (snap / name).write_bytes(data)
     t = time.perf_counter()
     # the build in a process of its own, as `op index build` runs it, so its peak memory is its own
-    built = Path(
-        subprocess.run(
-            [sys.executable, "-c", BUILD, str(snap), str(root / "indexes")],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.splitlines()[-1]
+    run = subprocess.run(
+        [sys.executable, "-c", BUILD, str(snap), str(root / "indexes")], capture_output=True, text=True
     )
+    if run.returncode != 0:
+        sys.exit(f"the build failed:\n{run.stderr}")
+    built = Path(run.stdout.splitlines()[-1])
     build_s = time.perf_counter() - t
     rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
     peak = rss if sys.platform == "darwin" else rss * 1024  # bytes on macOS, KiB on Linux
@@ -132,7 +131,7 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
         engine.verified.clear()
         engine.expanded.clear()
         cold = timed(lambda ast=ast: engine.search(ast, limit=50), rounds=1)[0]  # type: ignore[misc]
-        warm = p95(timed(lambda ast=ast: engine.search(ast, limit=50)))  # type: ignore[misc]
+        warm = p95(timed(lambda ast=ast: engine.search(ast, limit=50), WARM_ROUNDS))  # type: ignore[misc]
         exclusions = p95(timed(exclusion_run))
         total = engine.search(ast, limit=0).total
         rows.append(f"| {name} | {total:,} | {ms(cold)} | {ms(warm)} | {ms(exclusions)} |")
@@ -162,7 +161,7 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
         verified.append(f"| `{q}` | {total:,} | {ms(time.perf_counter() - t)} |")
 
     commit = subprocess.run(
-        ["git", "rev-parse", "--short", "HEAD"], cwd=REPO, capture_output=True, text=True
+        ["git", "describe", "--always", "--dirty"], cwd=REPO, capture_output=True, text=True
     ).stdout.strip()
     today = datetime.now(UTC).date().isoformat()
     report = f"""# Benchmarks on a synthetic ~80k corpus ({today})
@@ -179,15 +178,16 @@ are reported, not gated.
 
 ## Build (budget: under 2 min, under 500 MB)
 
-| Build time | Index size | Peak memory of the build process (its normalizing workers, ~65 MB each, not included) |
+| Build time | Index size | Peak memory: the largest single process (the build; its ~65 MB workers are not summed) |
 |---|---|---|
 | {build_s:.1f} s | {size / 1e6:,.0f} MB | {peak / 1e6:,.0f} MB |
 
-## Trust-Evals protocol strings, Scholar mode ({ROUNDS} rounds each; budgets: 100 ms, 300 ms)
+## Trust-Evals protocol strings, Scholar mode (budgets: 100 ms, 300 ms)
 
-Cold is the first run after the verified-clause cache is cleared; warm is the p95 of the {ROUNDS} runs after it
-(the cache an engine keeps). `main-2-pop` holds wildcard phrases (`model$`), which take the position-verified
-path spec 03 exempts, so its cold numbers are the exception's, not a budget miss.
+Cold is the first run after the verified-clause cache is cleared; warm is the p95 of the {WARM_ROUNDS} runs after
+it, with the cache an engine keeps; the exclusions column is the p95 of {ROUNDS} runs, each clearing the cache
+first. `main-2-pop` holds wildcard phrases (`model$`), which take the position-verified path spec 03 exempts, so
+its cold numbers are the exception's, not a budget miss (its warm headroom is task-076).
 
 | String | Matches | Search, first 50 hits: cold | Search: p95 warm | `match_ids` + exclusions: p95 cold |
 |---|---|---|---|---|

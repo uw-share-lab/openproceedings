@@ -1,10 +1,10 @@
 ---
 id: TASK-031
 title: Performance benchmarks against the spec 03 budgets
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 22:51'
+updated_date: '2026-09-26 23:22'
 labels:
   - engine
   - ops
@@ -37,4 +37,6 @@ Review fixes (gate semantics confirmed: --benchmark-compare picks the saved base
 Regenerated report (quiet machine, c9fee21, 40 rounds): build 32.8 s, 99 MB, 401 MB peak in the build process; every Trust-Evals string within budget except main-2-pop cold (10.1 s search, 10.5 s match_ids + exclusions: the spec 03 exception); main-2-pop warm 63 ms. The earlier 147 ms warm reading (20 rounds, p95 = max, other load) didn't reproduce, so task-075 is archived with that reason and spec 03's measured line is corrected.
 
 Verification (APPROVE; min:20% syntax and slowdown-only failure confirmed; RUSAGE_CHILDREN folds in the waited workers as a max, not a sum; 147 ms not reproduced even under load, main-2-pop warm p95 68-69 ms) nits fixed: the memory column says 'largest single process (the build; its workers are not summed)'; the report records git describe --always --dirty; a failed build prints its stderr; long lines rewrapped. Corrections to earlier notes: the gate is min:20%, not median; the 147 ms/task-075 item is superseded (archived, not reproduced). Report regenerated once more at the committed script.
+
+Final report (200 warm rounds, template wording fixed): build 33.1 s, 99 MB, 386 MB peak; main-2-pop warm p95 68.7 ms; a separate 200-run probe gave p95 95 ms / p99 148 ms, so the thin margin is task-076 (M4). A one-off 111 ms warm reading for human-centered in the 40-round run was a spike (200-run p95 31 ms), which is why the report now uses 200 warm rounds.
 <!-- SECTION:NOTES:END -->
