@@ -4,6 +4,7 @@ version = "0.0.0"
 description = "Exact, reproducible Boolean search over NeurIPS, ICLR and ICML titles and abstracts."
 requires-python = ">=3.12"
 license = "MIT"
+license-files = ["LICENSE"]
 dependencies = ["pydantic>=2.8"]
 
 [project.scripts]

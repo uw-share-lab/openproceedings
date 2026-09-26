@@ -9,7 +9,7 @@ import sys
 from collections.abc import Sequence
 
 from openproceedings import __version__
-from openproceedings.logs import configure_logging
+from openproceedings.logs import FORMATS, LEVELS, configure_logging
 
 log = logging.getLogger(__name__)
 
@@ -31,8 +31,10 @@ PLANNED: dict[str, tuple[str, str]] = {
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="op", description="openproceedings command line")
     parser.add_argument("--version", action="version", version=f"op {__version__}")
-    parser.add_argument("--log-level", default="INFO", help="DEBUG, INFO, WARNING or ERROR (default INFO)")
-    parser.add_argument("--log-format", default="text", choices=["json", "text"], help="log line format")
+    parser.add_argument("--log-level", default="INFO", type=str.upper, choices=LEVELS, help="default INFO")
+    parser.add_argument(
+        "--log-format", default="json", choices=FORMATS, help="json (default) or text for reading locally"
+    )
     sub = parser.add_subparsers(dest="command", metavar="<command>")
     for name, (help_text, _task) in PLANNED.items():
         p = sub.add_parser(name, help=help_text, description=help_text)

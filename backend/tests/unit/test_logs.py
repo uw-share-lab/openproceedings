@@ -99,3 +99,100 @@ def test_text_format_is_human_readable() -> None:
 def test_unknown_format_is_rejected() -> None:
     with pytest.raises(ValueError):
         logs.configure_logging("INFO", "yaml")
+
+
+# --- review round 1 (observability-reviewer) ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "Authorization",
+        "API_KEY",
+        "api_key",
+        "access_token",
+        "refresh_token",
+        "authors",
+        "body",
+        "headers",
+        "cookies",
+        "set_cookie",
+        "client_secret",
+        "db_password",
+        "Password",
+    ],
+)
+def test_redaction_is_case_insensitive_and_covers_secret_like_names(stream: io.StringIO, field: str) -> None:
+    logging.getLogger("openproceedings.x").info("e", extra={field: "sensitive"})
+    (rec,) = lines(stream)
+    assert rec[field] == "[redacted]"
+
+
+def test_nested_values_are_redacted(stream: io.StringIO) -> None:
+    extra = {"params": {"query": "trust", "page": 2, "inner": [{"token": "t"}]}}
+    logging.getLogger("openproceedings.x").info("e", extra=extra)
+    (rec,) = lines(stream)
+    assert rec["params"] == {"query": "[redacted]", "page": 2, "inner": [{"token": "[redacted]"}]}
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("https://u:p@api2.openreview.net/notes", "https://[redacted]@api2.openreview.net/notes"),
+        ("https://h/x?token=abc&page=2", "https://h/x?token=[redacted]&page=2"),
+        ("https://h/x?api_key=abc", "https://h/x?api_key=[redacted]"),
+        ("https://h/x?page=2", "https://h/x?page=2"),
+    ],
+)
+def test_urls_keep_their_shape_but_lose_credentials(stream: io.StringIO, value: str, expected: str) -> None:
+    logging.getLogger("openproceedings.x").info("crawl_page_fetched", extra={"url": value})
+    (rec,) = lines(stream)
+    assert rec["url"] == expected
+
+
+@pytest.mark.parametrize("key", ["event", "level", "logger", "ts", "exc"])
+def test_fields_cannot_overwrite_core_keys(stream: io.StringIO, key: str) -> None:
+    with logs.bind(**{key: "bound"}):
+        logging.getLogger("openproceedings.x").info("real_event", extra={key: "clobber"})
+    (rec,) = lines(stream)
+    assert rec["event"] == "real_event"
+    assert rec["level"] == "INFO"
+    assert rec["logger"] == "openproceedings.x"
+    assert rec[f"field_{key}"] == "clobber"
+
+
+def test_exception_text_is_scrubbed_of_credentials(stream: io.StringIO) -> None:
+    try:
+        raise ConnectionError("GET https://u:secret@api2.openreview.net/notes?token=abc failed")
+    except ConnectionError:
+        logging.getLogger("openproceedings.x").error("crawl_failed", exc_info=True)
+    (rec,) = lines(stream)
+    assert "secret" not in str(rec["exc"]) and "abc" not in str(rec["exc"])
+
+
+def test_stack_info_is_rendered(stream: io.StringIO) -> None:
+    logging.getLogger("openproceedings.x").warning("odd", stack_info=True)
+    (rec,) = lines(stream)
+    assert "Stack (most recent call last)" in str(rec["stack"])
+
+
+def test_text_format_escapes_values_so_a_newline_cannot_fake_a_line() -> None:
+    buf = io.StringIO()
+    logs.configure_logging("INFO", "text", stream=buf)
+    logging.getLogger("openproceedings.x").info("e", extra={"note": "a\nINFO forged"})
+    assert len(buf.getvalue().strip().splitlines()) == 1
+
+
+def test_text_format_includes_exception_text() -> None:
+    buf = io.StringIO()
+    logs.configure_logging("INFO", "text", stream=buf)
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        logging.getLogger("openproceedings.x").error("crawl_failed", exc_info=True)
+    assert "ValueError: boom" in buf.getvalue()
+
+
+def test_unknown_level_is_rejected_by_configure() -> None:
+    with pytest.raises(ValueError):
+        logs.configure_logging("VERBOSE", "json")

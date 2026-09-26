@@ -9,8 +9,9 @@ Adding a code needs: an entry here, a golden test that produces it with its span
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Strict, field_validator
 
 
 class DiagnosticCode(StrEnum):
@@ -72,7 +73,7 @@ class Diagnostic(BaseModel):
 
     code: DiagnosticCode
     message: str
-    span: tuple[int, int] | None = None
+    span: tuple[Annotated[int, Strict()], Annotated[int, Strict()]] | None = None
 
     @field_validator("message")
     @classmethod
@@ -93,6 +94,9 @@ class OpenProceedingsError(Exception):
     """Base for internal failures. Each carries a registry code; the API edge maps it to an error envelope."""
 
     def __init__(self, code: DiagnosticCode, message: str) -> None:
-        super().__init__(f"{code}: {message}")
+        super().__init__(code, message)  # both args, so the error pickles across processes
         self.code = code
         self.message = message
+
+    def __str__(self) -> str:
+        return f"{self.code}: {self.message}"

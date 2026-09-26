@@ -93,3 +93,17 @@ def test_typed_error_carries_a_code() -> None:
     err = OpenProceedingsError(DiagnosticCode.API_INDEX_NOT_LOADED, "No index is loaded yet.")
     assert err.code is DiagnosticCode.API_INDEX_NOT_LOADED
     assert "No index is loaded yet." in str(err)
+
+
+def test_typed_error_survives_pickling() -> None:
+    import pickle
+
+    err = OpenProceedingsError(DiagnosticCode.API_INTERNAL, "worker failed")
+    back = pickle.loads(pickle.dumps(err))
+    assert back.code is DiagnosticCode.API_INTERNAL and back.message == "worker failed"
+
+
+@pytest.mark.parametrize("span", [["1", 2], (True, 2), (1.0, 2)])
+def test_span_is_strict_about_types(span: object) -> None:
+    with pytest.raises(ValidationError):
+        Diagnostic(code=DiagnosticCode.PARSE_EMPTY_GROUP, message="x", span=span)  # type: ignore[arg-type]

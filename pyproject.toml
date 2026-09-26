@@ -10,6 +10,8 @@ dependencies = ["openproceedings"]
 
 [tool.uv]
 package = false
+# Pin the build backend so building the wheel is reproducible (hatchling is fetched at build time).
+build-constraint-dependencies = ["hatchling==1.27.0"]
 
 [tool.uv.sources]
 openproceedings = { workspace = true }

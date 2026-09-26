@@ -11,6 +11,7 @@ members = [
     "openproceedings",
     "openproceedings-monorepo",
 ]
+build-constraints = [{ name = "hatchling", specifier = "==1.27.0" }]
 
 [[package]]
 name = "annotated-types"

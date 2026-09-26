@@ -7,7 +7,7 @@ Status: **draft for review** · depends on: nothing · delivered in M0 (the rost
 ```
 openproceedings/
 ├── README.md  CLAUDE.md  AGENTS.md  CONTRIBUTING.md  LICENSE (MIT)
-├── pyproject.toml  uv.lock      # uv WORKSPACE root: repo-wide ruff config, dev tools (ruff, mypy)
+├── pyproject.toml  uv.lock      # uv WORKSPACE root: depends on the backend member; ruff, mypy-strict and pytest config; dev tools (ruff, mypy, pytest, hypothesis)
 ├── Makefile                     # sync · fmt · lint · tooling · test · hooks · mutate · mutate-changed
 ├── .claude/                     # committed: agents, skills, commands, hooks, learnings (roster: .claude/README.md)
 ├── .githooks/                   # commit-msg (attribution), pre-push (make lint + make tooling)
@@ -85,6 +85,10 @@ stdlib `logging` with one JSON formatter, configured only in `logs.py`. Each lin
 structured fields. INFO is one line per unit of work, with one access line per API request. Nothing is
 logged per record. Query text, abstracts, credentials and personal data are never logged.
 `observability-reviewer` reviews every `backend/src/**` diff.
+
+`op --log-format text` prints the same fields as one readable line per event, for reading logs locally.
+JSON is the default everywhere, and CI, the API and anything collected use it. `--log-level` accepts
+DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 2), never a traceback.
 
 ## CI (GitHub Actions): every workflow has `permissions: contents: read` and pins actions by SHA
 
