@@ -36,7 +36,8 @@ same-year workshop version share a title, and both must survive.
 - The survivor's id uses the OpenReview forum id if either side has one (`.claude/skills/record-schema/SKILL.md`).
 - The **union** of all claims is kept. Field values are re-resolved with the precedence table, never
   "whichever record came first".
-- A disagreement on `status`, `track` or `year` between merged sources becomes a `conflicts.csv` row, and
+- A disagreement on `status`, `track`, `year` or the title key between merged sources becomes a
+  `conflicts.csv` row (decision-005), and
   the winner comes from precedence.
 - Iterate inputs in sorted-id order so the output doesn't depend on crawl order.
 

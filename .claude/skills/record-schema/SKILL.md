@@ -50,7 +50,8 @@ field may answer it, best first. A source not listed may never answer it. Decide
 
 | Field | Precedence |
 |---|---|
-| `track`, `status` | `openreview_v2`, `openreview_v1`, then proceedings (`neurips_proceedings`, `pmlr`) only for venue-years not on OpenReview, then `ris` |
+| `status` | the official proceedings where the venue-year's are published and crawled (listed → `accepted`; OpenReview-accepted but not listed → `unknown` + `conflicts.csv`), otherwise `openreview_v2`, `openreview_v1` via `content.venueid`; `ris` only through claims |
+| `track` | `openreview_v2`, `openreview_v1` via `content.venueid`; proceedings only for venue-years not on OpenReview |
 | `title`, `abstract`, `authors` | `openreview_v2`, `openreview_v1`, then `neurips_proceedings`, `pmlr` (papers or years not on OpenReview), then `ris` |
 | `year`, `venue` | the source that defined the crawl scope and agrees with the venueid; a disagreement is a conflict |
 

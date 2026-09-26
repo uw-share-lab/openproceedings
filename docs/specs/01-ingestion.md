@@ -96,7 +96,9 @@ op snapshot diff <a> <b>                # added / removed / changed records
 - A source disagrees with another (for example, OpenReview says accepted but the proceedings don't list
   it): keep both claims, set `status` from the higher-priority source, and write `conflicts.csv`. The
   per-field precedence table is decision-005: OpenReview first for title, abstract and authors (the
-  proceedings only where OpenReview lacks the paper); OpenReview's venueid for track and status.
+  proceedings only where OpenReview lacks the paper); the official proceedings decide acceptance where
+  they are published (OpenReview-accepted but unlisted → `unknown` + a conflict row); OpenReview's venueid
+  decides track, and status elsewhere. A title that differs between merged sources is a conflict row too.
 
 ## Testing
 
