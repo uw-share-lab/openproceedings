@@ -16,10 +16,12 @@ Engine protocol, so ReferenceEngine and TantivyEngine compute it the same way an
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from openproceedings.diagnostics import DiagnosticCode
-from openproceedings.engine.protocol import Engine, EngineError, EngineInputError
+from openproceedings.engine.protocol import Engine, EngineInputError, EngineInternalError
 from openproceedings.query.ast import And, Filter, FilterField, Node
 from openproceedings.query.defaults import DEFAULT_CLAUSES
 from openproceedings.query.parser import ParseResult
@@ -30,19 +32,23 @@ ORDER: tuple[FilterField, ...] = ("track", "status")  # the fixed bucket order (
 @dataclass(frozen=True, slots=True)
 class Excluded:
     total: int
-    track: dict[str, int]
-    status: dict[str, int]
+    track: Mapping[str, int]  # read-only; by count, largest first (ties by name), then `unknown`
+    status: Mapping[str, int]
 
     def to_json(self) -> dict[str, object]:
         """The shape pinned in spec 04: `{"total": n, "track": {...}, "status": {...}}`."""
         return {"total": self.total, "track": dict(self.track), "status": dict(self.status)}
 
 
-def excluded(engine: Engine, parsed: ParseResult) -> Excluded:
-    """The records the default filters removed from `parsed`'s search, bucketed track first, then status."""
+def excluded(engine: Engine, parsed: ParseResult, total: int) -> Excluded:
+    """The records the default filters removed from `parsed`'s search, bucketed track first, then status.
+    `total` is the search's own match count (`|match_ids(effective_ast)|`, which the caller already has), so
+    the query isn't evaluated a third time; the buckets are checked against it."""
     if parsed.effective_ast is None:
         raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "exclusions need a query that parses.")
     defaults = [f for f in ORDER if f in parsed.defaults]
+    if not defaults:
+        return Excluded(0, _shaped({}), _shaped({}))  # no default applies: nothing was removed
     identified = parsed.identification_ast
     buckets: dict[FilterField, dict[str, int]] = {f: {} for f in ORDER}
     passed = identified  # the identified records still in, before each field's default is applied
@@ -55,10 +61,9 @@ def excluded(engine: Engine, parsed: ParseResult) -> Excluded:
             size = sum(counts.values())
         buckets[field] = {v: n for v, n in counts.items() if v not in DEFAULT_CLAUSES[field]}
         passed = _and(passed, default)
-    total = len(engine.match_ids(parsed.effective_ast))
-    removed = 0 if size is None else size - total
+    removed = (size or 0) - total
     if sum(n for b in buckets.values() for n in b.values()) != removed:
-        raise EngineError(
+        raise EngineInternalError(
             DiagnosticCode.API_INTERNAL,
             f"exclusion buckets don't sum to the {removed} records the defaults removed",
         )
@@ -72,8 +77,9 @@ def _and(a: Node | None, b: Node) -> Node:
     return And(span=(0, 0), children=children)
 
 
-def _shaped(bucket: dict[str, int]) -> dict[str, int]:
-    """Buckets by name (facets only count values that occur), then `unknown` last, always present."""
-    out = {v: n for v, n in sorted(bucket.items()) if v != "unknown"}
+def _shaped(bucket: dict[str, int]) -> Mapping[str, int]:
+    """Buckets by count, largest first, ties by name (facets only count values that occur), then `unknown`
+    last, always present: the order spec 04 pins, so a stored record's JSON is stable."""
+    out = {v: n for v, n in sorted(bucket.items(), key=lambda kv: (-kv[1], kv[0])) if v != "unknown"}
     out["unknown"] = bucket.get("unknown", 0)
-    return out
+    return MappingProxyType(out)

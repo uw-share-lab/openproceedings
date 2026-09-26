@@ -109,12 +109,13 @@ Counting rules (so the PRISMA number is never double-counted):
   itemised separately (`excluded.track.unknown`, `excluded.status.unknown`) and are never folded into
   another bucket. The UI and the methods text show them on their own line, so a review can choose to report
   them or screen them.
-- As built (task-026, `engine/exclusions.py`): `excluded(engine, parsed)` uses only the Engine protocol,
+- As built (task-026, `engine/exclusions.py`): `excluded(engine, parsed, total)` uses only the Engine protocol,
   so both engines compute it the same way. The track buckets are the track facet of `identification ∧
   track-default` (the facet drops that clause, so it counts every identified record). The status buckets
   are the status facet of the effective query (every identified record that passed the track default).
-  `|identified|` is the first default's facet total. Buckets that don't sum to `|identified| − total` are an
-  `API_INTERNAL` error, never a silent report. Tested against a brute-force count on the 200-record fixture,
+  `|identified|` is the first default's facet total, and `total` is the search's own count, passed in, so
+  the query runs no third time (no default applied: 0, with no evaluation). Buckets that don't sum to
+  `|identified| − total` are an `EngineInternalError` (`API_INTERNAL`, a 5xx), never a silent report. Tested against a brute-force count on the 200-record fixture,
   for both engines, including an `identification_query` of `""` and an all-negative one.
 
 ## Error handling

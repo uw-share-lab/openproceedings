@@ -8,7 +8,7 @@ description: How openproceedings output maps onto a PRISMA 2020 flow diagram and
 ## The mapping (PRISMA 2020 flow, "Identification" box)
 | PRISMA box | openproceedings value | Source |
 |---|---|---|
-| Records identified from databases (n) | the count of `identification_query` (the canonical string minus the default conjuncts, 02 §Default filters) = `total + excluded.total` | 03 §Exclusion accounting |
+| Records identified from databases (n) | the count of `identification_ast`, the set `identification_query` names (the canonical query minus the default conjuncts, 02 §Default filters; never re-parsed, since the string can be `""` or all-negative) = `total + excluded.total` | 03 §Exclusion accounting |
 | Records removed before screening: *marked as ineligible by automation tools* (n) | the default-filter buckets except `unknown`, itemized: `track: workshop 212, competition 4`; `status: rejected 88` | `SearchResponse.excluded` |
 | Records removed before screening: *removed for other reasons* (n) — unclassified (`excluded.track.unknown`, `excluded.status.unknown`) | on its **own line**, never folded into "ineligible". Unclassified is not ineligible: the review chooses to report them or screen them | 03 §Exclusion accounting |
 | Records removed before screening: duplicates (n) | **0 at this stage** — cross-source duplicates were merged at ingest, before indexing (01 §Pipeline). Duplicates against other databases are removed later in Covidence | 01 §Pipeline |
@@ -19,8 +19,8 @@ thing searched.
 
 **Only the default filters count as automation exclusions.** Filters the user wrote on purpose
 (`year:2020..2026`, `venue:ICLR`) are *search limits*, reported in the search string and the limits line,
-not in the "removed" box. Spec 03 decides this: `excluded` is computed against the `identification_query`,
-which keeps every user-written filter, so user limits never inflate it. A default is recognised by content,
+not in the "removed" box. Spec 03 decides this: `excluded` is computed against `identification_ast` (the set
+`identification_query` names), which keeps every user-written filter, so user limits never inflate it. A default is recognised by content,
 so a typed conjunct identical to a default counts as the default. "Identified" is therefore conditional on
 the user's own limits, and the methods text says so.
 

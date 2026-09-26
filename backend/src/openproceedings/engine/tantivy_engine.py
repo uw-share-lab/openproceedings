@@ -24,8 +24,8 @@ from openproceedings.engine.protocol import (
     FACET_FIELDS,
     MAX_EXPANSIONS,
     Engine,
-    EngineError,
     EngineInputError,
+    EngineInternalError,
     SearchResult,
 )
 from openproceedings.query.ast import And, Filter, Node, Not, TextField, Wildcard
@@ -49,12 +49,12 @@ class TantivyEngine:
         }
         for name, (built, current) in stale.items():
             if built != current:  # queries are normalized and compiled for the current versions
-                raise EngineError(
+                raise EngineInternalError(
                     DiagnosticCode.API_INTERNAL,
                     f"index {self.index_version} has {name} {built}, this code {current}: build a new index",
                 )
         if self.ranking.get("bm25") != TANTIVY_BM25:
-            raise EngineError(
+            raise EngineInternalError(
                 DiagnosticCode.API_INTERNAL,
                 f"index {self.index_version} records bm25 {self.ranking.get('bm25')}, but Tantivy applies {TANTIVY_BM25}",
             )
@@ -63,23 +63,32 @@ class TantivyEngine:
         self.ids = (path / IDS).read_text(encoding="utf-8").splitlines()
         self.universe = frozenset(self.ids)
         self.verified: dict[tuple[str, str], list[str]] = {}  # position-verified clauses, per engine
+        self.expanded: dict[tuple[str, str], tuple[str, ...]] = {}  # each wildcard's terms, before the cap
 
     # --- the Engine protocol -------------------------------------------------------------------------
     def expand(self, wildcard: Wildcard) -> list[str]:
         """Every indexed term (title or abstract) the wildcard matches, sorted; more than MAX_EXPANSIONS
         is an error, never a truncation. From the term dictionary, not a scan of the documents."""
-        found: set[str] = set()
-        for f in FIELDS:
-            for term, _count in self.searcher.terms_with_prefix(f, wildcard.stem):
-                if wildcard.op == "*" or term == wildcard.stem or len(term) == len(wildcard.stem) + 1:
-                    found.add(term)
-        if len(found) > MAX_EXPANSIONS:
+        key = (wildcard.stem, wildcard.op)
+        if (
+            key not in self.expanded
+        ):  # the index is immutable, so a stem's terms are too; the cap is checked on every call
+            if len(self.expanded) > 10_000:
+                self.expanded.clear()  # bounded, like `verified`
+            found: set[str] = set()
+            for f in FIELDS:
+                for term, _count in self.searcher.terms_with_prefix(f, wildcard.stem):
+                    if wildcard.op == "*" or term == wildcard.stem or len(term) == len(wildcard.stem) + 1:
+                        found.add(term)
+            self.expanded[key] = tuple(sorted(found))
+        found_terms = self.expanded[key]
+        if len(found_terms) > MAX_EXPANSIONS:
             raise EngineInputError(
                 DiagnosticCode.WILDCARD_TOO_MANY_EXPANSIONS,
-                f"`{wildcard.stem}{wildcard.op}` expands to {len(found)} terms (more than {MAX_EXPANSIONS}) — use a "
+                f"`{wildcard.stem}{wildcard.op}` expands to {len(found_terms)} terms (more than {MAX_EXPANSIONS}) — use a "
                 "longer stem.",
             )
-        return sorted(found)
+        return list(found_terms)
 
     def match_ids(self, ast: Node) -> frozenset[str]:
         return self.ids_of(self.compile(ast).query)
@@ -194,7 +203,7 @@ class TantivyEngine:
 
 def _ord(value: object) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
-        raise EngineError(
+        raise EngineInternalError(
             DiagnosticCode.API_INTERNAL, "a document has no ord: the index predates it; build it again"
         )
     return value
