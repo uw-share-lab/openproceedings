@@ -9,10 +9,12 @@ JSON; logs go to stderr; a refused operation exits 1 with its reason, a usage er
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import logging
 import os
 import sys
+import tempfile
 import time
 from collections import Counter
 from collections.abc import Sequence
@@ -213,7 +215,7 @@ def _index_parity(ns: argparse.Namespace) -> int:
     path = _index_path(ns)
     manifest = verify_index(path)  # before trusting anything the manifest names
     snapshot = resolve_snapshot(ns.snapshot or manifest["snapshot"], ns.data_dir / "snapshots")
-    report = check_parity(path, snapshot)
+    report = check_parity(path, snapshot, manifest=manifest)
     _print({"records": report.records, "terms": report.terms, "phrases": report.phrases, "differences": 0})
     return 0
 
@@ -227,7 +229,7 @@ def _parsed(ns: argparse.Namespace) -> ParseResult | None:
     for d in [*result.errors, *result.warnings, *result.translations]:
         print(f"{d.code}: {d.message}", file=sys.stderr)
     if result.effective_ast is None:
-        log.warning("cli_refused", extra={"command": ns.command, "error": "parse"})
+        log.debug("cli_refused", extra={"command": ns.command, "error": "parse"})  # user input: DEBUG at most
         return None
     return result
 
@@ -294,32 +296,39 @@ def _search(ns: argparse.Namespace) -> int:
         print("\n".join([*lines, engine.explain(ast)]))
         _search_run(ns, started, engine.index_version, result, len(engine.match_ids(ast)))
         return 0
-    page = engine.search(ast, sort=ns.sort, limit=ns.limit)
-    gone = excluded(engine, result, page.total)
+    total, page = engine.page(ast, sort=ns.sort, limit=ns.limit)  # one collection: ids and scores
+    gone = excluded(engine, result, total)
     buckets = "; ".join(
         f"{f}: " + ", ".join(f"{v} {n}" for v, n in b.items())
         for f, b in (("track", gone.track), ("status", gone.status))
     )
     print(
-        f"total {page.total} · excluded by default filters {gone.total} ({buckets}) · index {engine.index_version}"
+        f"total {total} · excluded by default filters {gone.total} ({buckets}) · index {engine.index_version}"
     )
     print(f"canonical: {result.canonical}")
-    shown = engine.display(list(page.ids))
-    scores = dict(engine.ranked(ast, ns.sort)) if page.ids else {}
-    for rank, i in enumerate(page.ids, 1):
+    shown = engine.display([i for i, _score in page])
+    for rank, (i, score) in enumerate(page, 1):
         r = shown[i]
-        print(f"{rank:>4}. {scores[i]:9.4f}  {i}  {r['venue']} {r['year']}  {' '.join(r['title'].split())}")
-    _search_run(ns, started, engine.index_version, result, page.total)
+        print(f"{rank:>4}. {score:9.4f}  {i}  {r['venue']} {r['year']}  {' '.join(r['title'].split())}")
+    _search_run(ns, started, engine.index_version, result, total)
     return 0
 
 
 def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:
     """The oracle over the snapshot an index was built from."""
+    from openproceedings.engine.index import IndexBuildError, verify_index
     from openproceedings.engine.reference import ReferenceEngine
     from openproceedings.ingest.snapshot import load_records
 
-    manifest = json.loads((index / "manifest.json").read_text(encoding="utf-8"))
+    manifest = verify_index(index)
     snapshot = resolve_snapshot(manifest["snapshot"], ns.data_dir / "snapshots")
+    found = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))["snapshot_hash"]
+    if (
+        found != manifest["snapshot_hash"]
+    ):  # the same name, other contents: the oracle would answer another corpus
+        raise IndexBuildError(
+            f"{snapshot.name} isn't the snapshot index {manifest['index_version']} was built from"
+        )
     return ReferenceEngine(load_records(snapshot).values())
 
 
@@ -337,23 +346,29 @@ def _export(ns: argparse.Namespace) -> int:
         return 1
     ast = result.effective_ast
     assert ast is not None and result.canonical_hash is not None
+    if ns.out is not None and ns.out.is_dir():
+        raise ValueError(f"--out {ns.out} is a directory; name a file")
     engine = TantivyEngine(_index_path(ns))
-    total = len(engine.match_ids(ast))
+    total, documents = engine.documents(ast)
     provenance = Provenance(engine.index_version, result.canonical_hash, datetime.now(UTC).date().isoformat())
+
+    def checked(n: int) -> None:
+        if n != total:
+            raise EngineInternalError(DiagnosticCode.API_INTERNAL, f"exported {n} records, but {total} match")
+
     if ns.out is None:
-        n = write(ns.format, engine.documents(ast), provenance, sys.stdout)
-    else:  # written beside the target, then renamed: a failed export never leaves a partial file behind
-        partial = ns.out.with_name(ns.out.name + ".partial")
+        n = write(ns.format, documents, provenance, sys.stdout)
+        checked(n)
+    else:  # a temporary file beside the target, renamed once complete and counted: never a partial file
+        fd, name = tempfile.mkstemp(dir=ns.out.parent, prefix=f".{ns.out.name}.", suffix=".partial")
+        partial = Path(name)
         try:
-            with partial.open("w", encoding="utf-8", newline="") as out:
-                n = write(ns.format, engine.documents(ast), provenance, out)
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as out:
+                n = write(ns.format, documents, provenance, out)
+            checked(n)
             partial.replace(ns.out)
         finally:
             partial.unlink(missing_ok=True)
-    if n != total:
-        raise EngineInternalError(
-            DiagnosticCode.API_INTERNAL, f"exported {n} records, but the query matches {total}"
-        )
     print(f"exported {n} records ({ns.format}) from index {engine.index_version}", file=sys.stderr)
     _search_run(ns, started, engine.index_version, result, total)
     return 0
@@ -393,6 +408,7 @@ def _reason(e: Exception) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    from openproceedings.diagnostics import InternalError
     from openproceedings.engine.index import IndexBuildError
     from openproceedings.engine.protocol import EngineError
     from openproceedings.ingest.snapshot import SnapshotError
@@ -416,9 +432,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     name = " ".join(filter(None, (ns.command, getattr(ns, "source", None), getattr(ns, "action", None))))
     try:
         code: int = ns.run(ns)
+    except BrokenPipeError:  # the reader stopped (`op export … | head`): not a failure, and nothing to log
+        # so the interpreter's final flush can't fail again (unless there is no real stdout to redirect)
+        with contextlib.suppress(OSError):
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 0
     except (SnapshotError, IndexBuildError, EngineError, ValueError, OSError) as e:
         reason = _reason(e)
-        log.warning("cli_refused", extra={"command": name, "error": type(e).__name__})
+        level = logging.ERROR if isinstance(e, InternalError) else logging.WARNING
+        log.log(level, "cli_refused", extra={"command": name, "error": type(e).__name__})
         print(f"op {name}: {reason}", file=sys.stderr)
         return 1
     return code

@@ -86,12 +86,23 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC date>}`.
   Every entry carries `openproceedings_id = {<id>}`, so a round-trip recovers the id of every record,
   proceedings-only (PMLR, NeurIPS) ones included. Output must pass `refaudit.bibtex.parse_string` (the pinned `refaudit` PyPI package).
-- As built (task-030, `export.py`, used by `op export`; the endpoints are task-036): RIS is `TY  - CPAPER`,
-  with `UR` forum, then pdf, then proceedings. Line breaks inside a value become single spaces, since RIS is
-  line-based. CSV joins lists with "; ". A BibTeX key is ASCII and lower-case (`anon` without authors,
-  `untitled` without a word). A value with unbalanced braces has them escaped, so it still parses. JSONL is one
-  object per record. Each format is checked round-trip to its ids; BibTeX also against the pinned
-  `refaudit==0.4.9`.
+- As built (task-030, `export.py`, used by `op export`; the endpoints are task-036):
+  - **RIS:** `TY  - CPAPER`, with `UR` forum, then pdf, then proceedings. Each record ends `ER  - `. Line breaks
+    inside a value become single spaces, since RIS is line-based.
+  - **CSV:** every field of the stored display record plus the facets and provenance columns. Two fields of
+    spec 01 are left out: `provenance` (per-field claims, a nested list) and `content_hash`. Both stay in the
+    snapshot that `index_version` pins. Lists are joined with "; ". A text cell starting with `=`, `+`, `-`,
+    `@`, a tab or a carriage return is prefixed with `'`, so a spreadsheet never runs it (OWASP's
+    CSV-injection guard).
+  - **BibTeX:** keys are ASCII and lower-case (`anon` without authors, `untitled` without a word). A repeat key
+    takes the next unused suffix, so a suffixed key never meets a real one. Braces are kept only when they
+    balance and none is escaped; otherwise they are dropped, since BibTeX and other parsers disagree on
+    `\{`, and a misread entry swallows the next. `&`, `%` and `#` are escaped. A value never ends on a
+    backslash.
+  - **JSONL:** one object per record.
+
+  Each format is checked round-trip to its ids; BibTeX also against the pinned `refaudit==0.4.9`. `op
+  export` counts what it wrote against the query's total before renaming its temporary file into place.
 - Exports stream, and are not paginated or truncated. The response headers `X-Total` (equal to the search's
   `total`) and `X-Index-Version` say exactly which set was exported. An export started during an index
   hot-swap finishes on the index it began on.

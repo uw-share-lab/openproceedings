@@ -86,8 +86,8 @@ def _ris(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         lines += [("UR", u) for u in _urls(r)]
         if (r.get("urls") or {}).get("doi"):
             lines.append(("DO", r["urls"]["doi"]))
-        lines += [("ID", r["id"]), ("KW", r["track"]), ("N1", p.line()), ("ER", "")]
-        yield "".join(f"{tag}  - {value}".rstrip() + "\n" for tag, value in lines) + "\n"
+        lines += [("ID", r["id"]), ("KW", r["track"]), ("N1", p.line())]
+        yield "".join(f"{tag}  - {value}\n" for tag, value in lines) + "ER  - \n\n"
 
 
 def _csv_row(values: Iterable[object]) -> str:
@@ -108,7 +108,17 @@ def _csv(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             "index_version": p.index_version,
             "canonical_hash": p.canonical_hash,
         }
-        yield _csv_row("" if row[c] is None else row[c] for c in CSV_COLUMNS)
+        yield _csv_row(_cell(row[c]) for c in CSV_COLUMNS)
+
+
+def _cell(value: object) -> object:
+    """A CSV cell a spreadsheet won't run: text starting with `=`, `+`, `-`, `@`, a tab or a carriage return
+    is prefixed with `'` (OWASP's CSV-injection guard; titles and abstracts come from anyone)."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
 
 
 class _Line:
@@ -139,25 +149,32 @@ def bibtex_key(r: dict[str, Any]) -> str:
 
 
 def _braced(text: str) -> str:
-    """A BibTeX `{…}` value: balanced braces stay (LaTeX such as `{BERT}` keeps its meaning); otherwise every
-    brace is escaped, so the entry still parses."""
-    depth = 0
+    """A BibTeX `{…}` value every parser reads the same way. Braces stay when they balance and none is
+    escaped (LaTeX such as `{BERT}` keeps its meaning); otherwise they are dropped, since BibTeX counts braces
+    without regard to backslashes while other parsers honour `\\{`, and an entry that one reads differently
+    can swallow the next. `&`, `%` and `#` are escaped (they break LaTeX and BibTeX); `$…$` math stays. A
+    value never ends on a backslash, which would escape the closing brace."""
+    text = _one_line(text)
+    depth, balanced = 0, "\\{" not in text and "\\}" not in text
     for ch in text:
         depth += {"{": 1, "}": -1}.get(ch, 0)
-        if depth < 0:
-            break
-    if depth != 0:
-        text = text.replace("{", "\\{").replace("}", "\\}")
-    return "{" + _one_line(text) + "}"
+        balanced = balanced and depth >= 0
+    if not (balanced and depth == 0):
+        text = _one_line(text.replace("{", "").replace("}", ""))
+    text = re.sub(r"(?<!\\)([&%#])", r"\\\1", text)
+    if text.endswith("\\"):
+        text += " "
+    return "{" + text + "}"
 
 
 def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
-    seen: dict[str, int] = {}
+    issued: set[str] = set()  # every key given out, so a suffixed key never meets a real one
     for r in records:
-        base = bibtex_key(r)
-        n = seen.get(base, 0)
-        seen[base] = n + 1
-        key = base if n == 0 else base + _suffix(n - 1)
+        base = key = bibtex_key(r)
+        n = 0
+        while key in issued:
+            key, n = base + _suffix(n), n + 1
+        issued.add(key)
         fields = [("title", _braced(r["title"]))]
         if r.get("authors"):
             fields.append(("author", _braced(" and ".join(r["authors"]))))

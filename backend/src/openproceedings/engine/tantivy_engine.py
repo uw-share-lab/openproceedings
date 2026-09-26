@@ -98,12 +98,19 @@ class TantivyEngine:
     def search(self, ast: Node, *, sort: str = "relevance", offset: int = 0, limit: int = 50) -> SearchResult:
         """One page of the fully ordered match set (field-weighted-bm25 skill), so pages are stable and
         their union is `match_ids` for every sort."""
+        total, page = self.page(ast, sort=sort, offset=offset, limit=limit)
+        return SearchResult(total=total, ids=tuple(i for i, _score in page))
+
+    def page(
+        self, ast: Node, *, sort: str = "relevance", offset: int = 0, limit: int = 50
+    ) -> tuple[int, list[tuple[str, float]]]:
+        """`search`'s page with each hit's exact score, from one collection of the match set."""
         if offset < 0 or limit < 0:
             raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "offset and limit must be ≥ 0.")
         keyed = self.keyed(ast, sort)
         # top offset+limit of the full order: keys end in the unique id, so ties at a page boundary are exact
         top = heapq.nsmallest(offset + limit, keyed)
-        return SearchResult(total=len(keyed), ids=tuple(i for _key, i, _score in top[offset:]))
+        return len(keyed), [(i, score) for _key, i, score in top[offset:]]
 
     def ranked(self, ast: Node, sort: str = "relevance") -> list[tuple[str, float]]:
         """Every match with its exact score, in `sort` order, ties always broken by id: `relevance` is
@@ -133,16 +140,16 @@ class TantivyEngine:
         sign = -1 if sort == "year_desc" else 1
         return [(float(sign * v), i, s) for v, s, i in zip(values, scores, ids, strict=True)]
 
-    def documents(self, ast: Node) -> Iterator[dict[str, Any]]:
-        """Every match's display record (id, venue, year, track, status, and the stored title, abstract,
-        authors, urls, presentation, keywords, venue_id_raw), in id order, one document read at a time:
-        what an export streams (spec 04 §Exports)."""
+    def documents(self, ast: Node) -> tuple[int, Iterator[dict[str, Any]]]:
+        """How many documents match, and every match's display record (id, venue, year, track, status, and
+        the stored title, abstract, authors, urls, presentation, keywords, venue_id_raw) in id order, read
+        one at a time: what an export streams (spec 04 §Exports). One collection of the match set."""
         addresses = self.hits(self.compile(ast).query)
         if not addresses:
-            return
-        ids = [self.ids[_ord(o)] for o in self.searcher.fast_field_values("ord", addresses)]
-        for _i, address in sorted(zip(ids, addresses, strict=True), key=lambda pair: pair[0]):
-            yield self._display(address)
+            return 0, iter(())
+        ords = [_ord(o) for o in self.searcher.fast_field_values("ord", addresses)]  # ord order is id order
+        ordered = [a for _o, a in sorted(zip(ords, addresses, strict=True), key=lambda pair: pair[0])]
+        return len(ordered), map(self._display, ordered)
 
     def display(self, ids: list[str]) -> dict[str, dict[str, Any]]:
         """The display records of `ids` (a page of hits), by id."""
