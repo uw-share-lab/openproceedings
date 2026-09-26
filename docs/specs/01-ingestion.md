@@ -68,12 +68,14 @@ auto-removed). This lets the team use the engine for the live review before the 
 3. **Classify.** Derive `track`, `status` and `presentation` using the rules above. Every classification
    records its evidence claim.
 4. **Deduplicate.** The same paper appears on OpenReview and in the proceedings (NeurIPS, ICML 2023+).
-   Merge on (a) an identical forum ID, then (b) a normalized title with the same venue and year. Two
+   `ingest/dedup.py`. Merge on (a) an identical id (the same forum ID in the same venue and year, or the
+   same proceedings id), then (b) a normalized title (the token contract) with the same venue and year. Two
    records are merged **only** when venue and year agree. That lesson comes from venuetriage: records
    with no year must never merge on `(title, "")`. **Two OpenReview records with different forum IDs are
    never merged**: a main-track paper and its same-year workshop version can share a title. Title
-   matching only links records *across* sources (OpenReview ↔ proceedings ↔ RIS). Merges are written to
-   `merges.csv` for audit.
+   matching only links records *across* sources (OpenReview ↔ proceedings ↔ RIS). A merged record's fields
+   are re-resolved from the union of its claims by the decision-005 precedence table. Merges are written
+   to `merges.csv`, and disagreements and refused merges to `conflicts.csv`, for audit (dedup-rules skill).
 5. **Snapshot.** Write `data/snapshots/<date>-<shorthash>/records.jsonl` (sorted by `id`) and
    `manifest.json`. The manifest holds counts per venue × year × track × status, source versions,
    the crawl date and the snapshot hash. Snapshots are immutable. `data/` is gitignored.
