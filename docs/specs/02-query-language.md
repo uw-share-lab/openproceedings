@@ -193,8 +193,9 @@ The review's existing strings must work **unchanged** or come back with a precis
 - The parser returns `translations[]`, for example: "`source:PMLR` → `venue:ICML` (PMLR also hosts other
   venues; only ICML is indexed)."
 
-Fixture: every string in the Trust-Evals protocol (the six variants of the main, narrow,
-human-centred and LLM-as-judge strings) parses without errors, and its canonical form is snapshot-tested.
+Fixture: every string in the Trust-Evals protocol (`backend/tests/fixtures/queries/trust-evals.txt`: the
+seven variants of the main string, the last marked "Most Updated", plus the narrow, human-centred and
+LLM-as-judge strings) parses without errors, and its canonical form is snapshot-tested.
 
 ## Outputs
 

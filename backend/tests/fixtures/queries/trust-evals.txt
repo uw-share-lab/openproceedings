@@ -1,0 +1,34 @@
+# The Trust-Evals protocol's search strings, copied programmatically (never retyped) from the protocol
+# document's "Search Strings" section. Each `## name` line is followed by one query line. Trailing
+# whitespace from the document export is trimmed; everything else is verbatim, including the curly
+# quote in main-5-sources. main-7's "Most Updated: " label is dropped (it is not part of the query).
+
+## main-1
+("large language model" OR LLM OR "foundation model" OR "generative AI" OR "vision-language model" OR VLM OR "multimodal model" OR "AI agent" OR "text-to-image model") AND (trust OR trustworthy OR trustworthiness OR "trustworthy AI") AND (benchmark OR dataset OR evaluation OR leaderboard OR "evaluation framework" OR "test suite")
+
+## main-2-pop
+(large language model$ | LLM | foundation model$ | generative AI$ | vision-language model$ | VLM | multimodal model$ | AI agent$ | text-to-image model$) (trust | trustworthy | trustworthiness | trustworthy AI$)  (benchmark | dataset | evaluation | leaderboard | evaluation framework$ | test suite$)
+
+## main-3-sources
+("large language model" OR LLM OR "foundation model" OR "generative AI" OR "vision-language model" OR VLM OR "multimodal model" OR "AI agent" OR "text-to-image model") AND (trust OR trustworthy OR trustworthiness OR "trustworthy AI") AND (benchmark OR dataset OR evaluation OR leaderboard OR "evaluation framework" OR "test suite") (source:ICLR OR source:ICML OR source:Neurips)
+
+## main-4-sources
+("foundation model" OR "large language model" OR LLM OR "generative AI") AND (trustworthiness OR trustworthy OR "trust benchmark" OR "trustworthy AI") AND (benchmark OR dataset OR leaderboard OR "evaluation framework")(source:ICLR OR source:ICML OR source:Neurips)
+
+## main-5-sources
+("foundation model" OR "large language model" OR LLM OR "generative AI") AND (trustworthiness OR trustworthy OR "trust benchmark" OR "trustworthy AI") AND (benchmark OR leaderboard OR "evaluation framework")(source:ICLR OR source:"international conference on learning representations" OR source:ICML OR source:"international conference on machine learning" OR source:”proceedings of machine learning research” OR source:Neurips OR source:"Neural Information Processing Systems")
+
+## main-6-sources
+("foundation model" OR "large language model" OR LLM OR "generative AI") AND (trustworthiness OR trustworthy OR "trust" OR "trustworthy AI") AND (benchmark OR leaderboard OR "evaluation framework") AND (source:"ICLR" OR source:"international conference on learning representations" OR source:ICML OR source:"international conference on machine learning" OR source:PMLR OR source:"proceedings of machine learning research" OR source:NeurIPS OR source:"neural information processing systems" OR source:"advances in neural information processing systems")
+
+## main-7-most-updated
+("foundation model" OR "large language model" OR LLM OR "generative AI") AND (trustworthiness OR trustworthy OR "trust" OR "trustworthy AI") AND (benchmark OR leaderboard OR "evaluation framework") AND (source:"ICLR" OR source:"international conference on learning representations" OR source:ICML OR source:"international conference on machine learning" OR source:PMLR OR source:"proceedings of machine learning research" OR source:NeurIPS OR source:"neural information processing systems" OR source:"advances in neural information processing systems")
+
+## narrow
+("foundation model" OR "large language model" OR LLM OR "generative AI") AND (trustworthiness OR trustworthy OR "trust benchmark" OR "trustworthy AI") AND (benchmark OR dataset OR leaderboard OR "evaluation framework")
+
+## human-centered
+("AI trust" OR "human-AI trust" OR "trust in AI" OR "trustworthiness in AI") AND (benchmark OR evaluation OR dataset OR framework)
+
+## llm-as-judge
+("LLM-as-a-judge" OR "model-as-a-judge" OR "automated evaluation") AND (trust OR trustworthiness OR reliability OR bias) AND (benchmark OR evaluation OR dataset)

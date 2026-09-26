@@ -50,8 +50,8 @@ one export per source) collapse to one `venue:(… OR …)` clause, with one not
   (`.claude/skills/default-filters/SKILL.md`).
 
 ## Fixtures
-- The six Trust-Evals protocol variants (main, narrow, human-centred, LLM-as-judge, including **Most
-  Updated**) must parse without errors, with their canonical forms snapshot-tested under
+- The ten Trust-Evals protocol strings in `backend/tests/fixtures/queries/trust-evals.txt` (seven main
+  variants including **Most Updated**, plus narrow, human-centred and LLM-as-judge) must parse without errors, with their canonical forms snapshot-tested under
   `backend/tests/golden/`. Copy the strings verbatim from the protocol document. Never retype them from memory.
 - Every source value above gets a translation fixture, including `"proceedings of machine learning
   research"`, which returned 0 hits in Scholar for 2020–2024 but must still translate (with the PMLR warning).
