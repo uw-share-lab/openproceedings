@@ -4,12 +4,14 @@ title: 'Tantivy schema, whitespace analyzer and index build'
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
+updated_date: '2026-09-26 15:53'
 labels:
   - engine
 milestone: m-2
 dependencies:
-  - TASK-022
   - TASK-010
+  - TASK-022
+  - TASK-071
 ordinal: 22000
 ---
 
