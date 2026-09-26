@@ -8,17 +8,20 @@ description: The exact normalization contract shared by the query parser and the
 ## The pipeline — in this order, and nothing else
 1. Unicode **NFKC** (`ﬁ` → `fi`, full-width → ASCII forms).
 2. **Case-fold** (`str.casefold()`, not `lower()` — `ß` → `ss`).
-3. **Diacritic fold**: NFD, drop combining marks (`naïve` → `naive`).
+3. **Diacritic fold**: NFD, drop combining marks (`naïve` → `naive`), then NFC to recompose (Hangul).
 4. **LaTeX**: `\cmd{X}` → `X`; math `$…$` keeps inner alphanumerics; bare `\cmd` dropped.
-5. **Split** on every char that is not a Unicode letter or digit. Positions are consecutive across the
-   split (`vision-language` → `vision`@0 `language`@1).
+5. **Split** on every char that is not a Unicode letter, digit or non-combining mark. Positions are
+   consecutive across the split (`vision-language` → `vision`@0 `language`@1). Invisible format characters
+   (soft hyphen, ZWSP, ZWJ) **join**: `bench\u00admark` → `benchmark`.
 
 **Never:** stemming, lemmatization, stopword removal, synonyms, spelling correction, n-grams, compound
 splitting beyond punctuation, number normalization (`GPT-4` stays `gpt` `4`).
 
 ## Single source of truth
-`backend/src/openproceedings/query/normalize.py::normalize(text) -> list[str]` is the only
-implementation. The index is fed its output joined by spaces, and the Tantivy analyzer only splits on
+`backend/src/openproceedings/query/normalize.py` is the only implementation: `tokenize(text) ->
+list[Token]` (each with the raw half-open code-point span it came from, for highlights) and
+`normalize(text) -> list[str]`. It works character by character; a Hypothesis property pins it equal to
+the simple whole-string definition, including an adversarial Unicode alphabet, at 50k examples nightly. The index is fed its output joined by spaces, and the Tantivy analyzer only splits on
 whitespace + lowercases (a no-op on normalized input). Any second implementation — in the frontend
 highlighter, a script, a test helper — is a bug; import or call the API instead.
 
