@@ -205,9 +205,10 @@ def test_an_analyzer_that_disagrees_with_normalize_refuses_the_build(
 
 def test_a_tampered_snapshot_is_refused(tmp_path: Path) -> None:
     snap = snapshot_of(CORPUS, tmp_path / "snap")
-    (snap / "records.jsonl").write_bytes((snap / "records.jsonl").read_bytes() + b"\n")
+    rewrite_manifest(snap, {"snapshot_hash": "0" * 64})
     with pytest.raises(Exception, match="doesn't match its manifest"):
         build_index(snap, tmp_path / "indexes", BUILT)
+    assert [p.name for p in (tmp_path / "indexes").iterdir() if p.name != ".lock"] == []  # nothing placed
 
 
 # --- CLI ---------------------------------------------------------------------------------------------------
@@ -366,3 +367,72 @@ def test_cli_hash_prefix_never_matches_a_staging_dir(
     shutil.copytree(snap, snaps / ".tmp-crashed")  # a crashed build's leftover with the same hash
     prefix = json.loads((snap / "manifest.json").read_text())["snapshot_hash"][:8]
     assert cli.resolve_snapshot(prefix, snaps) == snap
+
+
+# --- verification rows (task-023, 2026-09-26) --------------------------------------------------------------
+
+
+def test_verify_follows_the_current_symlink(built: Path) -> None:
+    current = built.parent / "current"
+    current.symlink_to(built.name)
+    assert verify_index(current)["index_version"] == built.name
+
+
+def test_an_index_under_another_name_is_refused(built: Path, tmp_path: Path) -> None:
+    import shutil
+
+    copy = tmp_path / "copy"
+    shutil.copytree(built, copy)
+    with pytest.raises(IndexBuildError, match="inputs don't give"):
+        verify_index(copy)
+
+
+def test_an_id_tantivy_would_drop_refuses_the_build(tmp_path: Path) -> None:
+    long = paper("pmlr-v202-" + "k" * MAX_TOKEN_BYTES, venue="ICML", source="pmlr",
+                 urls_proceedings=None, urls_pdf="https://proceedings.mlr.press/v202/" + "k" * MAX_TOKEN_BYTES + ".pdf")  # fmt: skip
+    with pytest.raises(IndexBuildError, match="the id is over"):
+        build_index(snapshot_of([long], tmp_path / "snap"), tmp_path / "indexes", BUILT)
+
+
+def test_every_display_field_is_stored(tmp_path: Path) -> None:
+    rich = paper("AbCd1234", "Trust", abstract="An abstract.", authors=("Doe, J", "Roe, R"),
+                 keywords=("trust", "llm"), presentation="oral", venue_id_raw="NeurIPS.cc/2024/Conference",
+                 urls_forum="https://openreview.net/forum?id=AbCd1234")  # fmt: skip
+    path = build_index(snapshot_of([rich], tmp_path / "snap"), tmp_path / "indexes", BUILT).path
+    index = open_index(path)
+    searcher = index.searcher()
+    [(_, address)] = searcher.search(tantivy.Query.all_query(), 1).hits
+    [raw] = searcher.doc(address).to_dict()["record"]
+    assert idx.record_of(raw) == {
+        "title": "Trust", "abstract": "An abstract.", "authors": ["Doe, J", "Roe, R"],
+        "urls": rich.urls.model_dump(), "presentation": "oral", "keywords": ["trust", "llm"],
+        "venue_id_raw": "NeurIPS.cc/2024/Conference",
+    }  # fmt: skip
+    compact = json.dumps(idx.record_of(raw), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    assert raw == compact.encode("utf-8")  # compact canonical JSON
+
+
+def test_a_bool_is_not_a_ranking_number() -> None:
+    assert index_version("0" * 64, "2", "1", {"b": True}) != index_version("0" * 64, "2", "1", {"b": 1.0})
+
+
+def test_a_placed_index_that_fails_verification_says_to_retire_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = idx.verify_index
+    calls = []
+
+    def failing_once(path: Path) -> Any:
+        calls.append(path)
+        if len(calls) == 1:
+            raise IndexBuildError("simulated")
+        return real(path)
+
+    monkeypatch.setattr(idx, "verify_index", failing_once)
+    with pytest.raises(IndexBuildError, match="retire it and build again"):
+        build_index(snapshot_of(CORPUS, tmp_path / "snap"), tmp_path / "indexes", BUILT)
+    with pytest.raises(IndexBuildError, match="retire it and build again"):  # and so does every later build
+        monkeypatch.setattr(
+            idx, "verify_index", lambda p: (_ for _ in ()).throw(IndexBuildError("still broken"))
+        )
+        build_index(tmp_path / "snap", tmp_path / "indexes", BUILT)

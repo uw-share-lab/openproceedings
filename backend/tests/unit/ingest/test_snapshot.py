@@ -423,9 +423,46 @@ def test_records_round_trip(cache: Path, tmp_path: Path) -> None:
 
 def test_a_snapshot_whose_records_do_not_match_its_hash_is_refused(cache: Path, tmp_path: Path) -> None:
     copy = writable_copy(build(cache, tmp_path / "s", BUILT).path, tmp_path / "copy")
-    (copy / "records.jsonl").write_bytes((copy / "records.jsonl").read_bytes() + b"\n")
+    manifest = json.loads((copy / "manifest.json").read_text())
+    (copy / "manifest.json").write_text(json.dumps({**manifest, "snapshot_hash": "0" * 64}))
     with pytest.raises(SnapshotError, match="doesn't match its manifest"):
         load_records(copy)
+    (copy / "records.jsonl").write_bytes((copy / "records.jsonl").read_bytes() + b"\n")
+    with pytest.raises(SnapshotError, match="invalid record"):  # a blank line is no record
+        load_records(copy)
+
+
+def test_one_pass_reads_the_file_it_checks(
+    cache: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # the file is hashed as it is read, so there is no window to swap it between a check and a read
+    copy = writable_copy(build(cache, tmp_path / "s", BUILT).path, tmp_path / "copy")
+    opened = []
+    real = Path.open
+
+    def counting(self: Path, *a: Any, **kw: Any) -> Any:
+        if self.name == "records.jsonl":
+            opened.append(self)
+        return real(self, *a, **kw)
+
+    monkeypatch.setattr(Path, "open", counting)
+    load_records(copy)
+    assert len(opened) == 1
+
+
+def test_a_record_may_hold_unicode_line_separators(tmp_path: Path) -> None:
+    from openproceedings.ingest.dedup import DedupResult
+
+    from tests.unit.ingest.test_dedup import paper
+
+    r = paper(
+        "AbCd1234", "Trust\u2028in\u0085AI".replace("\u2028", " ").replace("\u0085", " "), abstract="a\u2028b"
+    )
+    snap = tmp_path / "snap"
+    snap.mkdir()
+    for name, data in render(DedupResult((r,), (), ()), [], BUILT).items():
+        (snap / name).write_bytes(data)
+    assert load_records(snap)[r.id].abstract == "a\u2028b"  # JSON keeps it raw; a line split would break it
 
 
 def test_a_tampered_record_is_caught_without_quoting_it(cache: Path, tmp_path: Path) -> None:

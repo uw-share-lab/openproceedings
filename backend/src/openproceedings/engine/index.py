@@ -130,7 +130,9 @@ def record_of(stored: bytes) -> dict[str, Any]:
 
 
 PARALLEL_FROM = 2_000  # below this many records, normalizing in one process is faster than starting workers
-CHUNK = 4_096  # records normalized and added per step: memory stays flat whatever the corpus size
+# records normalized and added per step (never all at once). Must be ≥ PARALLEL_FROM, so a first chunk
+# smaller than PARALLEL_FROM is the whole corpus.
+CHUNK = 4_096
 
 
 def _normalize_pair(pair: tuple[str, str]) -> tuple[list[str], list[str]]:
@@ -138,7 +140,7 @@ def _normalize_pair(pair: tuple[str, str]) -> tuple[list[str], list[str]]:
 
 
 def _cpus() -> int:
-    """CPUs this process may use (a container's quota, not the host's count)."""
+    """CPUs this process may run on (its affinity mask; a cgroup `--cpus` quota isn't reflected)."""
     if hasattr(os, "sched_getaffinity"):
         return len(os.sched_getaffinity(0))
     return os.cpu_count() or 1
@@ -161,12 +163,17 @@ def _document(r: PaperRecord, fields: dict[str, list[str]]) -> tantivy.Document:
         "keywords": list(r.keywords),
         "venue_id_raw": r.venue_id_raw,
     }
-    doc.add_bytes("record", json.dumps(display, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+    compact = json.dumps(display, sort_keys=True, separators=(",", ":"), ensure_ascii=False)  # canonical JSON
+    doc.add_bytes("record", compact.encode("utf-8"))
     return doc
 
 
 def _check_tokens(r: PaperRecord, fields: dict[str, list[str]], exact: tantivy.TextAnalyzer) -> None:
-    # id and facets (the `raw` fields) can't reach the limit: PaperRecord bounds ids and the vocabulary facets
+    if len(r.id.encode("utf-8")) > MAX_TOKEN_BYTES:  # the `raw` id is one term (a pmlr key is unbounded)
+        raise IndexBuildError(
+            f"{r.id[:80]}…: the id is over {MAX_TOKEN_BYTES} bytes, which Tantivy would drop"
+        )
+    # facets can't reach the limit: they come from the vocabulary
     for field, tokens in fields.items():
         if any(len(t.encode("utf-8")) > MAX_TOKEN_BYTES for t in tokens):
             raise IndexBuildError(
@@ -197,7 +204,7 @@ def verify_index(path: Path) -> dict[str, Any]:
         )  # fmt: skip
     except (OSError, ValueError, KeyError, TypeError) as e:
         raise IndexBuildError(f"{path.name} is not an index ({type(e).__name__})") from None
-    if not recomputed == manifest.get("index_version") == path.name:
+    if not recomputed == manifest.get("index_version") == path.resolve().name:  # `current` is a symlink
         raise IndexBuildError(f"{path.name}: its manifest's inputs don't give its index_version (changed)")
     if _file_hashes(path) != manifest.get("files"):
         raise IndexBuildError(f"{path.name}: its files don't match its manifest (changed or incomplete)")
@@ -232,7 +239,7 @@ def _add_all(snapshot: Path, writer: Any, exact: tantivy.TextAnalyzer, workers: 
     try:
         for chunk in _chunks(iter_records(snapshot)):
             pairs = [(r.title, r.abstract or "") for r in chunk]  # a missing abstract indexes as ""
-            if pool is None and workers > 1 and (added > 0 or len(pairs) >= PARALLEL_FROM):
+            if pool is None and workers > 1 and len(pairs) >= PARALLEL_FROM:
                 # started only once the corpus is big enough to repay it (a small one never pays the cost)
                 pool = ProcessPoolExecutor(
                     max_workers=workers, mp_context=multiprocessing.get_context("spawn")
@@ -258,7 +265,7 @@ def build_index(
     snapshot: Path, indexes: Path, built_at: datetime | None = None, workers: int | None = None
 ) -> IndexBuildResult:
     """Build `indexes/<index_version>/` from a snapshot, or verify and report the one that exists. Records
-    stream through in chunks, so memory doesn't grow with the corpus."""
+    stream through in chunks, never all loaded at once."""
     began = time.monotonic()
     try:
         snapshot_manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
@@ -270,7 +277,10 @@ def build_index(
     with storage.exclusive(indexes):
         storage.sweep(indexes)
         if target.exists():
-            verify_index(target)
+            try:
+                verify_index(target)
+            except IndexBuildError as e:
+                raise IndexBuildError(f"{e}; it is immutable: retire it and build again") from None
             _seal(target)  # a crash between placing and sealing left it writable
             log.info("index_exists", extra={"index_version": version_id})
             return IndexBuildResult(target, version_id, created=False)

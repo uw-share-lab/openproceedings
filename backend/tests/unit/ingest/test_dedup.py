@@ -56,7 +56,7 @@ def paper(
     proceedings-id record names itself in `urls.proceedings` unless the caller says otherwise."""
     extra.setdefault("urls_proceedings", self_url(native, year))
     values: dict[str, Any] = {"title": title, "venue": venue, "year": year, "track": track, "status": status,
-                              "abstract": abstract, **{k.replace("_", ".", 1): v for k, v in extra.items()}}  # fmt: skip
+                              "abstract": abstract, **{k.replace("urls_", "urls.", 1): v for k, v in extra.items()}}  # fmt: skip
     claims = [
         Claim(field=f, value=v, source=source, fetched_at=fetched) for f, v in values.items() if v is not None
     ]  # type: ignore[arg-type]

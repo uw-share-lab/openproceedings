@@ -46,7 +46,7 @@ reference engine matches (`engine/index.py`, `op index build`).
 | `abstract` | text, positions | ✓ | ✓ | |
 | `venue`, `track`, `status` | text (raw, facet) | ✓ | ✓ | ✓ |
 | `year` | u64 | ✓ | ✓ | ✓ |
-| `record` | JSON (authors, urls, presentation, keywords) | | ✓ | |
+| `record` | bytes: compact JSON of the display fields (original title and abstract, authors, urls, presentation, keywords, venue_id_raw); stored, never indexed (a JSON field would be) | | ✓ | |
 
 ## AST → Tantivy compilation
 

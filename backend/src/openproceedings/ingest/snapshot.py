@@ -266,36 +266,38 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
 
 
 def iter_records(snapshot: Path) -> Iterator[PaperRecord]:
-    """A snapshot's records in file order, streamed (memory stays flat for any corpus). It must be a
-    snapshot: a manifest whose `snapshot_hash` matches `records.jsonl` (hashed in blocks before anything is
-    yielded), ids strictly ascending (so unique), and every record valid (so a stale content_hash is
-    caught). Errors name the line only, never its text."""
+    """A snapshot's records in file order, streamed in one pass. It must be a snapshot: every record valid
+    (so a stale content_hash is caught), ids strictly ascending (so unique), and the bytes read hashing to
+    the manifest's `snapshot_hash`, checked when the file ends (one read, so the file checked is the file
+    read). A caller must not act on the records until iteration finishes without raising: `load_records`
+    and `build_index` (which commits only after the last record) don't. Errors name the line only."""
     try:
         manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+        expected = manifest["snapshot_hash"] if isinstance(manifest, dict) else None
         digest = hashlib.sha256()
+        previous = ""
         with (snapshot / "records.jsonl").open("rb") as fh:
-            for block in iter(lambda: fh.read(1 << 20), b""):
-                digest.update(block)
-    except (OSError, ValueError) as e:
+            for n, raw in enumerate(fh, start=1):
+                digest.update(raw)
+                try:
+                    r = PaperRecord.model_validate_json(raw)
+                except ValidationError as e:
+                    kinds = sorted({str(err["type"]) for err in e.errors(include_input=False)})
+                    raise SnapshotError(
+                        f"{snapshot.name} line {n}: invalid record ({', '.join(kinds)})"
+                    ) from None
+                if r.id == previous:
+                    raise SnapshotError(f"{snapshot.name} line {n}: duplicate id")
+                if r.id < previous:
+                    raise SnapshotError(f"{snapshot.name} line {n}: records are not sorted by id")
+                previous = r.id
+                yield r
+    except (OSError, ValueError, KeyError) as e:
+        if isinstance(e, SnapshotError):
+            raise
         raise SnapshotError(f"{snapshot.name} is not a snapshot ({type(e).__name__})") from None
-    if not isinstance(manifest, dict) or manifest.get("snapshot_hash") != digest.hexdigest():
+    if expected != digest.hexdigest():
         raise SnapshotError(f"{snapshot.name}: records.jsonl doesn't match its manifest's snapshot_hash")
-    previous = ""
-    with (snapshot / "records.jsonl").open(encoding="utf-8") as fh:
-        for n, line in enumerate(fh, start=1):
-            try:
-                r = PaperRecord.model_validate_json(line)
-            except ValidationError as e:
-                kinds = sorted({str(err["type"]) for err in e.errors(include_input=False)})
-                raise SnapshotError(
-                    f"{snapshot.name} line {n}: invalid record ({', '.join(kinds)})"
-                ) from None
-            if r.id == previous:
-                raise SnapshotError(f"{snapshot.name} line {n}: duplicate id")
-            if r.id < previous:
-                raise SnapshotError(f"{snapshot.name} line {n}: records are not sorted by id")
-            previous = r.id
-            yield r
 
 
 def load_records(snapshot: Path) -> dict[str, PaperRecord]:
