@@ -107,13 +107,44 @@ class Claim(BaseModel):
         return (self.field, self.source, self.url or "", self.fetched_at.isoformat())
 
 
+def _url(v: str) -> str:
+    """An http(s) URL on one line: no whitespace, control, line or paragraph separator (an export writes it
+    as one RIS/BibTeX line, and a newline in it could forge a record)."""
+    if not v.startswith(("https://", "http://")) or not _SINGLE_LINE.fullmatch(v):
+        raise ValueError("a URL must be http(s) with no whitespace or control characters")
+    return v
+
+
+def _doi(v: str) -> str:
+    if not re.fullmatch(r"10\.\d+(?:\.\d+)*/\S+", v) or not _SINGLE_LINE.fullmatch(v):
+        raise ValueError("a DOI must look like 10.NNNN/suffix, with no whitespace or control characters")
+    return v
+
+
+# no whitespace, and nothing in the control (Cc), format-line (Zl) or paragraph (Zp) categories
+_SINGLE_LINE = re.compile(r"[^\s\x00-\x1f\x7f-\x9f\u2028\u2029]+")
+Url = Annotated[Text, AfterValidator(_url)]
+
+
+def is_url(v: str) -> bool:
+    """Would `v` be accepted as a record URL?"""
+    try:
+        _url(v)
+    except ValueError:
+        return False
+    return True
+
+
+Doi = Annotated[Text, AfterValidator(_doi)]
+
+
 class Urls(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    forum: Text | None = None
-    pdf: Text | None = None
-    proceedings: Text | None = None
-    doi: Text | None = None
+    forum: Url | None = None
+    pdf: Url | None = None
+    proceedings: Url | None = None
+    doi: Doi | None = None
 
 
 def content_hash(*, title: str, abstract: str | None, venue: str, year: int, track: str, status: str) -> str:

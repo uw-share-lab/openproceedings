@@ -42,7 +42,7 @@ from urllib.parse import urlparse
 from scholarmend.parse import parse_file
 
 from openproceedings.ingest.classify import Classification, classify_proceedings, classify_venueid
-from openproceedings.ingest.record import Claim, ClaimField, ClaimValue, PaperRecord, Urls
+from openproceedings.ingest.record import Claim, ClaimField, ClaimValue, PaperRecord, Urls, is_url
 from openproceedings.ingest.urls import PREFIX, pmlr, proceedings
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 
@@ -148,6 +148,7 @@ def _int(value: object) -> int | None:
 
 def _url_fields(urls: list[str], source: str) -> tuple[tuple[ClaimField, str, str], ...]:
     """The listing's page and PDF URLs, exactly as they appear (sorted, so the choice is stable)."""
+    urls = [u for u in urls if is_url(u)]  # a URL with a newline or control character is never kept
     html = next((u for u in urls if not urlparse(u).path.endswith(".pdf")), None)
     pdf = next((u for u in urls if urlparse(u).path.endswith(".pdf")), None)
     pairs: tuple[tuple[ClaimField, str | None], ...] = (("urls.proceedings", html), ("urls.pdf", pdf))

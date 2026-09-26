@@ -83,9 +83,9 @@ def _ris(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             lines.append(("AB", _one_line(r["abstract"])))
         lines += [("AU", _one_line(a)) for a in r.get("authors", [])]
         lines += [("PY", str(r["year"])), ("T2", proceedings_name(r["venue"], r["year"]))]
-        lines += [("UR", u) for u in _urls(r)]
+        lines += [("UR", _one_line(u)) for u in _urls(r)]  # validated at ingest; one line here regardless
         if (r.get("urls") or {}).get("doi"):
-            lines.append(("DO", r["urls"]["doi"]))
+            lines.append(("DO", _one_line(r["urls"]["doi"])))
         lines += [("ID", r["id"]), ("KW", r["track"]), ("N1", p.line())]
         yield "".join(f"{tag}  - {value}\n" for tag, value in lines) + "ER  - \n\n"
 

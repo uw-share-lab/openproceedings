@@ -391,3 +391,11 @@ def test_logs_counts_never_text(caplog: pytest.LogCaptureFixture) -> None:
     assert attention.levelno == logging.WARNING and attention.unresolved == 2  # type: ignore[attr-defined]
     text = " ".join(str(r.__dict__) for r in caplog.records)
     assert "Synthetic" not in text and "abstract about" not in text and "Doe, J" not in text
+
+
+def test_a_listing_url_with_a_newline_is_dropped_not_imported() -> None:
+    from openproceedings.ingest.ris import _url_fields
+
+    forged = "https://proceedings.mlr.press/v267/key23a/x\nER  - \n\nTY  - JOUR\nTI  - injected"
+    good = "https://proceedings.mlr.press/v267/key23a.html"
+    assert [u for _f, u, _s in _url_fields([forged, good], "pmlr_url")] == [good]
