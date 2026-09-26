@@ -1,6 +1,6 @@
 ---
 name: field-weighted-bm25
-description: The ranking standard — field-weighted BM25 (title 2.0, abstract 1.0, k1 1.2, b 0.75) that honestly approximates BM25F, ordering only inside the matched set, negations and filters never scoring, deterministic tie-break by id for every sort, and ranking params folded into index_version. Use when writing or reviewing engine/rank.py, boosts, sort options, pagination, or anything that claims ranking is reproducible.
+description: The ranking standard — field-weighted BM25 (title 2.0, abstract 1.0, k1 1.2, b 0.75) that honestly approximates BM25F, ordering only inside the matched set, negations and filters never scoring, deterministic tie-break by id for every sort, and ranking params folded into index_version. Use when writing or reviewing ranking in engine/tantivy_engine.py and engine/compile.py, boosts, sort options, pagination, or anything that claims ranking is reproducible.
 ---
 
 # Field-weighted BM25 (spec 03 §Ranking, guarantee 5)
@@ -14,7 +14,7 @@ summed over the query's positive scoring clauses.
   UI copy and the paper say "field-weighted BM25", never "BM25F".
 - Boosts go on the per-field clauses from compile (`.claude/skills/ast-compilation/SKILL.md`). k1 and b may
   be fixed constants inside Tantivy. Verify this in the pinned version. If different values are ever needed,
-  compute scores in `rank.py` rather than claim a setting that isn't applied.
+  compute scores in `tantivy_engine.py` rather than claim a setting that isn't applied.
 - The weights are configuration, and the whole ranking config (weights, k1, b, sort definitions) is part of
   `ranking_params` in `index_version` (`.claude/skills/index-versioning/SKILL.md`). Changing a weight
   changes `index_version`.
@@ -30,7 +30,15 @@ summed over the query's positive scoring clauses.
 - `TantivyEngine.ranked(ast, sort)` fetches every match with its exact float score and orders the whole
   set by the sort's key, the id always last (`year` from its fast column; `title` from a `title_rank` fast
   column computed at build from the casefolded display title and id), never by Tantivy's hit order
-  (tested by reversing it). `search` pages that list. `ranking_params` also records the sort definitions.
+  (tested by reversing it). `search` takes the top `offset + limit` of that order (`heapq.nsmallest`) and
+  pages it. `ranking_params` also records the sort definitions.
+- **Identical texts score identically.** Tantivy's union scorer works 4,096 documents at a time and
+  removes a finished clause by swapping the last one into its place, so a flat union of three or more
+  clauses adds scores in a different order after a term runs out, and identical texts end up 1 ulp apart.
+  Their order would then depend on index layout, not id. `compile.combine` therefore builds every
+  Boolean (ORs, ANDs, wildcard expansions, year ranges, verified candidates) as a balanced binary tree:
+  a two-operand sum is the same in either order. `test_rank.py` checks identical texts across the
+  4,096 boundary and a multi-segment build (`build_index(commit_every=…)`) against a single segment.
 
 ## Membership is not ranking's business
 - Ranking orders the matched set and nothing else. `total`, `match_ids` and exports are identical for
@@ -48,7 +56,8 @@ summed over the query's positive scoring clauses.
 | `semantic` | supplied by 06 when enabled; still tie-broken by `id` |
 
 - The tie-breaker is **always `id`**. Tantivy's internal doc order depends on segments, so it is never a
-  tie-breaker.
+  tie-breaker. The id only breaks ties if tied documents really get equal floats (the balanced trees
+  above).
 - Scores are compared as the exact floats Tantivy returns. Never round before sorting. Round only for
   display.
 - `offset`/`limit` pagination is taken from the fully ordered list, so page 2 is stable across calls. When

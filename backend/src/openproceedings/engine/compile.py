@@ -105,7 +105,7 @@ class Compiler:
         if isinstance(n, And | Or):
             self.line(depth, "AND" if isinstance(n, And) else "OR")
             occur = tantivy.Occur.Must if isinstance(n, And) else tantivy.Occur.Should
-            return tantivy.Query.boolean_query([(occur, self.node(c, depth + 1)) for c in n.children])
+            return combine(occur, [self.node(c, depth + 1) for c in n.children])
         if isinstance(n, Not):
             self.line(depth, "NOT (all documents, minus:)")
             return tantivy.Query.boolean_query(
@@ -120,18 +120,19 @@ class Compiler:
         if len(fields) == 1:
             return self.weighted(n, fields[0], depth)
         self.line(depth, "OR (per field)")
-        return tantivy.Query.boolean_query(
-            [(tantivy.Occur.Should, self.weighted(n, f, depth + 1)) for f in fields]
-        )
+        return combine(tantivy.Occur.Should, [self.weighted(n, f, depth + 1) for f in fields])
 
     def filter(self, f: Filter, depth: int) -> tantivy.Query:
         if f.field == "year":
             ranges = [v for v in f.values if isinstance(v, YearRange)]
             self.line(depth, f"filter year in {', '.join(f'{r.lo}..{r.hi}' for r in ranges)} (non-scoring)")
-            inner = tantivy.Query.boolean_query(
-                [(tantivy.Occur.Should, tantivy.Query.range_query(self.schema, "year", tantivy.FieldType.Unsigned, r.lo, r.hi))
-                 for r in ranges]
-            )  # fmt: skip
+            inner = combine(
+                tantivy.Occur.Should,
+                [
+                    tantivy.Query.range_query(self.schema, "year", tantivy.FieldType.Unsigned, r.lo, r.hi)
+                    for r in ranges
+                ],
+            )
         else:
             values = sorted(str(v) for v in f.values)
             self.line(depth, f"filter {f.field} in {{{', '.join(values)}}} (non-scoring)")
@@ -174,9 +175,7 @@ class Compiler:
             return tantivy.Query.empty_query()  # matches nothing: never a dropped (widening) clause
         # SHOULD of term queries (not a TermSetQuery, which scores every match 1): each expansion scores as
         # its own term (field-weighted-bm25 skill)
-        return tantivy.Query.boolean_query(
-            [(tantivy.Occur.Should, tantivy.Query.term_query(self.schema, f, t)) for t in terms]
-        )
+        return combine(tantivy.Occur.Should, [tantivy.Query.term_query(self.schema, f, t) for t in terms])
 
     def item(self, i: Term | Wildcard, f: TextField) -> tantivy.Query:
         if isinstance(i, Term):
@@ -195,9 +194,7 @@ class Compiler:
         """Candidates (every distinct item present in the field), then their stored token streams checked by
         position; the verified ids are what matches. The candidate query stays in, for scoring (each
         distinct item once)."""
-        candidates = tantivy.Query.boolean_query(
-            [(tantivy.Occur.Must, self.item(i, f)) for i in self.distinct(n)]
-        )
+        candidates = combine(tantivy.Occur.Must, [self.item(i, f) for i in self.distinct(n)])
         key = (f, n.model_dump_json())
         if key not in self.verified_cache:
             self.verified_cache[key] = [
@@ -249,6 +246,21 @@ class Compiler:
                 if k < len(right) and right[k] <= hi:
                     return True
         return False
+
+
+def combine(occur: tantivy.Occur, queries: list[tantivy.Query]) -> tantivy.Query:
+    """`queries` joined by `occur` as a balanced binary tree. Tantivy adds a union's clause scores in an
+    order that shifts from one document to the next, so a flat union of three or more gives identical texts
+    scores 1 ulp apart and their order would follow the segment layout, not the id. A sum of two is the same
+    in either order, so with at most two clauses per node every score depends only on the text."""
+    if len(queries) == 1:
+        return queries[0]
+    if len(queries) == 2:
+        return tantivy.Query.boolean_query([(occur, queries[0]), (occur, queries[1])])
+    half = len(queries) // 2
+    return tantivy.Query.boolean_query(
+        [(occur, combine(occur, queries[:half])), (occur, combine(occur, queries[half:]))]
+    )
 
 
 def _distinct_terms(n: Near) -> bool:

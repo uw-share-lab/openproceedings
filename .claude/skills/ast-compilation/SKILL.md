@@ -45,8 +45,9 @@ documentation.
 `backend/src/openproceedings/engine/compile.py` (the table; shares no matching code with ReferenceEngine)
 and `engine/tantivy_engine.py` (`TantivyEngine`: expansion from the term dictionary via
 `terms_with_prefix` over both fields, the 200 cap before compiling; match sets read back through the
-`ord` fast column and `ids.txt`; disjunctive facets by a terms aggregation; ranking is task-025, so
-`search` returns id order until then). Filters are `ConstScoreQuery(…, 0.0)`: they never change a score
+`ord` fast column and `ids.txt`; disjunctive facets by a terms aggregation; ranking per the field-weighted-bm25 skill). Every Boolean of
+three or more clauses (And/Or children, the per-field OR, year ranges, wildcard expansions, verified
+candidates) goes through `combine`, a balanced binary tree, so identical texts score identically. Filters are `ConstScoreQuery(…, 0.0)`: they never change a score
 (tested). The verified fallback finds each operand's occurrences from a token→positions map and pairs NEAR
 operands by binary search (each operand's width is fixed), so its cost is linear in the candidates' text:
 on an 80k index the worst stopword queries take 2–11 s (the reference engine 27–45 s); its candidate

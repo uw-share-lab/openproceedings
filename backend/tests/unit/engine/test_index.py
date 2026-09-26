@@ -67,7 +67,7 @@ def hits(index: tantivy.Index, field: str, term: str) -> int:
 def test_index_version_serialization_is_pinned() -> None:
     # sha256 of {"ranking_params":…,"schema_version":"1","snapshot_hash":"0…0","tokenizer_version":"2"}
     # with sorted keys and no whitespace; changing the serialization changes every index id
-    assert index_version("0" * 64, "2", "1") == "07bf0cd51fd0"
+    assert index_version("0" * 64, "2", "1") == "64bef1c5aeb6"
 
 
 @pytest.mark.parametrize(
@@ -139,7 +139,7 @@ def test_build_writes_a_verified_manifest(built: Path) -> None:
     assert (
         manifest["doc_count"] == 3
         and manifest["tokenizer_version"] == "2"
-        and manifest["schema_version"] == "1"
+        and manifest["schema_version"] == "2"
     )
     assert manifest["ranking_params"] == RANKING_PARAMS and manifest["tantivy_version"] == "0.26.2"
     assert manifest["built_at"] == "2026-09-26T12:00:00+00:00"

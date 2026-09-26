@@ -74,7 +74,8 @@ Every compiled query is also rendered as a readable string for debugging (`op se
 - As built (task-025, `engine/tantivy_engine.py`): the weights are per-field boosts; k1 and b are
   Tantivy's fixed constants, checked against a hand-computed score; the whole match set is ordered by the
   sort's key with `id` last (never Tantivy's hit order), then paged; the sort definitions are part of
-  `ranking_params`.
+  `ranking_params`. Every Boolean is compiled as a balanced binary tree, so identical texts get identical
+  scores whatever the index layout (a flat union of three or more clauses leaves them an ulp apart).
 
 ## Highlights
 

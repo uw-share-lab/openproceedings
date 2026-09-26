@@ -9,6 +9,7 @@ the last key, then pages it (task-025). The index is verified (every file re-has
 
 from __future__ import annotations
 
+import heapq
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,7 @@ import tantivy
 
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.compile import FIELDS, Compiled, Compiler, Expansions, wildcards
-from openproceedings.engine.index import IDS, open_index, verify_index
+from openproceedings.engine.index import IDS, SCHEMA_VERSION, open_index, verify_index
 from openproceedings.engine.protocol import (
     FACET_FIELDS,
     MAX_EXPANSIONS,
@@ -27,8 +28,13 @@ from openproceedings.engine.protocol import (
     SearchResult,
 )
 from openproceedings.query.ast import And, Filter, Node, Not, TextField, Wildcard
+from openproceedings.query.normalize import TOKENIZER_VERSION
 
 SORTS = ("relevance", "year_desc", "year_asc", "title")
+TANTIVY_BM25 = {
+    "b": 0.75,
+    "k1": 1.2,
+}  # Tantivy's fixed constants (tantivy 0.26.2): an index can't claim others
 
 
 class TantivyEngine:
@@ -36,6 +42,21 @@ class TantivyEngine:
         manifest = verify_index(path)
         self.index_version: str = manifest["index_version"]
         self.ranking: dict[str, Any] = manifest["ranking_params"]  # the params this index's id was built with
+        stale = {
+            "schema_version": (manifest.get("schema_version"), SCHEMA_VERSION),
+            "tokenizer_version": (manifest.get("tokenizer_version"), TOKENIZER_VERSION),
+        }
+        for name, (built, current) in stale.items():
+            if built != current:  # queries are normalized and compiled for the current versions
+                raise EngineError(
+                    DiagnosticCode.API_INTERNAL,
+                    f"index {self.index_version} has {name} {built}, this code {current}: build a new index",
+                )
+        if self.ranking.get("bm25") != TANTIVY_BM25:
+            raise EngineError(
+                DiagnosticCode.API_INTERNAL,
+                f"index {self.index_version} records bm25 {self.ranking.get('bm25')}, but Tantivy applies {TANTIVY_BM25}",
+            )
         self.index = open_index(path)
         self.searcher = self.index.searcher()
         self.ids = (path / IDS).read_text(encoding="utf-8").splitlines()
@@ -67,13 +88,21 @@ class TantivyEngine:
         their union is `match_ids` for every sort."""
         if offset < 0 or limit < 0:
             raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "offset and limit must be ≥ 0.")
-        ordered = self.ranked(ast, sort)
-        return SearchResult(total=len(ordered), ids=tuple(i for i, _ in ordered[offset : offset + limit]))
+        keyed = self.keyed(ast, sort)
+        # top offset+limit of the full order: keys end in the unique id, so ties at a page boundary are exact
+        top = heapq.nsmallest(offset + limit, keyed)
+        return SearchResult(total=len(keyed), ids=tuple(i for _key, i, _score in top[offset:]))
 
     def ranked(self, ast: Node, sort: str = "relevance") -> list[tuple[str, float]]:
         """Every match with its exact score, in `sort` order, ties always broken by id: `relevance` is
-        (-score, id), `year_desc`/`year_asc` (∓year, id), `title` (casefolded display title, id). Ranking
+        (-score, id), `year_desc`/`year_asc` (∓year, id), `title` (casefold(NFKC(display title)), id). Ranking
         only orders: the set is the same for every sort."""
+        return [(i, score) for _key, i, score in sorted(self.keyed(ast, sort))]
+
+    def keyed(self, ast: Node, sort: str) -> list[tuple[float, str, float]]:
+        """Every match as (sort key, id, score): ordering by the tuple orders by the key, then the id (unique,
+        so the score after it never decides anything).
+        For relevance the key is -score; year sorts ∓year; title the build-time title rank."""
         if sort not in SORTS:
             hint = " (semantic ordering needs embeddings: task-059)" if sort == "semantic" else ""
             raise EngineInputError(
@@ -86,13 +115,11 @@ class TantivyEngine:
         ids = [self.ids[_ord(o)] for o in self.searcher.fast_field_values("ord", addresses)]
         scores = [score for score, _address in hits]
         if sort == "relevance":
-            keys: list[tuple[float, str]] = [(-s, i) for s, i in zip(scores, ids, strict=True)]
-        else:
-            column = "title_rank" if sort == "title" else "year"
-            values = [_ord(v) for v in self.searcher.fast_field_values(column, addresses)]
-            keys = [(-v if sort == "year_desc" else v, i) for v, i in zip(values, ids, strict=True)]
-        order = sorted(range(len(ids)), key=keys.__getitem__)
-        return [(ids[k], scores[k]) for k in order]
+            return [(-s, i, s) for s, i in zip(scores, ids, strict=True)]
+        column = "title_rank" if sort == "title" else "year"
+        values = [_ord(v) for v in self.searcher.fast_field_values(column, addresses)]
+        sign = -1 if sort == "year_desc" else 1
+        return [(float(sign * v), i, s) for v, s, i in zip(values, scores, ids, strict=True)]
 
     def facets(self, ast: Node, fields: tuple[str, ...] = FACET_FIELDS) -> dict[str, dict[str, int]]:
         """Disjunctive facets (spec 04, decision-001 rule 6): field F is counted over the matches of the

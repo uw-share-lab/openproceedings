@@ -15,7 +15,7 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `backend/` (M1) | The uv workspace member, package `openproceedings` (`backend/pyproject.toml`) | |
 | `backend/src/openproceedings/ingest/` | 01: `sources/`, `classify.py`, `dedup.py`, `snapshot.py`, `ris.py` | Only place that makes network calls |
 | `backend/src/openproceedings/query/` | 02: `normalize.py`, `lexer.py`, `parser.py`, `ast.py`, `canonical.py`, `compat.py` | Pure; no I/O |
-| `backend/src/openproceedings/engine/` | 03: `reference.py`, `tantivy_engine.py`, `compile.py`, `rank.py`, `highlight.py` | Pure except index file reads |
+| `backend/src/openproceedings/engine/` | 03: `protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py` (ranking included), `highlight.py` (planned) | Pure except index file reads |
 | `backend/src/openproceedings/api/` | 04: app, routers, `exporters/`, `records.py` | The only writer of `data/records.sqlite` |
 | `backend/src/openproceedings/semantic/` | 06 (phase 2) | Never imported by `query/` or `engine/` matching code |
 | `backend/src/openproceedings/eval/` | 07 report generators | Writes to `docs/results/` |

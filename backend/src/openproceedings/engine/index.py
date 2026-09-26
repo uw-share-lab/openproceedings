@@ -24,6 +24,7 @@ import os
 import shutil
 import tempfile
 import time
+import unicodedata
 from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
@@ -44,7 +45,7 @@ log = logging.getLogger("openproceedings.engine.index")
 
 # The schema table below, the analyzer and how fields are populated (a missing abstract is ""). Any
 # change to them is a new SCHEMA_VERSION (index-versioning skill).
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"  # 2: the ord and title_rank fast columns (task-024/025)
 ANALYZER = "exact_v1"
 TEXT = ("title", "abstract")
 FACETS = ("venue", "track", "status")
@@ -58,7 +59,7 @@ RANKING_PARAMS: dict[str, Any] = {
     "field_weights": {"abstract": 1.0, "title": 2.0},
     "sorts": {
         "relevance": "-score,id",
-        "title": "casefolded display title,id",
+        "title": "casefold(nfkc(display title)),id",
         "year_asc": "year,id",
         "year_desc": "-year,id",
     },
@@ -90,16 +91,17 @@ def _floats(value: Any) -> Any:
 
 def index_version(
     snapshot_hash: str,
-    tokenizer_version: str = TOKENIZER_VERSION,
-    schema_version: str = SCHEMA_VERSION,
+    tokenizer_version: str | None = None,
+    schema_version: str | None = None,
     ranking_params: dict[str, Any] | None = None,
 ) -> str:
-    """The index's id: sha256 of the canonical JSON of its four inputs, first 12 hex digits."""
+    """The index's id: sha256 of the canonical JSON of its four inputs, first 12 hex digits. An input
+    left out is this code's current one (read when called, never frozen at import)."""
     body = {
         "ranking_params": _floats(RANKING_PARAMS if ranking_params is None else ranking_params),
-        "schema_version": schema_version,
+        "schema_version": SCHEMA_VERSION if schema_version is None else schema_version,
         "snapshot_hash": snapshot_hash,
-        "tokenizer_version": tokenizer_version,
+        "tokenizer_version": TOKENIZER_VERSION if tokenizer_version is None else tokenizer_version,
     }
     canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
@@ -247,21 +249,33 @@ def _chunks(records: Iterator[PaperRecord]) -> Iterator[list[PaperRecord]]:
         yield chunk
 
 
+def title_key(title: str) -> str:
+    """The `sort=title` key: NFKC then casefold, so a composed and a decomposed `École` sort together."""
+    return unicodedata.normalize("NFKC", title).casefold()
+
+
 def _title_ranks(snapshot: Path) -> dict[str, int]:
-    """Each record's position in (casefolded display title, id) order, from a light first pass over the
-    raw lines (the second, validating pass refuses a snapshot that doesn't verify)."""
+    """Each record's position in (title key, id) order, from a light first pass over the raw lines, read
+    as bytes exactly as the validating pass reads them (which refuses a snapshot that doesn't verify)."""
     keys = []
-    with (snapshot / "records.jsonl").open(encoding="utf-8") as fh:
+    with (snapshot / "records.jsonl").open("rb") as fh:
         for line in fh:
             try:
                 raw = json.loads(line)
-                keys.append((str(raw["title"]).casefold(), str(raw["id"])))
+                keys.append((title_key(str(raw["title"])), str(raw["id"])))
             except (ValueError, KeyError, TypeError):
-                continue  # the validating pass reports it
+                continue  # not a record: the validating pass refuses it
     return {rid: rank for rank, (_, rid) in enumerate(sorted(keys))}
 
 
-def _add_all(snapshot: Path, writer: Any, exact: tantivy.TextAnalyzer, workers: int, ids: Any) -> int:
+def _add_all(
+    snapshot: Path,
+    writer: Any,
+    exact: tantivy.TextAnalyzer,
+    workers: int,
+    ids: Any,
+    commit_every: int | None = None,
+) -> int:
     """Stream the snapshot's records (in id order, verified) through normalize() into the writer, across
     `workers` processes when there is more than one."""
     ranks = _title_ranks(snapshot)
@@ -282,7 +296,13 @@ def _add_all(snapshot: Path, writer: Any, exact: tantivy.TextAnalyzer, workers: 
             for r, (title, abstract) in zip(chunk, normalized, strict=True):
                 fields = {"title": title, "abstract": abstract}
                 _check_tokens(r, fields, exact)
+                if r.id not in ranks:  # can't happen for a valid line; refuse rather than guess a rank
+                    raise IndexBuildError(
+                        f"{r.id}: no title rank (the snapshot's lines didn't read the same twice)"
+                    )
                 writer.add_document(_document(r, fields, added, ranks[r.id]))
+                if commit_every and (added + 1) % commit_every == 0:
+                    writer.commit()  # tests: several segments
                 ids.write(r.id + "\n")
                 added += 1
     except BrokenProcessPool:
@@ -294,7 +314,11 @@ def _add_all(snapshot: Path, writer: Any, exact: tantivy.TextAnalyzer, workers: 
 
 
 def build_index(
-    snapshot: Path, indexes: Path, built_at: datetime | None = None, workers: int | None = None
+    snapshot: Path,
+    indexes: Path,
+    built_at: datetime | None = None,
+    workers: int | None = None,
+    commit_every: int | None = None,  # tests only: commit every N documents, to build several segments
 ) -> IndexBuildResult:
     """Build `indexes/<index_version>/` from a snapshot, or verify and report the one that exists. Records
     stream through in chunks, never all loaded at once."""
@@ -323,7 +347,9 @@ def build_index(
             index.register_tokenizer(ANALYZER, exact)
             writer = index.writer(num_threads=1)  # one thread: documents keep id order, deterministically
             with (tmp / IDS).open("w", encoding="utf-8") as ids:
-                added = _add_all(snapshot, writer, exact, workers if workers is not None else _cpus(), ids)
+                added = _add_all(
+                    snapshot, writer, exact, workers if workers is not None else _cpus(), ids, commit_every
+                )
             writer.commit()
             writer.wait_merging_threads()
             index.reload()

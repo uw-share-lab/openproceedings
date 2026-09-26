@@ -134,7 +134,7 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
 | [`exactness-guardian`](agents/exactness-guardian.md) | Read-only guardian of guarantee 1 (exactness) |
 | [`reference-oracle-keeper`](agents/reference-oracle-keeper.md) | Owns backend/src/openproceedings/engine/reference.py (ReferenceEngine), the naive pure-Python evaluator that defines correct matching |
 | [`differential-tester`](agents/differential-tester.md) | Runs and extends the TantivyEngine vs ReferenceEngine differential suites |
-| [`ranking-engineer`](agents/ranking-engineer.md) | Owns ordering inside the matched set in backend/src/openproceedings/engine/rank.py |
+| [`ranking-engineer`](agents/ranking-engineer.md) | Owns ordering inside the matched set (backend/src/openproceedings/engine/tantivy_engine.py, boosts in compile.py) |
 | [`performance-profiler`](agents/performance-profiler.md) | Measures and defends the spec 03 performance budgets |
 
 

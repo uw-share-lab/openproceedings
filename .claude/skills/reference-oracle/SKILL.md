@@ -11,7 +11,7 @@ ReferenceEngine.match_ids` is only worth something if the two are independent.
 
 ## Independence rules (each violation is a Must)
 - Imports allowed: `query/ast.py`, `query/normalize.py`, the snapshot loader, the stdlib. **Never**
-  `tantivy`, `engine/compile.py`, `engine/tantivy_engine.py`, `engine/rank.py`, or a helper shared with them.
+  `tantivy`, `engine/compile.py`, `engine/tantivy_engine.py`, or a helper shared with them.
 - No indexes, caches, precomputed postings or "optimisations". O(corpus) per query is the design. The
   5k-record fixture keeps it fast enough.
 - Its wildcard vocabulary is built from the snapshot's normalized tokens, not read from Tantivy's term

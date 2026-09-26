@@ -116,7 +116,7 @@ def test_filters_and_negations_never_reorder_or_rescore(two: tuple[TantivyEngine
         kept = ranked(engine, q)
         remaining = [(i, s) for i, s in plain if i in {k for k, _ in kept}]
         assert [i for i, _ in kept] == [i for i, _ in remaining]
-        assert [s for _, s in kept] == pytest.approx([s for _, s in remaining], rel=1e-9)
+        assert [s for _, s in kept] == [s for _, s in remaining]  # exact floats: never re-scored
 
 
 def test_sort_keys(two: tuple[TantivyEngine, TantivyEngine]) -> None:
@@ -170,3 +170,131 @@ def test_order_never_depends_on_tantivys_hit_order(tmp_path: Path) -> None:
 
     engine.searcher = Reversed()  # type: ignore[assignment]
     assert {sort: ranked(engine, "trust OR banana", sort) for sort in SORTS} == expected
+
+
+# --- review rows (task-025, 2026-09-26) ----------------------------------------------------------------------
+
+
+def repeated(n: int) -> list[PaperRecord]:
+    """Identical texts far apart in id order, among other texts."""
+    texts = [("trust model agent", "language evaluation benchmark"), ("model language", "trust agent"),
+             ("benchmark", "evaluation of trust")]  # fmt: skip
+    return [paper(f"Rr{i:04d}", *texts[i % 3][:1], abstract=texts[i % 3][1]) for i in range(n)]
+
+
+@pytest.mark.parametrize(
+    "q",
+    [
+        "trust OR model OR agent",
+        "model OR language OR evaluation OR benchmark OR agent",
+        "trust* OR mod*",
+        "trust agent model",
+    ],
+)
+def test_segment_layout_never_changes_scores_or_order(tmp_path: Path, q: str) -> None:
+    one = TantivyEngine(build_index(snapshot_of(repeated(60), tmp_path / "s1"), tmp_path / "one", BUILT).path)
+    many = TantivyEngine(
+        build_index(snapshot_of(repeated(60), tmp_path / "s2"), tmp_path / "many", BUILT, commit_every=7).path
+    )
+    assert many.searcher.num_segments > 1
+    a, b = ranked(one, q), ranked(many, q)
+    assert a == b  # exact order and exact floats, whatever the segments
+    by_text: dict[int, set[float]] = {}
+    for i, s in a:
+        by_text.setdefault(int(i[-4:]) % 3, set()).add(s)
+    assert all(len(v) == 1 for v in by_text.values())  # identical texts score identically, so ids break ties
+
+
+@pytest.mark.parametrize("q", ["w OR x OR y OR z", "x OR y OR z OR w", "z OR y OR x OR w"])
+def test_identical_texts_score_equally_across_union_windows(tmp_path: Path, q: str) -> None:
+    # Tantivy's union scores 4,096 documents at a time and drops a finished term's scorer by swapping the last
+    # one into its place, so a flat union of ≥3 clauses adds in a new order after `w` runs out: identical texts
+    # before and after that 4,096 boundary differ by an ulp. Balanced binary trees (`combine`) never reorder.
+    n = 4_300
+    texts = [" ".join(["x"] * (1 + g % 3) + ["y"] * (1 + g % 5) + ["z"] * (1 + g % 7) + ["pad"] * (g % 11))
+             for g in range(40)]  # fmt: skip
+
+    def text(i: int) -> str:
+        return texts[i] if i < 40 else texts[i - (n - 40)] if i >= n - 40 else "w" if i == 45 else "filler"
+
+    engine = engine_of([paper(f"Uu{i:05d}", "t", abstract=text(i)) for i in range(n)], tmp_path)
+    by_text: dict[str, set[float]] = {}
+    for i, s in ranked(engine, q):
+        if i[-5:] != "00045":
+            by_text.setdefault(text(int(i[-5:])), set()).add(s)
+    assert len(by_text) == 40
+    assert all(len(v) == 1 for v in by_text.values())
+
+
+def test_an_index_from_other_versions_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import openproceedings.engine.index as idx
+    from openproceedings.engine.protocol import EngineError
+
+    for name, value in (("SCHEMA_VERSION", "1"), ("TOKENIZER_VERSION", "1")):
+        with monkeypatch.context() as m:
+            m.setattr(idx, name, value)
+            path = build_index(snapshot_of(CORPUS, tmp_path / name), tmp_path / f"i-{name}", BUILT).path
+        with pytest.raises(EngineError, match="build a new index"):
+            TantivyEngine(path)
+    with monkeypatch.context() as m:
+        m.setattr(idx, "RANKING_PARAMS", {**idx.RANKING_PARAMS, "bm25": {"b": 0.75, "k1": 1.3}})
+        path = build_index(snapshot_of(CORPUS, tmp_path / "bm25"), tmp_path / "i-bm25", BUILT).path
+    with pytest.raises(EngineError, match="Tantivy applies"):
+        TantivyEngine(path)
+
+
+def test_weights_come_from_the_index_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import openproceedings.engine.index as idx
+
+    records = [
+        paper(f"Bb{i:02d}", t, abstract=t) for i, t in enumerate(["trust in ai", "trust", "calibration"])
+    ]
+    with monkeypatch.context() as m:
+        m.setattr(
+            idx, "RANKING_PARAMS", {**idx.RANKING_PARAMS, "field_weights": {"abstract": 1.0, "title": 3.0}}
+        )
+        path = build_index(snapshot_of(records, tmp_path / "s"), tmp_path / "i", BUILT).path
+    engine = TantivyEngine(path)  # the module constant is back to 2.0: the index's own 3.0 must win
+    title, abstract = dict(ranked(engine, "title:trust")), dict(ranked(engine, "abstract:trust"))
+    assert all(title[i] == pytest.approx(3 * abstract[i], rel=1e-6) for i in title)
+
+
+def test_every_match_is_ranked_however_many(tmp_path: Path) -> None:
+    engine = engine_of([paper(f"Mm{i:05d}", "trust", abstract="x") for i in range(1_100)], tmp_path)
+    assert (
+        len(ranked(engine, "trust")) == 1_100
+        and engine.search(parse("trust").ast, offset=1_090).total == 1_100
+    )  # type: ignore[arg-type]
+    assert len(engine.search(parse("trust").ast, offset=1_090).ids) == 10  # type: ignore[arg-type]
+
+
+def test_title_sort_normalizes_before_casefolding(tmp_path: Path) -> None:
+    records = [paper("Tt01", "strassf"), paper("Tt02", "Straße z"),  # casefold: strasse z < strassf
+               paper("Tt03", "Zebra"), paper("Tt04", "E\u0301cole"), paper("Tt05", "\u00c9cole")]  # fmt: skip
+    engine = engine_of(records, tmp_path)
+    order = [i[-4:] for i, _ in engine.ranked(parse("strassf OR z OR zebra OR ecole").ast, "title")]  # type: ignore[arg-type]
+    # casefold puts `strasse z` before `strassf`; NFKC makes both Écoles `école` (after `z` in code points),
+    # side by side and in id order
+    assert order == ["Tt02", "Tt01", "Tt03", "Tt04", "Tt05"]
+
+
+def test_the_title_pass_reads_lines_as_the_validating_pass_does(tmp_path: Path) -> None:
+    import hashlib
+    import json
+
+    from openproceedings.ingest.snapshot import SnapshotError
+
+    snap = snapshot_of(CORPUS, tmp_path / "s")
+    data = (snap / "records.jsonl").read_bytes().replace(b'{"', b'{\r"', 1)  # a CR between JSON tokens
+    (snap / "records.jsonl").write_bytes(data)
+    manifest = json.loads((snap / "manifest.json").read_text())
+    (snap / "manifest.json").write_text(
+        json.dumps({**manifest, "snapshot_hash": hashlib.sha256(data).hexdigest()})
+    )
+    assert len(ranked(TantivyEngine(build_index(snap, tmp_path / "i", BUILT).path), "trust")) == 6
+    bad = snapshot_of(CORPUS, tmp_path / "b")
+    (bad / "records.jsonl").write_bytes(
+        (bad / "records.jsonl").read_bytes().replace(b"trust", b"tr\xffst", 1)
+    )
+    with pytest.raises(SnapshotError):  # invalid UTF-8: a clean refusal, never a raw decode error
+        build_index(bad, tmp_path / "ib", BUILT)
