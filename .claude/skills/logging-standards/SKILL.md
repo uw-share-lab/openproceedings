@@ -63,6 +63,13 @@ log at DEBUG.
 access line's privacy-safe fields, never the query. Diagnostics (parse errors, warnings, translations) are
 user output on stderr, not log lines, because they quote the query (task-030).
 
+A refusal is one `cli_refused` line (`command`, `error` type, `code` if it has one; never the message),
+at the level of its kind: DEBUG for the user's own input (`UserInputError`: a bad query, a bad argument),
+ERROR with the traceback for an `InternalError` or a broken guarantee (`ParityError`), WARNING for any
+other refusal (a snapshot, an index, a file). An exception nothing anticipated is one `cli_failed` ERROR line
+with the traceback. Long jobs say they're alive: `index_build_started`, `index_build_progress` every 10k
+documents, `index_built`; `index_parity_ok` when a parity check passes.
+
 ## Review checklist (`observability-reviewer`)
 1. Does every new failure path produce exactly one log at the right level?
 2. Is anything logged per record, per term or per page at INFO or above?

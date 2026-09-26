@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import io
 import json
 import logging
 import os
+import secrets
 import sys
-import tempfile
 import time
 from collections import Counter
 from collections.abc import Sequence
@@ -29,7 +30,9 @@ FORMATS = ("ris", "csv", "bibtex", "jsonl")  # export formats (export.FORMATS; i
 SORTS = ("relevance", "year_desc", "year_asc", "title")  # tantivy_engine.SORTS
 
 if TYPE_CHECKING:
+    from openproceedings.engine.exclusions import Excluded
     from openproceedings.engine.reference import ReferenceEngine
+    from openproceedings.engine.tantivy_engine import TantivyEngine
     from openproceedings.query.parser import ParseResult
 
 log = logging.getLogger(__name__)
@@ -220,6 +223,13 @@ def _index_parity(ns: argparse.Namespace) -> int:
     return 0
 
 
+def _usage(message: str) -> Exception:
+    """A refusal of the user's own arguments: a UserInputError, so it logs at DEBUG (logging-standards)."""
+    from openproceedings.diagnostics import DiagnosticCode, UserInputError
+
+    return UserInputError(DiagnosticCode.API_BAD_PARAM, message)
+
+
 def _parsed(ns: argparse.Namespace) -> ParseResult | None:
     """The query's parse, its diagnostics printed to stderr as user output (never logged: they quote the
     query); None when it doesn't parse."""
@@ -242,6 +252,10 @@ def _index_path(ns: argparse.Namespace) -> Path:
     # a name under <data-dir>/indexes wins; otherwise --index may be a directory path
     path = indexes / name if (indexes / name).exists() or not Path(name).is_dir() else Path(name)
     if not path.exists():
+        if ns.index is None:  # `current` is set when an index is promoted (spec 08 §Deploy), not by a build
+            raise _usage(
+                f"no index at {path}: pass --index <index_version> (current is set when one is promoted)"
+            )
         raise IndexBuildError(f"no index at {path}; build one with `op index build --snapshot …`")
     return path
 
@@ -275,9 +289,9 @@ def _search(ns: argparse.Namespace) -> int:
     ast = result.effective_ast
     assert ast is not None
     if ns.engine == "reference" and not ns.ids:
-        raise ValueError("--engine reference needs --ids: the oracle has no ranking and no compiled query")
+        raise _usage("--engine reference needs --ids: the oracle has no ranking and no compiled query")
     if ns.limit < 0:
-        raise ValueError("--limit must be ≥ 0")
+        raise _usage("--limit must be ≥ 0")
     path = _index_path(ns)
     engine = TantivyEngine(path)
     if ns.ids:
@@ -294,24 +308,50 @@ def _search(ns: argparse.Namespace) -> int:
             f"index_version: {engine.index_version}",
         ]
         print("\n".join([*lines, engine.explain(ast)]))
-        _search_run(ns, started, engine.index_version, result, len(engine.match_ids(ast)))
+        _search_run(ns, started, engine.index_version, result, engine.page(ast, limit=0)[0])
         return 0
     total, page = engine.page(ast, sort=ns.sort, limit=ns.limit)  # one collection: ids and scores
     gone = excluded(engine, result, total)
-    buckets = "; ".join(
-        f"{f}: " + ", ".join(f"{v} {n}" for v, n in b.items())
-        for f, b in (("track", gone.track), ("status", gone.status))
-    )
-    print(
-        f"total {total} · excluded by default filters {gone.total} ({buckets}) · index {engine.index_version}"
-    )
-    print(f"canonical: {result.canonical}")
+    for line in _report(engine, result, total, gone):
+        print(line)
     shown = engine.display([i for i, _score in page])
     for rank, (i, score) in enumerate(page, 1):
         r = shown[i]
         print(f"{rank:>4}. {score:9.4f}  {i}  {r['venue']} {r['year']}  {' '.join(r['title'].split())}")
     _search_run(ns, started, engine.index_version, result, total)
     return 0
+
+
+def _report(engine: TantivyEngine, result: ParseResult, total: int, gone: Excluded) -> list[str]:
+    """The PRISMA-ready header of a ranked search (prisma-reporting skill): when and what was searched, the
+    records identified within the query's own limits, those the default filters removed (ineligible by
+    track or status), the unclassified ones on their own line, and the screened total; then the strings
+    that reproduce them and every wildcard expansion (guarantee 6)."""
+    from datetime import UTC, datetime
+
+    from openproceedings.query import QUERY_VERSION
+    from openproceedings.query.normalize import TOKENIZER_VERSION
+
+    removed = "; ".join(
+        f"{f}: " + (", ".join(f"{v} {n}" for v, n in b.items() if v != "unknown") or "none")
+        for f, b in (("track", gone.track), ("status", gone.status))
+    )
+    unclassified = gone.track["unknown"] + gone.status["unknown"]
+    searched = datetime.now(UTC).strftime("%Y-%m-%dT%H:%MZ")
+    lines = [
+        f"searched {searched} · index {engine.index_version} · tokenizer {TOKENIZER_VERSION} · query {QUERY_VERSION}",
+        f"identified {total + gone.total} (within the query's own limits)",
+        f"removed by default filters {gone.total - unclassified} ({removed})",
+        f"unclassified, removed by default filters {unclassified} "
+        f"(track unknown {gone.track['unknown']}, status unknown {gone.status['unknown']})",
+        f"screened (total) {total}",
+        f"canonical: {result.canonical}",
+        f"identification: {result.identification_query or '(every record)'}",
+    ]
+    for (stem, op), terms in sorted(engine.expansions(result.effective_ast).items()):  # type: ignore[arg-type]
+        shown = ", ".join(list(terms)[:10]) + (", …" if len(terms) > 10 else "")
+        lines.append(f"expansion: {stem}{op} → {len(terms)} terms ({shown})")
+    return lines
 
 
 def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:
@@ -332,16 +372,6 @@ def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:
     return ReferenceEngine(load_records(snapshot).values())
 
 
-def _file_mode(path: Path) -> int:
-    """The mode a shell redirect would give `path`: the existing file's, else 0666 less the umask."""
-    try:
-        return path.stat().st_mode & 0o777
-    except FileNotFoundError:
-        umask = os.umask(0)
-        os.umask(umask)
-        return 0o666 & ~umask
-
-
 def _export(ns: argparse.Namespace) -> int:
     from datetime import UTC, datetime
 
@@ -357,9 +387,9 @@ def _export(ns: argparse.Namespace) -> int:
     ast = result.effective_ast
     assert ast is not None and result.canonical_hash is not None
     if ns.out is not None and ns.out.is_dir():
-        raise ValueError(f"--out {ns.out} is a directory; name a file")
+        raise _usage(f"--out {ns.out} is a directory; name a file")
     if ns.out is not None and not ns.out.parent.is_dir():
-        raise ValueError(f"--out {ns.out}: no directory {ns.out.parent}")
+        raise _usage(f"--out {ns.out}: no directory {ns.out.parent}")
     engine = TantivyEngine(_index_path(ns))
     total, documents = engine.documents(ast)
     provenance = Provenance(engine.index_version, result.canonical_hash, datetime.now(UTC).date().isoformat())
@@ -368,21 +398,27 @@ def _export(ns: argparse.Namespace) -> int:
         if n != total:
             raise EngineInternalError(DiagnosticCode.API_INTERNAL, f"exported {n} records, but {total} match")
 
-    if ns.out is None:
-        n = write(ns.format, documents, provenance, sys.stdout)
+    if ns.out is None:  # UTF-8 and untranslated newlines whatever the terminal's locale (spec 04)
+        out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="", write_through=True)
+        try:
+            n = write(ns.format, documents, provenance, out)
+        finally:
+            out.detach()  # leave sys.stdout usable
         checked(n)
     else:  # a temporary file beside the target, renamed once complete and counted: never a partial file
-        fd, name = tempfile.mkstemp(dir=ns.out.parent, prefix=f".{ns.out.name}.", suffix=".partial")
-        partial = Path(name)
-        os.fchmod(fd, _file_mode(ns.out))  # mkstemp makes it owner-only; `> file` wouldn't
+        partial = ns.out.with_name(f".{ns.out.name}.{secrets.token_hex(6)}.partial")
+        # created 0666 so the kernel applies the umask, as `> file` would; an existing file keeps its mode
+        fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
         try:
-            with os.fdopen(fd, "w", encoding="utf-8", newline="") as out:
-                n = write(ns.format, documents, provenance, out)
+            if ns.out.exists():
+                os.fchmod(fd, ns.out.stat().st_mode & 0o777)
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as stream:
+                n = write(ns.format, documents, provenance, stream)
             checked(n)
             partial.replace(ns.out)
         finally:
             partial.unlink(missing_ok=True)
-    print(f"exported {n} records ({ns.format}) from index {engine.index_version}", file=sys.stderr)
+    print(f"exported {n} records ({ns.format}) · {provenance.line()}", file=sys.stderr)
     _search_run(ns, started, engine.index_version, result, total)
     return 0
 
@@ -421,7 +457,7 @@ def _reason(e: Exception) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    from openproceedings.diagnostics import InternalError
+    from openproceedings.diagnostics import InternalError, OpenProceedingsError, UserInputError
     from openproceedings.engine.index import IndexBuildError
     from openproceedings.engine.protocol import EngineError
     from openproceedings.ingest.snapshot import SnapshotError
@@ -450,11 +486,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         with contextlib.suppress(OSError):
             os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         return 0
-    except (SnapshotError, IndexBuildError, EngineError, ValueError, OSError) as e:
-        reason = _reason(e)
-        level = logging.ERROR if isinstance(e, InternalError) else logging.WARNING
-        log.log(level, "cli_refused", extra={"command": name, "error": type(e).__name__})
-        print(f"op {name}: {reason}", file=sys.stderr)
+    except (SnapshotError, IndexBuildError, EngineError, OpenProceedingsError, ValueError, OSError) as e:
+        from openproceedings.engine.parity import ParityError
+
+        # the level by kind (logging-standards): the user's own input at DEBUG, a broken guarantee or an
+        # internal failure at ERROR with its traceback, any other refusal (a snapshot, an index, a file) at
+        # WARNING; the code, never the message (messages may quote input)
+        broken = isinstance(e, InternalError | ParityError)
+        level = (
+            logging.DEBUG if isinstance(e, UserInputError) else logging.ERROR if broken else logging.WARNING
+        )
+        fields: dict[str, object] = {"command": name, "error": type(e).__name__}
+        if isinstance(e, OpenProceedingsError):
+            fields["code"] = str(e.code)
+        log.log(level, "cli_refused", extra=fields, exc_info=isinstance(e, InternalError))
+        print(f"op {name}: {_reason(e)}", file=sys.stderr)
+        return 1
+    except Exception:  # a bug: one ERROR line with the traceback, and a clean exit status
+        log.error("cli_failed", extra={"command": name}, exc_info=True)
+        print(f"op {name}: internal error (see the log)", file=sys.stderr)
         return 1
     return code
 

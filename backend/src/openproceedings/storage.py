@@ -9,6 +9,7 @@ it; the next run sweeps `.tmp-` leftovers under the lock. Used by `ingest/snapsh
 from __future__ import annotations
 
 import fcntl
+import logging
 import os
 import shutil
 import stat
@@ -18,6 +19,8 @@ from contextlib import contextmanager
 from pathlib import Path
 
 TMP = ".tmp-"
+
+log = logging.getLogger(__name__)
 
 
 class PlacementError(Exception):
@@ -67,8 +70,8 @@ def fsync(fd: int) -> None:
         try:
             fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
             return
-        except OSError:
-            pass  # a filesystem without it (e.g. some network mounts): plain fsync
+        except OSError:  # a filesystem without it (e.g. some network mounts): plain fsync
+            log.debug("fullfsync_unsupported")
     os.fsync(fd)
 
 

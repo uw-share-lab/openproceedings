@@ -46,7 +46,7 @@ from openproceedings.ingest.record import Claim, ClaimField, ClaimValue, PaperRe
 from openproceedings.ingest.urls import PREFIX, pmlr, proceedings, proceedings_parts
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 
-log = logging.getLogger("openproceedings.ingest.ris")
+log = logging.getLogger(__name__)
 
 _IN_SCOPE_HOST = re.compile(r"(?:.+\.)?(?:neurips\.cc|nips\.cc|iclr\.cc|icml\.cc|openreview\.net)")
 _IN_SCOPE_VENUEID = re.compile(r"(?:NeurIPS|ICLR|ICML)\.cc/.*")

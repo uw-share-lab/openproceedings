@@ -34,6 +34,7 @@ PROCEEDINGS = {
 CSV_COLUMNS = (
     "id", "title", "abstract", "authors", "venue", "year", "track", "status", "presentation",
     "venue_id_raw", "forum", "pdf", "proceedings", "doi", "keywords", "index_version", "canonical_hash",
+    "exported_at",
 )  # fmt: skip
 
 
@@ -68,7 +69,12 @@ def proceedings_name(venue: str, year: int) -> str:
 
 
 def _one_line(text: str) -> str:
-    return " ".join(text.split())
+    """One line: whitespace runs (line breaks included) become one space; control characters go."""
+    return " ".join(_printable(text).split())
+
+
+def _printable(text: str) -> str:
+    return "".join(ch for ch in text if ch.isspace() or unicodedata.category(ch) != "Cc")
 
 
 def _urls(r: dict[str, Any]) -> list[str]:
@@ -107,6 +113,7 @@ def _csv(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             "keywords": "; ".join(r.get("keywords", [])),
             "index_version": p.index_version,
             "canonical_hash": p.canonical_hash,
+            "exported_at": p.date,
         }
         yield _csv_row(_cell(row[c]) for c in CSV_COLUMNS)
 
@@ -116,8 +123,11 @@ def _cell(value: object) -> object:
     is prefixed with `'` (OWASP's CSV-injection guard; titles and abstracts come from anyone)."""
     if value is None:
         return ""
-    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
-        return "'" + value
+    if isinstance(value, str):
+        value = _printable(value)
+        head = unicodedata.normalize("NFKC", value.lstrip()[:1])  # full-width `＝` and ` =` too
+        if head in ("=", "+", "-", "@") or value[:1] in ("\t", "\r"):
+            return "'" + value
     return value
 
 
@@ -136,19 +146,40 @@ class _Line:
         return out
 
 
-def _ascii_word(text: str) -> str:
-    folded = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
-    return re.sub(r"[^a-z0-9]", "", folded.lower())
+# letters NFKD doesn't decompose into ASCII (`Ørsted` → `orsted`, not `rsted`)
+_LETTERS = str.maketrans({"ø": "o", "Ø": "O", "ß": "ss", "ł": "l", "Ł": "L", "æ": "ae", "Æ": "AE",
+                          "œ": "oe", "Œ": "OE", "đ": "d", "Đ": "D", "ð": "d", "þ": "th", "ı": "i"})  # fmt: skip
+
+
+def _ascii(text: str) -> str:
+    return unicodedata.normalize("NFKD", text.translate(_LETTERS)).encode("ascii", "ignore").decode().lower()
 
 
 def bibtex_key(r: dict[str, Any]) -> str:
-    authors = r.get("authors") or []
-    last = _ascii_word(authors[0].split()[-1]) if authors and authors[0].split() else ""
-    words = [w for w in (_ascii_word(t) for t in r["title"].split()) if w]
-    return f"{last or 'anon'}{r['year']}{words[0] if words else 'untitled'}"
+    """`<first author's last name><year><first title word>`, ASCII and lower-case; the title word is the first
+    run of letters and digits (`=HYPERLINK("…")` gives `hyperlink`)."""
+    authors = [a for a in r.get("authors") or [] if a.split()]
+    last = re.sub(r"[^a-z0-9]", "", _ascii(authors[0].split()[-1])) if authors else ""
+    word = re.search(r"[a-z0-9]+", _ascii(r["title"]))
+    return f"{last or 'anon'}{r['year']}{word.group() if word else 'untitled'}"
 
 
-_ODD_BACKSLASHES = r"(?<!\\)\\(?:\\\\)*"  # an odd run of backslashes: the next character is escaped
+_BRACE = re.compile(r"(\\*)[{}]")  # a brace and the backslash run before it
+
+
+def _balances(text: str, *, escaped_count: bool) -> bool:
+    """Do the braces nest? Counted as BibTeX does (every brace, `escaped_count`) or as parsers that honour
+    `\\{` do (escaped ones skipped). A value is kept as written only when both agree it nests."""
+    depth = 0
+    for m in _BRACE.finditer(text):
+        if not escaped_count and len(m.group(1)) % 2 == 1:
+            continue
+        depth += 1 if text[m.end() - 1] == "{" else -1
+        if depth < 0:
+            return False
+    return depth == 0
+
+
 _EVEN_BACKSLASHES = r"(?<!\\)((?:\\\\)*)"  # an even run (or none): the next character is not
 
 
@@ -159,13 +190,9 @@ def _braced(text: str) -> str:
     can swallow the next. `&`, `%` and `#` are escaped (they break LaTeX and BibTeX); `$…$` math stays. A
     value never ends on a backslash, which would escape the closing brace."""
     text = _one_line(text)
-    escaped = re.search(_ODD_BACKSLASHES + r"[{}]", text) is not None  # `\\{`, not `\\\\{`
-    depth, balanced = 0, not escaped
-    for ch in text:
-        depth += {"{": 1, "}": -1}.get(ch, 0)
-        balanced = balanced and depth >= 0
-    if not (balanced and depth == 0):
-        text = _one_line(text.replace("{", "").replace("}", ""))
+    if not (_balances(text, escaped_count=True) and _balances(text, escaped_count=False)):
+        # drop every brace, and the backslash that escaped one, so no `\\x` command is left behind
+        text = _one_line(_BRACE.sub(lambda m: m.group(1)[: len(m.group(1)) // 2 * 2], text))
     text = re.sub(_EVEN_BACKSLASHES + r"([&%#])", r"\1\\\2", text)  # `&` → `\\&`, `\\\\&` → `\\\\\\&`
     if text.endswith("\\"):
         text += " "
@@ -181,8 +208,9 @@ def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             key, n = base + _suffix(n), n + 1
         issued.add(key)
         fields = [("title", _braced(r["title"]))]
-        if r.get("authors"):
-            fields.append(("author", _braced(" and ".join(r["authors"]))))
+        names = [_name(a) for a in r.get("authors") or [] if a.split()]
+        if names:
+            fields.append(("author", _braced(" and ".join(names))))
         fields += [("booktitle", _braced(proceedings_name(r["venue"], r["year"]))), ("year", str(r["year"]))]
         if r.get("abstract"):
             fields.append(("abstract", _braced(r["abstract"])))
@@ -194,6 +222,14 @@ def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         fields += [("note", _braced(p.line())), ("openproceedings_id", _braced(r["id"]))]
         body = ",\n".join(f"  {name} = {value}" for name, value in fields)
         yield f"@inproceedings{{{key},\n{body}\n}}\n\n"
+
+
+def _name(author: str) -> str:
+    """An author as BibTeX's name list reads one: a name that holds a standalone `and`, or is `others`, is
+    braced so it isn't split into two people or read as et al."""
+    if re.search(r"(?i)\band\b", author) or author.strip().lower() == "others":
+        return "{" + _one_line(author).replace("{", "").replace("}", "") + "}"
+    return author
 
 
 def _suffix(n: int) -> str:
@@ -208,5 +244,12 @@ def _suffix(n: int) -> str:
 
 def _jsonl(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
     for r in records:
-        row = {**r, "index_version": p.index_version, "canonical_hash": p.canonical_hash}
-        yield json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"
+        row = {
+            **r,
+            "index_version": p.index_version,
+            "canonical_hash": p.canonical_hash,
+            "exported_at": p.date,
+        }
+        text = json.dumps(row, ensure_ascii=False, sort_keys=True)
+        # characters `str.splitlines()` breaks on, escaped so a record stays one line for every reader
+        yield text.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029").replace("\x85", "\\u0085") + "\n"

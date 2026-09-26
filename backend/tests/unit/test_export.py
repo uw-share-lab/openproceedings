@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -116,8 +117,8 @@ def test_bibtex_passes_refaudit_one_entry_per_record(data_dir: Path) -> None:
     assert by["AbCd0003"]["title"] == "Trust a unbalanced title"  # an unbalanced brace is dropped
     assert by["AbCd0007"]["title"] == "Trust Q\\&A 100\\% \\#1 \\"  # escaped; its closing brace not swallowed
     assert by["AbCd0002"]["doi"] == "10.1234/abcd"
-    # balanced but escaped: parsers disagree on `\\{`, so the braces go
-    assert by["AbCd0008"]["title"] == "Trust set \\x\\ notation"
+    # escaped braces that nest either way are kept: every parser reads them alike
+    assert by["AbCd0008"]["title"] == "Trust set \\{x\\} notation"
     assert by["AbCd0009"]["title"] == "Trust swapped"  # `}` before `{` never balances
 
 
@@ -132,7 +133,8 @@ def test_jsonl_is_one_record_per_line(data_dir: Path) -> None:
 def test_bibtex_keys() -> None:
     assert bibtex_key({"authors": ["Kurt Gödel"], "year": 1931, "title": "Über formal"}) == "godel1931uber"
     assert bibtex_key({"authors": [], "year": 2024, "title": "!!!"}) == "anon2024untitled"
-    assert bibtex_key({"authors": [], "year": 2021, "title": "Ørsted and trust"}) == "anon2021rsted"
+    assert bibtex_key({"authors": [], "year": 2021, "title": "Ørsted and trust"}) == "anon2021orsted"
+    assert bibtex_key({"authors": ["A B"], "year": 1, "title": '=HYPERLINK("http://x")'}) == "b1hyperlink"
     assert [export._suffix(n) for n in (0, 1, 25, 26, 27)] == ["a", "b", "z", "aa", "ab"]
     records = [{"authors": ["A Smith"], "year": 2024, "title": t, "venue": "ICLR", "id": f"x{i}"}
                for i, t in enumerate(["Deep one", "Deep two", "Deepa trust"])]  # fmt: skip
@@ -206,12 +208,43 @@ def test_a_closed_pipe_stops_quietly(
 def test_op_search_ranks_and_reports_exclusions(data_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert run(data_dir, "search", "trust", "--limit", "3") == 0
     out = capsys.readouterr().out.splitlines()
-    assert out[0].startswith(
-        "total 6 · excluded by default filters 1 (track: workshop 1, unknown 0; status: unknown 0)"
+    # PRISMA-ready: when and against what; identified, removed (ineligible, then unclassified), screened
+    assert re.fullmatch(
+        r"searched \d{4}-\d\d-\d\dT\d\d:\d\dZ · index \w{12} · tokenizer \d+ · query \d+", out[0]
     )
-    assert [line.split()[0] for line in out[2:]] == ["1.", "2.", "3."]
-    scores = [float(line.split()[1]) for line in out[2:]]
+    assert out[1:5] == [
+        "identified 7 (within the query's own limits)",
+        "removed by default filters 1 (track: workshop 1; status: none)",
+        "unclassified, removed by default filters 0 (track unknown 0, status unknown 0)",
+        "screened (total) 6",
+    ]
+    assert out[5].startswith("canonical: ") and out[6] == "identification: trust"
+    ranked = [line for line in out if re.match(r"\s+\d+\. ", line)]
+    assert [line.split()[0] for line in ranked] == ["1.", "2.", "3."]
+    scores = [float(line.split()[1]) for line in ranked]
     assert scores == sorted(scores, reverse=True) and scores[0] > 0
+
+
+def test_op_search_shows_every_wildcard_expansion(data_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert run(data_dir, "search", "trust*", "--limit", "1") == 0
+    out = capsys.readouterr().out
+    assert re.search(r"^expansion: trust\* → 2 terms \(trust, trusta\)$", out, re.M)  # guarantee 6
+
+
+def test_without_an_index_the_cli_says_to_pass_one(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["--data-dir", str(tmp_path), "search", "trust", "--ids"]) == 1
+    assert "pass --index" in capsys.readouterr().err
+
+
+def test_cli_choices_match_the_engine_and_the_exporter() -> None:
+    from openproceedings import cli
+    from openproceedings.engine.index import RANKING_PARAMS
+    from openproceedings.engine.tantivy_engine import SORTS
+
+    assert cli.FORMATS == export.FORMATS
+    assert set(cli.SORTS) == set(SORTS) == set(RANKING_PARAMS["sorts"])
 
 
 def test_the_oracle_and_tantivy_agree_through_the_cli(
@@ -295,3 +328,80 @@ def test_op_export_names_a_missing_directory(
     assert run(data_dir, "export", "trust", "--format", "ris", "--out", str(tmp_path / "nope" / "x.ris")) == 1
     err = capsys.readouterr().err
     assert "no directory" in err and ".partial" not in err
+
+
+def test_ris_reads_back_with_an_independent_parser(data_dir: Path) -> None:
+    from scholarmend.parse import parse_ris
+
+    text, n = exported(data_dir, "ris")
+    records = parse_ris(text, "export.ris")
+    assert len(records) == n == 8
+    first = next(r for r in records if "AbCd0001" in str(r))
+    assert "Ana Pérez" in str(first) and "Across two lines" in str(first)
+
+
+def test_jsonl_escapes_unicode_line_separators_and_carries_the_date() -> None:
+    record = {"id": "x", "title": "t", "abstract": "a\u2028b\u2029c\x85d", "year": 2024, "venue": "ICLR"}
+    line = "".join(export._jsonl([record], PROVENANCE))
+    assert len(line.splitlines()) == 1 and json.loads(line)["abstract"] == record["abstract"]
+    assert json.loads(line)["exported_at"] == "2026-09-26"
+
+
+def test_csv_guards_disguised_formulas_and_strips_control_characters() -> None:
+    assert export._cell(" =1+1") == "' =1+1" and export._cell("＝1+1") == "'＝1+1"
+    assert export._cell("a\x00b\x1bc") == "abc" and export._cell("plain") == "plain"
+
+
+def test_bibtex_names_are_never_split_or_read_as_et_al() -> None:
+    record = {"id": "x", "title": "t", "year": 2024, "venue": "ICLR",
+              "authors": ["Smith and Wesson", "others", "", "Jo Doe"]}  # fmt: skip
+    (entry,) = parse_string("".join(export._bibtex([record], PROVENANCE)))
+    assert entry.fields["author"] == "{Smith and Wesson} and {others} and Jo Doe"
+
+
+def logged(err: str) -> list[dict[str, object]]:
+    return [json.loads(line) for line in err.splitlines() if line.startswith("{")]
+
+
+def test_log_levels_follow_the_kind_of_failure(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # the user's own mistake: no WARNING (DEBUG at most)
+    assert run(data_dir, "search", "trust", "--limit", "-1") == 1
+    assert not [e for e in logged(capsys.readouterr().err) if e.get("event") == "cli_refused"]
+    # an internal failure: ERROR, with its code and the traceback
+    real = TantivyEngine.documents
+    monkeypatch.setattr(
+        TantivyEngine, "documents", lambda self, ast: (lambda t, d: (t, list(d)[1:]))(*real(self, ast))
+    )
+    assert run(data_dir, "export", "trust", "--format", "jsonl") == 1
+    (entry,) = [e for e in logged(capsys.readouterr().err) if e.get("event") == "cli_refused"]
+    assert (
+        entry["level"] == "ERROR"
+        and entry["code"] == "API_INTERNAL"
+        and "Traceback" in str(entry.get("exc_info", entry))
+    )
+    # a bug nothing anticipated: one ERROR line and a clean exit status, not a bare traceback
+    monkeypatch.setattr(TantivyEngine, "documents", lambda self, ast: 1 / 0)
+    assert run(data_dir, "export", "trust", "--format", "jsonl") == 1
+    captured = capsys.readouterr().err
+    assert [e["level"] for e in logged(captured) if e.get("event") == "cli_failed"] == ["ERROR"]
+    assert "internal error" in captured
+
+
+def test_a_long_build_and_a_parity_check_say_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import openproceedings.engine.index as index_module
+
+    monkeypatch.setattr(index_module, "PROGRESS_EVERY", 2)
+    snap = snapshot_of(CORPUS, tmp_path / "snapshots" / "s")
+    assert main(["--data-dir", str(tmp_path), "index", "build", "--snapshot", str(snap)]) == 0
+    events = [e["event"] for e in logged(capsys.readouterr().err)]
+    assert events[0] == "index_build_started" and events.count("index_build_progress") == len(CORPUS) // 2
+    index = index_of(tmp_path)
+    assert (
+        main(["--data-dir", str(tmp_path), "index", "parity", "--index", str(index), "--snapshot", str(snap)])
+        == 0
+    )
+    assert "index_parity_ok" in [e["event"] for e in logged(capsys.readouterr().err)]

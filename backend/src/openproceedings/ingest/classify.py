@@ -20,7 +20,7 @@ import logging
 import re
 from dataclasses import dataclass
 
-log = logging.getLogger("openproceedings.ingest.classify")
+log = logging.getLogger(__name__)
 
 _VENUEID = re.compile(r"(NeurIPS|ICLR|ICML)\.cc/([0-9]{4})/(.+)")
 _YEARS = range(2013, 2100)  # ICLR's first year onward

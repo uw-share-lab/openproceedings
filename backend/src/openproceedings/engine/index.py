@@ -41,7 +41,7 @@ from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import iter_records
 from openproceedings.query.normalize import TOKENIZER_VERSION, normalize
 
-log = logging.getLogger("openproceedings.engine.index")
+log = logging.getLogger(__name__)
 
 # The schema table below, the analyzer and how fields are populated (a missing abstract is ""). Any
 # change to them is a new SCHEMA_VERSION (index-versioning skill).
@@ -145,6 +145,7 @@ def record_of(stored: bytes) -> dict[str, Any]:
     return value
 
 
+PROGRESS_EVERY = 10_000  # documents between index_build_progress lines
 PARALLEL_FROM = 2_000  # below this many records, normalizing in one process is faster than starting workers
 # records normalized and added per step (never all at once). Must be ≥ PARALLEL_FROM, so a first chunk
 # smaller than PARALLEL_FROM is the whole corpus.
@@ -304,6 +305,7 @@ def _add_all(
     """Stream the snapshot's records through normalize() into the writer."""
     ranks = _title_ranks(snapshot)
     added = 0
+    started = time.perf_counter()
     for r, fields in normalized(snapshot, workers):
         _check_tokens(r, fields, exact)
         if r.id not in ranks:  # can't happen for a valid line; refuse rather than guess a rank
@@ -313,6 +315,11 @@ def _add_all(
             writer.commit()  # tests: several segments
         ids.write(r.id + "\n")
         added += 1
+        if added % PROGRESS_EVERY == 0:  # a long build says it's alive (logging-standards: at most every 10k)
+            log.info(
+                "index_build_progress",
+                extra={"docs": added, "ms": round((time.perf_counter() - started) * 1000)},
+            )
     return added
 
 
@@ -343,6 +350,7 @@ def build_index(
             _seal(target)  # a crash between placing and sealing left it writable
             log.info("index_exists", extra={"index_version": version_id})
             return IndexBuildResult(target, version_id, created=False)
+        log.info("index_build_started", extra={"index_version": version_id, "snapshot_hash": snapshot_hash})
         tmp = Path(tempfile.mkdtemp(dir=indexes, prefix=storage.TMP))
         try:
             index = tantivy.Index(schema(), path=str(tmp))

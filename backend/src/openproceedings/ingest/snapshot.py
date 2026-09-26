@@ -42,7 +42,7 @@ from openproceedings.ingest.record import RECORD_SCHEMA_VERSION, PaperRecord
 from openproceedings.ingest.ris import ImportReport, import_ris
 from openproceedings.query.normalize import TOKENIZER_VERSION
 
-log = logging.getLogger("openproceedings.ingest.snapshot")
+log = logging.getLogger(__name__)
 
 FORMAT_VERSION = "1"  # the snapshot directory's layout and manifest keys
 HASHED = ("title", "abstract", "venue", "year", "track", "status")  # content_hash's fields (record-schema)

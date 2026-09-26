@@ -222,7 +222,7 @@ def test_cli_search_refuses_an_over_cap_wildcard(
         err = capsys.readouterr().err
         assert "WILDCARD_TOO_MANY_EXPANSIONS" in err and "Traceback" not in err
     assert cli.main(["--data-dir", str(tmp_path / "empty"), "search", "trust", "--ids"]) == 1
-    assert "op index build" in capsys.readouterr().err
+    assert "pass --index" in capsys.readouterr().err  # `current` is set by promotion, not by a build
 
 
 def test_distinct_items_are_each_scored_once(engines: tuple[TantivyEngine, ReferenceEngine]) -> None:
@@ -269,8 +269,12 @@ def test_cli_search_index_precedence_and_errors(
     assert cli.main(["--data-dir", str(tmp_path / "none"), "search", "trust NOT", "--ids"]) == 1
     assert "PARSE_" in capsys.readouterr().err  # the query's error first, whatever the index
     assert cli.main(["--data-dir", str(tmp_path / "none"), "search", "trust", "--ids"]) == 1
+    assert "pass --index" in capsys.readouterr().err  # a usage error: the log line is at DEBUG
+    assert (
+        cli.main(["--data-dir", str(tmp_path / "none"), "search", "trust", "--ids", "--index", "nosuch"]) == 1
+    )
     err = capsys.readouterr().err
-    assert "cli_refused" in err and "op index build" in err
+    assert "cli_refused" in err and "op index build" in err  # a named index that isn't there
 
 
 @pytest.mark.parametrize(

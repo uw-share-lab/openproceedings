@@ -157,8 +157,11 @@ def test_documents_on_one_side_only_are_named(
 
 def test_an_index_from_another_snapshot_is_refused(built: tuple[Path, Path], tmp_path: Path) -> None:
     other = tantivy_of(fixture_records()[:5], tmp_path)
-    with pytest.raises(ParityError, match="built from another snapshot"):
+    from openproceedings.engine.index import IndexBuildError
+
+    with pytest.raises(IndexBuildError, match="built from another snapshot") as e:
         check_parity(tmp_path / "indexes" / other.index_version, built[1])
+    assert not isinstance(e.value, ParityError)  # operator error (a WARNING), not a broken guarantee
 
 
 def test_the_dictionary_is_read_whole(built: tuple[Path, Path]) -> None:

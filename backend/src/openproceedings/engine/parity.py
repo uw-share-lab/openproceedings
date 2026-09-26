@@ -20,6 +20,8 @@ decision-004), never in CI.
 from __future__ import annotations
 
 import json
+import logging
+import time
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -38,6 +40,8 @@ from openproceedings.engine.index import (
     verify_index,
 )
 
+log = logging.getLogger(__name__)
+
 
 class ParityError(IndexBuildError):
     """The index doesn't hold `normalize()`'s tokens for its snapshot. Its message quotes the tokens (local
@@ -55,10 +59,11 @@ def check_parity(
     index: Path, snapshot: Path, workers: int | None = None, manifest: dict[str, Any] | None = None
 ) -> ParityReport:
     """`manifest`: the index's, from a `verify_index` the caller already ran (so files aren't hashed twice)."""
+    started = time.perf_counter()
     manifest = manifest if manifest is not None else verify_index(index)
     snapshot_hash = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))["snapshot_hash"]
     if manifest["snapshot_hash"] != snapshot_hash:
-        raise ParityError(
+        raise IndexBuildError(  # operator error, not a broken guarantee: a WARNING, not a ParityError
             f"index {manifest['index_version']} was built from another snapshot than {snapshot.name}"
         )
     tantivy_index = open_index(index)
@@ -93,7 +98,13 @@ def check_parity(
             raise ParityError(
                 f"term {term!r} in {field}: {indexed[key]} documents in the index, {expected[key]} by normalize()"
             )
-    return ParityReport(n, len(expected), phrases)
+    report = ParityReport(n, len(expected), phrases)
+    log.info(
+        "index_parity_ok",
+        extra={"index_version": manifest["index_version"], "records": n, "terms": report.terms,
+               "phrases": phrases, "ms": round((time.perf_counter() - started) * 1000)},
+    )  # fmt: skip
+    return report
 
 
 def terms(searcher: tantivy.Searcher, field: str) -> list[tuple[str, int]]:

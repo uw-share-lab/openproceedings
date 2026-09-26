@@ -4,6 +4,7 @@ title: Headroom for warm searches over wildcard phrases at 80k
 status: To Do
 assignee: []
 created_date: '2026-09-26 23:03'
+updated_date: '2026-09-26 23:31'
 labels:
   - engine
   - performance
@@ -21,6 +22,12 @@ task-031: on a quiet M-series Mac with the synthetic 80k corpus, main-2-pop (wil
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 main-2-pop warm search p95 < 70 ms in report_80k.py (200 warm rounds) on a quiet machine
-- [ ] #2 Differential suite green; scores unchanged (determinism test)
+- [ ] #1 Differential suite green; scores unchanged (determinism test)
+- [ ] #2 main-2-pop warm search p95 < 50 ms and p99 < 100 ms over 200 warm rounds in report_80k.py on a quiet machine
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Numbers: the committed report (200 warm rounds) gives 68.7 ms p95; a separate 200-run probe (not in docs/results) gave p95 95 ms, p99 148 ms.
+<!-- SECTION:NOTES:END -->
