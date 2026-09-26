@@ -8,7 +8,7 @@ Status: **draft for review** · depends on: nothing · delivered in M0 (the rost
 openproceedings/
 ├── README.md  CLAUDE.md  AGENTS.md  CONTRIBUTING.md  LICENSE (MIT)
 ├── pyproject.toml  uv.lock      # uv WORKSPACE root: repo-wide ruff config, dev tools (ruff, mypy)
-├── Makefile                     # sync · fmt · lint · tooling · test · hooks
+├── Makefile                     # sync · fmt · lint · tooling · test · hooks · mutate · mutate-changed
 ├── .claude/                     # committed: agents, skills, commands, hooks, learnings (roster: .claude/README.md)
 ├── .githooks/                   # commit-msg (attribution), pre-push (make lint + make tooling)
 ├── .github/                     # workflows (below), dependabot.yml
@@ -179,8 +179,8 @@ All command-parsing gates share `.claude/hooks/lib/cmdparse.py`, which parses co
 them:
 - separators with or without spaces: `;` `&&` `||` `|` `&` `(` `)`, newlines, and process substitution
   `<(…)`/`>(…)`;
-- shell reserved words at the start of a command (`if`/`then`/`elif`/`else`/`fi`, `for`/`while`/`until`/
-  `do`/`done`, `{`/`}`, `!`, `case`/`esac`) are skipped;
+- shell reserved words at the start of a command (`if`/`then`/`elif`/`else`/`fi`, `while`/`until`/
+  `do`/`done`, `{`/`}`, `!`, `esac`, `function`) are skipped;
 - `VAR=val` assignments and the wrappers `env`, `command`, `builtin`, `exec`, `time`, `nohup`, `nice`,
   `sudo`, `timeout`, `stdbuf`, `xargs` and `watch` are skipped, each with its own table of options that take
   a value;

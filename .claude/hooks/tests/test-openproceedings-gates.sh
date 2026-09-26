@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # commands under test are single-quoted on purpose: $(…), $(( )) and backticks must reach the hooks unexpanded
 # Case table for the openproceedings gates: block-ai-attribution.sh, require-review.sh,
 # protect-data-dir.sh, remind-token-contract.sh, load-learnings.sh and .claude/scripts/record-review.py.
 # Runs the real hooks against a throwaway repo with a bare "origin", so git resolution is real.
@@ -382,6 +383,31 @@ printf 'export default []\n' > "$REPO/frontend/eslint.config.js"; : > "$TMP/npx.
 payload_file Edit "$REPO/frontend/a.ts" | PATH="$TMP/bin:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
 if grep -q eslint "$TMP/npx.log"; then fail=$((fail+1)); echo "  FAIL eslint ran with a new untracked config"; else pass=$((pass+1)); echo "  ok   eslint skipped while its config is untracked"; fi
 rm -rf "$REPO/frontend/node_modules" "$REPO/frontend/eslint.config.js" "$REPO/frontend/a.ts"
+
+echo "== round-4 rows (git clean precision, arithmetic, heredoc edges)"
+g switch -q mut
+approve
+check $P block "git clean -fdX -e data (X deletes it)"  "$(payload_bash 'git clean -fdX -e data')"
+check $P block "git clean -fdx :/ (repo-root pathspec)" "$(payload_bash 'git clean -fdx :/')"
+check $P block "git clean -fdx -enode_modules (not dry)" "$(payload_bash 'git clean -fdx -enode_modules')"
+check $P block "git clean -fdx data"                   "$(payload_bash 'git clean -fdx data')"
+check $P block "git clean -fdx data/snapshots"         "$(payload_bash 'git clean -fdx data/snapshots')"
+check $P block "arithmetic << then rm on the next line" "$(payload_bash 'echo $((x<<y))
+rm -rf data/snapshots')"
+check $R block "arithmetic << then push"                "$(payload_bash 'echo $((1<<n))
+git push origin other2')"
+check $R allow "arithmetic << before an approved push"  "$(payload_bash 'echo $((1<<2)) && git push origin mut')"
+check $R block "heredoc body ending in \\ keeps its end" "$(payload_bash "cat <<'EOF'
+x \\
+EOF
+git push origin other2")"
+check $R allow "<<\\EOF body with apostrophe, approved"  "$(payload_bash "cat <<\\EOF
+it's
+EOF
+git push origin mut")"
+check $R allow "'EOF ' (trailing space) is not the end" "$(payload_bash "$(printf 'cat <<EOF\nEOF \ngit push origin other2\nEOF')")"  # printf keeps the trailing space editors strip
+check $R block "line continuation joins a push"        "$(payload_bash 'git push origin \
+other2')"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")

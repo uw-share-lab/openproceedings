@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # commands under test are single-quoted on purpose: $(…), $(( )) and backticks must reach the hooks unexpanded
 # Case table for the CI tooling scripts: learnings_index.py, check_backlog.py, lint_tooling.py and
 # roster_index.py. Each case copies the real .claude/ (and CLAUDE.md / CONTRIBUTING.md) into a throwaway
 # tree, confirms the script passes on it, then breaks exactly one thing and confirms the script fails —
 # so a regression in a check can't hide behind the repo's own content being clean (review round 2).
 # Usage: ./test-tooling-scripts.sh
-# shellcheck disable=SC2016  # the single-quoted backticks are literal markdown injected into test files
 set -u
 # Never inherit a repo from the caller (git exports GIT_DIR etc. to hooks such as pre-push).
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX

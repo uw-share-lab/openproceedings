@@ -107,16 +107,32 @@ for argv, d in commands:
         continue
     gm = git_subcommand(argv, d)
     if gm and gm[0] == "clean":
-        flags = [a for a in gm[1] if a.startswith("-")]
-        dry = any(a in ("-n", "--dry-run") or (not a.startswith("--") and "n" in a) for a in flags)
-        ignored = any(a in ("-x", "-X") or (not a.startswith("--") and ("x" in a or "X" in a)) for a in flags)
-        excludes = [v for v in opt_values(gm[1], "-e", "--exclude")]
-        excluded = any(v.strip("/") == "data" for v in excludes)
-        pathspecs = [a for a in gm[1] if not a.startswith("-") and a not in excludes]
-        outside = bool(pathspecs) and not any(any_rel(lambda r: r is not None and (r == "data" or r.startswith("data/") or r == "."), p, gm[2]) for p in pathspecs)
+        # Separate -e/--exclude (and their values) from the flag clusters first: an attached `-enode_modules`
+        # contains an `n` and was read as a dry run (review round 4).
+        excludes, flags, pathspecs, args, k = [], [], [], gm[1], 0
+        while k < len(args):
+            a_ = args[k]
+            if a_ in ("-e", "--exclude") and k + 1 < len(args):
+                excludes.append(args[k + 1]); k += 2; continue
+            if a_.startswith("--exclude="):
+                excludes.append(a_.split("=", 1)[1]); k += 1; continue
+            if a_.startswith("-e") and not a_.startswith("--") and len(a_) > 2:
+                excludes.append(a_[2:]); k += 1; continue
+            if a_ == "--":
+                pathspecs += args[k + 1 :]; break
+            (flags if a_.startswith("-") else pathspecs).append(a_); k += 1
+        shorts = "".join(f[1:] for f in flags if not f.startswith("--"))
+        dry = "n" in shorts or "--dry-run" in flags
+        only_ignored = "X" in shorts
+        ignored = only_ignored or "x" in shorts
+        # `-e data` keeps data/ under -x, but under -X it ADDS data/ to the ignore set and deletes it.
+        excluded = not only_ignored and any(v.strip("/") == "data" for v in excludes)
+        def covers_data(p):
+            return p.startswith(":") or any_rel(lambda r: r is not None and (r == "data" or r.startswith("data/") or r == "."), p, gm[2])
+        outside = bool(pathspecs) and not any(covers_data(p) for p in pathspecs)
         if ignored and not dry and not excluded and not outside:
             refuse("Blocked: `git clean -x/-X` deletes gitignored files — that is all of data/ (snapshots, indexes, "
-                   "search records). Clean specific paths, or add -e data to exclude it.")
+                   "search records). Clean specific paths outside data/, or use -x (not -X) with -e data.")
     stash_writes = gm and gm[0] == "stash" and (not gm[1] or gm[1][0] in ("push", "save") or gm[1][0].startswith("-"))
     if stash_writes and any(a in ("-a", "--all") for a in gm[1]):
         refuse("Blocked: `git stash --all` stashes (and removes) gitignored files, including data/.")

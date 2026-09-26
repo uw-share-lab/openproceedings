@@ -36,27 +36,9 @@
   "new": "        pass"
  },
  {
-  "label": "heredoc stripping disabled",
-  "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "            if line.startswith(\"<<\", i) and (m := HEREDOC.match(line, i)):",
-  "new": "            if False:"
- },
- {
-  "label": "herestring treated as heredoc",
-  "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "            if line.startswith(\"<<<\", i):",
-  "new": "            if False:"
- },
- {
-  "label": "quoted <<EOF treated as heredoc",
-  "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                if c == quote:\n                    quote = None",
-  "new": "                quote = None"
- },
- {
   "label": "comments not stripped",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "            if c == \"#\" and (i == 0 or line[i - 1] in \" \\t;&|()\"):",
+  "old": "            if c == \"#\" and (i == 0 or line[i - 1] in \" \\t;&|()\") and not arith:",
   "new": "            if False:"
  },
  {
@@ -270,12 +252,6 @@
   "new": "\"shred\", "
  },
  {
-  "label": "git clean -x allowed",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        if ignored and not dry and not excluded and not outside:",
-  "new": "        if False:"
- },
- {
   "label": "git stash --all allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "    if stash_writes and any(a in (\"-a\", \"--all\") for a in gm[1]):",
@@ -435,8 +411,8 @@
  {
   "label": "comment cut on any # (not word start)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "if c == \"#\" and (i == 0 or line[i - 1] in \" \\t;&|()\"):",
-  "new": "if c == \"#\":"
+  "old": "            if c == \"#\" and (i == 0 or line[i - 1] in \" \\t;&|()\") and not arith:",
+  "new": "            if c == \"#\" and not arith:"
  },
  {
   "label": "comments cut even inside quotes",
@@ -473,18 +449,6 @@
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "    return [*glob.glob(full), path]",
   "new": "    return [path]"
- },
- {
-  "label": "git clean -e data not honoured",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        excluded = any(v.strip(\"/\") == \"data\" for v in excludes)",
-  "new": "        excluded = False"
- },
- {
-  "label": "git clean pathspec outside data not honoured",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        outside = bool(pathspecs) and not any(",
-  "new": "        outside = False and not any("
  },
  {
   "label": "git stash list --all refused",
@@ -528,5 +492,89 @@
   "file": ".claude/hooks/autofix.sh",
   "old": "git -C \"$root\" status --porcelain -- 'frontend/eslint.config.*'",
   "new": "git -C \"$root\" diff HEAD -- 'frontend/eslint.config.*'"
+ },
+ {
+  "label": "git clean -x allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if ignored and not dry and not excluded and not outside:",
+  "new": "        if False:"
+ },
+ {
+  "label": "git clean -e data not honoured",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        excluded = not only_ignored and any(v.strip(\"/\") == \"data\" for v in excludes)",
+  "new": "        excluded = False"
+ },
+ {
+  "label": "git clean -X with -e data honoured (deletes data/)",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        excluded = not only_ignored and any(",
+  "new": "        excluded = any("
+ },
+ {
+  "label": "git clean pathspec outside data not honoured",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        outside = bool(pathspecs) and not any(covers_data(p) for p in pathspecs)",
+  "new": "        outside = False"
+ },
+ {
+  "label": "git clean data/snapshots pathspec treated as outside",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(r == \"data\" or r.startswith(\"data/\") or r == \".\")",
+  "new": "(r == \"data\" or r == \".\")"
+ },
+ {
+  "label": "git clean data pathspec treated as outside",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(r == \"data\" or r.startswith(\"data/\") or r == \".\")",
+  "new": "(r.startswith(\"data/\") or r == \".\")"
+ },
+ {
+  "label": "git clean :/ pathspec treated as outside",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            return p.startswith(\":\") or any_rel(",
+  "new": "            return any_rel("
+ },
+ {
+  "label": "git clean attached -e value read as flags",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if a_.startswith(\"-e\") and not a_.startswith(\"--\") and len(a_) > 2:",
+  "new": "            if False:"
+ },
+ {
+  "label": "heredoc stripping disabled",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if not arith and line.startswith(\"<<\", i) and (m := HEREDOC.match(line, i)):",
+  "new": "            if False:"
+ },
+ {
+  "label": "herestring treated as heredoc",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if line.startswith(\"<<<\", i):",
+  "new": "            if False:"
+ },
+ {
+  "label": "quoted <<EOF treated as heredoc",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                if c == quote:\n                    quote = None",
+  "new": "                quote = None"
+ },
+ {
+  "label": "arithmetic << read as a heredoc",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if not arith and line.startswith(\"<<\", i)",
+  "new": "            if line.startswith(\"<<\", i)"
+ },
+ {
+  "label": "backslash-newline joined before heredoc handling",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    text = preprocess(cmd)",
+  "new": "    text = preprocess(cmd.replace(\"\\\\\\n\", \" \"))"
+ },
+ {
+  "label": "<<- tab rule applied to plain <<",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if (line.lstrip(\"\\t\") if dash else line) == delim:",
+  "new": "            if line.strip() == delim:"
  }
 ]

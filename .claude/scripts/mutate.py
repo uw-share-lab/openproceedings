@@ -55,6 +55,8 @@ def changed_files() -> set[str]:
     r = subprocess.run(
         ["git", "-C", str(ROOT), "diff", "--name-only", "origin/dev...HEAD"], capture_output=True, text=True
     )
+    if r.returncode != 0:
+        sys.exit("--changed needs origin/dev: run `git fetch origin dev` first")
     s = subprocess.run(["git", "-C", str(ROOT), "diff", "--name-only"], capture_output=True, text=True)
     return set((r.stdout + s.stdout).split())
 
@@ -74,7 +76,13 @@ def main() -> None:
         mutants = [m for m in mutants if a.match.lower() in m["label"].lower()]
     if a.changed:
         files = changed_files()
+        if not files:
+            sys.exit(
+                "--changed found no changed files (untracked files don't count) — refusing a vacuous pass"
+            )
         mutants = [m for m in mutants if m["file"] in files]
+        if not mutants:
+            print("no mutants cover the changed files — if you changed gate logic, add mutants", flush=True)
     work = Path(tempfile.mkdtemp(prefix="op-mutate-"))
     try:
         base = work / "baseline"

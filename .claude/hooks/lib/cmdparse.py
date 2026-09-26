@@ -21,6 +21,7 @@ control. `$(...)`, variables and script files are opaque to a static parser.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
@@ -103,7 +104,7 @@ RESERVED = {
 }
 GIT_VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
 GH_VALUE_OPTS = {"-R", "--repo"}
-HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)([A-Za-z_][\w-]*)\1")
+HEREDOC = re.compile(r"<<(?P<dash>-?)[ \t]*\\?(?P<q>['\"]?)(?P<delim>[A-Za-z_][\w-]*)(?P=q)")
 
 
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
@@ -128,20 +129,24 @@ def read_payload() -> tuple[str, str]:
 
 def preprocess(cmd: str) -> str:
     """One pass over the whole command, the way bash reads it, returning the text to tokenize:
-    - quote state is carried ACROSS lines, so a multi-line quoted message (`-m "a<newline>see #1"`) stays one
-      string — per-line state cut `#1` as a comment and unbalanced the quotes (review round 3);
-    - an unquoted `#` at the start of a word starts a comment, which is dropped to the end of the line;
-    - an unquoted `<<DELIM` / `<<-'DELIM'` / `<<"DELIM"` starts a heredoc: its body lines are dropped unread (an
-      apostrophe in a body must not open a quote), and the delimiter is read from the raw text so quoted
-      delimiters are recognised; `<<<` (herestring) is not a heredoc;
+    - quote state is carried ACROSS lines, so a multi-line quoted message stays one string (review round 3);
+    - an unquoted `#` at the start of a word starts a comment, dropped to the end of the line;
+    - an unquoted `<<DELIM` / `<<-'DELIM'` / `<<"DELIM"` / `<<\\DELIM` starts a heredoc: its body lines are
+      dropped unread, and it ends only at a line that is exactly DELIM (leading tabs allowed for `<<-`);
+      `<<<` (herestring) and `<<` inside `$(( … ))` / `(( … ))` arithmetic are not heredocs (review round 4);
+    - a backslash-newline outside single quotes and outside heredoc bodies joins the next line (bash line
+      continuation) — done here, not before, so a heredoc body ending in `\\` can't swallow its delimiter;
     - a `<<` inside quotes is text (the usual `-m "$(cat <<'EOF' …)"` stays inside its quoted argument).
     """
     out_lines: list[str] = []
     quote: str | None = None
-    pending: list[str] = []
+    pending: list[tuple[str, bool]] = []  # (delimiter, dash)
+    arith = 0  # depth of $(( … )) / (( … )) arithmetic, where << is a shift
+    joining = False
     for line in cmd.split("\n"):
         if pending:
-            if line.strip() == pending[0]:
+            delim, dash = pending[0]
+            if (line.lstrip("\t") if dash else line) == delim:
                 pending.pop(0)
             continue
         kept: list[str] = []
@@ -167,25 +172,47 @@ def preprocess(cmd: str) -> str:
                 kept.append(line[i : i + 2])
                 i += 2
                 continue
-            if c == "#" and (i == 0 or line[i - 1] in " \t;&|()"):
+            if c == "#" and (i == 0 or line[i - 1] in " \t;&|()") and not arith:
                 break
+            if line.startswith("$((", i) or (
+                line.startswith("((", i) and (i == 0 or line[i - 1] in " \t;&|(")
+            ):
+                step = 3 if c == "$" else 2
+                arith += 1
+                kept.append(line[i : i + step])
+                i += step
+                continue
+            if arith and line.startswith("))", i):
+                arith -= 1
+                kept.append("))")
+                i += 2
+                continue
             if line.startswith("<<<", i):
                 kept.append("<<<")
                 i += 3
                 continue
-            if line.startswith("<<", i) and (m := HEREDOC.match(line, i)):
-                pending.append(m.group(2))
+            if not arith and line.startswith("<<", i) and (m := HEREDOC.match(line, i)):
+                pending.append((m.group("delim"), m.group("dash") == "-"))
                 kept.append(m.group(0))
                 i = m.end()
                 continue
             kept.append(c)
             i += 1
-        out_lines.append("".join(kept))
+        text = "".join(kept)
+        # line continuation: a trailing unescaped backslash outside single quotes, not starting a heredoc
+        continues = text.endswith("\\") and not text.endswith("\\\\") and quote != "'" and not pending
+        if continues:
+            text = text[:-1]
+        if joining and out_lines:
+            out_lines[-1] += " " + text
+        else:
+            out_lines.append(text)
+        joining = continues
     return "\n".join(out_lines)
 
 
 def tokenize(cmd: str) -> list[str]:
-    text = preprocess(cmd.replace("\\\n", " "))
+    text = preprocess(cmd)
     lex = shlex.shlex(text, posix=True, punctuation_chars=PUNCT)
     lex.whitespace = " \t\r"
     lex.whitespace_split = True
@@ -391,6 +418,7 @@ def git(directory: str, *args: str) -> str:
     return r.stdout.strip() if r.returncode == 0 else ""
 
 
+@functools.lru_cache(maxsize=256)
 def repo_root(directory: str) -> str:
     """Top of the git worktree containing `directory` — walking up to the nearest existing ancestor
     first, because a Write may target a directory that doesn't exist yet (data/indexes/<new>/)."""

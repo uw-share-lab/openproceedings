@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # commands under test are single-quoted on purpose: $(…), $(( )) and backticks must reach the hooks unexpanded
 # Case table for enforce-pr-workflow.sh. Runs the real hook against a throwaway git repo so the
 # branch check exercises real `git rev-parse` rather than a mock. Usage: ./test-enforce-pr-workflow.sh
 # Never inherit a repo from the caller: git exports GIT_DIR etc. to hooks (e.g. pre-push from a worktree),
@@ -105,7 +106,6 @@ check feature/wip allow 'git merge x'
 
 echo "read-only lookalikes are not merges:"
 check main allow 'git merge-base origin/main feature/x'
-# shellcheck disable=SC2016  # the $(...) must reach the hook unexpanded — that is the case under test
 check main allow 'git diff $(git merge-base main feat) HEAD'
 check main allow 'git status'
 check main allow 'git log --oneline -3'
@@ -180,6 +180,12 @@ check feature/x block "git commit -F - <<'EOF' && git push origin HEAD:dev
 fix: don't crash
 EOF"                                                                    # quoted heredoc delimiter; apostrophe in body
 check feature/x block 'git commit -m "x ; git push origin HEAD:dev'     # unparseable: fallback checks push first
+check feature/x block 'echo $((1<<n))
+git push origin HEAD:dev'                                              # arithmetic << is not a heredoc
+check feature/x block "cat <<'EOF'
+x \\
+EOF
+git push origin HEAD:dev"                                              # body ending in a backslash keeps its delimiter
 check feature/x allow 'git push origin feat
 echo main'                                                              # separators split commands: 'main' is not a refspec
 check main  allow 'bash --norc -c "git status"'            # positive control: long opt + safe cmd
