@@ -4,7 +4,6 @@ import pytest
 from openproceedings import cli
 
 PLANNED = {
-    "export": "task-030",
     "serve": "task-034",
     "record": "task-037",
     "openapi": "task-040",
@@ -65,26 +64,26 @@ def test_stub_list_matches_the_planned_table() -> None:
 
 def test_bad_log_level_is_a_usage_error_not_a_traceback(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exc:
-        cli.main(["--log-level", "verbose", "export"])
+        cli.main(["--log-level", "verbose", "serve"])
     assert exc.value.code == 2
     err = capsys.readouterr().err
     assert "Traceback" not in err and "--log-level" in err
 
 
 def test_log_level_is_case_insensitive() -> None:
-    assert cli.main(["--log-level", "debug", "export"]) == 2  # the stub's exit code, not a usage error
+    assert cli.main(["--log-level", "debug", "serve"]) == 2  # the stub's exit code, not a usage error
 
 
 def test_default_log_format_is_json() -> None:
-    assert cli.build_parser().parse_args(["export"]).log_format == "json"
+    assert cli.build_parser().parse_args(["serve"]).log_format == "json"
 
 
 @pytest.mark.parametrize(
     "argv",
     [
-        ["export", "trust AND x", "--explain"],
+        ["serve", "--port", "8000"],
         ["--log-level", "debug", "--log-format", "json", "index", "retire", "old"],
-        ["export", "q", "--format", "ris"],
+        ["record", "replay", "abc123"],
     ],
 )
 def test_stub_accepts_the_future_arguments_of_its_command(

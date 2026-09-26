@@ -20,7 +20,13 @@ openproceedings = { workspace = true }
 members = ["backend"]
 
 [dependency-groups]
-dev = ["ruff>=0.13", "mypy>=1.18", "pytest>=8.3", "hypothesis>=6.112"]
+dev = [
+    "ruff>=0.13",
+    "mypy>=1.18",
+    "pytest>=8.3",
+    "hypothesis>=6.112",
+    "refaudit==0.4.9",
+]
 
 [tool.ruff]
 line-length = 110

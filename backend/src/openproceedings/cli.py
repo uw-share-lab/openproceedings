@@ -13,18 +13,27 @@ import json
 import logging
 import os
 import sys
+import time
 from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from openproceedings import __version__
-from openproceedings.logs import FORMATS, LEVELS, configure_logging
+from openproceedings.logs import FORMATS as LOG_FORMATS
+from openproceedings.logs import LEVELS, configure_logging
+
+FORMATS = ("ris", "csv", "bibtex", "jsonl")  # export formats (export.FORMATS; imported lazily there)
+SORTS = ("relevance", "year_desc", "year_asc", "title")  # tantivy_engine.SORTS
+
+if TYPE_CHECKING:
+    from openproceedings.engine.reference import ReferenceEngine
+    from openproceedings.query.parser import ParseResult
 
 log = logging.getLogger(__name__)
 
 # subcommand -> (help text, the Backlog task that implements it)
 PLANNED: dict[str, tuple[str, str]] = {
-    "export": ("export the full matched set: ris | csv | bibtex | jsonl (spec 04)", "task-030"),
     "serve": ("run the HTTP API (spec 04)", "task-034"),
     "record": ("save or replay a search record (spec 04)", "task-037"),
     "openapi": ("print the OpenAPI schema for the frontend codegen (spec 04)", "task-040"),
@@ -56,7 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"op {__version__}")
     parser.add_argument("--log-level", default="INFO", type=str.upper, choices=LEVELS, help="default INFO")
     parser.add_argument(
-        "--log-format", default="json", choices=FORMATS, help="json (default) or text for reading locally"
+        "--log-format", default="json", choices=LOG_FORMATS, help="json (default) or text for reading locally"
     )
     parser.add_argument(
         "--data-dir", type=Path, help="default $OP_DATA_DIR, else the repository's data/ (gitignored)"
@@ -104,21 +113,44 @@ def build_parser() -> argparse.ArgumentParser:
     ip.set_defaults(run=_index_parity)
     _stub(index_actions.add_parser("retire", help="planned in task-065"), "index retire", "task-065")
 
-    search = sub.add_parser("search", help="run a query against an index: --explain, --ids (spec 02/03)")
-    search.add_argument("query")
-    search.add_argument(
-        "--index",
-        help="an index_version under <data-dir>/indexes (checked first) or an index directory; default current",
+    search = sub.add_parser(
+        "search", help="run a query against an index: ranked hits, --ids or --explain (spec 02/03)"
     )
-    search.add_argument("--mode", choices=("native", "scholar"), default="native")
-    what = search.add_mutually_exclusive_group(required=True)
+    search.add_argument("query")
+    _index_arguments(search)
+    search.add_argument(
+        "--engine",
+        choices=("tantivy", "reference"),
+        default="tantivy",
+        help="reference: the oracle over the index's snapshot (with --ids only; it has no ranking)",
+    )
+    search.add_argument("--sort", choices=SORTS, default="relevance")
+    search.add_argument("--limit", type=int, default=20, help="ranked hits to print (default 20)")
+    what = search.add_mutually_exclusive_group()
     what.add_argument("--explain", action="store_true", help="print the parse and the compiled query")
-    what.add_argument("--ids", action="store_true", help="print the sorted matching ids")
+    what.add_argument("--ids", action="store_true", help="print every matching id, sorted")
     search.set_defaults(run=_search)
+
+    export = sub.add_parser(
+        "export", help="export the full matched set: ris | csv | bibtex | jsonl (spec 04)"
+    )
+    export.add_argument("query")
+    _index_arguments(export)
+    export.add_argument("--format", choices=FORMATS, required=True)
+    export.add_argument("--out", type=Path, help="write to this file (default standard output)")
+    export.set_defaults(run=_export)
 
     for name, (help_text, task) in PLANNED.items():
         _stub(sub.add_parser(name, help=help_text, description=help_text), name, task)
     return parser
+
+
+def _index_arguments(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--index",
+        help="an index_version under <data-dir>/indexes (checked first) or an index directory; default current",
+    )
+    p.add_argument("--mode", choices=("native", "scholar"), default="native")
 
 
 def _print(value: object) -> None:
@@ -175,45 +207,155 @@ def _index_build(ns: argparse.Namespace) -> int:
 
 
 def _index_parity(ns: argparse.Namespace) -> int:
-    from openproceedings.engine.index import IndexBuildError
+    from openproceedings.engine.index import verify_index
     from openproceedings.engine.parity import check_parity
 
-    indexes = ns.data_dir / "indexes"
-    path = indexes / ns.index if (indexes / ns.index).exists() else Path(ns.index)
-    if not path.is_dir():
-        raise IndexBuildError(f"no index at {path}")
-    manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
+    path = _index_path(ns)
+    manifest = verify_index(path)  # before trusting anything the manifest names
     snapshot = resolve_snapshot(ns.snapshot or manifest["snapshot"], ns.data_dir / "snapshots")
     report = check_parity(path, snapshot)
-    _print({"records": report.records, "terms": report.terms, "differences": 0})
+    _print({"records": report.records, "terms": report.terms, "phrases": report.phrases, "differences": 0})
     return 0
 
 
-def _search(ns: argparse.Namespace) -> int:
-    from openproceedings.engine.index import IndexBuildError
-    from openproceedings.engine.tantivy_engine import TantivyEngine
+def _parsed(ns: argparse.Namespace) -> ParseResult | None:
+    """The query's parse, its diagnostics printed to stderr as user output (never logged: they quote the
+    query); None when it doesn't parse."""
     from openproceedings.query.parser import parse
 
-    result = parse(ns.query, ns.mode)  # a bad query is reported first, whatever the index
-    lines = [f"input: {ns.query}"]
-    lines += [f"{d.code}: {d.message}" for d in [*result.errors, *result.warnings]]
-    lines += [f"{t.code}: {t.message}" for t in result.translations]
+    result = parse(ns.query, ns.mode)
+    for d in [*result.errors, *result.warnings, *result.translations]:
+        print(f"{d.code}: {d.message}", file=sys.stderr)
     if result.effective_ast is None:
-        log.warning("cli_refused", extra={"command": "search", "error": "parse"})
-        print("\n".join(lines), file=sys.stderr)
-        return 1
+        log.warning("cli_refused", extra={"command": ns.command, "error": "parse"})
+        return None
+    return result
+
+
+def _index_path(ns: argparse.Namespace) -> Path:
+    from openproceedings.engine.index import IndexBuildError
+
     indexes = ns.data_dir / "indexes"
     name = ns.index or "current"
     # a name under <data-dir>/indexes wins; otherwise --index may be a directory path
     path = indexes / name if (indexes / name).exists() or not Path(name).is_dir() else Path(name)
     if not path.exists():
         raise IndexBuildError(f"no index at {path}; build one with `op index build --snapshot …`")
+    return path
+
+
+def _search_run(
+    ns: argparse.Namespace, started: float, index_version: str, result: ParseResult, total: int
+) -> None:
+    """The one INFO line per search or export: the API access line's privacy-safe fields, never the query."""
+    log.info(
+        "search_run",
+        extra={
+            "command": ns.command,
+            "mode": ns.mode,
+            "engine": getattr(ns, "engine", "tantivy"),
+            "index_version": index_version,
+            "canonical_hash": result.canonical_hash,
+            "total": total,
+            "ms": round((time.perf_counter() - started) * 1000),
+        },
+    )
+
+
+def _search(ns: argparse.Namespace) -> int:
+    from openproceedings.engine.exclusions import excluded
+    from openproceedings.engine.tantivy_engine import TantivyEngine
+
+    started = time.perf_counter()
+    result = _parsed(ns)  # a bad query is reported first, whatever the index
+    if result is None:
+        return 1
+    ast = result.effective_ast
+    assert ast is not None
+    if ns.engine == "reference" and not ns.ids:
+        raise ValueError("--engine reference needs --ids: the oracle has no ranking and no compiled query")
+    if ns.limit < 0:
+        raise ValueError("--limit must be ≥ 0")
+    path = _index_path(ns)
     engine = TantivyEngine(path)
     if ns.ids:
-        print("\n".join(sorted(engine.match_ids(result.effective_ast))))
+        ids = sorted(
+            _reference(ns, path).match_ids(ast) if ns.engine == "reference" else engine.match_ids(ast)
+        )
+        print("\n".join(ids))
+        _search_run(ns, started, engine.index_version, result, len(ids))
         return 0
-    lines += [f"canonical: {result.canonical}", f"index_version: {engine.index_version}"]
-    print("\n".join([*lines, engine.explain(result.effective_ast)]))
+    if ns.explain:
+        lines = [
+            f"input: {ns.query}",
+            f"canonical: {result.canonical}",
+            f"index_version: {engine.index_version}",
+        ]
+        print("\n".join([*lines, engine.explain(ast)]))
+        _search_run(ns, started, engine.index_version, result, len(engine.match_ids(ast)))
+        return 0
+    page = engine.search(ast, sort=ns.sort, limit=ns.limit)
+    gone = excluded(engine, result, page.total)
+    buckets = "; ".join(
+        f"{f}: " + ", ".join(f"{v} {n}" for v, n in b.items())
+        for f, b in (("track", gone.track), ("status", gone.status))
+    )
+    print(
+        f"total {page.total} · excluded by default filters {gone.total} ({buckets}) · index {engine.index_version}"
+    )
+    print(f"canonical: {result.canonical}")
+    shown = engine.display(list(page.ids))
+    scores = dict(engine.ranked(ast, ns.sort)) if page.ids else {}
+    for rank, i in enumerate(page.ids, 1):
+        r = shown[i]
+        print(f"{rank:>4}. {scores[i]:9.4f}  {i}  {r['venue']} {r['year']}  {' '.join(r['title'].split())}")
+    _search_run(ns, started, engine.index_version, result, page.total)
+    return 0
+
+
+def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:
+    """The oracle over the snapshot an index was built from."""
+    from openproceedings.engine.reference import ReferenceEngine
+    from openproceedings.ingest.snapshot import load_records
+
+    manifest = json.loads((index / "manifest.json").read_text(encoding="utf-8"))
+    snapshot = resolve_snapshot(manifest["snapshot"], ns.data_dir / "snapshots")
+    return ReferenceEngine(load_records(snapshot).values())
+
+
+def _export(ns: argparse.Namespace) -> int:
+    from datetime import UTC, datetime
+
+    from openproceedings.diagnostics import DiagnosticCode
+    from openproceedings.engine.protocol import EngineInternalError
+    from openproceedings.engine.tantivy_engine import TantivyEngine
+    from openproceedings.export import Provenance, write
+
+    started = time.perf_counter()
+    result = _parsed(ns)
+    if result is None:
+        return 1
+    ast = result.effective_ast
+    assert ast is not None and result.canonical_hash is not None
+    engine = TantivyEngine(_index_path(ns))
+    total = len(engine.match_ids(ast))
+    provenance = Provenance(engine.index_version, result.canonical_hash, datetime.now(UTC).date().isoformat())
+    if ns.out is None:
+        n = write(ns.format, engine.documents(ast), provenance, sys.stdout)
+    else:  # written beside the target, then renamed: a failed export never leaves a partial file behind
+        partial = ns.out.with_name(ns.out.name + ".partial")
+        try:
+            with partial.open("w", encoding="utf-8", newline="") as out:
+                n = write(ns.format, engine.documents(ast), provenance, out)
+            partial.replace(ns.out)
+        finally:
+            partial.unlink(missing_ok=True)
+    if n != total:
+        raise EngineInternalError(
+            DiagnosticCode.API_INTERNAL, f"exported {n} records, but the query matches {total}"
+        )
+    print(f"exported {n} records ({ns.format}) from index {engine.index_version}", file=sys.stderr)
+    _search_run(ns, started, engine.index_version, result, total)
     return 0
 
 

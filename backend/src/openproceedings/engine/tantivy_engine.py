@@ -19,7 +19,7 @@ import tantivy
 
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.compile import FIELDS, Compiled, Compiler, Expansions, wildcards
-from openproceedings.engine.index import IDS, SCHEMA_VERSION, open_index, verify_index
+from openproceedings.engine.index import IDS, SCHEMA_VERSION, open_index, record_of, verify_index
 from openproceedings.engine.protocol import (
     FACET_FIELDS,
     MAX_EXPANSIONS,
@@ -132,6 +132,32 @@ class TantivyEngine:
         values = [_ord(v) for v in self.searcher.fast_field_values(column, addresses)]
         sign = -1 if sort == "year_desc" else 1
         return [(float(sign * v), i, s) for v, s, i in zip(values, scores, ids, strict=True)]
+
+    def documents(self, ast: Node) -> Iterator[dict[str, Any]]:
+        """Every match's display record (id, venue, year, track, status, and the stored title, abstract,
+        authors, urls, presentation, keywords, venue_id_raw), in id order, one document read at a time:
+        what an export streams (spec 04 §Exports)."""
+        addresses = self.hits(self.compile(ast).query)
+        if not addresses:
+            return
+        ids = [self.ids[_ord(o)] for o in self.searcher.fast_field_values("ord", addresses)]
+        for _i, address in sorted(zip(ids, addresses, strict=True), key=lambda pair: pair[0]):
+            yield self._display(address)
+
+    def display(self, ids: list[str]) -> dict[str, dict[str, Any]]:
+        """The display records of `ids` (a page of hits), by id."""
+        if not ids:
+            return {}
+        query = tantivy.Query.term_set_query(self.index.schema, "id", ids)
+        return {r["id"]: r for r in map(self._display, self.hits(query))}
+
+    def _display(self, address: tantivy.DocAddress) -> dict[str, Any]:
+        doc = self.searcher.doc(address).to_dict()
+        return {
+            "id": doc["id"][0],
+            **{f: doc[f][0] for f in ("venue", "track", "status", "year")},
+            **record_of(doc["record"][0]),
+        }
 
     def facets(self, ast: Node, fields: tuple[str, ...] = FACET_FIELDS) -> dict[str, dict[str, int]]:
         """Disjunctive facets (spec 04, decision-001 rule 6): field F is counted over the matches of the

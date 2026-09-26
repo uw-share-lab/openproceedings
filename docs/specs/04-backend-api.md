@@ -86,6 +86,12 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC date>}`.
   Every entry carries `openproceedings_id = {<id>}`, so a round-trip recovers the id of every record,
   proceedings-only (PMLR, NeurIPS) ones included. Output must pass `refaudit.bibtex.parse_string` (the pinned `refaudit` PyPI package).
+- As built (task-030, `export.py`, used by `op export`; the endpoints are task-036): RIS is `TY  - CPAPER`,
+  with `UR` forum, then pdf, then proceedings. Line breaks inside a value become single spaces, since RIS is
+  line-based. CSV joins lists with "; ". A BibTeX key is ASCII and lower-case (`anon` without authors,
+  `untitled` without a word). A value with unbalanced braces has them escaped, so it still parses. JSONL is one
+  object per record. Each format is checked round-trip to its ids; BibTeX also against the pinned
+  `refaudit==0.4.9`.
 - Exports stream, and are not paginated or truncated. The response headers `X-Total` (equal to the search's
   `total`) and `X-Index-Version` say exactly which set was exported. An export started during an index
   hot-swap finishes on the index it began on.

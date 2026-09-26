@@ -58,6 +58,11 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 concrete path), `status`, `ms`, `index_version`, `canonical_hash` (search/export), `total`. Health checks
 log at DEBUG.
 
+## CLI search line (INFO, at most one per `op search` / `op export`)
+`search_run` event with: `command`, `mode`, `engine`, `index_version`, `canonical_hash`, `total`, `ms`: the
+access line's privacy-safe fields, never the query. Diagnostics (parse errors, warnings, translations) are
+user output on stderr, not log lines, because they quote the query (task-030).
+
 ## Review checklist (`observability-reviewer`)
 1. Does every new failure path produce exactly one log at the right level?
 2. Is anything logged per record, per term or per page at INFO or above?
