@@ -1,0 +1,1056 @@
+[
+ {
+  "title": "Synthetic Trust Benchmark for Language Models",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "venue",
+    "value": "NeurIPS",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2025/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html"
+   },
+   {
+    "field": "year",
+    "value": "2025",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2025/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html"
+   },
+   {
+    "field": "track",
+    "value": "Conference",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2025/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2025/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html"
+   },
+   {
+    "field": "venue",
+    "value": "NeurIPS",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2025/file/0123456789abcdef0123456789abcdef-Paper-Conference.pdf"
+   },
+   {
+    "field": "year",
+    "value": "2025",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2025/file/0123456789abcdef0123456789abcdef-Paper-Conference.pdf"
+   },
+   {
+    "field": "track",
+    "value": "Conference",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2025/file/0123456789abcdef0123456789abcdef-Paper-Conference.pdf"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2025/file/0123456789abcdef0123456789abcdef-Paper-Conference.pdf"
+   },
+   {
+    "field": "abstract",
+    "value": "We introduce a synthetic benchmark for measuring trust calibration in language models.",
+    "source": "proceedings_page",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2025/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html"
+   },
+   {
+    "field": "abstract",
+    "value": "We introduce a synthetic … snippet",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=Synthetic Trust Benchmark for Language Models"
+   },
+   {
+    "field": "authors",
+    "value": "Doe, J; Roe, R; ...",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=Synthetic Trust Benchmark for Language Models"
+   }
+  ],
+  "fields": {
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2025/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "NeurIPS"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2025/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "2025"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2025/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "Conference"
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2025/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "abstract": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2025/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html",
+    "source": "proceedings_page",
+    "tier": 2,
+    "value": "We introduce a synthetic benchmark for measuring trust calibration in language models."
+   },
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=Synthetic Trust Benchmark for Language Models",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Doe, J; Roe, R; ..."
+   }
+  }
+ },
+ {
+  "title": "An Imaginary Workshop Paper on Reliance",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "forum_id",
+    "value": "AbCdEf1234",
+    "source": "openreview_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=AbCdEf1234"
+   },
+   {
+    "field": "venue_id",
+    "value": "ICML.cc/2026/Workshop/SyntheticWS",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICML.cc/2026/Workshop/SyntheticWS"
+   },
+   {
+    "field": "venue",
+    "value": "ICML",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICML.cc/2026/Workshop/SyntheticWS"
+   },
+   {
+    "field": "year",
+    "value": "2026",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICML.cc/2026/Workshop/SyntheticWS"
+   },
+   {
+    "field": "track",
+    "value": "Workshop/SyntheticWS",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICML.cc/2026/Workshop/SyntheticWS"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICML.cc/2026/Workshop/SyntheticWS"
+   },
+   {
+    "field": "abstract",
+    "value": "A made-up abstract about human reliance on model outputs.",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "openreview:AbCdEf1234"
+   },
+   {
+    "field": "abstract",
+    "value": "A made-up abstract …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=An Imaginary Workshop Paper on Reliance"
+   },
+   {
+    "field": "authors",
+    "value": "Poe, E",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=An Imaginary Workshop Paper on Reliance"
+   }
+  ],
+  "fields": {
+   "forum_id": {
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=AbCdEf1234",
+    "source": "openreview_url",
+    "tier": 2,
+    "value": "AbCdEf1234"
+   },
+   "venue_id": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICML.cc/2026/Workshop/SyntheticWS",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICML.cc/2026/Workshop/SyntheticWS"
+   },
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICML.cc/2026/Workshop/SyntheticWS",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICML"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICML.cc/2026/Workshop/SyntheticWS",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "2026"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICML.cc/2026/Workshop/SyntheticWS",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "Workshop/SyntheticWS"
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICML.cc/2026/Workshop/SyntheticWS",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "abstract": {
+    "confidence": 0.99,
+    "evidence": "openreview:AbCdEf1234",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "A made-up abstract about human reliance on model outputs."
+   },
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=An Imaginary Workshop Paper on Reliance",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Poe, E"
+   }
+  }
+ },
+ {
+  "title": "A Snippet-Only ICLR Record",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "venue",
+    "value": "ICLR",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2025/hash/fedcba9876543210fedcba9876543210-Abstract-Conference.html"
+   },
+   {
+    "field": "year",
+    "value": "2025",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2025/hash/fedcba9876543210fedcba9876543210-Abstract-Conference.html"
+   },
+   {
+    "field": "track",
+    "value": "Conference",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2025/hash/fedcba9876543210fedcba9876543210-Abstract-Conference.html"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2025/hash/fedcba9876543210fedcba9876543210-Abstract-Conference.html"
+   },
+   {
+    "field": "abstract",
+    "value": "… a truncated snippet about trust …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Snippet-Only ICLR Record"
+   },
+   {
+    "field": "authors",
+    "value": "Moe, M",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Snippet-Only ICLR Record"
+   }
+  ],
+  "fields": {
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2025/hash/fedcba9876543210fedcba9876543210-Abstract-Conference.html",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "ICLR"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2025/hash/fedcba9876543210fedcba9876543210-Abstract-Conference.html",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "2025"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2025/hash/fedcba9876543210fedcba9876543210-Abstract-Conference.html",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "Conference"
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2025/hash/fedcba9876543210fedcba9876543210-Abstract-Conference.html",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Snippet-Only ICLR Record",
+    "source": "scholar",
+    "tier": 0,
+    "value": "… a truncated snippet about trust …"
+   },
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Snippet-Only ICLR Record",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Moe, M"
+   }
+  }
+ },
+ {
+  "title": "An arXiv Preprint Out of Scope",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "venue",
+    "value": "arXiv.org",
+    "source": "semanticscholar",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "s2:An arXiv Preprint"
+   },
+   {
+    "field": "year",
+    "value": "2026",
+    "source": "semanticscholar",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "s2:An arXiv Preprint"
+   },
+   {
+    "field": "abstract",
+    "value": "Not a paper from the three venues.",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=An arXiv Preprint Out of Scope"
+   },
+   {
+    "field": "authors",
+    "value": "Zoe, Z",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=An arXiv Preprint Out of Scope"
+   }
+  ],
+  "fields": {
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "s2:An arXiv Preprint",
+    "source": "semanticscholar",
+    "tier": 2,
+    "value": "arXiv.org"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "s2:An arXiv Preprint",
+    "source": "semanticscholar",
+    "tier": 2,
+    "value": "2026"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=An arXiv Preprint Out of Scope",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Not a paper from the three venues."
+   },
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=An arXiv Preprint Out of Scope",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Zoe, Z"
+   }
+  }
+ },
+ {
+  "title": "No Identifier Anywhere",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "venue",
+    "value": "ICML",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=No Identifier Anywhere"
+   },
+   {
+    "field": "year",
+    "value": "2025",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=No Identifier Anywhere"
+   },
+   {
+    "field": "abstract",
+    "value": "A record whose only URL identifies nothing.",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=No Identifier Anywhere"
+   },
+   {
+    "field": "authors",
+    "value": "Koe, K",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=No Identifier Anywhere"
+   }
+  ],
+  "fields": {
+   "venue": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=No Identifier Anywhere",
+    "source": "scholar",
+    "tier": 0,
+    "value": "ICML"
+   },
+   "year": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=No Identifier Anywhere",
+    "source": "scholar",
+    "tier": 0,
+    "value": "2025"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=No Identifier Anywhere",
+    "source": "scholar",
+    "tier": 0,
+    "value": "A record whose only URL identifies nothing."
+   },
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=No Identifier Anywhere",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Koe, K"
+   }
+  }
+ },
+ {
+  "title": "A Synthetic ICML Paper Reached Through PMC",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "pmc_id",
+    "value": "PMC00000001",
+    "source": "pmc_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://pmc.ncbi.nlm.nih.gov/articles/PMC00000001/"
+   },
+   {
+    "field": "pmlr_volume",
+    "value": "267",
+    "source": "pmc_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "PMC esummary volume=267"
+   },
+   {
+    "field": "venue",
+    "value": "ICML",
+    "source": "pmlr_index",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "PMLR v267: International Conference on Machine Learning"
+   },
+   {
+    "field": "venue_id",
+    "value": "PMLR v267",
+    "source": "pmlr_index",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "PMLR v267: International Conference on Machine Learning"
+   },
+   {
+    "field": "year",
+    "value": "2025",
+    "source": "pmlr_index",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "PMLR v267: International Conference on Machine Learning"
+   },
+   {
+    "field": "abstract",
+    "value": "Only a PMC link …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic ICML Paper Reached Through PMC"
+   },
+   {
+    "field": "authors",
+    "value": "Loe, L",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic ICML Paper Reached Through PMC"
+   }
+  ],
+  "fields": {
+   "pmc_id": {
+    "confidence": 0.99,
+    "evidence": "https://pmc.ncbi.nlm.nih.gov/articles/PMC00000001/",
+    "source": "pmc_url",
+    "tier": 2,
+    "value": "PMC00000001"
+   },
+   "pmlr_volume": {
+    "confidence": 0.99,
+    "evidence": "PMC esummary volume=267",
+    "source": "pmc_api",
+    "tier": 2,
+    "value": "267"
+   },
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "PMLR v267: International Conference on Machine Learning",
+    "source": "pmlr_index",
+    "tier": 2,
+    "value": "ICML"
+   },
+   "venue_id": {
+    "confidence": 0.99,
+    "evidence": "PMLR v267: International Conference on Machine Learning",
+    "source": "pmlr_index",
+    "tier": 2,
+    "value": "PMLR v267"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "PMLR v267: International Conference on Machine Learning",
+    "source": "pmlr_index",
+    "tier": 2,
+    "value": "2025"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic ICML Paper Reached Through PMC",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Only a PMC link …"
+   },
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic ICML Paper Reached Through PMC",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Loe, L"
+   }
+  }
+ },
+ {
+  "title": "A Synthetic PMLR Paper on Calibration",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "pmlr_volume",
+    "value": "235",
+    "source": "pmlr_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.mlr.press/v235/smith24a.html"
+   },
+   {
+    "field": "venue",
+    "value": "ICML",
+    "source": "pmlr_index",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "PMLR v235: International Conference on Machine Learning"
+   },
+   {
+    "field": "year",
+    "value": "2024",
+    "source": "pmlr_index",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "PMLR v235: International Conference on Machine Learning"
+   },
+   {
+    "field": "abstract",
+    "value": "A synthetic PMLR abstract …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic PMLR Paper on Calibration"
+   },
+   {
+    "field": "authors",
+    "value": "Smith, A; Jones, B",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic PMLR Paper on Calibration"
+   }
+  ],
+  "fields": {
+   "pmlr_volume": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.mlr.press/v235/smith24a.html",
+    "source": "pmlr_url",
+    "tier": 2,
+    "value": "235"
+   },
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "PMLR v235: International Conference on Machine Learning",
+    "source": "pmlr_index",
+    "tier": 2,
+    "value": "ICML"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "PMLR v235: International Conference on Machine Learning",
+    "source": "pmlr_index",
+    "tier": 2,
+    "value": "2024"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic PMLR Paper on Calibration",
+    "source": "scholar",
+    "tier": 0,
+    "value": "A synthetic PMLR abstract …"
+   },
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic PMLR Paper on Calibration",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Smith, A; Jones, B"
+   }
+  }
+ },
+ {
+  "title": "A Synthetic Rejected Submission",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "forum_id",
+    "value": "Rej_ected-1",
+    "source": "openreview_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=Rej_ected-1"
+   },
+   {
+    "field": "venue_id",
+    "value": "ICLR.cc/2024/Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission"
+   },
+   {
+    "field": "venue",
+    "value": "ICLR",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission"
+   },
+   {
+    "field": "year",
+    "value": "2024",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission"
+   },
+   {
+    "field": "track",
+    "value": "Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission"
+   },
+   {
+    "field": "abstract",
+    "value": "A synthetic abstract of a rejected submission.",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "openreview:Rej_ected-1"
+   },
+   {
+    "field": "abstract",
+    "value": "A rejected paper's snippet …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Rejected Submission"
+   },
+   {
+    "field": "authors",
+    "value": "Noe, N",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Rejected Submission"
+   }
+  ],
+  "fields": {
+   "forum_id": {
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=Rej_ected-1",
+    "source": "openreview_url",
+    "tier": 2,
+    "value": "Rej_ected-1"
+   },
+   "venue_id": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR.cc/2024/Conference/Rejected_Submission"
+   },
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "2024"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "Conference/Rejected_Submission"
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "abstract": {
+    "confidence": 0.99,
+    "evidence": "openreview:Rej_ected-1",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "A synthetic abstract of a rejected submission."
+   },
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Rejected Submission",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Noe, N"
+   }
+  }
+ },
+ {
+  "title": "A Synthetic Datasets Track Paper",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "venue",
+    "value": "NeurIPS",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2024/file/00112233445566778899aabbccddeeff-Paper-Datasets_and_Benchmarks_Track.pdf"
+   },
+   {
+    "field": "year",
+    "value": "2024",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2024/file/00112233445566778899aabbccddeeff-Paper-Datasets_and_Benchmarks_Track.pdf"
+   },
+   {
+    "field": "track",
+    "value": "Datasets_and_Benchmarks_Track",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2024/file/00112233445566778899aabbccddeeff-Paper-Datasets_and_Benchmarks_Track.pdf"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2024/file/00112233445566778899aabbccddeeff-Paper-Datasets_and_Benchmarks_Track.pdf"
+   },
+   {
+    "field": "abstract",
+    "value": "A synthetic datasets-track abstract with  extra   spaces.",
+    "source": "proceedings_page",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2024/hash/00112233445566778899aabbccddeeff-Abstract-Datasets_and_Benchmarks_Track.html"
+   },
+   {
+    "field": "abstract",
+    "value": "A benchmark snippet …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Datasets Track Paper"
+   },
+   {
+    "field": "authors",
+    "value": "Hoe, H",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Datasets Track Paper"
+   }
+  ],
+  "fields": {
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2024/file/00112233445566778899aabbccddeeff-Paper-Datasets_and_Benchmarks_Track.pdf",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "NeurIPS"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2024/file/00112233445566778899aabbccddeeff-Paper-Datasets_and_Benchmarks_Track.pdf",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "2024"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2024/file/00112233445566778899aabbccddeeff-Paper-Datasets_and_Benchmarks_Track.pdf",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "Datasets_and_Benchmarks_Track"
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2024/file/00112233445566778899aabbccddeeff-Paper-Datasets_and_Benchmarks_Track.pdf",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "abstract": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.neurips.cc/paper_files/paper/2024/hash/00112233445566778899aabbccddeeff-Abstract-Datasets_and_Benchmarks_Track.html",
+    "source": "proceedings_page",
+    "tier": 2,
+    "value": "A synthetic datasets-track abstract with  extra   spaces."
+   },
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Datasets Track Paper",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Hoe, H"
+   }
+  }
+ },
+ {
+  "title": "A Synthetic Paper With No Query Date",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "venue",
+    "value": "ICLR",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2024/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html"
+   },
+   {
+    "field": "year",
+    "value": "2024",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2024/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html"
+   },
+   {
+    "field": "track",
+    "value": "Conference",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2024/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "proceedings_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2024/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html"
+   },
+   {
+    "field": "abstract",
+    "value": "No M1 line …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Paper With No Query Date"
+   },
+   {
+    "field": "authors",
+    "value": "Qoe, Q",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Paper With No Query Date"
+   }
+  ],
+  "fields": {
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2024/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "ICLR"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2024/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "2024"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2024/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "Conference"
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "https://proceedings.iclr.cc/paper_files/paper/2024/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html",
+    "source": "proceedings_url",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Paper With No Query Date",
+    "source": "scholar",
+    "tier": 0,
+    "value": "No M1 line …"
+   },
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Paper With No Query Date",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Qoe, Q"
+   }
+  }
+ }
+]

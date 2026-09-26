@@ -61,9 +61,12 @@ field may answer it, best first. A source not listed may never answer it. Decide
 All claims are kept, including the losing ones. Two same-rank sources that disagree produce a
 `conflicts.csv` row.
 
-**RIS-imported records** (spec 01 §Sources): `provenance.source = "ris"`. `status` comes from a claim
-only: an OpenReview venueid claim → its status; a proceedings-page claim → `accepted`; no claim →
-`unknown`. It is **never** inferred from the paper appearing in Scholar.
+**RIS-imported records** (spec 01 §Sources, `ingest/ris.py`): every claim has `source = "ris"`, with
+scholarmend's own source and evidence in `evidence` (`scholarmend:openreview_api venueid=…`). `status`
+comes from a claim only: an OpenReview venueid claim → its status; a proceedings listing (NeurIPS/ICLR
+proceedings URL, or a PMLR URL in an ICML main volume) → `accepted`, overriding the venueid. A record with
+neither is out of scope, so a RIS record is never `unknown` for lack of a claim. It is **never** inferred
+from the paper appearing in Scholar. The abstract is never Scholar's (`null` instead).
 
 ## content_hash
 `sha256` of the canonical JSON of the **searchable and filterable** fields: `title`, `abstract`,

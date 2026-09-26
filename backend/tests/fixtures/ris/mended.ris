@@ -1,0 +1,104 @@
+﻿TY  - PDF
+AU  - Doe, J
+AU  - Roe, R
+AU  - ...
+TI  - Synthetic Trust Benchmark for Language Models
+JF  - NeurIPS
+UR  - https://proceedings.neurips.cc/paper_files/paper/2025/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html
+UR  - https://proceedings.neurips.cc/paper_files/paper/2025/file/0123456789abcdef0123456789abcdef-Paper-Conference.pdf
+PY  - 2025///
+AB  - We introduce a synthetic … snippet
+M1  - Query date: 2026-09-19 01:06:30
+M1  - 3 cites: https://scholar.google.com/scholar?cites=1
+ER  - 
+
+TY  - PDF
+AU  - Poe, E
+TI  - An Imaginary Workshop Paper on Reliance
+JF  - ICML
+UR  - https://openreview.net/pdf?id=AbCdEf1234
+PY  - 2026///
+AB  - A made-up abstract …
+M1  - Query date: 2026-09-18 10:03:05
+ER  - 
+
+TY  - PDF
+AU  - Moe, M
+TI  - A Snippet-Only ICLR Record
+JF  - ICLR
+UR  - https://proceedings.iclr.cc/paper_files/paper/2025/hash/fedcba9876543210fedcba9876543210-Abstract-Conference.html
+PY  - 2025///
+AB  - … a truncated snippet about trust …
+M1  - Query date: 2026-09-19 01:06:30
+ER  - 
+
+TY  - PDF
+AU  - Zoe, Z
+TI  - An arXiv Preprint Out of Scope
+JF  - arXiv.org
+UR  - https://arxiv.org/abs/2601.00001
+PY  - 2026///
+AB  - Not a paper from the three venues.
+M1  - Query date: 2026-09-19 01:06:30
+ER  - 
+
+TY  - PDF
+AU  - Koe, K
+TI  - No Identifier Anywhere
+JF  - ICML
+UR  - https://example.org/paper.pdf
+PY  - 2025///
+AB  - A record whose only URL identifies nothing.
+M1  - Query date: 2026-09-19 01:06:30
+ER  - 
+
+TY  - PDF
+AU  - Loe, L
+TI  - A Synthetic ICML Paper Reached Through PMC
+JF  - ICML
+UR  - https://pmc.ncbi.nlm.nih.gov/articles/PMC00000001/
+PY  - 2025///
+AB  - Only a PMC link …
+M1  - Query date: 2026-09-19 01:06:30
+ER  - 
+
+TY  - PDF
+AU  - Smith, A
+AU  - Jones, B
+TI  - A Synthetic PMLR Paper on Calibration
+JF  - ICML
+UR  - https://proceedings.mlr.press/v235/smith24a.html
+UR  - https://proceedings.mlr.press/v235/smith24a/smith24a.pdf
+PY  - 2024///
+AB  - A synthetic PMLR abstract …
+M1  - Query date: 2026-09-20 08:00:00
+ER  - 
+
+TY  - PDF
+AU  - Noe, N
+TI  - A Synthetic Rejected Submission
+JF  - ICLR
+UR  - https://openreview.net/pdf?id=Rej_ected-1
+PY  - 2024///
+AB  - A rejected paper's snippet …
+M1  - Query date: 2026-09-19 01:06:30
+ER  - 
+
+TY  - PDF
+AU  - Hoe, H
+TI  - A Synthetic Datasets Track Paper
+JF  - NeurIPS
+UR  - https://proceedings.neurips.cc/paper_files/paper/2024/file/00112233445566778899aabbccddeeff-Paper-Datasets_and_Benchmarks_Track.pdf
+PY  - 2024///
+AB  - A benchmark snippet …
+M1  - Query date: 2026-09-19 01:06:30
+ER  - 
+
+TY  - PDF
+AU  - Qoe, Q
+TI  - A Synthetic Paper With No Query Date
+JF  - ICLR
+UR  - https://proceedings.iclr.cc/paper_files/paper/2024/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html
+PY  - 2024///
+AB  - No M1 line …
+ER  - 
