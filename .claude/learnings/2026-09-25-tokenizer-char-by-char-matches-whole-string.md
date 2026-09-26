@@ -44,3 +44,15 @@ Implement the token contract with a raw↔normalized offset map for highlights, 
 ## Propagated to
 - Spec 02 §Token semantics; `.claude/skills/token-contract/SKILL.md`; the ingestion and export agents,
   skills and specs now name the PyPI APIs.
+
+## Addendum 2026-09-25 (round 3, task-010 close, task-001 decisions)
+- **Every condition in a delimiter rule needs a row that fails without it.** The Pandoc `$` rule has four
+  conditions (opener not before a space, closer not after a space, closer not before a digit, `\$` never
+  closes). The first rows passed with any one of them deleted. Write each row by removing one condition and
+  finding an input whose tokens change, then run that mutant against the suite.
+- **A task in `backlog/completed/` can't be edited.** The CLI can't find it, and hand edits are gated. Check
+  every number in `--final-summary` (count the golden rows by importing the table, not with grep) *before*
+  running `backlog task complete`. task-010's summary says "190+ golden rows"; the real count is 176.
+- **Check a decision against its own examples.** The first draft of decision-001 put the stem minimum on the
+  last token, which would have rejected `gpt-4*`, the rule's own motivating example. It now counts the whole
+  written stem.
