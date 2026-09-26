@@ -133,7 +133,8 @@ as "current" and can load a pinned older version to replay a search record.
 
 - Differential testing (a CI gate): Hypothesis generates random ASTs over the corpus vocabulary (including
   rare terms, phrases, NEAR, wildcards and filters). Assert that
-  `TantivyEngine.match_ids == ReferenceEngine.match_ids` on a 5k-record fixture snapshot.
+  `TantivyEngine.match_ids == ReferenceEngine.match_ids` on a synthetic 5k-record fixture snapshot
+  (decision-004).
 - Golden fixtures from 02 run end to end through both engines.
 - Determinism: the same query and `index_version` give identical order and scores.
 - A tokenizer-parity test over the full corpus.

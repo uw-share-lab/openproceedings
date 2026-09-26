@@ -45,13 +45,13 @@ frozen, with scalar fields only, so they are hashable and set-comparable. That s
 where a mutable claim caused a blocking defect.
 
 Resolution is a **precedence table held as data** (scholarmend's ledger pattern). A source listed for a
-field may answer it, best first. A source not listed may never answer it. Proposed (confirm in a decision
-record before M4):
+field may answer it, best first. A source not listed may never answer it. Decided in decision-005
+(title, abstract and authors: OpenReview first, proceedings where OpenReview lacks the paper):
 
 | Field | Precedence |
 |---|---|
 | `track`, `status` | `openreview_v2`, `openreview_v1`, then proceedings (`neurips_proceedings`, `pmlr`) only for venue-years not on OpenReview, then `ris` |
-| `abstract` | `neurips_proceedings`, `pmlr` (the published text), `openreview_*`, `ris` |
+| `title`, `abstract`, `authors` | `openreview_v2`, `openreview_v1`, then `neurips_proceedings`, `pmlr` (papers or years not on OpenReview), then `ris` |
 | `year`, `venue` | the source that defined the crawl scope and agrees with the venueid; a disagreement is a conflict |
 
 All claims are kept, including the losing ones. Two same-rank sources that disagree produce a

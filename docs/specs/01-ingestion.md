@@ -94,11 +94,14 @@ op snapshot diff <a> <b>                # added / removed / changed records
   manifest.
 - Unparseable venueid: `track=unknown`, logged, and surfaced on the coverage page. Never guessed.
 - A source disagrees with another (for example, OpenReview says accepted but the proceedings don't list
-  it): keep both claims, set `status` from the higher-priority source, and write `conflicts.csv`.
+  it): keep both claims, set `status` from the higher-priority source, and write `conflicts.csv`. The
+  per-field precedence table is decision-005: OpenReview first for title, abstract and authors (the
+  proceedings only where OpenReview lacks the paper); OpenReview's venueid for track and status.
 
 ## Testing
 
-- Recorded HTTP fixtures (VCR-style) for each source and each year's schema variant.
+- Recorded HTTP fixtures (VCR-style) for each source and each year's schema variant, recorded by hand
+  and scrubbed of real text (titles, abstracts, authors replaced; structure kept), per decision-004.
 - A venueid-parsing table test covering every venueid form seen in scholarmend's 90 validated cases, plus
   the known workshop forms.
 - Dedup property tests. Never merge across venue or year. Merging is idempotent.

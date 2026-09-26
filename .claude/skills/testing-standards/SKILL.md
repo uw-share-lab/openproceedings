@@ -22,12 +22,14 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 - **Golden 200:** hand-built records whose text is written to be tricky (benchmark/benchmarking,
   trust/trustworthy, hyphens, LaTeX, phrases spanning title/abstract, NEAR order). Every expected ID set is
   written by a person and cross-checked against `ReferenceEngine`.
-- **5k snapshot:** a deterministic sample of the real corpus in the snapshot format (`records.jsonl` +
-  `manifest.json`), stratified across venue × year × track × status so filters and exclusion accounting
-  are exercised. It is versioned: regenerating it is a PR with its own manifest diff, and changes the
-  fixture `index_version`. Verify at implementation time that abstract licensing (00 open question 1)
-  allows committing the sample; if not, it is built in CI from a pinned cache.
-- Recorded HTTP fixtures (VCR-style) for each crawler source and year schema (01 §Testing). Tests never
+- **5k snapshot (decision-004): synthetic**, generated deterministically by a committed script in the
+  snapshot format (`records.jsonl` + `manifest.json`), covering every venue × year × track × status so
+  filters and exclusion accounting are exercised, with realistic vocabulary, LaTeX and Unicode. It is
+  versioned: regenerating it is a PR with its own manifest diff, and changes the fixture `index_version`.
+  Real-corpus checks (tokenizer parity, task-029) run locally against the maintainer's snapshot, never in
+  CI, because abstract licensing (00 open question 1) is unresolved.
+- Recorded HTTP fixtures (VCR-style) for each crawler source and year schema (01 §Testing), scrubbed of
+  real text (decision-004). Tests never
   hit the network, and it is **enforced**: `backend/tests/conftest.py` makes every non-loopback socket
   connection and DNS lookup raise `NetworkBlockedError` for the whole session (`test_no_network.py`). A test
   that needs a response gets a recorded fixture; there is no marker to opt out. Recording fixtures is a
