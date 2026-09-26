@@ -110,6 +110,9 @@ def canonicalize(n: Node) -> Node:
         return child.child if isinstance(child, Not) else n.model_copy(update={"child": child})
     if isinstance(n, Filter):
         return n.model_copy(update={"values": _sorted_values(n.values)})
+    if isinstance(n, Near):  # unordered, so `a NEAR/3 b` and `b NEAR/3 a` are one query
+        left, right = sorted((n.left, n.right), key=render)
+        return n.model_copy(update={"left": left, "right": right})
     if not isinstance(n, And | Or):
         return n
     children: list[Node] = []

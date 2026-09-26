@@ -44,7 +44,11 @@ def test_the_primary_string_is_pinned() -> None:
         "track:(datasets_benchmarks OR main OR position) AND status:accepted)"
     )
     assert [w.code for w in result.warnings] == [C.WARN_SOURCE_PARTIAL] * 2  # PMLR and its long name
-    assert [t.code for t in result.translations] == [C.COMPAT_SOURCE_ALIAS] * 9
+    assert [t.code for t in result.translations if t.code is not C.COMPAT_NO_STEMMING] == [
+        C.COMPAT_SOURCE_ALIAS
+    ] * 9
+    [stemming] = [t for t in result.translations if t.code is C.COMPAT_NO_STEMMING]
+    assert "`llm`" in stemming.message and "and 3 more" in stemming.message and "llm$" in stemming.message
 
 
 def test_pop_string_reads_items_as_phrases() -> None:
@@ -142,7 +146,10 @@ def test_or_of_sources_collapses_to_one_venue_clause() -> None:
 
 def test_pop_dollar_notice() -> None:
     result = scholar("model$ x")
-    assert [(t.code, t.span) for t in result.translations] == [(C.COMPAT_POP_DOLLAR, (0, 6))]
+    assert [(t.code, t.span) for t in result.translations if t.code is C.COMPAT_POP_DOLLAR] == [
+        (C.COMPAT_POP_DOLLAR, (0, 6))
+    ]
+    assert "no documented wildcard meaning in Google Scholar" in result.translations[0].message
 
 
 def test_alias_table_covers_every_corpus_export() -> None:
@@ -159,14 +166,16 @@ def test_intitle_hint() -> None:
 def test_pop_dollar_notices_cover_phrase_items_but_not_source_values() -> None:
     pop = scholar(protocol()["main-2-pop"])
     assert len([t for t in pop.translations if t.code is C.COMPAT_POP_DOLLAR]) == 10
-    assert [t.code for t in scholar("model$ source:ICLR").translations] == [
+    assert [
+        t.code for t in scholar("model$ source:ICLR").translations if t.code is not C.COMPAT_NO_STEMMING
+    ] == [
         C.COMPAT_POP_DOLLAR,
         C.COMPAT_SOURCE_ALIAS,
     ]
 
 
 def test_phrase_notice_span() -> None:
-    [note] = parse("(a b | c)", "scholar").translations
+    [note] = [t for t in parse("(a b | c)", "scholar").translations if t.code is C.COMPAT_POP_PHRASE]
     assert note.span == (1, 4)
 
 
@@ -206,3 +215,24 @@ def test_values_of_a_source_group_get_no_dollar_notice() -> None:
         (C.COMPAT_POP_DOLLAR, (24, 30))
     ]
     assert [t.code for t in scholar("source:ICLR (model$)").translations].count(C.COMPAT_POP_DOLLAR) == 1
+
+
+def test_no_stemming_notice_lists_exact_terms_once() -> None:
+    result = scholar('trust OR "large language model" OR trust OR bench* OR model$')
+    [note] = [t for t in result.translations if t.code is C.COMPAT_NO_STEMMING]
+    assert "`trust`" in note.message and "`large language model`" in note.message
+    assert "bench" not in note.message and "`model`" not in note.message  # wildcarded: nothing to warn about
+    assert [t.code for t in scholar("bench*").translations] == []  # only wildcards: no notice
+    assert parse("trust").translations == []  # native mode: the rule is the spec, not a translation
+
+
+def test_scholar_mixed_warning_says_scholar_groups_the_other_way() -> None:
+    [w] = [w for w in parse("a AND b OR c", "scholar").warnings if w.code is C.WARN_MIXED_AND_OR]
+    assert "Google Scholar binds OR tighter" in w.message
+    [n] = [w for w in parse("a b OR c").warnings if w.code is C.WARN_MIXED_AND_OR]
+    assert "Google Scholar" not in n.message
+
+
+def test_phrase_notice_names_the_decision() -> None:
+    [note] = [t for t in parse("(a b | c)", "scholar").translations if t.code is C.COMPAT_POP_PHRASE]
+    assert "decision-002" in note.message

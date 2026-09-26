@@ -26,7 +26,7 @@ outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copyin
 | `/` | Search home: the editor, example queries (the review's strings), a coverage summary line |
 | `/search` | The main workspace (below) |
 | `/paper/[id]` | Full record: abstract with the current query's highlights, all links, provenance table |
-| `/record/[id]` | Search-record page: the identification string and the default clauses, full index version, search date and crawl date, total, exclusions (`unknown` on its own line), replay status (`reproduced` / `drifted` with its reason / `mismatch`), a "Copy methods text" button, and export buttons pinned to the record's index. On `mismatch` the page is a blocking **"do not cite — replay mismatch"** state with no methods text and no export |
+| `/record/[id]` | Search-record page: the input string as typed, its `mode`, and every translation notice (Scholar mode), the identification string and the default clauses, full index version, search date and crawl date, total, exclusions (`unknown` on its own line), replay status (`reproduced` / `drifted` with its reason / `mismatch`), a "Copy methods text" button, and export buttons pinned to the record's index. On `mismatch` the page is a blocking **"do not cite — replay mismatch"** state with no methods text and no export |
 | `/coverage` | Venue × year × track table with source and snapshot date, missing-abstract counts, `unknown` counts |
 | `/help/syntax` | Language reference generated from the 02 golden table (it cannot drift from the tests) |
 
@@ -88,8 +88,13 @@ outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copyin
    count includes 0 unclassified records (track or status unknown), itemised separately. Cross-source
    duplicates were merged at ingest, before indexing (merge counts are in the search record). Database scope: coverage
    report for snapshot `<snapshot_hash>`. 412 records were screened. Search record: <url>."*
-   If `identification_query` is `""` or all-negative, the text cites `canonical` instead (prisma-reporting
-   skill); counts always come from `identification_ast`.
+   If `identification_query` is `""` the text reads "all indexed records"; if it is all-negative, the text
+   cites `canonical` instead (prisma-reporting skill). Counts always come from `identification_ast`. The
+   text also cites the input string as typed when it differs from the identification string, and when
+   `mode` is `scholar` it adds: "The string was entered in Google Scholar syntax and translated as
+   recorded: `source:` values became `venue:` filters; unquoted multi-word `|` items were read as phrases
+   (openproceedings decision-002), unlike Google Scholar; `$` was read as the Web of Science zero-or-one
+   wildcard; openproceedings does not stem (terms listed in the record)."
    It always gives the **full** `index_version`, never a prefix. The limits clause names every filter the
    user wrote (03 §Exclusion accounting: "identified" is conditional on them) and reads "with no limits"
    when there are none. The coverage report is cited with its snapshot hash as the database-scope caveat

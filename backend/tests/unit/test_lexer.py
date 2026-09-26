@@ -294,7 +294,12 @@ WARNINGS: list[tuple[str, DiagnosticCode, list[tuple[int, int]]]] = [
     ("trust ﹘bias", C.WARN_LOOKALIKE_OPERATOR, [(6, 11)]),
     ("``trust in AI''", C.WARN_LOOKALIKE_OPERATOR, [(0, 7)]),
     ("F# code", C.WARN_SYMBOLS_DROPPED, [(0, 2)]),
-    ('"C++ code"', C.WARN_SYMBOLS_DROPPED, []),  # phrase parts are not checked
+    ('"C++ code"', C.WARN_SYMBOLS_DROPPED, []),  # a phrase part that still has tokens is not flagged
+    (".NET code", C.WARN_SYMBOLS_DROPPED, [(0, 4)]),  # leading symbols too
+    ('"\\epsilon greedy"', C.WARN_SYMBOLS_DROPPED, [(1, 9)]),  # a part with nothing searchable
+    ("信頼", C.WARN_CJK_RUN, [(0, 2)]),
+    ('"信頼 性"', C.WARN_CJK_RUN, [(1, 3), (4, 5)]),
+    ("信頼性*", C.WARN_CJK_RUN, []),  # a wildcard already reaches longer runs
 ]
 
 
@@ -395,6 +400,11 @@ def test_random_input_never_raises_and_spans_are_sound(q: str) -> None:
         covered.update(range(*d.span))
     # every visible character belongs to some lexeme or to an error that explains it
     assert all(i in covered for i, c in enumerate(q) if not c.isspace())
+
+
+def test_the_cjk_hint_only_suggests_a_valid_wildcard() -> None:
+    assert "`信頼性*`" in lex("信頼性").warnings[0].message
+    assert "*" not in lex("信頼").warnings[0].message  # 信頼* would be a stem-too-short error
 
 
 def test_long_digit_runs_never_raise_in_the_lexer() -> None:

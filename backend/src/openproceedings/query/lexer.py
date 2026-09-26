@@ -131,6 +131,18 @@ def _diag(code: DiagnosticCode, message: str, start: int, end: int) -> Diagnosti
     return Diagnostic(code=code, message=message, span=(start, end))
 
 
+def _is_cjk(c: str) -> bool:
+    cp = ord(c)
+    return (
+        0x3040 <= cp <= 0x30FF  # hiragana, katakana
+        or 0x3400 <= cp <= 0x4DBF  # CJK extension A
+        or 0x4E00 <= cp <= 0x9FFF  # CJK unified ideographs
+        or 0xAC00 <= cp <= 0xD7AF  # hangul syllables
+        or 0xF900 <= cp <= 0xFAFF  # CJK compatibility ideographs
+        or 0x20000 <= cp <= 0x3134F  # CJK extensions B–H
+    )
+
+
 def letters(text: str) -> int:
     """How many letters and digits `text` keeps after the token contract (the wildcard stem measure)."""
     return sum(len(t.text) for t in tokenize(text))
@@ -240,7 +252,16 @@ class _Lexer:
                 while m < j and not q[m].isspace():
                     m += 1
             before = sum(letters(p.text) for p in parts)  # letters and digits of the earlier words
-            parts.append(self.word(k, m, in_phrase=True, before=before))
+            part = self.word(k, m, in_phrase=True, before=before)
+            if not part.wildcard and any(c.isalnum() for c in part.text) and not tokenize(part.text):
+                self.warn(  # `"\\epsilon greedy"` must not silently become the single word `greedy`
+                    DiagnosticCode.WARN_SYMBOLS_DROPPED,
+                    f"`{clip(part.text)}` in this phrase has nothing searchable (LaTeX commands outside math and "
+                    "symbols are not indexed), so the phrase is searched without it.",
+                    k,
+                    m,
+                )
+            parts.append(part)
             k = m
         self.out.append(Lexeme(Kind.PHRASE, i, end, q[i:end], parts=tuple(parts), closed=closed))
         return end
@@ -341,6 +362,20 @@ class _Lexer:
             )
         elif wildcard:
             self.check_stem(raw, stem, wildcard, start, end, before)
+        if not wildcard and any(_is_cjk(c) for c in stem):
+            self.warn(
+                DiagnosticCode.WARN_CJK_RUN,
+                f"`{clip(raw)}`: Chinese, Japanese and Korean text is not split into words, so this matches only "
+                "the exact run"
+                + (
+                    f" — `{clip(stem)}*` also finds longer runs that start with it"
+                    if letters(stem) >= MIN_STEM
+                    else "; search the whole run as written in the abstract"
+                )
+                + " (spec 02 §Known limits).",
+                start,
+                end,
+            )
         if not in_phrase:
             self.check_word(raw, stem, start, end)
         return Lexeme(Kind.WORD, start, end, raw, stem=stem, wildcard=wildcard)
@@ -397,11 +432,11 @@ class _Lexer:
                 start,
                 end,
             )
-        if stem.endswith(("+", "#")) and (toks := tokenize(stem)):
+        if (stem.endswith(("+", "#")) or stem.startswith((".", "#", "+", "@"))) and (toks := tokenize(stem)):
             searched = " ".join(t.text for t in toks)
             self.warn(
                 DiagnosticCode.WARN_SYMBOLS_DROPPED,
-                f"`{clip(raw)}` is searched as `{clip(searched)}`: symbols such as `+` and `#` are not indexed, so it matches "
+                f"`{clip(raw)}` is searched as `{clip(searched)}`: symbols such as `+`, `#` and `.` are not indexed, so it matches "
                 f"every `{clip(searched)}`.",
                 start,
                 end,

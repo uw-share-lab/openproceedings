@@ -24,6 +24,7 @@ ID, or goes to `review.csv`.
 | Only in Scholar, because… | Automated test |
 |---|---|
 | `filtered` — workshop / competition / rejected / withdrawn | Paper is in the corpus; `track`/`status` fails the default filters; re-running with defaults removed matches it. Counted in `excluded`. |
+| `compat_reading` | The difference comes from how Scholar mode read the string, not from the corpus: decision-002's phrase reading of unquoted multi-word `\|` items (Scholar ORs only neighbouring words), or `$` read as the WoS zero-or-one wildcard (Scholar has no documented `$`). Re-run with the Scholar reading written natively; it now matches. |
 | `stemming` | Re-run the query with the stemmed/inflected variants added (e.g. `benchmarks`, `trustworthy`); it now matches. Record which variant. |
 | `coverage_gap` — not in the corpus | No match by forum ID or title+venue+year in the snapshot. Fix in 01; cross-check with the coverage report. |
 | `full_text` | In the corpus, passes filters, and `ReferenceEngine` confirms neither the query nor any stemmed variant matches title+abstract. Residual class, so needs the oracle check. |

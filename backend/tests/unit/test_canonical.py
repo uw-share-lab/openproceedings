@@ -54,6 +54,7 @@ GOLDEN: list[tuple[str, str]] = [
     ('abstract:"trust in AI"', 'abstract:"trust in ai"'),
     ("title:gpt-4*", 'title:"gpt 4*"'),
     ("a NEAR/3 b", "(a NEAR/3 b)"),
+    ("b NEAR/3 a", "(a NEAR/3 b)"),  # NEAR is unordered, so its canonical form is too (M1 gate)
     ("title:(a NEAR/3 b)", "(title:a NEAR/3 title:b)"),
     # filters: after the text, ordered venue, year, track, status, then others alphabetically; values sorted
     (

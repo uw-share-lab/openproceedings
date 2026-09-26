@@ -127,7 +127,7 @@ once released: changing one is a breaking change under `/api/v1`.
 
 | Situation | HTTP | `code` |
 |---|---|---|
-| Query does not parse | 422 | `PARSE_*` (diagnostics carry the spans) |
+| Query does not parse, uses an unknown field or value, or has a bad wildcard (incl. more than 200 expansions) | 422 | `PARSE_*`, `FIELD_*`, `WILDCARD_*` (diagnostics carry the spans); a query over 2,000 code points is `PARSE_TOO_LONG`, rejected before parsing |
 | A query parameter is invalid (bad `sort`, `limit` > 200, unknown `format`, malformed `record_id`) | 422 | `API_BAD_PARAM` |
 | Paper or search record not found | 404 | `API_PAPER_NOT_FOUND` / `API_RECORD_NOT_FOUND` |
 | A pinned `index_version` is not available on this instance | 409 | `API_INDEX_VERSION_UNAVAILABLE` |

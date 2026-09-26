@@ -75,6 +75,8 @@ def test_codes_named_by_the_specs_exist() -> None:
         "WARN_SYMBOLS_DROPPED",
         "WARN_SOURCE_PARTIAL",
         "COMPAT_POP_PHRASE",
+        "COMPAT_NO_STEMMING",
+        "WARN_CJK_RUN",
         *SPEC_04,
     ):
         assert DiagnosticCode(name)

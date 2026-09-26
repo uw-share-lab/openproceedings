@@ -22,7 +22,11 @@ def test_canonical_string_parses_back_to_the_canonical_tree(tree: Node) -> None:
     result = parse(render(canonical))
     assert result.errors == [], (render(canonical), result.errors)
     # printing never causes a warning; WARN_NESTED_FILTER is about the tree's meaning, so it may remain
-    printed = [w for w in result.warnings if w.code is not DiagnosticCode.WARN_NESTED_FILTER]
+    semantic = (
+        DiagnosticCode.WARN_NESTED_FILTER,
+        DiagnosticCode.WARN_CJK_RUN,
+    )  # about the tree, not printing
+    printed = [w for w in result.warnings if w.code not in semantic]
     assert printed == [], (render(canonical), printed)
     assert result.ast is not None
     assert structure(canonicalize(result.ast)) == structure(canonical)

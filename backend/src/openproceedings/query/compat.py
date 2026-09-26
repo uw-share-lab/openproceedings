@@ -91,8 +91,8 @@ def group_phrases(
             notices.append(
                 Diagnostic(
                     code=DiagnosticCode.COMPAT_POP_PHRASE,
-                    message=f'`{clip(text)}` is read as the phrase `"{clip(text)}"`, as the `|` list intends — Google Scholar '
-                    "itself would have ORed only the neighbouring words.",
+                    message=f'`{clip(text)}` is read as the phrase `"{clip(text)}"` (openproceedings decision-002); Google '
+                    "Scholar itself would have ORed only the neighbouring words.",
                     span=(start, end),
                 )
             )
@@ -133,8 +133,9 @@ def dollar_notices(lexemes: tuple[Lexeme, ...]) -> list[Diagnostic]:
     return [
         Diagnostic(
             code=DiagnosticCode.COMPAT_POP_DOLLAR,
-            message=f"`{w.text}`: PoP `$` is read as zero or one more character (Web of Science), so it matches "
-            f"`{w.stem}` plus at most one character, e.g. a plural.",
+            message=f"`{clip(w.text)}`: `$` has no documented wildcard meaning in Google Scholar; openproceedings "
+            f"reads it as the Web of Science zero-or-one wildcard, so it matches `{clip(w.stem or '')}` plus at most one "
+            "character (e.g. a plural), and results for it may differ from the Scholar run.",
             span=(w.start, w.end),
         )
         for w in words

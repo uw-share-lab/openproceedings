@@ -19,7 +19,7 @@ need them settled. The Trust-Evals protocol's own search strings use a wildcard 
 3. **A wildcard stem that normalises to several tokens becomes a phrase whose last token carries the
    wildcard.** `gpt-4*` means `"gpt 4*"`. The 3-character minimum counts the letters and digits of the
    whole stem after normalisation, and in a phrase the words before the wildcard count too (so
-   `"gpt 4*"` and `"generative AI$"` are valid; amended 2026-09-25 with decision-002); the 200-expansion cap applies to the last token's expansions.
+   `"gpt 4*"` and `"generative AI$"` are valid; amended with decision-002, whose record is dated 2026-09-26 02:55 UTC, i.e. 2026-09-25 local time); the 200-expansion cap applies to the last token's expansions.
 4. **Only top-level AND conjuncts suppress a default filter** (already decided; spec 02 §Default
    filters; `WARN_NESTED_FILTER`).
 5. **Canonical filter order:** `venue`, `year`, `track`, `status`, then any other field alphabetically.

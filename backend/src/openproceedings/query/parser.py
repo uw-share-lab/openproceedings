@@ -258,8 +258,13 @@ class _Parser:
             self.warnings.append(
                 Diagnostic(
                     code=DiagnosticCode.WARN_MIXED_AND_OR,
-                    message=f"AND binds tighter than OR, so this is read as `{reading}` — add parentheses if you "
-                    "meant something else.",
+                    message=f"AND binds tighter than OR, so this is read as `{clip(reading, 120)}` — add parentheses "
+                    "if you meant something else."
+                    + (
+                        " Google Scholar binds OR tighter, so it would have grouped this the other way."
+                        if self.mode == "scholar"
+                        else ""
+                    ),
                     span=(nodes[0].span[0], nodes[-1].span[1]),
                 )
             )
@@ -719,6 +724,39 @@ class _Parser:
         return cls(span=(nodes[0].span[0], nodes[-1].span[1]), children=tuple(nodes))
 
 
+def _exact_terms(n: Node) -> list[str]:
+    """Words and phrases matched exactly (no wildcard), in order: what Scholar would have stemmed."""
+    if isinstance(n, Term):
+        return [n.token]
+    if isinstance(n, Phrase) and not any(isinstance(i, Wildcard) for i in n.items):
+        return [" ".join(i.token for i in n.items if isinstance(i, Term))]
+    if isinstance(n, Near):
+        return _exact_terms(n.left) + _exact_terms(n.right)
+    if isinstance(n, Not):
+        return _exact_terms(n.child)
+    if isinstance(n, And | Or):
+        return [t for c in n.children for t in _exact_terms(c)]
+    return []
+
+
+def _stemming_notice(ast: Node, end: int) -> list[Diagnostic]:
+    """Scholar mode: one notice that exact matching differs from Scholar's stemming (methods-reportable)."""
+    terms = list(dict.fromkeys(_exact_terms(ast)))
+    if not terms:
+        return []
+    shown = ", ".join(f"`{clip(t)}`" for t in terms[:8]) + (
+        f" and {len(terms) - 8} more" if len(terms) > 8 else ""
+    )
+    return [
+        Diagnostic(
+            code=DiagnosticCode.COMPAT_NO_STEMMING,
+            message=f"Google Scholar stems words; openproceedings matches them exactly, so {shown} match only "
+            "those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `llm$`).",
+            span=(0, end),
+        )
+    ]
+
+
 def _capped(diagnostics: list[Diagnostic]) -> list[Diagnostic]:
     """At most MAX_PER_CODE diagnostics of each code, then one "and N more" covering the rest."""
     seen: dict[DiagnosticCode, list[Diagnostic]] = {}
@@ -778,6 +816,8 @@ def parse(q: str, mode: Mode = "native") -> ParseResult:
         ]
     if errors or ast is None:
         return ParseResult(mode=mode, ast=None, warnings=warnings, errors=errors, translations=notes)
+    if mode == "scholar":
+        notes = sorted([*notes, *_stemming_notice(ast, len(q))], key=by_position)
     d = apply_defaults(ast, len(q))
     canonical = render(d.effective)
     return ParseResult(

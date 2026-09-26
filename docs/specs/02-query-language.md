@@ -48,10 +48,15 @@ tokens that share its span (`½` → `1`, `2`). The full case list is `backend/t
 ### Known limits (state these in a methods section when they matter)
 
 - **CJK has no word segmentation.** A run of Chinese, Japanese or Korean characters is one token, so
-  `信頼` does not match inside `信頼性`. Search the whole run, or use a wildcard (`信頼*`).
+  `信頼` does not match inside `信頼性`. Search the whole run, or use a wildcard on a stem of at least
+  three characters (`信頼性*`); `WARN_CJK_RUN` flags every CJK term.
 - **Hebrew and Arabic vowel points fold**, so a vocalised and an unvocalised spelling match each other.
   That is intended (points are optional in normal writing), but it is a fold, not an exact match.
 - **Latin, Greek and Cyrillic accents fold** (`resume` ≡ `résumé`), as in every mainstream search engine.
+- **No stemming.** `benchmark` does not match `benchmarks`, and `LLM` does not match `LLMs`; plurals and
+  other endings count only through an explicit `$` or `*`. Google Scholar stems, so a Scholar string run
+  unchanged identifies fewer records here; in Scholar mode `COMPAT_NO_STEMMING` lists the terms affected.
+- **Title and abstract only.** Scholar also searches full text; openproceedings never does (guarantee 2).
 
 Everything else is exact: a token matches only the identical normalised token. The corpus is
 overwhelmingly English, so these limits rarely bite, but a review of non-English titles should say so.
@@ -258,8 +263,11 @@ short or not at the end of a word, an unterminated phrase, `NEAR/` without a who
 with a bad operand, a missing operand (`a OR`), a word or phrase with no letters or digits (`a ~ b`), a
 nested text field, a malformed filter group, nesting deeper than 64, an ambiguous `-`, a stray `:`, a
 detached or mid-word wildcard, `source:` outside Scholar mode, an unknown field, an unknown filter value
-(listing the valid ones), a range with start > end, or an all-negative query. The codes are in
-`diagnostics.py`.
+(listing the valid ones), a range with start > end, an all-negative query, a quote or parenthesis glued
+to a word (`"trust in "AI"`, `model(s)`), or a query longer than 2,000 code points (`PARSE_TOO_LONG`,
+checked before any other work). Diagnostics are capped at 20 per code ("… and N more"), and user text
+quoted in a message is clipped to 40 characters, so no diagnostic grows with the input. The codes are in
+`diagnostics.py`; the `PARSE_*`, `FIELD_*` and `WILDCARD_*` errors are 422s (spec 04).
 
 ## Testing
 

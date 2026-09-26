@@ -67,10 +67,15 @@ prefix), and keeps the search date separate from the crawl date:
 > report for snapshot `<snapshot_hash>`. 412 records were screened. Search record: <url>.
 
 **When `identification_query` can't be cited as a search** (spec 02 §Default filters, as built): if it is
-`""` (the query was nothing but defaults) the text says "all indexed records within the stated limits"; if
+`""` (the query was nothing but defaults) the text says "all indexed records"; if
 it is all-negative (the only positive clause was a default, e.g. `NOT track:workshop`) the text cites
 `canonical` as the string searched and describes the identified set as "`canonical` without its default
 filters". Counts always come from `identification_ast`, never from re-parsing the string.
+
+**Scholar-mode strings** (spec 05 §Save search record): the methods text cites the input as typed, states
+that it was translated, and names the translations: `source:` → `venue:`, decision-002's phrase reading
+of `|` items (unlike Google Scholar), `$` as the WoS zero-or-one wildcard, and the no-stemming terms
+(`COMPAT_NO_STEMMING`). PRISMA-S asks for search strategies "exactly as run"; the record stores both.
 
 - **Unclassified** records are inside the removed count, and itemised in it.
 - The **limits clause** names every filter the user wrote (`year:`, `venue:`, a non-default `track:` set):
