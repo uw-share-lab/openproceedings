@@ -20,8 +20,9 @@ string (`main-7-most-updated`) quotes all its phrases and is unaffected.
 In `mode="scholar"` only, a run of two or more juxtaposed unquoted words with an `OR`/`|` directly on at
 least one side, bounded by `OR`/`|`, a parenthesis or the query's edge, is read as one phrase
 (`large language model$` → `"large language model$"`, the wildcard expanded at its position per
-decision-001). Each rewrite raises a `COMPAT_POP_PHRASE` translation notice with its span. Native mode is
-unchanged.
+decision-001). Each rewrite raises a `COMPAT_POP_PHRASE` translation notice with its span. A lowercase
+`and`/`or`/`not` (which keeps its own lowercase-operator warning) or a word with no letters or digits ends a
+run rather than disappearing into a phrase (task-015 review). Native mode is unchanged.
 
 ## Consequences
 

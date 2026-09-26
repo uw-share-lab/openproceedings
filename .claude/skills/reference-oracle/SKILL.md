@@ -51,7 +51,12 @@ It implements the same `Engine` protocol: `match_ids`, `expand`, `facets`, and a
   allowed imports; `api/` never imports it). `tests/golden/test_reference_200.py` runs 40 queries over a
   200-record fixture whose expected sets come from an independent evaluator
   (`tests/fixtures/corpus/make_reference_200.py`), and a property that canonical form never changes a match set.
-- Exclusion accounting (`excluded`) is task-026.
+- Every wildcard in a query (phrase items and NEAR operands too) is expanded once, before any record is
+  evaluated, so the 200 cap never depends on which records are reached (and a 5k differential run stays
+  O(corpus)). An empty snapshot expands nothing and matches nothing.
+- Facets judge "top-level" after flattening nested ANDs, as on the canonical tree. `track`/`status`
+  compare exactly; `venue` case-insensitively.
+- Exclusion accounting (`excluded`) is task-026; it evaluates `ParseResult.identification_ast`.
 
 ## When the two disagree
 Assume the Tantivy side is wrong until the oracle is shown to contradict spec 02 or 03. If the oracle is

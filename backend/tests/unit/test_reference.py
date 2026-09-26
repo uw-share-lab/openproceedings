@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from openproceedings.diagnostics import OpenProceedingsError
 from openproceedings.engine.reference import ReferenceEngine
-from openproceedings.query.ast import Not, Or, Term, Wildcard
+from openproceedings.query.ast import Filter, Not, Or, Term, Wildcard
 from openproceedings.query.parser import parse
 
 
@@ -64,10 +64,11 @@ ROWS = [
     ("model$", ["b", "d", "e"]),  # model, models
     ("llm$", ["a"]),
     ("trustworth*", ["b"]),
+    ("relian*", ["a"]),  # reliance is only in an abstract: the vocabulary covers both fields
     # Phrases: consecutive, within one field
     ('"trust calibration"', ["a", "f"]),
     ('"human trust"', ["c"]),
-    ('"calibration we"', []),  # never across the title/abstract boundary
+    ('"llms we"', []),  # a's title ends "LLMs", its abstract starts "We": never across the boundary
     ("vision-language", ["b"]),
     ('"trust in ai"', ["c", "e"]),
     ('"the model$ and"', ["e"]),
@@ -81,6 +82,10 @@ ROWS = [
     ("models NEAR/3 ai", ["e"]),
     ('"trust in" NEAR/0 ai', ["c", "e"]),
     ("title:(trust NEAR/0 calibration)", ["a"]),
+    (
+        "trust NEAR/5 trust",
+        ["c"],
+    ),  # two occurrences needed: c's abstract has two, e's title and abstract one each
     # Filters
     ("trust venue:ICML", ["e", "f"]),
     ("trust year:2022..2023", ["f"]),
@@ -113,6 +118,27 @@ def test_default_filters_apply_through_the_effective_tree() -> None:
     assert sorted(ENGINE.match_ids(result.effective_ast)) == ["a", "e", "f"]  # c is a workshop paper
 
 
+def test_the_expansion_cap_never_depends_on_which_records_are_reached() -> None:
+    engine = ReferenceEngine([Rec(f"r{i}", f"trust term{i:03d}", None) for i in range(201)])
+    for q in ("trust OR term*", "venue:ICML term*", "term* trust"):
+        tree = parse(q).ast
+        assert tree is not None
+        with pytest.raises(OpenProceedingsError) as err:
+            engine.match_ids(tree)
+        assert err.value.code == "WILDCARD_TOO_MANY_EXPANSIONS"
+        with pytest.raises(OpenProceedingsError):
+            engine.facets(tree)
+    empty = parse("term*").ast
+    assert empty is not None and ReferenceEngine([]).match_ids(empty) == frozenset()  # nothing to expand
+
+
+def test_expansion_boundaries() -> None:
+    exact = ReferenceEngine([Rec(str(i), f"term{i:03d}", None) for i in range(200)])
+    assert len(exact.expand(Wildcard(span=(0, 1), stem="term", op="*"))) == 200  # 200 is allowed
+    one_more = ReferenceEngine([Rec("m", "modeled", None)])
+    assert one_more.expand(Wildcard(span=(0, 1), stem="model", op="$")) == []  # `$` is at most one more
+
+
 def test_expand_is_sorted_and_capped() -> None:
     assert ENGINE.expand(Wildcard(span=(0, 1), stem="model", op="$")) == ["model", "models"]
     many = ReferenceEngine([Rec(str(i), f"term{i:03d}", None) for i in range(201)])
@@ -138,6 +164,46 @@ def test_facets_drop_only_the_fields_own_top_level_conjuncts() -> None:
     nested = parse("(trust venue:ICML) OR benchmark")
     assert nested.ast is not None
     assert ENGINE.facets(nested.ast, ("venue",))["venue"] == {"ICLR": 1, "ICML": 2, "NeurIPS": 1}
+
+
+def test_facet_rules() -> None:
+    def facets(q: str) -> dict[str, dict[str, int]]:
+        tree = parse(q).ast
+        assert tree is not None
+        return ENGINE.facets(tree)
+
+    assert facets("trust NOT venue:ICML")["venue"] == {"ICLR": 2, "ICML": 2}  # NOT venue:x is venue's own
+    assert facets("venue:ICML")["venue"] == {"ICLR": 3, "ICML": 2, "NeurIPS": 1}  # nothing left: every record
+    assert list(facets("trust")["venue"]) == ["ICLR", "ICML"]  # values in sorted order
+
+
+def test_facets_judge_top_level_on_the_flattened_tree() -> None:
+    engine = ReferenceEngine(
+        [
+            Rec("a", "trust benchmark", None, venue="ICML"),
+            Rec("b", "trust benchmark", None),
+            Rec("c", "trust", None),
+        ]
+    )
+    tree = parse("(trust venue:ICML) benchmark").ast
+    assert tree is not None
+    assert engine.facets(tree, ("venue",))["venue"] == {"ICLR": 1, "ICML": 1}
+
+
+def test_track_and_status_match_exactly_venue_case_insensitively() -> None:
+    track = Filter(span=(0, 1), field="track", values=("MAIN",))
+    venue = Filter(span=(0, 1), field="venue", values=("iclr",))
+    assert ENGINE.match_ids(track) == frozenset()
+    assert ENGINE.match_ids(venue) == frozenset({"a", "c", "d"})
+
+
+def test_bad_arguments_are_errors() -> None:
+    tree = parse("trust").ast
+    assert tree is not None
+    with pytest.raises(OpenProceedingsError):
+        ENGINE.search(tree, offset=-1)
+    with pytest.raises(OpenProceedingsError):
+        ENGINE.facets(tree, ("title",))
 
 
 def test_api_never_imports_the_oracle() -> None:

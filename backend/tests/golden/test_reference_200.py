@@ -34,7 +34,8 @@ ENGINE = ReferenceEngine(RECORDS)
 
 
 def test_fixture_size() -> None:
-    assert len(RECORDS) == 200 and len(GOLDEN) == 40
+    assert len(RECORDS) == 200 and len(GOLDEN) == 44
+    assert all(case["expected"] for case in GOLDEN), "a row expecting nothing pins nothing"
 
 
 @pytest.mark.parametrize("case", GOLDEN, ids=[c["q"] for c in GOLDEN])

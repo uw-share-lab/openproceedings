@@ -88,6 +88,8 @@ outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copyin
    count includes 0 unclassified records (track or status unknown), itemised separately. Cross-source
    duplicates were merged at ingest, before indexing (merge counts are in the search record). Database scope: coverage
    report for snapshot `<snapshot_hash>`. 412 records were screened. Search record: <url>."*
+   If `identification_query` is `""` or all-negative, the text cites `canonical` instead (prisma-reporting
+   skill); counts always come from `identification_ast`.
    It always gives the **full** `index_version`, never a prefix. The limits clause names every filter the
    user wrote (03 §Exclusion accounting: "identified" is conditional on them) and reads "with no limits"
    when there are none. The coverage report is cited with its snapshot hash as the database-scope caveat

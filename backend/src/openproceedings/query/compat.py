@@ -37,6 +37,16 @@ def source_key(text: str) -> str:
     return " ".join(normalize(text))
 
 
+_OPERATOR_WORDS = frozenset({"and", "or", "not"})
+
+
+def _joins(x: Lexeme) -> bool:
+    """Whether a word can be part of a `|` item phrase: a plain word with something to search. A lowercase
+    operator word (whose own warning says it is searched as a word) or a word with no letters or digits
+    (`&`, an error of its own) ends the run instead of silently vanishing into a phrase."""
+    return x.kind is Kind.WORD and x.text.casefold() not in _OPERATOR_WORDS and bool(normalize(x.stem or ""))
+
+
 def _is_or(x: Lexeme | None) -> bool:
     return x is not None and x.kind is Kind.OR
 
@@ -67,7 +77,7 @@ def group_phrases(
     i = 0
     while i < len(lexemes):
         j = i
-        while j < len(lexemes) and lexemes[j].kind is Kind.WORD:
+        while j < len(lexemes) and _joins(lexemes[j]):
             j += 1
         before = lexemes[i - 1] if i else None
         after = lexemes[j] if j < len(lexemes) else None
@@ -97,14 +107,33 @@ def group_phrases(
     return tuple(out), notices, cleared
 
 
+def _search_terms(lexemes: tuple[Lexeme, ...]) -> list[Lexeme]:
+    """WORDs and PHRASEs that are searched, skipping `source:` values (translated, never searched)."""
+    out: list[Lexeme] = []
+    skip_value, depth = False, 0
+    for x in lexemes:
+        if x.kind is Kind.FIELD and x.field == "source":
+            skip_value = True
+            continue
+        if skip_value and x.kind is Kind.LPAREN:
+            depth += 1
+            continue
+        if depth:
+            depth += 1 if x.kind is Kind.LPAREN else -1 if x.kind is Kind.RPAREN else 0
+            skip_value = depth > 0
+            continue
+        if skip_value:
+            skip_value = False
+            if x.kind in (Kind.WORD, Kind.PHRASE):
+                continue
+        if x.kind in (Kind.WORD, Kind.PHRASE):
+            out.append(x)
+    return out
+
+
 def dollar_notices(lexemes: tuple[Lexeme, ...]) -> list[Diagnostic]:
     """A notice for every PoP `$` wildcard: it is read as zero-or-one character."""
-    words = [
-        p
-        for x in lexemes
-        for p in (x.parts if x.kind is Kind.PHRASE else (x,))
-        if x.kind in (Kind.WORD, Kind.PHRASE)
-    ]
+    words = [p for x in _search_terms(lexemes) for p in (x.parts if x.kind is Kind.PHRASE else (x,))]
     return [
         Diagnostic(
             code=DiagnosticCode.COMPAT_POP_DOLLAR,

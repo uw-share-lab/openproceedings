@@ -66,6 +66,12 @@ prefix), and keeps the search date separate from the crawl date:
 > duplicates were merged at ingest, before indexing (merge counts are in the search record). Database scope: coverage
 > report for snapshot `<snapshot_hash>`. 412 records were screened. Search record: <url>.
 
+**When `identification_query` can't be cited as a search** (spec 02 §Default filters, as built): if it is
+`""` (the query was nothing but defaults) the text says "all indexed records within the stated limits"; if
+it is all-negative (the only positive clause was a default, e.g. `NOT track:workshop`) the text cites
+`canonical` as the string searched and describes the identified set as "`canonical` without its default
+filters". Counts always come from `identification_ast`, never from re-parsing the string.
+
 - **Unclassified** records are inside the removed count, and itemised in it.
 - The **limits clause** names every filter the user wrote (`year:`, `venue:`, a non-default `track:` set):
   "identified" is conditional on them (03 §Exclusion accounting). With none it reads "with no limits".

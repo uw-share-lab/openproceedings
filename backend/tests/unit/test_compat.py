@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.query.canonical import canonicalize, render
 from openproceedings.query.compat import SOURCE_ALIASES, source_key
 from openproceedings.query.parser import ParseResult, parse
 
@@ -69,15 +70,16 @@ PHRASING = [
     ("x (a b | c)", '(x AND ("a b" OR c))', 1),
     ("NOT a b | c", "((NOT a AND b) OR c)", 0),  # bounded by NOT, not by `|`: left as written
     ('"a b" | c d', '("a b" OR "c d")', 1),
+    ("a OR b c", '(a OR "b c")', 1),  # uppercase OR too, not just `|`
+    ("trust a b | c", '("trust a b" OR c)', 1),  # the whole run, as decision-002 states
+    ("a or b | c", '((a AND "or" AND b) OR c)', 0),  # a lowercase operator word ends a run (and warns)
 ]
 
 
 @pytest.mark.parametrize(("q", "expected", "notices"), PHRASING, ids=[q for q, *_ in PHRASING])
 def test_phrase_grouping(q: str, expected: str, notices: int) -> None:
     result = parse(q, "scholar")
-    assert result.effective_ast is not None
-    from openproceedings.query.canonical import canonicalize, render
-
+    assert result.errors == []
     assert result.ast is not None and render(canonicalize(result.ast)) == expected
     assert len([t for t in result.translations if t.code is C.COMPAT_POP_PHRASE]) == notices
 
@@ -99,6 +101,8 @@ SOURCES = [
     ('source:"international conference on machine learning"', "ICML"),
     ("source:PMLR", "ICML"),
     ("source:”proceedings of machine learning research”", "ICML"),
+    ("source:ICLR.", "ICLR"),  # matched after the token contract: punctuation and hyphens split
+    ("source:neural-information-processing-systems", "NeurIPS"),
 ]
 
 
@@ -107,14 +111,23 @@ def test_source_translates_to_venue(q: str, venue: str) -> None:
     result = scholar(f"trust {q}")
     assert f"venue:{venue}" in (result.canonical or "")
     [note] = [t for t in result.translations if t.code is C.COMPAT_SOURCE_ALIAS]
-    assert f"`venue:{venue}`" in note.message and note.span is not None and note.span[0] > 0
+    assert f"`venue:{venue}`" in note.message
+    value = q.removeprefix("source:")
+    assert note.span == (13, 13 + len(value))  # the value itself, not `source:` ("trust " is 6, "source:" 7)
     partial = [w for w in result.warnings if w.code is C.WARN_SOURCE_PARTIAL]
     assert len(partial) == (1 if "PMLR" in q or "proceedings" in q else 0)
 
 
 @pytest.mark.parametrize(
     ("q", "span"),
-    [("source:foo", (7, 10)), ('source:"neural information"', (7, 27)), ("source:neur*", (7, 12))],
+    [
+        ("source:foo", (7, 10)),
+        ('source:"neural information"', (7, 27)),
+        ("source:neur*", (7, 12)),
+        ("source:ICLR*", (7, 12)),
+        ('source:"ICLR*"', (7, 14)),  # a wildcard inside a quoted value is not dropped
+        ('source:"advances in neural information processing systems$"', (7, 59)),
+    ],
 )
 def test_unknown_source_is_an_error_never_a_substring(q: str, span: tuple[int, int]) -> None:
     result = parse(q, "scholar")
@@ -141,3 +154,47 @@ def test_alias_table_covers_every_corpus_export() -> None:
 
 def test_intitle_hint() -> None:
     assert "`title:`" in parse("intitle:trust", "scholar").errors[0].message
+
+
+def test_pop_dollar_notices_cover_phrase_items_but_not_source_values() -> None:
+    pop = scholar(protocol()["main-2-pop"])
+    assert len([t for t in pop.translations if t.code is C.COMPAT_POP_DOLLAR]) == 10
+    assert [t.code for t in scholar("model$ source:ICLR").translations] == [
+        C.COMPAT_POP_DOLLAR,
+        C.COMPAT_SOURCE_ALIAS,
+    ]
+
+
+def test_phrase_notice_span() -> None:
+    [note] = parse("(a b | c)", "scholar").translations
+    assert note.span == (1, 4)
+
+
+def test_source_translation_ends_with_its_clause() -> None:
+    result = scholar("trust source:ICLR track:workshop")
+    assert result.canonical == "(trust AND venue:ICLR AND track:workshop AND status:accepted)"
+
+
+def test_a_mid_word_dollar_in_a_source_value_is_one_error() -> None:
+    assert [e.code for e in parse("source:IC$LR", "scholar").errors] == [C.PARSE_WILDCARD_NOT_SUFFIX]
+
+
+SCOPE = [
+    ("source:ICLR OR PMLR", (15, 19)),
+    ('source:ICLR OR "neural information processing systems"', (15, 54)),
+]
+
+
+@pytest.mark.parametrize(("q", "span"), SCOPE, ids=[q for q, _ in SCOPE])
+def test_a_bare_source_name_ored_to_a_source_filter_warns(q: str, span: tuple[int, int]) -> None:
+    result = scholar(q)
+    assert [(w.code, w.span) for w in result.warnings] == [(C.WARN_FILTER_SCOPE, span)]
+    assert "source:(" in result.warnings[0].message
+
+
+def test_a_source_filter_inside_a_text_field_warns_like_venue() -> None:
+    assert [w.code for w in scholar("title:(trust source:ICLR)").warnings] == [C.WARN_FILTER_SCOPE]
+
+
+def test_scholar_mode_does_not_group_around_empty_words() -> None:
+    assert [e.code for e in parse("a & b | c", "scholar").errors] == [C.PARSE_EMPTY_TERM]

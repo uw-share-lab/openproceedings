@@ -184,7 +184,10 @@ The UI toggles edit these same clauses; they are not a separate state.
   `identification_query` is `""` when the query was nothing but defaults (every record). If a query's only
   positive clause was a default (`status:accepted NOT track:workshop`), `identification_query` is
   all-negative (`NOT track:workshop`): a well-defined set the engine counts from the tree, but not a
-  string that parses on its own. Records reproduce it by replaying `canonical`.
+  string that parses on its own. Records reproduce it by replaying `canonical`, and exclusion accounting
+  uses `ParseResult.identification_ast` (the same set as a tree; None = every record), never the string.
+  `WARN_NESTED_FILTER` fires whenever a default applies, whether inserted, typed or replayed, once per
+  nested clause of that field.
 
 ## Compatibility input modes
 
@@ -194,8 +197,11 @@ The review's existing strings must work **unchanged** or come back with a precis
   notice (`COMPAT_POP_DOLLAR`). `source:` values translate through an exact alias table (never a
   substring match; every value in the review's 17 corpus exports is covered) to `venue:`, with a
   `COMPAT_SOURCE_ALIAS` notice each; PMLR also raises `WARN_SOURCE_PARTIAL`; an unknown value is an error.
-  An OR of sources collapses to one `venue:(…)` clause. **Decision-002:** a run of two or more
-  juxtaposed unquoted words forming one `|`/`OR` item is a phrase (`(large language model$ | LLM)` →
+  An OR of sources collapses to one `venue:(…)` clause. A wildcard in a `source:` value (quoted or not)
+  is an error, and a bare source name OR-joined to a `source:` filter (`source:ICLR OR PMLR`) raises
+  `WARN_FILTER_SCOPE`. **Decision-002:** a run of two or more
+  juxtaposed unquoted words forming one `|`/`OR` item is a phrase (a lowercase `and`/`or`/`not` or a
+  word with no letters or digits ends the run instead of joining it) (`(large language model$ | LLM)` →
   `("large language model$" OR llm)`, `COMPAT_POP_PHRASE`), as the review intended; Google Scholar itself
   binds `|` tighter. The output is native: the canonical string re-parses in native mode unchanged.
 - The parser returns `translations[]`, for example: "`source:PMLR` → `venue:ICML` (PMLR also hosts other

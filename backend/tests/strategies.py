@@ -27,12 +27,26 @@ from openproceedings.query.ast import (
 )
 from openproceedings.query.normalize import normalize
 
+_ROWS = [
+    json.loads(line)
+    for line in (Path(__file__).parent / "fixtures" / "corpus" / "reference-200.jsonl")
+    .read_text()
+    .splitlines()
+]
+_FIELD_TOKENS = [normalize(r[f] or "") for r in _ROWS for f in ("title", "abstract")]
+
 
 def _fixture_vocabulary() -> list[str]:
     """The real term dictionary of the 200-record fixture, so generated queries hit documents."""
-    corpus = Path(__file__).parent / "fixtures" / "corpus" / "reference-200.jsonl"
-    rows = [json.loads(line) for line in corpus.read_text().splitlines()]
-    return sorted({t for r in rows for f in ("title", "abstract") for t in normalize(r[f] or "")})
+    return sorted({t for tokens in _FIELD_TOKENS for t in tokens})
+
+
+# consecutive tokens that really occur in one field, so phrases and NEAR operands match something
+NGRAMS = sorted(
+    {tuple(ts[i : i + k]) for ts in _FIELD_TOKENS for k in (2, 3) for i in range(len(ts) - k + 1)}
+)
+# real strict prefixes (`benchmar*`, `relian*`) as well as whole words
+PREFIXES = sorted({t[:n] for t in _fixture_vocabulary() if len(t) >= 5 for n in range(3, len(t))})
 
 
 VOCABULARY = [
@@ -43,7 +57,7 @@ VOCABULARY = [
     *("neurips", "iclr", "main", "workshop", "accepted", "2024", "2021"),  # filter values as text
     *("naive", "信頼性", "ป่า", "が"),
 ]
-STEMS = [w for w in VOCABULARY if len(w) >= 3]
+STEMS = [w for w in VOCABULARY if len(w) >= 3] + PREFIXES
 SPAN = (0, 0)
 FIELDS: list[TextField | None] = [None, "title", "abstract"]
 
@@ -58,12 +72,16 @@ def _wildcard(stem: str, op: str, field: TextField | None = None) -> Wildcard:
 
 @st.composite
 def leaves(draw: st.DrawFn, field: TextField | None = None) -> Term | Wildcard | Phrase:
-    kind = draw(st.sampled_from(["term", "wildcard", "phrase"]))
+    kind = draw(st.sampled_from(["term", "wildcard", "phrase", "phrase"]))
     if kind == "term":
         return _term(draw(st.sampled_from(VOCABULARY)), field)
     if kind == "wildcard":
         return _wildcard(draw(st.sampled_from(STEMS)), draw(st.sampled_from("*$")), field)
-    words = draw(st.lists(st.sampled_from(VOCABULARY), min_size=2, max_size=4))
+    words = list(
+        draw(
+            st.one_of(st.sampled_from(NGRAMS), st.lists(st.sampled_from(VOCABULARY), min_size=2, max_size=4))
+        )
+    )
     items: list[Term | Wildcard] = [_term(w) for w in words]
     if draw(st.booleans()):  # a wildcard item, at any position (decision-001)
         i = draw(st.integers(0, len(items) - 1))

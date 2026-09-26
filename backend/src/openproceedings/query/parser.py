@@ -18,7 +18,8 @@ one mistake gives one error (an error already reported inside a span suppresses 
   This is checked before default filters are added (task-014), which would otherwise hide it.
 
 `ParseResult.canonical`/`.canonical_hash` come from `canonical.py` and the default filters, with
-`effective_ast`, `identification_query` and `defaults`, from `defaults.py`. Scholar mode is task-015.
+`effective_ast`, `identification_query`, `identification_ast` and `defaults`, from `defaults.py`. Scholar
+mode (`mode="scholar"`) is `compat.py` plus the `source:` branch below.
 """
 
 from __future__ import annotations
@@ -81,6 +82,9 @@ class ParseResult(BaseModel):
     )
     canonical_hash: str | None = None
     identification_query: str | None = None  # canonical without the default conjuncts; "" = every record
+    # the same set as a tree, for exclusion accounting (task-026): None when it is every record, or on errors.
+    # Use it, not the string: the string can be "" or all-negative (spec 02 §Default filters, as built)
+    identification_ast: Node | None = None
     defaults: list[
         FilterField
     ] = []  # fields whose top-level clause is the default (spec 03 §Exclusion accounting)
@@ -241,20 +245,33 @@ class _Parser:
         """WARN_FILTER_SCOPE for `year:2023 OR 2024`: an OR branch that is just a bare value of the field of
         a filter in another branch of the same OR."""
         fields = sorted({n.field for n in nodes if isinstance(n, Filter)})
-        words = [t for t in toks if t.kind is Kind.WORD]
+        terms = [t for t in toks if t.kind in (Kind.WORD, Kind.PHRASE)]
         for n in nodes:
-            inside = [t for t in words if n.span[0] <= t.start and t.end <= n.span[1]]  # `2024` or `(2024)`
-            tok = inside[0] if isinstance(n, Term) and n.field is None and len(inside) == 1 else None
-            f = next((f for f in fields if tok and filter_value(f, tok) is not None), None)
-            if tok and f:
-                self.warnings.append(
-                    Diagnostic(
-                        code=DiagnosticCode.WARN_FILTER_SCOPE,
-                        message=f"`{tok.text}` is searched as text in any paper, not as a {f} — to OR it into the "
-                        f"filter, write `{f}:(… OR {tok.text})`.",
-                        span=(tok.start, tok.end),
-                    )
+            inside = [t for t in terms if n.span[0] <= t.start and t.end <= n.span[1]]  # `2024` or `(2024)`
+            bare = isinstance(n, Term | Phrase) and n.field is None and len(inside) == 1
+            tok = inside[0] if bare else None
+            if tok is None:
+                continue
+            if self.mode == "scholar" and "venue" in fields and self.is_source(tok):
+                field, fix = "source", "source"  # Scholar: `source:ICLR OR PMLR`
+            else:
+                f = next((f for f in fields if filter_value(f, tok) is not None), None)
+                if f is None:
+                    continue
+                field, fix = f, f
+            self.warnings.append(
+                Diagnostic(
+                    code=DiagnosticCode.WARN_FILTER_SCOPE,
+                    message=f"`{tok.text}` is searched as text in any paper, not as a {field} — to OR it into the "
+                    f"filter, write `{fix}:(… OR {tok.text})`.",
+                    span=(tok.start, tok.end),
                 )
+            )
+
+    @staticmethod
+    def is_source(tok: Lexeme) -> bool:
+        text = " ".join(p.text for p in tok.parts) if tok.kind is Kind.PHRASE else tok.text
+        return source_key(text) in SOURCE_ALIASES
 
     def and_expr(self, field: TextField | None) -> tuple[Node | None, bool]:
         children = [self.not_expr(field)]
@@ -411,6 +428,15 @@ class _Parser:
         name = tok.field or ""
         if name not in FIELDS:  # FIELD_UNKNOWN is the lexer's; what follows is parsed by the caller's loop
             return None
+        if name not in TEXT_FIELDS and outer is not None:
+            self.warnings.append(
+                Diagnostic(
+                    code=DiagnosticCode.WARN_FILTER_SCOPE,
+                    message=f"`{tok.text}` inside `{outer}:(…)` filters whole papers, not the {outer} — move it "
+                    "out of the group to make that clear.",
+                    span=(tok.start, tok.end),
+                )
+            )
         if name == "source" and self.mode == "scholar":
             self.in_source = True
             try:
@@ -429,15 +455,6 @@ class _Parser:
                 self.advance()  # its value: not a mistake of its own (a group is parsed for real errors)
             return None
         if name not in TEXT_FIELDS:
-            if outer is not None:
-                self.warnings.append(
-                    Diagnostic(
-                        code=DiagnosticCode.WARN_FILTER_SCOPE,
-                        message=f"`{tok.text}` inside `{outer}:(…)` filters whole papers, not the {outer} — move it "
-                        "out of the group to make that clear.",
-                        span=(tok.start, tok.end),
-                    )
-                )
             return self.filter(tok, cast(FilterField, name))
         if outer is not None and name != outer:
             self.error(
@@ -527,7 +544,7 @@ class _Parser:
         """A Scholar `source:` value translated to a venue through the alias table (exact, never substring)."""
         text = (
             " ".join(p.text for p in v.parts)
-            if v.kind is Kind.PHRASE
+            if v.kind is Kind.PHRASE and not any(p.wildcard for p in v.parts)  # `"ICLR*"`: no wildcards here
             else v.text
             if v.kind is Kind.WORD
             else ""
@@ -722,6 +739,7 @@ def parse(q: str, mode: Mode = "native") -> ParseResult:
         canonical=canonical,
         canonical_hash=canonical_hash(canonical),
         identification_query=render(d.identification) if d.identification is not None else "",
+        identification_ast=d.identification,
         defaults=list(d.defaults),
         warnings=sorted([*warnings, *d.warnings], key=_by_position),
         errors=errors,

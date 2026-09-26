@@ -28,7 +28,9 @@ DEFAULT_CLAUSES: dict[FilterField, tuple[str, ...]] = {
 @dataclass(frozen=True, slots=True)
 class Defaulted:
     effective: Node  # canonical, with the defaults
-    identification: Node | None  # canonical, without them; None = every record
+    identification: (
+        Node | None
+    )  # canonical, without them; None = every record (ParseResult.identification_ast)
     defaults: tuple[
         FilterField, ...
     ]  # the fields whose top-level clause is the default, in DEFAULT_CLAUSES order
@@ -53,15 +55,15 @@ def _clause_field(n: Node) -> str | None:
     return inner.field if isinstance(inner, Filter) else None
 
 
-def _nested_filter(n: Node, field: str) -> Filter | None:
-    """The first filter on `field` anywhere under `n`."""
+def _nested_filters(n: Node, field: str) -> list[Filter]:
+    """Every filter on `field` anywhere under `n`, in order."""
     if isinstance(n, Filter):
-        return n if n.field == field else None
+        return [n] if n.field == field else []
     if isinstance(n, Not):
-        return _nested_filter(n.child, field)
+        return _nested_filters(n.child, field)
     if isinstance(n, And | Or):
-        return next((f for c in n.children if (f := _nested_filter(c, field))), None)
-    return None
+        return [f for c in n.children for f in _nested_filters(c, field)]
+    return []
 
 
 def _is_default(n: Node) -> bool:
@@ -81,16 +83,18 @@ def apply_defaults(ast: Node, at: int) -> Defaulted:
         elif not own:
             defaults.append(field)
             added.append(Filter(span=(at, at), field=field, values=values))
-            nested = next((f for c in conjuncts if (f := _nested_filter(c, field))), None)
-            if nested is not None:
-                warnings.append(
-                    Diagnostic(
-                        code=DiagnosticCode.WARN_NESTED_FILTER,
-                        message=f"This `{field}:` clause is nested, so the default {field} filter still applies to "
-                        f"the whole query — add a top-level `{field}:` clause to override it.",
-                        span=nested.span,
-                    )
+        else:
+            continue  # the user's own top-level clause decides; nested clauses are just part of the search
+        # the default applies, whether inserted, typed or replayed: every nested clause of the field says so
+        for nested in (f for c in conjuncts if c not in own for f in _nested_filters(c, field)):
+            warnings.append(
+                Diagnostic(
+                    code=DiagnosticCode.WARN_NESTED_FILTER,
+                    message=f"This `{field}:` clause is nested, so the default {field} filter still applies to "
+                    f"the whole query — add a top-level `{field}:` clause to override it.",
+                    span=nested.span,
                 )
+            )
     effective = canonicalize(_combine(conjuncts + added) or ast)
     kept = [c for c in _conjuncts(effective) if not (_is_default(c) and _clause_field(c) in defaults)]
     return Defaulted(effective, _combine(kept), tuple(defaults), tuple(warnings))

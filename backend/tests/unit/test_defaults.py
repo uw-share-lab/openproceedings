@@ -163,6 +163,7 @@ NESTED = [
         "track",
         (16, 26),
     ),  # Hypothesis counterexample (task-017), kept as golden
+    (f"trust {TRACK} (x OR track:workshop)", "track", (60, 74)),  # a typed default keeps the warning
 ]
 
 
@@ -173,6 +174,8 @@ def test_nested_filters_keep_the_default_and_warn(q: str, field: str, span: tupl
     nested = [w for w in result.warnings if w.code is DiagnosticCode.WARN_NESTED_FILTER]
     assert [w.span for w in nested] == [span]
     assert f"top-level `{field}:`" in nested[0].message
+    assert result.canonical is not None  # a replay keeps the warning
+    assert [w.code for w in ok(result.canonical).warnings].count(DiagnosticCode.WARN_NESTED_FILTER) == 1
 
 
 def test_a_top_level_clause_silences_the_nested_warning() -> None:
@@ -233,3 +236,24 @@ def test_defaults_are_idempotent(q: str) -> None:
         assert first.identification_query == "" or [e.code for e in ident.errors] == [
             DiagnosticCode.PARSE_ALL_NEGATIVE
         ]
+
+
+def test_every_nested_clause_warns() -> None:
+    result = ok("trust (x OR track:workshop) (y OR track:main)")
+    assert [w.span for w in result.warnings if w.code is DiagnosticCode.WARN_NESTED_FILTER] == [
+        (12, 26),
+        (34, 44),
+    ]
+
+
+def test_inserted_defaults_point_at_the_end_of_the_input() -> None:
+    result = ok("trust")
+    assert result.effective_ast is not None
+    assert [c.span for c in result.effective_ast.children[1:]] == [(5, 5), (5, 5)]  # type: ignore[union-attr]
+
+
+def test_identification_ast_is_the_set_without_defaults() -> None:
+    assert ok("trust").identification_ast == ok("trust").ast
+    assert ok("status:accepted").identification_ast is None  # every record
+    negative = ok("status:accepted NOT track:workshop").identification_ast
+    assert negative is not None and negative.kind == "not"  # usable even though the string won't parse

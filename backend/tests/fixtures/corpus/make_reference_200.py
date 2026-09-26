@@ -97,16 +97,17 @@ def ev(rec: dict[str, object], t: list) -> bool:  # type: ignore[type-arg]
         return not ev(rec, t[1])
     if op == "seq":  # ["seq", field, [items]]
         return any(spans(f, t[2]) for f in fields(rec, t[1]))
-    if op == "near":  # ["near", field, [a items], [b items], n]
-        for f in fields(rec, t[1]):
+    if op == "near":  # ["near", field, [a items], [b items], n]: position sets that share no position,
+        for f in fields(rec, t[1]):  # with at most n positions strictly between them
             for a in spans(f, t[2]):
                 for b in spans(f, t[3]):
-                    first, second = sorted([a, b])
-                    if first[1] <= second[0] and second[0] - first[1] <= t[4]:
+                    pa, pb = set(range(*a)), set(range(*b))
+                    between = set(range(min(pa | pb), max(pa | pb) + 1)) - pa - pb
+                    if not pa & pb and len(between) <= t[4]:
                         return True
         return False
-    if op == "eq":
-        return str(rec[t[1]]).casefold() == str(t[2]).casefold()
+    if op == "eq":  # venue is case-insensitive; track and status are exact
+        return rec[t[1]] == t[2] if t[1] != "venue" else str(rec[t[1]]).lower() == str(t[2]).lower()
     if op == "years":
         return t[1] <= int(rec["year"]) <= t[2]  # type: ignore[call-overload]
     raise ValueError(op)
@@ -177,15 +178,19 @@ QUERIES: list[tuple[str, list]] = [  # type: ignore[type-arg]
     ('"of the"', ["seq", None, ["of", "the"]]),
     ("safety year:2020", ["and", ["seq", None, ["safety"]], ["years", 2020, 2020]]),
     (
-        "evaluation* venue:NeurIPS year:2024 track:datasets_benchmarks",
+        "evaluation* venue:NeurIPS track:(datasets_benchmarks OR main)",
         [
             "and",
             ["seq", None, ["evaluation*"]],
             ["eq", "venue", "NeurIPS"],
-            ["years", 2024, 2024],
-            ["eq", "track", "datasets_benchmarks"],
+            ["or", ["eq", "track", "datasets_benchmarks"], ["eq", "track", "main"]],
         ],
     ),
+    # the boundary record (op:fx:199): phrases never cross fields; NEAR needs distinct occurrences
+    ('"boundary reliance"', ["seq", None, ["boundary", "reliance"]]),
+    ('"reliance evaluation"', ["seq", None, ["reliance", "evaluation"]]),
+    ("trust NEAR/0 trust", ["near", None, ["trust"], ["trust"], 0]),
+    ('"trust calibration" NEAR/0 calibration', ["near", None, ["trust", "calibration"], ["calibration"], 0]),
 ]
 
 
@@ -216,6 +221,10 @@ def main() -> None:
                 ),
             }
         )
+    records[199].update(  # a boundary case the random records can't be relied on to contain
+        title="Boundary reliance",
+        abstract="Evaluation of trust trust and trust calibration calibration.",
+    )
     (HERE / "reference-200.jsonl").write_text(
         "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
     )

@@ -39,6 +39,8 @@ one export per source) collapse to one `venue:(… OR …)` clause, with one not
 side, bounded by `|`/`OR`, a parenthesis or the query edge, is one phrase (`COMPAT_POP_PHRASE` notice).
 Scholar itself would have ORed only the neighbouring words; the review meant phrases (review lead,
 2026-09-25). In a phrase the earlier words count toward a wildcard's stem, so `generative AI$` is valid.
+A lowercase `and`/`or`/`not` or a symbol-only word ends a run. `source:` values take no wildcards (quoted
+or not), their `$` gets no PoP notice, and `source:ICLR OR PMLR` warns (`WARN_FILTER_SCOPE`).
 
 ## Other rewrites
 | Input | Native | Notice |
