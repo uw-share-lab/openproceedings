@@ -7,7 +7,7 @@ locally; JSON is the default everywhere.
 Privacy (Must, logging-standards §Privacy):
 - query text (`q`, `query`, `input`, `canonical`, `identification_query`) is redacted unless
   `log_query_text=True`, which is for a local dev instance only;
-- abstracts, author lists, request bodies/headers/cookies and anything secret-shaped (a key containing
+- abstracts, author lists, request bodies/headers/cookies and anything secret-shaped (a key ENDING in
   `password`, `token`, `secret`, `api_key`/`apikey`, `auth`, `cookie`, `credential`) are always redacted;
 - key matching is case-insensitive and reaches into nested dicts and lists;
 - credentials are scrubbed from URLs and from exception text (`user:pass@`, `?token=…`), so an HTTP-client
@@ -38,7 +38,22 @@ QUERY_FIELDS = frozenset({"q", "query", "input", "canonical", "identification_qu
 ALWAYS_REDACTED = frozenset(
     {"abstract", "abstracts", "authors", "body", "headers", "cookies", "set_cookie", "authorization"}
 )
-SECRET_PARTS = ("password", "passwd", "token", "secret", "api_key", "apikey", "auth", "cookie", "credential")
+# A key is secret-shaped when it ENDS in one of these (case-insensitive): `access_token`, `apiKey`,
+# `openreview_password`, `client_secret`, `x_auth`. A suffix, not a substring, so ordinary fields that merely
+# contain the word stay visible: `tokenizer_version`, `token_count`, `author_count` (task-009 review).
+SECRET_SUFFIXES = (
+    "password",
+    "passwd",
+    "token",
+    "secret",
+    "api_key",
+    "apikey",
+    "auth",
+    "cookie",
+    "credential",
+    "credentials",
+    "private_key",
+)
 REDACTED = "[redacted]"
 
 _URL_USERINFO = re.compile(r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s@]+@")
@@ -72,7 +87,7 @@ def scrub(text: str) -> str:
 
 def _sensitive(key: str, log_query_text: bool) -> bool:
     k = key.lower()
-    if k in ALWAYS_REDACTED or any(part in k for part in SECRET_PARTS):
+    if k in ALWAYS_REDACTED or k.endswith(SECRET_SUFFIXES):
         return True
     return k in QUERY_FIELDS and not log_query_text
 
@@ -85,9 +100,10 @@ def _clean(value: object, log_query_text: bool) -> object:
         }
     if isinstance(value, list | tuple | set | frozenset):
         return [_clean(v, log_query_text) for v in value]
-    if isinstance(value, str):
-        return scrub(value)
-    return value
+    if value is None or isinstance(value, bool | int | float):
+        return value
+    # Everything else is logged via str(), so scrub that: an exception or an httpx.URL can carry credentials.
+    return scrub(value if isinstance(value, str) else str(value))
 
 
 def _fields(record: logging.LogRecord, log_query_text: bool) -> dict[str, object]:
@@ -121,7 +137,9 @@ class _JsonFormatter(_Formatter):
             "ts": ts,
             "level": record.levelname,
             "logger": record.name,
-            "event": record.getMessage(),
+            "event": scrub(
+                record.getMessage()
+            ),  # backstop: %-formatted variable data is banned, but never leaks
         }
         line.update(self._extras(record))
         return json.dumps(line, default=str, ensure_ascii=False)
@@ -133,7 +151,7 @@ class _TextFormatter(_Formatter):
         parts = [
             f"{k}={json.dumps(v, default=str, ensure_ascii=False)}" for k, v in self._extras(record).items()
         ]
-        return f"{record.levelname:<7} {record.name}: {record.getMessage()}" + (
+        return f"{record.levelname:<7} {record.name}: {scrub(record.getMessage())}" + (
             "  " + " ".join(parts) if parts else ""
         )
 

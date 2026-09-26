@@ -196,3 +196,57 @@ def test_text_format_includes_exception_text() -> None:
 def test_unknown_level_is_rejected_by_configure() -> None:
     with pytest.raises(ValueError):
         logs.configure_logging("VERBOSE", "json")
+
+
+class _Url:
+    def __str__(self) -> str:
+        return "https://u:p@host/?api_key=zz"
+
+
+@pytest.mark.parametrize("value", [_Url(), ValueError("https://u:p@h/x?token=t")])
+def test_non_string_values_are_scrubbed_via_their_str(stream: io.StringIO, value: object) -> None:
+    logging.getLogger("openproceedings.x").info("fetch_failed", extra={"target": value})
+    (rec,) = lines(stream)
+    assert (
+        "u:p@" not in str(rec["target"]) and "zz" not in str(rec["target"]) and "=t" not in str(rec["target"])
+    )
+
+
+def test_numbers_and_bools_pass_through_unchanged(stream: io.StringIO) -> None:
+    logging.getLogger("openproceedings.x").info("e", extra={"docs": 3, "ok": True, "secs": 1.5, "none": None})
+    (rec,) = lines(stream)
+    assert (rec["docs"], rec["ok"], rec["secs"], rec["none"]) == (3, True, 1.5, None)
+
+
+def test_the_message_itself_is_scrubbed_as_a_backstop(stream: io.StringIO) -> None:
+    logging.getLogger("openproceedings.x").info(
+        "fetch_failed %s", "https://u:p@h"
+    )  # banned style; still safe
+    (rec,) = lines(stream)
+    assert "u:p@" not in str(rec["event"])
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "tokenizer_version",
+        "token_count",
+        "author_count",
+        "index_version",
+        "canonical_hash",
+        "authority_score",
+    ],
+)
+def test_ordinary_fields_that_merely_contain_a_secret_word_are_not_redacted(
+    stream: io.StringIO, field: str
+) -> None:
+    logging.getLogger("openproceedings.x").info("index_built", extra={field: "v"})
+    (rec,) = lines(stream)
+    assert rec[field] == "v"
+
+
+@pytest.mark.parametrize("field", ["accessToken", "openreview_password", "client_secret", "x_auth", "apiKey"])
+def test_secret_suffixes_in_any_case_are_redacted(stream: io.StringIO, field: str) -> None:
+    logging.getLogger("openproceedings.x").info("e", extra={field: "s"})
+    (rec,) = lines(stream)
+    assert rec[field] == "[redacted]"
