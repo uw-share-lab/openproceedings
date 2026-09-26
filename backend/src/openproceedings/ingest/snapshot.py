@@ -20,20 +20,15 @@ Errors never quote record text (logging-standards skill).
 from __future__ import annotations
 
 import csv
-import fcntl
 import hashlib
 import io
 import json
 import logging
-import os
-import shutil
-import stat
 import tempfile
 import time
 import unicodedata
 from collections import Counter
-from collections.abc import Callable, Iterable, Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import astuple, dataclass, fields
 from datetime import UTC, datetime
 from pathlib import Path
@@ -41,7 +36,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from openproceedings import __version__
+from openproceedings import __version__, storage
 from openproceedings.ingest.dedup import Conflict, DedupResult, Merge, dedup
 from openproceedings.ingest.record import RECORD_SCHEMA_VERSION, PaperRecord
 from openproceedings.ingest.ris import ImportReport, import_ris
@@ -53,7 +48,6 @@ FORMAT_VERSION = "1"  # the snapshot directory's layout and manifest keys
 HASHED = ("title", "abstract", "venue", "year", "track", "status")  # content_hash's fields (record-schema)
 DISPLAY = ("authors", "urls", "keywords", "presentation", "venue_id_raw")  # shown, never hashed
 SHORT = 12
-TMP = ".tmp-"
 
 
 class SnapshotError(Exception):
@@ -71,93 +65,11 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _writable(path: Path) -> None:
-    for p in [path, *path.rglob("*")] if path.is_dir() else [path]:
-        p.chmod(p.stat().st_mode | stat.S_IWUSR)
-
-
-@contextmanager
-def _exclusive(parent: Path) -> Iterator[None]:
-    """Hold `<parent>/.lock` exclusively: one build or ingest at a time writes into `parent`."""
-    parent.mkdir(parents=True, exist_ok=True)
-    with (parent / ".lock").open("a") as fh:
-        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
-
-
-def _sweep(parent: Path) -> None:
-    """Remove `.tmp-` directories a crashed run left behind. Called only under `_exclusive(parent)`, so it
-    never touches a live run's staging directory."""
-    for leftover in parent.glob(f"{TMP}*"):
-        _writable(leftover)
-        shutil.rmtree(leftover, ignore_errors=True)
-
-
-def _sync(directory: Path) -> None:
-    """Flush every file and the directory itself to disk (before the rename that publishes them)."""
-    for f in directory.iterdir():
-        with f.open("rb") as fh:
-            _fsync(fh.fileno())
-    fd = os.open(directory, os.O_RDONLY)
+def _place_or_refuse(tmp: Path, target: Path, same: Callable[[Path], bool]) -> bool:
     try:
-        _fsync(fd)
-    finally:
-        os.close(fd)
-
-
-def _fsync(fd: int) -> None:
-    """fsync; on macOS F_FULLFSYNC, since its fsync doesn't reach the disk itself."""
-    if hasattr(fcntl, "F_FULLFSYNC"):
-        try:
-            fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
-            return
-        except OSError:
-            pass  # a filesystem without it (e.g. some network mounts): plain fsync
-    os.fsync(fd)
-
-
-def _lock(directory: Path) -> None:
-    """Make a placed directory and its files read-only (after the rename: a read-only directory can't be
-    renamed, since its `..` entry changes)."""
-    for f in directory.iterdir():
-        f.chmod(0o444)
-    directory.chmod(0o555)
-
-
-@contextmanager
-def _staging(parent: Path) -> Iterator[Path]:
-    """A fresh `.tmp-` directory in `parent`, removed again unless the caller renamed it into place."""
-    parent.mkdir(parents=True, exist_ok=True)
-    tmp = Path(tempfile.mkdtemp(dir=parent, prefix=TMP))
-    try:
-        yield tmp
-    finally:
-        if tmp.exists():
-            _writable(tmp)
-            shutil.rmtree(tmp, ignore_errors=True)
-
-
-def _place(tmp: Path, target: Path, same: Callable[[Path], bool]) -> bool:
-    """Sync `tmp`, rename it to `target` and make it read-only; True if placed. If `target` appeared meanwhile, False when it
-    holds the same content (`same(target)`), else refuse."""
-    _sync(tmp)
-    if target.exists():
-        if same(target):
-            return False
-        raise SnapshotError(f"{target.name} exists with other contents; it is immutable")
-    try:
-        os.rename(tmp, target)
-    except OSError as e:
-        if target.exists() and same(target):
-            return False
-        raise SnapshotError(f"could not place {target.name} ({type(e).__name__})") from None
-    if not same(target):  # never report a snapshot that doesn't hold what was written
-        raise SnapshotError(f"{target.name} was placed but doesn't hold what was written; retire it")
-    _lock(target)
-    return True
+        return storage.place(tmp, target, same)
+    except storage.PlacementError as e:
+        raise SnapshotError(str(e)) from None
 
 
 def _same_files(data: dict[str, bytes]) -> Callable[[Path], bool]:
@@ -173,8 +85,8 @@ def ingest_ris(mended: Sequence[Path], cache: Path) -> list[ImportReport]:
     different files under a cached name are refused, since a snapshot may already cite them."""
     root = cache / "ris"
     staged: list[tuple[Path, Path, dict[str, bytes], ImportReport]] = []
-    with _exclusive(root):
-        _sweep(root)
+    with storage.exclusive(root):
+        storage.sweep(root)
         paths = [p.resolve() for p in mended]  # a symlink: both files come from where it points
         names = [p.parent.name for p in paths]
         if any(not n or n.startswith(".") for n in names):
@@ -197,7 +109,7 @@ def ingest_ris(mended: Sequence[Path], cache: Path) -> list[ImportReport]:
                     "mended.ris": path.read_bytes(),
                     "resolved.json": path.with_name("resolved.json").read_bytes(),
                 }
-                tmp = Path(tempfile.mkdtemp(dir=root, prefix=TMP))
+                tmp = Path(tempfile.mkdtemp(dir=root, prefix=storage.TMP))
                 for fname, blob in data.items():
                     (tmp / fname).write_bytes(blob)
                 # what is checked is what gets cached; reports and errors name the cache entry
@@ -209,12 +121,12 @@ def ingest_ris(mended: Sequence[Path], cache: Path) -> list[ImportReport]:
                         f"cache entry {target.name} holds different files; use another directory name"
                     )
             for tmp, target, data, report in staged:
-                placed = _place(tmp, target, _same_files(data))
+                placed = _place_or_refuse(tmp, target, _same_files(data))
                 log.info(
                     "ris_cached", extra={"cache": target.name, "new": placed, "imported": report.imported}
                 )
         finally:
-            _sweep(root)
+            storage.sweep(root)
     return [report for *_, report in staged]
 
 
@@ -329,21 +241,21 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
     manifest = json.loads(files["manifest.json"])
     snapshot_hash = manifest["snapshot_hash"]
     target = snapshots / f"{manifest['crawl_date']}-{snapshot_hash[:SHORT]}"
-    with _exclusive(snapshots):
-        _sweep(snapshots)
+    with storage.exclusive(snapshots):
+        storage.sweep(snapshots)
         if target.exists():
             if not _holds(target, snapshot_hash):
                 raise SnapshotError(
                     f"{target.name} exists but isn't this snapshot in the current format; snapshots are "
                     "immutable: retire it (release-manager prune path) and build again"
                 )
-            _lock(target)  # a crash between placing and locking left it writable
+            storage.lock(target)  # a crash between placing and locking left it writable
             log.info("snapshot_exists", extra={"snapshot": target.name, "snapshot_hash": snapshot_hash})
             return BuildResult(target, snapshot_hash, created=False)
-        with _staging(snapshots) as tmp:
+        with storage.staging(snapshots) as tmp:
             for name, data in files.items():
                 (tmp / name).write_bytes(data)
-            created = _place(tmp, target, lambda t: _holds(t, snapshot_hash))
+            created = _place_or_refuse(tmp, target, lambda t: _holds(t, snapshot_hash))
     log.info(
         "snapshot_built" if created else "snapshot_exists",
         extra={"snapshot": target.name, "snapshot_hash": snapshot_hash, "records": manifest["record_count"],

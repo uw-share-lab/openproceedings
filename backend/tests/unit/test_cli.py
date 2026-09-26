@@ -4,7 +4,6 @@ import pytest
 from openproceedings import cli
 
 PLANNED = {
-    "index": "task-023",
     "search": "task-030",
     "export": "task-030",
     "serve": "task-034",
@@ -21,7 +20,7 @@ def test_help_lists_every_planned_subcommand(capsys: pytest.CaptureFixture[str])
     assert exc.value.code == 0
     out = capsys.readouterr().out
     listed = {line.split()[0] for line in out.splitlines() if line.startswith("    ") and line.split()}
-    assert set(PLANNED) | {"ingest", "snapshot"} <= listed
+    assert set(PLANNED) | {"ingest", "snapshot", "index"} <= listed
 
 
 @pytest.mark.parametrize(("name", "task"), sorted(PLANNED.items()))
@@ -85,7 +84,7 @@ def test_default_log_format_is_json() -> None:
     "argv",
     [
         ["search", "trust AND x", "--explain"],
-        ["--log-level", "debug", "--log-format", "json", "index", "build"],
+        ["--log-level", "debug", "--log-format", "json", "index", "retire", "old"],
         ["export", "q", "--format", "ris"],
     ],
 )

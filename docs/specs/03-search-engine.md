@@ -33,7 +33,9 @@ contract keeps distinct), no stemmer and no stopword filter. The query side does
 Tantivy's query parser. We compile our own AST. To keep the two sides from drifting, the index is fed
 **pre-normalized text** from `normalize.py` (02). Tantivy then only needs to split on whitespace, so the
 Rust side contains no normalization logic of its own. A test asserts that tokenizing through the index
-and through `normalize.py` gives identical token streams across the whole corpus.
+and through `normalize.py` gives identical token streams across the whole corpus. Tantivy silently drops
+a token over 65,530 UTF-8 bytes, so the build refuses a record with one rather than index less than the
+reference engine matches (`engine/index.py`, `op index build`).
 
 ## Index schema
 

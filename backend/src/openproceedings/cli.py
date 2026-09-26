@@ -1,7 +1,8 @@
 """The `op` command line. Every planned subcommand exists from M1 on; each stub names the task that
 implements it (spec 08 §CLI). The CLI and the API call the same functions.
 
-Implemented: `op ingest ris`, `op snapshot build`, `op snapshot diff` (task-022). Results go to stdout as
+Implemented: `op ingest ris`, `op snapshot build`, `op snapshot diff` (task-022), `op index build`
+(task-023). Results go to stdout as
 JSON; logs go to stderr; a refused operation exits 1 with its reason, a usage error or a stub exits 2.
 """
 
@@ -23,7 +24,6 @@ log = logging.getLogger(__name__)
 
 # subcommand -> (help text, the Backlog task that implements it)
 PLANNED: dict[str, tuple[str, str]] = {
-    "index": ("build or retire an immutable index (spec 03)", "task-023"),
     "search": ("run a query; --explain, --engine tantivy|reference (spec 02/03)", "task-030"),
     "export": ("export the full matched set: ris | csv | bibtex | jsonl (spec 04)", "task-030"),
     "serve": ("run the HTTP API (spec 04)", "task-034"),
@@ -87,6 +87,18 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("b", type=Path)
     d.set_defaults(run=_snapshot_diff)
 
+    index = sub.add_parser("index", help="build an immutable index from a snapshot (spec 03)")
+    index_actions = index.add_subparsers(dest="action", metavar="<action>", required=True)
+    ib = index_actions.add_parser(
+        "build", help="build data/indexes/<index_version>/ from a snapshot (offline)"
+    )
+    ib.add_argument(
+        "--snapshot", required=True, help="a snapshot directory, its name, or a snapshot_hash prefix"
+    )
+    ib.add_argument("--out", type=Path, help="indexes directory (default <data-dir>/indexes)")
+    ib.set_defaults(run=_index_build)
+    _stub(index_actions.add_parser("retire", help="planned in task-065"), "index retire", "task-065")
+
     for name, (help_text, task) in PLANNED.items():
         _stub(sub.add_parser(name, help=help_text, description=help_text), name, task)
     return parser
@@ -109,6 +121,37 @@ def _snapshot_build(ns: argparse.Namespace) -> int:
 
     result = build(ns.cache or ns.data_dir / "cache", ns.out or ns.data_dir / "snapshots")
     _print({"path": str(result.path), "snapshot_hash": result.snapshot_hash, "created": result.created})
+    return 0
+
+
+def resolve_snapshot(spec: str, snapshots: Path) -> Path:
+    """A snapshot from a path, a directory name under `snapshots`, or a unique snapshot_hash prefix."""
+    from openproceedings.ingest.snapshot import SnapshotError
+
+    if Path(spec).is_dir():
+        return Path(spec)
+    if (snapshots / spec).is_dir():
+        return snapshots / spec
+    found = []
+    for d in sorted(snapshots.glob("*")) if snapshots.is_dir() else []:
+        try:
+            if json.loads((d / "manifest.json").read_text(encoding="utf-8"))["snapshot_hash"].startswith(
+                spec
+            ):
+                found.append(d)
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    if len(found) != 1:
+        raise SnapshotError(f"{'no' if not found else 'more than one'} snapshot matches {spec!r}")
+    return found[0]
+
+
+def _index_build(ns: argparse.Namespace) -> int:
+    from openproceedings.engine.index import build_index
+
+    snapshot = resolve_snapshot(ns.snapshot, ns.data_dir / "snapshots")
+    result = build_index(snapshot, ns.out or ns.data_dir / "indexes")
+    _print({"path": str(result.path), "index_version": result.index_version, "created": result.created})
     return 0
 
 
@@ -146,6 +189,7 @@ def _reason(e: Exception) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    from openproceedings.engine.index import IndexBuildError
     from openproceedings.ingest.snapshot import SnapshotError
 
     parser = build_parser()
@@ -167,7 +211,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     name = " ".join(filter(None, (ns.command, getattr(ns, "source", None), getattr(ns, "action", None))))
     try:
         code: int = ns.run(ns)
-    except (SnapshotError, ValueError, OSError) as e:
+    except (SnapshotError, IndexBuildError, ValueError, OSError) as e:
         reason = _reason(e)
         log.warning("cli_refused", extra={"command": name, "error": type(e).__name__})
         print(f"op {name}: {reason}", file=sys.stderr)

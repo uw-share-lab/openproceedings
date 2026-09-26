@@ -28,28 +28,43 @@ Positions are mandatory on `title`/`abstract` (phrases, NEAR, highlights). Any c
   **long-token filter** (verify the current limit in the pinned tantivy version), which drops long tokens
   the oracle keeps, and that is a silent membership difference. Build the analyzer explicitly and check the
   filter list.
-- How a custom analyzer is registered differs between tantivy-py versions. Verify it against the pinned
-  version at implementation time, and pin tantivy-py exactly in `pyproject.toml`.
+- As built (`backend/src/openproceedings/engine/index.py`, tantivy-py **0.26.2**, pinned exactly):
+  `TextAnalyzerBuilder(Tokenizer.whitespace()).build()` with no filters, registered with
+  `index.register_tokenizer("exact_v1", …)` on every `Index` that is built or opened (`open_index`). The
+  whitespace tokenizer splits on ASCII whitespace only, which is enough: normalized tokens never contain
+  whitespace. `year` must be added with `Document.add_unsigned` (a Python int goes in as i64 and panics
+  the u64 fast field).
+- **Token length.** The analyzer keeps any length, but Tantivy's indexer silently drops a token over
+  **65,530 UTF-8 bytes** (measured). `build_index` refuses such a record (`MAX_TOKEN_BYTES`) instead of
+  losing it; the build also checks every field's tokens through `exact_v1` against `normalize()`.
 - Tokenizer-parity test: for every record, the tokens Tantivy indexed (read back via the term/position API)
   equal `normalize()` output. Run it over the 5k fixture in CI and the full corpus nightly. Zero diffs.
 
-## Build procedure (`op index build --snapshot <snapshot_hash>`)
+## Build procedure (`op index build --snapshot <path | name | snapshot_hash prefix>`)
 1. Load the immutable snapshot (`.claude/skills/snapshots/SKILL.md`). Refuse one whose content hash doesn't
    verify.
 2. Compute `index_version` **before** building. If `data/indexes/<index_version>/` already exists, verify it
    and stop. Never rebuild in place.
-3. Build into a staging directory on the same filesystem. Add documents in `id` order. Commit, then wait for
+3. Under an exclusive lock on `data/indexes/`, build into a `.tmp-` staging directory. Normalize titles and
+   abstracts (split across processes above 2,000 records: `normalize()` is the whole cost; results come
+   back in order), then add documents in `id` order through a one-thread writer. Commit, then wait for
    merges.
-4. Write a manifest (`index_version`, snapshot hash, `TOKENIZER_VERSION`, `SCHEMA_VERSION`, ranking params,
-   tantivy-py version, doc count, build time). Run the parity and doc-count checks.
-5. Atomically rename the staging directory to `data/indexes/<index_version>/`. Moving `current` is a
+4. Check the doc count. Write a manifest (`index_version`, snapshot name and hash, `TOKENIZER_VERSION`,
+   `SCHEMA_VERSION`, ranking params, tantivy-py version, doc count, build time and ms, and the sha256 of
+   every index file).
+5. Sync and rename the staging directory to `data/indexes/<index_version>/`, make every file read-only
+   except Tantivy's lock files (readers take `.tantivy-meta.lock`, so the directory itself stays
+   writable), and verify it: `verify_index` re-hashes every file and re-reads the doc count, and a build
+   that finds its version already present verifies it instead of rebuilding. Moving `current` is a
    separate release step.
 
 `data/indexes/` is immutable. `protect-data-dir.sh` blocks Write/Edit there, so builds go through the CLI
 only.
 
 ## Budgets
-Build in < 2 min and < 500 MB on the ~80k M4 corpus (CI bench plus nightly).
+Build in < 2 min and < 500 MB on the ~80k M4 corpus (CI bench plus nightly). Measured 2026-09-26 on an
+8-core laptop with 80k synthetic records (the real corpus's text repeated): 32.9 s and 187 MB (129.9 s
+before normalizing in parallel).
 
 ## Gotchas
 - Stored `title`/`abstract` hold normalized text. Keep the original display text in `record` (or the

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from openproceedings import cli
+from openproceedings import cli, storage
 from openproceedings.ingest import snapshot as snap
 from openproceedings.ingest.dedup import DedupResult, dedup
 from openproceedings.ingest.record import PaperRecord
@@ -347,7 +347,7 @@ def test_a_target_that_appears_during_the_build(
         shutil.copytree(first.path, dst)
         raise FileExistsError(17, "exists")
 
-    monkeypatch.setattr(snap.os, "rename", racing)
+    monkeypatch.setattr(storage.os, "rename", racing)
     result = build(cache, tmp_path / "b", BUILT)
     assert not result.created and result.path.name == first.path.name
     assert not list((tmp_path / "b").glob(".tmp-*"))
@@ -374,13 +374,13 @@ def test_a_complete_but_writable_snapshot_is_locked_on_rebuild(cache: Path, tmp_
 def test_a_placed_snapshot_is_checked_before_it_is_reported(
     cache: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    real = snap.os.rename
+    real = storage.os.rename
 
     def lossy(src: Any, dst: Any) -> None:
         (Path(src) / "records.jsonl").write_text("lost\n")
         real(src, dst)
 
-    monkeypatch.setattr(snap.os, "rename", lossy)
+    monkeypatch.setattr(storage.os, "rename", lossy)
     with pytest.raises(SnapshotError, match="doesn't hold what was written"):
         build(cache, tmp_path / "snapshots", BUILT)
 
