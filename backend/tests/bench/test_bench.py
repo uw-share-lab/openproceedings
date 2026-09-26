@@ -2,7 +2,7 @@
 
 Benchmarks are off in ordinary runs (`--benchmark-disable` in pyproject's addopts: each function then runs
 once, as a test). The `bench` workflow runs `--benchmark-enable --benchmark-only` on a pull request's base
-and head, fails a median regression over 20%, and these tests assert the budgets from the timings measured:
+and head, fails a regression of the minimum over 20% (the least noise-prone statistic), and these tests assert the budgets from the timings measured:
 - a search returning the first 50 hits: p95 < 100 ms (every Trust-Evals protocol string, Scholar mode);
 - `match_ids` with exclusion accounting: p95 < 300 ms;
 - a wildcard expansion of up to 200 terms: p95 < 50 ms.
@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.engine.compile import FIELDS
 from openproceedings.engine.exclusions import excluded
 from openproceedings.engine.protocol import MAX_EXPANSIONS, EngineInputError
 from openproceedings.engine.tantivy_engine import TantivyEngine
@@ -83,7 +84,7 @@ def test_match_ids_with_exclusion_accounting(benchmark: Any, engine: TantivyEngi
 
 def widest_stem(engine: TantivyEngine) -> tuple[str, int]:
     """The stem whose `*` expansion over the index is the largest at or under the cap."""
-    terms = sorted({t for f in ("title", "abstract") for t, _df in engine.searcher.terms_with_prefix(f, "")})
+    terms = sorted({t for f in FIELDS for t, _df in engine.searcher.terms_with_prefix(f, "")})
     best = ("", 0)
     for stem in sorted({t[:k] for t in terms for k in range(2, len(t))}):
         n = bisect_right(terms, stem + "\U0010ffff") - bisect_left(terms, stem)

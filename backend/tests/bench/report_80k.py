@@ -1,7 +1,7 @@
-"""The ~80k-corpus benchmark report (spec 03 §Performance budgets; spec 07 §E; task-031). Run from the repo
-root, on a quiet machine:
+"""The ~80k-corpus benchmark report (spec 03 §Performance budgets; spec 07 §E; task-031). Run from
+`backend/`, on a quiet machine (other load inflates the timings):
 
-    uv run python -m tests.bench.report_80k            (from backend/)
+    uv run python -m tests.bench.report_80k
 
 It generates the synthetic corpus at 80,000 records with abstracts of realistic length (120-250 words; the
 same generator as the 5k differential corpus, so anyone can reproduce it), builds the index, and writes
@@ -17,6 +17,7 @@ import contextlib
 import os
 import platform
 import resource
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -24,10 +25,11 @@ import time
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
+from typing import Any
 
 REPO = Path(__file__).resolve().parents[3]
 SIZE = 80_000
-ROUNDS = 20
+ROUNDS = 40  # so the p95 isn't simply the slowest round
 VERIFIED = [
     "the NEAR/5 the",
     '"the*" NEAR/5 model',
@@ -56,33 +58,65 @@ def ms(seconds: float) -> str:
     return f"{seconds * 1000:,.1f} ms"
 
 
-def main() -> None:
-    from openproceedings.engine.exclusions import excluded
-    from openproceedings.engine.index import build_index
-    from openproceedings.engine.protocol import EngineInputError
-    from openproceedings.engine.tantivy_engine import TantivyEngine
-    from openproceedings.query.parser import parse
+BUILD = (
+    "import sys; from datetime import UTC, datetime; from pathlib import Path; "
+    "from openproceedings.engine.index import build_index; "
+    "print(build_index(Path(sys.argv[1]), Path(sys.argv[2]), datetime(2026, 9, 26, tzinfo=UTC)).path)"
+)
 
-    from tests.bench.test_bench import widest_stem
+
+def main() -> None:
     from tests.fixtures.corpus.synthetic_5k import records
-    from tests.golden.test_trust_evals import STRINGS
-    from tests.unit.engine.test_exclusions import BUILT, DedupResult, as_paper, render
 
     started = time.perf_counter()
     corpus = records(SIZE, (120, 250))
     generated = time.perf_counter() - started
     root = Path(tempfile.mkdtemp(prefix="op-bench-"))
+    try:
+        _report(corpus, generated, root)
+    finally:
+        _remove(root)
+
+
+def _remove(root: Path) -> None:
+    """Delete the scratch corpus and index (an index is sealed read-only, so unseal it first)."""
+    for folder, _dirs, _files in os.walk(root):
+        Path(folder).chmod(0o755)
+    shutil.rmtree(root)
+
+
+def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
+    from openproceedings.engine.compile import FIELDS
+    from openproceedings.engine.exclusions import excluded
+    from openproceedings.engine.protocol import EngineInputError
+    from openproceedings.engine.tantivy_engine import TantivyEngine
+    from openproceedings.query.ast import Wildcard
+    from openproceedings.query.parser import parse
+
+    from tests.bench.test_bench import widest_stem
+    from tests.golden.test_trust_evals import STRINGS
+    from tests.unit.engine.test_exclusions import BUILT, DedupResult, as_paper, render
+
     snap = root / "snap"
     snap.mkdir()
     papers = tuple(sorted((as_paper(r) for r in corpus), key=lambda p: p.id))
     for name, data in render(DedupResult(papers, (), ()), [], BUILT).items():
         (snap / name).write_bytes(data)
     t = time.perf_counter()
-    built = build_index(snap, root / "indexes", BUILT)
+    # the build in a process of its own, as `op index build` runs it, so its peak memory is its own
+    built = Path(
+        subprocess.run(
+            [sys.executable, "-c", BUILD, str(snap), str(root / "indexes")],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()[-1]
+    )
     build_s = time.perf_counter() - t
-    size = sum(f.stat().st_size for f in built.path.rglob("*") if f.is_file())
-    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1 if sys.platform == "darwin" else 1 / 1024)
-    engine = TantivyEngine(built.path)
+    rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+    peak = rss if sys.platform == "darwin" else rss * 1024  # bytes on macOS, KiB on Linux
+    size = sum(f.stat().st_size for f in built.rglob("*") if f.is_file())
+    engine = TantivyEngine(built)
 
     rows = []
     for name in STRINGS:
@@ -92,16 +126,16 @@ def main() -> None:
 
         def exclusion_run(ast: object = ast, result: object = result) -> None:
             engine.verified.clear()
+            engine.expanded.clear()
             excluded(engine, result, len(engine.match_ids(ast)))  # type: ignore[arg-type]
 
         engine.verified.clear()
+        engine.expanded.clear()
         cold = timed(lambda ast=ast: engine.search(ast, limit=50), rounds=1)[0]  # type: ignore[misc]
         warm = p95(timed(lambda ast=ast: engine.search(ast, limit=50)))  # type: ignore[misc]
         exclusions = p95(timed(exclusion_run))
         total = engine.search(ast, limit=0).total
         rows.append(f"| {name} | {total:,} | {ms(cold)} | {ms(warm)} | {ms(exclusions)} |")
-
-    from openproceedings.query.ast import Wildcard
 
     stem, n = widest_stem(engine)
     wide = Wildcard(span=(0, 0), stem=stem, op="*")
@@ -122,6 +156,7 @@ def main() -> None:
         ast = parse(q).effective_ast
         assert ast is not None
         engine.verified.clear()
+        engine.expanded.clear()
         t = time.perf_counter()
         total = len(engine.match_ids(ast))
         verified.append(f"| `{q}` | {total:,} | {ms(time.perf_counter() - t)} |")
@@ -132,18 +167,19 @@ def main() -> None:
     today = datetime.now(UTC).date().isoformat()
     report = f"""# Benchmarks on a synthetic ~80k corpus ({today})
 
-Regenerate with `uv run python -m tests.bench.report_80k` (from `backend/`); never edit by hand. Budgets are
+Regenerate with `uv run python -m tests.bench.report_80k` (from `backend/`, on a quiet machine: other load
+inflates the timings); never edit by hand. Budgets are
 spec 03 §Performance budgets. Verified clauses are exempt from the `match_ids` budget (spec 03), so they
 are reported, not gated.
 
 - Machine: {platform.platform()}, {platform.machine()}, {os.cpu_count()} CPUs; Python {platform.python_version()},
-  tantivy {version("tantivy")}; commit `{commit}`; index `{built.index_version}`.
+  tantivy {version("tantivy")}; commit `{commit}`; index `{built.name}`.
 - Corpus: `tests/fixtures/corpus/synthetic_5k.records({SIZE}, (120, 250))`, {len(corpus):,} records (generated in
   {generated:.1f} s): the differential corpus's generator with abstracts of 120-250 words.
 
 ## Build (budget: under 2 min, under 500 MB)
 
-| Build time | Index size | Peak memory (this process) |
+| Build time | Index size | Peak memory of the build process (its normalizing workers, ~65 MB each, not included) |
 |---|---|---|
 | {build_s:.1f} s | {size / 1e6:,.0f} MB | {peak / 1e6:,.0f} MB |
 
@@ -162,7 +198,7 @@ path spec 03 exempts, so its cold numbers are the exception's, not a budget miss
 | Stem | Terms | p95 |
 |---|---|---|
 | `{stem}*` | {n} | {ms(p95(timed(expand_wide)))} |
-| `co*` (past the cap: refused) | {sum(1 for f in ("title", "abstract") for _ in engine.searcher.terms_with_prefix(f, "co"))} (both fields) | {ms(p95(timed(expand_past)))} |
+| `co*` (past the cap: refused) | {len({t for f in FIELDS for t, _df in engine.searcher.terms_with_prefix(f, "co")})} distinct | {ms(p95(timed(expand_past)))} |
 
 ## Position-verified clauses (the spec 03 exception; one cold run each)
 

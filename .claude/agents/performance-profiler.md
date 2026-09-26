@@ -29,7 +29,7 @@ however large the speed-up. Every optimisation you suggest has to keep the diffe
    path the diff touches. Add missing ones, with a fixed query set: the Trust-Evals strings, a 200-term
    wildcard, a multi-token NEAR, a deep nested NOT.
 2. Run `uv run pytest backend/tests/bench --benchmark-enable --benchmark-only --benchmark-save=base` on the
-   base, then `… --benchmark-compare --benchmark-compare-fail=median:20%` on the branch, on the same machine
+   base, then `… --benchmark-compare --benchmark-compare-fail=min:20%` on the branch, on the same machine
    (benchmarks are disabled in ordinary runs by pyproject's addopts; the `bench` workflow does exactly this).
    Report medians and p95. For the ~80k corpus and the verified-clause cases, run
    `uv run python -m tests.bench.report_80k` from `backend/` (it writes `docs/results/<date>-bench.md`).

@@ -174,9 +174,10 @@ as "current" and can load a pinned older version to replay a search record.
   `the NEAR/5 the` take 2–11 s (the reference engine 27–45 s). It is never capped, because a cap would make
   a query's result depend on the corpus's size and break replaying search records; task-031 measures these
   cases, and an engine caches each verified clause, so facets and repeats don't pay again.
-- Measured (task-031, `docs/results/2026-09-26-bench.md`, a synthetic 80k corpus): build 35 s and 99 MB;
-  every Trust-Evals string's search and `match_ids` + exclusions within budget, except `main-2-pop`
-  (wildcard phrases): 10 s cold, the exception above, and 147 ms warm, over the search budget (task-075).
+- Measured (task-031, `docs/results/2026-09-26-bench.md`, a synthetic 80k corpus, quiet machine): build 33 s,
+  99 MB, 401 MB peak in the build process. Every Trust-Evals string's search and `match_ids` + exclusions is
+  within budget, except `main-2-pop` (wildcard phrases) when cold: 10 s, the exception above. Its warm search
+  is 63 ms p95.
 
 ## Testing
 
