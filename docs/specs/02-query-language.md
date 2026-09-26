@@ -182,7 +182,17 @@ ParseResult = {
 ```
 
 `canonical` is deterministic: `parse(canonical).canonical == canonical`. That idempotence is tested with
-property tests. `canonical_hash = sha256(canonical + TOKENIZER_VERSION)`.
+property tests. `canonical_hash = sha256(canonical + "\0" + TOKENIZER_VERSION)`: the NUL separator keeps
+(`a`, `12`) and (`a1`, `2`) apart. `canonical` and `canonical_hash` are None when there are errors.
+
+Canonical form (`query/canonical.py`) is a normal form: nested `AND`/`OR` are flattened; in every `AND`,
+text conjuncts keep their written order and filter conjuncts follow in the decision-001 order (a
+positive filter before a negated one of the same field); an `OR` of filters on one field becomes one
+filter; values are sorted and deduplicated; every text leaf carries its field prefix
+(`title:(a OR b)` → `(title:a OR title:b)`). A wildcard whose last token is shorter than the stem
+minimum is hyphen-joined to the tokens before it (`gpt-4*` → `"gpt-4*"`). Semantically equal spellings
+(`trust venue:ICLR`, `venue:iclr Trust`) therefore share one hash. `QUERY_VERSION`
+(`openproceedings.query`) is `"1"`.
 
 ## Error handling
 

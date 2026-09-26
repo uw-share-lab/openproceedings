@@ -52,7 +52,7 @@ returns `ast=None` exactly when `errors` is non-empty, never raises (property-te
 one error per mistake, sorted by position.
 
 ## Canonical form
-`canonical` is: fully parenthesised, uppercase operators (`|` → `OR`, juxtaposition → `AND`, `-` → `NOT`),
+`canonical` (`query/canonical.py`, spec 02 §Outputs) is: flattened, fully parenthesised, uppercase operators (`|` → `OR`, juxtaposition → `AND`, `-` → `NOT`),
 default filters made explicit (`.claude/skills/default-filters/SKILL.md`), wildcards kept
 **unexpanded** (`benchmark*`, not its expansion — the expansion belongs to an `index_version`).
 Top-level filters are ordered `venue`, `year`, `track`, `status`, then any other field alphabetically; the

@@ -12,7 +12,8 @@ problem is a Diagnostic with a span, and `ast` is None exactly when there are er
 - A query with no positive part (`NOT a`, `a OR NOT b`) is PARSE_ALL_NEGATIVE. This is checked before
   default filters are added (task-014), which would otherwise hide it.
 
-Default filters, canonical form and Scholar mode are layered on top (tasks 013–015).
+`ParseResult.canonical` and `.canonical_hash` come from `canonical.py`. Default filters and Scholar mode
+are layered on top (tasks 014–015).
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ from openproceedings.query.ast import (
     Wildcard,
     YearRange,
 )
+from openproceedings.query.canonical import canonical_hash, canonicalize, render
 from openproceedings.query.lexer import FIELDS, Kind, Lexeme, lex
 from openproceedings.query.normalize import tokenize
 from openproceedings.vocab import STATUSES, TEXT_FIELDS, TRACKS, VENUES
@@ -56,6 +58,8 @@ class ParseResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     ast: Node | None
+    canonical: str | None = None  # None exactly when there are errors
+    canonical_hash: str | None = None
     warnings: list[Diagnostic]
     errors: list[Diagnostic]
     translations: list[Diagnostic] = []
@@ -553,4 +557,13 @@ def parse(q: str) -> ParseResult:
                 span=(0, len(q)),
             )
         ]
-    return ParseResult(ast=None if errors else ast, warnings=warnings, errors=errors)
+    if errors or ast is None:
+        return ParseResult(ast=None, warnings=warnings, errors=errors)
+    canonical = render(canonicalize(ast))
+    return ParseResult(
+        ast=ast,
+        canonical=canonical,
+        canonical_hash=canonical_hash(canonical),
+        warnings=warnings,
+        errors=errors,
+    )
