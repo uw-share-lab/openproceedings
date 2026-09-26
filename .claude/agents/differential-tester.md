@@ -35,6 +35,14 @@ small enough to fix in minutes.
    (`.claude/agents/index-engineer.md`), or to `reference-oracle-keeper`
    (`.claude/agents/reference-oracle-keeper.md`) if the oracle looks wrong.
 
+As built (task-028): the suite is `backend/tests/differential/test_differential.py` over the synthetic 5k
+corpus (`tests/fixtures/corpus/synthetic_5k.py`, generated in memory, every venue × year × track × status),
+drawing `engine_asts()`. It checks match sets, `expand` results or refusals, disjunctive facets, and
+`total` for every sort. 2,000 examples take ~2.5 min (the oracle is ~70 ms a tree at 5k). A shrunk
+counterexample goes into `backend/tests/differential/differential-regressions.json` (the AST as JSON and
+a note), replayed on every run; step 6's golden test is that entry. Five engine mutants (NEAR slop, one
+NEAR order, phrase slop, `$` as `*`, an empty expansion as all documents) each fail it at the dev profile.
+
 ## Rules
 - Never reduce example counts, add `assume()` or skip a node kind to get green. A strategy gap is a finding.
 - Compare against the oracle only. Two Tantivy runs agreeing proves nothing about exactness.

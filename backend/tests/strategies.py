@@ -26,6 +26,7 @@ from openproceedings.query.ast import (
     YearRange,
 )
 from openproceedings.query.normalize import normalize
+from openproceedings.vocab import STATUSES, TRACKS
 
 _ROWS = [
     json.loads(line)
@@ -102,8 +103,8 @@ def filters(draw: st.DrawFn) -> Filter:
     else:
         pool = {
             "venue": ["NeurIPS", "ICLR", "ICML"],
-            "track": ["main", "datasets_benchmarks", "position", "workshop", "unknown"],
-            "status": ["accepted", "rejected", "withdrawn", "unknown"],
+            "track": list(TRACKS),
+            "status": list(STATUSES),
         }[field]
         values = list(draw(st.lists(st.sampled_from(pool), min_size=1, max_size=3)))
     return Filter(span=SPAN, field=field, values=tuple(values))  # type: ignore[arg-type]
@@ -135,6 +136,12 @@ def negative_asts(draw: st.DrawFn) -> Node:
     if draw(st.booleans()):
         return negated
     return Or(span=SPAN, children=(draw(_node(1)), negated))
+
+
+def engine_asts() -> st.SearchStrategy[Node]:
+    """Any tree an engine may be handed: parser-valid ones, and bare or all-negative ones the parser would
+    refuse (an engine takes any AST; spec 03 §Two engines, one contract)."""
+    return st.one_of(asts(), _node(0), negative_asts())
 
 
 @st.composite

@@ -18,6 +18,12 @@ build). Others are reports (they're regenerated and committed as dated results, 
 | Semantic invariant | Search results identical with 06 on and off | 0 diffs |
 | Determinism | Same canonical query + `index_version` → identical order and scores | 0 diffs |
 
+As built (task-028): the differential is `backend/tests/differential/`, on a synthetic 5k corpus generated
+in memory (decision-004). It compares match sets, wildcard expansions (or refusals), disjunctive facets, and
+`total` for every sort, over any tree an engine may get, all-negative ones included. It ran 0 counterexamples
+in 2,000 examples in ~2.5 min. Shrunk counterexamples are kept in
+`differential-regressions.json` and replayed on every run. The 50k nightly job is task-057.
+
 ## B. Scholar comparison (report, `op eval scholar`)
 
 Replay the review's strings, starting with **Most Updated**, against the index (limited to the same venues

@@ -4,7 +4,7 @@ title: 'Nightly workflow: differential@50k, full benchmarks, parity'
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 03:12'
+updated_date: '2026-09-26 21:13'
 labels:
   - ops
 milestone: m-4
@@ -26,4 +26,5 @@ Spec 08 CI table (planned workflows).
 - [ ] #1 nightly workflow runs on schedule and reports failures
 - [ ] #2 Pinned actions, contents: read
 - [ ] #3 Wildcard strategies include stems near the 200-expansion cap on the 5k fixture (carried from task-017)
+- [ ] #4 Differential@50k (backend/tests/differential, ~1 h locally at 50k) runs in its own nightly job; the properties job ignores it until then (task-028)
 <!-- AC:END -->

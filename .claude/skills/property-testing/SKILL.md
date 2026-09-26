@@ -32,7 +32,8 @@ Hypothesis example database (`.hypothesis/`) is gitignored; CI failures are repr
 
 **As built (task-017):** `backend/tests/strategies.py` has `asts()` (valid trees with a positive
 anchor; every node type, wildcard phrase items, NEAR with same-field leaves, filters from the real
-vocabularies), `negative_asts()`, `leaves()`, `filters()` and `queries()` (strings). Tokens come from the
+vocabularies), `negative_asts()`, `engine_asts()` (any tree an engine may get, including bare and all-negative ones; task-028),
+`leaves()`, `filters()` (every track and status of the vocabulary) and `queries()` (strings). Tokens come from the
 200-record fixture's real term dictionary plus awkward extras (operator words, filter values as text,
 digits, Thai, kana, CJK). Import it as `from tests.strategies import …`. Properties over them live in
 `tests/unit/test_properties.py` (round-trip without printing-caused warnings, match-set preservation by
