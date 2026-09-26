@@ -12,8 +12,8 @@ ReferenceEngine's on every record):
 - AND: its children's spans; OR: the spans of the children that matched, so a branch that didn't match
   lights nothing; NOT and filters: nothing (they match by absence or by metadata, not by text).
 Overlapping spans are merged; touching ones stay apart (an operator token touches its neighbours: `5×3`).
-A LaTeX command's span is its name without the backslash (`$\\alpha$` lights `alpha`), as tokenize's
-offset map gives it for every command.
+A LaTeX math command's span is its name without the backslash (`$\\alpha$` lights `alpha`), and accent
+markup that opens a word is in the word's span (`\\"{O}del` lights all of it), as tokenize's offsets give.
 """
 
 from __future__ import annotations

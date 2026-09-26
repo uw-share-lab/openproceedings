@@ -1,10 +1,10 @@
 ---
 id: TASK-074
 title: 'Accent macros at the start of a word: token offsets begin inside the macro'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-26 21:07'
-updated_date: '2026-09-26 21:27'
+updated_date: '2026-09-26 22:29'
 labels:
   - tokenizer
 milestone: m-2
@@ -20,6 +20,12 @@ task-027 review: tokenize's offsets for a word that begins with an accent macro 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Word-initial accent macros (\\" \\' \\v \\H …, braced and bare) give spans from the backslash to the word's end
-- [ ] #2 Tokens unchanged: exhaustive suite and golden tokens; TOKENIZER_VERSION unchanged
+- [x] #1 Word-initial accent macros (\\" \\' \\v \\H …, braced and bare) give spans from the backslash to the word's end
+- [x] #2 Tokens unchanged: exhaustive suite and golden tokens; TOKENIZER_VERSION unchanged
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented in tokenize: a run of JOIN markup (accent macros, \\-) seen while no word is open is remembered, and the word that starts next starts its span there; a separator, a math command, or any character that starts no word forgets it. Tokens unchanged: exhaustive suite (OP_EXHAUSTIVE=1), golden tokens, highlights; a 300,000-text differential against the previous tokenizer gives identical token texts, ends and op flags, with 36,021 starts moved earlier and every moved-over character JOIN (or the backslash of a following math command, \\-\\alpha). TOKENIZER_VERSION unchanged (offsets aren't part of the token contract's output). Goldens: \\"{O}del (0,8), \\v{S}ekar (0,9), after a space, \\'{E}cole and \\H{O}, \\"{\\i}ve, and unchanged in-word and \\- cases. Docs: token-contract skill, highlight.py docstring, spec 03 §Highlights.
+<!-- SECTION:NOTES:END -->

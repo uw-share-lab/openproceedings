@@ -405,6 +405,7 @@ def tokenize(text: str) -> list[Token]:
     buf: list[str] = []
     start = end = 0
     base: str | None = None
+    lead: int | None = None  # where markup before a word began (`\\"{O}del`): the word's span starts there
 
     def close() -> None:
         nonlocal buf
@@ -429,21 +430,25 @@ def tokenize(text: str) -> list[Token]:
             else:  # a Greek letter: part of the word, like the letter itself
                 folded, base = _fold(spelling, base)
                 if not buf:
-                    start = i + 1
+                    start = i + 1 if lead is None else lead
                 buf.extend(p for p in folded if isinstance(p, str))
                 end = cmd_end
+            lead = None
             i += 1
             continue
         if latex[i] == SEP:
             close()
-            base = None
+            base = lead = None
             i += 1
             continue
         if latex[i] == JOIN:  # markup inside a word: keep the word open and cover the markup in its span
             if buf:
                 end = i + 1
+            elif lead is None:  # markup before any letter: a word starting next starts here
+                lead = i
             i += 1
             continue
+        first, lead = lead, None
         j = i + 1
         while j < n and latex[j] == KEEP and unicodedata.combining(text[j]):
             j += 1
@@ -463,7 +468,8 @@ def tokenize(text: str) -> list[Token]:
                 out.append(Token(piece.name, i, stop, op=True))
             elif _is_word_char(piece):
                 if not buf:
-                    start = i
+                    start = i if first is None else first
+                first = None
                 buf.append(piece)
                 end = stop
             else:

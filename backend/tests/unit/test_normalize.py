@@ -257,3 +257,19 @@ def test_script_join_is_linear() -> None:
     secs(1000)  # warm up
     small, large = min(secs(5_000) for _ in range(3)), min(secs(20_000) for _ in range(3))
     assert large < small * 8  # 4× the input: linear is ~4×, quadratic ~16×
+
+
+@pytest.mark.parametrize(
+    ("text", "spans"),
+    [
+        ('\\"{O}del', [(0, 8)]),  # a word that begins with an accent macro starts at its backslash (task-074)
+        ("\\v{S}ekar", [(0, 9)]),
+        ('x \\"{O}del', [(0, 1), (2, 10)]),
+        ("\\'{E}cole and \\H{O}", [(0, 9), (10, 13), (14, 19)]),
+        ('a \\"{\\i}ve', [(0, 1), (2, 10)]),
+        ('G\\"odel', [(0, 7)]),  # inside a word: unchanged
+        ("\\-mark", [(0, 6)]),
+    ],
+)
+def test_leading_accent_markup_is_in_the_word_span(text: str, spans: list[tuple[int, int]]) -> None:
+    assert [(t.start, t.end) for t in tokenize(text)] == spans
