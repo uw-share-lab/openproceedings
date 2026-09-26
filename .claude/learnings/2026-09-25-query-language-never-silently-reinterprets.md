@@ -62,3 +62,24 @@ form whose hash identifies a query.
   `error-diagnostics`, `scholar-syntax-compat`, `codemirror-lezer`.
 - Tests: `test_lexer.py` (NFKC table, wildcard shape), `test_parser.py` (one error per mistake, separate
   mistakes each reported), `test_ast.py` (invariants), `test_canonical.py` (idempotence, operator words).
+
+## Addendum 2026-09-25 (tasks 014–017, decision-002, decision-003)
+- **Printing the lint status is not gating on it.** Commit 62dd486 went in with lint at exit 2 because the
+  command printed `lint=$?` and committed anyway, an hour after the first entry above recorded the same
+  trap. Chain every commit on `make lint >/dev/null && …`. The pre-push hook would have caught it before
+  the remote, but not before the commit.
+- **Ask the reviewer's actual question when a rule changes a result set.** Reading the PoP string
+  `(large language model$ | …)` has three defensible answers (Scholar's precedence, native precedence, or
+  intent). It went to the review lead, who chose intent (decision-002). Only that string was affected; the
+  primary string (`main-7-most-updated`, confirmed by the lead) quotes its phrases.
+- **A rule that makes an equivalent spelling invalid is a bug in the rule.** `"generative AI$"` was
+  rejected while `"generative-AI$"` passed. Counting a phrase's earlier words toward the stem fixed both,
+  and removed canonical form's hyphen workaround (`gpt-4*` → `"gpt 4*"`, as decision-001 first wrote it).
+- **Generate trees, not just strings.** The AST strategy found in minutes what string generators hadn't:
+  a nested-filter warning on replay. It was legitimate (semantic, not printing), so the property now
+  excludes exactly that code rather than all warnings. Keep escape hatches out of properties: the
+  all-negative property first skipped any tree that parsed, and now compares against an independent
+  positivity check.
+- **Golden expected sets need an independent source.** The 200-record fixture's expected ids come from a
+  separate regex evaluator in `make_reference_200.py`, and all 40 queries agreed with ReferenceEngine
+  on the first run. Random word order almost never forms phrases, so the generator seeds some.
