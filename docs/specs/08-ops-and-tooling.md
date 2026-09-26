@@ -12,7 +12,7 @@ openproceedings/
 ├── .claude/                     # committed: agents, skills, commands, hooks, learnings (roster: .claude/README.md)
 ├── .githooks/                   # commit-msg (attribution), pre-push (make lint + make tooling)
 ├── .github/                     # workflows (below), dependabot.yml
-├── backend/                     # (M1) uv workspace member: Python package `openproceedings`
+├── backend/                     # uv workspace member: Python package `openproceedings` (Python 3.12, .python-version)
 │   ├── pyproject.toml
 │   ├── src/openproceedings/
 │   │   ├── ingest/              # 01: sources/, classify.py, dedup.py, snapshot.py, ris.py
