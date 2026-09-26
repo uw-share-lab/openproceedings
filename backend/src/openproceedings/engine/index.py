@@ -56,6 +56,7 @@ RANKING_PARAMS: dict[str, Any] = {
     "field_weights": {"abstract": 1.0, "title": 2.0},
 }
 MANIFEST = "manifest.json"
+IDS = "ids.txt"  # every record id in id order, one per line: `ord` indexes it
 _LOCKS = (".tantivy-meta.lock", ".tantivy-writer.lock")
 
 
@@ -112,6 +113,9 @@ def schema() -> tantivy.Schema:
     for field in FACETS:
         b.add_text_field(field, stored=True, fast=True, tokenizer_name="raw")
     b.add_unsigned_field("year", stored=True, indexed=True, fast=True)
+    # the record's position in id order (a fast column), so a match set reads back as ids without
+    # fetching stored documents: ids.txt holds the ids in that order
+    b.add_unsigned_field("ord", stored=False, indexed=False, fast=True)
     b.add_bytes_field("record", stored=True, indexed=False)
     return b.build()
 
@@ -146,9 +150,10 @@ def _cpus() -> int:
     return os.cpu_count() or 1
 
 
-def _document(r: PaperRecord, fields: dict[str, list[str]]) -> tantivy.Document:
+def _document(r: PaperRecord, fields: dict[str, list[str]], ord_: int) -> tantivy.Document:
     doc = tantivy.Document()
     doc.add_text("id", r.id)
+    doc.add_unsigned("ord", ord_)
     for field in TEXT:
         doc.add_text(field, " ".join(fields[field]))  # the token contract's output; "" for a missing abstract
     for field in FACETS:
@@ -231,7 +236,7 @@ def _chunks(records: Iterator[PaperRecord]) -> Iterator[list[PaperRecord]]:
         yield chunk
 
 
-def _add_all(snapshot: Path, writer: Any, exact: tantivy.TextAnalyzer, workers: int) -> int:
+def _add_all(snapshot: Path, writer: Any, exact: tantivy.TextAnalyzer, workers: int, ids: Any) -> int:
     """Stream the snapshot's records (in id order, verified) through normalize() into the writer, across
     `workers` processes when there is more than one."""
     pool = None
@@ -251,8 +256,9 @@ def _add_all(snapshot: Path, writer: Any, exact: tantivy.TextAnalyzer, workers: 
             for r, (title, abstract) in zip(chunk, normalized, strict=True):
                 fields = {"title": title, "abstract": abstract}
                 _check_tokens(r, fields, exact)
-                writer.add_document(_document(r, fields))
-            added += len(chunk)
+                writer.add_document(_document(r, fields, added))
+                ids.write(r.id + "\n")
+                added += 1
     except BrokenProcessPool:
         raise IndexBuildError("a normalizing worker process died (out of memory?); build again") from None
     finally:
@@ -290,7 +296,8 @@ def build_index(
             exact = analyzer()
             index.register_tokenizer(ANALYZER, exact)
             writer = index.writer(num_threads=1)  # one thread: documents keep id order, deterministically
-            added = _add_all(snapshot, writer, exact, workers if workers is not None else _cpus())
+            with (tmp / IDS).open("w", encoding="utf-8") as ids:
+                added = _add_all(snapshot, writer, exact, workers if workers is not None else _cpus(), ids)
             writer.commit()
             writer.wait_merging_threads()
             index.reload()

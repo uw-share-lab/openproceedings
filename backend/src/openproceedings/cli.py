@@ -2,7 +2,7 @@
 implements it (spec 08 §CLI). The CLI and the API call the same functions.
 
 Implemented: `op ingest ris`, `op snapshot build`, `op snapshot diff` (task-022), `op index build`
-(task-023). Results go to stdout as
+(task-023), `op search --explain / --ids` (task-024; ranked output and export are task-030). Results go to stdout as
 JSON; logs go to stderr; a refused operation exits 1 with its reason, a usage error or a stub exits 2.
 """
 
@@ -24,7 +24,6 @@ log = logging.getLogger(__name__)
 
 # subcommand -> (help text, the Backlog task that implements it)
 PLANNED: dict[str, tuple[str, str]] = {
-    "search": ("run a query; --explain, --engine tantivy|reference (spec 02/03)", "task-030"),
     "export": ("export the full matched set: ris | csv | bibtex | jsonl (spec 04)", "task-030"),
     "serve": ("run the HTTP API (spec 04)", "task-034"),
     "record": ("save or replay a search record (spec 04)", "task-037"),
@@ -99,6 +98,17 @@ def build_parser() -> argparse.ArgumentParser:
     ib.set_defaults(run=_index_build)
     _stub(index_actions.add_parser("retire", help="planned in task-065"), "index retire", "task-065")
 
+    search = sub.add_parser("search", help="run a query against an index: --explain, --ids (spec 02/03)")
+    search.add_argument("query")
+    search.add_argument(
+        "--index", help="an index directory or index_version (default <data-dir>/indexes/current)"
+    )
+    search.add_argument("--mode", choices=("native", "scholar"), default="native")
+    what = search.add_mutually_exclusive_group(required=True)
+    what.add_argument("--explain", action="store_true", help="print the parse and the compiled query")
+    what.add_argument("--ids", action="store_true", help="print the sorted matching ids")
+    search.set_defaults(run=_search)
+
     for name, (help_text, task) in PLANNED.items():
         _stub(sub.add_parser(name, help=help_text, description=help_text), name, task)
     return parser
@@ -154,6 +164,28 @@ def _index_build(ns: argparse.Namespace) -> int:
     snapshot = resolve_snapshot(ns.snapshot, ns.data_dir / "snapshots")
     result = build_index(snapshot, ns.out or ns.data_dir / "indexes")
     _print({"path": str(result.path), "index_version": result.index_version, "created": result.created})
+    return 0
+
+
+def _search(ns: argparse.Namespace) -> int:
+    from openproceedings.engine.tantivy_engine import TantivyEngine
+    from openproceedings.query.parser import parse
+
+    indexes = ns.data_dir / "indexes"
+    path = Path(ns.index) if ns.index and Path(ns.index).is_dir() else indexes / (ns.index or "current")
+    result = parse(ns.query, ns.mode)
+    lines = [f"input: {ns.query}"]
+    lines += [f"{d.code}: {d.message}" for d in [*result.errors, *result.warnings]]
+    lines += [f"{t.code}: {t.message}" for t in result.translations]
+    if result.effective_ast is None:
+        print("\n".join(lines), file=sys.stderr)
+        return 1
+    engine = TantivyEngine(path)
+    if ns.ids:
+        print("\n".join(sorted(engine.match_ids(result.effective_ast))))
+        return 0
+    lines += [f"canonical: {result.canonical}", f"index_version: {engine.index_version}"]
+    print("\n".join([*lines, engine.explain(result.effective_ast)]))
     return 0
 
 

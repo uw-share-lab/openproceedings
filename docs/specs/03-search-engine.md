@@ -54,7 +54,7 @@ reference engine matches (`engine/index.py`, `op index build`).
 |---|---|
 | `Term t` (no field) | `Boolean(SHOULD title:t, SHOULD abstract:t)` |
 | `Phrase` | `PhraseQuery` per field, combined with OR. Never across fields. |
-| `Near(a, b, n)` | Per field: `PhraseQuery([a, b], slop=n)` OR the reversed order. Multi-token operands are handled through the reference definition, with a documented fallback: the postings are candidate-filtered by Tantivy, then verified by position in Python. |
+| `Near(a, b, n)` | Two different single terms: per field, `PhraseQuery([a, b], slop=n)` OR the reversed order (exact on tantivy 0.26.2, measured). A phrase or wildcard operand, a term with itself, or a phrase with a wildcard item takes the documented fallback: candidates filtered by Tantivy, then verified by position in Python over the stored token streams. |
 | `Wildcard` | Expanded via the term dictionary (the FST behind `RegexQuery` / term streaming) into an explicit OR of terms. The expansion is returned to the caller. |
 | `And` / `Or` / `Not` | `BooleanQuery` MUST / SHOULD / MUST_NOT |
 | `Filter` | `TermQuery` or `RangeQuery` on the fast fields, applied as a non-scoring filter |

@@ -13,6 +13,7 @@ description: The Tantivy index standard for openproceedings — the schema table
 | `abstract` | text, freqs + positions | ✓ | ✓ | | same; a missing abstract is `""`, never omitted |
 | `venue`, `track`, `status` | text, `raw` (facet) | ✓ | ✓ | ✓ | one spelling per value, fixed by the ingest vocabulary |
 | `year` | u64 | ✓ | ✓ | ✓ | `RangeQuery` target |
+| `ord` | u64 | | | ✓ | the record's position in id order; `ids.txt` (hashed with the index) maps it back, so a match set reads as ids without fetching documents |
 | `record` | bytes: compact canonical JSON (display title and abstract, authors, urls, presentation, keywords, venue_id_raw) | | ✓ | | **never indexed** (guarantee 2): not a JSON field, which tantivy-py indexes by default; read with `record_of` |
 
 Positions are mandatory on `title`/`abstract` (phrases, NEAR, highlights). Any change to this table bumps

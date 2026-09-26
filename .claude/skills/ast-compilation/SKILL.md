@@ -16,8 +16,8 @@ documentation.
 | `Term t`, `title:`/`abstract:` | `TermQuery` on that field | |
 | Term normalizing to >1 token (`vision-language`) | as `Phrase` of those tokens | never an AND of the parts |
 | `Phrase p` | `PhraseQuery(title, p) OR PhraseQuery(abstract, p)` | **never** across fields; field-scoped phrases → one side only |
-| `Near(a, b, n)`, single-token operands | per field: `PhraseQuery([a,b], slop) OR PhraseQuery([b,a], slop)` | unordered; ≤ n intervening words |
-| `Near` with a multi-token operand | candidate filter: `MUST a MUST b` in the same field, then verify positions in Python | documented fallback; verification re-normalizes the stored text with `normalize.py` |
+| `Near(a, b, n)`, two **different** single terms | per field: `PhraseQuery([a,b], slop=n) OR PhraseQuery([b,a], slop=n)` | unordered; ≤ n intervening words (measured, see gotcha 2) |
+| `Near` with a phrase or wildcard operand, or a term with itself; a phrase with a wildcard item | candidate filter: every item `MUST` in the same field, then positions verified in Python over the candidates' stored token streams (the indexed text split on spaces); the verified ids become a `TermSetQuery` on `id`, kept with the candidate query for scoring | the documented fallback; `--explain` lists each verified clause |
 | `Wildcard w` | `Boolean(SHOULD term…)` of the expanded terms, per field | expansion from the term dictionary, returned to the caller (`.claude/skills/wildcards-and-expansion/SKILL.md`) |
 | `And` / `Or` | `BooleanQuery` MUST / SHOULD | |
 | `Not x` | `Boolean(MUST all_docs, MUST_NOT x)` | see gotcha 1 |
@@ -27,10 +27,13 @@ documentation.
 1. **A Boolean query with only MUST_NOT clauses matches nothing in Tantivy.** `a OR NOT b` means
    a ∪ (corpus − b). Compile every `Not` with an explicit all-docs positive clause, or restructure it under
    an enclosing `And`. The parser rejects all-negative *queries*, but nested negations are legal.
-2. **Slop is not NEAR/n until a test says so.** Check against the oracle whether a Tantivy slop value of `n`
-   means "≤ n intervening positions" for an in-order pair, and how reversed order is costed, in the pinned
-   version. Pin the mapping in `compile.py` with golden cases at n = 0, 1 and n+1, in both orders.
-3. `NEAR` of a term with itself (`a NEAR/2 a`) needs two distinct occurrences. Add a golden case.
+2. **Slop, measured on tantivy 0.26.2:** an in-order pair at slop n matches ≤ n tokens between; a reversed
+   pair costs 2 more, so the reversed matches slop admits are within NEAR/n anyway and
+   `[a,b] OR [b,a]` at slop n is exact. Pinned by golden rows at n = 0, 1, 2 and n+1, both orders
+   (`test_compile.py`).
+3. `NEAR` of a term with itself needs two distinct occurrences, but `[a,a]` at slop ≥ 1 also matches a
+   single `a` (measured), so it always takes the verified fallback (golden rows `alpha NEAR/1 alpha`,
+   `NEAR/0`).
 4. Filters must not score. Wrap them as a constant-score or filter clause (verify the tantivy-py API), so
    adding `year:2024` never reorders results (`.claude/skills/field-weighted-bm25/SKILL.md`).
 5. Empty expansion compiles to a match-nothing clause, never to a dropped clause. A dropped clause in an
@@ -38,11 +41,22 @@ documentation.
 6. Default filters arrive already explicit in the AST (`.claude/skills/default-filters/SKILL.md`). Compile
    never adds them.
 
+## As built
+`backend/src/openproceedings/engine/compile.py` (the table; shares no matching code with ReferenceEngine)
+and `engine/tantivy_engine.py` (`TantivyEngine`: expansion from the term dictionary via
+`terms_with_prefix` over both fields, the 200 cap before compiling; match sets read back through the
+`ord` fast column and `ids.txt`; disjunctive facets by a terms aggregation; ranking is task-025, so
+`search` returns id order until then). Filters are `ConstScoreQuery(…, 0.0)`: they never change a score
+(tested). Checked: the 44 golden queries of the 200-record fixture, a row per table line against
+ReferenceEngine, and (locally) the ten Trust-Evals protocol strings on the real corpus, identical sets.
+
 ## `op search --explain`
-`--explain` prints, in order: the input, the canonical string, the warnings and translations, the wildcard
-expansions, the compiled query rendered as a readable tree (field, clause kind, slop, boost, and whether it
-is a filter), and which NEAR clauses took the verification fallback. `--engine reference|tantivy` picks the
-engine, and `--ids` prints the sorted ID set. Every differential counterexample is reported with this output.
+`op search <q> --explain` prints, in order: the input, the warnings and translations, the canonical string
+(the effective query, default filters included), the index_version, the compiled query as a readable tree
+(field, clause kind, slop, and whether it is a filter), the wildcard expansions, and which clauses took the
+verification fallback. `op search <q> --ids` prints the sorted id set. Both take `--index` (a directory or
+an index_version; default `indexes/current`) and `--mode native|scholar`. `--engine reference` and ranked
+output arrive with task-030. Every differential counterexample is reported with this output.
 
 ## Review checklist
 - [ ] every row has a golden case in `backend/tests/golden/`, run through both engines

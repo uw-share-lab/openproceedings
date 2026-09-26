@@ -625,7 +625,7 @@ def test_cli_never_prints_record_text(
 
 @pytest.mark.parametrize(
     "argv",
-    [["snapshot", "build", "--form", "x"], ["--bogus", "search"], ["--bogus", "search", "--bogus"],
+    [["snapshot", "build", "--form", "x"], ["--bogus", "export"], ["--bogus", "export", "--bogus"],
      ["ingest", "--bogus", "openreview"]],
 )  # fmt: skip
 def test_cli_rejects_unknown_options(argv: list[str]) -> None:
