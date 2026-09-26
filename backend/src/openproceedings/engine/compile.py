@@ -76,10 +76,19 @@ class Compiler:
     compiling, so the 200 cap never depends on which documents are reached); `read` streams candidate
     documents' stored token streams for position verification."""
 
-    def __init__(self, schema: tantivy.Schema, expansions: Expansions, read: TokenReader) -> None:
+    def __init__(
+        self,
+        schema: tantivy.Schema,
+        expansions: Expansions,
+        read: TokenReader,
+        verified_cache: dict[tuple[str, str], list[str]] | None = None,
+    ) -> None:
         self.schema = schema
         self.expansions = expansions
         self.read = read
+        # (field, clause) → the ids it verified: an index never changes, so a clause is checked once per
+        # engine, however many times facets or later queries recompile it
+        self.verified_cache = {} if verified_cache is None else verified_cache
         self.out = Compiled(tantivy.Query.empty_query())
 
     def compile(self, n: Node) -> Compiled:
@@ -177,11 +186,15 @@ class Compiler:
         """Candidates (every distinct item present in the field), then their stored token streams checked by
         position; the verified ids are what matches. The candidate query stays in, for scoring (each
         distinct item once)."""
-        distinct = {_key(i): i for i in self.items(n)}
         candidates = tantivy.Query.boolean_query(
-            [(tantivy.Occur.Must, self.item(i, f)) for i in distinct.values()]
+            [(tantivy.Occur.Must, self.item(i, f)) for i in self.distinct(n)]
         )
-        ids = [doc_id for doc_id, tokens in self.read(candidates, f) if self.holds(n, tokens)]
+        key = (f, n.model_dump_json())
+        if key not in self.verified_cache:
+            self.verified_cache[key] = [
+                doc_id for doc_id, tokens in self.read(candidates, f) if self.holds(n, tokens)
+            ]
+        ids = self.verified_cache[key]
         what = f"NEAR/{n.distance}" if isinstance(n, Near) else "phrase"
         self.line(depth, f"{f}: {what} verified by position ({len(ids)} documents)")
         self.out.verified.append(f"{f}: {what}")
@@ -189,6 +202,12 @@ class Compiler:
             return tantivy.Query.empty_query()
         exact = tantivy.Query.const_score_query(tantivy.Query.term_set_query(self.schema, "id", ids), 0.0)
         return tantivy.Query.boolean_query([(tantivy.Occur.Must, candidates), (tantivy.Occur.Must, exact)])
+
+    def distinct(self, n: Node) -> list[Term | Wildcard]:
+        """The items a candidate must hold, each once: an item whose allowed tokens include another's is
+        implied by it (`trust` implies `trust*`), so only the narrower one is kept, and a term is scored once."""
+        items = {self.allowed(i): i for i in self.items(n)}  # equal token sets are one item
+        return [i for s, i in items.items() if not any(other < s for other in items)]
 
     # --- position checks (spec 02 semantics, written independently of ReferenceEngine) --------------
     def allowed(self, i: Term | Wildcard) -> frozenset[str]:
@@ -221,10 +240,6 @@ class Compiler:
                 if k < len(right) and right[k] <= hi:
                     return True
         return False
-
-
-def _key(i: Term | Wildcard) -> tuple[str, str]:
-    return ("term", i.token) if isinstance(i, Term) else (i.op, i.stem)
 
 
 def _distinct_terms(n: Near) -> bool:

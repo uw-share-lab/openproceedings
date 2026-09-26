@@ -228,3 +228,47 @@ def test_cli_search_refuses_an_over_cap_wildcard(
         assert "WILDCARD_TOO_MANY_EXPANSIONS" in err and "Traceback" not in err
     assert cli.main(["--data-dir", str(tmp_path / "empty"), "search", "trust", "--ids"]) == 1
     assert "op index build" in capsys.readouterr().err
+
+
+def test_distinct_items_are_each_scored_once(engines: tuple[TantivyEngine, ReferenceEngine]) -> None:
+    engine = engines[0]
+    ab03 = next(i for i in engine.ids if i.endswith("Ab03"))
+    # verified in both fields: alpha, x and beta each count once per field, as the plain AND does
+    assert scores(engine, '"alpha x" NEAR/1 beta')[ab03] == scores(engine, "alpha x beta")[ab03]
+    ab07 = next(i for i in engine.ids if i.endswith("Ab07"))
+    # `trust` implies `trust*`, so the candidate holds `trust` once (abstract "trust trustx")
+    assert scores(engine, '"trust trust*"')[ab07] == scores(engine, "abstract:trust")[ab07]
+
+
+def test_facets_verify_each_clause_once_per_field(tmp_path: Path) -> None:
+    engine = TantivyEngine(
+        build_index(snapshot_of(CORPUS, tmp_path / "snap"), tmp_path / "indexes", BUILT).path
+    )
+    reads = []
+    real = engine.read
+
+    def counting(query: object, field: str) -> object:
+        reads.append(field)
+        return real(query, field)  # type: ignore[arg-type]
+
+    engine.read = counting  # type: ignore[method-assign]
+    engine.facets(parse("alpha NEAR/1 alpha").effective_ast)  # type: ignore[arg-type]  # default filters: 4 fields
+    assert sorted(reads) == ["abstract", "title"]  # not once per facet field
+
+
+def test_cli_search_index_precedence_and_errors(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings import cli
+
+    data = tmp_path / "data"
+    index = build_index(snapshot_of(CORPUS, tmp_path / "snap"), data / "indexes", BUILT).path
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / index.name).mkdir()  # a same-named local directory never shadows the data dir's index
+    assert cli.main(["--data-dir", str(data), "search", "alpha", "--ids", "--index", index.name]) == 0
+    assert len(capsys.readouterr().out.split()) == 5
+    assert cli.main(["--data-dir", str(tmp_path / "none"), "search", "trust NOT", "--ids"]) == 1
+    assert "PARSE_" in capsys.readouterr().err  # the query's error first, whatever the index
+    assert cli.main(["--data-dir", str(tmp_path / "none"), "search", "trust", "--ids"]) == 1
+    err = capsys.readouterr().err
+    assert "cli_refused" in err and "op index build" in err

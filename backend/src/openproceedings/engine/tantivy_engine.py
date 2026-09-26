@@ -36,6 +36,7 @@ class TantivyEngine:
         self.searcher = self.index.searcher()
         self.ids = (path / IDS).read_text(encoding="utf-8").splitlines()
         self.universe = frozenset(self.ids)
+        self.verified: dict[tuple[str, str], list[str]] = {}  # position-verified clauses, per engine
 
     # --- the Engine protocol -------------------------------------------------------------------------
     def expand(self, wildcard: Wildcard) -> list[str]:
@@ -94,7 +95,9 @@ class TantivyEngine:
         return out
 
     def compile(self, ast: Node) -> Compiled:
-        return Compiler(self.index.schema, self.expansions(ast), self.read).compile(ast)
+        if len(self.verified) > 1_000:
+            self.verified.clear()  # bounded: a long-running API never grows it without limit
+        return Compiler(self.index.schema, self.expansions(ast), self.read, self.verified).compile(ast)
 
     def explain(self, ast: Node) -> str:
         """The compiled query as a readable tree, its wildcard expansions and verified clauses (op search

@@ -130,6 +130,12 @@ as "current" and can load a pinned older version to replay a search record.
 - p95 latency: under 100 ms for a search returning the first 50 hits, and under 300 ms for `match_ids`
   with exclusion accounting.
 - A wildcard expansion of up to 200 terms: under 50 ms.
+- **Exception, as built (task-024):** a clause that takes the position-verified fallback (a phrase with a
+  wildcard item; NEAR with a phrase or wildcard operand, or a term with itself) costs time linear in its
+  candidates' text and can exceed the `match_ids` budget: on an 80k corpus, stopword cases such as
+  `the NEAR/5 the` take 2–11 s (the reference engine 27–45 s). It is never capped, because a cap would make
+  a query's result depend on the corpus's size and break replaying search records; task-031 measures these
+  cases, and an engine caches each verified clause, so facets and repeats don't pay again.
 
 ## Testing
 

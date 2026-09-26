@@ -101,7 +101,8 @@ def build_parser() -> argparse.ArgumentParser:
     search = sub.add_parser("search", help="run a query against an index: --explain, --ids (spec 02/03)")
     search.add_argument("query")
     search.add_argument(
-        "--index", help="an index directory or index_version (default <data-dir>/indexes/current)"
+        "--index",
+        help="an index_version under <data-dir>/indexes (checked first) or an index directory; default current",
     )
     search.add_argument("--mode", choices=("native", "scholar"), default="native")
     what = search.add_mutually_exclusive_group(required=True)
@@ -168,22 +169,24 @@ def _index_build(ns: argparse.Namespace) -> int:
 
 
 def _search(ns: argparse.Namespace) -> int:
+    from openproceedings.engine.index import IndexBuildError
     from openproceedings.engine.tantivy_engine import TantivyEngine
     from openproceedings.query.parser import parse
 
-    indexes = ns.data_dir / "indexes"
-    name = ns.index or "current"
-    path = indexes / name if (indexes / name).exists() or not Path(name).is_dir() else Path(name)
-    if not path.exists():
-        print(f"op search: no index at {path}; build one with `op index build --snapshot …`", file=sys.stderr)
-        return 1
-    result = parse(ns.query, ns.mode)
+    result = parse(ns.query, ns.mode)  # a bad query is reported first, whatever the index
     lines = [f"input: {ns.query}"]
     lines += [f"{d.code}: {d.message}" for d in [*result.errors, *result.warnings]]
     lines += [f"{t.code}: {t.message}" for t in result.translations]
     if result.effective_ast is None:
+        log.warning("cli_refused", extra={"command": "search", "error": "parse"})
         print("\n".join(lines), file=sys.stderr)
         return 1
+    indexes = ns.data_dir / "indexes"
+    name = ns.index or "current"
+    # a name under <data-dir>/indexes wins; otherwise --index may be a directory path
+    path = indexes / name if (indexes / name).exists() or not Path(name).is_dir() else Path(name)
+    if not path.exists():
+        raise IndexBuildError(f"no index at {path}; build one with `op index build --snapshot …`")
     engine = TantivyEngine(path)
     if ns.ids:
         print("\n".join(sorted(engine.match_ids(result.effective_ast))))
