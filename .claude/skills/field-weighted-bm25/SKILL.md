@@ -29,7 +29,7 @@ summed over the query's positive scoring clauses.
   its **distinct** items, each once (an item implied by a narrower one is dropped); the id check adds 0.
 - `TantivyEngine.ranked(ast, sort)` fetches every match with its exact float score and orders the whole
   set by the sort's key, the id always last (`year` from its fast column; `title` from a `title_rank` fast
-  column computed at build from the casefolded display title and id), never by Tantivy's hit order
+  column computed at build from `title_key` = casefold(NFKC(display title)), then id), never by Tantivy's hit order
   (tested by reversing it). `search` takes the top `offset + limit` of that order (`heapq.nsmallest`) and
   pages it. `ranking_params` also records the sort definitions.
 - **Identical texts score identically.** Tantivy's union scorer works 4,096 documents at a time and
@@ -38,7 +38,10 @@ summed over the query's positive scoring clauses.
   Their order would then depend on index layout, not id. `compile.combine` therefore builds every
   Boolean (ORs, ANDs, wildcard expansions, year ranges, verified candidates) as a balanced binary tree:
   a two-operand sum is the same in either order. `test_rank.py` checks identical texts across the
-  4,096 boundary and a multi-segment build (`build_index(commit_every=…)`) against a single segment.
+  4,096 boundary (the test that catches a flat union), and `test_compile.py` that no compiled Boolean has
+  more than two clauses (the AND side, which no score probe has shown to drift). A multi-segment build
+  (`build_index(commit_every=…)`) is also checked against a single segment, but at 60 documents it can't
+  catch a flat union on its own.
 
 ## Membership is not ranking's business
 - Ranking orders the matched set and nothing else. `total`, `match_ids` and exports are identical for
@@ -52,7 +55,7 @@ summed over the query's positive scoring clauses.
 |---|---|
 | `relevance` (default) | `(-score, id)` |
 | `year_desc` / `year_asc` | `(-year, id)` / `(year, id)` |
-| `title` | `(display title casefolded, id)` |
+| `title` | `(casefold(NFKC(display title)), id)` |
 | `semantic` | supplied by 06 when enabled; still tie-broken by `id` |
 
 - The tie-breaker is **always `id`**. Tantivy's internal doc order depends on segments, so it is never a

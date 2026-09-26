@@ -271,3 +271,51 @@ def test_cli_search_index_precedence_and_errors(
     assert cli.main(["--data-dir", str(tmp_path / "none"), "search", "trust", "--ids"]) == 1
     err = capsys.readouterr().err
     assert "cli_refused" in err and "op index build" in err
+
+
+@pytest.mark.parametrize(
+    "q",
+    [
+        "alpha beta gamma delta",  # AND of four
+        "alpha OR beta OR gamma OR delta OR x",  # OR of five
+        "alpha beta gamma OR x y z",
+        "trust* alpha beta",  # a wildcard expansion beside a three-way AND
+        "alpha year:2020..2026 venue:(ICLR OR NeurIPS OR ICML)",
+        '"alpha x" "x y" beta',  # verified candidates in a three-way AND
+    ],
+)
+def test_no_compiled_boolean_has_more_than_two_clauses(
+    engines: tuple[TantivyEngine, ReferenceEngine], monkeypatch: pytest.MonkeyPatch, q: str
+) -> None:
+    # a flat Boolean of three or more clauses sums scores in a layout-dependent order (compile.combine)
+    import openproceedings.engine.compile as comp
+    import tantivy
+
+    sizes: list[int] = []
+
+    class Query:
+        def __getattr__(self, name: str) -> object:
+            return getattr(tantivy.Query, name)
+
+        def boolean_query(self, clauses: list[tuple[tantivy.Occur, tantivy.Query]]) -> tantivy.Query:
+            sizes.append(len(clauses))
+            return tantivy.Query.boolean_query(clauses)
+
+    class Tantivy:
+        def __getattr__(self, name: str) -> object:
+            return Query() if name == "Query" else getattr(tantivy, name)
+
+    monkeypatch.setattr(comp, "tantivy", Tantivy())
+    engines[0].verified.clear()
+    before = set(both(engines, q))
+    assert sizes and max(sizes) == 2, sizes
+    monkeypatch.undo()
+    assert both(engines, q) == before
+
+
+def test_combine_refuses_an_empty_list() -> None:
+    import tantivy
+    from openproceedings.engine.compile import combine
+
+    with pytest.raises(ValueError, match="at least one"):
+        combine(tantivy.Occur.Should, [])

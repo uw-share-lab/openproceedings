@@ -76,6 +76,7 @@ Every compiled query is also rendered as a readable string for debugging (`op se
   sort's key with `id` last (never Tantivy's hit order), then paged; the sort definitions are part of
   `ranking_params`. Every Boolean is compiled as a balanced binary tree, so identical texts get identical
   scores whatever the index layout (a flat union of three or more clauses leaves them an ulp apart).
+  The engine refuses an index built with another schema, tokenizer or Tantivy version, or other bm25 params.
 
 ## Highlights
 

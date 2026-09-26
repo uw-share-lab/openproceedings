@@ -14,7 +14,7 @@ description: The Tantivy index standard for openproceedings — the schema table
 | `venue`, `track`, `status` | text, `raw` (facet) | ✓ | ✓ | ✓ | one spelling per value, fixed by the ingest vocabulary |
 | `year` | u64 | ✓ | ✓ | ✓ | `RangeQuery` target |
 | `ord` | u64 | | | ✓ | the record's position in id order; `ids.txt` (hashed with the index) maps it back, so a match set reads as ids without fetching documents |
-| `title_rank` | u64 | | | ✓ | the record's position in (casefolded display title, id) order, for `sort=title` |
+| `title_rank` | u64 | | | ✓ | the record's position in (casefold(NFKC(display title)), id) order (`title_key`), for `sort=title` |
 | `record` | bytes: compact canonical JSON (display title and abstract, authors, urls, presentation, keywords, venue_id_raw) | | ✓ | | **never indexed** (guarantee 2): not a JSON field, which tantivy-py indexes by default; read with `record_of` |
 
 Positions are mandatory on `title`/`abstract` (phrases, NEAR, highlights). Any change to this table bumps
@@ -65,7 +65,9 @@ Positions are mandatory on `title`/`abstract` (phrases, NEAR, highlights). Any c
    that finds its version already present verifies and re-seals it instead of rebuilding. The directory
    must be writable to open (Tantivy's reader lock), so an index can't be served from a read-only mount
    (task-065). Moving `current` is a
-   separate release step.
+   separate release step. `TantivyEngine` opens only a verified index, and refuses (`API_INTERNAL`, "build a
+   new index") one whose `schema_version`, `tokenizer_version` or `tantivy_version` differs from the running
+   code, or whose bm25 isn't Tantivy's (field-weighted-bm25 skill).
 
 `data/indexes/` is immutable. `protect-data-dir.sh` blocks Write/Edit there, so builds go through the CLI
 only.

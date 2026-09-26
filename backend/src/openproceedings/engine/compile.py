@@ -253,6 +253,8 @@ def combine(occur: tantivy.Occur, queries: list[tantivy.Query]) -> tantivy.Query
     order that shifts from one document to the next, so a flat union of three or more gives identical texts
     scores 1 ulp apart and their order would follow the segment layout, not the id. A sum of two is the same
     in either order, so with at most two clauses per node every score depends only on the text."""
+    if not queries:
+        raise ValueError("combine needs at least one query")
     if len(queries) == 1:
         return queries[0]
     if len(queries) == 2:

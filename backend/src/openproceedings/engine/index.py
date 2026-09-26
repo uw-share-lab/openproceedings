@@ -126,7 +126,7 @@ def schema() -> tantivy.Schema:
     # the record's position in id order (a fast column), so a match set reads back as ids without
     # fetching stored documents: ids.txt holds the ids in that order
     b.add_unsigned_field("ord", stored=False, indexed=False, fast=True)
-    # the record's position in (casefolded display title, id) order: `sort=title` without fetching documents
+    # the record's position in (title_key(display title), id) order: `sort=title` without fetching documents
     b.add_unsigned_field("title_rank", stored=False, indexed=False, fast=True)
     b.add_bytes_field("record", stored=True, indexed=False)
     return b.build()

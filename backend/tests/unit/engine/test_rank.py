@@ -237,6 +237,11 @@ def test_an_index_from_other_versions_is_refused(tmp_path: Path, monkeypatch: py
         with pytest.raises(EngineError, match="build a new index"):
             TantivyEngine(path)
     with monkeypatch.context() as m:
+        m.setattr(idx, "version", lambda _name: "0.0.1")  # an index built by another Tantivy
+        path = build_index(snapshot_of(CORPUS, tmp_path / "tv"), tmp_path / "i-tv", BUILT).path
+    with pytest.raises(EngineError, match=r"tantivy_version 0\.0\.1"):
+        TantivyEngine(path)
+    with monkeypatch.context() as m:
         m.setattr(idx, "RANKING_PARAMS", {**idx.RANKING_PARAMS, "bm25": {"b": 0.75, "k1": 1.3}})
         path = build_index(snapshot_of(CORPUS, tmp_path / "bm25"), tmp_path / "i-bm25", BUILT).path
     with pytest.raises(EngineError, match="Tantivy applies"):
@@ -298,3 +303,12 @@ def test_the_title_pass_reads_lines_as_the_validating_pass_does(tmp_path: Path) 
     )
     with pytest.raises(SnapshotError):  # invalid UTF-8: a clean refusal, never a raw decode error
         build_index(bad, tmp_path / "ib", BUILT)
+
+
+def test_the_installed_tantivy_is_the_one_bm25_was_confirmed_on() -> None:
+    from importlib.metadata import version
+
+    from openproceedings.engine.tantivy_engine import TANTIVY_PINNED
+
+    # k1/b are Tantivy's constants, checked by hand on this version: an upgrade re-checks them
+    assert version("tantivy") == TANTIVY_PINNED

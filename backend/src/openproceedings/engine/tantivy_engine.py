@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import heapq
 from collections.abc import Iterator
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -31,10 +32,9 @@ from openproceedings.query.ast import And, Filter, Node, Not, TextField, Wildcar
 from openproceedings.query.normalize import TOKENIZER_VERSION
 
 SORTS = ("relevance", "year_desc", "year_asc", "title")
-TANTIVY_BM25 = {
-    "b": 0.75,
-    "k1": 1.2,
-}  # Tantivy's fixed constants (tantivy 0.26.2): an index can't claim others
+# the Tantivy TANTIVY_BM25 was confirmed on; test_rank.py fails if the installed one drifts
+TANTIVY_PINNED = "0.26.2"
+TANTIVY_BM25 = {"b": 0.75, "k1": 1.2}  # Tantivy's fixed constants: an index can't claim others
 
 
 class TantivyEngine:
@@ -45,6 +45,7 @@ class TantivyEngine:
         stale = {
             "schema_version": (manifest.get("schema_version"), SCHEMA_VERSION),
             "tokenizer_version": (manifest.get("tokenizer_version"), TOKENIZER_VERSION),
+            "tantivy_version": (manifest.get("tantivy_version"), version("tantivy")),  # scoring may differ
         }
         for name, (built, current) in stale.items():
             if built != current:  # queries are normalized and compiled for the current versions
