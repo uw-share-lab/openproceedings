@@ -84,6 +84,14 @@ For each hit, return the match spans per field, computed from the **AST** (not f
 generator), so what's highlighted is exactly what matched. That covers phrase spans and expanded wildcard
 terms.
 
+As built (task-027, `engine/highlight.py`): `highlights(ast, record, expansions)` evaluates the AST on one
+record over `tokenize`'s offset map. A term or expanded wildcard term lights each token it matches; a phrase
+lights one span per occurrence; NEAR lights the operand occurrences that form a pair within the distance;
+AND lights its children, OR only the children that matched; NOT and filters light nothing. A node that
+doesn't match has no spans, so a branch that didn't match lights nothing. Overlapping spans merge. A LaTeX
+command's span is its name without the backslash (`$\alpha$` lights `alpha`). The highlighter's verdict
+is checked against ReferenceEngine on every fixture record for all 44 golden queries.
+
 ## Exclusion accounting (guarantee 6, PRISMA)
 
 For every search, also compute the size of the matched set **with the default filters removed**
