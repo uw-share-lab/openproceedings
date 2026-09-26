@@ -97,11 +97,19 @@ Rules:
 - **A wildcard inside a phrase** is allowed and expanded per position: `"large language model$"` matches
   the phrase with `model` or `models` last (the Trust-Evals strings rely on this).
 - **A wildcard stem that normalises to several tokens** becomes a phrase whose last token carries the
-  wildcard: `gpt-4*` ≡ `"gpt 4*"`. The 3-character minimum counts the whole written stem (`gpt-4` passes);
+  wildcard: `gpt-4*` ≡ `"gpt 4*"`. The 3-character minimum counts the letters and digits of the whole stem
+  after normalisation (`gpt-4` has 4, so it passes; `a-b*` has 2 and fails);
   the 200-expansion cap still applies to the last token's expansions (`4*`), and exceeding it is the
   usual "use a longer stem" error. (Decision-001 records rules 1–3 of this list.)
 - **Phrases** keep word order and adjacency within **one field**. A phrase never spans the title and the
   abstract.
+- **Lexical details** (`query/lexer.py`): straight `"` and curly `“ ”` quotes both delimit phrases. A
+  backslash keeps the next character in the word (`G\"odel` is one word, not a phrase opener). `-` is
+  `NOT` only directly before a primary (`-bias`, `-(…)`, `-"…"`); `vision-language` and a lone `-` are
+  words. Field names are case-insensitive (`Title:` ≡ `title:`); letters followed by `:` at the start of a
+  primary are always a field, so an unknown one (`intitle:`) is an error rather than a silent search. A `*`
+  not at the end of a word is an error, and a trailing `$` is a wildcard only when it does not close a
+  `$…$` math pair (`$\epsilon$` is math).
 - `NEAR/n` works within one field, is unordered, and allows at most n intervening words. Tantivy's slop
   semantics are documented in 03 and must agree with the reference matcher.
 
@@ -169,8 +177,9 @@ property tests. `canonical_hash = sha256(canonical + TOKENIZER_VERSION)`.
 ## Error handling
 
 Every error has a span and a fix hint: unbalanced parentheses, an empty group, a wildcard stem that is too
-short, an unknown field, an unknown `track:` value (listing the valid values), a range with start > end,
-or an all-negative query.
+short or not at the end of a word, an unterminated phrase, `NEAR/` without a whole-number distance, an
+unknown field, an unknown `track:` value (listing the valid values), a range with start > end, or an
+all-negative query. The codes are in `diagnostics.py`.
 
 ## Testing
 

@@ -17,8 +17,8 @@ need them settled. The Trust-Evals protocol's own search strings use a wildcard 
 2. **A wildcard inside a phrase is allowed and expanded per position.** `"large language model$"` matches
    the phrase with `model` or `models` in the last position. The 200-expansion cap applies to each wildcard.
 3. **A wildcard stem that normalises to several tokens becomes a phrase whose last token carries the
-   wildcard.** `gpt-4*` means `"gpt 4*"`. The 3-character minimum counts the whole written stem; the
-   200-expansion cap applies to the last token's expansions.
+   wildcard.** `gpt-4*` means `"gpt 4*"`. The 3-character minimum counts the letters and digits of the
+   whole stem after normalisation; the 200-expansion cap applies to the last token's expansions.
 4. **Only top-level AND conjuncts suppress a default filter** (already decided; spec 02 §Default
    filters; `WARN_NESTED_FILTER`).
 5. **Canonical filter order:** `venue`, `year`, `track`, `status`, then any other field alphabetically.

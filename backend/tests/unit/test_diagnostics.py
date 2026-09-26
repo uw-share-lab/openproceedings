@@ -55,6 +55,9 @@ def test_codes_named_by_the_specs_exist() -> None:
         "PARSE_UNBALANCED_PAREN",
         "PARSE_EMPTY_GROUP",
         "PARSE_ALL_NEGATIVE",
+        "PARSE_UNTERMINATED_PHRASE",
+        "PARSE_BAD_NEAR",
+        "PARSE_WILDCARD_NOT_SUFFIX",
         *SPEC_04,
     ):
         assert DiagnosticCode(name)

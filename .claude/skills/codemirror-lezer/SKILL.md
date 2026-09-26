@@ -25,7 +25,7 @@ build a tree for garbage; that tree colours tokens and nothing else.
   (case-sensitive), so `and`/`or` stay `Word`. Also `|` and leading `-`.
 - `Field` = exactly `title abstract venue year track status source`, followed by `:`. Anything else
   before `:` is a `Word` (the server will report the unknown field).
-- `Phrase` = `"…"`; `Wildcard` = word ending in `*` or `$`; `Range` = `INT..INT`; parens.
+- `Phrase` = `"…"` or `“…”` (a backslash-escaped quote doesn't close it); `Wildcard` = word ending in `*` or `$`; `Range` = `INT..INT`; parens.
 - Words must accept the same character set the backend lexer does (Unicode letters, digits, `-`, `'`,
   LaTeX `\cmd{…}`, `$…$`). When `backend/src/openproceedings/query/lexer.py` changes, this file changes in
   the same PR.

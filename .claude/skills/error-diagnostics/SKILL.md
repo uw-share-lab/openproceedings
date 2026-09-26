@@ -31,7 +31,7 @@ class Diagnostic(BaseModel):  # frozen, extra="forbid"
 
 | Prefix | Area | Examples (from 02 §Error handling) |
 |---|---|---|
-| `PARSE_` | grammar | `PARSE_UNBALANCED_PAREN`, `PARSE_EMPTY_GROUP`, `PARSE_ALL_NEGATIVE` |
+| `PARSE_` | grammar | `PARSE_UNBALANCED_PAREN`, `PARSE_EMPTY_GROUP`, `PARSE_ALL_NEGATIVE`, `PARSE_UNTERMINATED_PHRASE`, `PARSE_BAD_NEAR`, `PARSE_WILDCARD_NOT_SUFFIX` |
 | `WILDCARD_` | expansion | `WILDCARD_STEM_TOO_SHORT`, `WILDCARD_TOO_MANY_EXPANSIONS` (>200) |
 | `FIELD_` | fields/filters | `FIELD_UNKNOWN`, `FIELD_UNKNOWN_VALUE` (lists valid `track:` values), `FIELD_RANGE_INVERTED` |
 | `WARN_` | warnings | `WARN_LOWERCASE_OPERATOR` ("did you mean OR?"), `WARN_MIXED_AND_OR`, `WARN_NESTED_FILTER` (spec 02 §Default filters): a `track:`/`status:` clause nested inside an `OR` branch does not suppress the default, e.g. `(track:workshop AND x) OR y` → "the default track/status filter still applies to the whole query; add a top-level `track:`/`status:` clause to override it", span on the nested clause |
