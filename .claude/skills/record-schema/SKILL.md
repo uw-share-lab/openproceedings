@@ -15,7 +15,7 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 |---|---|
 | `id` | `op:<venue>:<year>:<native>`, with venue lower-cased: `op:iclr:2024:iilhN2MycO`. Never changes once a snapshot has shipped it. |
 | `title` | Raw, whitespace-collapsed. **No** search normalization here (spec 03 owns it). |
-| `abstract` | Raw text or `null`. Reject any value containing `…`, because that's a Scholar snippet. HTML stripped, LaTeX kept verbatim. |
+| `abstract` | Raw text or `null` (never an empty or whitespace-only string). Reject a value that starts or ends with `…`: that's a Scholar snippet. An ellipsis inside a real abstract (`x₁, …, x_n`) is allowed. HTML stripped, LaTeX kept verbatim. |
 | `authors` | Display order, as the source gives them. |
 | `venue` | `NeurIPS` \| `ICLR` \| `ICML` (enum; extensible later). |
 | `year` | Conference year. Never the arXiv or PDF year. Required: a record with no year is not a valid `PaperRecord`. |
@@ -33,7 +33,8 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 |---|---|
 | OpenReview (v1 or v2) | forum id, as-is (case-sensitive) |
 | PMLR only | `pmlr-v<N>-<key>` |
-| NeurIPS proceedings only | `nips-<sha>` from the paper_files path |
+| NeurIPS proceedings only | `nips-<hash>`, the 32-hex hash from the paper_files path |
+| ICLR proceedings only | `iclr-<hash>`, the 32-hex hash from the proceedings path |
 | RIS import | the forum id if the record carries an OpenReview URL, else the proceedings form above. If neither exists, it can't be ingested: report it, never mint a random id. |
 
 When records merge (`.claude/skills/dedup-rules/SKILL.md`), the surviving id uses the OpenReview forum id
@@ -66,11 +67,14 @@ only: an OpenReview venueid claim → its status; a proceedings-page claim → `
 
 ## content_hash
 `sha256` of the canonical JSON of the **searchable and filterable** fields: `title`, `abstract`,
-`venue`, `year`, `track`, `status`, plus any further field spec 02's `FIELD` list makes filterable (it
-names `source`; verify how `source` is derived at implementation time). Canonical JSON means
+`venue`, `year`, `track`, `status`. Spec 02's `FIELD` list also names `source`, but `source:` is a Scholar
+alias that the parser rewrites to `venue:` (`query/compat.py`); it is not a record field and isn't hashed. Canonical JSON means
 `json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)` encoded as UTF-8, with no
 floats and no extra Unicode normalization.
 
-It **excludes** `provenance`, `urls`, `keywords` and `presentation`. A re-crawl that only refreshes fetch
-times must not change the hash. `op snapshot diff` uses it to tell a real change from a provenance-only
-change.
+It **excludes** `provenance`, `urls`, `keywords`, `presentation`, `authors` and `venue_id_raw`. A re-crawl
+that only refreshes fetch times must not change the hash. `op snapshot diff` uses it to tell a real change
+from a display-only or provenance-only change.
+
+`PaperRecord.build` computes the hash, `model_copy(update=...)` re-validates and recomputes it, and
+loading a record re-checks it. Never use `model_construct` on a record: it skips every check.

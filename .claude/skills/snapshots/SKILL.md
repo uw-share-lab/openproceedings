@@ -24,7 +24,8 @@ questions 1).
 - Sort by `id` using plain code-point order.
 - One line per record: `json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`,
   followed by `\n`, UTF-8, with no BOM.
-- Sort lists with no natural order (`provenance` by `(field, source, url)`). Keep `authors` in display
+- Sort lists with no natural order: `provenance` by `Claim.sort_key()`, which is `(field, source, url or "",
+  fetched_at)` (a missing url sorts first); `PaperRecord` enforces this order on load. Keep `authors` in display
   order.
 - Take `fetched_at` from the cache entry, **not** the build clock. Take no values from the environment
   (hostname, cwd, locale).
@@ -54,7 +55,9 @@ PMLR/NeurIPS page counts). The manifest may hold build times; `records.jsonl` ma
 - `op snapshot build [--from <cache>]` merges all cached sources, then classify → dedup → write. It never
   fetches, so it works offline.
 - `op snapshot diff <a> <b>` prints the ids **added**, **removed** and **changed** (where `content_hash`
-  differs, with the changed fields named), plus a separate count of provenance-only changes. Every
+  differs, with the changed fields named), plus separate counts of **display-only** changes (`authors`,
+  `urls`, `keywords`, `presentation` or `venue_id_raw` differ but the hash doesn't) and provenance-only
+  changes. Every
   snapshot promotion needs one: a removed id in a stable venue-year is a regression until explained.
 
 ## Checklist

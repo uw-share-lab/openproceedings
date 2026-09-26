@@ -66,9 +66,11 @@ def test_hash_is_sha256_of_canonical_json_of_the_searchable_and_filterable_field
     assert r.content_hash == hashlib.sha256(canonical).hexdigest()
 
 
-def test_hash_ignores_provenance_urls_keywords_presentation_and_authors_order_of_claims() -> None:
+def test_hash_ignores_provenance_urls_keywords_presentation_authors_and_venue_id_raw() -> None:
     base = record()
     other = record(
+        authors=("Someone Else",),
+        venue_id_raw=None,
         provenance=(claim("status", "accepted"), claim("title", "x", "neurips_proceedings")),
         urls=Urls(pdf="https://x.pdf"),
         keywords=("other",),
@@ -120,7 +122,22 @@ INVALID: list[tuple[str, dict[str, Any]]] = [
     ("unknown status", {"status": "maybe"}),
     ("unknown presentation", {"presentation": "keynote"}),
     ("year out of range", {"year": 99, "id": "op:iclr:99:iilhN2MycO"}),
-    ("extra field", {"source": "x"}),
+    ("id year zero-padded", {"id": "op:iclr:02024:iilhN2MycO"}),
+    ("native id with a space", {"id": "op:iclr:2024:iilh N2MycO"}),
+    ("native id with a colon", {"id": "op:iclr:2024:a:b"}),
+    ("native id too short", {"id": "op:iclr:2024:ab"}),
+    ("pmlr id on a non-ICML record", {"id": "op:iclr:2024:pmlr-v202-foo"}),
+    ("nips id that isn't a hash", {"id": "op:neurips:2023:nips-zzz", "venue": "NeurIPS", "year": 2023}),
+    (
+        "iclr id on a NeurIPS record",
+        {"id": "op:neurips:2024:iclr-0123456789abcdef0123456789abcdef", "venue": "NeurIPS"},
+    ),
+    ("whitespace abstract", {"abstract": "  "}),
+    ("empty title", {"title": ""}),
+    ("snippet at the start", {"abstract": "… we study trust"}),
+    ("year below 1000", {"year": 999, "id": "op:iclr:0999:iilhN2MycO"}),
+    ("year as a string", {"year": "2024"}),
+    ("lone surrogate", {"title": "Trust \ud800"}),
 ]
 
 
@@ -130,17 +147,97 @@ def test_invalid_records_cannot_be_built(why: str, overrides: dict[str, Any]) ->
         record(**overrides)
 
 
-def test_missing_year_track_or_status_is_invalid() -> None:
-    for missing in ("year", "track", "status"):
-        data = record().model_dump()
-        del data[missing]
-        with pytest.raises(ValidationError):
-            PaperRecord.model_validate(data)
+def test_an_extra_field_is_rejected() -> None:
+    data = record().model_dump()
+    data["source"] = "x"
+    with pytest.raises(ValidationError):
+        PaperRecord.model_validate(data)
+
+
+def test_valid_native_id_forms() -> None:
+    assert record(id="op:iclr:2024:Ab_c-12").forum_id == "Ab_c-12"
+    icml = record(id="op:icml:2024:pmlr-v235-smith24a", venue="ICML")
+    assert icml.forum_id is None and icml.native == "pmlr-v235-smith24a"
+    assert record(id="op:neurips:2024:nips-" + "a" * 32, venue="NeurIPS").forum_id is None
+    assert record(id="op:iclr:2024:iclr-" + "0" * 32).forum_id is None
+
+
+def test_a_real_abstract_may_contain_an_ellipsis() -> None:
+    assert record(abstract="for inputs x₁, …, x_n we show").abstract == "for inputs x₁, …, x_n we show"
+
+
+@pytest.mark.parametrize(
+    "missing", ["id", "title", "abstract", "authors", "venue", "year", "track", "status"]
+)
+def test_every_required_field_is_required(missing: str) -> None:
+    data = record().model_dump()
+    del data[missing]
+    with pytest.raises(ValidationError) as err:
+        PaperRecord.model_validate(data)
+    assert any(e["loc"] == (missing,) and e["type"] == "missing" for e in err.value.errors())
+
+
+def test_defaults_for_optional_fields() -> None:
+    minimal = PaperRecord.build(
+        id="op:iclr:2024:iilhN2MycO", title="T", abstract=None, authors=(), venue="ICLR", year=2024,
+        track="main", status="accepted",
+    )  # fmt: skip
+    assert (
+        minimal.urls,
+        minimal.venue_id_raw,
+        minimal.presentation,
+        minimal.keywords,
+        minimal.provenance,
+    ) == (Urls(), None, None, (), ())
+
+
+def test_model_copy_revalidates_and_rehashes() -> None:
+    r = record()
+    changed = r.model_copy(update={"title": "Other"})
+    assert changed.content_hash == record(title="Other").content_hash != r.content_hash
+    with pytest.raises(ValidationError):
+        r.model_copy(update={"venue": "ACL", "id": "garbage"})
+
+
+def test_records_are_hashable() -> None:
+    assert len({record(), record()}) == 1
 
 
 def test_records_are_frozen() -> None:
     with pytest.raises(ValidationError):
         record().title = "x"  # type: ignore[misc]
+
+
+def test_claims_and_urls_forbid_extras_and_are_frozen() -> None:
+    with pytest.raises(ValidationError):
+        Claim(field="title", value="x", source="ris", fetched_at=FETCHED, extra=1)  # type: ignore[call-arg]
+    with pytest.raises(ValidationError):
+        Urls(foo="x")  # type: ignore[call-arg]
+    with pytest.raises(ValidationError):
+        Urls().pdf = "x"  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("source", ["openreview_v2", "openreview_v1", "neurips_proceedings", "pmlr", "ris"])
+def test_every_source_can_claim(source: str) -> None:
+    assert claim("title", "x", source).source == source
+
+
+def test_claim_fields_and_values_are_strict() -> None:
+    with pytest.raises(ValidationError):
+        claim("titel", "x")  # a misspelt field would silently match nothing
+    with pytest.raises(ValidationError):
+        claim("year", True)  # no bool -> int coercion
+    with pytest.raises(ValidationError):
+        claim("year", 1.0)
+
+
+def test_one_claim_per_field_and_source_in_a_fixed_order() -> None:
+    a, b = claim("title", "A"), claim("status", "accepted", url="https://x")
+    assert record(provenance=(a, b)) == record(provenance=(b, a))  # order never matters
+    with pytest.raises(ValidationError):
+        record(provenance=(claim("title", "A"), claim("title", "B")))  # same field and source twice
+    mixed = record(provenance=(claim("title", "A", url="https://x"), claim("title", "B", "pmlr")))
+    assert [c.source for c in mixed.provenance] == ["openreview_v2", "pmlr"]  # None and str urls sort
 
 
 def test_claims_are_frozen_hashable_and_need_an_aware_fetch_time() -> None:
@@ -162,3 +259,4 @@ def test_fetch_times_are_normalised_to_utc() -> None:
 def test_claims_for_a_field() -> None:
     r = record(provenance=(claim("title", "A"), claim("status", "accepted"), claim("title", "B", "pmlr")))
     assert [c.value for c in r.claims("title")] == ["A", "B"]
+    assert isinstance(r.claims("title"), tuple)

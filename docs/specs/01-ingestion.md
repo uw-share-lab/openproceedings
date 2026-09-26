@@ -12,9 +12,9 @@ build.
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | str | Stable ID `op:<venue>:<year>:<native>`, e.g. `op:iclr:2024:iilhN2MycO`. `native` is the OpenReview forum ID, or `pmlr-v202-<key>` / `nips-<hash>` for proceedings-only papers. |
+| `id` | str | Stable ID `op:<venue>:<year>:<native>`, e.g. `op:iclr:2024:iilhN2MycO`. `native` is the OpenReview forum ID, or `pmlr-v202-<key>` (ICML) / `nips-<hash>` (NeurIPS) / `iclr-<hash>` (ICLR) for proceedings-only papers. |
 | `title` | str | Raw, whitespace-collapsed. Normalization for search happens in 03, not here. |
-| `abstract` | str \| null | Raw. `null` if no source has it. Never a Scholar snippet (reject strings containing `…`). |
+| `abstract` | str \| null | Raw. `null` if no source has it. Never a Scholar snippet (reject values that start or end with `…`; an ellipsis inside is allowed). Never an empty string. |
 | `authors` | list[str] | Display order. |
 | `venue` | enum | `NeurIPS` \| `ICLR` \| `ICML`. Extensible. |
 | `year` | int | Conference year, not the arXiv year. |

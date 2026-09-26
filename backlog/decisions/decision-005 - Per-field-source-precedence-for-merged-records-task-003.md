@@ -39,7 +39,9 @@ the same study twice; both titles stay in the record's claims.
 - OpenReview notes can change after publication, but each claim is stored with its `fetched_at` in the
   snapshot, so a search pinned to an `index_version` stays reproducible; a later edit appears only in a
   new snapshot, as a `snapshot diff` change.
-- Changing this table changes `content_hash` for affected records, so it is an `index_version` change.
+- Changing this table can change a record's searchable or filterable values (title, abstract, track,
+  status), and so its `content_hash`: that is an `index_version` change. A change that only moves
+  `authors` (not hashed) is a display-only change and leaves the hash alone.
 
 ## Evidence on abstract recency (2026-09-26, settled)
 
