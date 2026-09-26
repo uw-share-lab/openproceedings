@@ -42,15 +42,22 @@ safe direction.
 - A paper whose track the proceedings don't host (anything but `main`, `datasets_benchmarks`,
   `position`) into a **proceedings listing**: a cluster with a proceedings source *or* a proceedings id,
   so a RIS record with a `nips-`/`iclr-`/`pmlr-` id counts. Proceedings never host workshop papers. A
-  record with track `unknown` also stays apart until evidence arrives; once the crawlers land (M4) such
-  duplicates show up as `track_not_merged` rows to review.
+  non-listing record with track `unknown` also stays apart until evidence arrives; once the crawlers land
+  (M4) such duplicates show up as `track_not_merged` rows to review. The one exemption is a listing's
+  *own* `unknown`: a PMLR volume that holds both main and position papers (v235, v267) can't say which
+  track a paper is in, so it merges with the OpenReview record, whose track wins by precedence.
+- **Every proceedings-id record names itself** in a kept `urls.proceedings`/`urls.pdf` claim (dedup
+  refuses one that doesn't). Proceedings ids are read from those claims, so a merged record still carries
+  the ids of the listings it absorbed, and a second run can't fold another listing in. URL forms,
+  including NeurIPS up to 2021 (`/paper/<y>/hash/<h>-Abstract.html`, no track suffix) and upper-case hex,
+  are parsed by `ingest/urls.py`.
 
 ## Combining a merge
 - The survivor's id uses the OpenReview forum id if any side has one (`.claude/skills/record-schema/SKILL.md`).
 - The **union** of all claims is kept, one per (field, source). When one source claims a field twice
   (the same paper in both searches), the newest `fetched_at` wins and every other value that source gave,
   for any field, is a `newest:<source>` row; an exact fetch-time tie is a `tie:<source>` row (the kept
-  value is then only a deterministic pick, so a reviewer must look). Superseded same-source claims are
+  value is then only a deterministic pick, by the value's exact JSON form, so a reviewer must look). Superseded same-source claims are
   not kept in the record; merges.csv (`native_id`/`forum_id` rows) records that both inputs had the
   paper. Field values are re-resolved with the precedence table (`PRECEDENCE`, held as data), never
   "whichever record came first". So every input must already equal what its own claims resolve to;
@@ -73,8 +80,10 @@ to the final survivor. So every input id is an output id or a `merged_id`, once 
 `precedence:<source>` (the winner is `value_a`), `newest:<source>` or `tie:<source>` (one source, two
 values; the kept one is `value_a`), `ambiguous_not_merged`, `track_not_merged` or
 `venue_year_not_merged`. For the not-merged resolutions, `field` is `title_key`, `title_key_chain` or
-`forum_id` and the values are the two record ids, with their sources. Value rows always name an output
-record.
+`forum_id` and the values are the two record ids, with their sources. Every row names an output record:
+the not-merged rows are judged on the output records (every shared title key and forum id among records
+that stayed apart), so a second run reports exactly the same rows; only `newest:`/`tie:` rows disappear,
+because the merged record no longer holds the superseded claims.
 
 Both files are sorted and deterministic. They're counted in `manifest.json` and reviewed by
 `dedup-auditor` whenever dedup code or its inputs change.
@@ -84,7 +93,8 @@ Pools collide on purpose (four titles, three forum ids, two proceedings papers p
 track and status, tied fetch times), plus a `chains` strategy that builds the chain shape; `@example`
 rows pin the two over-merges a review found.
 - No output record combines inputs with different `(venue, year)`.
-- Idempotent: `dedup(dedup(xs)).records == dedup(xs).records`, and the same `precedence:` rows.
+- Idempotent: `dedup(dedup(xs)).records == dedup(xs).records`, and the same conflict rows apart from
+  `newest:`/`tie:`.
 - Order-independent: `dedup(shuffle(xs)) == dedup(xs)`.
 - Conservation: every input id is an output id or a `merged_id`, once per copy.
 - Never folds two papers: distinct forum ids, or distinct proceedings ids, never share a record, and a

@@ -21,6 +21,7 @@ only on the set of inputs (sorted ids, set-based decisions).
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -93,6 +94,11 @@ def _differ(fld: str, a: object, b: object) -> bool:
     return title_key(_text(a)) != title_key(_text(b)) if fld == "title" else _text(a) != _text(b)
 
 
+def _exact(v: object) -> str:
+    """A value's exact form: `("Smith; J",)` and `("Smith", "J")` print alike through `_text` but differ here."""
+    return json.dumps(v, sort_keys=True, ensure_ascii=False)
+
+
 def _sources(records: Iterable[PaperRecord]) -> frozenset[str]:
     return frozenset(c.source for r in records for c in r.provenance)
 
@@ -106,11 +112,11 @@ def _one_per_field_and_source(record_id: str, claims: Iterable[Claim]) -> tuple[
         groups[(c.field, c.source)].add(c)
     kept, conflicts = [], []
     for (fld, src), group in sorted(groups.items()):
-        ordered = sorted(group, key=lambda c: (c.fetched_at, c.sort_key(), _text(c.value), c.evidence or ""))
+        ordered = sorted(group, key=lambda c: (c.fetched_at, c.sort_key(), _exact(c.value), c.evidence or ""))
         newest = ordered[-1]
         kept.append(newest)
         for other in ordered[:-1]:
-            if _text(other.value) != _text(newest.value):
+            if _exact(other.value) != _exact(newest.value):
                 how = "tie" if other.fetched_at == newest.fetched_at else "newest"
                 conflicts.append(
                     Conflict(
@@ -190,7 +196,9 @@ class _Cluster:
     # every kept title claim's key: a superseded same-source title is only in conflicts.csv, because the
     # output record no longer carries it and matching on it would make a second run merge differently
     keys: frozenset[str]
-    proceedings_ids: frozenset[str]  # from proceedings native ids and proceedings URL claims
+    # from the kept proceedings URL claims; every proceedings-id record names itself in one (checked on
+    # input), so a merged record still carries the ids of the listings it absorbed
+    proceedings_ids: frozenset[str]
     listed: bool  # a proceedings listing: proceedings id or proceedings source
 
     @property
@@ -198,13 +206,20 @@ class _Cluster:
         return self.members[0].id
 
 
+def _url_natives(claims: Iterable[Claim]) -> set[str]:
+    return {
+        n
+        for c in claims
+        if c.field in _URL_FIELDS and isinstance(c.value, str) and (n := urls.native(c.value))
+    }
+
+
 def _cluster(members: Sequence[PaperRecord]) -> _Cluster:
     summary, _ = resolve(
         members[0].id, [c for r in members for c in r.provenance]
     )  # rows come from the final resolve
     claims = summary.provenance  # kept claims only: the output record carries nothing else
-    pids = {r.native for r in members if r.forum_id is None}
-    pids |= {
+    pids = {
         n
         for c in claims
         if c.field in _URL_FIELDS and isinstance(c.value, str) and (n := urls.native(c.value))
@@ -226,7 +241,10 @@ def _mergeable(group: Sequence[_Cluster]) -> str | None:
         return "ambiguous_not_merged"  # two different OpenReview submissions
     if len(frozenset().union(*(c.proceedings_ids for c in group))) > 1:
         return "ambiguous_not_merged"  # two different proceedings papers
-    if any(c.listed for c in group) and any(c.summary.track not in _PROCEEDINGS_TRACKS for c in group):
+    if any(c.listed for c in group) and any(
+        c.summary.track not in _PROCEEDINGS_TRACKS and not (c.listed and c.summary.track == "unknown")
+        for c in group
+    ):  # only a listing's own `unknown` (a PMLR volume holding main and position papers) is let through
         return "track_not_merged"  # the proceedings never host it (an unknown track waits for evidence)
     return None
 
@@ -252,6 +270,8 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
         again, _ = resolve(r.id, r.provenance)
         if again != r:
             raise ValueError(f"{r.id}: fields don't match its own claims; dedup would silently change it")
+        if r.forum_id is None and r.native not in _url_natives(r.provenance):
+            raise ValueError(f"{r.id}: a proceedings record must name itself in a urls.proceedings/pdf claim")
 
     # Step 1: identical id: the same forum id in the same venue and year, or the same proceedings id.
     by_id: dict[str, list[PaperRecord]] = defaultdict(list)
@@ -266,13 +286,6 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
             Merge(rid, rid, rule, cluster.summary.native, r.venue, r.year, "+".join(sorted(_sources([r]))))
             for r in by_id[rid][1:]
         ]  # the same id twice: one row per extra copy, survivor_id == merged_id
-    by_forum: dict[str, list[_Cluster]] = defaultdict(list)
-    for c in clusters:
-        if c.summary.forum_id is not None:
-            by_forum[c.summary.forum_id].append(c)
-    for same in by_forum.values():  # one forum id in two venue-years: a conflict, never a merge
-        conflicts.update(_pair(same[0], c, "venue_year_not_merged", "forum_id") for c in same[1:])
-
     # Step 2: (venue, year, title key) across sources.
     buckets: dict[tuple[str, int, str], set[int]] = defaultdict(set)
     for ci, c in enumerate(clusters):
@@ -284,10 +297,8 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
         if len(cis) < 2:
             continue
         ordered = sorted(cis)
-        reason = _mergeable([clusters[ci] for ci in ordered])
-        if reason is not None:
-            conflicts.update(_pair(clusters[ordered[0]], clusters[ci], reason) for ci in ordered[1:])
-            continue
+        if _mergeable([clusters[ci] for ci in ordered]) is not None:
+            continue  # reported by _refusals, against the output records
         for ci in ordered:
             step2.union(ordered[0], ci)
             joined_by.setdefault(ci, key)
@@ -295,14 +306,9 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
     out: list[PaperRecord] = []
     for group in step2.groups():
         chained = [clusters[ci] for ci in group]
-        if len(group) > 1 and _mergeable(chained) is not None:
-            # keys chained clusters that must not share a record: keep every cluster on its own
-            conflicts.update(
-                _pair(chained[0], c, "ambiguous_not_merged", "title_key_chain") for c in chained[1:]
-            )
-            parts = [[ci] for ci in group]
-        else:
-            parts = [group]
+        # keys chained clusters that must not share a record: keep every cluster on its own
+        refused = len(group) > 1 and _mergeable(chained) is not None
+        parts = [[ci] for ci in group] if refused else [group]
         for part in parts:
             members = [clusters[ci] for ci in part]
             survivor = _survivor_id(members)
@@ -314,6 +320,31 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
                       "+".join(sorted(clusters[ci].sources)))
                 for ci in part if clusters[ci].id != survivor
             ]  # fmt: skip
+    conflicts |= _refusals(out)
     return DedupResult(
         tuple(sorted(out, key=lambda r: r.id)), tuple(sorted(merges)), tuple(sorted(conflicts))
     )
+
+
+def _refusals(out: Sequence[PaperRecord]) -> set[Conflict]:
+    """The not-merged rows, judged on the output records, so a second run reports exactly the same rows:
+    one forum id in two venue-years, and every title key shared by records that stayed apart (a key
+    whose records could merge alone was refused as part of a chain)."""
+    clusters = sorted((_cluster([r]) for r in out), key=lambda c: c.id)
+    rows: set[Conflict] = set()
+    by_forum: dict[str, list[_Cluster]] = defaultdict(list)
+    for c in clusters:
+        if c.summary.forum_id is not None:
+            by_forum[c.summary.forum_id].append(c)
+    for same in by_forum.values():  # one forum id in two venue-years: a conflict, never a merge
+        rows.update(_pair(same[0], c, "venue_year_not_merged", "forum_id") for c in same[1:])
+    buckets: dict[tuple[str, int, str], list[_Cluster]] = defaultdict(list)
+    for c in clusters:
+        for key in c.keys:
+            buckets[(c.summary.venue, c.summary.year, key)].append(c)
+    for bucket in buckets.values():
+        if len(bucket) > 1:
+            reason = _mergeable(bucket)
+            fld = "title_key" if reason else "title_key_chain"
+            rows.update(_pair(bucket[0], c, reason or "ambiguous_not_merged", fld) for c in bucket[1:])
+    return rows

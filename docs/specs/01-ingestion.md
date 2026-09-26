@@ -73,7 +73,9 @@ auto-removed). This lets the team use the engine for the live review before the 
    records are merged **only** when venue and year agree. That lesson comes from venuetriage: records
    with no year must never merge on `(title, "")`. **Two OpenReview records with different forum IDs are
    never merged**: a main-track paper and its same-year workshop version can share a title. Title
-   matching only links records *across* sources (OpenReview ↔ proceedings ↔ RIS). A merged record's fields
+   matching only links records *across* sources (OpenReview ↔ proceedings ↔ RIS), never joins two different
+   proceedings papers, and never puts a paper whose track the proceedings don't host (workshop, other,
+   `unknown`) into a proceedings listing. A merged record's fields
    are re-resolved from the union of its claims by the decision-005 precedence table. Merges are written
    to `merges.csv`, and disagreements and refused merges to `conflicts.csv`, for audit (dedup-rules skill).
 5. **Snapshot.** Write `data/snapshots/<date>-<shorthash>/records.jsonl` (sorted by `id`) and

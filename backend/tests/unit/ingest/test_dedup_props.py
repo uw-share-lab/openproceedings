@@ -41,6 +41,10 @@ def records(draw: st.DrawFn) -> PaperRecord:
     extra = {}
     if native in FORUMS and draw(st.booleans()):
         extra["urls_proceedings"] = nips(draw(st.sampled_from([1, 2])))  # an OpenReview note linking a paper
+    if native in FORUMS and draw(st.booleans()):  # an old-style NeurIPS PDF link
+        extra["urls_pdf"] = (
+            f"https://papers.nips.cc/paper/2021/file/{H[draw(st.sampled_from([1, 2]))]}-Paper.pdf"
+        )
     return paper(
         native,
         draw(st.sampled_from(TITLES)),
@@ -115,8 +119,9 @@ def test_idempotent(xs: list[PaperRecord]) -> None:
     note(once)
     twice = dedup(once.records)
     assert twice.records == once.records
-    precedence = [c for c in once.conflicts if c.resolution.startswith("precedence:")]
-    assert [c for c in twice.conflicts if c.resolution.startswith("precedence:")] == precedence
+    # every row but the superseded-claim ones (the merged record no longer holds those claims) repeats
+    stable = [c for c in once.conflicts if not c.resolution.startswith(("newest:", "tie:"))]
+    assert [c for c in twice.conflicts if not c.resolution.startswith(("newest:", "tie:"))] == stable
 
 
 @given(pools, st.randoms(use_true_random=False))
@@ -157,4 +162,5 @@ def test_never_folds_two_papers(xs: list[PaperRecord]) -> None:
         assert len(natives & set(FORUMS)) <= 1  # distinct forum ids never share a record
         assert len(natives & set(PROCEEDINGS)) <= 1  # nor do distinct proceedings papers
         if len(natives) > 1 and natives & set(PROCEEDINGS):  # merged into a proceedings listing
-            assert by_id[out].track in {"main", "datasets_benchmarks", "position"}
+            # a proceedings track, or unknown when every side was a listing without one (a mixed PMLR volume)
+            assert by_id[out].track in {"main", "datasets_benchmarks", "position", "unknown"}

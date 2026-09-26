@@ -27,6 +27,18 @@ def nips(n: int) -> str:
     return f"https://proceedings.neurips.cc/paper_files/paper/2024/hash/{H[n]}-Abstract-Conference.html"
 
 
+def self_url(native: str, year: int) -> str | None:
+    """The proceedings URL a proceedings-id record names itself by (dedup requires one)."""
+    prefix, _, rest = native.partition("-")
+    if prefix in ("nips", "iclr"):
+        host = "neurips" if prefix == "nips" else "iclr"
+        return f"https://proceedings.{host}.cc/paper_files/paper/{year}/hash/{rest}-Abstract-Conference.html"
+    if prefix == "pmlr":
+        volume, _, key = rest.partition("-")
+        return f"https://proceedings.mlr.press/{volume}/{key}.html"
+    return None
+
+
 def paper(
     native: str,
     title: str = "Trust in AI",
@@ -40,7 +52,9 @@ def paper(
     fetched: datetime = T0,
     **extra: Any,  # further claim fields, e.g. `urls_proceedings=nips(1)`
 ) -> PaperRecord:
-    """A record whose fields are exactly what its claims say (as every importer builds them)."""
+    """A record whose fields are exactly what its claims say (as every importer builds them); a
+    proceedings-id record names itself in `urls.proceedings` unless the caller says otherwise."""
+    extra.setdefault("urls_proceedings", self_url(native, year))
     values: dict[str, Any] = {"title": title, "venue": venue, "year": year, "track": track, "status": status,
                               "abstract": abstract, **{k.replace("_", ".", 1): v for k, v in extra.items()}}  # fmt: skip
     claims = [
@@ -96,6 +110,23 @@ def test_same_moment_disagreement_is_a_tie_not_newest() -> None:
         ]
     )
     assert resolutions(result) == ["tie:ris"]
+
+
+def test_newest_is_by_fetch_time_not_by_claim_url() -> None:
+    base = paper("AbCd1234", source="ris")
+    old = Claim(field="urls.pdf", value="https://x/old.pdf", source="ris", url="https://z", fetched_at=T0)
+    new = Claim(field="urls.pdf", value="https://x/new.pdf", source="ris", url="https://a", fetched_at=T1)
+    merged, rows = resolve(base.id, [*base.provenance, old, new])
+    assert merged.urls.pdf == "https://x/new.pdf"
+    assert [r.resolution for r in rows] == ["newest:ris"]
+
+
+def test_a_tie_between_values_that_print_alike_is_still_a_tie() -> None:
+    a = paper("AbCd1234", source="ris", authors=("Smith; J",))
+    b = paper("AbCd1234", source="ris", authors=("Smith", "J"))
+    result = dedup([a, b])
+    assert [(c.field, c.resolution) for c in result.conflicts] == [("authors", "tie:ris")]
+    assert dedup([b, a]) == result
 
 
 def test_newest_is_by_fetch_time_not_by_url() -> None:
@@ -310,6 +341,47 @@ def test_conflicts_survive_a_rerun() -> None:
     twice = dedup(once.records)
     precedence = [c for c in once.conflicts if c.resolution.startswith("precedence:")]
     assert precedence and [c for c in twice.conflicts if c.resolution.startswith("precedence:")] == precedence
+
+
+def test_a_proceedings_record_must_name_itself() -> None:
+    with pytest.raises(ValueError, match="name itself"):
+        dedup([paper(f"nips-{H[1]}", source="neurips_proceedings", urls_proceedings=None)])
+    with pytest.raises(ValueError, match="name itself"):
+        dedup([paper(f"nips-{H[1]}", source="neurips_proceedings", urls_proceedings=nips(2))])
+
+
+def test_a_merged_record_remembers_the_listing_it_absorbed() -> None:
+    # nips-1 merges into the forum record; on a second run the merged record must still refuse nips-2
+    xs = [
+        paper("AbCd1234", "Trust in AI"),
+        paper(f"nips-{H[1]}", "Trust in AI", source="neurips_proceedings"),
+        paper(f"nips-{H[1]}", "Trust in Machines", source="ris"),
+        paper(f"nips-{H[2]}", "Trust in Machines", source="openreview_v1"),
+    ]
+    once = dedup(xs)
+    assert dedup(once.records).records == once.records
+    assert len(once.records) == 2
+
+
+def test_icml_papers_merge_with_a_mixed_pmlr_volume() -> None:
+    orv = paper("AbCd1234", venue="ICML", track="main")
+    pmlr = paper("pmlr-v235-smith24a", venue="ICML", source="pmlr", track="unknown")
+    [r] = dedup([orv, pmlr]).records
+    assert (r.id, r.track) == (orv.id, "main")  # OpenReview's track, the volume's unknown overruled
+    workshop = paper("AbCd1234", venue="ICML", track="workshop")
+    assert len(dedup([workshop, pmlr]).records) == 2  # but a workshop paper still never joins it
+
+
+def test_an_old_style_proceedings_url_names_its_paper() -> None:
+    old = "https://proceedings.neurips.cc/paper/2021/file/" + H[2].upper() + "-Paper.pdf"
+    orv = paper("AbCd1234", year=2021, urls_pdf=old)
+    proc = paper(f"nips-{H[1]}", source="neurips_proceedings", year=2021)
+    assert len(dedup([orv, proc]).records) == 2  # the forum's PDF is another NeurIPS paper
+    hexed = "abcdef" * 5 + "ab"
+    upper = f"https://proceedings.neurips.cc/paper/2021/file/{hexed.upper()}-Paper.pdf"
+    listing = paper(f"nips-{hexed}", source="neurips_proceedings", year=2021)
+    same = paper("AbCd1234", year=2021, urls_pdf=upper)
+    assert len(dedup([same, listing]).records) == 1  # upper-case hex names the same paper
 
 
 def test_records_must_match_their_claims() -> None:
