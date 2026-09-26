@@ -67,7 +67,7 @@ def hits(index: tantivy.Index, field: str, term: str) -> int:
 def test_index_version_serialization_is_pinned() -> None:
     # sha256 of {"ranking_params":…,"schema_version":"1","snapshot_hash":"0…0","tokenizer_version":"2"}
     # with sorted keys and no whitespace; changing the serialization changes every index id
-    assert index_version("0" * 64, "2", "1") == "6208c84b36b6"
+    assert index_version("0" * 64, "2", "1") == "07bf0cd51fd0"
 
 
 @pytest.mark.parametrize(
@@ -353,7 +353,7 @@ def test_a_dead_worker_is_a_refusal(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
 
 def test_ranking_numbers_are_canonical() -> None:
-    as_int = {"bm25": {"b": 0.75, "k1": 1.2}, "field_weights": {"abstract": 1, "title": 2}}
+    as_int = {**RANKING_PARAMS, "field_weights": {"abstract": 1, "title": 2}}
     assert index_version("0" * 64, "2", "1", as_int) == index_version("0" * 64, "2", "1", RANKING_PARAMS)
 
 

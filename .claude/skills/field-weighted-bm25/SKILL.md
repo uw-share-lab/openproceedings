@@ -19,6 +19,19 @@ summed over the query's positive scoring clauses.
   `ranking_params` in `index_version` (`.claude/skills/index-versioning/SKILL.md`). Changing a weight
   changes `index_version`.
 
+## As built (task-025)
+- `engine/compile.py` wraps every per-field text clause in a `BoostQuery` of its field's weight (from the
+  index manifest's `ranking_params`); filters and NOT's all-documents clause are const-score 0.
+- k1 = 1.2 and b = 0.75 are Tantivy's fixed BM25 constants on tantivy 0.26.2: `test_rank.py` checks a
+  score against the formula computed by hand (`idf = ln(1 + (N − n + 0.5)/(n + 0.5))`), and that a title
+  match scores exactly twice the same abstract match.
+- A position-verified clause (ast-compilation skill) scores as its candidate query: the per-field BM25 of
+  its **distinct** items, each once (an item implied by a narrower one is dropped); the id check adds 0.
+- `TantivyEngine.ranked(ast, sort)` fetches every match with its exact float score and orders the whole
+  set by the sort's key, the id always last (`year` from its fast column; `title` from a `title_rank` fast
+  column computed at build from the casefolded display title and id), never by Tantivy's hit order
+  (tested by reversing it). `search` pages that list. `ranking_params` also records the sort definitions.
+
 ## Membership is not ranking's business
 - Ranking orders the matched set and nothing else. `total`, `match_ids` and exports are identical for
   every sort. Test: the union of all pages for each sort equals `match_ids`, with no duplicates and no gaps.

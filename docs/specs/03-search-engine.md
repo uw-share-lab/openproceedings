@@ -71,6 +71,10 @@ Every compiled query is also rendered as a readable string for debugging (`op se
 - Other sorts: `year_desc`, `year_asc`, `title`. The tie-breaker is always `id`, so the order is fully
   deterministic.
 - `sort=semantic` is supplied by 06 when it is enabled.
+- As built (task-025, `engine/tantivy_engine.py`): the weights are per-field boosts; k1 and b are
+  Tantivy's fixed constants, checked against a hand-computed score; the whole match set is ordered by the
+  sort's key with `id` last (never Tantivy's hit order), then paged; the sort definitions are part of
+  `ranking_params`.
 
 ## Highlights
 

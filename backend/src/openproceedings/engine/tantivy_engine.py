@@ -3,14 +3,15 @@
 Matching is `compile.py`'s; this module wires it to an index: wildcard expansion from the term dictionary
 (both text fields, the 200 cap enforced before compiling), match sets read back through the `ord` fast
 column and `ids.txt`, disjunctive facets (decision-001 rule 6) counted by Tantivy's terms aggregation, and
-the `--explain` rendering. Ranking is task-025: until then `search` returns id order, as ReferenceEngine
-does. The index is verified (every file re-hashed) when the engine opens it.
+the `--explain` rendering. `search` orders the whole match set (field-weighted BM25, or year, or title) with the id as
+the last key, then pages it (task-025). The index is verified (every file re-hashed) when the engine opens it.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import tantivy
 
@@ -27,11 +28,14 @@ from openproceedings.engine.protocol import (
 )
 from openproceedings.query.ast import And, Filter, Node, Not, TextField, Wildcard
 
+SORTS = ("relevance", "year_desc", "year_asc", "title")
+
 
 class TantivyEngine:
     def __init__(self, path: Path) -> None:
         manifest = verify_index(path)
         self.index_version: str = manifest["index_version"]
+        self.ranking: dict[str, Any] = manifest["ranking_params"]  # the params this index's id was built with
         self.index = open_index(path)
         self.searcher = self.index.searcher()
         self.ids = (path / IDS).read_text(encoding="utf-8").splitlines()
@@ -59,11 +63,36 @@ class TantivyEngine:
         return self.ids_of(self.compile(ast).query)
 
     def search(self, ast: Node, *, sort: str = "relevance", offset: int = 0, limit: int = 50) -> SearchResult:
-        """Id order until ranking lands (task-025)."""
+        """One page of the fully ordered match set (field-weighted-bm25 skill), so pages are stable and
+        their union is `match_ids` for every sort."""
         if offset < 0 or limit < 0:
             raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "offset and limit must be ≥ 0.")
-        ids = sorted(self.match_ids(ast))
-        return SearchResult(total=len(ids), ids=tuple(ids[offset : offset + limit]))
+        ordered = self.ranked(ast, sort)
+        return SearchResult(total=len(ordered), ids=tuple(i for i, _ in ordered[offset : offset + limit]))
+
+    def ranked(self, ast: Node, sort: str = "relevance") -> list[tuple[str, float]]:
+        """Every match with its exact score, in `sort` order, ties always broken by id: `relevance` is
+        (-score, id), `year_desc`/`year_asc` (∓year, id), `title` (casefolded display title, id). Ranking
+        only orders: the set is the same for every sort."""
+        if sort not in SORTS:
+            hint = " (semantic ordering needs embeddings: task-059)" if sort == "semantic" else ""
+            raise EngineInputError(
+                DiagnosticCode.API_BAD_PARAM, f"sort must be one of {', '.join(SORTS)}{hint}."
+            )
+        hits = self.searcher.search(self.compile(ast).query, max(1, self.searcher.num_docs)).hits
+        if not hits:
+            return []
+        addresses = [address for _score, address in hits]
+        ids = [self.ids[_ord(o)] for o in self.searcher.fast_field_values("ord", addresses)]
+        scores = [score for score, _address in hits]
+        if sort == "relevance":
+            keys: list[tuple[float, str]] = [(-s, i) for s, i in zip(scores, ids, strict=True)]
+        else:
+            column = "title_rank" if sort == "title" else "year"
+            values = [_ord(v) for v in self.searcher.fast_field_values(column, addresses)]
+            keys = [(-v if sort == "year_desc" else v, i) for v, i in zip(values, ids, strict=True)]
+        order = sorted(range(len(ids)), key=keys.__getitem__)
+        return [(ids[k], scores[k]) for k in order]
 
     def facets(self, ast: Node, fields: tuple[str, ...] = FACET_FIELDS) -> dict[str, dict[str, int]]:
         """Disjunctive facets (spec 04, decision-001 rule 6): field F is counted over the matches of the
@@ -97,7 +126,9 @@ class TantivyEngine:
     def compile(self, ast: Node) -> Compiled:
         if len(self.verified) > 1_000:
             self.verified.clear()  # bounded: a long-running API never grows it without limit
-        return Compiler(self.index.schema, self.expansions(ast), self.read, self.verified).compile(ast)
+        return Compiler(
+            self.index.schema, self.expansions(ast), self.read, self.verified, self.ranking["field_weights"]
+        ).compile(ast)
 
     def explain(self, ast: Node) -> str:
         """The compiled query as a readable tree, its wildcard expansions and verified clauses (op search

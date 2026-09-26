@@ -51,9 +51,17 @@ FACETS = ("venue", "track", "status")
 # Tantivy drops a longer token without a word; a build refuses one instead (measured on tantivy 0.26.2).
 MAX_TOKEN_BYTES = 65_530
 # Ranking is part of what gets reproduced, so it is part of index_version (spec 03 §Ranking).
+# field-weighted-bm25 skill: k1 and b are Tantivy's fixed BM25 constants (checked against a hand-computed
+# score in the tests); the weights are applied as per-field boosts; every sort ends in the id.
 RANKING_PARAMS: dict[str, Any] = {
     "bm25": {"b": 0.75, "k1": 1.2},
     "field_weights": {"abstract": 1.0, "title": 2.0},
+    "sorts": {
+        "relevance": "-score,id",
+        "title": "casefolded display title,id",
+        "year_asc": "year,id",
+        "year_desc": "-year,id",
+    },
 }
 MANIFEST = "manifest.json"
 IDS = "ids.txt"  # every record id in id order, one per line: `ord` indexes it
@@ -116,6 +124,8 @@ def schema() -> tantivy.Schema:
     # the record's position in id order (a fast column), so a match set reads back as ids without
     # fetching stored documents: ids.txt holds the ids in that order
     b.add_unsigned_field("ord", stored=False, indexed=False, fast=True)
+    # the record's position in (casefolded display title, id) order: `sort=title` without fetching documents
+    b.add_unsigned_field("title_rank", stored=False, indexed=False, fast=True)
     b.add_bytes_field("record", stored=True, indexed=False)
     return b.build()
 
@@ -150,10 +160,11 @@ def _cpus() -> int:
     return os.cpu_count() or 1
 
 
-def _document(r: PaperRecord, fields: dict[str, list[str]], ord_: int) -> tantivy.Document:
+def _document(r: PaperRecord, fields: dict[str, list[str]], ord_: int, title_rank: int) -> tantivy.Document:
     doc = tantivy.Document()
     doc.add_text("id", r.id)
     doc.add_unsigned("ord", ord_)
+    doc.add_unsigned("title_rank", title_rank)
     for field in TEXT:
         doc.add_text(field, " ".join(fields[field]))  # the token contract's output; "" for a missing abstract
     for field in FACETS:
@@ -236,9 +247,24 @@ def _chunks(records: Iterator[PaperRecord]) -> Iterator[list[PaperRecord]]:
         yield chunk
 
 
+def _title_ranks(snapshot: Path) -> dict[str, int]:
+    """Each record's position in (casefolded display title, id) order, from a light first pass over the
+    raw lines (the second, validating pass refuses a snapshot that doesn't verify)."""
+    keys = []
+    with (snapshot / "records.jsonl").open(encoding="utf-8") as fh:
+        for line in fh:
+            try:
+                raw = json.loads(line)
+                keys.append((str(raw["title"]).casefold(), str(raw["id"])))
+            except (ValueError, KeyError, TypeError):
+                continue  # the validating pass reports it
+    return {rid: rank for rank, (_, rid) in enumerate(sorted(keys))}
+
+
 def _add_all(snapshot: Path, writer: Any, exact: tantivy.TextAnalyzer, workers: int, ids: Any) -> int:
     """Stream the snapshot's records (in id order, verified) through normalize() into the writer, across
     `workers` processes when there is more than one."""
+    ranks = _title_ranks(snapshot)
     pool = None
     added = 0
     try:
@@ -256,7 +282,7 @@ def _add_all(snapshot: Path, writer: Any, exact: tantivy.TextAnalyzer, workers: 
             for r, (title, abstract) in zip(chunk, normalized, strict=True):
                 fields = {"title": title, "abstract": abstract}
                 _check_tokens(r, fields, exact)
-                writer.add_document(_document(r, fields, added))
+                writer.add_document(_document(r, fields, added, ranks[r.id]))
                 ids.write(r.id + "\n")
                 added += 1
     except BrokenProcessPool:

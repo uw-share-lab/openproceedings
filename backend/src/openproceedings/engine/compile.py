@@ -82,8 +82,10 @@ class Compiler:
         expansions: Expansions,
         read: TokenReader,
         verified_cache: dict[tuple[str, str], list[str]] | None = None,
+        weights: dict[str, float] | None = None,
     ) -> None:
         self.schema = schema
+        self.weights = weights if weights is not None else dict.fromkeys(FIELDS, 1.0)
         self.expansions = expansions
         self.read = read
         # (field, clause) → the ids it verified: an index never changes, so a clause is checked once per
@@ -116,10 +118,10 @@ class Compiler:
             return self.filter(n, depth)
         fields = (n.field,) if n.field else FIELDS
         if len(fields) == 1:
-            return self.leaf(n, fields[0], depth)
+            return self.weighted(n, fields[0], depth)
         self.line(depth, "OR (per field)")
         return tantivy.Query.boolean_query(
-            [(tantivy.Occur.Should, self.leaf(n, f, depth + 1)) for f in fields]
+            [(tantivy.Occur.Should, self.weighted(n, f, depth + 1)) for f in fields]
         )
 
     def filter(self, f: Filter, depth: int) -> tantivy.Query:
@@ -137,6 +139,13 @@ class Compiler:
         return tantivy.Query.const_score_query(inner, 0.0)
 
     # --- text leaves, one field at a time ------------------------------------------------------------
+    def weighted(self, n: Node, f: TextField, depth: int) -> tantivy.Query:
+        """A text leaf in one field, boosted by the field's weight (field-weighted BM25: title 2.0,
+        abstract 1.0), so score = Σ weight_f · BM25_f over the positive clauses."""
+        weight = self.weights[f]
+        query = self.leaf(n, f, depth)
+        return query if weight == 1.0 else tantivy.Query.boost_query(query, weight)
+
     def leaf(self, n: Node, f: TextField, depth: int) -> tantivy.Query:
         if isinstance(n, Term):
             self.line(depth, f"{f}: term {n.token}")

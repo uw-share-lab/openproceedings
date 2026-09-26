@@ -152,13 +152,6 @@ def test_facets_agree_with_the_oracle(engines: tuple[TantivyEngine, ReferenceEng
     assert engines[0].facets(parse("(gamma venue:ICLR) delta").ast)["venue"] == {"ICLR": 1, "NeurIPS": 1}  # type: ignore[arg-type]
 
 
-def test_search_pages_in_id_order(engines: tuple[TantivyEngine, ReferenceEngine]) -> None:
-    ast = parse("alpha").ast
-    assert engines[0].search(ast, offset=1, limit=2) == engines[1].search(ast, offset=1, limit=2)  # type: ignore[arg-type]
-    with pytest.raises(EngineInputError):
-        engines[0].search(ast, offset=-1)  # type: ignore[arg-type]
-
-
 def test_a_query_is_never_parsed_by_tantivy() -> None:
     import openproceedings.engine.compile as compile_module
     import openproceedings.engine.tantivy_engine as engine_module
@@ -190,7 +183,7 @@ def scores(engine: TantivyEngine, q: str) -> dict[str, float]:
     query = engine.compile(parse(q).ast).query  # type: ignore[arg-type]
     hits = engine.searcher.search(query, 50).hits
     ords = engine.searcher.fast_field_values("ord", [a for _, a in hits])
-    return {engine.ids[o]: round(s, 6) for (s, _), o in zip(hits, ords, strict=True)}  # type: ignore[index]
+    return {engine.ids[o]: s for (s, _), o in zip(hits, ords, strict=True)}  # type: ignore[index]
 
 
 def test_not_adds_no_score(engines: tuple[TantivyEngine, ReferenceEngine]) -> None:
@@ -205,13 +198,15 @@ def test_each_wildcard_expansion_scores_as_its_own_term(
 ) -> None:
     # a wildcard scores exactly as the explicit OR of its expansions, never a flat constant per match
     explicit = "trust OR trusted OR trusts OR trustworthy OR trustx"
-    assert scores(engines[0], "trust*") == scores(engines[0], explicit)
+    assert scores(engines[0], "trust*") == pytest.approx(scores(engines[0], explicit), rel=1e-6)
 
 
 def test_a_verified_clause_scores_each_item_once(engines: tuple[TantivyEngine, ReferenceEngine]) -> None:
     ab05 = next(i for i in engines[0].ids if i.endswith("Ab05"))
     near = scores(engines[0], "alpha NEAR/1 alpha")[ab05]  # verified in the abstract only
-    assert near == scores(engines[0], "abstract:alpha")[ab05]  # alpha counted once, the id check adds 0
+    assert near == pytest.approx(
+        scores(engines[0], "abstract:alpha")[ab05], rel=1e-6
+    )  # alpha counted once, the id check adds 0
 
 
 def test_cli_search_refuses_an_over_cap_wildcard(
@@ -234,10 +229,14 @@ def test_distinct_items_are_each_scored_once(engines: tuple[TantivyEngine, Refer
     engine = engines[0]
     ab03 = next(i for i in engine.ids if i.endswith("Ab03"))
     # verified in both fields: alpha, x and beta each count once per field, as the plain AND does
-    assert scores(engine, '"alpha x" NEAR/1 beta')[ab03] == scores(engine, "alpha x beta")[ab03]
+    assert scores(engine, '"alpha x" NEAR/1 beta')[ab03] == pytest.approx(
+        scores(engine, "alpha x beta")[ab03], rel=1e-6
+    )
     ab07 = next(i for i in engine.ids if i.endswith("Ab07"))
     # `trust` implies `trust*`, so the candidate holds `trust` once (abstract "trust trustx")
-    assert scores(engine, '"trust trust*"')[ab07] == scores(engine, "abstract:trust")[ab07]
+    assert scores(engine, '"trust trust*"')[ab07] == pytest.approx(
+        scores(engine, "abstract:trust")[ab07], rel=1e-6
+    )
 
 
 def test_facets_verify_each_clause_once_per_field(tmp_path: Path) -> None:
