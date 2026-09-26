@@ -319,3 +319,17 @@ def test_combine_refuses_an_empty_list() -> None:
 
     with pytest.raises(ValueError, match="at least one"):
         combine(tantivy.Occur.Should, [])
+
+
+def test_an_over_cap_wildcard_is_refused_every_time_and_keeps_only_its_count(tmp_path: Path) -> None:
+    records = [paper(f"Cc{i:03d}", f"trust{i:03d}") for i in range(210)]
+    engine = TantivyEngine(build_index(snapshot_of(records, tmp_path / "s"), tmp_path / "i", BUILT).path)
+    w = parse("trust*").ast
+    for _ in range(3):  # the first call fills the cache; the later ones read it
+        with pytest.raises(EngineInputError, match="expands to 210 terms"):
+            engine.expand(w)  # type: ignore[arg-type]
+    assert engine.expanded[("trust", "*")] == 210  # a count, not 210 terms
+    small = parse("trust00*").ast
+    got = engine.expand(small)  # type: ignore[arg-type]
+    got.append("mutated")
+    assert engine.expand(small) == [f"trust{i:03d}" for i in range(10)]  # the caller gets a copy

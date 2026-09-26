@@ -1,6 +1,6 @@
 """Exclusion accounting (spec 03 §Exclusion accounting, guarantee 6; default-filters and prisma-reporting skills).
 
-`excluded(engine, parsed)` says how many records the default filters removed, and why, using nothing but the
+`excluded(engine, parsed, total)` says how many records the default filters removed, and why, using nothing but the
 Engine protocol, so ReferenceEngine and TantivyEngine compute it the same way and can be compared.
 
 - The counts come from `ParseResult.identification_ast` (None = every record) and `defaults`, never from
