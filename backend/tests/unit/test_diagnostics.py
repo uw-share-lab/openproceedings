@@ -65,7 +65,7 @@ def test_diagnostic_is_frozen_and_strict() -> None:
         code=DiagnosticCode.PARSE_EMPTY_GROUP, message="Empty group `()` — remove it.", span=(3, 5)
     )
     with pytest.raises(ValidationError):
-        Diagnostic(code="NOT_A_CODE", message="x", span=None)  # type: ignore[arg-type]
+        Diagnostic(code="NOT_A_CODE", message="x", span=None)
     with pytest.raises(ValidationError):
         Diagnostic(code=DiagnosticCode.PARSE_EMPTY_GROUP, message="x", span=None, extra_field=1)  # type: ignore[call-arg]
     with pytest.raises(ValidationError):
@@ -106,4 +106,4 @@ def test_typed_error_survives_pickling() -> None:
 @pytest.mark.parametrize("span", [["1", 2], (True, 2), (1.0, 2)])
 def test_span_is_strict_about_types(span: object) -> None:
     with pytest.raises(ValidationError):
-        Diagnostic(code=DiagnosticCode.PARSE_EMPTY_GROUP, message="x", span=span)  # type: ignore[arg-type]
+        Diagnostic(code=DiagnosticCode.PARSE_EMPTY_GROUP, message="x", span=span)
