@@ -284,12 +284,17 @@ LATEX_PIECES = ["$", "\\(", "\\)", " ", "a", "O", "5", "{", "}", "^", "_", '\\"'
                 "\\leq", "\\times", "\\alpha", "\\not", "=", "\\in", "\u0301", "\u200b", "中", "é", "-"]  # fmt: skip
 
 
-@given(st.lists(st.sampled_from(LATEX_PIECES), max_size=12).map("".join))
+@given(
+    st.lists(st.sampled_from(LATEX_PIECES), max_size=12)
+    .map("".join)
+    .flatmap(lambda t: st.sampled_from([t, f"${t}$"]))
+)
 def test_token_spans_are_valid_and_never_overlap(text: str) -> None:
     tokens = tokenize(text)
     for t in tokens:
         assert 0 <= t.start < t.end <= len(text), (text, t)
     for a, b in pairwise(tokens):
-        # pieces of one code point that folds to several (`½`, `⑴`) share its span; nothing else overlaps
+        # pieces of one non-ASCII code point that folds to several share its span; the alphabet has no such
+        # point or combining-slash cluster, so here nothing overlaps (a pre-existing cluster case is out of scope)
         shared = b.start < a.end and a.end - b.start <= 1 and not text[b.start : a.end].isascii()
         assert b.start >= a.end or shared, (text, a, b)

@@ -4,7 +4,7 @@ title: Performance benchmarks against the spec 03 budgets
 status: In Progress
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 22:47'
+updated_date: '2026-09-26 22:51'
 labels:
   - engine
   - ops
@@ -35,4 +35,6 @@ Implemented: backend/tests/bench/test_bench.py (pytest-benchmark 5.3, dev depend
 Review fixes (gate semantics confirmed: --benchmark-compare picks the saved base, fails on slowdowns only, the first PR only records, --benchmark-enable overrides the addopts; budgets really enforced when enabled). Shoulds: the report builds the index in a process of its own (as op index build does) and reports that process's peak memory, labelled as excluding its ~65 MB workers (the old figure included corpus generation and snapshot rendering); the report deletes its scratch corpus and index (unsealing the index first); the gate compares the minimum time (--benchmark-compare-fail=min:20%), the statistic least moved by runner noise. Nits: 40 rounds so the report's p95 isn't the max; the refused co* row counts distinct terms; cold match_ids clears the expansion cache too; the report itself says to regenerate on a quiet machine; the docstring says run from backend/; widest_stem uses compile.FIELDS; spec 07 says the search benchmark is warm and match_ids cold; checkout sets persist-credentials: false. Rejected: base/head on different Python minors (both steps use the same setup-uv and uv.lock pin, so they can't differ within one run). The report is regenerated at the current HEAD.
 
 Regenerated report (quiet machine, c9fee21, 40 rounds): build 32.8 s, 99 MB, 401 MB peak in the build process; every Trust-Evals string within budget except main-2-pop cold (10.1 s search, 10.5 s match_ids + exclusions: the spec 03 exception); main-2-pop warm 63 ms. The earlier 147 ms warm reading (20 rounds, p95 = max, other load) didn't reproduce, so task-075 is archived with that reason and spec 03's measured line is corrected.
+
+Verification (APPROVE; min:20% syntax and slowdown-only failure confirmed; RUSAGE_CHILDREN folds in the waited workers as a max, not a sum; 147 ms not reproduced even under load, main-2-pop warm p95 68-69 ms) nits fixed: the memory column says 'largest single process (the build; its workers are not summed)'; the report records git describe --always --dirty; a failed build prints its stderr; long lines rewrapped. Corrections to earlier notes: the gate is min:20%, not median; the 147 ms/task-075 item is superseded (archived, not reproduced). Report regenerated once more at the committed script.
 <!-- SECTION:NOTES:END -->
