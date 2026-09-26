@@ -22,6 +22,9 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_v
 
 from openproceedings.vocab import Status, Track, Venue
 
+# The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
+RECORD_SCHEMA_VERSION = "1"
+
 Source = Literal["openreview_v2", "openreview_v1", "neurips_proceedings", "pmlr", "ris"]
 Presentation = Literal["oral", "spotlight", "poster"]
 ClaimField = Literal[

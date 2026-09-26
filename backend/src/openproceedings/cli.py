@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -34,6 +35,17 @@ PLANNED: dict[str, tuple[str, str]] = {
 PLANNED_SOURCES: dict[str, str] = {"openreview": "task-050", "proceedings": "task-052"}
 
 
+def default_data_dir() -> Path:
+    """`$OP_DATA_DIR`, else the repository's `data/` (found from this package's location, so the command
+    works from any directory), else `./data`."""
+    if env := os.environ.get("OP_DATA_DIR"):
+        return Path(env)
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "backend").is_dir() and (parent / "pyproject.toml").is_file():
+            return parent / "data"
+    return Path("data")
+
+
 def _stub(p: argparse.ArgumentParser, name: str, task: str) -> None:
     p.add_argument("args", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
     p.set_defaults(stub=(name, task))
@@ -46,7 +58,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--log-format", default="json", choices=FORMATS, help="json (default) or text for reading locally"
     )
-    parser.add_argument("--data-dir", type=Path, default=Path("data"), help="default ./data (gitignored)")
+    parser.add_argument(
+        "--data-dir", type=Path, help="default $OP_DATA_DIR, else the repository's data/ (gitignored)"
+    )
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
     ingest = sub.add_parser(
@@ -104,13 +118,32 @@ def _snapshot_diff(ns: argparse.Namespace) -> int:
     return 0
 
 
+def _reason(e: Exception) -> str:
+    """A refusal's one-line reason, never record text: our errors name a file and a record index; a
+    pydantic error quotes its input, so only its error types are shown; an OS error its kind and path."""
+    from pydantic import ValidationError
+
+    if isinstance(e, ValidationError):
+        kinds = sorted({str(err["type"]) for err in e.errors(include_input=False)})
+        return f"invalid record ({', '.join(kinds)})"
+    if isinstance(e, OSError):
+        return f"{type(e).__name__}: {e.strerror or e}" + (
+            f" ({Path(e.filename).name})" if e.filename else ""
+        )
+    return str(e)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     from openproceedings.ingest.snapshot import SnapshotError
 
     parser = build_parser()
-    ns, extra = parser.parse_known_args(argv)
-    if extra and not hasattr(ns, "stub"):  # a stub takes any future arguments; a real command doesn't
+    args = list(sys.argv[1:] if argv is None else argv)
+    ns, extra = parser.parse_known_args(args)
+    # a stub takes any future arguments after its name; a real command, or anything before it, doesn't
+    after = args[args.index(ns.command) + 1 :] if ns.command in args else []
+    if extra and (not hasattr(ns, "stub") or any(e not in after for e in extra)):
         parser.error(f"unrecognized arguments: {' '.join(extra)}")
+    ns.data_dir = ns.data_dir or default_data_dir()
     configure_logging(ns.log_level, ns.log_format)
     if ns.command is None:
         parser.print_help(sys.stderr)
@@ -121,10 +154,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"op {name}: not implemented yet — planned in {task} (backlog task view {task})", file=sys.stderr
         )
         return 2
+    name = " ".join(filter(None, (ns.command, getattr(ns, "source", None), getattr(ns, "action", None))))
     try:
         code: int = ns.run(ns)
-    except (SnapshotError, ValueError, FileNotFoundError) as e:
-        print(f"op {ns.command}: {e}", file=sys.stderr)
+    except (SnapshotError, ValueError, OSError) as e:
+        reason = _reason(e)
+        log.warning("cli_refused", extra={"command": name, "error": type(e).__name__})
+        print(f"op {name}: {reason}", file=sys.stderr)
         return 1
     return code
 

@@ -6,13 +6,20 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-from datetime import UTC, datetime
+import stat
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 from openproceedings import cli
-from openproceedings.ingest.dedup import dedup
+from openproceedings.ingest import snapshot as snap
+from openproceedings.ingest.dedup import DedupResult, dedup
+from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import (
+    DISPLAY,
+    HASHED,
     SnapshotError,
     build,
     diff,
@@ -22,47 +29,131 @@ from openproceedings.ingest.snapshot import (
     record_line,
     render,
 )
-from pydantic import ValidationError
+
+from tests.unit.ingest.test_dedup import H, paper
 
 FIXTURE = Path(__file__).parents[2] / "fixtures" / "ris"
 BUILT = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
+WORKSHOP, REJECTED = "op:icml:2026:AbCdEf1234", "op:iclr:2024:Rej_ected-1"
+NEURIPS = "op:neurips:2025:nips-0123456789abcdef0123456789abcdef"
+PMLR = "op:icml:2023:pmlr-v202-smith23a"
+
+
+def source(tmp_path: Path, name: str = "search-a", edit: Callable[[str], str] = lambda t: t) -> Path:
+    """A copy of the fixture in `<tmp>/src/<name>/`, both files passed through `edit`."""
+    src = tmp_path / "src" / name
+    src.mkdir(parents=True)
+    for f in ("mended.ris", "resolved.json"):
+        (src / f).write_text(edit((FIXTURE / f).read_text(encoding="utf-8")), encoding="utf-8")
+    return src / "mended.ris"
 
 
 @pytest.fixture
 def cache(tmp_path: Path) -> Path:
-    src = tmp_path / "src" / "search-a"
-    src.mkdir(parents=True)
-    for name in ("mended.ris", "resolved.json"):
-        shutil.copyfile(FIXTURE / name, src / name)
-    ingest_ris([src / "mended.ris"], tmp_path / "cache")
+    ingest_ris([source(tmp_path)], tmp_path / "cache")
     return tmp_path / "cache"
+
+
+def writable_copy(snapshot: Path, out: Path) -> Path:
+    shutil.copytree(snapshot, out)
+    for p in [out, *out.iterdir()]:
+        p.chmod(p.stat().st_mode | stat.S_IWUSR)
+    return out
+
+
+def rewrite(snapshot: Path, out: Path, edit: Callable[[dict[str, PaperRecord]], None]) -> Path:
+    """A writable copy of `snapshot` whose records `edit` changed; its manifest hash is kept consistent."""
+    records = load_records(snapshot)
+    edit(records)
+    writable_copy(snapshot, out)
+    data = "".join(record_line(r) + "\n" for r in sorted(records.values(), key=lambda r: r.id)).encode(
+        "utf-8"
+    )
+    (out / "records.jsonl").write_bytes(data)
+    manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    manifest["snapshot_hash"] = hashlib.sha256(data).hexdigest()
+    (out / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return out
+
+
+# --- the cache ---------------------------------------------------------------------------------------------
 
 
 def test_ingest_copies_both_files_and_is_idempotent(cache: Path, tmp_path: Path) -> None:
     cached = cache / "ris" / "search-a"
     assert sorted(p.name for p in cached.iterdir()) == ["mended.ris", "resolved.json"]
     assert (cached / "mended.ris").read_bytes() == (FIXTURE / "mended.ris").read_bytes()
+    assert stat.S_IMODE(cached.stat().st_mode) == 0o555
     ingest_ris([tmp_path / "src" / "search-a" / "mended.ris"], cache)  # the same files again: no-op
     assert not list((cache / "ris").glob(".tmp-*"))
 
 
 def test_ingest_refuses_different_files_under_a_cached_name(cache: Path, tmp_path: Path) -> None:
-    src = tmp_path / "src" / "search-a"
-    (src / "resolved.json").write_text(
-        (src / "resolved.json").read_text(encoding="utf-8").replace("made-up", "invented"), encoding="utf-8"
-    )
+    changed = source(tmp_path / "other", edit=lambda t: t.replace("made-up", "invented"))
     with pytest.raises(SnapshotError, match="different files"):
-        ingest_ris([src / "mended.ris"], cache)
+        ingest_ris([changed], cache)
 
 
-def test_ingest_refuses_a_file_that_does_not_import(tmp_path: Path) -> None:
-    bad = tmp_path / "bad"
-    bad.mkdir()
-    shutil.copyfile(FIXTURE / "mended.ris", bad / "mended.ris")
-    (bad / "resolved.json").write_text("[]", encoding="utf-8")
+def test_a_cache_entry_missing_a_file_is_different(cache: Path, tmp_path: Path) -> None:
+    entry = cache / "ris" / "search-a"
+    entry.chmod(0o755)
+    (entry / "resolved.json").chmod(0o644)
+    (entry / "resolved.json").unlink()
+    with pytest.raises(SnapshotError, match="different files"):
+        ingest_ris([tmp_path / "src" / "search-a" / "mended.ris"], cache)
+
+
+def test_ingest_is_all_or_nothing(tmp_path: Path) -> None:
+    good = source(tmp_path, "search-a")
+    bad = source(tmp_path, "search-b", edit=lambda t: "[]" if t.startswith("[") else t)
     with pytest.raises(ValueError, match="RIS records but"):
-        ingest_ris([bad / "mended.ris"], tmp_path / "cache")
-    assert not (tmp_path / "cache" / "ris" / "bad").exists()
+        ingest_ris([good, bad], tmp_path / "cache")
+    assert [p.name for p in (tmp_path / "cache" / "ris").iterdir()] == []  # nothing cached, no leftovers
+
+
+def test_ingest_places_nothing_when_a_later_import_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+    real = snap.import_ris
+
+    def flaky(path: Path) -> Any:
+        calls.append(path)
+        if len(calls) == 2:
+            raise OSError(5, "disk error")
+        return real(path)
+
+    monkeypatch.setattr(snap, "import_ris", flaky)
+    with pytest.raises(OSError):
+        ingest_ris([source(tmp_path, "search-a"), source(tmp_path, "search-b")], tmp_path / "cache")
+    assert list((tmp_path / "cache" / "ris").iterdir()) == []
+
+
+def test_ingest_needs_distinct_named_directories(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    a = source(tmp_path / "x", "same")
+    b = source(tmp_path / "y", "same")
+    with pytest.raises(SnapshotError, match="share a directory name"):
+        ingest_ris([a, b], tmp_path / "cache")
+    monkeypatch.chdir(a.parent)  # a bare file name still resolves to its directory's name
+    ingest_ris([Path("mended.ris")], tmp_path / "cache")
+    assert (tmp_path / "cache" / "ris" / "same" / "mended.ris").exists()
+
+
+def test_leftover_temp_and_hidden_directories_are_never_sources(cache: Path, tmp_path: Path) -> None:
+    for hidden in (".tmp-crashed", ".hidden"):
+        shutil.copytree(FIXTURE, cache / "ris" / hidden)
+    _, reports = load_cache(cache)
+    assert [r.file for r in reports] == ["search-a/mended.ris"]
+    ingest_ris([tmp_path / "src" / "search-a" / "mended.ris"], cache)
+    assert not (cache / "ris" / ".tmp-crashed").exists()  # swept
+
+
+def test_an_empty_cache_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(SnapshotError, match="nothing cached"):
+        build(tmp_path / "cache", tmp_path / "snapshots", BUILT)
+
+
+# --- build -------------------------------------------------------------------------------------------------
 
 
 def test_build_writes_the_layout(cache: Path, tmp_path: Path) -> None:
@@ -72,12 +163,10 @@ def test_build_writes_the_layout(cache: Path, tmp_path: Path) -> None:
     lines = (result.path / "records.jsonl").read_bytes()
     assert result.snapshot_hash == manifest["snapshot_hash"] == hashlib.sha256(lines).hexdigest()
     assert result.path.name == f"2026-09-20-{result.snapshot_hash[:12]}"  # the newest claim's fetch date
-    assert sorted(p.name for p in result.path.iterdir()) == [
-        "conflicts.csv",
-        "manifest.json",
-        "merges.csv",
-        "records.jsonl",
-    ]
+    files = ["conflicts.csv", "manifest.json", "merges.csv", "records.jsonl"]
+    assert sorted(p.name for p in result.path.iterdir()) == files
+    assert stat.S_IMODE(result.path.stat().st_mode) == 0o555
+    assert {stat.S_IMODE((result.path / f).stat().st_mode) for f in files} == {0o444}
     ids = [json.loads(line)["id"] for line in lines.decode("utf-8").splitlines()]
     assert ids == sorted(ids) and manifest["record_count"] == len(ids) == 6
     assert manifest["counts"]["ICLR"] == {
@@ -88,11 +177,28 @@ def test_build_writes_the_layout(cache: Path, tmp_path: Path) -> None:
                                             "NeurIPS": {"2024": 0, "2025": 0}}  # fmt: skip
     assert manifest["unknown_track"]["ICML"] == {"2023": 0, "2026": 0}
     assert (manifest["merges"], manifest["conflicts"]) == ({"total": 0}, {"total": 0})
+    assert manifest["crawl_window"] == {
+        "from": "2026-09-18T10:03:05+00:00",
+        "to": "2026-09-20T08:00:00+00:00",
+    }
+    assert (manifest["format_version"], manifest["record_schema_version"], manifest["tokenizer_version"]) == (
+        "1",
+        "1",
+        "2",
+    )
+    assert manifest["openproceedings_version"]
+    for name in ("merges.csv", "conflicts.csv"):
+        assert manifest["files"][name] == hashlib.sha256((result.path / name).read_bytes()).hexdigest()
     [report] = manifest["sources"]["ris"]
     assert (report["file"], report["imported"], report["read"]) == ("search-a/mended.ris", 6, 12)
     assert manifest["built_at"] == "2026-09-26T12:00:00+00:00"
     assert (result.path / "merges.csv").read_text() == "survivor_id,merged_id,rule,key,venue,year,sources\n"
     assert not list((tmp_path / "snapshots").glob(".tmp-*"))
+
+
+def test_built_at_is_stored_in_utc(cache: Path, tmp_path: Path) -> None:
+    result = build(cache, tmp_path / "s", datetime(2026, 9, 26, 7, 0, tzinfo=timezone(timedelta(hours=-5))))
+    assert json.loads((result.path / "manifest.json").read_text())["built_at"] == "2026-09-26T12:00:00+00:00"
 
 
 def test_same_inputs_give_byte_identical_files(cache: Path, tmp_path: Path) -> None:
@@ -105,15 +211,45 @@ def test_same_inputs_give_byte_identical_files(cache: Path, tmp_path: Path) -> N
     assert {k for k in ma if ma[k] != mb[k]} == {"built_at"}
 
 
-def test_merges_and_conflicts_are_written_sorted(cache: Path, tmp_path: Path) -> None:
-    # the same search cached twice: every paper merges with its copy
-    shutil.copytree(cache / "ris" / "search-a", cache / "ris" / "search-b")
-    result = build(cache, tmp_path / "snapshots", BUILT)
+def test_text_is_written_as_utf8_not_escapes(tmp_path: Path) -> None:
+    accented = source(
+        tmp_path,
+        "suche-ä",
+        edit=lambda t: t.replace("Synthetic Trust Benchmark", "Synthetic Trust Bénchmark"),
+    )
+    ingest_ris([accented], tmp_path / "cache")
+    result = build(tmp_path / "cache", tmp_path / "snapshots", BUILT)
+    assert "Bénchmark".encode() in (result.path / "records.jsonl").read_bytes()
+    assert "suche-ä".encode() in (result.path / "manifest.json").read_bytes()
+
+
+def test_sources_are_listed_in_cached_name_order(tmp_path: Path) -> None:
+    ingest_ris([source(tmp_path, "b-search"), source(tmp_path / "2", "a-search")], tmp_path / "cache")
+    result = build(tmp_path / "cache", tmp_path / "snapshots", BUILT)
     manifest = json.loads((result.path / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["record_count"] == 6 and len(manifest["sources"]["ris"]) == 2
-    assert manifest["merges"] == {"total": 6, "forum_id": 2, "native_id": 4}
+    assert [r["file"] for r in manifest["sources"]["ris"]] == ["a-search/mended.ris", "b-search/mended.ris"]
+    assert manifest["merges"] == {"total": 6, "forum_id": 2, "native_id": 4}  # each paper and its copy
     rows = (result.path / "merges.csv").read_text().splitlines()[1:]
     assert rows == sorted(rows) and len(rows) == 6
+
+
+def test_render_sorts_rows_and_counts_conflicts_by_kind() -> None:
+    orv = paper("AbCd1234", status="rejected")
+    proc = paper(f"nips-{H[1]}", source="neurips_proceedings")
+    copy = paper(f"nips-{H[1]}", source="ris")
+    result = dedup([orv, proc, copy])
+    assert len(result.merges) == 2
+    shuffled = DedupResult(result.records, tuple(reversed(result.merges)), tuple(reversed(result.conflicts)))
+    files = render(shuffled, [], BUILT)
+    manifest = json.loads(files["manifest.json"])
+    assert manifest["conflicts"] == {"total": 1, "precedence": 1}
+    assert files["merges.csv"] == render(result, [], BUILT)["merges.csv"]
+    with pytest.raises(SnapshotError, match="no records"):
+        render(DedupResult((), (), ()), [], BUILT)
+    bare = PaperRecord.build(id="op:iclr:2024:AbCd1234", title="T", abstract=None, authors=(), venue="ICLR",
+                             year=2024, track="main", status="accepted")  # fmt: skip
+    with pytest.raises(SnapshotError, match="no provenance"):
+        render(DedupResult((bare,), (), ()), [], BUILT)
 
 
 def test_a_rebuild_reports_the_existing_snapshot(cache: Path, tmp_path: Path) -> None:
@@ -124,86 +260,157 @@ def test_a_rebuild_reports_the_existing_snapshot(cache: Path, tmp_path: Path) ->
     assert manifest["built_at"] == "2026-09-26T12:00:00+00:00"  # never rewritten
 
 
-def test_an_occupied_target_is_never_overwritten(cache: Path, tmp_path: Path) -> None:
-    files = render(dedup(load_cache(cache)[0]), load_cache(cache)[1], BUILT)
-    manifest = json.loads(files["manifest.json"])
+@pytest.mark.parametrize("contents", ["other records\n", None])  # different records; no records at all
+def test_an_occupied_target_is_never_overwritten(cache: Path, tmp_path: Path, contents: str | None) -> None:
+    records, reports = load_cache(cache)
+    manifest = json.loads(render(dedup(records), reports, BUILT)["manifest.json"])
     target = tmp_path / "snapshots" / f"{manifest['crawl_date']}-{manifest['snapshot_hash'][:12]}"
     target.mkdir(parents=True)
-    (target / "manifest.json").write_text(json.dumps({"snapshot_hash": "other"}), encoding="utf-8")
+    if contents is not None:
+        (target / "records.jsonl").write_text(contents, encoding="utf-8")
     with pytest.raises(SnapshotError, match="immutable"):
         build(cache, tmp_path / "snapshots", BUILT)
-    assert json.loads((target / "manifest.json").read_text(encoding="utf-8")) == {"snapshot_hash": "other"}
+    assert sorted(p.name for p in target.iterdir()) == ([] if contents is None else ["records.jsonl"])
 
 
-def test_an_empty_cache_is_refused(tmp_path: Path) -> None:
-    with pytest.raises(SnapshotError, match="nothing cached"):
-        build(tmp_path / "cache", tmp_path / "snapshots", BUILT)
+def test_a_target_that_appears_during_the_build(
+    cache: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = build(cache, tmp_path / "a", BUILT)
+
+    def racing(src: Any, dst: Any) -> None:  # another build places the same snapshot first
+        shutil.copytree(first.path, dst)
+        raise FileExistsError(17, "exists")
+
+    monkeypatch.setattr(snap.os, "rename", racing)
+    result = build(cache, tmp_path / "b", BUILT)
+    assert not result.created and result.path.name == first.path.name
+    assert not list((tmp_path / "b").glob(".tmp-*"))
 
 
-def test_records_round_trip_and_a_tampered_line_is_caught(cache: Path, tmp_path: Path) -> None:
+def test_a_build_sweeps_what_a_crashed_build_left(cache: Path, tmp_path: Path) -> None:
+    leftover = tmp_path / "snapshots" / ".tmp-crashed"
+    leftover.mkdir(parents=True)
+    (leftover / "records.jsonl").write_text("half", encoding="utf-8")
+    build(cache, tmp_path / "snapshots", BUILT)
+    assert not leftover.exists()
+
+
+def test_a_failed_write_leaves_no_target_and_no_temp(
+    cache: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = Path.write_bytes
+    calls = []
+
+    def failing(self: Path, data: bytes) -> int:
+        calls.append(self)
+        if len(calls) == 2:
+            raise OSError(28, "no space")
+        return real(self, data)
+
+    monkeypatch.setattr(Path, "write_bytes", failing)
+    with pytest.raises(OSError):
+        build(cache, tmp_path / "snapshots", BUILT)
+    assert list((tmp_path / "snapshots").iterdir()) == []
+
+
+# --- reading and diffing ---------------------------------------------------------------------------------
+
+
+def test_records_round_trip(cache: Path, tmp_path: Path) -> None:
     result = build(cache, tmp_path / "snapshots", BUILT)
     records = load_records(result.path)
     lines = (result.path / "records.jsonl").read_text(encoding="utf-8").splitlines()
     assert [record_line(records[json.loads(line)["id"]]) for line in lines] == lines
-    tampered = tmp_path / "tampered"
-    shutil.copytree(result.path, tampered)
-    text = (tampered / "records.jsonl").read_text(encoding="utf-8")
-    (tampered / "records.jsonl").write_text(
-        text.replace('"track":"workshop"', '"track":"main"'), encoding="utf-8"
-    )
-    with pytest.raises(ValidationError, match="content_hash"):
-        load_records(tampered)
 
 
-def _edit(snapshot: Path, out: Path, edit: object) -> Path:
-    """A copy of `snapshot` whose records were changed by `edit(dict_by_id)` (content hashes recomputed)."""
-    records = load_records(snapshot)
-    edit(records)  # type: ignore[operator]
-    out.mkdir()
-    (out / "records.jsonl").write_text(
-        "".join(record_line(r) + "\n" for r in sorted(records.values(), key=lambda r: r.id)), encoding="utf-8"
+def test_a_snapshot_whose_records_do_not_match_its_hash_is_refused(cache: Path, tmp_path: Path) -> None:
+    copy = writable_copy(build(cache, tmp_path / "s", BUILT).path, tmp_path / "copy")
+    (copy / "records.jsonl").write_bytes((copy / "records.jsonl").read_bytes() + b"\n")
+    with pytest.raises(SnapshotError, match="doesn't match its manifest"):
+        load_records(copy)
+
+
+def test_a_tampered_record_is_caught_without_quoting_it(cache: Path, tmp_path: Path) -> None:
+    copy = writable_copy(build(cache, tmp_path / "s", BUILT).path, tmp_path / "copy")
+    data = (
+        (copy / "records.jsonl").read_text(encoding="utf-8").replace('"track":"workshop"', '"track":"main"')
     )
-    return out
+    (copy / "records.jsonl").write_text(data, encoding="utf-8")
+    manifest = json.loads((copy / "manifest.json").read_text())
+    manifest["snapshot_hash"] = hashlib.sha256(data.encode()).hexdigest()
+    (copy / "manifest.json").write_text(json.dumps(manifest))
+    with pytest.raises(SnapshotError, match=r"line \d+: invalid record \(value_error\)") as err:
+        load_records(copy)
+    assert "Synthetic" not in str(err.value) and "abstract" not in str(err.value)
+
+
+def test_duplicate_ids_are_refused(cache: Path, tmp_path: Path) -> None:
+    copy = writable_copy(build(cache, tmp_path / "s", BUILT).path, tmp_path / "copy")
+    first = (copy / "records.jsonl").read_bytes().split(b"\n")[0] + b"\n"
+    data = first + (copy / "records.jsonl").read_bytes()
+    (copy / "records.jsonl").write_bytes(data)
+    manifest = json.loads((copy / "manifest.json").read_text())
+    manifest["snapshot_hash"] = hashlib.sha256(data).hexdigest()
+    (copy / "manifest.json").write_text(json.dumps(manifest))
+    with pytest.raises(SnapshotError, match="line 2: duplicate id"):
+        load_records(copy)
+
+
+def test_the_field_lists_cover_the_record() -> None:
+    fields = set(PaperRecord.model_fields) - {"id", "content_hash", "provenance"}
+    assert set(HASHED) | set(DISPLAY) == fields and not set(HASHED) & set(DISPLAY)
 
 
 def test_diff_names_every_kind_of_change(cache: Path, tmp_path: Path) -> None:
     a = build(cache, tmp_path / "snapshots", BUILT).path
-    workshop, rejected = "op:icml:2026:AbCdEf1234", "op:iclr:2024:Rej_ected-1"
-    neurips = "op:neurips:2025:nips-0123456789abcdef0123456789abcdef"
-    pmlr = "op:icml:2023:pmlr-v202-smith23a"
 
-    def edit(rs: dict) -> None:  # type: ignore[type-arg]
-        rs[workshop] = rs[workshop].model_copy(update={"title": "A Renamed Paper", "status": "rejected"})
-        rs[neurips] = rs[neurips].model_copy(update={"authors": ("Doe, J",)})
-        p = rs[pmlr]
-        rs[pmlr] = p.model_copy(
+    def edit(rs: dict[str, PaperRecord]) -> None:
+        rs[WORKSHOP] = rs[WORKSHOP].model_copy(update={"title": "A Renamed Paper", "status": "rejected"})
+        rs[NEURIPS] = rs[NEURIPS].model_copy(update={"authors": ("Doe, J",)})
+        p = rs[PMLR]
+        rs[PMLR] = p.model_copy(
             update={"provenance": tuple(c.model_copy(update={"evidence": "x"}) for c in p.provenance)}
         )
-        del rs[rejected]
-        rs["op:iclr:2024:NewPaper01"] = rs[workshop].model_copy(
-            update={"id": "op:iclr:2024:NewPaper01", "venue": "ICLR", "year": 2024}
-        )
+        moved = rs.pop(REJECTED).model_copy(update={"id": "op:iclr:2025:Rej_ected-1", "year": 2025})
+        rs[moved.id] = moved  # the same paper, its year corrected
+        new = rs[WORKSHOP].model_copy(update={"id": "op:iclr:2024:NewPaper01", "venue": "ICLR", "year": 2024})
+        rs[new.id] = new
+        del rs["op:iclr:2025:iclr-fedcba9876543210fedcba9876543210"]
 
-    b = _edit(a, tmp_path / "b", edit)
+    b = rewrite(a, tmp_path / "b", edit)
     assert diff(a, b) == {
         "from": a.name,
         "to": "b",
         "added": ["op:iclr:2024:NewPaper01"],
-        "removed": [rejected],
-        "changed": {workshop: ["title", "status"]},
+        "removed": ["op:iclr:2025:iclr-fedcba9876543210fedcba9876543210"],
+        "rekeyed": {REJECTED: {"to": "op:iclr:2025:Rej_ected-1", "fields": ["year"]}},
+        "changed": {WORKSHOP: ["title", "status"]},
         "display_only": 1,
         "provenance_only": 1,
     }
-    assert diff(a, a)["changed"] == {} and diff(a, a)["added"] == []
+    same = diff(a, a)
+    assert (same["added"], same["removed"], same["rekeyed"], same["changed"]) == ([], [], {}, {})
+
+
+@pytest.mark.parametrize("field", DISPLAY)
+def test_every_display_field_is_a_display_only_change(cache: Path, tmp_path: Path, field: str) -> None:
+    a = build(cache, tmp_path / "snapshots", BUILT).path
+    value: Any = {"authors": ("X, Y",), "urls": {"doi": "10.1/x"}, "keywords": ("k",), "presentation": "oral",
+                  "venue_id_raw": "ICML.cc/2026/Conference"}[field]  # fmt: skip
+    b = rewrite(
+        a, tmp_path / "b", lambda rs: rs.update({WORKSHOP: rs[WORKSHOP].model_copy(update={field: value})})
+    )
+    got = diff(a, b)
+    assert (got["display_only"], got["changed"]) == (1, {})
+
+
+# --- CLI ---------------------------------------------------------------------------------------------------
 
 
 def test_cli_end_to_end(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    src = tmp_path / "search-a"
-    src.mkdir()
-    for name in ("mended.ris", "resolved.json"):
-        shutil.copyfile(FIXTURE / name, src / name)
     data = ["--data-dir", str(tmp_path / "data")]
-    assert cli.main([*data, "ingest", "ris", str(src / "mended.ris")]) == 0
+    assert cli.main([*data, "ingest", "ris", str(source(tmp_path))]) == 0
     [report] = json.loads(capsys.readouterr().out)
     assert report["imported"] == 6
     assert cli.main([*data, "snapshot", "build"]) == 0
@@ -213,6 +420,77 @@ def test_cli_end_to_end(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> N
     assert json.loads(capsys.readouterr().out)["changed"] == {}
 
 
-def test_cli_reports_a_refusal_with_exit_1(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    assert cli.main(["--data-dir", str(tmp_path), "snapshot", "build"]) == 1
-    assert "nothing cached" in capsys.readouterr().err
+def test_cli_from_and_out_override_the_data_dir(
+    cache: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = tmp_path / "elsewhere"
+    argv = [
+        "--data-dir",
+        str(tmp_path / "unused"),
+        "snapshot",
+        "build",
+        "--from",
+        str(cache),
+        "--out",
+        str(out),
+    ]
+    assert cli.main(argv) == 0
+    assert Path(json.loads(capsys.readouterr().out)["path"]).parent == out
+
+
+def test_cli_data_dir_defaults_to_the_environment_then_the_repo(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("OP_DATA_DIR", str(tmp_path))
+    assert cli.default_data_dir() == tmp_path
+    monkeypatch.delenv("OP_DATA_DIR")
+    repo = cli.default_data_dir().parent
+    assert (repo / "backend").is_dir() and (repo / "pyproject.toml").is_file()
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["snapshot", "build"], "nothing cached"),
+        (["snapshot", "diff", "missing-a", "missing-b"], "not a snapshot"),
+        (["ingest", "ris", "missing/mended.ris"], "FileNotFoundError"),
+    ],
+)
+def test_cli_reports_a_refusal_with_exit_1(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], argv: list[str], message: str
+) -> None:
+    assert cli.main(["--data-dir", str(tmp_path), *argv]) == 1
+    err = capsys.readouterr().err
+    assert message in err and "Traceback" not in err
+    assert err.splitlines()[-1].startswith(f"op {' '.join(argv[:2])}:")  # logs come first, on stderr too
+
+
+def test_cli_diff_of_a_file_is_refused_not_a_traceback(
+    cache: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = build(cache, tmp_path / "s", BUILT).path / "records.jsonl"
+    assert cli.main(["snapshot", "diff", str(path), str(path)]) == 1
+    assert "not a snapshot" in capsys.readouterr().err
+
+
+def test_cli_never_prints_record_text(
+    cache: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    copy = writable_copy(build(cache, tmp_path / "s", BUILT).path, tmp_path / "copy")
+    data = (
+        (copy / "records.jsonl").read_text(encoding="utf-8").replace('"track":"workshop"', '"track":"main"')
+    )
+    (copy / "records.jsonl").write_text(data, encoding="utf-8")
+    manifest = json.loads((copy / "manifest.json").read_text())
+    manifest["snapshot_hash"] = hashlib.sha256(data.encode()).hexdigest()
+    (copy / "manifest.json").write_text(json.dumps(manifest))
+    assert cli.main(["snapshot", "diff", str(copy), str(copy)]) == 1
+    err = capsys.readouterr().err
+    assert "invalid record" in err and "made-up" not in err and "Synthetic" not in err
+
+
+@pytest.mark.parametrize("argv", [["snapshot", "build", "--form", "x"], ["--bogus", "search"]])
+def test_cli_rejects_unknown_options(argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(argv)
+    assert exc.value.code == 2

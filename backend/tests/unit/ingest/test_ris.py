@@ -369,7 +369,7 @@ def test_report_is_consistent_and_manifest_ready(imported: Imported) -> None:
     _, report = imported
     manifest = report.to_manifest()
     assert list(manifest) == sorted(manifest) and list(manifest["skipped"]) == sorted(manifest["skipped"])
-    assert manifest["scholarmend_version"] == "0.1.3" and len(manifest["mended_sha256"]) == 64
+    assert manifest["parser_version"] == "0.1.3" and len(manifest["mended_sha256"]) == 64
     json.dumps(manifest)  # plain values only
     with pytest.raises(ValueError, match="read"):
         ImportReport(**{**report.__dict__, "imported": report.imported + 1})

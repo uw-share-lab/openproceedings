@@ -69,6 +69,10 @@ or a PMLR URL in an ICML volume) → `accepted`, overriding a venueid that agree
 so a RIS record is never `unknown` for lack of a claim. It is **never** inferred from the paper appearing
 in Scholar. The abstract is never Scholar's (`null` instead).
 
+## Versions
+`RECORD_SCHEMA_VERSION` (`record.py`) names this shape: the fields, native-id forms and content_hash
+rule. Change any of them and bump it; every snapshot manifest records it.
+
 ## content_hash
 `sha256` of the canonical JSON of the **searchable and filterable** fields: `title`, `abstract`,
 `venue`, `year`, `track`, `status`. Spec 02's `FIELD` list also names `source`, but `source:` is a Scholar

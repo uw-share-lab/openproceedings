@@ -30,17 +30,20 @@ questions 1).
 - Take `fetched_at` from the cache entry, **not** the build clock. Take no values from the environment
   (hostname, cwd, locale).
 - `snapshot_hash = sha256(records.jsonl bytes)`, and `<shorthash>` is a fixed-length prefix of it. The
-  same cache gives the same bytes and the same hash. `backend/tests/unit/ingest/test_snapshot_determinism.py`
+  same cache gives the same bytes and the same hash. `backend/tests/unit/ingest/test_snapshot.py`
   builds twice from fixtures and compares the bytes.
 
 ## manifest.json
-As built (`backend/src/openproceedings/ingest/snapshot.py`, `render`): `snapshot_hash`; `crawl_date` (the
-newest claim's fetch date, which also names the directory); `built_at` (the only build-time value);
-`record_count`; `counts` nested venue → year → track → status; `abstract_missing` and `unknown_track`
-per venue → year; `merges` and `conflicts` (a `total` plus a count per rule / resolution kind); and
-`sources` — for RIS, one `ImportReport.to_manifest()` per cached file (both inputs' sha256, the
-scholarmend version, read / imported / skipped by reason, abstract_missing, unknown_track,
-status_overrides, track × status). The crawlers add their own source entries (crawl window, API host
+As built (`backend/src/openproceedings/ingest/snapshot.py`, `render`): `format_version`,
+`record_schema_version` (`record.py`), `tokenizer_version` (dedup's title keys use it) and
+`openproceedings_version`; `snapshot_hash`; `crawl_date` (the newest claim's fetch date, which also names
+the directory) and `crawl_window` (the oldest and newest fetch times); `built_at` (the only build-time
+value); `record_count`; `counts` nested venue → year → track → status; `abstract_missing` and
+`unknown_track` per venue → year; `merges` and `conflicts` (a `total` plus a count per rule /
+resolution kind); `files` (the sha256 of `merges.csv` and `conflicts.csv`, which `snapshot_hash` doesn't
+cover); and `sources` — for RIS, one `ImportReport.to_manifest()` per cached file (both inputs' sha256,
+the installed scholarmend `parser_version`, read / imported / skipped by reason, abstract_missing,
+unknown_track, status_overrides, track × status). The crawlers add their own source entries (crawl window, API host
 and version, page counts) in M4. The manifest may hold build times; `records.jsonl` may not. `/coverage`
 (spec 04) and `coverage-auditor` read these counts directly.
 
@@ -50,10 +53,16 @@ and version, page counts) in M4. The manifest may hold build times; `records.jso
 a no-op; different files under a cached name are refused (a snapshot may already cite them).
 
 ## Immutability
-- Build into a temporary directory next to the target and `os.replace` it into place. A crash never
-  leaves a half snapshot under the final name.
-- If the target already exists, **refuse**. If a snapshot with the same `snapshot_hash` already exists,
-  report it and exit 0 with no rewrite.
+- Build into a `.tmp-` directory next to the target, fsync the files and the directory, rename it into
+  place, then make it read-only (files 0444, directory 0555: a read-only directory can't be renamed). A
+  crash never leaves a half snapshot under the final name; the next build sweeps `.tmp-` leftovers, and
+  a hidden or `.tmp-` cache entry is never read as a source. The cache (`op ingest ris`) is written the
+  same way, all inputs or none, as the exact bytes that were checked.
+- If the target exists and its `records.jsonl` re-hashes to this snapshot's hash (never trusting the
+  manifest), report it and exit 0 with no rewrite (`created: false`); otherwise **refuse**. A target that
+  appears while building is judged the same way.
+- Reading a snapshot (`load_records`, used by `diff`) requires a manifest whose `snapshot_hash` matches
+  `records.jsonl`, unique ids and valid records; errors name the line and the error kind, never text.
 - `.claude/hooks/protect-data-dir.sh` blocks Write/Edit under `data/snapshots/` and `data/indexes/`,
   blocks `rm`/`mv`/`truncate`/`sed -i` there, and blocks `git add -f data/`. A block is correct
   behaviour, not an obstacle. Build a new snapshot instead.
@@ -64,7 +73,8 @@ a no-op; different files under a cached name are refused (a snapshot may already
 - `op [--data-dir data] snapshot build [--from <cache>] [--out <snapshots>]` imports all cached sources,
   then dedup → write. It never fetches, so it works offline. It prints `{path, snapshot_hash, created}`;
   `created: false` means a snapshot with that hash already existed and nothing was written.
-- `op snapshot diff <a> <b>` prints (JSON) the ids **added**, **removed** and **changed** (where `content_hash`
+- `op snapshot diff <a> <b>` prints (JSON) the ids **added**, **removed**, **rekeyed** (the same native
+  id under a new venue or year, with the fields that differ) and **changed** (where `content_hash`
   differs, with the changed fields named), plus separate counts of **display-only** changes (`authors`,
   `urls`, `keywords`, `presentation` or `venue_id_raw` differ but the hash doesn't) and provenance-only
   changes. Every

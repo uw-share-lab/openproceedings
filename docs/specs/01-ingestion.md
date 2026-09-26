@@ -93,8 +93,9 @@ op snapshot diff <a> <b>                # added / removed / changed records
 ```
 
 As built (task-022): `ingest ris`, `snapshot build` and `snapshot diff`; the crawler sources are stubs
-naming task-050/052. Every command takes `--data-dir` (default `./data`, gitignored); results go to
-stdout as JSON, a refusal exits 1 with its reason.
+naming task-050/052. Every command takes `--data-dir` (default `$OP_DATA_DIR`, else the repository's
+`data/`, gitignored); results go to stdout as JSON, a refusal exits 1 with a one-line reason that never
+quotes record text.
 
 ## Error handling
 

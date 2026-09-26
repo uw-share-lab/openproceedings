@@ -63,7 +63,7 @@ class ImportReport:
     file: str
     mended_sha256: str
     resolved_sha256: str
-    scholarmend_version: str  # the installed parser's; resolved.json doesn't record its producer's
+    parser_version: str  # the installed scholarmend parser's; resolved.json doesn't record its producer's
     read: int
     imported: int
     skipped: Mapping[str, int]  # reason → count, exactly the reasons in SKIP_REASONS (read-only)
@@ -290,7 +290,7 @@ def import_ris(mended: Path, resolved: Path | None = None) -> tuple[list[PaperRe
         file=name,
         mended_sha256=hashlib.sha256(mended.read_bytes()).hexdigest(),
         resolved_sha256=hashlib.sha256(resolved_bytes).hexdigest(),
-        scholarmend_version=version("scholarmend"),
+        parser_version=version("scholarmend"),
         read=len(ris),
         imported=len(records),
         skipped=dict(skipped),
