@@ -1,10 +1,10 @@
 ---
 id: TASK-023
 title: 'Tantivy schema, whitespace analyzer and index build'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 19:21'
+updated_date: '2026-09-26 19:22'
 labels:
   - engine
 milestone: m-2
@@ -37,3 +37,9 @@ Review round (2026-09-26): record is a stored bytes field (a JSON field was inde
 
 Verification round (2026-09-26): corrected numbers (verifier, 81k full records: 38.8 s, 140 MB index, 510 MB builder peak / 682 MB with workers, growing with the corpus; the earlier 187 MB / 45 MB / 355 MB figures were wrong or from a thinner bench); iter_records is one pass (hash as read, refuse at end); verify_index follows the current symlink; an over-long pmlr id refuses the build (reachable after all); record stored as compact JSON; retire hints on every broken-index path; rows for every surviving mutant.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Tantivy index (engine/index.py, storage.py, op index build): spec 03 schema with a never-indexed stored record; exact_v1 whitespace analyzer fed normalize() output, per-field parity checked and over-long tokens/ids refused (Tantivy's silent 65,530-byte drop, measured); index_version over canonical JSON; streamed, parallel, deterministic build; read-only hashed files re-verified (including via the current symlink). Verified: 45 tests, two review rounds with mutation passes, a real-corpus build (1805 docs, counts equal the token contract), and an 81k bench within budget (38.8 s, 140 MB).
+<!-- SECTION:FINAL_SUMMARY:END -->
