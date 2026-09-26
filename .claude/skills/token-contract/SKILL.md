@@ -8,16 +8,17 @@ description: The exact normalization contract shared by the query parser and the
 ## The pipeline — in this order, and nothing else
 1. Unicode **NFKC** (`ﬁ` → `fi`, full-width → ASCII forms).
 2. **Case-fold** (`str.casefold()`, not `lower()` — `ß` → `ss`).
-3. **Mark fold**: NFD, drop combining marks (combining class ≠ 0) whose base letter is Latin, Greek,
-   Cyrillic, Hebrew or Arabic (`naïve` → `naive`, `שָׁלוֹם` → `שלום`); **keep** marks that spell a different
-   word (Thai tones, kana voicing, Indic signs); drop a stray mark with no base; then NFC to recompose.
-   The base letter carries across raw characters, so a decomposed `e` + U+0301 folds like `é`.
-4. **LaTeX** (by classifying characters, so offsets survive): `\cmd{X}` → `X`; a bare `\cmd` outside
-   math is dropped; inside math `$…$` a command name is a word (`$\epsilon$` → `epsilon`); `\%` `\&` `\$`
-   `\\` are separators; neither `\$` nor a `$` followed by a digit (currency) opens math.
-5. **Split** on every char that is not a Unicode letter, digit or non-combining mark. Positions are
-   consecutive across the split (`vision-language` → `vision`@0 `language`@1). All Unicode format characters
-   (category Cf: soft hyphen, ZWSP, ZWJ, ZWNJ, direction marks, BOM) **join**: `bench\u00admark` → `benchmark`.
+3. **Mark fold**: NFD, drop combining marks (combining class ≠ 0) whose base's Unicode NAME begins with
+   LATIN, GREEK, CYRILLIC, HEBREW, ARABIC or EXTENDED ARABIC, or is an ASCII digit; **keep** marks that spell a distinct letter (Cyrillic breve,
+   Arabic hamza, Thai tones, kana voicing, Indic signs); drop a stray mark with no base and any mark-only run; then NFC.
+4. **LaTeX** (a three-state mask — keep / separate / join — so offsets survive): `\cmd{X}` → `X`; a bare
+   `\cmd` outside math is dropped; math is `$…$` (Pandoc rule: opener followed by a non-space, closer
+   preceded by a non-space and not followed by a digit), `$$…$$`, `\(…\)`, `\[…\]`, and inside it a
+   command name is a word; accent macros (`\"o`, `\H{o}`) and `\-` join the word; `\%` `\&` `\$` `\\`
+   separate.
+5. **Split** on every char that is not a Unicode letter, digit or non-combining mark. Invisible characters
+   **join** (Cf, variation selectors, enclosing marks, CGJ); the invisible math operators U+2061–2064
+   **separate**.
 
 Known limits (CJK runs are one token; Hebrew/Arabic points fold) are listed in spec 02 §Known limits.
 
@@ -27,8 +28,9 @@ splitting beyond punctuation, number normalization (`GPT-4` stays `gpt` `4`).
 ## Single source of truth
 `backend/src/openproceedings/query/normalize.py` is the only implementation: `tokenize(text) ->
 list[Token]` (each with the raw half-open code-point span it came from, for highlights) and
-`normalize(text) -> list[str]`. It works character by character; a Hypothesis property pins it equal to
-the simple whole-string definition, including an adversarial Unicode alphabet, at 50k examples nightly. The index is fed its output joined by spaces, and the Tantivy analyzer only splits on
+`normalize(text) -> list[str]`. It works character by character; a Hypothesis property pins it equal to an
+independent whole-string definition (block ranges, not Unicode names), including an adversarial Unicode
+alphabet, and the nightly workflow checks every code point in 8 contexts (`OP_EXHAUSTIVE=1`). The index is fed its output joined by spaces, and the Tantivy analyzer only splits on
 whitespace + lowercases (a no-op on normalized input). Any second implementation — in the frontend
 highlighter, a script, a test helper — is a bug; import or call the API instead.
 

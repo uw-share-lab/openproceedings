@@ -154,6 +154,41 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ("costs $5 and \\textbf{x}", ["costs", "5", "and", "x"]),
     ("from $10 to $20", ["from", "10", "to", "20"]),
     ("$x$ costs $5", ["x", "costs", "5"]),
+    # --- inline math per Pandoc's tex_math_dollars rule (task-010 review round 2)
+    ("a $2$-approximation with $\\epsilon$-DP", ["a", "2", "approximation", "with", "epsilon", "dp"]),
+    ("$1$ and $\\alpha$", ["1", "and", "alpha"]),
+    ("$10^{-3}$ lr and \\textsc{Adam}", ["10", "3", "lr", "and", "adam"]),
+    ("US$ 5 and \\emph{x}", ["us", "5", "and", "x"]),
+    ("cost \\$5 via \\textbf{x}", ["cost", "5", "via", "x"]),
+    ("$a\\$b$", ["a", "b"]),
+    ("$$\\alpha$$", ["alpha"]),
+    ("\\(\\epsilon\\)-DP", ["epsilon", "dp"]),
+    ("\\[\\alpha\\]", ["alpha"]),
+    ("＄\\alpha＄", []),  # full-width dollar is not a math delimiter (LaTeX never sees it)
+    ("$x$\\emph{w}$ end", ["x", "w", "end"]),  # a closing $ must never re-open math
+    ("$$x$$\\emph{w}$$", ["x", "w"]),  # nor a closing $$
+    # --- LaTeX accent macros and the discretionary hyphen join the word
+    ('G\\"odel', ["godel"]),
+    ('G\\"{o}del', ["godel"]),
+    ("Erd\\H{o}s", ["erdos"]),
+    ("Poincar\\'e", ["poincare"]),
+    ("\\c{c}a", ["ca"]),
+    ("bench\\-mark", ["benchmark"]),
+    ("\\é x", ["e", "x"]),
+    ("\\Huge text", ["text"]),  # a multi-letter command is not an accent macro
+    # --- invisible characters never become or split tokens
+    ("I ❤️ AI", ["i", "ai"]),
+    ("trust️", ["trust"]),
+    ("葛\U000e0100", ["葛"]),
+    ("1️⃣", ["1"]),
+    ("a͏b", ["ab"]),  # combining grapheme joiner
+    ("a⁣b", ["a", "b"]),  # invisible separator separates
+    ("x⁢y", ["x", "y"]),  # invisible times separates
+    # --- marks that spell a different letter are kept even in folding scripts
+    ("мой мои", ["мой", "мои"]),  # Cyrillic short i (breve) is its own letter
+    ("سؤال", ["سؤال"]),  # Arabic hamza on a seat is spelling, not a vowel point
+    ("أسئلة", ["أسئلة"]),
+    ("ป\\%́x", ["ป", "x"]),  # a LaTeX separator resets the base: the mark is stray, dropped
     # --- emoji and symbols are separators ---------------------------------------------------------------
     ("trust 🤖 benchmark", ["trust", "benchmark"]),
     ("trust→benchmark", ["trust", "benchmark"]),

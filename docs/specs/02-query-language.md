@@ -15,18 +15,28 @@ The query side and the index side run the **same** normalization function (`norm
 
 1. Unicode NFKC, then case-fold (`LLM` ≡ `llm`).
 2. Fold marks that only decorate a word: NFD, drop combining marks (canonical combining class ≠ 0)
-   whose base letter is Latin, Greek, Cyrillic, Hebrew or Arabic, then recompose with NFC. So
-   `naïve` ≡ `naive`, `ά` ≡ `α`, and Hebrew and Arabic vowel points (optional in normal writing) fold:
-   `שָׁלוֹם` ≡ `שלום`. Marks that spell a *different word* are kept: Thai tone marks (`ป่า` "forest" ≠ `ปา`
-   "throw"), kana voicing (`が` ≠ `か`), and Indic viramas and vowel signs. A stray mark with no base letter
-   is dropped.
-3. LaTeX: `\cmd{X}` → `X`, and a bare `\cmd` outside math is dropped. Inside math `$…$`, command names
-   are words (`$\epsilon$-DP` → `epsilon dp`). `\%`, `\&`, `\$` and `\\` are separators. Neither `\$`
-   nor a `$` followed by a digit (currency, `$5`) opens math.
+   whose base character's Unicode name begins with LATIN, GREEK, CYRILLIC, HEBREW, ARABIC or EXTENDED
+   ARABIC, or which is an ASCII digit, then recompose with NFC. (By name, so Coptic, IPA and phonetic letters
+   follow their script: IPA `ɓ` is Latin and folds; Coptic `ϣ` does not.) So `naïve` ≡ `naive`, `ά` ≡ `α`, and Hebrew and Arabic vowel points fold (`שָׁלוֹם` ≡ `שלום`). Marks
+   that spell a *different letter* are kept: Cyrillic breve (`мой` ≠ `мои`), Arabic hamza (`سؤال`), Thai
+   tone marks (`ป่า` "forest" ≠ `ปา` "throw"), kana voicing (`が` ≠ `か`), and Indic viramas and vowel
+   signs. A stray mark with no base letter is dropped, and a run made only of marks (a lone vowel sign) is not a
+   token.
+3. LaTeX, by classifying characters (so raw offsets survive):
+   - `\cmd{X}` → `X`; a bare `\cmd` outside math is dropped.
+   - Math regions are `$…$` (Pandoc's rule: the opening `$` is followed by a non-space, the closing `$` is
+     preceded by a non-space and not followed by a digit, so `$5` and `US$ 5` are currency), `$$…$$`,
+     `\(…\)` and `\[…\]`. Inside math a command name is a word (`$\epsilon$-DP` → `epsilon dp`).
+   - `\%`, `\&`, `\$`, `\\` are separators; `\$` never opens math.
+   - Accent macros join the word: `G\"odel`, `G\"{o}del`, `Erd\H{o}s` → `godel`, `erdos`. `\-` (the
+     discretionary hyphen) joins: `bench\-mark` → `benchmark`.
+   - Full-width `＄` and `＼` are ordinary text, not LaTeX.
 4. Split on anything that is not a letter, digit or (non-combining) mark. `vision-language` → `vision`
-   `language` at consecutive positions. `GPT-4o` → `gpt` `4o`. `model's` → `model` `s`. All Unicode format
-   characters (category Cf: soft hyphen, zero-width space/joiner/non-joiner, direction marks, BOM) join
-   rather than split: `bench\u00admark` → `benchmark`.
+   `language` at consecutive positions. `GPT-4o` → `gpt` `4o`. `model's` → `model` `s`. Invisible
+   characters **join** rather than split: all format characters (Cf: soft hyphen, zero-width
+   space/joiner/non-joiner, direction marks, BOM), variation selectors (`❤️`, `葛󠄀`), enclosing marks
+   (keycaps: `1️⃣` → `1`) and the combining grapheme joiner. The invisible math operators U+2061–2064
+   (function application, times, separator, plus) **separate**.
 5. **Nothing else.** No stemming, no lemmatization, no stopword removal, no synonyms, no spelling
    correction.
 

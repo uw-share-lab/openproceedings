@@ -11,11 +11,44 @@ from openproceedings.query.normalize import TOKENIZER_VERSION, Token, normalize,
 PLAIN = st.text(alphabet=st.characters(blacklist_characters="\\$", blacklist_categories=("Cs",)), max_size=60)
 
 
-FOLDING_SCRIPTS = ("LATIN", "GREEK", "CYRILLIC", "HEBREW", "ARABIC")
+# The per-script mark rule, computed a different way from the implementation: the implementation checks a
+# base letter's Unicode name at runtime; the reference precomputes the full set of folding bases once, by
+# scanning the whole Unicode database. (Spec 02: a mark folds when its base's name begins with LATIN, GREEK,
+# CYRILLIC, HEBREW, ARABIC or EXTENDED ARABIC, or the base is an ASCII digit named DIGIT …)
+def _names_starting(*prefixes: str) -> frozenset[str]:
+    out = set()
+    for cp in range(0x110000):
+        if 0xD800 <= cp <= 0xDFFF:
+            continue
+        if unicodedata.name(chr(cp), "").startswith(prefixes):
+            out.add(chr(cp))
+    return frozenset(out)
 
 
-def _folds(base: str | None) -> bool:
-    return base is None or unicodedata.name(base, "").startswith(FOLDING_SCRIPTS)
+FOLDING_BASES = _names_starting("LATIN", "GREEK", "CYRILLIC", "HEBREW", "ARABIC", "EXTENDED ARABIC", "DIGIT")
+CYRILLIC_BASES = _names_starting("CYRILLIC")
+ARABIC_BASES = _names_starting("ARABIC", "EXTENDED ARABIC")
+KEPT_ON = {"\u0306": CYRILLIC_BASES, "\u0654": ARABIC_BASES, "\u0655": ARABIC_BASES}
+INVISIBLE_SEPARATORS = {"\u2061", "\u2062", "\u2063", "\u2064"}
+
+
+def _block_folds(base: str | None, mark: str) -> bool:
+    if base is None:
+        return True
+    if mark in KEPT_ON and base in KEPT_ON[mark]:
+        return False
+    return base in FOLDING_BASES
+
+
+def _invisible(c: str) -> bool:
+    cp = ord(c)
+    return (
+        unicodedata.category(c) in ("Cf", "Me")
+        or 0xFE00 <= cp <= 0xFE0F
+        or 0xE0100 <= cp <= 0xE01EF
+        or 0x180B <= cp <= 0x180F
+        or cp == 0x034F
+    )
 
 
 def reference(text: str) -> list[str]:
@@ -23,11 +56,15 @@ def reference(text: str) -> list[str]:
     s = unicodedata.normalize("NFD", unicodedata.normalize("NFKC", text).casefold())
     kept, base = [], None
     for c in s:
-        if unicodedata.category(c) == "Cf":
-            continue  # invisible format chars join
+        if c in INVISIBLE_SEPARATORS:
+            kept.append(" ")
+            base = None
+            continue
+        if _invisible(c):
+            continue  # format chars, variation selectors, enclosing marks, CGJ: join
         if unicodedata.combining(c):
-            if not _folds(base):
-                kept.append(c)  # a mark that spells the word (Thai tone, kana voicing, Indic sign)
+            if not _block_folds(base, c):
+                kept.append(c)
             continue
         kept.append(c)
         base = c if (c.isalnum() or unicodedata.category(c).startswith("M")) else None
@@ -41,7 +78,7 @@ def reference(text: str) -> list[str]:
             cur = []
     if cur:
         words.append("".join(cur))
-    return words
+    return [w for w in words if not all(unicodedata.category(ch).startswith("M") for ch in w)]
 
 
 @given(PLAIN)
