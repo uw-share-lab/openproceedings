@@ -47,6 +47,12 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   on a Done task left in `backlog/tasks/`.
 - `docs-reviewer` runs on every diff.
 
+## Tests never call real APIs (rule, 2026-09-25)
+No test, fixture, CI job or review script reaches OpenReview, Semantic Scholar, PMLR, Scholar or any other
+live service. `backend/tests/conftest.py` refuses every non-loopback connection and DNS lookup for the whole
+session (`NetworkBlockedError`, no opt-out). Crawler and client code is tested against recorded HTTP
+fixtures under `backend/tests/fixtures/`; recording them is a separate, manual `op ingest` run, never a test.
+
 ## Code quality
 - **Autolint** (`.claude/skills/autolint/SKILL.md`): `autofix.sh` formats and fixes each file as it's edited
   (ruff, prettier, eslint, shellcheck).

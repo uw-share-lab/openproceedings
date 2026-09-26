@@ -28,7 +28,10 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
   fixture `index_version`. Verify at implementation time that abstract licensing (00 open question 1)
   allows committing the sample; if not, it is built in CI from a pinned cache.
 - Recorded HTTP fixtures (VCR-style) for each crawler source and year schema (01 §Testing). Tests never
-  hit the network.
+  hit the network, and it is **enforced**: `backend/tests/conftest.py` makes every non-loopback socket
+  connection and DNS lookup raise `NetworkBlockedError` for the whole session (`test_no_network.py`). A test
+  that needs a response gets a recorded fixture; there is no marker to opt out. Recording fixtures is a
+  manual `op ingest` run by a person, never part of `make test` or CI.
 
 ## Rules
 1. **TDD.** Write the failing test first, watch it fail for the right reason, then implement. A bug fix
@@ -39,7 +42,7 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 3. **Never delete a golden row.** Add one for every bug ever found. Changing an expected value needs the
    reason in the commit message and routes to `exactness-guardian`.
 4. **Sets, not samples.** Assert full ID sets and exact `total`/`excluded`, not "first hit is X".
-5. **Determinism.** No wall clock, randomness or network in tests; Hypothesis runs under a named profile
+5. **Determinism.** No wall clock, randomness or network in tests (network is blocked by conftest); Hypothesis runs under a named profile
    (`property-testing`).
 6. **Claim only what you ran.** Report the command and its summary line (`412 passed in 9.1s`).
 
