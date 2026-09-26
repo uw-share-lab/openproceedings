@@ -4,9 +4,11 @@ title: 'Record decision: per-field source precedence for merged records'
 status: To Do
 assignee: []
 created_date: '2026-09-25 22:06'
+updated_date: '2026-09-26 01:07'
 labels:
   - ingest
   - decision
+milestone: m-2
 dependencies: []
 references:
   - .claude/skills/dedup-rules/SKILL.md

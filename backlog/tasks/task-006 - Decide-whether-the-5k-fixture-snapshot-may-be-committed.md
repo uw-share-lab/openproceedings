@@ -4,9 +4,11 @@ title: Decide whether the 5k fixture snapshot may be committed
 status: To Do
 assignee: []
 created_date: '2026-09-25 22:06'
+updated_date: '2026-09-26 01:07'
 labels:
   - eval
   - decision
+milestone: m-2
 dependencies: []
 references:
   - docs/specs/00-overview.md

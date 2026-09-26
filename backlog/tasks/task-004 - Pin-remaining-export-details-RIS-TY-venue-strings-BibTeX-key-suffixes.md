@@ -4,8 +4,10 @@ title: 'Pin remaining export details (RIS TY, venue strings, BibTeX key suffixes
 status: To Do
 assignee: []
 created_date: '2026-09-25 22:06'
+updated_date: '2026-09-26 01:07'
 labels:
   - api
+milestone: m-3
 dependencies: []
 references:
   - .claude/skills/ris-format/SKILL.md

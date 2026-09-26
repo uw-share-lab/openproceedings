@@ -4,8 +4,10 @@ title: Verify unconfirmed OpenReview and proceedings facts against live data (M4
 status: To Do
 assignee: []
 created_date: '2026-09-25 22:06'
+updated_date: '2026-09-26 01:07'
 labels:
   - ingest
+milestone: m-4
 dependencies: []
 references:
   - .claude/skills/openreview-venueids/SKILL.md

@@ -4,9 +4,11 @@ title: Commit the Trust-Evals search strings as parser fixtures
 status: To Do
 assignee: []
 created_date: '2026-09-25 22:06'
+updated_date: '2026-09-26 01:07'
 labels:
   - query
   - eval
+milestone: m-1
 dependencies: []
 references:
   - .claude/skills/scholar-syntax-compat/SKILL.md

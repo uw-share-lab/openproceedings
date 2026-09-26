@@ -73,3 +73,9 @@ severity, dispositions) · **Learnings** (entry path + key lesson). No attributi
 - Stacked branches: base the PR on `dev` anyway; the diff routing uses `origin/dev...HEAD`.
 - A hook block is information, not an obstacle. Read its stderr; never work around it with `--no-verify`
   or by calling git through another wrapper.
+
+## Merge method
+Merge PRs into `dev` with a **merge commit** (`gh pr merge <n> --merge --delete-branch`), not a squash:
+review dispositions and learnings entries cite branch commit SHAs, and a squash would leave those references
+pointing at commits that aren't on `dev`. To change a PR body, use `gh api -X PATCH repos/{owner}/{repo}/pulls/<n>`;
+`gh pr edit` fails here on the retired Projects (classic) API.

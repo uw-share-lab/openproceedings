@@ -4,10 +4,11 @@ title: Decide open query-language semantics before M1
 status: To Do
 assignee: []
 created_date: '2026-09-25 22:06'
-updated_date: '2026-09-25 23:20'
+updated_date: '2026-09-26 01:07'
 labels:
   - query
   - decision
+milestone: m-1
 dependencies: []
 references:
   - docs/specs/02-query-language.md
