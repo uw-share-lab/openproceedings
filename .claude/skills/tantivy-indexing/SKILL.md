@@ -40,7 +40,8 @@ Positions are mandatory on `title`/`abstract` (phrases, NEAR, highlights). Any c
   **65,530 UTF-8 bytes** (measured). `build_index` refuses such a record (`MAX_TOKEN_BYTES`) instead of
   losing it; the build also checks every field's tokens through `exact_v1` against `normalize()`.
 - Tokenizer-parity test: for every record, the tokens Tantivy indexed (read back via the term/position API)
-  equal `normalize()` output. Run it over the 5k fixture in CI and the full corpus nightly. Zero diffs.
+  equal `normalize()` output. Run it over the 5k fixture in CI, and over the real corpus locally with
+  `op index parity` before promoting an index (decision-004: real text never enters CI). Zero diffs.
 
 ## Build procedure (`op index build --snapshot <path | name | snapshot_hash prefix>`)
 1. Load the immutable snapshot (`.claude/skills/snapshots/SKILL.md`). Refuse one whose content hash doesn't
@@ -77,8 +78,10 @@ Build in < 2 min, and an index under 500 MB on disk (spec 03), on the ~80k M4 co
 nightly). Measured 2026-09-26 on an 8-core laptop with 81k records made from the real corpus's text with
 every field filled: 38.8 s, a 140 MB index, peak memory 510 MB in the builder (682 MB with its workers),
 growing with the corpus (316 MB at 20k, 612 MB at 162k) as Tantivy's writer buffers segments (129.9 s
-before normalizing in parallel; 2 GB before streaming). The token-parity test that reads indexed terms
-back through the term/position API is task-029.
+before normalizing in parallel; 2 GB before streaming). Tokenizer parity is read back from the built index
+(task-029, `engine/parity.py`, `op index parity`): stored fields through `exact_v1`, and every term's
+document frequency from the term dictionary (`terms_with_prefix(field, "")` lists the whole dictionary),
+against `normalize()`. Real corpus: 1,805 records, 17,780 terms, 0 differences, in 3 s.
 
 ## Gotchas
 - Stored `title`/`abstract` hold normalized text. Keep the original display text in `record` (or the

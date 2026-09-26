@@ -17,7 +17,7 @@ openproceedings/
 │   ├── src/openproceedings/
 │   │   ├── ingest/              # 01: sources/, classify.py, dedup.py, snapshot.py, ris.py
 │   │   ├── query/               # 02: normalize.py, lexer.py, parser.py, ast.py, canonical.py, defaults.py, compat.py
-│   │   ├── engine/              # 03: protocol.py, reference.py, index.py, compile.py, tantivy_engine.py, exclusions.py, highlight.py (built)
+│   │   ├── engine/              # 03: protocol.py, reference.py, index.py, compile.py, tantivy_engine.py, exclusions.py, highlight.py, parity.py (built)
 │   │   ├── semantic/            # 06 (phase 2)
 │   │   ├── api/                 # 04: FastAPI app, routers, exporters/, records.py
 │   │   ├── eval/                # 07 report generators
@@ -43,7 +43,7 @@ into one `.venv` from one `uv.lock`. New Python packages join by adding their di
 |---|---|
 | `op ingest openreview\|proceedings\|ris … [--offline]` | fetch sources (`--offline`: cache only, no network) |
 | `op snapshot build` · `op snapshot diff <a> <b>` | build an immutable snapshot, or compare two |
-| `op index build [--snapshot <id>]` · `op index retire <index_version>` | build an immutable index; retire an old one (refuses if any search record pins it) |
+| `op index build [--snapshot <id>]` · `op index parity --index <v> [--snapshot <id>]` · `op index retire <index_version>` | build an immutable index; check it holds `normalize()`'s tokens for its snapshot (local, over the real corpus); retire an old one (refuses if any search record pins it) |
 | `op search "<q>" [--mode scholar] (--explain \| --ids) [--index <dir\|version>]` | as built (task-024): the compiled query, or the sorted id set, from the Tantivy index; ranked output and `--engine reference` (the oracle) arrive with task-030 |
 | `op export "<q>" --format ris\|csv\|bibtex\|jsonl [--index-version <v>]` | export the full matched set |
 | `op record save "<q>" [--mode scholar]` · `op record replay <id>` | freeze a search as a search record (the same function as `POST /records`); replay one and print its status, `reproduced` / `drifted` / `mismatch` (the same function as `GET /records/{id}`) |

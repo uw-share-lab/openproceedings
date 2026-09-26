@@ -96,6 +96,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ib.add_argument("--out", type=Path, help="indexes directory (default <data-dir>/indexes)")
     ib.set_defaults(run=_index_build)
+    ip = index_actions.add_parser(
+        "parity", help="check an index holds normalize()'s tokens for every record of its snapshot (local)"
+    )
+    ip.add_argument("--index", required=True, help="an index name under <data-dir>/indexes, or its directory")
+    ip.add_argument("--snapshot", help="its snapshot (default: the one its manifest names)")
+    ip.set_defaults(run=_index_parity)
     _stub(index_actions.add_parser("retire", help="planned in task-065"), "index retire", "task-065")
 
     search = sub.add_parser("search", help="run a query against an index: --explain, --ids (spec 02/03)")
@@ -165,6 +171,21 @@ def _index_build(ns: argparse.Namespace) -> int:
     snapshot = resolve_snapshot(ns.snapshot, ns.data_dir / "snapshots")
     result = build_index(snapshot, ns.out or ns.data_dir / "indexes")
     _print({"path": str(result.path), "index_version": result.index_version, "created": result.created})
+    return 0
+
+
+def _index_parity(ns: argparse.Namespace) -> int:
+    from openproceedings.engine.index import IndexBuildError
+    from openproceedings.engine.parity import check_parity
+
+    indexes = ns.data_dir / "indexes"
+    path = indexes / ns.index if (indexes / ns.index).exists() else Path(ns.index)
+    if not path.is_dir():
+        raise IndexBuildError(f"no index at {path}")
+    manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
+    snapshot = resolve_snapshot(ns.snapshot or manifest["snapshot"], ns.data_dir / "snapshots")
+    report = check_parity(path, snapshot)
+    _print({"records": report.records, "terms": report.terms, "differences": 0})
     return 0
 
 
