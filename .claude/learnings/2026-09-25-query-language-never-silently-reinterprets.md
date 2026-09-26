@@ -89,3 +89,19 @@ form whose hash identifies a query.
   words count toward a wildcard's stem, canonical form prints `"gpt 4*"`, as decision-001 first wrote it.
 - Commit 62dd486 in the first addendum was amended to 15e2294 before any push; 62dd486 no longer exists.
 - The 200-record golden set has 44 queries, not 40, after the task-016 review added boundary rows.
+
+## Addendum 2026-09-26 (M1 review gate: 6 reviewers, 2 verification rounds)
+- **`git add -A` sweeps in what reviewers leave behind.** A reviewer's `.coverage` (absolute local paths)
+  landed in a commit on a public repo's branch. It was caught before any push and removed with a
+  `filter-branch` over the unpushed range; coverage output is now gitignored. Check `git status --short`
+  before every commit during a review, and keep reviewers' artifacts in the scratchpad.
+- **"Linear" needs a timing test for every input shape, not one.** Parsing was declared linear three times:
+  plain words, then `$` words (O(n³), 11 s), then space-free runs, then `\(`-heavy runs (7 s) were each
+  found separately. The timing test now covers every shape found (`w `, `$x `, `$a b `, `a(b)`, `a|`,
+  `)a`, `\((`). Build adversarial inputs from each loop's inner scan, not from typical queries.
+- **A fast path needs an oracle.** Each optimisation (precomputed `$` closers, the no-math fast path,
+  per-run caching) was fuzzed against the code it replaced (60k–80k strings, 0 differences), and the
+  first is also held by a property test against `normalize.first_math_end`.
+- **Reviewers reading the live tree see mid-edit states.** Three "failures" in a reviewer's 50k run were
+  golden rows between edits. Point reviewers at `git archive <sha>`, and run the final 50k on a commit
+  the tree won't move from.
