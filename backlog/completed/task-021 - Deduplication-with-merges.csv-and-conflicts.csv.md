@@ -1,10 +1,10 @@
 ---
 id: TASK-021
 title: Deduplication with merges.csv and conflicts.csv
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 16:52'
+updated_date: '2026-09-26 17:12'
 labels:
   - ingest
 milestone: m-2
@@ -34,3 +34,9 @@ Implemented in backend/src/openproceedings/ingest/dedup.py. Step 1 merges identi
 
 Verification round (2026-09-26): proceedings-id records must name themselves in a URL claim, so merged records keep absorbed listing ids (fixes a second-run over-merge); a listing's own unknown track (PMLR v235/v267) no longer blocks ICML merges; NeurIPS URLs up to 2021 and upper-case hex parse; ties broken by exact JSON; not-merged rows judged on output records, so reruns repeat them.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Dedup (ingest/dedup.py): identical ids merge first, then (venue, year, token-contract title key) across disjoint sources only; never two forum ids, two proceedings papers, or an unhosted track into a listing; fields re-resolved from claims by decision-005's precedence table; merges.csv/conflicts.csv rows. Verified: 36 unit tests, Hypothesis properties (idempotent, order-independent, conservation, never folds two papers) at the ci and nightly profiles (50k examples), mutation passes after two review rounds, and the real corpus (1805 records, no merges or conflicts). Follow-up: task-072 (OpenReview-accepted but unlisted).
+<!-- SECTION:FINAL_SUMMARY:END -->
