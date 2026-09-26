@@ -28,8 +28,11 @@ however large the speed-up. Every optimisation you suggest has to keep the diffe
 1. Find the benchmark suite (`grep -rl "benchmark" backend/tests`). Make sure a benchmark exists for each
    path the diff touches. Add missing ones, with a fixed query set: the Trust-Evals strings, a 200-term
    wildcard, a multi-token NEAR, a deep nested NOT.
-2. Run `uv run pytest backend/tests -m benchmark --benchmark-compare` (verify the marker and flags in
-   `pyproject.toml`) on the branch and on `main`, on the same machine. Report medians and p95.
+2. Run `uv run pytest backend/tests/bench --benchmark-enable --benchmark-only --benchmark-save=base` on the
+   base, then `… --benchmark-compare --benchmark-compare-fail=median:20%` on the branch, on the same machine
+   (benchmarks are disabled in ordinary runs by pyproject's addopts; the `bench` workflow does exactly this).
+   Report medians and p95. For the ~80k corpus and the verified-clause cases, run
+   `uv run python -m tests.bench.report_80k` from `backend/` (it writes `docs/results/<date>-bench.md`).
 3. For a regression, profile it (`uv run python -m cProfile -o <scratch>/prof.out -m openproceedings.cli
    search "<q>" --ids`, or py-spy if installed). Name the function and the reason, e.g. the NEAR fallback
    verifying too many candidates, or the expansion scanning the vocabulary instead of streaming a prefix.
