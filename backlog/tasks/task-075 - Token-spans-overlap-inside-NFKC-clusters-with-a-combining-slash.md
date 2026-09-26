@@ -4,6 +4,7 @@ title: Token spans overlap inside NFKC clusters with a combining slash
 status: To Do
 assignee: []
 created_date: '2026-09-26 22:52'
+updated_date: '2026-09-26 22:52'
 labels:
   - tokenizer
 milestone: m-3
@@ -22,3 +23,9 @@ task-074 verification: a code point that folds to several pieces, clustered with
 - [ ] #1 No two token spans overlap except pieces of one code point that share its span exactly
 - [ ] #2 Tokens unchanged (exhaustive suite); the overlap property's alphabet gains ½, ⑴ and U+0338
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+ID note: backlog 1.53 reuses the ids of archived tasks, so this task shares task-075 with the archived 'Warm search over wildcard phrases within the 100 ms page budget at 80k' (not reproduced; see task-031's notes). References to task-075 after 2026-09-26 18:55 mean this task.
+<!-- SECTION:NOTES:END -->
