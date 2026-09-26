@@ -2,6 +2,8 @@
 # document's "Search Strings" section. Each `## name` line is followed by one query line. Trailing
 # whitespace from the document export is trimmed; everything else is verbatim, including the curly
 # quote in main-5-sources. main-7's "Most Updated: " label is dropped (it is not part of the query).
+# PRIMARY: main-7-most-updated is the review's main search string (confirmed by the review lead,
+# 2026-09-25); it is identical to main-6-sources. Its canonical form and hash are pinned separately.
 
 ## main-1
 ("large language model" OR LLM OR "foundation model" OR "generative AI" OR "vision-language model" OR VLM OR "multimodal model" OR "AI agent" OR "text-to-image model") AND (trust OR trustworthy OR trustworthiness OR "trustworthy AI") AND (benchmark OR dataset OR evaluation OR leaderboard OR "evaluation framework" OR "test suite")

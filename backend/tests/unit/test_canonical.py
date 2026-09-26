@@ -42,14 +42,14 @@ GOLDEN: list[tuple[str, str]] = [
     ("model$", "model$"),
     ('"large language model$"', '"large language model$"'),
     ('"trust* calibration"', '"trust* calibration"'),
-    # a short last stem is hyphen-joined to what precedes it, so the canonical string re-parses (decision-001)
-    ("gpt-4*", '"gpt-4*"'),
-    ("a-b-c*", '"a-b-c*"'),
-    ('"use gpt-4o*"', '"use gpt-4o*"'),
-    ('"x gpt-4* y"', '"x gpt-4* y"'),
+    # in a phrase the earlier words count toward a wildcard's stem, so `gpt-4*` prints as decision-001 wrote it
+    ("gpt-4*", '"gpt 4*"'),
+    ("a-b-c*", '"a b c*"'),
+    ('"use gpt-4o*"', '"use gpt 4o*"'),
+    ('"x gpt-4* y"', '"x gpt 4* y"'),
     ("title:(a OR b)", "(title:a OR title:b)"),
     ('abstract:"trust in AI"', 'abstract:"trust in ai"'),
-    ("title:gpt-4*", 'title:"gpt-4*"'),
+    ("title:gpt-4*", 'title:"gpt 4*"'),
     ("a NEAR/3 b", "(a NEAR/3 b)"),
     ("title:(a NEAR/3 b)", "(title:a NEAR/3 title:b)"),
     # filters: after the text, ordered venue, year, track, status, then others alphabetically; values sorted

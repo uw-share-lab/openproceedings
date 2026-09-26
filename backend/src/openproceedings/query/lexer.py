@@ -18,7 +18,8 @@ Lexical rules, in the order they are tried at the start of each lexeme:
   operators; `NEAR/n` (n ≤ 100) is proximity, and a bare `NEAR` between terms is PARSE_BAD_NEAR;
   `2020..2026` is a range; everything else is a WORD.
 - A WORD (or phrase part) ending in `*` or in a `$` outside math is a wildcard. Its stem must keep at
-  least 3 letters or digits after normalisation (decision-001), and the wildcard must directly follow a
+  least 3 letters or digits after normalisation, counting the words before it in a phrase (decision-001;
+  `"generative AI$"` is fine, as `generative-AI$` is), and the wildcard must directly follow a
   letter or digit (`vision-*` is PARSE_WILDCARD_DETACHED). A `*` or `$` anywhere else outside math is
   PARSE_WILDCARD_NOT_SUFFIX, except a `$` before a digit (currency, `US$5`).
 
@@ -159,9 +160,10 @@ class _Lexer:
         name = m.group(1).lower()
         if name not in FIELDS:
             valid = ", ".join(f"`{f}:`" for f in FIELDS)
+            hint = " (Scholar's `intitle:` is `title:` here)" if name in ("intitle", "allintitle") else ""
             self.error(
                 DiagnosticCode.FIELD_UNKNOWN,
-                f"`{m.group()}` is not a field — use one of {valid}, or quote the text to search for it.",
+                f"`{m.group()}` is not a field{hint} — use one of {valid}, or quote the text to search for it.",
                 i,
                 m.end(),
             )
@@ -182,7 +184,7 @@ class _Lexer:
                 n,
             )
         end = j + 1 if closed else n
-        parts = []
+        parts: list[Lexeme] = []
         k = i + 1
         while k < j:
             if q[k].isspace():
@@ -191,7 +193,8 @@ class _Lexer:
             m = k
             while m < j and not q[m].isspace():
                 m += 1
-            parts.append(self.word(k, m, in_phrase=True))
+            before = sum(len(t.text) for p in parts for t in tokenize(p.text))  # letters of earlier words
+            parts.append(self.word(k, m, in_phrase=True, before=before))
             k = m
         self.out.append(Lexeme(Kind.PHRASE, i, end, q[i:end], parts=tuple(parts), closed=closed))
         return end
@@ -235,8 +238,9 @@ class _Lexer:
             self.out.append(self.word(i, j, in_phrase=False))
         return j
 
-    def word(self, start: int, end: int, *, in_phrase: bool) -> Lexeme:
-        """A WORD over `q[start:end]`, with its wildcard split off and checked."""
+    def word(self, start: int, end: int, *, in_phrase: bool, before: int = 0) -> Lexeme:
+        """A WORD over `q[start:end]`, with its wildcard split off and checked. `before` is the number of
+        letters and digits of the phrase words before it, which count toward a wildcard's stem."""
         raw = self.q[start:end]
         regions = math_regions(raw)
         wild: list[int] = []  # offsets in `raw` of `*`/`$` that act as wildcards (outside math, not currency)
@@ -266,14 +270,14 @@ class _Lexer:
                 start + s + 1,
             )
         elif wildcard:
-            self.check_stem(raw, stem, wildcard, start, end)
+            self.check_stem(raw, stem, wildcard, start, end, before)
         if not in_phrase:
             self.check_word(raw, stem, start, end)
         return Lexeme(Kind.WORD, start, end, raw, stem=stem, wildcard=wildcard)
 
-    def check_stem(self, raw: str, stem: str, wildcard: str, start: int, end: int) -> None:
+    def check_stem(self, raw: str, stem: str, wildcard: str, start: int, end: int, before: int) -> None:
         toks = tokenize(stem)
-        if len("".join(t.text for t in toks)) < MIN_STEM:
+        if not toks or before + len("".join(t.text for t in toks)) < MIN_STEM:
             self.error(
                 DiagnosticCode.WILDCARD_STEM_TOO_SHORT,
                 f"The wildcard `{raw}` keeps fewer than {MIN_STEM} letters or digits before `{wildcard}`, so it "

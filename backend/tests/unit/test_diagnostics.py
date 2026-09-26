@@ -70,6 +70,8 @@ def test_codes_named_by_the_specs_exist() -> None:
         "WARN_FILTER_SCOPE",
         "WARN_LOOKALIKE_OPERATOR",
         "WARN_SYMBOLS_DROPPED",
+        "WARN_SOURCE_PARTIAL",
+        "COMPAT_POP_PHRASE",
         *SPEC_04,
     ):
         assert DiagnosticCode(name)

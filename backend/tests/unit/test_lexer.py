@@ -154,7 +154,8 @@ ERRORS: list[tuple[str, DiagnosticCode, tuple[int, int]]] = [
     ("*", C.WILDCARD_STEM_TOO_SHORT, (0, 1)),
     ("$", C.WILDCARD_STEM_TOO_SHORT, (0, 1)),
     ("a-b*", C.WILDCARD_STEM_TOO_SHORT, (0, 4)),
-    ('"large ab*"', C.WILDCARD_STEM_TOO_SHORT, (7, 10)),
+    ('"ab*"', C.WILDCARD_STEM_TOO_SHORT, (1, 4)),
+    ('"a b*"', C.WILDCARD_STEM_TOO_SHORT, (3, 5)),  # the earlier phrase words count, but a + b is still 2
     # a `*`/`$` that is not a suffix (outside math, not currency)
     ("ben*mark", C.PARSE_WILDCARD_NOT_SUFFIX, (3, 4)),
     ("bench**", C.PARSE_WILDCARD_NOT_SUFFIX, (5, 6)),
@@ -207,7 +208,17 @@ def test_messages_carry_a_fix_hint() -> None:
 
 
 def test_long_enough_stems_are_fine() -> None:
-    for q in ("gpt-4*", "vision-lang*", "naï*", "abc*", "abc$", "4o-m*", "cost$"):
+    for q in (
+        "gpt-4*",
+        "vision-lang*",
+        "naï*",
+        "abc*",
+        "abc$",
+        "4o-m*",
+        "cost$",
+        '"gpt 4*"',
+        '"generative AI$"',
+    ):
         assert lex(q).errors == (), q
 
 

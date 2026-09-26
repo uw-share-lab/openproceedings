@@ -98,7 +98,8 @@ Rules:
   the phrase with `model` or `models` last (the Trust-Evals strings rely on this).
 - **A wildcard stem that normalises to several tokens** becomes a phrase whose last token carries the
   wildcard: `gpt-4*` ≡ `"gpt 4*"`. The 3-character minimum counts the letters and digits of the whole stem
-  after normalisation (`gpt-4` has 4, so it passes; `a-b*` has 2 and fails);
+  after normalisation, and inside a phrase the earlier words count too (`gpt-4*`, `"gpt 4*"` and
+  `"generative AI$"` pass; `a-b*` and `"a b*"` have 2 and fail);
   the 200-expansion cap still applies to the last token's expansions (`4*`), and exceeding it is the
   usual "use a longer stem" error. (Decision-001 records rules 1–3 of this list.)
 - **Phrases** keep word order and adjacency within **one field**. A phrase never spans the title and the
@@ -188,12 +189,20 @@ The UI toggles edit these same clauses; they are not a separate state.
 ## Compatibility input modes
 
 The review's existing strings must work **unchanged** or come back with a precise explanation:
-- **Scholar/PoP mode:** accepts `OR` / `|`, `source:` and quoted phrases. PoP's `$` is interpreted as the
-  WoS zero-or-one wildcard, and the parser says so in a notice.
+- **Scholar/PoP mode** (`parse(q, "scholar")`, `query/compat.py`): accepts `OR` / `|`, `source:` and
+  quoted phrases. PoP's `$` is interpreted as the WoS zero-or-one wildcard, and the parser says so in a
+  notice (`COMPAT_POP_DOLLAR`). `source:` values translate through an exact alias table (never a
+  substring match; every value in the review's 17 corpus exports is covered) to `venue:`, with a
+  `COMPAT_SOURCE_ALIAS` notice each; PMLR also raises `WARN_SOURCE_PARTIAL`; an unknown value is an error.
+  An OR of sources collapses to one `venue:(…)` clause. **Decision-002:** a run of two or more
+  juxtaposed unquoted words forming one `|`/`OR` item is a phrase (`(large language model$ | LLM)` →
+  `("large language model$" OR llm)`, `COMPAT_POP_PHRASE`), as the review intended; Google Scholar itself
+  binds `|` tighter. The output is native: the canonical string re-parses in native mode unchanged.
 - The parser returns `translations[]`, for example: "`source:PMLR` → `venue:ICML` (PMLR also hosts other
   venues; only ICML is indexed)."
 
-Fixture: every string in the Trust-Evals protocol (`backend/tests/fixtures/queries/trust-evals.txt`: the
+Fixture (snapshots in `backend/tests/golden/trust_evals_canonical.json`; the review's primary string is
+`main-7-most-updated`): every string in the Trust-Evals protocol (`backend/tests/fixtures/queries/trust-evals.txt`: the
 seven variants of the main string, the last marked "Most Updated", plus the narrow, human-centred and
 LLM-as-judge strings) parses without errors, and its canonical form is snapshot-tested.
 

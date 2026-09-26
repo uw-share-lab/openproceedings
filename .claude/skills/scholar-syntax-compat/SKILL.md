@@ -34,6 +34,12 @@ not).
 Unknown value → **error** listing the known aliases. Several `source:` clauses OR'd together (the review ran
 one export per source) collapse to one `venue:(… OR …)` clause, with one notice per clause.
 
+## Multi-word `|` items are phrases (decision-002)
+`(large language model$ | LLM | …)`: a run of 2+ juxtaposed unquoted words with `|`/`OR` on at least one
+side, bounded by `|`/`OR`, a parenthesis or the query edge, is one phrase (`COMPAT_POP_PHRASE` notice).
+Scholar itself would have ORed only the neighbouring words; the review meant phrases (review lead,
+2026-09-25). In a phrase the earlier words count toward a wildcard's stem, so `generative AI$` is valid.
+
 ## Other rewrites
 | Input | Native | Notice |
 |---|---|---|

@@ -9,10 +9,9 @@
   deduplicated.
 
 `render` prints it fully parenthesised with uppercase operators and a field prefix on every leaf, in a
-form that re-parses to the same tree: `parse(canonical).canonical == canonical` (property-tested). A
-wildcard whose last token is shorter than the stem minimum is hyphen-joined to the tokens before it
-(`gpt-4*` → `"gpt-4*"`, not `"gpt 4*"`, which the lexer would reject), and a lone token that spells an
-operator in lowercase is quoted (`"and"`), so re-parsing raises no lowercase-operator warning.
+form that re-parses to the same tree: `parse(canonical).canonical == canonical` (property-tested).
+`gpt-4*` prints as `"gpt 4*"` (in a phrase the earlier words count toward a wildcard's stem), and a lone
+token that spells an operator in lowercase is quoted (`"and"`), so re-parsing raises no warning.
 
 `canonical_hash` = sha256 of the canonical string and TOKENIZER_VERSION joined by a NUL byte.
 """
@@ -34,7 +33,6 @@ from openproceedings.query.ast import (
     Wildcard,
     YearRange,
 )
-from openproceedings.query.lexer import MIN_STEM
 from openproceedings.query.normalize import TOKENIZER_VERSION
 
 FILTER_ORDER = ("venue", "year", "track", "status")
@@ -89,19 +87,7 @@ def _prefix(field: TextField | str | None) -> str:
 
 
 def _phrase_body(items: tuple[Term | Wildcard, ...]) -> str:
-    words: list[str] = []
-    letters: list[int] = []
-    for item in items:
-        if isinstance(item, Term):
-            text, n = item.token, len(item.token)
-        else:
-            text, n = item.stem + item.op, len(item.stem)
-            while n < MIN_STEM and words and not words[-1].endswith(("*", "$")):
-                text = f"{words.pop()}-{text}"
-                n += letters.pop()
-        words.append(text)
-        letters.append(n)
-    return " ".join(words)
+    return " ".join(item.token if isinstance(item, Term) else item.stem + item.op for item in items)
 
 
 def _render_value(v: str | YearRange) -> str:

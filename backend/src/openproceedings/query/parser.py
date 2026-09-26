@@ -46,11 +46,19 @@ from openproceedings.query.ast import (
     YearRange,
 )
 from openproceedings.query.canonical import canonical_hash, render
+from openproceedings.query.compat import (
+    PARTIAL_SOURCES,
+    SOURCE_ALIASES,
+    dollar_notices,
+    group_phrases,
+    source_key,
+)
 from openproceedings.query.defaults import apply_defaults
 from openproceedings.query.lexer import FIELDS, Kind, Lexeme, lex
 from openproceedings.query.normalize import tokenize
 from openproceedings.vocab import STATUSES, TEXT_FIELDS, TRACKS, VENUES
 
+Mode = Literal["native", "scholar"]
 MAX_DEPTH = 64  # nested groups and NOTs; deeper is PARSE_TOO_DEEP, so recursion can never overflow
 _STARTS = frozenset({Kind.WORD, Kind.PHRASE, Kind.LPAREN, Kind.FIELD, Kind.NOT, Kind.RANGE})
 _EXAMPLES = {
@@ -65,6 +73,7 @@ _VALID: dict[str, tuple[str, ...]] = {"venue": tuple(VENUES.values()), "track": 
 class ParseResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    mode: Mode = "native"
     ast: Node | None  # the tree as typed, spans into q (the UI's parse tree)
     effective_ast: Node | None = None  # canonical, with default filters: what the engine runs
     canonical: str | None = (
@@ -114,8 +123,13 @@ def filter_value(field: FilterField, v: Lexeme) -> str | YearRange | None:
 
 
 class _Parser:
-    def __init__(self, q: str, lexemes: tuple[Lexeme, ...], lex_errors: tuple[Diagnostic, ...]) -> None:
+    def __init__(
+        self, q: str, lexemes: tuple[Lexeme, ...], lex_errors: tuple[Diagnostic, ...], mode: Mode = "native"
+    ) -> None:
         self.q = q
+        self.mode = mode
+        self.in_source = False  # parsing a Scholar `source:` clause: values translate to venues
+        self.translations: list[Diagnostic] = []
         self.toks = lexemes
         self.i = 0
         self.depth = 0
@@ -396,6 +410,12 @@ class _Parser:
         name = tok.field or ""
         if name not in FIELDS:  # FIELD_UNKNOWN is the lexer's; what follows is parsed by the caller's loop
             return None
+        if name == "source" and self.mode == "scholar":
+            self.in_source = True
+            try:
+                return self.filter(tok, "venue")
+            finally:
+                self.in_source = False
         if name == "source":
             self.error(
                 DiagnosticCode.FIELD_COMPAT_ONLY,
@@ -493,7 +513,48 @@ class _Parser:
             return None
         return Filter(span=(tok.start, end), field=name, values=tuple(values))
 
+    def source_value(self, v: Lexeme) -> str | None:
+        """A Scholar `source:` value translated to a venue through the alias table (exact, never substring)."""
+        text = (
+            " ".join(p.text for p in v.parts)
+            if v.kind is Kind.PHRASE
+            else v.text
+            if v.kind is Kind.WORD
+            else ""
+        )
+        key = source_key(text) if v.wildcard is None else ""
+        venue = SOURCE_ALIASES.get(key)
+        if venue is None:
+            if not self.reported(v.start, v.end):
+                known = ", ".join(f"`{k}`" for k in SOURCE_ALIASES)
+                self.error(
+                    DiagnosticCode.FIELD_UNKNOWN_VALUE,
+                    f"`{v.text}` is not a known `source:` (matched exactly, not as a substring) — use one of {known}, "
+                    "or write `venue:` directly.",
+                    v.start,
+                    v.end,
+                )
+            return None
+        self.translations.append(
+            Diagnostic(
+                code=DiagnosticCode.COMPAT_SOURCE_ALIAS,
+                message=f"`source:{v.text}` is read as `venue:{venue}`.",
+                span=(v.start, v.end),
+            )
+        )
+        if key in PARTIAL_SOURCES:
+            self.warnings.append(
+                Diagnostic(
+                    code=DiagnosticCode.WARN_SOURCE_PARTIAL,
+                    message=f"`{v.text}` also hosts other venues; only ICML is indexed, so it matches ICML papers only.",
+                    span=(v.start, v.end),
+                )
+            )
+        return venue
+
     def value(self, name: FilterField, v: Lexeme) -> str | YearRange | None:
+        if self.in_source:
+            return self.source_value(v)
         found = filter_value(name, v)
         if found is not None or self.reported(v.start, v.end):
             return found
@@ -609,17 +670,28 @@ def _by_position(d: Diagnostic) -> tuple[int, int]:
     return d.span or (0, 0)
 
 
-def parse(q: str) -> ParseResult:
+def parse(q: str, mode: Mode = "native") -> ParseResult:
     """Parse `q`. Never raises; `ast`, `canonical` and `canonical_hash` are None exactly when `errors` is
-    non-empty."""
+    non-empty. `mode="scholar"` accepts Scholar/PoP syntax and reports every rewrite in `translations`."""
     lexed = lex(q)
-    p = _Parser(q, lexed.lexemes, lexed.errors)
+    lexemes, lex_errors = lexed.lexemes, lexed.errors
+    translations: list[Diagnostic] = []
+    if mode == "scholar":
+        lexemes, translations, cleared = group_phrases(q, lexemes)
+        lex_errors = tuple(
+            e
+            for e in lex_errors
+            if not (e.code is DiagnosticCode.WILDCARD_STEM_TOO_SHORT and e.span in cleared)
+        )
+        translations += dollar_notices(lexemes)
+    p = _Parser(q, lexemes, lex_errors, mode)
     try:
         ast = p.run()
     except _TooDeep:
         ast = None
-    errors = sorted([*lexed.errors, *p.errors], key=_by_position)
+    errors = sorted([*lex_errors, *p.errors], key=_by_position)
     warnings = sorted([*lexed.warnings, *p.warnings], key=_by_position)
+    notes = sorted([*translations, *p.translations], key=_by_position)
     if ast is None and not errors:  # defensive: every path that drops the tree reports why
         errors = [
             Diagnostic(
@@ -629,10 +701,12 @@ def parse(q: str) -> ParseResult:
             )
         ]
     if errors or ast is None:
-        return ParseResult(ast=None, warnings=warnings, errors=errors)
+        return ParseResult(mode=mode, ast=None, warnings=warnings, errors=errors, translations=notes)
     d = apply_defaults(ast, len(q))
     canonical = render(d.effective)
     return ParseResult(
+        mode=mode,
+        translations=notes,
         ast=ast,
         effective_ast=d.effective,
         canonical=canonical,
