@@ -55,7 +55,7 @@ class Merge:
     survivor_id: str
     merged_id: str
     rule: str  # forum_id | native_id | title_venue_year
-    key: str
+    key: str  # the title key that joined the merged cluster to the group (in a chain, not always the survivor's)
     venue: str
     year: int
     sources: str  # the merged record's sources, "+"-joined
@@ -219,11 +219,7 @@ def _cluster(members: Sequence[PaperRecord]) -> _Cluster:
         members[0].id, [c for r in members for c in r.provenance]
     )  # rows come from the final resolve
     claims = summary.provenance  # kept claims only: the output record carries nothing else
-    pids = {
-        n
-        for c in claims
-        if c.field in _URL_FIELDS and isinstance(c.value, str) and (n := urls.native(c.value))
-    }
+    pids = _url_natives(claims)
     sources = _sources(members)
     return _Cluster(
         members=tuple(members), summary=summary, sources=sources,

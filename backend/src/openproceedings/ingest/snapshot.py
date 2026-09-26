@@ -216,12 +216,19 @@ def render(result: DedupResult, reports: Sequence[ImportReport], built_at: datet
     }
 
 
-def _holds(snapshot: Path, snapshot_hash: str) -> bool:
+AUDITED = ("files", "tokenizer_version", "record_schema_version")  # what a rebuild must reproduce exactly
+
+
+def _holds(snapshot: Path, snapshot_hash: str, fresh: dict[str, Any] | None = None) -> bool:
     """Is `snapshot` this snapshot, complete and current? Its records re-hash to `snapshot_hash` (never
-    trusted from the manifest), and its manifest parses, names that hash and this format version."""
+    trusted from the manifest); its manifest parses and names that hash and this format version; its audit
+    files (merges.csv, conflicts.csv) re-hash to the manifest's `files`; and, against `fresh` (the manifest
+    this build rendered), its audit hashes and versions are the ones this code produces, so a dedup change
+    that keeps the records but changes merges or conflicts is never passed off as the old snapshot."""
     try:
         manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
         records = (snapshot / "records.jsonl").read_bytes()
+        audit = {f: _sha256((snapshot / f).read_bytes()) for f in ("merges.csv", "conflicts.csv")}
     except (OSError, ValueError):
         return False
     return (
@@ -229,7 +236,8 @@ def _holds(snapshot: Path, snapshot_hash: str) -> bool:
         and isinstance(manifest, dict)
         and manifest.get("snapshot_hash") == snapshot_hash
         and manifest.get("format_version") == FORMAT_VERSION
-        and all((snapshot / f).is_file() for f in ("merges.csv", "conflicts.csv"))
+        and manifest.get("files") == audit
+        and (fresh is None or all(manifest.get(k) == fresh.get(k) for k in AUDITED))
     )
 
 
@@ -244,7 +252,7 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
     with storage.exclusive(snapshots):
         storage.sweep(snapshots)
         if target.exists():
-            if not _holds(target, snapshot_hash):
+            if not _holds(target, snapshot_hash, manifest):
                 raise SnapshotError(
                     f"{target.name} exists but isn't this snapshot in the current format; snapshots are "
                     "immutable: retire it (release-manager prune path) and build again"
@@ -255,7 +263,7 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
         with storage.staging(snapshots) as tmp:
             for name, data in files.items():
                 (tmp / name).write_bytes(data)
-            created = _place_or_refuse(tmp, target, lambda t: _holds(t, snapshot_hash))
+            created = _place_or_refuse(tmp, target, lambda t: _holds(t, snapshot_hash, manifest))
     log.info(
         "snapshot_built" if created else "snapshot_exists",
         extra={"snapshot": target.name, "snapshot_hash": snapshot_hash, "records": manifest["record_count"],
@@ -298,6 +306,15 @@ def iter_records(snapshot: Path) -> Iterator[PaperRecord]:
         raise SnapshotError(f"{snapshot.name} is not a snapshot ({type(e).__name__})") from None
     if expected != digest.hexdigest():
         raise SnapshotError(f"{snapshot.name}: records.jsonl doesn't match its manifest's snapshot_hash")
+    for name, recorded in (
+        manifest.get("files") or {}
+    ).items():  # the audit files, as the manifest hashed them
+        try:
+            actual = _sha256((snapshot / name).read_bytes())
+        except OSError:
+            actual = None
+        if actual != recorded:
+            raise SnapshotError(f"{snapshot.name}: {name} doesn't match its manifest")
 
 
 def load_records(snapshot: Path) -> dict[str, PaperRecord]:
@@ -311,8 +328,17 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
     naming the hashed fields that differ; and counts of display-only and provenance-only changes."""
     old, new = load_records(a), load_records(b)
     added, removed = new.keys() - old.keys(), old.keys() - new.keys()
-    by_native = {new[i].native: i for i in added}
-    rekeyed = {i: by_native[old[i].native] for i in sorted(removed) if old[i].native in by_native}
+    # a rekey only when exactly one removed and one added id share a native id: anything else (two papers
+    # into one, one into two) is reported as added and removed, so a lost record is never hidden
+    gone_by_native = Counter(old[i].native for i in removed)
+    new_by_native: dict[str, list[str]] = {}
+    for i in added:
+        new_by_native.setdefault(new[i].native, []).append(i)
+    rekeyed = {
+        i: new_by_native[old[i].native][0]
+        for i in sorted(removed)
+        if gone_by_native[old[i].native] == 1 and len(new_by_native.get(old[i].native, [])) == 1
+    }
 
     def hashed_diff(x: PaperRecord, y: PaperRecord) -> list[str]:
         return [f for f in HASHED if getattr(x, f) != getattr(y, f)]  # a hash change is always one of these

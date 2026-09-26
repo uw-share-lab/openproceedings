@@ -142,9 +142,9 @@ def test_conservation_and_no_cross_venue_year_merges(xs: list[PaperRecord]) -> N
     assert Counter(r.id for r in xs) == outputs + Counter(m.merged_id for m in result.merges)
     by_id = {r.id: r for r in result.records}
     ends = final_ids(result)
-    for m in result.merges:
-        final = by_id[ends[m.merged_id]]
-        assert (m.venue, m.year) == (final.venue, final.year)
+    for x in xs:  # each input against the record it ended in: never merged across a venue or a year
+        final = by_id[ends.get(x.id, x.id)]
+        assert (x.venue, x.year) == (final.venue, final.year)
 
 
 @given(pools)

@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-26 16:35'
+updated_date: '2026-09-26 23:56'
 labels:
   - ingest
 milestone: m-4
@@ -28,3 +29,9 @@ decision-005: where a venue-year's official proceedings are published and crawle
 - [ ] #2 The derived status is a claim with its evidence, so dedup's inputs-equal-their-claims check and idempotence still hold
 - [ ] #3 Unit and property tests; dedup-rules skill and decision-005 updated
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+From the M2 gate (dedup audit): dedup.py's precedence lets proceedings answer track in a venue-year that is on OpenReview when no OpenReview claim is present; decision-005 says proceedings answer only for venue-years not on OpenReview. Unreachable until the crawlers (task-052/053); enforce it when reconciling.
+<!-- SECTION:NOTES:END -->

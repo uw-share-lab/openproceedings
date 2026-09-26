@@ -632,3 +632,52 @@ def test_cli_rejects_unknown_options(argv: list[str]) -> None:
     with pytest.raises(SystemExit) as exc:
         cli.main(argv)
     assert exc.value.code == 2
+
+
+def test_diff_never_hides_a_lost_record_behind_a_rekey(cache: Path, tmp_path: Path) -> None:
+    # two papers sharing a native id collapse into one: both are reported removed and the survivor added,
+    # never as two rekeys to one id (which would hide the lost paper)
+    a = build(cache, tmp_path / "snapshots", BUILT).path
+
+    def twin(rs: dict[str, PaperRecord]) -> None:
+        other = rs[REJECTED].model_copy(update={"id": "op:iclr:2023:Rej_ected-1", "year": 2023})
+        rs[other.id] = other
+
+    a2 = rewrite(a, tmp_path / "a2", twin)
+
+    def collapse(rs: dict[str, PaperRecord]) -> None:
+        moved = rs.pop(REJECTED).model_copy(update={"id": "op:iclr:2025:Rej_ected-1", "year": 2025})
+        del rs["op:iclr:2023:Rej_ected-1"]
+        rs[moved.id] = moved
+
+    result = diff(a2, rewrite(a2, tmp_path / "b", collapse))
+    assert result["rekeyed"] == {}
+    assert result["removed"] == ["op:iclr:2023:Rej_ected-1", REJECTED]
+    assert result["added"] == ["op:iclr:2025:Rej_ected-1"]
+
+
+def test_audit_files_are_checked_against_the_manifest(cache: Path, tmp_path: Path) -> None:
+    a = build(cache, tmp_path / "snapshots", BUILT).path
+    copy = writable_copy(a, tmp_path / "copy")
+    with (copy / "conflicts.csv").open("a", encoding="utf-8") as fh:
+        fh.write("forged,row\n")
+    with pytest.raises(SnapshotError, match=r"conflicts\.csv doesn't match its manifest"):
+        load_records(copy)
+
+
+def test_a_rebuild_refuses_a_snapshot_whose_audit_files_this_code_wouldnt_write(
+    cache: Path, tmp_path: Path
+) -> None:
+    # the records hash the same, but merges.csv differs from what this build renders (a dedup change that
+    # kept the records): the old snapshot is never reported as this one, even when self-consistent
+    snapshots = tmp_path / "snapshots"
+    a = build(cache, snapshots, BUILT).path
+    for p in [a, *a.iterdir()]:
+        p.chmod(p.stat().st_mode | stat.S_IWUSR)
+    data = (a / "merges.csv").read_bytes() + b"forged,row\n"
+    (a / "merges.csv").write_bytes(data)
+    manifest = json.loads((a / "manifest.json").read_text(encoding="utf-8"))
+    manifest["files"]["merges.csv"] = hashlib.sha256(data).hexdigest()
+    (a / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(SnapshotError, match="immutable"):
+        build(cache, snapshots, BUILT)
