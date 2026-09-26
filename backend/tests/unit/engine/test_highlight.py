@@ -169,9 +169,12 @@ def test_near_over_a_long_field_is_not_quadratic() -> None:
     import time
 
     r = rec("t", "trust ai " * 1_500)
-    t = time.perf_counter()
-    got = lit("trust NEAR/100 ai", r)["abstract"]
-    assert len(got) == 3_000 and time.perf_counter() - t < 1.0  # every pair checked took ~13 s
+    best = float("inf")
+    for _ in range(3):  # best of 3: one busy moment on a shared runner isn't a regression
+        t = time.perf_counter()
+        got = lit("trust NEAR/100 ai", r)["abstract"]
+        best = min(best, time.perf_counter() - t)
+    assert len(got) == 3_000 and best < 1.0  # every pair checked took ~13 s
 
 
 TOKENS = {r.id: {f: tokenize(getattr(r, f) or "") for f in ("title", "abstract")} for r in RECORDS}

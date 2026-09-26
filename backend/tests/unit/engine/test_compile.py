@@ -132,6 +132,39 @@ def test_expansions_and_the_cap(
         engine.match_ids(parse("alpha OR trust*").ast)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize(("cap", "refused"), [(5, False), (4, True)])
+def test_the_cap_is_inclusive_on_both_engines(
+    engines: tuple[TantivyEngine, ReferenceEngine], monkeypatch: pytest.MonkeyPatch, cap: int, refused: bool
+) -> None:
+    # `trust*` expands to exactly 5 terms: at a cap of 5 it's allowed, at 4 it's refused (spec 02: more than
+    # the cap is an error, never the cap itself)
+    import openproceedings.engine.reference as ref
+    import openproceedings.engine.tantivy_engine as te
+
+    monkeypatch.setattr(te, "MAX_EXPANSIONS", cap)
+    monkeypatch.setattr(ref, "MAX_EXPANSIONS", cap)
+    w = parse("trust*").ast
+    engines[0].expanded.clear()  # the memo from earlier tests would skip the check being tested
+    for engine in engines:
+        engine_expand = engine.expand
+        if refused:
+            with pytest.raises(EngineInputError, match="expands to 5 terms"):
+                engine_expand(w)  # type: ignore[arg-type]
+        else:
+            assert len(engine_expand(w)) == 5  # type: ignore[arg-type]
+
+
+def test_near_reversed_counts_the_tokens_between_exactly(tmp_path: Path) -> None:
+    # `beta x y alpha`: alpha NEAR/2 beta holds (two tokens between, in reverse order), NEAR/1 doesn't
+    records = [paper("Rv01", "beta x y alpha"), paper("Rv02", "unrelated")]
+    tantivy = TantivyEngine(build_index(snapshot_of(records, tmp_path / "s"), tmp_path / "i", BUILT).path)
+    reference = ReferenceEngine(records)
+    for q, expected in (("alpha NEAR/2 beta", {"Rv01"}), ("alpha NEAR/1 beta", set())):
+        ast = parse(q).ast
+        got = {i.rsplit(":", 1)[1] for i in tantivy.match_ids(ast)}  # type: ignore[arg-type]
+        assert got == {i.rsplit(":", 1)[1] for i in reference.match_ids(ast)} == expected, q  # type: ignore[arg-type]
+
+
 def test_explain_shows_the_tree_expansions_and_fallbacks(
     engines: tuple[TantivyEngine, ReferenceEngine],
 ) -> None:

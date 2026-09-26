@@ -33,7 +33,8 @@ jobs:
           uv sync --locked
           if ls .benchmarks/*/*_base.json >/dev/null 2>&1; then
             uv run --locked pytest -q backend/tests/bench --benchmark-enable --benchmark-only \
-              --benchmark-compare --benchmark-compare-fail=min:20%
+              --benchmark-compare --benchmark-compare-fail=min:20% \
+              || { echo "::error::a benchmark's minimum regressed over 20% against the base, or a budget failed"; exit 1; }
           else
             uv run --locked pytest -q backend/tests/bench --benchmark-enable --benchmark-only
           fi

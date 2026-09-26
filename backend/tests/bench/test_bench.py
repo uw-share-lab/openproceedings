@@ -13,6 +13,7 @@ The ~80k corpus and the position-verified cases are measured by `backend/tests/b
 
 from __future__ import annotations
 
+import time
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable
 from pathlib import Path
@@ -49,7 +50,13 @@ def p95(benchmark: Any) -> float | None:
 
 
 def measure(benchmark: Any, f: Callable[[], object]) -> object:
-    return benchmark.pedantic(f, rounds=ROUNDS, iterations=1, warmup_rounds=1)
+    """ROUNDS rounds of at least ~1 ms each: a sub-millisecond call is repeated within a round, so a 20% gate
+    compares real work, not timer and scheduler noise."""
+    t = time.perf_counter()
+    f()
+    once = time.perf_counter() - t
+    iterations = max(1, min(1_000, round(0.001 / max(once, 1e-7))))
+    return benchmark.pedantic(f, rounds=ROUNDS, iterations=iterations, warmup_rounds=1)
 
 
 def trust_evals(name: str) -> ParseResult:

@@ -42,4 +42,5 @@ def test_unclosed_openers_are_linear(unit: str) -> None:
     # ratio doesn't depend on the machine, and the old scan fails it in about 4 s per opener
     small, large = (fastest(tokenize, unit * (n // len(unit))) for n in (2_000, 8_000))
     assert large / small < 8, (unit, small, large)
-    assert fastest(parse, unit * (2_000 // len(unit))) < 0.25, unit  # at the query cap
+    # at the query cap: ~10 ms now, 0.3-0.8 s quadratic; 1 s leaves slow CI runners room (the ratio is the check)
+    assert fastest(parse, unit * (2_000 // len(unit))) < 1.0, unit

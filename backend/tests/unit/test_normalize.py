@@ -256,7 +256,8 @@ def test_script_join_is_linear() -> None:
         return time.perf_counter() - t
 
     secs(1000)  # warm up
-    small, large = min(secs(5_000) for _ in range(3)), min(secs(20_000) for _ in range(3))
+    # best of 9: one busy moment on a shared machine can't push the ratio over (task-070's lesson)
+    small, large = min(secs(5_000) for _ in range(9)), min(secs(20_000) for _ in range(9))
     assert large < small * 8  # 4× the input: linear is ~4×, quadratic ~16×
 
 

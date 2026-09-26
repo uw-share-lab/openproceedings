@@ -11,11 +11,11 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 | Unit | `backend/tests/unit/` | inline values | 100% pass |
 | Golden tokens | `backend/tests/golden/test_tokens.py` | 02 table + ≥100 cases | 100% pass |
 | Golden queries | `backend/tests/golden/` | hand-built **200-record** fixture | 100% pass, exact ID sets |
-| Differential | `backend/tests/differential/` | **5k fixture snapshot** | `TantivyEngine == ReferenceEngine`, 0 counterexamples in 2,000 (CI) / 50k (nightly) |
+| Differential | `backend/tests/differential/` | **5k fixture snapshot** | `TantivyEngine == ReferenceEngine`, 0 counterexamples in 2,000 (CI) / 50k (nightly, its own job: task-057) |
 | Contract | `backend/tests/contract/` | 5k fixture index via `TestClient` | every endpoint, OpenAPI snapshot, export round-trips, record replay (reproduced + drifted + mismatch) |
 | Frontend unit | `frontend/**/*.test.ts(x)` (Vitest) | mocked API from generated types | builder↔AST, URL reducer |
 | e2e | Playwright | `op serve` over the fixture index | the 05 §Testing flow end to end |
-| Bench | pytest-benchmark | fixture index (CI), full index (nightly) | >20% relative regression fails |
+| Bench | pytest-benchmark | fixture index (`bench` workflow, advisory), 80k report (`report_80k.py`) | >20% regression of the minimum fails the `bench` check |
 | Nightly | — | full corpus | differential@50k, tokenizer parity (0 diffs), semantic invariant, determinism |
 
 ## Fixtures (`backend/tests/fixtures/`)
