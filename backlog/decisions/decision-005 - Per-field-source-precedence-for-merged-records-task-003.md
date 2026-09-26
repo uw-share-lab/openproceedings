@@ -41,12 +41,18 @@ the same study twice; both titles stay in the record's claims.
   new snapshot, as a `snapshot diff` change.
 - Changing this table changes `content_hash` for affected records, so it is an `index_version` change.
 
-## Open evidence question (2026-09-26)
+## Evidence on abstract recency (2026-09-26, settled)
 
 scholarmend (`ledger.py`) ranks the proceedings abstract above OpenReview's on the grounds that "a
 camera-ready revision can leave [the OpenReview note] behind"; the review lead's sources say OpenReview is
-the more current. A cache comparison was inconclusive (17 prefix-matched pairs, several of them different
-papers). The review lead is running an authenticated check of OpenReview revision history for the papers
-whose abstracts differ. If OpenReview proves stale for camera-ready abstracts, the `title`/`abstract`/
-`authors` row flips to proceedings-first here, with the evidence recorded. scholarmend is not changed
-either way while the Trust-Evals screening that used its output is in progress.
+the more current. An authenticated check against OpenReview (API v2 notes and their edit history) on the
+Trust-Evals cache paired each cached OpenReview abstract with a proceedings abstract only when the match
+was unique on both sides: 8 pairs. In all 3 pairs that are the same paper, OpenReview's current abstract
+equals the proceedings text. The 5 that differ are all workshop notes (SafeGenAI, SeT LLM @ ICLR 2024,
+MINT@NeurIPS 2024) or an unpublished ICML 2026 submission matched to a different publication's
+proceedings abstract; none ever carried the proceedings text. So there is no evidence that OpenReview lags
+the proceedings for the same paper, and the only disagreements found are distinct publications, which
+dedup never merges (a workshop note never merges into a proceedings record). OpenReview-first stands.
+The sample is small; the local real-corpus checks (decision-004) will report any title/abstract
+conflicts at scale through `conflicts.csv`. scholarmend is left unchanged while the Trust-Evals screening
+that used its output is in progress.

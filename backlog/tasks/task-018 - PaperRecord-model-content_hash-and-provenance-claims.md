@@ -1,9 +1,11 @@
 ---
 id: TASK-018
 title: 'PaperRecord model, content_hash and provenance claims'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@jeevan'
 created_date: '2026-09-26 01:06'
+updated_date: '2026-09-26 15:49'
 labels:
   - ingest
 milestone: m-2
