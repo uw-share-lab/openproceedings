@@ -140,15 +140,34 @@ def main() -> None:
 
     if a.attest and a.verdict == "APPROVE":
         view = subprocess.run(
-            ["gh", "pr", "view", "--json", "body", "-q", ".body"], capture_output=True, text=True
+            ["gh", "pr", "view", "--json", "number,body", "-q", '"\\(.number)\\n\\(.body)"'],
+            capture_output=True,
+            text=True,
         )
         if view.returncode != 0:
             print("no open PR for this branch yet — re-run with --attest after `gh pr create`")
             return
-        body = re.sub(r"\n?<!-- op-review: [0-9a-f]+ APPROVE -->", "", view.stdout.rstrip())
+        number, _, body = view.stdout.partition("\n")
+        body = re.sub(r"\n?<!-- op-review: [0-9a-f]+ APPROVE -->", "", body.rstrip())
         body += f"\n\n<!-- op-review: {head} APPROVE -->"
-        subprocess.run(["gh", "pr", "edit", "--body", body], check=True)
-        print("PR body attested")
+        # REST, not `gh pr edit`: gh pr edit queries the retired Projects (classic) API and fails
+        # (PR #1, 2026-09-25). {owner}/{repo} is filled in by gh from the current repository.
+        patch = subprocess.run(
+            [
+                "gh",
+                "api",
+                "-X",
+                "PATCH",
+                f"repos/{{owner}}/{{repo}}/pulls/{number.strip()}",
+                "-f",
+                f"body={body}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if patch.returncode != 0:
+            fail(f"could not attest PR #{number.strip()}: {patch.stderr.strip() or patch.stdout.strip()}")
+        print(f"PR #{number.strip()} body attested for {head[:10]}")
 
 
 if __name__ == "__main__":
