@@ -9,12 +9,16 @@ from itertools import pairwise
 from pathlib import Path
 
 import pytest
+from hypothesis import given, settings
 from openproceedings.engine.highlight import _Highlighter, highlights
+from openproceedings.engine.protocol import EngineInternalError
 from openproceedings.engine.reference import ReferenceEngine
-from openproceedings.query.normalize import normalize, tokenize
+from openproceedings.query.ast import Near, Node, Not, Phrase, Term, Wildcard
+from openproceedings.query.normalize import tokenize
 from openproceedings.query.parser import parse
 
 from tests.corpus import Rec, fixture_records
+from tests.strategies import asts
 
 RECORDS = fixture_records()
 REFERENCE = ReferenceEngine(RECORDS)
@@ -44,15 +48,14 @@ def test_the_highlighter_matches_exactly_what_the_oracle_matches(case: dict[str,
         tokens = {f: tokenize(getattr(r, f) or "") for f in ("title", "abstract")}
         verdict, _spans = _Highlighter(r, tokens, expansions).node(ast)  # type: ignore[arg-type]
         assert verdict == (r.id in matched), (case["q"], r.id)
-        lit_ = highlights(ast, r, expansions)
         if r.id not in matched:
-            assert lit_ == {"title": [], "abstract": []}
-        for f, v in lit_.items():
+            with pytest.raises(EngineInternalError):  # an engine hit the AST doesn't match: never silent
+                highlights(ast, r, expansions)
+            continue
+        for f, v in highlights(ast, r, expansions).items():
             text = getattr(r, f) or ""
             assert all(0 <= s < e <= len(text) for s, e in v) and v == sorted(v)
             assert all(a[1] <= b[0] for a, b in pairwise(v))  # merged: never overlapping
-            for s, e in v:
-                assert normalize(text[s:e])  # every span covers at least one real token
 
 
 def rec(title: str, abstract: str | None = None, **kw: object) -> Rec:
@@ -108,3 +111,64 @@ def test_latex_math_lights_its_raw_source() -> None:
         "alpha"
     ]  # a command's span is its name (tokenize's offset map)
     assert raw(r, lit("leq", r))["abstract"] == ["le"]
+
+
+def allowed(n: Node, expansions: dict[tuple[str, str], frozenset[str]]) -> set[str]:
+    """Every token some positive leaf of `n` can match (NOT subtrees and filters light nothing)."""
+    if isinstance(n, Term):
+        return {n.token}
+    if isinstance(n, Wildcard):
+        return set(expansions[(n.stem, n.op)])
+    if isinstance(n, Phrase):
+        return set().union(*(allowed(i, expansions) for i in n.items))
+    if isinstance(n, Near):
+        return allowed(n.left, expansions) | allowed(n.right, expansions)
+    if isinstance(n, Not):
+        return set()
+    return set().union(*(allowed(c, expansions) for c in getattr(n, "children", ())))
+
+
+@settings(deadline=None)
+@given(asts())
+def test_every_lit_token_is_one_a_positive_leaf_can_match(ast: Node) -> None:
+    # independent of the evaluation: spans start and end on token boundaries, and every token inside one is
+    # a term, an expansion or a phrase item of the query, outside any NOT
+    expansions = REFERENCE.expansions(ast)
+    ok = allowed(ast, expansions)
+    matched = REFERENCE.match_ids(ast)
+    for r in RECORDS:
+        if r.id not in matched:
+            continue
+        for f, spans in highlights(ast, r, expansions).items():
+            tokens = tokenize(getattr(r, f) or "")
+            starts, ends = {t.start for t in tokens}, {t.end for t in tokens}
+            for s, e in spans:
+                assert s in starts and e in ends, (f, s, e)
+                inside = [t.text for t in tokens if s <= t.start and t.end <= e]
+                assert inside and all(t in ok for t in inside), (f, inside)
+
+
+def test_phrase_items_and_near_operands_light_exactly() -> None:
+    r = rec("t", "trusting in the ai and trusted in ai")
+    assert raw(r, lit('"tru* in" NEAR/1 ai', r))["abstract"] == ["trusting in", "ai", "trusted in", "ai"]
+    assert raw(r, lit('"trust* in" ai', r))["abstract"] == ["trusting in", "ai", "trusted in", "ai"]
+    assert raw(r, lit('"trusted in" NEAR/0 ai', r))["abstract"] == ["trusted in", "ai"]
+
+
+def test_a_fielded_near_lights_only_its_field() -> None:
+    r = rec("trust ai", "trust ai")
+    assert lit("title:(trust NEAR/1 ai)", r) == {"title": [(0, 5), (6, 8)], "abstract": []}
+
+
+def test_touching_operator_tokens_stay_apart() -> None:
+    r = rec("5×3", None)
+    assert lit("5 times", r)["title"] == [(0, 1), (1, 2)]
+
+
+def test_near_over_a_long_field_is_not_quadratic() -> None:
+    import time
+
+    r = rec("t", "trust ai " * 1_500)
+    t = time.perf_counter()
+    got = lit("trust NEAR/100 ai", r)["abstract"]
+    assert len(got) == 3_000 and time.perf_counter() - t < 1.0  # every pair checked took ~13 s

@@ -91,6 +91,10 @@ AND lights its children, OR only the children that matched; NOT and filters ligh
 doesn't match has no spans, so a branch that didn't match lights nothing. Overlapping spans merge. A LaTeX
 command's span is its name without the backslash (`$\alpha$` lights `alpha`). The highlighter's verdict
 is checked against ReferenceEngine on every fixture record for all 44 golden queries.
+Measured (task-027 review): a 50-hit page of ~400-word abstracts takes ~174 ms to highlight, almost all
+of it `tokenize`, over the 100 ms page budget; task-073 moves it inside (precomputed offsets or a cache,
+decided with the API's page assembly). A NEAR over a long field is a binary search per occurrence, never
+a check of every pair. A hit the highlighter doesn't match raises `EngineInternalError`.
 
 ## Exclusion accounting (guarantee 6, PRISMA)
 

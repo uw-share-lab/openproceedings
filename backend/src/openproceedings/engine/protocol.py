@@ -5,6 +5,7 @@ Only types live here, so the two engines can share it without sharing any matchi
 
 from __future__ import annotations
 
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -62,3 +63,6 @@ class Engine(Protocol):
     def match_ids(self, ast: Node) -> frozenset[str]: ...
     def expand(self, wildcard: Wildcard) -> list[str]: ...
     def facets(self, ast: Node, fields: tuple[str, ...] = FACET_FIELDS) -> dict[str, dict[str, int]]: ...
+    def expansions(self, ast: Node) -> Mapping[tuple[str, str], Collection[str]]:
+        """Every wildcard in `ast`, (stem, op) → its terms, each expanded once (the cap applies)."""
+        ...
