@@ -174,6 +174,14 @@ check feature/x block 'git status
 git push origin HEAD:main'                                             # newline between commands
 check main  block 'timeout 60 git commit -m x'                          # wrapper prefix
 check main  block '{ git commit -m x; }'                                # brace group
+check feature/x block 'git commit -m "a
+see #1" ; git push origin HEAD:dev'                                    # '#1' inside a multi-line quote is not a comment
+check feature/x block "git commit -F - <<'EOF' && git push origin HEAD:dev
+fix: don't crash
+EOF"                                                                    # quoted heredoc delimiter; apostrophe in body
+check feature/x block 'git commit -m "x ; git push origin HEAD:dev'     # unparseable: fallback checks push first
+check feature/x allow 'git push origin feat
+echo main'                                                              # separators split commands: 'main' is not a refspec
 check main  allow 'bash --norc -c "git status"'            # positive control: long opt + safe cmd
 check main  allow 'bash -cx "git status"'                  # positive control: cluster + safe cmd
 

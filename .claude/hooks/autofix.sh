@@ -37,7 +37,7 @@ case "$rel" in
     else
       note "autofix: $root/.venv/bin/ruff not found — skipped ruff for $rel (run: uv sync)."
     fi
-    out=$(cd "$root" && python3 -m py_compile "$rel" 2>&1) || note "py_compile failed on $rel:"$'\n'"$out"
+    out=$(cd "$root" && python3 -m py_compile -- "$rel" 2>&1) || note "py_compile failed on $rel:"$'\n'"$out"
     ;;
   frontend/*.ts|frontend/*.tsx|frontend/*.js|frontend/*.jsx|frontend/*.json|frontend/*.css|frontend/*.md)
     if [ -d "$root/frontend/node_modules" ]; then
@@ -45,7 +45,8 @@ case "$rel" in
       (cd "$root/frontend" && npx --no-install prettier --write -- "$sub" >/dev/null 2>&1)
       case "$sub" in
         *.ts|*.tsx|*.js|*.jsx)
-          if git -C "$root" diff --quiet HEAD -- 'frontend/eslint.config.*' 'frontend/.eslintrc*' frontend/package.json 2>/dev/null; then
+          cfg_state=$(git -C "$root" status --porcelain -- 'frontend/eslint.config.*' 'frontend/.eslintrc*' frontend/package.json 2>/dev/null)
+          if [ -z "$cfg_state" ]; then   # tracked AND untracked changes both count (review round 3)
             out=$(cd "$root/frontend" && npx --no-install eslint --fix -- "$sub" 2>&1) || note "eslint still fails on $rel:"$'\n'"$out"
           else
             note "autofix: eslint skipped for $rel — its config or package.json has uncommitted changes (eslint runs its config as code). Run make lint after reviewing them."

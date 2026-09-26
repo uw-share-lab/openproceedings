@@ -305,6 +305,84 @@ check_cmd err "APPROVE refused: must → task"          python3 "$RECORD" APPROV
 check_cmd ok  "REQUEST_CHANGES with an open must"     python3 "$RECORD" REQUEST_CHANGES "$TMP/d12.md"
 check $R block "…and that record does not approve"    "$(payload_bash 'git push origin mut')"
 
+echo "== round-3 rows (parser regressions, fail-closed, globs, and the mutation survivors)"
+g switch -q mut
+approve
+# multi-line quoted messages keep their quotes (a '#' line inside must not become a comment)
+check $R block "quoted body with #12, unreviewed PR"   "$(payload_bash 'gh pr create --base dev --head other2 --label no-learning --body "Summary
+
+Closes #12"')"
+check $P block "quoted #1 line then rm -rf data"      "$(payload_bash 'echo "note
+#1" ; rm -rf data')"
+# quoted heredoc delimiters are recognised; apostrophes in bodies are inert
+check $R block "<<'EOF' body with apostrophe, then push" "$(payload_bash "cat > n.md <<'EOF'
+It's a note
+EOF
+git push origin other2")"
+check $P block "<<'EOF' body with apostrophe, then rm" "$(payload_bash "cat > n.md <<'EOF'
+don't
+EOF
+rm -rf data")"
+check $R allow "<<'EOF' body line 'then git push' inert" "$(payload_bash "cat <<'EOF'
+then git push origin other2
+EOF")"
+# the same quoting must not crash the parser on APPROVED work (a crash fails closed and would block it)
+check $R allow "approved push after a #12 message line" "$(payload_bash 'git commit -m "fix
+Closes #12" && git push origin mut')"
+check $R allow "approved push after \"x # y\" message" "$(payload_bash 'git commit -m "x # y" && git push origin mut')"
+# comment rule: '#' starts a comment only at the start of a word, and never inside quotes
+check $P block "a#b is a word, not a comment"          "$(payload_bash 'echo a#b; rm -rf data')"
+check $P block "quoted \"x # y\" is not a comment"     "$(payload_bash 'echo "x # y"; rm -rf data')"
+check $P block "# <<EOF inside a comment is no heredoc" "$(payload_bash 'git log -1 # <<EOF
+rm -rf data')"
+# fail closed on unparseable commands
+check $R block "unparseable push fails closed"        "$(payload_bash 'git push origin other2 "')"
+check $P block "unparseable rm of data fails closed"  "$(payload_bash 'rm -rf data "')"
+# globs are expanded against the filesystem
+check $P block "rm -rf data* (glob)"                  "$(payload_bash 'rm -rf data*')"
+check $P block "rm -rf dat? (glob)"                   "$(payload_bash 'rm -rf dat?')"
+check $P block "rm -rf * in the repo root"            "$(payload_bash 'rm -rf *')"
+check $P block "cd frontend && rm -rf ../*"           "$(payload_bash 'cd frontend && rm -rf ../*')"
+check $P block "rm -r da\"\"ta (quotes split the word)" "$(payload_bash 'rm -r da""ta')"
+check $P allow "rm -rf frontend/src/data/* (not data/)" "$(payload_bash 'rm -rf frontend/src/data/*')"
+# git clean / stash precision
+check $P allow "git clean -fdx -e data"               "$(payload_bash 'git clean -fdx -e data')"
+check $P allow "git clean -fdx --exclude=data/"       "$(payload_bash 'git clean -fdx --exclude=data/')"
+check $P allow "git clean -fdx -- frontend/"          "$(payload_bash 'git clean -fdx -- frontend/')"
+check $P block "git clean -fdx -- . (covers data)"    "$(payload_bash 'git clean -fdx -- .')"
+check $P block "git stash -a"                         "$(payload_bash 'git stash -a')"
+check $P allow "git stash list --all is read-only"    "$(payload_bash 'git stash list --all')"
+check $P block "git stash push --all"                 "$(payload_bash 'git stash push --all')"
+# backlog: copying OUT is fine, into is not
+check $P allow "cp a task OUT of backlog/"            "$(payload_bash 'cp "backlog/tasks/task-999 - Speed up.md" /tmp/')"
+check $P allow "rsync backlog/ out"                   "$(payload_bash 'rsync -a backlog/ /tmp/bk/')"
+check $P block "cp INTO backlog/"                     "$(payload_bash 'cp x.md backlog/tasks/')"
+# wrappers: long options and env -S
+check $R block "sudo --user root git push"            "$(payload_bash 'sudo --user root git push origin other2')"
+check $R block "env -S 'git push'"                    "$(payload_bash "env -S 'git push origin other2'")"
+# --head must be a real branch name even when it resolves (mut@{0} is a reflog entry of an approved sha)
+check $R block "--head mut@{0} is not a branch name"  "$(payload_bash 'gh pr create --base dev --head "mut@{0}" --fill --label no-learning')"
+# learnings: rename + extend counts
+g switch -q -c mut-rename dev
+git -C "$REPO" mv ".claude/learnings/2026-01-01-old.md" ".claude/learnings/2026-01-01-old-renamed.md"
+printf '\n## Addendum\nmore\n' >> "$REPO/.claude/learnings/2026-01-01-old-renamed.md"; g add -A; g commit -qm rename
+approve
+check $R allow "rename + extend of an entry counts"   "$(payload_bash 'gh pr create --base dev --fill')"
+g switch -q mut
+# record-review: a rejection needs >= 3 words
+printf -- '- [nit] a.py:1 name → rejected: too noisy\n' > "$TMP/d13.md"
+check_cmd err "two-word rejection reason refused"     python3 "$RECORD" APPROVE "$TMP/d13.md"
+# autofix: eslint never runs while its config is new/untracked (a fake npx records calls)
+mkdir -p "$TMP/bin" "$REPO/frontend/node_modules"
+printf '#!/bin/sh\necho "$@" >> "%s/npx.log"\n' "$TMP" > "$TMP/bin/npx"; chmod +x "$TMP/bin/npx"
+printf 'x\n' > "$REPO/frontend/a.ts"; : > "$TMP/npx.log"
+payload_file Edit "$REPO/frontend/a.ts" | PATH="$TMP/bin:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
+if grep -q eslint "$TMP/npx.log"; then pass=$((pass+1)); echo "  ok   eslint runs when its config is unchanged"; else fail=$((fail+1)); echo "  FAIL eslint did not run with a clean config"; fi
+printf 'export default []\n' > "$REPO/frontend/eslint.config.js"; : > "$TMP/npx.log"
+payload_file Edit "$REPO/frontend/a.ts" | PATH="$TMP/bin:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
+if grep -q eslint "$TMP/npx.log"; then fail=$((fail+1)); echo "  FAIL eslint ran with a new untracked config"; else pass=$((pass+1)); echo "  ok   eslint skipped while its config is untracked"; fi
+rm -rf "$REPO/frontend/node_modules" "$REPO/frontend/eslint.config.js" "$REPO/frontend/a.ts"
+
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")
 case "$out" in *TOKENIZER_VERSION*) pass=$((pass+1)); echo "  ok   reminder on normalize.py";; *) fail=$((fail+1)); echo "  FAIL no reminder on normalize.py";; esac
@@ -316,7 +394,8 @@ cp "$HOOKS/../../pyproject.toml" "$REPO/pyproject.toml" 2>/dev/null
 ln -s "$(cd "$HOOKS/../.." && pwd)/.venv" "$REPO/.venv" 2>/dev/null   # autofix runs ruff from the workspace venv, never via uv run
 printf 'import os,sys\nx=1\n' > "$REPO/fmt_me.py"
 ( cd "$REPO" && payload_file Edit "$REPO/fmt_me.py" | CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1 ); rc=$?
-if [ $rc -eq 0 ] && grep -q '^x = 1$' "$REPO/fmt_me.py"; then pass=$((pass+1)); echo "  ok   python file formatted in place (exit 0)"; else fail=$((fail+1)); echo "  FAIL python not formatted / nonzero exit ($rc)"; fi
+if [ ! -x "$HOOKS/../../.venv/bin/ruff" ]; then pass=$((pass+1)); echo "  skip python formatting rows: no .venv (run uv sync)"
+elif [ $rc -eq 0 ] && grep -q '^x = 1$' "$REPO/fmt_me.py"; then pass=$((pass+1)); echo "  ok   python file formatted in place (exit 0)"; else fail=$((fail+1)); echo "  FAIL python not formatted / nonzero exit ($rc)"; fi
 printf 'def f(:\n' > "$REPO/broken.py"
 out=$(payload_file Edit "$REPO/broken.py" | CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" 2>/dev/null)
 case "$out" in *additionalContext*) pass=$((pass+1)); echo "  ok   unfixable python reported back";; *) fail=$((fail+1)); echo "  FAIL unfixable python not reported";; esac

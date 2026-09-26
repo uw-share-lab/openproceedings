@@ -16,6 +16,8 @@
 #    constituent PRs were each reviewed and each carried a learning; main's own gate is a second
 #    person's approval.
 #
+# An unparseable command that looks like a push or a PR is blocked (fail closed).
+#
 # Writing/deleting main or dev directly is enforce-pr-workflow.sh's job; this gate adds the review
 # requirement on top. Guardrail, not a security boundary (see lib/cmdparse.py). Exit 2 blocks.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -90,7 +92,11 @@ if not cmd or not re.search(r"\b(git|gh)\b", cmd):
 try:
     commands = list(simple_commands(cmd, cwd))
 except ParseError:
-    sys.exit(0)  # unbalanced quotes: bash refuses to run it; enforce-pr-workflow.sh fails closed anyway
+    # Fail CLOSED (review round 3): a command the parser can't read may still be a push or a PR.
+    if re.search(r"\bgit\b[^\n]*\bpush\b|\bgh\b[^\n]*\bpr\b", cmd):
+        block(["Review gate: this command could not be parsed (unbalanced quotes?) and appears to push or open",
+               "a PR — refusing rather than letting it through unexamined. Fix the quoting and retry."])
+    sys.exit(0)
 
 for argv, d in commands:
     g = git_subcommand(argv, d)

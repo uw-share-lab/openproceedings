@@ -325,16 +325,21 @@ PY
 # normal python path allows those; the fallback only runs when the parser cannot.
 if [ -z "$verdict" ] || [ "$verdict" = "parse-fail" ]; then
   case "$branch" in main|dev) on_protected=1 ;; *) on_protected=0 ;; esac
+  # Evaluate push FIRST and independently of commit/merge (review round 3: `git commit …; git push origin
+  # HEAD:dev` matched the commit arm and was allowed).
+  verdict="allow"
   case "$input" in
-    *"git commit"*|*"git merge"*)
-      [ "$on_protected" = 1 ] && verdict="protected" || verdict="allow" ;;
     *"git push"*)
       case "$input" in
         *" main"*|*":main"*|*"/main"*|*" dev"*|*":dev"*|*"/dev"*) verdict="protected-ref" ;;
-        *) [ "$on_protected" = 1 ] && verdict="protected" || verdict="allow" ;;
+        *) [ "$on_protected" = 1 ] && verdict="protected" ;;
       esac ;;
-    *) verdict="allow" ;;
   esac
+  if [ "$verdict" = "allow" ]; then
+    case "$input" in
+      *"git commit"*|*"git merge"*) [ "$on_protected" = 1 ] && verdict="protected" ;;
+    esac
+  fi
 fi
 
 case "$verdict" in

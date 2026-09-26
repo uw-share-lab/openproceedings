@@ -12,13 +12,17 @@
 # - backlog/ is CLI-managed (task-hygiene skill): only the `backlog` CLI moves a task (e.g. `backlog task
 #   complete` into backlog/completed/). Bash mv / git mv / cp / rm / tee / redirects that target files
 #   under backlog/ are refused here; enforce-backlog-cli.sh covers editor writes.
-# Paths are resolved against the repo root, so frontend/src/data/… is unaffected. Exit 2 blocks.
+# - `git clean -x/-X` (unless a dry run, `-e data`, or pathspecs outside data/) and `git stash push|save --all`
+#   are refused: they remove gitignored files, which is all of data/.
+# Globs are expanded against the filesystem (`rm -rf data*`, `*`, `../*`). An unparseable command that names
+# data/ or backlog/ is refused (fail closed). Paths are resolved against the repo root, so
+# frontend/src/data/… is unaffected. Exit 2 blocks.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 input=$(cat)
 HOOK_INPUT="$input" python3 - "$HOOK_DIR" <<'PY'
-import json, os, sys
+import glob, json, os, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import ParseError, git_subcommand, read_payload, redirect_targets, repo_root, simple_commands
+from cmdparse import ParseError, git_subcommand, opt_values, read_payload, redirect_targets, repo_root, simple_commands
 
 try:
     payload = json.loads(os.environ.get("HOOK_INPUT") or "{}")
@@ -28,21 +32,24 @@ tool = payload.get("tool_name", "")
 ti = payload.get("tool_input") or {}
 cwd = payload.get("cwd") or os.getcwd()
 
-def glob_base(path):
-    """A glob stays literal in the command string, so `rm -rf data/*` must be judged by the directory the
-    glob expands inside (`data`) — review round 2 found it wiping every snapshot."""
-    for i, ch in enumerate(path):
-        if ch in "*?[":
-            return os.path.dirname(path[:i]) or "."
-    return path
+def expand(path, base):
+    """Every path a shell word can name: a glob is expanded against the real filesystem, so `data*`,
+    `dat?`, `*` and `../*` are judged by what they match (review round 3). A glob that matches nothing
+    deletes nothing, so its literal text is checked only as a path."""
+    if not any(ch in path for ch in "*?["):
+        return [path]
+    full = path if os.path.isabs(path) else os.path.join(base, path)
+    return [*glob.glob(full), path]
 
 def rel(path, base):
     """Path relative to the repo root that contains `base`, with forward slashes; None if outside."""
-    path = glob_base(path)
     root = os.path.realpath(repo_root(base))
     full = os.path.realpath(path if os.path.isabs(path) else os.path.join(base, path))
     r = os.path.relpath(full, root).replace("\\", "/")
     return None if r.startswith("..") else r
+
+def any_rel(pred, path, base):
+    return any(pred(rel(p, base)) for p in expand(path, base))
 
 def inside_immutable(r):
     return r is not None and (r.startswith("data/snapshots/") or r.startswith("data/indexes/"))
@@ -69,14 +76,14 @@ if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
     sys.exit(0)
 
 cmd, cwd = read_payload()
-# Fast exit only when nothing in the command could touch data/ or backlog/. `git clean`/`git stash` never
-# name data/ but remove it (it is gitignored), so they must reach the checks below.
-if not any(k in cmd for k in ("data", "backlog", "clean", "stash")):
-    sys.exit(0)
 try:
     commands = list(simple_commands(cmd, cwd))
     redirects = list(redirect_targets(cmd, cwd))
 except ParseError:
+    # Fail CLOSED (review round 3): an unparseable command that names data/ or backlog/ is refused.
+    if "data" in cmd or "backlog" in cmd:
+        refuse("Blocked: this command could not be parsed (unbalanced quotes?) and mentions data/ or backlog/ — "
+               "refusing rather than letting it through unexamined. Fix the quoting and retry.")
     sys.exit(0)
 for op, target, d in redirects:
     if ">" in op and inside_immutable(rel(target, d)):
@@ -103,29 +110,36 @@ for argv, d in commands:
         flags = [a for a in gm[1] if a.startswith("-")]
         dry = any(a in ("-n", "--dry-run") or (not a.startswith("--") and "n" in a) for a in flags)
         ignored = any(a in ("-x", "-X") or (not a.startswith("--") and ("x" in a or "X" in a)) for a in flags)
-        if ignored and not dry:
+        excludes = [v for v in opt_values(gm[1], "-e", "--exclude")]
+        excluded = any(v.strip("/") == "data" for v in excludes)
+        pathspecs = [a for a in gm[1] if not a.startswith("-") and a not in excludes]
+        outside = bool(pathspecs) and not any(any_rel(lambda r: r is not None and (r == "data" or r.startswith("data/") or r == "."), p, gm[2]) for p in pathspecs)
+        if ignored and not dry and not excluded and not outside:
             refuse("Blocked: `git clean -x/-X` deletes gitignored files — that is all of data/ (snapshots, indexes, "
                    "search records). Clean specific paths, or add -e data to exclude it.")
-    if gm and gm[0] == "stash" and any(a in ("-a", "--all") for a in gm[1]):
+    stash_writes = gm and gm[0] == "stash" and (not gm[1] or gm[1][0] in ("push", "save") or gm[1][0].startswith("-"))
+    if stash_writes and any(a in ("-a", "--all") for a in gm[1]):
         refuse("Blocked: `git stash --all` stashes (and removes) gitignored files, including data/.")
     if gm and gm[0] in ("mv", "rm") and any(in_backlog(rel(p, gm[2])) for p in gm[1] if not p.startswith("-")):
         refuse(BACKLOG_MSG)
-    if head in DESTROY | {"mv", "tee"} | DEST_LAST and any(in_backlog(rel(p, d)) for p in paths):
+    if head in DESTROY | {"mv", "tee"} and any(any_rel(in_backlog, p, d) for p in paths):
         refuse(BACKLOG_MSG)
-    if head in DESTROY and any(is_or_contains_immutable(rel(p, d)) for p in paths):
+    if head in DEST_LAST and paths and any_rel(in_backlog, paths[-1], d):  # copying OUT of backlog/ is fine
+        refuse(BACKLOG_MSG)
+    if head in DESTROY and any(any_rel(is_or_contains_immutable, p, d) for p in paths):
         refuse(IMMUTABLE_MSG + " To retire an old version use `op index retire <index_version>` (it refuses while a search record pins it).")
-    if head == "mv" and paths and (any(is_or_contains_immutable(rel(p, d)) for p in paths[:-1]) or inside_immutable(rel(paths[-1], d))):
+    if head == "mv" and paths and (any(any_rel(is_or_contains_immutable, p, d) for p in paths[:-1]) or any_rel(inside_immutable, paths[-1], d)):
         refuse(IMMUTABLE_MSG)
-    if head in DEST_LAST and paths and is_or_contains_immutable(rel(paths[-1], d)):
+    if head in DEST_LAST and paths and any_rel(is_or_contains_immutable, paths[-1], d):
         refuse(IMMUTABLE_MSG)
-    if head == "tee" and any(inside_immutable(rel(p, d)) for p in paths):
+    if head == "tee" and any(any_rel(inside_immutable, p, d) for p in paths):
         refuse(IMMUTABLE_MSG)
     if head == "dd" and any(a.startswith("of=") and inside_immutable(rel(a[3:], d)) for a in args):
         refuse(IMMUTABLE_MSG)
-    if head == "find" and ("-delete" in args or "-exec" in args or "-execdir" in args) and paths and is_or_contains_immutable(rel(paths[0], d)):
+    if head == "find" and ("-delete" in args or "-exec" in args or "-execdir" in args) and paths and any_rel(is_or_contains_immutable, paths[0], d):
         refuse(IMMUTABLE_MSG)
     in_place = any(a.startswith("--in-place") or (a.startswith("-") and not a.startswith("--") and "i" in a) for a in args)
-    if head == "sed" and in_place and any(inside_immutable(rel(p, d)) for p in paths):
+    if head == "sed" and in_place and any(any_rel(inside_immutable, p, d) for p in paths):
         refuse(IMMUTABLE_MSG)
 sys.exit(0)
 PY

@@ -1,17 +1,19 @@
 """Shared command-string parsing for the openproceedings PreToolUse(Bash) gates.
 
-Splits a Bash tool command into simple commands (argv lists) the way bash would for the cases that
+Parses a Bash tool command into simple commands (argv lists) the way bash reads it, for the cases that
 matter to a gate:
-  * separators split with or without surrounding spaces: `;` `&&` `||` `|` `&` `(` `)` and NEWLINES
-    (a multi-line tool call is several commands) — review 2026-09-25 found `git status;git push`
-    and `git status<newline>git push` slipping past a whitespace-only split;
-  * heredoc bodies (`<<EOF … EOF`, `<<-'EOF'`) are removed before splitting, so body lines are never
-    mistaken for commands (the raw text is still available to gates that scan message content);
-  * leading `VAR=val` assignments and the wrappers `env`, `command`, `builtin`, `exec`, `time`,
-    `nohup`, `nice`, `sudo` are stripped, so `FOO=1 git push` is still a git push;
-  * `cd <dir>` is tracked, and `bash -c "…"` / `sh -lc '…'` / `eval "…"` are recursed into.
-Each simple command is yielded with the directory it would run in, so a gate can ask git about the
-right worktree. Redirect operators (`>`, `>>`, `<`, `2>&1`) come out as their own tokens.
+  * `preprocess` makes ONE pass over the whole text: quote state carries across lines (a multi-line quoted
+    message is one word), an unquoted `#` at the start of a word starts a comment, and an unquoted
+    `<<DELIM` / `<<'DELIM'` / `<<-"DELIM"` starts a heredoc whose body is dropped unread (never `<<<`);
+  * separators split with or without spaces: `;` `&&` `||` `|` `&` `(` `)`, newlines, `<(`/`>(`;
+  * leading reserved words (`if`/`then`/`do`/`{`/`!` …), `VAR=val`, and wrappers (`env`, `sudo`, `nice`,
+    `timeout`, `xargs`, `stdbuf`, `watch`, `exec`, `time`, `nohup`, `command`, `builtin`) are stripped, each
+    wrapper with its own table of value-taking options; `env -S '…'` is split, `env -C`/`sudo -D` move dir;
+  * command names compare by basename (`/usr/bin/git` is `git`);
+  * redirections leave argv as (operator, target) pairs (`redirect_targets`);
+  * `cd <dir>` is tracked and `bash -c "…"` / `eval "…"` are recursed into.
+A command that cannot be parsed raises ParseError; every gate treats that as a reason to BLOCK a command
+that looks like what it guards (fail closed), never to allow it.
 
 Threat model (same as enforce-pr-workflow.sh): a guardrail against honest mistakes, not an adversarial
 control. `$(...)`, variables and script files are opaque to a static parser.
@@ -33,14 +35,35 @@ SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 # Wrappers that run the rest of the line as a command, with the options of EACH that consume the next word
 # (review round 2: one shared set made `sudo -n git push` skip `git`). A wrapper not listed takes none.
 WRAPPER_VALUE_OPTS: dict[str, set[str]] = {
-    "env": {"-u", "-C", "-S"},
+    "env": {"-u", "-C", "-S", "--unset", "--chdir", "--split-string"},
     "command": set(),
     "builtin": set(),
     "exec": {"-a"},
     "time": {"-f", "-o"},
     "nohup": set(),
     "nice": {"-n"},
-    "sudo": {"-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T"},
+    "sudo": {
+        "-u",
+        "-g",
+        "-h",
+        "-p",
+        "-C",
+        "-D",
+        "-r",
+        "-t",
+        "-U",
+        "-T",
+        "--user",
+        "--group",
+        "--host",
+        "--prompt",
+        "--close-from",
+        "--chdir",
+        "--role",
+        "--type",
+        "--other-user",
+        "--command-timeout",
+    },
     "timeout": {"-s", "-k", "--signal", "--kill-after"},
     "stdbuf": {"-i", "-o", "-e"},
     "xargs": {
@@ -71,44 +94,16 @@ RESERVED = {
     "elif",
     "else",
     "fi",
-    "for",
     "while",
     "until",
     "do",
     "done",
-    "case",
     "esac",
-    "select",
     "function",
 }
 GIT_VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
 GH_VALUE_OPTS = {"-R", "--repo"}
 HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)([A-Za-z_][\w-]*)\1")
-
-
-def _unquoted(line: str) -> str:
-    """`line` with quoted spans blanked and any `#` comment removed, so heredoc detection only sees
-    shell syntax (a `<<EOF` inside a quoted message is text, not a heredoc)."""
-    out, quote, i = [], None, 0
-    while i < len(line):
-        c = line[i]
-        if quote:
-            if c == "\\" and quote == '"' and i + 1 < len(line):
-                out.append("  ")
-                i += 2
-                continue
-            if c == quote:
-                quote = None
-            out.append(" ")
-        elif c in "'\"":
-            quote = c
-            out.append(" ")
-        elif c == "#" and (i == 0 or line[i - 1] in " \t;&|("):
-            break
-        else:
-            out.append(c)
-        i += 1
-    return "".join(out)
 
 
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
@@ -131,43 +126,66 @@ def read_payload() -> tuple[str, str]:
     return cmd, cwd
 
 
-def strip_comments(cmd: str) -> str:
-    """Drop unquoted `#` comments the way bash does: `#` starts a comment only at the start of a word, so
-    `git push origin feat  # publish` loses the comment but `a#b` and a quoted `"x # y"` do not."""
-    lines = []
-    for line in cmd.split("\n"):
-        quote, cut = None, None
-        for i, c in enumerate(line):
-            if quote:
-                if c == quote and not (quote == '"' and i and line[i - 1] == "\\"):
-                    quote = None
-            elif c in "'\"":
-                quote = c
-            elif c == "#" and (i == 0 or line[i - 1] in " \t;&|()"):
-                cut = i
-                break
-        lines.append(line if cut is None else line[:cut])
-    return "\n".join(lines)
-
-
-def strip_heredocs(cmd: str) -> str:
-    """Remove heredoc bodies (the lines after a `<<DELIM` up to a line that is exactly DELIM)."""
-    lines = cmd.split("\n")
-    out: list[str] = []
+def preprocess(cmd: str) -> str:
+    """One pass over the whole command, the way bash reads it, returning the text to tokenize:
+    - quote state is carried ACROSS lines, so a multi-line quoted message (`-m "a<newline>see #1"`) stays one
+      string — per-line state cut `#1` as a comment and unbalanced the quotes (review round 3);
+    - an unquoted `#` at the start of a word starts a comment, which is dropped to the end of the line;
+    - an unquoted `<<DELIM` / `<<-'DELIM'` / `<<"DELIM"` starts a heredoc: its body lines are dropped unread (an
+      apostrophe in a body must not open a quote), and the delimiter is read from the raw text so quoted
+      delimiters are recognised; `<<<` (herestring) is not a heredoc;
+    - a `<<` inside quotes is text (the usual `-m "$(cat <<'EOF' …)"` stays inside its quoted argument).
+    """
+    out_lines: list[str] = []
+    quote: str | None = None
     pending: list[str] = []
-    for line in lines:
+    for line in cmd.split("\n"):
         if pending:
             if line.strip() == pending[0]:
                 pending.pop(0)
             continue
-        out.append(line)
-        bare = _unquoted(line).replace("<<<", "   ")  # a herestring is not a heredoc
-        pending.extend(m.group(2) for m in HEREDOC.finditer(bare))
-    return "\n".join(out)
+        kept: list[str] = []
+        i, n = 0, len(line)
+        while i < n:
+            c = line[i]
+            if quote:
+                kept.append(c)
+                if c == "\\" and quote == '"' and i + 1 < n:
+                    kept.append(line[i + 1])
+                    i += 2
+                    continue
+                if c == quote:
+                    quote = None
+                i += 1
+                continue
+            if c in "'\"":
+                quote = c
+                kept.append(c)
+                i += 1
+                continue
+            if c == "\\" and i + 1 < n:
+                kept.append(line[i : i + 2])
+                i += 2
+                continue
+            if c == "#" and (i == 0 or line[i - 1] in " \t;&|()"):
+                break
+            if line.startswith("<<<", i):
+                kept.append("<<<")
+                i += 3
+                continue
+            if line.startswith("<<", i) and (m := HEREDOC.match(line, i)):
+                pending.append(m.group(2))
+                kept.append(m.group(0))
+                i = m.end()
+                continue
+            kept.append(c)
+            i += 1
+        out_lines.append("".join(kept))
+    return "\n".join(out_lines)
 
 
 def tokenize(cmd: str) -> list[str]:
-    text = strip_comments(strip_heredocs(cmd).replace("\\\n", " "))
+    text = preprocess(cmd.replace("\\\n", " "))
     lex = shlex.shlex(text, posix=True, punctuation_chars=PUNCT)
     lex.whitespace = " \t\r"
     lex.whitespace_split = True
@@ -197,7 +215,9 @@ def base(word: str) -> str:
     return os.path.basename(word) if "/" in word else word
 
 
-def _strip_prefixes(argv: list[str]) -> list[str]:
+def _strip_prefixes(argv: list[str], state: dict | None = None) -> list[str]:
+    """Drop leading reserved words, `VAR=val` and wrappers (with their option values). `env -S 'cmd'`
+    splits its string into the command; `env -C dir` / `sudo -D dir` change the directory in `state`."""
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -207,9 +227,21 @@ def _strip_prefixes(argv: list[str]) -> list[str]:
             name = base(a)
             i += 1
             while i < len(argv) and argv[i].startswith("-"):  # env -i, nice -n 5, sudo -u x, timeout -s KILL
-                opt = argv[i].split("=", 1)[0]
-                takes_value = opt in WRAPPER_VALUE_OPTS[name] and "=" not in argv[i]
-                i += 2 if takes_value else 1
+                opt, eq, attached = argv[i].partition("=")
+                takes_value = opt in WRAPPER_VALUE_OPTS[name]
+                value = attached if eq else (argv[i + 1] if takes_value and i + 1 < len(argv) else None)
+                if name == "env" and opt in ("-S", "--split-string") and value is not None:
+                    return _strip_prefixes([*tokenize(value), *argv[i + (1 if eq else 2) :]], state)
+                if (
+                    state is not None
+                    and value is not None
+                    and (
+                        (name == "env" and opt in ("-C", "--chdir"))
+                        or (name == "sudo" and opt in ("-D", "--chdir"))
+                    )
+                ):
+                    state["dir"] = _resolve(value, state["dir"])
+                i += 1 if (eq or not takes_value) else 2
             if name == "timeout" and i < len(argv):  # the duration
                 i += 1
         else:
@@ -270,14 +302,12 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[list[str], str, list
             j += 1
         raw, i = tokens[i:j], j + 1
         args, redirects = split_redirects(raw)
-        argv = _strip_prefixes(args)
+        argv = _strip_prefixes(args, state)
         if not argv:
             if redirects:
                 yield [], state["dir"], redirects
             continue
         head = argv[0]
-        if head in ("for", "select", "case"):  # loop/case headers carry no command
-            continue
         if head == "cd" and len(argv) > 1 and not argv[1].startswith("-"):
             state["dir"] = _resolve(argv[1], state["dir"])
             continue

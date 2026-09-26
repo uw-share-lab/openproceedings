@@ -1,0 +1,532 @@
+[
+ {
+  "label": "newline not a separator",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "SEP_CHARS = set(\";&|()\\n\")",
+  "new": "SEP_CHARS = set(\";&|()\")"
+ },
+ {
+  "label": "env not a wrapper",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"env\": {\"-u\", \"-C\", \"-S\", \"--unset\", \"--chdir\", \"--split-string\"},\n",
+  "new": ""
+ },
+ {
+  "label": "timeout duration not skipped",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if name == \"timeout\" and i < len(argv):  # the duration\n                i += 1\n",
+  "new": ""
+ },
+ {
+  "label": "wrapper option values not skipped",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                i += 1 if (eq or not takes_value) else 2",
+  "new": "                i += 1"
+ },
+ {
+  "label": "reserved words not stripped",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        if a in RESERVED or ASSIGNMENT.match(a):",
+  "new": "        if ASSIGNMENT.match(a):"
+ },
+ {
+  "label": "absolute path not basenamed",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        rest = [base(rest[0]), *rest[1:]]",
+  "new": "        pass"
+ },
+ {
+  "label": "heredoc stripping disabled",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if line.startswith(\"<<\", i) and (m := HEREDOC.match(line, i)):",
+  "new": "            if False:"
+ },
+ {
+  "label": "herestring treated as heredoc",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if line.startswith(\"<<<\", i):",
+  "new": "            if False:"
+ },
+ {
+  "label": "quoted <<EOF treated as heredoc",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                if c == quote:\n                    quote = None",
+  "new": "                quote = None"
+ },
+ {
+  "label": "comments not stripped",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if c == \"#\" and (i == 0 or line[i - 1] in \" \\t;&|()\"):",
+  "new": "            if False:"
+ },
+ {
+  "label": "fd digit before redirect kept",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if args and args[-1].isdigit():\n                args.pop()\n",
+  "new": ""
+ },
+ {
+  "label": "process substitution not a separator",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    return \"(\" in tok and set(tok) <= SEP_CHARS | {\"<\", \">\"}",
+  "new": "    return False"
+ },
+ {
+  "label": "eval not recursed",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        if head == \"eval\":\n            yield from _walk(tokenize(\" \".join(argv[1:])), state)\n            continue\n",
+  "new": ""
+ },
+ {
+  "label": "gh -R value not skipped",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "GH_VALUE_OPTS = {\"-R\", \"--repo\"}",
+  "new": "GH_VALUE_OPTS = set()"
+ },
+ {
+  "label": "pr new alias dropped",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        verb = \"create\"",
+  "new": "        pass"
+ },
+ {
+  "label": "attached short opt ignored",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if not name.startswith(\"--\") and len(name) == 2 and arg.startswith(name) and len(arg) > 2:\n        return arg[2:]\n",
+  "new": ""
+ },
+ {
+  "label": "cd not tracked",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            state[\"dir\"] = _resolve(argv[1], state[\"dir\"])\n",
+  "new": ""
+ },
+ {
+  "label": "git -C ignored",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                eff = _resolve(argv[j + 1], eff)",
+  "new": "                pass"
+ },
+ {
+  "label": "bash -c not recursed",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    yield from _walk(tokenize(argv[k + 1]), state)\n",
+  "new": ""
+ },
+ {
+  "label": "-o value not skipped",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "PUSH_VALUE_OPTS = {\"-o\", ",
+  "new": "PUSH_VALUE_OPTS = {"
+ },
+ {
+  "label": "--all not expanded",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "if \"--all\" in flags or \"--mirror\" in flags",
+  "new": "if False"
+ },
+ {
+  "label": "promotion: any head to main",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "if base == \"main\" and raw_head == \"dev\" and not other_repo:",
+  "new": "if base == \"main\":"
+ },
+ {
+  "label": "promotion: owner:dev accepted",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "if base == \"main\" and raw_head == \"dev\" and not other_repo:",
+  "new": "if base == \"main\" and head == \"dev\" and not other_repo:"
+ },
+ {
+  "label": "promotion: --repo other accepted",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "and not other_repo:",
+  "new": ":"
+ },
+ {
+  "label": "learnings: A only (extensions rejected)",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "\"--diff-filter=AMR\"",
+  "new": "\"--diff-filter=A\""
+ },
+ {
+  "label": "learnings: zero-line changes count",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "and int(parts[0]) > 0",
+  "new": ""
+ },
+ {
+  "label": "learnings: any file counts",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "                if ENTRY_NAME.match(path):",
+  "new": "                if True:"
+ },
+ {
+  "label": "-d not a full deletion",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "if \"--delete\" in flags or \"-d\" in flags:",
+  "new": "if \"--delete\" in flags:"
+ },
+ {
+  "label": "owner not stripped",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "head = safe_branch(strip_owner(raw_head), \"--head\")",
+  "new": "head = safe_branch(raw_head, \"--head\")"
+ },
+ {
+  "label": "base default main",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "or \"dev\"",
+  "new": "or \"main\""
+ },
+ {
+  "label": "label comma split dropped",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "for l in v.split(\",\")",
+  "new": "for l in [v]"
+ },
+ {
+  "label": "verdict not checked",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "return \"approved\" if first == \"APPROVE\" else",
+  "new": "return \"approved\" if first else"
+ },
+ {
+  "label": "base/head injection not validated",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    ok = (not name.startswith(\"-\")) and git(\".\", \"check-ref-format\", \"--branch\", name) != \"\"",
+  "new": "    ok = True"
+ },
+ {
+  "label": "robot footer dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "|🤖 generated",
+  "new": ""
+ },
+ {
+  "label": "= trailer form dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "co-authored-by[:=]",
+  "new": "co-authored-by:"
+ },
+ {
+  "label": "gh pr edit not checked",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "{\"create\", \"edit\", ",
+  "new": "{\"create\", "
+ },
+ {
+  "label": "git tag not checked",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "\"merge\", \"tag\", ",
+  "new": "\"merge\", "
+ },
+ {
+  "label": "--body-file not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "opt_values(h[2], \"--body-file\", \"-F\")",
+  "new": "opt_values(h[2], \"--nothing\")"
+ },
+ {
+  "label": "stdin redirect not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if \"<\" in op and target:",
+  "new": "        if False:"
+ },
+ {
+  "label": "cat pipe not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if argv and argv[0] == \"cat\":",
+  "new": "        if False:"
+ },
+ {
+  "label": "parse error not blocked",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if PATTERN.search(cmd):  # unbalanced",
+  "new": "    if False:  # unbalanced"
+ },
+ {
+  "label": "dd branch removed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if head == \"dd\"",
+  "new": "    if False and head == \"dd\""
+ },
+ {
+  "label": "rsync not DEST_LAST",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "DEST_LAST = {\"cp\", \"rsync\", ",
+  "new": "DEST_LAST = {\"cp\", "
+ },
+ {
+  "label": "DEST_LAST dir itself allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if head in DEST_LAST and paths and any_rel(is_or_contains_immutable, paths[-1], d):",
+  "new": "    if head in DEST_LAST and paths and any_rel(inside_immutable, paths[-1], d):"
+ },
+ {
+  "label": "truncate not destructive",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "\"shred\", \"truncate\", ",
+  "new": "\"shred\", "
+ },
+ {
+  "label": "git clean -x allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if ignored and not dry and not excluded and not outside:",
+  "new": "        if False:"
+ },
+ {
+  "label": "git stash --all allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if stash_writes and any(a in (\"-a\", \"--all\") for a in gm[1]):",
+  "new": "    if False:"
+ },
+ {
+  "label": "-execdir not checked",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": " or \"-execdir\" in args",
+  "new": ""
+ },
+ {
+  "label": "sed -Ei cluster missed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": " or (a.startswith(\"-\") and not a.startswith(\"--\") and \"i\" in a)",
+  "new": ""
+ },
+ {
+  "label": "NotebookEdit path ignored",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": " or ti.get(\"notebook_path\")",
+  "new": ""
+ },
+ {
+  "label": "backlog mv allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if gm and gm[0] in (\"mv\", \"rm\") and any(in_backlog(",
+  "new": "    if False and any(in_backlog("
+ },
+ {
+  "label": "backlog redirect allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if \">\" in op and in_backlog(rel(target, d)):",
+  "new": "    if False:"
+ },
+ {
+  "label": "PR gate: git not basenamed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        if _base(tok) != \"git\":",
+  "new": "        if tok != \"git\":"
+ },
+ {
+  "label": "record: on_base check removed",
+  "file": ".claude/scripts/record-review.py",
+  "old": "if on_base else None",
+  "new": "if False else None"
+ },
+ {
+  "label": "record: stray tag check removed",
+  "file": ".claude/scripts/record-review.py",
+  "old": "stray = [ln for ln in lines if TAG_ANYWHERE.search(ln) and not FINDING_START.match(ln)]",
+  "new": "stray = []"
+ },
+ {
+  "label": "record: completed/ not searched",
+  "file": ".claude/scripts/record-review.py",
+  "old": "(root / \"backlog\" / \"completed\").glob(f\"{task} - *.md\")",
+  "new": "(root / \"nowhere\").glob(\"x\")"
+ },
+ {
+  "label": "record: must→task counted fixed",
+  "file": ".claude/scripts/record-review.py",
+  "old": "if level == \"must\" and not disp.lower().startswith(\"fixed\"):",
+  "new": "if level == \"must\" and disp.lower().startswith(\"rejected\"):"
+ },
+ {
+  "label": "record: REQUEST_CHANGES blocked on open must",
+  "file": ".claude/scripts/record-review.py",
+  "old": "if a.verdict == \"APPROVE\" and open_must:",
+  "new": "if open_must:"
+ },
+ {
+  "label": "record: dirty tree allowed",
+  "file": ".claude/scripts/record-review.py",
+  "old": "    if git(\"status\", \"--porcelain\", \"--untracked-files=normal\"):",
+  "new": "    if False:"
+ },
+ {
+  "label": "learnidx: placeholder check removed",
+  "file": ".claude/scripts/learnings_index.py",
+  "old": "if PLACEHOLDER.search(title or \"\") or (key and PLACEHOLDER.search(key.group(1))):",
+  "new": "if False:"
+ },
+ {
+  "label": "learnidx: date check removed",
+  "file": ".claude/scripts/learnings_index.py",
+  "old": "            dt.date.fromisoformat(m.group(1))",
+  "new": "            pass"
+ },
+ {
+  "label": "learnidx: subfolder allowed",
+  "file": ".claude/scripts/learnings_index.py",
+  "old": "        if p.parent != DIR:",
+  "new": "        if False:"
+ },
+ {
+  "label": "backlog: Done check inverted",
+  "file": ".claude/scripts/check_backlog.py",
+  "old": "== \"done\"",
+  "new": "== \"never\""
+ },
+ {
+  "label": "lint: near-miss names ignored",
+  "file": ".claude/scripts/lint_tooling.py",
+  "old": "            elif near := difflib.get_close_matches(",
+  "new": "            elif False and difflib.get_close_matches("
+ },
+ {
+  "label": "lint: learnings skill skipped",
+  "file": ".claude/scripts/lint_tooling.py",
+  "old": "p.is_relative_to(C / \"learnings\")",
+  "new": "\"learnings\" in p.parts"
+ },
+ {
+  "label": "lint: agent orphans ignored",
+  "file": ".claude/scripts/lint_tooling.py",
+  "old": "    for a in sorted(agents - agent_refs):",
+  "new": "    for a in []:"
+ },
+ {
+  "label": "roster: unassigned items allowed",
+  "file": ".claude/scripts/roster_index.py",
+  "old": "for n in sorted(set(have[kind]) - placed[kind]):",
+  "new": "for n in []:"
+ },
+ {
+  "label": "load-learnings: cap removed",
+  "file": ".claude/hooks/load-learnings.sh",
+  "old": "| head -40",
+  "new": ""
+ },
+ {
+  "label": "autofix: data/ not skipped",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "  data/*|backlog/*|",
+  "new": "  backlog/*|"
+ },
+ {
+  "label": "autofix: symlink escape",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "root=$(realpath_py \"$root\"); file=$(realpath_py \"$file\")",
+  "new": ":"
+ },
+ {
+  "label": "PR gate: redirects kept as tokens (EQUIVALENT: redirect targets are never compared as refs)",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        elif not _is_redirect(t):",
+  "new": "        else:",
+  "equivalent": true
+ },
+ {
+  "label": "quote state reset per line (round-3 regression)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    for line in cmd.split(\"\\n\"):\n        if pending:",
+  "new": "    for line in cmd.split(\"\\n\"):\n        quote = None\n        if pending:"
+ },
+ {
+  "label": "comment cut on any # (not word start)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "if c == \"#\" and (i == 0 or line[i - 1] in \" \\t;&|()\"):",
+  "new": "if c == \"#\":"
+ },
+ {
+  "label": "comments cut even inside quotes",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if quote:\n                kept.append(c)",
+  "new": "            if quote and c != \"#\":\n                kept.append(c)"
+ },
+ {
+  "label": "env -S not split",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                if name == \"env\" and opt in (\"-S\", \"--split-string\") and value is not None:",
+  "new": "                if False:"
+ },
+ {
+  "label": "require-review fails open on parse error",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "if re.search(r\"\\bgit\\b[^\\n]*\\bpush\\b|\\bgh\\b[^\\n]*\\bpr\\b\", cmd):",
+  "new": "if False:"
+ },
+ {
+  "label": "protect-data-dir fails open on parse error",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if \"data\" in cmd or \"backlog\" in cmd:",
+  "new": "    if False:"
+ },
+ {
+  "label": "PR fallback checks commit before push",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "  if [ \"$verdict\" = \"allow\" ]; then\n    case \"$input\" in\n      *\"git commit\"*|*\"git merge\"*) [ \"$on_protected\" = 1 ] && verdict=\"protected\" ;;\n    esac\n  fi",
+  "new": "  case \"$input\" in *\"git commit\"*|*\"git merge\"*) verdict=\"allow\" ;; esac"
+ },
+ {
+  "label": "globs not expanded",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    return [*glob.glob(full), path]",
+  "new": "    return [path]"
+ },
+ {
+  "label": "git clean -e data not honoured",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        excluded = any(v.strip(\"/\") == \"data\" for v in excludes)",
+  "new": "        excluded = False"
+ },
+ {
+  "label": "git clean pathspec outside data not honoured",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        outside = bool(pathspecs) and not any(",
+  "new": "        outside = False and not any("
+ },
+ {
+  "label": "git stash list --all refused",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    stash_writes = gm and gm[0] == \"stash\" and (not gm[1] or gm[1][0] in (\"push\", \"save\") or gm[1][0].startswith(\"-\"))",
+  "new": "    stash_writes = gm and gm[0] == \"stash\""
+ },
+ {
+  "label": "copy OUT of backlog refused",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if head in DEST_LAST and paths and any_rel(in_backlog, paths[-1], d):  # copying OUT of backlog/ is fine",
+  "new": "    if head in DEST_LAST and any(any_rel(in_backlog, p, d) for p in paths):"
+ },
+ {
+  "label": "safe_branch without check-ref-format",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    ok = (not name.startswith(\"-\")) and git(\".\", \"check-ref-format\", \"--branch\", name) != \"\"",
+  "new": "    ok = not name.startswith(\"-\")"
+ },
+ {
+  "label": "learnings rename path not rewritten",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "                path = re.sub(r\"\\{[^{}]* => ([^{}]*)\\}\", r\"\\1\", parts[2]).split(\" => \")[-1]",
+  "new": "                path = parts[2]"
+ },
+ {
+  "label": "learnings --find-renames dropped (EQUIVALENT: git's diff.renames defaults to true; the flag states intent)",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "\"--numstat\", \"--find-renames\", ",
+  "new": "\"--numstat\", \"--no-renames\", ",
+  "equivalent": true
+ },
+ {
+  "label": "rejection needs only one word",
+  "file": ".claude/scripts/record-review.py",
+  "old": "        return None if len(words) >= 3 else",
+  "new": "        return None if len(words) >= 1 else"
+ },
+ {
+  "label": "eslint guard ignores untracked config",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "git -C \"$root\" status --porcelain -- 'frontend/eslint.config.*'",
+  "new": "git -C \"$root\" diff HEAD -- 'frontend/eslint.config.*'"
+ }
+]
