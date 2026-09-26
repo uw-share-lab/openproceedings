@@ -22,8 +22,11 @@ over-merge silently deletes a paper from someone's systematic review.
 Step 2 only runs **across sources**: the clusters' provenance source sets must be disjoint
 (OpenReview ↔ proceedings ↔ RIS). Two OpenReview notes with different forum ids are different submissions
 even when their titles match. For example, a main-track paper and a same-year workshop version share a
-title, and both must survive. Each step-1 cluster is judged by the record its claims resolve to (its
-track, sources and every title claim's key), so running dedup on its own output changes nothing.
+title, and both must survive. Each step-1 cluster is judged by the record its claims resolve to: its
+track, its sources, and the key of every title claim it **keeps**. A same-source title that a newer
+claim superseded is only reported (`newest:`), never matched on, because the output record no longer
+carries it and a second run would then merge differently. Missing that match leaves a duplicate, the
+safe direction.
 
 ## Never merge
 - Across `venue` or `year`. The key is `(venue, year, title_key)`, and there's no fallback key.
@@ -31,40 +34,58 @@ track, sources and every title claim's key), so running dedup on its own output 
   validation). This is the venuetriage lesson: a `(title, "")` key merged every year-less record that
   shared a title.
 - When `title_key` is empty (a title of punctuation or math only).
-- When the key matches **more than one** candidate from one source, or two different forum ids. That's
-  ambiguous: write a `conflicts.csv` row and keep them all separate. The same holds when two keys chain
-  clusters that must not share a record: every cluster in the chain stays separate.
-- A proceedings record into an OpenReview record whose track is not one the proceedings list (`main`,
-  `datasets_benchmarks`, `position`). Proceedings never host workshop papers.
+- When the key matches **more than one** candidate from one source, two different forum ids, or two
+  different proceedings papers (proceedings ids come from native ids *and* `urls.proceedings`/`urls.pdf`
+  claims, `ingest/urls.py`). That's ambiguous: write a `conflicts.csv` row and keep them all separate.
+  The same holds when two keys chain clusters that must not share a record: every cluster in the chain
+  stays separate (`field = title_key_chain`).
+- A paper whose track the proceedings don't host (anything but `main`, `datasets_benchmarks`,
+  `position`) into a **proceedings listing**: a cluster with a proceedings source *or* a proceedings id,
+  so a RIS record with a `nips-`/`iclr-`/`pmlr-` id counts. Proceedings never host workshop papers. A
+  record with track `unknown` also stays apart until evidence arrives; once the crawlers land (M4) such
+  duplicates show up as `track_not_merged` rows to review.
 
 ## Combining a merge
-- The survivor's id uses the OpenReview forum id if either side has one (`.claude/skills/record-schema/SKILL.md`).
-- The **union** of all claims is kept, one per (field, source): when one source claims a field twice
-  (the same paper in both searches), the newest `fetched_at` wins. Field values are re-resolved with the
-  precedence table (`PRECEDENCE`, held as data), never "whichever record came first". So every input
-  must already equal what its own claims resolve to; dedup refuses one that doesn't.
-- A disagreement on `status`, `track`, `year` or the title key between merged sources becomes a
-  `conflicts.csv` row (decision-005), and
-  the winner comes from precedence.
+- The survivor's id uses the OpenReview forum id if any side has one (`.claude/skills/record-schema/SKILL.md`).
+- The **union** of all claims is kept, one per (field, source). When one source claims a field twice
+  (the same paper in both searches), the newest `fetched_at` wins and every other value that source gave,
+  for any field, is a `newest:<source>` row; an exact fetch-time tie is a `tie:<source>` row (the kept
+  value is then only a deterministic pick, so a reviewer must look). Superseded same-source claims are
+  not kept in the record; merges.csv (`native_id`/`forum_id` rows) records that both inputs had the
+  paper. Field values are re-resolved with the precedence table (`PRECEDENCE`, held as data), never
+  "whichever record came first". So every input must already equal what its own claims resolve to;
+  dedup refuses one that doesn't.
+- A cross-source disagreement on `status`, `track` or the title **key** (decision-005: a title that
+  differs only in case, punctuation or markup is no conflict) becomes a `precedence:<source>` row, and
+  the winner comes from precedence. `venue` and `year` can't differ inside a merge: they're part of every
+  merge key.
 - Iterate inputs in sorted-id order so the output doesn't depend on crawl order.
 
 ## Audit files (in the snapshot directory)
 `merges.csv`: `survivor_id,merged_id,rule,key,venue,year,sources`, where `rule` is `forum_id`,
 `native_id` (the same proceedings id) or `title_venue_year`, and `key` is the forum id, the native id or
-the title key.
+the first shared title key. Step-1 rows point from a cluster's id to itself (`survivor_id ==
+merged_id`: one row per extra copy of that id); a `title_venue_year` row then points from the cluster id
+to the final survivor. So every input id is an output id or a `merged_id`, once per copy, and following
+`title_venue_year` rows from any `merged_id` reaches an output record.
 
 `conflicts.csv`: `id,field,value_a,source_a,value_b,source_b,resolution`, where `resolution` is
-`precedence:<source>` (the winner is `value_a`), `newest:<source>` (one source, two values),
-`ambiguous_not_merged`, `track_not_merged` or `venue_year_not_merged`. For the three not-merged
-resolutions, `field` is `title_key` or `forum_id` and the values are the two record ids, with their
-sources.
+`precedence:<source>` (the winner is `value_a`), `newest:<source>` or `tie:<source>` (one source, two
+values; the kept one is `value_a`), `ambiguous_not_merged`, `track_not_merged` or
+`venue_year_not_merged`. For the not-merged resolutions, `field` is `title_key`, `title_key_chain` or
+`forum_id` and the values are the two record ids, with their sources. Value rows always name an output
+record.
 
 Both files are sorted and deterministic. They're counted in `manifest.json` and reviewed by
 `dedup-auditor` whenever dedup code or its inputs change.
 
 ## Property tests (`backend/tests/unit/ingest/test_dedup_props.py`, Hypothesis)
+Pools collide on purpose (four titles, three forum ids, two proceedings papers per venue, every source,
+track and status, tied fetch times), plus a `chains` strategy that builds the chain shape; `@example`
+rows pin the two over-merges a review found.
 - No output record combines inputs with different `(venue, year)`.
-- Idempotent: `dedup(dedup(xs)) == dedup(xs)`.
+- Idempotent: `dedup(dedup(xs)).records == dedup(xs).records`, and the same `precedence:` rows.
 - Order-independent: `dedup(shuffle(xs)) == dedup(xs)`.
-- Conservation: every input id is either a survivor or appears as `merged_id` exactly once.
-- Two OpenReview inputs with distinct forum ids are never merged.
+- Conservation: every input id is an output id or a `merged_id`, once per copy.
+- Never folds two papers: distinct forum ids, or distinct proceedings ids, never share a record, and a
+  merge into a proceedings listing keeps a proceedings track.

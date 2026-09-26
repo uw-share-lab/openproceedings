@@ -24,13 +24,23 @@ unlisted source never answers it. All claims are kept, including the losing ones
 |---|---|
 | `title`, `abstract`, `authors` | `openreview_v2`, `openreview_v1` (the venues' own platform, current first), then `neurips_proceedings`, `pmlr` (for papers or years not on OpenReview, e.g. ICML before its move), then `ris` |
 | `status` | Where the venue-year's official proceedings (`neurips_proceedings`, `pmlr`) are published and crawled, they decide acceptance: listed → `accepted`; OpenReview says accepted but not listed → `status=unknown` plus a `conflicts.csv` row (never silently accepted or rejected; `unknown` is itemised in exclusion counts). Otherwise `openreview_v2`, `openreview_v1` via `content.venueid` only (never an invitation); `ris` only through its claims (spec 01) |
-| `track` | `openreview_v2`, `openreview_v1` via `content.venueid`; proceedings only for venue-years not on OpenReview |
-| `venue`, `year` | the source whose crawl scope defined the record, and it must agree with the venueid; a disagreement is a `conflicts.csv` row, never silently resolved |
+| `track` | `openreview_v2`, `openreview_v1` via `content.venueid`; proceedings only for venue-years not on OpenReview; `ris` last (its track comes from those same claims, via scholarmend; in M2 it is the only source) |
+| `venue`, `year` | the source whose crawl scope defined the record, and it must agree with the venueid; a disagreement is a `conflicts.csv` row, never silently resolved. As built, venue and year are part of every merge key, so they can't differ inside a merge; a forum id seen in two venue-years is a `venue_year_not_merged` row and the records stay apart |
 
 Two same-rank sources that disagree produce a `conflicts.csv` row with `resolution=precedence:<source>`.
 A **title** that differs between merged sources (beyond case and punctuation, i.e. a different dedup
 title key) is also a `conflicts.csv` row with both titles, so a reviewer can see both and never screens
 the same study twice; both titles stay in the record's claims.
+
+**Same-source claims** (amended 2026-09-26, task-021 review): a record keeps one claim per (field,
+source). When one source gives a field twice (the same paper in both Trust-Evals searches, or a
+re-crawl), the newest `fetched_at` replaces the older claim, which is then written to `conflicts.csv` as a
+`newest:<source>` row (or `tie:<source>` for an exact tie) when its value differs. "All claims are kept"
+means every *source's* claim, including the ones precedence overruled.
+
+**Not yet built:** "OpenReview says accepted but the crawled proceedings don't list it → `unknown` plus a
+`conflicts.csv` row" needs the set of crawled proceedings venue-years, which only the proceedings
+crawlers produce. It is a reconcile step after dedup, tracked as its own task (blocked by 052/053).
 
 ## Consequences
 

@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-26 15:53'
+updated_date: '2026-09-26 16:24'
 labels:
   - query
   - exactness
@@ -26,3 +27,9 @@ Found 2026-09-26 while checking OpenReview vs PMLR abstracts (another session's 
 - [ ] #2 Every pair above tokenizes identically; golden rows for each; exhaustive and property suites green
 - [ ] #3 TOKENIZER_VERSION bumped; spec 02 §Token semantics and the token-contract skill updated
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+User decision 2026-09-26 (asked with previews): (1) Greek letters: canonical token is the Unicode letter; $\alpha$ and α both -> α; a query must contain α (typing alpha finds only the spelled word). (2) Operators and relations: spelled tokens; × and $\times$ both -> times, ≤ and $\leq$ -> leq, etc. Spelling = the LaTeX command name; the full symbol<->command table goes in the decision record for the user to check, flagging collisions with ordinary words (∈ -> in, times). (3) Super/subscripts: joined; O(n²) and $O(n^2)$ both -> o n2 (NFKC reading), so a query for n doesn't match n². Record as a decision (backlog decision), implement with a TOKENIZER_VERSION bump before task-023.
+<!-- SECTION:NOTES:END -->

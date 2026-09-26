@@ -3,14 +3,28 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
-from openproceedings.ingest.dedup import Conflict, Merge, dedup, resolve, title_key
+from openproceedings.ingest.dedup import (
+    CONFLICT_FIELDS,
+    PRECEDENCE,
+    Conflict,
+    Merge,
+    dedup,
+    resolve,
+    title_key,
+)
 from openproceedings.ingest.record import Claim, PaperRecord
 
 T0 = datetime(2026, 9, 1, tzinfo=UTC)
 T1 = datetime(2026, 9, 2, tzinfo=UTC)
+T2 = datetime(2026, 9, 3, tzinfo=UTC)
 H = {n: f"{n:x}" * 32 for n in range(1, 6)}
+
+
+def nips(n: int) -> str:
+    return f"https://proceedings.neurips.cc/paper_files/paper/2024/hash/{H[n]}-Abstract-Conference.html"
 
 
 def paper(
@@ -24,16 +38,11 @@ def paper(
     status: str = "accepted",
     abstract: str | None = None,
     fetched: datetime = T0,
+    **extra: Any,  # further claim fields, e.g. `urls_proceedings=nips(1)`
 ) -> PaperRecord:
     """A record whose fields are exactly what its claims say (as every importer builds them)."""
-    values = {
-        "title": title,
-        "venue": venue,
-        "year": year,
-        "track": track,
-        "status": status,
-        "abstract": abstract,
-    }
+    values: dict[str, Any] = {"title": title, "venue": venue, "year": year, "track": track, "status": status,
+                              "abstract": abstract, **{k.replace("_", ".", 1): v for k, v in extra.items()}}  # fmt: skip
     claims = [
         Claim(field=f, value=v, source=source, fetched_at=fetched) for f, v in values.items() if v is not None
     ]  # type: ignore[arg-type]
@@ -41,33 +50,79 @@ def paper(
     return record
 
 
+def resolutions(result: Any) -> list[str]:
+    return [c.resolution for c in result.conflicts]
+
+
 def test_title_key_is_the_token_contract() -> None:
-    assert title_key("Trust in AI!") == title_key("trust  in ai") == "trust in ai"
+    assert (
+        title_key("Trust in AI!")
+        == title_key("trust  in ai")
+        == title_key("Trust in \\textbf{AI}")
+        == "trust in ai"
+    )
     assert title_key("—") == ""
 
 
+def test_the_precedence_table_is_decision_005() -> None:
+    text = ("openreview_v2", "openreview_v1", "neurips_proceedings", "pmlr", "ris")
+    assert PRECEDENCE["status"] == ("neurips_proceedings", "pmlr", "openreview_v2", "openreview_v1", "ris")
+    assert all(PRECEDENCE[f] == text for f in PRECEDENCE if f != "status")
+    assert CONFLICT_FIELDS == ("title", "track", "status")
+
+
+# --- step 1: identical ids ---------------------------------------------------------------------------
+
+
 def test_same_forum_id_merges_across_the_two_searches_newest_claim_wins() -> None:
-    old = paper("AbCd1234", source="ris", status="unknown", fetched=T0)
-    new = paper("AbCd1234", source="ris", status="accepted", fetched=T1)
+    old = paper("AbCd1234", source="ris", status="unknown", abstract="Old.", fetched=T0)
+    new = paper("AbCd1234", source="ris", status="accepted", abstract="New.", fetched=T1)
     result = dedup([new, old])
     [r] = result.records
-    assert r.status == "accepted"
+    assert (r.status, r.abstract) == ("accepted", "New.")
     assert result.merges == (Merge(r.id, r.id, "forum_id", "AbCd1234", "NeurIPS", 2024, "ris"),)
-    assert Conflict(r.id, "status", "accepted", "ris", "unknown", "ris", "newest:ris") in result.conflicts
+    # every field that changed between the searches is visible, not just the conflict fields
+    assert set(result.conflicts) == {
+        Conflict(r.id, "status", "accepted", "ris", "unknown", "ris", "newest:ris"),
+        Conflict(r.id, "abstract", "New.", "ris", "Old.", "ris", "newest:ris"),
+    }
+
+
+def test_same_moment_disagreement_is_a_tie_not_newest() -> None:
+    result = dedup(
+        [
+            paper("AbCd1234", source="ris", status="accepted"),
+            paper("AbCd1234", source="ris", status="unknown"),
+        ]
+    )
+    assert resolutions(result) == ["tie:ris"]
+
+
+def test_newest_is_by_fetch_time_not_by_url() -> None:
+    old = paper("AbCd1234", source="ris", fetched=T0, urls_pdf="https://z.example/old.pdf")
+    new = paper("AbCd1234", source="ris", fetched=T1, urls_pdf="https://a.example/new.pdf")
+    [r] = dedup([old, new]).records
+    assert r.urls.pdf == "https://a.example/new.pdf"
 
 
 def test_same_proceedings_id_merges() -> None:
-    a = paper(f"nips-{H[1]}", source="ris", fetched=T0)
-    b = paper(f"nips-{H[1]}", source="ris", fetched=T1)
-    result = dedup([a, b])
+    result = dedup(
+        [paper(f"nips-{H[1]}", source="ris", fetched=T0), paper(f"nips-{H[1]}", source="ris", fetched=T1)]
+    )
     assert len(result.records) == 1
-    assert [m.rule for m in result.merges] == ["native_id"]
+    assert [(m.rule, m.key) for m in result.merges] == [("native_id", f"nips-{H[1]}")]
 
 
 def test_same_forum_id_in_different_years_is_not_merged() -> None:
-    result = dedup([paper("AbCd1234", year=2023), paper("AbCd1234", year=2024)])
-    assert len(result.records) == 2 and not result.merges
-    assert [c.resolution for c in result.conflicts] == ["venue_year_not_merged"]
+    result = dedup([paper("AbCd1234", year=2023), paper("AbCd1234", year=2024), paper("AbCd1234", year=2025)])
+    assert len(result.records) == 3 and not result.merges
+    assert [(c.field, c.value_b, c.resolution) for c in result.conflicts] == [
+        ("forum_id", "op:neurips:2024:AbCd1234", "venue_year_not_merged"),
+        ("forum_id", "op:neurips:2025:AbCd1234", "venue_year_not_merged"),
+    ]
+
+
+# --- step 2: title, venue, year across sources --------------------------------------------------------
 
 
 def test_openreview_and_proceedings_merge_on_title_with_precedence() -> None:
@@ -81,11 +136,41 @@ def test_openreview_and_proceedings_merge_on_title_with_precedence() -> None:
     assert (r.title, r.abstract) == ("Trust in AI", "OpenReview abstract.")  # OpenReview first for text
     assert r.status == "accepted"  # the proceedings decide acceptance
     assert {c.source for c in r.provenance} == {"openreview_v2", "neurips_proceedings"}  # every claim kept
-    assert result.merges == (  # markup tokenizes like plain text, so the keys agree
+    assert result.merges == (
         Merge(orv.id, proc.id, "title_venue_year", "trust in ai", "NeurIPS", 2024, "neurips_proceedings"),
     )
-    fields = {c.field: c.resolution for c in result.conflicts}
-    assert fields == {"title": "precedence:openreview_v2", "status": "precedence:neurips_proceedings"}
+    # the titles differ only in markup (same key): no title row, per decision-005
+    assert [(c.field, c.resolution) for c in result.conflicts] == [
+        ("status", "precedence:neurips_proceedings")
+    ]
+
+
+def test_a_real_title_difference_is_a_conflict_row() -> None:
+    orv = paper("AbCd1234", "Trust in AI")
+    result = dedup([orv, paper("AbCd1234", "Trust in Machines", source="ris")])
+    expected = Conflict(
+        orv.id,
+        "title",
+        "Trust in AI",
+        "openreview_v2",
+        "Trust in Machines",
+        "ris",
+        "precedence:openreview_v2",
+    )
+    assert expected in result.conflicts
+
+
+def test_openreview_track_beats_the_proceedings_track() -> None:
+    result = dedup([paper("AbCd1234", track="position"), paper(f"nips-{H[1]}", source="neurips_proceedings")])
+    [r] = result.records
+    assert r.track == "position"
+    assert ("track", "precedence:openreview_v2") in [(c.field, c.resolution) for c in result.conflicts]
+
+
+def test_datasets_track_merges_into_proceedings() -> None:
+    result = dedup([paper("AbCd1234", track="datasets_benchmarks"),
+                    paper(f"nips-{H[1]}", source="neurips_proceedings", track="datasets_benchmarks")])  # fmt: skip
+    assert len(result.records) == 1
 
 
 @pytest.mark.parametrize(
@@ -110,47 +195,78 @@ def test_no_shared_key_never_merges(why: str, a: PaperRecord, b: PaperRecord) ->
     assert len(result.records) == 2 and not result.merges and not result.conflicts
 
 
-def test_two_openreview_submissions_with_one_title_both_survive() -> None:
-    result = dedup([paper("AbCd1234"), paper("EfGh5678")])  # e.g. a paper and its workshop version
-    assert len(result.records) == 2 and not result.merges
-    assert [c.resolution for c in result.conflicts] == ["ambiguous_not_merged"]
+@pytest.mark.parametrize(
+    ("why", "records", "resolution"),
+    [
+        (
+            "two OpenReview submissions with one title",
+            [paper("AbCd1234"), paper("EfGh5678")],
+            "ambiguous_not_merged",
+        ),
+        (
+            "different forum ids across sources",
+            [paper("AbCd1234"), paper("EfGh5678", source="ris")],
+            "ambiguous_not_merged",
+        ),
+        (
+            "two proceedings ids across sources",
+            [paper(f"nips-{H[1]}", source="neurips_proceedings"), paper(f"nips-{H[2]}", source="ris")],
+            "ambiguous_not_merged",
+        ),
+        (
+            "a proceedings URL on the OpenReview side names another paper",
+            [paper("AbCd1234", urls_proceedings=nips(1)), paper(f"nips-{H[2]}", source="ris")],
+            "ambiguous_not_merged",
+        ),
+        (
+            "a workshop paper into a proceedings source",
+            [paper("AbCd1234", track="workshop"), paper(f"nips-{H[1]}", source="neurips_proceedings")],
+            "track_not_merged",
+        ),
+        (
+            "a workshop paper into a RIS proceedings listing",
+            [paper("AbCd1234", track="workshop"), paper(f"nips-{H[1]}", source="ris")],
+            "track_not_merged",
+        ),
+        (
+            "an unknown track waits for evidence",
+            [
+                paper("AbCd1234", source="ris", track="unknown"),
+                paper(f"nips-{H[1]}", source="neurips_proceedings"),
+            ],
+            "track_not_merged",
+        ),
+    ],
+)
+def test_never_merge(why: str, records: list[PaperRecord], resolution: str) -> None:
+    result = dedup(records)
+    assert len(result.records) == len(records) and not result.merges
+    assert set(resolutions(result)) == {resolution}
 
 
-def test_different_forum_ids_never_merge_even_across_sources() -> None:
-    result = dedup([paper("AbCd1234"), paper("EfGh5678", source="ris")])
-    assert len(result.records) == 2
-    assert [c.resolution for c in result.conflicts] == ["ambiguous_not_merged"]
-
-
-def test_a_workshop_paper_never_merges_into_proceedings() -> None:
-    result = dedup([paper("AbCd1234", track="workshop"), paper(f"nips-{H[1]}", source="neurips_proceedings")])
-    assert len(result.records) == 2
-    assert [c.resolution for c in result.conflicts] == ["track_not_merged"]
+def test_three_way_with_two_proceedings_ids_is_refused() -> None:
+    result = dedup([paper("AbCd1234"), paper(f"nips-{H[1]}", source="neurips_proceedings"),
+                    paper(f"nips-{H[2]}", source="ris")])  # fmt: skip
+    assert len(result.records) == 3 and not result.merges
 
 
 def test_two_candidates_from_one_source_are_ambiguous() -> None:
-    result = dedup(
-        [
-            paper("AbCd1234"),
-            paper(f"nips-{H[1]}", source="neurips_proceedings"),
-            paper(f"nips-{H[2]}", source="neurips_proceedings"),
-        ]
-    )
+    result = dedup([paper("AbCd1234"), paper(f"nips-{H[1]}", source="neurips_proceedings"),
+                    paper(f"nips-{H[2]}", source="neurips_proceedings")])  # fmt: skip
     assert len(result.records) == 3 and not result.merges
-    assert {c.resolution for c in result.conflicts} == {"ambiguous_not_merged"}
+    assert set(resolutions(result)) == {"ambiguous_not_merged"}
 
 
-def test_three_sources_merge_into_one() -> None:
-    result = dedup(
-        [
-            paper("AbCd1234"),
-            paper(f"nips-{H[1]}", source="neurips_proceedings"),
-            paper(f"nips-{H[1]}", source="ris"),
-        ]
-    )
+def test_three_sources_merge_into_one_and_merges_csv_shows_each_rule() -> None:
+    result = dedup([paper("AbCd1234"), paper(f"nips-{H[1]}", source="neurips_proceedings"),
+                    paper(f"nips-{H[1]}", source="ris")])  # fmt: skip
     [r] = result.records
     assert r.id == "op:neurips:2024:AbCd1234"
-    assert sorted(m.merged_id for m in result.merges) == [f"op:neurips:2024:nips-{H[1]}"] * 2
+    proc = f"op:neurips:2024:nips-{H[1]}"
+    assert [(m.survivor_id, m.merged_id, m.rule) for m in result.merges] == [
+        (r.id, proc, "title_venue_year"),  # the proceedings cluster joins the OpenReview record
+        (proc, proc, "native_id"),  # its two copies (proceedings crawl and RIS) were one id first
+    ]
 
 
 def test_keys_that_chain_forbidden_clusters_merge_nothing() -> None:
@@ -164,7 +280,36 @@ def test_keys_that_chain_forbidden_clusters_merge_nothing() -> None:
     result = dedup([orv, ris, p1, p2])
     assert sorted(r.id for r in result.records) == sorted({orv.id, p1.id, p2.id})
     assert [m.rule for m in result.merges] == ["forum_id"]
-    assert "ambiguous_not_merged" in {c.resolution for c in result.conflicts}
+    assert ("title_key_chain", "ambiguous_not_merged") in [(c.field, c.resolution) for c in result.conflicts]
+
+
+def test_a_merge_row_names_the_first_shared_key() -> None:
+    # both clusters carry both titles, so they share two keys; merges.csv names the first, in key order
+    orv = [paper("AbCd1234", "Trust in Machines"), paper("AbCd1234", "Trust in AI", source="openreview_v1")]
+    proc = [paper(f"nips-{H[1]}", "Trust in AI", source="neurips_proceedings"),
+            paper(f"nips-{H[1]}", "Trust in Machines", source="ris")]  # fmt: skip
+    result = dedup([*orv, *proc])
+    [title] = [m for m in result.merges if m.rule == "title_venue_year"]
+    assert title.key == "trust in ai"
+
+
+def test_a_superseded_title_is_reported_not_matched() -> None:
+    # Matching on the older title would merge here but not on a second run (the merged record no longer
+    # carries it), so it stays a duplicate, the safe direction, with the old title in conflicts.csv.
+    old = paper(f"nips-{H[1]}", "Old Title", source="ris", fetched=T0)
+    new = paper(f"nips-{H[1]}", "New Title", source="ris", fetched=T1)
+    result = dedup([old, new, paper("AbCd1234", "Old Title")])
+    assert len(result.records) == 2
+    assert ("title", "New Title", "Old Title", "newest:ris") in [
+        (c.field, c.value_a, c.value_b, c.resolution) for c in result.conflicts
+    ]
+
+
+def test_conflicts_survive_a_rerun() -> None:
+    once = dedup([paper("AbCd1234", status="rejected"), paper(f"nips-{H[1]}", source="neurips_proceedings")])
+    twice = dedup(once.records)
+    precedence = [c for c in once.conflicts if c.resolution.startswith("precedence:")]
+    assert precedence and [c for c in twice.conflicts if c.resolution.startswith("precedence:")] == precedence
 
 
 def test_records_must_match_their_claims() -> None:
