@@ -250,3 +250,30 @@ def test_secret_suffixes_in_any_case_are_redacted(stream: io.StringIO, field: st
     logging.getLogger("openproceedings.x").info("e", extra={field: "s"})
     (rec,) = lines(stream)
     assert rec[field] == "[redacted]"
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "password_hash",
+        "passwd_old",
+        "secret_key",
+        "auth_header",
+        "bearer",
+        "Bearer_Token",
+        "credential_id",
+        "token_value",
+    ],
+)
+def test_secret_prefixes_are_redacted(stream: io.StringIO, field: str) -> None:
+    logging.getLogger("openproceedings.x").info("e", extra={field: "s"})
+    (rec,) = lines(stream)
+    assert rec[field] == "[redacted]"
+
+
+@pytest.mark.parametrize("field", ["tokenizer_version", "token_count", "author_count", "authority_score"])
+def test_prefix_rule_still_spares_ordinary_fields(stream: io.StringIO, field: str) -> None:
+    # `token_count` is the one deliberate carve-out from the token_ prefix: counts are what the standard asks for.
+    logging.getLogger("openproceedings.x").info("e", extra={field: "v"})
+    (rec,) = lines(stream)
+    assert rec[field] == "v"

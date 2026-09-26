@@ -47,7 +47,9 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   bodies. Never log IPs beyond what the rate limiter needs in memory.
 - Exceptions from HTTP clients can carry URLs with credentials or tokens. `logs.py` scrubs `user:pass@` and
   secret-looking query parameters (`token`, `key`, `secret`, `password`, `auth`, `sig`) from every string
-  value and from exception and stack text, and redacts secret-shaped keys case-insensitively at any depth.
+  value and from exception and stack text, and redacts secret-shaped keys (starting or ending with a secret word: `password…`, `…_token`, `auth_…`,
+  `secret…`, `bearer…`, `…api_key`) case-insensitively at any depth, while ordinary fields like
+  `tokenizer_version`, `token_count` and `author_count` stay visible.
   That is a backstop, not permission: still never pass credentials to a log call.
 
 ## API access line (INFO, exactly one per request)

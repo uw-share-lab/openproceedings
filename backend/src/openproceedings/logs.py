@@ -7,7 +7,7 @@ locally; JSON is the default everywhere.
 Privacy (Must, logging-standards §Privacy):
 - query text (`q`, `query`, `input`, `canonical`, `identification_query`) is redacted unless
   `log_query_text=True`, which is for a local dev instance only;
-- abstracts, author lists, request bodies/headers/cookies and anything secret-shaped (a key ENDING in
+- abstracts, author lists, request bodies/headers/cookies and anything secret-shaped (a key STARTING or ENDING with
   `password`, `token`, `secret`, `api_key`/`apikey`, `auth`, `cookie`, `credential`) are always redacted;
 - key matching is case-insensitive and reaches into nested dicts and lists;
 - credentials are scrubbed from URLs and from exception text (`user:pass@`, `?token=…`), so an HTTP-client
@@ -53,7 +53,13 @@ SECRET_SUFFIXES = (
     "credential",
     "credentials",
     "private_key",
+    "bearer",
 )
+# ... or STARTS with one of these: `password_hash`, `secret_key`, `auth_header`, `bearer_token`,
+# `credential_id`, `token_value`. `auth_` (with the underscore) spares `author_count` / `authority`.
+SECRET_PREFIXES = ("password", "passwd", "secret", "auth_", "bearer", "credential", "token_")
+# Ordinary counters the logging standard asks for, spared from the prefix rule.
+NOT_SECRET = frozenset({"token_count", "tokens", "token_total"})
 REDACTED = "[redacted]"
 
 _URL_USERINFO = re.compile(r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s@]+@")
@@ -87,7 +93,9 @@ def scrub(text: str) -> str:
 
 def _sensitive(key: str, log_query_text: bool) -> bool:
     k = key.lower()
-    if k in ALWAYS_REDACTED or k.endswith(SECRET_SUFFIXES):
+    if k in NOT_SECRET:
+        return False
+    if k in ALWAYS_REDACTED or k.endswith(SECRET_SUFFIXES) or k.startswith(SECRET_PREFIXES):
         return True
     return k in QUERY_FIELDS and not log_query_text
 
