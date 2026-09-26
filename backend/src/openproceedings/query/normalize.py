@@ -9,11 +9,15 @@ about what a "word" is. In this order, and nothing else:
    Arabic (accents and optional vowel points: `naïve` → `naive`, `שָׁלוֹם` → `שלום`), recompose with NFC.
    Marks that spell a different word are KEPT: Thai tones (`ป่า` ≠ `ปา`), kana voicing (`が` ≠ `か`),
    Indic viramas and vowel signs. A stray mark with no base letter is dropped.
-4. LaTeX: `\\cmd{X}` → `X`; inside `$…$` a command name is a word (`$\\epsilon$` → `epsilon`); a bare
-   `\\cmd` outside math is dropped; `\\%`, `\\&`, `\\$`, `\\\\` are separators. `\\$` never opens math, and
-   neither does a `$` followed by a digit (currency: `$5`).
-5. Split on every character that is not a letter, digit or (non-combining) mark. Invisible format
-   characters (soft hyphen, zero-width joiner/space) join, so `bench\\u00admark` stays one word.
+4. LaTeX: `\\cmd{X}` → `X`; a bare `\\cmd` outside math is dropped. Math regions are `$…$` (Pandoc's
+   tex_math_dollars rule: the opener is followed by a non-space, the closer is preceded by a non-space and
+   not followed by a digit, so `$5` and `US$ 5` are currency), `$$…$$`, `\\(…\\)` and `\\[…\\]`; inside
+   them a command name is a word (`$\\epsilon$` → `epsilon`). `\\%`, `\\&`, `\\$`, `\\\\` are separators and
+   `\\$` never opens math. Accent macros (`G\\"odel`, `Erd\\H{o}s`, `na\\"{\\i}ve`) and `\\-` join the word.
+5. Split on every character that is not a letter, digit or (non-combining) mark. Invisible characters join
+   (format characters such as the soft hyphen and zero-width joiner, variation selectors, enclosing marks,
+   the combining grapheme joiner), so `bench\\u00admark` stays one word; the invisible math operators
+   U+2061–2064 separate.
 
 Never: stemming, lemmatization, stopword removal, synonyms, spelling correction, n-grams, number
 normalization. Changing what ANY input tokenizes to requires bumping TOKENIZER_VERSION.
@@ -124,12 +128,13 @@ def _find_closing_dollar(text: str, i: int) -> int:
 
 
 def _find(text: str, start: int, closer: str) -> int:
-    """Index of the next unescaped `closer` at or after `start`, or -1."""
+    """Index of the next unescaped `closer` at or after `start`, or -1. Any other backslash escapes the
+    character after it, so `\\\\)` (an escaped backslash, then `)`) never closes `\\(`."""
     j = start
     while j < len(text):
         if text.startswith(closer, j):
             return j
-        j += 2 if text[j] == "\\" and not closer.startswith("\\") else 1
+        j += 2 if text[j] == "\\" else 1
     return -1
 
 
@@ -167,6 +172,15 @@ def _latex_mask(text: str) -> list[int]:
             if nxt in ACCENT_SYMBOLS or (nxt in ACCENT_LETTERS and i + 2 < n and text[i + 2] == "{"):
                 mask[i] = mask[i + 1] = JOIN  # accent macro: `G\\"odel`, `Erd\\H{o}s` stay one word
                 k = i + 2
+                if (
+                    k + 3 < n
+                    and text[k] == "{"
+                    and text[k + 1 : k + 3] in ("\\i", "\\j")
+                    and text[k + 3] == "}"
+                ):
+                    mask[k] = mask[k + 1] = mask[k + 3] = JOIN  # BibTeX dotless i/j: `na\\"{\\i}ve`
+                    i = k + 4
+                    continue
                 if k + 2 < n and text[k] == "{" and text[k + 2] == "}":
                     mask[k] = mask[k + 2] = JOIN
                     i = k + 3

@@ -133,6 +133,11 @@ def test_decomposed_input_span_covers_the_combining_mark() -> None:
     assert (first.text, text[first.start : first.end]) == ("cafe", "café")
 
 
+def test_accent_macro_markup_is_inside_the_span() -> None:
+    text = "r\\'esum\\'e"
+    assert [(t.text, text[t.start : t.end]) for t in tokenize(text)] == [("resume", text)]
+
+
 def test_token_is_frozen() -> None:
     t = Token("trust", 0, 5)
     try:

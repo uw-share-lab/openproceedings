@@ -69,7 +69,7 @@ reviews without the UI.
 accounting) plus a `track` and a `status` map whose buckets sum to it. Each map always carries an `unknown`
 key, even when 0, so unclassified records are itemised and never folded into another bucket.
 
-`facets` are disjunctive: each facet field is counted over the matched set with every filter applied **except that field's own**. So the track facet still shows how many workshop papers you would get by including them. Clicking a facet in the UI
+`facets` are disjunctive: each facet field is counted over the matched set with every filter applied **except that field's own top-level conjuncts** (a filter nested under an `OR` stays applied; decision-001). So the track facet still shows how many workshop papers you would get by including them. Clicking a facet in the UI
 rewrites the query (guarantee 3). No hidden facet state exists.
 
 ## Exports (built to be imported into Covidence)

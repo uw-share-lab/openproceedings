@@ -28,7 +28,8 @@ The query side and the index side run the **same** normalization function (`norm
      preceded by a non-space and not followed by a digit, so `$5` and `US$ 5` are currency), `$$…$$`,
      `\(…\)` and `\[…\]`. Inside math a command name is a word (`$\epsilon$-DP` → `epsilon dp`).
    - `\%`, `\&`, `\$`, `\\` are separators; `\$` never opens math.
-   - Accent macros join the word: `G\"odel`, `G\"{o}del`, `Erd\H{o}s` → `godel`, `erdos`. `\-` (the
+   - Accent macros join the word: `G\"odel`, `G\"{o}del`, `Erd\H{o}s`, `na\"{\i}ve` → `godel`, `erdos`, `naive`
+     (BibTeX's dotless `{\i}`/`{\j}` inside an accent is the letter). `\-` (the
      discretionary hyphen) joins: `bench\-mark` → `benchmark`.
    - Full-width `＄` and `＼` are ordinary text, not LaTeX.
 4. Split on anything that is not a letter, digit or (non-combining) mark. `vision-language` → `vision`
@@ -90,9 +91,15 @@ Rules:
   subtract from.
 - **Wildcards are opt-in and suffix-only:** `benchmark*` means zero or more characters.
   `model$` means zero or one character (Web of Science semantics, so `model$` → model, models). The
-  stem before `*` must be at least 3 characters. Every wildcard is expanded against the index's term
-  dictionary. The expansion list is returned to the user. More than 200 expansions is an error that
-  suggests a longer stem.
+  stem before `*` **or** `$` must be at least 3 characters. Every wildcard is expanded against the index's
+  term dictionary. The expansion list is returned to the user. More than 200 expansions (per wildcard) is
+  an error that suggests a longer stem.
+- **A wildcard inside a phrase** is allowed and expanded per position: `"large language model$"` matches
+  the phrase with `model` or `models` last (the Trust-Evals strings rely on this).
+- **A wildcard stem that normalises to several tokens** becomes a phrase whose last token carries the
+  wildcard: `gpt-4*` ≡ `"gpt 4*"`. The 3-character minimum counts the whole written stem (`gpt-4` passes);
+  the 200-expansion cap still applies to the last token's expansions (`4*`), and exceeding it is the
+  usual "use a longer stem" error. (Decision-001 records rules 1–3 of this list.)
 - **Phrases** keep word order and adjacency within **one field**. A phrase never spans the title and the
   abstract.
 - `NEAR/n` works within one field, is unordered, and allows at most n intervening words. Tantivy's slop
@@ -148,6 +155,8 @@ parse(q: str, mode="native"|"scholar") -> ParseResult
 ParseResult = {
   ast: Node,                 # discriminated union: Or, And, Not, Term, Phrase, Near, Wildcard, Filter
   canonical: str,            # fully parenthesised, uppercase operators, defaults made explicit, sorted filters
+                             #   (top-level filters ordered venue, year, track, status, then others
+                             #   alphabetically; values in a single-field OR group sorted)
   warnings: [Diagnostic],    # {code, message, span:[start,end]}
   errors: [Diagnostic],      # non-empty ⇒ no search
   translations: [Diagnostic],

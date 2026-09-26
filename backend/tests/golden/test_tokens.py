@@ -167,7 +167,15 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ("＄\\alpha＄", []),  # full-width dollar is not a math delimiter (LaTeX never sees it)
     ("$x$\\emph{w}$ end", ["x", "w", "end"]),  # a closing $ must never re-open math
     ("$$x$$\\emph{w}$$", ["x", "w"]),  # nor a closing $$
+    # --- each Pandoc delimiter condition, pinned by a row that changes if it is dropped
+    ("$5 via \\textbf{y}-$10", ["5", "via", "y", "10"]),  # a `$` followed by a digit never closes
+    ("$5 via \\textbf{y} $x", ["5", "via", "y", "x"]),  # a closer cannot follow a space
+    ("costs 5 $ \\textbf{b}$", ["costs", "5", "b"]),  # an opener cannot be followed by a space
+    ("$a\\$ \\textbf{b}$", ["a", "textbf", "b"]),  # an escaped `\$` never closes
+    ("\\(x\\\\)\\alpha y\\)", ["x", "alpha", "y"]),  # an escaped backslash never closes `\(`
     # --- LaTeX accent macros and the discretionary hyphen join the word
+    ('na\\"{\\i}ve', ["naive"]),  # BibTeX dotless i
+    ("\\v{\\j}", ["j"]),
     ('G\\"odel', ["godel"]),
     ('G\\"{o}del', ["godel"]),
     ("Erd\\H{o}s", ["erdos"]),

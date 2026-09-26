@@ -29,6 +29,9 @@ Code: `backend/src/openproceedings/query/{lexer,parser,ast,canonical}.py`.
 | All-negative query (`NOT x`, `-x` alone) | Error: nothing to subtract from. |
 | `-` is negation only at the start of a primary | `vision-language` is one WORD that normalizes to `vision` `language` (a two-token term, matched at consecutive positions). `-bias` after whitespace/`(` is `NOT bias`. |
 | A WORD that normalizes to >1 token | Behaves as a phrase of those tokens in one field (golden: `vision-language` matches "vision language", not "visionlanguage"). |
+| Wildcard stem length | `*` and `$` both need a written stem of ≥ 3 characters (`a$` → error). The whole written stem counts, so `gpt-4*` passes. More than 200 expansions of one wildcard → error suggesting a longer stem. |
+| Wildcard inside a phrase | Allowed, expanded per position: `"large language model$"` is a `Phrase` whose last element is a `Wildcard`. |
+| A wildcard WORD that normalizes to >1 token | A phrase with the wildcard on its last token: `gpt-4*` ≡ `"gpt 4*"`. |
 | A WORD that normalizes to 0 tokens | Error with a span (e.g. a bare `--`). Verify the exact code at implementation time. |
 | Phrases and `NEAR/n` | One field only; never across title and abstract. |
 | Ranges | `year:2020..2026` inclusive; start > end is an error. |
@@ -44,11 +47,11 @@ its source span so diagnostics and the UI parse tree point at the input.
 
 ## Canonical form
 `canonical` is: fully parenthesised, uppercase operators (`|` → `OR`, juxtaposition → `AND`, `-` → `NOT`),
-default filters made explicit (`.claude/skills/default-filters/SKILL.md`), filters sorted, wildcards kept
+default filters made explicit (`.claude/skills/default-filters/SKILL.md`), wildcards kept
 **unexpanded** (`benchmark*`, not its expansion — the expansion belongs to an `index_version`).
-Pick one deterministic filter order and one spelling per value (e.g. `venue:NeurIPS`), record it as a
-Backlog.md decision (`backlog decision create`, `.claude/skills/decision-records/SKILL.md`), and pin it
-with snapshot tests.
+Top-level filters are ordered `venue`, `year`, `track`, `status`, then any other field alphabetically; the
+values in a single-field OR group are sorted; one spelling per value (e.g. `venue:NeurIPS`). Decision-001
+records this; snapshot tests pin it.
 
 **Idempotence (property-tested):** `parse(canonical).canonical == canonical`, and AST → string → AST is the
 identity. A change that alters any existing canonical string changes every saved record's hash: treat it as

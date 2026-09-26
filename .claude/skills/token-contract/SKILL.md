@@ -14,7 +14,7 @@ description: The exact normalization contract shared by the query parser and the
 4. **LaTeX** (a three-state mask — keep / separate / join — so offsets survive): `\cmd{X}` → `X`; a bare
    `\cmd` outside math is dropped; math is `$…$` (Pandoc rule: opener followed by a non-space, closer
    preceded by a non-space and not followed by a digit), `$$…$$`, `\(…\)`, `\[…\]`, and inside it a
-   command name is a word; accent macros (`\"o`, `\H{o}`) and `\-` join the word; `\%` `\&` `\$` `\\`
+   command name is a word; accent macros (`\"o`, `\H{o}`, `\"{\i}`) and `\-` join the word; `\%` `\&` `\$` `\\`
    separate.
 5. **Split** on every char that is not a Unicode letter, digit or non-combining mark. Invisible characters
    **join** (Cf, variation selectors, enclosing marks, CGJ); the invisible math operators U+2061–2064
