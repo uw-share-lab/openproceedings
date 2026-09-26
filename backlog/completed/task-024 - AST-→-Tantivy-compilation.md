@@ -1,10 +1,10 @@
 ---
 id: TASK-024
 title: AST → Tantivy compilation
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 20:07'
+updated_date: '2026-09-26 20:08'
 labels:
   - engine
 milestone: m-2
@@ -37,3 +37,9 @@ Review round (2026-09-26): 0 set differences in 2,000 generated ASTs and crafted
 
 Verification round (2026-09-26): 0 membership differences (300k random position checks, 2.5k generated queries). Fixed: verified clauses memoised per engine and field (facets after a match 0.1-0.3 s on 80k, were 10.6-32.6 s with default filters; the earlier '25 -> 1.8 s' held only without filters); candidates drop items implied by narrower ones ('trust trust*' scores trust once); op search parses first, logs a missing index as cli_refused, documents --index precedence (tested). Candidate cap rejected because a cap would make results depend on corpus size and break search-record replay; spec 03 records the exception for verified clauses, and task-031 gained an AC to measure them on 80k.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+AST -> Tantivy compilation (engine/compile.py) and TantivyEngine (engine/tantivy_engine.py), with op search --explain / --ids: exact per-field terms, phrases and slop-NEAR (slop measured), wildcards from the term dictionary as scored ORs, non-scoring filters and NOT, and a memoised position-verified fallback for the rest. Verified: 44 golden queries, a row per compilation-table line vs ReferenceEngine, combination properties, two review rounds (0 membership differences over 2k+ generated ASTs and 300k random position checks), mutation passes, and locally the ten Trust-Evals strings on the real corpus.
+<!-- SECTION:FINAL_SUMMARY:END -->
