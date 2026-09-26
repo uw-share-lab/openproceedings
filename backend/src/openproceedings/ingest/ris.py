@@ -43,7 +43,7 @@ from scholarmend.parse import parse_file
 
 from openproceedings.ingest.classify import Classification, classify_proceedings, classify_venueid
 from openproceedings.ingest.record import Claim, ClaimField, ClaimValue, PaperRecord, Urls, is_url
-from openproceedings.ingest.urls import PREFIX, pmlr, proceedings
+from openproceedings.ingest.urls import PREFIX, pmlr, proceedings, proceedings_parts
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 
 log = logging.getLogger("openproceedings.ingest.ris")
@@ -126,7 +126,15 @@ def _listing(
         tracks = {c["value"] for c, _ in proc if c["field"] == "track"}
         if len(sha) != 32 or len(years) != 1 or len(tracks) != 1:
             return "unresolved"
-        return (venue, int(years.pop()), f"{PREFIX[venue]}-{sha}", classify_proceedings(tracks.pop()),
+        year, track = int(years.pop()), tracks.pop()
+        claimed = classify_proceedings(track).track
+        for c, _p in proc:  # the claim must agree with the address it cites: the URL's year and track token
+            parts = proceedings_parts(c["evidence"])
+            assert parts is not None  # `proc` holds only URLs that parse
+            _v, url_year, _h, token = parts
+            if url_year != year or (token is not None and classify_proceedings(token).track != claimed):
+                return "conflict"
+        return (venue, year, f"{PREFIX[venue]}-{sha}", classify_proceedings(track),
                 ("proceedings_url", url), sorted({c["evidence"] for c, _ in proc}))  # fmt: skip
     parsed = [(c, pmlr(c["evidence"])) for c in _claims(entry, "pmlr_volume", "pmlr_url")]
     # an ICML volume, by the URL or (when the URL doesn't parse) by scholarmend's volume claim

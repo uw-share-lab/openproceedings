@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -399,3 +400,45 @@ def test_a_listing_url_with_a_newline_is_dropped_not_imported() -> None:
     forged = "https://proceedings.mlr.press/v267/key23a/x\nER  - \n\nTY  - JOUR\nTI  - injected"
     good = "https://proceedings.mlr.press/v267/key23a.html"
     assert [u for _f, u, _s in _url_fields([forged, good], "pmlr_url")] == [good]
+
+
+@pytest.mark.parametrize(
+    ("change", "why"),
+    [
+        (lambda u: u.replace("/paper/2025/", "/paper/2023/"), "the URL's year isn't the claimed year"),
+        (
+            lambda u: re.sub(r"-Abstract(?:-[A-Za-z_]+)?\.html$", "-Abstract-Creative_AI_Track.html", u),
+            "track",
+        ),
+        (
+            lambda u: re.sub(r"-Abstract(?:-[A-Za-z_]+)?\.html$", "-Abstract-Workshop.html", u),
+            "a workshop page",
+        ),
+    ],
+)
+def test_a_listing_claim_must_agree_with_the_url_it_cites(
+    tmp_path: Path, change: Callable[[str], str], why: str
+) -> None:
+    # row 2 is listing-only (ICLR 2025, `Conference`): its track and year come from scholarmend's claims,
+    # which must match the proceedings address they cite, or a workshop page could import as `main`
+    (tmp_path / "base").mkdir()
+    (tmp_path / "edited").mkdir()
+    base = run(tmp_path / "base", lambda e: None)[1].skipped["conflict"]
+
+    def edit(e: Entries) -> None:
+        for c in e[2]["claims"]:
+            if c["source"] == "proceedings_url":
+                c["evidence"] = change(c["evidence"])
+
+    by_id, report = run(tmp_path / "edited", edit)
+    assert report.skipped["conflict"] == base + 1, why
+    assert not any(i.endswith("fedcba9876543210fedcba9876543210") for i in by_id)
+
+
+def test_a_workshop_venueid_with_a_conference_listing_is_a_conflict(tmp_path: Path) -> None:
+    def edit(e: Entries) -> None:
+        set_venueid_of(e, 7, "ICLR.cc/2024/Workshop/X")
+        listed("2024", "Conference")(e)
+
+    by_id, report = run(tmp_path, edit)
+    assert REJECTED not in by_id and report.skipped["conflict"] == 1

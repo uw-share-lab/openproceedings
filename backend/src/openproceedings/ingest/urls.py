@@ -18,7 +18,7 @@ _PROCEEDINGS_HOSTS = {
 }
 # 2022+: /paper_files/paper/<y>/hash/<h>-Abstract-<Track>.html; up to 2021: /paper/<y>/hash/<h>-Abstract.html
 _PROCEEDINGS_PATH = re.compile(
-    r"(?:/paper_files)?/paper/[0-9]{4}/(?:hash|file)/([0-9a-fA-F]+)-(?:Abstract|Paper)(?:-[A-Za-z_]+)?\.(?:html|pdf)"
+    r"(?:/paper_files)?/paper/([0-9]{4})/(?:hash|file)/([0-9a-fA-F]+)-(?:Abstract|Paper)(?:-([A-Za-z_]+))?\.(?:html|pdf)"
 )
 _PMLR_HOSTS = {"proceedings.mlr.press", "mlr.press"}
 _PMLR_PATH = re.compile(r"/v([0-9]+)/([A-Za-z0-9_-]+?)(?:\.html|\.pdf|/.*)?")
@@ -28,10 +28,17 @@ PREFIX = {"NeurIPS": "nips", "ICLR": "iclr"}
 
 def proceedings(url: str) -> tuple[str, str] | None:
     """(venue, hash) from a NeurIPS or ICLR proceedings URL; the hash may be any length (check it)."""
+    parts = proceedings_parts(url)
+    return (parts[0], parts[2]) if parts else None
+
+
+def proceedings_parts(url: str) -> tuple[str, int, str, str | None] | None:
+    """(venue, year, hash, track token or None) from a NeurIPS or ICLR proceedings URL: what the page's own
+    address says, to check a claim against (`…/paper/2025/hash/<h>-Abstract-Creative_AI_Track.html`)."""
     parsed = urlparse(url)
     venue = _PROCEEDINGS_HOSTS.get(parsed.netloc.lower())
     m = _PROCEEDINGS_PATH.fullmatch(parsed.path)
-    return (venue, m.group(1).lower()) if venue and m else None
+    return (venue, int(m.group(1)), m.group(2).lower(), m.group(3)) if venue and m else None
 
 
 def pmlr(url: str) -> tuple[int, str] | None:
