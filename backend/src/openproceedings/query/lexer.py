@@ -37,7 +37,12 @@ Warnings, raised where an operator would have made sense: a lowercase `and`/`or`
 two terms (WARN_LOWERCASE_OPERATOR); a word that starts with a dash or single quote that only looks like
 an operator (`−bias`, `‘trust`, a paired `’…’`: WARN_LOOKALIKE_OPERATOR); a word or phrase part that loses
 something to the tokenizer (`C++` → `c`, `.NET` → `net`, a bare `\\epsilon` or an empty `\\alpha{}` outside
-math: WARN_SYMBOLS_DROPPED); CJK text, which is not split into words (WARN_CJK_RUN). Bad input is a diagnostic, never an exception.
+math: WARN_SYMBOLS_DROPPED); CJK text, which is not split into words (WARN_CJK_RUN); a logic sign (`∨`,
+`∧`, `¬`), which is searched as its word, not as an operator (WARN_LOOKALIKE_OPERATOR); a spelled Greek
+name (`alpha`), which finds only the word since abstracts' `$\\alpha$` and `α` are indexed as `α`
+(WARN_SPELLED_GREEK; not for filter values, wildcards, or when the query already has the letter). A
+wildcard straight after an operator (`vision×*`, `$\\le$*`) is PARSE_WILDCARD_DETACHED (decision-006).
+Bad input is a diagnostic, never an exception.
 """
 
 from __future__ import annotations
@@ -156,6 +161,7 @@ _COMMAND = re.compile(r"\\([A-Za-z]+)")
 _EMPTY_BRACES = re.compile(r"\{[{}]*\}")  # `{}`, `{{}}`: braces that keep nothing
 
 
+_FILTER_FIELDS = frozenset((*QUERY_FILTER_FIELDS, "source"))
 _GREEK_NAMES = frozenset(
     name for name in GREEK if name.islower() and not name.startswith("var") and name != "ell"
 )
@@ -464,6 +470,7 @@ class _Lexer:
                 end,
             )
         if not in_phrase:
+            self.check_math_words(raw, stem, wildcard, start, end)
             self.check_word(raw, stem, start, end)
             self.check_dropped(raw, stem, start, end)
         return Lexeme(Kind.WORD, start, end, raw, stem=stem, wildcard=wildcard)
@@ -478,11 +485,11 @@ class _Lexer:
                 start,
                 end,
             )
-        elif not any(_wordy(ch) for ch in unicodedata.normalize("NFKC", stem[toks[-1].end - 1])):
+        elif toks[-1].op:
             self.error(
                 DiagnosticCode.PARSE_WILDCARD_DETACHED,
-                f"The `{wildcard}` in `{clip(raw)}` follows `{clip(stem[toks[-1].end - 1])}`, an operator searched as "
-                f"`{clip(toks[-1].text)}`, not a letter or digit — a wildcard extends a word.",
+                f"The `{wildcard}` in `{clip(raw)}` follows an operator (searched as `{clip(toks[-1].text)}`), not a "
+                "letter or digit — a wildcard extends a word, so put it straight after one.",
                 start,
                 end,
             )
@@ -498,7 +505,6 @@ class _Lexer:
 
     def check_word(self, raw: str, stem: str, start: int, end: int) -> None:
         """Checks for a top-level WORD (not a phrase part, where these characters are plainly literal)."""
-        self.check_math_words(raw, stem, start, end)
         if raw[0] in MINUSES:
             self.error(
                 DiagnosticCode.PARSE_AMBIGUOUS_MINUS,
@@ -531,31 +537,43 @@ class _Lexer:
                 end,
             )
 
-    def check_math_words(self, raw: str, stem: str, start: int, end: int) -> None:
+    def check_math_words(self, raw: str, stem: str, wildcard: str | None, start: int, end: int) -> None:
         """A logic sign looks like an operator but is searched as a word (decision-006); a spelled Greek
-        name finds only the word, since abstracts' `$\\alpha$` and `α` are indexed as `α`."""
-        logic = {"∨": ("OR", "a OR b"), "∧": ("AND", "a AND b")}
-        if stem in logic:
-            op, example = logic[stem]
+        name finds only the word, since abstracts' `$\\alpha$` and `α` are indexed as `α`. Both are read
+        after NFKC (`￢` is `¬`, `ａｌｐｈａ` is `alpha`)."""
+        folded = unicodedata.normalize("NFKC", stem)
+        prev = self.out[-1] if self.out else None
+        if any(c in "∨∧" for c in folded):
+            sign = next(c for c in folded if c in "∨∧")
+            op, example = {"∨": ("OR", "a OR b"), "∧": ("AND", "a AND b")}[sign]
             self.warn(
                 DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
-                f"`{stem}` is searched as the word `{OPERATORS[stem]}`, not as {op} — write `{example}` for that.",
+                f"`{sign}` in `{clip(raw)}` is searched as the word `{OPERATORS[sign]}`, not as {op} — write "
+                f"`{example}` for that.",
                 start,
                 end,
             )
-        elif stem.startswith("¬"):
+        elif "¬" in folded:
+            rest = folded.split("¬", 1)[1] or "word"
             self.warn(
                 DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
-                f"`¬` is searched as the word `neg`, not NOT — to exclude, write `-{clip(stem[1:] or 'word')}`.",
+                f"`¬` in `{clip(raw)}` is searched as the word `neg`, not NOT — to exclude, write `-{clip(rest)}`.",
                 start,
                 end,
             )
-        elif stem.casefold() in _GREEK_NAMES:
-            letter = GREEK[stem.casefold()]
+        elif wildcard is None and folded.casefold() in _GREEK_NAMES:
+            if prev is not None and prev.kind is Kind.FIELD and prev.field in _FILTER_FIELDS:
+                return  # a filter value (`venue:pi`) is never searched as text
+            name = folded.casefold()
+            letter = GREEK[name]
+            if letter in unicodedata.normalize("NFKC", self.q).casefold():
+                return  # the query already searches the letter
+            negated = prev is not None and prev.kind is Kind.NOT and prev.end == start
+            advice = f"add `-{letter}` to exclude it too" if negated else f"search `{clip(stem)} OR {letter}`"
             self.warn(
                 DiagnosticCode.WARN_SPELLED_GREEK,
-                f"`{clip(raw)}` finds the word only: abstracts' `$\\{stem.casefold()}$` and `{letter}` are indexed as "
-                f"`{letter}`, so search `{letter}` too (`{clip(stem)} OR {letter}`).",
+                f"`{clip(raw)}` finds the word only: abstracts' `$\\{name}$` and `{letter}` are indexed as "
+                f"`{letter}`, so {advice}.",
                 start,
                 end,
             )

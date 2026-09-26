@@ -249,6 +249,33 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ("$x^α$", ["x", "α"]),  # only ASCII after ^/_ joins
     ("$x^{αβ}$", ["x", "αβ"]),
     ("$x^{}y$", ["x", "y"]),  # empty braces raise nothing, so nothing joins
+    ("＝\u0338", ["neq"]),  # the slash composes with the character's NFKC form
+    ("=\u0301\u0338", ["neq"]),  # whatever the marks' order
+    ("∈\u0301\u0338", ["notin"]),
+    (
+        "≰ ≱ ⊄ ⊈ ∌ ∄ ∤ ∦ ≢ ≁ ≉",
+        [
+            "nleq",
+            "ngeq",
+            "nsubset",
+            "nsubseteq",
+            "notni",
+            "nexists",
+            "nmid",
+            "nparallel",
+            "nequiv",
+            "nsim",
+            "napprox",
+        ],
+    ),
+    (
+        "$\\not\\subset$ $\\nsubset$ $\\not\\leq$ $\\nleq$ $\\nexists$",
+        ["nsubset", "nsubset", "nleq", "nleq", "nexists"],
+    ),
+    ("$\\not =$", ["neq"]),  # TeX allows a space after \\not
+    ("$\\in\u0338$", ["notin"]),  # a slash after an operator command negates it
+    ("ก×\u0e48ข", ["ก", "times", "ข"]),  # an operator ends the word: the tone mark after it is stray
+    ("a\ufe68b", ["a", "b"]),  # small reverse solidus is text, not LaTeX (like full-width ＼)
     ("∈\u0338", ["notin"]),  # a decomposed ∉ is ∉, never `in`
     ("=\u0338", ["neq"]),
     ("∉ and ≠", ["notin", "and", "neq"]),

@@ -36,11 +36,15 @@ The review lead chose (2026-09-26, asked with worked examples):
    arrows `⟶ ⟹ ⟵ ⟸ ⟷ ⟺` join the table, with `\longrightarrow` and kin as aliases; `\not\in` and `\not=`
    are `notin` and `neq`, like `∉` and `≠`.
 5. **How the rules apply:** the operator table is consulted **after NFKC** (so `∬` → `int int`, `𝛁` →
-   `nabla`, `ŀ` and `l·` agree), and a U+0338 slash composes with the character before it, so a
-   decomposed `∉` is `notin`, never `in`. A Greek letter right after another command's name starts a
+   `nabla`, `ŀ` and `l·` agree), and a character whose combining marks include a U+0338 slash is read
+   with its marks as one NFKC cluster, so a decomposed `∉` is `notin` (never `in`) and full-width `＝` +
+   slash is `≠`, whatever the marks' order. A Greek letter right after another command's name starts a
    new word (`$\hat\theta$` → `hat θ`), as the Unicode `θ̂` gives `θ`; after a letter it joins
    (`$x\alpha$` → `xα`). Only ASCII letters and digits join after `^`/`_`.
-6. **Queries** (the review lead chose "warn, keep as terms"): a logic sign (`∨`, `∧`, a leading `¬`) is
+6. **Negated relations** (verification round): `≰ ≱ ⊄ ⊈ ⊅ ⊉ ∌ ∄ ∤ ∦ ≢ ≁ ≉ ≇` are tokens of their own
+   (`nleq`, `nsubset`, …), matching the `\n…` commands, `\not` followed by the operator (spaces allowed,
+   as in TeX) and an operator command followed by a U+0338 slash.
+7. **Queries** (the review lead chose "warn, keep as terms"): a logic sign (`∨`, `∧`, `¬`, anywhere in a word, after NFKC) is
    searched as its word with `WARN_LOOKALIKE_OPERATOR` saying it is not OR/AND/NOT; a spelled Greek name
    (`alpha`) gets `WARN_SPELLED_GREEK` pointing to the letter; a wildcard straight after an operator is
    `PARSE_WILDCARD_DETACHED`.
@@ -59,7 +63,7 @@ copy and the code differ.
 
 | Token | Unicode | LaTeX (inside math) | Also an ordinary word |
 |---|---|---|---|
-| `approx` | ≈ | `\approx` |  |
+| `approx` | ≈ | `\approx` | **yes** |
 | `ast` | ∗ | `\ast` |  |
 | `cap` | ∩ | `\cap` | **yes** |
 | `cdot` | · ⋅ | `\cdot` |  |
@@ -85,10 +89,24 @@ copy and the code differ.
 | `mid` | ∣ | `\mid` | **yes** |
 | `mp` | ∓ | `\mp` | **yes** |
 | `nabla` | ∇ | `\nabla` |  |
+| `napprox` | ≉ | `\napprox`, `\not\approx` |  |
+| `ncong` | ≇ | `\ncong`, `\not\cong` |  |
 | `neg` | ¬ | `\lnot`, `\neg` | **yes** |
 | `neq` | ≠ | `\ne`, `\neq`, `\not=` |  |
+| `nequiv` | ≢ | `\nequiv`, `\not\equiv` |  |
+| `nexists` | ∄ | `\nexists`, `\not\exists` |  |
+| `ngeq` | ≱ | `\ngeq`, `\not\ge`, `\not\geq`, `\not\geqslant` |  |
 | `ni` | ∋ | `\ni` | **yes** |
+| `nleq` | ≰ | `\nleq`, `\not\le`, `\not\leq`, `\not\leqslant` |  |
+| `nmid` | ∤ | `\nmid`, `\not\mid` |  |
 | `notin` | ∉ | `\not\in`, `\notin` |  |
+| `notni` | ∌ | `\not\ni`, `\notni` |  |
+| `nparallel` | ∦ | `\not\parallel`, `\nparallel` |  |
+| `nsim` | ≁ | `\not\sim`, `\nsim` |  |
+| `nsubset` | ⊄ | `\not\subset`, `\nsubset` |  |
+| `nsubseteq` | ⊈ | `\not\subseteq`, `\nsubseteq` |  |
+| `nsupset` | ⊅ | `\not\supset`, `\nsupset` |  |
+| `nsupseteq` | ⊉ | `\not\supseteq`, `\nsupseteq` |  |
 | `odot` | ⊙ | `\odot` |  |
 | `oplus` | ⊕ | `\oplus` |  |
 | `otimes` | ⊗ | `\otimes` |  |

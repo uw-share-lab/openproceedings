@@ -237,11 +237,12 @@ def test_every_operator_command_is_its_operators_token(command: str) -> None:
 
 
 def test_command_tokens_span_the_command_name() -> None:
-    assert tokenize("$\\le$") == [Token("leq", 2, 4)]
+    assert tokenize("$\\le$") == [Token("leq", 2, 4, op=True)]
     assert tokenize("$x\\alpha$") == [Token("xα", 1, 8)]
     assert tokenize("$\\alpha$") == [Token("α", 2, 7)]
-    assert tokenize("$\\not\\in$") == [Token("notin", 2, 8)]
-    assert tokenize("a ∈\u0338 b") == [Token("a", 0, 1), Token("notin", 2, 4), Token("b", 5, 6)]
+    assert tokenize("$\\not\\in$") == [Token("notin", 2, 8, op=True)]
+    assert tokenize("a ∈\u0338 b") == [Token("a", 0, 1), Token("notin", 2, 4, op=True), Token("b", 5, 6)]
+    assert tokenize("5×3") == [Token("5", 0, 1), Token("times", 1, 2, op=True), Token("3", 2, 3)]
 
 
 def test_script_join_is_linear() -> None:

@@ -37,7 +37,14 @@ from __future__ import annotations
 import unicodedata
 from dataclasses import dataclass
 
-from openproceedings.query.mathsyms import GREEK, LETTER_LOOKALIKES, NEGATED, OPERATOR_COMMANDS, OPERATORS
+from openproceedings.query.mathsyms import (
+    GREEK,
+    LETTER_LOOKALIKES,
+    NEGATED,
+    NEGATION,
+    OPERATOR_COMMANDS,
+    OPERATORS,
+)
 
 TOKENIZER_VERSION = "2"  # 2: math spelled in LaTeX or Unicode gives one token (decision-006)
 # Base letters whose combining marks fold (accents, optional vowel points): matched on the Unicode name.
@@ -64,6 +71,7 @@ class Token:
     text: str
     start: int  # raw code-point offset, inclusive
     end: int  # raw code-point offset, exclusive
+    op: bool = False  # an operator's name (`×` → `times`), not a word of the text: never a wildcard stem
 
 
 def _is_word_char(ch: str) -> bool:
@@ -179,7 +187,10 @@ def _script_join(text: str, i: int) -> int:
 
 
 def _negation(text: str, j: int) -> tuple[str, int] | None:
-    """After `\\not` ending at `j`: the negated operator's name and where it ends, or None."""
+    """After `\\not` ending at `j` (spaces may follow, as TeX allows): the negated operator's name and
+    where it ends, or None."""
+    while j < len(text) and text[j] == " ":
+        j += 1
     if j < len(text) and text[j] in NEGATED:
         return NEGATED[text[j]], j + 1
     if text.startswith("\\", j):
@@ -269,12 +280,15 @@ def _latex_mask(
                     i = j
                     continue
                 if in_math and (name in GREEK or name in OPERATOR_COMMANDS):
+                    op = name not in GREEK
+                    spelling = OPERATOR_COMMANDS[name] if op else GREEK[name]
+                    if op and j < n and text[j] == "\u0338" and spelling in NEGATION:
+                        spelling, j = NEGATION[spelling], j + 1  # `\\in` + a slash is `∉`
                     mask[i] = SUB
                     for k in range(i + 1, j):
                         mask[k] = JOIN
                     if subs is not None:
-                        op = name not in GREEK
-                        subs[i] = (OPERATOR_COMMANDS[name] if op else GREEK[name], op, j, i == name_end)
+                        subs[i] = (spelling, op, j, i == name_end)
                     i = j
                     continue
                 if in_math:
@@ -367,7 +381,7 @@ def tokenize(text: str) -> list[Token]:
             if operator or split:
                 close()
             if operator:  # a token of its own
-                out.append(Token(spelling, i + 1, cmd_end))
+                out.append(Token(spelling, i + 1, cmd_end, op=True))
                 base = None
             else:  # a Greek letter: part of the word, like the letter itself
                 folded, base = _fold(spelling, base)
@@ -387,10 +401,13 @@ def tokenize(text: str) -> list[Token]:
                 end = i + 1
             i += 1
             continue
-        if i + 1 < n and text[i + 1] == "\u0338" and latex[i + 1] == KEEP:
-            composed = unicodedata.normalize("NFC", c + "\u0338")  # `∈` + slash is `∉`, `=` + slash is `≠`
-            if len(composed) == 1:
-                c, stop = composed, i + 2
+        j = i + 1
+        while j < n and latex[j] == KEEP and unicodedata.combining(text[j]):
+            j += 1
+        if "\u0338" in text[i + 1 : j]:
+            # a slash among the marks after a character: NFKC the whole cluster, as the whole-string rule
+            # would (`∈` + slash is `∉`, full-width `＝` + slash is `≠`, whatever the marks' order)
+            c, stop = text[i:j], j
         folded, base = _fold(c, base)
         if not folded:  # combining mark or invisible format char: extends an open word, never starts one
             if buf:
@@ -400,7 +417,7 @@ def tokenize(text: str) -> list[Token]:
         for piece in folded:
             if isinstance(piece, _Op):
                 close()
-                out.append(Token(piece.name, i, stop))
+                out.append(Token(piece.name, i, stop, op=True))
             elif _is_word_char(piece):
                 if not buf:
                     start = i

@@ -43,6 +43,10 @@ OPERATORS: dict[str, str] = {
     "∣": "mid", "∗": "ast", "⋆": "star", "⋯": "cdots",
     "⟶": "rightarrow", "⟹": "rightarrow", "⟵": "leftarrow", "⟸": "leftarrow", "⟷": "leftrightarrow",
     "⟺": "leftrightarrow",
+    # negated relations: each its own token (`\\not\\leq`, `\\nleq` and `≰` all → `nleq`)
+    "≰": "nleq", "≱": "ngeq", "⊄": "nsubset", "⊈": "nsubseteq", "⊅": "nsupset", "⊉": "nsupseteq",
+    "∌": "notni", "∄": "nexists", "∤": "nmid", "∦": "nparallel", "≢": "nequiv", "≁": "nsim",
+    "≉": "napprox", "≇": "ncong",
 }  # fmt: skip
 
 # LaTeX commands (inside math) that are operators: each name and alias → the operator's token. The
@@ -56,14 +60,24 @@ _ALIASES = {
     "Longleftrightarrow": "leftrightarrow",
 }  # fmt: skip
 OPERATOR_COMMANDS: dict[str, str] = {**{name: name for name in OPERATORS.values()}, **_ALIASES}
-# `\\not` before one of these (a command name, or `=`) is its negation, as `∉` and `≠` are.
-NEGATED: dict[str, str] = {"in": "notin", "=": "neq"}
+# An operator token → its negation: `\\not` before the operator (a command, or `=`), or a U+0338 slash
+# after it, means the negated operator, as `∉` and `≠` are.
+NEGATION: dict[str, str] = {
+    "in": "notin", "neq": "neq", "leq": "nleq", "geq": "ngeq", "subset": "nsubset", "subseteq": "nsubseteq",
+    "supset": "nsupset", "supseteq": "nsupseteq", "ni": "notni", "exists": "nexists", "mid": "nmid",
+    "parallel": "nparallel", "equiv": "nequiv", "sim": "nsim", "approx": "napprox", "cong": "ncong",
+}  # fmt: skip
+# What may follow `\\not`: `=`, or any operator command whose token has a negation.
+NEGATED: dict[str, str] = {
+    "=": "neq",
+    **{cmd: NEGATION[tok] for cmd, tok in OPERATOR_COMMANDS.items() if tok in NEGATION and tok != "neq"},
+}
 
 # Operator names that are also ordinary words, so a search for the word finds the symbol too
 # (decision-006 lists them; test_mathsyms rebuilds the decision's table from this module).
 ALSO_WORDS = frozenset({
     "in", "times", "cap", "cup", "sum", "wedge", "parallel", "pm", "exists", "partial", "subset", "sim",
-    "int", "div", "prod", "mp", "ll", "neg", "ni", "mid", "star",
+    "int", "div", "prod", "mp", "ll", "neg", "ni", "mid", "star", "approx",
 })  # fmt: skip
 
 

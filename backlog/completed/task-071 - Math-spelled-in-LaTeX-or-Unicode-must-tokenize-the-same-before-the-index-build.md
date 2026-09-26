@@ -3,10 +3,10 @@ id: TASK-071
 title: >-
   Math spelled in LaTeX or Unicode must tokenize the same (before the index
   build)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 15:53'
-updated_date: '2026-09-26 18:28'
+updated_date: '2026-09-26 18:41'
 labels:
   - query
   - exactness
@@ -36,4 +36,12 @@ User decision 2026-09-26 (asked with previews): (1) Greek letters: canonical tok
 Implemented (decision-006, TOKENIZER_VERSION 2): query/mathsyms.py holds the Greek and operator tables; normalize.py maps Greek commands in math to the letter (SUB mask state), operator commands and Unicode operators to the LaTeX name as a token of their own, and joins ^/_ before one letter/digit or a braced run. Golden rows pin every pair both ways; the whole-string reference models operators; exhaustive (OP_EXHAUSTIVE=1) and property suites green; Trust-Evals canonical hashes regenerated (strings unchanged).
 
 Review round (2026-09-26): Greek letter after another command's name starts a word (\hat\theta -> hat θ); operator table consulted after NFKC and U+0338 composes (decomposed ∉ -> notin); linear _script_join; user chose to add ∆, \ell, ∣ ∗ ⋆ ⋯, long arrows, \not\in/\not= and to warn (not reject) on logic signs in queries; WARN_SPELLED_GREEK added; wildcard after an operator is DETACHED; decision-006 table generated and drift-tested. TOKENIZER_VERSION stays 2 (unreleased).
+
+Verification round 2 (2026-09-26): tokens carry op=True for operators (wildcard after any operator spelling is DETACHED); a slash among a character's combining marks NFKCs the whole cluster; negated relations (≰ ⊄ ∄ …, \n… commands, \not with spaces, command + slash); logic signs warned anywhere after NFKC; WARN_SPELLED_GREEK skips filter values, wildcards and queries that already have the letter, gives negation-aware advice, and reads NFKC/any case; approx flagged as a word. a﹨b pinned as text (the documented full-width-backslash rule).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Math spelled in LaTeX or Unicode gives one token (decision-006, TOKENIZER_VERSION 2): Greek letters as the letter, operators and relations (incl. negations) as their LaTeX name, joined super/subscripts; query warnings for logic signs and spelled Greek names; wildcards after operators refused. Verified: golden rows for every pair, a round-trip over every table entry, the exhaustive every-code-point check, a 200k LaTeX fuzz for idempotence, linear-time checks, three review rounds with mutation passes, and a drift test tying decision-006's table to the code.
+<!-- SECTION:FINAL_SUMMARY:END -->
