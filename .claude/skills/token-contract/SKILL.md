@@ -8,11 +8,18 @@ description: The exact normalization contract shared by the query parser and the
 ## The pipeline — in this order, and nothing else
 1. Unicode **NFKC** (`ﬁ` → `fi`, full-width → ASCII forms).
 2. **Case-fold** (`str.casefold()`, not `lower()` — `ß` → `ss`).
-3. **Diacritic fold**: NFD, drop combining marks (`naïve` → `naive`), then NFC to recompose (Hangul).
-4. **LaTeX**: `\cmd{X}` → `X`; math `$…$` keeps inner alphanumerics; bare `\cmd` dropped.
+3. **Mark fold**: NFD, drop combining marks (combining class ≠ 0) whose base letter is Latin, Greek,
+   Cyrillic, Hebrew or Arabic (`naïve` → `naive`, `שָׁלוֹם` → `שלום`); **keep** marks that spell a different
+   word (Thai tones, kana voicing, Indic signs); drop a stray mark with no base; then NFC to recompose.
+   The base letter carries across raw characters, so a decomposed `e` + U+0301 folds like `é`.
+4. **LaTeX** (by classifying characters, so offsets survive): `\cmd{X}` → `X`; a bare `\cmd` outside
+   math is dropped; inside math `$…$` a command name is a word (`$\epsilon$` → `epsilon`); `\%` `\&` `\$`
+   `\\` are separators; neither `\$` nor a `$` followed by a digit (currency) opens math.
 5. **Split** on every char that is not a Unicode letter, digit or non-combining mark. Positions are
-   consecutive across the split (`vision-language` → `vision`@0 `language`@1). Invisible format characters
-   (soft hyphen, ZWSP, ZWJ) **join**: `bench\u00admark` → `benchmark`.
+   consecutive across the split (`vision-language` → `vision`@0 `language`@1). All Unicode format characters
+   (category Cf: soft hyphen, ZWSP, ZWJ, ZWNJ, direction marks, BOM) **join**: `bench\u00admark` → `benchmark`.
+
+Known limits (CJK runs are one token; Hebrew/Arabic points fold) are listed in spec 02 §Known limits.
 
 **Never:** stemming, lemmatization, stopword removal, synonyms, spelling correction, n-grams, compound
 splitting beyond punctuation, number normalization (`GPT-4` stays `gpt` `4`).

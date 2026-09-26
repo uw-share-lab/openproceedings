@@ -135,11 +135,25 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ("信頼 評価", ["信頼", "評価"]),
     ("доверие к ИИ", ["доверие", "к", "ии"]),
     ("ثقة", ["ثقة"]),
-    (
-        "विश्वास",
-        ["विशवास"],
-    ),  # Devanagari: vowel signs stay in the word; the virama (a combining mark) folds away
+    ("विश्वास", ["विश्वास"]),  # Devanagari: virama and vowel signs are spelling, never folded
     ("신뢰", ["신뢰"]),
+    # --- marks: folded only where they decorate (Latin, Greek, Cyrillic accents; Hebrew/Arabic vowel points),
+    #     kept where they spell a different word (Thai tones, kana voicing, Indic signs)
+    ("ά", ["α"]),  # Greek tonos folds
+    ("ёж", ["еж"]),  # Cyrillic diaeresis folds
+    ("שָׁלוֹם", ["שלום"]),  # Hebrew niqqud (optional vowel points) folds
+    ("كَتَبَ", ["كتب"]),  # Arabic harakat (optional vowel points) fold
+    ("ป่า ปา", ["ป่า", "ปา"]),  # Thai tone mark kept: "forest" and "throw" stay distinct
+    ("が か", ["が", "か"]),  # kana voicing kept
+    ("パ ハ", ["パ", "ハ"]),  # half-voiced kana kept
+    ("नमस्ते", ["नमस्ते"]),  # Devanagari signs kept
+    ("\u0301abc", ["abc"]),  # a stray mark with no base letter is dropped
+    # --- CJK: no word segmentation, so a run is one token (spec 02 §Known limits)
+    ("信頼性", ["信頼性"]),  # does NOT contain the token 信頼
+    # --- currency dollar is not math (spec 02 §Token semantics step 3)
+    ("costs $5 and \\textbf{x}", ["costs", "5", "and", "x"]),
+    ("from $10 to $20", ["from", "10", "to", "20"]),
+    ("$x$ costs $5", ["x", "costs", "5"]),
     # --- emoji and symbols are separators ---------------------------------------------------------------
     ("trust 🤖 benchmark", ["trust", "benchmark"]),
     ("trust→benchmark", ["trust", "benchmark"]),

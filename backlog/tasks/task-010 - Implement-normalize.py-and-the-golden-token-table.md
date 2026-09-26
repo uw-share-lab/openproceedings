@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 01:34'
+updated_date: '2026-09-26 01:40'
 labels:
   - query
 milestone: m-1
@@ -22,10 +22,10 @@ The token contract (spec 02 §Token semantics; token-contract skill), with an of
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 normalize(text) returns tokens and a raw↔normalized code-point offset map
-- [ ] #2 Golden token table has ≥100 cases incl. Unicode dashes, ligatures, LaTeX, digits, ß
-- [ ] #3 No stemming, stopwords or synonyms anywhere (exactness-guardian review)
-- [ ] #4 TOKENIZER_VERSION defined in normalize.py (folding it into canonical_hash is task-013 AC #3)
+- [ ] #1 Golden token table has ≥100 cases incl. Unicode dashes, ligatures, LaTeX, digits, ß
+- [ ] #2 No stemming, stopwords or synonyms anywhere (exactness-guardian review)
+- [ ] #3 TOKENIZER_VERSION defined in normalize.py (folding it into canonical_hash is task-013 AC #3)
+- [ ] #4 tokenize(text) returns tokens with half-open raw code-point spans; normalize(text) returns the token strings
 <!-- AC:END -->
 
 ## Implementation Plan

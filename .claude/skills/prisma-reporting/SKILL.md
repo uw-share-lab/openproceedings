@@ -29,7 +29,9 @@ itemized breakdown must sum to the difference; an overlapping paper goes to the 
 order (track, then status; spec 03), and the tooltip says so. A breakdown that double-counts misreports the flow diagram.
 
 ## PRISMA-S items the tool must make reportable
-Database name and version (the **full** `index_version`, `tokenizer_version`, `query_version`) · the
+Database name and version (the **full** `index_version`, `tokenizer_version`, `query_version`) (a
+review of non-English titles also states the tokenizer's known limits, spec 02 §Known limits: CJK runs
+are one token; Latin/Greek/Cyrillic accents and Hebrew/Arabic vowel points fold) · the
 **full search string**: the `identification_query` plus the default clauses · date searched (UTC,
 `searched_at`) and, separately, the crawl date (`crawl_dates`) · limits (years, venues, tracks, statuses) ·
 the number of records · expansions, translations and warnings · the deduplication process (item 16) ·

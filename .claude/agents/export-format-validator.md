@@ -27,8 +27,8 @@ edit the exporters themselves. You report defects for `api-engineer` to fix.
    fixture index. For the fixture set, use the golden export queries in `backend/tests/fixtures/`. Also
    record `op search "<q>" --ids` and the `total`.
 2. **Parse each with an independent reader, never our writer.** RIS: `scholarmend.parse.parse_ris`.
-   BibTeX: `refaudit.bibtex.parse_string`. Both come from the pinned PyPI packages. CSV: `csv.DictReader` over `utf-8-sig`, after checking that the file's first bytes are
-   the BOM `EF BB BF`.
+   BibTeX: `refaudit.bibtex.parse_string`. Both come from the pinned PyPI packages. CSV:
+   `csv.DictReader` over `utf-8-sig`, after checking that the file's first bytes are the BOM `EF BB BF`.
 3. **Assert, per format:** the record count equals `X-Total` equals `total`. The id set equals
    `--ids`. Titles, the ordered authors, the year, the venue string and the full abstract equal the
    stored record. Exactly one provenance line naming the served `index_version` and `canonical_hash`.

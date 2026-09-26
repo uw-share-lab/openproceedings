@@ -1,6 +1,6 @@
 ---
 name: ris-format
-description: The openproceedings RIS export standard — the spec 04 field mapping, the Covidence-safe choices (one AU per line, full single-line AB, T2 venue string, N1 provenance line, UTF-8), what venuetriage's RIS parser tolerates and silently drops, the known Covidence import behaviours, and the round-trip test. Use when writing or reviewing backend/src/openproceedings/api/exporters/ RIS code, `op export --format ris`, or an RIS fixture.
+description: The openproceedings RIS export standard — the spec 04 field mapping, the Covidence-safe choices (one AU per line, full single-line AB, T2 venue string, N1 provenance line, UTF-8), what scholarmend's RIS parser (`scholarmend.parse.parse_ris`, pinned from PyPI) tolerates and silently drops, the known Covidence import behaviours, and the round-trip test. Use when writing or reviewing backend/src/openproceedings/api/exporters/ RIS code, `op export --format ris`, or an RIS fixture.
 ---
 
 # RIS export (spec 04 §Exports)
@@ -34,10 +34,10 @@ record including PMLR-only ones. Never overload `N1` or recover ids from `UR`.
 
 ## Encoding
 UTF-8. Keep diacritics and non-Latin names as they are (`Şahin`); never ASCII-fold them in RIS.
-`mended.ris`, which imported cleanly, started with a BOM. venuetriage reads with `utf-8-sig`, so either
+`mended.ris`, which imported cleanly, started with a BOM. The reference parser reads with `utf-8-sig`, so either
 choice parses. Match the known-good file unless the Covidence fixture shows otherwise.
 
-## What venuetriage's parser does (`Trust-Evals-LitReview/src/venuetriage/parse.py`, read-only)
+## What the reference RIS parser does (`scholarmend.parse.parse_ris`, from the pinned `scholarmend` PyPI package)
 - Records start at the regex `^TY  - `. Any non-blank text before the first `TY` raises `ValueError`, so
   write no header comment.
 - Fields match `^([A-Z][A-Z0-9])  - (.*)$`. **Continuation lines are dropped silently.** A multi-line `AB`
@@ -53,7 +53,7 @@ choice parses. Match the known-good file unless the Covidence fixture shows othe
 
 ## Round-trip test (spec 04 §Testing)
 `backend/tests/contract/`: export the fixture query, parse the result with an independent RIS reader
-(the same rules as venuetriage, not our writer's code), and assert:
+(`scholarmend.parse.parse_ris`, not our writer's code), and assert:
 1. the record count equals `X-Total` and `/search` `total`;
 2. the set of ids equals `match_ids` for the query;
 3. `TI`, `AB`, the ordered `AU` list, `PY` and `T2` equal the stored record field for field;

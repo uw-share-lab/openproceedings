@@ -5,9 +5,13 @@ about what a "word" is. In this order, and nothing else:
 
 1. Unicode NFKC (`ﬁ` → `fi`, full-width → ASCII, `²` → `2`).
 2. Case-fold (`str.casefold()`: `ß` → `ss`).
-3. Diacritic fold: NFD, drop combining marks (`naïve` → `naive`), recompose with NFC.
+3. Diacritic fold: NFD, drop combining marks whose base letter is Latin, Greek, Cyrillic, Hebrew or
+   Arabic (accents and optional vowel points: `naïve` → `naive`, `שָׁלוֹם` → `שלום`), recompose with NFC.
+   Marks that spell a different word are KEPT: Thai tones (`ป่า` ≠ `ปา`), kana voicing (`が` ≠ `か`),
+   Indic viramas and vowel signs. A stray mark with no base letter is dropped.
 4. LaTeX: `\\cmd{X}` → `X`; inside `$…$` a command name is a word (`$\\epsilon$` → `epsilon`); a bare
-   `\\cmd` outside math is dropped; `\\%`, `\\&`, `\\$`, `\\\\` are separators (and `\\$` never opens math).
+   `\\cmd` outside math is dropped; `\\%`, `\\&`, `\\$`, `\\\\` are separators. `\\$` never opens math, and
+   neither does a `$` followed by a digit (currency: `$5`).
 5. Split on every character that is not a letter, digit or (non-combining) mark. Invisible format
    characters (soft hyphen, zero-width joiner/space) join, so `bench\\u00admark` stays one word.
 
@@ -25,6 +29,7 @@ import unicodedata
 from dataclasses import dataclass
 
 TOKENIZER_VERSION = "1"
+FOLDING_SCRIPTS = ("LATIN", "GREEK", "CYRILLIC", "HEBREW", "ARABIC")
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,15 +39,32 @@ class Token:
     end: int  # raw code-point offset, exclusive
 
 
-def _fold(c: str) -> str:
-    """Steps 1–3 for one raw character; may return "" (a combining mark or format char) or several chars."""
-    s = unicodedata.normalize("NFKC", c).casefold()
-    s = unicodedata.normalize("NFD", s)
-    return "".join(ch for ch in s if not unicodedata.combining(ch) and unicodedata.category(ch) != "Cf")
-
-
 def _is_word_char(ch: str) -> bool:
     return ch.isalnum() or unicodedata.category(ch).startswith("M")
+
+
+def _folds_marks(base: str | None) -> bool:
+    """Does a combining mark on `base` fold away? Yes for decorative accents and optional vowel points."""
+    return base is None or unicodedata.name(base, "").startswith(FOLDING_SCRIPTS)
+
+
+def _fold(c: str, base: str | None) -> tuple[str, str | None]:
+    """Steps 1–3 for one raw character, given the base letter the previous characters left open.
+
+    Returns the folded characters (possibly "" or several) and the base letter to carry forward, so a
+    combining mark in the NEXT raw character knows which script it decorates.
+    """
+    out: list[str] = []
+    for ch in unicodedata.normalize("NFD", unicodedata.normalize("NFKC", c).casefold()):
+        if unicodedata.category(ch) == "Cf":
+            continue  # invisible format characters join
+        if unicodedata.combining(ch):
+            if not _folds_marks(base):
+                out.append(ch)  # a mark that spells the word stays
+            continue
+        out.append(ch)
+        base = ch if _is_word_char(ch) else None
+    return "".join(out), base
 
 
 def _latex_mask(text: str) -> list[bool]:
@@ -70,7 +92,8 @@ def _latex_mask(text: str) -> list[bool]:
             sep[i] = True
         elif c == "$":
             sep[i] = True
-            in_math = not in_math
+            if in_math or not (i + 1 < n and text[i + 1].isdigit()):  # `$5` is currency, not math
+                in_math = not in_math
         i += 1
     return sep
 
@@ -81,6 +104,7 @@ def tokenize(text: str) -> list[Token]:
     out: list[Token] = []
     buf: list[str] = []
     start = end = 0
+    base: str | None = None
 
     def close() -> None:
         nonlocal buf
@@ -91,8 +115,9 @@ def tokenize(text: str) -> list[Token]:
     for i, c in enumerate(text):
         if latex[i]:
             close()
+            base = None
             continue
-        folded = _fold(c)
+        folded, base = _fold(c, base)
         if not folded:  # combining mark or invisible format char: extends an open word, never starts one
             if buf:
                 end = i + 1

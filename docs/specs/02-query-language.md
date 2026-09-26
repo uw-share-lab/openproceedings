@@ -14,22 +14,36 @@ The query side and the index side run the **same** normalization function (`norm
 `TOKENIZER_VERSION`):
 
 1. Unicode NFKC, then case-fold (`LLM` ≡ `llm`).
-2. Fold diacritics (`naïve` ≡ `naive`): NFD, drop combining marks, recompose with NFC. This changes
-   characters, not words, so it is not stemming. It also removes combining marks in other scripts (the
-   Devanagari virama), identically on the query and index side.
+2. Fold marks that only decorate a word: NFD, drop combining marks (canonical combining class ≠ 0)
+   whose base letter is Latin, Greek, Cyrillic, Hebrew or Arabic, then recompose with NFC. So
+   `naïve` ≡ `naive`, `ά` ≡ `α`, and Hebrew and Arabic vowel points (optional in normal writing) fold:
+   `שָׁלוֹם` ≡ `שלום`. Marks that spell a *different word* are kept: Thai tone marks (`ป่า` "forest" ≠ `ปา`
+   "throw"), kana voicing (`が` ≠ `か`), and Indic viramas and vowel signs. A stray mark with no base letter
+   is dropped.
 3. LaTeX: `\cmd{X}` → `X`, and a bare `\cmd` outside math is dropped. Inside math `$…$`, command names
-   are words (`$\epsilon$-DP` → `epsilon dp`). `\%`, `\&`, `\$` and `\\` are separators, and `\$`
-   never opens math.
+   are words (`$\epsilon$-DP` → `epsilon dp`). `\%`, `\&`, `\$` and `\\` are separators. Neither `\$`
+   nor a `$` followed by a digit (currency, `$5`) opens math.
 4. Split on anything that is not a letter, digit or (non-combining) mark. `vision-language` → `vision`
-   `language` at consecutive positions. `GPT-4o` → `gpt` `4o`. `model's` → `model` `s`. Invisible format
-   characters (soft hyphen, zero-width space and joiner) join rather than split: `bench\u00admark` →
-   `benchmark`.
+   `language` at consecutive positions. `GPT-4o` → `gpt` `4o`. `model's` → `model` `s`. All Unicode format
+   characters (category Cf: soft hyphen, zero-width space/joiner/non-joiner, direction marks, BOM) join
+   rather than split: `bench\u00admark` → `benchmark`.
 5. **Nothing else.** No stemming, no lemmatization, no stopword removal, no synonyms, no spelling
    correction.
 
 `tokenize(text)` returns each token with the half-open code-point span of the **raw** text it came from
 (spec 04 §Conventions); `normalize(text)` is just the token strings. One raw character can yield two
 tokens that share its span (`½` → `1`, `2`). The full case list is `backend/tests/golden/test_tokens.py`.
+
+### Known limits (state these in a methods section when they matter)
+
+- **CJK has no word segmentation.** A run of Chinese, Japanese or Korean characters is one token, so
+  `信頼` does not match inside `信頼性`. Search the whole run, or use a wildcard (`信頼*`).
+- **Hebrew and Arabic vowel points fold**, so a vocalised and an unvocalised spelling match each other.
+  That is intended (points are optional in normal writing), but it is a fold, not an exact match.
+- **Latin, Greek and Cyrillic accents fold** (`resume` ≡ `résumé`), as in every mainstream search engine.
+
+Everything else is exact: a token matches only the identical normalised token. The corpus is
+overwhelmingly English, so these limits rarely bite, but a review of non-English titles should say so.
 
 Consequences, which are also golden tests:
 

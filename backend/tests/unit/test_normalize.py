@@ -11,12 +11,27 @@ from openproceedings.query.normalize import TOKENIZER_VERSION, Token, normalize,
 PLAIN = st.text(alphabet=st.characters(blacklist_characters="\\$", blacklist_categories=("Cs",)), max_size=60)
 
 
+FOLDING_SCRIPTS = ("LATIN", "GREEK", "CYRILLIC", "HEBREW", "ARABIC")
+
+
+def _folds(base: str | None) -> bool:
+    return base is None or unicodedata.name(base, "").startswith(FOLDING_SCRIPTS)
+
+
 def reference(text: str) -> list[str]:
     """The token contract stated as simply as possible, over the whole string (no LaTeX)."""
-    s = unicodedata.normalize("NFKC", text).casefold()
-    s = "".join(c for c in unicodedata.normalize("NFD", s) if not unicodedata.combining(c))
-    s = "".join(c for c in s if unicodedata.category(c) != "Cf")  # invisible format chars join
-    s = unicodedata.normalize("NFC", s)  # recompose what NFD split (Hangul syllables)
+    s = unicodedata.normalize("NFD", unicodedata.normalize("NFKC", text).casefold())
+    kept, base = [], None
+    for c in s:
+        if unicodedata.category(c) == "Cf":
+            continue  # invisible format chars join
+        if unicodedata.combining(c):
+            if not _folds(base):
+                kept.append(c)  # a mark that spells the word (Thai tone, kana voicing, Indic sign)
+            continue
+        kept.append(c)
+        base = c if (c.isalnum() or unicodedata.category(c).startswith("M")) else None
+    s = unicodedata.normalize("NFC", "".join(kept))  # recompose (Hangul, kept marks)
     words, cur = [], []
     for c in s:
         if c.isalnum() or unicodedata.category(c).startswith("M"):
