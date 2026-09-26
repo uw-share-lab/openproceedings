@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 # subcommand -> (help text, the Backlog task that implements it)
 PLANNED: dict[str, tuple[str, str]] = {
-    "ingest": ("fetch sources: openreview | proceedings | ris (spec 01)", "task-019"),
+    "ingest": ("fetch sources: openreview | proceedings | ris (spec 01)", "task-022"),
     "snapshot": ("build or diff immutable corpus snapshots (spec 01)", "task-022"),
     "index": ("build or retire an immutable index (spec 03)", "task-023"),
     "search": ("run a query; --explain, --engine tantivy|reference (spec 02/03)", "task-030"),

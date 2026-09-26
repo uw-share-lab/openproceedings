@@ -4,7 +4,7 @@ import pytest
 from openproceedings import cli
 
 PLANNED = {
-    "ingest": "task-019",
+    "ingest": "task-022",
     "snapshot": "task-022",
     "index": "task-023",
     "search": "task-030",

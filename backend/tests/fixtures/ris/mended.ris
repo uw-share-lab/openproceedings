@@ -67,9 +67,9 @@ AU  - Smith, A
 AU  - Jones, B
 TI  - A Synthetic PMLR Paper on Calibration
 JF  - ICML
-UR  - https://proceedings.mlr.press/v235/smith24a.html
-UR  - https://proceedings.mlr.press/v235/smith24a/smith24a.pdf
-PY  - 2024///
+UR  - https://proceedings.mlr.press/v202/smith23a.html
+UR  - https://proceedings.mlr.press/v202/smith23a/smith23a.pdf
+PY  - 2023///
 AB  - A synthetic PMLR abstract …
 M1  - Query date: 2026-09-20 08:00:00
 ER  - 
@@ -88,7 +88,7 @@ TY  - PDF
 AU  - Hoe, H
 TI  - A Synthetic Datasets Track Paper
 JF  - NeurIPS
-UR  - https://proceedings.neurips.cc/paper_files/paper/2024/file/00112233445566778899aabbccddeeff-Paper-Datasets_and_Benchmarks_Track.pdf
+UR  - https://Papers.NIPS.cc/paper_files/paper/2024/file/00112233445566778899aabbccddeeff-Paper-Datasets_and_Benchmarks_Track.pdf?utm_source=chatgpt.com
 PY  - 2024///
 AB  - A benchmark snippet …
 M1  - Query date: 2026-09-19 01:06:30
@@ -98,7 +98,27 @@ TY  - PDF
 AU  - Qoe, Q
 TI  - A Synthetic Paper With No Query Date
 JF  - ICLR
-UR  - https://proceedings.iclr.cc/paper_files/paper/2024/hash/0123456789abcdef0123456789abcdef-Abstract-Conference.html
+UR  - https://proceedings.iclr.cc/paper_files/paper/2024/hash/ffeeddccbbaa99887766554433221100-Abstract-Conference.html
 PY  - 2024///
 AB  - No M1 line …
+ER  - 
+
+TY  - PDF
+AU  - Roe, S
+TI  - A Synthetic Hidden Forum
+JF  - ICLR
+UR  - https://openreview.net/pdf?id=HiDden0001
+PY  - 2025///
+AB  - Hidden …
+M1  - Query date: 2026-09-19 01:06:30
+ER  - 
+
+TY  - PDF
+AU  - Soe, T
+TI  - A Synthetic NeurIPS Media Link
+JF  - NeurIPS
+UR  - https://neurips.cc/media/PosterPDFs/NeurIPS%202023/1.png
+PY  - 2023///
+AB  - Poster only …
+M1  - Query date: 2026-09-19 01:06:30
 ER  - 

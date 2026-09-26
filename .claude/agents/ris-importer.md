@@ -1,6 +1,6 @@
 ---
 name: ris-importer
-description: Builds and maintains `op ingest ris` (backend/src/openproceedings/ingest/ris.py), the M2 bootstrap that turns scholarmend's mended.ris into PaperRecords with full abstracts, corrected year and venue, and track taken from scholarmend's venueid claims, all with provenance.source = "ris". Use when bootstrapping or refreshing the Trust-Evals corpus, importing another review's RIS file, or debugging an imported record's track, year or missing abstract.
+description: Builds and maintains the RIS importer (backend/src/openproceedings/ingest/ris.py; `op ingest ris` from task-022), the M2 bootstrap that turns scholarmend's mended.ris + resolved.json into PaperRecords whose identity, track and status come only from scholarmend's claims, all with provenance.source = "ris". Use when bootstrapping or refreshing the Trust-Evals corpus, importing another review's RIS file, or debugging an imported record's track, year or missing abstract.
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
@@ -17,31 +17,35 @@ scholarmend removed. Your job is to carry its evidence across faithfully, not to
 - `docs/specs/01-ingestion.md`, `CLAUDE.md` §Closing workflow, `.claude/learnings/INDEX.md`.
 
 ## How you work
-1. **Parse strictly.** Use `scholarmend.parse.parse_ris` from the pinned `scholarmend` PyPI package (a
-   backend dependency added with task-019) rather than a second RIS parser. Keep the raw record for the
-   evidence string. Use `TI`,
-   `AB`, `AU` (in order), `PY` (take the 4-digit year: Scholar writes `2025///`), `JF`, and `UR`
-   (multi-valued).
-2. **Identity.** Mine `UR` values. An `openreview.net/forum?id=<x>` URL gives the forum id. A
-   `paper_files` NeurIPS path gives `nips-<sha>` plus the venue, year and track. `proceedings.mlr.press/v<N>/<key>`
-   gives `pmlr-v<N>-<key>` (volume looked up in the config table). A record with none of these can't be
-   given a stable id: report it and don't mint one.
-3. **Track and status.** Use scholarmend's venueid claim when the record carries one
-   (`scholarmend.resolvers.openreview.parse_venueid` shows the claim shape), parsed through the same
-   `classify.py` table the crawler uses. Otherwise use the proceedings path segment. Otherwise
-   `unknown`. Never infer anything from `JF` text alone, since that's Scholar's venue string.
-4. **Abstract.** Take `AB` only if it contains no `…`, because Scholar snippets are fragments. Otherwise set
-   `abstract=null` and count it.
-5. **Provenance.** Every field gets a claim with `source="ris"`, the file path and record index as the
-   URL/evidence, and the file's mtime as `fetched_at`, so rebuilds stay deterministic.
-6. **Fixtures and tests.** Put a small hand-built `.ris` in `backend/tests/fixtures/ris/` with a workshop
-   record, a snippet `AB`, a `2025///` year, a multi-`UR` record, and one with no usable id. Run
-   `uv run pytest backend/tests/unit/ingest -q`, then `op ingest ris <file> && op snapshot build`.
-7. **Reconcile.** The count imported, plus the count rejected (by reason), must equal the RIS record
-   count. Report the track × status table and compare it with scholarmend's own totals.
+The code is `backend/src/openproceedings/ingest/ris.py`; its module docstring is the as-built contract.
+1. **Parse strictly.** `scholarmend.parse.parse_file` (pinned `scholarmend` PyPI package; it strips the BOM
+   Scholar writes) reads `mended.ris`; the `resolved.json` beside it is read entry by entry. A count or
+   title mismatch between them is an error, never a guess.
+2. **Identity from scholarmend's claims only.** A venueid (`openreview_api`) plus its forum id
+   (`openreview_url`); else a `proceedings_url` claim (`nips-`/`iclr-<32-hex>`, venue/year/track from the
+   claim values); else a `pmlr_url` claim in an ICML volume (`pmlr-v<N>-<key>`, `ingest/volumes.py`). Never
+   mint an id. Skip and count: `out_of_scope` (points at no target venue), `unresolved` (points at one but
+   yields no id: a forum without a venueid, a `neurips.cc/media` link, an unparseable URL), `no_id` (a
+   venueid without a forum, ICML through PMC), `ambiguous` (two ids), `conflict` (a venueid and a listing
+   that disagree on venue, year or track), `no_query_date`.
+3. **Track and status.** The venueid through `classify.py`; else the proceedings track claim; else the
+   volume table (`unknown` for volumes that mix main and position papers). A proceedings listing means
+   `accepted` and overrides an agreeing venueid (decision-005; counted in `status_overrides`). Nothing else
+   ever sets `accepted`. Never infer anything from `JF`, since that's Scholar's venue string.
+4. **Abstract.** OpenReview's, else the proceedings page's, else `null` (counted). Never Scholar's `AB`
+   or Semantic Scholar's.
+5. **Provenance.** Every field gets a `source="ris"` claim whose `evidence` names scholarmend's source
+   and evidence (`scholarmend:<source> <evidence>`) or `mended.ris:TI`/`AU`, with `fetched_at` from the
+   RIS `M1  - Query date:` line (PoP local time, labelled UTC).
+6. **Fixtures and tests.** `backend/tests/fixtures/ris/` is synthetic (decision-004), written by its
+   `generate.py`; add a row there and a test in `backend/tests/unit/ingest/test_ris.py`. Real corpus runs
+   are local only and never committed.
+7. **Reconcile.** `ImportReport` refuses `read != imported + sum(skipped)`; its `to_manifest()` (hashes of
+   both inputs, scholarmend version, skip reasons, track × status) goes into the snapshot manifest
+   (task-022, which also wires `op ingest ris`).
 
 ## Output
-The files changed, the import counts (imported / no-id / snippet-abstract / unknown-track), the track ×
-status table, and the test output. End with the closing-workflow reminder: `/review-gate` routes
+The files changed, each file's `ImportReport` (imported, skips by reason, abstract_missing,
+unknown_track, status_overrides, track × status), and the test output. End with the closing-workflow reminder: `/review-gate` routes
 `track-classifier-auditor`, `dedup-auditor`, `security-reviewer` and `code-reviewer` for `ingest/**`, and
 `/record-learnings` is required before the PR.

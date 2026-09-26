@@ -32,7 +32,7 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | Source | `native` |
 |---|---|
 | OpenReview (v1 or v2) | forum id, as-is (case-sensitive) |
-| PMLR only | `pmlr-v<N>-<key>` |
+| PMLR only | `pmlr-v<N>-<key>` (ICML volumes only, `ingest/volumes.py`) |
 | NeurIPS proceedings only | `nips-<hash>`, the 32-hex hash from the paper_files path |
 | ICLR proceedings only | `iclr-<hash>`, the 32-hex hash from the proceedings path |
 | RIS import | the forum id if the record carries an OpenReview URL, else the proceedings form above. If neither exists, it can't be ingested: report it, never mint a random id. |
@@ -62,11 +62,12 @@ All claims are kept, including the losing ones. Two same-rank sources that disag
 `conflicts.csv` row.
 
 **RIS-imported records** (spec 01 §Sources, `ingest/ris.py`): every claim has `source = "ris"`, with
-scholarmend's own source and evidence in `evidence` (`scholarmend:openreview_api venueid=…`). `status`
-comes from a claim only: an OpenReview venueid claim → its status; a proceedings listing (NeurIPS/ICLR
-proceedings URL, or a PMLR URL in an ICML main volume) → `accepted`, overriding the venueid. A record with
-neither is out of scope, so a RIS record is never `unknown` for lack of a claim. It is **never** inferred
-from the paper appearing in Scholar. The abstract is never Scholar's (`null` instead).
+its origin in `evidence` (`scholarmend:openreview_api venueid=…`, `mended.ris:TI`). `status` comes from a
+claim only: an OpenReview venueid claim → its status; a proceedings listing (NeurIPS/ICLR proceedings URL,
+or a PMLR URL in an ICML volume) → `accepted`, overriding a venueid that agrees on venue, year and track
+(one that disagrees is a `conflict` and the record is skipped). A record with neither is never imported,
+so a RIS record is never `unknown` for lack of a claim. It is **never** inferred from the paper appearing
+in Scholar. The abstract is never Scholar's (`null` instead).
 
 ## content_hash
 `sha256` of the canonical JSON of the **searchable and filterable** fields: `title`, `abstract`,
