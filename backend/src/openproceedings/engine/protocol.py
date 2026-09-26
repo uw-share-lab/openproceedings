@@ -8,7 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from openproceedings.query.ast import Node, Wildcard
+from openproceedings.diagnostics import OpenProceedingsError, UserInputError
+from openproceedings.query.ast import FILTER_FIELDS, Node, Wildcard
 
 
 class Searchable(Protocol):
@@ -30,13 +31,21 @@ class Searchable(Protocol):
     def status(self) -> str: ...
 
 
+class EngineError(OpenProceedingsError):
+    """A failure inside a search engine."""
+
+
+class EngineInputError(EngineError, UserInputError):
+    """An engine rejected the query or its arguments (e.g. more than MAX_EXPANSIONS expansions): a 4xx."""
+
+
 @dataclass(frozen=True, slots=True)
 class SearchResult:
     total: int
     ids: tuple[str, ...]  # one page, in the engine's order
 
 
-FACET_FIELDS = ("venue", "year", "track", "status")
+FACET_FIELDS: tuple[str, ...] = FILTER_FIELDS
 MAX_EXPANSIONS = 200  # spec 02: more distinct expanded terms than this is an error, never a truncation
 
 

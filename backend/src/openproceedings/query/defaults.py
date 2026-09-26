@@ -95,6 +95,6 @@ def apply_defaults(ast: Node, at: int) -> Defaulted:
                     span=nested.span,
                 )
             )
-    effective = canonicalize(_combine(conjuncts + added) or ast)
+    effective = canonicalize(_combine(conjuncts + added) or ast)  # never empty: `ast` has a conjunct
     kept = [c for c in _conjuncts(effective) if not (_is_default(c) and _clause_field(c) in defaults)]
     return Defaulted(effective, _combine(kept), tuple(defaults), tuple(warnings))

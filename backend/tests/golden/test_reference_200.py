@@ -4,7 +4,6 @@ independent evaluator (task-016 AC2; `fixtures/corpus/make_reference_200.py`).""
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -14,21 +13,12 @@ from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.query.canonical import canonicalize, render
 from openproceedings.query.parser import parse
 
+from tests.corpus import fixture_records
+
 CORPUS = Path(__file__).parents[1] / "fixtures" / "corpus"
 
 
-@dataclass(frozen=True)
-class Rec:
-    id: str
-    title: str
-    abstract: str | None
-    venue: str
-    year: int
-    track: str
-    status: str
-
-
-RECORDS = [Rec(**json.loads(line)) for line in (CORPUS / "reference-200.jsonl").read_text().splitlines()]
+RECORDS = fixture_records()
 GOLDEN = json.loads((CORPUS / "reference-200-queries.json").read_text())
 ENGINE = ReferenceEngine(RECORDS)
 

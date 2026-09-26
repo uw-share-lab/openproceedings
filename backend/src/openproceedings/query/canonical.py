@@ -3,8 +3,7 @@
 `canonicalize` puts an AST in normal form without changing what it matches:
 - nested AND in AND (and OR in OR) is flattened;
 - in every AND, text conjuncts keep their order and filter conjuncts (`venue:x`, `NOT track:y`) follow,
-  ordered venue, year, track, status, then other fields alphabetically, a positive filter before a
-  negated one of the same field;
+  ordered venue, year, track, status, a positive filter before a negated one of the same field;
 - an OR whose branches are all filters of one field becomes one filter; filter values are sorted and
   deduplicated.
 
@@ -23,6 +22,7 @@ import hashlib
 
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import (
+    FILTER_FIELDS,
     MIN_YEAR,
     And,
     Filter,
@@ -37,11 +37,11 @@ from openproceedings.query.ast import (
     YearRange,
     structure,
 )
+from openproceedings.query.lexer import OPERATOR_WORDS
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.vocab import STATUSES, TRACKS, VENUES
 
-FILTER_ORDER = ("venue", "year", "track", "status")
-_OPERATOR_WORDS = frozenset({"and", "or", "not"})
+FILTER_ORDER = FILTER_FIELDS
 _VALUE_WORDS = {  # tokens a bare word could be mistaken for, next to a filter of that field (WARN_FILTER_SCOPE)
     "venue": frozenset(VENUES),
     "track": frozenset(TRACKS),
@@ -160,7 +160,7 @@ def render(n: Node, quote: frozenset[str] = frozenset()) -> str:
     """The canonical string of an already canonicalized node. `quote`: filter fields among the node's OR
     siblings, whose values a bare term must be quoted to not be mistaken for."""
     if isinstance(n, Term):
-        plain = n.token not in _OPERATOR_WORDS and not (n.field is None and _mistakable(n.token, set(quote)))
+        plain = n.token not in OPERATOR_WORDS and not (n.field is None and _mistakable(n.token, set(quote)))
         return f"{_prefix(n.field)}{n.token if plain else f'"{n.token}"'}"
     if isinstance(n, Wildcard):
         return (

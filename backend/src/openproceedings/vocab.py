@@ -20,4 +20,10 @@ TRACKS = (
 )
 STATUSES = ("accepted", "rejected", "withdrawn", "desk_rejected", "unknown")
 TEXT_FIELDS = ("title", "abstract")
-FILTER_FIELDS = ("venue", "year", "track", "status", "source")
+FILTER_FIELDS = (
+    "venue",
+    "year",
+    "track",
+    "status",
+    "source",
+)  # `source:` is Scholar syntax (FIELD_COMPAT_ONLY)

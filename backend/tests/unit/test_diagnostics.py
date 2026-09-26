@@ -127,3 +127,13 @@ def test_typed_error_survives_pickling() -> None:
 def test_span_is_strict_about_types(span: object) -> None:
     with pytest.raises(ValidationError):
         Diagnostic(code=DiagnosticCode.PARSE_EMPTY_GROUP, message="x", span=span)
+
+
+def test_every_code_a_parse_can_return_as_an_error_is_a_422() -> None:
+    from openproceedings.diagnostics import http_status
+
+    for code in DiagnosticCode:
+        if code.startswith(("PARSE_", "FIELD_", "WILDCARD_")):
+            assert http_status(code) == 422, code
+        if code.startswith(("WARN_", "COMPAT_")):
+            assert http_status(code) is None, code  # warnings and notices never fail a request

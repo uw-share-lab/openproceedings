@@ -14,7 +14,7 @@ and produces a native AST and canonical string. It never changes what a native q
 from __future__ import annotations
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode, clip
-from openproceedings.query.lexer import MIN_STEM, Kind, Lexeme
+from openproceedings.query.lexer import MIN_STEM, OPERATOR_WORDS, Kind, Lexeme, letters
 from openproceedings.query.normalize import normalize
 
 # normalised `source:` value → venue (every source value of the Trust-Evals corpus exports)
@@ -37,14 +37,11 @@ def source_key(text: str) -> str:
     return " ".join(normalize(text))
 
 
-_OPERATOR_WORDS = frozenset({"and", "or", "not"})
-
-
 def _joins(x: Lexeme) -> bool:
     """Whether a word can be part of a `|` item phrase: a plain word with something to search. A lowercase
     operator word (whose own warning says it is searched as a word) or a word with no letters or digits
     (`&`, an error of its own) ends the run instead of silently vanishing into a phrase."""
-    return x.kind is Kind.WORD and x.text.casefold() not in _OPERATOR_WORDS and bool(normalize(x.stem or ""))
+    return x.kind is Kind.WORD and x.text.casefold() not in OPERATOR_WORDS and bool(normalize(x.stem or ""))
 
 
 def _is_or(x: Lexeme | None) -> bool:
@@ -59,10 +56,9 @@ def _cleared(run: tuple[Lexeme, ...]) -> set[tuple[int, int]]:
     """Spans of wildcard words whose stem is long enough once the phrase's earlier words count."""
     cleared, before = set(), 0
     for w in run:
-        letters = sum(len(t) for t in normalize(w.stem or ""))
-        if w.wildcard and before + letters >= MIN_STEM:
+        if w.wildcard and before + letters(w.stem or "") >= MIN_STEM:
             cleared.add((w.start, w.end))
-        before += letters
+        before += letters(w.stem or "")
     return cleared
 
 

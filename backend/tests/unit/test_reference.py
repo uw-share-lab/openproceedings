@@ -3,26 +3,17 @@
 from __future__ import annotations
 
 import ast as pyast
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from openproceedings.diagnostics import OpenProceedingsError
+from openproceedings.diagnostics import OpenProceedingsError, UserInputError
+from openproceedings.engine.protocol import EngineInputError
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.query.ast import Filter, Not, Or, Term, Wildcard
 from openproceedings.query.parser import parse
+from pydantic import ValidationError
 
-
-@dataclass(frozen=True)
-class Rec:
-    id: str
-    title: str
-    abstract: str | None
-    venue: str = "ICLR"
-    year: int = 2024
-    track: str = "main"
-    status: str = "accepted"
-
+from tests.corpus import Rec
 
 CORPUS = [
     Rec("a", "Trust calibration in LLMs", "We benchmark trust and reliance."),
@@ -123,7 +114,7 @@ def test_the_expansion_cap_never_depends_on_which_records_are_reached() -> None:
     for q in ("trust OR term*", "venue:ICML term*", "term* trust"):
         tree = parse(q).ast
         assert tree is not None
-        with pytest.raises(OpenProceedingsError) as err:
+        with pytest.raises(EngineInputError) as err:  # a user error (4xx), not an internal failure
             engine.match_ids(tree)
         assert err.value.code == "WILDCARD_TOO_MANY_EXPANSIONS"
         with pytest.raises(OpenProceedingsError):
@@ -190,19 +181,21 @@ def test_facets_judge_top_level_on_the_flattened_tree() -> None:
     assert engine.facets(tree, ("venue",))["venue"] == {"ICLR": 1, "ICML": 1}
 
 
-def test_track_and_status_match_exactly_venue_case_insensitively() -> None:
-    track = Filter(span=(0, 1), field="track", values=("MAIN",))
-    venue = Filter(span=(0, 1), field="venue", values=("iclr",))
-    assert ENGINE.match_ids(track) == frozenset()
-    assert ENGINE.match_ids(venue) == frozenset({"a", "c", "d"})
+def test_filter_values_are_canonical_so_matching_is_exact() -> None:
+    for field, value in (("track", "MAIN"), ("venue", "iclr"), ("status", "Accepted")):
+        with pytest.raises(ValidationError):
+            Filter(span=(0, 1), field=field, values=(value,))  # type: ignore[arg-type]
+    assert ENGINE.match_ids(Filter(span=(0, 1), field="venue", values=("ICLR",))) == frozenset(
+        {"a", "c", "d"}
+    )
 
 
 def test_bad_arguments_are_errors() -> None:
     tree = parse("trust").ast
     assert tree is not None
-    with pytest.raises(OpenProceedingsError):
+    with pytest.raises(EngineInputError):
         ENGINE.search(tree, offset=-1)
-    with pytest.raises(OpenProceedingsError):
+    with pytest.raises(EngineInputError):
         ENGINE.facets(tree, ("title",))
 
 
@@ -230,3 +223,7 @@ def test_the_oracle_imports_nothing_it_must_not() -> None:
         "openproceedings.query.normalize",
     }
     assert modules <= allowed, modules - allowed
+
+
+def test_engine_input_errors_are_user_errors() -> None:
+    assert issubclass(EngineInputError, UserInputError) and issubclass(EngineInputError, OpenProceedingsError)

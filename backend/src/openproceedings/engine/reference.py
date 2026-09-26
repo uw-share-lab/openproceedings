@@ -20,8 +20,15 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 
-from openproceedings.diagnostics import DiagnosticCode, OpenProceedingsError
-from openproceedings.engine.protocol import FACET_FIELDS, MAX_EXPANSIONS, Searchable, SearchResult
+from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.engine.protocol import (
+    FACET_FIELDS,
+    MAX_EXPANSIONS,
+    Engine,
+    EngineInputError,
+    Searchable,
+    SearchResult,
+)
 from openproceedings.query.ast import (
     And,
     Filter,
@@ -79,7 +86,7 @@ class ReferenceEngine:
         """Every vocabulary token the wildcard matches, sorted; more than MAX_EXPANSIONS is an error."""
         terms = sorted(t for t in self.vocabulary if _matches_wildcard(t, wildcard))
         if len(terms) > MAX_EXPANSIONS:
-            raise OpenProceedingsError(
+            raise EngineInputError(
                 DiagnosticCode.WILDCARD_TOO_MANY_EXPANSIONS,
                 f"`{wildcard.stem}{wildcard.op}` expands to {len(terms)} terms (more than {MAX_EXPANSIONS}) — use a "
                 "longer stem.",
@@ -93,7 +100,7 @@ class ReferenceEngine:
     def search(self, ast: Node, *, sort: str = "relevance", offset: int = 0, limit: int = 50) -> SearchResult:
         """The oracle does not rank: results are in id order whatever `sort` asks for."""
         if offset < 0 or limit < 0:
-            raise OpenProceedingsError(DiagnosticCode.API_BAD_PARAM, "offset and limit must be ≥ 0.")
+            raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "offset and limit must be ≥ 0.")
         ids = sorted(self.match_ids(ast))
         return SearchResult(total=len(ids), ids=tuple(ids[offset : offset + limit]))
 
@@ -103,7 +110,7 @@ class ReferenceEngine:
         after flattening nested ANDs, as on the canonical tree."""
         unknown = [f for f in fields if f not in FACET_FIELDS]
         if unknown:
-            raise OpenProceedingsError(DiagnosticCode.API_BAD_PARAM, f"not facet fields: {unknown}")
+            raise EngineInputError(DiagnosticCode.API_BAD_PARAM, f"facet fields must be among {FACET_FIELDS}")
         self.expansions(ast)  # the cap applies to the whole query, even if a facet drops the wildcard
         out: dict[str, dict[str, int]] = {}
         for field in fields:
@@ -188,12 +195,10 @@ def _fields(field: TextField | None) -> tuple[TextField, ...]:
 
 
 def _filter_matches(d: _Doc, f: Filter) -> bool:
-    """Exact equality with the record's value; venue case-insensitively; years inclusive."""
+    """Exact equality with the record's value; years inclusive."""
     if f.field == "year":
         return any(isinstance(v, YearRange) and v.lo <= d.year <= v.hi for v in f.values)
-    if f.field == "venue":
-        return any(isinstance(v, str) and v.casefold() == d.venue.casefold() for v in f.values)
-    return getattr(d, f.field) in f.values
+    return getattr(d, f.field) in f.values  # values are canonical vocabulary (the AST validates them)
 
 
 def _own_field(n: Node) -> str | None:
@@ -205,3 +210,7 @@ def _and(nodes: list[Node]) -> Node:
     if len(nodes) == 1:
         return nodes[0]
     return And(span=(0, 0), children=tuple(nodes))
+
+
+def _conforms(engine: ReferenceEngine) -> Engine:
+    return engine  # mypy fails `make lint` if ReferenceEngine drifts from the Engine protocol

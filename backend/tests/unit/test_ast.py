@@ -30,6 +30,9 @@ S = (0, 1)
         lambda: Filter(span=S, field="year", values=("ICLR",)),
         lambda: Filter(span=S, field="source", values=("PMLR",)),  # type: ignore[arg-type]  # Scholar-only
         lambda: Filter(span=S, field="venue", values=()),
+        lambda: Filter(span=S, field="venue", values=("iclr",)),  # canonical spellings only
+        lambda: Filter(span=S, field="track", values=("bogus",)),
+        lambda: Filter(span=S, field="status", values=("ACCEPTED",)),
     ],
 )
 def test_invalid_nodes_cannot_be_built(build: object) -> None:

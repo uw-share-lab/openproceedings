@@ -47,8 +47,10 @@ from enum import StrEnum
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip
 from openproceedings.query.normalize import math_regions, tokenize
+from openproceedings.vocab import FILTER_FIELDS, TEXT_FIELDS
 
-FIELDS = ("title", "abstract", "venue", "year", "track", "status", "source")
+FIELDS = TEXT_FIELDS + FILTER_FIELDS  # FILTER_FIELDS includes Scholar's `source:` (vocab.py)
+OPERATOR_WORDS = frozenset({"and", "or", "not"})  # lowercase: searched as words, with a warning
 MIN_STEM = 3  # letters or digits a wildcard stem keeps after normalisation (spec 02, decision-001)
 MAX_NEAR = 100
 QUOTES = frozenset('"“”„‟＂«»「」『』')
@@ -127,6 +129,11 @@ class LexResult:
 
 def _diag(code: DiagnosticCode, message: str, start: int, end: int) -> Diagnostic:
     return Diagnostic(code=code, message=message, span=(start, end))
+
+
+def letters(text: str) -> int:
+    """How many letters and digits `text` keeps after the token contract (the wildcard stem measure)."""
+    return sum(len(t.text) for t in tokenize(text))
 
 
 def _small_int(digits: str, max_len: int) -> int | None:
@@ -232,7 +239,7 @@ class _Lexer:
                 m = k
                 while m < j and not q[m].isspace():
                     m += 1
-            before = sum(len(t.text) for p in parts for t in tokenize(p.text))  # letters of earlier words
+            before = sum(letters(p.text) for p in parts)  # letters and digits of the earlier words
             parts.append(self.word(k, m, in_phrase=True, before=before))
             k = m
         self.out.append(Lexeme(Kind.PHRASE, i, end, q[i:end], parts=tuple(parts), closed=closed))

@@ -198,3 +198,11 @@ def test_a_source_filter_inside_a_text_field_warns_like_venue() -> None:
 
 def test_scholar_mode_does_not_group_around_empty_words() -> None:
     assert [e.code for e in parse("a & b | c", "scholar").errors] == [C.PARSE_EMPTY_TERM]
+
+
+def test_values_of_a_source_group_get_no_dollar_notice() -> None:
+    result = scholar('source:("PMLR" OR iclr) model$')
+    assert [(t.code, t.span) for t in result.translations if t.code is C.COMPAT_POP_DOLLAR] == [
+        (C.COMPAT_POP_DOLLAR, (24, 30))
+    ]
+    assert [t.code for t in scholar("source:ICLR (model$)").translations].count(C.COMPAT_POP_DOLLAR) == 1

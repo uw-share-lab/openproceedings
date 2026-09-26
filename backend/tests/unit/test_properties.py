@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
-from pathlib import Path
-
-from hypothesis import given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.reference import ReferenceEngine
@@ -14,22 +10,10 @@ from openproceedings.query.ast import And, Filter, Node, Not, Or, structure
 from openproceedings.query.canonical import canonicalize, render
 from openproceedings.query.parser import parse
 
+from tests.corpus import fixture_records
 from tests.strategies import asts, filters, negative_asts
 
-
-@dataclass(frozen=True)
-class Rec:
-    id: str
-    title: str
-    abstract: str | None
-    venue: str
-    year: int
-    track: str
-    status: str
-
-
-CORPUS = Path(__file__).parents[1] / "fixtures" / "corpus" / "reference-200.jsonl"
-ENGINE = ReferenceEngine([Rec(**json.loads(line)) for line in CORPUS.read_text().splitlines()])
+ENGINE = ReferenceEngine(fixture_records())
 
 
 @given(asts())
@@ -82,20 +66,11 @@ def test_scholar_mode_reads_a_canonical_string_the_same_way(tree: Node) -> None:
 
 
 @given(asts(), st.sampled_from(["venue", "year", "track", "status"]))
-def test_facet_counts_add_up(tree: Node, field: str) -> None:
-    """Each facet counts every record matched once F's own top-level conjuncts are dropped, exactly once."""
-    counts = ENGINE.facets(tree, (field,))[field]
-    conjuncts = _flatten(tree)
-    own = [c for c in conjuncts if _own_field(c) == field]
-    kept = [c for c in conjuncts if c not in own]
-    expected = (
-        ENGINE.match_ids(And(span=(0, 0), children=tuple(kept)))
-        if len(kept) > 1
-        else (ENGINE.match_ids(kept[0]) if kept else ENGINE.universe)
-    )
-    assert sum(counts.values()) == len(expected)
-    if not own:
-        assert sum(counts.values()) == len(ENGINE.match_ids(tree))
+def test_a_facet_of_a_field_the_query_never_filters_counts_its_matches(tree: Node, field: str) -> None:
+    """Independent of how the oracle picks conjuncts: with no filter on F anywhere in the tree, F's facet
+    partitions exactly the query's matches."""
+    assume(field not in str(structure(tree)))
+    assert sum(ENGINE.facets(tree, (field,))[field].values()) == len(ENGINE.match_ids(tree))
 
 
 @given(filters())

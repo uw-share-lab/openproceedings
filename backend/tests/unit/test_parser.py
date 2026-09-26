@@ -427,3 +427,11 @@ def test_parsing_is_linear_in_the_query_length() -> None:
 
     small, large = cost("w " * 200), cost("w " * 999)  # 5x the input
     assert large < small * 15, (small, large)  # quadratic would be ~25x; generous for noise
+
+
+def test_a_malformed_filter_group_is_skipped_as_a_whole() -> None:
+    result = parse("venue:(iclr (x)) trust")
+    assert [e.code for e in result.errors] == [DiagnosticCode.FIELD_FILTER_SYNTAX]
+    assert (
+        parse("venue:(iclr (x)) trust NOT").errors[-1].code is DiagnosticCode.PARSE_EXPECTED_TERM
+    )  # parsing went on

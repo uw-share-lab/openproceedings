@@ -81,7 +81,7 @@ def http_status(code: DiagnosticCode) -> int | None:
     """The HTTP status an error with this code is returned with, or None if it is never an HTTP error."""
     if code in _API_STATUS:
         return _API_STATUS[code]
-    if code.startswith("PARSE_"):
+    if code.startswith(("PARSE_", "FIELD_", "WILDCARD_")):  # a query that can't be run as written
         return 422
     return None
 
@@ -120,7 +120,8 @@ class Diagnostic(BaseModel):
 
 
 class OpenProceedingsError(Exception):
-    """Base for internal failures. Each carries a registry code; the API edge maps it to an error envelope."""
+    """Base for every typed failure. Each carries a registry code; the API edge maps it to an error envelope
+    with `http_status`. Log the code, never `message`: messages quote user input (logging-standards)."""
 
     def __init__(self, code: DiagnosticCode, message: str) -> None:
         super().__init__(code, message)  # both args, so the error pickles across processes
@@ -129,3 +130,11 @@ class OpenProceedingsError(Exception):
 
     def __str__(self) -> str:
         return f"{self.code}: {self.message}"
+
+
+class UserInputError(OpenProceedingsError):
+    """The request can't be served as asked (a 4xx): logged at DEBUG with its code only."""
+
+
+class InternalError(OpenProceedingsError):
+    """Something broke on our side (a 5xx): logged at ERROR with the traceback, never the message's input."""
