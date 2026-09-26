@@ -17,7 +17,7 @@ openproceedings/
 │   ├── src/openproceedings/
 │   │   ├── ingest/              # 01: sources/, classify.py, dedup.py, snapshot.py, ris.py
 │   │   ├── query/               # 02: normalize.py, lexer.py, parser.py, ast.py, canonical.py, defaults.py, compat.py
-│   │   ├── engine/              # 03: protocol.py, reference.py, index.py, compile.py, tantivy_engine.py (built); highlight.py
+│   │   ├── engine/              # 03: protocol.py, reference.py, index.py, compile.py, tantivy_engine.py, exclusions.py (built); highlight.py
 │   │   ├── semantic/            # 06 (phase 2)
 │   │   ├── api/                 # 04: FastAPI app, routers, exporters/, records.py
 │   │   ├── eval/                # 07 report generators

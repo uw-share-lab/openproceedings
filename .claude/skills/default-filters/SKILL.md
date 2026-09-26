@@ -65,8 +65,10 @@ clauses removed**) and reports how the difference breaks down:
   accounting:** buckets are assigned in a fixed order, track first and then status, so that paper counts
   once, under `track.workshop`. The buckets always add up to `excluded.total = |unfiltered| − |filtered|`,
   the single number PRISMA needs. Reporting rules: `.claude/skills/prisma-reporting/SKILL.md`.
-- The counts must come from the same engine and `index_version` as the result set. The oracle computes them
-  too, and the differential suite compares both.
+- The counts must come from the same engine and `index_version` as the result set. As built (task-026):
+  `engine/exclusions.py::excluded(engine, parsed)` runs over the Engine protocol (two disjunctive facet
+  counts and one `match_ids`), so ReferenceEngine and TantivyEngine both compute it; `test_exclusions.py`
+  checks both against a brute-force count, and that a garbled `identification_query` changes nothing.
 - Budget: `match_ids` with exclusion accounting takes < 300 ms p95 (spec 03).
 
 ## Worked example
