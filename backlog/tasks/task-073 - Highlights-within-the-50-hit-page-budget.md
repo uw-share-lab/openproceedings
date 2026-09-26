@@ -4,13 +4,14 @@ title: Highlights within the 50-hit page budget
 status: To Do
 assignee: []
 created_date: '2026-09-26 21:07'
-updated_date: '2026-09-26 21:07'
+updated_date: '2026-09-26 21:27'
 labels:
   - engine
 milestone: m-3
 dependencies:
   - TASK-027
   - TASK-035
+  - TASK-031
 ordinal: 72000
 ---
 

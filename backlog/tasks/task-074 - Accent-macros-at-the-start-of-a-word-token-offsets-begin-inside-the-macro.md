@@ -4,6 +4,7 @@ title: 'Accent macros at the start of a word: token offsets begin inside the mac
 status: To Do
 assignee: []
 created_date: '2026-09-26 21:07'
+updated_date: '2026-09-26 21:27'
 labels:
   - tokenizer
 milestone: m-2
@@ -14,7 +15,7 @@ ordinal: 73000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-task-027 review: tokenize's offsets for a word that begins with an accent macro start at the letter, not the macro: `\\"{O}del` gives the span `O}del` (3,8), an unbalanced brace; `\\v{S}ekar` likewise. Tokens are right; only offsets (so highlights) are off. Start the token at the macro's backslash.
+task-027 review: tokenize's offsets for a word that begins with an accent macro start at the letter, not the macro: in the raw text G-backslash-quote-brace-O-brace-del (a BibTeX umlaut before a capital O), the span is "O}del" (3,8), an unbalanced brace; the v-caron macro before S (Sekar) likewise. Tokens are right; only offsets (so highlights) are off. Start the token at the macro's backslash.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

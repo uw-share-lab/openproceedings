@@ -172,3 +172,34 @@ def test_near_over_a_long_field_is_not_quadratic() -> None:
     t = time.perf_counter()
     got = lit("trust NEAR/100 ai", r)["abstract"]
     assert len(got) == 3_000 and time.perf_counter() - t < 1.0  # every pair checked took ~13 s
+
+
+TOKENS = {r.id: {f: tokenize(getattr(r, f) or "") for f in ("title", "abstract")} for r in RECORDS}
+
+
+def covered(ast: Node, r: Rec, expansions: dict[tuple[str, str], frozenset[str]]) -> dict[str, set[int]]:
+    """The code points `ast` lights in each field of `r` (tokens cached per record)."""
+    _m, spans = _Highlighter(r, TOKENS[r.id], expansions).node(ast)  # type: ignore[arg-type]
+    return {f: {i for s, e in spans.get(f, set()) for i in range(s, e)} for f in ("title", "abstract")}  # type: ignore[call-overload]
+
+
+@settings(deadline=None)
+@given(asts(), asts())
+def test_an_or_lights_exactly_its_matching_branches_and_an_and_all_of_them(a: Node, b: Node) -> None:
+    # compositional, from the oracle's verdicts: OR lights the union over the branches that match (so an
+    # unmatched branch lights nothing), AND the union over both
+    from openproceedings.query.ast import And, Or
+
+    branches = [(c, REFERENCE.match_ids(c)) for c in (a, b)]
+    for combined in (Or(span=(0, 0), children=(a, b)), And(span=(0, 0), children=(a, b))):
+        expansions = REFERENCE.expansions(combined)
+        matched = REFERENCE.match_ids(combined)
+        for r in RECORDS:
+            if r.id not in matched:
+                continue
+            want: dict[str, set[int]] = {"title": set(), "abstract": set()}
+            for c, ids in branches:
+                if r.id in ids:
+                    for f, points in covered(c, r, expansions).items():
+                        want[f] |= points
+            assert covered(combined, r, expansions) == want, (r.id, combined.kind)
