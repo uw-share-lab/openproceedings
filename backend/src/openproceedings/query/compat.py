@@ -70,10 +70,11 @@ def group_phrases(
     out: list[Lexeme] = []
     notices: list[Diagnostic] = []
     cleared: set[tuple[int, int]] = set()
+    joins = [_joins(x) for x in lexemes]  # once per lexeme: the loop below is linear
     i = 0
     while i < len(lexemes):
         j = i
-        while j < len(lexemes) and _joins(lexemes[j]):
+        while j < len(lexemes) and joins[j]:
             j += 1
         before = lexemes[i - 1] if i else None
         after = lexemes[j] if j < len(lexemes) else None
@@ -96,6 +97,10 @@ def group_phrases(
                     span=(start, end),
                 )
             )
+            i = j
+        elif run:
+            # a run that doesn't qualify has no qualifying tail either (a word, not `|`, precedes the tail)
+            out.extend(run)
             i = j
         else:
             out.append(lexemes[i])

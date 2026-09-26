@@ -40,13 +40,14 @@ tokenizer (`C++` → `c`: WARN_SYMBOLS_DROPPED). Bad input is a diagnostic, neve
 
 from __future__ import annotations
 
+import bisect
 import re
 import unicodedata
 from dataclasses import dataclass
 from enum import StrEnum
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip
-from openproceedings.query.normalize import math_regions, tokenize
+from openproceedings.query.normalize import first_math_end, math_regions, tokenize
 from openproceedings.vocab import FILTER_FIELDS, TEXT_FIELDS
 
 FIELDS = TEXT_FIELDS + FILTER_FIELDS  # FILTER_FIELDS includes Scholar's `source:` (vocab.py)
@@ -167,6 +168,23 @@ class _Lexer:
         self.next_quote = [len(q)] * (len(q) + 1)
         for k in range(len(q) - 1, -1, -1):
             self.next_quote[k] = k if q[k] in QUOTES else self.next_quote[k + 1]
+        # Every unescaped `$` that ends an inline-math scan, found once so math_run is a lookup, not a scan:
+        # one followed by `$` stops it without closing (`$$` inside inline math); one preceded by a non-space
+        # and not followed by a digit closes it (Pandoc). normalize.first_math_end is the one-scan reference
+        # a property test holds this to.
+        self.dollar_stops: list[int] = []
+        self.dollar_closes: list[bool] = []
+        backslashes = 0
+        for k, c in enumerate(q):
+            if c == "$" and backslashes % 2 == 0:
+                nxt = q[k + 1] if k + 1 < len(q) else ""
+                if nxt == "$":
+                    self.dollar_stops.append(k)
+                    self.dollar_closes.append(False)
+                elif k > 0 and not q[k - 1].isspace() and not nxt.isdigit():
+                    self.dollar_stops.append(k)
+                    self.dollar_closes.append(True)
+            backslashes = backslashes + 1 if c == "\\" else 0
         self.out: list[Lexeme] = []
         self.errors: list[Diagnostic] = []
         self.warnings: list[Diagnostic] = []
@@ -241,6 +259,7 @@ class _Lexer:
         if closed and end < n and q[end].isalnum():
             self.ambiguous_quote(j, "is followed directly by a letter or digit")
         parts: list[Lexeme] = []
+        counted = 0
         k = i + 1
         while k < j:
             if q[k].isspace():
@@ -251,7 +270,7 @@ class _Lexer:
                 m = k
                 while m < j and not q[m].isspace():
                     m += 1
-            before = sum(letters(p.text) for p in parts)  # letters and digits of the earlier words
+            before = counted  # letters and digits of the earlier words (a running total: linear)
             part = self.word(k, m, in_phrase=True, before=before)
             if not part.wildcard and any(c.isalnum() for c in part.text) and not tokenize(part.text):
                 self.warn(  # `"\\epsilon greedy"` must not silently become the single word `greedy`
@@ -262,6 +281,7 @@ class _Lexer:
                     m,
                 )
             parts.append(part)
+            counted += letters(part.text)
             k = m
         self.out.append(Lexeme(Kind.PHRASE, i, end, q[i:end], parts=tuple(parts), closed=closed))
         return end
@@ -270,12 +290,21 @@ class _Lexer:
         """If LaTeX math opens at `i` and closes before `limit` at the end of a word (`$\\alpha + \\beta$`),
         the index after it; else -1. So math with spaces stays one word, while `behavio$r colo$r` (the `$`
         not at a word's start) never pairs across words."""
-        if self.q[i] != "$":
+        q = self.q
+        if q[i] != "$":
             return -1
-        ends = [b for a, b in math_regions(self.q[i:limit]) if a == 0]
-        if not ends:
-            return -1
-        end = i + ends[0]
+        if i + 1 < limit and q[i + 1] == "$":  # `$$…$$` (rare): the one-scan rule
+            found = first_math_end(q[i:limit])
+            if found < 0:
+                return -1
+            end = i + found
+        else:
+            if i + 1 >= limit or q[i + 1].isspace():  # Pandoc: an opener is followed by a non-space
+                return -1
+            k = bisect.bisect_right(self.dollar_stops, i)
+            if k == len(self.dollar_stops) or self.dollar_stops[k] >= limit or not self.dollar_closes[k]:
+                return -1
+            end = self.dollar_stops[k] + 1
         at_boundary = end == limit or self.q[end].isspace() or self.q[end] in _BREAKS | QUOTES
         return end if at_boundary else -1
 

@@ -99,7 +99,7 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 | `test` → `test` | pytest (unit, golden, differential@2k, contract); vitest; OpenAPI → TS types freshness |
 | `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`), every hook case table (`.claude/hooks/tests/`) and the tooling-script table (`.claude/scripts/tests/test-tooling-scripts.sh`) |
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha |
-| `nightly` (scheduled, not a PR check) | The exhaustive tokenizer check (`OP_EXHAUSTIVE=1`), every property test at 50,000 examples, and `make mutate` (every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent). Differential@50k and full-corpus parity join it with the Tantivy engine (task-057, M4) |
+| `nightly` (scheduled, not a PR check) | Three parallel jobs, each with its own time limit: the oracle-backed properties at 50,000 examples; the exhaustive tokenizer check (`OP_EXHAUSTIVE=1`) plus every other property at 50,000; and `make mutate` (every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent). Differential@50k and full-corpus parity join it with the Tantivy engine (task-057, M4) |
 | *(planned, M1+)* `e2e`, `bench` | Playwright; pytest-benchmark vs main |
 
 `review-attested` is an **honesty check** against forgetting to review, not an access control. Anyone who

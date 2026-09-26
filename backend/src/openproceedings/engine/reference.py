@@ -111,7 +111,7 @@ class ReferenceEngine:
         unknown = [f for f in fields if f not in FACET_FIELDS]
         if unknown:
             raise EngineInputError(DiagnosticCode.API_BAD_PARAM, f"facet fields must be among {FACET_FIELDS}")
-        self.expansions(ast)  # the cap applies to the whole query, even if a facet drops the wildcard
+        self.expansions(ast)  # the cap applies even when no facet field is asked for (`fields=()`)
         out: dict[str, dict[str, int]] = {}
         for field in fields:
             kept = [c for c in _conjuncts(ast) if _own_field(c) != field]

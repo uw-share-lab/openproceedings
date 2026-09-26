@@ -230,6 +230,19 @@ def _latex_mask(text: str, regions: list[tuple[int, int]] | None = None) -> list
     return mask
 
 
+def first_math_end(text: str) -> int:
+    """If LaTeX math opens at the start of `text` (`$…$` by the Pandoc rule, or `$$…$$`), the index just after
+    its closing delimiter; else -1. Exactly the decision step 4 makes at position 0 (so it agrees with
+    `math_regions`), in one scan to the closer instead of a pass over the whole text."""
+    if not text.startswith("$"):
+        return -1
+    if text.startswith("$$"):
+        close = _find(text, 2, "$$")
+        return close + 2 if close >= 0 else -1
+    close = _find_closing_dollar(text, 0)
+    return close + 1 if close >= 0 else -1
+
+
 def math_regions(text: str) -> list[tuple[int, int]]:
     """The LaTeX math regions of `text` exactly as step 4 finds them (half-open, delimiters included).
     The query lexer uses this so that it and the tokenizer never disagree about what `$…$` is."""

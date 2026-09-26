@@ -414,3 +414,42 @@ def test_long_digit_runs_never_raise_in_the_lexer() -> None:
 
 def test_words_can_still_touch_parentheses_that_hold_math() -> None:
     assert lex("$f(x)$ trust").errors == ()
+
+
+@given(st.text(alphabet='$ \\ax1"(', max_size=24))
+def test_math_run_lookup_agrees_with_the_one_scan_rule(q: str) -> None:
+    """The lexer's precomputed closers must give exactly normalize.first_math_end's answer (M1 gate)."""
+    from openproceedings.query.lexer import _Lexer
+    from openproceedings.query.normalize import first_math_end
+
+    lexer = _Lexer(q)
+    for i in range(len(q)):
+        limit = lexer.next_quote[i]
+        if i >= limit or q[i] != "$":
+            continue
+        ref = first_math_end(q[i:limit])
+        end = i + ref if ref >= 0 else -1
+        at_boundary = (
+            end < 0 or end == limit or q[end].isspace() or q[end] in "()|" or q[end] in lexer_quotes()
+        )
+        assert lexer.math_run(i, limit) == (end if at_boundary else -1), (q, i)
+
+
+def lexer_quotes() -> frozenset[str]:
+    return lexer.QUOTES | lexer.LPARENS | lexer.RPARENS | lexer.PIPES
+
+
+def test_first_math_end_agrees_with_math_regions() -> None:
+    from openproceedings.query.normalize import first_math_end, math_regions
+
+    for t in ("$x$", "$x", "$ x$", "$x $y$", "$$a$$", "$$a", "$a\\$b$", "$5$", "$x$5", "$x$ y"):
+        starts = [b for a, b in math_regions(t) if a == 0]
+        assert first_math_end(t) == (starts[0] if starts else -1), t
+
+
+def test_m1_gate_mutant_rows() -> None:
+    """Each row kills a mutant that survived the M1 gate's QA pass (L9, L13b, L15)."""
+    assert [e.code for e in lex("$x$*").errors] == [C.WILDCARD_STEM_TOO_SHORT]  # math ends before the `*`
+    assert lex("$abc$*").lexemes[0].wildcard == "*"
+    assert [e.code for e in lex('"a. b*"').errors] == [C.WILDCARD_STEM_TOO_SHORT]  # `.` is not a letter
+    assert [x.text for x in lex("$a b$(c)").lexemes] == ["$a b$", "(", "c", ")"]  # math ends at `(`

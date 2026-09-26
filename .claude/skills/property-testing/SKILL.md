@@ -37,7 +37,8 @@ vocabularies), `negative_asts()`, `leaves()`, `filters()` and `queries()` (strin
 digits, Thai, kana, CJK). Import it as `from tests.strategies import …`. Properties over them live in
 `tests/unit/test_properties.py` (round-trip without printing-caused warnings, match-set preservation by
 the oracle, all-negative rejection, Scholar mode reads canonical strings identically). CI runs the `ci`
-profile (2,000); the nightly workflow runs every property at `nightly` (50,000). Counterexamples found so
+profile (2,000); the nightly workflow runs every property at `nightly` (50,000), split into an
+oracle-backed job and the rest (about 35 and 20 minutes locally). Counterexamples found so
 far are golden rows (`("0", "0")` in test_canonical.py; `trust (trust OR track:main)` in test_defaults.py).
 Not yet: stems near the 200-expansion cap (needs the 5k fixture, task-057).
 

@@ -227,3 +227,11 @@ def test_the_oracle_imports_nothing_it_must_not() -> None:
 
 def test_engine_input_errors_are_user_errors() -> None:
     assert issubclass(EngineInputError, UserInputError) and issubclass(EngineInputError, OpenProceedingsError)
+
+
+def test_facets_enforce_the_cap_even_with_no_fields() -> None:
+    engine = ReferenceEngine([Rec(f"r{i}", f"term{i:03d}", None) for i in range(201)])
+    tree = parse("term*").ast
+    assert tree is not None
+    with pytest.raises(EngineInputError):
+        engine.facets(tree, ())

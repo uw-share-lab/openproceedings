@@ -7,6 +7,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.query.ast import And, Filter, Near, Node, Not, Or, Phrase, Term, Wildcard, YearRange
+from openproceedings.query.canonical import canonicalize, render
 from openproceedings.query.parser import MAX_DEPTH, parse
 
 
@@ -425,8 +426,14 @@ def test_parsing_is_linear_in_the_query_length() -> None:
             best = min(best, time.perf_counter() - start)
         return best
 
-    small, large = cost("w " * 200), cost("w " * 999)  # 5x the input
-    assert large < small * 15, (small, large)  # quadratic would be ~25x; generous for noise
+    for unit in ("w ", "$x ", "$a b ", "a. b "):  # plain words, unclosed math openers, math with spaces
+        n = 2000 // len(unit) - 1
+        small, large = cost(unit * (n // 5)), cost(unit * n)  # 5x the input
+        assert large < small * 15 + 0.01, (unit, small, large)  # quadratic would be ~25x
+    for q in ('"' + "$x " * 666 + '"', "a " * 999):
+        start = time.perf_counter()
+        parse(q, "scholar")
+        assert time.perf_counter() - start < 0.5, q[:10]  # was 11 s before the M1 gate fix
 
 
 def test_a_malformed_filter_group_is_skipped_as_a_whole() -> None:
@@ -435,3 +442,16 @@ def test_a_malformed_filter_group_is_skipped_as_a_whole() -> None:
     assert (
         parse("venue:(iclr (x)) trust NOT").errors[-1].code is DiagnosticCode.PARSE_EXPECTED_TERM
     )  # parsing went on
+
+
+def test_m1_gate_mutant_rows() -> None:
+    """Each row kills a mutant that survived the M1 gate's QA pass (P5, P6, P7, C9b, D6)."""
+    [mixed] = [w for w in parse("a NEAR/1 b OR c d").warnings if w.code is DiagnosticCode.WARN_MIXED_AND_OR]
+    assert "`a NEAR/1 b OR (c d)`" in mixed.message  # the NEAR span covers both operands
+    assert DiagnosticCode.WARN_FILTER_SCOPE not in [w.code for w in parse("year:2023 OR title:2024").warnings]
+    assert DiagnosticCode.WARN_FILTER_SCOPE not in [w.code for w in parse("year:2023 OR (2024 -)").warnings]
+    tree = parse("year:2020 OR 5").ast
+    assert tree is not None and "(year:2020 OR 5)" in render(canonicalize(tree))  # 5 is no year: unquoted
+    partial = parse("trust track:main")  # a partial track set is the user's own limit, never the default
+    assert partial.defaults == ["status"]
+    assert partial.identification_query == "(trust AND track:main)"
