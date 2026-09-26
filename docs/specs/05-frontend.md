@@ -86,7 +86,7 @@ outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copyin
    (`year:2020..2026`). Default filters `track:(main OR datasets_benchmarks OR position)` and
    `status:accepted` removed 304 of them before screening (212 workshop, 4 competition, 88 rejected); that
    count includes 0 unclassified records (track or status unknown), itemised separately. Cross-source
-   duplicates were merged at ingest, before indexing (see the coverage report). Database scope: coverage
+   duplicates were merged at ingest, before indexing (merge counts are in the search record). Database scope: coverage
    report for snapshot `<snapshot_hash>`. 412 records were screened. Search record: <url>."*
    It always gives the **full** `index_version`, never a prefix. The limits clause names every filter the
    user wrote (03 §Exclusion accounting: "identified" is conditional on them) and reads "with no limits"

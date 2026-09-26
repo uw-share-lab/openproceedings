@@ -78,7 +78,7 @@ terms.
 ## Exclusion accounting (guarantee 6, PRISMA)
 
 For every search, also compute the size of the matched set **with the default filters removed** (the
-`identification_query` of 02 §Default filters), and break the difference down by filter, e.g. `{"track": {"workshop": 212, "competition": 4}, "status": {"rejected": 88}}`.
+`identification_query` of 02 §Default filters), and break the difference down by filter, e.g. `{"total": 304, "track": {"workshop": 212, "competition": 4, "unknown": 0}, "status": {"rejected": 88, "unknown": 0}}` (the shape pinned in 04).
 The API exposes this as `excluded` (04). It maps directly onto PRISMA's "records removed before screening".
 
 Counting rules (so the PRISMA number is never double-counted):

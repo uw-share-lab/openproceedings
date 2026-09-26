@@ -21,7 +21,8 @@ Put OpenReview credentials in `.env` (gitignored). The anonymous API rate-limits
      tasks moved with `backlog task complete <id>`) → docs, specs and READMEs as-built in the same branch
    - `/record-learnings` → commit the entry and `INDEX.md`
    - `/review-gate`. Every finding gets a disposition: `fixed <sha>`, `task-NNN`, or `rejected: <reason>`.
-     A must-fix can only be fixed.
+     A must-fix can only be fixed, and every Should is fixed in the same round too. Only work that genuinely
+     can't be done yet becomes a task, with the reason.
    - `/open-pr` (pushes, opens the PR into `dev`, attests the review).
 5. CI must pass: `lint`, `test`, `claude-tooling`, `attribution`, `learnings`, `review-attested`.
    Merge into `dev` yourself once it's green.

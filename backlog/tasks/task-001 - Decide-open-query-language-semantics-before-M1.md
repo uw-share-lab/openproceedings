@@ -4,7 +4,7 @@ title: Decide open query-language semantics before M1
 status: To Do
 assignee: []
 created_date: '2026-09-25 22:06'
-updated_date: '2026-09-25 22:26'
+updated_date: '2026-09-25 23:20'
 labels:
   - query
   - decision
@@ -36,4 +36,6 @@ Raised while writing the query/engine and API skills (2026-09-25). Spec 02/04 le
 
 <!-- SECTION:NOTES:BEGIN -->
 AC4 decided in the 2026-09-25 review round: only top-level AND conjuncts suppress a default; nested track:/status: raises nested_filter (spec 02 §Default filters).
+
+Correction (2026-09-25): the warning code is WARN_NESTED_FILTER (registry style), not nested_filter.
 <!-- SECTION:NOTES:END -->

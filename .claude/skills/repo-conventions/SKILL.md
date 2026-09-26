@@ -9,7 +9,7 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | Path | Holds | Notes |
 |---|---|---|
 | `pyproject.toml`, `uv.lock` (root) | The **uv workspace** root: repo-wide ruff config, dev group (ruff, mypy), one lock | `uv sync` at the root; members join via `[tool.uv.workspace] members` |
-| `Makefile` | `sync`, `fmt`, `lint`, `tooling`, `test`, `hooks` | `make lint` is exactly what CI and pre-push run |
+| `Makefile` | `sync`, `fmt`, `lint`, `tooling`, `test`, `hooks` | `make lint` is exactly CI's `lint` job; pre-push runs `make lint` + `make tooling` |
 | `.githooks/` | `commit-msg` (attribution), `pre-push` (`make lint` + `make tooling`) | Installed by `scripts/setup-dev.sh` |
 | `.github/` | Workflows, `dependabot.yml` | Actions pinned by SHA |
 | `backend/` (M1) | The uv workspace member, package `openproceedings` (`backend/pyproject.toml`) | |

@@ -15,7 +15,8 @@ Extra reviewers requested: $ARGUMENTS
 2. **Route.** `git diff --name-only origin/dev...HEAD` → apply the routing table. Always include
    `code-reviewer` and `docs-reviewer` (every diff). Add `observability-reviewer` for any `backend/src/**`
    change, and `security-reviewer` + `qa-auditor` for `.claude/hooks/**`, `.claude/scripts/**`,
-   `.github/**`, `.githooks/**`, `Makefile`, `pyproject.toml` or lockfiles. Print the reviewer list and why
+   `.github/**`, `.githooks/**`, `Makefile`, `pyproject.toml` or lockfiles. For those, `qa-auditor` runs
+   `make mutate-changed` (fast, parallel), not a hand-written mutation loop. Print the reviewer list and why
    each was chosen.
 3. **Review in parallel.** Spawn all routed reviewers in one message. Give each: the diff range
    (`origin/dev...HEAD`), the relevant spec(s) under `docs/specs/`, and the reviewer output contract.

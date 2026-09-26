@@ -61,7 +61,7 @@ clauses removed**) and reports how the difference breaks down:
 ## Worked example
 Input `trust AND calibration` →
 canonical (illustrative ordering) `((trust AND calibration) AND status:accepted AND track:(datasets_benchmarks OR main OR position))`.
-Input `trust AND track:workshop` → only `status:accepted` is added. `excluded.track` is absent, because the
+Input `trust AND track:workshop` → only `status:accepted` is added. `excluded.track` has no buckets, only `"unknown": 0`, because the
 user chose the track.
 
 ## Gotchas

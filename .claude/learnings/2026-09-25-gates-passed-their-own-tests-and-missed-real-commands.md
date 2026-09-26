@@ -69,3 +69,24 @@ Run the new review gate on its own tooling: five routed reviewers (code, securit
 - **Wrong-shaped command parsing kept recurring** (whitespace-only, then keywords, then wrappers, then
   process substitution). Parse like bash from the start: separators, reserved words, per-wrapper option
   tables, basenames, quote- and comment-aware heredocs.
+
+## Addendum — 2026-09-25 (review round 3)
+
+- **My round-2 fix introduced two regressions.** Comment stripping reset quote state on every line, so a
+  commit message line `Closes #12` was "commented out". Quote blanking hid `<<'EOF'` delimiters. Both
+  crashed the parser, and the gates then **failed open**. Fixes: one `preprocess` pass that carries quote
+  state across lines and treats heredoc bodies as opaque, and every gate now **fails closed** on a parse
+  error.
+- **Fail-closed hides regressions from block rows.** Once a crash blocks, every "should block" row still
+  passes when the parser breaks. Parser changes need **allow rows on approved work** (an approved push
+  after a `#12` message line), which a crash would fail.
+- **Delete code a mutant proves inert, rather than keeping it.** `glob_base` became redundant once globs
+  are expanded (an unmatched glob deletes nothing), and the loop-header check never changed an outcome.
+  Both were removed along with their mutants. Genuinely equivalent mutants stay, documented
+  (`diff.renames` defaults to true).
+- **Replace code by AST, not by slicing between function names.** A slice-based rewrite of `cmdparse.py`
+  silently dropped `ParseError`, `read_payload` and `ASSIGNMENT`. An AST name diff against HEAD caught it.
+- **Speed:** a hand-rolled serial mutation loop took about 40 minutes of review time. The committed parallel
+  runner (`make mutate`, `mutate-changed`, `--match`) does the full set in minutes and a targeted re-check
+  in seconds. `make tooling` now runs its tables in parallel (about 15 s). Reviews use `mutate-changed`;
+  the nightly workflow runs everything.

@@ -51,3 +51,9 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 ## What goes where
 Pure function → unit. Anything that decides *what matches* → golden (+ differential if it touches
 compilation). Anything the frontend or a script depends on → contract. User-visible flow → e2e.
+
+## Mutation testing (gates and tooling)
+`make mutate` / `make mutate-changed` / `mutate.py --match` (spec 08 §Mutation testing). Every new check in a
+hook or tooling script ships with a mutant in `.claude/scripts/mutants/gates.json`, and with a case-table row
+that kills it. A row that passes only because something else fails first (a stale index, a parser crash
+that fails closed, an unreviewed HEAD) does not count. Isolate the one check the row is about.

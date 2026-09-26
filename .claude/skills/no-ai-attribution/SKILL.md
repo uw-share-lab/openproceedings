@@ -20,13 +20,13 @@ matter: the paper's methods and the lab's records name the people responsible.
 ## What enforces it
 | Layer | Where | Catches |
 |---|---|---|
-| PreToolUse hook | `.claude/hooks/block-ai-attribution.sh` | Any Bash call containing a message-writing git command (`commit`, `merge`, `tag`, `notes`, `revert`, `cherry-pick`) or a PR-writing gh command (`pr create`/`new`/`edit`/`comment`/`review`/`merge`): the **whole raw command text** is scanned, not individual flags, so `-m`, `-am`, `-qm`, `--message=`, `--trailer`, `--title`/`--body`, heredoc bodies (`-F - <<EOF`, `-m "$(cat <<'EOF' …)"`) are all covered, plus the contents of any `-F`/`--file`/`--body-file` that is a regular file (≤ 1 MB) |
+| PreToolUse hook | `.claude/hooks/block-ai-attribution.sh` | Any Bash call containing a message-writing git command (`commit`, `merge`, `tag`, `notes`, `revert`, `cherry-pick`) or a PR-writing gh command (`pr create`/`new`/`edit`/`comment`/`review`/`merge`): the **whole raw command text** is scanned, not individual flags, so `-m`, `-am`, `-qm`, `--message=`, `--trailer`, `--title`/`--body`, heredoc bodies (`-F - <<EOF`, `-m "$(cat <<'EOF' …)"`) are all covered, plus the contents of any `-F`/`--file`/`--body-file` that is a regular file (≤ 1 MB), and a message fed on stdin (`-F - < msg.txt`, `cat msg.txt \| git commit -F -`) |
 | git `commit-msg` hook | `.githooks/commit-msg` (installed by `scripts/setup-dev.sh`) | Backstop for messages written in an editor (`git commit` with no message), which the PreToolUse hook can't see. Check `git config core.hooksPath` → `.githooks` |
 | CI | `attribution` job in `pr-gates.yml` | Every commit message in the PR range and the PR title/body; the final backstop for anything local hooks missed |
 
 The shared pattern (case-insensitive):
 ```
-co-authored-by:[^\n]*(claude|anthropic) | generated with \[?claude | 🤖 generated | noreply@anthropic\.com
+co-authored-by[:=][^\n]*(claude|anthropic) | generated with \[?claude | 🤖 generated | noreply@anthropic\.com
 ```
 A human `Co-Authored-By:` trailer for a real co-author is fine.
 

@@ -49,7 +49,8 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 ## Code quality
 - **Autolint** (`.claude/skills/autolint/SKILL.md`): `autofix.sh` formats and fixes each file as it's edited
   (ruff, prettier, eslint, shellcheck).
-- `make lint` is exactly what CI and the pre-push hook run. `make fmt` fixes the whole repo.
+- `make lint` is exactly what CI's `lint` job runs. The pre-push hook runs `make lint` and `make tooling`.
+  `make fmt` fixes the whole repo.
 - **Logging** (`.claude/skills/logging-standards/SKILL.md`): structured JSON, one line per unit of work, and
   no query text, abstracts, credentials or personal data. `observability-reviewer` checks every
   `backend/src/**` diff.
@@ -66,7 +67,10 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 | `load-learnings.sh` | Every session starts with `.claude/learnings/INDEX.md` in context. |
 | `autofix.sh` | After every edit: formats and fixes the file, then reports what it couldn't fix. Never blocks. |
 
-After editing any hook, run its test table: `for t in .claude/hooks/tests/*.sh; do bash "$t"; done`.
+After editing any hook or tooling script, run `make tooling`. It runs every case table in
+`.claude/hooks/tests/` and `.claude/scripts/tests/`, in parallel, in about 15 seconds. Then run
+`make mutate-changed`, so each mutant of the logic you touched is killed by some row (spec 08 §Mutation
+testing).
 
 ## Closing workflow (required, in this order; approvals are per-commit)
 1. **Tests and lint green** locally (`make test`, `make lint`, `make tooling`). Never claim a pass you didn't run.

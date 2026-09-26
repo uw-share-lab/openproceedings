@@ -51,3 +51,11 @@ does not write to the repo or to `data/snapshots|indexes`.
 ## Output
 The `review-gates` contract: **Verified** (claim → evidence command), then **Must / Should / Nit** with
 `file:line — how it fails (repro command or query) — fix`, then **APPROVE** / **REQUEST CHANGES**.
+
+## Mutation testing: use the runner, never a hand-rolled loop
+Run `make mutate-changed` (only mutants in files changed vs `origin/dev`) or
+`python3 .claude/scripts/mutate.py --match <text>`. It runs in parallel and takes seconds to minutes. A
+serial, hand-written mutation loop took about 40 minutes in review round 3; don't write one. For new gate
+logic, **add its mutants** to `.claude/scripts/mutants/gates.json` and show that each one is killed. Watch
+for rows that "pass for the wrong reason": a block row can be satisfied by a parser crash (which fails
+closed), so every parser change also needs an **allow** row on approved work.

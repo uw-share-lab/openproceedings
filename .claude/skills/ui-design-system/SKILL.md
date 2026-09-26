@@ -36,7 +36,8 @@ exclusion banner · `[Export ▾]` `[Save search record]`. At <768 px the sideba
   `[show tree]` for mixed AND/OR. Zero warnings → row absent, not "No warnings".
 - **Expansion chips:** one chip per wildcard: `trustworth* → trustworthy, trustworthiness`. Long lists
   show the first ~8 plus `+N more` which expands inline to the full list. Never truncate without `+N`.
-- **Exclusion banner:** `excluded: 212 workshop · 4 competition · 88 rejected`, each with `[include ▸]`
+- **Exclusion banner:** `excluded: 212 workshop · 4 competition · 88 rejected`, with `unknown` itemised on its
+  own line (`3 unclassified`), each with `[include ▸]`
   that rewrites `q`. Shown even when every count is 0 (`excluded: none`), because "nothing excluded" is
   also a reportable fact. An info disclosure explains the PRISMA mapping ("removed before screening").
 - **"How we read your query":** collapsible AST tree; default clauses in `--default-clause` with a

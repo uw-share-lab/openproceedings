@@ -10,7 +10,7 @@ description: How openproceedings output maps onto a PRISMA 2020 flow diagram and
 |---|---|---|
 | Records identified from databases (n) | the count of `identification_query` (the canonical string minus the default conjuncts, 02 §Default filters) = `total + excluded.total` | 03 §Exclusion accounting |
 | Records removed before screening: *marked as ineligible by automation tools* (n) | the default-filter buckets except `unknown`, itemized: `track: workshop 212, competition 4`; `status: rejected 88` | `SearchResponse.excluded` |
-| Unclassified (`excluded.track.unknown`, `excluded.status.unknown`) | on its **own line**, never folded into "ineligible". Unclassified is not ineligible: the review chooses to report them or screen them | 03 §Exclusion accounting |
+| Records removed before screening: *removed for other reasons* (n) — unclassified (`excluded.track.unknown`, `excluded.status.unknown`) | on its **own line**, never folded into "ineligible". Unclassified is not ineligible: the review chooses to report them or screen them | 03 §Exclusion accounting |
 | Records removed before screening: duplicates (n) | **0 at this stage** — cross-source duplicates were merged at ingest, before indexing (01 §Pipeline). Duplicates against other databases are removed later in Covidence | 01 §Pipeline |
 | Records screened (n) | `total` (what the export contains, `X-Total`) | 04 §Exports |
 
@@ -61,7 +61,7 @@ prefix), and keeps the search date separate from the crawl date:
 > (`year:2020..2026`). Default filters `track:(main OR datasets_benchmarks OR position)` and
 > `status:accepted` removed 304 of them before screening (212 workshop, 4 competition, 88 rejected); that
 > count includes 0 unclassified records (track or status unknown), itemised separately. Cross-source
-> duplicates were merged at ingest, before indexing (see the coverage report). Database scope: coverage
+> duplicates were merged at ingest, before indexing (merge counts are in the search record). Database scope: coverage
 > report for snapshot `<snapshot_hash>`. 412 records were screened. Search record: <url>.
 
 - **Unclassified** records are inside the removed count, and itemised in it.

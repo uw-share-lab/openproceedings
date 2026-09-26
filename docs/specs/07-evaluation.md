@@ -7,15 +7,6 @@ Status: **draft for review** · depends on: all parts · owns: the evidence that
 Turn each guarantee in 00 into something that can be checked. Some checks are CI gates (they fail the
 build). Others are reports (they're regenerated and committed as dated results, never quoted from memory).
 
-## Error handling
-
-- A gate that cannot run (a missing fixture snapshot, a crashed oracle) **fails** the build; it is never
-  skipped or reported as passed.
-- A report whose inputs are missing (no Scholar set, no official count for a cell) says so in the report
-  and leaves that cell unscored; it never fills in an estimate.
-- An **our bug** row in the Scholar comparison (§B) or a differential counterexample (§A) opens a Backlog
-  task with the query and the shrunk AST before the report is committed.
-
 ## A. Exactness (CI gates)
 
 | Suite | What | Gate |
@@ -74,3 +65,22 @@ The 03 budgets are measured with `pytest-benchmark` on the fixture index in CI (
 ## F. Usefulness of near-misses (report, M5)
 
 This is 06's recall@25 protocol, using the review's Covidence included set as ground truth.
+
+## Error handling
+
+- A gate that cannot run (a missing fixture snapshot, a crashed oracle) **fails** the build; it is never
+  skipped or reported as passed.
+- A report whose inputs are missing (no Scholar set, no official count for a cell) says so in the report
+  and leaves that cell unscored; it never fills in an estimate.
+- An **our bug** row in the Scholar comparison (§B) or a differential counterexample (§A) opens a Backlog
+  task with the query and the shrunk AST before the report is committed.
+
+## Testing
+
+The evaluation tooling is tested like any other code:
+- The report generators (`op eval scholar|coverage|audit|near-miss`) have unit tests on fixture inputs
+  with known answers. For example, a coverage fixture with one cell off by 2% must fail the gate.
+- The CI gates in §A are checked for teeth by mutation. Deleting the comparison, or the oracle call, must
+  make the suite fail (`qa-auditor`).
+- Dated reports in `docs/results/` are regenerated from their command, never edited by hand. A report
+  whose command no longer reproduces it is a Should.

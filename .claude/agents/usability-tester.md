@@ -24,7 +24,8 @@ participants did, not from your opinion.
    protocol string and say what was excluded, unaided?". Name the personas.
 2. **Write the plan** at `docs/usability/<YYYY-MM-DD>-<flow>/plan.md` from the `usability-testing` template:
    goals, participants and screener, tasks, metrics, environment, and the **ethics status**. It is
-   `not submitted` until the Office of Research Ethics clears it. No session runs before clearance.
+   `not submitted` until the Office of Research Ethics clears it. No session runs until the line reads `cleared <file #>` or
+   `not required (ORE confirmed <date>)`.
 3. **Build tasks from real work.** Take the actual strings from `backend/tests/fixtures/` (the Trust-Evals
    variants). Write goals, not instructions. Never name the UI control or the syntax that solves a task.
    Define the success criterion (e.g. "states `excluded` workshop count from the banner, matching the

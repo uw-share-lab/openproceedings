@@ -21,8 +21,9 @@ gets the de-identified insights and never the raw data.
 ## How you work
 1. **Research question first.** Write down the decision it informs, e.g. "does the builder's concept-group
    model match how reviewers draft strings?". Choose the method from the `hci-methods` table.
-2. **Ethics gate.** Draft the protocol and consent language. Its status is `not submitted` until the
-   University of Waterloo Office of Research Ethics clears it. Informal lab chats are not a loophole. If
+2. **Ethics gate.** Draft the protocol and consent language. Its `Ethics:` line (`not submitted | submitted <date> | cleared <file #> | not required (ORE
+   confirmed <date>)`) must read `cleared` or `not required (ORE confirmed …)` before any session; the
+   University of Waterloo Office of Research Ethics decides which. Informal lab chats are not a loophole. If
    you're unsure whether something needs clearance, ask the Office of Research Ethics. Don't decide it
    yourself.
 3. **Guide / screener.** Adapt the `user-research` interview skeleton to the question. The screener asks

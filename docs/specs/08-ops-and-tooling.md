@@ -92,9 +92,10 @@ logged per record. Query text, abstracts, credentials and personal data are neve
 |---|---|
 | `lint` → `lint` | `make lint` (ruff format/check, mypy --strict once `backend/src` exists, shellcheck, frontend prettier/eslint/tsc), then actionlint |
 | `test` → `test` | pytest (unit, golden, differential@2k, contract); vitest; OpenAPI → TS types freshness |
-| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`), every hook case table |
+| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`), every hook case table (`.claude/hooks/tests/`) and the tooling-script table (`.claude/scripts/tests/test-tooling-scripts.sh`) |
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha |
-| *(planned, M1+)* `e2e`, `bench`, `nightly` | Playwright; pytest-benchmark vs main; differential@50k and full-corpus parity |
+| `nightly` (scheduled, not a PR check) | `make mutate`: every mutant in `.claude/scripts/mutants/*.json` must be killed or documented as equivalent. Differential@50k and full-corpus parity join it in M1/M2 |
+| *(planned, M1+)* `e2e`, `bench` | Playwright; pytest-benchmark vs main |
 
 `review-attested` is an **honesty check** against forgetting to review, not an access control. Anyone who
 can edit the PR body could paste the marker. The access control is branch protection plus human review on
@@ -117,7 +118,7 @@ checks the head repo, so a fork branch named `dev` cannot use it.
 - **No AI authorship** in commits or PRs (project decision 2026-09-25). `.claude/` is committed.
 - Secrets (OpenReview credentials) live only in `.env` (gitignored, mode 600). `data/` is never committed.
 
-## Deploy
+## Deploy (M6, planned)
 
 `deploy/compose.yml`: `api` (uvicorn, loads `data/indexes/current`) and `web` (Next.js standalone), with
 Caddy in front for TLS. The data volume is read-only in `api`, except `records.sqlite`. Refreshing the index
@@ -169,14 +170,38 @@ exists and could shadow the project command.
 | `require-review.sh` | PreToolUse Bash | `git push` of any unreviewed commit (every refspec source, `--all`); `gh pr create`/`new` without an APPROVE record for the head, or without an added or extended learnings entry |
 | `block-ai-attribution.sh` | PreToolUse Bash | A message-writing git command or PR-writing gh command whose text (incl. heredocs, `--trailer`, `-F` files) has a Claude co-author trailer or "Generated with" footer; `.githooks/commit-msg` covers editor commits |
 | `enforce-backlog-cli.sh` | PreToolUse Write/Edit/MultiEdit/NotebookEdit | Hand edits under `backlog/` (from Kreate; decision bodies are Edit-only) |
-| `protect-data-dir.sh` | PreToolUse Write/Edit/MultiEdit/NotebookEdit/Bash | Any write into, move of or deletion of `data/snapshots/`, `data/indexes/` (or `data/` itself), incl. redirects, `cp`, `tee`, `find -delete`, `sed -i`; `git add -f data/` |
+| `protect-data-dir.sh` | PreToolUse Write/Edit/MultiEdit/NotebookEdit/Bash | Any write into, move of or deletion of `data/snapshots/`, `data/indexes/` (or `data/` itself), incl. globs expanded against the filesystem (`rm -rf data*`, `*`), redirects, `cp`/`rsync`/`tee`/`dd`/`truncate`, `find -delete`, `sed -i`; `git clean -x/-X` and `git stash --all` (they remove gitignored `data/`); `git add -f data/`; and shell `mv`/`git mv`/`cp`/`rm`/redirects into `backlog/` (only the CLI moves tasks) |
 | `autofix.sh` | PostToolUse Write/Edit/MultiEdit | Formats and fixes the edited file; reports what remains (never blocks) |
 | `remind-token-contract.sh` | PostToolUse Write/Edit/MultiEdit | Editing `normalize.py` or the tokenizer → reminder to bump `TOKENIZER_VERSION` and run the parity and differential tests |
 | `load-learnings.sh` | SessionStart | Puts `.claude/learnings/INDEX.md` into every session's context |
 
-All command-parsing gates share `.claude/hooks/lib/cmdparse.py`, which splits on unspaced `;` `&&` `|` `(`
-`)` and newlines, strips heredoc bodies, redirections and `VAR=`/`env`/`command`/`time` prefixes, and follows
-`cd`, `-C`, `bash -c` and `eval`. The threat model is honest mistakes, not deliberate evasion.
+All command-parsing gates share `.claude/hooks/lib/cmdparse.py`, which parses commands the way bash splits
+them:
+- separators with or without spaces: `;` `&&` `||` `|` `&` `(` `)`, newlines, and process substitution
+  `<(…)`/`>(…)`;
+- shell reserved words at the start of a command (`if`/`then`/`elif`/`else`/`fi`, `for`/`while`/`until`/
+  `do`/`done`, `{`/`}`, `!`, `case`/`esac`) are skipped;
+- `VAR=val` assignments and the wrappers `env`, `command`, `builtin`, `exec`, `time`, `nohup`, `nice`,
+  `sudo`, `timeout`, `stdbuf`, `xargs` and `watch` are skipped, each with its own table of options that take
+  a value;
+- command names are compared by basename (`/usr/bin/git`);
+- one pass over the whole text carries quote state across lines, so a multi-line quoted message
+  stays one word; `#` starts a comment only at the start of an unquoted word, as in bash; an unquoted
+  `<<DELIM`/`<<'DELIM'` heredoc body is dropped unread (never `<<<`);
+- redirections come out of argv as separate `(operator, target)` pairs;
+- it follows `cd`, `-C`, `bash -c` and `eval`.
+
+`enforce-pr-workflow.sh` uses the same tokenizer. A command the parser cannot read is **blocked**, never
+allowed, when it looks like what a gate guards (fail closed). The threat model is honest mistakes, not
+deliberate evasion.
+
+### Mutation testing
+
+`.claude/scripts/mutate.py` (`make mutate`, `make mutate-changed`, `--match <text>`) proves the case tables
+have teeth. Each mutant in `.claude/scripts/mutants/*.json` breaks one piece of gate or tooling logic, and at
+least one table must fail. Survivors are either fixed with a new row or documented as `equivalent`, with
+the reason. Mutants run in parallel: the full set takes minutes, and `--changed` takes seconds. Reviews run
+`make mutate-changed`; the nightly workflow runs everything. Never hand-roll a serial loop.
 
 ### Branch protection (GitHub)
 
