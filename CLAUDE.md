@@ -51,7 +51,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 ## Tests never call real APIs (rule, 2026-09-25)
 No test, fixture, CI job or review script reaches OpenReview, Semantic Scholar, PMLR, Scholar or any other
 live service. `backend/tests/conftest.py` refuses every non-loopback connection and DNS lookup for the whole
-session (`NetworkBlockedError`, no opt-out): TCP and UDP to non-loopback addresses and every name lookup.
+session (`NetworkBlockedError`, no opt-out): TCP and UDP to non-loopback addresses and every name lookup, forward or reverse.
 It does not reach subprocesses or `multiprocessing` spawn children, so tests don't spawn network clients.
 Its mutants are in `.claude/scripts/mutants/gates.json` (case table `test-network-guard.sh`). Crawler and client code is tested against recorded HTTP
 fixtures under `backend/tests/fixtures/`; recording them is a separate, manual `op ingest` run, never a test.

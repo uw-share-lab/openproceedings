@@ -41,9 +41,10 @@ def test_ipv6_is_refused() -> None:
         lambda: socket.gethostbyname("example.com"),
         lambda: socket.gethostbyname_ex("example.com"),
         lambda: socket.gethostbyaddr("1.1.1.1"),
+        lambda: socket.getnameinfo(("1.1.1.1", 443), 0),
         lambda: socket.create_connection(("example.com", 443), timeout=1),
     ],
-    ids=["gethostbyname", "gethostbyname_ex", "gethostbyaddr", "create_connection"],
+    ids=["gethostbyname", "gethostbyname_ex", "gethostbyaddr", "getnameinfo", "create_connection"],
 )
 def test_every_name_lookup_is_refused(lookup: object) -> None:
     with pytest.raises(NetworkBlockedError):
@@ -70,6 +71,7 @@ def test_loopback_and_unix_sockets_still_work() -> None:
     a.close()
     b.close()
     assert socket.gethostbyname("localhost")
+    assert socket.getnameinfo(("127.0.0.1", 80), 0)
     with (
         socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_server,
         socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_client,

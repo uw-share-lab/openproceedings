@@ -205,9 +205,13 @@ ERRORS: list[tuple[str, DiagnosticCode, tuple[int, int]]] = [
     ("(LLM|VLM)-based", C.PARSE_AMBIGUOUS_MINUS, (9, 15)),
     ('"x"-y', C.PARSE_AMBIGUOUS_MINUS, (3, 5)),
     # a quote touching a word on the outside: does it open or close? (M1 gate)
-    ('"human “trust” in AI"', C.PARSE_AMBIGUOUS_QUOTE, (7, 8)),
-    ('"trust in "AI" systems"', C.PARSE_AMBIGUOUS_QUOTE, (10, 11)),
-    ('a"b c"', C.PARSE_AMBIGUOUS_QUOTE, (1, 2)),
+    ('"human “trust” in AI"', C.PARSE_AMBIGUOUS_QUOTE, (7, 14)),  # the span runs to the end of the glued text
+    ('"trust in "AI" systems"', C.PARSE_AMBIGUOUS_QUOTE, (10, 14)),
+    ('"x"\'s impact', C.PARSE_AMBIGUOUS_QUOTE, (2, 5)),  # a possessive after a closing quote
+    ('"GPT-4"’s', C.PARSE_AMBIGUOUS_QUOTE, (6, 9)),
+    ('cafe\u0301"x y"', C.PARSE_AMBIGUOUS_QUOTE, (5, 7)),  # a decomposed accent is part of the word
+    ('"trust in “AI”"', C.PARSE_AMBIGUOUS_QUOTE, (10, 15)),  # one error, not a second for the empty `”"`
+    ('a"b c"', C.PARSE_AMBIGUOUS_QUOTE, (1, 3)),
     # a parenthesis glued to a word would silently mean AND
     ("model(s)", C.PARSE_PAREN_TOUCHES_WORD, (0, 6)),
     ("LLM(s)", C.PARSE_PAREN_TOUCHES_WORD, (0, 4)),
@@ -294,7 +298,14 @@ WARNINGS: list[tuple[str, DiagnosticCode, list[tuple[int, int]]]] = [
     ("trust ﹘bias", C.WARN_LOOKALIKE_OPERATOR, [(6, 11)]),
     ("``trust in AI''", C.WARN_LOOKALIKE_OPERATOR, [(0, 7)]),
     ("F# code", C.WARN_SYMBOLS_DROPPED, [(0, 2)]),
-    ('"C++ code"', C.WARN_SYMBOLS_DROPPED, []),  # a phrase part that still has tokens is not flagged
+    ('"C++ code"', C.WARN_SYMBOLS_DROPPED, [(1, 4)]),  # phrase parts too (M1 re-review)
+    ('".NET framework"', C.WARN_SYMBOLS_DROPPED, [(1, 5)]),
+    ("\\epsilon-greedy", C.WARN_SYMBOLS_DROPPED, [(0, 15)]),  # a bare command dropped from a word
+    ('"\\epsilon-greedy policy"', C.WARN_SYMBOLS_DROPPED, [(1, 16)]),
+    ("\\textbf{Adam}", C.WARN_SYMBOLS_DROPPED, []),  # \\cmd{X} keeps X: nothing is lost
+    ('G\\"odel', C.WARN_SYMBOLS_DROPPED, []),  # an accent macro is part of the word
+    ("$\\epsilon$-DP", C.WARN_SYMBOLS_DROPPED, []),  # inside math the command is searched
+    ("’trust in AI", C.WARN_LOOKALIKE_OPERATOR, [(0, 6)]),
     (".NET code", C.WARN_SYMBOLS_DROPPED, [(0, 4)]),  # leading symbols too
     ('"\\epsilon greedy"', C.WARN_SYMBOLS_DROPPED, [(1, 9)]),  # a part with nothing searchable
     ("信頼", C.WARN_CJK_RUN, [(0, 2)]),
@@ -458,3 +469,34 @@ def test_m1_gate_mutant_rows() -> None:
 def test_a_parenthesis_glued_to_a_phrase_is_an_error_too() -> None:
     assert [e.code for e in lex('"a b"(c)').errors] == [C.PARSE_PAREN_TOUCHES_WORD]
     assert [e.code for e in lex('(c)"a b"').errors] == [C.PARSE_PAREN_TOUCHES_WORD]
+
+
+@pytest.mark.parametrize(
+    ("q", "phrase"),
+    [
+        ("〝trust in AI〞", "trust|in|AI"),
+        ("〝trust in AI〟", "trust|in|AI"),
+        ("″trust in AI″", "trust|in|AI"),
+    ],
+)
+def test_more_quote_families(q: str, phrase: str) -> None:
+    assert shape(q) == [f"PHRASE:{phrase}"] and lex(q).errors == ()
+
+
+def test_quote_families_do_not_cross() -> None:
+    assert shape("「trust』 x」") == ["PHRASE:trust』|x"]  # 』 does not close 「
+
+
+def test_an_operator_glued_to_a_quote_gets_a_specific_hint() -> None:
+    [e] = lex('"trust"OR "bias"').errors
+    assert e.code is C.PARSE_AMBIGUOUS_QUOTE and "put a space before `OR`" in e.message
+
+
+def test_hangul_and_kana_are_cjk() -> None:
+    for q in ("신뢰", "かな", "カタカナ"):
+        assert [w.code for w in lex(q).warnings] == [C.WARN_CJK_RUN], q
+
+
+def test_quote_flagged_since_counts_only_quote_errors() -> None:
+    result = lex('ab* "x"y"z"')  # a stem error in the same run must not hide the quote error
+    assert C.PARSE_AMBIGUOUS_QUOTE in [e.code for e in result.errors]

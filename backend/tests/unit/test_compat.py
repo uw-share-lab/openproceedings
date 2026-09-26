@@ -239,3 +239,13 @@ def test_scholar_mixed_warning_says_scholar_groups_the_other_way() -> None:
 def test_phrase_notice_names_the_decision() -> None:
     [note] = [t for t in parse("(a b | c)", "scholar").translations if t.code is C.COMPAT_POP_PHRASE]
     assert "decision-002" in note.message
+
+
+def test_no_stemming_notice_covers_near_not_and_truncates() -> None:
+    [near] = [t for t in scholar("trust NEAR/3 calibration x").translations if t.code is C.COMPAT_NO_STEMMING]
+    assert "`calibration`" in near.message  # NEAR operands are exact too
+    [negated] = [t for t in scholar("trust NOT bias").translations if t.code is C.COMPAT_NO_STEMMING]
+    assert "`bias`" in negated.message  # excluded terms don't stem either
+    words = " OR ".join(f"w{i}" for i in range(10))
+    [many] = [t for t in scholar(words).translations if t.code is C.COMPAT_NO_STEMMING]
+    assert "`w7`" in many.message and "`w8`" not in many.message and "and 2 more" in many.message

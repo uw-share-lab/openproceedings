@@ -54,7 +54,7 @@ FIELDS = TEXT_FIELDS + QUERY_FILTER_FIELDS  # incl. Scholar's `source:` (vocab.p
 OPERATOR_WORDS = frozenset({"and", "or", "not"})  # lowercase: searched as words, with a warning
 MIN_STEM = 3  # letters or digits a wildcard stem keeps after normalisation (spec 02, decision-001)
 MAX_NEAR = 100
-QUOTES = frozenset('"“”„‟＂«»「」『』')
+QUOTES = frozenset('"“”„‟＂«»「」『』〝〞〟″')
 _ENGLISH_QUOTES = frozenset('"“”„‟＂')
 # A phrase closes only with a quote of its opener's family, so a foreign quote inside it (`"trust 「in」 AI"`)
 # is ordinary punctuation. English-style double quotes are one family (pasted text mixes them freely).
@@ -65,6 +65,10 @@ CLOSERS = {q: _ENGLISH_QUOTES for q in _ENGLISH_QUOTES} | {
     "」": frozenset("」"),
     "『": frozenset("』"),
     "』": frozenset("』"),
+    "〝": frozenset("〞〟"),  # CJK double prime quotation marks
+    "〞": frozenset("〞〟"),
+    "〟": frozenset("〟"),
+    "″": frozenset("″"),  # double prime used as a quote
 }
 LPARENS = frozenset("(（﹙︵")
 RPARENS = frozenset(")）﹚︶")
@@ -79,7 +83,7 @@ _LOOKALIKE_MINUS = frozenset(
     "\u058a\u05be\u1400\u1806\u2010\u2011\u2012\u2013\u2014\u2015\u2e17\u2e1a\u2e3a\u2e3b\u2e40\u2e5d"
     "\u301c\u3030\u30a0\ufe31\ufe32\ufe58\U00010ead\u2212"
 )
-_SINGLE_QUOTES = ("‘", "`")
+_SINGLE_QUOTES = ("‘", "’", "`")
 _BREAKS = LPARENS | RPARENS | PIPES
 _FIELD = re.compile(r"([^\W\d_]\w*)[:：﹕︓]")
 _NEAR = re.compile(r"NEAR/([0-9]+)")
@@ -145,6 +149,14 @@ def _is_cjk(c: str) -> bool:
     )
 
 
+_COMMAND = re.compile(r"\\([A-Za-z]+)")
+
+
+def _wordy(c: str) -> bool:
+    """A letter, mark or number (incl. a decomposed accent, `e` + U+0301): what a quote may not touch."""
+    return unicodedata.category(c)[0] in "LMN"
+
+
 def letters(text: str) -> int:
     """How many letters and digits `text` keeps after the token contract (the wildcard stem measure)."""
     return sum(len(t.text) for t in tokenize(text))
@@ -166,6 +178,10 @@ class _Lexer:
         self.q = q
         # next_quote[k]: index of the first quote at or after k (len(q) if none), computed once so lexing
         # stays linear however many words the query has
+        self._chunk: tuple[int, int, dict[int, int]] | None = None  # see chunk()
+        self.next_space = [len(q)] * (len(q) + 1)  # the first whitespace at or after k
+        for k in range(len(q) - 1, -1, -1):
+            self.next_space[k] = k if q[k].isspace() else self.next_space[k + 1]
         self.next_quote = [len(q)] * (len(q) + 1)
         for k in range(len(q) - 1, -1, -1):
             self.next_quote[k] = k if q[k] in QUOTES else self.next_quote[k + 1]
@@ -216,7 +232,7 @@ class _Lexer:
                 self.out.append(Lexeme(kind, i, i + 1, c))
                 i += 1
             elif c in QUOTES:
-                if i and q[i - 1].isalnum() and not self.quote_flagged_since(i):
+                if i and _wordy(q[i - 1]) and not self.quote_flagged_since(i):
                     self.ambiguous_quote(i, "follows a letter or digit directly")
                 i = self.phrase(i)
             elif c in MINUSES and self.negates(i):
@@ -266,8 +282,14 @@ class _Lexer:
                 n,
             )
         end = j + 1 if closed else n
-        if closed and end < n and q[end].isalnum():
-            self.ambiguous_quote(j, "is followed directly by a letter or digit")
+        possessive = end + 1 < n and q[end] in "'’" and _wordy(q[end + 1])  # `"GPT-4"'s`
+        if closed and end < n and (_wordy(q[end]) or possessive):
+            follower = q[end : self.next_stop[end]]
+            operator = unicodedata.normalize("NFKC", follower)
+            if operator in _OPERATORS:
+                self.ambiguous_quote(j, f"is glued to `{operator}`", hint=f"put a space before `{operator}`")
+            else:
+                self.ambiguous_quote(j, "is followed directly by a letter or digit")
         parts: list[Lexeme] = []
         counted = 0
         k = i + 1
@@ -290,13 +312,15 @@ class _Lexer:
                     k,
                     m,
                 )
+            else:
+                self.check_dropped(part.text, part.stem or "", k, m)
             parts.append(part)
             counted += letters(part.text)
             k = m
         self.out.append(Lexeme(Kind.PHRASE, i, end, q[i:end], parts=tuple(parts), closed=closed))
         return end
 
-    def math_run(self, i: int, limit: int) -> int:
+    def math_run(self, i: int, limit: int) -> int:  # precondition: limit is next_quote[i] (a quote or len(q))
         """If LaTeX math opens at `i` and closes before `limit` at the end of a word (`$\\alpha + \\beta$`),
         the index after it; else -1. So math with spaces stays one word, while `behavio$r colo$r` (the `$`
         not at a word's start) never pairs across words."""
@@ -318,21 +342,31 @@ class _Lexer:
         at_boundary = end == limit or self.q[end].isspace() or self.q[end] in _BREAKS | QUOTES
         return end if at_boundary else -1
 
+    def chunk(self, i: int) -> tuple[int, int, dict[int, int]]:
+        """The whitespace- and quote-delimited run holding word start `i`: its start, end and LaTeX math
+        regions (start → end), computed once per run and reused by every word in it, so that text like
+        `\\((\\((…` stays linear. Words are lexed left to right, so the last run is the only one to cache."""
+        if self._chunk is not None and self._chunk[0] <= i < self._chunk[1]:
+            return self._chunk
+        q, n = self.q, len(self.q)
+        end = i
+        while end < n and not q[end].isspace() and q[end] not in QUOTES:
+            end = _step(q, end)
+        end = min(end, n)
+        self._chunk = (i, end, {i + a: i + b for a, b in math_regions(q[i:end])})
+        return self._chunk
+
     def word_end(self, i: int) -> int:
         """End of the word at `i`: a whole LaTeX math run, or the next break (except inside LaTeX math within
         the same chunk)."""
-        q, n = self.q, len(self.q)
+        q = self.q
         stop, mathish = self.next_stop[i], self.next_mathish[i]
         if mathish >= stop:  # fast path: no `$` or `\\` before the next break, so no math and no escapes
             return stop
         limit = self.next_quote[i]
         if (end := self.math_run(i, limit)) > 0:
             return end
-        chunk_end = i
-        while chunk_end < n and not q[chunk_end].isspace() and q[chunk_end] not in QUOTES:
-            chunk_end = _step(q, chunk_end)
-        chunk_end = min(chunk_end, n)
-        math_ends = {i + a: i + b for a, b in math_regions(q[i:chunk_end])}
+        _, chunk_end, math_ends = self.chunk(i)
         j = i
         while j < chunk_end:
             if j in math_ends:
@@ -420,6 +454,7 @@ class _Lexer:
             )
         if not in_phrase:
             self.check_word(raw, stem, start, end)
+            self.check_dropped(raw, stem, start, end)
         return Lexeme(Kind.WORD, start, end, raw, stem=stem, wildcard=wildcard)
 
     def check_stem(self, raw: str, stem: str, wildcard: str, start: int, end: int, before: int) -> None:
@@ -474,15 +509,38 @@ class _Lexer:
                 start,
                 end,
             )
-        if (stem.endswith(("+", "#")) or stem.startswith((".", "#", "+", "@"))) and (toks := tokenize(stem)):
-            searched = " ".join(t.text for t in toks)
-            self.warn(
-                DiagnosticCode.WARN_SYMBOLS_DROPPED,
-                f"`{clip(raw)}` is searched as `{clip(searched)}`: symbols such as `+`, `#` and `.` are not indexed, so it matches "
-                f"every `{clip(searched)}`.",
-                start,
-                end,
-            )
+
+    def check_dropped(self, raw: str, stem: str, start: int, end: int) -> None:
+        """WARN_SYMBOLS_DROPPED when part of a word or phrase part silently disappears: leading or trailing
+        symbols (`C++`, `.NET`), or a bare LaTeX command outside math (`\\epsilon-greedy` → `greedy`)."""
+        toks = tokenize(stem)
+        if not toks:
+            return  # nothing left at all: an error or the phrase-part warning says so
+        searched = " ".join(t.text for t in toks)
+        if stem.endswith(("+", "#")) or stem.startswith((".", "#", "+", "@")):
+            dropped = "symbols such as `+`, `#` and `.` are not indexed"
+        elif self.bare_command(stem):
+            dropped = "a LaTeX command outside math is not indexed (write it inside `$…$` to search its name)"
+        else:
+            return
+        self.warn(
+            DiagnosticCode.WARN_SYMBOLS_DROPPED,
+            f"`{clip(raw)}` is searched as `{clip(searched)}`: {dropped}, so it matches every `{clip(searched)}`.",
+            start,
+            end,
+        )
+
+    @staticmethod
+    def bare_command(stem: str) -> bool:
+        """A `\\cmd` outside math that isn't an accent macro or `\\cmd{…}` (whose content is kept)."""
+        regions = math_regions(stem)
+        for m in _COMMAND.finditer(stem):
+            inside_math = any(a <= m.start() < b for a, b in regions)
+            accent = len(m.group(1)) == 1 and m.group(1) in "uvHcdbrkij"
+            braced = m.end() < len(stem) and stem[m.end()] == "{"
+            if not (inside_math or accent or braced):
+                return True
+        return False
 
     def quote_flagged_since(self, i: int) -> bool:
         """Whether an ambiguous quote was already reported in the unbroken run of text that ends at `i`
@@ -495,13 +553,21 @@ class _Lexer:
             for e in self.errors
         )
 
-    def ambiguous_quote(self, k: int, why: str) -> None:
+    def ambiguous_quote(self, k: int, why: str, hint: str = "") -> None:
+        """One error per unbroken run: its span reaches the end of the run, so follow-on errors inside it
+        (an empty phrase between two glued quotes) are recognised as the same mistake."""
+        end = self.next_space[k]
         self.error(
             DiagnosticCode.PARSE_AMBIGUOUS_QUOTE,
-            f"The quote `{self.q[k]}` {why}, so it is unclear whether it opens or closes a phrase — put a space "
-            "between them, or drop the inner quotes (a phrase cannot contain the same kind of quote).",
+            f"The quote `{self.q[k]}` {why}, so it is unclear whether it opens or closes a phrase — "
+            + (
+                hint
+                or "put a space between them, or drop the inner quotes (a phrase cannot contain the same kind "
+                "of quote)"
+            )
+            + ".",
             k,
-            k + 1,
+            max(end, k + 1),
         )
 
     def after_pass(self) -> None:

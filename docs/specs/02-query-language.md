@@ -112,11 +112,12 @@ Rules:
   abstract.
 - **Lexical details** (`query/lexer.py`; the module docstring is the full list). Nothing in a query is
   silently reinterpreted: every ambiguous spelling is an error or a warning.
-  - Double quotes delimit phrases: `"`, `“ ”`, `„ ‟`, `＂`, `« »`, `「 」`, `『 』`. A phrase closes only with a
+  - Double quotes delimit phrases: `"`, `“ ”`, `„ ‟`, `＂`, `« »`, `「 」`, `『 』`, `〝 〞 〟`, `″`. A phrase closes only with a
     quote of its opener's family (the English-style double quotes `"“”„‟＂` are one family and close each
     other; `« »`/`» «`, `「 」` and `『 』` pair only with themselves), so a foreign quote inside a phrase is
     punctuation (`"trust 「in」 AI"` is one phrase). A quote touching a letter or digit on the outside
-    (`"trust in "AI"`, `a"b c"`) is `PARSE_AMBIGUOUS_QUOTE`, and a parenthesis glued to a word or phrase
+    (`"trust in "AI"`, `a"b c"`, a possessive `"GPT-4"'s`, a decomposed accent `cafe\u0301"x"`) is
+    `PARSE_AMBIGUOUS_QUOTE` (its span covers the rest of the glued text: one mistake, one error), and a parenthesis glued to a word or phrase
     (`model(s)`, `"a"(b)`) is `PARSE_PAREN_TOUCHES_WORD`: both would otherwise silently split a query.
     A backslash keeps the next character in the word
     (`G\"odel`). Characters whose NFKC form is a syntax character (full-width `（ ）｜：－＊＂`, …) act as
@@ -136,7 +137,10 @@ Rules:
     `$f(x)$-DP` is one word) and a `$` before a digit (currency, `US$5`).
   - A bare uppercase `NEAR` between terms is `PARSE_BAD_NEAR` (Web of Science reads it as `NEAR/15`);
     `NEAR/n` takes n ≤ 100.
-  - A word whose trailing `+`/`#` the tokenizer drops (`C++` → `c`) raises `WARN_SYMBOLS_DROPPED`.
+  - A word or phrase part that loses something to the tokenizer raises `WARN_SYMBOLS_DROPPED`: leading
+    or trailing symbols (`C++` → `c`, `.NET` → `net`) or a bare LaTeX command outside math
+    (`\epsilon-greedy` → `greedy`; `\cmd{X}` keeps `X` and accent macros are part of the word, so neither
+    warns). A word starting with `‘`, `’` or `` ` `` raises `WARN_LOOKALIKE_OPERATOR`.
 - `NEAR/n` works within one field, is unordered, and allows at most n intervening words. Tantivy's slop
   semantics are documented in 03 and must agree with the reference matcher. Its two operands are words,
   wildcards or phrases (not groups or filters) in the same field, and `NEAR` does not chain

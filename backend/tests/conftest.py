@@ -36,6 +36,7 @@ _real_getaddrinfo = socket.getaddrinfo
 _real_gethostbyname = socket.gethostbyname
 _real_gethostbyname_ex = socket.gethostbyname_ex
 _real_gethostbyaddr = socket.gethostbyaddr
+_real_getnameinfo = socket.getnameinfo
 
 
 def _refuse(what: object) -> NetworkBlockedError:
@@ -82,6 +83,12 @@ def _lookup(real: Any) -> Any:
     return guarded
 
 
+def _reverse_lookup(sockaddr: Any, flags: int) -> Any:
+    if isinstance(sockaddr, tuple) and sockaddr[0] in _LOOPBACK:
+        return _real_getnameinfo(sockaddr, flags)
+    raise _refuse(sockaddr)
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Installed for the whole session. Covers connect/connect_ex (TCP), sendto/sendmsg (UDP, e.g. DNS) and
     every name lookup. Not covered: subprocesses and `multiprocessing` spawn children (they start a fresh
@@ -94,3 +101,4 @@ def pytest_configure(config: pytest.Config) -> None:
     socket.gethostbyname = _lookup(_real_gethostbyname)
     socket.gethostbyname_ex = _lookup(_real_gethostbyname_ex)
     socket.gethostbyaddr = _lookup(_real_gethostbyaddr)
+    socket.getnameinfo = _reverse_lookup

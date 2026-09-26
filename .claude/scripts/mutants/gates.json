@@ -684,5 +684,17 @@
   "file": "backend/tests/conftest.py",
   "old": "    address = rest[-1]",
   "new": "    address = rest[0]"
+ },
+ {
+  "label": "guard: getnameinfo not patched",
+  "file": "backend/tests/conftest.py",
+  "old": "    socket.getnameinfo = _reverse_lookup\n",
+  "new": ""
+ },
+ {
+  "label": "guard: getnameinfo allows every address",
+  "file": "backend/tests/conftest.py",
+  "old": "    if isinstance(sockaddr, tuple) and sockaddr[0] in _LOOPBACK:\n        return _real_getnameinfo(sockaddr, flags)",
+  "new": "    if True:\n        return _real_getnameinfo(sockaddr, flags)"
  }
 ]
