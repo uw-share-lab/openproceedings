@@ -35,7 +35,7 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | PMLR only | `pmlr-v<N>-<key>` (ICML volumes only, `ingest/volumes.py`) |
 | NeurIPS proceedings only | `nips-<hash>`, the 32-hex hash from the paper_files path |
 | ICLR proceedings only | `iclr-<hash>`, the 32-hex hash from the proceedings path |
-| RIS import | the forum id if the record carries an OpenReview URL, else the proceedings form above. If neither exists, it can't be ingested: report it, never mint a random id. |
+| RIS import | a venueid plus its forum id → the forum id; else the proceedings or PMLR form above, from scholarmend's `proceedings_url` / `pmlr_url` claim (`ingest/urls.py`). A record with neither is skipped and counted (`unresolved` / `no_id`), never given a minted id. |
 
 When records merge (`.claude/skills/dedup-rules/SKILL.md`), the surviving id uses the OpenReview forum id
 if either side has one.

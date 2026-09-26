@@ -30,10 +30,12 @@ import json
 import logging
 import re
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 from urllib.parse import urlparse
 
@@ -41,19 +43,11 @@ from scholarmend.parse import parse_file
 
 from openproceedings.ingest.classify import Classification, classify_proceedings, classify_venueid
 from openproceedings.ingest.record import Claim, ClaimField, ClaimValue, PaperRecord, Urls
+from openproceedings.ingest.urls import PREFIX, pmlr, proceedings
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 
 log = logging.getLogger("openproceedings.ingest.ris")
 
-_PROCEEDINGS_HOSTS = {
-    "proceedings.neurips.cc": "NeurIPS",
-    "papers.nips.cc": "NeurIPS",
-    "proceedings.iclr.cc": "ICLR",
-}
-_PROCEEDINGS_PATH = re.compile(r"/paper_files/paper/[0-9]{4}/(?:hash|file)/([0-9a-f]+)-(?:Abstract|Paper)-")
-_PMLR_HOSTS = {"proceedings.mlr.press", "mlr.press"}
-_PMLR_PATH = re.compile(r"/v([0-9]+)/([A-Za-z0-9_-]+?)(?:\.html|\.pdf|/.*)?")
-_PMLR_GITHUB_PATH = re.compile(r"/mlresearch/v([0-9]+)/[^/]+/assets/([A-Za-z0-9_-]+)/.*")
 _IN_SCOPE_HOST = re.compile(r"(?:.+\.)?(?:neurips\.cc|nips\.cc|iclr\.cc|icml\.cc|openreview\.net)")
 _IN_SCOPE_VENUEID = re.compile(r"(?:NeurIPS|ICLR|ICML)\.cc/.*")
 _QUERY_DATE = re.compile(r"Query date: ([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})")
@@ -69,16 +63,24 @@ class ImportReport:
     file: str
     mended_sha256: str
     resolved_sha256: str
-    scholarmend_version: str
+    scholarmend_version: str  # the installed parser's; resolved.json doesn't record its producer's
     read: int
     imported: int
-    skipped: dict[str, int]  # reason → count, every reason in SKIP_REASONS
+    skipped: Mapping[str, int]  # reason → count, exactly the reasons in SKIP_REASONS (read-only)
     abstract_missing: int
     unknown_track: int
     status_overrides: int  # venueid status replaced by a proceedings listing
-    track_status: dict[str, dict[str, int]]  # track → status → count
+    track_status: Mapping[str, Mapping[str, int]]  # track → status → count (read-only)
 
     def __post_init__(self) -> None:
+        if set(self.skipped) != set(SKIP_REASONS):
+            raise ValueError(f"{self.file}: skip reasons {sorted(self.skipped)} != {sorted(SKIP_REASONS)}")
+        object.__setattr__(self, "skipped", MappingProxyType(dict(self.skipped)))
+        object.__setattr__(
+            self,
+            "track_status",
+            MappingProxyType({t: MappingProxyType(dict(s)) for t, s in self.track_status.items()}),
+        )
         if self.read != self.imported + sum(self.skipped.values()):
             raise ValueError(f"{self.file}: {self.read} read != {self.imported} imported + {self.skipped}")
 
@@ -105,27 +107,6 @@ def _claims(entry: dict[str, Any], fld: str, source: str) -> list[dict[str, Any]
     return [c for c in entry["claims"] if c["field"] == fld and c["source"] == source]
 
 
-def _proceedings(url: str) -> tuple[str, str] | None:
-    """(venue, hash) from a NeurIPS/ICLR proceedings URL, any host case or query (scholarmend's grammar)."""
-    parsed = urlparse(url)
-    venue = _PROCEEDINGS_HOSTS.get(parsed.netloc.lower())
-    m = _PROCEEDINGS_PATH.match(parsed.path)
-    return (venue, m.group(1)) if venue and m else None
-
-
-def _pmlr(url: str) -> tuple[int, str] | None:
-    """(volume, key) from a PMLR URL, or its raw GitHub asset (the two hosts Scholar links to)."""
-    parsed = urlparse(url)
-    host = parsed.netloc.lower()
-    if host in _PMLR_HOSTS:
-        m = _PMLR_PATH.fullmatch(parsed.path)
-    elif host == "raw.githubusercontent.com":
-        m = _PMLR_GITHUB_PATH.fullmatch(parsed.path)
-    else:
-        return None
-    return (int(m.group(1)), m.group(2)) if m else None
-
-
 def _listing(
     entry: dict[str, Any],
 ) -> tuple[str, int, str, Classification, tuple[str, str], list[str]] | str | None:
@@ -135,33 +116,34 @@ def _listing(
         (c, p)
         for c in entry["claims"]
         if c["source"] == "proceedings_url"
-        if (p := _proceedings(c["evidence"]))
+        if (p := proceedings(c["evidence"]))
     ]
     if proc:
         if len({p for _, p in proc}) > 1:
             return "ambiguous"
         (venue, sha), url = proc[0][1], proc[0][0]["evidence"]
-        prefix = "nips" if venue == "NeurIPS" else "iclr"
         years = {c["value"] for c, _ in proc if c["field"] == "year"}
         tracks = {c["value"] for c, _ in proc if c["field"] == "track"}
         if len(sha) != 32 or len(years) != 1 or len(tracks) != 1:
             return "unresolved"
-        return (venue, int(years.pop()), f"{prefix}-{sha}", classify_proceedings(tracks.pop()),
+        return (venue, int(years.pop()), f"{PREFIX[venue]}-{sha}", classify_proceedings(tracks.pop()),
                 ("proceedings_url", url), sorted({c["evidence"] for c, _ in proc}))  # fmt: skip
-    pmlr = [
-        (c["evidence"], vk) for c in _claims(entry, "pmlr_volume", "pmlr_url") if (vk := _pmlr(c["evidence"]))
-    ]
-    icml = [(u, p) for u, p in pmlr if p[0] in ICML_PMLR_VOLUMES]
+    parsed = [(c, pmlr(c["evidence"])) for c in _claims(entry, "pmlr_volume", "pmlr_url")]
+    # an ICML volume, by the URL or (when the URL doesn't parse) by scholarmend's volume claim
+    icml_claims = [(c, vk) for c, vk in parsed if (vk[0] if vk else _int(c["value"])) in ICML_PMLR_VOLUMES]
+    icml = [(c["evidence"], vk) for c, vk in icml_claims if vk is not None]
     if not icml:
-        if _claims(entry, "pmlr_volume", "pmlr_url") and not pmlr:
-            return "unresolved"
-        return None
+        return "unresolved" if icml_claims else None
     if len({p for _, p in icml}) > 1:
         return "ambiguous"
     url, (vol, key) = icml[0]
     year, track = ICML_PMLR_VOLUMES[vol]
     return ("ICML", year, f"pmlr-v{vol}-{key}", Classification(track, "accepted", "ICML", year),
             ("pmlr_url", url), sorted({u for u, _ in icml}))  # fmt: skip
+
+
+def _int(value: object) -> int | None:
+    return int(value) if isinstance(value, str) and value.isdigit() else None
 
 
 def _url_fields(urls: list[str], source: str) -> tuple[tuple[ClaimField, str, str], ...]:
@@ -176,11 +158,9 @@ def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
     """The record's identity, or the reason it can't be imported (one of SKIP_REASONS)."""
     venueids = {c["value"] for c in _claims(entry, "venue_id", "openreview_api")}
     forums = {c["value"] for c in _claims(entry, "forum_id", "openreview_url")}
-    listing = _listing(entry)
-    if len(venueids) > 1 or len(forums) > 1 or listing == "ambiguous":
+    if len(venueids) > 1 or len(forums) > 1:
         return "ambiguous"
-    if isinstance(listing, str):
-        return listing
+    listing = _listing(entry)
     four = ("venue", "year", "track", "status")
     if venueids:
         vid = venueids.pop()
@@ -196,15 +176,19 @@ def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
             ("urls.forum", f"https://openreview.net/forum?id={fid}", "openreview_url"),
         )
         override = False
-        if listing is not None:
+        if isinstance(listing, tuple):  # an unusable listing never outweighs a venueid; it's ignored
             l_venue, l_year, _, l_cls, l_ev, l_urls = listing
             if (l_venue, l_year) != (venue, year) or l_cls.track not in (cls.track, "unknown"):
                 return "conflict"  # decision-005: never silently resolved
             override = cls.status != "accepted"
-            cls = Classification(cls.track, "accepted", venue, year, vid)  # the proceedings decide acceptance
-            evidence["status"] = l_ev
+            # the proceedings decide acceptance; an overruled venueid status stays visible in the evidence
+            note = f" (overrides venueid status {cls.status})" if override else ""
+            evidence["status"] = (l_ev[0], l_ev[1] + note)
+            cls = Classification(cls.track, "accepted", venue, year, vid)
             url_claims += _url_fields(l_urls, l_ev[0])
         return _Identity(venue, year, fid, cls, evidence, url_claims, override)
+    if isinstance(listing, str):
+        return listing
     if listing is not None:
         venue, year, native, cls, ev, l_urls = listing
         return _Identity(venue, year, native, cls, dict.fromkeys(four, ev), _url_fields(l_urls, ev[0]))

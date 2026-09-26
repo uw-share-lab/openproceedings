@@ -152,7 +152,7 @@ def test_claims_record_where_each_value_came_from(imported: Imported) -> None:
 def pmlr_urls(*urls: str) -> Callable[[Entries], None]:
     def edit(e: Entries) -> None:
         e[6]["claims"] = [c for c in e[6]["claims"] if c["source"] != "pmlr_url"]
-        e[6]["claims"] += [claim("pmlr_volume", "0", "pmlr_url", u) for u in urls]
+        e[6]["claims"] += [claim("pmlr_volume", u.split("/v")[1].split("/")[0], "pmlr_url", u) for u in urls]
 
     return edit
 
@@ -174,7 +174,14 @@ def test_pmlr_url_forms(tmp_path: Path, url: str) -> None:
 def test_icml_volumes_with_position_papers_give_unknown_track(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    assert ICML_PMLR_VOLUMES[235] == (2024, "unknown") and ICML_PMLR_VOLUMES[202] == (2023, "main")
+    assert ICML_PMLR_VOLUMES == {
+        119: (2020, "main"),
+        139: (2021, "main"),
+        162: (2022, "main"),
+        202: (2023, "main"),
+        235: (2024, "unknown"),
+        267: (2025, "unknown"),
+    }
     with caplog.at_level(logging.WARNING, logger="openproceedings.ingest.ris"):
         by_id, report = run(tmp_path, pmlr_urls("https://proceedings.mlr.press/v235/smith24a.html"))
     assert by_id["op:icml:2024:pmlr-v235-smith24a"].track == "unknown"
@@ -187,13 +194,14 @@ def drop_pmlr_index(e: Entries) -> None:
     e[6]["claims"] = [c for c in e[6]["claims"] if c["source"] != "pmlr_index"]
 
 
-def set_venueid(value: str) -> Callable[[Entries], None]:
-    def edit(e: Entries) -> None:
-        for c in e[1]["claims"]:
-            if c["field"] == "venue_id":
-                c["value"] = value
+def set_venueid_of(e: Entries, row: int, value: str) -> None:
+    for c in e[row]["claims"]:
+        if c["field"] == "venue_id":
+            c["value"] = value
 
-    return edit
+
+def set_venueid(value: str) -> Callable[[Entries], None]:
+    return lambda e: set_venueid_of(e, 1, value)
 
 
 def short_hash(e: Entries) -> None:
@@ -275,15 +283,78 @@ def test_a_listing_decides_acceptance_when_it_agrees_with_the_venueid(tmp_path: 
     )  # type: ignore[union-attr]
     assert r.urls.proceedings is not None and r.urls.forum is not None
     assert report.status_overrides == 1
+    [status] = r.claims("status")
+    assert status.evidence is not None and status.evidence.endswith(" (overrides venueid status rejected)")
+
+
+def test_an_agreeing_listing_on_an_accepted_venueid_is_no_override(tmp_path: Path) -> None:
+    def accepted(e: Entries) -> None:
+        set_venueid_of(e, 7, "ICLR.cc/2024/Conference")
+        listed("2024", "Conference")(e)
+
+    by_id, report = run(tmp_path, accepted)
+    assert by_id[REJECTED].status == "accepted" and report.status_overrides == 0
+    assert "overrides" not in (by_id[REJECTED].claims("status")[0].evidence or "")
+
+
+def test_a_mixed_volume_listing_agrees_with_any_venueid_track(tmp_path: Path) -> None:
+    def icml_2024(e: Entries) -> None:
+        set_venueid_of(e, 1, "ICML.cc/2024/Conference")
+        e[1]["claims"].append(
+            claim("pmlr_volume", "235", "pmlr_url", "https://proceedings.mlr.press/v235/poe24a.html")
+        )
+
+    by_id, report = run(tmp_path, icml_2024)
+    r = by_id["op:icml:2024:AbCdEf1234"]
+    assert (r.track, r.status) == ("main", "accepted")
+    assert r.urls.proceedings == "https://proceedings.mlr.press/v235/poe24a.html"
+    assert report.skipped["conflict"] == 0
+
+
+def test_a_forum_without_a_venueid_takes_the_listings_id(tmp_path: Path) -> None:
+    by_id, _ = run(
+        tmp_path, lambda e: e[0]["claims"].append(claim("forum_id", "FoRum0001", "openreview_url", "u"))
+    )
+    assert NEURIPS in by_id and by_id[NEURIPS].urls.forum is None
+
+
+def test_an_unusable_listing_never_outweighs_a_venueid(tmp_path: Path) -> None:
+    def stray(e: Entries) -> None:
+        url = "https://proceedings.iclr.cc/paper_files/paper/2024/hash/abc-Abstract-Conference.html"  # short hash
+        e[7]["claims"] += [
+            claim("venue", "ICLR", "proceedings_url", url),
+            claim("year", "2024", "proceedings_url", url),
+        ]
+
+    by_id, _ = run(tmp_path, stray)
+    assert by_id[REJECTED].status == "rejected"
+
+
+def test_an_unparseable_non_icml_pmlr_url_is_out_of_scope(tmp_path: Path) -> None:
+    _, report = run(
+        tmp_path, lambda e: (pmlr_urls("https://proceedings.mlr.press/v238/")(e), drop_pmlr_index(e))
+    )
+    assert (report.skipped["out_of_scope"], report.skipped["unresolved"]) == (3, 2)
 
 
 @pytest.mark.parametrize(
-    ("year", "track"), [("2025", "Conference"), ("2024", "Datasets_and_Benchmarks_Track")]
+    ("year", "track", "host"),
+    [
+        ("2025", "Conference", "iclr"),  # another year
+        ("2024", "Datasets_and_Benchmarks_Track", "iclr"),  # another track
+        ("2024", "Conference", "neurips"),  # another venue
+    ],
 )
 def test_a_listing_that_disagrees_with_the_venueid_is_a_conflict(
-    tmp_path: Path, year: str, track: str
+    tmp_path: Path, year: str, track: str, host: str
 ) -> None:
-    by_id, report = run(tmp_path, listed(year, track))
+    def edit(e: Entries) -> None:
+        listed(year, track)(e)
+        for c in e[7]["claims"]:
+            if c["source"] == "proceedings_url":
+                c["evidence"] = c["evidence"].replace("proceedings.iclr.cc", f"proceedings.{host}.cc")
+
+    by_id, report = run(tmp_path, edit)
     assert REJECTED not in by_id and report.skipped["conflict"] == 1
 
 
@@ -302,6 +373,12 @@ def test_report_is_consistent_and_manifest_ready(imported: Imported) -> None:
     json.dumps(manifest)  # plain values only
     with pytest.raises(ValueError, match="read"):
         ImportReport(**{**report.__dict__, "imported": report.imported + 1})
+    with pytest.raises(ValueError, match="skip reasons"):
+        ImportReport(**{**report.__dict__, "skipped": {"out_of_scope": 6}})
+    with pytest.raises(TypeError):
+        report.skipped["no_id"] = 0  # type: ignore[index]
+    with pytest.raises(TypeError):
+        report.track_status["main"]["accepted"] = 0  # type: ignore[index]
 
 
 def test_logs_counts_never_text(caplog: pytest.LogCaptureFixture) -> None:

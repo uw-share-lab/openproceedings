@@ -82,7 +82,7 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
 |---|---|
 | [`openreview-crawler`](agents/openreview-crawler.md) | Builds and maintains the OpenReview API v2 and v1 crawlers and their per-venue-year schema adapters under backend/src/openproceedings/ingest/sources/ |
 | [`proceedings-miner`](agents/proceedings-miner.md) | Builds and maintains the NeurIPS (proceedings.neurips.cc) and PMLR (proceedings.mlr.press) miners and the PMLR volume→venue/year/track config table |
-| [`ris-importer`](agents/ris-importer.md) | Builds and maintains the RIS importer (backend/src/openproceedings/ingest/ris.py |
+| [`ris-importer`](agents/ris-importer.md) | Builds and maintains the RIS importer, backend/src/openproceedings/ingest/ris.py (the `op ingest ris` wiring is task-022). |
 | [`track-classifier-auditor`](agents/track-classifier-auditor.md) | Read-only auditor of track and status classification |
 | [`dedup-auditor`](agents/dedup-auditor.md) | Read-only auditor of deduplication |
 | [`coverage-auditor`](agents/coverage-auditor.md) | Read-only auditor of corpus coverage |

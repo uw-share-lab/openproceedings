@@ -1,6 +1,6 @@
 ---
 name: ris-importer
-description: Builds and maintains the RIS importer (backend/src/openproceedings/ingest/ris.py; `op ingest ris` from task-022), the M2 bootstrap that turns scholarmend's mended.ris + resolved.json into PaperRecords whose identity, track and status come only from scholarmend's claims, all with provenance.source = "ris". Use when bootstrapping or refreshing the Trust-Evals corpus, importing another review's RIS file, or debugging an imported record's track, year or missing abstract.
+description: Builds and maintains the RIS importer, backend/src/openproceedings/ingest/ris.py (the `op ingest ris` wiring is task-022). It is the M2 bootstrap that turns scholarmend's mended.ris + resolved.json into PaperRecords whose identity, track and status come only from scholarmend's claims, all with provenance.source = "ris". Use when bootstrapping or refreshing the Trust-Evals corpus, importing another review's RIS file, or debugging an imported record's track, year or missing abstract.
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
