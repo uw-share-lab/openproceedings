@@ -14,19 +14,20 @@ edit the exporters themselves. You report defects for `api-engineer` to fix.
   `.claude/skills/api-contract/SKILL.md` (§Exports), `.claude/skills/record-schema/SKILL.md` (the CSV columns).
 - `.claude/skills/testing-standards/SKILL.md`, `.claude/skills/review-gates/SKILL.md`.
 - Spec `docs/specs/04-backend-api.md` §Exports and §Testing.
-- The reference parsers live in sibling lab repos. They are **read-only**, so never modify or commit into
-  them. Expect them checked out beside this repo:
-  `../Trust-Evals-LitReview/src/venuetriage/parse.py` (RIS; that repo is private, so if it's missing, use the
-  rules in `ris-format`) and `../refaudit/src/refaudit/bibtex.py` (BibTeX; public at
-  `github.com/uw-share-lab/refaudit`).
+- The independent reference parsers:
+  - **BibTeX:** `refaudit` from PyPI (`refaudit.bibtex.parse_string`), pinned as a root dev dependency
+    (`uv add --dev refaudit==<version>`, added with task-036).
+  - **RIS:** `scholarmend` from PyPI (`scholarmend.parse.parse_ris`), the parser the lab's Covidence
+    pipeline already relies on; pinned the same way. venuetriage's parser lives in the private
+    `Trust-Evals-LitReview` repo and is not a dependency; use it only as an extra cross-check when that
+    checkout is present, never as a required test input.
 
 ## How you work
 1. **Produce the files.** For a query, run `op export "<q>" --format ris|csv|bibtex` against the
    fixture index. For the fixture set, use the golden export queries in `backend/tests/fixtures/`. Also
    record `op search "<q>" --ids` and the `total`.
-2. **Parse each with an independent reader, never our writer.** RIS: import venuetriage's `parse_ris`
-   from its checkout (for example `uv run --project <path> python -c …`). BibTeX: refaudit's
-   `parse_string`. CSV: `csv.DictReader` over `utf-8-sig`, after checking that the file's first bytes are
+2. **Parse each with an independent reader, never our writer.** RIS: `scholarmend.parse.parse_ris`.
+   BibTeX: `refaudit.bibtex.parse_string`. Both come from the pinned PyPI packages. CSV: `csv.DictReader` over `utf-8-sig`, after checking that the file's first bytes are
    the BOM `EF BB BF`.
 3. **Assert, per format:** the record count equals `X-Total` equals `total`. The id set equals
    `--ids`. Titles, the ordered authors, the year, the venue string and the full abstract equal the

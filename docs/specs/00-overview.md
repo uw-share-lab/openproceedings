@@ -86,7 +86,7 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
 
 | Layer | Choice | Why |
 |---|---|---|
-| Ingestion, query, index, API | **Python 3.12**, `uv`, FastAPI, pydantic v2 | Matches the lab's tools. We can reuse scholarmend's OpenReview client and cache patterns. |
+| Ingestion, query, index, API | **Python 3.12**, `uv`, FastAPI, pydantic v2 | Matches the lab's tools. The lab's own PyPI packages are pinned dependencies rather than copied code: `scholarmend` (RIS parsing, OpenReview venueid parsing and client, cache, claim ledger) for ingestion, and `refaudit` (BibTeX parser) for export tests. |
 | Index | **Tantivy** via `tantivy-py` | Rust speed, positional index, phrase/slop/regex queries, BM25, and custom tokenizers with no stemmer. |
 | Frontend | **Next.js (App Router) + TypeScript** | The lab already has Next.js experience. Hosting doesn't depend on Vercel. |
 | Semantic (phase 2) | SPECTER2 + a flat in-memory vector index | Built for scientific papers. About 80k vectors fit in RAM, so no vector database is needed. |

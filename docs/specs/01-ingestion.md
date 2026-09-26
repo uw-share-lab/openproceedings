@@ -53,7 +53,7 @@ into an ICLR main-track paper (scholarmend note, `zkNCWtw2fd`).
 | OpenReview API v1 (`api.openreview.net`) | ICLR 2018–2023, NeurIPS 2021–2022 | Status comes from decision notes or `content.venue`. A per-year adapter handles each schema. |
 | NeurIPS proceedings (`proceedings.neurips.cc`) | NeurIPS main and D&B, all years; the only source before 2021 | HTML/JSON pages. Also cross-checks OpenReview acceptance. |
 | PMLR (`proceedings.mlr.press`) | ICML 2020–2022 (v119, v139, v162); confirms 2023+ | Volume index plus per-paper pages. The volume → venue/year/track table lives in config and is checked in tests. |
-| RIS importer | The Trust-Evals corpus (M2 bootstrap) | Reads scholarmend `mended.ris` (full abstracts, corrected PY/JF). Tags track from scholarmend's venueid claims. `status` comes from a claim only: an OpenReview venueid claim → its status; a proceedings-page claim → `accepted`; no claim → `unknown` (never inferred from appearing in Scholar). Imported records carry `provenance.source = "ris"`. |
+| RIS importer | The Trust-Evals corpus (M2 bootstrap) | Reads scholarmend `mended.ris` (full abstracts, corrected PY/JF) with `scholarmend.parse.parse_ris` from the pinned `scholarmend` PyPI package. Tags track from scholarmend's venueid claims. `status` comes from a claim only: an OpenReview venueid claim → its status; a proceedings-page claim → `accepted`; no claim → `unknown` (never inferred from appearing in Scholar). Imported records carry `provenance.source = "ris"`. |
 
 The M2 bootstrap is deliberately the existing corpus (≈1,834 screened records plus workshop records
 auto-removed). This lets the team use the engine for the live review before the full crawl lands in M4.

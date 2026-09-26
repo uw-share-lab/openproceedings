@@ -84,7 +84,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
 - **BibTeX:** `@inproceedings`. Keys are `<firstauthorlast><year><firsttitleword>`, de-duplicated with a/b.
   Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC date>}`.
   Every entry carries `openproceedings_id = {<id>}`, so a round-trip recovers the id of every record,
-  proceedings-only (PMLR, NeurIPS) ones included. Output must pass refaudit's parser.
+  proceedings-only (PMLR, NeurIPS) ones included. Output must pass `refaudit.bibtex.parse_string` (the pinned `refaudit` PyPI package).
 - Exports stream, and are not paginated or truncated. The response headers `X-Total` (equal to the search's
   `total`) and `X-Index-Version` say exactly which set was exported. An export started during an index
   hot-swap finishes on the index it began on.
