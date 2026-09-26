@@ -180,6 +180,9 @@ ERRORS: list[tuple[str, DiagnosticCode, tuple[int, int]]] = [
     ("model$$", C.PARSE_WILDCARD_NOT_SUFFIX, (5, 6)),
     # a wildcard must directly follow a letter or digit
     ("vision-*", C.PARSE_WILDCARD_DETACHED, (0, 8)),
+    ("vision×*", C.PARSE_WILDCARD_DETACHED, (0, 8)),  # an operator is a word of its own, not a stem
+    ("≤*", C.PARSE_WILDCARD_DETACHED, (0, 2)),
+    ("$\\le$*", C.PARSE_WILDCARD_DETACHED, (0, 6)),
     ("gpt-$", C.PARSE_WILDCARD_DETACHED, (0, 5)),
     # phrases
     ('"trust in AI', C.PARSE_UNTERMINATED_PHRASE, (0, 12)),
@@ -289,6 +292,16 @@ WARNINGS: list[tuple[str, DiagnosticCode, list[tuple[int, int]]]] = [
     ('"a or b"', C.WARN_LOWERCASE_OPERATOR, []),  # inside a phrase it is plainly a word
     ("a oregon b", C.WARN_LOWERCASE_OPERATOR, []),
     ("trust −bias", C.WARN_LOOKALIKE_OPERATOR, [(6, 11)]),  # U+2212 minus sign
+    ("a ∨ b", C.WARN_LOOKALIKE_OPERATOR, [(2, 3)]),  # a logic sign is searched as a word (decision-006)
+    ("a ∧ b", C.WARN_LOOKALIKE_OPERATOR, [(2, 3)]),
+    ("trust ¬bias", C.WARN_LOOKALIKE_OPERATOR, [(6, 11)]),
+    ('"a ∨ b"', C.WARN_LOOKALIKE_OPERATOR, []),  # inside a phrase it is plainly literal
+    ("alpha divergence", C.WARN_SPELLED_GREEK, [(0, 5)]),
+    ("Epsilon-DP", C.WARN_SPELLED_GREEK, []),  # a hyphenated word is not the name alone
+    ("epsilon greedy", C.WARN_SPELLED_GREEK, [(0, 7)]),
+    ("α divergence", C.WARN_SPELLED_GREEK, []),
+    ("varepsilon", C.WARN_SPELLED_GREEK, []),  # only the plain lower-case names
+    ("alphabet", C.WARN_SPELLED_GREEK, []),
     ("trust –bias", C.WARN_LOOKALIKE_OPERATOR, [(6, 11)]),  # en dash
     ("‘trust in AI’", C.WARN_LOOKALIKE_OPERATOR, [(0, 6)]),
     ("C++ code", C.WARN_SYMBOLS_DROPPED, [(0, 3)]),

@@ -31,23 +31,43 @@ The review lead chose (2026-09-26, asked with worked examples):
    Anything else is unchanged (`$10^{-3}$` and `10⁻³` both → `10 3`). `$x^\alpha$` stays `x α`: NFKC
    reads `ᵅ` as the Latin `ɑ`, so no Unicode spelling could agree.
 
-Commands outside math are still markup (dropped), as LaTeX treats them. `TOKENIZER_VERSION` is 2.
+4. **Review additions (2026-09-26, the review lead chose "add them all"):** `∆` (U+2206) is read as `Δ`;
+   `\ell` is `ℓ`, which NFKC reads as `l` (`$\ell_2$` and `ℓ₂` → `l2`); `∣`, `∗`, `⋆`, `⋯` and the long
+   arrows `⟶ ⟹ ⟵ ⟸ ⟷ ⟺` join the table, with `\longrightarrow` and kin as aliases; `\not\in` and `\not=`
+   are `notin` and `neq`, like `∉` and `≠`.
+5. **How the rules apply:** the operator table is consulted **after NFKC** (so `∬` → `int int`, `𝛁` →
+   `nabla`, `ŀ` and `l·` agree), and a U+0338 slash composes with the character before it, so a
+   decomposed `∉` is `notin`, never `in`. A Greek letter right after another command's name starts a
+   new word (`$\hat\theta$` → `hat θ`), as the Unicode `θ̂` gives `θ`; after a letter it joins
+   (`$x\alpha$` → `xα`). Only ASCII letters and digits join after `^`/`_`.
+6. **Queries** (the review lead chose "warn, keep as terms"): a logic sign (`∨`, `∧`, a leading `¬`) is
+   searched as its word with `WARN_LOOKALIKE_OPERATOR` saying it is not OR/AND/NOT; a spelled Greek name
+   (`alpha`) gets `WARN_SPELLED_GREEK` pointing to the letter; a wildcard straight after an operator is
+   `PARSE_WILDCARD_DETACHED`.
+
+Commands outside math are still markup (dropped), as LaTeX treats them. `TOKENIZER_VERSION` is 2; it was
+first committed with rules 1–3 and completed with 4–5 on the same unmerged branch before any index or
+search record used it, so it stays 2.
 
 ### The operator table (`backend/src/openproceedings/query/mathsyms.py`)
 
-Tokens marked **yes** are also ordinary words, so a search for the word also finds the symbol (a search
-for `in` or `times` matches `x ∈ S` and `5×3`). The review lead accepted this for `times` and `in`;
-the others were not asked about individually.
+Tokens marked **yes** are also ordinary words (`mathsyms.ALSO_WORDS`), so a search for the word also
+finds the symbol (a search for `in` or `times` matches `x ∈ S` and `5×3`). The review lead accepted this
+for `times` and `in` and was told the full list. `·` is also used as a separator in titles
+(`Foo · Bar` → `foo cdot bar`). The table is generated (`mathsyms.operator_table()`); a test fails if this
+copy and the code differ.
 
 | Token | Unicode | LaTeX (inside math) | Also an ordinary word |
 |---|---|---|---|
 | `approx` | ≈ | `\approx` |  |
+| `ast` | ∗ | `\ast` |  |
 | `cap` | ∩ | `\cap` | **yes** |
 | `cdot` | · ⋅ | `\cdot` |  |
+| `cdots` | ⋯ | `\cdots` |  |
 | `circ` | ∘ | `\circ` |  |
 | `cong` | ≅ | `\cong` |  |
 | `cup` | ∪ | `\cup` | **yes** |
-| `div` | ÷ | `\div` |  |
+| `div` | ÷ | `\div` | **yes** |
 | `emptyset` | ∅ | `\emptyset`, `\varnothing` |  |
 | `equiv` | ≡ | `\equiv` |  |
 | `exists` | ∃ | `\exists` | **yes** |
@@ -56,18 +76,19 @@ the others were not asked about individually.
 | `gg` | ≫ | `\gg` |  |
 | `in` | ∈ | `\in` | **yes** |
 | `infty` | ∞ | `\infty` |  |
-| `int` | ∫ | `\int` |  |
-| `leftarrow` | ← ⇐ | `\Leftarrow`, `\gets`, `\leftarrow` |  |
-| `leftrightarrow` | ↔ ⇔ | `\Leftrightarrow`, `\iff`, `\leftrightarrow` |  |
+| `int` | ∫ | `\int` | **yes** |
+| `leftarrow` | ← ⇐ ⟵ ⟸ | `\Leftarrow`, `\Longleftarrow`, `\gets`, `\leftarrow`, `\longleftarrow` |  |
+| `leftrightarrow` | ↔ ⇔ ⟷ ⟺ | `\Leftrightarrow`, `\Longleftrightarrow`, `\iff`, `\leftrightarrow`, `\longleftrightarrow` |  |
 | `leq` | ≤ ⩽ | `\le`, `\leq`, `\leqslant` |  |
-| `ll` | ≪ | `\ll` |  |
+| `ll` | ≪ | `\ll` | **yes** |
 | `mapsto` | ↦ | `\mapsto` |  |
-| `mp` | ∓ | `\mp` |  |
+| `mid` | ∣ | `\mid` | **yes** |
+| `mp` | ∓ | `\mp` | **yes** |
 | `nabla` | ∇ | `\nabla` |  |
-| `neg` | ¬ | `\lnot`, `\neg` |  |
-| `neq` | ≠ | `\ne`, `\neq` |  |
-| `ni` | ∋ | `\ni` |  |
-| `notin` | ∉ | `\notin` |  |
+| `neg` | ¬ | `\lnot`, `\neg` | **yes** |
+| `neq` | ≠ | `\ne`, `\neq`, `\not=` |  |
+| `ni` | ∋ | `\ni` | **yes** |
+| `notin` | ∉ | `\not\in`, `\notin` |  |
 | `odot` | ⊙ | `\odot` |  |
 | `oplus` | ⊕ | `\oplus` |  |
 | `otimes` | ⊗ | `\otimes` |  |
@@ -75,13 +96,14 @@ the others were not asked about individually.
 | `partial` | ∂ | `\partial` | **yes** |
 | `perp` | ⊥ | `\perp` |  |
 | `pm` | ± | `\pm` | **yes** |
-| `prod` | ∏ | `\prod` |  |
+| `prod` | ∏ | `\prod` | **yes** |
 | `propto` | ∝ | `\propto` |  |
-| `rightarrow` | → ⇒ | `\Rightarrow`, `\implies`, `\rightarrow`, `\to` |  |
+| `rightarrow` | → ⇒ ⟶ ⟹ | `\Longrightarrow`, `\Rightarrow`, `\implies`, `\longrightarrow`, `\rightarrow`, `\to` |  |
 | `setminus` | ∖ | `\setminus` |  |
-| `sim` | ∼ | `\sim` |  |
+| `sim` | ∼ | `\sim` | **yes** |
 | `simeq` | ≃ | `\simeq` |  |
 | `sqrt` | √ | `\sqrt` |  |
+| `star` | ⋆ | `\star` | **yes** |
 | `subset` | ⊂ | `\subset` | **yes** |
 | `subseteq` | ⊆ | `\subseteq` |  |
 | `sum` | ∑ | `\sum` | **yes** |

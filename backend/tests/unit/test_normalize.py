@@ -3,9 +3,10 @@ whole-string definition of the token contract (spec 02 §Token semantics)."""
 
 import unicodedata
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-from openproceedings.query.mathsyms import OPERATORS
+from openproceedings.query.mathsyms import GREEK, LETTER_LOOKALIKES, OPERATOR_COMMANDS, OPERATORS
 from openproceedings.query.normalize import TOKENIZER_VERSION, Token, normalize, tokenize
 
 # Text without LaTeX syntax: the whole-string reference below doesn't model LaTeX.
@@ -54,8 +55,11 @@ def _invisible(c: str) -> bool:
 
 def reference(text: str) -> list[str]:
     """The token contract stated as simply as possible, over the whole string (no LaTeX)."""
-    text = "".join(f" {OPERATORS[c]} " if c in OPERATORS else c for c in text)  # an operator is its own word
-    s = unicodedata.normalize("NFD", unicodedata.normalize("NFKC", text).casefold())
+    # NFKC first (it composes `∈` + U+0338 into `∉`); then an operator is its own word, and a look-alike
+    # letter (`∆`) is the letter
+    text = unicodedata.normalize("NFKC", text)
+    text = "".join(f" {OPERATORS[c]} " if c in OPERATORS else LETTER_LOOKALIKES.get(c, c) for c in text)
+    s = unicodedata.normalize("NFD", text.casefold())
     kept, base = [], None
     for c in s:
         if c in INVISIBLE_SEPARATORS:
@@ -214,3 +218,41 @@ def test_adversarial_char_by_char_equals_whole_string_definition(text: str) -> N
 def test_adversarial_reindexing_is_idempotent(text: str) -> None:
     tokens = normalize(text)
     assert normalize(" ".join(tokens)) == tokens
+
+
+# --- decision-006: every table entry, both spellings, one token -----------------------------------------------
+
+
+@pytest.mark.parametrize("name", sorted(GREEK))
+def test_every_greek_command_is_its_letter(name: str) -> None:
+    assert normalize(f"${chr(92)}{name}$") == normalize(GREEK[name])
+
+
+@pytest.mark.parametrize("command", sorted(OPERATOR_COMMANDS))
+def test_every_operator_command_is_its_operators_token(command: str) -> None:
+    name = OPERATOR_COMMANDS[command]
+    assert normalize(f"$a {chr(92)}{command} b$") == ["a", name, "b"]
+    symbols = [c for c, n in OPERATORS.items() if n == name]
+    assert all(normalize(f"a {c} b") == ["a", name, "b"] for c in symbols)
+
+
+def test_command_tokens_span_the_command_name() -> None:
+    assert tokenize("$\\le$") == [Token("leq", 2, 4)]
+    assert tokenize("$x\\alpha$") == [Token("xα", 1, 8)]
+    assert tokenize("$\\alpha$") == [Token("α", 2, 7)]
+    assert tokenize("$\\not\\in$") == [Token("notin", 2, 8)]
+    assert tokenize("a ∈\u0338 b") == [Token("a", 0, 1), Token("notin", 2, 4), Token("b", 5, 6)]
+
+
+def test_script_join_is_linear() -> None:
+    import time
+
+    def secs(n: int) -> float:
+        text = "$" + "^{a" * n + "x$"
+        t = time.perf_counter()
+        normalize(text)
+        return time.perf_counter() - t
+
+    secs(1000)  # warm up
+    small, large = min(secs(5_000) for _ in range(3)), min(secs(20_000) for _ in range(3))
+    assert large < small * 8  # 4× the input: linear is ~4×, quadratic ~16×

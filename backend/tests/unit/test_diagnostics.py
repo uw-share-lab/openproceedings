@@ -77,6 +77,7 @@ def test_codes_named_by_the_specs_exist() -> None:
         "COMPAT_POP_PHRASE",
         "COMPAT_NO_STEMMING",
         "WARN_CJK_RUN",
+        "WARN_SPELLED_GREEK",
         *SPEC_04,
     ):
         assert DiagnosticCode(name)

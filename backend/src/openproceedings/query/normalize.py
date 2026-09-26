@@ -37,7 +37,7 @@ from __future__ import annotations
 import unicodedata
 from dataclasses import dataclass
 
-from openproceedings.query.mathsyms import GREEK, OPERATOR_COMMANDS, OPERATORS
+from openproceedings.query.mathsyms import GREEK, LETTER_LOOKALIKES, NEGATED, OPERATOR_COMMANDS, OPERATORS
 
 TOKENIZER_VERSION = "2"  # 2: math spelled in LaTeX or Unicode gives one token (decision-006)
 # Base letters whose combining marks fold (accents, optional vowel points): matched on the Unicode name.
@@ -92,27 +92,40 @@ def _invisible(ch: str) -> bool:
     )
 
 
-def _fold(c: str, base: str | None) -> tuple[str, str | None]:
+@dataclass(frozen=True, slots=True)
+class _Op:
+    """An operator found in a character's NFKC form: a token of its own, its LaTeX name."""
+
+    name: str
+
+
+def _fold(c: str, base: str | None) -> tuple[list[str | _Op], str | None]:
     """Steps 1–3 for one raw character, given the base letter the previous characters left open.
 
-    Returns the folded characters (possibly "" or several) and the base letter to carry forward, so a
-    combining mark in the NEXT raw character knows which script it decorates.
+    Returns the folded pieces (characters, and an `_Op` for each operator NFKC yields: `∬` → two `int`,
+    `𝛁` → `nabla`, `ŀ` → `l` then `cdot`) and the base letter to carry forward, so a combining mark in the
+    NEXT raw character knows which script it decorates.
     """
-    out: list[str] = []
-    for ch in unicodedata.normalize("NFD", unicodedata.normalize("NFKC", c).casefold()):
-        if ch in INVISIBLE_SEPARATORS:
-            out.append(" ")
+    out: list[str | _Op] = []
+    for piece in unicodedata.normalize("NFKC", c):
+        if piece in OPERATORS:
+            out.append(_Op(OPERATORS[piece]))
             base = None
             continue
-        if _invisible(ch):
-            continue  # joins its neighbours
-        if unicodedata.combining(ch):
-            if not _folds_marks(base, ch):
-                out.append(ch)  # a mark that spells the word stays
-            continue
-        out.append(ch)
-        base = ch if _is_word_char(ch) else None
-    return "".join(out), base
+        for ch in unicodedata.normalize("NFD", LETTER_LOOKALIKES.get(piece, piece).casefold()):
+            if ch in INVISIBLE_SEPARATORS:
+                out.append(" ")
+                base = None
+                continue
+            if _invisible(ch):
+                continue  # joins its neighbours
+            if unicodedata.combining(ch):
+                if not _folds_marks(base, ch):
+                    out.append(ch)  # a mark that spells the word stays
+                continue
+            out.append(ch)
+            base = ch if _is_word_char(ch) else None
+    return out, base
 
 
 def _find_closing_dollar(text: str, i: int) -> int:
@@ -158,23 +171,39 @@ def _script_join(text: str, i: int) -> int:
     if nxt.isascii() and nxt.isalnum():
         return i
     if nxt == "{":
-        k = text.find("}", i + 2)
-        inner = text[i + 2 : k] if k > 0 else ""
-        return k if inner and inner.isascii() and inner.isalnum() else -1
+        k = i + 2  # scan the run itself (linear), never ahead to some later `}`
+        while k < len(text) and text[k].isascii() and text[k].isalnum():
+            k += 1
+        return k if k > i + 2 and k < len(text) and text[k] == "}" else -1
     return -1
+
+
+def _negation(text: str, j: int) -> tuple[str, int] | None:
+    """After `\\not` ending at `j`: the negated operator's name and where it ends, or None."""
+    if j < len(text) and text[j] in NEGATED:
+        return NEGATED[text[j]], j + 1
+    if text.startswith("\\", j):
+        k = j + 1
+        while k < len(text) and text[k].isascii() and text[k].isalpha():
+            k += 1
+        if text[j + 1 : k] in NEGATED:
+            return NEGATED[text[j + 1 : k]], k
+    return None
 
 
 def _latex_mask(
     text: str,
     regions: list[tuple[int, int]] | None = None,
-    subs: dict[int, tuple[str, bool, int]] | None = None,
+    subs: dict[int, tuple[str, bool, int, bool]] | None = None,
 ) -> list[int]:
     """Classify every raw character for step 4: KEEP, SEP (LaTeX syntax that separates) or JOIN (markup
     inside a word, such as an accent macro or `\\-`). Math regions: `$…$` (Pandoc rule), `$$…$$`, `\\(…\\)`,
     `\\[…\\]`; inside them a command name is a word, outside it is dropped. Each math region found is
     appended to `regions` as a half-open span from its opening delimiter to the end of its closing one. A
     math command with a Unicode spelling is SUB at its backslash and JOIN over its name; `subs` maps the
-    backslash's index to (the spelling, whether it is an operator token, the command's end)."""
+    backslash's index to (the spelling, whether it is an operator token, the command's end, whether it
+    starts a new word because another command's name ends right before it: `\\hat\\theta` → `hat θ`)."""
+    name_end = -1  # where the last kept command name (a word inside math) ended
     n = len(text)
     opened = -1  # where the current math region's opening delimiter starts
     mask = [KEEP] * n
@@ -229,15 +258,27 @@ def _latex_mask(
                 while j < n and text[j].isascii() and text[j].isalpha():
                     j += 1
                 name = text[i + 1 : j]
+                negated = _negation(text, j) if in_math and name == "not" else None
+                if negated is not None:  # `\\not\\in`, `\\not=`: one operator, like `∉`, `≠`
+                    spelling, j = negated
+                    mask[i] = SUB
+                    for k in range(i + 1, j):
+                        mask[k] = JOIN
+                    if subs is not None:
+                        subs[i] = (spelling, True, j, False)
+                    i = j
+                    continue
                 if in_math and (name in GREEK or name in OPERATOR_COMMANDS):
                     mask[i] = SUB
                     for k in range(i + 1, j):
                         mask[k] = JOIN
                     if subs is not None:
                         op = name not in GREEK
-                        subs[i] = (OPERATOR_COMMANDS[name] if op else GREEK[name], op, j)
+                        subs[i] = (OPERATOR_COMMANDS[name] if op else GREEK[name], op, j, i == name_end)
                     i = j
                     continue
+                if in_math:
+                    name_end = j
                 mask[i] = SEP
                 if not in_math:  # a command name outside math is markup, not content
                     for k in range(i + 1, j):
@@ -301,7 +342,7 @@ def math_regions(text: str) -> list[tuple[int, int]]:
 
 def tokenize(text: str) -> list[Token]:
     """Tokens of `text` with their raw code-point spans."""
-    subs: dict[int, tuple[str, bool, int]] = {}
+    subs: dict[int, tuple[str, bool, int, bool]] = {}
     latex = _latex_mask(text, subs=subs)
     out: list[Token] = []
     buf: list[str] = []
@@ -317,46 +358,57 @@ def tokenize(text: str) -> list[Token]:
                 out.append(Token(word, start, end))
             buf = []
 
-    for i, c in enumerate(text):
-        if latex[i] == SUB:  # a math command with a Unicode spelling
-            spelling, operator, stop = subs[i]
-            if operator:  # a token of its own
+    n = len(text)
+    i = 0
+    while i < n:
+        c, stop = text[i], i + 1
+        if latex[i] == SUB:  # a math command with a Unicode spelling; its span starts at its name
+            spelling, operator, cmd_end, split = subs[i]
+            if operator or split:
                 close()
-                out.append(Token(spelling, i, stop))
+            if operator:  # a token of its own
+                out.append(Token(spelling, i + 1, cmd_end))
                 base = None
-                continue
-            folded, base = _fold(spelling, base)  # a Greek letter: part of the word, like the letter itself
-            if not buf:
-                start = i
-            buf.extend(folded)
-            end = stop
-            continue
-        if latex[i] == KEEP and c in OPERATORS:  # a Unicode operator: a token of its own, its LaTeX name
-            close()
-            out.append(Token(OPERATORS[c], i, i + 1))
-            base = None
+            else:  # a Greek letter: part of the word, like the letter itself
+                folded, base = _fold(spelling, base)
+                if not buf:
+                    start = i + 1
+                buf.extend(p for p in folded if isinstance(p, str))
+                end = cmd_end
+            i += 1
             continue
         if latex[i] == SEP:
             close()
             base = None
+            i += 1
             continue
         if latex[i] == JOIN:  # markup inside a word: keep the word open and cover the markup in its span
             if buf:
                 end = i + 1
+            i += 1
             continue
+        if i + 1 < n and text[i + 1] == "\u0338" and latex[i + 1] == KEEP:
+            composed = unicodedata.normalize("NFC", c + "\u0338")  # `∈` + slash is `∉`, `=` + slash is `≠`
+            if len(composed) == 1:
+                c, stop = composed, i + 2
         folded, base = _fold(c, base)
         if not folded:  # combining mark or invisible format char: extends an open word, never starts one
             if buf:
-                end = i + 1
+                end = stop
+            i = stop
             continue
-        for ch in folded:
-            if _is_word_char(ch):
+        for piece in folded:
+            if isinstance(piece, _Op):
+                close()
+                out.append(Token(piece.name, i, stop))
+            elif _is_word_char(piece):
                 if not buf:
                     start = i
-                buf.append(ch)
-                end = i + 1
+                buf.append(piece)
+                end = stop
             else:
                 close()
+        i = stop
     close()
     return out
 

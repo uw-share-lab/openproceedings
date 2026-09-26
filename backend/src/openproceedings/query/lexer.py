@@ -49,6 +49,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip
+from openproceedings.query.mathsyms import GREEK, OPERATORS
 from openproceedings.query.normalize import first_math_end, math_regions, tokenize
 from openproceedings.vocab import QUERY_FILTER_FIELDS, TEXT_FIELDS
 
@@ -153,6 +154,11 @@ def _is_cjk(c: str) -> bool:
 
 _COMMAND = re.compile(r"\\([A-Za-z]+)")
 _EMPTY_BRACES = re.compile(r"\{[{}]*\}")  # `{}`, `{{}}`: braces that keep nothing
+
+
+_GREEK_NAMES = frozenset(
+    name for name in GREEK if name.islower() and not name.startswith("var") and name != "ell"
+)
 
 
 def _wordy(c: str) -> bool:
@@ -472,6 +478,14 @@ class _Lexer:
                 start,
                 end,
             )
+        elif not any(_wordy(ch) for ch in unicodedata.normalize("NFKC", stem[toks[-1].end - 1])):
+            self.error(
+                DiagnosticCode.PARSE_WILDCARD_DETACHED,
+                f"The `{wildcard}` in `{clip(raw)}` follows `{clip(stem[toks[-1].end - 1])}`, an operator searched as "
+                f"`{clip(toks[-1].text)}`, not a letter or digit — a wildcard extends a word.",
+                start,
+                end,
+            )
         elif toks[-1].end < len(stem):
             self.error(
                 DiagnosticCode.PARSE_WILDCARD_DETACHED,
@@ -484,6 +498,7 @@ class _Lexer:
 
     def check_word(self, raw: str, stem: str, start: int, end: int) -> None:
         """Checks for a top-level WORD (not a phrase part, where these characters are plainly literal)."""
+        self.check_math_words(raw, stem, start, end)
         if raw[0] in MINUSES:
             self.error(
                 DiagnosticCode.PARSE_AMBIGUOUS_MINUS,
@@ -512,6 +527,35 @@ class _Lexer:
             self.warn(
                 DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
                 f'`{clip(raw)}` starts with a single quote, which does not make a phrase — use double quotes: `"…"`.',
+                start,
+                end,
+            )
+
+    def check_math_words(self, raw: str, stem: str, start: int, end: int) -> None:
+        """A logic sign looks like an operator but is searched as a word (decision-006); a spelled Greek
+        name finds only the word, since abstracts' `$\\alpha$` and `α` are indexed as `α`."""
+        logic = {"∨": ("OR", "a OR b"), "∧": ("AND", "a AND b")}
+        if stem in logic:
+            op, example = logic[stem]
+            self.warn(
+                DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+                f"`{stem}` is searched as the word `{OPERATORS[stem]}`, not as {op} — write `{example}` for that.",
+                start,
+                end,
+            )
+        elif stem.startswith("¬"):
+            self.warn(
+                DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+                f"`¬` is searched as the word `neg`, not NOT — to exclude, write `-{clip(stem[1:] or 'word')}`.",
+                start,
+                end,
+            )
+        elif stem.casefold() in _GREEK_NAMES:
+            letter = GREEK[stem.casefold()]
+            self.warn(
+                DiagnosticCode.WARN_SPELLED_GREEK,
+                f"`{clip(raw)}` finds the word only: abstracts' `$\\{stem.casefold()}$` and `{letter}` are indexed as "
+                f"`{letter}`, so search `{letter}` too (`{clip(stem)} OR {letter}`).",
                 start,
                 end,
             )

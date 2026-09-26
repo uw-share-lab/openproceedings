@@ -240,6 +240,35 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ("\\alpha outside math", ["outside", "math"]),  # a command outside math is still markup
     ("snake_case and a^b", ["snake", "case", "and", "a", "b"]),  # ^ and _ join only inside math
     ("$\\mathcal{L}$", ["mathcal", "l"]),  # a command with no Unicode spelling is still its name
+    # --- decision-006 review rows
+    ("$\\hat\\theta$", ["hat", "θ"]),  # a Greek letter after another command's name starts a word
+    ("$\\sin\\alpha$", ["sin", "α"]),
+    ("$\\mathbf\\Sigma$", ["mathbf", "σ"]),
+    ("$x\\alpha$", ["xα"]),  # but after a letter it joins, as `xα` does
+    ("$x\\times y$", ["x", "times", "y"]),
+    ("$x^α$", ["x", "α"]),  # only ASCII after ^/_ joins
+    ("$x^{αβ}$", ["x", "αβ"]),
+    ("$x^{}y$", ["x", "y"]),  # empty braces raise nothing, so nothing joins
+    ("∈\u0338", ["notin"]),  # a decomposed ∉ is ∉, never `in`
+    ("=\u0338", ["neq"]),
+    ("∉ and ≠", ["notin", "and", "neq"]),
+    ("$\\not\\in$ and $\\not=$", ["notin", "and", "neq"]),
+    ("$\\notin$", ["notin"]),
+    ("∬", ["int", "int"]),  # NFKC first, then operators
+    ("\U0001d6c1", ["nabla"]),  # mathematical bold nabla
+    (
+        "col\u0387lecci\u00f3 and co\u0140lecci\u00f3 and col·lecció",
+        ["col", "cdot", "leccio", "and", "col", "cdot", "leccio", "and", "col", "cdot", "leccio"],
+    ),
+    ("∆ and $\\Delta$", ["δ", "and", "δ"]),  # the increment sign is written for Δ
+    ("$\\ell_2$ and ℓ₂", ["l2", "and", "l2"]),
+    (
+        "a ⟹ b and $a \\implies b$ and $a \\Longrightarrow b$",
+        ["a", "rightarrow", "b", "and", "a", "rightarrow", "b", "and", "a", "rightarrow", "b"],
+    ),
+    ("a ⟺ b and $a \\iff b$", ["a", "leftrightarrow", "b", "and", "a", "leftrightarrow", "b"]),
+    ("a ∣ b ∗ c ⋆ d ⋯", ["a", "mid", "b", "ast", "c", "star", "d", "cdots"]),
+    ("$a \\mid b \\ast c \\star d \\cdots$", ["a", "mid", "b", "ast", "c", "star", "d", "cdots"]),
 ]
 
 

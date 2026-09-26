@@ -21,7 +21,11 @@ GREEK: dict[str, str] = {
     "psi": "ψ", "omega": "ω",
     "Gamma": "Γ", "Delta": "Δ", "Theta": "Θ", "Lambda": "Λ", "Xi": "Ξ", "Pi": "Π", "Sigma": "Σ",
     "Upsilon": "Υ", "Phi": "Φ", "Psi": "Ψ", "Omega": "Ω",
+    "ell": "ℓ",  # not Greek, but a letter-like symbol: NFKC reads ℓ as `l`, so `$\\ell_2$` and `ℓ₂` → `l2`
 }  # fmt: skip
+
+# Unicode characters that stand for a letter above (after NFKC): the increment sign ∆ is written for Δ.
+LETTER_LOOKALIKES: dict[str, str] = {"∆": "Δ"}
 
 # Unicode operator or relation → its token: the case-folded name of its LaTeX command.
 OPERATORS: dict[str, str] = {
@@ -36,6 +40,9 @@ OPERATORS: dict[str, str] = {
     "⊕": "oplus", "⊗": "otimes", "⊙": "odot", "∘": "circ",
     "∞": "infty", "∑": "sum", "∏": "prod", "∫": "int", "∂": "partial", "∇": "nabla", "√": "sqrt",
     "∥": "parallel", "⊥": "perp",
+    "∣": "mid", "∗": "ast", "⋆": "star", "⋯": "cdots",
+    "⟶": "rightarrow", "⟹": "rightarrow", "⟵": "leftarrow", "⟸": "leftarrow", "⟷": "leftrightarrow",
+    "⟺": "leftrightarrow",
 }  # fmt: skip
 
 # LaTeX commands (inside math) that are operators: each name and alias → the operator's token. The
@@ -44,6 +51,36 @@ _ALIASES = {
     "le": "leq", "leqslant": "leq", "ge": "geq", "geqslant": "geq", "ne": "neq", "to": "rightarrow",
     "Rightarrow": "rightarrow", "implies": "rightarrow", "gets": "leftarrow", "Leftarrow": "leftarrow",
     "iff": "leftrightarrow", "Leftrightarrow": "leftrightarrow", "lnot": "neg", "land": "wedge",
-    "lor": "vee", "varnothing": "emptyset",
+    "lor": "vee", "varnothing": "emptyset", "longrightarrow": "rightarrow", "Longrightarrow": "rightarrow",
+    "longleftarrow": "leftarrow", "Longleftarrow": "leftarrow", "longleftrightarrow": "leftrightarrow",
+    "Longleftrightarrow": "leftrightarrow",
 }  # fmt: skip
 OPERATOR_COMMANDS: dict[str, str] = {**{name: name for name in OPERATORS.values()}, **_ALIASES}
+# `\\not` before one of these (a command name, or `=`) is its negation, as `∉` and `≠` are.
+NEGATED: dict[str, str] = {"in": "notin", "=": "neq"}
+
+# Operator names that are also ordinary words, so a search for the word finds the symbol too
+# (decision-006 lists them; test_mathsyms rebuilds the decision's table from this module).
+ALSO_WORDS = frozenset({
+    "in", "times", "cap", "cup", "sum", "wedge", "parallel", "pm", "exists", "partial", "subset", "sim",
+    "int", "div", "prod", "mp", "ll", "neg", "ni", "mid", "star",
+})  # fmt: skip
+
+
+def operator_table() -> str:
+    """decision-006's operator table, generated from the tables above (a test keeps the two identical)."""
+    by: dict[str, tuple[list[str], list[str]]] = {}
+    for ch, name in OPERATORS.items():
+        by.setdefault(name, ([], []))[0].append(ch)
+    for cmd, name in OPERATOR_COMMANDS.items():
+        by.setdefault(name, ([], []))[1].append("\\" + cmd)
+    for sym, name in NEGATED.items():
+        by[name][1].append(f"\\not{'' if sym == '=' else chr(92)}{sym}")
+    rows = ["| Token | Unicode | LaTeX (inside math) | Also an ordinary word |", "|---|---|---|---|"]
+    for name in sorted(by):
+        unicode, latex = by[name]
+        commands = ", ".join(f"`{c}`" for c in sorted(latex))
+        rows.append(
+            f"| `{name}` | {' '.join(unicode)} | {commands} | {'**yes**' if name in ALSO_WORDS else ''} |"
+        )
+    return "\n".join(rows) + "\n"

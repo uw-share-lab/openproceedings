@@ -65,8 +65,11 @@ tokens that share its span (`½` → `1`, `2`). The full case list is `backend/t
   unchanged identifies fewer records here; in Scholar mode `COMPAT_NO_STEMMING` lists the terms affected.
 - **Title and abstract only.** Scholar also searches full text; openproceedings never does (guarantee 2).
 - **Math is matched by its Unicode spelling** (decision-006): a Greek letter is searched as the letter
-  (`α`, not `alpha`), an operator by its LaTeX name (`times`, `leq`), and some names are also ordinary
-  words (`in`, `times`, `sum`), so searching the word also finds the symbol.
+  (`α`, not `alpha`; `WARN_SPELLED_GREEK` says so when a query spells the name), an operator by its LaTeX
+  name (`times`, `leq`), and some names are also ordinary words (`in`, `times`, `sum`; decision-006 lists
+  them), so searching the word also finds the symbol. A logic sign in a query (`∨`, `∧`, `¬`) is such a
+  word, never an operator (`WARN_LOOKALIKE_OPERATOR`), and a wildcard straight after an operator is
+  `PARSE_WILDCARD_DETACHED`.
 
 Everything else is exact: a token matches only the identical normalised token. The corpus is
 overwhelmingly English, so these limits rarely bite, but a review of non-English titles should say so.

@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-26 15:53'
-updated_date: '2026-09-26 17:03'
+updated_date: '2026-09-26 18:28'
 labels:
   - query
   - exactness
@@ -34,4 +34,6 @@ Found 2026-09-26 while checking OpenReview vs PMLR abstracts (another session's 
 User decision 2026-09-26 (asked with previews): (1) Greek letters: canonical token is the Unicode letter; $\alpha$ and α both -> α; a query must contain α (typing alpha finds only the spelled word). (2) Operators and relations: spelled tokens; × and $\times$ both -> times, ≤ and $\leq$ -> leq, etc. Spelling = the LaTeX command name; the full symbol<->command table goes in the decision record for the user to check, flagging collisions with ordinary words (∈ -> in, times). (3) Super/subscripts: joined; O(n²) and $O(n^2)$ both -> o n2 (NFKC reading), so a query for n doesn't match n². Record as a decision (backlog decision), implement with a TOKENIZER_VERSION bump before task-023.
 
 Implemented (decision-006, TOKENIZER_VERSION 2): query/mathsyms.py holds the Greek and operator tables; normalize.py maps Greek commands in math to the letter (SUB mask state), operator commands and Unicode operators to the LaTeX name as a token of their own, and joins ^/_ before one letter/digit or a braced run. Golden rows pin every pair both ways; the whole-string reference models operators; exhaustive (OP_EXHAUSTIVE=1) and property suites green; Trust-Evals canonical hashes regenerated (strings unchanged).
+
+Review round (2026-09-26): Greek letter after another command's name starts a word (\hat\theta -> hat θ); operator table consulted after NFKC and U+0338 composes (decomposed ∉ -> notin); linear _script_join; user chose to add ∆, \ell, ∣ ∗ ⋆ ⋯, long arrows, \not\in/\not= and to warn (not reject) on logic signs in queries; WARN_SPELLED_GREEK added; wildcard after an operator is DETACHED; decision-006 table generated and drift-tested. TOKENIZER_VERSION stays 2 (unreleased).
 <!-- SECTION:NOTES:END -->

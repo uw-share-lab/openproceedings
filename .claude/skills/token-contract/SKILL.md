@@ -16,11 +16,14 @@ description: The exact normalization contract shared by the query parser and the
    preceded by a non-space and not followed by a digit), `$$…$$`, `\(…\)`, `\[…\]`, and inside it a
    command name is a word — except math with a Unicode spelling (decision-006, `query/mathsyms.py`): a
    Greek command is its letter (`$\alpha$` → `α`), an operator command its operator's name (`$\le$` →
-   `leq`), and `^`/`_` join one letter/digit or a braced run (`$n^2$` → `n2`); a fourth mask state, SUB,
-   marks those commands; accent macros (`\"o`, `\H{o}`, `\"{\i}`) and `\-` join the word; `\%` `\&` `\$` `\\`
+   `leq`, `\not\in` → `notin`), and `^`/`_` join one ASCII letter/digit or a braced run of them (`$n^2$` →
+   `n2`); a fourth mask state, SUB, marks those commands, and a Greek letter right after another command's
+   name starts a new word (`\hat\theta` → `hat θ`); accent macros (`\"o`, `\H{o}`, `\"{\i}`) and `\-` join the word; `\%` `\&` `\$` `\\`
    separate.
 5. **Split** on every char that is not a Unicode letter, digit or non-combining mark; a Unicode operator
-   in `mathsyms.OPERATORS` is a token of its own, its LaTeX name (`×` → `times`). Invisible characters
+   in `mathsyms.OPERATORS`, looked up **after NFKC** (so `∬` → `int int`, `𝛁` → `nabla`, `ŀ` → `l cdot`), is
+   a token of its own, its LaTeX name (`×` → `times`); a U+0338 slash composes with the character before
+   it (`∈`+U+0338 → `∉` → `notin`); `∆` is read as `Δ`. Invisible characters
    **join** (Cf, variation selectors, enclosing marks, CGJ); the invisible math operators U+2061–2064
    **separate**.
 
@@ -47,7 +50,11 @@ highlighter, a script, a test helper — is a bug; import or call the API instea
 | `naïve Bayes` | `naive`, `bayes` |
 | `GPT-4o` | `gpt`, `4o` |
 | `model's` | `model`, `s` |
-| `$\epsilon$-DP` | `epsilon`, `dp` |
+| `$\epsilon$-DP` | `ε`, `dp` (tokenizer 2; `epsilon` in 1) |
+| `$\hat\theta$` | `hat`, `θ` (a Greek letter after another command's name starts a word) |
+| `∈` + U+0338 (a decomposed `∉`) | `notin` (NFKC before the operator table, never `in`) |
+| `5×3`, `$5 \times 3$` | `5`, `times`, `3` |
+| `O(n²)`, `$O(n^2)$` | `o`, `n2` |
 | `\textit{TrustLLM}` | `trustllm` |
 | `ﬁne-tuning` (ligature) | `fine`, `tuning` |
 | `STRASSE` / `Straße` | `strasse` / `strasse` |
