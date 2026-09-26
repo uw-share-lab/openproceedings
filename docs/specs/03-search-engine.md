@@ -77,9 +77,39 @@ terms.
 
 ## Exclusion accounting (guarantee 6, PRISMA)
 
-For every search, also compute the size of the matched set **with the default filters removed**, and break
-the difference down by filter, e.g. `{"track": {"workshop": 212, "competition": 4}, "status": {"rejected": 88}}`.
+For every search, also compute the size of the matched set **with the default filters removed** (the
+`identification_query` of 02 §Default filters), and break the difference down by filter, e.g. `{"total": 304, "track": {"workshop": 212, "competition": 4, "unknown": 0}, "status": {"rejected": 88, "unknown": 0}}` (the shape pinned in 04).
 The API exposes this as `excluded` (04). It maps directly onto PRISMA's "records removed before screening".
+
+Counting rules (so the PRISMA number is never double-counted):
+- `excluded.total = |matched without default filters| − |matched with them|`.
+- Buckets are assigned **in a fixed order, track first, then status**. A paper that is both a workshop
+  paper and rejected counts once, under `track.workshop`. So the buckets always add up to `excluded.total`.
+- Only **default** filters produce exclusions, and a default is recognised by content (02 §Default
+  filters): a typed conjunct identical to a default counts as the default. Any other filter the user wrote
+  (for example `year:2023..2026`, or a different `track:` set) is part of the search itself, not an
+  automated removal, and is never counted in `excluded`.
+- "Identified" is therefore **conditional on the user's own limits.** The defaults-removed set keeps every
+  user-written filter (year, venue, …). The methods text says so (05).
+- **An "include" action ends the default.** Clicking "include" on an exclusion (05 §Components 5) writes a
+  non-default `track:`/`status:` set into `q`. Because a default is recognised by content, that set is no
+  longer a default: it produces no `excluded` bucket, stays in the `identification_query` as a user limit,
+  and the methods text changes accordingly. The UI says so in the include action's tooltip.
+- **Unclassified is not ineligible.** Records removed because their `track` or `status` is `unknown` are
+  itemised separately (`excluded.track.unknown`, `excluded.status.unknown`) and are never folded into
+  another bucket. The UI and the methods text show them on their own line, so a review can choose to report
+  them or screen them.
+
+## Error handling
+
+- A search whose query does not parse never reaches an engine: 02's diagnostics go back as a 422 (04 §Error
+  handling). The engines only ever see a valid AST.
+- A wildcard over 200 expansions is a `WILDCARD_TOO_MANY_EXPANSIONS` error from `expand`, never a silently
+  truncated OR.
+- An engine failure (a corrupt or missing index segment) is a typed exception mapped at the API edge to 500
+  `API_INTERNAL`, or 503 `API_INDEX_NOT_LOADED` while no index is loaded. The engine never falls back to a
+  partial set or to the reference engine behind the API.
+- A differential mismatch in CI is a failing gate, reported with the shrunk AST; never a skipped test.
 
 ## Versioning
 

@@ -1,0 +1,22 @@
+name: claude-tooling
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+permissions:
+  contents: read
+
+jobs:
+  claude-tooling:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Sync workspace (the autofix rows run ruff from .venv)
+        run: uv sync --locked
+      - name: make tooling (roster lint, roster + learnings indexes, backlog hygiene, hook case tables)
+        run: |
+          git config --global user.email ci@example.invalid
+          git config --global user.name ci
+          make tooling

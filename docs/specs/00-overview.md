@@ -113,7 +113,7 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
 | M1 | Query language + tokenizer + reference matcher (02, 03 §oracle) | All exactness fixtures pass. The parser round-trips the review's search strings. |
 | M2 | Index + CLI search over the Trust-Evals corpus (RIS import) (01 §RIS, 03) | `op search "<Most Updated string>"` runs. Differential tests against the oracle are green. |
 | M3 | API + frontend MVP (04, 05) | The team can run the review's queries in a browser and export RIS into Covidence. |
-| M4 | Full crawl of OpenReview and proceedings (01) | Coverage page within ±1% of official accepted counts for each venue-year. |
+| M4 | Full crawl of OpenReview and proceedings (01) | Every main-track and D&B cell with an official accepted count is within ±1% (07 §C). |
 | M5 | Semantic layer (06) | Near-miss panel live. The invariant test proves membership never changes. |
 | M6 | Hosting + public release | Licensing question resolved, repo made public, instance deployed. |
 

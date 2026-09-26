@@ -1,0 +1,24 @@
+name: nightly
+# Full mutation run of every gate and tooling check (make mutate). Reviews run only `make mutate-changed`;
+# this catches anything that slipped. Differential@50k and full-corpus parity join this job in M1/M2.
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  mutate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Sync workspace
+        run: uv sync --locked
+      - name: make mutate (every mutant must be killed, or documented as equivalent)
+        run: |
+          git config --global user.email ci@example.invalid
+          git config --global user.name ci
+          make mutate

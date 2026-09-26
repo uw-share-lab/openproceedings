@@ -33,7 +33,7 @@ build.
 |---|---|
 | `main` | `<Venue>.cc/<Y>/Conference` (accepted), PMLR main ICML volume, NeurIPS main proceedings |
 | `datasets_benchmarks` | `NeurIPS.cc/<Y>/Track/Datasets_and_Benchmarks` or `…/Datasets_and_Benchmarks_Track`; NeurIPS ≤2023 proceedings `Datasets_and_Benchmarks` aliased to `_Track` (scholarmend fix) |
-| `position` | ICML position-paper track |
+| `position` | ICML position-paper track; NeurIPS position-paper track (verify the venueid form at M4) |
 | `workshop` | `<Venue>.cc/<Y>/Workshop/…`, including satellite paths like `Workshop_Mexico_City/…` |
 | `competition` | NeurIPS Competition Track, PMLR competition volumes |
 | `tiny_papers` | ICLR Tiny Papers (2023–2024) |
@@ -53,7 +53,7 @@ into an ICLR main-track paper (scholarmend note, `zkNCWtw2fd`).
 | OpenReview API v1 (`api.openreview.net`) | ICLR 2018–2023, NeurIPS 2021–2022 | Status comes from decision notes or `content.venue`. A per-year adapter handles each schema. |
 | NeurIPS proceedings (`proceedings.neurips.cc`) | NeurIPS main and D&B, all years; the only source before 2021 | HTML/JSON pages. Also cross-checks OpenReview acceptance. |
 | PMLR (`proceedings.mlr.press`) | ICML 2020–2022 (v119, v139, v162); confirms 2023+ | Volume index plus per-paper pages. The volume → venue/year/track table lives in config and is checked in tests. |
-| RIS importer | The Trust-Evals corpus (M2 bootstrap) | Reads scholarmend `mended.ris` (full abstracts, corrected PY/JF). Tags track from scholarmend's venueid claims. Imported records carry `provenance.source = "ris"`. |
+| RIS importer | The Trust-Evals corpus (M2 bootstrap) | Reads scholarmend `mended.ris` (full abstracts, corrected PY/JF). Tags track from scholarmend's venueid claims. `status` comes from a claim only: an OpenReview venueid claim → its status; a proceedings-page claim → `accepted`; no claim → `unknown` (never inferred from appearing in Scholar). Imported records carry `provenance.source = "ris"`. |
 
 The M2 bootstrap is deliberately the existing corpus (≈1,834 screened records plus workshop records
 auto-removed). This lets the team use the engine for the live review before the full crawl lands in M4.
@@ -70,7 +70,10 @@ auto-removed). This lets the team use the engine for the live review before the 
 4. **Deduplicate.** The same paper appears on OpenReview and in the proceedings (NeurIPS, ICML 2023+).
    Merge on (a) an identical forum ID, then (b) a normalized title with the same venue and year. Two
    records are merged **only** when venue and year agree. That lesson comes from venuetriage: records
-   with no year must never merge on `(title, "")`. Merges are written to `merges.csv` for audit.
+   with no year must never merge on `(title, "")`. **Two OpenReview records with different forum IDs are
+   never merged**: a main-track paper and its same-year workshop version can share a title. Title
+   matching only links records *across* sources (OpenReview ↔ proceedings ↔ RIS). Merges are written to
+   `merges.csv` for audit.
 5. **Snapshot.** Write `data/snapshots/<date>-<shorthash>/records.jsonl` (sorted by `id`) and
    `manifest.json`. The manifest holds counts per venue × year × track × status, source versions,
    the crawl date and the snapshot hash. Snapshots are immutable. `data/` is gitignored.
