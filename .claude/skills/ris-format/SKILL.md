@@ -1,6 +1,6 @@
 ---
 name: ris-format
-description: The openproceedings RIS export standard — the spec 04 field mapping, the Covidence-safe choices (one AU per line, full single-line AB, T2 venue string, N1 provenance line, UTF-8), what scholarmend's RIS parser (`scholarmend.parse.parse_ris`, pinned from PyPI) tolerates and silently drops, the known Covidence import behaviours, and the round-trip test. Use when writing or reviewing backend/src/openproceedings/api/exporters/ RIS code, `op export --format ris`, or an RIS fixture.
+description: The openproceedings RIS export standard — the spec 04 field mapping, the Covidence-safe choices (one AU per line, full single-line AB, T2 venue string, N1 provenance line, UTF-8), what scholarmend's RIS parser (`scholarmend.parse.parse_ris`, pinned from PyPI) tolerates and silently drops, the known Covidence import behaviours, and the round-trip test. Use when writing or reviewing backend/src/openproceedings/export.py RIS code, `op export --format ris`, or an RIS fixture.
 ---
 
 # RIS export (spec 04 §Exports)

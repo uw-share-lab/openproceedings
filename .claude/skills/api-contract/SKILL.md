@@ -11,12 +11,12 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 | POST | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations). Debounced, called as the user types. Any well-formed body is a 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body is a 422 `API_BAD_PARAM`. |
 | GET | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | GET | `/papers/{id}` | full record with provenance |
-| GET | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl`, optional `record_id` **or** `index_version` → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; `record_id` → exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if gone, 409 `API_RECORD_MISMATCH` on a `mismatch`) |
-| POST | `/records` | freeze a search as an immutable search record → 201 `{record_id, page}` + `Location: /api/v1/records/<id>` (`.claude/skills/search-records/SKILL.md`) |
+| GET | `/export` | `format=ris\|csv\|bibtex\|jsonl` plus either `q` (with `mode` and optional `index_version`) or `record_id` alone → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; `record_id` → exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if gone, 409 `API_RECORD_MISMATCH` on a `mismatch`) |
+| POST | `/records` | freeze a search as an immutable search record → 201 `{record_id, page}` plus the three versions, + `Location: /api/v1/records/<id>` (`.claude/skills/search-records/SKILL.md`) |
 | GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`) |
-| GET | `/records/{id}/diff` | for a `drifted` record: added and removed ids (with titles), and which `index_version` inputs changed |
+| GET | `/records/{id}/diff` | for a record of any status: added and removed ids (with titles, paged), and which `index_version` inputs changed |
 | GET | `/coverage` | counts per venue × year × track × status, abstract-missing counts, snapshot date |
-| GET | `/meta` | current and available `index_version`s, field and track vocabularies |
+| GET | `/meta` | current and servable `index_version`s, field names, venue, track and status vocabularies |
 | GET | `/healthz` | liveness, index loaded |
 | GET | `/near-misses` | M5 only, a separate resource (`.claude/skills/specter2-embeddings/SKILL.md`) |
 

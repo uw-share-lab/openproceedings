@@ -115,8 +115,11 @@ A record must go (a legal request, personal data in `input`). With the API stopp
 - `API_REPLAY_MISMATCH` is ERROR once per record per process, DEBUG after that.
 - `GET /records/{id}` leaves `ids` out unless `?include=ids`; `/diff` pages each list (`offset`, `limit` ≤
   200) and keeps `added_total`/`removed_total` in full.
-- A mismatch test inserts a *new* row (a copy with a wrong `ids_hash`, `excluded`, one bucket, or
-  `canonical_hash`) through `RecordStore.insert`: the store stays append-only in tests too.
+- A mismatch test adds a *new* row, never an edit: a copy with a wrong `ids_hash`, `excluded`, one bucket,
+  `canonical_hash`, a non-canonical `canonical`, or a stored list `ids_hash` doesn't name. It is written
+  straight into `records.sqlite` with plain `INSERT`s (`tampered` in `backend/tests/contract/test_records.py`),
+  as a broken writer would, because `RecordStore.insert` refuses a row whose `ids_hash` isn't its list's.
+  The triggers allow a new row, so the store stays append-only in tests too.
 - `/export?record_id=` hands over exactly the cited set: the record's **stored** ids, from the index it
   names, never a re-run of the query (so a later query version changes nothing). 409
   `API_INDEX_VERSION_UNAVAILABLE` when that index is gone; 409 `API_RECORD_MISMATCH` when the replay is a

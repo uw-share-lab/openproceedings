@@ -159,7 +159,7 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
 |---|---|
 | [`api-engineer`](agents/api-engineer.md) | Implements the openproceedings FastAPI service |
 | [`api-contract-reviewer`](agents/api-contract-reviewer.md) | Read-only reviewer of the openproceedings HTTP contract |
-| [`export-format-validator`](agents/export-format-validator.md) | Validates openproceedings RIS, CSV and BibTeX exports end to end |
+| [`export-format-validator`](agents/export-format-validator.md) | Validates openproceedings RIS, CSV, BibTeX and JSONL exports end to end |
 | [`search-records-keeper`](agents/search-records-keeper.md) | Owns openproceedings search records |
 
 

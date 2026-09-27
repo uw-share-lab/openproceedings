@@ -218,7 +218,8 @@ class Vocabularies(Model):
 
 class MetaResponse(Versioned):
     index_versions: list[str] = Field(
-        description="every index on this instance, sorted; the served one included"
+        description="every index this instance can serve, sorted, the served one included: an index this "
+        "code can't open (another tokenizer, schema or Tantivy version) or one currently refused is left out"
     )
     text_fields: list[TextField]
     filter_fields: list[FilterField]

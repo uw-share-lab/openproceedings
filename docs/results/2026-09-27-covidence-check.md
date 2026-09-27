@@ -2,7 +2,10 @@
 
 **Status: not yet run.** Only a person can do this import. When it's done:
 1. Fill in the Result columns and the Outcome section, including the fixture's sha256.
-2. Tick TASK-004 AC#1 (`backlog task edit TASK-004 --check-ac 1`).
+2. Tick TASK-004 AC#1 (`backlog task edit TASK-004 --check-ac 1`) and TASK-036 AC#1
+   (`backlog task edit TASK-036 --check-ac 1`: the API's RIS body is byte for byte `op export`'s).
+3. Add a final summary to each and complete both: `backlog task complete TASK-004`, then
+   `backlog task complete TASK-036` (every other AC of both is already ticked).
 
 Once the sha256 is recorded, or AC#1 is ticked, `test_the_hand_imported_fixture_is_the_pinned_one` in
 `backend/tests/unit/test_covidence_fixture.py` checks that the file you imported is the one pinned in the

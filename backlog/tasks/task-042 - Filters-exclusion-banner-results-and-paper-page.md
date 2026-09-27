@@ -4,13 +4,14 @@ title: 'Filters, exclusion banner, results and paper page'
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-27 07:21'
+updated_date: '2026-09-27 11:33'
 labels:
   - frontend
 milestone: m-3
 dependencies:
   - TASK-041
   - TASK-035
+  - TASK-087
 ordinal: 41000
 ---
 
