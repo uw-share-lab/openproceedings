@@ -4,12 +4,14 @@ title: Coverage page and syntax help generated from golden tables
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
+updated_date: '2026-09-27 08:02'
 labels:
   - frontend
 milestone: m-3
 dependencies:
   - TASK-038
   - TASK-039
+  - TASK-082
 ordinal: 44000
 ---
 

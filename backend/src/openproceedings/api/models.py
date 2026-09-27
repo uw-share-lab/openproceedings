@@ -1,4 +1,4 @@
-"""The response models of `/parse`, `/search`, `/papers/{id}` and `/meta`: the contract (spec 04; api-contract
+"""The response models of `/parse`, `/search`, `/papers/{id}`, `/meta` and `/coverage`: the contract (spec 04; api-contract
 skill). Every response carries `index_version`, `tokenizer_version` and `query_version` (`Versioned`).
 
 Spans are half-open `[start, end)` code-point ranges over the raw source: the stored title or abstract for
@@ -142,3 +142,48 @@ class MetaResponse(Versioned):
     text_fields: list[TextField]
     filter_fields: list[FilterField]
     values: Vocabularies
+
+
+# --- /coverage ---------------------------------------------------------------------------------------
+class CoverageCell(Model):
+    track: Track
+    status: Status
+    count: int
+
+
+class VenueYearCoverage(Model):
+    """One venue-year of the snapshot (`coverage.breakdown`): its cells in vocabulary order (`unknown`
+    last, never folded), and its unknown and missing-abstract counts, 0 included."""
+
+    venue: Venue
+    year: int
+    records: int
+    abstract_missing: int
+    unknown_track: int
+    unknown_status: int
+    cells: list[CoverageCell]
+
+
+class CoverageTotals(Model):
+    records: int  # = the index's document count
+    abstract_missing: int
+    unknown_track: int
+    unknown_status: int
+
+
+class SnapshotInfo(Model):
+    """The snapshot the served index was built from, as its manifest records it."""
+
+    name: str
+    snapshot_hash: str
+    crawl_date: str  # the last fetch's UTC date
+    crawl_from: str  # the first and last fetch (UTC)
+    crawl_to: str
+    built_at: str
+    sources: list[str]
+
+
+class CoverageResponse(Versioned):
+    snapshot: SnapshotInfo
+    totals: CoverageTotals
+    venue_years: list[VenueYearCoverage]  # by venue name, then year

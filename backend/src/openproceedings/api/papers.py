@@ -42,6 +42,10 @@ class Papers:
     def get(self, index_version: str, rid: str) -> PaperRecord | None:
         return self._file(index_version).get(rid)
 
+    def records(self, index_version: str) -> RecordFile:
+        """The verified record file of the snapshot `index_version` was built from (`GET /coverage`)."""
+        return self._file(index_version)
+
     def _file(self, index_version: str) -> RecordFile:
         with self._lock:
             found = self._files.get(index_version)
