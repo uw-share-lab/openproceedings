@@ -1,11 +1,11 @@
 ---
 id: TASK-042
 title: 'Filters, exclusion banner, results and paper page'
-status: In Progress
+status: Done
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-27 21:42'
+updated_date: '2026-09-27 22:38'
 labels:
   - frontend
 milestone: m-3

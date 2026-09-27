@@ -1,10 +1,10 @@
 ---
 id: TASK-082
 title: Statuses indexed and per-source crawl dates for GET /coverage
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 08:02'
-updated_date: '2026-09-27 21:35'
+updated_date: '2026-09-27 22:38'
 labels:
   - api
   - ingest

@@ -1,10 +1,10 @@
 ---
 id: TASK-043
 title: Concept-group query builder
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-27 21:41'
+updated_date: '2026-09-27 22:38'
 labels:
   - frontend
 milestone: m-3

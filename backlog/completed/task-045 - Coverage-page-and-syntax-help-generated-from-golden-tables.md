@@ -1,10 +1,10 @@
 ---
 id: TASK-045
 title: Coverage page and syntax help generated from golden tables
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-27 21:36'
+updated_date: '2026-09-27 22:38'
 labels:
   - frontend
 milestone: m-3
