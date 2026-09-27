@@ -4,4 +4,4 @@
 # default filters and the `source:` alias table. Bump it whenever some query could mean something
 # different (spec 04 §Conventions, index-versioning skill). TOKENIZER_VERSION (normalize.py) covers the
 # token contract.
-QUERY_VERSION = "1"
+QUERY_VERSION = "2"

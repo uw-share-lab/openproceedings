@@ -41,11 +41,13 @@ is its name; markup that opens a word (an accent macro such as `\"{O}del` or `\v
 task-074; two spans overlap only on exactly one code point that folds to several pieces, `½` → `1`, `2`:
 inside a U+0338 cluster each piece spans the raw characters it came from, except that pieces before the first
 raw U+0345 end at it even if a later mark belongs to them, task-075; `Token.reach` is the end of the whole
-characters a token took a piece from, and the lexer's detached-wildcard check reads it, never `end`) and
+characters a token took a piece from; no span decides what parses: the lexer's detached-wildcard check reads
+the folded pieces after the last word, `tokenize_with_tail(text) -> (tokens, Tail)`, decision-008) and
 `normalize(text) -> list[str]`. It works character by character (with two exact shortcuts, task-073: a whole
 text that is ASCII with no `\` or `$` is its lower-cased `[A-Za-z0-9]+` runs, and in the loop an ASCII
 character with no mark after it skips `_fold`; `test_highlight_speed.py` pins both to a frozen copy of the
-loop, `tests/unit/tokenize_before.py`); a Hypothesis property pins it equal to an
+loop, `tests/unit/tokenize_before.py`, and `test_normalize.py` checks every ASCII character alone and in
+`a?b` against the loop, and that no operator or letter look-alike key is ASCII); a Hypothesis property pins it equal to an
 independent whole-string definition (block ranges, not Unicode names), including an adversarial Unicode
 alphabet, and the nightly workflow checks every code point in 8 contexts (`OP_EXHAUSTIVE=1`). The index is fed its output joined by spaces, and the Tantivy analyzer only splits on
 whitespace + lowercases (a no-op on normalized input). Any second implementation — in the frontend

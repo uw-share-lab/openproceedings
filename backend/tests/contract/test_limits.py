@@ -199,7 +199,11 @@ def test_a_40k_character_query_is_rejected_before_parsing(client: TestClient, no
 
 
 def test_the_cap_is_code_points_and_exactly_the_parsers(client: TestClient) -> None:
-    at_cap = "信" * MAX_QUERY_LENGTH  # 2,000 code points, 6,000 UTF-8 bytes: allowed
+    # 2,000 code points, 6,000 UTF-8 bytes, already in canonical form (a longer canonical is refused too:
+    # decision-008), so it is allowed
+    clauses = " AND track:main AND status:accepted)"
+    at_cap = "(" + "信" * (MAX_QUERY_LENGTH - 1 - len(clauses)) + clauses
+    assert len(at_cap) == MAX_QUERY_LENGTH and parser.parse(at_cap).canonical == at_cap
     assert checked_query(at_cap) == at_cap
     assert client.get(SEARCH, params={"q": at_cap}).status_code == 200
     with pytest.raises(ApiError) as e:

@@ -30,6 +30,7 @@ Code: `backend/src/openproceedings/query/{lexer,parser,ast,canonical}.py`.
 | `-` is negation only at the start of a primary | `vision-language` is one WORD that normalizes to `vision` `language` (a two-token term, matched at consecutive positions). `-bias` after whitespace/`(` is `NOT bias`. |
 | A WORD that normalizes to >1 token | Behaves as a phrase of those tokens in one field (golden: `vision-language` matches "vision language", not "visionlanguage"). |
 | Wildcard stem length | `*` and `$` both need a written stem of ≥ 3 characters (`a$` → error). The letters and digits of the whole stem count after normalisation, so `gpt-4*` passes and `a-b*` fails. A `*` elsewhere in a word → `PARSE_WILDCARD_NOT_SUFFIX`; a trailing `$` that closes a `$…$` pair is math, not a wildcard. More than 200 expansions of one wildcard → error suggesting a longer stem. |
+| Wildcard attachment | The stem's last **folded** piece must be a letter or digit, else `PARSE_WILDCARD_DETACHED` (decision-008): `abcd⒈*` (`1.`) and `abcd⑴*` (`(1)`) are detached like `abcd1.*`; `abcd½*` (`1⁄2`) is attached. Read from `normalize.tokenize_with_tail`, never from a span or `Token.reach`. |
 | Wildcard inside a phrase | Allowed, expanded per position: `"large language model$"` is a `Phrase` whose last element is a `Wildcard`. |
 | A wildcard WORD that normalizes to >1 token | A phrase with the wildcard on its last token: `gpt-4*` ≡ `"gpt 4*"`. |
 | A WORD that normalizes to 0 tokens | `PARSE_EMPTY_TERM` with a span (`a ~ b`); a bare `-`/`--` is `PARSE_AMBIGUOUS_MINUS` instead. |
@@ -60,6 +61,10 @@ default filters made explicit (`.claude/skills/default-filters/SKILL.md`), wildc
 Top-level filters are ordered `venue`, `year`, `track`, `status`, then any other field alphabetically; the
 values in a single-field OR group are sorted; one spelling per value (e.g. `venue:NeurIPS`). Decision-001
 records this; snapshot tests pin it.
+
+**Canonical length:** a query whose canonical string is over 2,000 code points is `PARSE_TOO_LONG` (whole-input
+span), even if the input fits: the defaults, ` AND ` per juxtaposition and per-leaf field prefixes add up
+(decision-008). So every accepted canonical string re-parses (property-tested near the cap).
 
 **Idempotence (property-tested):** `parse(canonical).canonical == canonical`, and AST → string → AST is the
 identity. A change that alters any existing canonical string changes every saved record's hash: treat it as

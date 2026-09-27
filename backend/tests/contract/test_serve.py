@@ -114,7 +114,11 @@ def test_the_real_server_logs_one_access_line_per_request_and_nothing_else_of_uv
     assert get(port, "/api/v1/healthz")[1]["index_loaded"] is True
     status, body = get(port, f"/api/v1/search?q={q('trust ' + SECRET)}")
     assert status == 200 and body["index_version"] == store.big
-    status, body = get(port, f"/api/v1/search?q={q('信' * 2_000)}")  # 18 KB of URL: over uvicorn's default
+    # 2,000 code points in canonical form (a longer canonical is PARSE_TOO_LONG): ~18 KB of URL, over
+    # uvicorn's default
+    clauses = " AND track:main AND status:accepted)"
+    at_cap = "(" + "信" * (2_000 - 1 - len(clauses)) + clauses
+    status, body = get(port, f"/api/v1/search?q={q(at_cap)}")
     assert status == 200
     status, body = get(port, f"/api/v1/search?q={q(SECRET * 2_000)}")  # 40k characters
     assert status == 422 and body["error"]["code"] == "PARSE_TOO_LONG"

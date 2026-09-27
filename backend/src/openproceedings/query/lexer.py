@@ -25,7 +25,8 @@ Lexical rules, in the order they are tried at the start of each lexeme:
 - A WORD (or phrase part) ending in `*` or in a `$` outside math is a wildcard. Its stem must keep at
   least 3 letters or digits after normalisation, counting the words before it in a phrase (decision-001;
   `"generative AI$"` is fine, as `generative-AI$` is), and the wildcard must directly follow a
-  letter or digit (`vision-*` is PARSE_WILDCARD_DETACHED). A `*` or `$` anywhere else outside math is
+  letter or digit (`vision-*` is PARSE_WILDCARD_DETACHED), judged on the stem's folded pieces
+  (decision-008), so `abcd⒈*` (`⒈` is `1.`) is detached like `abcd1.*`. A `*` or `$` anywhere else outside math is
   PARSE_WILDCARD_NOT_SUFFIX, except a `$` before a digit (currency, `US$5`).
 
 Characters whose NFKC form is one of these syntax characters (full-width `（`, `－`, `＂`, `＊`, …) act as
@@ -55,7 +56,14 @@ from enum import StrEnum
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip
 from openproceedings.query.mathsyms import GREEK, OPERATORS
-from openproceedings.query.normalize import first_math_end, math_regions, tokenize
+from openproceedings.query.normalize import (
+    Tail,
+    Token,
+    first_math_end,
+    math_regions,
+    tokenize,
+    tokenize_with_tail,
+)
 from openproceedings.vocab import QUERY_FILTER_FIELDS, TEXT_FIELDS
 
 FIELDS = TEXT_FIELDS + QUERY_FILTER_FIELDS  # incl. Scholar's `source:` (vocab.py)
@@ -476,7 +484,7 @@ class _Lexer:
         return Lexeme(Kind.WORD, start, end, raw, stem=stem, wildcard=wildcard)
 
     def check_stem(self, raw: str, stem: str, wildcard: str, start: int, end: int, before: int) -> None:
-        toks = tokenize(stem)
+        toks, tail = tokenize_with_tail(stem)
         if not toks or before + len("".join(t.text for t in toks)) < MIN_STEM:
             self.error(
                 DiagnosticCode.WILDCARD_STEM_TOO_SHORT,
@@ -493,17 +501,35 @@ class _Lexer:
                 start,
                 end,
             )
-        # `reach`, not `end`: the whole cluster the last piece came from (task-075 review), so a slash on a
-        # piece the word didn't take (`abcd⒈` + slash + `*`) doesn't detach the wildcard
-        elif toks[-1].reach < len(stem):
+        # Judged on the folded pieces (spec 02, decision-008): `abcd⒈*` is `abcd1.*`, so its `*` follows `.`,
+        # whatever the raw character looked like or whether a U+0338 sits on it
+        elif tail.pieces:
             self.error(
                 DiagnosticCode.PARSE_WILDCARD_DETACHED,
-                f"The `{wildcard}` in `{clip(raw)}` follows `{clip(stem[toks[-1].reach :])}`, not a letter or digit, so it "
-                f"would match any word starting `{clip(toks[-1].text)}` — put it straight after the stem, e.g. "
-                f"`{clip(stem[: toks[-1].reach])}{wildcard}`.",
+                f"The `{wildcard}` in `{clip(raw)}` follows {self.tail_name(stem, tail)}, not a letter or digit, so "
+                f"it would match any word starting `{clip(toks[-1].text)}` — put it straight after the stem, e.g. "
+                f"`{clip(self.attached(stem, toks, tail, wildcard))}`.",
                 start,
                 end,
             )
+
+    @staticmethod
+    def tail_name(stem: str, tail: Tail) -> str:
+        """How a detached wildcard's message names what it follows: the folded pieces, and the raw text
+        they came from when that looks different (`.` from `⒈`)."""
+        written = stem[tail.start :]
+        shown = tail.pieces if tail.pieces.strip() else written
+        return f"`{clip(shown)}`" + (f" (from `{clip(written)}`)" if written != shown else "")
+
+    @staticmethod
+    def attached(stem: str, toks: list[Token], tail: Tail, wildcard: str) -> str:
+        """The fix hint: the wildcard on the stem without its tail, as written when the tail is whole
+        characters (`vision-*` → `vision*`), else from its tokens (`abcd⒈*` → `abcd1*`, `abcd⑴*` →
+        `"abcd 1*"`)."""
+        if tail.start >= toks[-1].end:
+            return stem[: tail.start] + wildcard
+        words = " ".join(t.text for t in toks) + wildcard
+        return words if len(toks) == 1 else f'"{words}"'
 
     def check_word(self, raw: str, stem: str, start: int, end: int) -> None:
         """Checks for a top-level WORD (not a phrase part, where these characters are plainly literal)."""

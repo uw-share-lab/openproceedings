@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from hypothesis import assume, given, settings
+from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.query.ast import And, Filter, Node, Not, Or, structure
 from openproceedings.query.canonical import canonicalize, render
-from openproceedings.query.parser import parse
+from openproceedings.query.parser import MAX_QUERY_LENGTH, parse
 
 from tests.corpus import fixture_records
-from tests.strategies import asts, filters, negative_asts
+from tests.strategies import asts, filters, near_cap_queries, negative_asts
 
 ENGINE = ReferenceEngine(fixture_records())
 
@@ -111,3 +111,19 @@ def test_generated_trees_mostly_match_something() -> None:
 def _own_field(n: Node) -> str | None:
     inner = n.child if isinstance(n, Not) else n
     return inner.field if isinstance(inner, Filter) else None
+
+
+@settings(deadline=None)
+@given(near_cap_queries(), st.sampled_from(["native", "scholar"]))
+@example(" ".join(f"w{i:04d}" for i in range(284)), "native")  # 1,703 cp; canonical 2,909: refused
+@example("(" + "x" * 1_963 + " AND track:main AND status:accepted)", "native")  # canonical at the cap
+def test_an_accepted_query_near_the_cap_replays_from_its_canonical_string(q: str, mode: str) -> None:
+    """decision-008: a query is accepted only if its canonical string is too, so a saved search record can
+    always be replayed and pasted back (records.py re-parses the canonical string, natively)."""
+    result = parse(q, mode)  # type: ignore[arg-type]
+    if result.errors:
+        return
+    assert result.canonical is not None and len(result.canonical) <= MAX_QUERY_LENGTH
+    again = parse(result.canonical)
+    assert again.errors == [], (q, again.errors)
+    assert again.canonical == result.canonical and again.canonical_hash == result.canonical_hash
