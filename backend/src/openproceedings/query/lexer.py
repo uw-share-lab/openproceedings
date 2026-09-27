@@ -493,12 +493,14 @@ class _Lexer:
                 start,
                 end,
             )
-        elif toks[-1].end < len(stem):
+        # `reach`, not `end`: the whole cluster the last piece came from (task-075 review), so a slash on a
+        # piece the word didn't take (`abcd⒈` + slash + `*`) doesn't detach the wildcard
+        elif toks[-1].reach < len(stem):
             self.error(
                 DiagnosticCode.PARSE_WILDCARD_DETACHED,
-                f"The `{wildcard}` in `{clip(raw)}` follows `{clip(stem[toks[-1].end :])}`, not a letter or digit, so it "
+                f"The `{wildcard}` in `{clip(raw)}` follows `{clip(stem[toks[-1].reach :])}`, not a letter or digit, so it "
                 f"would match any word starting `{clip(toks[-1].text)}` — put it straight after the stem, e.g. "
-                f"`{clip(stem[: toks[-1].end])}{wildcard}`.",
+                f"`{clip(stem[: toks[-1].reach])}{wildcard}`.",
                 start,
                 end,
             )

@@ -503,3 +503,25 @@ def test_m1_gate_mutant_rows() -> None:
 def test_a_year_is_at_most_four_digits_alone_or_in_a_range() -> None:
     assert [e.code for e in parse("year:02024").errors] == [DiagnosticCode.FIELD_UNKNOWN_VALUE]
     assert [e.code for e in parse("year:00002020..2024").errors] == [DiagnosticCode.FIELD_UNKNOWN_VALUE]
+
+
+# task-075 review: a wildcard straight after a character that folds to several pieces is attached, with or
+# without a U+0338 slash on it. Whether it is detached is decided by the raw characters the last word took a
+# piece from (Token.reach), never by its highlight span, so per-piece spans can't change what parses.
+@pytest.mark.parametrize(
+    ("q", "tree"),
+    [
+        ("abcd⒈*", "abcd1*"),  # DIGIT ONE FULL STOP: `1.`
+        ("abcd⒈̸*", "abcd1*"),  # the slash is on the `.`, a piece the word didn't take
+        ("abcd⑴*", '"abcd 1*"'),  # PARENTHESIZED DIGIT ONE: `(1)`
+        ("abcd⑴̸*", '"abcd 1*"'),
+        ("abcd½̸*", '"abcd1 2*"'),  # the 1/2: the last piece carries the slash
+        ("abcd≠ͅ*", '"abcd neq ι*"'),  # U+0345 after neq: its own word, iota
+        ('"trust abcd⒈̸*"', '"trust abcd1*"'),
+    ],
+    ids=ascii,
+)
+def test_wildcard_after_a_multi_piece_character_stays_attached(q: str, tree: str) -> None:
+    result = parse(q)
+    assert result.errors == []
+    assert result.ast is not None and render(canonicalize(result.ast)) == tree
