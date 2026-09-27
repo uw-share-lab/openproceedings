@@ -6,7 +6,8 @@ included). `LastCatch`, just inside CORS, catches an unexpected exception: one E
 frames (never the message), and a 500 `API_INTERNAL` envelope if nothing was sent yet (which CORS then
 decorates like any response), or `aborted: true` on the access line if the response had started. Nothing
 is re-raised, so the server never logs a traceback of its own (its last line would be the message, which
-can quote the query).
+can quote the query). A response that started but never sent its final body message, with nothing having
+failed, is a client that went away mid-stream: the line says `client_disconnected: true`.
 
 `RateLimit` is a token bucket per client. The client is the TCP peer, unless the peer is a configured
 trusted proxy: then it is the right-most `X-Forwarded-For` address that is not itself a trusted proxy.
@@ -61,13 +62,15 @@ class AccessLog:
         fields: dict[str, object] = {"request_id": rid}
         scope[ACCESS] = fields
         status = 500
-        sent = False
+        sent = completed = False
 
         async def tracked(message: Message) -> None:
-            nonlocal status, sent
+            nonlocal status, sent, completed
             if message["type"] == "http.response.start":
                 status, sent = int(message["status"]), True
             await send(message)
+            if message["type"] == "http.response.body" and not message.get("more_body", False):
+                completed = True  # the final body message went out: the response is whole
 
         with bind(request_id=rid):
             try:
@@ -86,6 +89,10 @@ class AccessLog:
                 line.update({k: fields[k] for k in ANNOTATIONS if k in fields and k != "index_version"})
                 if fields.get("aborted"):
                     line["aborted"] = True  # failed after the response started: the body is cut short
+                elif sent and not completed:
+                    # started, never finished, and nothing failed: the client went away mid-stream (the
+                    # server cancelled the response), so the body it has is cut short
+                    line["client_disconnected"] = True
                 log.log(logging.DEBUG if template == HEALTH_PATH else logging.INFO, "request", extra=line)
 
 

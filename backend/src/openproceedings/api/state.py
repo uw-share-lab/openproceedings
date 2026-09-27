@@ -14,8 +14,17 @@ its snapshot and coverage or not at all. A failed load or reload keeps the engin
 
 Index selection is restricted (task-034 notes; `cli.resolve_snapshot` is not reused): the configured name
 must match `config.INDEX_NAME`, and what it resolves to — through the `current` symlink — must be a
-directory directly under `<data_dir>/indexes/` whose name is an index_version. A request pinned to another
-index_version (`GET /export?index_version=`) gets it from `IndexState.pinned`, selected by the same rule.
+directory directly under `<data_dir>/indexes/` whose name is an index_version.
+
+Pinned index_versions (`GET /export?index_version=` or `?record_id=`, a record's replay and diff) come from
+`IndexState.pinned(version) -> Pinned(engine, reason)`, the one loader: the name is selected by the same rule
+and must resolve to itself (not `current`, not an alias symlink); the engine opens it as it opens the served
+one (every file re-hashed) and must report that version. `reason` is `ok`, `absent` (no such index here),
+`unloadable` (this code can't serve it: another tokenizer, schema or Tantivy version, or a read error, one
+WARNING) or `tampered` (its files or manifest don't verify, one ERROR). Engines are held in an LRU of
+`ApiConfig.pinned_indexes`; a refusal is remembered for `pinned_refusal_seconds`, or until the next reload
+(SIGHUP). A cache hit takes no lock that an open holds; opens of one version are serialised, of different
+versions not.
 """
 
 from __future__ import annotations
@@ -26,14 +35,17 @@ import re
 import signal
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from types import FrameType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from openproceedings.api.config import INDEX_NAME
 from openproceedings.api.errors import frames
 from openproceedings.diagnostics import OpenProceedingsError
+from openproceedings.engine.index import IndexBuildError
 from openproceedings.ingest.snapshot import RecordFile, SnapshotError
 
 if TYPE_CHECKING:
@@ -42,7 +54,18 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 VERSION_DIR = re.compile(r"[0-9a-f][0-9a-f-]{0,63}")
-KEEP_PINNED = 1  # engines of other index_versions held open for pinned requests (besides the served one)
+MAX_REFUSALS = 256  # refused pins remembered (a client can name any number of absent versions)
+
+PinnedReason = Literal["ok", "absent", "unloadable", "tampered"]
+
+
+@dataclass(frozen=True, slots=True)
+class Pinned:
+    """What `IndexState.pinned(version)` found: the engine (`reason == "ok"`), or None and why not."""
+
+    engine: TantivyEngine | None
+    reason: PinnedReason
+
 
 type Opener = Callable[[Path], TantivyEngine]  # TantivyEngine itself; tests wrap it to slow a load down
 
@@ -100,7 +123,16 @@ def coverage_of(engine: TantivyEngine, records: RecordFile) -> CoverageResponse:
 
 
 class IndexState:
-    def __init__(self, data_dir: Path, name: str, opener: Opener) -> None:
+    def __init__(
+        self,
+        data_dir: Path,
+        name: str,
+        opener: Opener,
+        *,
+        keep_pinned: int = 4,
+        refusal_seconds: float = 300.0,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self._data_dir = data_dir
         self._name = name
         self._opener = opener
@@ -109,8 +141,15 @@ class IndexState:
         # across a swap); both are built and checked at load, before the swap
         self._loaded: dict[str, tuple[RecordFile, CoverageResponse]] = {}
         self._reloading = threading.Lock()  # one load at a time; readers never take it
-        self._pinned: dict[str, TantivyEngine] = {}  # engines of other versions opened for a pin (`pinned`)
-        self._pinning = threading.Lock()  # one pinned open at a time
+        # pinned engines (LRU) and refusals (version -> (reason, until)); both under `_cache_lock`, held
+        # only to read or update the two maps, never across an open
+        self._keep_pinned = keep_pinned
+        self._refusal_seconds = refusal_seconds
+        self._clock = clock
+        self._pinned: OrderedDict[str, TantivyEngine] = OrderedDict()
+        self._refused: OrderedDict[str, tuple[PinnedReason, float]] = OrderedDict()
+        self._cache_lock = threading.Lock()
+        self._opening: dict[str, threading.Lock] = {}  # one open per version at a time (under _cache_lock)
 
     @property
     def engine(self) -> TantivyEngine | None:
@@ -121,6 +160,8 @@ class IndexState:
         """Load the configured index and swap it in; True if an engine is being served afterwards and it is
         the configured one. Never raises: a failure is one ERROR line, and the previous engine stays."""
         with self._reloading:
+            with self._cache_lock:
+                self._refused.clear()  # a reload (SIGHUP) looks at every refused pin again
             return self._load()
 
     def _load(self) -> bool:
@@ -169,15 +210,23 @@ class IndexState:
         return loaded[1] if loaded is not None else None
 
     def available(self, engine: TantivyEngine | None) -> list[str]:
-        """Every index_version on this instance (`GET /meta`), sorted: each directory directly under
-        `<data_dir>/indexes/` named like one and holding a manifest (the `current` symlink and `.tmp-`
-        leftovers are not versions), plus `engine`'s (the one this request read)."""
+        """Every index_version this instance can serve (`GET /meta`), sorted: each directory directly under
+        `<data_dir>/indexes/` named like one and holding a manifest this code can serve (`unservable`: same
+        tokenizer, schema and Tantivy versions; read without re-hashing) and not refused as a pin (the
+        `current` symlink and `.tmp-` leftovers are not versions), plus `engine`'s (the one this request
+        read)."""
         indexes = self._data_dir / "indexes"
+        now = self._clock()
+        with self._cache_lock:
+            refused = {v for v, (_reason, until) in self._refused.items() if until > now}
         try:
             found = {
                 d.name
                 for d in indexes.iterdir()
-                if VERSION_DIR.fullmatch(d.name) and not d.is_symlink() and (d / "manifest.json").is_file()
+                if VERSION_DIR.fullmatch(d.name)
+                and not d.is_symlink()
+                and d.name not in refused
+                and _servable(d)
             }
         except OSError:
             found = set()
@@ -185,39 +234,87 @@ class IndexState:
             found.add(engine.index_version)
         return sorted(found)
 
-    def pinned(self, version: str) -> TantivyEngine | None:
-        """The engine of index_version `version` (an export pinned by `index_version`; spec 04 §Exports), or
-        None when this instance doesn't hold it. The served engine if it is that version; otherwise
-        `<data_dir>/indexes/<version>`, validated exactly as the configured index is (`index_path`: an
-        index_version name, a directory directly under `indexes/`; `current` and aliases are refused), opened
-        read-only on first use and kept (`KEEP_PINNED` of them, the oldest dropped first)."""
+    def pinned(self, version: str) -> Pinned:
+        """The engine of index_version `version`, or why this instance can't serve it (module docstring).
+        The served engine if it is that version. Never raises for a version that is absent, unloadable or
+        tampered with; each refusal is logged once (then remembered)."""
         engine = self._engine
         if engine is not None and engine.index_version == version:
-            return engine
+            return Pinned(engine, "ok")
         if not VERSION_DIR.fullmatch(version):
-            return None
-        with self._pinning:
-            found = self._pinned.get(version)
-            if found is not None:
-                return found
-            try:
-                path = index_path(self._data_dir, version)
-            except IndexSelectionError:
-                return None
-            if path.name != version:  # a symlink named like a version: not the version asked for
-                return None
-            started = time.perf_counter()
-            found = self._opener(path)  # verifies every file, as a load does
-            if found.index_version != version:  # a directory whose manifest names another version
-                return None
-            self._pinned[version] = found
-            while len(self._pinned) > KEEP_PINNED:
-                del self._pinned[next(iter(self._pinned))]
-            log.info(
-                "index_pinned_opened",
-                extra={"index_version": version, "ms": round((time.perf_counter() - started) * 1000)},
-            )
-            return found
+            return Pinned(None, "absent")
+        cached = self._cached(version)
+        if cached is not None:
+            return cached
+        with self._cache_lock:
+            opening = self._opening.setdefault(version, threading.Lock())
+        with opening:  # one open of this version at a time; others wait, then find it cached
+            cached = self._cached(version)
+            if cached is None:
+                cached = self._open_pinned(version)
+                with self._cache_lock:
+                    self._remember(version, cached)
+        with self._cache_lock:
+            self._opening.pop(version, None)
+        return cached
+
+    def _cached(self, version: str) -> Pinned | None:
+        with self._cache_lock:
+            engine = self._pinned.get(version)
+            if engine is not None:
+                self._pinned.move_to_end(version)
+                return Pinned(engine, "ok")
+            refused = self._refused.get(version)
+            if refused is not None:
+                reason, until = refused
+                if until > self._clock():
+                    return Pinned(None, reason)
+                del self._refused[version]
+        return None
+
+    def _remember(self, version: str, found: Pinned) -> None:  # under _cache_lock
+        if found.engine is not None:
+            self._pinned[version] = found.engine
+            while len(self._pinned) > self._keep_pinned:
+                self._pinned.popitem(last=False)  # the least recently used
+        else:
+            self._refused[version] = (found.reason, self._clock() + self._refusal_seconds)
+            while len(self._refused) > MAX_REFUSALS:
+                self._refused.popitem(last=False)
+
+    def _open_pinned(self, version: str) -> Pinned:
+        started = time.perf_counter()
+        try:
+            path = index_path(self._data_dir, version)
+        except IndexSelectionError:
+            return self._refuse(version, "absent", None)
+        if path.name != version:  # a symlink named like a version: not the version asked for
+            return self._refuse(version, "absent", None)
+        try:
+            engine = self._opener(path)  # verifies every file (the manifest names this very directory)
+        except IndexBuildError as e:  # its files or manifest don't verify
+            return self._refuse(version, "tampered", e)
+        except (OpenProceedingsError, OSError, ValueError, RuntimeError) as e:
+            # another tokenizer/schema/Tantivy version (EngineInternalError), or Tantivy can't read a
+            # segment (ValueError), or the files can't be read
+            return self._refuse(version, "unloadable", e)
+        if engine.index_version != version:  # defence in depth: verify_index already ties the two
+            return self._refuse(version, "tampered", None)
+        log.info(
+            "index_pinned_opened",
+            extra={"index_version": version, "ms": round((time.perf_counter() - started) * 1000)},
+        )
+        return Pinned(engine, "ok")
+
+    def _refuse(self, version: str, reason: PinnedReason, error: BaseException | None) -> Pinned:
+        """One line per refusal (then it is remembered): `absent` at DEBUG (a client can name any version),
+        `unloadable` at WARNING, `tampered` at ERROR. The error's type, never its message (it names paths)."""
+        level = {"absent": logging.DEBUG, "unloadable": logging.WARNING, "tampered": logging.ERROR}[reason]
+        fields: dict[str, object] = {"index_version": version, "reason": reason}
+        if error is not None:
+            fields["error"] = type(error).__name__
+        log.log(level, "pinned_index_unavailable", extra=fields)
+        return Pinned(None, reason)
 
     def load_in_background(self) -> threading.Thread:
         thread = threading.Thread(target=self.load, name="op-index-load", daemon=True)
@@ -238,3 +335,14 @@ def install_sighup(state: IndexState) -> Callable[[], None]:
         signal.signal(signal.SIGHUP, previous)
 
     return restore
+
+
+def _servable(index: Path) -> bool:
+    """Whether this code can serve the index in directory `index`, from its manifest alone."""
+    from openproceedings.engine.tantivy_engine import unservable
+
+    try:
+        manifest = json.loads((index / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(manifest, dict) and unservable(manifest) is None

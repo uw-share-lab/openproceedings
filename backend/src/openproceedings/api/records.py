@@ -3,7 +3,7 @@ records; search-records skill).
 
 Transport only: freezing, the store and the replay are `openproceedings.records`, which a future `op record`
 (spec 08) calls too. A record is saved from the query re-run here (never the client's counts), on the one
-engine this request read; a replay loads the record's pinned index read-only on demand (`api/pinned.py`).
+engine this request read; a replay loads the record's pinned index read-only on demand (`IndexState.pinned`).
 
 Every replay is a 200 whose `replay.status` is `reproduced`, `drifted` or `mismatch`. A malformed record id
 is 422 `API_BAD_PARAM`; an unknown one 404 `API_RECORD_NOT_FOUND` (the message never repeats it).
@@ -35,12 +35,12 @@ from openproceedings.api.models import (
     ReplayInfo,
     versions,
 )
-from openproceedings.api.pinned import PinnedIndexes
-from openproceedings.api.state import Opener
+from openproceedings.api.state import IndexState
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.records import (
     RECORDS_FILE,
+    PinnedLoader,
     RecordStore,
     Replay,
     SearchRecord,
@@ -60,14 +60,14 @@ class Records:
 
     data_dir: Path
     store: RecordStore
-    pinned: PinnedIndexes
+    pinned: PinnedLoader  # `IndexState.pinned(v).engine`
 
 
-def install(app: FastAPI, data_dir: Path, opener: Opener) -> None:
+def install(app: FastAPI, data_dir: Path, state: IndexState) -> None:
     """Give `app` its record store (`<data_dir>/records.sqlite`, created on the first save) and the
-    on-demand loader of pinned indexes."""
+    on-demand loader of pinned indexes (`state.pinned`, the one loader)."""
     app.state.records = Records(
-        data_dir, RecordStore(data_dir / RECORDS_FILE), PinnedIndexes(data_dir, opener)
+        data_dir, RecordStore(data_dir / RECORDS_FILE), lambda version: state.pinned(version).engine
     )
 
 
@@ -89,7 +89,7 @@ def _stored(request: Request, record_id: str) -> SearchRecord:
 
 def _replayed(request: Request, engine: TantivyEngine, record: SearchRecord) -> Replay:
     records = _records(request)
-    result = replay(record, engine, records.pinned.get, records.data_dir)
+    result = replay(record, engine, records.pinned, records.data_dir)
     annotate(
         request,
         index_version=result.engine.index_version,
@@ -198,7 +198,7 @@ def _titles(request: Request, result: Replay, record: SearchRecord) -> dict[str,
     titles = {i: str(r["title"]) for i, r in result.engine.display(wanted).items()}
     missing = [i for i in result.removed if i not in titles]
     if missing and record.index_version != result.engine.index_version:
-        old = _records(request).pinned.get(record.index_version)
+        old = _records(request).pinned(record.index_version)
         if old is not None:
             titles.update({i: str(r["title"]) for i, r in old.display(missing).items()})
     return titles

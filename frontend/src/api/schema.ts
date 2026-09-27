@@ -33,8 +33,10 @@ export interface paths {
         };
         /**
          * Export
-         * @description Every record the query matches, in `format`, from the pinned `index_version` (else the served index).
-         *     Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and index.
+         * @description Every record the query matches, in `format`: of `q` (with `mode`, default `native`) on the pinned
+         *     `index_version` (else the served index), or of the stored search record `record_id` (alone: its query,
+         *     mode and index_version). Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same
+         *     query and index.
          */
         get: operations["export"];
         put?: never;
@@ -1031,10 +1033,11 @@ export interface operations {
     export: {
         parameters: {
             query: {
-                q: string;
                 format: "ris" | "csv" | "bibtex" | "jsonl";
-                mode?: "native" | "scholar";
+                q?: string | null;
+                mode?: ("native" | "scholar") | null;
                 index_version?: string | null;
+                record_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -1042,7 +1045,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The entire matched set, ordered by id, with `X-Total` and `X-Index-Version`. */
+            /** @description The entire matched set, ordered by id, with `X-Total`, `X-Index-Version`, `X-Tokenizer-Version` and `X-Query-Version`. */
             200: {
                 headers: {
                     [name: string]: unknown;

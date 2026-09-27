@@ -64,6 +64,8 @@ def header(fmt: str) -> str:
 
 def entries(fmt: str, records: Iterable[dict[str, Any]], provenance: Provenance) -> Iterator[str]:
     """One string per record of `records`, as `fmt` writes it (after `header(fmt)`)."""
+    if fmt not in FORMATS:
+        raise ValueError(f"unknown export format {fmt!r}")
     writer = {"ris": _ris, "csv": _csv, "bibtex": _bibtex, "jsonl": _jsonl}[fmt]
     return writer(records, provenance)
 

@@ -1,17 +1,20 @@
 """`GET /api/v1/export` (task-036; spec 04 §Exports): `op export`'s bytes for the same query and index, the
 whole matched set in id order, `X-Total` (= `/search`'s `total`) and `X-Index-Version`, the media type and
 filename, every format round-tripped to its ids by an independent parser (scholarmend for RIS, the pinned
-refaudit for BibTeX), a pinned `index_version` served from that index (409 when this instance lacks it),
-every refusal before the first byte, a stream that finishes on its index across a hot swap, and a failure
-mid-stream logged as aborted with no query text anywhere."""
+refaudit for BibTeX), a pinned `index_version` served from that index (409 when this instance can't serve
+it: absent, tampered with, or built by other code), a saved record's export (`record_id` alone; 409 for a
+mismatch record), every refusal before the first byte, a body that really streams in bounded chunks, a
+stream that finishes on its index across a hot swap, and a failure mid-stream logged as aborted with no
+query text anywhere."""
 
 from __future__ import annotations
 
 import csv
 import io
 import json
+import shutil
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, get_args
@@ -24,11 +27,15 @@ from openproceedings.api import export as route
 from openproceedings.api.state import IndexState
 from openproceedings.engine.protocol import EngineInternalError
 from openproceedings.engine.tantivy_engine import TantivyEngine
+from openproceedings.query import QUERY_VERSION
+from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import parse
 from refaudit.bibtex import parse_string
 from scholarmend.parse import parse_ris
 
-from tests.contract.conftest import SECRET, Store, make_app, point_current
+from tests.contract.conftest import SECRET, Store, build, make_app, point_current
+from tests.contract.test_records import save, tampered
+from tests.fixtures.corpus.synthetic_5k import records
 
 EXPORT = "/api/v1/export"
 DATE = "2026-09-27"
@@ -146,6 +153,8 @@ def test_headers_name_the_set_its_type_and_a_filename(client: TestClient, store:
     total = client.get("/api/v1/search", params={"q": q, "limit": 0}).json()["total"]
     assert r.headers["x-total"] == str(total) and r.headers["x-index-version"] == store.big
     assert r.headers["content-type"] == route.MEDIA[fmt][0]
+    assert r.headers["x-tokenizer-version"] == TOKENIZER_VERSION
+    assert r.headers["x-query-version"] == QUERY_VERSION
     digest = parse(q).canonical_hash
     assert digest is not None
     ext = route.MEDIA[fmt][1]
@@ -159,7 +168,7 @@ def test_cors_exposes_the_export_headers(store: Store) -> None:
     with TestClient(make_app(store.indexes.parent, cors_origins=(origin,))) as c:
         r = c.get(EXPORT, params={"q": "trust", "format": "ris"}, headers={"Origin": origin})
     exposed = {h.strip().lower() for h in r.headers["access-control-expose-headers"].split(",")}
-    assert {"x-total", "x-index-version"} <= exposed
+    assert {"x-total", "x-index-version", "x-tokenizer-version", "x-query-version"} <= exposed
 
 
 def test_a_pinned_index_version_is_served_from_that_index(
@@ -241,8 +250,10 @@ def test_an_over_cap_wildcard_is_a_located_422(store: Store, monkeypatch: pytest
         {"q": "trust"},  # no format
         {"q": "trust", "format": "xml"},
         {"q": "trust", "format": "RIS"},
-        {"format": "ris"},  # no q
+        {"format": "ris"},  # neither q nor record_id
         {"q": "trust", "format": "ris", "mode": "google"},
+        {"record_id": "short", "format": "ris"},  # not a record id
+        {"record_id": "abcdefghijk!", "format": "ris"},
     ],
 )
 def test_bad_parameters_are_422_api_bad_param(client: TestClient, params: dict[str, Any]) -> None:
@@ -268,6 +279,28 @@ class Held(TantivyEngine):
         return super()._display(address)
 
 
+class Failing(TantivyEngine):
+    """Fails reading its 1,000th record (of 1,175): after the first body chunks have gone out."""
+
+    reads = 0
+
+    def _display(self, address: Any) -> dict[str, Any]:
+        type(self).reads += 1
+        if type(self).reads == 1_000:
+            raise RuntimeError(f"disk gone while exporting {SECRET}")
+        return super()._display(address)
+
+
+@pytest.fixture(autouse=True)
+def fresh_engines() -> Iterator[None]:
+    """Held's events and Failing's count are class state: each test starts from none."""
+    for event in (Held.armed, Held.entered, Held.release):
+        event.clear()
+    Failing.reads = 0
+    yield
+    Held.release.set()  # never leave a stream waiting
+
+
 def test_an_export_started_before_a_swap_finishes_on_its_index(data_dir: Path, store: Store) -> None:
     q = "trust OR model"
     app = make_app(data_dir, opener=Held)
@@ -289,18 +322,6 @@ def test_an_export_started_before_a_swap_finishes_on_its_index(data_dir: Path, s
     assert after.headers["x-index-version"] == store.small  # a new export gets the new one
 
 
-class Failing(TantivyEngine):
-    """Fails reading its 1,000th record (of 1,175): after the first body chunks have gone out."""
-
-    reads = 0
-
-    def _display(self, address: Any) -> dict[str, Any]:
-        type(self).reads += 1
-        if type(self).reads == 1_000:
-            raise RuntimeError(f"disk gone while exporting {SECRET}")
-        return super()._display(address)
-
-
 def test_a_failure_mid_stream_is_logged_as_aborted_without_query_text(store: Store, logs: Logs) -> None:
     with TestClient(make_app(store.indexes.parent, opener=Failing)) as c:
         r = c.get(EXPORT, params={"q": f"(agent OR {SECRET}) {EVERY_STATUS}", "format": "ris"})
@@ -313,14 +334,23 @@ def test_a_failure_mid_stream_is_logged_as_aborted_without_query_text(store: Sto
     assert SECRET not in logs.raw.getvalue()  # type: ignore[attr-defined]
 
 
-def test_a_stream_that_miscounts_fails_rather_than_pass_as_complete() -> None:
+RECORD = {"id": "x:1", "title": "T", "abstract": None, "authors": [], "venue": "ICLR", "year": 2024,
+          "track": "main", "status": "accepted", "urls": {}}  # fmt: skip
+
+
+@pytest.mark.parametrize("n, total", [(1, 2), (3, 2), (0, 1)])  # short, over, and nothing at all
+def test_a_stream_that_miscounts_fails_rather_than_pass_as_complete(n: int, total: int) -> None:
     provenance = exporter.Provenance("abc", "0" * 64, DATE)
-    record = {"id": "x:1", "title": "T", "abstract": None, "authors": [], "venue": "ICLR", "year": 2024,
-              "track": "main", "status": "accepted", "urls": {}}  # fmt: skip
-    body = route._body("jsonl", iter([record]), provenance, total=2)
-    assert next(body)  # the record goes out; the shortfall is found after it
+    body = route._body("jsonl", iter([RECORD] * n), provenance, total=total)
+    sent = next(body)  # what it has goes out; the miscount is found after the last record
+    assert sent.count(b"\n") == n
     with pytest.raises(EngineInternalError):
         next(body)
+
+
+def test_a_stream_that_counts_right_ends_cleanly() -> None:
+    provenance = exporter.Provenance("abc", "0" * 64, DATE)
+    assert b"".join(route._body("jsonl", iter([RECORD] * 3), provenance, total=3)).count(b"\n") == 3
 
 
 def test_the_access_line_has_the_hash_and_total_and_no_query_text(
@@ -340,7 +370,164 @@ def test_the_access_line_has_the_hash_and_total_and_no_query_text(
 def test_the_openapi_document_describes_the_export(client: TestClient) -> None:
     op = client.get("/api/v1/openapi.json").json()["paths"][EXPORT]["get"]
     params = {p["name"]: p for p in op["parameters"]}
-    assert set(params) == {"q", "format", "mode", "index_version"}  # record_id arrives with task-037
-    assert params["q"]["required"] and params["format"]["required"]
-    assert not params["index_version"]["required"]
+    assert set(params) == {"q", "format", "mode", "index_version", "record_id"}
+    assert params["format"]["required"]  # q or record_id: one of the two, checked by the route
+    assert not any(params[p].get("required") for p in ("q", "mode", "index_version", "record_id"))
     assert set(op["responses"]["200"]["content"]) == {m.split(";")[0] for m, _ext in route.MEDIA.values()}
+
+
+# --- the body really streams (S4) ---------------------------------------------------------------------------
+def body_messages(client: TestClient, params: dict[str, str]) -> list[dict[str, Any]]:
+    """Every ASGI message the app sends for one export, as the server would see them (TestClient joins the
+    body, so the app is called directly on the client's own event loop)."""
+    import urllib.parse
+
+    sent: list[dict[str, Any]] = []
+    scope = {
+        "type": "http", "asgi": {"version": "3.0", "spec_version": "2.4"}, "http_version": "1.1",
+        "method": "GET", "scheme": "http", "path": EXPORT, "raw_path": EXPORT.encode(),
+        "query_string": urllib.parse.urlencode(params).encode(), "root_path": "",
+        "headers": [(b"host", b"testserver")], "client": ("testclient", 1), "server": ("testserver", 80),
+    }  # fmt: skip
+
+    async def receive() -> dict[str, Any]:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict[str, Any]) -> None:
+        sent.append(message)
+
+    async def run() -> None:
+        await client.app(scope, receive, send)  # type: ignore[arg-type]
+
+    assert client.portal is not None
+    client.portal.call(run)
+    return sent
+
+
+@pytest.mark.parametrize("fmt", FORMATS)
+def test_the_body_is_sent_in_bounded_chunks_as_it_is_written(client: TestClient, fmt: str) -> None:
+    sent = body_messages(client, {"q": BROAD, "format": fmt})
+    assert sent[0]["type"] == "http.response.start" and sent[0]["status"] == 200
+    bodies = [m for m in sent if m["type"] == "http.response.body"]
+    chunks = [m["body"] for m in bodies if m["body"]]
+    assert len(chunks) > 2  # streamed, never buffered whole
+    assert [m.get("more_body", False) for m in bodies][-1] is False
+    text = b"".join(chunks).decode("utf-8")
+    longest = max(
+        len(e) for e in exporter.entries(fmt, _documents(client, BROAD), _provenance(client, BROAD))
+    )
+    assert all(len(c.decode("utf-8")) <= route.CHUNK + longest for c in chunks)
+    assert text.encode("utf-8") == ok(client, BROAD, fmt).content  # the same bytes, however cut
+
+
+def _documents(client: TestClient, q: str) -> Iterator[dict[str, Any]]:
+    engine = client.app.state.index.engine  # type: ignore[attr-defined]
+    return engine.documents(parse(q).effective_ast)[1]  # type: ignore[no-any-return]
+
+
+def _provenance(client: TestClient, q: str) -> exporter.Provenance:
+    engine = client.app.state.index.engine  # type: ignore[attr-defined]
+    return exporter.Provenance(engine.index_version, parse(q).canonical_hash or "", DATE)
+
+
+# --- a pinned index this instance can't serve (S1, S2) --------------------------------------------------------
+def test_a_copied_index_directory_is_refused_as_tampered_409(
+    data_dir: Path, store: Store, logs: Logs
+) -> None:
+    """A copy of an index under another version's name: its manifest names the original, so it doesn't
+    verify. 409 (not available here), one ERROR line, and /meta doesn't offer it."""
+    shutil.copytree(data_dir / "indexes" / store.small, data_dir / "indexes" / "abcdef012345")
+    with TestClient(make_app(data_dir)) as c:
+        for _ in range(2):
+            error(
+                c.get(EXPORT, params={"q": "trust", "format": "ris", "index_version": "abcdef012345"}),
+                409,
+                "API_INDEX_VERSION_UNAVAILABLE",
+            )
+        versions = c.get("/api/v1/meta").json()["index_versions"]
+    refusals = [x for x in logs() if x["event"] == "pinned_index_unavailable"]
+    assert [(x["level"], x["reason"]) for x in refusals] == [("ERROR", "tampered")]  # once, then remembered
+    assert "abcdef012345" not in versions
+
+
+@pytest.fixture
+def stale(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    """An index built by an older tokenizer, in the instance's data directory: its version."""
+    import openproceedings.engine.index as index_module
+
+    with monkeypatch.context() as m:
+        m.setattr(index_module, "TOKENIZER_VERSION", "0-old")
+        return build(list(records())[:50], data_dir / "snapshots", "old", data_dir / "indexes")
+
+
+def test_an_index_this_code_cant_serve_is_409_logged_once_and_not_listed(
+    data_dir: Path, stale: str, logs: Logs
+) -> None:
+    opened: list[str] = []
+
+    def opener(path: Path) -> TantivyEngine:
+        opened.append(path.name)
+        return TantivyEngine(path)
+
+    with TestClient(make_app(data_dir, opener=opener)) as c:
+        assert stale not in c.get("/api/v1/meta").json()["index_versions"]  # from its manifest, unopened
+        for _ in range(3):
+            error(
+                c.get(EXPORT, params={"q": "trust", "format": "ris", "index_version": stale}),
+                409,
+                "API_INDEX_VERSION_UNAVAILABLE",
+            )
+    assert opened.count(stale) == 1  # the refusal is remembered, not re-verified per request
+    refusals = [x for x in logs() if x["event"] == "pinned_index_unavailable"]
+    assert [(x["level"], x["reason"], x["error"]) for x in refusals] == [
+        ("WARNING", "unloadable", "EngineInternalError")
+    ]
+
+
+# --- record_id (AC3) ---------------------------------------------------------------------------------------
+@pytest.fixture
+def recorded(data_dir: Path) -> Iterator[TestClient]:
+    """The app over a private data directory, so its records.sqlite is this test's own."""
+    with TestClient(make_app(data_dir)) as c:
+        yield c
+
+
+def test_a_record_exports_its_own_query_on_its_own_index(
+    recorded: TestClient, data_dir: Path, store: Store, tmp_path: Path
+) -> None:
+    record_id = save(recorded, "trust OR calibrat*")
+    stored = recorded.get(f"/api/v1/records/{record_id}").json()["record"]
+    r = recorded.get(EXPORT, params={"record_id": record_id, "format": "jsonl"})
+    assert r.status_code == 200, r.text
+    assert r.headers["x-index-version"] == store.big and int(r.headers["x-total"]) == stored["total"]
+    assert ids_of("jsonl", r.content) == stored["ids"]  # the record's membership, exactly
+    assert r.content == op_export(store, stored["canonical"], "jsonl", tmp_path)
+    # after a swap the record still exports from the index it names
+    point_current(data_dir, store.small)
+    assert recorded.app.state.index.load()  # type: ignore[attr-defined]
+    after = recorded.get(EXPORT, params={"record_id": record_id, "format": "jsonl"})
+    assert after.headers["x-index-version"] == store.big and after.content == r.content
+
+
+def test_exporting_a_mismatch_record_is_409_and_streams_nothing(recorded: TestClient, data_dir: Path) -> None:
+    from openproceedings.records import ids_hash
+
+    good = save(recorded, "trust")
+    ids = recorded.get(f"/api/v1/records/{good}").json()["record"]["ids"]
+    bad = tampered(data_dir, good, ids_hash=ids_hash([*ids, "op:iclr:2024:forged"]))
+    e = error(recorded.get(EXPORT, params={"record_id": bad, "format": "ris"}), 409, "API_RECORD_MISMATCH")
+    assert bad not in e["message"]
+
+
+@pytest.mark.parametrize(
+    "extra", [{"q": "trust"}, {"mode": "native"}, {"mode": "scholar"}, {"index_version": "0123456789ab"}]
+)
+def test_a_record_id_with_a_query_mode_or_version_is_422(recorded: TestClient, extra: dict[str, str]) -> None:
+    record_id = save(recorded, "trust")
+    error(
+        recorded.get(EXPORT, params={"record_id": record_id, "format": "ris", **extra}), 422, "API_BAD_PARAM"
+    )
+
+
+def test_an_unknown_record_is_404(recorded: TestClient) -> None:
+    error(recorded.get(EXPORT, params={"record_id": "A" * 12, "format": "ris"}), 404, "API_RECORD_NOT_FOUND")

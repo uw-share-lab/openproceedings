@@ -21,8 +21,9 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   `diagnostics.py`, `vocab.py`, `storage.py`, `records.py` (search records: `ids_hash`, the append-only store, replay), `coverage.py` (the snapshot manifest's venue × year × track × status breakdown), `query/` (`normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`,
   `ast.py`, `canonical.py`, `defaults.py`, `compat.py`), `engine/` (`protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py`, `exclusions.py`, `highlight.py`, `parity.py`), `ingest/`
   (`record.py`, `classify.py`, `urls.py`, `volumes.py`, `ris.py`, `dedup.py`, `snapshot.py`), `api/` (`app.py`
-  `create_app`, `config.py`, `state.py`, `deps.py`, `errors.py`, `middleware.py`, `models.py` (the response
-  contract), routers `search.py` (parse and search), `papers.py`, `records.py` (with `pinned.py`, older indexes for replay), `meta.py`, `coverage.py`, `health.py`, `export.py`
+  `create_app`, `config.py`, `state.py` (the served index and `pinned`, the one loader of
+  other index_versions), `deps.py`, `errors.py`, `middleware.py`, `models.py` (the response
+  contract), routers `search.py` (parse and search), `papers.py`, `records.py`, `meta.py`, `coverage.py`, `health.py`, `export.py`
   (streamed exports, `op export`'s writers), `server.py` → `op serve`, `openapi.py` → `op openapi`);
   `semantic/ eval/` arrive with their tasks). Tests in `backend/tests/`; `uv run pytest` from the root.
 - **API contract:** after changing a route or a response model, run `make openapi` and commit both
