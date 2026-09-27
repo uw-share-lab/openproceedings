@@ -286,7 +286,7 @@ The record page (05) is what a methods section cites. Records are stored in `dat
 (append-only, backed up with the snapshots).
 
 As built (task-037 and its review fixes; `backend/src/openproceedings/records.py` holds the record,
-`ids_hash`, the store and the replay, so a later `op record` calls the same functions; `api/records.py` is the
+`ids_hash`, the store and the replay, so `op record save`/`replay` (task-083) call the same functions; `api/records.py` is the
 transport, `IndexState.pinned` in `api/state.py` loads older indexes):
 - **`POST /records`** takes `{q, mode}` (no other keys) and answers **201** `{record_id, page, index_version,
   tokenizer_version, query_version}` with `Location: /api/v1/records/<record_id>` (the API resource). `page`

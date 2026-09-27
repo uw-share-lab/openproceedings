@@ -8,7 +8,6 @@ import pytest
 from openproceedings import cli
 
 PLANNED = {
-    "record": "task-083",
     "embed": "task-058",
     "eval": "task-054",
 }
@@ -20,7 +19,7 @@ def test_help_lists_every_planned_subcommand(capsys: pytest.CaptureFixture[str])
     assert exc.value.code == 0
     out = capsys.readouterr().out
     listed = {line.split()[0] for line in out.splitlines() if line.startswith("    ") and line.split()}
-    assert set(PLANNED) | {"ingest", "snapshot", "index", "search", "serve", "openapi"} <= listed
+    assert set(PLANNED) | {"ingest", "snapshot", "index", "search", "record", "serve", "openapi"} <= listed
 
 
 @pytest.mark.parametrize(("name", "task"), sorted(PLANNED.items()))
@@ -82,18 +81,18 @@ def test_stub_list_matches_the_planned_table() -> None:
 
 def test_bad_log_level_is_a_usage_error_not_a_traceback(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exc:
-        cli.main(["--log-level", "verbose", "record"])
+        cli.main(["--log-level", "verbose", "embed"])
     assert exc.value.code == 2
     err = capsys.readouterr().err
     assert "Traceback" not in err and "--log-level" in err
 
 
 def test_log_level_is_case_insensitive() -> None:
-    assert cli.main(["--log-level", "debug", "record"]) == 2  # the stub's exit code, not a usage error
+    assert cli.main(["--log-level", "debug", "embed"]) == 2  # the stub's exit code, not a usage error
 
 
 def test_default_log_format_is_json() -> None:
-    assert cli.build_parser().parse_args(["record"]).log_format == "json"
+    assert cli.build_parser().parse_args(["embed"]).log_format == "json"
 
 
 @pytest.mark.parametrize(
@@ -101,7 +100,7 @@ def test_default_log_format_is_json() -> None:
     [
         ["embed", "build", "--index", "current"],
         ["--log-level", "debug", "--log-format", "json", "index", "retire", "old"],
-        ["record", "replay", "abc123"],
+        ["eval", "scholar", "--query", "trust"],
     ],
 )
 def test_stub_accepts_the_future_arguments_of_its_command(
@@ -116,3 +115,22 @@ def test_subcommand_help_exits_0(capsys: pytest.CaptureFixture[str]) -> None:
         cli.main(["export", "--help"])
     assert exc.value.code == 0
     assert "usage: op export" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "argv", [["record"], ["record", "save"], ["record", "replay"], ["record", "delete", "x"]]
+)
+def test_record_needs_an_action_and_its_argument(argv: list[str]) -> None:
+    """`op record` is implemented (task-083): a missing action or argument is a usage error, not a stub."""
+    with pytest.raises(SystemExit) as exc:
+        cli.main(argv)
+    assert exc.value.code == 2
+
+
+def test_record_actions_take_their_options() -> None:
+    parser = cli.build_parser()
+    ns = parser.parse_args(["record", "save", "trust", "--mode", "scholar", "--index", "abc", "--json"])
+    assert (ns.query, ns.mode, ns.index, ns.json, ns.action) == ("trust", "scholar", "abc", True, "save")
+    ns = parser.parse_args(["record", "replay", "AAAAAAAAAAAA"])
+    assert (ns.record_id, ns.index, ns.json, ns.action) == ("AAAAAAAAAAAA", None, False, "replay")
+    assert cli.EXIT_MISMATCH not in (0, 1, 2)  # a mismatch is told apart from drift, refusal and usage
