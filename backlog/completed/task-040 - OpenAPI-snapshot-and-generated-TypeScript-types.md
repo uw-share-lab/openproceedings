@@ -1,10 +1,10 @@
 ---
 id: TASK-040
 title: OpenAPI snapshot and generated TypeScript types
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-27 08:11'
+updated_date: '2026-09-27 08:13'
 labels:
   - api
   - frontend

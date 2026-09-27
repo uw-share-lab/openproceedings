@@ -172,6 +172,117 @@
           }
         ]
       },
+      "CoverageCell": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "rejected",
+              "withdrawn",
+              "desk_rejected",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "track": {
+            "enum": [
+              "main",
+              "datasets_benchmarks",
+              "position",
+              "workshop",
+              "competition",
+              "tiny_papers",
+              "blogpost",
+              "other",
+              "unknown"
+            ],
+            "title": "Track",
+            "type": "string"
+          }
+        },
+        "required": [
+          "track",
+          "status",
+          "count"
+        ],
+        "title": "CoverageCell",
+        "type": "object"
+      },
+      "CoverageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/SnapshotInfo"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/CoverageTotals"
+          },
+          "venue_years": {
+            "items": {
+              "$ref": "#/components/schemas/VenueYearCoverage"
+            },
+            "title": "Venue Years",
+            "type": "array"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "snapshot",
+          "totals",
+          "venue_years"
+        ],
+        "title": "CoverageResponse",
+        "type": "object"
+      },
+      "CoverageTotals": {
+        "additionalProperties": false,
+        "properties": {
+          "abstract_missing": {
+            "title": "Abstract Missing",
+            "type": "integer"
+          },
+          "records": {
+            "title": "Records",
+            "type": "integer"
+          },
+          "unknown_status": {
+            "title": "Unknown Status",
+            "type": "integer"
+          },
+          "unknown_track": {
+            "title": "Unknown Track",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "records",
+          "abstract_missing",
+          "unknown_track",
+          "unknown_status"
+        ],
+        "title": "CoverageTotals",
+        "type": "object"
+      },
       "Diagnostic": {
         "additionalProperties": false,
         "description": "A warning, error or translation notice about a query, with a half-open code-point span into `q`.",
@@ -1444,6 +1555,54 @@
         "title": "SearchResponse",
         "type": "object"
       },
+      "SnapshotInfo": {
+        "additionalProperties": false,
+        "description": "The snapshot the served index was built from, as its manifest records it.",
+        "properties": {
+          "built_at": {
+            "title": "Built At",
+            "type": "string"
+          },
+          "crawl_date": {
+            "title": "Crawl Date",
+            "type": "string"
+          },
+          "crawl_from": {
+            "title": "Crawl From",
+            "type": "string"
+          },
+          "crawl_to": {
+            "title": "Crawl To",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "snapshot_hash": {
+            "title": "Snapshot Hash",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "snapshot_hash",
+          "crawl_date",
+          "crawl_from",
+          "crawl_to",
+          "built_at",
+          "sources"
+        ],
+        "title": "SnapshotInfo",
+        "type": "object"
+      },
       "Span": {
         "maxItems": 2,
         "minItems": 2,
@@ -1557,6 +1716,59 @@
           }
         },
         "title": "Urls",
+        "type": "object"
+      },
+      "VenueYearCoverage": {
+        "additionalProperties": false,
+        "description": "One venue-year of the snapshot (`coverage.breakdown`): its cells in vocabulary order (`unknown`\nlast, never folded), and its unknown and missing-abstract counts, 0 included.",
+        "properties": {
+          "abstract_missing": {
+            "title": "Abstract Missing",
+            "type": "integer"
+          },
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageCell"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "records": {
+            "title": "Records",
+            "type": "integer"
+          },
+          "unknown_status": {
+            "title": "Unknown Status",
+            "type": "integer"
+          },
+          "unknown_track": {
+            "title": "Unknown Track",
+            "type": "integer"
+          },
+          "venue": {
+            "enum": [
+              "NeurIPS",
+              "ICLR",
+              "ICML"
+            ],
+            "title": "Venue",
+            "type": "string"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "venue",
+          "year",
+          "records",
+          "abstract_missing",
+          "unknown_track",
+          "unknown_status",
+          "cells"
+        ],
+        "title": "VenueYearCoverage",
         "type": "object"
       },
       "Vocabularies": {
@@ -1707,6 +1919,120 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/coverage": {
+      "get": {
+        "description": "The served index's coverage, as the snapshot it was built from counts it.",
+        "operationId": "coverage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Coverage"
+      }
+    },
+    "/api/v1/export": {
+      "get": {
+        "description": "Every record the query matches, in `format`, from the pinned `index_version` (else the served index).\nNever paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and index.",
+        "operationId": "export",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": true,
+            "schema": {
+              "enum": [
+                "ris",
+                "csv",
+                "bibtex",
+                "jsonl"
+              ],
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "native",
+              "enum": [
+                "native",
+                "scholar"
+              ],
+              "title": "Mode",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "index_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(?:[0-9a-f][0-9a-f-]{0,63})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Index Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/x-bibtex": {},
+              "application/x-ndjson": {},
+              "application/x-research-info-systems": {},
+              "text/csv": {}
+            },
+            "description": "The entire matched set, ordered by id, with `X-Total` and `X-Index-Version`."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Export"
+      }
+    },
     "/api/v1/healthz": {
       "get": {
         "description": "Always 200 while the process serves requests; `index_loaded` is false until the first load succeeds\n(search routes answer 503 `API_INDEX_NOT_LOADED` meanwhile).",

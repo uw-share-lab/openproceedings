@@ -4,6 +4,47 @@
  */
 
 export interface paths {
+    "/api/v1/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Coverage
+         * @description The served index's coverage, as the snapshot it was built from counts it.
+         */
+        get: operations["coverage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export
+         * @description Every record the query matches, in `format`, from the pinned `index_version` (else the served index).
+         *     Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and index.
+         */
+        get: operations["export"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/healthz": {
         parameters: {
             query?: never;
@@ -152,6 +193,45 @@ export interface components {
             value: components["schemas"]["ClaimValue"];
         };
         ClaimValue: string | number | string[] | null;
+        /** CoverageCell */
+        CoverageCell: {
+            /** Count */
+            count: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "accepted" | "rejected" | "withdrawn" | "desk_rejected" | "unknown";
+            /**
+             * Track
+             * @enum {string}
+             */
+            track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "other" | "unknown";
+        };
+        /** CoverageResponse */
+        CoverageResponse: {
+            /** Index Version */
+            index_version: string;
+            /** Query Version */
+            query_version: string;
+            snapshot: components["schemas"]["SnapshotInfo"];
+            /** Tokenizer Version */
+            tokenizer_version: string;
+            totals: components["schemas"]["CoverageTotals"];
+            /** Venue Years */
+            venue_years: components["schemas"]["VenueYearCoverage"][];
+        };
+        /** CoverageTotals */
+        CoverageTotals: {
+            /** Abstract Missing */
+            abstract_missing: number;
+            /** Records */
+            records: number;
+            /** Unknown Status */
+            unknown_status: number;
+            /** Unknown Track */
+            unknown_track: number;
+        };
         /**
          * Diagnostic
          * @description A warning, error or translation notice about a query, with a half-open code-point span into `q`.
@@ -523,6 +603,26 @@ export interface components {
             /** Total */
             total: number;
         };
+        /**
+         * SnapshotInfo
+         * @description The snapshot the served index was built from, as its manifest records it.
+         */
+        SnapshotInfo: {
+            /** Built At */
+            built_at: string;
+            /** Crawl Date */
+            crawl_date: string;
+            /** Crawl From */
+            crawl_from: string;
+            /** Crawl To */
+            crawl_to: string;
+            /** Name */
+            name: string;
+            /** Snapshot Hash */
+            snapshot_hash: string;
+            /** Sources */
+            sources: string[];
+        };
         Span: [
             number,
             number
@@ -554,6 +654,30 @@ export interface components {
             pdf?: string | null;
             /** Proceedings */
             proceedings?: string | null;
+        };
+        /**
+         * VenueYearCoverage
+         * @description One venue-year of the snapshot (`coverage.breakdown`): its cells in vocabulary order (`unknown`
+         *     last, never folded), and its unknown and missing-abstract counts, 0 included.
+         */
+        VenueYearCoverage: {
+            /** Abstract Missing */
+            abstract_missing: number;
+            /** Cells */
+            cells: components["schemas"]["CoverageCell"][];
+            /** Records */
+            records: number;
+            /** Unknown Status */
+            unknown_status: number;
+            /** Unknown Track */
+            unknown_track: number;
+            /**
+             * Venue
+             * @enum {string}
+             */
+            venue: "NeurIPS" | "ICLR" | "ICML";
+            /** Year */
+            year: number;
         };
         /** Vocabularies */
         Vocabularies: {
@@ -605,6 +729,72 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    coverage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverageResponse"];
+                };
+            };
+            /** @description Error (spec 04 §Error handling) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    export: {
+        parameters: {
+            query: {
+                q: string;
+                format: "ris" | "csv" | "bibtex" | "jsonl";
+                mode?: "native" | "scholar";
+                index_version?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entire matched set, ordered by id, with `X-Total` and `X-Index-Version`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-bibtex": unknown;
+                    "application/x-ndjson": unknown;
+                    "application/x-research-info-systems": unknown;
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Error (spec 04 §Error handling) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     healthz: {
         parameters: {
             query?: never;
