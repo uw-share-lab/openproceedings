@@ -5,7 +5,8 @@ once, as a test). The `bench` workflow runs `--benchmark-enable --benchmark-only
 and head, fails a regression of the minimum over 20% (the least noise-prone statistic), and these tests
 assert the budgets from the timings measured:
 - a search returning the first 50 hits: p95 < 100 ms (every Trust-Evals protocol string, Scholar mode), with
-  and without its display records and highlights (task-073; exclusion accounting has its own budget);
+  and without its display records and highlights (task-073; exclusion accounting has its own budget), and
+  as the `/search` endpoint runs it, with exclusion accounting and facets too (first page, facet memo cold);
 - `match_ids` with exclusion accounting: p95 < 300 ms;
 - a wildcard expansion of up to 200 terms: p95 < 50 ms.
 The ~80k corpus and the position-verified cases are measured by `backend/tests/bench/report_80k.py` into
@@ -21,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from openproceedings import search
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.compile import FIELDS
 from openproceedings.engine.exclusions import excluded
@@ -93,6 +95,26 @@ def test_search_first_50_hits_with_highlights(benchmark: Any, engine: TantivyEng
     ast = trust_evals(name).effective_ast
     assert ast is not None
     measure(benchmark, lambda: search_with_highlights(engine, ast))
+    time = p95(benchmark)
+    assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
+
+
+def search_endpoint(
+    engine: TantivyEngine, parsed: ParseResult, offset: int = 0, first: bool = True
+) -> object:
+    """The whole of `GET /api/v1/search`'s engine work: `search.run` with facets and highlights (page, display
+    records, highlights, exclusion accounting, disjunctive facets). `first` forgets the facet memo, so the
+    call pays as a query's first page does (compiled queries and verified clauses stay warm); otherwise it
+    is a later page of the same query."""
+    if first:
+        engine.faceted.clear()
+    return search.run(engine, parsed, offset=offset, limit=50, facets=True, highlight=True)
+
+
+@pytest.mark.parametrize("name", list(STRINGS))
+def test_search_endpoint_first_page(benchmark: Any, engine: TantivyEngine, name: str) -> None:
+    parsed = trust_evals(name)
+    measure(benchmark, lambda: search_endpoint(engine, parsed))
     time = p95(benchmark)
     assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
 

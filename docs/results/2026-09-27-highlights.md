@@ -99,7 +99,9 @@ is the page without highlights, to show where the rest goes:
 over `2026-09-27-bench.md`, whose quiet-machine numbers stand). "Search with highlights" is
 `test_bench.search_with_highlights`: the 50-hit search, its display records and every hit's highlights, as
 `search.run` assembles them, less exclusion accounting (its own 300 ms budget) and facets; p95 of 200 warm
-runs. Every string is inside 100 ms:
+runs. Every string is inside 100 ms for this part of the work, but **not the `/search` endpoint as a whole**:
+the endpoint also runs exclusion accounting and the disjunctive facets, which collect the query again (see
+the note after the table):
 
 | String | Matches | Search, first 50 hits: cold | Search: p95 warm | Search with highlights: p95 warm | `match_ids` + exclusions: p95 cold |
 |---|---|---|---|---|---|
@@ -116,6 +118,18 @@ runs. Every string is inside 100 ms:
 
 Before this change the same column would be the warm search plus 128–175 ms of highlighting (the 80k table
 above): about 155–210 ms, over budget. `main-2-pop`'s cold numbers are spec 03's position-verified exception.
+
+**The endpoint's number (added by the M3a review gate, 2026-09-27).** The table leaves out exclusion accounting
+and facets, and `GET /api/v1/search` runs both (`search.run(limit=50, highlight=True, facets=True)`), so the
+column above is not the endpoint's latency. Measured on a synthetic 80k index (built as `report_80k` builds it),
+p95 **CPU time** of 30 runs (load 12–17, so wall time would mislead): the whole endpoint took 153–276 ms for
+the nine non-empty strings (`llm-as-judge` 4 ms), over the 100 ms budget. Each collection of the query costs
+~31 ms at 80k whatever it computes, and a request collected it seven times (the page, four facet
+aggregations, two for exclusion accounting). Facets now share one aggregation per distinct kept set and are
+memoised per kept set (`TantivyEngine.faceted`), so a first page collects five times: 136–238 ms (main-1
+214 ms), and a later page of the same query, reading the memo, 51–76 ms. The first page is still over
+budget; task-086 is the structural fix (every facet and exclusion bucket from one collection's fast
+columns). `report_80k` now has both `/search` columns, in CPU time.
 The same run's index build took 21.9 s (30.3 s in `2026-09-27-bench.md`): the build tokenizes every record,
 so it gains from the tokenizer's shortcuts too.
 

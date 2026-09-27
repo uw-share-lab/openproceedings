@@ -118,7 +118,8 @@ the highlighter to a frozen copy of the old one, span for span (`tests/unit/engi
 Nothing is precomputed at build and nothing is cached across requests. Measured in
 `docs/results/2026-09-27-highlights.md`: highlighting a 50-hit page costs about 5–7× less (real local corpus,
 5k fixture, synthetic 80k), and a 50-hit search with its display records and highlights is inside the 100 ms
-budget at 80k (exclusion accounting keeps its own 300 ms budget). It is a row of the `bench` workflow
+budget at 80k (exclusion accounting keeps its own 300 ms budget). The `/search` endpoint as a whole (with
+exclusion accounting and facets) is not yet: see §Performance budgets. It is a row of the `bench` workflow
 (`test_search_first_50_hits_with_highlights`) and a column of the 80k report.
 
 ## Exclusion accounting (guarantee 6, PRISMA)
@@ -193,6 +194,14 @@ as "current" and can load a pinned older version to replay a search record.
   exclusions is within budget, except `main-2-pop` (wildcard phrases) when cold: 10.1 s to search and 10.5 s
   for `match_ids` + exclusions, the exception above. Warm (the engine's verified-clause cache and compiled-
   query memo), its search is 27 ms p95 over 200 runs.
+- Measured, the `/search` endpoint (M3a review gate; `search.run(limit=50, facets=True, highlight=True)`,
+  synthetic 80k, p95 CPU time of 30 runs on a loaded machine; `docs/results/2026-09-27-highlights.md`): **over
+  the 100 ms budget on a query's first page**, 136–238 ms for the nine non-empty Trust-Evals strings; a later
+  page of the same query 51–76 ms. One collection of the query costs ~31 ms at 80k whatever it computes, and
+  a first page makes five: the page, then one `aggregate` per distinct kept set of the disjunctive facets and
+  exclusion accounting (fields over the same set share one call, every facet field's counts per set are
+  memoised in `TantivyEngine.faceted`, so later pages and exclusion accounting reuse them). task-086 counts
+  them all from one collection's fast columns. `report_80k` reports both pages, in CPU time.
 
 ## Testing
 
