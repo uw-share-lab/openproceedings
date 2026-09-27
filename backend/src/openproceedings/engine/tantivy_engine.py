@@ -2,7 +2,7 @@
 
 Matching is `compile.py`'s; this module wires it to an index: wildcard expansion from the term dictionary
 (both text fields, the 200 cap enforced before compiling), match sets read back through the `ord` fast
-column and `ids.txt`, disjunctive facets (decision-001 rule 6) counted by Tantivy's terms aggregation, and
+column and `ids.txt`, disjunctive facets (decision-001 rule 6) counted from one nested terms aggregation of the query without its top-level filters (task-086), and
 the `--explain` rendering. `search` orders the whole match set (field-weighted BM25, or year, or title) with the id as
 the last key, then pages it (task-025). The index is verified (every file re-hashed) when the engine opens it.
 """
@@ -30,10 +30,13 @@ from openproceedings.engine.protocol import (
     EngineInternalError,
     SearchResult,
 )
-from openproceedings.query.ast import And, Filter, Node, Not, TextField, Wildcard
+from openproceedings.query.ast import And, Filter, Node, Not, TextField, Wildcard, YearRange
 from openproceedings.query.normalize import TOKENIZER_VERSION
 
 SORTS = ("relevance", "year_desc", "year_asc", "title")
+# a document's facet values, in this order: what every filter and facet depends on (task-086)
+COMBO: tuple[str, ...] = ("venue", "year", "track", "status")
+type Combo = tuple[str, int, str, str]
 # the Tantivy TANTIVY_BM25 was confirmed on; test_rank.py fails if the installed one drifts
 TANTIVY_PINNED = "0.26.2"
 TANTIVY_BM25 = {"b": 0.75, "k1": 1.2}  # Tantivy's fixed constants: an index can't claim others
@@ -74,13 +77,13 @@ class TantivyEngine:
     # index, ~5 MB on 80k): it is cleared once the weights charged to it since its last clear pass its budget.
     # Weights, in ids/terms (~60 bytes each as Python strings): a verified clause, its ids + 1; an expansion,
     # its terms + 1 (an over-cap count, 1); a compiled query, `Compiled.held` + 1 (the ids and terms inside its
-    # Tantivy query, plus its explain lines); a facet count, its buckets + 1. So ≲ 30 + 30 + 6 + a few MB per
+    # Tantivy query, plus its explain lines); a base's facet combos, their number + 1. So ≲ 30 + 30 + 6 + a few MB per
     # engine, and the API holds the served engine plus `pinned_indexes` more. A memo exceeds its budget only by
     # what the computations in flight store (one entry per thread), never more: see `_trim`.
     MAX_COMPILED_UNITS = 500_000
     MAX_VERIFIED_IDS = 500_000
     MAX_EXPANDED_TERMS = 100_000
-    MAX_FACET_BUCKETS = 100_000  # `faceted`: a field's buckets over a kept set, + 1 (~100 buckets a set)
+    MAX_FACET_COMBOS = 100_000  # `faceted`: a base's (venue, year, track, status) combos, + 1 (a few hundred)
 
     def __init__(self, path: Path) -> None:
         manifest = verify_index(path)
@@ -98,7 +101,7 @@ class TantivyEngine:
         self.expanded: dict[tuple[str, str], tuple[str, ...] | int] = {}
         # each memo's ledger: the weight of every entry stored since its last clear (see `_trim`)
         # each kept set's facet counts, per field (see `facets`)
-        self.faceted: dict[tuple[str, str], dict[str, int]] = {}
+        self.faceted: dict[str, tuple[tuple[Combo, int], ...]] = {}
         self.charges: dict[str, list[int]] = {"compiled": [], "verified": [], "expanded": [], "faceted": []}
         self.tallied: dict[str, tuple[list[int], int, int]] = {}  # each ledger's running sum (see `_trim`)
 
@@ -212,44 +215,61 @@ class TantivyEngine:
         """Disjunctive facets (spec 04, decision-001 rule 6): field F is counted over the matches of the
         query without F's own top-level conjuncts (a filter on F, or NOT of one; nested ones stay).
 
-        Fields whose kept conjuncts are the same share one `aggregate` (one named terms aggregation per
-        field): its cost is the query's collection, not the aggregations (~31 ms either way at 80k). Every
-        facet field's counts over a kept set are memoised (`faceted`, by the set's conjuncts with spans
-        dropped and sorted: order and position never change a count), so another page of the query, its
-        exclusion accounting and a later query sharing the set don't collect it again."""
+        One collection serves every field (task-086). The query's top-level facet-field filters (`Filter`,
+        or `NOT` of one) are set aside, and the rest (the *base*) is collected once, counting its matches
+        per combination of (venue, year, track, status) with one nested terms aggregation over those fast
+        columns. A filter depends only on its field's value, so field F's count is exact from the combos:
+        those passing every set-aside filter not on F, summed by their F value. The combos are memoised per
+        base (`faceted`, by its span-less, sorted conjuncts), so another page, exclusion accounting (whose
+        trees differ only in top-level filters) and a later query with the same base never collect again.
+        Proved equal to one collection per kept set, and to ReferenceEngine (`test_facets_equal.py`)."""
         unknown = [f for f in fields if f not in FACET_FIELDS]
         if unknown:
             raise EngineInputError(DiagnosticCode.API_BAD_PARAM, f"facet fields must be among {FACET_FIELDS}")
         self.expansions(ast)  # the cap applies even when no facet field is asked for
-        conjuncts = [(c, _spanless(c)) for c in _conjuncts(ast)]
-        groups: dict[str, tuple[list[Node], list[str]]] = {}  # kept set → its conjuncts, the fields over it
-        for f in fields:
-            pairs = [(c, k) for c, k in conjuncts if _filter_field(c) != f]
-            key = "\x00".join(sorted(k for _c, k in pairs))
-            groups.setdefault(key, ([c for c, _k in pairs], []))[1].append(f)
+        conjuncts = _conjuncts(ast)
+        filters = [c for c in conjuncts if _filter_field(c) in FACET_FIELDS]
+        base = [c for c in conjuncts if _filter_field(c) not in FACET_FIELDS]
+        combos = self.combos(base)
+        # per field, whether each value that occurs passes every set-aside filter on that field
+        ok = [
+            {
+                v: all(_passes(c, v) for c in filters if _filter_field(c) == g)
+                for v in {c[i] for c, _n in combos}
+            }
+            for i, g in enumerate(COMBO)
+        ]
         out: dict[str, dict[str, int]] = {}
-        for key, (kept, group) in groups.items():
-            counts = {f: self.faceted.get((key, f)) for f in group}  # one read each (task-080)
-            if any(c is None for c in counts.values()):
-                counts.update(self._aggregate(key, kept))
-            for f in group:
-                out[f] = dict(counts[f] or {})  # the caller's copy, never the memo's dict
-        return {f: out[f] for f in fields}
+        for f in fields:
+            at = COMBO.index(f)
+            others = [i for i in range(len(COMBO)) if i != at]  # every other field's filters apply; F's don't
+            counts: dict[str, int] = {}
+            for combo, n in combos:
+                if all(ok[i][combo[i]] for i in others):
+                    value = str(combo[at])
+                    counts[value] = counts.get(value, 0) + n
+            out[f] = dict(sorted(counts.items()))
+        return out
 
-    def _aggregate(self, key: str, kept: list[Node]) -> dict[str, dict[str, int]]:
-        """Every facet field's counts over the matches of `kept`'s conjunction, in one collection, each
-        stored in `faceted` once complete."""
-        node = kept[0] if len(kept) == 1 else And(span=(0, 0), children=tuple(kept)) if kept else None
+    def combos(self, base: list[Node]) -> tuple[tuple[Combo, int], ...]:
+        """How many matches of `base`'s conjunction (every document when empty) have each (venue, year,
+        track, status), from one collection; memoised per base under task-080's rules."""
+        key = "\x00".join(sorted(_spanless(c) for c in base))
+        hit = self.faceted.get(key)  # one read (task-080)
+        if hit is not None:
+            return hit
+        node = base[0] if len(base) == 1 else And(span=(0, 0), children=tuple(base)) if base else None
         query = tantivy.Query.all_query() if node is None else self.compile(node).query
-        aggs = {f: {"terms": {"field": f, "size": 100_000}} for f in FACET_FIELDS}
-        result = self.searcher.aggregate(query, aggs)
-        self._trim("faceted", self.faceted, self.MAX_FACET_BUCKETS)
-        counts: dict[str, dict[str, int]] = {}
-        for f in FACET_FIELDS:
-            counts[f] = dict(sorted((str(b["key"]), int(b["doc_count"])) for b in result[f]["buckets"]))
-            self.faceted[(key, f)] = counts[f]  # stored complete, never changed after
-            self.charges["faceted"].append(len(counts[f]) + 1)
-        return counts
+        aggs: dict[str, Any] = {}
+        for f in reversed(COMBO):  # venue → year → track → status, innermost last
+            aggs = {f: {"terms": {"field": f, "size": 100_000}, **({"aggs": aggs} if aggs else {})}}
+        found: list[tuple[Combo, int]] = []
+        _walk(self.searcher.aggregate(query, aggs), (), found)
+        combos = tuple(sorted(found))
+        self._trim("faceted", self.faceted, self.MAX_FACET_COMBOS)
+        self.faceted[key] = combos  # stored complete (an immutable tuple), never changed after
+        self.charges["faceted"].append(len(combos) + 1)
+        return combos
 
     # --- compilation and explain ---------------------------------------------------------------------
     def expansions(self, ast: Node) -> Expansions:
@@ -353,6 +373,30 @@ def _ord(value: object) -> int:
 def _conjuncts(n: Node) -> list[Node]:
     """Top-level AND conjuncts, nested ANDs flattened."""
     return [x for c in n.children for x in _conjuncts(c)] if isinstance(n, And) else [n]
+
+
+def _walk(result: dict[str, Any], prefix: tuple[str | int, ...], out: list[tuple[Combo, int]]) -> None:
+    """The leaves of a nested terms aggregation over COMBO, as ((venue, year, track, status), count)."""
+    field = COMBO[len(prefix)]
+    for bucket in result[field]["buckets"]:
+        key = (*prefix, int(bucket["key"]) if field == "year" else str(bucket["key"]))
+        if len(key) == len(COMBO):
+            out.append((key, int(bucket["doc_count"])))  # type: ignore[arg-type]
+        else:
+            _walk(bucket, key, out)
+
+
+def _passes(n: Node, value: str | int) -> bool:
+    """Whether a document whose value in `n`'s field is `value` passes the top-level filter `n` (a `Filter` or
+    `NOT` of one), as the compiled query decides it (compile.py `filter`): years in any range, inclusive;
+    other fields equal to one of the values."""
+    inner = n.child if isinstance(n, Not) else n
+    assert isinstance(inner, Filter)
+    if inner.field == "year":
+        hit = any(isinstance(v, YearRange) and v.lo <= value <= v.hi for v in inner.values)  # type: ignore[operator]
+    else:
+        hit = str(value) in {str(v) for v in inner.values}
+    return not hit if isinstance(n, Not) else hit
 
 
 def _spanless(n: Node) -> str:

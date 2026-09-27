@@ -195,13 +195,17 @@ as "current" and can load a pinned older version to replay a search record.
   for `match_ids` + exclusions, the exception above. Warm (the engine's verified-clause cache and compiled-
   query memo), its search is 27 ms p95 over 200 runs.
 - Measured, the `/search` endpoint (M3a review gate; `search.run(limit=50, facets=True, highlight=True)`,
-  synthetic 80k, p95 CPU time of 30 runs on a loaded machine; `docs/results/2026-09-27-highlights.md`): **over
-  the 100 ms budget on a query's first page**, 136–238 ms for the nine non-empty Trust-Evals strings; a later
-  page of the same query 51–76 ms. One collection of the query costs ~31 ms at 80k whatever it computes, and
-  a first page makes five: the page, then one `aggregate` per distinct kept set of the disjunctive facets and
-  exclusion accounting (fields over the same set share one call, every facet field's counts per set are
-  memoised in `TantivyEngine.faceted`, so later pages and exclusion accounting reuse them). task-086 counts
-  them all from one collection's fast columns. `report_80k` reports both pages, in CPU time.
+  synthetic 80k, p95 CPU time of 30 runs on a loaded machine, load 7–19; `docs/results/2026-09-27-highlights.md`).
+  A first page collects the text query twice: the page, and once without its top-level filters for every
+  facet and both exclusion buckets (task-086: counts per (venue, year, track, status) from one nested terms
+  aggregation, the rest in Python; memoised per base in `TantivyEngine.faceted`). First page: 75–93 ms for
+  seven of the nine non-empty Trust-Evals strings, **over the 100 ms budget for `main-1` (117 ms) and
+  `main-3-sources` (109 ms)**; a later page 55–82 ms. It was 153–276 ms before the M3a review gate (seven
+  collections), 136–238 ms after batching facets. Where `main-1`'s first page goes (median CPU): the page's
+  collection 34 ms, the facet collection 37 ms, highlighting 50 hits 33 ms (the tokenizer's slow path: the
+  synthetic text is about half non-ASCII, real abstracts about a quarter), counting 3 ms, display 1 ms. Two
+  collections are the floor of an exact design (the page needs the effective query's own scores); task-087
+  holds the options. `report_80k` reports both pages, in CPU time.
 
 ## Testing
 

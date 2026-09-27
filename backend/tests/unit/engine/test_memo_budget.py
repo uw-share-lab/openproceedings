@@ -32,7 +32,7 @@ def index_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def unbounded(index_path: Path) -> TantivyEngine:
     engine = TantivyEngine(index_path)
     engine.MAX_COMPILED_UNITS = engine.MAX_VERIFIED_IDS = engine.MAX_EXPANDED_TERMS = (
-        engine.MAX_FACET_BUCKETS
+        engine.MAX_FACET_COMBOS
     ) = 10**9
     return engine
 
@@ -129,7 +129,7 @@ class Counting:
         return self.searcher.aggregate(*args, **kwargs)
 
 
-def test_facets_collect_each_kept_set_once_and_later_pages_reuse_it(index_path: Path) -> None:
+def test_one_collection_serves_every_facet_and_the_exclusion_counts(index_path: Path) -> None:
     from openproceedings import search
 
     engine = TantivyEngine(index_path)
@@ -137,16 +137,17 @@ def test_facets_collect_each_kept_set_once_and_later_pages_reuse_it(index_path: 
     engine.searcher = counting
     parsed = parse("alpha OR trust*")  # both defaults inserted
     first = search.run(engine, parsed, limit=2, facets=True)
-    # kept sets: the effective query (venue, year), without the track default (track), without the status
-    # default (status; exclusion accounting's status count too), and exclusion accounting's identified set
-    assert counting.aggregates == 4
+    # the effective tree, and both of exclusion accounting's trees, share one base: `alpha OR trust*`
+    assert counting.aggregates == 1
     again = search.run(engine, parsed, offset=2, limit=2, facets=True)
-    assert counting.aggregates == 4  # another page: every count from the memo
+    assert counting.aggregates == 1  # another page: every count from the memo
     assert (again.facets, again.excluded) == (first.facets, first.excluded)
     assert first.facets == unbounded(index_path).facets(parsed.effective_ast)  # type: ignore[arg-type]
     moved = parse("  alpha   OR trust*")  # the same query written elsewhere: spans never key the memo
     assert engine.facets(moved.effective_ast) == first.facets  # type: ignore[arg-type]
-    assert counting.aggregates == 4
+    narrowed = parse("(alpha OR trust*) venue:ICLR year:2024")  # other filters, the same base
+    engine.facets(narrowed.effective_ast)  # type: ignore[arg-type]
+    assert counting.aggregates == 1
     assert first.facets is not None
     first.facets["venue"]["changed"] = 1  # the caller's copy, never the memo's
     assert "changed" not in engine.facets(parsed.effective_ast)["venue"]  # type: ignore[arg-type]
@@ -154,14 +155,12 @@ def test_facets_collect_each_kept_set_once_and_later_pages_reuse_it(index_path: 
 
 def test_a_facet_memo_over_budget_is_cleared(index_path: Path) -> None:
     engine, reference = TantivyEngine(index_path), unbounded(index_path)
-    budget = 12
-    engine.MAX_FACET_BUCKETS = budget
+    budget = 4
+    engine.MAX_FACET_COMBOS = budget
     for q in QUERIES * 2:
         parsed = parse(q)
         assert parsed.effective_ast is not None
         assert engine.facets(parsed.effective_ast) == reference.facets(parsed.effective_ast), q
         held = sum(len(c) + 1 for c in engine.faceted.values())
-        assert held <= budget + 4 * max(len(c) + 1 for c in engine.faceted.values()), (
-            q
-        )  # one kept set in flight
-    assert sum(len(c) + 1 for c in reference.faceted.values()) > 3 * budget
+        assert held <= budget + max(len(c) + 1 for c in engine.faceted.values()), q  # one base in flight
+    assert sum(len(c) + 1 for c in reference.faceted.values()) > 3 * budget  # the budget binds
