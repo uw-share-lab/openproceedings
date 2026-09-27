@@ -26,11 +26,8 @@ venue-years to replay (offline, from the same cached responses).
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import re
-import tempfile
 import time
 from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -45,11 +42,9 @@ from pydantic import ValidationError
 from openproceedings import storage
 from openproceedings.ingest.classify import classify_venueid
 from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Source, Urls
-from openproceedings.ingest.sources.openreview_client import (
-    OpenReviewCacheMiss,
-    OpenReviewClient,
-    OpenReviewError,
-)
+from openproceedings.ingest.sources.common import CrawlError, Crawls, Report, write_marker
+from openproceedings.ingest.sources.http import CacheMiss
+from openproceedings.ingest.sources.openreview_client import OpenReviewClient
 from openproceedings.logs import elapsed_ms
 
 log = logging.getLogger(__name__)
@@ -85,10 +80,6 @@ def check_scope(venue: str, year: int) -> None:
         raise ValueError(f"{venue} {year} is not on OpenReview API v2 (API v1 years: `openreview_v1`)")
 
 
-class CrawlError(OpenReviewError):
-    reason = "crawl_inconsistent"
-
-
 @dataclass(frozen=True)
 class VenueGroup:
     id: str
@@ -97,9 +88,10 @@ class VenueGroup:
 
 
 @dataclass
-class CrawlReport:
+class CrawlReport(Report):
     """What one venue-year gave; `to_manifest()` goes into the crawl file and the snapshot manifest."""
 
+    source: str = field(default=SOURCE, init=False)
     venue: str
     year: int
     page_size: int = PAGE_SIZE  # part of every page's URL, so a replay must page the same way
@@ -114,13 +106,9 @@ class CrawlReport:
     unknown_track: int = 0
     abstract_missing: int = 0
     track_status: dict[str, Counter[str]] = field(default_factory=dict)
-    fetched: list[str] = field(default_factory=list)  # every response's fetched_at (for the crawl window)
     would_fetch: list[str] = field(default_factory=list)  # dry run: the uncached requests met first
 
     api = "v2"
-
-    def crawl_window(self) -> dict[str, str] | None:
-        return {"from": min(self.fetched), "to": max(self.fetched)} if self.fetched else None
 
     def to_manifest(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -150,6 +138,10 @@ class CrawlReport:
 class Crawl:
     records: tuple[PaperRecord, ...]
     report: CrawlReport
+
+    @property
+    def reports(self) -> tuple[CrawlReport]:
+        return (self.report,)
 
 
 # --- notes → records ----------------------------------------------------------------------------------------
@@ -266,14 +258,14 @@ def _is_container(gid: str) -> bool:
 def _group_ids(client: OpenReviewClient, parent: str, report: CrawlReport, page_size: int) -> list[str]:
     ids: list[str] = []
     for entry, groups in _pages(client, "/groups", {"parent": parent, "select": "id"}, "groups", page_size):
-        report.fetched.append(entry["fetched_at"])
+        report.fetched.append(datetime.fromisoformat(entry["fetched_at"]))
         ids += [g["id"] for g in groups if isinstance(g, Mapping) and isinstance(g.get("id"), str)]
     return sorted(set(ids))
 
 
 def _venue_group(client: OpenReviewClient, gid: str, report: CrawlReport) -> VenueGroup | None:
     entry = client.get("/groups", {"id": gid})
-    report.fetched.append(entry["fetched_at"])
+    report.fetched.append(datetime.fromisoformat(entry["fetched_at"]))
     groups = [g for g in entry["json"].get("groups") or [] if isinstance(g, Mapping) and g.get("id") == gid]
     content = groups[0].get("content") if groups else None
     if not groups or groups[0].get("domain") != gid or not isinstance(content, Mapping):
@@ -289,18 +281,18 @@ def _venue_group(client: OpenReviewClient, gid: str, report: CrawlReport) -> Ven
     return VenueGroup(gid, tuple(dict.fromkeys(venueids)), MappingProxyType(public))
 
 
-def _raise(e: OpenReviewCacheMiss) -> None:
+def _raise(e: CacheMiss) -> None:
     raise e
 
 
 def venue_groups(client: OpenReviewClient, venue: str, year: int, report: CrawlReport,
-                 page_size: int = PAGE_SIZE, on_miss: Callable[[OpenReviewCacheMiss], None] = _raise,
+                 page_size: int = PAGE_SIZE, on_miss: Callable[[CacheMiss], None] = _raise,
                  ) -> list[VenueGroup]:  # fmt: skip
     """The year's v2 venue groups (module docstring, step 1). `on_miss` decides what an uncached response
     does (a dry run notes it and follows the other branches)."""
     try:
         top = _group_ids(client, f"{venue}.cc/{year}", report, page_size)
-    except OpenReviewCacheMiss as e:
+    except CacheMiss as e:
         on_miss(e)
         return []
     candidates: list[str] = []
@@ -312,7 +304,7 @@ def venue_groups(client: OpenReviewClient, venue: str, year: int, report: CrawlR
         else:
             try:
                 candidates += _group_ids(client, gid, report, page_size)
-            except OpenReviewCacheMiss as e:
+            except CacheMiss as e:
                 on_miss(e)
     found = []
     for gid in sorted(set(candidates)):
@@ -324,7 +316,7 @@ def venue_groups(client: OpenReviewClient, venue: str, year: int, report: CrawlR
             try:
                 if (group := _venue_group(client, gid, report)) is not None:
                     found.append(group)
-            except OpenReviewCacheMiss as e:
+            except CacheMiss as e:
                 on_miss(e)
     return found
 
@@ -340,7 +332,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     report = CrawlReport(venue, year, page_size=page_size)
     records: dict[str, PaperRecord] = {}
 
-    def missed(e: OpenReviewCacheMiss) -> None:
+    def missed(e: CacheMiss) -> None:
         if not dry_run:
             raise e
         report.complete = False
@@ -357,7 +349,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
                 continue
             try:
                 _listing(client, vid, venue, year, report, records, page_size)
-            except OpenReviewCacheMiss as e:
+            except CacheMiss as e:
                 missed(e)
     for r in records.values():
         report.track_status.setdefault(r.track, Counter())[r.status] += 1
@@ -384,7 +376,7 @@ def _listing(client: OpenReviewClient, vid: str, venue: str, year: int, report: 
     rows = 0
     counts: set[int] = set()
     for entry, notes in _pages(client, "/notes", params, "notes", page_size):
-        report.fetched.append(entry["fetched_at"])
+        report.fetched.append(datetime.fromisoformat(entry["fetched_at"]))
         if isinstance(count := entry["json"].get("count"), int):
             counts.add(count)
         seen |= {i for n in notes if isinstance(n, Mapping) and isinstance(i := n.get("id"), str)}
@@ -432,40 +424,26 @@ def ingest(client: OpenReviewClient, cache: Path, venue: str, years: Sequence[in
             result = crawl(client, venue, year, dry_run=dry_run, page_size=page_size)
             reports.append(result.report)
             if not dry_run and result.report.complete:
-                _write_json(crawl_file(cache, venue, year), result.report.to_manifest())
+                write_marker(crawls_dir(cache), f"{venue}-{year}", result.report.to_manifest())
     return reports
 
 
-def _write_json(path: Path, data: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f"{storage.TMP}{path.name}")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(json.dumps(data, indent=1, sort_keys=True, ensure_ascii=False) + "\n")
-            fh.flush()
-            storage.fsync(fh.fileno())
-        os.replace(tmp, path)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+def marker_key(marker: Mapping[str, Any]) -> tuple[str, int, int]:
+    """A crawl file's venue, year and page size (part of every page's URL, so a replay pages the same way)."""
+    return str(marker["venue"]), int(marker["year"]), int(marker["page_size"])
 
 
-def cached_crawls(cache: Path) -> list[tuple[str, int, int]]:
-    """The venue-years (and page size) with a finished crawl in the cache, in file-name order."""
-    out = []
-    for path in sorted(crawls_dir(cache).glob("*.json")):
-        if path.name.startswith("."):
-            continue
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            out.append((str(data["venue"]), int(data["year"]), int(data["page_size"])))
-        except (OSError, ValueError, KeyError, TypeError):
-            raise CrawlError(f"crawl file {path.name} is unreadable; crawl that venue-year again",
-                             reason="crawl_file_invalid") from None  # fmt: skip
-    return out
+def _replay_one(cache: Path, key: tuple[Any, ...]) -> Crawl:
+    venue, year, page_size = key
+    return crawl(
+        OpenReviewClient(http_dir(cache), credentials=None, offline=True), venue, year, page_size=page_size
+    )
+
+
+CRAWLS: Crawls[Crawl] = Crawls(crawls_dir, marker_key, lambda k: f"{k[0]} {k[1]} (OpenReview API v2)",
+                               "op ingest openreview", _replay_one)  # fmt: skip
 
 
 def replay(cache: Path) -> list[Crawl]:
     """Every finished crawl, rebuilt from the cache alone (no credentials, no network)."""
-    client = OpenReviewClient(http_dir(cache), credentials=None, offline=True)
-    return [crawl(client, venue, year, page_size=size) for venue, year, size in cached_crawls(cache)]
+    return CRAWLS.replay(cache)

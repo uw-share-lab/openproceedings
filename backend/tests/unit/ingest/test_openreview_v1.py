@@ -21,14 +21,10 @@ from openproceedings.ingest import snapshot as snap
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources import openreview_v1 as v1
 from openproceedings.ingest.sources import openreview_v2 as orv2
-from openproceedings.ingest.sources.openreview_client import (
-    Credentials,
-    OpenReviewCacheMiss,
-    OpenReviewClient,
-    OpenReviewRetriesExhausted,
-    Request,
-    Response,
-)
+from openproceedings.ingest.sources.http import CacheMiss as OpenReviewCacheMiss
+from openproceedings.ingest.sources.http import Request, Response
+from openproceedings.ingest.sources.http import RetriesExhausted as OpenReviewRetriesExhausted
+from openproceedings.ingest.sources.openreview_client import Credentials, OpenReviewClient
 
 from tests.unit.ingest.openreview_fakes import (
     PASSWORD,

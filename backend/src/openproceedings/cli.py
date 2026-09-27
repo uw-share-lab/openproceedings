@@ -1014,9 +1014,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from openproceedings.engine.index import IndexBuildError
     from openproceedings.engine.protocol import EngineError
     from openproceedings.ingest.snapshot import SnapshotError
-    from openproceedings.ingest.sources.common import MinerError
-    from openproceedings.ingest.sources.http import CacheError, FetchError
-    from openproceedings.ingest.sources.openreview_client import OpenReviewError
+    from openproceedings.ingest.sources.http import FetchError, SourceError
 
     parser = build_parser()
     args = list(sys.argv[1:] if argv is None else argv)
@@ -1043,8 +1041,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         return 0
     except (
-        SnapshotError, IndexBuildError, EngineError, OpenProceedingsError, OpenReviewError, MinerError, FetchError,
-        CacheError, ValueError, OSError,
+        SnapshotError, IndexBuildError, EngineError, OpenProceedingsError, SourceError, ValueError, OSError,
     ) as e:  # fmt: skip
         from openproceedings.engine.parity import ParityError
 
@@ -1060,7 +1057,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         fields: dict[str, object] = {"command": name, "error": type(e).__name__}
         if isinstance(e, OpenProceedingsError):
             fields["code"] = str(e.code)
-        if isinstance(e, OpenReviewError | SnapshotError | MinerError | FetchError):
+        if isinstance(e, SourceError | SnapshotError):
             fields["reason"] = e.reason
         log.log(level, "cli_refused", extra=fields, exc_info=isinstance(e, InternalError))
         print(f"op {name}: {_reason(e)}", file=sys.stderr)
