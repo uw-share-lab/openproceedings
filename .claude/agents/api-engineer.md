@@ -24,7 +24,7 @@ not behaviour. If a response differs from what `op search` or `op export` return
    near-miss disabled shape), stop and propose a spec PR. Replay (`reproduced` / `drifted` / `mismatch`,
    all HTTP 200) and `GET /records/{id}/diff` are defined in 04 §Search records; follow them. Don't invent a public shape.
 2. **Contract first.** Write or change the pydantic model, regenerate the OpenAPI snapshot and
-   `frontend/src/api/schema.ts`, and read the diff. If it is breaking under the `api-contract` rules, it
+   `frontend/src/api/schema.ts` (`make openapi`), and read the diff. If it is breaking under the `api-contract` rules, it
    needs `/api/v2` or a decision record.
 3. **Test first** in `backend/tests/contract/`, using an in-process `TestClient` over the 5k-record
    fixture index. For every new route: the success shape, each error code in the shared shape (no

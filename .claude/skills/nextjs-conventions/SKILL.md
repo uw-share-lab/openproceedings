@@ -13,14 +13,18 @@ description: The openproceedings Next.js standard — App Router layout, output 
 2. **Generated types only.** `frontend/src/api/schema.ts` is generated from the FastAPI OpenAPI schema
    (spec 04 §Conventions); CI fails if it is stale. Never hand-write a response type, never widen one with
    `as`, never add an optional field the schema lacks. Contract change → backend PR first
-   (`api-engineer`), then regenerate. The codegen tool and script are pinned in `frontend/package.json`
-   (verify at implementation time which one; do not add a second).
+   (`api-engineer`), then regenerate with `make openapi` (the backend snapshot, then `npm run gen:api`:
+   `openapi-typescript` 7.13.0, pinned in `frontend/package.json`; do not add a second codegen tool).
+   Fetch through `src/api/client.ts` only: `createApi()` is `openapi-fetch` typed by the generated
+   `paths`, `cache: "no-store"`, base URL `NEXT_PUBLIC_API_BASE_URL` (default "" = same origin); it returns
+   `{data, error}`, where `error` is the typed `ErrorEnvelope` for every non-2xx (a 422 included).
+   `hitHighlightsUtf16(hit)` converts a hit's highlight spans with `spans.ts`.
 3. **The server decides membership, counts, highlights and parsing.** The client never tokenizes, never
    re-matches terms to draw highlights, never filters/sorts/dedups `hits`, never computes a count. A
    second tokenizer in TypeScript is a guarantee-1 bug (`token-contract`). Highlights are slices of the
    string at the API's `highlights` spans, nothing more.
 
-## Layout (skeleton built in TASK-039: app routes, `src/lib/search-state.ts`, `src/api/spans.ts`; the rest arrives with its task)
+## Layout (skeleton built in TASK-039: app routes, `src/lib/search-state.ts`, `src/api/spans.ts`; `src/api/schema.ts` and `client.ts` in TASK-040; the rest arrives with its task)
 | Path | Kind |
 |---|---|
 | `src/app/page.tsx` (`/`), `search/page.tsx` | server shell; the `/search` workspace is a client component |

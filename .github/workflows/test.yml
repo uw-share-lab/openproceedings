@@ -27,12 +27,13 @@ jobs:
       - name: Install the npm workspace (root package-lock.json)
         if: hashFiles('frontend/package.json') != ''
         run: npm ci
-      - name: OpenAPI → TS types are fresh
-        # Arms itself once TASK-040 commits the generated schema.ts and the gen:api script.
-        if: hashFiles('backend/pyproject.toml') != '' && hashFiles('frontend/src/api/schema.ts') != ''
+      - name: OpenAPI snapshot and TS types are fresh (make openapi)
+        # Unconditional: regenerate backend/tests/contract/openapi.json and frontend/src/api/schema.ts from
+        # the app, and fail if either differs from the committed file (api-contract skill; TASK-040).
         run: |
-          uv run --locked op openapi > frontend/openapi.json
-          (cd frontend && npm run gen:api && git diff --exit-code src/api/schema.ts)
+          make openapi
+          git diff --exit-code -- backend/tests/contract/openapi.json frontend/src/api/schema.ts \
+            || { echo "::error::the API contract is stale: run 'make openapi' and commit both files"; exit 1; }
       - name: Frontend — vitest
         if: hashFiles('frontend/package.json') != ''
         run: npm test --workspace frontend

@@ -12,7 +12,16 @@ brew install shellcheck       # or apt-get install shellcheck — used by make l
 ```
 `make help` lists the entry points: `sync` runs `uv sync` and `npm ci`, `fmt` fixes the whole repo, `lint`
 is exactly what CI checks (frontend included: prettier, eslint, `next typegen` + `tsc --noEmit`; it fails if
-`node_modules/` is missing), and `tooling` runs the roster, backlog and hook checks.
+`node_modules/` is missing), `tooling` runs the roster, backlog and hook checks, and `openapi` regenerates
+the API contract (below).
+
+**Changed a route, a parameter or a response model? Run `make openapi` and commit both files it writes:**
+`backend/tests/contract/openapi.json` (the OpenAPI snapshot, from `op openapi`) and
+`frontend/src/api/schema.ts` (TypeScript types generated from it by `openapi-typescript`). Never edit either
+by hand. The contract test (`test_openapi_snapshot.py`) and CI's `test` job both fail while they are stale,
+and the snapshot diff is what a reviewer reads to classify the change (`.claude/skills/api-contract/SKILL.md`).
+When branches that each change the API merge, rerun `make openapi` on the merge result rather than resolving
+conflicts in the generated files by hand.
 **Backend-only contributors need Node too:** the pre-push hook runs `make lint`, which checks `frontend/`,
 so install Node 22 and run `npm ci` once even if you never touch the UI.
 Put OpenReview credentials in `.env` (gitignored). The anonymous API rate-limits almost immediately.
