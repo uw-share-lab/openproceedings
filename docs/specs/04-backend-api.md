@@ -303,6 +303,24 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     filter values against, so autocomplete never offers a value it refuses).
   - Every route that reports `index_version` needs a loaded engine, `/parse` and `/meta` included (503
     `API_INDEX_NOT_LOADED` before the first load).
+- As built (task-038, `api/coverage.py`, `coverage.py`): `GET /coverage` answers the three versions plus
+  `snapshot` (`name`, `snapshot_hash`, `crawl_date`, `crawl_from` and `crawl_to` (the first and last fetch),
+  `built_at`, `sources`), `totals` (`records`, `abstract_missing`, `unknown_track`, `unknown_status`) and
+  `venue_years`: one entry per venue-year, ordered by venue name then year, with the same four counts and
+  `cells`, a `{track, status, count}` per non-empty cell in vocabulary order (`vocab.py`; `unknown` last).
+  - The numbers are the manifest of the snapshot the served index was built from (`counts`,
+    `abstract_missing`, `unknown_track`, `record_count`: counted from the records once, at snapshot build),
+    reshaped by `coverage.breakdown`, which never recounts. `unknown` is never folded: it is its own cell,
+    and every venue-year carries `unknown_track` and `unknown_status`, 0 included. Missing abstracts are per
+    venue-year, the manifest's granularity (the M4 abstract threshold is per venue-year too).
+  - The snapshot is found and verified as `/papers/{id}` does (`Papers.records`: the index manifest's
+    snapshot, whose records hash to its `snapshot_hash`). A manifest whose maps disagree with one another, a
+    track or status outside the vocabulary, or a total different from the records' or the index's
+    document count is a 500 `API_INTERNAL`, never partial coverage.
+  - Computed once per `index_version` (`Coverages`; task-080's memo rule) and kept for the served index and
+    the one before it, so a hot swap gets a fresh entry. One `coverage_computed` INFO line per computation.
+  - Not yet: which statuses a venue-year's sources *can* contain (spec 07 §C "statuses indexed") and crawl
+    dates per source; neither is in the manifest (task-082).
 
 ## Testing
 
