@@ -4,7 +4,7 @@ title: User research with systematic reviewers
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-27 18:33'
+updated_date: '2026-09-27 20:04'
 labels:
   - ux
   - research
@@ -35,4 +35,6 @@ Interviews/contextual inquiry on the Scholar → dedup → Covidence → PRISMA 
 2026-09-27: ethics clearance obtained (reported by the project owner; protocol details not recorded here). AC#1 satisfied.
 
 Clarification (2026-09-27, M3 follow-ups review gate): AC#1 was ticked on the project owner's explicit instruction; the owner confirmed clearance was obtained and chose not to record the ORE file number or decision date here. Add them to this note if they become needed (the hci-methods skill's status line expects 'cleared <file #>').
+
+2026-09-27 re-scope (owner): deferred until the full system (M3b UI + M4 crawlers) is built.
 <!-- SECTION:NOTES:END -->

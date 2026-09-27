@@ -4,6 +4,7 @@ title: Usability test round 1 on the MVP
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
+updated_date: '2026-09-27 20:04'
 labels:
   - ux
   - research
@@ -25,3 +26,9 @@ Task-based sessions on real review tasks (usability-testing skill; /usability-st
 - [ ] #1 Study plan with ethics status line; tasks from the Trust-Evals workflow
 - [ ] #2 Findings with severity become Backlog tasks; Musts fixed before M3 exit
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-09-27 re-scope (owner): deferred until the full system (M3b UI + M4 crawlers) is built.
+<!-- SECTION:NOTES:END -->
