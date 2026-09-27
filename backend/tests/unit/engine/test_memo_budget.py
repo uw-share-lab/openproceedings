@@ -164,3 +164,49 @@ def test_a_facet_memo_over_budget_is_cleared(index_path: Path) -> None:
         held = sum(len(c) + 1 for c in engine.faceted.values())
         assert held <= budget + max(len(c) + 1 for c in engine.faceted.values()), q  # one base in flight
     assert sum(len(c) + 1 for c in reference.faceted.values()) > 3 * budget  # the budget binds
+
+
+def test_one_compile_with_many_verified_clauses_overshoots_by_at_most_one_clause(index_path: Path) -> None:
+    """The verified memo is kept clause by clause inside a compile (`_store_verified`), not once per compile:
+    a query of many cold verified clauses can't carry the memo past its budget by more than one clause."""
+    engine, reference = TantivyEngine(index_path), unbounded(index_path)
+    budget = 6
+    engine.MAX_VERIFIED_IDS = budget
+    q = " OR ".join(f"({v})" for v in VERIFIED)  # every clause cold, in one compile
+    assert run(engine, q) == run(reference, q)  # a clear mid-compile never changes the result
+    largest = max(len(ids) + 1 for ids in reference.verified.values())
+    assert verified_held(engine) <= budget + largest
+    # the query needs it: charged once per compile, as before, the memo would hold every clause
+    assert verified_held(reference) > budget + largest
+    assert sum(engine.charges["verified"]) >= verified_held(engine)  # the ledger still covers what's held
+
+
+def test_a_compile_refused_partway_has_charged_every_clause_it_stored(index_path: Path) -> None:
+    """A compile that fails after verifying some clauses (the API's gate refuses a later one: 503 API_BUSY)
+    leaves those clauses in the memo; each was charged as it was stored, so the budget still sees them
+    (a charge at the compile's end was skipped by the refusal, and the memo grew past its budget unseen)."""
+    from contextlib import contextmanager
+
+    engine = TantivyEngine(index_path)
+
+    class Busy(Exception):
+        pass
+
+    entries = 0
+
+    @contextmanager
+    def gate() -> Any:
+        nonlocal entries
+        entries += 1
+        if entries % 2 == 0:
+            raise Busy  # every second cold verification refused
+        yield
+
+    engine.verification_gate = gate
+    for k in range(20):
+        q = f"(alpha NEAR/{k} alpha) OR (beta NEAR/{k} beta)"  # two fields each: at least two cold entries
+        entries = 0
+        with pytest.raises(Busy):
+            run(engine, q)
+    assert len(engine.verified) >= 20  # the refused compiles did store what they verified
+    assert sum(engine.charges["verified"]) == verified_held(engine)

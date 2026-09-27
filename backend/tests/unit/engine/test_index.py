@@ -25,7 +25,7 @@ from openproceedings.engine.index import (
 )
 from openproceedings.ingest.dedup import DedupResult
 from openproceedings.ingest.record import PaperRecord
-from openproceedings.ingest.snapshot import render
+from openproceedings.ingest.snapshot import SnapshotError, render
 
 from tests.unit.ingest.test_dedup import H, paper
 
@@ -209,6 +209,40 @@ def test_a_tampered_snapshot_is_refused(tmp_path: Path) -> None:
     with pytest.raises(Exception, match="doesn't match its manifest"):
         build_index(snap, tmp_path / "indexes", BUILT)
     assert [p.name for p in (tmp_path / "indexes").iterdir() if p.name != ".lock"] == []  # nothing placed
+
+
+def test_a_failed_build_releases_its_writer_before_removing_its_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The failing frame's traceback keeps the writer alive; unless it is stopped first, Tantivy can rewrite
+    its lock file after `rmtree` has walked the directory, and the `.tmp-*` survives (M3a review gate round
+    2). Checked at the moment of removal: another writer can take the directory's lock, so none holds it."""
+    snap = snapshot_of(CORPUS, tmp_path / "snap")
+    rewrite_manifest(snap, {"snapshot_hash": "0" * 64})
+    rmtree = idx.shutil.rmtree
+    checked: list[str] = []
+
+    def removing(path: Any, *args: Any, **kwargs: Any) -> None:
+        if Path(path).name.startswith(".tmp-"):
+            tantivy.Index.open(str(path)).writer(num_threads=1).wait_merging_threads()  # LockBusy if held
+            checked.append(Path(path).name)
+        rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(idx.shutil, "rmtree", removing)
+    with pytest.raises(SnapshotError, match="doesn't match its manifest"):
+        build_index(snap, tmp_path / "indexes", BUILT, workers=1)
+    assert len(checked) == 1
+
+
+def test_failed_builds_never_leave_their_directory(tmp_path: Path) -> None:
+    """Many failing builds, each checked at once (the next build's sweep would hide a leftover)."""
+    snap = snapshot_of(CORPUS, tmp_path / "snap")
+    rewrite_manifest(snap, {"snapshot_hash": "0" * 64})
+    indexes = tmp_path / "indexes"
+    for _ in range(40):
+        with pytest.raises(SnapshotError):
+            build_index(snap, indexes, BUILT, workers=1)
+        assert [p.name for p in indexes.iterdir() if p.name != ".lock"] == []
 
 
 # --- CLI ---------------------------------------------------------------------------------------------------

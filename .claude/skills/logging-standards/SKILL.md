@@ -89,7 +89,8 @@ whose message quotes corpus tokens), WARNING for any other refusal (a snapshot, 
 exception nothing anticipated is one `cli_failed` ERROR line with the traceback; a traceback's last line is
 the exception's message, which can quote input, so the API (task-034) logs frames and type, not the
 message. Long jobs say they're alive: `index_build_started`, `index_build_progress` every 10k documents,
-`index_built`; `index_parity_ok` when a parity check passes.
+`index_built`; `index_parity_ok` when a parity check passes. A failed build whose `.tmp-*` staging directory
+survives its removal logs `index_build_tmp_left` (WARNING, the directory's name only).
 
 ## Review checklist (`observability-reviewer`)
 1. Does every new failure path produce exactly one log at the right level?

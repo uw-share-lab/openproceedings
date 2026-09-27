@@ -32,6 +32,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, TextIO
 
+from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.engine.protocol import EngineInternalError
 from openproceedings.vocab import venue_name
 
 __all__ = [
@@ -72,9 +74,6 @@ def check_count(written: int, total: int) -> None:
     """An export wrote exactly the `total` records its query matched, or it failed: EngineInternalError, never
     a silently shorter or longer file (`op export` and `GET /export` both end with it)."""
     if written != total:
-        from openproceedings.diagnostics import DiagnosticCode
-        from openproceedings.engine.protocol import EngineInternalError
-
         raise EngineInternalError(
             DiagnosticCode.API_INTERNAL, f"exported {written} records, but {total} match"
         )
@@ -251,6 +250,8 @@ def _balances(text: str, *, escaped_count: bool) -> bool:
     `\\{` do (escaped ones skipped). A value is kept as written only when both agree it nests, and never when
     a brace follows two or more backslashes (`\\\\{`), which readers disagree on (bibtexparser 2 reads it as
     escaped)."""
+    if "{" not in text and "}" not in text:
+        return True  # most values: nothing to count (the loop below would find nothing and say so)
     depth = 0
     for m in _BRACE.finditer(text):
         if len(m.group(1)) >= 2:
@@ -268,7 +269,9 @@ def _debraced(text: str) -> str:
     return _one_line(_BRACE.sub(lambda m: m.group(1)[: len(m.group(1)) // 2 * 2], _one_line(text)))
 
 
-_EVEN_BACKSLASHES = r"(?<!\\)((?:\\\\)*)"  # an even run (or none): the next character is not
+# a special character and the whole backslash run before it (the match starts at the run's first backslash,
+# `\\*` being greedy); an even run (or none) leaves the character bare, so it is escaped
+_SPECIAL = re.compile(r"(\\*)([&%#])")
 _AT = re.compile(r"(\\*)@")  # an `@` and the backslash run before it
 _BARE_UNDERSCORE = re.compile(r"(?<!\\)_")
 
@@ -285,11 +288,21 @@ def _braced(text: str) -> str:
     text = _one_line(text)
     if not (_balances(text, escaped_count=True) and _balances(text, escaped_count=False)):
         text = _debraced(text)
-    text = re.sub(_EVEN_BACKSLASHES + r"([&%#])", r"\1\\\2", text)  # `&` → `\\&`, `\\\\&` → `\\\\\\&`
-    text = _AT.sub(lambda m: m.group(1)[: len(m.group(1)) // 2 * 2] + "{@}", text)
+    # each pass only when its character occurs (most values have none): the same output, a fraction of the CPU
+    if "&" in text or "%" in text or "#" in text:
+        text = _SPECIAL.sub(_escape_special, text)  # `&` → `\&`, `\\&` → `\\\&`, `\&` stays
+    if "@" in text:
+        text = _AT.sub(lambda m: m.group(1)[: len(m.group(1)) // 2 * 2] + "{@}", text)
     if text.endswith("\\"):
         text += " "
     return "{" + text + "}"
+
+
+def _escape_special(m: re.Match[str]) -> str:
+    """`&`, `%` or `#` after an even backslash run (or none) gets one more backslash; after an odd run it is
+    already escaped and stays."""
+    run, char = m.group(1), m.group(2)
+    return m.group(0) if len(run) % 2 else run + "\\" + char
 
 
 def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:

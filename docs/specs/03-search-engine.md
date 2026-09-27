@@ -119,7 +119,8 @@ Nothing is precomputed at build and nothing is cached across requests. Measured 
 `docs/results/2026-09-27-highlights.md`: highlighting a 50-hit page costs about 5–7× less (real local corpus,
 5k fixture, synthetic 80k), and a 50-hit search with its display records and highlights is inside the 100 ms
 budget at 80k (exclusion accounting keeps its own 300 ms budget). The `/search` endpoint as a whole (with
-exclusion accounting and facets) is not yet: see §Performance budgets. It is a row of the `bench` workflow
+exclusion accounting and facets) is too, in wall time, since its facets overlap the page: see §Performance
+budgets. It is a row of the `bench` workflow
 (`test_search_first_50_hits_with_highlights`) and a column of the 80k report.
 
 ## Exclusion accounting (guarantee 6, PRISMA)
@@ -195,17 +196,24 @@ as "current" and can load a pinned older version to replay a search record.
   for `match_ids` + exclusions, the exception above. Warm (the engine's verified-clause cache and compiled-
   query memo), its search is 27 ms p95 over 200 runs.
 - Measured, the `/search` endpoint (M3a review gate; `search.run(limit=50, facets=True, highlight=True)`,
-  synthetic 80k, p95 CPU time of 30 runs on a loaded machine, load 7–19; `docs/results/2026-09-27-highlights.md`).
-  A first page collects the text query twice: the page, and once without its top-level filters for every
-  facet and both exclusion buckets (task-086: counts per (venue, year, track, status) from one nested terms
-  aggregation, the rest in Python; memoised per base in `TantivyEngine.faceted`). First page: 75–93 ms for
-  seven of the nine non-empty Trust-Evals strings, **over the 100 ms budget for `main-1` (117 ms) and
-  `main-3-sources` (109 ms)**; a later page 55–82 ms. It was 153–276 ms before the M3a review gate (seven
-  collections), 136–238 ms after batching facets. Where `main-1`'s first page goes (median CPU): the page's
-  collection 34 ms, the facet collection 37 ms, highlighting 50 hits 33 ms (the tokenizer's slow path: the
-  synthetic text is about half non-ASCII, real abstracts about a quarter), counting 3 ms, display 1 ms. Two
-  collections are the floor of an exact design (the page needs the effective query's own scores); task-088
-  holds the options. `report_80k` reports both pages, in CPU time.
+  synthetic 80k). A first page collects the text query twice: the page, and once without its top-level
+  filters for every facet and both exclusion buckets (task-086: counts per (venue, year, track, status) from
+  one nested terms aggregation, the rest in Python; memoised per base in `TantivyEngine.faceted`). Two
+  collections are the floor of an exact design (the page needs the effective query's own scores), so the
+  second runs on a worker thread, overlapping the first (M3a review gate round 2): `search.run` compiles the
+  effective tree in the request's thread (a cold verified clause takes its one verification slot there),
+  then starts the facet aggregation on a worker and collects, reads and highlights the page meanwhile
+  (Tantivy releases the GIL while collecting). The result is the sequential one, field for field
+  (`tests/unit/test_search_overlap.py`). **First page, wall p95 over 200 runs: 57–85 ms for every non-empty
+  Trust-Evals string, within budget** (`main-1` 84.5 ms, `main-3-sources` 76.8 ms; sequentially 76–116 ms,
+  interleaved in the same run); a later page 54–77 ms. CPU per request is unchanged, 74–109 ms: the overlap
+  saves wait, not work, so throughput under load is as before (`docs/results/2026-09-27-search-overlap.md`,
+  load 6–14). Where `main-1`'s first page goes (median CPU, task-088's breakdown): the page's collection
+  34 ms, the facet collection 37 ms (now overlapped), highlighting 50 hits 33 ms (the tokenizer's slow path:
+  the synthetic text is about half non-ASCII, real abstracts about a quarter), counting 3 ms, display 1 ms.
+  The remaining headroom work (a non-ASCII tokenizer fast path, a re-measure on the real corpus) is
+  task-088, in M4. `report_80k` reports both pages as wall p95 over 200 runs, and the first page's CPU per
+  request.
 
 ## Testing
 
