@@ -73,6 +73,8 @@ class DiagnosticCode(StrEnum):
     API_BUSY = "API_BUSY"  # position verification's slots are all taken: retry shortly (M3a review)
     # more position-verified clauses than the instance runs in one query (M3a review round 2, decision-010)
     API_TOO_MANY_VERIFIED_CLAUSES = "API_TOO_MANY_VERIFIED_CLAUSES"
+    # position checks that would read more candidate documents than the instance allows one query
+    API_QUERY_TOO_COSTLY = "API_QUERY_TOO_COSTLY"  # (M3a review round 3, decision-010)
 
 
 _API_STATUS: dict[DiagnosticCode, int] = {
@@ -90,6 +92,7 @@ _API_STATUS: dict[DiagnosticCode, int] = {
     DiagnosticCode.API_BODY_TOO_LARGE: 413,
     DiagnosticCode.API_BUSY: 503,
     DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES: 422,
+    DiagnosticCode.API_QUERY_TOO_COSTLY: 422,
 }
 
 

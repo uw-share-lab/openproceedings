@@ -11,6 +11,7 @@ traceback, whose last line is the message and can quote the query (task-034 note
 
 from __future__ import annotations
 
+import contextvars
 import errno
 import logging
 import traceback
@@ -36,6 +37,11 @@ from openproceedings.diagnostics import (
 
 log = logging.getLogger(__name__)
 ACCESS = "openproceedings.access"  # scope key: the request's access-line fields (api/middleware.py)
+# the same dict, for code that has no request (the verification slot, `state.IndexState.verification_slot`):
+# set by `AccessLog` for the request's task, so its worker threads see it too (each runs in a copy of the context)
+current_access: contextvars.ContextVar[dict[str, object] | None] = contextvars.ContextVar(
+    "op_access_fields", default=None
+)
 
 if TYPE_CHECKING:
     ErrorCode = DiagnosticCode
@@ -56,7 +62,7 @@ class ErrorBody(BaseModel):
     code: ErrorCode
     message: str
     # present (non-empty) on a query refusal (`PARSE_*`, `FIELD_*`, `WILDCARD_*`,
-    # `API_TOO_MANY_VERIFIED_CLAUSES`), absent otherwise; never null
+    # `API_TOO_MANY_VERIFIED_CLAUSES`, `API_QUERY_TOO_COSTLY`), absent otherwise; never null
     diagnostics: list[Diagnostic] | SkipJsonSchema[None] = Field(default=None)
 
 

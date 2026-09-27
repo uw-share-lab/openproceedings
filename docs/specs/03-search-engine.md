@@ -201,7 +201,9 @@ as "current" and can load a pinned older version to replay a search record.
   one nested terms aggregation, the rest in Python; memoised per base in `TantivyEngine.faceted`). Two
   collections are the floor of an exact design (the page needs the effective query's own scores), so the
   second runs on a worker thread, overlapping the first (M3a review gate round 2): `search.run` compiles the
-  effective tree in the request's thread (a cold verified clause takes its one verification slot there),
+  effective tree in the request's thread (a cold verified clause takes its one verification slot there, and
+  the request keeps the ids it verified in its own `Scope`, so no later compile of it, the worker's
+  included, verifies a clause again however the memos are trimmed; the worker never verifies: round 3),
   then starts the facet aggregation on a worker and collects, reads and highlights the page meanwhile
   (Tantivy releases the GIL while collecting). The result is the sequential one, field for field
   (`tests/unit/test_search_overlap.py`). **First page, wall p95 over 200 runs: 57–85 ms for every non-empty

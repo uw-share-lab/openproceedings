@@ -53,7 +53,7 @@ from types import FrameType
 from typing import TYPE_CHECKING, Literal
 
 from openproceedings.api.config import INDEX_NAME
-from openproceedings.api.errors import ApiError, frames, reason_of
+from openproceedings.api.errors import ApiError, current_access, frames, reason_of
 from openproceedings.diagnostics import DiagnosticCode, OpenProceedingsError
 from openproceedings.engine.index import VERSION_NAME, IndexBuildError
 from openproceedings.ingest.snapshot import RecordFile, SnapshotError, indexed_snapshot
@@ -161,6 +161,7 @@ class IndexState:
         refusal_seconds: float = 300.0,
         verification_slots: int = 1,
         busy_retry_seconds: int = 5,
+        slow_verification_seconds: float = 5.0,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._data_dir = data_dir
@@ -191,11 +192,15 @@ class IndexState:
         # time, across all requests and indexes; one more is refused, never queued (spec 04 §Rate limit)
         self._verifying = threading.BoundedSemaphore(verification_slots)
         self._busy_retry_seconds = busy_retry_seconds
+        self._slow_verification_ms = slow_verification_seconds * 1000
 
     @contextmanager
     def verification_slot(self) -> Iterator[None]:
         """Hold one of the cold-verification slots for the block, or raise 503 `API_BUSY` with
-        `Retry-After` at once if none is free (`TantivyEngine.verification_gate`)."""
+        `Retry-After` at once if none is free (`TantivyEngine.verification_gate`). The time held is added to
+        the request's access line (`verify_ms`, summed over its holds); a request whose holds pass
+        `slow_verification_seconds` logs `verification_slow` (WARNING, once), the slot starving every other
+        verified query meanwhile."""
         if not self._verifying.acquire(blocking=False):
             raise ApiError(
                 DiagnosticCode.API_BUSY,
@@ -203,10 +208,28 @@ class IndexState:
                 f"Try again in {self._busy_retry_seconds} s.",
                 headers={"Retry-After": str(self._busy_retry_seconds)},
             )
+        started = time.perf_counter()
         try:
             yield
         finally:
             self._verifying.release()
+            self._held(elapsed_ms(started))
+
+    def _held(self, ms: float) -> None:
+        fields = current_access.get()
+        if fields is None:  # outside a request (a test driving the engine)
+            return
+        held = fields.get("verify_ms", 0.0)
+        before = held if isinstance(held, float) else 0.0
+        after = round(before + ms, 1)
+        fields["verify_ms"] = (
+            after  # one request verifies in one thread at a time (its facet worker never does)
+        )
+        if before <= self._slow_verification_ms < after:
+            log.warning(
+                "verification_slow",
+                extra={"verify_ms": after, "threshold_ms": self._slow_verification_ms},
+            )
 
     def _gated(self, engine: TantivyEngine) -> TantivyEngine:
         engine.verification_gate = self.verification_slot

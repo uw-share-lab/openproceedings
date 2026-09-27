@@ -586,9 +586,30 @@ def test_a_query_whose_canonical_form_is_over_the_cap_is_too_long() -> None:
     over = f"{len(canonical) - MAX_QUERY_LENGTH:,} over the limit of {MAX_QUERY_LENGTH:,}"
     assert f"is {len(canonical):,} characters, {over}" in error.message
     assert "each space between words becomes ` AND `" in error.message
-    assert "a `field:(…)` group repeats `field:` on every term" in error.message
+    assert "field:" not in error.message  # no field group: not blamed (M3a round 3)
     defaults = " AND track:(datasets_benchmarks OR main OR position) AND status:accepted"
     assert f"the default filters add {len(defaults)}" in error.message
+
+
+def test_a_canonical_overflow_names_only_the_causes_its_query_has() -> None:
+    """A plain OR list has no implicit AND and no field group: neither is named (the defaults still are);
+    a `field:(…)` group is named, and juxtaposition inside one counts as an implicit AND."""
+    ored = " OR ".join(f"w{i:04d}" for i in range(217))  # 1,949 code points
+    [error] = parse(ored).errors
+    assert error.code is DiagnosticCode.PARSE_TOO_LONG, parse(ored).canonical
+    assert "` AND `" not in error.message and "field:" not in error.message
+    assert "the default filters add" in error.message
+    grouped = "title:(" + " OR ".join(f"w{i:04d}" for i in range(200)) + ") track:main status:accepted"
+    [error] = parse(grouped).errors
+    assert error.code is DiagnosticCode.PARSE_TOO_LONG
+    assert "a `field:(…)` group repeats `field:` on every term" in error.message
+    assert "each space between words becomes ` AND `" in error.message  # `) track:main` side by side
+    assert "default filters add" not in error.message
+
+
+def test_the_length_cap_message_groups_thousands() -> None:
+    [error] = parse("x" * 2_966).errors
+    assert error.message.startswith("The query is 2,966 characters long; the limit is 2,000")
 
 
 def test_a_canonical_overflow_with_typed_filters_does_not_blame_the_defaults() -> None:

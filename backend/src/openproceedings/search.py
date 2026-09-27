@@ -10,8 +10,12 @@ here, in the calling thread, holding at most one verification slot (task-088). W
 their aggregation (one collection of the query without its top-level filters, `TantivyEngine.facets`) then
 runs on a worker thread while the caller collects the page, reads its display records and highlights it:
 Tantivy releases the GIL while it collects, so the two collections overlap. The facet tree's verified
-clauses are the effective tree's, just checked, so the worker reads them from the engine's memo. Then
-exclusion accounting reuses `total` and the facet memo. The result is the sequential one, field for field
+clauses are the effective tree's, just checked: the request keeps the ids it verified (its `scope`, passed to
+every compile it makes), so a page whose compiled entry was trimmed and exclusion accounting read them there,
+never verifying a clause twice however the engine's memos are trimmed meanwhile; the worker gets a read-only
+view (`Scope.reader`) and never verifies, so it never takes a verification slot, and a caller that fails while
+the worker runs leaves no slot held (M3a review gate round 3). Then exclusion accounting reuses `total`
+and the facet memo. The result is the sequential one, field for field
 (`tests/unit/test_search_overlap.py`); only wall time changes, not CPU time.
 """
 
@@ -24,6 +28,7 @@ import threading
 from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
@@ -31,7 +36,7 @@ from openproceedings.engine.compile import wildcards
 from openproceedings.engine.exclusions import Excluded, excluded
 from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import EngineInputError, Expansions
-from openproceedings.engine.tantivy_engine import TantivyEngine
+from openproceedings.engine.tantivy_engine import Scope, TantivyEngine
 from openproceedings.query.ast import Node, TextField
 from openproceedings.query.parser import ParseResult
 
@@ -95,16 +100,17 @@ def run(
     if ast is None:
         raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "a search needs a query that parses.")
     expansions = expanded(engine, ast)
+    scope = Scope()  # the ids this request verifies, for its every compile (module docstring)
     faceting: Future[dict[str, dict[str, int]]] | None = None
     if facets:
         engine.check_page(sort, offset, limit)  # a bad argument is refused before any work, as before
         # compiled first, here: a cold verified clause takes its slot in this thread, and the worker's facet
-        # tree (the same clauses, less top-level filters) then finds each one verified
-        engine.compile(ast)
-        faceting = _submit(engine, ast)
+        # tree (the same clauses, less top-level filters) then finds each one in `scope` (it never verifies)
+        engine.compile(ast, scope)
+        faceting = _submit(engine, ast, scope)
     try:
         # one collection: ids and scores
-        total, page = engine.page(ast, sort=sort, offset=offset, limit=limit)
+        total, page = engine.page(ast, sort=sort, offset=offset, limit=limit, scope=scope)
         shown = engine.display([i for i, _score in page])
         lit = Highlighter(ast, expansions) if highlight else None  # one per page: the query's work done once
         hits = tuple(
@@ -124,8 +130,10 @@ def run(
     if faceting is not None:
         counted = faceting.result()  # the worker's error, re-raised as it was raised
     elif facets:
-        counted = engine.facets(ast)  # no worker (the pool is shutting down): counted here instead
-    gone = excluded(engine, parsed, total)
+        counted = engine.facets(
+            ast, scope=scope
+        )  # no worker (the pool is shutting down): counted here instead
+    gone = excluded(engine, parsed, total, facets=partial(engine.facets, scope=scope))
     return Search(total, hits, gone, expansions, counted)
 
 
@@ -161,8 +169,8 @@ _POOL: ThreadPoolExecutor | None = None
 _POOL_LOCK = threading.Lock()
 
 
-def _submit(engine: TantivyEngine, ast: Node) -> Future[dict[str, dict[str, int]]] | None:
-    """`engine.facets(ast)` started on a worker, in a copy of the caller's context (a request's log fields
+def _submit(engine: TantivyEngine, ast: Node, scope: Scope) -> Future[dict[str, dict[str, int]]] | None:
+    """`engine.facets(ast, scope=scope.reader())` (it never verifies, so never takes a slot) started on a worker, in a copy of the caller's context (a request's log fields
     follow it), or None if the pool is shutting down (`run` then counts them itself)."""
     global _POOL
     with _POOL_LOCK:
@@ -170,7 +178,7 @@ def _submit(engine: TantivyEngine, ast: Node) -> Future[dict[str, dict[str, int]
             _POOL = ThreadPoolExecutor(max(4, os.cpu_count() or 4), thread_name_prefix="op-facets")
         pool = _POOL
     try:
-        return pool.submit(contextvars.copy_context().run, engine.facets, ast)
+        return pool.submit(contextvars.copy_context().run, partial(engine.facets, ast, scope=scope.reader()))
     except RuntimeError:  # shut down between the lock and the submit (interpreter exit, or `shutdown()`)
         return None
 

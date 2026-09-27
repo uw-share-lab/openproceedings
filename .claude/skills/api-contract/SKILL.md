@@ -11,9 +11,9 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 | POST | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations). Debounced, called as the user types. Any well-formed body is a 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body is a 422 `API_BAD_PARAM`. |
 | GET | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | GET | `/papers/{id}` | full record with provenance |
-| GET | `/export` | `format=ris\|csv\|bibtex\|jsonl` plus either `q` (with `mode` and optional `index_version`) or `record_id` alone → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; `record_id` → exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if gone, 409 `API_RECORD_MISMATCH` on a `mismatch`) |
+| GET | `/export` | `format=ris\|csv\|bibtex\|jsonl` plus either `q` (with `mode` and optional `index_version`) or `record_id` (with at most `mode=native`, the declared default some clients always send; `scholar` is 422 "with record_id, mode may only be native") → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; `record_id` → exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if gone, 409 `API_RECORD_MISMATCH` on a `mismatch`) |
 | POST | `/records` | freeze a search as an immutable search record → 201 `{record_id, page}` plus the three versions, + `Location: /api/v1/records/<id>` (`.claude/skills/search-records/SKILL.md`) |
-| GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`) |
+| GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`; a replay over this instance's verification limits is withheld: 200, `refused`, never a 422) |
 | GET | `/records/{id}/diff` | for a record of any status: added and removed ids (with titles, paged), and which `index_version` inputs changed |
 | GET | `/coverage` | counts per venue × year × track × status, abstract-missing counts, snapshot date |
 | GET | `/meta` | current and servable `index_version`s, field names, venue, track and status vocabularies |
@@ -65,8 +65,9 @@ Checked by `backend/tests/contract/test_contract_v1.py`; keep to them in every n
   fails on an enum in neither. Open ones get "Open set: … handle a value you don't know." in the schema.
 - **`ErrorBody.code` is `ErrorCode`**: the registry's codes with an HTTP status, derived, never hand-listed.
 - **Status-specific headers are declared** (`response_header`): an export's 200 (`X-Total`, the three
-  versions, `Content-Disposition`), every 405 (`Allow`) and 429 (`Retry-After`), a 201 (`Location`); CORS
-  exposes each (`app.EXPOSED_HEADERS`).
+  versions, `Content-Disposition`), every 405 (`Allow`) and 429 (`Retry-After`), the 503 `API_BUSY` of every
+  route that runs a query (`Retry-After`, `openapi.BUSY`: `/search`, `/export`, the record routes), a 201
+  (`Location`); CORS exposes each (`app.EXPOSED_HEADERS`).
 - `info.version` is the API version (`v1`), not the package's.
 
 ## Span units (spec 04 §Conventions)
@@ -133,7 +134,8 @@ commit both files it writes. Never edit either by hand; never resolve a merge co
    `get_healthz`, `create_record`, `get_record`, `get_record_diff` (a test pins the list), so it must be
    unique across routers; every route documents the error envelope (`ErrorEnvelope`) as its **`default`
    response**, which replaces FastAPI's `HTTPValidationError` 422 (never sent here), plus its 405 (`Allow`)
-   and 429 (`Retry-After`; not `/healthz`, never limited); the HEAD of a GET+HEAD route is dropped from the
+   and 429 (`Retry-After`; not `/healthz`, never limited), and each route that runs a query its 503
+   `API_BUSY` (`Retry-After`, `openapi.BUSY`); the HEAD of a GET+HEAD route is dropped from the
    document (FastAPI would repeat the GET's operationId); and open enums are marked (`mark_open_enums`).
 5. Reviewing: read the snapshot diff first. It is the contract as shipped; classify each change with the
    versioning rules above. A model change with no snapshot diff means the change is not in the contract.

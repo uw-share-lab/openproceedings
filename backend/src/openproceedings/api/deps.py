@@ -25,9 +25,12 @@ from openproceedings.api.errors import ACCESS, ApiError
 from openproceedings.api.middleware import charge
 from openproceedings.api.state import Served
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode, clip
+from openproceedings.engine.compile import verified_clauses
+from openproceedings.engine.protocol import EngineInputError
 from openproceedings.engine.tantivy_engine import TantivyEngine
-from openproceedings.query.ast import And, Near, Node, Not, Or, Phrase, Term, Wildcard
+from openproceedings.query.ast import And, Near, Node, Not, Or, Phrase, Term, TextField, Wildcard
 from openproceedings.query.parser import Mode, ParseResult, parse, too_long
+from openproceedings.search import expanded
 
 if TYPE_CHECKING:
     from openproceedings.api.state import IndexState
@@ -181,66 +184,124 @@ def searchable(request: Request, q: str, mode: Mode) -> ParseResult:
     return result
 
 
-def verified_clauses(node: Node | None) -> list[Phrase | Near]:
-    """Every clause of `node` that compiles to the position-verified path, in query order: the rule of
-    `engine.compile.verifies` (a phrase with a wildcard item, a NEAR that isn't two distinct terms), counted
-    rather than tested. A test holds `bool(verified_clauses(n)) == verifies(n)` and the count equal to the
-    compiler's own."""
-    match node:
-        case Phrase() if not all(isinstance(i, Term) for i in node.items):
-            return [node]
-        case Near() if not (
-            isinstance(node.left, Term)
-            and isinstance(node.right, Term)
-            and node.left.token != node.right.token
-        ):
-            return [node]
-        case Not():
-            return verified_clauses(node.child)
-        case And() | Or():
-            return [clause for c in node.children for clause in verified_clauses(c)]
-        case _:
-            return []
-
-
-def too_many_verified(clauses: Sequence[Phrase | Near], cap: int, *, located: bool = True) -> ApiError:
-    """422 `API_TOO_MANY_VERIFIED_CLAUSES`: one diagnostic per verified clause, each spanning it in `q`
-    (`located=False`: a replay, whose query is the record's canonical string, not the client's `q`)."""
+def too_many_verified(clauses: Sequence[Phrase | Near], cap: int) -> ApiError:
+    """422 `API_TOO_MANY_VERIFIED_CLAUSES`: one diagnostic per verified clause, each spanning it in `q`."""
     message = (
         f"This query has {len(clauses)} clauses that need a slow position check (a phrase with a wildcard, "
         f"or a NEAR of anything but two different words); this instance runs at most {cap} in one query. "
         "Split it into several searches, or write some of them as plain phrases."
     )
-    diagnostics = (
-        [
-            Diagnostic(
-                code=DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES,
-                message="This clause needs a slow position check.",
-                span=c.span,
-            )
-            for c in clauses
-        ]
-        if located
-        else [Diagnostic(code=DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES, message=message)]
-    )
+    diagnostics = [
+        Diagnostic(
+            code=DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES,
+            message="This clause needs a slow position check.",
+            span=c.span,
+        )
+        for c in clauses
+    ]
     return ApiError(DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES, message, diagnostics=diagnostics)
 
 
-def charge_verified(request: Request, ast: Node | None, *, located: bool = True) -> None:
+def charge_verified(request: Request, ast: Node | None) -> None:
     """A query's position-verified clauses (spec 03), counted from the AST before anything compiles it: more
     than `ApiConfig.max_verified_clauses` is 422 `API_TOO_MANY_VERIFIED_CLAUSES` (each is a cold
     verification holding a slot for seconds, so one request could otherwise hold the slots for a minute);
-    otherwise the query costs `verified_weight` per clause (`RateLimit.verified_charge`): the rest is charged
-    now, or 429 `API_RATE_LIMITED` (spec 04 §Rate limit). Every route that runs a query calls this: through
-    `searchable`, or on a replay's re-parsed canonical (`api/records.py`)."""
+    otherwise the query costs `ApiConfig.verified_cost` per clause: the rest is charged now, or 429
+    `API_RATE_LIMITED` (spec 04 §Rate limit). Every route that runs the client's query calls this, through
+    `searchable`, and then `check_candidates` once it has its engine; a replay calls `admit_replay`."""
     clauses = verified_clauses(ast)
+    access_fields(request)["verified_clauses"] = len(clauses)
     if not clauses:
         return
     config = request.app.state.config
     if len(clauses) > config.max_verified_clauses:
-        raise too_many_verified(clauses, config.max_verified_clauses, located=located)
+        raise too_many_verified(clauses, config.max_verified_clauses)
+    _charge(request, len(clauses))
+
+
+def _charge(request: Request, clauses: int) -> None:
+    config = request.app.state.config
     if config.rate_limit.enabled:
-        charge(request.scope, config.rate_limit.verified_charge(len(clauses)))
+        charge(request.scope, config.verified_charge(clauses))
+
+
+type Counted = list[tuple[Phrase | Near, TextField, int]]
+
+
+def too_costly(counted: Counted, ceiling: int) -> ApiError:
+    """422 `API_QUERY_TOO_COSTLY`: one diagnostic per verified clause, spanning it in `q`, with how many
+    documents its position check would read in each field."""
+    total = sum(n for _c, _f, n in counted)
+    message = (
+        "This query's slow position checks (phrases with a wildcard, NEARs of anything but two different "
+        f"words) would read {total:,} documents; this instance reads at most {ceiling:,} for one query. Make "
+        "those clauses narrower (longer wildcard stems, rarer words), or split the query into several searches."
+    )
+    per: dict[int, list[tuple[str, int]]] = {}
+    clauses: dict[int, Phrase | Near] = {}
+    for c, f, n in counted:  # in query order, each clause's fields together
+        per.setdefault(id(c), []).append((f, n))
+        clauses[id(c)] = c
+    diagnostics = [
+        Diagnostic(
+            code=DiagnosticCode.API_QUERY_TOO_COSTLY,
+            message="This clause's position check would read "
+            + ", ".join(f"{n:,} documents in {f}" for f, n in per[k])
+            + ".",
+            span=c.span,
+        )
+        for k, c in clauses.items()
+    ]
+    return ApiError(DiagnosticCode.API_QUERY_TOO_COSTLY, message, diagnostics=diagnostics)
+
+
+def verification_candidates(request: Request, engine: TantivyEngine, ast: Node) -> Counted | None:
+    """Each verified clause's candidate count per field (`TantivyEngine.candidates`), their sum on the access
+    line as `verification_candidates`; None when the query has no verified clause. Wildcards are expanded
+    first, so an over-cap one is the located 422 it always was."""
+    if not verified_clauses(ast):
+        return None
+    expanded(engine, ast)
+    counted = engine.candidates(ast)
+    access_fields(request)["verification_candidates"] = sum(n for _c, _f, n in counted)
+    return counted
+
+
+def check_candidates(request: Request, engine: TantivyEngine, ast: Node) -> None:
+    """422 `API_QUERY_TOO_COSTLY` when the query's position checks would read more than
+    `ApiConfig.max_verification_candidates` documents (decision-010), before any is verified: a cold
+    verification's time is proportional to its candidates, not to its clause count. Every route that runs the
+    client's query calls this after `searchable`, on the engine it runs on (the verified charge `searchable`
+    took is given back on this refusal: `middleware.RateLimit`)."""
+    counted = verification_candidates(request, engine, ast)
+    ceiling = request.app.state.config.max_verification_candidates
+    if counted is not None and sum(n for _c, _f, n in counted) > ceiling:
+        raise too_costly(counted, ceiling)
+
+
+def admit_replay(request: Request, engine: TantivyEngine, parsed: ParseResult) -> DiagnosticCode | None:
+    """Whether this instance runs a replay's re-parsed canonical on `engine` (the index the replay runs on):
+    `charge_verified` and `check_candidates` for a record, which never refuse it with a 422. Over either limit
+    it is withheld (not run, not charged) and this returns the code the replay reports as `refused`, so the
+    record itself stays readable (200: decision-010); within them it is charged as a search is (or 429) and
+    this returns None. A canonical that doesn't parse, or whose wildcard is over the cap, is left to the
+    replay, which refuses it before compiling anything."""
+    ast = parsed.effective_ast
+    clauses = verified_clauses(ast)
+    access_fields(request)["verified_clauses"] = len(clauses)
+    if ast is None or not clauses:
+        return None
+    config = request.app.state.config
+    if len(clauses) > config.max_verified_clauses:
+        return DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES
+    try:
+        counted = verification_candidates(request, engine, ast)
+    except EngineInputError:
+        return None  # an over-cap wildcard: the replay refuses it itself
+    if counted is not None and sum(n for _c, _f, n in counted) > config.max_verification_candidates:
+        return DiagnosticCode.API_QUERY_TOO_COSTLY
+    _charge(request, len(clauses))
+    return None
 
 
 def current_served(request: Request) -> Served:

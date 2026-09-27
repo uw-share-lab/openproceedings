@@ -46,7 +46,20 @@ Every replay returns **HTTP 200** with a `status`:
 
 The diff behind `drifted` is `GET /api/v1/records/{id}/diff`: added and removed ids (with titles), and
 which `index_version` inputs changed. An export pinned to a `mismatch` record (`/export?record_id=`) is
-refused with 409 `API_RECORD_MISMATCH` (spec 04 §Error handling). Replay re-parses `canonical`, not `input`, so compatibility
+refused with 409 `API_RECORD_MISMATCH` (spec 04 §Error handling).
+
+**A withheld replay** (decision-010, round 3): a canonical with more position-verified clauses than
+`max_verified_clauses`, or whose checks would read more than `max_verification_candidates` documents, is
+not run on this instance (`replay(admit=…)`, the API's `deps.admit_replay`, called with the engine the
+replay runs on). It is 200, never a 422: `refused` is `API_TOO_MANY_VERIFIED_CLAUSES` or
+`API_QUERY_TOO_COSTLY`, counts null, `verified_clauses` set, nothing compiled or charged for its clauses.
+On its own index under its own query version it is `drifted` with `changed: []` (the status enum is
+closed; a `withheld` status was rejected), never `reproduced` and never a `mismatch` for the withholding;
+the run-free checks (canonical re-parse, index inputs, stored list hash and total) still make it a
+`mismatch` if they fail. `/export?record_id=` still streams the stored ids. The record page says
+"could not be re-run: <code> — this instance's limit is below the record's N position-verified clauses".
+
+Replay re-parses `canonical` (once per request: the API passes the parse it counted to `replay`), not `input`, so compatibility
 translations that changed later cannot alter the replay.
 
 ## Store: `data/records/records.sqlite`
@@ -110,8 +123,10 @@ A record must go (a legal request, personal data in `input`). With the API stopp
   equal `/search`'s) plus `match_ids`.
 - Replay runs on the record's own index whenever it is here (even when only the query version drifted, so
   `changed` isolates that), and an engine handed back for another version counts as unavailable. A refused
-  replay (the canonical no longer runs) reports `added`/`removed`/`membership_identical` as null, never
-  "everything removed".
+  replay (the canonical no longer runs, or is withheld) reports `added`/`removed`/`membership_identical` as
+  null, never "everything removed".
+- `RecordStore.insert` refuses fields whose `ids_hash` isn't its ids' hash or whose `total` isn't their
+  number (either could only replay as a mismatch); tests that need such a row write it with raw SQL.
 - `API_REPLAY_MISMATCH` is ERROR once per record per process, DEBUG after that.
 - `GET /records/{id}` leaves `ids` out unless `?include=ids`; `/diff` pages each list (`offset`, `limit` ≤
   200) and keeps `added_total`/`removed_total` in full.

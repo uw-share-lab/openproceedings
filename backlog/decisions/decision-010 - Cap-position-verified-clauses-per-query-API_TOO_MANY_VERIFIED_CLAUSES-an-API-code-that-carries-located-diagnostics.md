@@ -26,14 +26,14 @@ The refusal needs a code. Options considered:
 ## Decision
 
 `ApiConfig.max_verified_clauses` (default 8) caps the position-verified clauses of one query. The API counts
-them from the AST (`api/deps.py::verified_clauses`, by `engine.compile.verifies`'s rule; a test holds the
-count equal to the compiler's) after the parse and before anything compiles, on every route that runs a query
-(`/search`, `/export`, `POST /records`) and on a replay's re-parsed canonical (`GET /records/{id}`, `/diff`,
+them from the AST (`engine.compile.verified_clauses`, by `verifies`'s rule; a test holds the count equal to
+the compiler's) after the parse and before anything compiles, on every route that runs a query (`/search`,
+`/export`, `POST /records`) and on a replay's re-parsed canonical (`GET /records/{id}`, `/diff`,
 `/export?record_id=`). More than the cap is **422 `API_TOO_MANY_VERIFIED_CLAUSES`**, whose envelope carries
-one diagnostic per verified clause spanning it in `q` (on a replay, one diagnostic with `span: null`: the
-record's canonical string is not the client's `q`). Within the cap the query costs `verified_weight` per
-clause, at most the smaller bucket's capacity (`RateLimit.verified_charge`), so a query within the cap can
-always run and a large one empties the client's bucket.
+one diagnostic per verified clause spanning it in `q` (a replay over it is withheld instead: see
+Consequences, round 3). Within the cap the query costs `ApiConfig.verified_cost` per clause, and the cap
+times that cost fits the smaller bucket (round 3), so a query within the cap can always run and one at the
+cap empties the client's bucket.
 
 `op search` has no such cap: it is the API's serving policy, like the rate limit and `API_BUSY`, not a
 change to what a query means. The same query and `index_version` give the same ids through both whenever the
@@ -45,7 +45,45 @@ API runs it.
   `ErrorBody.diagnostics` is documented as present on it as on `PARSE_*`, `FIELD_*` and `WILDCARD_*`.
   `ErrorCode` is an open enum (decision-009), so this is additive within `/api/v1`.
 - The frontend draws its diagnostics as squiggles, as for a parse error (spec 05 §Error handling).
-- A record saved before an operator lowered the cap can be refused on replay; raising the cap back replays it.
-  Its stored ids stay exportable only through a replay, so the operator's cap should not go below the
-  largest saved query's count.
+- **A replay over a limit is withheld, not refused (M3a review gate round 3).** A record saved before an
+  operator lowered the cap (or the candidate ceiling below) is not re-run on this instance, but it stays
+  readable: `GET /records/{id}` and `/diff` answer 200 with `replay.refused` set to the code, every count
+  null, nothing compiled and nothing charged for its clauses, and `replay.verified_clauses` giving the
+  count (the record page reads "could not be re-run: `API_TOO_MANY_VERIFIED_CLAUSES` — this instance's limit
+  is below the record's N position-verified clauses"). It is never presented as reproduced or as
+  membership-identical, and the withholding itself is never a `mismatch` and logs no `replay_mismatch`. On the
+  record's own index under its own query version the status is `drifted` with `changed: []`; the checks that
+  need no run (the canonical re-parse, the index's inputs, the stored list's hash and total) still apply,
+  and one failing is a `mismatch`, logged as always. Elsewhere it is `drifted` with its changed inputs. A new
+  status value (`withheld`) was considered and rejected: the replay `status` is a closed enum in `/api/v1`
+  (decision-009), so a new value would be a breaking change, while `refused` (an open error-code enum)
+  already says why nothing was compared. `/export?record_id=` still streams the stored ids (it hands over
+  the stored list from the pinned index and never re-runs the query; only a `mismatch` blocks it). Raising
+  the limit replays the record in full.
+- **The clause count is not the cost; candidates are (M3a review gate round 3).** A clause's cold
+  verification reads every candidate document (each holding all its items in the field, ~40 µs each), so
+  8 clauses of a common word NEAR itself (`(a NEAR/50 a) OR … (4o NEAR/49 4o)`) held the only slot for
+  63 s on the synthetic 80k index while costing 60 tokens against a 60 s refill. `ApiConfig.
+  max_verification_candidates` (default 200,000, about 8 s of verification) bounds the candidates of one
+  query, summed over its verified clauses and their fields, counted from the inverted index before any is
+  verified (`TantivyEngine.candidates`, every clause counted cached or not, so a refusal never depends on
+  the memos). Over it is **422 `API_QUERY_TOO_COSTLY`**, a new registry code carrying one located diagnostic
+  per clause with its counts. A new code rather than `API_TOO_MANY_VERIFIED_CLAUSES` with a reason: the two
+  have different remedies (fewer clauses, versus narrower clauses: longer stems, rarer words), a client
+  branches on the code, not on a message, and `ErrorCode` is open (decision-009), so it is additive.
+  Measured on the synthetic 80k index (candidates summed; cold verification): the exploit 686,684 (refused,
+  counted in 4 ms); 8 × `model NEAR/k model*` 543,208 (refused); `"calibrat* trust" OR trust NEAR/3 trust`
+  137,933 (5.4 s, served); `a NEAR/50 a` 96,580 (3.7 s); `trust NEAR/5 model*` 66,720 (2.9 s);
+  `"large language model*"` 57,516 (2.3 s); `trust NEAR/5 model` none (not verified). On the real 1,805-paper
+  corpus the heaviest Trust-Evals string (`main-2-pop`, Scholar mode) reads 2,251, about 100,000 scaled to
+  80k, but its 10 clauses are over the clause cap already. `backend/tests/contract/test_verification_scale.py`
+  holds this at a 5k-scaled ceiling in CI and at the default on a built 80k index (`OP_BENCH_80K=1`).
+- **Every clause up to the cap costs its share.** Capping a charge at the bucket made clauses past
+  capacity ÷ weight free (at the defaults, 8 cost what 6 did). A configured `verified_weight` × the cap must
+  now fit the smaller bucket (the config refuses it otherwise), and without one the per-clause cost is the
+  export weight lowered to fit (default min(10, 60 / 8) = 7.5). `op serve` takes `--max-verified-clauses`
+  and `--max-verification-candidates`.
+- A refusal after the verified charge was taken (`API_QUERY_TOO_COSTLY`, or `API_BUSY` from a slot) gives
+  the charge back; within a request every compile shares the ids it verified (`tantivy_engine.Scope`), so no
+  clause is verified twice however the memos are trimmed, and the facet worker never verifies (no slot).
 - Revisit if cold verification gets cheaper (task-080's successors) or runs outside the request.

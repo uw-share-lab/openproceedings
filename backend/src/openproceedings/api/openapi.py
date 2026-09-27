@@ -153,15 +153,40 @@ def mark_open_enums(document: dict[str, Any]) -> None:
             schema["description"] = " ".join(filter(None, (schema.get("description"), OPEN_NOTE)))
 
 
+REF = "#/components/schemas/"
+
+
+def refs(node: Any) -> Iterator[str]:
+    """The component schema names `node` refers to (`$ref` anywhere inside it)."""
+    if isinstance(node, dict):
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref.startswith(REF):
+            yield ref.removeprefix(REF)
+        for value in node.values():
+            yield from refs(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from refs(value)
+
+
 def request_schemas(document: dict[str, Any]) -> set[str]:
-    """The component schemas a request body names (`ParseRequest`, `RecordRequest`)."""
-    names = set()
-    for item in document.get("paths", {}).values():
-        for op in item.values():
-            for media in op.get("requestBody", {}).get("content", {}).values():
-                ref = media.get("schema", {}).get("$ref", "")
-                if ref.startswith("#/components/schemas/"):
-                    names.add(ref.rsplit("/", 1)[1])
+    """The component schemas a request body names (`ParseRequest`, `RecordRequest`), and every schema they
+    refer to, however deeply: a model nested in a request body is refused whole by the server, so it stays
+    closed too."""
+    schemas = document.get("components", {}).get("schemas", {})
+    todo = [
+        name
+        for item in document.get("paths", {}).values()
+        for op in item.values()
+        if isinstance(op, dict)
+        for name in refs(op.get("requestBody", {}))
+    ]
+    names: set[str] = set()
+    while todo:
+        name = todo.pop()
+        if name not in names:
+            names.add(name)
+            todo.extend(refs(schemas.get(name, {})))
     return names
 
 

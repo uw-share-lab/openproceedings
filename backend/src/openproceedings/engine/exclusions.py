@@ -16,7 +16,7 @@ Engine protocol, so ReferenceEngine and TantivyEngine compute it the same way an
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 
@@ -40,10 +40,18 @@ class Excluded:
         return {"total": self.total, "track": dict(self.track), "status": dict(self.status)}
 
 
-def excluded(engine: Engine, parsed: ParseResult, total: int) -> Excluded:
+def excluded(
+    engine: Engine,
+    parsed: ParseResult,
+    total: int,
+    *,
+    facets: Callable[[Node, tuple[str, ...]], dict[str, dict[str, int]]] | None = None,
+) -> Excluded:
     """The records the default filters removed from `parsed`'s search, bucketed track first, then status.
     `total` is the search's own match count (`|match_ids(effective_ast)|`, which the caller already has), so
-    the query isn't evaluated a third time; the buckets are checked against it."""
+    the query isn't evaluated a third time; the buckets are checked against it. `facets` is `engine.facets`
+    unless given (`search.run` passes its request-scoped one, so no clause is verified twice)."""
+    count = engine.facets if facets is None else facets
     if parsed.effective_ast is None:
         raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "exclusions need a query that parses.")
     defaults = [f for f in ORDER if f in parsed.defaults]
@@ -56,7 +64,7 @@ def excluded(engine: Engine, parsed: ParseResult, total: int) -> Excluded:
     for field in defaults:
         default = Filter(span=(0, 0), field=field, values=DEFAULT_CLAUSES[field])
         # over `passed`: the facet drops `default`, its own field's top-level clause
-        counts = engine.facets(_and(passed, default), (field,))[field]
+        counts = count(_and(passed, default), (field,))[field]
         if size is None:
             size = sum(counts.values())
         buckets[field] = {v: n for v, n in counts.items() if v not in DEFAULT_CLAUSES[field]}

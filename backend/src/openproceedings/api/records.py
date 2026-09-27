@@ -16,8 +16,9 @@ refilled at `record_saves_network_per_hour`, and every client together to `recor
 `record_saves_per_hour` (429 `API_RATE_LIMITED` with `Retry-After` beyond either): the store is
 append-only, so its growth is bounded in time as well as in bytes, and one network can't spend the
 instance's ceiling for everyone. A save whose query then fails to run (or whose store is full) is refunded.
-A ceiling's first refusal logs `record_saves_throttled` (WARNING) and its next allowed save
-`record_saves_recovered` (INFO), with `scope` (`instance` or `network`, never the network itself).
+A ceiling's first refusal logs `record_saves_throttled` and its next allowed save `record_saves_recovered`,
+with `scope` (`instance` or `network`, never the network itself): WARNING and INFO for the instance ceiling,
+DEBUG for a network's (one network throttling itself is not an operator's concern).
 
 What `GET /export?record_id=` (task-036) calls: `stored_record(request, record_id)` (the stored record,
 ids included; the 422/404 above), then, after pinning the record's index, `refuse_mismatch(request, record,
@@ -37,7 +38,7 @@ from fastapi import APIRouter, FastAPI, Query, Request, Response
 from fastapi import Path as PathParam
 
 from openproceedings.api.config import ApiConfig
-from openproceedings.api.deps import EngineDep, annotate, charge_verified, searchable
+from openproceedings.api.deps import EngineDep, admit_replay, annotate, check_candidates, searchable
 from openproceedings.api.errors import ApiError
 from openproceedings.api.middleware import (
     API_PREFIX,
@@ -68,6 +69,7 @@ from openproceedings.api.models import (
 from openproceedings.api.openapi import BUSY, response_header
 from openproceedings.api.state import IndexState
 from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.engine.compile import verified_clauses
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.query.parser import parse
 from openproceedings.records import (
@@ -131,10 +133,19 @@ class SaveCeiling:
                     self._throttled[key] = None
                     while len(self._throttled) > MAX_THROTTLED_NETWORKS:
                         self._throttled.popitem(last=False)
-                    self._log(logging.WARNING, "record_saves_throttled", scope)
+                    # the instance ceiling is everyone's: WARNING; one network's is its own business: DEBUG
+                    self._log(
+                        logging.WARNING if scope == "instance" else logging.DEBUG,
+                        "record_saves_throttled",
+                        scope,
+                    )
                 elif max(waits) == 0 and key in self._throttled:
                     del self._throttled[key]
-                    self._log(logging.INFO, "record_saves_recovered", scope)
+                    self._log(
+                        logging.INFO if scope == "instance" else logging.DEBUG,
+                        "record_saves_recovered",
+                        scope,
+                    )
         if max(waits) > 0:
             who = "This instance is" if waits[0] > 0 else "Your network is"
             raise rate_limited(max(waits), f"{who} saving search records as fast as it allows")
@@ -192,19 +203,28 @@ def stored_record(request: Request, record_id: str) -> SearchRecord:
     return record
 
 
-def _replayed(request: Request, engine: TantivyEngine, record: SearchRecord) -> Replay:
+def _replayed(request: Request, engine: TantivyEngine, record: SearchRecord) -> tuple[Replay, int | None]:
+    """The replay, and its canonical's position-verified clause count (None when it doesn't parse)."""
     records = _records(request)
-    # charged and capped like a search's, before the replay compiles anything: the replay runs this very
-    # parse of the stored canonical (`records._run`); its refusals, if any, are the replay's to report
-    charge_verified(request, parse(record.canonical, "native").effective_ast, located=False)
-    result = replay(record, engine, records.pinned, records.data_dir)
+    # parsed once: counted, capped and charged like a search's by `admit_replay` on the engine the replay runs
+    # on, before it compiles anything; over a limit the replay is withheld (`refused`, 200), never a 422
+    parsed = parse(record.canonical, "native")
+    result = replay(
+        record,
+        engine,
+        records.pinned,
+        records.data_dir,
+        parsed=parsed,
+        admit=lambda ran_on, p: admit_replay(request, ran_on, p),
+    )
     annotate(
         request,
         index_version=result.engine.index_version,
         canonical_hash=record.canonical_hash,
         total=len(result.identified.ids) if result.identified is not None else None,
     )
-    return result
+    ast = parsed.effective_ast
+    return result, (len(verified_clauses(ast)) if ast is not None else None)
 
 
 # --- what /export?record_id= calls (task-036) ----------------------------------------------------------
@@ -212,7 +232,7 @@ def refuse_mismatch(request: Request, record: SearchRecord, served: TantivyEngin
     """409 `API_RECORD_MISMATCH` if `record`'s replay is a `mismatch` (logged by the replay): a set that
     breaks guarantee 4 is never handed to screening (spec 04 §Error handling). `served` is the request's
     `EngineDep` engine, so the request never reads the served index twice."""
-    if _replayed(request, served, record).status == "mismatch":
+    if _replayed(request, served, record)[0].status == "mismatch":
         raise ApiError(
             DiagnosticCode.API_RECORD_MISMATCH,
             "This search record no longer reproduces on the index it names (replay mismatch), so it can't be "
@@ -237,6 +257,8 @@ def create_record(
 ) -> RecordCreated:
     """Freeze a search as an immutable record: re-run here on the served index, then one transaction."""
     parsed = searchable(request, body.q, body.mode)
+    assert parsed.effective_ast is not None  # searchable refuses a query that doesn't parse
+    check_candidates(request, engine, parsed.effective_ast)  # 422 API_QUERY_TOO_COSTLY before a save is taken
     records = _records(request)
     network = records.saves.take(request)  # after the parse (a refused query costs no save), before it runs
     try:
@@ -266,7 +288,7 @@ def get_record(
     """The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless
     `include=ids`; `/export?record_id=` streams the papers themselves."""
     record = stored_record(request, id)
-    result = _replayed(request, engine, record)
+    result, clauses = _replayed(request, engine, record)
     found = result.identified
     return RecordResponse(
         **versions(result.engine.index_version),
@@ -281,6 +303,7 @@ def get_record(
             ids_match=result.ids_match,
             excluded_match=result.excluded_match,
             refused=result.refused,
+            verified_clauses=clauses,
             changed=_changed(result),
             added_total=len(result.added) if result.added is not None else None,
             removed_total=len(result.removed) if result.removed is not None else None,
@@ -302,7 +325,7 @@ def get_record_diff(
     title comes from the index the replay ran on, null if it doesn't hold the paper. A refused replay
     compared nothing: empty lists, null totals."""
     record = stored_record(request, id)
-    result = _replayed(request, engine, record)
+    result, clauses = _replayed(request, engine, record)
     added = list(result.added[offset : offset + limit]) if result.added is not None else []
     removed = list(result.removed[offset : offset + limit]) if result.removed is not None else []
     wanted = [*added, *removed]
@@ -313,6 +336,7 @@ def get_record_diff(
         status=result.status,
         recorded_index_version=record.index_version,
         refused=result.refused,
+        verified_clauses=clauses,
         changed=_changed(result),
         offset=offset,
         limit=limit,

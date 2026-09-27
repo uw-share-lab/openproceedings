@@ -87,42 +87,53 @@ def test_the_default_cap_is_8_clauses() -> None:
 
 
 def test_each_verified_clause_costs_the_verified_weight(store: Store) -> None:
-    limit = RateLimit(capacity=25, refill_per_second=0.001, export_weight=10)  # 10 per clause
-    with TestClient(make_app(store.indexes.parent, rate_limit=limit)) as c:
+    limit = RateLimit(capacity=25, refill_per_second=0.001, export_weight=10, verified_weight=10)
+    with TestClient(make_app(store.indexes.parent, rate_limit=limit, max_verified_clauses=2)) as c:
         assert c.get(SEARCH, params={"q": many_verified(2)}).status_code == 200  # 20 of 25
         assert c.get(SEARCH, params={"q": "trust"}).status_code == 200  # 21
         error(c.get(SEARCH, params={"q": VERIFIED}), 429, "API_RATE_LIMITED")  # 10 more: only 4 left
 
 
-def test_a_verified_charge_is_capped_at_the_bucket_so_a_query_within_the_cap_can_run(store: Store) -> None:
-    limit = RateLimit(capacity=25, refill_per_second=0.001, export_weight=10)
-    with TestClient(make_app(store.indexes.parent, rate_limit=limit)) as c:
-        assert c.get(SEARCH, params={"q": many_verified(3)}).status_code == 200  # 30, capped at 25
+def test_a_cap_times_a_weight_over_the_bucket_is_refused_so_no_clause_rides_free() -> None:
+    """Round 3: capping a charge at the bucket made every clause past capacity / weight free (8 cost what 6
+    did). Now a configured weight × the cap must fit the smaller bucket, and the default weight is lowered to
+    fit, so each clause up to the cap costs its share."""
+    with pytest.raises(ValidationError, match=r"max_verified_clauses \(3\) × verified_weight \(10\)"):
+        ApiConfig(
+            data_dir=Path("x"),
+            rate_limit=RateLimit(capacity=25, export_weight=10, verified_weight=10),
+            max_verified_clauses=3,
+        )
+    small_network = RateLimit(capacity=100, export_weight=10, verified_weight=10, network_capacity=20)
+    with pytest.raises(ValidationError, match="smaller rate-limit bucket"):
+        ApiConfig(data_dir=Path("x"), rate_limit=small_network, max_verified_clauses=3)
+    ApiConfig(  # off: nothing is charged, so nothing has to fit
+        data_dir=Path("x"),
+        rate_limit=RateLimit(enabled=False, capacity=25, export_weight=10, verified_weight=10),
+        max_verified_clauses=3,
+    )
+    default = ApiConfig(data_dir=Path("x"))
+    assert default.verified_cost == 7.5  # min(export_weight 10, 60 / 8)
+    assert (default.verified_charge(6), default.verified_charge(8)) == (45, 60)
+
+
+def test_a_query_at_the_cap_empties_the_bucket_exactly(store: Store) -> None:
+    limit = RateLimit(capacity=24, refill_per_second=0.001, export_weight=10)  # 8 per clause, cap 3
+    with TestClient(make_app(store.indexes.parent, rate_limit=limit, max_verified_clauses=3)) as c:
+        assert c.get(SEARCH, params={"q": many_verified(3)}).status_code == 200  # 24 of 24
         error(c.get(SEARCH, params={"q": "trust"}), 429, "API_RATE_LIMITED")  # the bucket is empty
 
 
 def test_a_replay_is_charged_per_verified_clause(data_dir: Path) -> None:
     with TestClient(make_app(data_dir)) as c:
         rid = c.post("/api/v1/records", json={"q": many_verified(2)}).json()["record_id"]
-    limit = RateLimit(capacity=30, refill_per_second=0.001, export_weight=10)
-    with TestClient(make_app(data_dir, rate_limit=limit)) as c:
+    limit = RateLimit(capacity=30, refill_per_second=0.001, export_weight=10, verified_weight=10)
+    with TestClient(make_app(data_dir, rate_limit=limit, max_verified_clauses=2)) as c:
         assert c.get(f"/api/v1/records/{rid}").status_code == 200  # 10 on the way in, 20 for its clauses
         error(c.get(f"/api/v1/records/{rid}/diff"), 429, "API_RATE_LIMITED")  # 10 in, then 10 more: no
 
 
-def test_a_replay_over_the_cap_is_refused_without_a_span(data_dir: Path) -> None:
-    with TestClient(make_app(data_dir)) as c:
-        rid = c.post("/api/v1/records", json={"q": many_verified(2)}).json()["record_id"]
-    with TestClient(make_app(data_dir, max_verified_clauses=1)) as c:
-        for r in (
-            c.get(f"/api/v1/records/{rid}"),
-            c.get(f"/api/v1/records/{rid}/diff"),
-            c.get("/api/v1/export", params={"record_id": rid, "format": "ris"}),
-        ):
-            e = error(r, 422, "API_TOO_MANY_VERIFIED_CLAUSES")
-            assert [d["span"] for d in e["diagnostics"]] == [
-                None
-            ]  # the record's canonical isn't the client's q
+# a replay over the cap: tests/contract/test_abuse_limits_r3.py (withheld, 200, never a 422)
 
 
 # --- the save ceilings ---------------------------------------------------------------------------------------
@@ -161,10 +172,14 @@ def request_from(address: str) -> Any:
     return SimpleNamespace(scope={"client": (address, 1)})
 
 
-@pytest.mark.parametrize(("burst", "network_burst", "scope"), [(1, 5, "instance"), (5, 1, "network")])
+@pytest.mark.parametrize(
+    ("burst", "network_burst", "scope", "levels"),
+    [(1, 5, "instance", ("WARNING", "INFO")), (5, 1, "network", ("DEBUG", "DEBUG"))],
+)
 def test_a_save_ceiling_logs_once_when_it_throttles_and_once_when_it_recovers(
-    logs: Logs, burst: int, network_burst: int, scope: str
+    logs: Logs, burst: int, network_burst: int, scope: str, levels: tuple[str, str]
 ) -> None:
+    """The instance ceiling is everyone's (WARNING, then INFO); one network's throttling is DEBUG (round 3)."""
     clock = FakeClock()
     saves = ceiling(clock, burst, network_burst)
     saves.take(request_from("203.0.113.1"))
@@ -175,8 +190,8 @@ def test_a_save_ceiling_logs_once_when_it_throttles_and_once_when_it_recovers(
     saves.take(request_from("203.0.113.1"))
     lines = [x for x in logs() if x["event"].startswith("record_saves")]
     assert [(x["event"], x["level"], x["scope"]) for x in lines] == [
-        ("record_saves_throttled", "WARNING", scope),
-        ("record_saves_recovered", "INFO", scope),
+        ("record_saves_throttled", levels[0], scope),
+        ("record_saves_recovered", levels[1], scope),
     ]
     assert (lines[0]["burst"], lines[0]["per_hour"]) == (min(burst, network_burst), 3600.0)
     assert "203.0.113" not in json.dumps(lines)  # never the client's network

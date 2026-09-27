@@ -27,7 +27,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 
-from openproceedings.api.deps import EngineDep, annotate, searchable
+from openproceedings.api.deps import EngineDep, annotate, check_candidates, searchable
 from openproceedings.api.errors import ApiError
 from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import MODE_DOC, Q_DOC
@@ -143,9 +143,11 @@ def export(
     index (for a record, its stored `total`)."""
     if record_id is not None:
         # `mode=native` (the declared default) is accepted: a record replays its canonical string natively
-        if q is not None or mode != "native" or index_version is not None:
+        if q is not None or index_version is not None:
+            raise _bad("Pass either q (with mode and index_version) or record_id, not both.")
+        if mode != "native":
             raise _bad(
-                "Pass either q (with mode and index_version) or record_id (mode native at most), not both."
+                "With record_id, mode may only be native (a record's canonical string is native syntax)."
             )
         record = stored_record(request, record_id)  # 422, 404
         engine = pinned_engine(request, served, record.index_version)  # 409 unless its own index is here
@@ -174,6 +176,7 @@ def export(
         canonical_hash = result.canonical_hash
         pinned_by = {}
         expanded(engine, ast)  # an over-cap wildcard is a located 422 before anything is compiled
+        check_candidates(request, engine, ast)  # 422 API_QUERY_TOO_COSTLY before any verification
         total, documents = engine.documents(ast)  # the one collection; records are read as they stream
     annotate(request, total=total)
     provenance = Provenance(engine.index_version, canonical_hash, utc_date(), **pinned_by)

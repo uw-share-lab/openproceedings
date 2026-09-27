@@ -26,6 +26,7 @@ from bisect import bisect_left
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
+from typing import Protocol
 
 import tantivy
 
@@ -47,6 +48,15 @@ from openproceedings.vocab import TEXT_FIELDS
 FIELDS = TEXT_FIELDS  # the searched fields (vocab)
 # (stem, op) → the sorted expanded terms: the concrete form protocol.Expansions narrows to, as the compiler reads it
 Expansions = dict[tuple[str, str], tuple[str, ...]]
+
+
+class VerifiedCache(Protocol):
+    """Where a compile looks up a clause's verified ids: one `.get` (task-080), None on a miss. A dict, or the
+    engine's request-scoped overlay (`tantivy_engine.Overlay`)."""
+
+    def get(self, key: tuple[str, str], /) -> list[str] | None: ...
+
+
 # A field's stored token stream for each candidate document: (doc address, field) → tokens
 TokenReader = Callable[[tantivy.Query, TextField], Iterator[tuple[str, list[str]]]]
 
@@ -88,7 +98,7 @@ class Compiler:
         schema: tantivy.Schema,
         expansions: Expansions,
         read: TokenReader,
-        verified_cache: dict[tuple[str, str], list[str]] | None = None,
+        verified_cache: VerifiedCache | None = None,
         weights: dict[str, float] | None = None,
         gate: Callable[[], AbstractContextManager[object]] = nullcontext,
         store: Callable[[tuple[str, str], list[str]], None] | None = None,
@@ -99,11 +109,14 @@ class Compiler:
         self.read = read
         # (field, clause) → the ids it verified: an index never changes, so a clause is checked once per
         # engine, however many times facets or later queries recompile it
-        self.verified_cache = {} if verified_cache is None else verified_cache
+        plain: dict[tuple[str, str], list[str]] = {}
+        self.verified_cache: VerifiedCache = plain if verified_cache is None else verified_cache
         # how a newly verified clause is stored: the engine's keeps the cache's budget as each clause is
         # stored (trim, store, charge), so no single compile, however many clauses it verifies, overshoots
-        # the budget by more than one clause's ids; by default a plain store
-        self.store = store if store is not None else self.verified_cache.__setitem__
+        # the budget by more than one clause's ids; with no cache given, a plain store into a fresh one
+        if store is None and verified_cache is not None:
+            raise TypeError("a Compiler given a verified cache needs its `store`")
+        self.store = store if store is not None else plain.__setitem__
         # entered around each cold verification (a cache miss), the one slow path: the API bounds how many
         # run at once and refuses one more (503 API_BUSY) rather than queueing it
         self.gate = gate
@@ -212,7 +225,7 @@ class Compiler:
         """Candidates (every distinct item present in the field), then their stored token streams checked by
         position; the verified ids are what matches. The candidate query stays in, for scoring (each
         distinct item once)."""
-        candidates = combine(tantivy.Occur.Must, [self.item(i, f) for i in self.distinct(n)])
+        candidates = self.candidates(n, f)
         key = (f, n.model_dump_json())
         # one read, then the local list: the cache is an engine's, shared across threads, and may be cleared
         # between any two operations on it (task-080); a miss recomputes the same ids from the immutable index
@@ -229,6 +242,11 @@ class Compiler:
             return tantivy.Query.empty_query()
         exact = tantivy.Query.const_score_query(tantivy.Query.term_set_query(self.schema, "id", ids), 0.0)
         return tantivy.Query.boolean_query([(tantivy.Occur.Must, candidates), (tantivy.Occur.Must, exact)])
+
+    def candidates(self, n: Phrase | Near, f: TextField) -> tantivy.Query:
+        """What a verified clause's candidates must hold in `f`: every distinct item (the non-positional
+        superset its position check reads, and what `TantivyEngine.candidates` counts)."""
+        return combine(tantivy.Occur.Must, [self.item(i, f) for i in self.distinct(n)])
 
     def distinct(self, n: Node) -> list[Term | Wildcard]:
         """The items a candidate must hold, each once: an item whose allowed tokens include another's is
@@ -299,6 +317,22 @@ def verifies(n: Node) -> bool:
     if isinstance(n, Near):
         return not _distinct_terms(n)
     return False
+
+
+def verified_clauses(node: Node | None) -> list[Phrase | Near]:
+    """Every clause of `node` that compiles to the position-verified path, in query order: `verifies`'s rule,
+    counted rather than tested (what the API caps and charges, and costs by its candidates:
+    `TantivyEngine.candidates`). A test holds `bool(verified_clauses(n)) == verifies(n)` and the count equal
+    to the compiler's own."""
+    if isinstance(node, Phrase):
+        return [] if all(isinstance(i, Term) for i in node.items) else [node]
+    if isinstance(node, Near):
+        return [] if _distinct_terms(node) else [node]
+    if isinstance(node, Not):
+        return verified_clauses(node.child)
+    if isinstance(node, And | Or):
+        return [clause for c in node.children for clause in verified_clauses(c)]
+    return []
 
 
 def _distinct_terms(n: Near) -> bool:

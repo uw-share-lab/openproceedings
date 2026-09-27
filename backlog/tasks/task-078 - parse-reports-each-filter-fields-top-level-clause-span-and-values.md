@@ -4,7 +4,7 @@ title: /parse reports each filter field's top-level clause span and values
 status: To Do
 assignee: []
 created_date: '2026-09-27 07:21'
-updated_date: '2026-09-27 11:17'
+updated_date: '2026-09-27 13:24'
 labels:
   - api
   - frontend
@@ -37,4 +37,6 @@ TASK-039 review: writing an applied default out as (q) AND field:(…) adds one 
 TASK-035 (2026-09-27) left this open: /parse now returns 02's ParseResult (ast with spans, effective_ast, defaults), but the per-field clause summary is a new public shape spec 02/04 don't define yet. It needs a spec decision first: (a) the name and placement (e.g. ParseResult.filters: {venue|year|track|status: {span, values, toggleable, reason?}}), (b) how year is represented (ranges, not a value list), (c) what 'cannot be toggled' carries (nested under OR, negated, OR of mixed fields), (d) the values for an unrestricted field (all /meta values, or empty + a flag). The server-side derivation belongs in query/ (e.g. defaults.py beside the top-level conjunct logic), not in the router. AC3 also waits on TASK-040's codegen.
 
 M3a gate (decision-008): the length cap now also applies to the CANONICAL form, which adds ~4 characters per implicit AND plus the defaults. A facet click's wrapped q can therefore pass the frontend's raw 2,000-code-point check and still be refused by the server. /parse should report a filter field as not toggleable (reason: would exceed the cap) when the canonical of the wrapped form would exceed MAX_QUERY_LENGTH.
+
+M3a review gate round 3: /meta could also expose the instance's serving limits a client needs to explain a refusal before it happens: `max_verified_clauses` (and `max_verification_candidates`, decision-010) and the query-length cap (`MAX_QUERY_LENGTH`, 2,000 code points), so the search box can warn as the user types and the record page can say by how much a withheld replay is over the limit. Additive to MetaResponse; scope it with this task or split it out.
 <!-- SECTION:NOTES:END -->

@@ -11,7 +11,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request
 
-from openproceedings.api.deps import EngineDep, annotate, parsed, searchable
+from openproceedings.api.deps import EngineDep, annotate, check_candidates, parsed, searchable
 from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import (
     DEFAULT_LIMIT,
@@ -76,6 +76,10 @@ def search(
     highlights. `limit` over 200 is a 422 (never clamped); a query that doesn't parse is a 422 with its
     diagnostics."""
     result = searchable(request, q, mode)
+    assert result.effective_ast is not None  # searchable refuses a query that doesn't parse
+    check_candidates(
+        request, engine, result.effective_ast
+    )  # 422 API_QUERY_TOO_COSTLY before any verification
     found = run(engine, result, sort=sort, offset=offset, limit=limit, facets=True, highlight=True)
     annotate(request, total=found.total)
     assert result.canonical is not None and result.canonical_hash is not None  # it parsed

@@ -35,7 +35,14 @@ from collections.abc import Callable, Sequence
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from openproceedings.api.config import RateLimit as RateLimitConfig
-from openproceedings.api.errors import ACCESS, ApiError, error_response, internal_error, refused
+from openproceedings.api.errors import (
+    ACCESS,
+    ApiError,
+    current_access,
+    error_response,
+    internal_error,
+    refused,
+)
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.logs import bind, elapsed_ms
 
@@ -54,6 +61,9 @@ ANNOTATIONS = (
     "n_errors",
     "error_codes",
     "warning_codes",
+    "verified_clauses",  # the query's position-verified clauses (api/deps.py; replays too)
+    "verification_candidates",  # the documents their position checks would read, summed (api/deps.py)
+    "verify_ms",  # time this request held a verification slot (api/state.py::verification_slot)
     "code",  # the error envelope's code, on every refusal and every 500 (api/errors.py::note_code)
 )
 
@@ -72,6 +82,7 @@ class AccessLog:
         rid = uuid.uuid4().hex
         fields: dict[str, object] = {"request_id": rid}
         scope[ACCESS] = fields
+        token = current_access.set(fields)
         status = 500
         sent = completed = False
 
@@ -105,6 +116,7 @@ class AccessLog:
                     # server cancelled the response), so the body it has is cut short
                     line["client_disconnected"] = True
                 log.log(logging.DEBUG if template == HEALTH_PATH else logging.INFO, "request", extra=line)
+                current_access.reset(token)
 
 
 class LastCatch:
@@ -339,13 +351,30 @@ def charge(scope: Scope, total: float) -> None:
     held = scope.get(BUCKETS)
     if not isinstance(held, tuple):
         return
-    buckets, paid = held
+    buckets, paid, base = held
     if total <= paid:
         return
     wait = take_all(buckets, total - paid)
     if wait > 0:
         raise rate_limited(wait)
-    scope[BUCKETS] = (buckets, total)
+    scope[BUCKETS] = (buckets, total, base)
+
+
+# a refusal after `charge` took a query's verified cost, before any of it was verified to completion: that
+# cost is given back (the route's own weight is kept), as a refused save's is (`records.SaveCeiling.refund`)
+REFUNDED = frozenset({str(DiagnosticCode.API_BUSY), str(DiagnosticCode.API_QUERY_TOO_COSTLY)})
+
+
+def refund_charged(scope: Scope) -> None:
+    """Give back what `charge` took beyond the middleware's own weight (a no-op if it took nothing)."""
+    held = scope.get(BUCKETS)
+    if not isinstance(held, tuple):
+        return
+    buckets, paid, base = held
+    if paid > base:
+        for bucket, key in buckets:
+            bucket.refund(key, paid - base)
+        scope[BUCKETS] = (buckets, base, base)
 
 
 class RateLimit:
@@ -381,5 +410,10 @@ class RateLimit:
             response = error_response(error.code, error.message, headers=error.headers)
             await response(scope, receive, send)
             return
-        scope[BUCKETS] = (held, cost)
-        await self.app(scope, receive, send)
+        scope[BUCKETS] = (held, cost, cost)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            fields = scope.get(ACCESS)
+            if isinstance(fields, dict) and fields.get("code") in REFUNDED:
+                refund_charged(scope)

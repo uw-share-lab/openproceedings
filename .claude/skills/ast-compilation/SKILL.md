@@ -75,8 +75,16 @@ same value (`tests/unit/engine/test_concurrency.py`). Only single dict operation
 the GIL and on free-threaded 3.13t), so never iterate a memo or check-then-act across two operations.
 `search.run` counts facets on a worker thread (`_pool()`, overlapping the page's collection: task-088) only
 after compiling the effective tree in the caller, so a cold verified clause takes its one verification slot
-there and the worker's filter-free tree finds it memoised; start no engine work on another thread before
-the tree it shares clauses with is compiled, or one request can be refused (API_BUSY) against itself. Candidates hold each distinct item once, and an item implied by a narrower one
+there. The memo alone can't carry it to the worker (a query at the cap can clear `verified` and trim
+`compiled` within its own compile), so the request passes its own `tantivy_engine.Scope` to every compile it
+runs (`compile`, `page`, `facets`, `combos`, exclusion accounting): what it verifies is kept there and read
+first (`Overlay`: one `.get` per dict, never a `ChainMap`, whose `get` is `in` then `[key]`), so no clause is
+verified twice in a request; the worker gets `scope.reader()`, which never verifies (a miss is an internal
+error), so it never takes a slot. Start no engine work on another thread before the tree it shares clauses
+with is compiled, and never hand a thread other than the caller a verifying scope, or one request can be
+refused (API_BUSY) against itself. `TantivyEngine.candidates` counts what each verified clause's check would
+read (`Compiler.candidates`, per field, from the inverted index): the API bounds that sum per query
+(`max_verification_candidates`, decision-010). Candidates hold each distinct item once, and an item implied by a narrower one
 (`trust` implies `trust*`) is dropped, so no term is scored twice; that is how a verified clause scores
 (field-weighted-bm25 skill). Spec 03 records the budget exception for verified clauses. Checked: the 44 golden queries of the 200-record fixture, a row per table line against
 ReferenceEngine, and (locally) the ten Trust-Evals protocol strings on the real corpus, identical sets.

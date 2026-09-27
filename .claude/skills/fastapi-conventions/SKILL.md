@@ -78,11 +78,15 @@ raised mid-stream: `errors.internal_error` logs the cause's frames and reason, s
   when the peer is a configured trusted proxy (no network wider than /8 IPv4 or /32 IPv6: refused). Otherwise every user
   shares Caddy's IP, or anyone can spoof theirs.
 - An export or a record route costs `export_weight` (it touches the whole set). A query's
-  position-verified clauses are counted from the AST (`deps.verified_clauses`): over
+  position-verified clauses are counted from the AST (`engine.compile.verified_clauses`): over
   `ApiConfig.max_verified_clauses` is 422 `API_TOO_MANY_VERIFIED_CLAUSES` (decision-010), else each costs
-  `verified_weight` (at most the bucket): a cost known only after the parse is charged with
-  `middleware.charge(request.scope, total)` (`deps.charge_verified`, from `deps.searchable` for every route
-  that runs a query and from the record routes for a replay).
+  `ApiConfig.verified_cost` (the cap × it fits the smaller bucket, checked by the config): a cost known only
+  after the parse is charged with `middleware.charge(request.scope, total)` (`deps.charge_verified`, from
+  `deps.searchable`). Then, on the route's engine, `deps.check_candidates` refuses a query whose position
+  checks would read more than `max_verification_candidates` documents (422 `API_QUERY_TOO_COSTLY`); every
+  route that runs the client's query calls both. A replay calls `deps.admit_replay` instead, which withholds
+  (200, `refused`) rather than refusing. `API_BUSY` and `API_QUERY_TOO_COSTLY` give the verified charge back
+  (`middleware.refund_charged`, from `RateLimit` by the access line's `code`).
   Cold verification is bounded by `ApiConfig.verification_slots` through `TantivyEngine.verification_gate`
   (set by `IndexState` on every engine it opens) and refused with 503 `API_BUSY`, never queued.
 - Record saves are held to a per-network ceiling (`record_saves_network_burst`,

@@ -480,7 +480,8 @@
           "API_RECORDS_STORE_FULL",
           "API_BODY_TOO_LARGE",
           "API_BUSY",
-          "API_TOO_MANY_VERIFIED_CLAUSES"
+          "API_TOO_MANY_VERIFIED_CLAUSES",
+          "API_QUERY_TOO_COSTLY"
         ],
         "title": "DiagnosticCode",
         "type": "string"
@@ -573,7 +574,8 @@
           "API_RECORDS_STORE_FULL",
           "API_BODY_TOO_LARGE",
           "API_BUSY",
-          "API_TOO_MANY_VERIFIED_CLAUSES"
+          "API_TOO_MANY_VERIFIED_CLAUSES",
+          "API_QUERY_TOO_COSTLY"
         ],
         "title": "ErrorCode",
         "type": "string"
@@ -1836,6 +1838,17 @@
           "tokenizer_version": {
             "title": "Tokenizer Version",
             "type": "string"
+          },
+          "verified_clauses": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified Clauses"
           }
         },
         "required": [
@@ -1846,6 +1859,7 @@
           "status",
           "recorded_index_version",
           "refused",
+          "verified_clauses",
           "changed",
           "offset",
           "limit",
@@ -2036,6 +2050,17 @@
               }
             ],
             "title": "Total"
+          },
+          "verified_clauses": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified Clauses"
           }
         },
         "required": [
@@ -2048,6 +2073,7 @@
           "ids_match",
           "excluded_match",
           "refused",
+          "verified_clauses",
           "changed",
           "added_total",
           "removed_total",

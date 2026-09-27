@@ -656,7 +656,8 @@ def test_a_record_id_with_a_query_mode_or_version_is_422(recorded: TestClient, e
     e = error(
         recorded.get(EXPORT, params={"record_id": record_id, "format": "ris", **extra}), 422, "API_BAD_PARAM"
     )
-    assert "record_id (mode native at most)" in e["message"]
+    expected = "mode may only be native" if extra == {"mode": "scholar"} else "or record_id, not both"
+    assert expected in e["message"]
 
 
 def test_a_record_id_with_the_declared_default_mode_is_served(recorded: TestClient) -> None:
