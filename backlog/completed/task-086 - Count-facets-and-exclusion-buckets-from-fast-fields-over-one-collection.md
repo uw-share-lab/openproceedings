@@ -1,10 +1,10 @@
 ---
 id: TASK-086
 title: Count facets and exclusion buckets from fast fields over one collection
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 11:08'
-updated_date: '2026-09-27 11:37'
+updated_date: '2026-09-27 11:38'
 labels:
   - engine
   - performance
@@ -35,6 +35,8 @@ Structural fix: collect the query without its top-level filter conjuncts once, r
 
 <!-- SECTION:NOTES:BEGIN -->
 All ACs met and checked; final summary written. Left In Progress only because the agent sandbox refuses the backlog complete command, and check_backlog.py fails a Done task left in backlog/tasks. Run: backlog task complete task-086
+
+Renumbered at merge: the follow-up called task-087 above is TASK-088 (the docs pass took 087 in parallel).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

@@ -1,9 +1,9 @@
 ---
-id: TASK-087
+id: TASK-088
 title: Bring the /search first page under 100 ms at 80k after task-086
 status: To Do
 assignee: []
-created_date: '2026-09-27 11:32'
+created_date: '2026-09-27 11:38'
 labels:
   - engine
   - performance
@@ -11,7 +11,7 @@ milestone: m-3
 dependencies:
   - TASK-086
 priority: high
-ordinal: 85000
+ordinal: 86000
 ---
 
 ## Description

@@ -157,7 +157,7 @@ twice (page + base). p95 CPU, first page / later page:
 `main-1` and `main-3-sources` are still over 100 ms. `main-1`'s first page, median CPU: the page's collection
 34 ms, the base's combo aggregation 37 ms, highlighting 50 hits 33 ms (nearly all
 `normalize._tokenize_each_char`, the non-ASCII slow path, which the synthetic text hits about twice as often
-as real abstracts), facet and exclusion counting 3 ms, display records 1 ms. task-087 holds what's left.
+as real abstracts), facet and exclusion counting 3 ms, display records 1 ms. task-088 holds what's left.
 The same run's index build took 21.9 s (30.3 s in `2026-09-27-bench.md`): the build tokenizes every record,
 so it gains from the tokenizer's shortcuts too.
 

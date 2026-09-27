@@ -204,7 +204,7 @@ as "current" and can load a pinned older version to replay a search record.
   collections), 136–238 ms after batching facets. Where `main-1`'s first page goes (median CPU): the page's
   collection 34 ms, the facet collection 37 ms, highlighting 50 hits 33 ms (the tokenizer's slow path: the
   synthetic text is about half non-ASCII, real abstracts about a quarter), counting 3 ms, display 1 ms. Two
-  collections are the floor of an exact design (the page needs the effective query's own scores); task-087
+  collections are the floor of an exact design (the page needs the effective query's own scores); task-088
   holds the options. `report_80k` reports both pages, in CPU time.
 
 ## Testing
