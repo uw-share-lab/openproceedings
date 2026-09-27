@@ -5,7 +5,7 @@ format to a text stream: nothing is paginated, truncated or held whole in memory
 provenance (`openproceedings <index_version> · query <canonical_hash> · <UTC date>`) and each record's
 openproceedings id, so an export round-trips to the ids it came from.
 
-- RIS (for Covidence): `TY  - CPAPER`, TI, AB, one AU per author, PY, T2 (the proceedings name), UR (forum,
+- RIS (for Covidence): `TY  - CPAPER`, TI, AB, one AU per author, PY, T2 (the conference and that year's acronym), UR (forum,
   then pdf, then proceedings), DO, ID, KW (the track), N1 (provenance), ER. RIS is line-based, so line
   breaks inside a value become single spaces.
 - CSV: the record fields of spec 01 plus `index_version`, `canonical_hash` and `exported_at`, UTF-8 with a BOM (Excel).
@@ -26,10 +26,18 @@ from dataclasses import dataclass
 from typing import Any, TextIO
 
 FORMATS = ("ris", "csv", "bibtex", "jsonl")
-PROCEEDINGS = {
-    "NeurIPS": "Conference on Neural Information Processing Systems",
-    "ICLR": "International Conference on Learning Representations",
-    "ICML": "International Conference on Machine Learning",
+# The venue string, RIS `T2` and BibTeX `booktitle` (spec 04 §Exports, task-004, which cites the sources):
+# the conference's full name, then the acronym it went by that year, and the year. Each venue lists its
+# (first year, acronym) eras; a year before the first era has no name. NeurIPS was NIPS until 2017
+# (proceedings.neurips.cc labels 2018 on "NeurIPS"; the board renamed it on 2018-11-16, before that
+# December's meeting). ICLR began in 2013 (iclr.cc). ICML is held annually as a conference from 1988, its 5th
+# meeting (icml.cc calls 2026 the 43rd). It is the conference's name, not a proceedings title ("Advances in
+# Neural Information Processing Systems 36", "Proceedings of the 40th International Conference on Machine
+# Learning"), because an export also holds workshop, rejected and ICLR papers that no proceedings contain.
+CONFERENCES: dict[str, tuple[str, tuple[tuple[int, str], ...]]] = {
+    "NeurIPS": ("Conference on Neural Information Processing Systems", ((1987, "NIPS"), (2018, "NeurIPS"))),
+    "ICLR": ("International Conference on Learning Representations", ((2013, "ICLR"),)),
+    "ICML": ("International Conference on Machine Learning", ((1988, "ICML"),)),
 }
 CSV_COLUMNS = (
     "id", "title", "abstract", "authors", "venue", "year", "track", "status", "presentation",
@@ -64,8 +72,15 @@ def write(fmt: str, records: Iterable[dict[str, Any]], provenance: Provenance, o
     return n
 
 
-def proceedings_name(venue: str, year: int) -> str:
-    return f"{PROCEEDINGS[venue]} ({venue} {year})"
+def venue_name(venue: str, year: int) -> str:
+    """`Conference on Neural Information Processing Systems (NIPS 2017)`: one string per venue and year,
+    whatever a paper's track or status, so every copy of a venue-year reads the same in a reference manager.
+    A year the venue wasn't held under its name raises ValueError (`op export --out` then leaves no file)."""
+    name, eras = CONFERENCES.get(venue, ("", ()))
+    acronyms = [acronym for first, acronym in eras if first <= year]
+    if not acronyms:
+        raise ValueError(f"no conference name for {venue} {year}: it was not held under that name then")
+    return f"{name} ({acronyms[-1]} {year})"
 
 
 def _one_line(text: str) -> str:
@@ -88,7 +103,7 @@ def _ris(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         if r.get("abstract"):
             lines.append(("AB", _one_line(r["abstract"])))
         lines += [("AU", _one_line(a)) for a in r.get("authors", [])]
-        lines += [("PY", str(r["year"])), ("T2", proceedings_name(r["venue"], r["year"]))]
+        lines += [("PY", str(r["year"])), ("T2", venue_name(r["venue"], r["year"]))]
         lines += [("UR", _one_line(u)) for u in _urls(r)]  # validated at ingest; one line here regardless
         if (r.get("urls") or {}).get("doi"):
             lines.append(("DO", _one_line(r["urls"]["doi"])))
@@ -227,7 +242,7 @@ def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         names = [_name(n) for n in (_debraced(a).rstrip("\\ ") for a in r.get("authors") or []) if n]
         if names:
             fields.append(("author", _braced(" and ".join(names))))
-        fields += [("booktitle", _braced(proceedings_name(r["venue"], r["year"]))), ("year", str(r["year"]))]
+        fields += [("booktitle", _braced(venue_name(r["venue"], r["year"]))), ("year", str(r["year"]))]
         if r.get("abstract"):
             fields.append(("abstract", _braced(r["abstract"])))
         urls = _urls(r)

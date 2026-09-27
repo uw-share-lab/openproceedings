@@ -16,11 +16,11 @@ fixtures. The reference parser strips values, so it reads either ending.
 ## Field mapping
 | Tag | Value | Notes |
 |---|---|---|
-| `TY` | `CPAPER` for proceedings papers | Spec allows `JOUR`/`CPAPER`. Confirm what Covidence shows for `CPAPER` in the hand-imported fixture. |
+| `TY` | `CPAPER` for every record | Chosen over `JOUR` (spec 04 §Exports, task-004): Zotero imports it as `conferencePaper` with `T2` as `conferenceName`, EndNote as *Conference Paper*. EndNote's default duplicate check stays within one reference type, so another database's `JOUR`/`CONF` copy of a paper is only caught with Reference Type unticked. The Covidence hand import is `docs/results/2026-09-27-covidence-check.md` (**pending**). |
 | `TI` | full title | One line. No trailing period added. |
 | `AU` | one author per line, `Last, First` | Full names from the record. Never initials only, never an `...` sentinel line. |
-| `PY` | year | The file known to import cleanly (Trust-Evals `mended.ris`) used `2025///`. Plain `2025` is also valid RIS. Pin one with the fixture. |
-| `T2` | venue string | e.g. `International Conference on Learning Representations (ICLR 2025)`. The NeurIPS and ICML strings are pinned from the venue table; verify the wording at implementation time. |
+| `PY` | year | The file known to import cleanly (Trust-Evals `mended.ris`) used `2025///`. Plain `2025` is also valid RIS. The writer writes plain `2025`; the Covidence check confirms it shows as the year. |
+| `T2` | venue string: `<conference name> (<acronym that year> <year>)` | `export.venue_name()`, table `CONFERENCES` (spec 04 §Exports cites the sources). `Conference on Neural Information Processing Systems (NIPS 2017)`, `… (NeurIPS 2018)` on; `International Conference on Learning Representations (ICLR 2025)`; `International Conference on Machine Learning (ICML 2023)`. One string per venue-year whatever the track or status. It is the conference's name, never a proceedings title, because workshop, rejected and ICLR papers are in no proceedings. A year before the venue was held is refused. |
 | `AB` | the **full** abstract on **one line** | Replace internal newlines with a space. Never truncate, never use `…`. |
 | `UR` | forum URL, then PDF URL | Two `UR` lines in that order. Skip an absent URL, never write an empty one. |
 | `DO` | DOI, only if present | |
@@ -61,4 +61,7 @@ choice parses. Match the known-good file unless the Covidence fixture shows othe
 5. no value contains `\n`, `…` or `\r`.
 Freeze the clock so the `N1` date is fixed and the file can be byte-compared to a golden fixture.
 Cover records with no abstract, no DOI, no PDF URL, a non-ASCII author and a title with LaTeX. One
-fixture is also imported into Covidence by hand, and the result is recorded in `docs/results/`.
+fixture is also imported into Covidence by hand: `docs/results/2026-09-27-covidence-fixture.ris`, with the
+checklist and results in `docs/results/2026-09-27-covidence-check.md` (pending, task-004 AC#1).
+`backend/tests/unit/test_covidence_fixture.py` pins that file byte for byte to the writer, so a writer change
+fails it, and the hand import has to be redone before the fixture is regenerated.

@@ -143,6 +143,83 @@ def test_bibtex_keys() -> None:
     assert keys == ["smith2024deep", "smith2024deepa", "smith2024deepaa"]  # the real `deepa` moves on
 
 
+def test_three_colliding_keys_the_first_bare_then_a_then_b() -> None:
+    """decision-007: the first use of a key stays bare, later ones take a, b, … in the export's id order."""
+    records = [{"authors": ["Jo Smith"], "year": 2024, "title": "Deep trust", "venue": "ICLR", "id": f"op:iclr:2024:{n}"}
+               for n in ("A1", "B2", "C3")]  # fmt: skip
+    entries = parse_string("".join(export._bibtex(records, PROVENANCE)))
+    assert [(e.key, e.fields["openproceedings_id"]) for e in entries] == [
+        ("smith2024deep", "op:iclr:2024:A1"),
+        ("smith2024deepa", "op:iclr:2024:B2"),
+        ("smith2024deepb", "op:iclr:2024:C3"),
+    ]
+
+
+def test_a_superset_keeps_keys_unless_an_added_paper_sorts_first() -> None:
+    """decision-007's trade-off, pinned: adding colliding papers that sort after the ones already exported
+    keeps every earlier key; one that sorts before them takes the bare key and shifts the rest."""
+
+    def keys(natives: list[str]) -> dict[str, str]:
+        records = [{"authors": ["Jo Smith"], "year": 2024, "title": "Deep", "venue": "ICLR", "id": f"op:iclr:2024:{n}"}
+                   for n in sorted(natives)]  # fmt: skip
+        return {
+            e.fields["openproceedings_id"][-2:]: e.key
+            for e in parse_string("".join(export._bibtex(records, PROVENANCE)))
+        }
+
+    small = keys(["B2", "C3"])
+    assert small == {"B2": "smith2024deep", "C3": "smith2024deepa"}
+    assert {k: v for k, v in keys(["B2", "C3", "D4"]).items() if k in small} == small  # appended: stable
+    assert keys(["A1", "B2", "C3"])["B2"] == "smith2024deepa"  # prepended: shifts (keys are per file)
+
+
+# spec 04 §Exports, T2 / booktitle: the full conference name, then the acronym it went by that year. The
+# first year of each naming era, the rename and recent years are pinned by hand, apart from `CONFERENCES`.
+VENUE_NAMES = {
+    ("NeurIPS", 1987): "Conference on Neural Information Processing Systems (NIPS 1987)",
+    ("NeurIPS", 2017): "Conference on Neural Information Processing Systems (NIPS 2017)",
+    ("NeurIPS", 2018): "Conference on Neural Information Processing Systems (NeurIPS 2018)",
+    ("NeurIPS", 2025): "Conference on Neural Information Processing Systems (NeurIPS 2025)",
+    ("ICLR", 2013): "International Conference on Learning Representations (ICLR 2013)",
+    ("ICLR", 2025): "International Conference on Learning Representations (ICLR 2025)",
+    ("ICML", 1988): "International Conference on Machine Learning (ICML 1988)",
+    ("ICML", 2023): "International Conference on Machine Learning (ICML 2023)",
+    ("ICML", 2026): "International Conference on Machine Learning (ICML 2026)",
+}
+
+
+@pytest.mark.parametrize(("venue", "year"), sorted(VENUE_NAMES))
+def test_venue_names_are_pinned(venue: str, year: int) -> None:
+    assert export.venue_name(venue, year) == VENUE_NAMES[venue, year]
+
+
+def test_every_crawlable_year_has_one_venue_name() -> None:
+    """2013–2026 for all three venues (the review's 2020–2026 and task-049's 2018 proposal inside it): one
+    string per venue and year, whatever the track or status, with the year it names equal to `PY`."""
+    for venue in ("NeurIPS", "ICLR", "ICML"):
+        for year in range(2013, 2027):
+            name = export.venue_name(venue, year)
+            acronym = "NIPS" if venue == "NeurIPS" and year < 2018 else venue
+            assert name.endswith(f" ({acronym} {year})") and "\n" not in name and "{" not in name
+
+
+@pytest.mark.parametrize(
+    ("venue", "year"), [("NeurIPS", 1986), ("ICLR", 2012), ("ICML", 1987), ("AAAI", 2024)]
+)
+def test_a_year_the_venue_was_not_held_is_refused(venue: str, year: int) -> None:
+    with pytest.raises(ValueError, match="no conference name"):
+        export.venue_name(venue, year)
+
+
+def test_ris_t2_and_bibtex_booktitle_are_the_same_string() -> None:
+    record = {"id": "op:neurips:2017:nips-ab", "title": "t", "authors": ["A B"], "venue": "NeurIPS", "year": 2017,
+              "track": "main"}  # fmt: skip
+    ris = "".join(export._ris([record], PROVENANCE))
+    (entry,) = parse_string("".join(export._bibtex([record], PROVENANCE)))
+    assert f"T2  - {entry.fields['booktitle']}\n" in ris
+    assert entry.fields["booktitle"] == "Conference on Neural Information Processing Systems (NIPS 2017)"
+
+
 def run(data_dir: Path, *args: str) -> int:
     return main(["--data-dir", str(data_dir), *args, "--index", index_of(data_dir).name])
 

@@ -23,7 +23,8 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
 - Every value is **brace-delimited**, even `year`. Never quote-delimited: quotes and braces have
   different escaping rules, and one convention keeps the escaping code small.
 - `title` gets an inner brace pair so that bibliography styles keep its capitalisation.
-- `booktitle` is the same venue string as RIS `T2` (`.claude/skills/ris-format/SKILL.md`). `keywords` is
+- `booktitle` is the same venue string as RIS `T2` (`export.venue_name()`, `.claude/skills/ris-format/SKILL.md`):
+  the conference's name, not a proceedings title, since workshop and rejected papers are in no proceedings. `keywords` is
   the track. Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC
   date>}` (spec 04 §Exports), the same line as RIS `N1`: `·` is U+00B7, the date `YYYY-MM-DD` UTC. Omit `doi`, `url` and `abstract` when they
   are absent. Never write an empty field.
@@ -42,13 +43,16 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
    literal rule unless a spec PR changes it.
 4. Each part is NFKD-folded to ASCII, lower-cased and stripped to `[a-z0-9]`. refaudit's key regex
    rejects `,`, whitespace and braces. LaTeX handles non-ASCII keys badly.
-5. **De-duplication:** collisions are resolved by suffixing `a`, `b`, `c`, … in the export's stable
-   order. Decide once whether the first occurrence stays bare (streamable with a seen-dict) or also gets
-   `a` (needs a pre-pass over the set). Pin the choice with a fixture that has three colliding papers.
-   Past `z`, continue with `aa`.
+5. **De-duplication (decision-007):** the first paper with a key keeps it **bare**; each later one, in the
+   export's id order, takes the next suffix not yet issued in the file: `a`, `b`, … `z`, `aa`, `ab`, …. A
+   paper whose real key equals an issued suffix moves on (`smith2024deepa` → `smith2024deepaa`). This is
+   what Better BibTeX and JabRef do, and it streams with a set of issued keys (all-suffixed would need a
+   pre-pass). Pinned by `test_three_colliding_keys_the_first_bare_then_a_then_b`.
 
 Keys are unique **within one file** only. The same paper can get a different key in a different query's
-export. Never present a key as a stable identifier. The id lives in `openproceedings_id`.
+export: a superset keeps earlier keys only when the added colliding papers sort after them
+(`test_a_superset_keeps_keys_unless_an_added_paper_sorts_first`). Never present a key as a stable
+identifier. The id lives in `openproceedings_id`.
 
 ## Escaping
 Abstracts contain real LaTeX (`$\epsilon$-DP`, `\textbf{63.7\%}`). Keep it; escaping it would change the
