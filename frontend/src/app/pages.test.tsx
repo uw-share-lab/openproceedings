@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
+import { EditorView } from "@codemirror/view";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import type { ReactNode } from "react";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { json, polyfillLayout, renderWithApi } from "@/test/api-stub";
 import { metadata as coverageMeta } from "./coverage/page";
 import SyntaxHelpPage, { metadata as syntaxMeta } from "./help/syntax/page";
 import NotFound, { metadata as notFoundMeta } from "./not-found";
@@ -11,11 +14,19 @@ import { metadata as paperMeta } from "./paper/[id]/page";
 import { metadata as recordMeta } from "./record/[id]/page";
 import SearchPage, { metadata as searchMeta } from "./search/page";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }), usePathname: () => "/search" }));
+beforeAll(polyfillLayout);
 afterEach(cleanup);
+
+/** The workspace's API calls answer "not found": these tests are about the pages, not the answers. */
+const withApi = (ui: ReactNode) =>
+  renderWithApi(ui, () => json({ error: { code: "API_NOT_FOUND", message: "-" } }, 404));
 
 async function renderSearch(searchParams: Record<string, string | string[]>) {
   // A server component: await it, then render what it returned.
-  render(await SearchPage({ searchParams: Promise.resolve(searchParams), params: Promise.resolve({}) }));
+  return withApi(
+    await SearchPage({ searchParams: Promise.resolve(searchParams), params: Promise.resolve({}) }),
+  );
 }
 
 describe("page titles (layout template `%s · openproceedings`)", () => {
@@ -41,7 +52,7 @@ describe("not-found page", () => {
 
 describe("visible copy has no internal task ids or route paths", () => {
   it.each([
-    ["home", () => render(<HomePage />)],
+    ["home", () => withApi(<HomePage />)],
     ["placeholder", () => render(<SyntaxHelpPage />)],
   ])("%s", (_name, draw) => {
     draw();
@@ -72,12 +83,12 @@ describe("/search URL notices", () => {
     expect(screen.queryByRole("link", { name: "Use corrected link" })).toBeNull();
   });
 
-  it("shows an empty q as a label, not as monospace query text", async () => {
-    await renderSearch({});
-    const empty = screen.getByText("(empty)");
-    expect(empty.className).toMatch(/italic/);
-    expect(empty.className).not.toMatch(/font-mono/);
-    expect(empty.closest(".font-mono")).toBeNull();
+  it("heads the notices with what they are, and opens the workspace on the URL's q and mode", async () => {
+    const { container } = await renderSearch({ q: "trust*", mode: "scholar", utm: "x" });
+    expect(screen.getByText("This link had parameters that weren't used:")).toBeTruthy();
+    const view = EditorView.findFromDOM(container.querySelector(".cm-editor") as HTMLElement);
+    expect(view?.state.doc.toString()).toBe("trust*");
+    expect((screen.getByRole("combobox", { name: "Syntax" }) as HTMLSelectElement).value).toBe("scholar");
   });
 });
 

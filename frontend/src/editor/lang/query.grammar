@@ -1,0 +1,21 @@
+// The query language (spec 02) for HIGHLIGHTING ONLY (codemirror-lezer skill). The server's parser decides
+// what a query means and whether it is valid; this grammar decides nothing. It is a flat sequence of the
+// server lexer's lexemes, found by the external tokenizer in tokens.ts (lex.ts mirrors lexer.py and is
+// checked against it by lex.test.ts and grammar.test.ts), so it has no rule that could reject input: every
+// character is in a token, and the tree never has an error node.
+//
+// Regenerate parser.ts with `npm run gen:grammar --workspace frontend`; grammar.test.ts fails if it is stale.
+
+@top Query { lexeme* }
+
+lexeme {
+  LParen | RParen | Pipe | And | Or | Not | Minus | Near | BadNear |
+  Field | UnknownField | Phrase | Range | Wildcard | Word
+}
+
+@skip { space }
+
+@external tokens queryTokens from "./tokens" {
+  space, LParen, RParen, Pipe, And, Or, Not, Minus, Near, BadNear,
+  Field, UnknownField, Phrase, Range, Wildcard, Word
+}

@@ -40,6 +40,14 @@
   --color-excluded-border: var(--excluded-border);
   --color-default-clause: var(--default-clause);
   --color-track-workshop: var(--track-workshop);
+  --color-syn-operator: var(--syn-operator);
+  --color-syn-field: var(--syn-field);
+  --color-syn-phrase: var(--syn-phrase);
+  --color-syn-wildcard: var(--syn-wildcard);
+  --color-syn-number: var(--syn-number);
+  --color-diag-error: var(--diag-error);
+  --color-diag-warning: var(--diag-warning);
+  --color-diag-info: var(--diag-info);
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -78,6 +86,17 @@
   --excluded-border: oklch(0.6 0.08 250);
   --default-clause: oklch(0.5 0 0);
   --track-workshop: oklch(0.45 0.15 300);
+
+  /* query editor: syntax colours (each also bold, italic or underlined) and squiggles (each also a line style
+     and a gutter glyph); none is the only cue */
+  --syn-operator: oklch(0.45 0.16 265);
+  --syn-field: oklch(0.45 0.08 175);
+  --syn-phrase: oklch(0.46 0.13 145);
+  --syn-wildcard: oklch(0.47 0.15 320);
+  --syn-number: oklch(0.47 0.12 50);
+  --diag-error: oklch(0.52 0.21 27);
+  --diag-warning: oklch(0.55 0.12 65);
+  --diag-info: oklch(0.5 0.14 250);
 }
 
 .dark {
@@ -110,6 +129,15 @@
   --excluded-border: oklch(0.55 0.07 250);
   --default-clause: oklch(0.68 0 0);
   --track-workshop: oklch(0.78 0.12 300);
+
+  --syn-operator: oklch(0.8 0.1 265);
+  --syn-field: oklch(0.8 0.1 175);
+  --syn-phrase: oklch(0.82 0.12 145);
+  --syn-wildcard: oklch(0.8 0.12 320);
+  --syn-number: oklch(0.82 0.1 60);
+  --diag-error: oklch(0.704 0.185 22.216);
+  --diag-warning: oklch(0.78 0.13 75);
+  --diag-info: oklch(0.75 0.11 250);
 }
 
 @layer base {

@@ -14,9 +14,20 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "gen:api": "openapi-typescript ../backend/tests/contract/openapi.json --output src/api/schema.ts"
+    "gen:api": "openapi-typescript ../backend/tests/contract/openapi.json --output src/api/schema.ts",
+    "gen:grammar": "lezer-generator --typeScript -o src/editor/lang/parser.ts src/editor/lang/query.grammar"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "6.20.3",
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/language": "6.12.4",
+    "@codemirror/lint": "6.9.7",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.13",
+    "@lezer/common": "1.5.3",
+    "@lezer/highlight": "1.2.4",
+    "@lezer/lr": "1.4.10",
+    "@tanstack/react-query": "5.104.0",
     "clsx": "2.1.1",
     "next": "16.3.6",
     "next-themes": "0.4.6",
@@ -26,9 +37,11 @@
     "tailwind-merge": "3.7.0"
   },
   "devDependencies": {
+    "@lezer/generator": "1.8.1",
     "@tailwindcss/postcss": "4.3.3",
     "@testing-library/dom": "10.4.2",
     "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.7",
     "@types/node": "22.20.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
