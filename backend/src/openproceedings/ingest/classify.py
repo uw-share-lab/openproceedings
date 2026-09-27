@@ -179,3 +179,42 @@ def classify_proceedings(track_token: str) -> Classification:
         return Classification(track="workshop", status="accepted")
     track = _PROCEEDINGS.get(track_token, "unknown")
     return Classification(track=track, status="accepted", parsed=track != "unknown")
+
+
+# NeurIPS proceedings listings (neurips-proceedings skill §Track vocabulary): the evidence rules that give a
+# listing its track from its host, year and path token. Each rule is named in the claim's evidence.
+NEURIPS_MAIN_HOSTS = frozenset({"proceedings.neurips.cc", "papers.nips.cc"})
+NEURIPS_DB_2021_HOST = "datasets-benchmarks-proceedings.neurips.cc"
+_TOKENLESS_LAST_YEAR = 2021  # 1987-2021 abstract links carry no track token; the year page has one track
+_DB_ALIAS = "Datasets_and_Benchmarks"
+_DB_ALIAS_LAST_YEAR = 2023  # the <=2023 spelling of Datasets_and_Benchmarks_Track (scholarmend's alias)
+_DB_ROUNDS = frozenset({"round1", "round2"})
+
+
+def classify_neurips_listing(host: str, year: int, token: str | None) -> tuple[Classification, str]:
+    """Track (and `accepted`) for a paper listed in the NeurIPS proceedings, with the evidence rule that
+    gave it. A form no rule covers is `unknown` (counted and flagged), never `main`."""
+
+    def listed(track: str, rule: str) -> tuple[Classification, str]:
+        cls = Classification(
+            track=track, status="accepted", venue="NeurIPS", year=year, parsed=track != "unknown"
+        )
+        return cls, rule
+
+    host = host.lower()
+    if host == NEURIPS_DB_2021_HOST:
+        if year == 2021 and token in _DB_ROUNDS:
+            return listed("datasets_benchmarks", f"{host} {token}: NeurIPS 2021 Datasets and Benchmarks")
+        return listed("unknown", f"{host} token {token} in {year}: no rule")
+    if host not in NEURIPS_MAIN_HOSTS:
+        return listed("unknown", f"{host}: not a NeurIPS proceedings host")
+    if token is None:
+        if year <= _TOKENLESS_LAST_YEAR:
+            return listed("main", f"{host} {year}: no track token, so the main track (host and year)")
+        return listed("unknown", f"{host} {year}: no track token after {_TOKENLESS_LAST_YEAR}: no rule")
+    if token == _DB_ALIAS:
+        if year <= _DB_ALIAS_LAST_YEAR:
+            return listed("datasets_benchmarks", f"track token {token} (<=2023 alias of {token}_Track)")
+        return listed("unknown", f"track token {token} after {_DB_ALIAS_LAST_YEAR}: no rule")
+    track = classify_proceedings(token).track
+    return listed(track, f"track token {token}" + (": no rule" if track == "unknown" else ""))

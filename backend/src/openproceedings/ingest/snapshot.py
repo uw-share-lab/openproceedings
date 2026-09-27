@@ -2,8 +2,10 @@
 
 `ingest_ris` checks scholarmend outputs and copies them into the cache (`<cache>/ris/<name>/`, the
 `mended.ris` and the `resolved.json` beside it); `op ingest openreview` caches its crawls under
-`<cache>/openreview/` (`sources/openreview_v2.py`). `build` imports everything cached (the RIS files, and each
-finished OpenReview crawl replayed from its cached responses), dedups, and writes
+`<cache>/openreview/` (`sources/openreview_v2.py`); `op ingest neurips|pmlr` cache proceedings pages
+(`sources/crawl.py`). `build` imports everything cached (the RIS files, each finished OpenReview crawl
+replayed from its cached responses, and each finished NeurIPS/PMLR crawl re-mined from its cached pages),
+dedups, and writes
 `<snapshots>/<crawl date>-<shorthash>/` with `records.jsonl`, `manifest.json`, `merges.csv` and
 `conflicts.csv`. It never fetches, so it works offline.
 
@@ -197,9 +199,17 @@ def load_cache(cache: Path) -> tuple[list[PaperRecord], list[ImportReport]]:
     return records, reports
 
 
-def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], list[CrawlReport]]:
-    """Every cached source: the RIS imports, then each finished OpenReview v2 crawl replayed offline from its
-    cached responses (`openreview_v2.replay`)."""
+def load_sources(
+    cache: Path,
+) -> tuple[list[PaperRecord], list[ImportReport], list[CrawlReport], dict[str, Any]]:
+    """Every cached source, with no network: the RIS imports; each finished OpenReview v2 crawl replayed from
+    its cached responses (`openreview_v2.replay`); then every NeurIPS/PMLR proceedings crawl with a finished
+    marker, re-mined from the page cache (`sources/crawl.py`). Returns the records, the RIS reports, the
+    OpenReview crawl reports, and the proceedings miners' manifest entries. Refuses an empty cache."""
+    from openproceedings.ingest.sources.common import MinerError
+    from openproceedings.ingest.sources.crawl import load_crawls
+    from openproceedings.ingest.sources.http import CacheError
+
     records, reports = _load_ris(cache)
     try:
         crawls = openreview_v2.replay(cache)
@@ -207,12 +217,17 @@ def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], li
         raise SnapshotError(f"the OpenReview cache can't be replayed: {e}", reason=e.reason) from None
     for c in crawls:
         records += c.records
-    if not reports and not crawls:
+    try:
+        mined, proceedings = load_crawls(cache)
+    except (MinerError, CacheError) as e:
+        raise SnapshotError(str(e), reason=getattr(e, "reason", "cache_invalid")) from e
+    records += mined
+    if not reports and not crawls and not proceedings:
         raise SnapshotError(
-            f"nothing cached under {cache.name}; run `op ingest ris <mended.ris>...` or "
-            "`op ingest openreview --venue <V> --years <Y>` first"
+            f"nothing cached under {cache.name}; run `op ingest ris <mended.ris>...`, "
+            "`op ingest openreview --venue <V> --years <Y>` or `op ingest neurips|pmlr ...` first"
         )
-    return records, reports, [c.report for c in crawls]
+    return records, reports, [c.report for c in crawls], proceedings
 
 
 def record_line(record: PaperRecord) -> str:
@@ -244,11 +259,16 @@ def _nested(
     return plain
 
 
-def _sources(reports: Sequence[ImportReport], crawls: Sequence[CrawlReport]) -> dict[str, Any]:
-    """manifest.json's `sources`: `ris` (the import reports; always present without a crawl), and
-    `openreview_v2` with its own `crawl_window` (records.py and coverage.py read it) and each crawl's report."""
+def _sources(
+    reports: Sequence[ImportReport],
+    crawls: Sequence[CrawlReport],
+    proceedings: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """manifest.json's `sources`: `ris` (the import reports; always present when no other source is),
+    `openreview_v2` with its own `crawl_window` (records.py and coverage.py read it) and each crawl's report,
+    and the proceedings miners' entries (`neurips_proceedings`, `pmlr`), each with its own `crawl_window`."""
     sources: dict[str, Any] = {}
-    if reports or not crawls:
+    if reports or not (crawls or proceedings):
         sources["ris"] = [r.to_manifest() for r in reports]
     if crawls:
         windows = [w for c in crawls if (w := c.crawl_window())]
@@ -256,6 +276,7 @@ def _sources(reports: Sequence[ImportReport], crawls: Sequence[CrawlReport]) -> 
             "crawl_window": {"from": min(w["from"] for w in windows), "to": max(w["to"] for w in windows)},
             "crawls": [c.to_manifest() for c in crawls],
         }
+    sources.update(proceedings or {})
     return sources
 
 
@@ -264,8 +285,11 @@ def render(
     reports: Sequence[ImportReport],
     built_at: datetime,
     crawls: Sequence[CrawlReport] = (),
+    proceedings: Mapping[str, Any] | None = None,
 ) -> dict[str, bytes]:
-    """The snapshot's files. Everything but manifest.json's `built_at` is a function of the inputs."""
+    """The snapshot's files. Everything but manifest.json's `built_at` is a function of the inputs.
+    `crawls` are the OpenReview v2 crawl reports; `proceedings` holds the proceedings miners' `sources`
+    entries (`neurips_proceedings`, `pmlr`)."""
     records = sorted(result.records, key=lambda r: r.id)
     if not records:
         raise SnapshotError("no records to snapshot")
@@ -291,7 +315,7 @@ def render(
         "merges": {"total": len(result.merges), **Counter(m.rule for m in result.merges)},
         "conflicts": {"total": len(result.conflicts), **Counter(c.resolution.split(":")[0] for c in result.conflicts)},
         "files": {"merges.csv": _sha256(merges), "conflicts.csv": _sha256(conflicts)},
-        "sources": _sources(reports, crawls),
+        "sources": _sources(reports, crawls, proceedings),
     }  # fmt: skip
     return {
         "records.jsonl": lines,
@@ -337,8 +361,8 @@ def _holds(snapshot: Path, snapshot_hash: str, fresh: dict[str, Any] | None = No
 def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> BuildResult:
     """Import, dedup and write a new immutable snapshot (or report the one that already has this hash)."""
     began = time.monotonic()
-    records, reports, crawls = load_sources(cache)
-    files = render(dedup(records), reports, built_at or datetime.now(UTC), crawls)
+    records, reports, crawls, proceedings = load_sources(cache)
+    files = render(dedup(records), reports, built_at or datetime.now(UTC), crawls, proceedings)
     manifest = json.loads(files["manifest.json"])
     snapshot_hash = manifest["snapshot_hash"]
     target = snapshots / f"{manifest['crawl_date']}-{snapshot_hash[:SHORT]}"

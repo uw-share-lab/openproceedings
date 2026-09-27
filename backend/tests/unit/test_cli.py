@@ -47,16 +47,53 @@ def test_the_search_header_finds_its_snapshot_by_the_one_rule(tmp_path: Path, na
     assert got == ({"snapshot_hash": "h"} if found else None)
 
 
-@pytest.mark.parametrize(("source", "task"), [("proceedings", "task-052")])
-def test_planned_ingest_sources_name_their_task(
-    source: str, task: str, capsys: pytest.CaptureFixture[str]
+def test_ingest_neurips_offline_from_a_seeded_cache(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert cli.main(["ingest", source, "--venue", "ICLR"]) == 2
-    err = capsys.readouterr().err
-    assert f"op ingest {source}" in err and task in err and "not implemented yet" in err
+    from tests.unit.ingest.test_neurips import seed_2013
+
+    seed_2013(tmp_path / "cache")
+    assert cli.main(["--data-dir", str(tmp_path), "ingest", "neurips", "--year", "2013", "--offline"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    [listing] = out["listings"]
+    assert (out["requests"], listing["records"], listing["tracks"]) == (0, 2, {"main": 2})
+    assert (tmp_path / "cache" / "neurips" / "crawls" / "2013.json").is_file()
 
 
-@pytest.mark.parametrize("argv", [["ingest"], ["snapshot"], ["ingest", "ris"], ["snapshot", "diff", "a"]])
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["ingest", "neurips", "--year", "2013", "--delay", "0.1"], "--delay must be at least"),
+        (["ingest", "pmlr", "--year", "2013", "--dry-run", "--offline"], "don't combine"),
+        (["ingest", "pmlr", "--year", "2026", "--offline"], "no verified PMLR volume"),
+        (["ingest", "neurips", "--year", "2012", "--offline"], "decision-013"),
+        (["ingest", "neurips", "--year", "2013", "--offline"], "not in the cache (offline)"),
+    ],
+)
+def test_ingest_crawl_refusals_exit_1(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], argv: list[str], message: str
+) -> None:
+    assert cli.main(["--data-dir", str(tmp_path), *argv]) == 1
+    assert message in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("year", ["13", "2013-2012", "2013-", "twenty", "2013-20145"])
+def test_ingest_crawl_year_must_be_a_year_or_range(year: str) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["ingest", "neurips", "--year", year, "--offline"])
+    assert exc.value.code == 2
+
+
+def test_ingest_crawl_years_and_ranges_combine() -> None:
+    ns = cli.build_parser().parse_args(
+        ["ingest", "pmlr", "--year", "2013-2015", "--year", "2014", "--year", "2020"]
+    )
+    assert sorted({y for chunk in ns.years for y in chunk}) == [2013, 2014, 2015, 2020]
+
+
+@pytest.mark.parametrize(
+    "argv", [["ingest"], ["snapshot"], ["ingest", "ris"], ["snapshot", "diff", "a"], ["ingest", "neurips"]]
+)
 def test_implemented_commands_need_their_arguments(argv: list[str]) -> None:
     with pytest.raises(SystemExit) as exc:
         cli.main(argv)

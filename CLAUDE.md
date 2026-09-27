@@ -20,8 +20,8 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   ranked search, which `op search` and the API search route both run), `export.py`, `logs.py`,
   `diagnostics.py`, `vocab.py`, `storage.py`, `records.py` (search records: `ids_hash`, the append-only store, replay), `coverage.py` (the snapshot manifest's venue × year × track × status breakdown), `timestamps.py` (the API's one UTC `Z` timestamp form), `query/` (`normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`,
   `ast.py`, `canonical.py`, `defaults.py`, `clauses.py` (each filter field's clause for facet clicks), `compat.py`), `engine/` (`protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py`, `exclusions.py`, `highlight.py`, `parity.py`), `ingest/`
-  (`record.py`, `classify.py`, `urls.py`, `volumes.py`, `ris.py`, `dedup.py`, `snapshot.py`, `sources/` (crawlers:
-  `openreview_client.py` (auth, pacing, retries, cache), `openreview_v2.py` → `op ingest openreview`)), `api/` (`app.py`
+  (`record.py`, `classify.py`, `urls.py`, `volumes.py` + `pmlr_volumes.toml` (the PMLR volume table), `ris.py`, `dedup.py`, `snapshot.py`, `sources/` (crawlers:
+  `openreview_client.py` (auth, pacing, retries, cache), `openreview_v2.py` → `op ingest openreview`; the proceedings crawlers: `http.py` cached polite fetcher, `neurips.py`, `pmlr.py`, `crawl.py` → `op ingest neurips|pmlr`)), `api/` (`app.py`
   `create_app`, `config.py`, `state.py` (the served index and `pinned`, the one loader of
   other index_versions), `deps.py`, `errors.py`, `middleware.py`, `models.py` (the response
   contract), routers `search.py` (parse and search), `papers.py`, `records.py`, `meta.py`, `coverage.py`, `health.py`, `export.py`

@@ -76,9 +76,28 @@ The alias means one track never counts as two in the manifest. Mapping an unknow
   inline tags (`<i>`, `<sub>`) vanish, so `<i>k</i>-means` stays `k-means`.
 - Some pages are **double-escaped** (`&amp;amp;`; the 2025 year page has an author `&amp;quot;…&amp;quot;`). Unescape once, then decode only complete leftover
   entities. A bare `&` in `R&D` survives.
-- Collapse whitespace. Keep LaTeX verbatim. Reject any string containing `…`, which is a snippet and not
-  an abstract.
-- Missing abstract: `abstract=null` and count it in the manifest.
+- Collapse whitespace. Keep LaTeX verbatim. Reject a string that starts or ends with `…` (a snippet, not
+  an abstract); an ellipsis inside a real abstract (`x₁, …, x_n`) is kept (spec 01, record-schema).
+- Missing abstract: `abstract=null` and count it in the manifest (the report splits out
+  `abstract_title_mismatch` and `page_missing`).
+
+## The miner (as built, task-052)
+`backend/src/openproceedings/ingest/sources/neurips.py`, run by `op ingest neurips --year <Y|Y-Y>`
+(`--dry-run`, `--offline`, `--refresh`, `--delay`), cache under `<data-dir>/cache/neurips/`. Years before
+2013 are refused (decision-013); a year whose index page isn't there (404) is refused as not published,
+never read as empty. The track rules above live in `classify.classify_neurips_listing(host, year, token)`,
+which returns the rule text that becomes the track claim's evidence; the RIS importer checks a NeurIPS
+listing URL with the same function. Claims (source `neurips_proceedings`): venue, year, title, track,
+status (`listed on <year index>`) and `urls.proceedings` at the year page's fetch time; abstract, authors
+(`citation_author`, else the listing's), `urls.pdf` and `urls.doi` (`citation_doi`, 2024+) at the abstract
+page's. From 2021 the report's `role` is `confirm`: dedup's precedence lets the proceedings decide
+acceptance and OpenReview the track, and a disagreement is a `conflicts.csv` row. The year page's
+`<span class="paper-count">` is the report's `stated` count, compared with the entries parsed (`count_ok`).
+- **2025 splits its volumes.** On 2026-09-27 the 2025 year page (Creative AI only) says "See also:
+  Advances in Neural Information Processing Systems 38 Main Conference" →
+  `/paper_files/paper/2025/vol38-main-conference`. The miner reports such links (`see_also`, and a
+  `listing_see_also_unfollowed` warning) but does not crawl them until a person records that page and
+  its structure.
 
 ## Presentation
 Only set `presentation` (`oral` / `spotlight` / `poster`) when the page or OpenReview states it. Never

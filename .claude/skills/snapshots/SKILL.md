@@ -43,18 +43,30 @@ value); `record_count`; `counts` nested venue → year → track → status; `ab
 resolution kind); `files` (the sha256 of `merges.csv` and `conflicts.csv`, which `snapshot_hash` doesn't
 cover); and `sources` — for RIS, one `ImportReport.to_manifest()` per cached file (both inputs' sha256,
 the installed scholarmend `parser_version`, read / imported / skipped by reason, abstract_missing,
-unknown_track, status_overrides, track × status) under `ris` (present whenever no crawl is); and, once
+unknown_track, status_overrides, track × status) under `ris` (present whenever no other source is); once
 `op ingest openreview` has finished a venue-year, `openreview_v2`: its own `crawl_window` (which search records'
 `crawl_dates` and `/coverage` read) and one `CrawlReport.to_manifest()` per venue-year (groups crawled and skipped
 with the reason, each group's `public_*` flags, notes per venueid, read / imported / skipped by reason,
-unknown_track, abstract_missing, track × status, page size). `build` replays each finished crawl offline from
-the cached responses (`load_sources`); the proceedings crawlers add their entries later in M4. The manifest may hold build times; `records.jsonl` may not. `/coverage`
+unknown_track, abstract_missing, track × status, page size); and the proceedings crawlers (task-052/053) add
+`neurips_proceedings` and `pmlr`: each `{crawl_window, listings}`, one report per listing (venue, year,
+volume, listing URL, role, `stated` vs `listed` and `count_ok`, records, skipped by reason, tracks,
+abstract_missing with `abstract_title_mismatch` and `page_missing`, unknown_track, `see_also`, its own
+crawl window); `coverage.crawl_dates` picks up each `crawl_window`. `build` (`load_sources`) replays each
+finished OpenReview crawl offline from the cached responses and re-mines each finished NeurIPS/PMLR crawl from
+the cached pages (`sources/crawl.py`). The manifest may hold build times; `records.jsonl` may not. `/coverage`
 (spec 04) and `coverage-auditor` read these counts directly.
 
 ## The cache
 `op ingest ris <mended.ris>...` checks each scholarmend output imports cleanly, then copies it and the
 `resolved.json` beside it to `<data-dir>/cache/ris/<its directory name>/`. Re-ingesting identical files is
 a no-op; different files under a cached name are refused (a snapshot may already cite them).
+
+`op ingest neurips|pmlr` fills a page cache, `<data-dir>/cache/{neurips,pmlr}/pages/<sha256[:2]>/<sha256>.json`
+(one fixture-shaped entry per URL with its `fetched_at`, each written atomically; a 404 paper page is
+cached as a stable absence), and writes `<data-dir>/cache/<source>/crawls/<year|vN>.json` once a listing's
+pages are all cached. `op snapshot build` re-mines only marked listings, from the cache with no network; a
+marked listing whose pages have gone is a refusal, never a smaller snapshot. An empty cache (no RIS and no
+marked crawl) is refused.
 
 ## Immutability
 - A build or ingest holds an exclusive `flock` on `<dir>/.lock` in the directory it writes into, so

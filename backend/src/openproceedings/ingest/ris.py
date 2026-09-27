@@ -43,7 +43,13 @@ from urllib.parse import urlparse
 
 from scholarmend.parse import parse_file
 
-from openproceedings.ingest.classify import Classification, classify_proceedings, classify_venueid, is_v1
+from openproceedings.ingest.classify import (
+    Classification,
+    classify_neurips_listing,
+    classify_proceedings,
+    classify_venueid,
+    is_v1,
+)
 from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Urls, is_url
 from openproceedings.ingest.urls import PREFIX, pmlr, proceedings, proceedings_parts
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
@@ -140,8 +146,13 @@ def _listing(
         for c, _p in proc:  # the claim must agree with the address it cites: the URL's year and track token
             parts = proceedings_parts(c["evidence"])
             assert parts is not None  # `proc` holds only URLs that parse
-            _v, url_year, _h, token = parts
-            if url_year != year or (token is not None and classify_proceedings(token).track != claimed):
+            url_venue, url_year, _h, token = parts
+            by_url = (  # the NeurIPS miner's host/year/token rules (the 2021 D&B host's round1/round2)
+                classify_neurips_listing(urlparse(c["evidence"]).netloc, url_year, token)[0]
+                if url_venue == "NeurIPS"
+                else classify_proceedings(token or "")
+            )
+            if url_year != year or (token is not None and by_url.track != claimed):
                 return "conflict"
         return (venue, year, f"{PREFIX[venue]}-{sha}", classify_proceedings(track),
                 ("proceedings_url", url), sorted({c["evidence"] for c, _ in proc}))  # fmt: skip
