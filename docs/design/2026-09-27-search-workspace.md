@@ -320,12 +320,16 @@ Component rules:
   field's clause is the default (`defaults` includes it). Track values display as the `/meta` vocabulary,
   with `datasets_benchmarks` shown `D&B` (accessible name "datasets and benchmarks"). A value with facet
   count 0 is listed (the vocabulary is complete) but dimmed, still operable.
-  - **Year** had no reducer action when this was designed (decision-011; TASK-092 has since added the year
-    actions, so a range control can be built on them: Open questions 2). M3b shows the year
-    facet as a read-only list of counts, newest first, and "Edit `year:` in the query ▸". If the searched
-    `q` has a `year:` clause with a span (`filters.year`), it selects that clause in the editor; otherwise it
-    appends ` year:2020..2026` with the range selected, so the reader sees the syntax and types over it
-    (pre-pass S14). See Open questions 2.
+  - **Year** had no reducer action when this was designed (decision-011); TASK-092 added the year actions and
+    **TASK-042 built the control on them** (Open questions 2): the year facet as checkboxes with counts,
+    newest first, checked when the clause's ranges admit the year (a tick is `yearAdd`/`yearRemove` of that
+    one year); a "From year / To year / Set years" pair (`yearSet`); "All years" (`yearClear`); and a line
+    saying what the clause admits ("Every year." / "Admits 2020..2022."). Each is disabled with
+    `whyBlocked`'s reason like the other fields (`TOO_MANY_RANGES` past four ranges). "Edit `year:` in the
+    query ▸" stays: if the searched `q` has a `year:` clause with a span (`filters.year`), it selects that
+    clause in the editor; otherwise it appends ` year:2020..2026` to the draft with the range selected, so
+    the reader sees the syntax and types over it (pre-pass S14). New string: "Type a four-digit year in both
+    boxes, the earlier first." (Set years with an unreadable box).
 - **Result item** (ui-design-system §Result item): `h3` title linking to `/paper/<id>?q=<q>&mode=<mode>`, with
   highlights; badges `venue · year · track · presentation`, plus a status badge only when not `accepted`
   (text, e.g. `rejected`); abstract excerpt with highlights; links OpenReview (`urls.forum`), PDF
@@ -549,6 +553,12 @@ Export → Save search record → hits (title link, then OpenReview/PDF/Proceedi
 
 On narrow screens the Filters button sits after the banner, so the order stays the visual order.
 
+**As built (TASK-042):** one DOM order serves both widths, so the results header, banner and Limits line
+come **before** the sidebar: … tree disclosure → Expansions → results header (Copy index version) → banner
+(i) and include buttons → (Filters button, narrow only) → sidebar → Sort → hits → paging. On wide screens
+the sidebar is placed in the left column by CSS grid; the numbers the page reports are read before the
+controls that change them. Export and Save (TASK-044) go after Sort.
+
 ### Per component: keyboard and screen reader
 
 | Component | Keyboard | Screen reader |
@@ -630,9 +640,9 @@ severity 3–4 finding on this page is fixed in the wireframes above: the audito
    PR, not this doc.
 2. **Year control.** Decision-011 left year without a reducer action; TASK-092 added them (`yearSet`,
    `yearClear`, `yearAdd`, `yearRemove`, at most 4 ranges; spec 05 §URL is state; goldens
-   `frontend/src/lib/year-clause-golden.json`). The read-only year list plus "Edit `year:` in the query" stays
-   the design until a control is designed on them (a from–to range plus per-year add/remove fits the actions;
-   `whyBlocked` gives each its disabled reason).
+   `frontend/src/lib/year-clause-golden.json`). **Resolved in TASK-042**: per-year add/remove, a from–to range
+   and All years, each disabled with `whyBlocked`'s reason (§W5 Sidebar). Revisit after TASK-047 if readers
+   find a tick that splits every-year into two ranges (`year:(1000..2022 OR 2024..9999)`) confusing.
 3. **V1 — ticking a value on an unrestricted venue.** With no `venue:` clause every venue is ticked (the
    clause admits all). Unticking ICML writes `(q) AND venue:(ICLR OR NeurIPS)`. That's the reducer's
    behaviour and the right one; the design says so in the Venue heading's hint ("All venues: untick one to

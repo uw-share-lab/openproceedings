@@ -12,6 +12,8 @@ import { newQueryClient, Providers } from "@/components/providers";
 export interface Call {
   readonly method: string;
   readonly path: string;
+  /** The request's query parameters (GET /search, /papers/{id}). */
+  readonly query: URLSearchParams;
   readonly body: unknown;
   readonly signal: AbortSignal;
 }
@@ -35,6 +37,7 @@ export function stubFetch(handler: Handler): { fetch: typeof globalThis.fetch; c
     const call: Call = {
       method: input.method,
       path: url.pathname,
+      query: url.searchParams,
       body: text === "" ? null : JSON.parse(text),
       signal: input.signal,
     };

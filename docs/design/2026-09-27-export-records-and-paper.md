@@ -342,6 +342,13 @@ Counts come from the record: identified = `total + excluded.total` and unclassif
   its proceedings."
 - "Back to results" is history back when the previous entry is this `/search`, otherwise a link to
   `/search?q=&mode=`.
+- **As built (TASK-042):** "Back to results" is always the link `/search?q=&mode=` (page 1; `/search` for a
+  direct link): with `Referrer-Policy: no-referrer` the page can't tell where it was reached from. The status
+  line names the venue as `<venue> <year>` ("submitted to ICLR 2024"): the conference's full name lives in
+  the backend's `vocab.CONFERENCES` era table and isn't in the API, and the client doesn't restate it
+  (proposed: a `venue_name` field on `PaperRecord`). Provenance values that are lists are joined with `; `; a
+  claim's `url` is a "source ▸" link after its evidence text. The query in the URL is fetched as
+  `["paper", id, q, mode]`.
 
 ### P2 Not matched (`matched: false`)
 "✖ Doesn't match `<q>` (native). Nothing is highlighted. A filter may remove it (for example the default

@@ -12,7 +12,7 @@
  * `/parse`, labelled "Draft — not searched", and the searched query's warnings stay one click away.
  */
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMeta } from "@/api/hooks";
 import { codePointLength } from "@/api/spans";
 import { countText, editorDiagnostics, itemOf, itemsOf, plural, type Item } from "@/editor/diagnostics";
@@ -24,6 +24,7 @@ import { DiagnosticsRow } from "./diagnostics-row";
 import { EmptyState } from "./empty-state";
 import type { Example } from "./examples";
 import { QueryTree } from "./query-tree";
+import { WorkspaceSlotContext } from "./workspace-slot";
 
 export interface Draft {
   readonly text: string;
@@ -44,6 +45,8 @@ export interface SearchWorkspaceProps {
   readonly refusal?: SearchRefusal | null;
   /** Open "How we read your query" (zero results, W8; TASK-042). */
   readonly openTree?: boolean;
+  /** TASK-042: the results, sidebar and banner, drawn below the query half; they read `useWorkspaceSlot()`. */
+  readonly results?: ReactNode;
 }
 
 /** `DRAFT_DIRTY`: the draft differs from the searched query (design W13; copy SB-6). */
@@ -193,7 +196,7 @@ function SearchedWarnings({ items }: { items: readonly Item[] }) {
   );
 }
 
-export function SearchWorkspace({ state, refusal = null, openTree = false }: SearchWorkspaceProps) {
+export function SearchWorkspace({ state, refusal = null, openTree = false, results }: SearchWorkspaceProps) {
   const router = useRouter();
   const meta = useMeta();
   const editor = useRef<QueryEditorHandle>(null);
@@ -228,6 +231,21 @@ export function SearchWorkspace({ state, refusal = null, openTree = false }: Sea
     if (focusTree.current) {
       focusTree.current = false;
       treeButton.current?.focus();
+    }
+  });
+  // TASK-042's slot: point at a clause in the editor; draftAndSelect selects once the editor holds the new
+  // draft (the editor's own effect runs first).
+  const pendingSelect = useRef<[number, number] | null>(null);
+  const select = (from: number, to: number) => editor.current?.select(from, to);
+  const draftAndSelect = (text: string, from: number, to: number) => {
+    pendingSelect.current = [from, to];
+    setDraft((d) => ({ ...d, text }));
+  };
+  useEffect(() => {
+    const range = pendingSelect.current;
+    if (range !== null) {
+      pendingSelect.current = null;
+      editor.current?.select(range[0], range[1]);
     }
   });
 
@@ -359,6 +377,12 @@ export function SearchWorkspace({ state, refusal = null, openTree = false }: Sea
       )}
 
       {state.q === "" && <EmptyState onLoad={(e: Example) => load({ text: e.q, mode: e.mode })} />}
+
+      {results !== undefined && (
+        <WorkspaceSlotContext.Provider value={{ dirty, select, draftAndSelect }}>
+          {results}
+        </WorkspaceSlotContext.Provider>
+      )}
     </div>
   );
 }

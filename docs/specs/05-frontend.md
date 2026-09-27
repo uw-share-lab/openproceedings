@@ -159,8 +159,19 @@ warnings, the save's index check), the design doc says so; its open questions li
    being automation removals and become user limits in the identification string, and the methods text
    changes to match (03 §Exclusion accounting). The tooltip says so before the click.
 6. **Result list.** Title and abstract with highlights taken exactly from the API spans (never re-matched
-   on the client). Venue/year/track badges. Links to OpenReview, PDF and proceedings. Uses infinite scroll
-   or pages (decided at implementation time; both keep the ordering stable).
+   on the client). Venue/year/track badges. Links to OpenReview, PDF and proceedings. **Numbered pages**
+   (TASK-042): `◂ Previous · Page n of m · Next ▸` and a "Go to page" input, `router.replace` (Back leaves
+   the search), focus to the results heading after a change.
+
+   *As built (TASK-042).* `src/components/search/search-view.tsx` runs `GET /search` (TanStack key
+   `["search", q, mode, sort, page]`, `keepPreviousData`) and draws the results in `SearchWorkspace`'s
+   `results` slot (`workspace-slot.ts`: `dirty`, and the editor for "Show the clause"). A 422 for the searched
+   query goes back to the workspace as `refusal` (squiggles); the last good answer stays on screen, dimmed and
+   marked stale, with **Restore it**. The sidebar and banner read `/parse`'s `filters` for the searched query
+   (`controls.ts`: `parseViewOf`, and `blockOf` = `whyBlocked` + `DRAFT_DIRTY` + "no report yet", which is the
+   reducer's `STALE_CLAUSE`). Banner and Limits line are computed in `exclusions.ts` from `excluded`, `facets`
+   and `/parse` only (no client arithmetic beyond reading them). Highlights and the abstract excerpt:
+   `src/lib/excerpt.ts`. `/paper/[id]`: `src/components/paper/paper-view.tsx`.
 7. **Export menu.** RIS (Covidence), CSV, BibTeX, JSONL. Shows the count before downloading.
 8. **Save search record.** Creates `/records` and shows the permanent link plus generated methods text
    that says which string reproduces which number:
