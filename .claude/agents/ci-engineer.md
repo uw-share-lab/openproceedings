@@ -34,7 +34,7 @@ tempted to bypass it.
    `uv run pytest -q --hypothesis-profile=ci`. The planned nightly uses the `nightly` profile and the full
    index.
 3. **Frontend jobs:** `actions/setup-node` with npm cache on `package-lock.json`; `npm ci`; eslint, `tsc
-   --noEmit`, prettier, vitest; regenerate `frontend/src/api/schema.ts` and `git diff --exit-code` it.
+   --noEmit`, prettier, vitest; `make openapi` and `git diff --exit-code` the snapshot and `frontend/src/api/schema.ts`.
 4. **Fixture index:** build once per run from the 5k fixture snapshot; cache keyed on the fixture
    manifest hash + `TOKENIZER_VERSION` + `SCHEMA_VERSION`. A cache key that omits an `index_version`
    input serves a stale index and makes the differential test lie.

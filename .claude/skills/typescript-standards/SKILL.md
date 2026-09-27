@@ -26,10 +26,13 @@ description: The frontend TypeScript standard for openproceedings — strict tsc
 
 ## API types are generated — never hand-written
 - Source of truth: the pydantic v2 models in `backend/src/openproceedings/api/` → OpenAPI →
-  `frontend/src/api/schema.ts` via codegen (spec 04 §Conventions). Regenerate with the project script
-  (verify the exact command at implementation time, e.g. `npm run gen:api`) after any backend model change,
-  and commit the result in the same PR.
-- CI `test` fails if `schema.ts` is stale. Don't edit it by hand to make CI pass.
+  `frontend/src/api/schema.ts` via codegen (spec 04 §Conventions). Regenerate with **`make openapi`**
+  (the backend snapshot `backend/tests/contract/openapi.json`, then `npm run gen:api`, `openapi-typescript`)
+  after any backend model change, and commit both files in the same PR.
+- CI `test` fails if `schema.ts` is stale. Don't edit it by hand to make CI pass. It is excluded from
+  prettier and eslint, and checked by `tsc`.
+- Call the API through `src/api/client.ts` (`openapi-fetch` typed by `paths`): no hand-written `fetch`
+  plus `as` cast; derive names from `Schemas["SearchResponse"]` (`client.ts` re-exports `components["schemas"]`).
 - Derive component prop types from the generated ones (`Pick<components["schemas"]["SearchResponse"],
   "total" | "excluded">`), never parallel interfaces like `interface Hit { title: string }`. A hand-written
   API type is a Must in review — it is how the two sides drift.

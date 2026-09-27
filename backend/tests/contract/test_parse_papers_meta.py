@@ -193,7 +193,7 @@ def test_every_route_answers_503_before_an_index_loads(
 
 
 def test_the_openapi_document_describes_the_routes_and_their_models(client: TestClient) -> None:
-    """(The committed snapshot and the TypeScript codegen are task-040.)"""
+    """(The committed snapshot is pinned by test_openapi_snapshot.py.)"""
     doc = client.get("/api/v1/openapi.json").json()
     paths = {"/api/v1/parse", "/api/v1/search", "/api/v1/papers/{id}", "/api/v1/meta", "/api/v1/healthz"}
     assert paths <= set(doc["paths"])

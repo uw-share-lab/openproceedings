@@ -1,0 +1,1940 @@
+{
+  "components": {
+    "schemas": {
+      "And": {
+        "additionalProperties": false,
+        "properties": {
+          "children": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "and": "#/components/schemas/And",
+                  "filter": "#/components/schemas/Filter",
+                  "near": "#/components/schemas/Near",
+                  "not": "#/components/schemas/Not",
+                  "or": "#/components/schemas/Or",
+                  "phrase": "#/components/schemas/Phrase",
+                  "term": "#/components/schemas/Term",
+                  "wildcard": "#/components/schemas/Wildcard"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/Term"
+                },
+                {
+                  "$ref": "#/components/schemas/Wildcard"
+                },
+                {
+                  "$ref": "#/components/schemas/Phrase"
+                },
+                {
+                  "$ref": "#/components/schemas/Near"
+                },
+                {
+                  "$ref": "#/components/schemas/Filter"
+                },
+                {
+                  "$ref": "#/components/schemas/Not"
+                },
+                {
+                  "$ref": "#/components/schemas/And"
+                },
+                {
+                  "$ref": "#/components/schemas/Or"
+                }
+              ]
+            },
+            "minItems": 2,
+            "title": "Children",
+            "type": "array"
+          },
+          "kind": {
+            "const": "and",
+            "default": "and",
+            "title": "Kind",
+            "type": "string"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          }
+        },
+        "required": [
+          "span",
+          "children"
+        ],
+        "title": "And",
+        "type": "object"
+      },
+      "Claim": {
+        "additionalProperties": false,
+        "description": "One source's statement about one field. Frozen and scalar (tuples for lists), so claims are\nhashable and set-comparable. `fetched_at` comes from the cache entry, never from build time.",
+        "properties": {
+          "evidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "fetched_at": {
+            "format": "date-time",
+            "title": "Fetched At",
+            "type": "string"
+          },
+          "field": {
+            "enum": [
+              "title",
+              "abstract",
+              "authors",
+              "venue",
+              "year",
+              "track",
+              "status",
+              "presentation",
+              "venue_id_raw",
+              "keywords",
+              "urls.forum",
+              "urls.pdf",
+              "urls.proceedings",
+              "urls.doi"
+            ],
+            "title": "Field",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "openreview_v2",
+              "openreview_v1",
+              "neurips_proceedings",
+              "pmlr",
+              "ris"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "value": {
+            "$ref": "#/components/schemas/ClaimValue"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "source",
+          "fetched_at"
+        ],
+        "title": "Claim",
+        "type": "object"
+      },
+      "ClaimValue": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "Diagnostic": {
+        "additionalProperties": false,
+        "description": "A warning, error or translation notice about a query, with a half-open code-point span into `q`.",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/DiagnosticCode"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "Diagnostic",
+        "type": "object"
+      },
+      "DiagnosticCode": {
+        "enum": [
+          "PARSE_UNBALANCED_PAREN",
+          "PARSE_EMPTY_GROUP",
+          "PARSE_ALL_NEGATIVE",
+          "PARSE_UNTERMINATED_PHRASE",
+          "PARSE_BAD_NEAR",
+          "PARSE_WILDCARD_NOT_SUFFIX",
+          "PARSE_EXPECTED_TERM",
+          "PARSE_EMPTY_TERM",
+          "PARSE_NESTED_FIELD",
+          "PARSE_TOO_DEEP",
+          "PARSE_WILDCARD_DETACHED",
+          "PARSE_AMBIGUOUS_MINUS",
+          "PARSE_STRAY_COLON",
+          "PARSE_AMBIGUOUS_QUOTE",
+          "PARSE_PAREN_TOUCHES_WORD",
+          "PARSE_TOO_LONG",
+          "WILDCARD_STEM_TOO_SHORT",
+          "WILDCARD_TOO_MANY_EXPANSIONS",
+          "FIELD_UNKNOWN",
+          "FIELD_UNKNOWN_VALUE",
+          "FIELD_RANGE_INVERTED",
+          "FIELD_FILTER_SYNTAX",
+          "FIELD_COMPAT_ONLY",
+          "WARN_LOWERCASE_OPERATOR",
+          "WARN_MIXED_AND_OR",
+          "WARN_NESTED_FILTER",
+          "WARN_FILTER_SCOPE",
+          "WARN_LOOKALIKE_OPERATOR",
+          "WARN_SYMBOLS_DROPPED",
+          "WARN_SOURCE_PARTIAL",
+          "WARN_CJK_RUN",
+          "WARN_SPELLED_GREEK",
+          "COMPAT_SOURCE_ALIAS",
+          "COMPAT_POP_DOLLAR",
+          "COMPAT_POP_PHRASE",
+          "COMPAT_NO_STEMMING",
+          "API_BAD_PARAM",
+          "API_PAPER_NOT_FOUND",
+          "API_RECORD_NOT_FOUND",
+          "API_INDEX_VERSION_UNAVAILABLE",
+          "API_RECORD_MISMATCH",
+          "API_RATE_LIMITED",
+          "API_INDEX_NOT_LOADED",
+          "API_INTERNAL",
+          "API_NOT_FOUND",
+          "API_METHOD_NOT_ALLOWED",
+          "API_REPLAY_MISMATCH"
+        ],
+        "title": "DiagnosticCode",
+        "type": "string"
+      },
+      "ErrorBody": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/DiagnosticCode"
+          },
+          "diagnostics": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Diagnostic"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnostics"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorBody",
+        "type": "object"
+      },
+      "ErrorEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorEnvelope",
+        "type": "object"
+      },
+      "Excluded": {
+        "additionalProperties": false,
+        "description": "What the default filters removed (spec 03 §Exclusion accounting): the buckets sum to `total`, each\nmap is ordered by count (largest first, ties by name) with `unknown` last and always present.",
+        "properties": {
+          "status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Status",
+            "type": "object"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "track": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Track",
+            "type": "object"
+          }
+        },
+        "required": [
+          "total",
+          "track",
+          "status"
+        ],
+        "title": "Excluded",
+        "type": "object"
+      },
+      "Facets": {
+        "additionalProperties": false,
+        "description": "Disjunctive (decision-001): each field counted without its own top-level conjuncts. Values that\noccur only; years as strings.",
+        "properties": {
+          "status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Status",
+            "type": "object"
+          },
+          "track": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Track",
+            "type": "object"
+          },
+          "venue": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Venue",
+            "type": "object"
+          },
+          "year": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Year",
+            "type": "object"
+          }
+        },
+        "required": [
+          "venue",
+          "year",
+          "track",
+          "status"
+        ],
+        "title": "Facets",
+        "type": "object"
+      },
+      "Filter": {
+        "additionalProperties": false,
+        "description": "`field:` restricted to any of `values` (a single-field OR group): YearRanges for `year`, canonical\nstrings (`vocab.py`) for the others.",
+        "properties": {
+          "field": {
+            "enum": [
+              "venue",
+              "year",
+              "track",
+              "status"
+            ],
+            "title": "Field",
+            "type": "string"
+          },
+          "kind": {
+            "const": "filter",
+            "default": "filter",
+            "title": "Kind",
+            "type": "string"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          },
+          "values": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/components/schemas/YearRange"
+                }
+              ]
+            },
+            "minItems": 1,
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "span",
+          "field",
+          "values"
+        ],
+        "title": "Filter",
+        "type": "object"
+      },
+      "Health": {
+        "additionalProperties": false,
+        "properties": {
+          "index_loaded": {
+            "title": "Index Loaded",
+            "type": "boolean"
+          },
+          "index_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Version"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index_loaded",
+          "index_version",
+          "tokenizer_version",
+          "query_version"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "Highlights": {
+        "additionalProperties": false,
+        "properties": {
+          "abstract": {
+            "items": {
+              "$ref": "#/components/schemas/Span"
+            },
+            "title": "Abstract",
+            "type": "array"
+          },
+          "title": {
+            "items": {
+              "$ref": "#/components/schemas/Span"
+            },
+            "title": "Title",
+            "type": "array"
+          }
+        },
+        "required": [
+          "title",
+          "abstract"
+        ],
+        "title": "Highlights",
+        "type": "object"
+      },
+      "Hit": {
+        "additionalProperties": false,
+        "properties": {
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
+          "highlights": {
+            "$ref": "#/components/schemas/Highlights"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "presentation": {
+            "anyOf": [
+              {
+                "enum": [
+                  "oral",
+                  "spotlight",
+                  "poster"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presentation"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "track": {
+            "enum": [
+              "main",
+              "datasets_benchmarks",
+              "position",
+              "workshop",
+              "competition",
+              "tiny_papers",
+              "blogpost",
+              "other",
+              "unknown"
+            ],
+            "title": "Track",
+            "type": "string"
+          },
+          "urls": {
+            "$ref": "#/components/schemas/Urls"
+          },
+          "venue": {
+            "enum": [
+              "NeurIPS",
+              "ICLR",
+              "ICML"
+            ],
+            "title": "Venue",
+            "type": "string"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "abstract",
+          "authors",
+          "venue",
+          "year",
+          "track",
+          "presentation",
+          "score",
+          "highlights",
+          "urls"
+        ],
+        "title": "Hit",
+        "type": "object"
+      },
+      "MetaResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "filter_fields": {
+            "items": {
+              "enum": [
+                "venue",
+                "year",
+                "track",
+                "status"
+              ],
+              "type": "string"
+            },
+            "title": "Filter Fields",
+            "type": "array"
+          },
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "index_versions": {
+            "description": "every index on this instance, sorted; the served one included",
+            "items": {
+              "type": "string"
+            },
+            "title": "Index Versions",
+            "type": "array"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "text_fields": {
+            "items": {
+              "enum": [
+                "title",
+                "abstract"
+              ],
+              "type": "string"
+            },
+            "title": "Text Fields",
+            "type": "array"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          },
+          "values": {
+            "$ref": "#/components/schemas/Vocabularies"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "index_versions",
+          "text_fields",
+          "filter_fields",
+          "values"
+        ],
+        "title": "MetaResponse",
+        "type": "object"
+      },
+      "Near": {
+        "additionalProperties": false,
+        "description": "Both operands within `distance` words of each other, in either order, in one field.",
+        "properties": {
+          "distance": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Distance",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "near",
+            "default": "near",
+            "title": "Kind",
+            "type": "string"
+          },
+          "left": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Term"
+              },
+              {
+                "$ref": "#/components/schemas/Wildcard"
+              },
+              {
+                "$ref": "#/components/schemas/Phrase"
+              }
+            ],
+            "title": "Left"
+          },
+          "right": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Term"
+              },
+              {
+                "$ref": "#/components/schemas/Wildcard"
+              },
+              {
+                "$ref": "#/components/schemas/Phrase"
+              }
+            ],
+            "title": "Right"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          }
+        },
+        "required": [
+          "span",
+          "left",
+          "right",
+          "distance"
+        ],
+        "title": "Near",
+        "type": "object"
+      },
+      "Not": {
+        "additionalProperties": false,
+        "properties": {
+          "child": {
+            "discriminator": {
+              "mapping": {
+                "and": "#/components/schemas/And",
+                "filter": "#/components/schemas/Filter",
+                "near": "#/components/schemas/Near",
+                "not": "#/components/schemas/Not",
+                "or": "#/components/schemas/Or",
+                "phrase": "#/components/schemas/Phrase",
+                "term": "#/components/schemas/Term",
+                "wildcard": "#/components/schemas/Wildcard"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Term"
+              },
+              {
+                "$ref": "#/components/schemas/Wildcard"
+              },
+              {
+                "$ref": "#/components/schemas/Phrase"
+              },
+              {
+                "$ref": "#/components/schemas/Near"
+              },
+              {
+                "$ref": "#/components/schemas/Filter"
+              },
+              {
+                "$ref": "#/components/schemas/Not"
+              },
+              {
+                "$ref": "#/components/schemas/And"
+              },
+              {
+                "$ref": "#/components/schemas/Or"
+              }
+            ],
+            "title": "Child"
+          },
+          "kind": {
+            "const": "not",
+            "default": "not",
+            "title": "Kind",
+            "type": "string"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          }
+        },
+        "required": [
+          "span",
+          "child"
+        ],
+        "title": "Not",
+        "type": "object"
+      },
+      "Or": {
+        "additionalProperties": false,
+        "properties": {
+          "children": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "and": "#/components/schemas/And",
+                  "filter": "#/components/schemas/Filter",
+                  "near": "#/components/schemas/Near",
+                  "not": "#/components/schemas/Not",
+                  "or": "#/components/schemas/Or",
+                  "phrase": "#/components/schemas/Phrase",
+                  "term": "#/components/schemas/Term",
+                  "wildcard": "#/components/schemas/Wildcard"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/Term"
+                },
+                {
+                  "$ref": "#/components/schemas/Wildcard"
+                },
+                {
+                  "$ref": "#/components/schemas/Phrase"
+                },
+                {
+                  "$ref": "#/components/schemas/Near"
+                },
+                {
+                  "$ref": "#/components/schemas/Filter"
+                },
+                {
+                  "$ref": "#/components/schemas/Not"
+                },
+                {
+                  "$ref": "#/components/schemas/And"
+                },
+                {
+                  "$ref": "#/components/schemas/Or"
+                }
+              ]
+            },
+            "minItems": 2,
+            "title": "Children",
+            "type": "array"
+          },
+          "kind": {
+            "const": "or",
+            "default": "or",
+            "title": "Kind",
+            "type": "string"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          }
+        },
+        "required": [
+          "span",
+          "children"
+        ],
+        "title": "Or",
+        "type": "object"
+      },
+      "PaperRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "keywords": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
+          "presentation": {
+            "anyOf": [
+              {
+                "enum": [
+                  "oral",
+                  "spotlight",
+                  "poster"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presentation"
+          },
+          "provenance": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            },
+            "title": "Provenance",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "rejected",
+              "withdrawn",
+              "desk_rejected",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "track": {
+            "enum": [
+              "main",
+              "datasets_benchmarks",
+              "position",
+              "workshop",
+              "competition",
+              "tiny_papers",
+              "blogpost",
+              "other",
+              "unknown"
+            ],
+            "title": "Track",
+            "type": "string"
+          },
+          "urls": {
+            "$ref": "#/components/schemas/Urls",
+            "default": {}
+          },
+          "venue": {
+            "enum": [
+              "NeurIPS",
+              "ICLR",
+              "ICML"
+            ],
+            "title": "Venue",
+            "type": "string"
+          },
+          "venue_id_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue Id Raw"
+          },
+          "year": {
+            "minimum": 1000.0,
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "abstract",
+          "authors",
+          "venue",
+          "year",
+          "track",
+          "status",
+          "content_hash"
+        ],
+        "title": "PaperRecord",
+        "type": "object"
+      },
+      "PaperResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "paper": {
+            "$ref": "#/components/schemas/PaperRecord"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "paper"
+        ],
+        "title": "PaperResponse",
+        "type": "object"
+      },
+      "ParseRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "default": "native",
+            "enum": [
+              "native",
+              "scholar"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "q": {
+            "title": "Q",
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "title": "ParseRequest",
+        "type": "object"
+      },
+      "ParseResponse": {
+        "additionalProperties": false,
+        "description": "02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints). A query\nwith errors is still a 200 here: `errors` holds them, and every Optional is null.",
+        "properties": {
+          "ast": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "and": "#/components/schemas/And",
+                    "filter": "#/components/schemas/Filter",
+                    "near": "#/components/schemas/Near",
+                    "not": "#/components/schemas/Not",
+                    "or": "#/components/schemas/Or",
+                    "phrase": "#/components/schemas/Phrase",
+                    "term": "#/components/schemas/Term",
+                    "wildcard": "#/components/schemas/Wildcard"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Term"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Wildcard"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Phrase"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Near"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Filter"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Not"
+                  },
+                  {
+                    "$ref": "#/components/schemas/And"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Or"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ast"
+          },
+          "canonical": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical"
+          },
+          "canonical_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Hash"
+          },
+          "defaults": {
+            "items": {
+              "enum": [
+                "venue",
+                "year",
+                "track",
+                "status"
+              ],
+              "type": "string"
+            },
+            "title": "Defaults",
+            "type": "array"
+          },
+          "effective_ast": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "and": "#/components/schemas/And",
+                    "filter": "#/components/schemas/Filter",
+                    "near": "#/components/schemas/Near",
+                    "not": "#/components/schemas/Not",
+                    "or": "#/components/schemas/Or",
+                    "phrase": "#/components/schemas/Phrase",
+                    "term": "#/components/schemas/Term",
+                    "wildcard": "#/components/schemas/Wildcard"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Term"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Wildcard"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Phrase"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Near"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Filter"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Not"
+                  },
+                  {
+                    "$ref": "#/components/schemas/And"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Or"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Ast"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "identification_query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identification Query"
+          },
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "native",
+              "scholar"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          },
+          "translations": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "title": "Translations",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "mode",
+          "ast",
+          "effective_ast",
+          "canonical",
+          "canonical_hash",
+          "identification_query",
+          "defaults",
+          "warnings",
+          "errors",
+          "translations"
+        ],
+        "title": "ParseResponse",
+        "type": "object"
+      },
+      "Phrase": {
+        "additionalProperties": false,
+        "description": "Consecutive positions in one field. A wildcard item is expanded at its position (decision-001).",
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "enum": [
+                  "title",
+                  "abstract"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "items": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Term"
+                },
+                {
+                  "$ref": "#/components/schemas/Wildcard"
+                }
+              ]
+            },
+            "minItems": 2,
+            "title": "Items",
+            "type": "array"
+          },
+          "kind": {
+            "const": "phrase",
+            "default": "phrase",
+            "title": "Kind",
+            "type": "string"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          }
+        },
+        "required": [
+          "span",
+          "items"
+        ],
+        "title": "Phrase",
+        "type": "object"
+      },
+      "QueryInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "canonical": {
+            "title": "Canonical",
+            "type": "string"
+          },
+          "canonical_hash": {
+            "title": "Canonical Hash",
+            "type": "string"
+          },
+          "expansions": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Expansions",
+            "type": "object"
+          },
+          "identification_query": {
+            "title": "Identification Query",
+            "type": "string"
+          },
+          "input": {
+            "title": "Input",
+            "type": "string"
+          },
+          "translations": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "title": "Translations",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "input",
+          "canonical",
+          "canonical_hash",
+          "identification_query",
+          "warnings",
+          "translations",
+          "expansions"
+        ],
+        "title": "QueryInfo",
+        "type": "object"
+      },
+      "SearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "excluded": {
+            "$ref": "#/components/schemas/Excluded"
+          },
+          "facets": {
+            "$ref": "#/components/schemas/Facets"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/Hit"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "query": {
+            "$ref": "#/components/schemas/QueryInfo"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "query",
+          "total",
+          "excluded",
+          "facets",
+          "hits"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "Span": {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "integer"
+          }
+        ],
+        "type": "array"
+      },
+      "Term": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "enum": [
+                  "title",
+                  "abstract"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "kind": {
+            "const": "term",
+            "default": "term",
+            "title": "Kind",
+            "type": "string"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          },
+          "token": {
+            "pattern": "^\\S+$",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "span",
+          "token"
+        ],
+        "title": "Term",
+        "type": "object"
+      },
+      "Urls": {
+        "additionalProperties": false,
+        "properties": {
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "forum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forum"
+          },
+          "pdf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf"
+          },
+          "proceedings": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proceedings"
+          }
+        },
+        "title": "Urls",
+        "type": "object"
+      },
+      "Vocabularies": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "items": {
+              "enum": [
+                "accepted",
+                "rejected",
+                "withdrawn",
+                "desk_rejected",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            "title": "Status",
+            "type": "array"
+          },
+          "track": {
+            "items": {
+              "enum": [
+                "main",
+                "datasets_benchmarks",
+                "position",
+                "workshop",
+                "competition",
+                "tiny_papers",
+                "blogpost",
+                "other",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            "title": "Track",
+            "type": "array"
+          },
+          "venue": {
+            "items": {
+              "enum": [
+                "NeurIPS",
+                "ICLR",
+                "ICML"
+              ],
+              "type": "string"
+            },
+            "title": "Venue",
+            "type": "array"
+          }
+        },
+        "required": [
+          "venue",
+          "track",
+          "status"
+        ],
+        "title": "Vocabularies",
+        "type": "object"
+      },
+      "Wildcard": {
+        "additionalProperties": false,
+        "description": "A suffix wildcard on one normalised token: `*` is zero or more characters, `$` zero or one.",
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "enum": [
+                  "title",
+                  "abstract"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "kind": {
+            "const": "wildcard",
+            "default": "wildcard",
+            "title": "Kind",
+            "type": "string"
+          },
+          "op": {
+            "enum": [
+              "*",
+              "$"
+            ],
+            "title": "Op",
+            "type": "string"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          },
+          "stem": {
+            "pattern": "^\\S+$",
+            "title": "Stem",
+            "type": "string"
+          }
+        },
+        "required": [
+          "span",
+          "stem",
+          "op"
+        ],
+        "title": "Wildcard",
+        "type": "object"
+      },
+      "YearRange": {
+        "additionalProperties": false,
+        "properties": {
+          "hi": {
+            "maximum": 9999.0,
+            "minimum": 1000.0,
+            "title": "Hi",
+            "type": "integer"
+          },
+          "lo": {
+            "maximum": 9999.0,
+            "minimum": 1000.0,
+            "title": "Lo",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "lo",
+          "hi"
+        ],
+        "title": "YearRange",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "openproceedings",
+    "version": "0.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/healthz": {
+      "get": {
+        "description": "Always 200 while the process serves requests; `index_loaded` is false until the first load succeeds\n(search routes answer 503 `API_INDEX_NOT_LOADED` meanwhile).",
+        "operationId": "healthz",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Healthz"
+      }
+    },
+    "/api/v1/meta": {
+      "get": {
+        "operationId": "meta",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Meta"
+      }
+    },
+    "/api/v1/papers/{id}": {
+      "get": {
+        "description": "The paper with this id in the served index, as its snapshot holds it.",
+        "operationId": "paper",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Paper"
+      }
+    },
+    "/api/v1/parse": {
+      "post": {
+        "description": "02's ParseResult for `q` (debounced as the user types). A query that doesn't parse is a 200 whose\n`errors` say why; only an over-long query (`PARSE_TOO_LONG`) or a malformed body is refused.",
+        "operationId": "parse_query",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Parse Query"
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "description": "One page of the ranked matched set, with its total, exclusion accounting, disjunctive facets and\nhighlights. `limit` over 200 is a 422 (never clamped); a query that doesn't parse is a 422 with its\ndiagnostics.",
+        "operationId": "search",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "native",
+              "enum": [
+                "native",
+                "scholar"
+              ],
+              "title": "Mode",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "relevance",
+              "enum": [
+                "relevance",
+                "year_desc",
+                "year_asc",
+                "title"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 0,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Search"
+      }
+    }
+  }
+}

@@ -3,7 +3,7 @@ implements it (spec 08 §CLI). The CLI and the API call the same functions.
 
 Implemented: `op ingest ris`, `op snapshot build`, `op snapshot diff` (task-022), `op index build`
 (task-023), `op index parity` (task-029), `op search` (ranked, `--ids`, `--explain`, `--engine reference`;
-task-024/030), `op export` (task-030) and `op serve` (task-034). Results go to stdout; logs go to stderr; a refused operation exits
+task-024/030), `op export` (task-030), `op serve` (task-034) and `op openapi` (task-040). Results go to stdout; logs go to stderr; a refused operation exits
 1 with its reason, a usage error or a stub exits 2.
 """
 
@@ -41,7 +41,6 @@ log = logging.getLogger(__name__)
 # subcommand -> (help text, the Backlog task that implements it)
 PLANNED: dict[str, tuple[str, str]] = {
     "record": ("save or replay a search record (spec 04)", "task-037"),
-    "openapi": ("print the OpenAPI schema for the frontend codegen (spec 04)", "task-040"),
     "embed": ("build SPECTER2 embeddings for the current index (spec 06)", "task-058"),
     "eval": ("evaluation reports: scholar | coverage | audit | near-miss (spec 07)", "task-054"),
 }
@@ -169,6 +168,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="let the log formatter keep query-text fields (a local dev instance only); no log line passes one today",
     )
     serve.set_defaults(run=_serve)
+
+    openapi = sub.add_parser(
+        "openapi",
+        help="print the API's OpenAPI document, sorted and stable (`make openapi` commits it; spec 04)",
+    )
+    openapi.add_argument("--out", type=Path, help="write to this file (default standard output)")
+    openapi.set_defaults(run=_openapi)
 
     for name, (help_text, task) in PLANNED.items():
         _stub(sub.add_parser(name, help=help_text, description=help_text), name, task)
@@ -527,6 +533,18 @@ def _serve(ns: argparse.Namespace) -> int:
         )
         raise _usage(f"invalid serve options: {', '.join(bad)}") from None
     serve(config, ns.host, ns.port, ns.log_level, ns.log_format)
+    return 0
+
+
+def _openapi(ns: argparse.Namespace) -> int:
+    """No index and no data directory are needed: the document comes from the routes and models alone."""
+    from openproceedings.api.openapi import render
+
+    text = render()
+    if ns.out is None:
+        sys.stdout.write(text)
+    else:
+        ns.out.write_text(text, encoding="utf-8")
     return 0
 
 

@@ -22,7 +22,7 @@ about membership; you render it faithfully and make it editable only through `q`
 ## How you work
 1. **Pin the task:** `backlog task view <id> --plain`, set In Progress via the CLI; map each acceptance
    criterion to a spec 05 section.
-2. **Contract first.** Regenerate `frontend/src/api/schema.ts` with the pinned codegen script and confirm
+2. **Contract first.** Regenerate `frontend/src/api/schema.ts` with `make openapi` and confirm
    it is unchanged or that the change is intended. Missing field? Stop and route to `api-engineer`
    (`.claude/agents/api-engineer.md`); never hand-type it.
 3. **Run against the real API:** `op serve` on the fixture index, `npm run dev` in `frontend/`.

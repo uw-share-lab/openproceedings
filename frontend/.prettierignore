@@ -1,5 +1,4 @@
 .next/
 next-env.d.ts
-# generated from the backend OpenAPI schema (TASK-040); never formatted by hand
+# generated from the backend OpenAPI snapshot by `make openapi` (TASK-040); never edited or formatted by hand
 src/api/schema.ts
-openapi.json

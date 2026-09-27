@@ -31,6 +31,7 @@ from openproceedings.api import coverage, export, health, meta, papers, search
 from openproceedings.api.config import ApiConfig
 from openproceedings.api.errors import install_error_handlers
 from openproceedings.api.middleware import API_PREFIX, AccessLog, LastCatch, RateLimit
+from openproceedings.api.openapi import ERROR_RESPONSES, document_head_as_get, operation_id
 from openproceedings.api.state import IndexState, Opener, install_sighup
 
 ROUTERS: tuple[APIRouter, ...] = (
@@ -71,6 +72,7 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
         docs_url=f"{API_PREFIX}/docs",
         redoc_url=None,
         swagger_ui_oauth2_redirect_url=None,
+        generate_unique_id_function=operation_id,
     )
     app.state.index = state
     app.state.config = config
@@ -80,7 +82,8 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
     for router in ROUTERS:
         if router.prefix != API_PREFIX:
             raise ValueError(f"a router must be declared with prefix={API_PREFIX!r}")
-        app.include_router(router)
+        app.include_router(router, responses=ERROR_RESPONSES)
+    document_head_as_get(app)  # the committed snapshot is this document (`op openapi`, task-040)
     # added innermost first: the last one added wraps everything
     app.add_middleware(RateLimit, config=config.rate_limit, trusted=config.trusted_proxies)
     app.add_middleware(LastCatch)  # inside CORS: a 500 gets the CORS headers like any response

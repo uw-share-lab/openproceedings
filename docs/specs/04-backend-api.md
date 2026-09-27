@@ -262,8 +262,18 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     httpx/httpcore are pinned to WARNING, and the root logger gets the same JSON handler at WARNING, so another
     library's warning (asyncio, fastapi) is JSON too. `--log-query-text` only lets the formatter keep
     query-text fields; no log call passes one today (the access line never carries `q`), so it changes nothing.
-  - The OpenAPI document and Swagger UI are served under `/api/v1` (`openapi.json`, `docs`); the snapshot
-    and codegen are task-040.
+  - The OpenAPI document and Swagger UI are served under `/api/v1` (`openapi.json`, `docs`).
+- As built (task-040, `api/openapi.py`): the served document is committed as
+  `backend/tests/contract/openapi.json` (`op openapi`: sorted keys, two-space indent, no server URL, no
+  timestamp, built from `create_app` without loading an index), and `frontend/src/api/schema.ts` is
+  generated from that file by `openapi-typescript` (pinned in `frontend/package.json`, `npm run gen:api`).
+  `make openapi` regenerates both; `test_openapi_snapshot.py` fails when the live document differs from the
+  snapshot, and CI's `test` job runs `make openapi` and fails on any diff. To keep the document valid and
+  stable: an operationId is the handler's name (FastAPI's default appends the first method of the route's
+  set, which follows `PYTHONHASHSEED`), unique across routers (tested); every route documents the error
+  envelope as its `default` response (replacing FastAPI's `HTTPValidationError` 422, which this app never
+  sends); and the HEAD of a GET+HEAD route (`/healthz`) is left out of the document, because FastAPI
+  would give it the GET's operationId.
 - As built (task-035, `api/search.py`, `api/papers.py`, `api/meta.py`, `api/models.py`; the models are the
   contract):
   - Each router is declared with `prefix="/api/v1"` and included directly, because FastAPI 0.141 leaves

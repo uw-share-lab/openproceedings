@@ -5,7 +5,6 @@ from openproceedings import cli
 
 PLANNED = {
     "record": "task-037",
-    "openapi": "task-040",
     "embed": "task-058",
     "eval": "task-054",
 }
@@ -17,7 +16,7 @@ def test_help_lists_every_planned_subcommand(capsys: pytest.CaptureFixture[str])
     assert exc.value.code == 0
     out = capsys.readouterr().out
     listed = {line.split()[0] for line in out.splitlines() if line.startswith("    ") and line.split()}
-    assert set(PLANNED) | {"ingest", "snapshot", "index", "search", "serve"} <= listed
+    assert set(PLANNED) | {"ingest", "snapshot", "index", "search", "serve", "openapi"} <= listed
 
 
 @pytest.mark.parametrize(("name", "task"), sorted(PLANNED.items()))

@@ -84,11 +84,26 @@ filters), changing what a field *means* (`total` counting something else), chang
 changing an export's field mapping or byte format. External scripts and Covidence imports depend on
 those formats.
 
-## Codegen and freshness
-1. The OpenAPI document is generated from the app (`app.openapi()`) and committed as a snapshot under
-   `backend/tests/contract/`. The exact filename is pinned at implementation time. The contract test
-   diffs the live schema against it, so every contract change shows up in the PR diff.
-2. `frontend/src/api/schema.ts` is generated from that snapshot (verify the tool at implementation time;
-   `openapi-typescript` is the usual choice). Never edit it by hand.
-3. CI (`test` workflow) regenerates both and fails if either differs from the committed file.
-4. Keep the snapshot deterministic: stable key order, no timestamps, no server URL from the environment.
+## Codegen and freshness (as built, TASK-040)
+**One command: `make openapi`.** Run it after any change to a route, a parameter or a response model, and
+commit both files it writes. Never edit either by hand; never resolve a merge conflict in them by hand
+(merge, then rerun `make openapi`).
+1. `op openapi [--out FILE]` (`backend/src/openproceedings/api/openapi.py`) renders the app's document
+   from `create_app` without running its lifespan (no index, no data dir): sorted keys, two-space indent,
+   raw UTF-8, trailing newline, no server URL, no timestamp. `make openapi` writes it to
+   **`backend/tests/contract/openapi.json`**, the committed snapshot.
+2. **`frontend/src/api/schema.ts`** is generated from that snapshot by `openapi-typescript` (7.13.0,
+   pinned exactly in `frontend/package.json`; `npm run gen:api --workspace frontend`, which `make openapi`
+   runs). Excluded from prettier and eslint (`frontend/.prettierignore`, `eslint.config.mjs`); `tsc`
+   still checks it. `src/api/client.ts` is the one typed client over it (`openapi-fetch`).
+3. `backend/tests/contract/test_openapi_snapshot.py` fails when the live document differs from the
+   snapshot (and says to run `make openapi`), when an operationId repeats, and when `op openapi` renders
+   differently under another `PYTHONHASHSEED`. CI's `test` job runs `make openapi` unconditionally and then
+   `git diff --exit-code` on both files.
+4. Validity rules the app enforces (`api/app.py`, `api/openapi.py`): an **operationId is the handler's
+   function name** (`search`, `parse_query`, `paper`, `meta`, `healthz`), so it must be unique across
+   routers; every route documents the error envelope (`ErrorEnvelope`) as its **`default` response**,
+   which replaces FastAPI's `HTTPValidationError` 422 (never sent here); and the HEAD of a GET+HEAD route
+   is dropped from the document (FastAPI would repeat the GET's operationId).
+5. Reviewing: read the snapshot diff first. It is the contract as shipped; classify each change with the
+   versioning rules above. A model change with no snapshot diff means the change is not in the contract.
