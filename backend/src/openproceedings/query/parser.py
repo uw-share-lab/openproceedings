@@ -785,17 +785,25 @@ def _capped(diagnostics: list[Diagnostic]) -> list[Diagnostic]:
     return sorted(out, key=by_position)
 
 
+def too_long(q: str) -> Diagnostic | None:
+    """The PARSE_TOO_LONG error for a query over MAX_QUERY_LENGTH code points, else None. O(1): `parse` and
+    the API (`api/deps.py::checked_query`, before any parsing) both call it, so the two refuse alike."""
+    if len(q) <= MAX_QUERY_LENGTH:
+        return None
+    return Diagnostic(
+        code=DiagnosticCode.PARSE_TOO_LONG,
+        message=f"The query is {len(q)} characters long; the limit is {MAX_QUERY_LENGTH} — split it into "
+        "several searches.",
+        span=(MAX_QUERY_LENGTH, len(q)),
+    )
+
+
 def parse(q: str, mode: Mode = "native") -> ParseResult:
     """Parse `q`. Never raises; `ast`, `canonical` and `canonical_hash` are None exactly when `errors` is
     non-empty. `mode="scholar"` accepts Scholar/PoP syntax and reports every rewrite in `translations`."""
-    if len(q) > MAX_QUERY_LENGTH:  # checked before any work, so an oversized query costs nothing
-        too_long = Diagnostic(
-            code=DiagnosticCode.PARSE_TOO_LONG,
-            message=f"The query is {len(q)} characters long; the limit is {MAX_QUERY_LENGTH} — split it into "
-            "several searches.",
-            span=(MAX_QUERY_LENGTH, len(q)),
-        )
-        return ParseResult(mode=mode, ast=None, warnings=[], errors=[too_long])
+    over = too_long(q)  # checked before any work, so an oversized query costs nothing
+    if over is not None:
+        return ParseResult(mode=mode, ast=None, warnings=[], errors=[over])
     lexed = lex(q)
     lexemes, lex_errors = lexed.lexemes, lexed.errors
     translations: list[Diagnostic] = []

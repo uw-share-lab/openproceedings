@@ -160,6 +160,8 @@ once released: changing one is a breaking change under `/api/v1`.
 | Rate limit exceeded | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
 | No index loaded yet (startup, failed swap) | 503 | `API_INDEX_NOT_LOADED` |
 | Anything unexpected | 500 | `API_INTERNAL` (logged at ERROR with the request id; message never echoes input) |
+| No such endpoint (task-034) | 404 | `API_NOT_FOUND` |
+| An endpoint that exists, called with another method (task-034) | 405 | `API_METHOD_NOT_ALLOWED` (with `Allow`) |
 
 A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "mismatch"`, logged as
 `API_REPLAY_MISMATCH` (§Search records).
@@ -171,6 +173,39 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
 - Logging: structured JSON with request ID, canonical hash, latency and total. **Neither `q` nor the
   canonical or identification strings are logged by default**, in case they contain unpublished review
   designs. This is set in config.
+- As built (task-034, `backend/src/openproceedings/api/`):
+  - `create_app(ApiConfig)` (`app.py`). `ApiConfig` (`config.py`) holds the data directory, the index name
+    (`current` or an index_version: only `[0-9a-f-]`, and it must resolve, through the `current` symlink, to a
+    directory directly under `<data_dir>/indexes/`), the rate limit (`capacity` 60, `refill_per_second` 1,
+    `export_weight` 10, per client), the exact CORS origins (no `*`, no path; `allow_credentials=False`),
+    the trusted proxies (addresses or networks) and `log_query_text` (default false). The query-length cap
+    is not configurable: it is the parser's 2,000 code points, so the API refuses what `op search` refuses.
+  - The lifespan loads the index in a background thread, so `GET /api/v1/healthz` answers `{index_loaded,
+    index_version, tokenizer_version, query_version}` (`index_version` null) meanwhile, and routes that need
+    the engine answer 503 `API_INDEX_NOT_LOADED`. SIGHUP (main thread) reloads in a background thread and
+    swaps the one engine reference; a failed reload logs `index_load_failed` at ERROR and keeps serving the
+    engine it had, so 503 means only that no index was ever loaded. Reloading the version already served
+    keeps the engine.
+  - Routes take the engine through `deps.EngineDep`: read once per request, so a request or a stream in
+    flight finishes on the index it started on. `deps.checked_query(q)` raises 422 `PARSE_TOO_LONG` (the
+    parser's own diagnostic, `parser.too_long`) before anything reads the query.
+  - The client for the rate limit is the TCP peer, or, when the peer is a trusted proxy, the right-most
+    `X-Forwarded-For` hop that is not one (IPv6 per /64). `/healthz` costs nothing; `/export` costs
+    `export_weight`, charged before routing. The 429 carries `Retry-After` in whole seconds.
+  - Access line: one `request` line per request (INFO; `/healthz` at DEBUG) with `request_id`, `method`,
+    `route` (the template; null when nothing matched, a 429 included), `status`, `ms`, `index_version`, and
+    what a route adds with `deps.annotate`/`annotate_parse`: `canonical_hash`, `total`, `token_count`,
+    `n_errors`, `error_codes`, `warning_codes` (at most 10 distinct codes, then `+N`). Never `q`, the
+    canonical or identification strings, messages or spans. An unexpected exception is one
+    `request_failed` ERROR line with its type and frames (never its message) and a 500 whose message names
+    the request id; nothing is re-raised to the server.
+  - `op serve [--host] [--port] [--index] [--cors-origin …] [--trusted-proxy …] [--rate-capacity]
+    [--rate-refill] [--export-weight] [--no-rate-limit] [--log-query-text]` runs one uvicorn process with
+    its own access log off, `proxy_headers` off, and a 64 KiB request-head limit (uvicorn's 16 KiB would
+    refuse a valid 2,000-code-point query in the URL). uvicorn's loggers go through the JSON handler;
+    httpx/httpcore are pinned to WARNING.
+  - The OpenAPI document and Swagger UI are served under `/api/v1` (`openapi.json`, `docs`); the snapshot
+    and codegen are task-040.
 
 ## Testing
 

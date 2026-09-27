@@ -65,6 +65,8 @@ class DiagnosticCode(StrEnum):
     API_RATE_LIMITED = "API_RATE_LIMITED"
     API_INDEX_NOT_LOADED = "API_INDEX_NOT_LOADED"
     API_INTERNAL = "API_INTERNAL"
+    API_NOT_FOUND = "API_NOT_FOUND"  # no such endpoint (task-034)
+    API_METHOD_NOT_ALLOWED = "API_METHOD_NOT_ALLOWED"  # an endpoint that exists, another method (task-034)
     API_REPLAY_MISMATCH = "API_REPLAY_MISMATCH"  # log code only — never an HTTP error
 
 
@@ -77,6 +79,8 @@ _API_STATUS: dict[DiagnosticCode, int] = {
     DiagnosticCode.API_RATE_LIMITED: 429,
     DiagnosticCode.API_INDEX_NOT_LOADED: 503,
     DiagnosticCode.API_INTERNAL: 500,
+    DiagnosticCode.API_NOT_FOUND: 404,
+    DiagnosticCode.API_METHOD_NOT_ALLOWED: 405,
 }
 
 

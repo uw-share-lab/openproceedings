@@ -3,7 +3,7 @@ implements it (spec 08 §CLI). The CLI and the API call the same functions.
 
 Implemented: `op ingest ris`, `op snapshot build`, `op snapshot diff` (task-022), `op index build`
 (task-023), `op index parity` (task-029), `op search` (ranked, `--ids`, `--explain`, `--engine reference`;
-task-024/030) and `op export` (task-030). Results go to stdout; logs go to stderr; a refused operation exits
+task-024/030), `op export` (task-030) and `op serve` (task-034). Results go to stdout; logs go to stderr; a refused operation exits
 1 with its reason, a usage error or a stub exits 2.
 """
 
@@ -40,7 +40,6 @@ log = logging.getLogger(__name__)
 
 # subcommand -> (help text, the Backlog task that implements it)
 PLANNED: dict[str, tuple[str, str]] = {
-    "serve": ("run the HTTP API (spec 04)", "task-034"),
     "record": ("save or replay a search record (spec 04)", "task-037"),
     "openapi": ("print the OpenAPI schema for the frontend codegen (spec 04)", "task-040"),
     "embed": ("build SPECTER2 embeddings for the current index (spec 06)", "task-058"),
@@ -145,6 +144,29 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--format", choices=FORMATS, required=True)
     export.add_argument("--out", type=Path, help="write to this file (default standard output)")
     export.set_defaults(run=_export)
+
+    serve = sub.add_parser("serve", help="run the HTTP API (spec 04) over <data-dir>/indexes/<index>")
+    serve.add_argument("--host", default="127.0.0.1", help="default 127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000, help="default 8000")
+    serve.add_argument("--index", default="current", help="`current` (default) or an index_version")
+    serve.add_argument(
+        "--cors-origin", action="append", default=[], metavar="ORIGIN", help="an allowed origin (repeatable)"
+    )
+    serve.add_argument(
+        "--trusted-proxy",
+        action="append",
+        default=[],
+        metavar="ADDRESS",
+        help="an address or network whose X-Forwarded-For is believed (repeatable)",
+    )
+    serve.add_argument("--rate-capacity", type=float, default=60.0, help="token bucket size per client")
+    serve.add_argument("--rate-refill", type=float, default=1.0, help="tokens per second per client")
+    serve.add_argument("--export-weight", type=float, default=10.0, help="tokens one export costs")
+    serve.add_argument("--no-rate-limit", action="store_true", help="turn the rate limit off (local use)")
+    serve.add_argument(
+        "--log-query-text", action="store_true", help="keep query text in logs (a local dev instance only)"
+    )
+    serve.set_defaults(run=_serve)
 
     for name, (help_text, task) in PLANNED.items():
         _stub(sub.add_parser(name, help=help_text, description=help_text), name, task)
@@ -476,6 +498,35 @@ def _export(ns: argparse.Namespace) -> int:
             partial.unlink(missing_ok=True)
     print(f"exported {n} records ({ns.format}) · {provenance.line()}", file=sys.stderr)
     _search_run(ns, started, engine.index_version, result, total)
+    return 0
+
+
+def _serve(ns: argparse.Namespace) -> int:
+    from pydantic import ValidationError
+
+    from openproceedings.api.config import ApiConfig, RateLimit
+    from openproceedings.api.server import serve
+
+    try:
+        config = ApiConfig(
+            data_dir=ns.data_dir,
+            index=ns.index,
+            rate_limit=RateLimit(
+                enabled=not ns.no_rate_limit,
+                capacity=ns.rate_capacity,
+                refill_per_second=ns.rate_refill,
+                export_weight=ns.export_weight,
+            ),
+            cors_origins=tuple(ns.cors_origin),
+            trusted_proxies=tuple(ns.trusted_proxy),
+            log_query_text=ns.log_query_text,
+        )
+    except ValidationError as e:  # the operator's own flags: say which, as usage
+        bad = sorted(
+            {".".join(str(p) for p in err["loc"]) or "options" for err in e.errors(include_input=False)}
+        )
+        raise _usage(f"invalid serve options: {', '.join(bad)}") from None
+    serve(config, ns.host, ns.port, ns.log_level, ns.log_format)
     return 0
 
 
