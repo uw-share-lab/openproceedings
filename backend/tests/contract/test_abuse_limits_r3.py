@@ -104,7 +104,7 @@ def test_an_over_cap_wildcard_is_still_its_own_located_422(
 
 
 def test_the_default_candidate_ceiling() -> None:
-    assert ApiConfig(data_dir=Path("x")).max_verification_candidates == 200_000
+    assert ApiConfig(data_dir=Path("x")).max_verification_candidates == 300_000
 
 
 # --- refunds -----------------------------------------------------------------------------------------------------
@@ -227,6 +227,7 @@ def test_op_serve_takes_the_verification_limits(monkeypatch: pytest.MonkeyPatch,
     config = seen["config"]
     assert (config.max_verified_clauses, config.max_verification_candidates) == (4, 1000)
     assert config.verified_cost == 10  # min(export_weight 10, 60 / 4)
+    assert ApiConfig(data_dir=tmp_path).max_verified_clauses == 16  # the flag's default is the config's
 
 
 @pytest.mark.parametrize(

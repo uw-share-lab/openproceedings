@@ -427,8 +427,8 @@ once released: changing one is a breaking change under `/api/v1`.
 | Rate limit exceeded: the client's or its network's bucket, a position-verified query's extra weight, or the record-save ceiling (its network's or the instance-wide one) | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
 | A search record can't be saved: the record store is over its size cap or its disk under the free-space floor (task-037) | 503 | `API_RECORDS_STORE_FULL` |
 | A query needs a cold position verification and every verification slot is taken (refused, never queued) | 503 | `API_BUSY` (with `Retry-After`) |
-| A query has more position-verified clauses than `ApiConfig.max_verified_clauses` (default 8), refused before it compiles (decision-010; a replay over it is withheld, 200, §Search records) | 422 | `API_TOO_MANY_VERIFIED_CLAUSES` (diagnostics: one per clause, spanning it in `q`) |
-| A query's position checks would read more than `ApiConfig.max_verification_candidates` (default 200,000) candidate documents, summed over its verified clauses and their fields, refused before any is verified (decision-010; a replay over it is withheld, 200) | 422 | `API_QUERY_TOO_COSTLY` (diagnostics: one per verified clause, spanning it in `q`, with its count per field) |
+| A query has more position-verified clauses than `ApiConfig.max_verified_clauses` (default 16, a backstop), refused before it compiles (decision-010; a replay over it is withheld, 200, §Search records) | 422 | `API_TOO_MANY_VERIFIED_CLAUSES` (diagnostics: one per clause, spanning it in `q`) |
+| A query's position checks would read more than `ApiConfig.max_verification_candidates` (default 300,000) candidate documents, summed over its verified clauses and their fields, refused before any is verified (decision-010; a replay over it is withheld, 200) | 422 | `API_QUERY_TOO_COSTLY` (diagnostics: one per verified clause, spanning it in `q`, with its count per field) |
 | No index loaded yet (startup, or the first load failed; a failed swap keeps serving the old index) | 503 | `API_INDEX_NOT_LOADED` |
 | Anything unexpected | 500 | `API_INTERNAL` (logged at ERROR with the request id; message never echoes input) |
 | No such endpoint (task-034) | 404 | `API_NOT_FOUND` |
@@ -485,10 +485,10 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     cost `export_weight`, charged before routing. A
     query's **position-verified clauses** (spec 03: a phrase with a wildcard, a NEAR the index can't answer)
     are counted from the AST (`engine.compile.verified_clauses`, by `verifies`'s rule; a test holds the
-    count equal to the compiler's own): more than `ApiConfig.max_verified_clauses` (default 8) is 422
+    count equal to the compiler's own): more than `ApiConfig.max_verified_clauses` (default 16: a backstop, admitting every Trust-Evals string) is 422
     `API_TOO_MANY_VERIFIED_CLAUSES` (decision-010), one diagnostic per clause, before anything compiles;
     otherwise the query costs `ApiConfig.verified_cost` **per clause**: `verified_weight` when set, else
-    `export_weight` lowered to the smaller bucket's capacity over the cap (default min(10, 60 / 8) = 7.5), and
+    `export_weight` lowered to the smaller bucket's capacity over the cap (default min(10, 60 / 16) = 3.75), and
     `max_verified_clauses` × a set `verified_weight` must fit the smaller bucket (the config refuses it
     otherwise), so every clause up to the cap costs its share and a query at the cap can always be paid. The
     rest is charged after the parse and before compiling (`deps.charge_verified` from `deps.searchable`,
@@ -498,7 +498,8 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     So once the route has its engine, and after the wildcard cap, `deps.check_candidates` counts each
     verified clause's candidates per field from the inverted index (`TantivyEngine.candidates`; no document
     is read, and every clause counts, cached or not, so a refusal never depends on the memos): more than
-    `ApiConfig.max_verification_candidates` (default 200,000, ~8 s of verification) is 422
+    `ApiConfig.max_verification_candidates` (default 300,000, ~12 s of verification, above the heaviest real review query:
+    Trust-Evals `main-2-pop`, 247,793 on the synthetic 80k index) is 422
     `API_QUERY_TOO_COSTLY`, one diagnostic per clause with its counts, before any is verified (`/search`,
     `/export`, `POST /records`). A refusal after the charge, `API_QUERY_TOO_COSTLY` or `API_BUSY`, gives the
     verified charge back (`middleware.refund_charged`; the route's own weight is kept). A replay

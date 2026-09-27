@@ -168,14 +168,14 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument(
         "--max-verified-clauses",
         type=int,
-        default=8,
-        help="position-verified clauses one query may have (default 8; decision-010); with the rate limit on, times each clause's cost it must fit the smaller bucket",
+        default=16,
+        help="position-verified clauses one query may have (default 16, a backstop; decision-010); with the rate limit on, times each clause's cost it must fit the smaller bucket",
     )
     serve.add_argument(
         "--max-verification-candidates",
         type=int,
-        default=200_000,
-        help="documents one query's position checks may read (default 200000; decision-010)",
+        default=300_000,
+        help="documents one query's position checks may read (default 300000, the cost bound; decision-010)",
     )
     serve.add_argument(
         "--docs",

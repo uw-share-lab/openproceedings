@@ -25,7 +25,7 @@ The refusal needs a code. Options considered:
 
 ## Decision
 
-`ApiConfig.max_verified_clauses` (default 8) caps the position-verified clauses of one query. The API counts
+`ApiConfig.max_verified_clauses` (default 8; 16 since round 3, see Consequences) caps the position-verified clauses of one query. The API counts
 them from the AST (`engine.compile.verified_clauses`, by `verifies`'s rule; a test holds the count equal to
 the compiler's) after the parse and before anything compiles, on every route that runs a query (`/search`,
 `/export`, `POST /records`) and on a replay's re-parsed canonical (`GET /records/{id}`, `/diff`,
@@ -64,7 +64,7 @@ API runs it.
   verification reads every candidate document (each holding all its items in the field, ~40 µs each), so
   8 clauses of a common word NEAR itself (`(a NEAR/50 a) OR … (4o NEAR/49 4o)`) held the only slot for
   63 s on the synthetic 80k index while costing 60 tokens against a 60 s refill. `ApiConfig.
-  max_verification_candidates` (default 200,000, about 8 s of verification) bounds the candidates of one
+  max_verification_candidates` (default 300,000, about 12 s of verification) bounds the candidates of one
   query, summed over its verified clauses and their fields, counted from the inverted index before any is
   verified (`TantivyEngine.candidates`, every clause counted cached or not, so a refusal never depends on
   the memos). Over it is **422 `API_QUERY_TOO_COSTLY`**, a new registry code carrying one located diagnostic
@@ -74,14 +74,23 @@ API runs it.
   Measured on the synthetic 80k index (candidates summed; cold verification): the exploit 686,684 (refused,
   counted in 4 ms); 8 × `model NEAR/k model*` 543,208 (refused); `"calibrat* trust" OR trust NEAR/3 trust`
   137,933 (5.4 s, served); `a NEAR/50 a` 96,580 (3.7 s); `trust NEAR/5 model*` 66,720 (2.9 s);
-  `"large language model*"` 57,516 (2.3 s); `trust NEAR/5 model` none (not verified). On the real 1,805-paper
-  corpus the heaviest Trust-Evals string (`main-2-pop`, Scholar mode) reads 2,251, about 100,000 scaled to
-  80k, but its 10 clauses are over the clause cap already. `backend/tests/contract/test_verification_scale.py`
-  holds this at a 5k-scaled ceiling in CI and at the default on a built 80k index (`OP_BENCH_80K=1`).
+  `"large language model*"` 57,516 (2.3 s); `trust NEAR/5 model` none (not verified). The heaviest real
+  review query, the published Trust-Evals `main-2-pop` string in Scholar mode, reads 247,793 (10.2 s) there
+  (2,251 on the real 1,805-paper corpus, about 100,000 scaled to 80k), so the default sits above it and
+  below the exploit shapes: 300,000. `backend/tests/contract/test_verification_scale.py` holds this at a
+  5k-scaled ceiling in CI and at the true defaults on a built 80k index (`OP_BENCH_80K=1`): the exploit (8
+  and 16 clauses) refused before any verification, every Trust-Evals string served in both modes (the one
+  that doesn't parse in native mode, `main-2-pop`'s `AI$`, is the parser's 422, not a limit's).
+- **The clause cap is a backstop, raised to 16 (round 3).** With the candidate ceiling bounding the actual
+  cost, the clause cap only has to stop a query of absurdly many clauses before anything is counted. At 8 it
+  refused `main-2-pop` (10 verified clauses in Scholar mode), a systematic reviewer's real, published
+  search string, and the API must not refuse a real review query. 16 admits every Trust-Evals string with
+  room to spare; a 16-clause exploit is refused by the candidate ceiling instead. The per-clause cost falls
+  to 60 / 16 = 3.75 at the default bucket, so a query at the cap still costs the whole bucket (60).
 - **Every clause up to the cap costs its share.** Capping a charge at the bucket made clauses past
-  capacity ÷ weight free (at the defaults, 8 cost what 6 did). A configured `verified_weight` × the cap must
-  now fit the smaller bucket (the config refuses it otherwise), and without one the per-clause cost is the
-  export weight lowered to fit (default min(10, 60 / 8) = 7.5). `op serve` takes `--max-verified-clauses`
+  capacity ÷ weight free (at the then defaults, 8 cost what 6 did). A configured `verified_weight` × the cap
+  must now fit the smaller bucket (the config refuses it otherwise), and without one the per-clause cost is
+  the export weight lowered to fit (default min(10, 60 / 16) = 3.75). `op serve` takes `--max-verified-clauses`
   and `--max-verification-candidates`.
 - A refusal after the verified charge was taken (`API_QUERY_TOO_COSTLY`, or `API_BUSY` from a slot) gives
   the charge back; within a request every compile shares the ids it verified (`tantivy_engine.Scope`), so no

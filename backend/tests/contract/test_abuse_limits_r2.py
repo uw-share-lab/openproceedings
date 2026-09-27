@@ -82,8 +82,8 @@ def test_a_query_over_the_verified_clause_cap_is_a_located_422_before_it_compile
         assert c.get(SEARCH, params={"q": many_verified(2)}).status_code == 200  # at the cap: served
 
 
-def test_the_default_cap_is_8_clauses() -> None:
-    assert ApiConfig(data_dir=Path("x")).max_verified_clauses == 8
+def test_the_default_cap_is_16_clauses() -> None:
+    assert ApiConfig(data_dir=Path("x")).max_verified_clauses == 16
 
 
 def test_each_verified_clause_costs_the_verified_weight(store: Store) -> None:
@@ -113,8 +113,12 @@ def test_a_cap_times_a_weight_over_the_bucket_is_refused_so_no_clause_rides_free
         max_verified_clauses=3,
     )
     default = ApiConfig(data_dir=Path("x"))
-    assert default.verified_cost == 7.5  # min(export_weight 10, 60 / 8)
-    assert (default.verified_charge(6), default.verified_charge(8)) == (45, 60)
+    assert default.verified_cost == 3.75  # min(export_weight 10, 60 / 16)
+    assert (default.verified_charge(12), default.verified_charge(16)) == (
+        45,
+        60,
+    )  # 16 fits the bucket exactly
+    assert default.verified_charge(16) <= default.rate_limit.smallest_capacity
 
 
 def test_a_query_at_the_cap_empties_the_bucket_exactly(store: Store) -> None:

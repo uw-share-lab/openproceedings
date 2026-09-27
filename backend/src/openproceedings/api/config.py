@@ -104,13 +104,15 @@ class ApiConfig(BaseModel):
     # time; a query that would need another slot is 503 API_BUSY with `Retry-After: busy_retry_seconds`
     verification_slots: int = Field(default=1, ge=1)
     busy_retry_seconds: int = Field(default=5, ge=1)
-    # a query with more position-verified clauses than this is 422 API_TOO_MANY_VERIFIED_CLAUSES (each clause
-    # is one cold verification, holding a slot for seconds on a large index), before anything compiles it
-    max_verified_clauses: int = Field(default=8, ge=1)
+    # a query with more position-verified clauses than this is 422 API_TOO_MANY_VERIFIED_CLAUSES, before anything
+    # compiles it: a coarse backstop (16 admits every Trust-Evals string; main-2-pop has 10), the cost being
+    # bounded by `max_verification_candidates` (decision-010)
+    max_verified_clauses: int = Field(default=16, ge=1)
     # a query whose position-verified clauses would read more candidate documents than this, summed over each
     # clause's fields, is 422 API_QUERY_TOO_COSTLY before any is verified (decision-010): a cold verification
-    # costs ~40 µs per candidate, so the default bounds one query's slot hold near 8 s (measured at 80k)
-    max_verification_candidates: int = Field(default=200_000, ge=1)
+    # costs ~40 µs per candidate, so the default bounds one query's slot hold near 12 s (measured at 80k), above
+    # the heaviest real review query (Trust-Evals main-2-pop, Scholar mode: 247,793 candidates, 10.2 s)
+    max_verification_candidates: int = Field(default=300_000, ge=1)
     # a request holding a verification slot longer than this logs `verification_slow` (WARNING)
     slow_verification_seconds: float = Field(default=5.0, gt=0)
     # one client network (IPv4 /24, IPv6 /48) at most `record_saves_network_burst` saves at once, refilled at
