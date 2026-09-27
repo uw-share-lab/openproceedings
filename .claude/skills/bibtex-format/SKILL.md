@@ -1,6 +1,6 @@
 ---
 name: bibtex-format
-description: The openproceedings BibTeX export standard — @inproceedings entries for accepted papers and @unpublished for every other status, the <firstauthorlast><year><firsttitleword> key scheme with a/b de-duplication, field set, brace and special-character escaping, and the exact behaviour of refaudit's BibTeX parser that every export must satisfy. Use when writing or reviewing the BibTeX exporter under backend/src/openproceedings/api/exporters/, `op export --format bibtex`, or a .bib fixture.
+description: The openproceedings BibTeX export standard — @inproceedings entries for accepted papers and @unpublished for every other status, the <firstauthorlast><year><firsttitleword> key scheme with a/b de-duplication, field set, brace and special-character escaping, and the exact behaviour of refaudit's BibTeX parser that every export must satisfy. Use when writing or reviewing the BibTeX exporter in backend/src/openproceedings/export.py, `op export --format bibtex`, or a .bib fixture.
 ---
 
 # BibTeX export (spec 04 §Exports)

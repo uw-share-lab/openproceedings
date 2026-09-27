@@ -16,8 +16,8 @@ Tests: Vitest + Testing Library (units), Playwright (e2e against the fixture API
 
 As built (TASK-039): Next 16.3.6, React 19.2, Tailwind 4.3 (CSS-first `@theme`, no `tailwind.config`),
 shadcn/ui via `components.json` (`radix-nova`, CSS variables; components are added with `npx shadcn add`
-as pages need them), `next-themes` for the class-based theme, Vitest 5. Node 22. Testing Library,
-TanStack Query and CodeMirror join with the tasks that use them.
+as pages need them), `next-themes` for the class-based theme, Vitest 5 with Testing Library
+(`@testing-library/react`). Node 22. TanStack Query and CodeMirror join with the tasks that use them.
 
 ## URL is state (guarantee 3)
 
@@ -37,7 +37,9 @@ and ignoring `trust`.", with `""` marking an empty value). The notice box ends w
 link** (the canonical URL of the state actually shown); the page never redirects on its own.
 
 Facet and include clicks rewrite `q` from the server's `/parse` report of that field's top-level clause
-(field, polarity, code-point span, values, and the `(q, mode)` it was parsed from). **"Top-level" is judged
+(field, polarity, code-point span, values, and the `(q, mode)` it was parsed from). **Pending TASK-078:**
+`/parse` doesn't report these clauses yet, so the reducer takes a `FilterClause` it declares itself
+(`search-state.ts`) until the generated schema has one. **"Top-level" is judged
 on the flattened canonical tree**, where parenthesised AND groups are flattened: in
 `track:workshop "large language model" AND (venue:NeurIPS track:workshop)` both `track:` clauses are
 top-level. A field with more than one such clause, or with its only clause inside an OR or NOT, has no
@@ -72,7 +74,7 @@ clauses to an existing top-level AND instead of re-wrapping.
 |---|---|
 | `/` | Search home: the editor, example queries (the review's strings), a coverage summary line |
 | `/search` | The main workspace (below) |
-| `/paper/[id]` | Full record: abstract with the current query's highlights, all links, provenance table |
+| `/paper/[id]` | Full record: abstract with the current query's highlights, all links, provenance table. `GET /papers/{id}` takes no `q` and returns no highlights, so the page needs TASK-087 first |
 | `/record/[id]` | Search-record page: the input string as typed, its `mode`, and every translation notice (Scholar mode), the identification string and the default clauses, full index version, search date and the crawl window (`crawl_dates["*"]`, "crawl run <from> to <to>"; only `*` exists until M4 adds per-source windows; when `crawl_dates_kind["*"]` is `scholar_query_dates` it reads "Scholar searches run <from> to <to> (local time)", never "crawl"), total, exclusions (`unknown` on its own line), replay status (`reproduced` / `drifted` with its reason and `+<added_total> / −<removed_total>`, or "membership-identical" on `+0 / −0` / `mismatch`; a replay whose canonical no longer runs reads "could not be re-run: `<refused code>`" with no counts), a "Copy methods text" button, and export buttons that **must** call `/export?record_id=<id>` (the record's stored ids from its own index, never a re-run of `q`). When `identification_citable` is `false` the page shows the CLI's caution, "bootstrap corpus (sources: <sources>): these counts describe that corpus, not a database; they are not PRISMA identification numbers", and **no methods text** (exports stay); when it is null (a v1 record) the caution says this wasn't recorded, also with no methods text. On `mismatch` the page is a blocking **"do not cite — replay mismatch"** state with no methods text and no export |
 | `/coverage` | Venue × year × track table with source and snapshot date, missing-abstract counts, `unknown` counts |
 | `/help/syntax` | Language reference generated from the 02 golden table (it cannot drift from the tests) |

@@ -1,6 +1,6 @@
 ---
 name: export-format-validator
-description: Validates openproceedings RIS, CSV and BibTeX exports end to end — round-trips each file back to the same ids and fields, parses it with venuetriage's RIS reader and refaudit's BibTeX reader, checks the Covidence-safe choices, and writes the missing fixtures and contract tests. Use on any change to backend/src/openproceedings/api/exporters/ or `op export`, before a Covidence import, and via /review-export on a query or the fixture set.
+description: Validates openproceedings RIS, CSV, BibTeX and JSONL exports end to end — round-trips each file back to the same ids and fields, parses it with scholarmend's RIS reader and refaudit's BibTeX reader, checks the Covidence-safe choices, and writes the missing fixtures and contract tests. Use on any change to backend/src/openproceedings/export.py, api/export.py or `op export`, before a Covidence import, and via /review-export on a query or the fixture set.
 tools: Read, Grep, Glob, Bash, Write
 ---
 

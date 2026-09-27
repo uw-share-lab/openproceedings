@@ -527,7 +527,7 @@ export interface components {
             index_version: string;
             /**
              * Index Versions
-             * @description every index on this instance, sorted; the served one included
+             * @description every index this instance can serve, sorted, the served one included: an index this code can't open (another tokenizer, schema or Tantivy version) or one currently refused is left out
              */
             index_versions: string[];
             /** Query Version */

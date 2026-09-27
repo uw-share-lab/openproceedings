@@ -105,3 +105,11 @@ Implement the token contract with a raw↔normalized offset map for highlights, 
 - **One documented exception:** in a slash cluster, the pieces before the first raw U+0345 end at it even if
   a later mark belongs to them (`=` + U+0345 + U+0338: `neq` spans `=` only). Contiguous spans can't split
   interleaved marks.
+
+## Addendum — 2026-09-27 (M3a gate; decision-008, QUERY_VERSION 2)
+- **"The lexer reads `reach`" above is no longer true.** decision-008 judges wildcard detachment on the
+  stem's **folded** pieces (`normalize.tokenize_with_tail`), not on any raw offset, so `abcd⒈*` (`1.`) and
+  `abcd⑴*` (`(1)`) are now `PARSE_WILDCARD_DETACHED` like `abcd1.*`: a deliberate change to which queries
+  parse, hence `QUERY_VERSION` "2". `Token.reach` stays only for the frozen task-073 oracle; nothing that
+  decides what parses reads it (`query/normalize.py` comment, spec 02, `query-grammar` and `token-contract`
+  skills). The lesson above still holds: audit every consumer of an offset before changing it.

@@ -931,7 +931,7 @@
             "type": "string"
           },
           "index_versions": {
-            "description": "every index on this instance, sorted; the served one included",
+            "description": "every index this instance can serve, sorted, the served one included: an index this code can't open (another tokenizer, schema or Tantivy version) or one currently refused is left out",
             "items": {
               "type": "string"
             },

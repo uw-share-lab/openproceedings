@@ -9,7 +9,7 @@ openproceedings/
 ├── README.md  CLAUDE.md  AGENTS.md  CONTRIBUTING.md  LICENSE (MIT)
 ├── pyproject.toml  uv.lock      # uv WORKSPACE root: depends on the backend member; ruff, mypy-strict and pytest config; dev tools (ruff, mypy, pytest, hypothesis)
 ├── package.json  package-lock.json  .nvmrc   # npm WORKSPACE root (workspaces: ["frontend"]); deps hoisted to ./node_modules; Node 22
-├── Makefile                     # sync · fmt · lint · tooling · test · hooks · mutate · mutate-changed
+├── Makefile                     # sync · fmt · lint · tooling · test · openapi · hooks · mutate · mutate-changed
 ├── .claude/                     # committed: agents, skills, commands, hooks, learnings (roster: .claude/README.md)
 ├── .githooks/                   # commit-msg (attribution), pre-push (make lint + make tooling)
 ├── .github/                     # workflows (below), dependabot.yml
@@ -20,13 +20,17 @@ openproceedings/
 │   │   ├── query/               # 02: normalize.py, mathsyms.py, lexer.py, parser.py, ast.py, canonical.py, defaults.py, compat.py
 │   │   ├── engine/              # 03: protocol.py, reference.py, index.py, compile.py, tantivy_engine.py, exclusions.py, highlight.py, parity.py
 │   │   ├── semantic/            # 06 (phase 2)
-│   │   ├── api/                 # 04: FastAPI app, routers, exporters/, records.py
+│   │   ├── api/                 # 04: app.py, config.py, state.py, deps.py, errors.py, middleware.py, models.py, openapi.py, server.py; routers search.py, papers.py, meta.py, coverage.py, records.py, export.py, health.py
 │   │   ├── eval/                # 07 report generators
 │   │   ├── diagnostics.py       # error-code registry (one Diagnostic shape; error-diagnostics skill)
 │   │   ├── vocab.py             # venue/track/status vocabularies (spec 01), shared by ingest and query
 │   │   ├── logs.py              # the only place logging is configured (logging-standards skill)
 │   │   ├── storage.py           # locks, staging, fsync and read-only sealing for snapshots and indexes
 │   │   ├── export.py            # 04 exports (RIS, CSV, BibTeX, JSONL), shared by `op export` and the API
+│   │   ├── search.py            # one ranked search, run by `op search` and `GET /search`
+│   │   ├── records.py           # search records: ids_hash, the append-only store, replay (04 §Search records)
+│   │   ├── coverage.py          # the snapshot manifest's venue × year × track × status breakdown (`GET /coverage`)
+│   │   ├── timestamps.py        # the API's one timestamp form (UTC, `Z`)
 │   │   └── cli.py               # `op` entry point
 │   └── tests/{unit,golden,differential,bench,contract,fixtures}/
 ├── frontend/                    # npm workspace member: Next.js App Router, output standalone (spec 05; skeleton TASK-039)
@@ -49,10 +53,10 @@ into one `.venv` from one `uv.lock`. New Python packages join by adding their di
 | `op index build --snapshot <dir\|name\|hash prefix> [--out <dir>]` · `op index parity --index <v> [--snapshot <id>]` · `op index retire <index_version>` (planned, task-065) | build an immutable index; check it holds `normalize()`'s tokens for its snapshot (local, over the real corpus); retire an old one (refuses if any search record pins it) |
 | `op search "<q>" [--mode scholar] [--explain \| --ids] [--engine tantivy\|reference] [--sort <s>] [--limit <n>] [--index <dir\|version>]` | ranked hits under a PRISMA header (default): searched time, index, crawl window (first to last fetch), tokenizer and query versions; a bootstrap-corpus caution when the index holds only RIS, or a caution that the sources are unknown when its snapshot isn't in the data dir or its hash differs; identified, removed by default filters (ineligible and unclassified), screened; the canonical and identification strings; every wildcard's expansion (its count and first 10 terms; every term with `--explain`); the sorted id set (`--ids`; `--engine reference` runs the oracle over the index's snapshot, `--ids` only); or the compiled query (`--explain`). Diagnostics go to stderr as user output; one `search_run` INFO line per run (task-030) |
 | `op export "<q>" --format ris\|csv\|bibtex\|jsonl [--mode scholar] [--index <dir\|version>] [--out <file>]` | export the full matched set in id order (spec 04 §Exports), streamed to stdout or written whole to `--out` (never a partial file); the count is checked against the query's total |
-| `op record save "<q>" [--mode scholar]` · `op record replay <id>` | freeze a search as a search record (the same function as `POST /records`); replay one and print its status, `reproduced` / `drifted` / `mismatch` (the same function as `GET /records/{id}`) |
+| `op record save "<q>" [--mode scholar]` · `op record replay <id>` (planned, task-083) | freeze a search as a search record (the same function as `POST /records`); replay one and print its status, `reproduced` / `drifted` / `mismatch` (the same function as `GET /records/{id}`) |
 | `op serve [--host] [--port] [--index current\|<index_version>] [--cors-origin …] [--trusted-proxy …] [--rate-capacity] [--rate-refill] [--export-weight] [--no-rate-limit] [--log-query-text]` | run the API (04 §Implementation notes, as built): one uvicorn process over `<data-dir>/indexes/<index>`; SIGHUP reloads it. Refused as usage: a trusted proxy of `0.0.0.0/0` or `::/0`, and `--no-rate-limit` with a non-loopback `--host` (§Deploy) |
-| `op embed build` | build embeddings for the current index (06) |
-| `op eval scholar [--query <name>]` · `op eval coverage` · `op eval audit` · `op eval near-miss` | the 07 reports; `near-miss` is 06's recall@25 |
+| `op embed build` (planned, task-058) | build embeddings for the current index (06) |
+| `op eval scholar [--query <name>]` · `op eval coverage` · `op eval audit` · `op eval near-miss` (planned, task-054) | the 07 reports; `near-miss` is 06's recall@25 |
 | `op openapi [--out <file>]` | print the OpenAPI document, sorted and stable, without loading an index (task-040); `make openapi` writes it to `backend/tests/contract/openapi.json` and regenerates `frontend/src/api/schema.ts` from it |
 
 The CLI and the API call the same functions, so the CLI alone is enough to run a whole review.

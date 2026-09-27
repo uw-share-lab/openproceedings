@@ -77,11 +77,11 @@ reviews without the UI.
 | `GET` | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | `GET` | `/papers/{id}` | The full record, provenance included |
 | `GET` | `/export` | `format=ris\|csv\|bibtex\|jsonl` and either `q` (with `mode` and an optional `index_version`) or `record_id` alone → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; with `record_id`, exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if that index is gone, 409 `API_RECORD_MISMATCH` if its replay is a `mismatch`) |
-| `POST` | `/records` | Freezes a search as an immutable **search record** → 201 `{record_id, page}` with `Location: /api/v1/records/<record_id>` |
+| `POST` | `/records` | Freezes a search as an immutable **search record** → 201 `{record_id, page}` plus the three versions, with `Location: /api/v1/records/<record_id>` |
 | `GET` | `/records/{id}` | The stored record, plus a replay check (see below) |
-| `GET` | `/records/{id}/diff` | For a `drifted` record: added and removed ids (with titles), and which `index_version` inputs changed |
+| `GET` | `/records/{id}/diff` | For a record of any status: added and removed ids (with titles), paged, and which `index_version` inputs changed (empty unless `drifted`) |
 | `GET` | `/coverage` | Counts per venue × year × track × status, abstract-missing counts, snapshot date |
-| `GET` | `/meta` | Current and available `index_version`s, the field and track vocabularies (these feed the UI's autocomplete) |
+| `GET` | `/meta` | Current and servable `index_version`s, the field names and the venue, track and status vocabularies (these feed the UI's autocomplete) |
 | `GET` | `/healthz` | Liveness and whether the index is loaded |
 | `GET` | `/near-misses` | **M5 only**: the semantic suggestion panel, a separate resource (see 06) |
 
@@ -431,7 +431,8 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     `network_capacity` and `network_refill_per_second`, default 4 × the client's): a request passes only if
     both hold its cost, and a refusal by one spends nothing from the other. `/healthz` (GET or
     HEAD, for uptime monitors; HEAD is its own route, left out of the OpenAPI document so operation ids stay
-    unique) costs nothing; `/export` and the record routes cost `export_weight`, charged before routing. A
+    unique) costs nothing; `/export` and every record route (`POST /records`, `GET /records/{id}`, `/diff`)
+    cost `export_weight`, charged before routing. A
     query with a **position-verified clause** (spec 03: a phrase with a wildcard, a NEAR the index can't answer;
     `engine.compile.verifies`, tested equal to the compiler's own path) costs at least `verified_weight`
     (default `export_weight`): the rest is charged after the parse and before compiling (`deps.searchable`,
@@ -535,8 +536,8 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     `API_INDEX_NOT_LOADED`; on SIGHUP the old index keeps serving. It is never a record without its
     provenance, and never a re-hash per request. Only a snapshot file that becomes unreadable after the load
     is a per-request 500 `API_INTERNAL`.
-  - `GET /meta` answers the three versions, plus `index_versions` (every index directory on the instance,
-    sorted, with the served one included), `text_fields` (`title`, `abstract`), `filter_fields` (`venue`,
+  - `GET /meta` answers the three versions, plus `index_versions` (every index this instance can serve,
+    sorted, with the served one included; which are left out: §Implementation notes, pinned indexes), `text_fields` (`title`, `abstract`), `filter_fields` (`venue`,
     `year`, `track`, `status`), and `values` (`venue`, `track` and `status`: the vocabularies the parser checks
     filter values against, so autocomplete never offers a value it refuses).
   - Every route that reports `index_version` needs a loaded engine, `/parse` and `/meta` included (503
@@ -579,11 +580,15 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     index and UTC date: both run `export.header` and `export.entries` over `TantivyEngine.documents`, and a
     contract test compares them for every format. Records are sent in chunks of whole records, each at most
     `CHUNK` (64 Ki characters) plus one record (a contract test reads the ASGI messages).
-  - Everything that can refuse happens before the first byte, in the one envelope: the parameters, the
-    length cap and the parse (422 with diagnostics), a record's lookup (404 `API_RECORD_NOT_FOUND`), pin and
-    replay (409 `API_RECORD_MISMATCH` for a `mismatch`), the pin, every wildcard's expansion
+  - Everything that can refuse happens before the first byte, in the one envelope. First the parameters
+    (422 `API_BAD_PARAM`: an unknown or repeated one, `record_id` with `q`/`mode`/`index_version`, or
+    neither). Then, **with `q`**: the length cap and the parse (422 with diagnostics), a position-verified
+    query's extra weight (429), the pin (409 `API_INDEX_VERSION_UNAVAILABLE`), every wildcard's expansion
     (422 `WILDCARD_TOO_MANY_EXPANSIONS`, each over-cap wildcard located in `q` by `search.expanded`, as
-    `/search` does), then the one collection of the match set that gives `X-Total`. Then a sync generator
+    `/search` does), then the one collection of the match set that gives `X-Total`. **With `record_id`**:
+    the record's lookup (404 `API_RECORD_NOT_FOUND`), the pin of its own index (409
+    `API_INDEX_VERSION_UNAVAILABLE`), its replay (409 `API_RECORD_MISMATCH` on a `mismatch`), and the stored
+    ids hashing to its `ids_hash` (409 `API_RECORD_MISMATCH`); `X-Total` is that list's length, the record's `total`. Then a sync generator
     streams from the engine the request took, so an export started before a hot swap finishes on its index
     (contract test). A failure after the first byte is logged by the last catch and marks the access line
     `aborted: true`. A stream whose record count is below or above `X-Total` fails the same way after its

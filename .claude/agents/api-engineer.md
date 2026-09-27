@@ -31,7 +31,7 @@ not behaviour. If a response differs from what `op search` or `op export` return
    `{"detail"}`), `index_version`, `tokenizer_version` and `query_version` present, and a captured log line containing
    no query text.
 4. **Implement thin.** `def` handlers. Read `engine = state.engine` once per request. Call the shared
-   function from `engine/` or `api/exporters/`. Exports run `match_ids` first, set `X-Total` and
+   function from `engine/`, `search.py`, `records.py` or `export.py`. Exports run `match_ids` first, set `X-Total` and
    `X-Index-Version`, then stream ordered by `id` from a sync generator, on the pinned index. Never clamp `limit`: reject over 200 with a 422.
 5. **Guarantee checks in the PR:** `total` independent of `sort`/`limit`; `excluded` always present;
    `expansions` never dropped; the facet rule is disjunctive and computed server-side from the AST, with
