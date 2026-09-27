@@ -48,11 +48,10 @@ from typing import Any, Literal
 
 from pydantic import ValidationError
 
-from openproceedings import storage
 from openproceedings.ingest.classify import Classification, classify_v1_venue, classify_venueid
 from openproceedings.ingest.dedup import Conflict
 from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Source, Urls
-from openproceedings.ingest.sources.common import CrawlError, Crawls, Report, write_marker
+from openproceedings.ingest.sources.common import CrawlError, Crawls, Report
 from openproceedings.ingest.sources.http import CacheMiss
 from openproceedings.ingest.sources.openreview_client import API_V1, API_V2, OpenReviewClient
 from openproceedings.ingest.sources.openreview_v2 import (
@@ -697,14 +696,14 @@ def ingest(client: OpenReviewClient, cache: Path, venue: str, years: Sequence[in
     non-dry-run crawl, write its crawl file so `op snapshot build` replays it."""
     for year in years:
         adapter(venue, year)  # refuse the whole request before fetching anything
-    reports = []
-    with storage.exclusive(cache_root(cache)):
-        for year in years:
-            result = crawl(client, venue, year, dry_run=dry_run, page_size=page_size)
-            reports.append(result.report)
-            if not dry_run and result.report.complete:
-                write_marker(crawls_dir(cache), f"{venue}-{year}", result.report.to_manifest())
-    return reports
+
+    def marker(year: int, c: Crawl) -> tuple[str, dict[str, Any]] | None:
+        return None if dry_run or not c.report.complete else (f"{venue}-{year}", c.report.to_manifest())
+
+    crawls = CRAWLS.ingest(
+        cache, years, lambda year: crawl(client, venue, year, dry_run=dry_run, page_size=page_size), marker
+    )
+    return [c.report for c in crawls]
 
 
 def _replay_one(cache: Path, key: tuple[Any, ...]) -> Crawl:

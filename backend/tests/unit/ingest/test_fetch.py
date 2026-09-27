@@ -1,4 +1,6 @@
-"""The crawlers' cached, polite fetcher (`ingest/sources/http.py`), against a scripted transport."""
+"""The proceedings fetcher's own policy (`ingest/sources/http.py`: its cache, retry waits and back-off),
+against a scripted transport. What every source shares (the allowlist, off-host answers, pacing, an offline
+miss) is tested once in `test_http.py`."""
 
 from __future__ import annotations
 
@@ -34,27 +36,12 @@ def test_a_page_is_fetched_once_then_served_from_the_cache(tmp_path: Path) -> No
     assert offline.get(URL).fetched_at == T1  # the cache entry's time, never the reader's clock
 
 
-def test_offline_a_miss_is_an_error_never_a_fetch(tmp_path: Path) -> None:
-    f, _ = fetcher(tmp_path, None, HOSTS)
-    with pytest.raises(FetchError) as e:
-        f.get(URL)
-    assert e.value.reason == "not_cached"
-
-
 def test_refresh_refetches_and_replaces_the_entry(tmp_path: Path) -> None:
     t = FakeTransport({URL: [response(PAGE), response("<html>new</html>")]})
     f, _ = fetcher(tmp_path, t, HOSTS)
     f.get(URL)
     assert f.get(URL, refresh=True).text == "<html>new</html>"
     assert f.get(URL).text == "<html>new</html>" and len(t.calls) == 2
-
-
-def test_requests_are_paced(tmp_path: Path) -> None:
-    urls = [f"https://proceedings.mlr.press/v28/p{i}.html" for i in range(3)]
-    f, clock = fetcher(tmp_path, FakeTransport({u: response(PAGE) for u in urls}), HOSTS, min_interval=1.5)
-    for u in urls:
-        f.get(u)
-    assert clock.sleeps == [1.5, 1.5]  # none before the first request
 
 
 @pytest.mark.parametrize(
@@ -120,23 +107,6 @@ def test_a_truncated_body_and_a_network_error_are_retried(tmp_path: Path) -> Non
     f, clock = fetcher(tmp_path, t, HOSTS, min_interval=0)
     assert f.get(URL).text == PAGE
     assert len(t.calls) == 3 and clock.sleeps == [5.0, 10.0]
-
-
-@pytest.mark.parametrize(
-    "url",
-    ["https://example.org/v28/", "ftp://proceedings.mlr.press/v28/", "https://proceedings.mlr.press.evil/x"],
-)
-def test_only_the_sources_hosts_are_fetched(tmp_path: Path, url: str) -> None:
-    f, _ = fetcher(tmp_path, FakeTransport({}), HOSTS)
-    with pytest.raises(FetchError) as e:
-        f.get(url)
-    assert e.value.reason == "off_host"
-
-
-def test_a_redirect_off_the_hosts_is_refused(tmp_path: Path) -> None:
-    f, _ = fetcher(tmp_path, FakeTransport({URL: response(PAGE, url="https://elsewhere.example/x")}), HOSTS)
-    with pytest.raises(FetchError, match="not on"):
-        f.get(URL)
 
 
 def test_query_strings_and_fragments_are_dropped() -> None:

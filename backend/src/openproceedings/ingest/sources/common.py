@@ -6,8 +6,9 @@ an abstract is taken, records built from their own claims).
 A crawler runs twice: online under `op ingest` (fetching into its cache), and offline under `op snapshot build`
 (the cache only), so a snapshot is a function of the cache. A crawl counts only once it finished and wrote its
 marker (`<source dir>/crawls/<name>.json`, written atomically); a crawl that stopped half-way resumes from the
-cache. `Crawls` is the one replay: every marker of a source, in key order, re-run offline; a marked crawl whose
-responses are no longer cached is an error, never a silently smaller snapshot.
+cache. `Crawls` is the one ingest loop and the one replay: `ingest` crawls under the source's lock and writes
+each finished crawl's marker where `replay` reads them; `replay` re-runs every marker of a source, in key order,
+offline; a marked crawl whose responses are no longer cached is an error, never a silently smaller snapshot.
 """
 
 from __future__ import annotations
@@ -122,13 +123,31 @@ class Mined(Protocol):
 @dataclass(frozen=True)
 class Crawls[M: Mined]:
     """One source's finished crawls: where its markers are, what identifies one (`key`: the replay order, and
-    a marker that says less is unreadable), and how one is re-run from the cache with no network."""
+    a marker that says less is unreadable), and how one is re-run from the cache with no network. The source's
+    directory (the lock `op ingest` holds) is the marker directory's parent."""
 
     directory: Callable[[Path], Path]  # the cache → this source's marker directory
     key: Callable[[Mapping[str, Any]], tuple[Any, ...]]
     label: Callable[[tuple[Any, ...]], str]  # a key → "NeurIPS 2013", for an error
     command: str  # what re-crawls it
     run: Callable[[Path, tuple[Any, ...]], M]  # (the cache, a key) → the replayed crawl
+
+    def ingest[K](
+        self, cache: Path, keys: Iterable[K], crawl: Callable[[K], M],
+        marker: Callable[[K, M], tuple[str, Mapping[str, Any]] | None],
+    ) -> list[M]:  # fmt: skip
+        """The one `op ingest` loop: one run at a time per source (an exclusive lock on the source's
+        directory), each key crawled in order, and each finished crawl's marker (`marker` → its file name and
+        body, or None for a dry run or an incomplete crawl) written where `replay` reads it."""
+        directory = self.directory(cache)
+        out = []
+        with storage.exclusive(directory.parent):
+            for key in keys:
+                mined = crawl(key)
+                out.append(mined)
+                if (m := marker(key, mined)) is not None:
+                    write_marker(directory, *m)
+        return out
 
     def replay(self, cache: Path) -> list[M]:
         keys = set()

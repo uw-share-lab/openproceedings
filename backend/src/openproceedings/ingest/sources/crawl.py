@@ -1,10 +1,10 @@
 """`op ingest neurips|pmlr`, and the one offline replay of every crawler that `op snapshot build` runs (spec 01
 §CLI, §Pipeline).
 
-`ingest_*` crawls each listing into `<cache>/<source>/pages/` (one run at a time per source: an exclusive
-lock on `<cache>/<source>/.lock`) and, when the whole listing is cached, writes its crawl marker. A dry
-run reads only the index pages (through the cache) and reports what a crawl would fetch; it writes no
-marker. `--offline` crawls from the cache alone. `replay_all` re-runs every marked crawl of every source
+`ingest_*` crawls each listing into `<cache>/<source>/pages/` through `common.Crawls.ingest` (one run at a
+time per source: an exclusive lock on `<cache>/<source>/.lock`) and, when the whole listing is cached, writes
+its crawl marker. A dry run reads only the index pages (through the cache) and reports what a crawl would
+fetch; it writes no marker. `--offline` crawls from the cache alone. `replay_all` re-runs every marked crawl of every source
 (OpenReview API v2, then v1, then NeurIPS, then PMLR; `common.Crawls`) with no transport at all, so a snapshot
 never fetches.
 """
@@ -16,7 +16,6 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from openproceedings import storage
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources import neurips, openreview_v1, openreview_v2, pmlr
 from openproceedings.ingest.sources.common import (
@@ -25,7 +24,6 @@ from openproceedings.ingest.sources.common import (
     MinerError,
     Report,
     sources_manifest,
-    write_marker,
 )
 from openproceedings.ingest.sources.http import Fetcher, PageCache, Transport, urllib_transport
 from openproceedings.ingest.volumes import icml_volume
@@ -63,15 +61,12 @@ def ingest_neurips(
     """Crawl NeurIPS years (each year's listings, then every paper page) into the cache."""
     f = fetcher(cache, neurips.CACHE_DIR, neurips.HOSTS, offline=offline, transport=transport,
                 min_interval=min_interval)  # fmt: skip
-    reports: list[ListingReport] = []
-    with storage.exclusive(cache / neurips.CACHE_DIR):
-        for year in sorted(set(years)):
-            result = neurips.mine_year(year, f, refresh_index=refresh, plan_only=dry_run)
-            reports += result.reports
-            if not dry_run:
-                write_marker(
-                    crawls_dir(cache, neurips.CACHE_DIR), str(year), {"source": neurips.SOURCE, "year": year}
-                )
+    mined = NEURIPS.ingest(
+        cache, sorted(set(years)),
+        lambda year: neurips.mine_year(year, f, refresh_index=refresh, plan_only=dry_run),
+        lambda year, _: None if dry_run else (str(year), {"source": neurips.SOURCE, "year": year}),
+    )  # fmt: skip
+    reports = [r for m in mined for r in m.reports]
     log.info(
         "neurips_ingested", extra={"years": len(reports), "requests": f.stats.network, "dry_run": dry_run}
     )
@@ -95,15 +90,11 @@ def ingest_pmlr(
     f = fetcher(
         cache, pmlr.CACHE_DIR, pmlr.HOSTS, offline=offline, transport=transport, min_interval=min_interval
     )
-    reports: list[ListingReport] = []
-    with storage.exclusive(cache / pmlr.CACHE_DIR):
-        for number in volumes:
-            result = pmlr.mine_volume(number, f, refresh_index=refresh, plan_only=dry_run)
-            reports.append(result.report)
-            if not dry_run:
-                write_marker(
-                    crawls_dir(cache, pmlr.CACHE_DIR), f"v{number}", {"source": pmlr.SOURCE, "volume": number}
-                )
+    mined = PMLR.ingest(
+        cache, volumes, lambda number: pmlr.mine_volume(number, f, refresh_index=refresh, plan_only=dry_run),
+        lambda number, _: None if dry_run else (f"v{number}", {"source": pmlr.SOURCE, "volume": number}),
+    )  # fmt: skip
+    reports = [m.report for m in mined]
     log.info(
         "pmlr_ingested", extra={"volumes": len(reports), "requests": f.stats.network, "dry_run": dry_run}
     )

@@ -239,15 +239,6 @@ def test_any_other_4xx_is_raised_at_once(tmp_path: Path) -> None:
         client(tmp_path, not_found).get("/notes", {"id": "g1SzIRLQXMM"})
 
 
-def test_requests_are_paced(tmp_path: Path) -> None:
-    clock = FakeClock()
-    server = FakeOpenReview(notes={"ICLR.cc/2024/Conference": []})
-    c = client(tmp_path, server, clock, min_interval=2.0)
-    for n in (1, 2, 3):
-        c.get("/notes", {**PARAMS, "limit": n})
-    assert clock.sleeps == [2.0, 2.0, 2.0]  # login, then three GETs, each two seconds after the last
-
-
 # --- secrets ----------------------------------------------------------------------------------------------------
 
 

@@ -1,6 +1,7 @@
-"""The shared HTTP layer's security properties, once for every source (TASK-103): the host allowlist, a
-response that answers for another host, the body cap, and the error hierarchy; and that a cache written
-before the layer was shared still replays. Scripted transports only; no network."""
+"""The shared HTTP layer's properties, once for every source (TASK-103, TASK-114): the host allowlist, a
+response that answers for another host, the body cap, pacing, an offline miss, and the error hierarchy; and
+that a cache written before the layer was shared still replays. Each source's own policy (retry waits,
+back-off, what is cached and how) stays in `test_fetch.py` and `test_openreview_client.py`. Scripted transports only; no network."""
 
 from __future__ import annotations
 
@@ -52,26 +53,30 @@ class Script:
         return sum(not u.endswith("/login") for u in self.sent)
 
 
-Make = Callable[[Path, Script], tuple[HttpClient[Any], Callable[[], Any]]]
+Get = Callable[..., Any]  # get(n): the n-th distinct request of a source's kind
+Made = tuple[HttpClient[Any], Get, Any]  # the client, get, and its fake clock
+Make = Callable[..., Made]  # (cache, transport, *, offline, min_interval) → Made
 
 
-def proceedings(hosts: frozenset[str], url: str) -> Make:
-    def make(tmp_path: Path, transport: Script) -> tuple[HttpClient[Any], Callable[[], Any]]:
-        f, _ = fetcher(tmp_path, transport, hosts, min_interval=0)  # type: ignore[arg-type]
-        return f, lambda: f.get(url)
+def proceedings(hosts: frozenset[str], base: str) -> Make:
+    def make(tmp_path: Path, transport: Script, *, offline: bool = False, min_interval: float = 0) -> Made:
+        live = None if offline else transport
+        f, clock = fetcher(tmp_path, live, hosts, min_interval=min_interval)  # type: ignore[arg-type]
+        return f, lambda n=0: f.get(f"{base}p{n}.html"), clock
 
     return make
 
 
-def openreview(tmp_path: Path, transport: Script) -> tuple[HttpClient[Any], Callable[[], Any]]:
-    c = OpenReviewClient(tmp_path, credentials=Credentials(USERNAME, PASSWORD), transport=transport,
-                         clock=FakeClock(), min_interval=0.0, jitter=lambda: 0.0)  # fmt: skip
-    return c, lambda: c.get("/notes", {"id": "x"})
+def openreview(tmp_path: Path, transport: Script, *, offline: bool = False, min_interval: float = 0) -> Made:
+    clock = FakeClock()
+    c = OpenReviewClient(tmp_path, credentials=Credentials(USERNAME, PASSWORD), transport=transport, clock=clock,
+                         min_interval=min_interval, jitter=lambda: 0.0, offline=offline)  # fmt: skip
+    return c, lambda n=0: c.get("/notes", {"id": f"x{n}"}), clock
 
 
 SOURCES = {
     "neurips": (
-        proceedings(neurips.HOSTS, "https://proceedings.neurips.cc/paper_files/paper/2013"),
+        proceedings(neurips.HOSTS, "https://proceedings.neurips.cc/paper_files/paper/2013/"),
         "text/html",
     ),
     "pmlr": (proceedings(pmlr.HOSTS, "https://proceedings.mlr.press/v28/"), "text/html"),
@@ -87,7 +92,7 @@ def ok_body(content_type: str) -> bytes:
 def test_a_url_off_the_sources_hosts_is_never_sent(tmp_path: Path, source: str) -> None:
     make, _ = SOURCES[source]
     transport = Script(lambda r: Response(200, {}, b""))
-    client, _ = make(tmp_path, transport)
+    client, _, _ = make(tmp_path, transport)
     for url in (
         "https://example.org/x",
         "ftp://proceedings.mlr.press/v28/",
@@ -103,7 +108,7 @@ def test_a_url_off_the_sources_hosts_is_never_sent(tmp_path: Path, source: str) 
 def test_a_response_answering_for_another_host_is_refused_and_not_cached(tmp_path: Path, source: str) -> None:
     make, content_type = SOURCES[source]
     body = ok_body(content_type)
-    _, get = make(tmp_path, Script(lambda r: Response(200, {"content-type": content_type}, body,
+    _, get, _ = make(tmp_path, Script(lambda r: Response(200, {"content-type": content_type}, body,
                                                           "https://elsewhere.example/x")))  # fmt: skip
     with pytest.raises(FetchError, match="not on") as e:
         get()
@@ -114,12 +119,34 @@ def test_a_response_answering_for_another_host_is_refused_and_not_cached(tmp_pat
 def test_a_body_over_the_cap_is_refused_at_once_and_not_cached(tmp_path: Path, source: str) -> None:
     make, content_type = SOURCES[source]
     transport = Script(lambda r: Response(200, {"content-type": content_type}, b" " * (cap + 1)))
-    client, get = make(tmp_path, transport)
+    client, get, _ = make(tmp_path, transport)
     cap = client.policy.max_body
     with pytest.raises(FetchError) as e:
         get()
     assert e.value.reason == "too_large" and not list(tmp_path.rglob("*.json"))
     assert transport.gets() == 1  # never retried
+
+
+@pytest.mark.parametrize("source", SOURCES)
+def test_requests_are_paced(tmp_path: Path, source: str) -> None:
+    make, content_type = SOURCES[source]
+    transport = Script(lambda r: Response(200, {"content-type": content_type}, ok_body(content_type)))
+    _, get, clock = make(tmp_path, transport, min_interval=1.5)
+    for n in range(3):
+        get(n)
+    assert clock.sleeps == [1.5] * (
+        len(transport.sent) - 1
+    )  # none before the first (OpenReview's: its login)
+
+
+@pytest.mark.parametrize("source", SOURCES)
+def test_offline_a_miss_is_an_error_never_a_request(tmp_path: Path, source: str) -> None:
+    make, _ = SOURCES[source]
+    transport = Script(lambda r: Response(200, {}, b""))
+    _, get, _ = make(tmp_path, transport, offline=True)
+    with pytest.raises(CacheMiss) as e:
+        get()
+    assert e.value.reason == "not_cached" and transport.sent == []
 
 
 def test_every_crawler_error_is_one_source_error() -> None:

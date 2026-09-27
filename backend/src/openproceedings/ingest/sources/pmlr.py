@@ -20,12 +20,12 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 
 from pydantic import ValidationError
 
 from openproceedings.ingest import urls
-from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Source, is_url
+from openproceedings.ingest.record import Claim, ClaimField, ClaimValue, PaperRecord, Source, is_url
 from openproceedings.ingest.sources.common import (
     ListingReport,
     MinerError,
@@ -88,14 +88,6 @@ def heading(text: str) -> tuple[int, str] | None:
     return None
 
 
-def _forum(href: str) -> str | None:
-    p = urlparse(href)
-    if p.netloc.lower() != "openreview.net" or p.path != "/forum":
-        return None
-    ids = parse_qs(p.query).get("id", [])
-    return ids[0] if len(ids) == 1 and FORUM_ID.fullmatch(ids[0]) else None
-
-
 def parse_volume_index(text: str, base: str) -> tuple[list[Entry], int]:
     """The entries on a volume index and the number of `<div class="paper">` blocks without an `abs` link."""
     entries: list[Entry] = []
@@ -108,7 +100,7 @@ def parse_volume_index(text: str, base: str) -> tuple[list[Entry], int]:
             unlinked += 1
             continue
         pdf = next((h for h in hrefs if h.endswith(".pdf") and "-supp" not in h and urls.pmlr(h)), None)
-        forum = next((f for h in hrefs if (f := _forum(h))), None)
+        forum = next((f for h in hrefs if (f := urls.forum_id(h))), None)
         title = _TITLE.search(body)
         authors = _AUTHORS.search(body)
         entries.append(
