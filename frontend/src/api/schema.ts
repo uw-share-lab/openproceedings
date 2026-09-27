@@ -95,7 +95,8 @@ export interface paths {
         /**
          * Get Paper
          * @description The paper with this id in the served index, as its snapshot holds it (the records loaded with that
-         *     very engine: one bundle, whatever swaps happen meanwhile).
+         *     very engine: one bundle, whatever swaps happen meanwhile); with `q`, whether that query matches it and
+         *     its highlights, as `/search` gives them.
          */
         get: operations["get_paper"];
         put?: never;
@@ -641,8 +642,15 @@ export interface components {
         };
         /** PaperResponse */
         PaperResponse: {
+            /** @description With `q`: the spans `/search` gives this paper as a hit for that query, over `paper.title` and `paper.abstract` (code points over the raw text); both lists empty when `matched` is false. Null without `q`. */
+            highlights: components["schemas"]["Highlights"] | null;
             /** Index Version */
             index_version: string;
+            /**
+             * Matched
+             * @description With `q`: whether the query (default filters included) matches this paper on this index, i.e. whether `/search` would count it in `total`. Null without `q`.
+             */
+            matched: boolean | null;
             paper: components["schemas"]["PaperRecord"];
             /** Query Version */
             query_version: string;
@@ -1327,7 +1335,12 @@ export interface operations {
     };
     get_paper: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Optional: a query (spec 02 grammar) whose highlights to return for this paper, admitted exactly as `/search` admits `q` (at most 2,000 code points, else 422 `PARSE_TOO_LONG`; one that doesn't parse is a 422 with its diagnostics). Without it, `matched` and `highlights` are null. */
+                q?: string | null;
+                /** @description `native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). Only with `q`: `scholar` without `q` is 422 `API_BAD_PARAM`. */
+                mode?: "native" | "scholar";
+            };
             header?: never;
             path: {
                 /** @description A paper id, `op:<venue>:<year>:<native>`. Any other shape is 422 `API_BAD_PARAM`. */
@@ -1361,6 +1374,17 @@ export interface operations {
             429: {
                 headers: {
                     /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
+            503: {
+                headers: {
+                    /** @description Sent with API_BUSY: whole seconds to wait before retrying */
                     "Retry-After"?: number;
                     [name: string]: unknown;
                 };

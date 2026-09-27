@@ -144,6 +144,19 @@ def run(
     return Search(total, hits, gone, expansions, counted)
 
 
+def highlight(engine: TantivyEngine, parsed: ParseResult, id: str) -> Spans | None:
+    """Paper `id`'s highlights for `parsed` on `engine` (it must hold `id`), as `run(..., highlight=True)` gives
+    them when `id` is a hit: the same display record, expansions and `Highlighter` (`GET /papers/{id}?q=`,
+    task-087). None when the query doesn't match the paper (its effective tree, default filters included):
+    no collection is run and nothing is position-verified; the evaluation is the highlighter's, which a test
+    holds to ReferenceEngine's verdict on every record."""
+    ast = parsed.effective_ast
+    if ast is None:
+        raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "a search needs a query that parses.")
+    expansions = expanded(engine, ast)
+    return Highlighter(ast, expansions).match(Shown.of(engine.display([id])[id]))
+
+
 def expanded(engine: TantivyEngine, ast: Node) -> Expansions:
     """Every wildcard of `ast` expanded on `engine`, before anything is compiled; an over-cap wildcard is
     refused as the engine's `EngineInputError` with `diagnostics` locating each one in `q` (what `/search`

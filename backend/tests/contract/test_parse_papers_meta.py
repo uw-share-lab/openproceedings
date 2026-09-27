@@ -106,7 +106,7 @@ def test_a_paper_is_its_full_snapshot_record(client: TestClient, store: Store) -
     r = client.get(f"/api/v1/papers/{hit['id']}")
     assert r.status_code == 200, r.text
     body = r.json()
-    assert set(body) == VERSIONS | {"paper"}
+    assert set(body) == VERSIONS | {"paper", "matched", "highlights"}
     versions_of(body, store)
     snapshot = load_records(store.indexes.parent / "snapshots" / "big")
     assert body["paper"] == snapshot[hit["id"]].model_dump(mode="json")

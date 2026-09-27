@@ -27,7 +27,7 @@ reviews without the UI.
   title containing an astral-plane character.
 - Errors use one shape: `{error: {code, message, diagnostics?: [Diagnostic]}}`. A query that doesn't parse
   is a `422` carrying 02's diagnostics (spans included) on every endpoint that **runs** it (`/search`,
-  `/export`, `POST /records`). `POST /parse` **reports** a parse: any well-formed body is a `200` whose
+  `/export`, `POST /records`, and `GET /papers/{id}` given a `q`). `POST /parse` **reports** a parse: any well-formed body is a `200` whose
   `errors` hold those same diagnostics; only a malformed body is a `422 API_BAD_PARAM`.
 - No authentication in v1. Rate limiting is per IP (a token bucket in the app, set in config). CORS
   allowlist comes from config.
@@ -74,7 +74,7 @@ reviews without the UI.
     `Content-Disposition`; every route's 405 declares `Allow` and its 429 `Retry-After` (not `/healthz`'s,
     which is never limited; the 429's description names every bucket that can refuse: the client's, its
     network's, a query's position-verified clauses, the save ceilings); every route that runs a query
-    (`/search`, `/export`, `POST /records`, `GET /records/{id}`, `/diff`) declares its 503 with `Retry-After`
+    (`/search`, `/export`, `/papers/{id}`, `POST /records`, `GET /records/{id}`, `/diff`) declares its 503 with `Retry-After`
     (sent with `API_BUSY`); `POST /records`'s 201 declares `Location`. CORS exposes all of them.
   - `info.version` is the API version, `v1`. operationIds are `verb_noun`: `search`, `parse_query`, `export`,
     `get_paper`, `get_coverage`, `get_meta`, `get_healthz`, `create_record`, `get_record`, `get_record_diff`.
@@ -87,7 +87,7 @@ reviews without the UI.
 |---|---|---|
 | `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side). Called as you type, debounced. |
 | `GET` | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
-| `GET` | `/papers/{id}` | The full record, provenance included |
+| `GET` | `/papers/{id}` | The full record, provenance included; with an optional `q` (and `mode`), whether that query matches it and its `highlights`, exactly as `/search` gives them for that paper (task-087) |
 | `GET` | `/export` | `format=ris\|csv\|bibtex\|jsonl` and either `q` (with `mode` and an optional `index_version`) or `record_id` (with `mode` at most `native`) → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; with `record_id`, exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if that index is gone, 409 `API_RECORD_MISMATCH` if its replay is a `mismatch`) |
 | `POST` | `/records` | Freezes a search as an immutable **search record** → 201 `{record_id, page}` plus the three versions, with `Location: /api/v1/records/<record_id>` |
 | `GET` | `/records/{id}` | The stored record, plus a replay check (see below) |
@@ -668,6 +668,36 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     `API_INDEX_NOT_LOADED`; on SIGHUP the old index keeps serving. It is never a record without its
     provenance, and never a re-hash per request. Only a snapshot file that becomes unreadable after the load
     is a per-request 500 `API_INTERNAL`.
+  - **Paper-page highlights (task-087).** `GET /papers/{id}` takes an optional `q` and `mode` (`native` |
+    `scholar`, default `native`) and always sends two more fields, `matched` and `highlights` (additive
+    under v1: a new optional parameter whose absence keeps the old answer, two new always-sent nullable
+    fields). Without `q` both are null. With `q`:
+    - `matched` is whether the **effective** query (the default filters included) matches the paper on the
+      served index: whether `/search` counts it in `total`. So a workshop paper whose text matches `trust` is
+      `matched: false` for `trust` (the default `track:main` removes it) and `true` for `trust track:workshop`.
+    - `highlights` is `{title, abstract}` in the `/search` hit's shape and span units (code points over the
+      raw stored text). For a matched paper they are **the spans `/search` gives that paper as a hit** for the
+      same `q`, `mode` and index: `search.highlight` builds the same `Highlighter` over the same display record
+      and the same wildcard expansions (`Highlighter.match`, which `/search`'s per-hit call wraps).
+      `tests/contract/test_paper_highlights.py` compares them hit by hit over every Trust-Evals protocol
+      string (Scholar mode) and a set of native queries on the 5k fixture, plus the astral-plane golden.
+    - A query that doesn't match the paper is **not an error**: `matched: false`, both highlight lists empty.
+      A query that matches only through filters (`venue:ICLR`) is `matched: true` with nothing lit.
+    - `q` is **admitted exactly as `/search` admits it**, so a `q` this route runs is one `/search` runs:
+      strict parameters (unknown or repeated is 422 `API_BAD_PARAM`; so is `mode=scholar` without `q`), the
+      2,000-code-point cap (`PARSE_TOO_LONG` before parsing), the parse (422 with its diagnostics), an
+      over-cap wildcard (its located 422), the verified-clause cap and per-clause charge (`deps.searchable`),
+      and the candidate ceiling (`deps.check_candidates`, 422 `API_QUERY_TOO_COSTLY`). The query is admitted
+      before the id is looked up, so an unknown paper with a verified `q` is charged and then 404. The route
+      declares the 503 `API_BUSY` as every query route does, but today never sends it: the paper's own text
+      is evaluated (the highlighter's verdict, which a unit test holds to ReferenceEngine's on every
+      fixture record), so no collection runs and nothing is position-verified, and no verification slot or
+      deadline applies. The access line carries the parse fields (`canonical_hash`, token count, codes,
+      `verified_clauses`), never `q`.
+    - Chosen over carrying the hit's spans from the `/search` response the reader came from (the other option
+      TASK-087 named): that way a direct or shared link to a paper page would show no highlights, the page
+      would depend on client state the URL doesn't hold (guarantee 3 keeps `q` as the only result-set state),
+      and a reload would lose them. The paper page links as `/paper/<id>?q=…&mode=…` instead (spec 05).
   - `GET /meta` answers the three versions, plus `index_versions` (every index this instance can serve,
     sorted, with the served one included; which are left out: §Implementation notes, pinned indexes), `text_fields` (`title`, `abstract`), `filter_fields` (`venue`,
     `year`, `track`, `status`), and `values` (`venue`, `track` and `status`: the vocabularies the parser checks
