@@ -75,7 +75,8 @@ would read, summed; absent with none) and `verify_ms` (the time it held a verifi
 held none; added by `IndexState.verification_slot` through the `errors.current_access` context variable,
 the request having no handle there). A request whose slot holds pass `slow_verification_seconds` logs one
 `verification_slow` WARNING (`verify_ms`, `threshold_ms`): every other cold verification was refused
-meanwhile. Health checks log at DEBUG. An unexpected failure is one `request_failed` ERROR line beside it: `code`, `error`, `frames`,
+meanwhile. `verify_tokens` is what that slot time was debited after the fact (`RateLimit`). A facet worker
+that would have had to verify (a bug) logs `facet_worker_recounted` (WARNING) and the caller recounts. Health checks log at DEBUG. An unexpected failure is one `request_failed` ERROR line beside it: `code`, `error`, `frames`,
 and for a wrapped one (only then: never `cause: null`) `cause`, `cause_frames` (where it really failed: Starlette wraps an error its handler
 catches after a stream started in a RuntimeError whose frames stop at the handler) and `cause_reason`. `status` is what the client was sent. If a handler fails after the response started (a
 stream cut short), the line adds `aborted: true`, beside that failure's one `request_failed` ERROR line;

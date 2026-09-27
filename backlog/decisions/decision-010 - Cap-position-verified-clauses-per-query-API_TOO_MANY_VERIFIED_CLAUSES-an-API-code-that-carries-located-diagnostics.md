@@ -95,4 +95,24 @@ API runs it.
 - A refusal after the verified charge was taken (`API_QUERY_TOO_COSTLY`, or `API_BUSY` from a slot) gives
   the charge back; within a request every compile shares the ids it verified (`tantivy_engine.Scope`), so no
   clause is verified twice however the memos are trimmed, and the facet worker never verifies (no slot).
+- **Width is free; candidates stay the bound (round 4).** A wildcard phrase's position check rebuilt each
+  item's allowed-token set (up to 200 expansions) per candidate document, so its cost grew as width ×
+  expansions × candidates while the candidate count stayed flat: a `rel*` phrase at 80k (186 expansions,
+  83,017 candidates at any width) took 3.8 s at 2 items, 5.9 s at 20, 15.4 s at 100 and 84 s at 300 (the
+  reviewer's run: 3.8, 6.0, 15.9, 27.4 s at 2, 20, 100, 200), all admitted as one clause. The sets are now
+  built once per clause (`Compiler.holder`), and the same clauses take 3.3, 3.3, 3.2, 3.3 and 3.1 s at 2,
+  20, 100, 200 and 300 items: about 38-40 µs per candidate whatever the width. So the candidate count
+  measures the work again and no weighting by items or expansions, nor a cap on a phrase's wildcard items,
+  is needed. What remains width-sensitive is only a run of consecutive matching tokens in one document
+  (each start is checked until an item fails), bounded by the document's length, which the corpus sets,
+  not the query. Identical ids are held by the differential suite and ReferenceEngine on wide and mixed
+  clauses (`tests/unit/engine/test_verification_cost.py`).
+- **Slot time is charged after the fact (round 4).** The up-front charge prices a clause, not the seconds
+  it holds the one slot: a cold one-clause query cost 4.75 tokens and held it 4-6 s at 80k, and a client
+  refilling 1 token a second (4 a network) could keep it busy by varying a NEAR distance (each variant is
+  cold). A request is now also debited one token per `verify_token_ms` (default 100 ms) of the slot time it
+  used, when it finishes, to its client's and network's buckets, which may go below zero; the client then
+  waits (429, `Retry-After`) until the debt is repaid. Any one client's share of the slot is thus at most
+  refill × `verify_token_ms`: 10% at the defaults, 40% for a network. The per-clause charge stays as the
+  admission cost; a refused query's per-clause charge is refunded, but the time it used is still debited.
 - Revisit if cold verification gets cheaper (task-080's successors) or runs outside the request.

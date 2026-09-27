@@ -94,9 +94,15 @@ class Scope:
         return Scope(self.ids, may_verify=False)
 
 
+class WouldVerify(EngineInternalError):
+    """A read-only scope (`Scope.reader`) met a clause it doesn't hold: a bug in what the request recorded,
+    never the client's. `search.run` recounts the facets in the caller (which may verify) when its worker
+    raises it, so the client still gets its answer."""
+
+
 @contextmanager
 def _never_verify() -> Iterator[None]:
-    raise EngineInternalError(
+    raise WouldVerify(
         DiagnosticCode.API_INTERNAL,
         "a request's facet worker met a clause its compile hadn't verified: it never verifies (task-088)",
     )
@@ -108,7 +114,9 @@ class Overlay:
     engine's memo. A request holds its own ids to its end, so a memo trimmed under it (by its own compile, by its
     facet worker's, or by another request's) never makes it verify a clause twice: its worker and its page read
     them here and never enter the verification gate for them (M3a review gate round 3). Each lookup is one
-    `.get` per dict (task-080), never `in` then `[key]` (so not a `ChainMap`, whose `get` is exactly that)."""
+    `.get` per dict (task-080), never `in` then `[key]` (so not a `ChainMap`, whose `get` is exactly that).
+    A hit in the shared memo is recorded in `local` too (one store of a complete list), so the request keeps
+    every clause its compiles read, warm or cold, however the memo is trimmed afterwards (round 4)."""
 
     __slots__ = ("local", "shared")
 
@@ -117,7 +125,11 @@ class Overlay:
 
     def get(self, key: tuple[str, str], /) -> list[str] | None:
         ids = self.local.get(key)
-        return ids if ids is not None else self.shared.get(key)
+        if ids is None:
+            ids = self.shared.get(key)
+            if ids is not None:
+                self.local[key] = ids  # the request's now: a later trim of the memo can't take it away
+        return ids
 
 
 class TantivyEngine:
@@ -396,6 +408,12 @@ class TantivyEngine:
         key = ast.model_dump_json()
         hit = self.compiled.get(key)  # one read: the memo may be cleared by another thread at any time
         if hit is not None:
+            # the request holds the tree's verified ids as if it had compiled it (round 4). Carried in the entry
+            # rather than skipping the memo for a scope: a skip would recompile every search (task-076's
+            # headroom), while these are the very lists the compiled query holds, already charged in `held`
+            if scope is not None:
+                for clause, ids in hit.ids.items():  # the entry's own dict, complete and never changed
+                    scope.ids[clause] = ids
             return self._copy(hit)
         self._trim("compiled", self.compiled, self.MAX_COMPILED_UNITS)
         store = self._store_verified
@@ -458,7 +476,9 @@ class TantivyEngine:
     @staticmethod
     def _copy(compiled: Compiled) -> Compiled:
         """The memo's entry with its own lists, so a caller can't change what later callers get."""
-        return dataclasses.replace(compiled, explain=list(compiled.explain), verified=list(compiled.verified))
+        return dataclasses.replace(
+            compiled, explain=list(compiled.explain), verified=list(compiled.verified), ids=dict(compiled.ids)
+        )
 
     def explain(self, ast: Node) -> str:
         """The compiled query as a readable tree, its wildcard expansions and verified clauses (op search

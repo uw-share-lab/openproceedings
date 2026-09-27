@@ -34,6 +34,8 @@ from tests.contract.conftest import Store, make_app
 from tests.contract.test_abuse_limits import VERIFIED, error
 
 SEARCH = "/api/v1/search"
+# these tests count the up-front per-clause charge alone: slot time all but free (its debit: test_abuse_limits_r4)
+SLOT_FREE = 1e9
 Logs = Callable[[], list[dict[str, Any]]]
 
 
@@ -87,7 +89,9 @@ def test_the_default_cap_is_16_clauses() -> None:
 
 
 def test_each_verified_clause_costs_the_verified_weight(store: Store) -> None:
-    limit = RateLimit(capacity=25, refill_per_second=0.001, export_weight=10, verified_weight=10)
+    limit = RateLimit(
+        capacity=25, refill_per_second=0.001, export_weight=10, verified_weight=10, verify_token_ms=SLOT_FREE
+    )
     with TestClient(make_app(store.indexes.parent, rate_limit=limit, max_verified_clauses=2)) as c:
         assert c.get(SEARCH, params={"q": many_verified(2)}).status_code == 200  # 20 of 25
         assert c.get(SEARCH, params={"q": "trust"}).status_code == 200  # 21
@@ -122,7 +126,9 @@ def test_a_cap_times_a_weight_over_the_bucket_is_refused_so_no_clause_rides_free
 
 
 def test_a_query_at_the_cap_empties_the_bucket_exactly(store: Store) -> None:
-    limit = RateLimit(capacity=24, refill_per_second=0.001, export_weight=10)  # 8 per clause, cap 3
+    limit = RateLimit(
+        capacity=24, refill_per_second=0.001, export_weight=10, verify_token_ms=SLOT_FREE
+    )  # 8 per clause, cap 3
     with TestClient(make_app(store.indexes.parent, rate_limit=limit, max_verified_clauses=3)) as c:
         assert c.get(SEARCH, params={"q": many_verified(3)}).status_code == 200  # 24 of 24
         error(c.get(SEARCH, params={"q": "trust"}), 429, "API_RATE_LIMITED")  # the bucket is empty
@@ -131,7 +137,9 @@ def test_a_query_at_the_cap_empties_the_bucket_exactly(store: Store) -> None:
 def test_a_replay_is_charged_per_verified_clause(data_dir: Path) -> None:
     with TestClient(make_app(data_dir)) as c:
         rid = c.post("/api/v1/records", json={"q": many_verified(2)}).json()["record_id"]
-    limit = RateLimit(capacity=30, refill_per_second=0.001, export_weight=10, verified_weight=10)
+    limit = RateLimit(
+        capacity=30, refill_per_second=0.001, export_weight=10, verified_weight=10, verify_token_ms=SLOT_FREE
+    )
     with TestClient(make_app(data_dir, rate_limit=limit, max_verified_clauses=2)) as c:
         assert c.get(f"/api/v1/records/{rid}").status_code == 200  # 10 on the way in, 20 for its clauses
         error(c.get(f"/api/v1/records/{rid}/diff"), 429, "API_RATE_LIMITED")  # 10 in, then 10 more: no

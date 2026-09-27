@@ -41,6 +41,32 @@ EXPLOIT_16 = " OR ".join(f"({w} NEAR/{k} {w})" for w in ("a", "the", "model", "4
 NORMAL = ("trust NEAR/5 model", '"trust calibrat*"', "trust NEAR/5 model*", '"large language model*"')
 
 
+def wide(width: int, stem: str) -> str:
+    return '"' + " ".join([stem] * width) + '"'
+
+
+def cold_ms(c: TestClient, q: str) -> float:
+    """A served query's cold verification time, from its access line's `verify_ms` (the slot time)."""
+    engine = c.app.state.index.engine  # type: ignore[attr-defined]
+    engine.verified.clear()
+    engine.compiled.clear()
+    engine.faceted.clear()
+    started = time.perf_counter()
+    r = c.get(SEARCH, params={"q": q})
+    assert r.status_code == 200, r.text[:300]
+    return (time.perf_counter() - started) * 1000
+
+
+def width_is_free(c: TestClient, stem: str, widths: tuple[int, ...]) -> dict[int, float]:
+    """Round 4: a wildcard phrase's cold time doesn't grow with its width (its candidates don't, and the
+    token sets are built once per clause); each width is admitted and served. Before, a 300-item `rel*`
+    phrase took 84 s at 80k against 3.8 s for 2 items, all admitted as one clause."""
+    times = {w: cold_ms(c, wide(w, stem)) for w in widths}
+    narrow = times[widths[0]]
+    assert all(t < 2 * narrow + 500 for t in times.values()), times
+    return times
+
+
 def refused_fast(c: TestClient, q: str, clauses: int) -> None:
     engine = c.app.state.index.engine  # type: ignore[attr-defined]
 
@@ -85,6 +111,7 @@ def test_the_exploit_is_refused_and_every_review_query_served_at_the_scaled_ceil
         for q in NORMAL:
             assert c.get(SEARCH, params={"q": q}).status_code == 200, q
         every_trust_evals_string_is_served(c)
+        width_is_free(c, "tru*", (2, 20, 100, 300))
 
 
 def test_main_2_pop_needs_more_than_the_old_cap_of_8() -> None:
@@ -106,3 +133,4 @@ def test_the_exploit_is_refused_and_every_review_query_served_at_80k(tmp_path: P
         for q in NORMAL:
             assert c.get(SEARCH, params={"q": q}).status_code == 200, q
         every_trust_evals_string_is_served(c)
+        width_is_free(c, "rel*", (2, 20, 100, 200, 300))
