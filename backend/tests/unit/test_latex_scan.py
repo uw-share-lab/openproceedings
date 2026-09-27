@@ -30,9 +30,9 @@ def test_the_tables_answer_exactly_what_the_scans_do(text: str) -> None:
 def fastest(f: Callable[[str], object], arg: str) -> float:
     best = float("inf")
     for _ in range(9):  # best of 9: headroom when the machine is busy
-        t = time.perf_counter()
+        t = time.thread_time()  # CPU time: being preempted on a busy machine doesn't count
         f(arg)
-        best = min(best, time.perf_counter() - t)
+        best = min(best, time.thread_time() - t)
     return best
 
 

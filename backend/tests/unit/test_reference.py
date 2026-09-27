@@ -236,3 +236,10 @@ def test_facets_enforce_the_cap_even_with_no_fields() -> None:
     assert tree is not None
     with pytest.raises(EngineInputError):
         engine.facets(tree, ())
+
+
+def test_the_oracles_text_fields_are_the_vocabularys() -> None:
+    from openproceedings.engine import reference
+    from openproceedings.vocab import TEXT_FIELDS
+
+    assert reference.TEXT_FIELDS == TEXT_FIELDS  # its own copy (isolation), never a different set

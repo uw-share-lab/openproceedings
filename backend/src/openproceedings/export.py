@@ -8,11 +8,11 @@ openproceedings id, so an export round-trips to the ids it came from.
 - RIS (for Covidence): `TY  - CPAPER`, TI, AB, one AU per author, PY, T2 (the proceedings name), UR (forum,
   then pdf, then proceedings), DO, ID, KW (the track), N1 (provenance), ER. RIS is line-based, so line
   breaks inside a value become single spaces.
-- CSV: the record fields of spec 01 plus `index_version` and `canonical_hash`, UTF-8 with a BOM (Excel).
+- CSV: the record fields of spec 01 plus `index_version`, `canonical_hash` and `exported_at`, UTF-8 with a BOM (Excel).
   Lists (authors, keywords) are joined with "; ".
 - BibTeX: `@inproceedings`, keyed `<first author's last name><year><first title word>` (ASCII, lower-case),
   a repeat key suffixed a, b, …; `note` holds the provenance and `openproceedings_id` the id.
-- JSONL: one JSON object per record, with `index_version` and `canonical_hash`.
+- JSONL: one JSON object per record, with `index_version`, `canonical_hash` and `exported_at`.
 """
 
 from __future__ import annotations
@@ -155,11 +155,17 @@ def _ascii(text: str) -> str:
     return unicodedata.normalize("NFKD", text.translate(_LETTERS)).encode("ascii", "ignore").decode().lower()
 
 
+def _family(name: str) -> str:
+    """The family name: before the comma in "Family, Given" (how every stored author is written), else the
+    last word ("Given Family")."""
+    return name.split(",", 1)[0] if "," in name else name.split()[-1]
+
+
 def bibtex_key(r: dict[str, Any]) -> str:
-    """`<first author's last name><year><first title word>`, ASCII and lower-case; the title word is the first
+    """`<first author's family name><year><first title word>`, ASCII and lower-case; the title word is the first
     run of letters and digits (`=HYPERLINK("…")` gives `hyperlink`)."""
     authors = [a for a in r.get("authors") or [] if a.split()]
-    last = re.sub(r"[^a-z0-9]", "", _ascii(authors[0].split()[-1])) if authors else ""
+    last = re.sub(r"[^a-z0-9]", "", _ascii(_family(authors[0]))) if authors else ""
     word = re.search(r"[a-z0-9]+", _ascii(r["title"]))
     return f"{last or 'anon'}{r['year']}{word.group() if word else 'untitled'}"
 
@@ -172,6 +178,10 @@ def _balances(text: str, *, escaped_count: bool) -> bool:
     `\\{` do (escaped ones skipped). A value is kept as written only when both agree it nests."""
     depth = 0
     for m in _BRACE.finditer(text):
+        if (
+            len(m.group(1)) >= 2
+        ):  # `\\{`: readers disagree (bibtexparser 2 reads it as escaped), so never keep it
+            return False
         if not escaped_count and len(m.group(1)) % 2 == 1:
             continue
         depth += 1 if text[m.end() - 1] == "{" else -1
@@ -208,7 +218,10 @@ def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             key, n = base + _suffix(n), n + 1
         issued.add(key)
         fields = [("title", _braced(r["title"]))]
-        names = [_name(a) for a in r.get("authors") or [] if a.split()]
+        # each name brace-free before it's protected, so one stray brace can't unbrace the others
+        names = [
+            _name(_one_line(a).replace("{", "").replace("}", "")) for a in r.get("authors") or [] if a.split()
+        ]
         if names:
             fields.append(("author", _braced(" and ".join(names))))
         fields += [("booktitle", _braced(proceedings_name(r["venue"], r["year"]))), ("year", str(r["year"]))]

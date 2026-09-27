@@ -44,7 +44,9 @@ from openproceedings.query.ast import (
     YearRange,
 )
 from openproceedings.query.normalize import normalize
-from openproceedings.vocab import TEXT_FIELDS
+
+# its own copy: the oracle imports only the AST, the token contract and the protocol (a test pins it to vocab)
+TEXT_FIELDS: tuple[TextField, ...] = ("title", "abstract")
 
 
 @dataclass(frozen=True, slots=True)

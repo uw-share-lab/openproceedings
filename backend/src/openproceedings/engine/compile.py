@@ -44,7 +44,8 @@ from openproceedings.query.ast import (
 from openproceedings.vocab import TEXT_FIELDS
 
 FIELDS = TEXT_FIELDS  # the searched fields (vocab)
-Expansions = dict[tuple[str, str], tuple[str, ...]]  # (stem, op) → the sorted expanded terms
+# (stem, op) → the sorted expanded terms: the concrete form protocol.Expansions narrows to, as the compiler reads it
+Expansions = dict[tuple[str, str], tuple[str, ...]]
 # A field's stored token stream for each candidate document: (doc address, field) → tokens
 TokenReader = Callable[[tantivy.Query, TextField], Iterator[tuple[str, list[str]]]]
 

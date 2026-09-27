@@ -216,7 +216,15 @@ def render(result: DedupResult, reports: Sequence[ImportReport], built_at: datet
     }
 
 
-AUDITED = ("files", "tokenizer_version", "record_schema_version")  # what a rebuild must reproduce exactly
+AUDITED = ("files", "tokenizer_version", "record_schema_version")
+AUDIT_FILES = ("merges.csv", "conflicts.csv")
+
+
+def _audit(snapshot: Path) -> dict[str, str]:
+    """The audit files' hashes, as a manifest's `files` records them (both, always)."""
+    return {
+        f: _sha256((snapshot / f).read_bytes()) for f in AUDIT_FILES
+    }  # what a rebuild must reproduce exactly
 
 
 def _holds(snapshot: Path, snapshot_hash: str, fresh: dict[str, Any] | None = None) -> bool:
@@ -228,7 +236,7 @@ def _holds(snapshot: Path, snapshot_hash: str, fresh: dict[str, Any] | None = No
     try:
         manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
         records = (snapshot / "records.jsonl").read_bytes()
-        audit = {f: _sha256((snapshot / f).read_bytes()) for f in ("merges.csv", "conflicts.csv")}
+        audit = _audit(snapshot)
     except (OSError, ValueError):
         return False
     return (
@@ -306,15 +314,12 @@ def iter_records(snapshot: Path) -> Iterator[PaperRecord]:
         raise SnapshotError(f"{snapshot.name} is not a snapshot ({type(e).__name__})") from None
     if expected != digest.hexdigest():
         raise SnapshotError(f"{snapshot.name}: records.jsonl doesn't match its manifest's snapshot_hash")
-    for name, recorded in (
-        manifest.get("files") or {}
-    ).items():  # the audit files, as the manifest hashed them
-        try:
-            actual = _sha256((snapshot / name).read_bytes())
-        except OSError:
-            actual = None
-        if actual != recorded:
-            raise SnapshotError(f"{snapshot.name}: {name} doesn't match its manifest")
+    try:  # the audit files, both of them, exactly as the manifest hashed them (the check _holds makes too)
+        matches = manifest.get("files") == _audit(snapshot)
+    except OSError:
+        matches = False
+    if not matches:
+        raise SnapshotError(f"{snapshot.name}: merges.csv or conflicts.csv doesn't match its manifest")
 
 
 def load_records(snapshot: Path) -> dict[str, PaperRecord]:

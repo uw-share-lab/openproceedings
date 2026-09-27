@@ -21,7 +21,7 @@ import time
 from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from openproceedings import __version__
 from openproceedings.logs import FORMATS as LOG_FORMATS
@@ -284,6 +284,8 @@ def _search(ns: argparse.Namespace) -> int:
     from openproceedings.engine.tantivy_engine import TantivyEngine
 
     started = time.perf_counter()
+    with contextlib.suppress(AttributeError, ValueError):  # UTF-8 whatever the locale, as `op export` writes
+        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     result = _parsed(ns)  # a bad query is reported first, whatever the index
     if result is None:
         return 1
@@ -313,7 +315,7 @@ def _search(ns: argparse.Namespace) -> int:
         return 0
     total, page = engine.page(ast, sort=ns.sort, limit=ns.limit)  # one collection: ids and scores
     gone = excluded(engine, result, total)
-    for line in _report(engine, result, total, gone):
+    for line in _report(engine, result, total, gone, _snapshot_of(ns, path)):
         print(line)
     shown = engine.display([i for i, _score in page])
     for rank, (i, score) in enumerate(page, 1):
@@ -323,36 +325,69 @@ def _search(ns: argparse.Namespace) -> int:
     return 0
 
 
-def _report(engine: TantivyEngine, result: ParseResult, total: int, gone: Excluded) -> list[str]:
-    """The PRISMA-ready header of a ranked search (prisma-reporting skill): when and what was searched, the
-    records identified within the query's own limits, those the default filters removed (ineligible by
-    track or status), the unclassified ones on their own line, and the screened total; then the strings
-    that reproduce them and every wildcard expansion (guarantee 6)."""
+def _report(
+    engine: TantivyEngine, result: ParseResult, total: int, gone: Excluded, snapshot: dict[str, Any] | None
+) -> list[str]:
+    """The PRISMA-ready header of a ranked search (prisma-reporting skill): when it was searched and against
+    what (the index, its crawl date, the versions); a caution when the index holds only a bootstrap corpus,
+    whose counts are not identification numbers (spec 01); the records identified within the query's own
+    limits; those the default filters removed, ineligible (track or status) and unclassified apart; the
+    screened total; then the strings that reproduce them and every wildcard expansion (guarantee 6)."""
     from datetime import UTC, datetime
 
     from openproceedings.query import QUERY_VERSION
     from openproceedings.query.normalize import TOKENIZER_VERSION
 
-    removed = "; ".join(
+    ineligible = "; ".join(
         f"{f}: " + (", ".join(f"{v} {n}" for v, n in b.items() if v != "unknown") or "none")
         for f, b in (("track", gone.track), ("status", gone.status))
     )
     unclassified = gone.track["unknown"] + gone.status["unknown"]
     searched = datetime.now(UTC).strftime("%Y-%m-%dT%H:%MZ")
+    crawl = (snapshot or {}).get("crawl_date", "unknown (snapshot not found)")
     lines = [
-        f"searched {searched} · index {engine.index_version} · tokenizer {TOKENIZER_VERSION} · query {QUERY_VERSION}",
+        f"searched {searched} · index {engine.index_version} · crawl {crawl} · tokenizer {TOKENIZER_VERSION} "
+        f"· query {QUERY_VERSION}"
+    ]
+    sources = sorted((snapshot or {}).get("sources") or {})
+    if sources and set(sources) <= BOOTSTRAP_SOURCES:
+        lines.append(
+            f"note: bootstrap corpus (sources: {', '.join(sources)}): these counts describe that corpus, "
+            "not a database; they are not PRISMA identification numbers (spec 01)"
+        )
+    lines += [
         f"identified {total + gone.total} (within the query's own limits)",
-        f"removed by default filters {gone.total - unclassified} ({removed})",
-        f"unclassified, removed by default filters {unclassified} "
-        f"(track unknown {gone.track['unknown']}, status unknown {gone.status['unknown']})",
+        f"removed by default filters {gone.total}: ineligible {gone.total - unclassified} ({ineligible}), "
+        f"unclassified {unclassified} (track unknown {gone.track['unknown']}, status unknown {gone.status['unknown']})",
         f"screened (total) {total}",
         f"canonical: {result.canonical}",
         f"identification: {result.identification_query or '(every record)'}",
     ]
     for (stem, op), terms in sorted(engine.expansions(result.effective_ast).items()):  # type: ignore[arg-type]
-        shown = ", ".join(list(terms)[:10]) + (", …" if len(terms) > 10 else "")
-        lines.append(f"expansion: {stem}{op} → {len(terms)} terms ({shown})")
+        listed = list(terms)
+        shown = ", ".join(listed[:10]) + (", …; every term with --explain" if len(listed) > 10 else "")
+        lines.append(f"expansion: {stem}{op} → {len(listed)} term{'' if len(listed) == 1 else 's'} ({shown})")
     return lines
+
+
+BOOTSTRAP_SOURCES = {"ris"}  # an index built only from these holds an earlier search's output, not a database
+
+
+def _snapshot_of(ns: argparse.Namespace, index: Path) -> dict[str, Any] | None:
+    """The manifest of the snapshot an index was built from, if it's in <data-dir>/snapshots and is that
+    snapshot (same hash); None otherwise (the header then says the crawl date is unknown)."""
+    try:
+        manifest = json.loads((index / "manifest.json").read_text(encoding="utf-8"))
+        snap = json.loads(
+            (ns.data_dir / "snapshots" / manifest["snapshot"] / "manifest.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return (
+        snap
+        if isinstance(snap, dict) and snap.get("snapshot_hash") == manifest.get("snapshot_hash")
+        else None
+    )
 
 
 def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:

@@ -208,14 +208,16 @@ def test_a_closed_pipe_stops_quietly(
 def test_op_search_ranks_and_reports_exclusions(data_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert run(data_dir, "search", "trust", "--limit", "3") == 0
     out = capsys.readouterr().out.splitlines()
-    # PRISMA-ready: when and against what; identified, removed (ineligible, then unclassified), screened
+    # PRISMA-ready: when and against what (the crawl date from the snapshot); identified, removed, screened
     assert re.fullmatch(
-        r"searched \d{4}-\d\d-\d\dT\d\d:\d\dZ · index \w{12} · tokenizer \d+ · query \d+", out[0]
+        r"searched \d{4}-\d\d-\d\dT\d\d:\d\dZ · index \w{12} · crawl \d{4}-\d\d-\d\d · tokenizer \d+ · query \d+",
+        out[0],
     )
-    assert out[1:5] == [
+    assert out[1].startswith("note: bootstrap corpus (sources: ris)")  # the fixture snapshot is RIS-only
+    assert out[2:5] == [
         "identified 7 (within the query's own limits)",
-        "removed by default filters 1 (track: workshop 1; status: none)",
-        "unclassified, removed by default filters 0 (track unknown 0, status unknown 0)",
+        "removed by default filters 1: ineligible 1 (track: workshop 1; status: none), "
+        "unclassified 0 (track unknown 0, status unknown 0)",
         "screened (total) 6",
     ]
     assert out[5].startswith("canonical: ") and out[6] == "identification: trust"
@@ -223,6 +225,83 @@ def test_op_search_ranks_and_reports_exclusions(data_dir: Path, capsys: pytest.C
     assert [line.split()[0] for line in ranked] == ["1.", "2.", "3."]
     scores = [float(line.split()[1]) for line in ranked]
     assert scores == sorted(scores, reverse=True) and scores[0] > 0
+
+
+def test_the_header_splits_ineligible_from_unclassified(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # identified 9 = removed 7 (ineligible 3: workshop 2, rejected 1; unclassified 4: track unknown 2, status
+    # unknown 2) + screened 2; the track bucket is assigned first (a workshop paper that's also rejected)
+    rows = [("main", "accepted"), ("main", "accepted"), ("workshop", "accepted"), ("workshop", "rejected"),
+            ("main", "rejected"), ("unknown", "accepted"), ("unknown", "rejected"), ("main", "unknown"),
+            ("position", "unknown")]  # fmt: skip
+    corpus = [paper(f"Pq{i:04d}", "trust", abstract=None, venue="ICLR", year=2024, track=t, status=st)
+              for i, (t, st) in enumerate(rows)]  # fmt: skip
+    build_index(snapshot_of(corpus, tmp_path / "snapshots" / "s"), tmp_path / "indexes")
+    assert (
+        main(
+            [
+                "--data-dir",
+                str(tmp_path),
+                "search",
+                "trust",
+                "--limit",
+                "0",
+                "--index",
+                index_of(tmp_path).name,
+            ]
+        )
+        == 0
+    )
+    out = capsys.readouterr().out.splitlines()
+    assert out[2:5] == [
+        "identified 9 (within the query's own limits)",
+        "removed by default filters 7: ineligible 3 (track: workshop 2; status: rejected 1), "
+        "unclassified 4 (track unknown 2, status unknown 2)",
+        "screened (total) 2",
+    ]
+
+
+def test_a_bootstrap_corpus_says_its_counts_arent_identification_numbers(data_dir: Path) -> None:
+    from openproceedings.cli import _report
+    from openproceedings.engine.exclusions import excluded
+
+    engine = TantivyEngine(index_of(data_dir))
+    result = parse("trust*")
+    total = len(engine.match_ids(result.effective_ast))  # type: ignore[arg-type]
+    gone = excluded(engine, result, total)
+    ris_only = _report(engine, result, total, gone, {"crawl_date": "2026-09-23", "sources": {"ris": []}})
+    assert " · crawl 2026-09-23 · " in ris_only[0]
+    assert (
+        ris_only[1].startswith("note: bootstrap corpus (sources: ris)")
+        and "not PRISMA identification" in ris_only[1]
+    )
+    crawled = _report(
+        engine, result, total, gone, {"crawl_date": "2026-09-23", "sources": {"ris": [], "openreview": []}}
+    )
+    assert not any(line.startswith("note:") for line in crawled)
+    unknown = _report(engine, result, total, gone, None)
+    assert " · crawl unknown (snapshot not found) · " in unknown[0]
+    assert unknown[-1] == "expansion: trust* → 2 terms (trust, trusta)"
+
+
+def test_an_expansion_line_says_term_or_terms_and_where_the_rest_are(data_dir: Path) -> None:
+    from types import SimpleNamespace
+
+    from openproceedings.cli import _report
+    from openproceedings.engine.exclusions import Excluded
+
+    engine = SimpleNamespace(
+        index_version="x" * 12,
+        expansions=lambda _ast: {("a", "*"): tuple(f"a{i:02d}" for i in range(12)), ("b", "$"): ("b",)},
+    )
+    result = parse("a* b$")
+    lines = _report(engine, result, 0, Excluded(0, {"unknown": 0}, {"unknown": 0}), None)  # type: ignore[arg-type]
+    assert (
+        "expansion: a* → 12 terms (a00, a01, a02, a03, a04, a05, a06, a07, a08, a09, …; every term with --explain)"
+        in lines
+    )
+    assert "expansion: b$ → 1 term (b)" in lines
 
 
 def test_op_search_shows_every_wildcard_expansion(data_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -334,10 +413,15 @@ def test_ris_reads_back_with_an_independent_parser(data_dir: Path) -> None:
     from scholarmend.parse import parse_ris
 
     text, n = exported(data_dir, "ris")
-    records = parse_ris(text, "export.ris")
-    assert len(records) == n == 8
-    first = next(r for r in records if "AbCd0001" in str(r))
-    assert "Ana Pérez" in str(first) and "Across two lines" in str(first)
+    parsed = {r.first("ID"): r for r in parse_ris(text, "export.ris")}
+    engine = TantivyEngine(index_of(data_dir))
+    stored = {d["id"]: d for d in engine.documents(parse(ALL).effective_ast)[1]}  # type: ignore[arg-type]
+    assert len(parsed) == n == len(stored)
+    for rid, d in stored.items():  # every field, every record: title, abstract, ordered authors, year
+        r = parsed[rid]
+        assert r.fields["TI"] == [" ".join(d["title"].split())]
+        assert r.fields.get("AB", []) == ([" ".join(d["abstract"].split())] if d["abstract"] else [])
+        assert r.fields.get("AU", []) == d["authors"] and r.fields["PY"] == [str(d["year"])]
 
 
 def test_jsonl_escapes_unicode_line_separators_and_carries_the_date() -> None:
@@ -405,3 +489,59 @@ def test_a_long_build_and_a_parity_check_say_so(
         == 0
     )
     assert "index_parity_ok" in [e["event"] for e in logged(capsys.readouterr().err)]
+
+
+def test_bibtex_keys_take_the_family_name_before_a_comma() -> None:
+    assert (
+        bibtex_key({"authors": ["Gödel, Kurt"], "year": 1931, "title": "On formally undecidable"})
+        == "godel1931on"
+    )
+    assert bibtex_key({"authors": ["van der Berg, Ada"], "year": 2024, "title": "X"}) == "vanderberg2024x"
+    assert bibtex_key({"authors": ["Kurt Gödel"], "year": 1931, "title": "On"}) == "godel1931on"
+
+
+def test_one_names_stray_brace_never_unbraces_the_others() -> None:
+    record = {"id": "x", "title": "t", "year": 2024, "venue": "ICLR", "authors": ["Jo{hn Doe", "X and Y"]}
+    (entry,) = parse_string("".join(export._bibtex([record], PROVENANCE)))
+    assert entry.fields["author"] == "John Doe and {X and Y}"
+
+
+def test_a_brace_after_a_backslash_run_is_never_kept() -> None:
+    # `\\{b}` nests for BibTeX and for parsers that honour `\{`, but bibtexparser 2 reads the brace as escaped
+    assert export._braced("a \\\\{b} c") == "{a \\\\b c}"
+
+
+def test_ris_urls_and_dois_stay_on_one_line_even_if_they_got_past_ingest() -> None:
+    record = {"id": "x", "title": "t", "year": 2024, "venue": "ICLR", "track": "main", "authors": [],
+              "urls": {"forum": "https://a/b\nER  - \nTY  - JOUR", "pdf": None, "proceedings": None,
+                       "doi": "10.1/x\u2028TY  - JOUR"}}  # fmt: skip
+    text = "".join(export._ris([record], PROVENANCE))
+    assert text.count("TY  - ") == 1 and text.count("ER  - ") == 1
+
+
+def test_a_parity_failure_logs_at_error_without_its_tokens(
+    data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from openproceedings.engine import parity
+
+    def broken(*_args: object, **_kw: object) -> object:
+        raise parity.ParityError("op:x: title token 1: the index has 'SENTINELTOKEN', normalize() gives 'y'")
+
+    monkeypatch.setattr(parity, "check_parity", broken)
+    index = index_of(data_dir)
+    assert main(["--data-dir", str(data_dir), "index", "parity", "--index", str(index)]) == 1
+    err = capsys.readouterr().err
+    (entry,) = [e for e in logged(err) if e.get("event") == "cli_refused"]
+    assert (entry["level"], entry["error"]) == ("ERROR", "ParityError")  # a broken guarantee
+    assert all("SENTINELTOKEN" not in json.dumps(e) for e in logged(err))  # the tokens stay on the terminal
+    assert "SENTINELTOKEN" in err
+    monkeypatch.undo()
+    other = snapshot_of(CORPUS[:2], tmp_path / "other")  # the wrong snapshot: operator error, a WARNING
+    assert (
+        main(
+            ["--data-dir", str(data_dir), "index", "parity", "--index", str(index), "--snapshot", str(other)]
+        )
+        == 1
+    )
+    (entry,) = [e for e in logged(capsys.readouterr().err) if e.get("event") == "cli_refused"]
+    assert (entry["level"], entry["error"]) == ("WARNING", "IndexBuildError")

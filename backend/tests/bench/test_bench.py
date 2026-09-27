@@ -52,6 +52,7 @@ def p95(benchmark: Any) -> float | None:
 def measure(benchmark: Any, f: Callable[[], object]) -> object:
     """ROUNDS rounds of at least ~1 ms each: a sub-millisecond call is repeated within a round, so a 20% gate
     compares real work, not timer and scheduler noise."""
+    f()  # the first call is cold (compile, expansion, verified clauses): size the rounds on a warm one
     t = time.perf_counter()
     f()
     once = time.perf_counter() - t
@@ -81,8 +82,9 @@ def test_match_ids_with_exclusion_accounting(benchmark: Any, engine: TantivyEngi
     assert ast is not None
 
     def run() -> object:
-        engine.verified.clear()  # cold, as for a new query: no verified clauses and no compiled query
+        engine.verified.clear()  # cold, as for a new query: every cache cleared
         engine.compiled.clear()
+        engine.expanded.clear()
         ids = engine.match_ids(ast)
         return excluded(engine, result, len(ids))
 
@@ -91,8 +93,9 @@ def test_match_ids_with_exclusion_accounting(benchmark: Any, engine: TantivyEngi
     assert time is None or time < 0.300, f"p95 {time * 1000:.1f} ms"
 
 
+BROAD = "a OR agent OR ai OR and OR the OR of"  # ~97% of the fixture, without the default filters
 SHAPES = {
-    "broad": "the",  # thousands of matches: the whole-set collection and the facets dominate
+    "broad": BROAD,  # thousands of matches (no default filters): the whole-set collection dominates
     "widest wildcard": None,  # the widest expansion under the cap, inside a search (filled in below)
     "multi-token NEAR": '"large language" NEAR/3 model',
     "nested NOT": "trust NOT (model NOT (language OR NOT agent))",
@@ -103,15 +106,18 @@ SHAPES = {
 @pytest.mark.parametrize("shape", list(SHAPES))
 def test_search_shapes_and_sorts(benchmark: Any, engine: TantivyEngine, shape: str, sort: str) -> None:
     q = SHAPES[shape] or f"{widest_stem(engine)[0]}*"
-    ast = parse(q).effective_ast
+    parsed = parse(q)
+    ast = parsed.ast if shape == "broad" else parsed.effective_ast  # broad: the raw tree, no default filters
     assert ast is not None
+    if shape == "broad":
+        assert len(engine.match_ids(ast)) > 2_500  # a floor, so fixture drift can't narrow it silently
     measure(benchmark, lambda: engine.search(ast, sort=sort, limit=50))
     time_ = p95(benchmark)
     assert time_ is None or time_ < 0.100, f"p95 {time_ * 1000:.1f} ms"
 
 
 def test_match_ids_with_exclusions_on_a_broad_query(benchmark: Any, engine: TantivyEngine) -> None:
-    result = parse("the")
+    result = parse(BROAD)  # exclusions need the default filters, so the effective tree
     ast = result.effective_ast
     assert ast is not None
     measure(benchmark, lambda: excluded(engine, result, len(engine.match_ids(ast))))
@@ -120,8 +126,8 @@ def test_match_ids_with_exclusions_on_a_broad_query(benchmark: Any, engine: Tant
 
 
 def test_an_export_drains_every_document(benchmark: Any, engine: TantivyEngine) -> None:
-    ast = parse("the").effective_ast
-    assert ast is not None
+    ast = parse(BROAD).ast  # every match, no default filters: the drain is the cost
+    assert ast is not None and len(engine.match_ids(ast)) > 2_500
     measure(benchmark, lambda: sum(1 for _ in engine.documents(ast)[1]))
 
 

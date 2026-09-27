@@ -9,6 +9,7 @@ the last key, then pages it (task-025). The index is verified (every file re-has
 
 from __future__ import annotations
 
+import dataclasses
 import heapq
 from collections.abc import Iterator
 from importlib.metadata import version
@@ -203,9 +204,11 @@ class TantivyEngine:
     def compile(self, ast: Node) -> Compiled:
         """The compiled query, memoised per tree: the index is immutable, so a tree compiles the same way every
         time, and a search, its pages and its facets needn't build the Boolean again (task-076 headroom)."""
-        key = ast.model_dump_json()
+        key = (
+            ast.model_dump_json()
+        )  # spans included: ` trust` and `trust` compile apart (a miss, never wrong)
         if key in self.compiled:
-            return self.compiled[key]
+            return self._copy(self.compiled[key])
         if len(self.verified) > 1_000:
             self.verified.clear()  # bounded: a long-running API never grows it without limit
         if len(self.compiled) > 1_000:
@@ -214,7 +217,12 @@ class TantivyEngine:
             self.index.schema, self.expansions(ast), self.read, self.verified, self.ranking["field_weights"]
         ).compile(ast)
         self.compiled[key] = compiled
-        return compiled
+        return self._copy(compiled)
+
+    @staticmethod
+    def _copy(compiled: Compiled) -> Compiled:
+        """The memo's entry with its own lists, so a caller can't change what later callers get."""
+        return dataclasses.replace(compiled, explain=list(compiled.explain), verified=list(compiled.verified))
 
     def explain(self, ast: Node) -> str:
         """The compiled query as a readable tree, its wildcard expansions and verified clauses (op search

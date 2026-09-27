@@ -19,6 +19,7 @@ import unicodedata
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, Self
+from urllib.parse import urlparse
 
 from pydantic import (
     AfterValidator,
@@ -110,8 +111,8 @@ class Claim(BaseModel):
 def _url(v: str) -> str:
     """An http(s) URL on one line: no whitespace, control, line or paragraph separator (an export writes it
     as one RIS/BibTeX line, and a newline in it could forge a record)."""
-    if not v.startswith(("https://", "http://")) or not _SINGLE_LINE.fullmatch(v):
-        raise ValueError("a URL must be http(s) with no whitespace or control characters")
+    if not v.startswith(("https://", "http://")) or not _SINGLE_LINE.fullmatch(v) or not urlparse(v).netloc:
+        raise ValueError("a URL must be http(s) with a host and no whitespace, control or format characters")
     return v
 
 
@@ -122,7 +123,10 @@ def _doi(v: str) -> str:
 
 
 # no whitespace, and nothing in the control (Cc), format-line (Zl) or paragraph (Zp) categories
-_SINGLE_LINE = re.compile(r"[^\s\x00-\x1f\x7f-\x9f\u2028\u2029]+")
+# nor zero-width or bidi-override format characters, which could make an exported URL read as another
+_SINGLE_LINE = re.compile(
+    r"[^\s\x00-\x1f\x7f-\x9f\u2028\u2029\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]+"
+)
 Url = Annotated[Text, AfterValidator(_url)]
 
 

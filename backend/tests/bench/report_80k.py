@@ -130,7 +130,6 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
             excluded(engine, result, len(engine.match_ids(ast)))  # type: ignore[arg-type]
 
         engine.verified.clear()
-
         engine.compiled.clear()  # the compiled query holds verified results too
         engine.expanded.clear()
         cold = timed(lambda ast=ast: engine.search(ast, limit=50), rounds=1)[0]  # type: ignore[misc]
@@ -188,9 +187,9 @@ when cold (spec 03), so they are reported, not gated.
 
 ## Trust-Evals protocol strings, Scholar mode (budgets: 100 ms, 300 ms)
 
-Cold is the first run after the verified-clause cache is cleared; warm is the p95 of the {WARM_ROUNDS} runs after
-it, with the cache an engine keeps; the exclusions column is the p95 of {ROUNDS} runs, each clearing the cache
-first. `main-2-pop` holds wildcard phrases (`model$`), which take the position-verified path spec 03 exempts, so
+Cold is the first run after every cache is cleared (verified clauses, expansions, compiled queries); warm is the
+p95 of the {WARM_ROUNDS} runs after it, with the caches an engine keeps; the exclusions column is the p95 of
+{ROUNDS} runs, each clearing every cache first. `main-2-pop` holds wildcard phrases (`model$`), which take the position-verified path spec 03 exempts, so
 its cold numbers are the exception's, not a budget miss (its warm headroom is task-076).
 
 | String | Matches | Search, first 50 hits: cold | Search: p95 warm | `match_ids` + exclusions: p95 cold |

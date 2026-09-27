@@ -380,5 +380,8 @@ def test_a_tree_compiles_once_per_engine(engines: tuple[TantivyEngine, Reference
     engine = engines[0]
     ast = parse("alpha OR trust*").ast
     first = engine.compile(ast)  # type: ignore[arg-type]
-    assert engine.compile(ast) is first  # type: ignore[arg-type]
-    assert engine.compile(parse("alpha OR beta").ast) is not first  # type: ignore[arg-type]
+    again = engine.compile(ast)  # type: ignore[arg-type]
+    assert again.query is first.query and again.explain == first.explain  # the memo, not a recompile
+    again.explain.append("changed")  # a caller's copy: never what the next caller gets
+    assert engine.compile(ast).explain == first.explain  # type: ignore[arg-type]
+    assert engine.compile(parse("alpha OR beta").ast).query is not first.query  # type: ignore[arg-type]

@@ -251,9 +251,9 @@ def test_script_join_is_linear() -> None:
 
     def secs(n: int) -> float:
         text = "$" + "^{a" * n + "x$"
-        t = time.perf_counter()
+        t = time.thread_time()  # CPU time: being preempted on a busy machine doesn't count
         normalize(text)
-        return time.perf_counter() - t
+        return time.thread_time() - t
 
     secs(1000)  # warm up
     # best of 9: one busy moment on a shared machine can't push the ratio over (task-070's lesson)

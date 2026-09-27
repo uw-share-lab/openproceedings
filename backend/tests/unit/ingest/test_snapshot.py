@@ -661,7 +661,7 @@ def test_audit_files_are_checked_against_the_manifest(cache: Path, tmp_path: Pat
     copy = writable_copy(a, tmp_path / "copy")
     with (copy / "conflicts.csv").open("a", encoding="utf-8") as fh:
         fh.write("forged,row\n")
-    with pytest.raises(SnapshotError, match=r"conflicts\.csv doesn't match its manifest"):
+    with pytest.raises(SnapshotError, match=r"merges\.csv or conflicts\.csv doesn't match its manifest"):
         load_records(copy)
 
 
@@ -681,3 +681,32 @@ def test_a_rebuild_refuses_a_snapshot_whose_audit_files_this_code_wouldnt_write(
     (a / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     with pytest.raises(SnapshotError, match="immutable"):
         build(cache, snapshots, BUILT)
+
+
+def test_diff_never_calls_a_split_a_rekey(cache: Path, tmp_path: Path) -> None:
+    a = build(cache, tmp_path / "snapshots", BUILT).path
+
+    def split(rs: dict[str, PaperRecord]) -> None:
+        one = rs.pop(REJECTED)
+        for year in (2023, 2025):
+            copy = one.model_copy(update={"id": f"op:iclr:{year}:Rej_ected-1", "year": year})
+            rs[copy.id] = copy
+
+    result = diff(a, rewrite(a, tmp_path / "b", split))
+    assert result["rekeyed"] == {} and result["removed"] == [REJECTED]
+    assert result["added"] == ["op:iclr:2023:Rej_ected-1", "op:iclr:2025:Rej_ected-1"]
+
+
+def test_a_manifest_that_stops_listing_its_audit_files_is_refused(cache: Path, tmp_path: Path) -> None:
+    a = build(cache, tmp_path / "snapshots", BUILT).path
+    for edit in ("drop", "empty", "list"):
+        copy = writable_copy(a, tmp_path / edit)
+        manifest = json.loads((copy / "manifest.json").read_text(encoding="utf-8"))
+        if edit == "drop":
+            del manifest["files"]
+            (copy / "merges.csv").unlink()
+        else:
+            manifest["files"] = {} if edit == "empty" else []
+        (copy / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        with pytest.raises(SnapshotError, match="doesn't match its manifest"):
+            load_records(copy)

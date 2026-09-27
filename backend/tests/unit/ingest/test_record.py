@@ -319,7 +319,10 @@ def test_claims_for_a_field() -> None:
     assert isinstance(r.claims("title"), tuple)
 
 
-@pytest.mark.parametrize("bad", ["\n", "\r", "\x85", " ", " ", "\x00", " ", "\t"])
+@pytest.mark.parametrize(
+    "bad",
+    ["\n", "\r", "\x85", "\u2028", "\u2029", "\x00", " ", "\t", "\x9b", "\xa0", "\u202e", "\u200b", "\ufeff"],
+)
 @pytest.mark.parametrize("field", ["forum", "pdf", "proceedings", "doi"])
 def test_a_url_with_a_line_break_or_control_char_is_refused(field: str, bad: str) -> None:
     # a newline in a URL would be written into an RIS/BibTeX line and could forge a record (security gate)
@@ -335,6 +338,11 @@ def test_urls_must_be_http_and_dois_well_formed() -> None:
     from openproceedings.ingest.record import Urls
 
     assert Urls(forum="https://openreview.net/forum?id=AbCd", doi="10.1000.10/x.y").forum
-    for bad in ({"pdf": "javascript:alert(1)"}, {"proceedings": "ftp://x/y"}, {"doi": "doi:10.1/x"}):
+    for bad in (
+        {"pdf": "javascript:alert(1)"},
+        {"proceedings": "ftp://x/y"},
+        {"doi": "doi:10.1/x"},
+        {"forum": "https://"},
+    ):
         with pytest.raises(ValueError):
             Urls(**bad)  # type: ignore[arg-type]
