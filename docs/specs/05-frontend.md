@@ -115,6 +115,11 @@ clauses to an existing top-level AND instead of re-wrapping.
 
 ## Components
 
+Designs (TASK-033, wireframes, every state, interaction and copy): `docs/design/2026-09-27-search-workspace.md`
+indexes them; the heuristic pre-pass and its dispositions are in `docs/design/2026-09-27-heuristic-prepass.md`.
+Where a design adds to this spec (the `(text, mode)` draft and `DRAFT_DIRTY`, the export's status and track
+warnings, the save's index check), the design doc says so; its open questions list what would change this spec.
+
 1. **Query editor (CodeMirror 6).** Syntax highlighting from a Lezer grammar that mirrors 02. Colour for
    operators, fields, phrases and wildcards. Inline squiggles from `/parse` diagnostics (debounced 250 ms)
    using the spans the server returns. Autocomplete for fields and for the `track:`/`venue:` values from
