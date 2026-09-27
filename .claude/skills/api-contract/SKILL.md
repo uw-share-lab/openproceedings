@@ -44,7 +44,9 @@ has `id, title, abstract, authors, venue, year, track, presentation, score, high
 - **Highlights** are spans computed from the AST, never from a snippet generator. Built: `engine/highlight.py::highlights(ast,
   record, engine.expansions(ast))`, which returns both fields, each a sorted list (spec 03 §Highlights). Call it only on the
   engine's hits: a record the query doesn't match raises `EngineInternalError` (a 500). Spans that touch
-  (an operator token and its neighbour, `5×3`) stay separate; only overlaps merge.
+  (an operator token and its neighbour, `5×3`) stay separate; only overlaps merge. For a page, build one
+  `Highlighter(ast, expansions)` and call it on each hit (`search.run` does; task-073): the query's work is
+  done once, not per hit.
 
 ## Span units (spec 04 §Conventions)
 Every span is a half-open `[start, end)` range of **Unicode code points** over the **raw source string**:

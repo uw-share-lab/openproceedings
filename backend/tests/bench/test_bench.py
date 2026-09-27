@@ -4,7 +4,8 @@ Benchmarks are off in ordinary runs (`--benchmark-disable` in pyproject's addopt
 once, as a test). The `bench` workflow runs `--benchmark-enable --benchmark-only` on a pull request's base
 and head, fails a regression of the minimum over 20% (the least noise-prone statistic), and these tests
 assert the budgets from the timings measured:
-- a search returning the first 50 hits: p95 < 100 ms (every Trust-Evals protocol string, Scholar mode);
+- a search returning the first 50 hits: p95 < 100 ms (every Trust-Evals protocol string, Scholar mode), with
+  and without its display records and highlights (task-073; exclusion accounting has its own budget);
 - `match_ids` with exclusion accounting: p95 < 300 ms;
 - a wildcard expansion of up to 200 terms: p95 < 50 ms.
 The ~80k corpus and the position-verified cases are measured by `backend/tests/bench/report_80k.py` into
@@ -23,10 +24,12 @@ import pytest
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.compile import FIELDS
 from openproceedings.engine.exclusions import excluded
+from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import MAX_EXPANSIONS, EngineInputError
 from openproceedings.engine.tantivy_engine import TantivyEngine
-from openproceedings.query.ast import Wildcard
+from openproceedings.query.ast import Node, Wildcard
 from openproceedings.query.parser import ParseResult, parse
+from openproceedings.search import Shown
 
 from tests.fixtures.corpus.synthetic_5k import records
 from tests.golden.test_trust_evals import STRINGS
@@ -71,6 +74,25 @@ def test_search_first_50_hits(benchmark: Any, engine: TantivyEngine, name: str) 
     ast = trust_evals(name).effective_ast
     assert ast is not None
     measure(benchmark, lambda: engine.search(ast, limit=50))
+    time = p95(benchmark)
+    assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
+
+
+def search_with_highlights(engine: TantivyEngine, ast: Node, limit: int = 50) -> list[object]:
+    """A search's first `limit` hits as `search.run` assembles them for the API, less exclusion accounting
+    (budgeted on its own, 300 ms) and facets: the page, its display records and each hit's highlights, the
+    part no engine cache holds, so every call pays for it (task-073)."""
+    _total, page = engine.page(ast, limit=limit)
+    shown = engine.display([i for i, _score in page])
+    lit = Highlighter(ast, engine.expansions(ast))
+    return [lit(Shown.of(shown[i])) for i, _score in page]
+
+
+@pytest.mark.parametrize("name", list(STRINGS))
+def test_search_first_50_hits_with_highlights(benchmark: Any, engine: TantivyEngine, name: str) -> None:
+    ast = trust_evals(name).effective_ast
+    assert ast is not None
+    measure(benchmark, lambda: search_with_highlights(engine, ast))
     time = p95(benchmark)
     assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
 

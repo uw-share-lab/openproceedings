@@ -36,6 +36,7 @@ one such code point (a combining-slash cluster gives each piece the raw characte
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from dataclasses import dataclass, field
 
@@ -446,8 +447,22 @@ def math_regions(text: str) -> list[tuple[int, int]]:
     return regions
 
 
+# An ASCII text with no `\` and no `$` holds no LaTeX (every mask entry is KEEP: math and commands need one
+# of the two) and no character that NFKC, case-folding, marks or the operator table change beyond ASCII
+# lower-casing, so its tokens are exactly its runs of ASCII letters and digits, lower-cased, each spanning
+# itself (task-073). Most abstracts are such texts; a property pins this path to the loop below.
+_ASCII_WORD = re.compile(r"[A-Za-z0-9]+")
+
+
 def tokenize(text: str) -> list[Token]:
     """Tokens of `text` with their raw code-point spans."""
+    if text.isascii() and "\\" not in text and "$" not in text:
+        return [Token(m.group().lower(), m.start(), m.end()) for m in _ASCII_WORD.finditer(text)]
+    return _tokenize_each_char(text)
+
+
+def _tokenize_each_char(text: str) -> list[Token]:
+    """`tokenize`'s definition for any text, one raw character at a time (steps 1-5 above)."""
     subs: dict[int, tuple[str, bool, int, bool]] = {}
     latex = _latex_mask(text, subs=subs)
     out: list[Token] = []
@@ -499,6 +514,20 @@ def tokenize(text: str) -> list[Token]:
             i += 1
             continue
         first, lead = lead, None
+        if c < "\x80" and (stop == n or not unicodedata.combining(text[stop])):
+            # an ASCII character with no mark after it (most characters of most texts; task-073): `_fold`
+            # would give it back lower-cased, and it is a word character exactly when it is alphanumeric
+            if c.isalnum():
+                if not buf:
+                    start = i if first is None else first
+                base = c.lower()
+                buf.append(base)
+                end = reach = stop
+            else:
+                close()
+                base = None
+            i = stop
+            continue
         j = i + 1
         while j < n and latex[j] == KEEP and unicodedata.combining(text[j]):
             j += 1
