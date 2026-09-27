@@ -64,6 +64,7 @@ ANNOTATIONS = (
     "verified_clauses",  # the query's position-verified clauses (api/deps.py; replays too)
     "verification_candidates",  # the documents their position checks would read, summed (api/deps.py)
     "verify_ms",  # time this request held a verification slot (api/state.py::verification_slot)
+    "verify_cpu_ms",  # the verifying thread's CPU time in those holds: what is debited (round 5)
     "verify_tokens",  # what that time was debited after the fact (RateLimit.debit_verification)
     "code",  # the error envelope's code, on every refusal and every 500 (api/errors.py::note_code)
 )
@@ -292,9 +293,25 @@ class TokenBucket:
         tokens, last = self._buckets.pop(key, (self.capacity, now))
         tokens = min(self.capacity, tokens + (now - last) * self.refill)
         self._buckets[key] = (tokens, now)
-        while len(self._buckets) > self.max_clients:
-            self._buckets.popitem(last=False)
+        self._evict(key)
         return 0.0 if tokens >= cost else (cost - tokens) / self.refill
+
+    def _evict(self, keep: str) -> None:
+        """Drop the least recently seen buckets beyond `max_clients`, skipping one in debt (below zero, from a
+        slot-time debit): forgetting it would forgive the debt, and a new bucket starts full (round 5). The
+        map stays bounded: if every other bucket were in debt, the oldest goes anyway. `keep`, the bucket just
+        touched, is never dropped (its caller spends from it next). Under `lock`."""
+        while len(self._buckets) > self.max_clients:
+            victim = fallback = None  # a scan from the oldest that stops at the first bucket not in debt:
+            for k, (tokens, _last) in self._buckets.items():  # O(1) unless debtors are the oldest
+                if k == keep:
+                    continue
+                if fallback is None:
+                    fallback = k
+                if tokens >= 0:
+                    victim = k
+                    break
+            del self._buckets[victim if victim is not None else fallback]  # type: ignore[arg-type]
 
     def spend(self, key: str, cost: float) -> None:
         """Spend `cost` of `key`'s tokens, which `wait` just found there. Under `lock`."""
@@ -314,8 +331,7 @@ class TokenBucket:
             tokens, last = self._buckets.pop(key, (self.capacity, now))
             tokens = min(self.capacity, tokens + (now - last) * self.refill)
             self._buckets[key] = (tokens - cost, now)
-            while len(self._buckets) > self.max_clients:
-                self._buckets.popitem(last=False)
+            self._evict(key)
 
     def refund(self, key: str, cost: float) -> None:
         """Give back `cost` tokens `key` spent on work that then didn't happen (never above `capacity`)."""
@@ -440,13 +456,16 @@ class RateLimit:
 
     def debit_verification(self, held: Sequence[tuple[TokenBucket, str]], fields: dict[str, object]) -> None:
         """Charge the cold verification time this request used, after the fact, to its client's and network's
-        buckets: one token per `verify_token_ms` of slot time (`verify_ms` on the access line). The buckets
+        buckets: one token per `verify_token_ms` of the verifying thread's CPU time in the slot
+        (`verify_cpu_ms`, round 5: not the wall time `verify_ms`, which other requests' load on the GIL inflates,
+        and a reviewer shouldn't be billed for; a main-2-pop query was debited 155 tokens idle and 1,090 under
+        contention by wall time). The buckets
         may go below zero, so a client that keeps the one slot busy (cold queries back to back: vary a NEAR
         distance and each is cold) then waits until its debt is repaid, and its share of the slot is at most
         refill × `verify_token_ms` (10% a client, 40% a network at the defaults): the rest is everyone
         else's (M3a review gate round 4, decision-010). The up-front per-clause charge stays, as the
         admission cost."""
-        used = fields.get("verify_ms")
+        used = fields.get("verify_cpu_ms")
         if isinstance(used, int | float) and used > 0:
             tokens = used / self.config.verify_token_ms
             for bucket, key in held:

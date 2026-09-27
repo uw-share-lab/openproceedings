@@ -493,12 +493,14 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     otherwise), so every clause up to the cap costs its share and a query at the cap can always be paid. The
     rest is charged after the parse and before compiling (`deps.charge_verified` from `deps.searchable`,
     `middleware.charge`). The clause count doesn't measure the work, though: a clause's cold verification
-    reads every **candidate** (each document holding all its items in the field, ~40 µs each), and a word
+    reads every **candidate** (each document holding all its items in the field, 37-56 µs each by shape, wildcard-phrase NEARs the
+    dearest), and a word
     NEAR itself makes every document holding it one (M3a round 3: 8 such clauses held the slot 63 s on 80k).
     So once the route has its engine, and after the wildcard cap, `deps.check_candidates` counts each
     verified clause's candidates per field from the inverted index (`TantivyEngine.candidates`; no document
     is read, and every clause counts, cached or not, so a refusal never depends on the memos): more than
-    `ApiConfig.max_verification_candidates` (default 300,000, ~12 s of verification, above the heaviest real review query:
+    `ApiConfig.max_verification_candidates` (default 300,000, up to about 16 s of verification idle at 80k and more under load, which the deadline
+    below bounds; above the heaviest real review query:
     Trust-Evals `main-2-pop`, 247,793 on the synthetic 80k index) is 422
     `API_QUERY_TOO_COSTLY`, one diagnostic per clause with its counts, before any is verified (`/search`,
     `/export`, `POST /records`). A refusal after the charge, `API_QUERY_TOO_COSTLY` or `API_BUSY`, gives the
@@ -514,12 +516,28 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     cost per candidate doesn't depend on its width or expansions (its token sets are built once per clause,
     round 4: a 300-item `rel*` phrase at 80k took 84 s before, 3.1 s after, like a 2-item one), so the
     candidate count is the whole bound. **The slot time used is charged after the fact**: a request that
-    held a verification slot is debited one token per `RateLimit.verify_token_ms` (default 100 ms) of it,
-    to its client's and its network's buckets, when it finishes (`RateLimit.debit_verification`; the
-    access line's `verify_tokens`). A bucket may go below zero; the client then waits (429 with
-    `Retry-After`) until the refill repays the debt, so a client sending cold queries back to back (each
+    held a verification slot is debited one token per `RateLimit.verify_token_ms` (default 100 ms) of the
+    verifying thread's **CPU** time in it (`time.thread_time`, round 5: wall time, which other requests'
+    load on the GIL stretches, billed one main-2-pop query 155 tokens idle and 1,090 under contention), to
+    its client's and its network's buckets, when it finishes (`RateLimit.debit_verification`; the access
+    line's `verify_cpu_ms` and `verify_tokens`). A bucket may go below zero; the client then waits (429 with
+    `Retry-After`) until the refill repays the debt (a bucket in debt is skipped when the least recently seen
+    are dropped at `max_clients`, so the debt isn't forgiven; only if every other bucket were in debt would the
+    oldest go), so a client sending cold queries back to back (each
     NEAR distance is a new, cold clause) holds the slot at most refill × `verify_token_ms` of the time: 10%
-    a client and 40% a network at the defaults. The up-front per-clause charge stays, as the admission cost. Cold verification (a cache miss: seconds of pure Python per clause) runs in at most
+    a client and 40% a network at the defaults. The up-front per-clause charge stays, as the admission cost.
+    **A deadline bounds the wall time** (round 5: the candidate ceiling bounds work, not wall time, and
+    pure-Python verification competes for the GIL, so one admitted near-ceiling query held the slot 15.5 s
+    idle, 35 s beside 4 busy clients and 109 s beside 8): a request's cold verifications together get
+    `ApiConfig.max_verification_seconds` (default 30, `--max-verification-seconds`) of wall time from its
+    first slot, checked every 1,000 candidates (`compile.CHECK_EVERY`: tens of ms apart, no measurable cost)
+    and before each clause. Past it the loop stops and the request is 503 `API_BUSY` with `Retry-After`
+    and a message naming the limit: the partial id list is dropped (no memo, scope or compiled query holds
+    any of it), the per-clause charge is refunded, and the CPU time used is still debited. 30 s because
+    main-2-pop, the heaviest real query, needs 10.2 s idle at 80k, so it still finishes under load that
+    triples its wall time, while no query holds the slot for minutes. A replay past it is the same 503, not
+    a withheld replay: the deadline depends on the moment's load, so it is the client's retry, not the
+    record's `refused`. A verified clause with no candidates takes no slot and verifies nothing. Cold verification (a cache miss: seconds of pure Python per clause) runs in at most
     `ApiConfig.verification_slots` (default 1) at a time, on every engine the state opens
     (`TantivyEngine.verification_gate`); a query that needs another slot is refused at once with 503
     `API_BUSY` and `Retry-After: busy_retry_seconds` (default 5), never queued, so it can't hold a worker
@@ -530,8 +548,9 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     what a route adds with `deps.annotate`/`annotate_parse`: `canonical_hash`, `total`, `token_count`,
     `n_errors`, `error_codes`, `warning_codes` (at most 10 distinct codes, then `+N`), `verified_clauses`
     (the query's, a replay's too), `verification_candidates` (their candidates, summed; absent with none),
-    `verify_ms` (the time the request held a verification slot; absent when it held none), `verify_tokens`
-    (what that time was debited; absent likewise), and `code`, the error
+    `verify_ms` (the wall time the request held a verification slot; absent when it held none),
+    `verify_cpu_ms` (the verifying thread's CPU in those holds), `verify_tokens` (what that CPU time was
+    debited; absent likewise), and `code`, the error
     envelope's code, on every refusal (the body cap's 413, the rate limit's 429, a routing 404, `API_BUSY`, …)
     and every 500 (`errors.note_code`). Never `q`, the
     canonical or identification strings, messages or spans. `ms` is milliseconds to one decimal, the one form
@@ -557,7 +576,7 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     it held the slot every other cold verification was 503 `API_BUSY`.
   - `op serve [--host] [--port] [--index] [--cors-origin …] [--trusted-proxy …] [--rate-capacity]
     [--rate-refill] [--export-weight] [--no-rate-limit] [--max-verified-clauses]
-    [--max-verification-candidates] [--log-query-text]` refuses an invalid combination as usage, naming each
+    [--max-verification-candidates] [--max-verification-seconds] [--log-query-text]` refuses an invalid combination as usage, naming each
     option and the validator's reason (never the value pydantic would quote), and runs one uvicorn process with
     its own access log off, `proxy_headers` off, and a 64 KiB request-head limit (uvicorn's 16 KiB would
     refuse a valid 2,000-code-point query in the URL). **Deploy note:** `GET /search?q=…` carries the query

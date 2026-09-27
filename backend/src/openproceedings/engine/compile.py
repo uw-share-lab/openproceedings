@@ -46,6 +46,9 @@ from openproceedings.query.ast import (
 from openproceedings.vocab import TEXT_FIELDS
 
 FIELDS = TEXT_FIELDS  # the searched fields (vocab)
+# candidates between two deadline checks in a verification: ~40-56 ms of work at 40-56 µs a candidate, so
+# a deadline is overshot by well under a tenth of a second, and a check costs nothing measurable
+CHECK_EVERY = 1_000
 # (stem, op) → the sorted expanded terms: the concrete form protocol.Expansions narrows to, as the compiler reads it
 Expansions = dict[tuple[str, str], tuple[str, ...]]
 
@@ -105,6 +108,7 @@ class Compiler:
         weights: dict[str, float] | None = None,
         gate: Callable[[], AbstractContextManager[object]] = nullcontext,
         store: Callable[[tuple[str, str], list[str]], None] | None = None,
+        count: Callable[[tantivy.Query], int] | None = None,
     ) -> None:
         self.schema = schema
         self.weights = weights if weights is not None else dict.fromkeys(FIELDS, 1.0)
@@ -123,6 +127,9 @@ class Compiler:
         # entered around each cold verification (a cache miss), the one slow path: the API bounds how many
         # run at once and refuses one more (503 API_BUSY) rather than queueing it
         self.gate = gate
+        self.count = (
+            count  # how many documents a query matches (the engine's): a clause with none takes no slot
+        )
         self.out = Compiled(tantivy.Query.empty_query())
         self._allowed: dict[tuple[str, str], frozenset[str]] = {}  # per item: `allowed`
 
@@ -235,11 +242,10 @@ class Compiler:
         # between any two operations on it (task-080); a miss recomputes the same ids from the immutable index
         ids = self.verified_cache.get(key)
         if ids is None:
-            with self.gate():
-                holds = self.holder(n)  # the clause's sets, built once, not per candidate
-                ids = [doc_id for doc_id, tokens in self.read(candidates, f) if holds(tokens)]
+            ids = self.verify(n, f, candidates)
             self.store(key, ids)  # stored complete, never changed after
-        self.out.held += len(ids)
+        # twice: the Tantivy query's own copy of the ids, and the Python list `Compiled.ids` keeps (round 5)
+        self.out.held += 2 * len(ids)
         self.out.ids[key] = ids
         what = f"NEAR/{n.distance}" if isinstance(n, Near) else "phrase"
         self.line(depth, f"{f}: {what} verified by position ({len(ids)} documents)")
@@ -248,6 +254,27 @@ class Compiler:
             return tantivy.Query.empty_query()
         exact = tantivy.Query.const_score_query(tantivy.Query.term_set_query(self.schema, "id", ids), 0.0)
         return tantivy.Query.boolean_query([(tantivy.Occur.Must, candidates), (tantivy.Occur.Must, exact)])
+
+    def verify(self, n: Phrase | Near, f: TextField, candidates: tantivy.Query) -> list[str]:
+        """The ids of `candidates` whose `f` tokens hold `n`, checked under the gate (one verification slot). A
+        clause with no candidate (`count`, from the inverted index) takes no slot and reads nothing. The gate
+        may yield a deadline check (the API's `max_verification_seconds`), called before the clause and every
+        `CHECK_EVERY` candidates: when it raises, the partial list is dropped with this frame, never returned or
+        stored, so no memo, scope or compiled query ever holds part of a clause."""
+        if self.count is not None and self.count(candidates) == 0:
+            return []
+        holds = self.holder(n)  # the clause's sets, built once, not per candidate
+        ids: list[str] = []
+        with self.gate() as check:
+            deadline = check if callable(check) else None
+            if deadline is not None:
+                deadline()  # a request whose earlier clauses used its time up stops before this one
+            for count, (doc_id, tokens) in enumerate(self.read(candidates, f), 1):
+                if holds(tokens):
+                    ids.append(doc_id)
+                if deadline is not None and count % CHECK_EVERY == 0:
+                    deadline()
+        return ids
 
     def candidates(self, n: Phrase | Near, f: TextField) -> tantivy.Query:
         """What a verified clause's candidates must hold in `f`: every distinct item (the non-positional

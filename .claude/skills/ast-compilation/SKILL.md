@@ -84,7 +84,10 @@ compiled-memo hit (`Compiled.ids`, its tree's clause ids, seed the scope), and r
 request; the worker gets `scope.reader()`, which never verifies (a miss is an internal
 error, `WouldVerify`, which `search.run` answers by recounting in the caller), so it never takes a slot.
 A position check builds each clause's token sets once (`Compiler.holder`, `allowed` cached per item), never
-per candidate: its cost per candidate must not grow with width or expansions (round 4). Start no engine work on another thread before the tree it shares clauses
+per candidate: its cost per candidate must not grow with width or expansions (round 4). The verify loop
+(`Compiler.verify`) calls the gate's deadline check every `CHECK_EVERY` candidates and before each clause,
+keeps its partial list local until the clause is complete (an abort stores nothing), and takes no slot for
+a clause with no candidates (round 5). Start no engine work on another thread before the tree it shares clauses
 with is compiled, and never hand a thread other than the caller a verifying scope, or one request can be
 refused (API_BUSY) against itself. `TantivyEngine.candidates` counts what each verified clause's check would
 read (`Compiler.candidates`, per field, from the inverted index): the API bounds that sum per query

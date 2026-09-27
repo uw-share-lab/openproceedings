@@ -79,6 +79,7 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
         verification_slots=config.verification_slots,
         busy_retry_seconds=config.busy_retry_seconds,
         slow_verification_seconds=config.slow_verification_seconds,
+        max_verification_seconds=config.max_verification_seconds,
     )
 
     @asynccontextmanager

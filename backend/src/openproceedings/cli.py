@@ -172,6 +172,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="position-verified clauses one query may have (default 16, a backstop; decision-010); with the rate limit on, times each clause's cost it must fit the smaller bucket",
     )
     serve.add_argument(
+        "--max-verification-seconds",
+        type=float,
+        default=30.0,
+        help="wall time one query's position checks may take before a 503 API_BUSY (default 30; decision-010)",
+    )
+    serve.add_argument(
         "--max-verification-candidates",
         type=int,
         default=300_000,
@@ -550,6 +556,7 @@ def _serve(ns: argparse.Namespace) -> int:
             log_query_text=ns.log_query_text,
             max_verified_clauses=ns.max_verified_clauses,
             max_verification_candidates=ns.max_verification_candidates,
+            max_verification_seconds=ns.max_verification_seconds,
             serve_docs=loopback if ns.docs is None else ns.docs,
         )
     except ValidationError as e:  # the operator's own flags: say which and why, as usage

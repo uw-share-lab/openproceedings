@@ -61,10 +61,11 @@ API runs it.
   the stored list from the pinned index and never re-runs the query; only a `mismatch` blocks it). Raising
   the limit replays the record in full.
 - **The clause count is not the cost; candidates are (M3a review gate round 3).** A clause's cold
-  verification reads every candidate document (each holding all its items in the field, ~40 µs each), so
+  verification reads every candidate document (each holding all its items in the field, 37-56 µs each by shape), so
   8 clauses of a common word NEAR itself (`(a NEAR/50 a) OR … (4o NEAR/49 4o)`) held the only slot for
   63 s on the synthetic 80k index while costing 60 tokens against a 60 s refill. `ApiConfig.
-  max_verification_candidates` (default 300,000, about 12 s of verification) bounds the candidates of one
+  max_verification_candidates` (default 300,000: up to about 16 s of verification idle at 80k, the dearest shape being NEARs of wide
+  wildcard phrases; more under load, which `max_verification_seconds` bounds) bounds the candidates of one
   query, summed over its verified clauses and their fields, counted from the inverted index before any is
   verified (`TantivyEngine.candidates`, every clause counted cached or not, so a refusal never depends on
   the memos). Over it is **422 `API_QUERY_TOO_COSTLY`**, a new registry code carrying one located diagnostic
@@ -115,4 +116,18 @@ API runs it.
   waits (429, `Retry-After`) until the debt is repaid. Any one client's share of the slot is thus at most
   refill × `verify_token_ms`: 10% at the defaults, 40% for a network. The per-clause charge stays as the
   admission cost; a refused query's per-clause charge is refunded, but the time it used is still debited.
+- **A wall-clock deadline, and CPU time for the debit (round 5).** The candidate ceiling bounds work, not
+  wall time: verification is pure Python competing for the GIL, so one admitted near-ceiling query
+  (287.5k candidates) held the slot 15.5 s idle, 22 s beside 2 busy clients, 35 s beside 4 and 109 s beside
+  8, every other cold verified query getting `API_BUSY` meanwhile. A request's cold verifications now get
+  `max_verification_seconds` (default 30) of wall time from its first slot, checked every 1,000 candidates
+  and before each clause; past it the loop stops and the request is **503 `API_BUSY`** with `Retry-After`
+  (not a new code: the client's move is the same, retry later, and the message names the limit). Nothing
+  partial is kept (the list dies with the loop's frame: no memo, scope or compiled query), the per-clause
+  charge is refunded, and the CPU used is debited. A replay past it is that 503 too, not a withheld replay:
+  it depends on the moment's load, so it is transient. 30 s: main-2-pop needs 10.2 s idle at 80k, so it
+  finishes under load that triples its wall time (4 busy clients measured ~2.3×), and no query holds the
+  slot for minutes. The slot-time debit now charges the verifying thread's CPU (`time.thread_time`), not
+  wall time: by wall time one main-2-pop query was debited 155 tokens idle and 1,090 under contention,
+  billing a reviewer for other people's load. A verified clause with no candidates takes no slot.
 - Revisit if cold verification gets cheaper (task-080's successors) or runs outside the request.
