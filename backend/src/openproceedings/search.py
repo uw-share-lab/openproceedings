@@ -61,6 +61,12 @@ class Search:
     facets: dict[str, dict[str, int]] | None  # None unless asked for
 
 
+def expansions_json(expansions: Expansions) -> dict[str, list[str]]:
+    """Every wildcard's terms keyed `<stem><op>` (`calibrat*`), sorted by key: the shape `GET /search`'s
+    `query.expansions` and a search record's `expansions` share."""
+    return {f"{stem}{op}": list(terms) for (stem, op), terms in sorted(expansions.items())}
+
+
 def run(
     engine: TantivyEngine,
     parsed: ParseResult,

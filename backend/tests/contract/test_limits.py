@@ -32,7 +32,8 @@ def limited(store: Store, **rate: Any) -> TestClient:
 
 
 def statuses(c: TestClient, n: int, headers: dict[str, str] | None = None, path: str = SEARCH) -> list[int]:
-    return [c.get(path, params={"q": "trust"}, headers=headers).status_code for _ in range(n)]
+    params = {"q": "trust"} if path == SEARCH else None  # a route refuses a parameter it doesn't take
+    return [c.get(path, params=params, headers=headers).status_code for _ in range(n)]
 
 
 # --- the token bucket --------------------------------------------------------------------------------------

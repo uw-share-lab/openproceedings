@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from bisect import bisect_left
 from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 
 import tantivy
@@ -90,6 +91,7 @@ class Compiler:
         read: TokenReader,
         verified_cache: dict[tuple[str, str], list[str]] | None = None,
         weights: dict[str, float] | None = None,
+        gate: Callable[[], AbstractContextManager[object]] = nullcontext,
     ) -> None:
         self.schema = schema
         self.weights = weights if weights is not None else dict.fromkeys(FIELDS, 1.0)
@@ -98,6 +100,9 @@ class Compiler:
         # (field, clause) → the ids it verified: an index never changes, so a clause is checked once per
         # engine, however many times facets or later queries recompile it
         self.verified_cache = {} if verified_cache is None else verified_cache
+        # entered around each cold verification (a cache miss), the one slow path: the API bounds how many
+        # run at once and refuses one more (503 API_BUSY) rather than queueing it
+        self.gate = gate
         self.out = Compiled(tantivy.Query.empty_query())
 
     def compile(self, n: Node) -> Compiled:
@@ -209,7 +214,8 @@ class Compiler:
         # between any two operations on it (task-080); a miss recomputes the same ids from the immutable index
         ids = self.verified_cache.get(key)
         if ids is None:
-            ids = [doc_id for doc_id, tokens in self.read(candidates, f) if self.holds(n, tokens)]
+            with self.gate():
+                ids = [doc_id for doc_id, tokens in self.read(candidates, f) if self.holds(n, tokens)]
             self.verified_cache[key] = ids  # stored complete, never changed after
             self.out.stored += len(ids) + 1
         self.out.held += len(ids)
@@ -275,6 +281,21 @@ def combine(occur: tantivy.Occur, queries: list[tantivy.Query]) -> tantivy.Query
     return tantivy.Query.boolean_query(
         [(occur, combine(occur, queries[:half])), (occur, combine(occur, queries[half:]))]
     )
+
+
+def verifies(n: Node) -> bool:
+    """Whether compiling `n` takes the position-verified path for some clause (`Compiler.leaf`: a phrase
+    with a wildcard item, a NEAR that isn't two distinct terms). From the AST alone, before compiling, so the
+    API can charge for it first (spec 04 §Rate limit); a test holds it equal to `Compiled.verified`."""
+    if isinstance(n, And | Or):
+        return any(verifies(c) for c in n.children)
+    if isinstance(n, Not):
+        return verifies(n.child)
+    if isinstance(n, Phrase):
+        return not all(isinstance(i, Term) for i in n.items)
+    if isinstance(n, Near):
+        return not _distinct_terms(n)
+    return False
 
 
 def _distinct_terms(n: Near) -> bool:

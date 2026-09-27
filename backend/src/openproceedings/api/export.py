@@ -30,12 +30,15 @@ from fastapi.responses import StreamingResponse
 from openproceedings.api.deps import EngineDep, annotate, searchable
 from openproceedings.api.errors import ApiError
 from openproceedings.api.middleware import API_PREFIX
+from openproceedings.api.models import MODE_DOC, Q_DOC
+from openproceedings.api.openapi import response_header
 from openproceedings.api.records import refuse_mismatch, stored_record
-from openproceedings.api.state import VERSION_DIR, IndexState
+from openproceedings.api.state import IndexState
 from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.engine.index import VERSION_NAME
 from openproceedings.engine.protocol import EngineInternalError
 from openproceedings.engine.tantivy_engine import TantivyEngine
-from openproceedings.export import Provenance, entries, header, utc_date
+from openproceedings.export import Provenance, check_count, entries, header, utc_date
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import Mode
@@ -53,7 +56,7 @@ MEDIA: dict[str, tuple[str, str]] = {
     "jsonl": ("application/x-ndjson; charset=utf-8", "jsonl"),
 }
 CHUNK = 64 * 1024  # characters per body chunk (64 Ki): whole records, never split or reordered
-VERSION_PARAM = f"^(?:{VERSION_DIR.pattern})$"
+VERSION_PARAM = f"^(?:{VERSION_NAME.pattern})$"
 RECORD_PARAM = f"^(?:{RECORD_ID.pattern})$"
 
 
@@ -83,27 +86,54 @@ def _bad(message: str) -> ApiError:
     response_class=StreamingResponse,
     responses={
         200: {
-            "description": "The entire matched set, ordered by id, with `X-Total`, `X-Index-Version`, "
-            "`X-Tokenizer-Version` and `X-Query-Version`.",
+            "description": "The entire matched set, ordered by id.",
             "content": {media.split(";")[0]: {} for media, _ext in MEDIA.values()},
+            "headers": {
+                "X-Total": response_header(
+                    "How many records the body holds: `/search`'s `total` for the same query and index (for "
+                    "a search record, its stored `total`)",
+                    {"type": "integer", "minimum": 0},
+                ),
+                "X-Index-Version": response_header("The index the records were read from"),
+                "X-Tokenizer-Version": response_header("This code's tokenizer_version"),
+                "X-Query-Version": response_header("This code's query_version"),
+                "Content-Disposition": response_header(
+                    'attachment; filename="openproceedings-<index_version>-<first 12 of canonical_hash>.<ext>"'
+                ),
+            },
         }
     },
 )
 def export(
     request: Request,
     served: EngineDep,
-    fmt: Annotated[ExportFormat, Query(alias="format")],
-    q: str | None = None,
-    mode: Mode | None = None,
-    index_version: Annotated[str | None, Query(pattern=VERSION_PARAM)] = None,
-    record_id: Annotated[str | None, Query(pattern=RECORD_PARAM)] = None,
+    fmt: Annotated[ExportFormat, Query(alias="format", description="The file format.")],
+    q: Annotated[str | None, Query(description=Q_DOC + " Required unless `record_id` is given.")] = None,
+    mode: Annotated[Mode, Query(description=MODE_DOC + " Only with `q`.")] = "native",
+    index_version: Annotated[
+        str | None,
+        Query(
+            pattern=VERSION_PARAM,
+            description="Export from this index (409 `API_INDEX_VERSION_UNAVAILABLE` if this instance can't "
+            "serve it); the served one if absent. Only with `q`.",
+        ),
+    ] = None,
+    record_id: Annotated[
+        str | None,
+        Query(
+            pattern=RECORD_PARAM,
+            description="Export exactly this search record's stored ids, from the index it names. Alone: not "
+            "with `q`, `mode` or `index_version`.",
+        ),
+    ] = None,
 ) -> StreamingResponse:
     """Every record the query matches, in `format`: of `q` (with `mode`, default `native`) on the pinned
     `index_version` (else the served index), or the stored ids of search record `record_id` (alone) from the
     index it names. Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and
     index (for a record, its stored `total`)."""
     if record_id is not None:
-        if q is not None or mode is not None or index_version is not None:
+        # `mode` has a default, so whether the client sent one is read from the query string itself
+        if q is not None or "mode" in request.query_params or index_version is not None:
             raise _bad("Pass either q (with mode and index_version) or record_id alone, not both.")
         record = stored_record(request, record_id)  # 422, 404
         engine = pinned_engine(request, served, record.index_version)  # 409 unless its own index is here
@@ -121,7 +151,7 @@ def export(
     else:
         if q is None:
             raise _bad("Pass q (the query to export) or record_id (a saved search record).")
-        result = searchable(request, q, mode or "native")
+        result = searchable(request, q, mode)
         engine = pinned_engine(request, served, index_version)
         ast = result.effective_ast
         if ast is None or result.canonical_hash is None:  # searchable refuses a query that didn't parse
@@ -181,5 +211,4 @@ def _body(
             parts, size = [], 0
     if parts:
         yield "".join(parts).encode("utf-8")
-    if n != total:
-        raise EngineInternalError(DiagnosticCode.API_INTERNAL, f"exported {n} records, but {total} match")
+    check_count(n, total)

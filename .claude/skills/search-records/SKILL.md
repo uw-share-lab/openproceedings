@@ -71,7 +71,7 @@ translations that changed later cannot alter the replay.
   row that could only ever replay as a mismatch is never written. Tests that need such a row (replay and
   export of a broken record) write it straight into the file, as `tampered()` in
   `backend/tests/contract/test_records.py` does.
-- **`excluded` is compared whole** on replay (`Excluded.to_json()` against the stored `RecordExcluded`), so
+- **`excluded` is compared whole** on replay (`Excluded.to_json()` against the stored `Excluded`, the one schema of the exclusion accounting), so
   its shape is covered by `query_version`: adding a key to the live shape without a `query_version` bump
   would turn every stored record into a `mismatch`. `test_the_stored_excluded_shape_is_the_live_one` fails
   first.
@@ -120,7 +120,7 @@ A record must go (a legal request, personal data in `input`). With the API stopp
 - `/export?record_id=` hands over exactly the cited set: the record's **stored** ids, from the index it
   names, never a re-run of the query (so a later query version changes nothing). 409
   `API_INDEX_VERSION_UNAVAILABLE` when that index is gone; 409 `API_RECORD_MISMATCH` when the replay is a
-  `mismatch` (`api.records.stored_record` + `refuse_mismatch`; `require_citable` is both). A `reproduced`
+  `mismatch` (`api.records.stored_record`, then `refuse_mismatch` on the pinned index). A `reproduced`
   replay also requires the stored list to hash to `ids_hash`. Spec 04 §Search records "As built" has the
   full response shapes.
 

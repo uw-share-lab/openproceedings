@@ -22,10 +22,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from openproceedings.api import RateLimit
-from openproceedings.api import records as api_records
 from openproceedings.api.state import IndexState
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.defaults import DEFAULT_CLAUSES
@@ -40,6 +38,7 @@ from openproceedings.records import (
     new_record_id,
     replay,
 )
+from openproceedings.timestamps import utc_z
 
 from tests.contract.conftest import SECRET, Store, build, make_app, point_current
 from tests.corpus import Rec
@@ -102,7 +101,9 @@ def test_post_freezes_every_field_of_spec_04s_table(client: TestClient, data_dir
     assert r.status_code == 201, r.text
     created = r.json()
     assert RECORD_ID.fullmatch(created["record_id"])
-    assert created["url"] == f"/record/{created['record_id']}"
+    assert created["page"] == f"/record/{created['record_id']}" and "url" not in created
+    assert r.headers["location"] == f"/api/v1/records/{created['record_id']}"  # the API resource
+    assert client.get(r.headers["location"]).status_code == 200
     assert (created["index_version"], created["tokenizer_version"], created["query_version"]) == (
         store.big, TOKENIZER_VERSION, QUERY_VERSION,
     )  # fmt: skip
@@ -130,7 +131,9 @@ def test_post_freezes_every_field_of_spec_04s_table(client: TestClient, data_dir
     assert (record["tokenizer_version"], record["query_version"]) == (TOKENIZER_VERSION, QUERY_VERSION)
     for f in ("snapshot_hash", "schema_version", "ranking_params"):
         assert record[f] == manifest[f]
-    assert record["crawl_dates"] == {"*": snapshot["crawl_window"]}
+    # the manifest's window, in the API's one timestamp form (UTC, `Z`; spec 04 §Conventions)
+    assert record["crawl_dates"] == {"*": {k: utc_z(v) for k, v in snapshot["crawl_window"].items()}}
+    assert all(v.endswith("Z") for v in record["crawl_dates"]["*"].values())
     assert record["dedup"] == {
         "merged": 0, "ambiguous_not_merged": 0, "track_not_merged": 0, "venue_year_not_merged": 0,
     }  # fmt: skip
@@ -176,7 +179,7 @@ def test_replay_on_the_same_index_is_reproduced(client: TestClient, store: Store
         and replay_["excluded_match"]
     )
     assert replay_["total"] == body["record"]["total"] and replay_["excluded"] == body["record"]["excluded"]
-    assert (replay_["added"], replay_["removed"], replay_["membership_identical"]) == (0, 0, True)
+    assert (replay_["added_total"], replay_["removed_total"], replay_["membership_identical"]) == (0, 0, True)
     assert replay_["changed"] == [] and replay_["refused"] is None
 
 
@@ -302,29 +305,6 @@ def test_a_tampered_record_is_a_mismatch_logged_once_never_drifted(
     assert replayed(client, good)["replay"]["status"] == "reproduced"  # the original is untouched
 
 
-@pytest.mark.parametrize("what", MISMATCHES)
-def test_export_hook_refuses_a_mismatch_record_with_409(data_dir: Path, what: str) -> None:
-    """The function TASK-036's `/export?record_id=` calls before streaming (a stand-in route here), for
-    every kind of mismatch: most of them only the replay can see."""
-    app: FastAPI = make_app(data_dir)
-
-    @app.get("/api/v1/_probe/citable/{record_id}")
-    def probe(request: Request, record_id: str) -> dict[str, str]:
-        record = api_records.require_citable(request, record_id)
-        return {"record_id": record.record_id, "status": api_records.replay_status(request, record_id)}
-
-    with TestClient(app) as client:
-        good = save(client, "trust")
-        bad = mismatched(client, data_dir, good, what)
-        assert client.get(f"/api/v1/_probe/citable/{good}").json() == {
-            "record_id": good,
-            "status": "reproduced",
-        }
-        error(client.get(f"/api/v1/_probe/citable/{bad}"), 409, "API_RECORD_MISMATCH")
-        error(client.get("/api/v1/_probe/citable/nope"), 422, "API_BAD_PARAM")
-        error(client.get("/api/v1/_probe/citable/AAAAAAAAAAAA"), 404, "API_RECORD_NOT_FOUND")
-
-
 # --- replay: drifted --------------------------------------------------------------------------------------
 def test_a_changed_query_version_is_drifted_and_membership_identical(
     client: TestClient, data_dir: Path, logs: Logs
@@ -336,7 +316,7 @@ def test_a_changed_query_version_is_drifted_and_membership_identical(
     assert replay_["changed"] == [
         {"input": "query_version", "kind": "method", "recorded": "0", "current": QUERY_VERSION}
     ]
-    assert (replay_["added"], replay_["removed"], replay_["membership_identical"]) == (0, 0, True)
+    assert (replay_["added_total"], replay_["removed_total"], replay_["membership_identical"]) == (0, 0, True)
     diff = diffed(client, old)
     assert (diff["added"], diff["removed"], diff["membership_identical"]) == ([], [], True)
     assert (diff["added_total"], diff["removed_total"], diff["refused"]) == (0, 0, None)
@@ -352,7 +332,11 @@ def test_a_removal_only_drift_is_not_membership_identical(client: TestClient, da
     old = tampered(data_dir, good, ids=extra, ids_hash=ids_hash(extra), total=len(extra), query_version="0")
     replay_ = replayed(client, old)["replay"]
     assert replay_["status"] == "drifted"
-    assert (replay_["added"], replay_["removed"], replay_["membership_identical"]) == (0, 1, False)
+    assert (replay_["added_total"], replay_["removed_total"], replay_["membership_identical"]) == (
+        0,
+        1,
+        False,
+    )
     diff = diffed(client, old)
     assert [x["id"] for x in diff["removed"]] == ["op:iclr:2024:zzGoneSince"] and diff["added"] == []
     assert diff["membership_identical"] is False
@@ -406,7 +390,7 @@ def test_a_canonical_that_no_longer_runs_is_refused_with_null_counts(
         bad = tampered(data_dir, good, canonical="(trust", query_version=query_version)
         replay_ = replayed(client, bad)["replay"]
         assert replay_["status"] == status and replay_["refused"] == "PARSE_UNBALANCED_PAREN"
-        for k in ("added", "removed", "membership_identical", "total", "excluded", "ids_hash"):
+        for k in ("added_total", "removed_total", "membership_identical", "total", "excluded", "ids_hash"):
             assert replay_[k] is None, k
         assert (replay_["ids_match"], replay_["excluded_match"]) == (False, False)
         diff = diffed(client, bad)
@@ -489,7 +473,7 @@ def test_a_changed_snapshot_with_the_pinned_index_gone_is_drifted_with_exact_cou
             "current": after_manifest["snapshot_hash"],
         }
     ]
-    assert (replay_["added"], replay_["removed"]) == (len(added), len(removed))
+    assert (replay_["added_total"], replay_["removed_total"]) == (len(added), len(removed))
     assert replay_["membership_identical"] is False and replay_["ids_match"] is False
     assert replay_["total"] == body["record"]["total"] + len(added) - len(removed)
 

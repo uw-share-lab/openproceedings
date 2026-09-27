@@ -22,6 +22,8 @@ from typing import Any
 from openproceedings.ingest.snapshot import SnapshotError
 from openproceedings.vocab import STATUSES, TRACKS, VENUES
 
+ALL_SOURCES = "*"  # records.ALL_SOURCES: the corpus-wide window's key (a test pins them equal)
+
 TRACK_ORDER = {t: i for i, t in enumerate(TRACKS)}
 STATUS_ORDER = {s: i for i, s in enumerate(STATUSES)}
 
@@ -44,27 +46,42 @@ def _year(key: str) -> int:
     return int(key)
 
 
+def _window(value: object) -> dict[str, str]:
+    window = _map(value, "crawl_window")
+    if set(window) != {"from", "to"} or not all(isinstance(v, str) and v for v in window.values()):
+        raise SnapshotError("a crawl window in the snapshot manifest is not {from, to}")
+    return {"from": window["from"], "to": window["to"]}
+
+
+def crawl_dates(manifest: Mapping[str, Any]) -> dict[str, dict[str, str]]:
+    """The manifest's crawl windows in a search record's `crawl_dates` shape: `*` is the corpus-wide
+    `crawl_window`, and a source entry that carries its own `crawl_window` (the M4 crawlers) adds its key."""
+    dates = {ALL_SOURCES: _window(manifest["crawl_window"])}
+    for source, entry in sorted(_map(manifest["sources"], "sources").items()):
+        if isinstance(entry, Mapping) and "crawl_window" in entry and source != ALL_SOURCES:
+            dates[source] = _window(entry["crawl_window"])
+    return dates
+
+
 def breakdown(manifest: Mapping[str, Any], name: str) -> dict[str, Any]:
     """The coverage of snapshot `name` (its directory) from its manifest: `snapshot` (name, hash, crawl
-    date and window, build time, sources), `totals` and `venue_years` (see the module docstring)."""
+    date and windows, build time, sources), `totals` and `venue_years` (see the module docstring)."""
     try:
         counts = _map(manifest["counts"], "counts")
         missing = _map(manifest["abstract_missing"], "abstract_missing")
         unknown = _map(manifest["unknown_track"], "unknown_track")
-        window = _map(manifest["crawl_window"], "crawl_window")
         snapshot = {
             "name": name,
             "snapshot_hash": manifest["snapshot_hash"],
             "crawl_date": manifest["crawl_date"],
-            "crawl_from": window["from"],
-            "crawl_to": window["to"],
+            "crawl_dates": crawl_dates(manifest),
             "built_at": manifest["built_at"],
             "sources": sorted(_map(manifest["sources"], "sources")),
         }
         record_count = _count(manifest["record_count"])
     except KeyError as e:
         raise SnapshotError(f"the snapshot manifest has no {e.args[0]!r}") from None
-    if not all(isinstance(v, str) and v for k, v in snapshot.items() if k != "sources"):
+    if not all(isinstance(v, str) and v for k, v in snapshot.items() if k not in ("sources", "crawl_dates")):
         raise SnapshotError("the snapshot manifest's hash, dates or name are not strings")
 
     venue_years: list[dict[str, Any]] = []

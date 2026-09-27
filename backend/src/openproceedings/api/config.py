@@ -12,16 +12,23 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, IPvAnyNetwork, field_validator, model_validator
 
+from openproceedings.engine.index import VERSION_NAME
+
 # An index to serve: the `current` symlink, or an index_version (hex; `-` allowed for hand-named copies).
 # Nothing else — no `/`, no `..` — so a name can never leave `<data_dir>/indexes/` (task-034 notes).
-INDEX_NAME = re.compile(r"current|[0-9a-f][0-9a-f-]{0,63}")
+INDEX_NAME = re.compile(rf"current|{VERSION_NAME.pattern}")
 # An exact origin: scheme, host, optional port; no path, no wildcard (fastapi-conventions §Rate limit and CORS).
 ORIGIN = re.compile(r"https?://(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(:[0-9]{1,5})?")
 
 
 class RateLimit(BaseModel):
     """A per-client token bucket: `capacity` tokens, refilled at `refill_per_second`. A request costs one
-    token; an export costs `export_weight` (it touches the whole matched set). `/healthz` is free."""
+    token; an export or a record route costs `export_weight` (it touches the whole matched set), and a query
+    with a position-verified clause (spec 03: a phrase with a wildcard, a NEAR the index can't answer) costs
+    at least `verified_weight` (None: `export_weight`), the rest charged once the route has parsed it.
+    `/healthz` is free. Every request is also charged to its client's network (IPv4 /24, IPv6 /48), a
+    bucket of `network_capacity` (None: 4 × `capacity`) refilled at `network_refill_per_second` (None:
+    4 × `refill_per_second`), so one host holding many addresses is bounded too."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -29,12 +36,34 @@ class RateLimit(BaseModel):
     capacity: float = Field(default=60.0, gt=0)
     refill_per_second: float = Field(default=1.0, gt=0)
     export_weight: float = Field(default=10.0, ge=1)
+    verified_weight: float | None = Field(default=None, ge=0)
+    network_capacity: float | None = Field(default=None, gt=0)
+    network_refill_per_second: float | None = Field(default=None, gt=0)
     max_clients: int = Field(default=100_000, ge=1)  # buckets held in memory; the least recent is dropped
+
+    @property
+    def verified_cost(self) -> float:
+        return self.export_weight if self.verified_weight is None else self.verified_weight
+
+    @property
+    def network_bucket(self) -> tuple[float, float]:
+        """The network bucket's capacity and refill per second."""
+        return (
+            4 * self.capacity if self.network_capacity is None else self.network_capacity,
+            4 * self.refill_per_second
+            if self.network_refill_per_second is None
+            else self.network_refill_per_second,
+        )
 
     @model_validator(mode="after")
     def _export_fits(self) -> RateLimit:
         if self.export_weight > self.capacity:
             raise ValueError("export_weight must not exceed capacity, or no export could ever run")
+        if max(self.export_weight, self.verified_cost) > min(self.capacity, self.network_bucket[0]):
+            raise ValueError(
+                "export_weight and verified_weight must fit in capacity and network_capacity, or no such "
+                "request could ever run"
+            )
         return self
 
 
@@ -61,12 +90,36 @@ class ApiConfig(BaseModel):
     # store holds `records_max_bytes` (None: no cap) or its disk has less than `records_min_free_bytes` free
     records_max_bytes: int | None = Field(default=1 << 30, ge=1)
     records_min_free_bytes: int = Field(default=256 << 20, ge=0)
+    # every client together: at most `record_saves_burst` saves at once, refilled at `record_saves_per_hour`
+    # (an append-only store can't be emptied, so its growth is bounded in time as well as in bytes)
+    record_saves_burst: int = Field(default=60, ge=1)
+    record_saves_per_hour: float = Field(default=600.0, gt=0)
+    # a request body over this is 413 API_BODY_TOO_LARGE, before it is read (task-079). 64 KiB holds the
+    # longest valid body: a 2,000-code-point `q` of astral characters as JSON escapes is ~24 KB
+    max_body_bytes: int = Field(default=64 * 1024, ge=1024)
+    # cold position verification (spec 03: seconds of pure Python per clause) runs at most this many at a
+    # time; a query that would need another slot is 503 API_BUSY with `Retry-After: busy_retry_seconds`
+    verification_slots: int = Field(default=1, ge=1)
+    busy_retry_seconds: int = Field(default=5, ge=1)
+    # uvicorn's limit_concurrency: connections and tasks beyond it get a 503 from uvicorn itself
+    limit_concurrency: int | None = Field(default=64, ge=1)
 
     @field_validator("index")
     @classmethod
     def _index_name(cls, v: str) -> str:
         if not INDEX_NAME.fullmatch(v):
             raise ValueError("index must be `current` or an index_version (0-9, a-f, -)")
+        return v
+
+    @field_validator("trusted_proxies")
+    @classmethod
+    def _proxies(cls, v: tuple[IPvAnyNetwork, ...]) -> tuple[IPvAnyNetwork, ...]:
+        for network in v:
+            if network.prefixlen == 0:  # 0.0.0.0/0 or ::/0: every client could forge its address
+                raise ValueError(
+                    f"trusted proxy {network} trusts every address, so any client could set its own "
+                    "X-Forwarded-For; name the proxy's own address or network"
+                )
         return v
 
     @field_validator("cors_origins")

@@ -39,6 +39,7 @@ from openproceedings.engine.index import (
     open_index,
     verify_index,
 )
+from openproceedings.logs import elapsed_ms
 
 log = logging.getLogger(__name__)
 
@@ -102,7 +103,7 @@ def check_parity(
     log.info(
         "index_parity_ok",
         extra={"index_version": manifest["index_version"], "records": n, "terms": report.terms,
-               "phrases": phrases, "ms": round((time.perf_counter() - started) * 1000)},
+               "phrases": phrases, "ms": elapsed_ms(started)},
     )  # fmt: skip
     return report
 

@@ -26,8 +26,9 @@ import json
 import logging
 import re
 import sys
+import time
 import types
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from typing import IO
 
 ROOT = "openproceedings"
@@ -73,6 +74,12 @@ _STANDARD = frozenset(vars(logging.LogRecord("", 0, "", 0, "", None, None))) | {
 _context: contextvars.ContextVar[Mapping[str, object]] = contextvars.ContextVar(
     "op_log_context", default=types.MappingProxyType({})
 )
+
+
+def elapsed_ms(started: float, clock: Callable[[], float] = time.perf_counter) -> float:
+    """Milliseconds since `clock()` read `started`, to one decimal: the one form of every log line's `ms`
+    field (logging-standards)."""
+    return round((clock() - started) * 1000, 1)
 
 
 @contextlib.contextmanager

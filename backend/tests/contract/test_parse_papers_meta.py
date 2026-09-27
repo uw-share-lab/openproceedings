@@ -128,7 +128,9 @@ def test_every_paper_of_an_index_is_served(store: Store, data_dir: Path) -> None
             assert body["paper"] == record.model_dump(mode="json")
 
 
-@pytest.mark.parametrize("rid", ["op:iclr:2024:nope", SECRET, "op:iclr:2024:Fx0001 x", "x" * 5000])
+@pytest.mark.parametrize(
+    "rid", ["op:iclr:2024:nope", f"op:icml:2023:{SECRET}", "op:neurips:1999:" + "x" * 5000]
+)
 def test_an_unknown_paper_is_404_api_paper_not_found(client: TestClient, rid: str) -> None:
     e = error(client.get(f"/api/v1/papers/{rid}"), 404, "API_PAPER_NOT_FOUND")
     assert rid not in e["message"]
@@ -190,12 +192,17 @@ def test_a_snapshot_that_vanishes_after_load_is_a_500(store: Store, tmp_path: Pa
     assert "snapshot" not in e["message"]  # the client learns only the request id
     (failed,) = [line for line in logs() if line["event"] == "request_failed"]
     assert failed["level"] == "ERROR"
+    assert (failed["cause"], failed["cause_reason"]) == ("FileNotFoundError", "ENOENT")  # why, never a path
 
 
 def test_the_paper_line_logs_the_template_not_the_id(client: TestClient, logs: Logs) -> None:
-    client.get(f"/api/v1/papers/{SECRET}")
-    (line,) = [entry for entry in logs() if entry["event"] == "request"]
-    assert line["route"] == "/api/v1/papers/{id}" and line["status"] == 404
+    client.get(f"/api/v1/papers/op:iclr:2024:{SECRET}")
+    client.get(f"/api/v1/papers/{SECRET}")  # malformed: a 422 whose message names the pattern, not the id
+    lines = [entry for entry in logs() if entry["event"] == "request"]
+    assert [(line["route"], line["status"]) for line in lines] == [
+        ("/api/v1/papers/{id}", 404),
+        ("/api/v1/papers/{id}", 422),
+    ]
     raw = logs.raw.getvalue()  # type: ignore[attr-defined]
     assert SECRET not in raw
 
@@ -258,17 +265,46 @@ def test_the_openapi_document_describes_the_routes_and_their_models(client: Test
     assert limit["schema"]["maximum"] == 200
 
 
-def test_a_malformed_paper_id_is_a_404_without_asking_the_index(
+def test_a_malformed_paper_id_is_a_422_like_a_malformed_record_id_without_asking_the_index(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """One rule for both path ids (M3a review): a malformed one is 422 `API_BAD_PARAM` (the path's
+    `pattern`), an unknown well-formed one 404; neither message repeats the id."""
     engine = client.app.state.index.engine  # type: ignore[attr-defined]
 
     def refuse(ids: list[str]) -> Any:
         raise AssertionError("the index was asked about a malformed id")
 
     monkeypatch.setattr(engine, "display", refuse)
-    for rid in ("nope", "op:iclr:24:x", "op:acl:2024:x", "x" * 5000):
-        error(client.get(f"/api/v1/papers/{rid}"), 404, "API_PAPER_NOT_FOUND")
+    for rid in ("nope", "op:iclr:24:x", "op:acl:2024:x", "x" * 5000, SECRET, "op:iclr:2024:Fx0001 x"):
+        e = error(client.get(f"/api/v1/papers/{rid}"), 422, "API_BAD_PARAM")
+        assert rid not in e["message"]
+    for rid in ("nope", "short", "x" * 13):
+        e = error(client.get(f"/api/v1/records/{rid}"), 422, "API_BAD_PARAM")
+        e = error(client.get(f"/api/v1/records/{rid}/diff"), 422, "API_BAD_PARAM")
+        assert rid not in e["message"]
+
+
+def test_the_path_patterns_are_the_ids_own_checks() -> None:
+    """The documented `pattern`s are what the code checks (`is_paper_id`, `records.RECORD_ID`)."""
+    import re
+
+    from openproceedings.api.models import PAPER_ID, RECORD_ID
+    from openproceedings.ingest.record import is_paper_id
+    from openproceedings.records import RECORD_ID as RECORD_ID_RE
+    from openproceedings.records import valid_record_id
+
+    for text in (
+        "op:iclr:2024:x",
+        "op:neurips:1987:a-b_c.d",
+        "op:icml:2023:Fx0001 x",
+        "op:acl:2024:x",
+        "nope",
+    ):
+        assert bool(re.fullmatch(PAPER_ID, text)) == is_paper_id(text), text
+    assert f"^{RECORD_ID_RE.pattern}$" == RECORD_ID
+    for text in ("AAAAAAAAAAAA", "a-_b" * 3, "short", "x" * 13):
+        assert bool(re.fullmatch(RECORD_ID, text)) == valid_record_id(text), text
 
 
 def test_meta_lists_the_index_the_request_read(client: TestClient, store: Store) -> None:

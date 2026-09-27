@@ -11,15 +11,19 @@ traceback, whose last line is the message and can quote the query (task-034 note
 
 from __future__ import annotations
 
+import errno
 import logging
 import traceback
 from collections.abc import Mapping, Sequence
+from enum import StrEnum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.json_schema import SkipJsonSchema
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from openproceedings.diagnostics import (
@@ -33,13 +37,26 @@ from openproceedings.diagnostics import (
 log = logging.getLogger(__name__)
 ACCESS = "openproceedings.access"  # scope key: the request's access-line fields (api/middleware.py)
 
+if TYPE_CHECKING:
+    ErrorCode = DiagnosticCode
+else:
+    # The codes an error envelope can carry: the registry's codes that have an HTTP status (`PARSE_*`,
+    # `FIELD_*`, `WILDCARD_*` and every `API_*` one but `API_REPLAY_MISMATCH`), as a schema of its own, so a
+    # client's switch over `error.code` holds no warning or log-only code. Derived from the registry, never
+    # hand-listed; a contract test compares the two.
+    ErrorCode = StrEnum(
+        "ErrorCode", {c.name: c.value for c in DiagnosticCode if http_status(c) is not None}, module=__name__
+    )
+    ErrorCode.__doc__ = "An error envelope's code (spec 04 §Error handling)."
+
 
 class ErrorBody(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    code: DiagnosticCode
+    code: ErrorCode
     message: str
-    diagnostics: list[Diagnostic] | None = None
+    # present (non-empty) on a query refusal (`PARSE_*`, `FIELD_*`, `WILDCARD_*`), absent otherwise; never null
+    diagnostics: list[Diagnostic] | SkipJsonSchema[None] = Field(default=None)
 
 
 class ErrorEnvelope(BaseModel):
@@ -97,6 +114,17 @@ def frames(exc: BaseException) -> list[str]:
     return [f"{Path(f.filename).name}:{f.lineno} {f.name}" for f in traceback.extract_tb(exc.__traceback__)]
 
 
+def reason_of(exc: BaseException) -> str | None:
+    """A constant that says why `exc` happened, never its message: its `reason` (SnapshotError,
+    IndexBuildError, IndexSelectionError, IndexUnservable), or an OSError's errno name (`ENOENT`)."""
+    reason = getattr(exc, "reason", None)
+    if isinstance(reason, str):
+        return reason
+    if isinstance(exc, OSError) and exc.errno is not None:
+        return errno.errorcode.get(exc.errno, str(exc.errno))
+    return None
+
+
 def request_id(scope: Mapping[str, object]) -> str:
     fields = scope.get(ACCESS)
     return str(fields.get("request_id", "")) if isinstance(fields, dict) else ""
@@ -106,15 +134,20 @@ def internal_error(scope: Mapping[str, object], exc: BaseException) -> JSONRespo
     """Log an unexpected failure once (ERROR: type and frames, never the message) and answer 500
     `API_INTERNAL` naming the request id, so a report can be matched to the log line."""
     cause = exc.__cause__ or exc.__context__
-    log.error(
-        "request_failed",
-        extra={
-            "code": str(DiagnosticCode.API_INTERNAL),
-            "error": type(exc).__name__,
-            "cause": type(cause).__name__ if cause is not None else None,
-            "frames": frames(exc),
-        },
-    )
+    fields: dict[str, object] = {
+        "code": str(DiagnosticCode.API_INTERNAL),
+        "error": type(exc).__name__,
+        "cause": type(cause).__name__ if cause is not None else None,
+        "frames": frames(exc),
+    }
+    if cause is not None:
+        # Starlette wraps an exception its handlers catch after the response started (a stream failing
+        # mid-body) in a RuntimeError whose own frames stop at the handler; where it failed is the cause's
+        fields["cause_frames"] = frames(cause)
+        reason = reason_of(cause)
+        if reason is not None:
+            fields["cause_reason"] = reason
+    log.error("request_failed", extra=fields)
     rid = request_id(scope)
     return error_response(
         DiagnosticCode.API_INTERNAL,

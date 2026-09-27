@@ -87,7 +87,10 @@ class Claim(BaseModel):
     """One source's statement about one field. Frozen and scalar (tuples for lists), so claims are
     hashable and set-comparable. `fetched_at` comes from the cache entry, never from build time."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+    # every field is always sent, so the API schema marks every one required (spec 04 §Conventions)
+    model_config = ConfigDict(
+        frozen=True, extra="forbid", strict=True, json_schema_serialization_defaults_required=True
+    )
 
     field: ClaimField
     value: ClaimValue
@@ -156,7 +159,7 @@ Doi = Annotated[Text, AfterValidator(_doi)]
 
 
 class Urls(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", json_schema_serialization_defaults_required=True)
 
     forum: Url | None = None
     pdf: Url | None = None
@@ -180,7 +183,7 @@ def content_hash(*, title: str, abstract: str | None, venue: str, year: int, tra
 
 
 class PaperRecord(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", json_schema_serialization_defaults_required=True)
 
     id: str  # op:<venue lower-case>:<year>:<native>; never changes once a snapshot has shipped it
     title: StrictStr

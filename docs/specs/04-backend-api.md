@@ -31,6 +31,43 @@ reviews without the UI.
   `errors` hold those same diagnostics; only a malformed body is a `422 API_BAD_PARAM`.
 - No authentication in v1. Rate limiting is per IP (a token bucket in the app, set in config). CORS
   allowlist comes from config.
+- **Shapes, as frozen for the first `/api/v1` release** (M3a review-gate; `backend/tests/contract/test_contract_v1.py`):
+  - **Every field a response sends is required** in the schema, a null or defaulted one too (response models,
+    `Urls`, `PaperRecord`, `Diagnostic`, the AST nodes, a stored record: `json_schema_serialization_defaults_required`),
+    so a client may rely on the key being there. The one optional key is an error's `diagnostics`: present
+    (non-empty) on a query refusal, **absent otherwise, never null**. A hit and its paper agree field by field.
+  - **Counts are `*_total`**: `added_total`/`removed_total` in a replay and in a diff (where `added`/`removed`
+    are the id lists), beside `total`.
+  - **One timestamp form**: an RFC 3339 date-time in UTC with a `Z` suffix, `YYYY-MM-DDTHH:MM:SS[.ffffff]Z`
+    (fractional seconds only when the source had them), typed `format: date-time`: a record's `searched_at`,
+    every `crawl_dates` end, `/coverage`'s `built_at`, a provenance claim's `fetched_at`. Manifests store
+    `…+00:00`; the API renders them in this form (`openproceedings/timestamps.py`) and never rewrites the
+    files. A calendar date (`crawl_date`) is `YYYY-MM-DD`, `format: date`.
+  - **Crawl windows have one shape**, `crawl_dates: {"*": {from, to}, <source>: {from, to}…}`, in a record and in
+    `/coverage`'s `snapshot`: `*` is the corpus-wide window, a source that carries its own adds its key.
+  - **Parameters are exact.** Every route refuses a query parameter it doesn't declare, or one given twice,
+    with 422 `API_BAD_PARAM` naming it (`/search?limt=5`, `/search?index_version=…`, `?q=a&q=b`), so a typo is
+    never answered as if the parameter were absent. A trailing slash is not redirected: `/search/` is 404
+    `API_NOT_FOUND`. A path id has its `pattern` in the schema; a **malformed paper id or record id is 422
+    `API_BAD_PARAM`**, an unknown well-formed one 404, and neither message repeats it. Every parameter is
+    described in the schema (`q` names its 2,000-code-point cap).
+  - **Open and closed enums** (decision-009; `OPEN_ENUMS`/`CLOSED_ENUMS` in `api/openapi.py`, and a test fails
+    on an enum in neither). **Open** — a new value may appear within v1, and a client handles one it doesn't
+    know (the schema says "Open set"): error codes, diagnostic codes (a stored record's are plain strings),
+    `venue`, `track`, `status`, `presentation`, a provenance claim's `source` and `field`, the text and filter
+    field names, and `ChangedInput.input`. **Closed** — a new value is a breaking change: `mode`, `sort`, the
+    export `format`, the replay `status`, `ChangedInput.kind`, a wildcard's `op`, `include`.
+  - **`ErrorBody.code` is its own schema, `ErrorCode`**: exactly the registry's codes that have an HTTP status
+    (`PARSE_*`, `FIELD_*`, `WILDCARD_*`, the `API_*` ones but the log-only `API_REPLAY_MISMATCH`), derived from
+    the registry and tested against it.
+  - **Headers are in the contract**: an export's 200 declares `X-Total`, `X-Index-Version`,
+    `X-Tokenizer-Version`, `X-Query-Version` and `Content-Disposition`; every route's 405 declares `Allow` and
+    its 429 `Retry-After` (not `/healthz`'s, which is never limited); `POST /records`'s 201 declares
+    `Location`. CORS exposes all of them.
+  - `info.version` is the API version, `v1`. operationIds are `verb_noun`: `search`, `parse_query`, `export`,
+    `get_paper`, `get_coverage`, `get_meta`, `get_healthz`, `create_record`, `get_record`, `get_record_diff`.
+  - A request body over `ApiConfig.max_body_bytes` (64 KiB; the longest valid body, 2,000 astral code points
+    as JSON escapes, is ~24 KB) is 413 `API_BODY_TOO_LARGE`, refused before it is read (task-079).
 
 ## Endpoints
 
@@ -40,7 +77,7 @@ reviews without the UI.
 | `GET` | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | `GET` | `/papers/{id}` | The full record, provenance included |
 | `GET` | `/export` | `format=ris\|csv\|bibtex\|jsonl` and either `q` (with `mode` and an optional `index_version`) or `record_id` alone → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; with `record_id`, exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if that index is gone, 409 `API_RECORD_MISMATCH` if its replay is a `mismatch`) |
-| `POST` | `/records` | Freezes a search as an immutable **search record** → `{record_id, url}` |
+| `POST` | `/records` | Freezes a search as an immutable **search record** → 201 `{record_id, page}` with `Location: /api/v1/records/<record_id>` |
 | `GET` | `/records/{id}` | The stored record, plus a replay check (see below) |
 | `GET` | `/records/{id}/diff` | For a `drifted` record: added and removed ids (with titles), and which `index_version` inputs changed |
 | `GET` | `/coverage` | Counts per venue × year × track × status, abstract-missing counts, snapshot date |
@@ -62,7 +99,7 @@ reviews without the UI.
   "excluded": { "total": 304,
                 "track": { "workshop": 212, "competition": 4, "unknown": 0 },
                 "status": { "rejected": 88, "unknown": 0 } },
-  "facets": { "venue": {...}, "year": {...}, "track": {...} },
+  "facets": { "venue": {...}, "year": {...}, "track": {...}, "status": {...} },
   "hits": [ { "id": "...", "title": "...", "abstract": "...", "authors": [...], "venue": "ICLR",
               "year": 2025, "track": "main", "status": "accepted", "presentation": "poster", "score": 12.3,
               "highlights": { "title": [[0,5]], "abstract": [[102,114]] }, "urls": {...} } ]
@@ -235,21 +272,29 @@ The record page (05) is what a methods section cites. Records are stored in `dat
 As built (task-037 and its review fixes; `backend/src/openproceedings/records.py` holds the record,
 `ids_hash`, the store and the replay, so a later `op record` calls the same functions; `api/records.py` is the
 transport, `IndexState.pinned` in `api/state.py` loads older indexes):
-- **`POST /records`** takes `{q, mode}` (no other keys) and answers **201** `{record_id, url, index_version,
-  tokenizer_version, query_version}`. `url` is the record page's path, `/record/<record_id>` (05 §Pages),
-  relative to the site. The query is refused exactly as `/search` refuses it (422 with diagnostics,
-  `PARSE_TOO_LONG` before parsing) and nothing is written. It is re-run on the request's one engine:
+- **`POST /records`** takes `{q, mode}` (no other keys) and answers **201** `{record_id, page, index_version,
+  tokenizer_version, query_version}` with `Location: /api/v1/records/<record_id>` (the API resource). `page`
+  is the record page's path, `/record/<record_id>` (05 §Pages), relative to the site (renamed from `url`
+  before the first release: it is not the resource's URL). The query is refused exactly as `/search` refuses it (422 with diagnostics,
+  `PARSE_TOO_LONG` before parsing, or after canonicalising when the canonical form is over the cap,
+  decision-008) and nothing is written. It is re-run on the request's one engine:
   `search.run` (so `total`, `excluded` and `expansions` equal `/search`'s) plus `match_ids` for the ids.
 - **Cost and capacity.** `POST /records`, `GET /records/{id}` and `/diff` each run a whole query, so each
   costs the rate limit's `export_weight`. A save is refused with 503 `API_RECORDS_STORE_FULL` (nothing
   written) once the store holds `ApiConfig.records_max_bytes` (default 1 GiB; `None` for no cap) or its disk
   has less than `records_min_free_bytes` free (default 256 MiB). An empty store always takes its first save.
-  Reads are never refused.
+  Reads are never refused. The store logs `records_store_full` (WARNING) when it fills and
+  `records_store_recovered` (INFO) when a save fits again: one line per change of state, not per refusal.
+  Saves from every client together are also held to `ApiConfig.record_saves_burst` (default 60) at once,
+  refilled at `record_saves_per_hour` (default 600): beyond it a save is 429 `API_RATE_LIMITED` with
+  `Retry-After`, checked after the parse (a query that doesn't parse costs no save) and before the query
+  runs. The store is append-only, so its growth is bounded in time as well as in bytes.
 - **The record** holds every field of the table, plus `record_id`, `body_version` (2), `schema_version` and
   `ranking_params` (the index's two other inputs, so a drifted replay can name a method change after the
   pinned index is gone). `crawl_dates` is keyed by source: `*` is the snapshot manifest's corpus-wide
   `crawl_window` (today's manifests have only that), and a source entry that carries its own
-  `crawl_window` (the M4 crawlers) adds its own key. Every end is checked to be an ISO 8601 date-time.
+  `crawl_window` (the M4 crawlers) adds its own key. Every end is checked to be an ISO 8601 date-time and is
+  sent in the one timestamp form (§Conventions; a stored `…+00:00` reads back as `…Z`).
   `crawl_dates_kind` has the same keys: a source in `vocab.BOOTSTRAP_SOURCES` (`ris`) gives
   `scholar_query_dates`, any other `crawl`, and `*` is the one kind of all the manifest's sources, or `mixed`.
   `sources` is the manifest's `sources` keys, sorted; `identification_citable` is `not
@@ -263,8 +308,8 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
 - **`ids_hash`** is `sha256("\n".join(sorted(ids)))`, code-point order, no trailing newline, with
   known-answer tests (the empty set is `sha256("")`).
 - **Record ids** are `secrets.token_urlsafe(9)`: 12 characters of `[A-Za-z0-9_-]`, 72 random bits, redrawn
-  only when the drawn id is taken. Anything else is 422 `API_BAD_PARAM`; an unknown id is 404
-  `API_RECORD_NOT_FOUND`, and neither message repeats the id.
+  only when the drawn id is taken. Anything else is 422 `API_BAD_PARAM` (the path parameter's `pattern`, as
+  for a paper id); an unknown id is 404 `API_RECORD_NOT_FOUND`, and neither message repeats the id.
 - **The store** is `<data_dir>/records/records.sqlite`: its own directory (mode 0700, file 0600), because
   WAL mode writes `-wal` and `-shm` files beside the database, so the directory, not just the file, must be
   writable. Created on the first save (a read never creates it; a removed file is re-created). Tables
@@ -297,11 +342,11 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   runs on that index, so `changed` holds just `query_version`; otherwise `replay.changed` lists each
   differing input (`snapshot_hash` kind `corpus`; `tokenizer_version`, `schema_version`, `ranking_params`,
   `query_version` kind `method`) with its recorded and current value. `replay` also has `total`,
-  `excluded`, `ids_hash`, `ids_match`, `excluded_match`, `added`, `removed` (counts) and
-  `membership_identical` (true on `+0/−0`).
+  `excluded`, `ids_hash`, `ids_match`, `excluded_match`, `added_total`, `removed_total` (counts, named as
+  in the diff) and `membership_identical` (true on `+0/−0`).
 - **A refused replay** (the canonical string no longer parses, or a wildcard now expands past the cap) has
-  `refused` set to that code and compares nothing: `total`, `excluded`, `ids_hash`, `added`, `removed` and
-  `membership_identical` are null. Its status stays `drifted`, or `mismatch` under the record's own versions.
+  `refused` set to that code and compares nothing: `total`, `excluded`, `ids_hash`, `added_total`,
+  `removed_total` and `membership_identical` are null. Its status stays `drifted`, or `mismatch` under the record's own versions.
 - **Pinned indexes** load on demand, read-only, by the served index's rules (`state.index_path`: an
   index_version resolving to itself directly under `<data_dir>/indexes/`; never `resolve_snapshot`), and
   are opened (verified) by the same engine class, so "available" means loadable by this code: an index built
@@ -316,9 +361,9 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   replay has empty lists and null totals.
 - **For `/export?record_id=` (task-036)**: `api.records.stored_record(request, record_id)` (422/404) and
   `refuse_mismatch(request, record, engine)` (409 `API_RECORD_MISMATCH` on a `mismatch` replay), which
-  `/export` calls after pinning the record's index; `require_citable(request, record_id, engine)` is the two
-  together and `replay_status(request, record_id, engine)` returns just the status. Pass the route's
-  `EngineDep` engine so a request never reads the served index twice. A `reproduced` replay also requires
+  `/export` calls after pinning the record's index (the only production callers; the `require_citable` and
+  `replay_status` wrappers were removed at the M3a gate as unused). Pass the route's `EngineDep` engine so a
+  request never reads the served index twice. A `reproduced` replay also requires
   the stored id list to hash to the record's `ids_hash`, since that list is what `/export` hands over.
 - Access line: `canonical_hash`, `total` (the replay's) and `index_version` (the one the replay ran on).
   No log line carries the input, canonical or identification strings: the record stores them, the logs don't.
@@ -331,13 +376,15 @@ once released: changing one is a breaking change under `/api/v1`.
 
 | Situation | HTTP | `code` |
 |---|---|---|
-| Query does not parse, uses an unknown field or value, or has a bad wildcard (incl. more than 200 expansions) (on endpoints that run the query) | 422 | `PARSE_*`, `FIELD_*`, `WILDCARD_*` (diagnostics carry the spans); a query over 2,000 code points is `PARSE_TOO_LONG`, rejected before parsing |
-| A query parameter is invalid (bad `sort`, `limit` > 200, unknown `format`, malformed `record_id`) | 422 | `API_BAD_PARAM` |
-| Paper or search record not found | 404 | `API_PAPER_NOT_FOUND` / `API_RECORD_NOT_FOUND` |
+| Query does not parse, uses an unknown field or value, or has a bad wildcard (incl. more than 200 expansions) (on endpoints that run the query) | 422 | `PARSE_*`, `FIELD_*`, `WILDCARD_*` (diagnostics carry the spans); a query over 2,000 code points is `PARSE_TOO_LONG`, rejected before parsing, and so is one whose canonical form is over 2,000 code points, refused after canonicalising (decision-008) |
+| A parameter is invalid (bad `sort`, `limit` > 200, unknown `format`, a malformed paper or record id), unknown to the route, or given twice; or a body is malformed | 422 | `API_BAD_PARAM` |
+| Paper or search record not found (a well-formed id) | 404 | `API_PAPER_NOT_FOUND` / `API_RECORD_NOT_FOUND` |
 | A pinned `index_version` is not available on this instance | 409 | `API_INDEX_VERSION_UNAVAILABLE` |
 | Export requested for a record whose replay status is `mismatch` | 409 | `API_RECORD_MISMATCH` |
-| Rate limit exceeded | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
+| A request body over `max_body_bytes` (64 KiB), by `Content-Length` or by the bytes of a chunked body, refused before it is read and before any other check (task-079) | 413 | `API_BODY_TOO_LARGE` |
+| Rate limit exceeded: the client's or its network's bucket, a position-verified query's extra weight, or the instance-wide record-save ceiling | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
 | A search record can't be saved: the record store is over its size cap or its disk under the free-space floor (task-037) | 503 | `API_RECORDS_STORE_FULL` |
+| A query needs a cold position verification and every verification slot is taken (refused, never queued) | 503 | `API_BUSY` (with `Retry-After`) |
 | No index loaded yet (startup, or the first load failed; a failed swap keeps serving the old index) | 503 | `API_INDEX_NOT_LOADED` |
 | Anything unexpected | 500 | `API_INTERNAL` (logged at ERROR with the request id; message never echoes input) |
 | No such endpoint (task-034) | 404 | `API_NOT_FOUND` |
@@ -363,29 +410,51 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
   - The lifespan loads the index in a background thread, so `GET /api/v1/healthz` answers `{index_loaded,
     index_version, tokenizer_version, query_version}` (`index_version` null) meanwhile, and routes that need
     the engine answer 503 `API_INDEX_NOT_LOADED`. SIGHUP (main thread) reloads in a background thread and
-    swaps the one engine reference; a failed reload logs `index_load_failed` at ERROR and keeps serving the
-    engine it had, so 503 means only that no index was ever loaded. Reloading the version already served
-    keeps the engine.
-  - Routes take the engine through `deps.EngineDep`: read once per request, so a request or a stream in
-    flight finishes on the index it started on. `deps.checked_query(q)` raises 422 `PARSE_TOO_LONG` (the
-    parser's own diagnostic, `parser.too_long`) before anything reads the query.
+    swaps the one reference to the served bundle (`state.Served`: the engine, its snapshot's records and its
+    coverage, built and checked together); a failed reload logs `index_load_failed` at ERROR (with `error`,
+    a `reason` constant — `not_found`, `outside_indexes`, `files_mismatch`, `manifest_changed`,
+    `doc_count_mismatch`, `unreadable`, `tokenizer_version_mismatch` and the other `*_mismatch` of an index
+    this code can't serve, a snapshot's reasons below, or an OSError's errno name — `index_version_attempted`
+    and `index_version_kept`, never a path) and keeps serving the bundle it had, so 503 means only that no
+    index was ever loaded. Reloading the version already served keeps the engine.
+  - Routes take the served bundle through `deps.ServedDep` (and its engine through `deps.EngineDep`): read
+    once per request, so a request or a stream in flight finishes on the index it started on, with that
+    index's records (`/papers`) and coverage, however many swaps happen before it ends (M3a review). `deps.checked_query(q)` raises 422 `PARSE_TOO_LONG` (the
+    parser's own diagnostic, `parser.too_long`) before anything reads the query; a query within the cap
+    whose canonical form is over it is `PARSE_TOO_LONG` too, from `parse` after canonicalising
+    (decision-008), so a saved canonical string always re-parses.
   - The client for the rate limit is the TCP peer, or, when the peer is a trusted proxy, the right-most
     `X-Forwarded-For` hop that is not one. An IPv4-mapped IPv6 address (`::ffff:a.b.c.d`, as a dual-stack
     bind reports IPv4 peers) counts as its IPv4 address, both as a key and when matching trusted proxies.
     IPv6 clients are bucketed per /64. One host usually holds a whole /64, but an attacker holding a /48 gets
-    65,536 buckets, so the per-/64 limit bounds one host, not a determined network. `/healthz` (GET or
+    65,536 buckets, so every request is also charged to its client's **network** bucket (IPv4 /24, IPv6 /48;
+    `network_capacity` and `network_refill_per_second`, default 4 × the client's): a request passes only if
+    both hold its cost, and a refusal by one spends nothing from the other. `/healthz` (GET or
     HEAD, for uptime monitors; HEAD is its own route, left out of the OpenAPI document so operation ids stay
-    unique) costs nothing; `/export` costs `export_weight`, charged before routing. The
-    429 carries `Retry-After` in whole seconds.
+    unique) costs nothing; `/export` and the record routes cost `export_weight`, charged before routing. A
+    query with a **position-verified clause** (spec 03: a phrase with a wildcard, a NEAR the index can't answer;
+    `engine.compile.verifies`, tested equal to the compiler's own path) costs at least `verified_weight`
+    (default `export_weight`): the rest is charged after the parse and before compiling (`deps.searchable`,
+    `middleware.charge`). Cold verification (a cache miss: seconds of pure Python per clause) runs in at most
+    `ApiConfig.verification_slots` (default 1) at a time, on every engine the state opens
+    (`TantivyEngine.verification_gate`); a query that needs another slot is refused at once with 503
+    `API_BUSY` and `Retry-After: busy_retry_seconds` (default 5), never queued, so it can't hold a worker
+    thread or stall `/healthz`. A query that needs no verification, or whose clauses are cached, never waits.
+    Every 429 carries `Retry-After` in whole seconds.
   - Access line: one `request` line per request (INFO; `/healthz` at DEBUG) with `request_id`, `method`,
     `route` (the template; null when nothing matched, a 429 included), `status`, `ms`, `index_version`, and
     what a route adds with `deps.annotate`/`annotate_parse`: `canonical_hash`, `total`, `token_count`,
     `n_errors`, `error_codes`, `warning_codes` (at most 10 distinct codes, then `+N`). Never `q`, the
-    canonical or identification strings, messages or spans. An unexpected exception is one
-    `request_failed` ERROR line with its type and frames (never its message) and a 500 whose message names
-    the request id; nothing is re-raised to the server. Layers, outermost first: the access line, CORS,
-    the last catch (`LastCatch`), the rate limit, then the app, so a 500 carries the CORS headers like any
-    response. If the exception comes after the response started (a stream), the client has its status, so
+    canonical or identification strings, messages or spans. `ms` is milliseconds to one decimal, the one form
+    of every log line's `ms` (`logs.elapsed_ms`). An unexpected exception is one
+    `request_failed` ERROR line with its type and frames (never its message), its cause's type, the cause's
+    frames (`cause_frames`: Starlette wraps an exception its handler catches after a stream started in a
+    RuntimeError whose own frames stop at the handler) and the cause's reason constant (`cause_reason`: a
+    `SnapshotError`'s reason or an OSError's errno name, e.g. `ENOENT` for a snapshot that vanished under
+    `/papers`), and a 500 whose message names the request id; nothing is re-raised to the server. Layers,
+    outermost first: the access line, CORS, the last catch (`LastCatch`), the body cap (`BodyLimit`), the
+    rate limit, then the app (whose app-wide `strict_query` dependency refuses unknown or repeated
+    parameters), so a 500 or a 413 carries the CORS headers like any response. If the exception comes after the response started (a stream), the client has its status, so
     the access line keeps `status` as sent and adds `aborted: true`. A CORS preflight from an origin that
     isn't allowed is Starlette's plain-text 400 `Disallowed CORS origin`, not the envelope (it never reaches
     the app), and it still gets its access line.
@@ -404,6 +473,10 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     httpx/httpcore are pinned to WARNING, and the root logger gets the same JSON handler at WARNING, so another
     library's warning (asyncio, fastapi) is JSON too. `--log-query-text` only lets the formatter keep
     query-text fields; no log call passes one today (the access line never carries `q`), so it changes nothing.
+    uvicorn runs with `limit_concurrency` (`ApiConfig.limit_concurrency`, default 64). A trusted proxy of
+    `0.0.0.0/0` or `::/0` is refused (any client could then set its own address), and so is `--no-rate-limit`
+    with a non-loopback `--host`; `op serve` must sit behind the reverse proxy (spec 08 §Deploy: uvicorn has
+    no header timeout of its own).
   - The OpenAPI document and Swagger UI are served under `/api/v1` (`openapi.json`, `docs`).
 - As built (task-040, `api/openapi.py`): the served document is committed as
   `backend/tests/contract/openapi.json` (`op openapi`: sorted keys, two-space indent, no server URL, no
@@ -411,11 +484,12 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
   generated from that file by `openapi-typescript` (pinned in `frontend/package.json`, `npm run gen:api`).
   `make openapi` regenerates both; `test_openapi_snapshot.py` fails when the live document differs from the
   snapshot, and CI's `test` job runs `make openapi` and fails on any diff. To keep the document valid and
-  stable: an operationId is the handler's name (FastAPI's default appends the first method of the route's
-  set, which follows `PYTHONHASHSEED`), unique across routers (tested); every route documents the error
-  envelope as its `default` response (replacing FastAPI's `HTTPValidationError` 422, which this app never
-  sends); and the HEAD of a GET+HEAD route (`/healthz`) is left out of the document, because FastAPI
-  would give it the GET's operationId.
+  stable: an operationId is the handler's name, `verb_noun` (§Conventions; FastAPI's default appends the
+  first method of the route's set, which follows `PYTHONHASHSEED`), unique across routers (tested); every
+  route documents the error envelope as its `default` response (replacing FastAPI's `HTTPValidationError`
+  422, which this app never sends), plus its 405 with `Allow` and its 429 with `Retry-After`; the HEAD of a
+  GET+HEAD route (`/healthz`) is left out of the document, because FastAPI would give it the GET's
+  operationId; and every open enum's schema is marked open (`mark_open_enums`).
 - As built (task-035, `api/search.py`, `api/papers.py`, `api/meta.py`, `api/models.py`; the models are the
   contract):
   - Each router is declared with `prefix="/api/v1"` and included directly, because FastAPI 0.141 leaves
@@ -438,7 +512,8 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
   - `POST /parse` takes `{q, mode}` (no other keys) and answers **200 even when the query has errors**:
     that is the ParseResult as spec 02 defines it (`errors` non-empty, every Optional null), which the
     editor draws as squiggles. That includes an over-long query: `parse` checks the 2,000-code-point cap
-    first, in O(1), and returns `errors=[PARSE_TOO_LONG]` without lexing. Only a malformed body is refused
+    first, in O(1), and returns `errors=[PARSE_TOO_LONG]` without lexing; and a query whose canonical form
+    is over the cap, which `parse` refuses with `PARSE_TOO_LONG` after canonicalising (decision-008). Only a malformed body is refused
     (422 `API_BAD_PARAM`). The 422-on-parse-error rule applies to endpoints that run the query (`/search`,
     `/export`, `POST /records`). **Correction to TASK-035 AC #2** (the task is completed, so the CLI can't
     edit it): the AC says "Parse errors are 422", but that holds only for endpoints that run the query.
@@ -446,13 +521,16 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
   - `GET /papers/{id}` answers `{index_version, tokenizer_version, query_version, paper}`, where `paper` is
     the spec 01 `PaperRecord` (provenance and `content_hash` included). The served index decides whether the
     id exists. Otherwise the answer is 404 `API_PAPER_NOT_FOUND`, whose message never repeats the id. An id
-    that isn't shaped `op:<venue>:<year>:<native>` gets that 404 without the index being asked. The index
+    that isn't shaped `op:<venue>:<year>:<native>` is 422 `API_BAD_PARAM` (the path's `pattern`, as a
+    malformed record id is; M3a review), without the index being asked. The index
     stores only the display record, so the full one comes from the snapshot it was built from:
     `<data_dir>/snapshots/<the index manifest's snapshot>`, which must hash to the manifest's
     `snapshot_hash`. That snapshot is verified **when the index is loaded**
     (`api/state.py::snapshot_records`, next to opening the engine and before the swap).
-    `ingest.snapshot.RecordFile` makes one verifying pass and holds each record's byte range, for the
-    served index and the one before it. **A deployment must ship that snapshot beside the index.** If it is
+    `ingest.snapshot.RecordFile` makes one verifying pass and holds each record's byte range; it is part of
+    the served bundle, so a request reads the records of the engine it took. The index manifest → snapshot
+    directory rule (a plain directory name, whose manifest names the index's `snapshot_hash`) is one helper,
+    `ingest.snapshot.indexed_snapshot`, which a search record's facts use too. **A deployment must ship that snapshot beside the index.** If it is
     missing or different, the load fails (`index_load_failed`, ERROR). At startup that means 503
     `API_INDEX_NOT_LOADED`; on SIGHUP the old index keeps serving. It is never a record without its
     provenance, and never a re-hash per request. Only a snapshot file that becomes unreadable after the load
@@ -464,7 +542,8 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
   - Every route that reports `index_version` needs a loaded engine, `/parse` and `/meta` included (503
     `API_INDEX_NOT_LOADED` before the first load).
 - As built (task-038, `api/coverage.py`, `coverage.py`): `GET /coverage` answers the three versions plus
-  `snapshot` (`name`, `snapshot_hash`, `crawl_date`, `crawl_from` and `crawl_to` (the first and last fetch),
+  `snapshot` (`name`, `snapshot_hash`, `crawl_date` (the last fetch's UTC date), `crawl_dates` (a search
+  record's shape, `{"*": {from, to}}`, plus a key per source that carries its own window; `coverage.crawl_dates`),
   `built_at`, `sources`), `totals` (`records`, `abstract_missing`, `unknown_track`, `unknown_status`) and
   `venue_years`: one entry per venue-year, ordered by venue name then year, with the same four counts and
   `cells`, a `{track, status, count}` per non-empty cell in vocabulary order (`vocab.py`; `unknown` last).
@@ -474,16 +553,16 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     and every venue-year carries `unknown_track` and `unknown_status`, 0 included. Missing abstracts are per
     venue-year, the manifest's granularity (the M4 abstract threshold is per venue-year too).
   - Computed **when the index is loaded** (`IndexState._load` → `api/coverage.py::compute`, right after the
-    snapshot is verified and before the swap; task-038 review). It is stored beside the snapshot's records,
-    for the served index and the one before it (`IndexState.coverage`). The load's one pass over the records
+    snapshot is verified and before the swap; task-038 review). It is part of the served bundle, beside the
+    snapshot's records (`IndexState.served`). The load's one pass over the records
     also counts them per (venue, year, track, status) and counts missing abstracts per venue-year. These
     counts must equal the manifest's cells and `abstract_missing`, and the records must number the index's
     documents. Any of these failures makes the load fail, logged as `index_load_failed` (ERROR) with a
     `reason` constant and never a path: a manifest whose maps disagree, a track or status outside the
     vocabulary, a manifest that disagrees with the records, a missing or different snapshot, or a record
     count that differs from the index's document count. The reasons are `snapshot_missing`,
-    `snapshot_hash_mismatch`, `manifest_invalid`, `counts_mismatch`, `abstract_missing_mismatch` and
-    `doc_count_mismatch`. At startup the failure is 503 `API_INDEX_NOT_LOADED`; on SIGHUP the old index and
+    `snapshot_unreadable`, `snapshot_hash_mismatch`, `index_manifest_invalid`, `manifest_invalid`,
+    `counts_mismatch`, `abstract_missing_mismatch` and `doc_count_mismatch`. At startup the failure is 503 `API_INDEX_NOT_LOADED`; on SIGHUP the old index and
     its coverage keep serving. Coverage is never partial and never recomputed per request. One
     `coverage_computed` INFO line is written per load.
   - Not yet: which statuses a venue-year's sources *can* contain (spec 07 §C "statuses indexed") and crawl
@@ -495,7 +574,8 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     reads them in id order a chunk at a time, and provenance carries the record's `canonical_hash`), after
     the pin (409 `API_INDEX_VERSION_UNAVAILABLE`) and the replay (`api.records.refuse_mismatch`, 409
     `API_RECORD_MISMATCH`); passing `q`, `mode` or `index_version` as well is 422 `API_BAD_PARAM`, as is
-    neither `q` nor `record_id`. `mode` defaults to `native`. The body is the bytes `op export` writes for the same query,
+    neither `q` nor `record_id`. `mode` defaults to `native` (the default is in the schema; whether a client
+    sent `mode` with `record_id` is read from the query string, so an explicit `mode=native` is refused too). The body is the bytes `op export` writes for the same query,
     index and UTC date: both run `export.header` and `export.entries` over `TantivyEngine.documents`, and a
     contract test compares them for every format. Records are sent in chunks of whole records, each at most
     `CHUNK` (64 Ki characters) plus one record (a contract test reads the ASGI messages).
@@ -507,7 +587,7 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     streams from the engine the request took, so an export started before a hot swap finishes on its index
     (contract test). A failure after the first byte is logged by the last catch and marks the access line
     `aborted: true`. A stream whose record count is below or above `X-Total` fails the same way after its
-    last record; it never ends as if complete. A client that hangs up mid-stream is `client_disconnected:
+    last record (`export.check_count`, the check `op export` ends with too); it never ends as if complete. A client that hangs up mid-stream is `client_disconnected:
     true` on the access line (tested through uvicorn).
   - Headers: `X-Total`, `X-Index-Version`, `X-Tokenizer-Version`, `X-Query-Version` (all exposed to CORS),
     `Content-Disposition: attachment; filename="openproceedings-<index_version>-<first 12 of
@@ -528,15 +608,22 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
   name any version), `unloadable` (`EngineInternalError`: another tokenizer, schema or Tantivy version; or a
   `ValueError`, `OSError` or `RuntimeError` from Tantivy or the filesystem; one WARNING) or `tampered`
   (`IndexBuildError` from verification, or an engine that reports another version; one ERROR). Each refusal
-  is one `pinned_index_unavailable` line with `index_version`, `reason` and the error type, then remembered
-  for `ApiConfig.pinned_refusal_seconds` (default 300; at most 256 held) or until the next reload
-  (SIGHUP), so a broken or stale index is not re-verified per request. Engines are held in an LRU of
-  `ApiConfig.pinned_indexes` (default 4; size it to the versions the instance holds). A cache hit takes only
-  the short map lock, never a lock an open holds; opens of different versions run side by side, and one
-  version asked for at once is opened once. An engine dropped from the LRU stays alive while a stream still
+  is one `pinned_index_unavailable` line with `index_version`, `reason`, the error type and `cause_reason`
+  (the load failure's constants above: `not_found`, `alias`, `files_mismatch`, `tokenizer_version_mismatch`,
+  `index_version_mismatch`, an errno name), then remembered for `ApiConfig.pinned_refusal_seconds` (default
+  300) or until the next reload (SIGHUP), so a broken or stale index is not re-verified per request.
+  `absent`, the one refusal a client causes at will, is remembered in a map of its own (at most 256), so
+  naming many absent versions never evicts a remembered `unloadable` or `tampered` one (at most 256 more).
+  Engines are held in an LRU of `ApiConfig.pinned_indexes` (default 4; size it to the versions the instance
+  holds); an open logs `pinned_index_opened` (INFO, with `ms`). A cache hit takes only the short map lock,
+  never a lock an open holds; **at most one pinned index opens at a time** (each re-hashes a whole index;
+  security review), and one version asked for at once is opened once. An engine dropped from the LRU stays alive while a stream still
   holds it, so memory is bounded by the LRU plus the exports in flight (each costs `export_weight` of the
   rate limit). `GET /meta`'s `index_versions` leaves out a version this code can't serve (its manifest's
-  tokenizer, schema or Tantivy version, read without re-hashing) and one currently refused.
+  tokenizer, schema or Tantivy version, read without re-hashing) and one currently refused. If listing
+  `<data_dir>/indexes/` fails, `/meta` lists the served version alone and logs `index_list_failed` (WARNING,
+  with the errno name) once, and `index_list_recovered` (INFO) once it lists again: one line per change of
+  state, not per request.
 
 ## Testing
 

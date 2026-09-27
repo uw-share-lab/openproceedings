@@ -33,6 +33,9 @@ def uvicorn_config(config: ApiConfig, host: str, port: int) -> uvicorn.Config:
         server_header=False,
         date_header=True,
         h11_max_incomplete_event_size=MAX_REQUEST_HEAD,
+        # connections and tasks beyond this get uvicorn's own 503 before the app: a bound on what one
+        # process holds open (header timeouts are the reverse proxy's job; spec 08 §Deploy)
+        limit_concurrency=config.limit_concurrency,
         http="h11",
         lifespan="on",
     )

@@ -50,7 +50,7 @@ into one `.venv` from one `uv.lock`. New Python packages join by adding their di
 | `op search "<q>" [--mode scholar] [--explain \| --ids] [--engine tantivy\|reference] [--sort <s>] [--limit <n>] [--index <dir\|version>]` | ranked hits under a PRISMA header (default): searched time, index, crawl window (first to last fetch), tokenizer and query versions; a bootstrap-corpus caution when the index holds only RIS, or a caution that the sources are unknown when its snapshot isn't in the data dir or its hash differs; identified, removed by default filters (ineligible and unclassified), screened; the canonical and identification strings; every wildcard's expansion (its count and first 10 terms; every term with `--explain`); the sorted id set (`--ids`; `--engine reference` runs the oracle over the index's snapshot, `--ids` only); or the compiled query (`--explain`). Diagnostics go to stderr as user output; one `search_run` INFO line per run (task-030) |
 | `op export "<q>" --format ris\|csv\|bibtex\|jsonl [--mode scholar] [--index <dir\|version>] [--out <file>]` | export the full matched set in id order (spec 04 §Exports), streamed to stdout or written whole to `--out` (never a partial file); the count is checked against the query's total |
 | `op record save "<q>" [--mode scholar]` · `op record replay <id>` | freeze a search as a search record (the same function as `POST /records`); replay one and print its status, `reproduced` / `drifted` / `mismatch` (the same function as `GET /records/{id}`) |
-| `op serve [--host] [--port] [--index current\|<index_version>] [--cors-origin …] [--trusted-proxy …] [--rate-capacity] [--rate-refill] [--export-weight] [--no-rate-limit] [--log-query-text]` | run the API (04 §Implementation notes, as built): one uvicorn process over `<data-dir>/indexes/<index>`; SIGHUP reloads it |
+| `op serve [--host] [--port] [--index current\|<index_version>] [--cors-origin …] [--trusted-proxy …] [--rate-capacity] [--rate-refill] [--export-weight] [--no-rate-limit] [--log-query-text]` | run the API (04 §Implementation notes, as built): one uvicorn process over `<data-dir>/indexes/<index>`; SIGHUP reloads it. Refused as usage: a trusted proxy of `0.0.0.0/0` or `::/0`, and `--no-rate-limit` with a non-loopback `--host` (§Deploy) |
 | `op embed build` | build embeddings for the current index (06) |
 | `op eval scholar [--query <name>]` · `op eval coverage` · `op eval audit` · `op eval near-miss` | the 07 reports; `near-miss` is 06's recall@25 |
 | `op openapi [--out <file>]` | print the OpenAPI document, sorted and stable, without loading an index (task-040); `make openapi` writes it to `backend/tests/contract/openapi.json` and regenerates `frontend/src/api/schema.ts` from it |
@@ -131,7 +131,12 @@ checks the head repo, so a fork branch named `dev` cannot use it.
 
 `deploy/compose.yml`: `api` (uvicorn, loads `data/indexes/current`) and `web` (Next.js standalone), with
 Caddy in front for TLS. Caddy must not log query strings: `GET /api/v1/search?q=…` carries the query
-(spec 04 §Implementation notes). The data volume is read-only in `api`, except the `records/` directory
+(spec 04 §Implementation notes). **`op serve` must sit behind that proxy**, never face clients directly:
+uvicorn (h11) has no request-header or slow-body timeout of its own, so the proxy's timeouts are what bound a
+client that sends its request slowly; the app caps a body at 64 KiB (413 `API_BODY_TOO_LARGE`) and uvicorn's
+`limit_concurrency` (`ApiConfig.limit_concurrency`, default 64) bounds the connections one process holds. The
+proxy is also the one trusted proxy (`--trusted-proxy <its address>`); `0.0.0.0/0` and `::/0` are refused, as
+is `--no-rate-limit` with a non-loopback `--host`. The data volume is read-only in `api`, except the `records/` directory
 (`records/records.sqlite` and the WAL files SQLite writes beside it; spec 04 §Search records), and it
 holds each served index's snapshot beside it (`/papers/{id}` reads provenance from it). Refreshing the index
 means building a new `index_version` offline, switching the `current` symlink, and sending SIGHUP. Hosting is

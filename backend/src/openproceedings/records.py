@@ -48,13 +48,16 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError, model_validator
 
 from openproceedings.diagnostics import DiagnosticCode, InternalError, OpenProceedingsError
+from openproceedings.engine.index import VERSION_NAME
 from openproceedings.engine.index import index_version as index_version_of
 from openproceedings.engine.protocol import EngineInputError
 from openproceedings.engine.tantivy_engine import TantivyEngine
+from openproceedings.ingest.snapshot import SnapshotError, indexed_snapshot
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.normalize import TOKENIZER_VERSION
-from openproceedings.query.parser import ParseResult, parse
-from openproceedings.search import run
+from openproceedings.query.parser import Mode, ParseResult, parse
+from openproceedings.search import expansions_json, run
+from openproceedings.timestamps import CrawlWindow, Timestamp
 from openproceedings.vocab import BOOTSTRAP_SOURCES, bootstrap_only
 
 log = logging.getLogger(__name__)
@@ -65,7 +68,6 @@ BODY_VERSION = 2  # the stored record body's layout (`body_version` in the JSON)
 RECORDS_DIR = "records"  # under the data directory: the one writable place on the data volume
 RECORDS_FILE = "records.sqlite"
 ALL_SOURCES = "*"  # `crawl_dates` key of the corpus-wide window (a reserved name no source can take)
-VERSION_NAME = re.compile(r"[0-9a-f][0-9a-f-]{0,63}")  # an index directory's name (api/state.VERSION_DIR)
 # `index_version`'s inputs, by kind of drift (spec 04: snapshot_hash = corpus drift; the rest = method drift)
 INDEX_INPUTS = ("snapshot_hash", "tokenizer_version", "schema_version", "ranking_params")
 CORPUS_INPUTS = frozenset({"snapshot_hash"})
@@ -91,10 +93,11 @@ def valid_record_id(value: str) -> bool:
 class _Stored(BaseModel):
     """Stored bodies outlive the code that wrote them: plain types (no live enums), unknown keys ignored."""
 
-    model_config = ConfigDict(frozen=True, extra="ignore")
+    # json_schema_serialization_defaults_required: every field is always sent, so the API schema says required
+    model_config = ConfigDict(frozen=True, extra="ignore", json_schema_serialization_defaults_required=True)
 
 
-class RecordExcluded(_Stored):
+class Excluded(_Stored):
     """03's exclusion accounting, verbatim: buckets by count (largest first, ties by name), `unknown` last."""
 
     total: int
@@ -136,7 +139,7 @@ class SearchRecord(_Stored):
     body_version: int
     record_id: str
     input: str
-    mode: str
+    mode: Mode
     canonical: str
     canonical_hash: str
     identification_query: str
@@ -146,10 +149,10 @@ class SearchRecord(_Stored):
     schema_version: str
     ranking_params: dict[str, JsonValue]
     snapshot_hash: str
-    crawl_dates: dict[str, dict[str, str]]  # source → {"from", "to"}; "*" is the corpus-wide window
-    searched_at: str  # UTC, ISO 8601 with Z
+    crawl_dates: dict[str, CrawlWindow]  # source → {"from", "to"}; "*" is the corpus-wide window
+    searched_at: Timestamp  # UTC, ISO 8601 with Z
     total: int
-    excluded: RecordExcluded
+    excluded: Excluded
     expansions: dict[str, list[str]]
     translations: list[StoredDiagnostic]
     warnings: list[StoredDiagnostic]
@@ -238,12 +241,7 @@ def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> SnapshotFacts:
     a key of its own. A bootstrap source's window (RIS: when the Scholar searches were run) is
     `scholar_query_dates`, not a crawl; `*` over bootstrap sources alone is too, over both is `mixed`."""
     try:
-        name = inputs["snapshot"]
-        if not isinstance(name, str) or not name or "/" in name or "\\" in name or name.startswith("."):
-            raise ValueError("the index manifest's snapshot is not a directory name")
-        manifest = json.loads((data_dir / "snapshots" / name / "manifest.json").read_text(encoding="utf-8"))
-        if manifest["snapshot_hash"] != inputs["snapshot_hash"]:
-            raise ValueError("the snapshot of that name is not the one the index was built from")
+        _path, manifest = indexed_snapshot(data_dir, inputs)  # the name and hash rule of the API's load
         sources = sorted(manifest.get("sources", {}))
         crawl = {ALL_SOURCES: _window(manifest["crawl_window"])}
         kinds = {ALL_SOURCES: _kind(sources)}
@@ -258,7 +256,7 @@ def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> SnapshotFacts:
             merged=int(manifest["merges"]["total"]),
             **{k: int(conflicts.get(k, 0)) for k in NOT_MERGED},
         )
-    except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+    except (SnapshotError, OSError, ValueError, KeyError, TypeError, AttributeError) as e:
         raise InternalError(
             DiagnosticCode.API_INTERNAL, "this instance doesn't hold the snapshot its index was built from"
         ) from e
@@ -288,7 +286,7 @@ def identify(engine: TantivyEngine, parsed: ParseResult) -> Identified:
         ids=ids,
         ids_hash=ids_hash(ids),
         excluded=found.excluded.to_json(),
-        expansions={f"{stem}{op}": list(terms) for (stem, op), terms in sorted(found.expansions.items())},
+        expansions=expansions_json(found.expansions),
     )
 
 
@@ -391,6 +389,7 @@ class RecordStore:
         self.min_free_bytes = min_free_bytes
         self._ready = False
         self._init = threading.Lock()
+        self._full = False  # the last save's view: its log line is written on a change, not per refusal
 
     def _connect(self, *, read_only: bool = False) -> sqlite3.Connection:
         if read_only:
@@ -443,15 +442,18 @@ class RecordStore:
         if not full and self.min_free_bytes:
             at = next(p for p in (self.directory, *self.directory.parents) if p.exists())
             full = shutil.disk_usage(at).free < self.min_free_bytes
-        if full:
-            log.warning(
-                "records_store_full",
+        if full != self._full:  # one line per change of state (full, then recovered), not one per refusal
+            self._full = full
+            log.log(
+                logging.WARNING if full else logging.INFO,
+                "records_store_full" if full else "records_store_recovered",
                 extra={
                     "bytes": self._used_bytes(),
                     "max_bytes": self.max_bytes,
                     "min_free_bytes": self.min_free_bytes,
                 },
             )
+        if full:
             raise RecordStoreFull(
                 DiagnosticCode.API_RECORDS_STORE_FULL,
                 "The search-record store on this instance is full, so the record wasn't saved. Your search "

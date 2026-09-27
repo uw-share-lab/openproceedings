@@ -28,7 +28,7 @@ import tempfile
 import time
 import unicodedata
 from collections import Counter
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import astuple, dataclass, fields
 from datetime import UTC, datetime
 from pathlib import Path
@@ -40,6 +40,7 @@ from openproceedings import __version__, storage
 from openproceedings.ingest.dedup import Conflict, DedupResult, Merge, dedup
 from openproceedings.ingest.record import RECORD_SCHEMA_VERSION, PaperRecord
 from openproceedings.ingest.ris import ImportReport, import_ris
+from openproceedings.logs import elapsed_ms
 from openproceedings.query.normalize import TOKENIZER_VERSION
 
 log = logging.getLogger(__name__)
@@ -57,6 +58,39 @@ class SnapshotError(Exception):
     def __init__(self, message: str, *, reason: str = "snapshot_invalid") -> None:
         super().__init__(message)
         self.reason = reason
+
+
+def indexed_snapshot(data_dir: Path, index_manifest: Mapping[str, Any]) -> tuple[Path, dict[str, Any]]:
+    """The snapshot an index was built from, and that snapshot's manifest: `<data_dir>/snapshots/<name>`,
+    `name` being the index manifest's `snapshot` (a plain directory name), whose manifest names the index
+    manifest's `snapshot_hash`. The one rule for the API's load (`api/state.snapshot_records`, which then
+    re-hashes the records with `RecordFile`) and a search record's facts (`records.snapshot_facts`).
+    SnapshotError otherwise, reason `index_manifest_invalid`, `snapshot_missing`, `snapshot_unreadable` or
+    `snapshot_hash_mismatch`."""
+    name, expected = index_manifest.get("snapshot"), index_manifest.get("snapshot_hash")
+    plain = (
+        isinstance(name, str) and name and "/" not in name and "\\" not in name and not name.startswith(".")
+    )
+    if not plain or not isinstance(expected, str):
+        raise SnapshotError(
+            "the index manifest doesn't name its snapshot by a directory name and hash",
+            reason="index_manifest_invalid",
+        )
+    path = data_dir / "snapshots" / str(name)
+    try:
+        manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise SnapshotError(f"{name} is not on this instance", reason="snapshot_missing") from None
+    except (OSError, ValueError) as e:
+        raise SnapshotError(
+            f"{name}'s manifest is unreadable ({type(e).__name__})", reason="snapshot_unreadable"
+        ) from None
+    if not isinstance(manifest, dict) or manifest.get("snapshot_hash") != expected:
+        raise SnapshotError(
+            "the snapshot of that name is not the one the index was built from",
+            reason="snapshot_hash_mismatch",
+        )
+    return path, manifest
 
 
 @dataclass(frozen=True)
@@ -279,7 +313,7 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
         "snapshot_built" if created else "snapshot_exists",
         extra={"snapshot": target.name, "snapshot_hash": snapshot_hash, "records": manifest["record_count"],
                "merges": manifest["merges"]["total"], "conflicts": manifest["conflicts"]["total"],
-               "ms": round((time.monotonic() - began) * 1000)},
+               "ms": elapsed_ms(began, time.monotonic)},
     )  # fmt: skip
     return BuildResult(target, snapshot_hash, created=created)
 

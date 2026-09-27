@@ -34,7 +34,9 @@ from typing import Any, TextIO
 
 from openproceedings.vocab import venue_name
 
-__all__ = ["CSV_COLUMNS", "FORMATS", "Provenance", "bibtex_key", "entries", "header", "utc_date", "write"]
+__all__ = [
+    "CSV_COLUMNS", "FORMATS", "Provenance", "bibtex_key", "check_count", "entries", "header", "utc_date", "write",
+]  # fmt: skip
 
 FORMATS = ("ris", "csv", "bibtex", "jsonl")
 CSV_COLUMNS = (
@@ -64,6 +66,18 @@ class Provenance:
         if self.record_id is not None and self.searched_at is not None:
             line += f" · record {self.record_id} · searched {self.searched_at[:10]}"
         return line
+
+
+def check_count(written: int, total: int) -> None:
+    """An export wrote exactly the `total` records its query matched, or it failed: EngineInternalError, never
+    a silently shorter or longer file (`op export` and `GET /export` both end with it)."""
+    if written != total:
+        from openproceedings.diagnostics import DiagnosticCode
+        from openproceedings.engine.protocol import EngineInternalError
+
+        raise EngineInternalError(
+            DiagnosticCode.API_INTERNAL, f"exported {written} records, but {total} match"
+        )
 
 
 def utc_date() -> str:

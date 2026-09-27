@@ -35,8 +35,8 @@ def test_the_breakdown_of_a_hand_counted_manifest() -> None:
             "name": "2026-09-23-abababababab",
             "snapshot_hash": "ab" * 32,
             "crawl_date": "2026-09-23",
-            "crawl_from": "2026-09-20T10:00:00+00:00",
-            "crawl_to": "2026-09-23T09:00:00+00:00",
+            # the manifest's text; the API model renders it in the one `…Z` form
+            "crawl_dates": {"*": {"from": "2026-09-20T10:00:00+00:00", "to": "2026-09-23T09:00:00+00:00"}},
             "built_at": "2026-09-24T00:00:00+00:00",
             "sources": ["openreview", "ris"],
         },
@@ -125,3 +125,17 @@ def test_an_inconsistent_manifest_is_refused_never_guessed(edit: Callable[[dict[
     edit(manifest)
     with pytest.raises(SnapshotError):
         breakdown(manifest, "s")
+
+
+def test_crawl_dates_take_a_search_records_shape_with_per_source_windows() -> None:
+    """`/coverage`'s `snapshot.crawl_dates` is a record's `crawl_dates` (M3a review): `*` the corpus-wide
+    window, plus a key per source whose entry carries its own window (the M4 crawlers)."""
+    from openproceedings import records
+    from openproceedings.coverage import ALL_SOURCES, crawl_dates
+
+    assert ALL_SOURCES == records.ALL_SOURCES
+    window = {"from": "2026-09-21T00:00:00+00:00", "to": "2026-09-22T00:00:00+00:00"}
+    manifest = {**MANIFEST, "sources": {"ris": [], "openreview": {"crawl_window": window}}}
+    assert crawl_dates(manifest) == {"*": MANIFEST["crawl_window"], "openreview": window}
+    with pytest.raises(SnapshotError):
+        crawl_dates({**manifest, "crawl_window": {"from": "x"}})

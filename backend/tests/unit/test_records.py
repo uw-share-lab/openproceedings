@@ -314,7 +314,32 @@ def test_the_stored_excluded_shape_is_the_live_one() -> None:
     from openproceedings.engine.exclusions import Excluded
 
     live = Excluded(total=0, track={"unknown": 0}, status={"unknown": 0}).to_json()
-    assert set(live) == set(records.RecordExcluded.model_fields)
+    assert set(live) == set(records.Excluded.model_fields)
+
+
+def test_a_full_store_logs_on_each_change_of_state_not_per_refusal(tmp_path: Path) -> None:
+    """`records_store_full` once when it fills, `records_store_recovered` once when a save fits again (M3a
+    review): a client retrying a full store can't flood the log."""
+    import io
+    import json
+
+    from openproceedings.logs import configure_logging
+
+    stream = io.StringIO()
+    configure_logging("DEBUG", "json", stream=stream)
+    small = RecordStore(tmp_path / "small", max_bytes=1)
+    small.insert(fields(), IDS)
+    for _ in range(3):
+        with pytest.raises(RecordStoreFull):
+            small.insert(fields(), IDS)
+    small.max_bytes = None  # room again (an operator raised the cap)
+    small.insert(fields(), IDS)
+    small.insert(fields(), IDS)
+    events = [json.loads(line) for line in stream.getvalue().splitlines()]
+    assert [(e["event"], e["level"]) for e in events if e["event"].startswith("records_store")] == [
+        ("records_store_full", "WARNING"),
+        ("records_store_recovered", "INFO"),
+    ]
 
 
 def test_concurrent_inserts_from_threads_each_get_their_own_row(store: RecordStore) -> None:

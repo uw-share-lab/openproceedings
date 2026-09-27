@@ -6,6 +6,7 @@ open, and one version is opened once however many ask at the same time."""
 
 from __future__ import annotations
 
+import errno
 import threading
 import time
 from collections.abc import Callable
@@ -19,6 +20,7 @@ from openproceedings.api.state import IndexState, Pinned
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.index import IndexBuildError
 from openproceedings.engine.protocol import EngineInternalError
+from openproceedings.engine.tantivy_engine import IndexUnservable
 
 from tests.contract.conftest import Store
 
@@ -112,16 +114,35 @@ def test_an_engine_reporting_another_version_is_tampered(indexes: Path, logs: Lo
 
 
 @pytest.mark.parametrize(
-    "error, reason, level",
+    "error, reason, level, cause",
     [
-        (IndexBuildError("its files don't match its manifest"), "tampered", "ERROR"),
-        (EngineInternalError(DiagnosticCode.API_INTERNAL, "another tokenizer"), "unloadable", "WARNING"),
-        (ValueError("corrupt segment"), "unloadable", "WARNING"),  # what Tantivy raises
-        (OSError("unreadable"), "unloadable", "WARNING"),
+        (
+            IndexBuildError("its files don't match its manifest", reason="files_mismatch"),
+            "tampered",
+            "ERROR",
+            "files_mismatch",
+        ),
+        (
+            IndexUnservable(
+                DiagnosticCode.API_INTERNAL, "another tokenizer", reason="tokenizer_version_mismatch"
+            ),
+            "unloadable",
+            "WARNING",
+            "tokenizer_version_mismatch",
+        ),
+        (
+            EngineInternalError(DiagnosticCode.API_INTERNAL, "another tokenizer"),
+            "unloadable",
+            "WARNING",
+            None,
+        ),
+        (ValueError("corrupt segment"), "unloadable", "WARNING", None),  # what Tantivy raises
+        (OSError("unreadable"), "unloadable", "WARNING", None),
+        (PermissionError(errno.EACCES, "unreadable"), "unloadable", "WARNING", "EACCES"),  # the errno's name
     ],
 )
 def test_an_index_that_wont_open_is_refused_with_its_reason_and_logged_once(
-    indexes: Path, logs: Logs, error: BaseException, reason: str, level: str
+    indexes: Path, logs: Logs, error: BaseException, reason: str, level: str, cause: str | None
 ) -> None:
     opener = Opener()
     opener.fail["aaaa01"] = error
@@ -130,7 +151,9 @@ def test_an_index_that_wont_open_is_refused_with_its_reason_and_logged_once(
         assert s.pinned("aaaa01") == Pinned(None, reason)  # type: ignore[arg-type]
     assert opener.opened == ["aaaa01"]  # remembered: not re-verified per request
     lines = [x for x in logs() if x["event"] == "pinned_index_unavailable"]
-    assert [(x["level"], x["reason"], x["error"]) for x in lines] == [(level, reason, type(error).__name__)]
+    assert [(x["level"], x["reason"], x["error"], x.get("cause_reason")) for x in lines] == [
+        (level, reason, type(error).__name__, cause)
+    ]
     assert "unreadable" not in str(lines) and "corrupt" not in str(lines)  # the type, never the message
 
 
@@ -155,7 +178,69 @@ def test_absent_versions_are_remembered_too(indexes: Path, logs: Logs) -> None:
     for _ in range(3):
         assert s.pinned("dddd04").reason == "absent"
     lines = [x for x in logs() if x["event"] == "pinned_index_unavailable"]
-    assert [(x["level"], x["reason"]) for x in lines] == [("DEBUG", "absent")]  # a client can name any
+    # a client can name any; why it's absent is the selection's reason constant
+    assert [(x["level"], x["reason"], x["cause_reason"]) for x in lines] == [("DEBUG", "absent", "not_found")]
+
+
+def test_a_pinned_open_logs_one_line_named_pinned_index_opened(indexes: Path, logs: Logs) -> None:
+    state(indexes, Opener()).pinned("aaaa01")
+    (line,) = [x for x in logs() if x["event"] == "pinned_index_opened"]
+    assert line["index_version"] == "aaaa01" and isinstance(line["ms"], float)
+
+
+@pytest.mark.parametrize(
+    ("setup", "reason", "attempted"),
+    [
+        (lambda d: None, "not_found", None),  # no `current`
+        (lambda d: (d / "indexes" / "current").symlink_to("../elsewhere"), "not_found", None),
+        (lambda d: (d / "indexes" / "current").symlink_to("aaaa01"), "files_mismatch", "aaaa01"),
+    ],
+)
+def test_a_failed_load_names_its_reason_and_the_version_it_attempted(
+    indexes: Path, logs: Logs, setup: Callable[[Path], object], reason: str, attempted: str | None
+) -> None:
+    """`index_load_failed` says why with a constant and which version it tried (M3a review)."""
+    setup(indexes)
+    opener = Opener()
+    opener.fail["aaaa01"] = IndexBuildError("changed", reason="files_mismatch")
+    assert not state(indexes, opener).load()
+    (line,) = [x for x in logs() if x["event"] == "index_load_failed"]
+    assert (line["reason"], line["index_version_attempted"], line["index_version_kept"]) == (
+        reason,
+        attempted,
+        None,
+    )
+
+
+def test_an_index_name_the_selection_refuses_says_why(indexes: Path) -> None:
+    from openproceedings.api.state import IndexSelectionError, index_path
+
+    (indexes / "outside").mkdir()
+    (indexes / "indexes" / "ffff06").symlink_to("../outside")
+    for name, reason in (("../x", "name_invalid"), ("dddd04", "not_found"), ("ffff06", "outside_indexes")):
+        with pytest.raises(IndexSelectionError) as e:
+            index_path(indexes, name)
+        assert e.value.reason == reason
+
+
+def test_a_failing_index_listing_warns_once_per_change_of_state(
+    indexes: Path, logs: Logs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    s = state(indexes, Opener())
+    real = Path.iterdir
+
+    def broken(self: Path) -> Any:
+        if self.name == "indexes":
+            raise PermissionError(errno.EACCES, "denied")
+        return real(self)
+
+    monkeypatch.setattr(Path, "iterdir", broken)
+    assert s.available(None) == [] and s.available(None) == []
+    monkeypatch.setattr(Path, "iterdir", real)
+    s.available(None)
+    s.available(None)
+    lines = [(x["event"], x["level"], x.get("reason")) for x in logs() if x["event"].startswith("index_list")]
+    assert lines == [("index_list_failed", "WARNING", "EACCES"), ("index_list_recovered", "INFO", None)]
 
 
 def test_a_cache_hit_never_waits_for_another_versions_open(indexes: Path) -> None:
@@ -169,10 +254,42 @@ def test_a_cache_hit_never_waits_for_another_versions_open(indexes: Path) -> Non
             time.sleep(0.001)
         started = time.monotonic()
         assert s.pinned("bbbb02").reason == "ok"  # served while aaaa01 is still opening
-        s.pinned("cccc03")  # and another version opens alongside
         assert time.monotonic() - started < 5
         opener.gate["aaaa01"].set()
         assert slow.result(10).reason == "ok"
+
+
+def test_at_most_one_pinned_index_opens_at_a_time(indexes: Path) -> None:
+    """Each open re-hashes a whole index, so opens of different versions take turns (security review);
+    the second waits for the first, then opens (never refused, never a second hash in parallel)."""
+    opener = Opener()
+    opener.gate["aaaa01"] = threading.Event()
+    s = state(indexes, opener, keep=3)
+    with ThreadPoolExecutor(2) as pool:
+        first = pool.submit(s.pinned, "aaaa01")
+        while "aaaa01" not in opener.opened:
+            time.sleep(0.001)
+        second = pool.submit(s.pinned, "cccc03")
+        time.sleep(0.05)
+        assert opener.opened == ["aaaa01"]  # cccc03 waits for the slot
+        opener.gate["aaaa01"].set()
+        assert (first.result(10).reason, second.result(10).reason) == ("ok", "ok")
+    assert opener.opened == ["aaaa01", "cccc03"]
+
+
+def test_client_chosen_absent_versions_never_evict_a_remembered_tampered_one(indexes: Path) -> None:
+    """`absent` is the one refusal a client causes at will (any name), so it has its own bounded map: naming
+    more absent versions than the map holds can't make a tampered index be re-hashed (M3a review)."""
+    from openproceedings.api.state import MAX_REFUSALS
+
+    opener = Opener()
+    opener.fail["aaaa01"] = IndexBuildError("changed", reason="files_mismatch")
+    s = state(indexes, opener)
+    assert s.pinned("aaaa01").reason == "tampered"
+    for i in range(MAX_REFUSALS + 10):
+        assert s.pinned(f"f{i:05x}").reason == "absent"
+    assert s.pinned("aaaa01").reason == "tampered"
+    assert opener.opened == ["aaaa01"]  # still remembered: not re-verified
 
 
 def test_one_version_asked_for_at_once_is_opened_once(indexes: Path) -> None:
