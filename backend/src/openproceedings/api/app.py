@@ -27,7 +27,7 @@ from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from openproceedings import __version__
-from openproceedings.api import coverage, export, health, meta, papers, search
+from openproceedings.api import coverage, export, health, meta, papers, records, search
 from openproceedings.api.config import ApiConfig
 from openproceedings.api.errors import install_error_handlers
 from openproceedings.api.middleware import API_PREFIX, AccessLog, LastCatch, RateLimit
@@ -35,7 +35,13 @@ from openproceedings.api.openapi import ERROR_RESPONSES, document_head_as_get, o
 from openproceedings.api.state import IndexState, Opener, install_sighup
 
 ROUTERS: tuple[APIRouter, ...] = (
-    search.router, papers.router, meta.router, health.router, coverage.router, export.router
+    search.router,
+    papers.router,
+    records.router,
+    meta.router,
+    health.router,
+    coverage.router,
+    export.router,
 )
 EXPOSED_HEADERS = ("X-Total", "X-Index-Version", "Retry-After")  # spec 04 §Exports, §Error handling
 
@@ -78,6 +84,7 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
     app.state.config = config
     app.state.papers = papers.Papers(config.data_dir)
     app.state.coverage = coverage.Coverages()
+    records.install(app, config.data_dir, opener)
     install_error_handlers(app)
     for router in ROUTERS:
         if router.prefix != API_PREFIX:

@@ -18,11 +18,11 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   `Makefile` has `sync`, `fmt`, `lint`, `tooling`, `test`, `openapi` and `hooks`.
 - `backend/`: the uv workspace member, Python package `openproceedings` (`cli.py` → `op`, `search.py` (one
   ranked search, which `op search` and the API search route both run), `export.py`, `logs.py`,
-  `diagnostics.py`, `vocab.py`, `storage.py`, `coverage.py` (the snapshot manifest's venue × year × track × status breakdown), `query/` (`normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`,
+  `diagnostics.py`, `vocab.py`, `storage.py`, `records.py` (search records: `ids_hash`, the append-only store, replay), `coverage.py` (the snapshot manifest's venue × year × track × status breakdown), `query/` (`normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`,
   `ast.py`, `canonical.py`, `defaults.py`, `compat.py`), `engine/` (`protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py`, `exclusions.py`, `highlight.py`, `parity.py`), `ingest/`
   (`record.py`, `classify.py`, `urls.py`, `volumes.py`, `ris.py`, `dedup.py`, `snapshot.py`), `api/` (`app.py`
   `create_app`, `config.py`, `state.py`, `deps.py`, `errors.py`, `middleware.py`, `models.py` (the response
-  contract), routers `search.py` (parse and search), `papers.py`, `meta.py`, `coverage.py`, `health.py`, `export.py`
+  contract), routers `search.py` (parse and search), `papers.py`, `records.py` (with `pinned.py`, older indexes for replay), `meta.py`, `coverage.py`, `health.py`, `export.py`
   (streamed exports, `op export`'s writers), `server.py` → `op serve`, `openapi.py` → `op openapi`);
   `semantic/ eval/` arrive with their tasks). Tests in `backend/tests/`; `uv run pytest` from the root.
 - **API contract:** after changing a route or a response model, run `make openapi` and commit both

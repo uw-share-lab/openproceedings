@@ -206,6 +206,62 @@ It returns a short id. `GET /records/{id}` replays the query and returns HTTP 20
 The record page (05) is what a methods section cites. Records are stored in `data/records.sqlite`
 (append-only, backed up with the snapshots).
 
+As built (task-037; `backend/src/openproceedings/records.py` holds the record, `ids_hash`, the store and the
+replay, so a later `op record` calls the same functions; `api/records.py` is the transport, `api/pinned.py`
+loads older indexes):
+- **`POST /records`** takes `{q, mode}` (no other keys) and answers **201** `{record_id, url, index_version,
+  tokenizer_version, query_version}`. `url` is the record page's path, `/record/<record_id>` (05 §Pages),
+  relative to the site. The query is refused exactly as `/search` refuses it (422 with diagnostics,
+  `PARSE_TOO_LONG` before parsing) and nothing is written. It is re-run on the request's one engine:
+  `search.run` (so `total`, `excluded` and `expansions` equal `/search`'s) plus `match_ids` for the ids.
+- **The record** holds every field of the table, plus `record_id`, `schema_version` and `ranking_params`
+  (the index's two other inputs, so a drifted replay can name a method change after the pinned index is
+  gone). `crawl_dates` is `{"all": {"from", "to"}}`, the snapshot manifest's `crawl_window`: today's
+  manifest has one corpus-wide window, and a source entry that carries its own `crawl_window` (the M4
+  crawlers) adds a key of its own. `dedup` is `{merged: manifest merges.total, ambiguous_not_merged:
+  manifest conflicts.ambiguous_not_merged}`. `searched_at` is UTC to the second (`…Z`). `semantic_version`
+  is null until the near-miss panel exists (M5). `excluded` keeps the pinned bucket order.
+- **`ids_hash`** is `sha256("\n".join(sorted(ids)))`, code-point order, no trailing newline, with
+  known-answer tests (the empty set is `sha256("")`).
+- **Record ids** are `secrets.token_urlsafe(9)`: 12 characters of `[A-Za-z0-9_-]`, 72 random bits, redrawn
+  on a collision. Anything else is 422 `API_BAD_PARAM`; an unknown id is 404 `API_RECORD_NOT_FOUND`, and
+  neither message repeats the id.
+- **The store** is `<data_dir>/records.sqlite` (`ApiConfig.data_dir`), created on the first save (a read
+  never creates it). Tables `schema_version` and `records (record_id, index_version, searched_at, body, ids)`,
+  `body` being the record's JSON without `ids` and `ids` the zlib-compressed id list. `BEFORE UPDATE` and
+  `BEFORE DELETE` triggers on both tables abort ("append-only"), and a `BEFORE INSERT` trigger refuses an
+  id that exists, so `INSERT OR REPLACE` can't delete-then-insert from any client (SQLite's REPLACE skips
+  DELETE triggers unless `recursive_triggers` is on, which the app's connections also set). WAL mode; one connection per
+  call, so the thread pool never shares one. `RecordStore.pinned(index_version)` counts the records that
+  pin a version (check it before retiring one).
+- **Replay** (`GET /records/{id}`, 200 `{index_version, tokenizer_version, query_version, record, replay}`;
+  the top-level versions are those the replay ran on) re-parses the stored `canonical` in native mode, never
+  `input`. If the record's `query_version` is this code's and its `index_version` is served or loadable here,
+  it runs there: `reproduced` if `ids_hash` and `excluded` both match (and the canonical re-parses to the
+  same `canonical_hash`), otherwise `mismatch`, with one ERROR line `replay_mismatch` (`code`
+  `API_REPLAY_MISMATCH`, `record_id`, the versions, and which of `ids_match`, `excluded_match` and
+  `canonical_match` failed). Otherwise it is `drifted` and runs on the served index: `replay.changed` lists
+  each differing input (`snapshot_hash` kind `corpus`; `tokenizer_version`, `schema_version`,
+  `ranking_params`, `query_version` kind `method`) with its recorded and current value. `replay` also has
+  `total`, `excluded`, `ids_hash`, `ids_match`, `excluded_match`, `added`, `removed` (counts) and
+  `membership_identical` (true on `+0/−0`). A canonical string that no longer runs under a newer query
+  version (it no longer parses, or a wildcard now expands past the cap) is `drifted` with `refused` set to
+  the code and `total`, `excluded` and `ids_hash` null; every stored id is then `removed`.
+- **Pinned indexes** load on demand, read-only, by the served index's rules (`state.index_path`: an
+  index_version resolving to itself directly under `<data_dir>/indexes/`; never `resolve_snapshot`), and
+  are opened (verified) by the same engine class, so "available" means loadable by this code: an index built
+  with another tokenizer or schema version is not, and its records replay as `drifted`. Two are held
+  (least recently used dropped). An unloadable one is one WARNING line `pinned_index_unavailable`.
+- **`GET /records/{id}/diff`** answers `{…versions, record_id, status, recorded_index_version, changed,
+  added: [{id, title}], removed: [{id, title}], membership_identical}` for any status. A title comes from the
+  index the replay ran on, else the record's pinned index; null when no index here holds the paper.
+- **For `/export?record_id=` (task-036)**: `api.records.require_citable(request, record_id, engine)`
+  returns the stored record, or raises 409 `API_RECORD_MISMATCH` when its replay is a `mismatch` (422 and
+  404 as above); `replay_status(request, record_id, engine)` returns just the status. Pass the route's
+  `EngineDep` engine so a request never reads the served index twice.
+- Access line: `canonical_hash`, `total` (the replay's) and `index_version` (the one the replay ran on).
+  No log line carries the input, canonical or identification strings: the record stores them, the logs don't.
+
 ## Error handling
 
 Every error uses the one envelope `{error: {code, message, diagnostics?}}`. Codes come from the registry in
