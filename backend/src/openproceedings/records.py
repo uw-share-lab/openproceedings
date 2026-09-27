@@ -2,9 +2,10 @@
 and replay it.
 
 A record is the citable evidence for a PRISMA "records identified" number: the query as typed and as
-canonicalised, the three versions and the index's inputs, the crawl dates and dedup counts of the snapshot
-the index was built from, `total`, `excluded`, the interpretation (expansions, translations, warnings) and
-the sorted matched ids with `ids_hash`. Written once, never edited.
+canonicalised, the three versions and the index's inputs, the crawl dates (and what kind of dates they
+are), sources and dedup counts of the snapshot the index was built from, whether its counts are citable as
+PRISMA identification numbers (not on a bootstrap corpus), `total`, `excluded`, the interpretation
+(expansions, translations, warnings) and the sorted matched ids with `ids_hash`. Written once, never edited.
 
 - `ids_hash` is pinned here and only here: sha256 of the sorted ids joined by `\\n`, no trailing newline.
 - `identify` is the one way a record's membership is computed, at save and at replay: `search.run` (what
@@ -44,7 +45,7 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
+from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError, model_validator
 
 from openproceedings.diagnostics import DiagnosticCode, InternalError, OpenProceedingsError
 from openproceedings.engine.index import index_version as index_version_of
@@ -54,12 +55,13 @@ from openproceedings.query import QUERY_VERSION
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import ParseResult, parse
 from openproceedings.search import run
+from openproceedings.vocab import BOOTSTRAP_SOURCES, bootstrap_only
 
 log = logging.getLogger(__name__)
 
 RECORD_ID = re.compile(r"[A-Za-z0-9_-]{12}")  # secrets.token_urlsafe(9): 72 random bits, URL-safe
 STORE_SCHEMA_VERSION = 1  # the records.sqlite layout; migrations only add columns or tables
-BODY_VERSION = 1  # the stored record body's layout (`body_version` in the JSON)
+BODY_VERSION = 2  # the stored record body's layout (`body_version` in the JSON); v1 bodies still read
 RECORDS_DIR = "records"  # under the data directory: the one writable place on the data volume
 RECORDS_FILE = "records.sqlite"
 ALL_SOURCES = "*"  # `crawl_dates` key of the corpus-wide window (a reserved name no source can take)
@@ -102,10 +104,14 @@ class RecordExcluded(_Stored):
 
 class Dedup(_Stored):
     """Corpus-wide ingest merges from the snapshot manifest (PRISMA-S item 16): a process statement, never a
-    removal count of this search."""
+    removal count of this search. The not-merged counts are the manifest's conflicts by resolution: pairs
+    that looked alike but were kept apart (two candidates from one source; a track the proceedings never
+    host; two records of one venue-year). The last two are None on a v1 body, which didn't record them."""
 
     merged: int
     ambiguous_not_merged: int
+    track_not_merged: int | None = None
+    venue_year_not_merged: int | None = None
 
 
 class StoredDiagnostic(_Stored):
@@ -119,7 +125,13 @@ class StoredDiagnostic(_Stored):
 class SearchRecord(_Stored):
     """Every field of spec 04 §Search records, plus `body_version`, `schema_version` and `ranking_params`
     (the index's other two inputs, so a drifted replay can name a method change after the pinned index is
-    gone). `ids` is None when the caller didn't ask for them."""
+    gone). `ids` is None when the caller didn't ask for them.
+
+    Body version 2 adds `sources` (the snapshot manifest's source names, sorted), `identification_citable`
+    (false when every source is a bootstrap one, `vocab.bootstrap_only`: the corpus is an earlier search's
+    output, so `total` is not a PRISMA identification number) and `crawl_dates_kind` (per `crawl_dates` key:
+    `crawl`, `scholar_query_dates` or `mixed`), and `dedup`'s two other not-merged counts. A v1 body has
+    none of them: they read as None ("not recorded"), never as a guess."""
 
     body_version: int
     record_id: str
@@ -145,6 +157,23 @@ class SearchRecord(_Stored):
     ids_hash: str
     dedup: Dedup
     semantic_version: str | None = None  # the near-miss panel (M5); never an input to ids_hash
+    sources: list[str] | None = None  # v2: the snapshot manifest's source names, sorted
+    identification_citable: bool | None = None  # v2: not bootstrap_only(sources)
+    # v2, per crawl_dates key: "crawl" (fetch times, UTC), "scholar_query_dates" (Publish or Perish's query
+    # dates: local wall time stored labelled UTC, so an end can be a day off) or "mixed" (`*` over both)
+    crawl_dates_kind: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def _v2_fields(self) -> SearchRecord:
+        """A v2 body has every v2 field, and its citability is the one its sources give."""
+        if self.body_version >= 2:
+            if self.sources is None or self.identification_citable is None or self.crawl_dates_kind is None:
+                raise ValueError("a v2 record body names its sources, citability and window kinds")
+            if self.identification_citable == bootstrap_only(self.sources):
+                raise ValueError("a record's identification_citable contradicts its sources")
+            if set(self.crawl_dates_kind) != set(self.crawl_dates):
+                raise ValueError("a record's crawl_dates_kind has other keys than its crawl_dates")
+        return self
 
 
 # --- the index and snapshot a record pins -----------------------------------------------------------------
@@ -176,10 +205,38 @@ def _window(value: Any) -> dict[str, str]:
     return {"from": value["from"], "to": value["to"]}
 
 
-def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> tuple[dict[str, dict[str, str]], Dedup]:
-    """`crawl_dates` and `dedup` from the manifest of the snapshot the index was built from (which must
-    name the index's `snapshot_hash`). The manifest's corpus-wide crawl window is key `*`; a source entry
-    that carries its own `crawl_window` (the M4 crawlers) adds a key of its own."""
+NOT_MERGED = (
+    "ambiguous_not_merged",
+    "track_not_merged",
+    "venue_year_not_merged",
+)  # conflicts.csv resolutions
+CRAWL = "crawl"  # a window of fetch times (UTC)
+SCHOLAR_QUERY_DATES = "scholar_query_dates"  # Publish or Perish's query dates: local time labelled UTC
+MIXED = "mixed"  # the corpus-wide window over both kinds
+
+
+def _kind(sources: Iterable[str]) -> str:
+    kinds = {SCHOLAR_QUERY_DATES if s in BOOTSTRAP_SOURCES else CRAWL for s in sources}
+    return kinds.pop() if len(kinds) == 1 else MIXED if kinds else CRAWL
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotFacts:
+    """What a record freezes from the snapshot manifest (spec 04 §Search records)."""
+
+    crawl_dates: dict[str, dict[str, str]]
+    crawl_dates_kind: dict[str, str]
+    sources: list[str]
+    identification_citable: bool
+    dedup: Dedup
+
+
+def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> SnapshotFacts:
+    """`crawl_dates` (with each key's kind), `sources`, `identification_citable` and `dedup` from the manifest
+    of the snapshot the index was built from (which must name the index's `snapshot_hash`). The manifest's
+    corpus-wide window is key `*`; a source entry that carries its own `crawl_window` (the M4 crawlers) adds
+    a key of its own. A bootstrap source's window (RIS: when the Scholar searches were run) is
+    `scholar_query_dates`, not a crawl; `*` over bootstrap sources alone is too, over both is `mixed`."""
     try:
         name = inputs["snapshot"]
         if not isinstance(name, str) or not name or "/" in name or "\\" in name or name.startswith("."):
@@ -187,21 +244,25 @@ def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> tuple[dict[str,
         manifest = json.loads((data_dir / "snapshots" / name / "manifest.json").read_text(encoding="utf-8"))
         if manifest["snapshot_hash"] != inputs["snapshot_hash"]:
             raise ValueError("the snapshot of that name is not the one the index was built from")
+        sources = sorted(manifest.get("sources", {}))
         crawl = {ALL_SOURCES: _window(manifest["crawl_window"])}
+        kinds = {ALL_SOURCES: _kind(sources)}
         for source, entry in sorted(manifest.get("sources", {}).items()):
             if source == ALL_SOURCES:
                 raise ValueError("a source can't be named `*`")
             if isinstance(entry, dict) and "crawl_window" in entry:
                 crawl[source] = _window(entry["crawl_window"])
+                kinds[source] = _kind([source])
+        conflicts = manifest["conflicts"]
         dedup = Dedup(
             merged=int(manifest["merges"]["total"]),
-            ambiguous_not_merged=int(manifest["conflicts"].get("ambiguous_not_merged", 0)),
+            **{k: int(conflicts.get(k, 0)) for k in NOT_MERGED},
         )
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
         raise InternalError(
             DiagnosticCode.API_INTERNAL, "this instance doesn't hold the snapshot its index was built from"
         ) from e
-    return crawl, dedup
+    return SnapshotFacts(crawl, kinds, sources, not bootstrap_only(sources), dedup)
 
 
 # --- membership -------------------------------------------------------------------------------------------
@@ -250,7 +311,7 @@ def freeze(
     inputs = index_inputs(data_dir, engine.index_version)  # the instance's own facts first: no search on a
     if inputs["tokenizer_version"] != TOKENIZER_VERSION:  # broken instance (the engine refuses such an index)
         raise InternalError(DiagnosticCode.API_INTERNAL, "the served index has another tokenizer_version")
-    crawl, dedup = snapshot_facts(data_dir, inputs)
+    facts = snapshot_facts(data_dir, inputs)
     found = identify(engine, parsed)
     fields: dict[str, Any] = {
         "body_version": BODY_VERSION,
@@ -265,7 +326,10 @@ def freeze(
         "schema_version": inputs["schema_version"],
         "ranking_params": inputs["ranking_params"],
         "snapshot_hash": inputs["snapshot_hash"],
-        "crawl_dates": crawl,
+        "crawl_dates": facts.crawl_dates,
+        "crawl_dates_kind": facts.crawl_dates_kind,
+        "sources": facts.sources,
+        "identification_citable": facts.identification_citable,
         "searched_at": searched_at or utc_now(),
         "total": len(found.ids),
         "excluded": found.excluded,
@@ -273,7 +337,7 @@ def freeze(
         "translations": [d.model_dump(mode="json") for d in parsed.translations],
         "warnings": [d.model_dump(mode="json") for d in parsed.warnings],
         "ids_hash": found.ids_hash,
-        "dedup": dedup.model_dump(),
+        "dedup": facts.dedup.model_dump(),
         "semantic_version": None,
     }
     return fields, found
@@ -334,6 +398,8 @@ class RecordStore:
         else:
             conn = sqlite3.connect(self.path, timeout=10)
         conn.isolation_level = None  # explicit transactions only
+        # defence in depth only: the BEFORE INSERT triggers already refuse a REPLACE of an existing key; with
+        # this on, a REPLACE issued through this connection would also fire the BEFORE DELETE trigger
         conn.execute("PRAGMA recursive_triggers = ON")
         return conn
 
@@ -394,14 +460,19 @@ class RecordStore:
 
     def insert(self, fields: Mapping[str, Any], ids: Sequence[str]) -> SearchRecord:
         """Store a new record under a fresh random id (redrawn only when that id is taken), with its id set
-        added unless an identical one is already stored. One transaction."""
+        added unless an identical one is already stored. One transaction. `fields["ids_hash"]` must be the
+        hash of `ids`: a record that names another set could only ever replay as a mismatch."""
         if any(b <= a for a, b in pairwise(ids)) or any("\n" in i for i in ids):
             raise InternalError(
                 DiagnosticCode.API_INTERNAL, "a record's ids must be strictly increasing, one line each"
             )
+        key = ids_hash(ids)
+        if fields.get("ids_hash") != key:
+            raise InternalError(
+                DiagnosticCode.API_INTERNAL, "a record's ids_hash must be the hash of its ids"
+            )
         self._check_room()  # before the file exists, so an empty store always takes its first record
         self._ensure()
-        key = ids_hash(ids)
         blob = zlib.compress("\n".join(ids).encode("utf-8"))
         for _ in range(_INSERT_TRIES):
             record = SearchRecord.model_validate({**fields, "record_id": new_record_id(), "ids": list(ids)})

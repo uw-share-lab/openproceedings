@@ -80,12 +80,19 @@ rewrites the query (guarantee 3). No hidden facet state exists.
 ## Exports (built to be imported into Covidence)
 
 - **RIS:** `TY  - CPAPER`, `TI`, `AB` (full), `AU` (one line each), `PY`, `T2` (the venue string below), `UR` (forum, then pdf, then proceedings; each only if present), `DO` if present, `ID` (the openproceedings paper id, so exports round-trip), two `KW`
-  lines (the track, then `status:<status>`), and `N1` = `openproceedings <index_version> · query <canonical_hash> · <UTC date>`. Checked against
+  lines (the track, then `status:<status>`), and the provenance `N1` = `openproceedings <index_version> · query
+  <canonical_hash> · exported <UTC date>` (for an export pinned by a search record, `/export?record_id=`,
+  followed by ` · record <record_id> · searched <UTC date of searched_at>`), always the last `N1`. A paper that
+  is not `accepted` has one more `N1` before it: `Submitted to <venue string>; status: <status in words> (not
+  in its proceedings).` (`unknown` reads "not known to be in its proceedings"; `desk_rejected` reads "desk
+  rejected"), so the Notes a screener sees say it plainly; `TY` and `T2` are unchanged. Checked against
   the reference RIS parser, `scholarmend.parse.parse_ris` (the pinned `scholarmend` PyPI package), plus one
   fixture imported into Covidence by hand (`docs/results/2026-09-27-covidence-check.md`, **pending**).
 - **Status in every format** (task-004 review). The venue string names the conference a paper was
   *submitted to*, so a rejected or withdrawn paper still reads "ICLR 2024". A screener sees its status as
-  RIS `KW  - status:rejected` (Covidence shows keywords), CSV and JSONL have the `status` column, and BibTeX has
+  RIS `KW  - status:rejected` and the status `N1` sentence (whether Covidence shows keywords to screeners is
+  **pending** the hand check; if it doesn't, the `N1` sentence is what they read), CSV and JSONL have the
+  `status` column, and BibTeX has
   it in `keywords` and in the entry type below. RIS keeps `TY  - CPAPER` for every status, so one export
   imports as one reference type.
 - **`TY` is `CPAPER`, not `JOUR`** (task-004). Every exported paper is a conference paper. Zotero's RIS
@@ -130,13 +137,16 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   PMLR's v202 is the 40th (2023), so, counting back annually, 1988 is the 5th, the first held as a conference
   (the earlier meetings were workshops). `backend/tests/unit/test_export.py` pins each era's first year, the
   rename and recent years by hand, and every venue from 2013 to 2026.
-- **CSV:** one row per paper, the columns of the schema in 01 plus `index_version` and `canonical_hash`
-  provenance columns, UTF-8 with a BOM (so Excel opens it
-  correctly).
+- **CSV:** one row per paper, the columns of the schema in 01 plus the provenance columns `index_version`,
+  `canonical_hash`, `exported_at`, `record_id` and `searched_at` (the last two empty unless the export is
+  pinned by a search record; JSONL has the same five fields, null when not pinned), UTF-8 with a BOM (so
+  Excel opens it correctly).
 - **BibTeX:** `@inproceedings` for an `accepted` paper, with `booktitle` = the venue string. Any other status
   (`rejected`, `withdrawn`, `desk_rejected`, `unknown`) is `@unpublished`, BibTeX's type for a paper with an
   author and title that was not formally published, and has **no `booktitle`**. Its `note` starts
-  `Submitted to <venue string>, status: <status>.` and then gives the provenance line, so the venue string is
+  `Submitted to <venue string>, status: <status in words>.` (`desk rejected`: a bare `_` breaks LaTeX when
+  a style typesets `note`; every other `_` in `note`, e.g. a record id's, is written `\_`) and then gives
+  the provenance line, so the venue string is
   still the same string for every paper of a venue and year. Standard styles print `note` for `@unpublished`
   and require it. `@misc` with `howpublished` was the other option; `@unpublished` is the one that says "not
   published". `unknown` counts as not accepted, since an export must never cite a paper into proceedings on
@@ -148,7 +158,8 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   not identifiers. A superset export keeps every earlier key when the added papers sort after them in id
   order; an added paper that sorts first takes the bare key and shifts the rest. Merge successive exports on
   `openproceedings_id`, not on the key.
-  Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC date>}` (after
+  Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · exported <UTC date>}`
+  (plus ` · record <record_id> · searched <date>` when pinned by a record; after
   the `Submitted to …` sentence on an `@unpublished` entry).
   Every entry carries `openproceedings_id = {<id>}`, so a round-trip recovers the id of every record,
   proceedings-only (PMLR, NeurIPS) ones included. Output must pass `refaudit.bibtex.parse_string` (the pinned `refaudit` PyPI package).
@@ -157,7 +168,8 @@ rewrites the query (guarantee 3). No hidden facet state exists.
     inside a value become single spaces and control characters are dropped, since RIS is line-based. URLs
     are validated at ingest as one-line http(s) addresses, so none can carry a forged record.
   - **CSV:** UTF-8 with a BOM (Excel); every field of the stored display record plus the facets and the
-    provenance columns `index_version`, `canonical_hash` and `exported_at` (the UTC date). Two fields of
+    provenance columns `index_version`, `canonical_hash`, `exported_at` (the UTC date), `record_id` and
+  `searched_at` (empty unless pinned by a record). Two fields of
     spec 01 are left out: `provenance` (per-field claims, a nested list) and `content_hash`. Both stay in the
     snapshot that `index_version` pins. Lists are joined with "; " (ambiguous if a value holds one; JSONL
     keeps lists). A text cell starting, after leading spaces, with `=`, `+`, `-` or `@` (full-width forms
@@ -168,9 +180,12 @@ rewrites the query (guarantee 3). No hidden facet state exists.
     are spelled out first). A repeat key takes the next unused suffix, so a suffixed key never meets a real
     one. Braces are kept when they nest both as BibTeX counts them (every brace) and as parsers that honour
     `\{` do; otherwise every brace is dropped with the backslash that escaped it, since an entry the two read
-    differently can swallow the next. `&`, `%` and `#` are escaped. A value never ends on a backslash. An
+    differently can swallow the next. `&`, `%` and `#` are escaped. Every `@` is written `{@}` (BibTeX
+    and refaudit open an entry at a bare `@` anywhere, so `@article{x,` in a title would become an entry;
+    an odd backslash run before it loses one backslash). A value never ends on a backslash. An
     author name holding a standalone `and`, or `others`, is braced, so it isn't split or read as et al.
-  - **JSONL:** one object per record, with `index_version`, `canonical_hash` and `exported_at`: the lossless
+  - **JSONL:** one object per record, with `index_version`, `canonical_hash`, `exported_at`, `record_id` and
+    `searched_at` (null unless pinned by a record): the lossless
     format (CSV's formula guard adds a `'` to some cells). U+2028, U+2029 and U+0085 are escaped, so a record
     stays one line for every reader.
 
@@ -194,12 +209,14 @@ rewrites the query (guarantee 3). No hidden facet state exists.
 | Field | Why |
 |---|---|
 | `input`, `mode`, `canonical`, `canonical_hash`, `identification_query` | what was searched, and the string that reproduces "identified" |
-| `index_version`, `tokenizer_version`, `query_version`, `snapshot_hash`, `crawl_dates` (per source, from the manifest) | the database version and when its contents were collected |
+| `index_version`, `tokenizer_version`, `query_version`, `snapshot_hash`, `crawl_dates` (per source, from the manifest; only `*`, the corpus-wide from–to window, until M4) | the database version and when its contents were collected |
+| `crawl_dates_kind` (per `crawl_dates` key: `crawl`, `scholar_query_dates` or `mixed`) | what those dates are: a bootstrap source's window is when its Scholar searches were run (Publish or Perish's local time, stored labelled UTC), not a crawl |
+| `sources` (the manifest's source names) and `identification_citable` | whether `total` can be cited as a PRISMA identification number: `false` when every source is a bootstrap one (`vocab.bootstrap_only`, the test `op search`'s "bootstrap corpus" note uses), since the corpus is then an earlier search's output, not a database |
 | `searched_at` (UTC) | the search date, which is separate from the crawl date |
 | `total`, `excluded` (with `unknown` itemised) | the counts cited in PRISMA |
 | `expansions`, `translations`, `warnings` | how the query was interpreted (PRISMA-S) |
 | `ids` (sorted) and `ids_hash = sha256(ids)` | membership, for replay and for the diff |
-| `dedup` (`merged`, `ambiguous_not_merged` counts from the manifest) | the PRISMA-S item 16 deduplication-process statement (corpus-wide ingest merges, never a per-search removal count) |
+| `dedup` (`merged`, and the manifest's not-merged conflicts by resolution: `ambiguous_not_merged`, `track_not_merged`, `venue_year_not_merged`) | the PRISMA-S item 16 deduplication-process statement (corpus-wide ingest merges, never a per-search removal count) |
 | `semantic_version` (if the near-miss panel was open) | the audit trail for query revisions it prompted |
 
 It returns a short id. `GET /records/{id}` replays the query and returns HTTP 200 with a `status`:
@@ -228,12 +245,17 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   written) once the store holds `ApiConfig.records_max_bytes` (default 1 GiB; `None` for no cap) or its disk
   has less than `records_min_free_bytes` free (default 256 MiB). An empty store always takes its first save.
   Reads are never refused.
-- **The record** holds every field of the table, plus `record_id`, `body_version` (1), `schema_version` and
+- **The record** holds every field of the table, plus `record_id`, `body_version` (2), `schema_version` and
   `ranking_params` (the index's two other inputs, so a drifted replay can name a method change after the
   pinned index is gone). `crawl_dates` is keyed by source: `*` is the snapshot manifest's corpus-wide
   `crawl_window` (today's manifests have only that), and a source entry that carries its own
   `crawl_window` (the M4 crawlers) adds its own key. Every end is checked to be an ISO 8601 date-time.
-  `dedup` is `{merged: manifest merges.total, ambiguous_not_merged: manifest conflicts.ambiguous_not_merged}`.
+  `crawl_dates_kind` has the same keys: a source in `vocab.BOOTSTRAP_SOURCES` (`ris`) gives
+  `scholar_query_dates`, any other `crawl`, and `*` is the one kind of all the manifest's sources, or `mixed`.
+  `sources` is the manifest's `sources` keys, sorted; `identification_citable` is `not
+  bootstrap_only(sources)` (false for today's RIS-only corpus; the record page then shows the CLI's caution
+  and no methods text, 05). `dedup` is `{merged: manifest merges.total, ambiguous_not_merged,
+  track_not_merged, venue_year_not_merged: manifest conflicts.<each>, 0 when absent}`.
   `searched_at` is UTC to the second (`…Z`). `semantic_version` is null until the near-miss panel exists
   (M5). `excluded` keeps the pinned bucket order.
 - **`ids` are left out of `GET /records/{id}`** (`record.ids` is null) unless `?include=ids`; to fetch the
@@ -258,15 +280,19 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
 - **Stored bodies are read with frozen, tolerant types** (a diagnostic's `code` is a plain string, unknown
   keys are ignored), so a later change to the live enums never makes an old record unreadable; a body whose
   `body_version` is newer than this code's is a 500. `backend/tests/fixtures/records/record-v1.json` is a
-  committed v1 body that must stay readable.
+  committed v1 body that must stay readable. **Body version 2** added `sources`, `identification_citable`,
+  `crawl_dates_kind` and `dedup.track_not_merged` / `venue_year_not_merged`: a v1 body reads them as null
+  ("not recorded", never guessed; the record page treats a null `identification_citable` as not citable),
+  and a v2 body missing them, or whose `identification_citable` contradicts its `sources`, is unreadable (500).
 - **Replay** (`GET /records/{id}`, 200 `{index_version, tokenizer_version, query_version, record, replay}`;
   the top-level versions are those the replay ran on) re-parses the stored `canonical` in native mode, never
   `input`. It runs on the record's own index when this instance has it (served, or loaded on demand; an
   engine handed back for another version counts as unavailable), else on the served index. On its own index
   and under its own `query_version`, it is `reproduced` if `ids_hash` and `excluded` both match and the
-  canonical re-parses to the same `canonical_hash`, otherwise `mismatch`: ERROR `replay_mismatch` (`code`
-  `API_REPLAY_MISMATCH`, `record_id`, the versions, and which of `ids_match`, `excluded_match` and
-  `canonical_match` failed) the first time this process sees that record mismatch, DEBUG after that. Any
+  canonical re-parses to the same `canonical_hash` and the stored id list hashes to `ids_hash`, otherwise
+  `mismatch`: ERROR `replay_mismatch` (`code` `API_REPLAY_MISMATCH`, `record_id`, the versions, which of
+  `ids_match`, `excluded_match`, `canonical_match` and `stored_ids_match` failed, and `refused`: the refusal
+  code when the canonical no longer runs, else null) the first time this process sees that record mismatch, DEBUG after that. Any
   other case is `drifted`: when only the query version differs and the record's own index is here, the replay
   runs on that index, so `changed` holds just `query_version`; otherwise `replay.changed` lists each
   differing input (`snapshot_hash` kind `corpus`; `tokenizer_version`, `schema_version`, `ranking_params`,

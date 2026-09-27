@@ -17,7 +17,7 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
   abstract  = {…},
   keywords  = {main, status:accepted},
   openproceedings_id = {op:iclr:2024:iilhN2MycO},
-  note      = {openproceedings a1b2c3d4e5f6 · query 9f8e7d… · 2026-09-25}
+  note      = {openproceedings a1b2c3d4e5f6 · query 9f8e7d… · exported 2026-09-25}
 }
 ```
 - Every value is **brace-delimited**, even `year`. Never quote-delimited: quotes and braces have
@@ -25,13 +25,16 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
 - `title` gets an inner brace pair so that bibliography styles keep its capitalisation.
 - **Only `status: accepted` is `@inproceedings`** (spec 04 §Exports, task-004 review). Any other status
   (`rejected`, `withdrawn`, `desk_rejected`, `unknown`) is `@unpublished`, with **no `booktitle`**. Its
-  `note` is `Submitted to <venue string>, status: <status>. <provenance line>`. A rejected paper must never
-  become a citation into a conference.
+  `note` is `Submitted to <venue string>, status: <status in words>. <provenance line>`: `desk rejected`,
+  never `desk_rejected`, since a bare `_` in a typeset `note` breaks LaTeX (`keywords` keep the machine form
+  `status:desk_rejected`). Any other `_` in `note` (a record id's) is written `\_`. A rejected paper must
+  never become a citation into a conference.
 - `booktitle` is the same venue string as RIS `T2` (`vocab.venue_name()`, also importable from `export`,
   `.claude/skills/ris-format/SKILL.md`). It is the conference's name, not a proceedings title, since workshop
   and rejected papers are in no proceedings. `keywords = {<track>, status:<status>}` on every entry. Provenance
-  goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC date>}` (spec 04
-  §Exports), the same line as RIS `N1`: `·` is U+00B7, the date `YYYY-MM-DD` UTC. Omit `doi`, `url` and
+  goes in `note = {openproceedings <index_version> · query <canonical_hash> · exported <UTC date>}`, plus
+  ` · record <record_id> · searched <UTC date>` for an export pinned by a search record (spec 04 §Exports),
+  the same line as RIS `N1`: `·` is U+00B7, the dates `YYYY-MM-DD` UTC. Omit `doi`, `url` and
   `abstract` when they are absent. Never write an empty field.
 - `openproceedings_id = {<id>}` is on **every** entry (spec 04 §Exports), so a round-trip recovers the id
   of every record, proceedings-only ones (PMLR, NeurIPS `nips-<hash>`) included, which have no forum `url`

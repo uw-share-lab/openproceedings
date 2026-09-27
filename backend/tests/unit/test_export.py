@@ -292,7 +292,8 @@ def test_bibtex_cites_only_accepted_papers_as_inproceedings() -> None:
     for status in STATUSES[1:]:
         e = by[status[:4]]
         assert e.entry_type == "unpublished" and "booktitle" not in e.fields, status
-        assert e.fields["note"] == f"Submitted to {venue}, status: {status}. {PROVENANCE.line()}"
+        words = status.replace("_", " ")  # `desk_rejected` in a note would break LaTeX
+        assert e.fields["note"] == f"Submitted to {venue}, status: {words}. {PROVENANCE.line()}"
         assert e.fields["keywords"] == f"main, status:{status}"
 
 
@@ -790,3 +791,111 @@ def test_an_unknown_format_is_refused_by_header_and_entries_alike(fmt: str) -> N
         export.header(fmt)
     with pytest.raises(ValueError, match="unknown export format"):
         export.entries(fmt, [], PROVENANCE)
+
+
+# --- review-gate fixes (M3a) ------------------------------------------------------------------------------
+LEAKS = ("@article{leak,", "@jit(nopython,")  # an entry opener and a decorator, both read as entries if bare
+
+
+def adversarial() -> list[dict[str, object]]:
+    """Accepted and not: each with an `@` opener in its title, its abstract and an author."""
+    out: list[dict[str, object]] = []
+    for n, (status, leak) in enumerate(
+        [(s, leak) for s in ("accepted", "rejected", "unknown") for leak in LEAKS], start=1
+    ):
+        out.append({"id": f"op:iclr:2024:At{n:04d}", "title": f"Speed {leak} title}} here",
+                    "abstract": f"We use {leak}\n parallel=True) and \\@{leak}", "authors": [f"Smith, {leak}", "Jo Doe"],
+                    "venue": "ICLR", "year": 2024, "track": "main", "status": status})  # fmt: skip
+    return out
+
+
+def test_an_at_sign_in_any_value_never_opens_an_entry() -> None:
+    """refaudit (and BibTeX) start an entry at a bare `@` wherever it is; every `@` is written `{@}`."""
+    records = adversarial()
+    text = "".join(export._bibtex(records, PROVENANCE))
+    entries = parse_string(text)
+    assert len(entries) == len(records) == 6
+    assert [e.fields["openproceedings_id"] for e in entries] == [r["id"] for r in records]
+    assert [e.entry_type for e in entries] == ["inproceedings"] * 2 + ["unpublished"] * 4
+    assert not re.search(r"(?<!\{)@(?!\})", text.split("\n", 1)[1].replace("@inproceedings{", "")
+                         .replace("@unpublished{", ""))  # fmt: skip
+
+
+def test_a_bibtex_note_has_no_bare_underscore_and_reads_the_status_in_words() -> None:
+    pinned = Provenance(
+        "abcdef123456", "0" * 64, "2026-09-26", record_id="ab_cd-ef_gh1", searched_at="2026-09-25T10:00:00Z"
+    )
+    for status in STATUSES:
+        (e,) = parse_string("".join(export._bibtex([status_record(status)], pinned)))
+        assert not re.search(r"(?<!\\)_", e.fields["note"]), e.fields["note"]
+        assert e.fields["keywords"] == f"main, status:{status}"  # keywords keep the machine form
+    (desk,) = parse_string("".join(export._bibtex([status_record("desk_rejected")], PROVENANCE)))
+    assert "status: desk rejected." in desk.fields["note"]
+
+
+@pytest.mark.parametrize("status", STATUSES)
+def test_ris_says_a_paper_that_was_not_accepted_is_not_in_the_proceedings(status: str) -> None:
+    ris = "".join(export._ris([status_record(status)], PROVENANCE))
+    notes = [line[6:] for line in ris.splitlines() if line.startswith("N1  - ")]
+    venue = "International Conference on Learning Representations (ICLR 2024)"
+    words = status.replace("_", " ")
+    if status == "accepted":
+        assert notes == [PROVENANCE.line()]
+    elif status == "unknown":
+        assert notes == [f"Submitted to {venue}; status: unknown (not known to be in its proceedings).",
+                         PROVENANCE.line()]  # fmt: skip
+    else:
+        assert notes == [
+            f"Submitted to {venue}; status: {words} (not in its proceedings).",
+            PROVENANCE.line(),
+        ]
+    assert "TY  - CPAPER\n" in ris and f"T2  - {venue}\n" in ris  # one reference type, the venue kept
+
+
+def test_the_provenance_line_says_exported_and_names_a_pinning_record() -> None:
+    assert PROVENANCE.line() == f"openproceedings abcdef123456 · query {'0' * 64} · exported 2026-09-26"
+    pinned = Provenance("abcdef123456", "0" * 64, "2026-09-26", record_id="Rec0rd_Id-01",
+                        searched_at="2026-09-25T23:59:59Z")  # fmt: skip
+    line = f"openproceedings abcdef123456 · query {'0' * 64} · exported 2026-09-26 · record Rec0rd_Id-01 · searched 2026-09-25"
+    assert pinned.line() == line
+    with pytest.raises(ValueError, match="record_id and searched_at"):
+        Provenance("a", "b", "c", record_id="Rec0rd_Id-01")
+    record = status_record("accepted")
+    ris = "".join(export._ris([record], pinned))
+    assert f"N1  - {line}\n" in ris
+    (e,) = parse_string("".join(export._bibtex([record], pinned)))
+    assert e.fields["note"] == line.replace("_", "\\_")
+    row = next(csv.DictReader(io.StringIO(export.header("csv") + "".join(export._csv([record], pinned)))))
+    row = {k.lstrip("\ufeff"): v for k, v in row.items()}
+    assert (row["record_id"], row["searched_at"]) == ("Rec0rd_Id-01", "2026-09-25T23:59:59Z")
+    plain = next(
+        csv.DictReader(io.StringIO("".join(export._csv([record], PROVENANCE))), fieldnames=export.CSV_COLUMNS)
+    )
+    assert (plain["record_id"], plain["searched_at"]) == ("", "")
+    (obj,) = [json.loads(x) for x in export._jsonl([record], pinned)]
+    assert (obj["record_id"], obj["searched_at"]) == ("Rec0rd_Id-01", "2026-09-25T23:59:59Z")
+    (bare,) = [json.loads(x) for x in export._jsonl([record], PROVENANCE)]
+    assert (bare["record_id"], bare["searched_at"]) == (None, None)
+
+
+def test_the_conference_table_names_exactly_the_venues() -> None:
+    from typing import get_args
+
+    assert tuple(vocab.CONFERENCES) == get_args(vocab.Venue)
+    with pytest.raises(ValueError, match="the conference table must name exactly"):
+        vocab.check_conferences({k: v for k, v in vocab.CONFERENCES.items() if k != "ICML"})
+
+
+def _printable_before(text: str) -> str:
+    """`export._printable` as it was: a per-character generator (kept here as the reference)."""
+    import unicodedata
+
+    return "".join(ch for ch in text if ch.isspace() or unicodedata.category(ch) != "Cc")
+
+
+def test_printable_equals_the_per_character_definition_on_every_code_point() -> None:
+    """The regex drops exactly the control characters (Cc) that aren't whitespace, for every code point but
+    the surrogates (which no decoded UTF-8 text holds); ~1.1M code points, well under a second."""
+    every = "".join(chr(c) for c in range(0x110000) if not 0xD800 <= c <= 0xDFFF)
+    assert export._printable(every) == _printable_before(every)
+    assert export._printable("a\x00\t\n\x0b\x0c\r\x1c\x1f\x7f\x85\x9fb") == "a\t\n\x0b\x0c\r\x1c\x1f\x85b"

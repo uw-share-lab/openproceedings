@@ -16,7 +16,7 @@ UR  - https://openreview.net/pdf?id=Hn3vQ6eYt0
 ID  - op:neurips:2023:Hn3vQ6eYt0
 KW  - main
 KW  - status:accepted
-N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · 2026-09-27
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · exported 2026-09-27
 ER  - 
 
 TY  - CONF
@@ -34,5 +34,41 @@ AU  - Fischer, Lena
 PY  - 2024
 T2  - Advances in Neural Information Processing Systems
 VL  - 37
+ER  - 
+
+TY  - CPAPER
+TI  - Calibrated Trust in Language-Model Assistants Under Distribution Shift
+AB  - People rely on language-model assistants more when the assistant sounds confident, whether or not it is right. We study how that reliance changes under distribution shift, where the assistant's accuracy drops but its stated confidence does not. In three preregistered experiments (N = 1,204) we find that verbalised uncertainty reduces over-reliance by 23% without reducing appropriate reliance, and that the effect survives a shift in task domain.
+AU  - Lindqvist, Maja
+AU  - Okonkwo, Adaeze
+AU  - Park, Joon-ho
+PY  - 2024
+T2  - International Conference on Learning Representations (ICLR 2025)
+UR  - https://openreview.net/forum?id=bT4kR8sW1n
+UR  - https://openreview.net/pdf?id=bT4kR8sW1n
+ID  - op:iclr:2025:bT4kR8sW1n
+KW  - main
+KW  - status:accepted
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · exported 2026-09-27
+ER  - 
+
+TY  - CPAPER
+TI  - Explanations That Help: A Benchmark for Appropriate Reliance
+AB  - Explanations are meant to help people decide when to follow an AI's advice. We release a benchmark of 14 decision tasks with ground truth, human baselines and a protocol for measuring appropriate reliance, and evaluate nine explanation methods. None improves appropriate reliance over showing the model's confidence alone.
+AU  - Şahin, E.
+AU  - Nguyễn, T. H.
+AU  - Zhang, Y.
+AU  - O'Neill, A.
+AU  - García-López, M.
+AU  - Van der Berg, P.
+AU  - Kowalczyk, Ł.
+PY  - 2023
+T2  - Conference on Neural Information Processing Systems (NeurIPS 2023)
+UR  - https://openreview.net/forum?id=Hn3vQ6eYt0
+UR  - https://openreview.net/pdf?id=Hn3vQ6eYt0
+ID  - op:neurips:2023:Hn3vQ6eYt0
+KW  - main
+KW  - status:accepted
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · exported 2026-09-27
 ER  - 
 

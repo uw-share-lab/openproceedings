@@ -13,12 +13,15 @@ A search record is the citable artifact of a review search: "we ran *this* canon
 |---|---|
 | `record_id` | a short, URL-safe, unguessable id (random, collision-checked on insert) |
 | `input`, `mode`, `canonical`, `canonical_hash`, `identification_query` | 02's `ParseResult`. `identification_query` is the canonical string with the default conjuncts removed: the string that reproduces "identified" |
-| `index_version`, `tokenizer_version`, `query_version`, `snapshot_hash`, `crawl_dates` (per source, from the manifest) | the database version and when its contents were collected |
+| `index_version`, `tokenizer_version`, `query_version`, `snapshot_hash`, `crawl_dates` (per source, from the manifest; only `*`, the corpus-wide from–to window, until M4) | the database version and when its contents were collected |
+| `crawl_dates_kind` (body v2; per `crawl_dates` key) | what those dates are: `crawl` (fetch times, UTC), `scholar_query_dates` (a bootstrap source's Publish or Perish query dates: local time labelled UTC, so an end can be a day off; say "Scholar searches run …", never "a crawl"), or `mixed` (`*` over both kinds) |
+| `sources` (body v2) | the snapshot manifest's source names, sorted |
+| `identification_citable` (body v2) | `false` when every source is a bootstrap one (`vocab.bootstrap_only`, the same test as `op search`'s "note: bootstrap corpus"): the counts describe an earlier search's output, not a database, so they are not PRISMA identification numbers. The record page then shows that caution and no methods text |
 | `searched_at` | UTC, ISO 8601 with `Z`. The search date, which is separate from the crawl date |
 | `total`, `excluded` (with `unknown` itemised) | the counts cited in PRISMA; `excluded` is 03's per-filter breakdown, verbatim |
 | `expansions`, `translations`, `warnings` | how the query was interpreted (PRISMA-S) |
 | `ids` (sorted) and `ids_hash` | membership, for replay and for the diff; see below |
-| `dedup` (`merged`, `ambiguous_not_merged` counts from the manifest) | the PRISMA-S item 16 deduplication-process statement (corpus-wide ingest merges, never a per-search removal count; `prisma-reporting`) |
+| `dedup` (`merged` and the manifest's not-merged conflicts by resolution: `ambiguous_not_merged`, and from body v2 `track_not_merged`, `venue_year_not_merged`) | the PRISMA-S item 16 deduplication-process statement (corpus-wide ingest merges, never a per-search removal count; `prisma-reporting`) |
 | `semantic_version` | optional. Set only if the near-miss panel was open when the record was made (spec 06). **Never** an input to `ids_hash`. |
 | `schema_version`, `ranking_params` | as built (task-037): the index's other two `index_version` inputs, so a drifted replay names a method change even after the pinned index is deleted |
 
@@ -59,12 +62,28 @@ translations that changed later cannot alter the replay.
   with write access to the file can drop them. Protect the file with the volume's permissions.
 - A `schema_version` table (currently 1). Migrations only add columns or tables and never rewrite rows; a
   store with a newer version is refused.
+- **The first migration needs an explicit step.** `schema_version` is checked only when the store is opened
+  for a write (`_ensure`, on the first insert), never on a read, and every schema statement is
+  `CREATE … IF NOT EXISTS`, which never replaces an existing table or a *changed* trigger. So the first
+  migration must (1) insert the new version row, (2) `DROP TRIGGER` and re-create any trigger whose text
+  changed, and (3) be checked on read paths too, or an old instance would read a new store unchecked.
+- **`RecordStore.insert` refuses** fields whose `ids_hash` isn't the hash of the ids passed (500), so a
+  row that could only ever replay as a mismatch is never written. Tests that need such a row (replay and
+  export of a broken record) write it straight into the file, as `tampered()` in
+  `backend/tests/contract/test_records.py` does.
+- **`excluded` is compared whole** on replay (`Excluded.to_json()` against the stored `RecordExcluded`), so
+  its shape is covered by `query_version`: adding a key to the live shape without a `query_version` bump
+  would turn every stored record into a `mismatch`. `test_the_stored_excluded_shape_is_the_live_one` fails
+  first.
 - **Content-addressed id sets:** `id_sets (ids_hash, ids)` holds each distinct id list once (zlib of the
   `\n`-joined sorted list, re-hashed against its key on every read); `records (record_id, index_version,
   searched_at, id_set, body)` points at it. Saving the same set again costs one body (~1 KB).
-- **Bodies are versioned** (`body_version`, now 1) and read with frozen, tolerant types (a diagnostic's
+- **Bodies are versioned** (`body_version`, now 2) and read with frozen, tolerant types (a diagnostic's
   `code` is a string, unknown keys ignored), so changing a live enum never makes an old record unreadable.
   `backend/tests/fixtures/records/record-v1.json` must stay readable; a newer `body_version` is a 500.
+  v2 added `sources`, `identification_citable`, `crawl_dates_kind` and two `dedup` counts: a v1 body reads
+  them as null ("not recorded", never guessed), and a v2 body without them, or whose
+  `identification_citable` contradicts its `sources`, is refused as unreadable.
 - **Capacity:** a save is refused (503 `API_RECORDS_STORE_FULL`) when the store is at
   `ApiConfig.records_max_bytes` or its disk below `records_min_free_bytes`. All three record routes cost the
   rate limit's `export_weight`.
@@ -107,12 +126,15 @@ A record must go (a legal request, personal data in `input`). With the API stopp
 
 ## What a methods section cites
 The record page (05) shows, and a methods section quotes: the `identification_query` and the default
-clauses, the **full** `index_version` (never a prefix), the search date and the crawl date (separately),
-`total`, the `excluded` breakdown with `unknown` on its own line (PRISMA "records removed before
-screening", see `.claude/skills/prisma-reporting/SKILL.md`), the record URL, and the replay status on the
-day it was checked. A `mismatch` record is not citable: the page shows "do not cite", with no methods text
-and no export. RIS and BibTeX exports carry the same `index_version` and `canonical_hash` in `N1`/`note`, so a
-Covidence library can be traced back to its record.
+clauses, the **full** `index_version` (never a prefix), the search date and the crawl window
+(`crawl_dates["*"]` from–to; separately), `total`, the `excluded` breakdown with `unknown` on its own line
+(PRISMA "records removed before screening", see `.claude/skills/prisma-reporting/SKILL.md`), the record
+URL, and the replay status on the day it was checked. A `mismatch` record is not citable: the page shows
+"do not cite", with no methods text and no export. A record whose `identification_citable` is not `true`
+(a bootstrap corpus, or a v1 record that didn't record it) gets the CLI's caution and no methods text; its
+exports still work. RIS and BibTeX exports carry the same `index_version` and `canonical_hash` in
+`N1`/`note`, and an export from the record page (`/export?record_id=`) adds `record <record_id> · searched
+<date>`, so a Covidence library can be traced back to its record.
 
 ## Tests (spec 04 §Testing)
 - Reproduced path: create a record on the fixture index, then replay it and get `reproduced`.

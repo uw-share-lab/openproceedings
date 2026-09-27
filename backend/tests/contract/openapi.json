@@ -322,7 +322,7 @@
         "type": "object"
       },
       "Dedup": {
-        "description": "Corpus-wide ingest merges from the snapshot manifest (PRISMA-S item 16): a process statement, never a\nremoval count of this search.",
+        "description": "Corpus-wide ingest merges from the snapshot manifest (PRISMA-S item 16): a process statement, never a\nremoval count of this search. The not-merged counts are the manifest's conflicts by resolution: pairs\nthat looked alike but were kept apart (two candidates from one source; a track the proceedings never\nhost; two records of one venue-year). The last two are None on a v1 body, which didn't record them.",
         "properties": {
           "ambiguous_not_merged": {
             "title": "Ambiguous Not Merged",
@@ -331,6 +331,28 @@
           "merged": {
             "title": "Merged",
             "type": "integer"
+          },
+          "track_not_merged": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Not Merged"
+          },
+          "venue_year_not_merged": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue Year Not Merged"
           }
         },
         "required": [
@@ -1977,7 +1999,7 @@
         "type": "object"
       },
       "SearchRecord": {
-        "description": "Every field of spec 04 §Search records, plus `body_version`, `schema_version` and `ranking_params`\n(the index's other two inputs, so a drifted replay can name a method change after the pinned index is\ngone). `ids` is None when the caller didn't ask for them.",
+        "description": "Every field of spec 04 §Search records, plus `body_version`, `schema_version` and `ranking_params`\n(the index's other two inputs, so a drifted replay can name a method change after the pinned index is\ngone). `ids` is None when the caller didn't ask for them.\n\nBody version 2 adds `sources` (the snapshot manifest's source names, sorted), `identification_citable`\n(false when every source is a bootstrap one, `vocab.bootstrap_only`: the corpus is an earlier search's\noutput, so `total` is not a PRISMA identification number) and `crawl_dates_kind` (per `crawl_dates` key:\n`crawl`, `scholar_query_dates` or `mixed`), and `dedup`'s two other not-merged counts. A v1 body has\nnone of them: they read as None (\"not recorded\"), never as a guess.",
         "properties": {
           "body_version": {
             "title": "Body Version",
@@ -2001,6 +2023,20 @@
             "title": "Crawl Dates",
             "type": "object"
           },
+          "crawl_dates_kind": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawl Dates Kind"
+          },
           "dedup": {
             "$ref": "#/components/schemas/Dedup"
           },
@@ -2016,6 +2052,17 @@
             },
             "title": "Expansions",
             "type": "object"
+          },
+          "identification_citable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identification Citable"
           },
           "identification_query": {
             "title": "Identification Query",
@@ -2088,6 +2135,20 @@
           "snapshot_hash": {
             "title": "Snapshot Hash",
             "type": "string"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sources"
           },
           "tokenizer_version": {
             "title": "Tokenizer Version",
