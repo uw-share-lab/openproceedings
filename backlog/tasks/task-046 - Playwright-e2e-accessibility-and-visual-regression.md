@@ -4,7 +4,7 @@ title: 'Playwright e2e, accessibility and visual regression'
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-27 20:20'
+updated_date: '2026-09-27 22:47'
 labels:
   - frontend
   - ops
@@ -33,4 +33,6 @@ Spec 05 §Testing; e2e workflow (e2e-tester, accessibility skills).
 
 <!-- SECTION:NOTES:BEGIN -->
 Design (TASK-033, 2026-09-27): every wireframe state in docs/design/2026-09-27-*.md is an e2e or visual case (search W1-W14, builder B1-B2, export E1-E4, save S1-S3, record R1-R6, paper P1-P5, coverage C1); every 'Keyboard and screen reader' table is a keyboard-only Playwright flow; axe on each state in both themes at 320 px. Heuristic pre-pass: docs/design/2026-09-27-heuristic-prepass.md.
+
+From TASK-042/045: check the focus order (results header, banner and Limits line come before the sidebar in DOM order); Playwright + axe for /coverage and /help/syntax; consider widening SearchWorkspace's max-w-5xl now that the sidebar exists.
 <!-- SECTION:NOTES:END -->
