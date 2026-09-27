@@ -20,6 +20,7 @@ A search record is the citable artifact of a review search: "we ran *this* canon
 | `ids` (sorted) and `ids_hash` | membership, for replay and for the diff; see below |
 | `dedup` (`merged`, `ambiguous_not_merged` counts from the manifest) | the PRISMA-S item 16 deduplication-process statement (corpus-wide ingest merges, never a per-search removal count; `prisma-reporting`) |
 | `semantic_version` | optional. Set only if the near-miss panel was open when the record was made (spec 06). **Never** an input to `ids_hash`. |
+| `schema_version`, `ranking_params` | as built (task-037): the index's other two `index_version` inputs, so a drifted replay names a method change even after the pinned index is deleted |
 
 Store the full sorted id list as well as the hash, compressed if needed. The diff cannot say *which*
 papers were added or removed without it.
@@ -53,6 +54,22 @@ translations that changed later cannot alter the replay.
 - It is backed up with the snapshots and never committed (`data/` is gitignored).
 - `POST /records` re-runs the query server-side to compute `total`, `excluded` and `ids_hash`. Never trust
   counts sent by the client.
+
+## As built (task-037)
+- Code: `backend/src/openproceedings/records.py` (`ids_hash`, `SearchRecord`, `identify`, `freeze`,
+  `RecordStore`, `replay`), `api/records.py` (routes and the `/export` hook), `api/pinned.py` (older indexes,
+  loaded on demand read-only). Tests: `backend/tests/unit/test_records.py` (known answers, triggers,
+  concurrency) and `backend/tests/contract/test_records.py` (the replay matrix, diff, errors, logs).
+- `identify` is the one membership computation, at save and at replay: `search.run` (so `total`/`excluded`
+  equal `/search`'s) plus `match_ids`.
+- Store columns: `record_id`, `index_version`, `searched_at`, `body` (JSON without `ids`), `ids`
+  (zlib of the `\n`-joined list). A `BEFORE INSERT` trigger refuses an existing id: SQLite's REPLACE
+  deletes the old row *without* firing DELETE triggers unless `recursive_triggers` is on, so the update and
+  delete triggers alone don't stop `INSERT OR REPLACE` from a plain `sqlite3` shell. `RecordStore.pinned(v)` is the retention count. A read never creates the file.
+- A mismatch test inserts a *new* row (a copy with a wrong `ids_hash` or `excluded`) through
+  `RecordStore.insert`: the store stays append-only in tests too.
+- The export hook: `api.records.require_citable(request, record_id, engine)` → the record, or 409
+  `API_RECORD_MISMATCH`. Spec 04 §Search records "As built" has the full response shapes.
 
 ## What a methods section cites
 The record page (05) shows, and a methods section quotes: the `identification_query` and the default

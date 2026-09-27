@@ -9,14 +9,15 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
-from openproceedings.diagnostics import Diagnostic
+from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.ingest.record import PaperRecord, Presentation, Urls
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import FilterField, Node, TextField
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import Mode
+from openproceedings.records import SearchRecord
 from openproceedings.vocab import Status, Track, Venue
 
 Sort = Literal["relevance", "year_desc", "year_asc", "title"]  # tantivy_engine.SORTS (a test pins them equal)
@@ -126,6 +127,61 @@ class SearchResponse(Versioned):
 # --- /papers/{id} ------------------------------------------------------------------------------------
 class PaperResponse(Versioned):
     paper: PaperRecord  # the snapshot record the index was built from (spec 01), provenance included
+
+
+# --- /records (task-037; spec 04 §Search records) -----------------------------------------------------
+# The top-level versions of a record response are those the replay ran on; the record's own are in `record`.
+class RecordRequest(Model):
+    q: str
+    mode: Mode = "native"
+
+
+class RecordCreated(Versioned):
+    record_id: str
+    url: str  # the record page's path (`/record/<record_id>`, spec 05), relative to the site
+
+
+class ChangedInput(Model):
+    input: Literal["snapshot_hash", "tokenizer_version", "schema_version", "ranking_params", "query_version"]
+    kind: Literal["corpus", "method"]  # snapshot_hash is corpus drift; every other input is method drift
+    recorded: JsonValue
+    current: JsonValue
+
+
+class ReplayInfo(Model):
+    status: Literal["reproduced", "drifted", "mismatch"]
+    index_version: str  # the index the replay ran on (the pinned one unless drifted)
+    query_version: str
+    total: int | None  # null when the canonical string no longer runs (`refused`)
+    excluded: Excluded | None
+    ids_hash: str | None
+    ids_match: bool
+    excluded_match: bool
+    refused: DiagnosticCode | None  # why the canonical string no longer runs on a drifted replay
+    changed: list[ChangedInput]  # empty unless drifted
+    added: int  # ids the replay matched that the record doesn't hold
+    removed: int  # ids the record holds that the replay didn't match
+    membership_identical: bool  # added == removed == 0 (a drifted +0/−0 is reported, not hidden)
+
+
+class RecordResponse(Versioned):
+    record: SearchRecord
+    replay: ReplayInfo
+
+
+class DiffEntry(Model):
+    id: str
+    title: str | None  # null when no index on this instance still holds the paper
+
+
+class RecordDiff(Versioned):
+    record_id: str
+    status: Literal["reproduced", "drifted", "mismatch"]
+    recorded_index_version: str
+    changed: list[ChangedInput]
+    added: list[DiffEntry]  # sorted by id
+    removed: list[DiffEntry]
+    membership_identical: bool
 
 
 # --- /meta -------------------------------------------------------------------------------------------
