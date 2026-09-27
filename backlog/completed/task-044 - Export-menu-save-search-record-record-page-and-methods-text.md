@@ -1,10 +1,10 @@
 ---
 id: TASK-044
 title: 'Export menu, save search record, record page and methods text'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-27 23:12'
+updated_date: '2026-09-27 23:13'
 labels:
   - frontend
 milestone: m-3
