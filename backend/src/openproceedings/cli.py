@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 from openproceedings import __version__
 from openproceedings.logs import FORMATS as LOG_FORMATS
 from openproceedings.logs import LEVELS, configure_logging
+from openproceedings.vocab import bootstrap_only
 
 FORMATS = ("ris", "csv", "bibtex", "jsonl")  # export formats (export.FORMATS; imported lazily there)
 SORTS = ("relevance", "year_desc", "year_asc", "title")  # tantivy_engine.SORTS
@@ -399,7 +400,7 @@ def _report(
             "unknown, and so is "
             "whether these counts are PRISMA identification numbers (spec 01)"
         )
-    elif sources and set(sources) <= BOOTSTRAP_SOURCES:
+    elif bootstrap_only(sources):
         lines.append(
             f"note: bootstrap corpus (sources: {', '.join(sources)}): these counts describe that corpus, "
             "not a database; they are not PRISMA identification numbers (spec 01)"
@@ -417,9 +418,6 @@ def _report(
         shown = ", ".join(listed[:10]) + (", …; every term with --explain" if len(listed) > 10 else "")
         lines.append(f"expansion: {stem}{op} → {len(listed)} term{'' if len(listed) == 1 else 's'} ({shown})")
     return lines
-
-
-BOOTSTRAP_SOURCES = {"ris"}  # an index built only from these holds an earlier search's output, not a database
 
 
 def _snapshot_of(ns: argparse.Namespace, index: Path) -> dict[str, Any] | None:

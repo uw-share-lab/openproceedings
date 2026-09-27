@@ -317,13 +317,19 @@ export interface components {
         /**
          * Dedup
          * @description Corpus-wide ingest merges from the snapshot manifest (PRISMA-S item 16): a process statement, never a
-         *     removal count of this search.
+         *     removal count of this search. The not-merged counts are the manifest's conflicts by resolution: pairs
+         *     that looked alike but were kept apart (two candidates from one source; a track the proceedings never
+         *     host; two records of one venue-year). The last two are None on a v1 body, which didn't record them.
          */
         Dedup: {
             /** Ambiguous Not Merged */
             ambiguous_not_merged: number;
             /** Merged */
             merged: number;
+            /** Track Not Merged */
+            track_not_merged?: number | null;
+            /** Venue Year Not Merged */
+            venue_year_not_merged?: number | null;
         };
         /**
          * Diagnostic
@@ -814,6 +820,12 @@ export interface components {
          * @description Every field of spec 04 §Search records, plus `body_version`, `schema_version` and `ranking_params`
          *     (the index's other two inputs, so a drifted replay can name a method change after the pinned index is
          *     gone). `ids` is None when the caller didn't ask for them.
+         *
+         *     Body version 2 adds `sources` (the snapshot manifest's source names, sorted), `identification_citable`
+         *     (false when every source is a bootstrap one, `vocab.bootstrap_only`: the corpus is an earlier search's
+         *     output, so `total` is not a PRISMA identification number) and `crawl_dates_kind` (per `crawl_dates` key:
+         *     `crawl`, `scholar_query_dates` or `mixed`), and `dedup`'s two other not-merged counts. A v1 body has
+         *     none of them: they read as None ("not recorded"), never as a guess.
          */
         SearchRecord: {
             /** Body Version */
@@ -828,12 +840,18 @@ export interface components {
                     [key: string]: string;
                 };
             };
+            /** Crawl Dates Kind */
+            crawl_dates_kind?: {
+                [key: string]: string;
+            } | null;
             dedup: components["schemas"]["Dedup"];
             excluded: components["schemas"]["RecordExcluded"];
             /** Expansions */
             expansions: {
                 [key: string]: string[];
             };
+            /** Identification Citable */
+            identification_citable?: boolean | null;
             /** Identification Query */
             identification_query: string;
             /** Ids */
@@ -862,6 +880,8 @@ export interface components {
             semantic_version?: string | null;
             /** Snapshot Hash */
             snapshot_hash: string;
+            /** Sources */
+            sources?: string[] | null;
             /** Tokenizer Version */
             tokenizer_version: string;
             /** Total */

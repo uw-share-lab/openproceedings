@@ -10,7 +10,8 @@ UR  - https://openreview.net/pdf?id=Wd8nJ3cV5r
 ID  - op:iclr:2024:Wd8nJ3cV5r
 KW  - main
 KW  - status:rejected
-N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · 2026-09-27
+N1  - Submitted to International Conference on Learning Representations (ICLR 2024); status: rejected (not in its proceedings).
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · exported 2026-09-27
 ER  - 
 
 TY  - CPAPER
@@ -24,7 +25,7 @@ UR  - https://openreview.net/pdf?id=Xq7Lm2Pz9A
 ID  - op:iclr:2024:Xq7Lm2Pz9A
 KW  - main
 KW  - status:accepted
-N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · 2026-09-27
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · exported 2026-09-27
 ER  - 
 
 TY  - CPAPER
@@ -40,7 +41,7 @@ UR  - https://openreview.net/pdf?id=bT4kR8sW1n
 ID  - op:iclr:2025:bT4kR8sW1n
 KW  - main
 KW  - status:accepted
-N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · 2026-09-27
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · exported 2026-09-27
 ER  - 
 
 TY  - CPAPER
@@ -55,7 +56,7 @@ UR  - https://proceedings.mlr.press/v202/okafor23a.html
 ID  - op:icml:2023:pmlr-v202-okafor23a
 KW  - main
 KW  - status:accepted
-N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · 2026-09-27
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · exported 2026-09-27
 ER  - 
 
 TY  - CPAPER
@@ -69,7 +70,7 @@ UR  - https://proceedings.neurips.cc/paper_files/paper/2017/hash/3f9a1c0d5e7b2a4
 ID  - op:neurips:2017:nips-3f9a1c0d5e7b2a4c6d8e0f1a2b3c4d5e
 KW  - main
 KW  - status:accepted
-N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · 2026-09-27
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · exported 2026-09-27
 ER  - 
 
 TY  - CPAPER
@@ -89,7 +90,7 @@ UR  - https://openreview.net/pdf?id=Hn3vQ6eYt0
 ID  - op:neurips:2023:Hn3vQ6eYt0
 KW  - main
 KW  - status:accepted
-N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · 2026-09-27
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · exported 2026-09-27
 ER  - 
 
 TY  - CPAPER
@@ -105,6 +106,6 @@ DO  - 10.5555/trustbench.2024.001
 ID  - op:neurips:2024:Rk2wP5dLx8
 KW  - datasets_benchmarks
 KW  - status:accepted
-N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · 2026-09-27
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · exported 2026-09-27
 ER  - 
 

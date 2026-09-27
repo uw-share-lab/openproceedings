@@ -5,6 +5,7 @@ Filter values in a query are checked against these; ingestion never writes a val
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Literal, get_args
 
 # The types are the single source; the value tuples derive from them, so they can't drift apart.
@@ -36,6 +37,20 @@ QUERY_FILTER_FIELDS = (  # every filter field a query may name, incl. Scholar's 
     "source",
 )
 
+# Snapshot sources that hold an earlier search's output, not a database (spec 01, the M2 bootstrap): the RIS
+# import of a Publish or Perish Scholar search. An index built only from these is a bootstrap corpus, whose
+# counts are not PRISMA identification numbers (`op search`'s note and a search record's
+# `identification_citable` both use `bootstrap_only`).
+BOOTSTRAP_SOURCES: frozenset[str] = frozenset({"ris"})
+
+
+def bootstrap_only(sources: Iterable[str]) -> bool:
+    """True when a snapshot names sources and every one is a bootstrap source. No sources named is not
+    evidence of a bootstrap corpus (the caller reports a missing snapshot on its own)."""
+    named = set(sources)
+    return bool(named) and named <= BOOTSTRAP_SOURCES
+
+
 # The venue string, RIS `T2` and BibTeX `booktitle` (spec 04 §Exports, task-004, which cites the sources):
 # the conference's full name, then the acronym it went by that year, and the year. Each venue lists its
 # (first year, acronym) eras in year order. A year before the first era has no name, and a record for it is
@@ -54,13 +69,17 @@ CONFERENCES: ConferenceTable = {
 
 
 def check_conferences(table: ConferenceTable) -> None:
-    """Every venue has eras, in strictly increasing year order (`venue_name` takes the last one begun)."""
+    """Every venue has eras, in strictly increasing year order (`venue_name` takes the last one begun), and
+    the table names exactly the venues of `Venue`, in its order (so a venue added there can't reach an export
+    without a name)."""
     for venue, (_name, eras) in table.items():
         if not eras:
             raise ValueError(f"{venue} has no eras")
         years = [first for first, _acronym in eras]
         if years != sorted(set(years)):
             raise ValueError(f"{venue} eras are not in year order: {years}")
+    if tuple(table) != get_args(Venue):
+        raise ValueError(f"the conference table must name exactly {get_args(Venue)}, not {tuple(table)}")
 
 
 check_conferences(CONFERENCES)

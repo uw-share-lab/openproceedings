@@ -284,6 +284,36 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
     return BuildResult(target, snapshot_hash, created=created)
 
 
+class _OnePass:
+    """One read of a snapshot, shared by `iter_records` and `RecordFile`: its parsed manifest, then
+    `records.jsonl` line by line (numbered from 1), each line hashed as it is read, so the file checked
+    against `snapshot_hash` is the file read. Errors (OSError, ValueError) are the caller's to word."""
+
+    def __init__(self, snapshot: Path) -> None:
+        self.manifest: Any = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+        self.path = snapshot / "records.jsonl"
+        self._digest = hashlib.sha256()
+
+    def lines(self) -> Iterator[tuple[int, bytes]]:
+        with self.path.open("rb") as fh:
+            for n, raw in enumerate(fh, start=1):
+                self._digest.update(raw)
+                yield n, raw
+
+    def hexdigest(self) -> str:
+        """The sha256 of the lines read so far (all of them, once `lines()` is exhausted)."""
+        return self._digest.hexdigest()
+
+
+def _id_order(previous: str, rid: str) -> str | None:
+    """Why `rid` can't follow `previous` in a snapshot (ids strictly ascending, so unique), or None."""
+    if rid == previous:
+        return "duplicate id"
+    if rid < previous:
+        return "records are not sorted by id"
+    return None
+
+
 def iter_records(snapshot: Path) -> Iterator[PaperRecord]:
     """A snapshot's records in file order, streamed in one pass. It must be a snapshot: every record valid
     (so a stale content_hash is caught), ids strictly ascending (so unique), and the bytes read hashing to
@@ -291,31 +321,27 @@ def iter_records(snapshot: Path) -> Iterator[PaperRecord]:
     read). A caller must not act on the records until iteration finishes without raising: `load_records`
     and `build_index` (which commits only after the last record) don't. Errors name the line only."""
     try:
-        manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+        read = _OnePass(snapshot)
+        manifest = read.manifest
         expected = manifest["snapshot_hash"] if isinstance(manifest, dict) else None
-        digest = hashlib.sha256()
         previous = ""
-        with (snapshot / "records.jsonl").open("rb") as fh:
-            for n, raw in enumerate(fh, start=1):
-                digest.update(raw)
-                try:
-                    r = PaperRecord.model_validate_json(raw)
-                except ValidationError as e:
-                    kinds = sorted({str(err["type"]) for err in e.errors(include_input=False)})
-                    raise SnapshotError(
-                        f"{snapshot.name} line {n}: invalid record ({', '.join(kinds)})"
-                    ) from None
-                if r.id == previous:
-                    raise SnapshotError(f"{snapshot.name} line {n}: duplicate id")
-                if r.id < previous:
-                    raise SnapshotError(f"{snapshot.name} line {n}: records are not sorted by id")
-                previous = r.id
-                yield r
+        for n, raw in read.lines():
+            try:
+                r = PaperRecord.model_validate_json(raw)
+            except ValidationError as e:
+                kinds = sorted({str(err["type"]) for err in e.errors(include_input=False)})
+                raise SnapshotError(
+                    f"{snapshot.name} line {n}: invalid record ({', '.join(kinds)})"
+                ) from None
+            if out_of_order := _id_order(previous, r.id):
+                raise SnapshotError(f"{snapshot.name} line {n}: {out_of_order}")
+            previous = r.id
+            yield r
     except (OSError, ValueError, KeyError) as e:
         if isinstance(e, SnapshotError):
             raise
         raise SnapshotError(f"{snapshot.name} is not a snapshot ({type(e).__name__})") from None
-    if expected != digest.hexdigest():
+    if expected != read.hexdigest():
         raise SnapshotError(f"{snapshot.name}: records.jsonl doesn't match its manifest's snapshot_hash")
     try:  # the audit files, both of them, exactly as the manifest hashed them (the check _holds makes too)
         matches = manifest.get("files") == _audit(snapshot)
@@ -346,24 +372,22 @@ class RecordFile:
         self.cells: Counter[tuple[str, int, str, str]] = Counter()  # (venue, year, track, status) → records
         self.abstract_missing: Counter[tuple[str, int]] = Counter()  # (venue, year) → no abstract
         try:
-            manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+            read = _OnePass(snapshot)
+            manifest = read.manifest
             self.manifest: dict[str, Any] = manifest
             self.snapshot_hash: str = manifest["snapshot_hash"]
-            digest = hashlib.sha256()
             self._at: dict[str, tuple[int, int]] = {}
             previous, offset = "", 0
-            with self.path.open("rb") as fh:
-                for n, raw in enumerate(fh, start=1):
-                    digest.update(raw)
-                    line = json.loads(raw)
-                    rid = line["id"]
-                    if not isinstance(rid, str) or rid <= previous:
-                        raise SnapshotError(f"{snapshot.name} line {n}: ids are not unique and ascending")
-                    self._at[rid] = (offset, len(raw))
-                    self.cells[(line["venue"], line["year"], line["track"], line["status"])] += 1
-                    if line["abstract"] is None:
-                        self.abstract_missing[(line["venue"], line["year"])] += 1
-                    previous, offset = rid, offset + len(raw)
+            for n, raw in read.lines():
+                line = json.loads(raw)
+                rid = line["id"]
+                if not isinstance(rid, str) or _id_order(previous, rid):
+                    raise SnapshotError(f"{snapshot.name} line {n}: ids are not unique and ascending")
+                self._at[rid] = (offset, len(raw))
+                self.cells[(line["venue"], line["year"], line["track"], line["status"])] += 1
+                if line["abstract"] is None:
+                    self.abstract_missing[(line["venue"], line["year"])] += 1
+                previous, offset = rid, offset + len(raw)
         except FileNotFoundError:
             raise SnapshotError(
                 f"{snapshot.name} is not on this instance", reason="snapshot_missing"
@@ -372,7 +396,7 @@ class RecordFile:
             raise SnapshotError(
                 f"{snapshot.name} is not a snapshot ({type(e).__name__})", reason="snapshot_unreadable"
             ) from None
-        if digest.hexdigest() != self.snapshot_hash:
+        if read.hexdigest() != self.snapshot_hash:
             raise SnapshotError(
                 f"{snapshot.name}: records.jsonl doesn't match its manifest's snapshot_hash",
                 reason="snapshot_hash_mismatch",

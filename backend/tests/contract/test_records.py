@@ -2,9 +2,10 @@
 
 The replay matrix: reproduced (on the served index, and on a pinned older one loaded on demand), drifted
 (a changed snapshot with the pinned index gone; a changed query version, replayed on the pinned index; the
-method inputs), refused (null counts), and mismatch (fixture rows inserted with a wrong `ids_hash`,
-`excluded`, one bucket, or `canonical_hash`: 200, `mismatch`, exactly one ERROR `API_REPLAY_MISMATCH` line,
-never `drifted`). Plus the diff and its pages, ids on request, the cost, a full store, the errors, and no
+method inputs; a removal-only drift is not membership-identical), refused (null counts), and mismatch
+(fixture rows written straight into the store with a wrong `ids_hash`, `excluded`, one bucket,
+`canonical_hash`, a non-canonical `canonical` spelling, or a stored list that isn't its `ids_hash`'s: 200,
+`mismatch`, exactly one ERROR `API_REPLAY_MISMATCH` line, never `drifted`). Plus the diff and its pages, ids on request, the cost, a full store, the errors, and no
 query text in any log line.
 """
 
@@ -13,6 +14,8 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import sqlite3
+import zlib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,7 +31,15 @@ from openproceedings.query import QUERY_VERSION
 from openproceedings.query.defaults import DEFAULT_CLAUSES
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import parse
-from openproceedings.records import RECORD_ID, RECORDS_DIR, RecordStore, SearchRecord, ids_hash, replay
+from openproceedings.records import (
+    RECORD_ID,
+    RECORDS_DIR,
+    RecordStore,
+    SearchRecord,
+    ids_hash,
+    new_record_id,
+    replay,
+)
 
 from tests.contract.conftest import SECRET, Store, build, make_app, point_current
 from tests.corpus import Rec
@@ -40,7 +51,7 @@ SPEC_FIELDS = {  # spec 04 §Search records, every row of the table
     "input", "mode", "canonical", "canonical_hash", "identification_query",
     "index_version", "tokenizer_version", "query_version", "snapshot_hash", "crawl_dates",
     "searched_at", "total", "excluded", "expansions", "translations", "warnings", "ids", "ids_hash", "dedup",
-    "semantic_version",
+    "semantic_version", "sources", "identification_citable", "crawl_dates_kind",
 }  # fmt: skip
 EVERYTHING = "year:1900..2100"  # every record, then the defaults
 
@@ -98,7 +109,7 @@ def test_post_freezes_every_field_of_spec_04s_table(client: TestClient, data_dir
 
     record = replayed(client, created["record_id"], ids=True)["record"]
     assert set(record) == SPEC_FIELDS | {"record_id", "body_version", "schema_version", "ranking_params"}
-    assert record["body_version"] == 1
+    assert record["body_version"] == 2
     search = client.get("/api/v1/search", params={"q": q, "limit": 200}).json()
     parsed = parse(q)
     assert record["input"] == q and record["mode"] == "native"
@@ -120,7 +131,13 @@ def test_post_freezes_every_field_of_spec_04s_table(client: TestClient, data_dir
     for f in ("snapshot_hash", "schema_version", "ranking_params"):
         assert record[f] == manifest[f]
     assert record["crawl_dates"] == {"*": snapshot["crawl_window"]}
-    assert record["dedup"] == {"merged": 0, "ambiguous_not_merged": 0}
+    assert record["dedup"] == {
+        "merged": 0, "ambiguous_not_merged": 0, "track_not_merged": 0, "venue_year_not_merged": 0,
+    }  # fmt: skip
+    # the fixture snapshot is RIS-only (a bootstrap corpus): its counts are not identification numbers
+    assert record["sources"] == sorted(snapshot["sources"]) == ["ris"]
+    assert record["identification_citable"] is False
+    assert record["crawl_dates_kind"] == {"*": "scholar_query_dates"}
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", record["searched_at"])
     assert record["semantic_version"] is None
     assert (data_dir / RECORDS_DIR / "records.sqlite").is_file()  # its own writable directory
@@ -195,20 +212,39 @@ def test_an_unknown_record_is_404_without_creating_the_store(client: TestClient,
 
 
 # --- replay: mismatch (fixture rows; the store stays append-only) ----------------------------------------
-def tampered(data_dir: Path, record_id: str, **changes: Any) -> str:
-    """A fixture row: a copy of record `record_id` with `changes`, inserted as a new record."""
+def tampered(data_dir: Path, record_id: str, *, ids: list[str] | None = None, **changes: Any) -> str:
+    """A fixture row: a copy of record `record_id` with `changes` (and, if given, another stored id list),
+    written straight into records.sqlite as a broken or older writer would have: `RecordStore.insert`
+    refuses a row whose `ids_hash` isn't its list's, and these rows exist to test what replay and export do
+    when one is there anyway. The triggers allow a new row (and a new id set)."""
     store = store_of(data_dir)
     original = store.get(record_id)
     assert original is not None and original.ids is not None
-    fields = original.model_dump(mode="json", exclude={"record_id", "ids"})
-    return store.insert({**fields, **changes}, original.ids).record_id
+    new_id = new_record_id()
+    body = {**original.model_dump(mode="json", exclude={"ids"}), **changes, "record_id": new_id}
+    stored = original.ids if ids is None else ids
+    key = ids_hash(stored)
+    conn = sqlite3.connect(store.path)
+    try:
+        conn.execute(
+            "INSERT INTO id_sets SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM id_sets WHERE ids_hash = ?)",
+            (key, zlib.compress("\n".join(stored).encode("utf-8")), key),
+        )
+        conn.execute(
+            "INSERT INTO records (record_id, index_version, searched_at, id_set, body) VALUES (?, ?, ?, ?, ?)",
+            (new_id, body["index_version"], body["searched_at"], key, json.dumps(body)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return new_id
 
 
-@pytest.mark.parametrize("what", ["ids_hash", "excluded", "bucket", "canonical_hash"])
-def test_a_tampered_record_is_a_mismatch_logged_once_never_drifted(
-    client: TestClient, data_dir: Path, logs: Logs, what: str
-) -> None:
-    good = save(client, f"trust OR {SECRET}")
+MISMATCHES = ["ids_hash", "excluded", "bucket", "canonical_hash", "canonical", "stored_ids"]
+
+
+def mismatched(client: TestClient, data_dir: Path, good: str, what: str) -> str:
+    """A copy of record `good` that replays as `mismatch` on its own index for reason `what`."""
     record = replayed(client, good, ids=True)["record"]
     excluded = json.loads(json.dumps(record["excluded"]))
     change: dict[str, Any]
@@ -223,9 +259,23 @@ def test_a_tampered_record_is_a_mismatch_logged_once_never_drifted(
         excluded["track"][moved] -= 1
         excluded["track"]["unknown"] += 1
         change = {"excluded": excluded}
-    else:
+    elif what == "canonical_hash":
         change = {"canonical_hash": "0" * 64}
-    bad = tampered(data_dir, good, **change)
+    elif what == "canonical":  # the same query, stored in a non-canonical spelling (its hash unchanged)
+        assert " AND " in record["canonical"]
+        change = {"canonical": record["canonical"].replace(" AND ", "  AND  ")}
+    else:  # the stored list is not the one `ids_hash` names (the replay itself still matches `ids_hash`)
+        assert len(record["ids"]) > 1
+        return tampered(data_dir, good, ids=record["ids"][1:])
+    return tampered(data_dir, good, **change)
+
+
+@pytest.mark.parametrize("what", MISMATCHES)
+def test_a_tampered_record_is_a_mismatch_logged_once_never_drifted(
+    client: TestClient, data_dir: Path, logs: Logs, what: str
+) -> None:
+    good = save(client, f"trust OR {SECRET}")
+    bad = mismatched(client, data_dir, good, what)
     before = len(mismatch_lines(logs))
 
     body = replayed(client, bad)
@@ -236,7 +286,11 @@ def test_a_tampered_record_is_a_mismatch_logged_once_never_drifted(
     lines = mismatch_lines(logs)[before:]
     assert len(lines) == 1, lines
     assert lines[0]["record_id"] == bad
-    assert lines[0]["canonical_match"] is (what != "canonical_hash")
+    assert lines[0]["canonical_match"] is (what not in ("canonical_hash", "canonical"))
+    assert lines[0]["stored_ids_match"] is (
+        what not in ("ids_hash", "stored_ids")
+    )  # a forged hash names no list
+    assert lines[0]["refused"] is None
     assert SECRET not in json.dumps(logs())
 
     diff = client.get(f"/api/v1/records/{bad}/diff")
@@ -248,8 +302,10 @@ def test_a_tampered_record_is_a_mismatch_logged_once_never_drifted(
     assert replayed(client, good)["replay"]["status"] == "reproduced"  # the original is untouched
 
 
-def test_export_hook_refuses_a_mismatch_record_with_409(data_dir: Path) -> None:
-    """The function TASK-036's `/export?record_id=` calls before streaming (a stand-in route here)."""
+@pytest.mark.parametrize("what", MISMATCHES)
+def test_export_hook_refuses_a_mismatch_record_with_409(data_dir: Path, what: str) -> None:
+    """The function TASK-036's `/export?record_id=` calls before streaming (a stand-in route here), for
+    every kind of mismatch: most of them only the replay can see."""
     app: FastAPI = make_app(data_dir)
 
     @app.get("/api/v1/_probe/citable/{record_id}")
@@ -259,7 +315,7 @@ def test_export_hook_refuses_a_mismatch_record_with_409(data_dir: Path) -> None:
 
     with TestClient(app) as client:
         good = save(client, "trust")
-        bad = tampered(data_dir, good, ids_hash="0" * 64)
+        bad = mismatched(client, data_dir, good, what)
         assert client.get(f"/api/v1/_probe/citable/{good}").json() == {
             "record_id": good,
             "status": "reproduced",
@@ -285,6 +341,21 @@ def test_a_changed_query_version_is_drifted_and_membership_identical(
     assert (diff["added"], diff["removed"], diff["membership_identical"]) == ([], [], True)
     assert (diff["added_total"], diff["removed_total"], diff["refused"]) == (0, 0, None)
     assert mismatch_lines(logs) == []
+
+
+def test_a_removal_only_drift_is_not_membership_identical(client: TestClient, data_dir: Path) -> None:
+    """The record holds one id the replay no longer matches, and nothing was added: +0 / −1 is drifted
+    membership, never "membership-identical"."""
+    good = save(client, "trust AND calibrat*")
+    ids = replayed(client, good, ids=True)["record"]["ids"]
+    extra = sorted([*ids, "op:iclr:2024:zzGoneSince"])
+    old = tampered(data_dir, good, ids=extra, ids_hash=ids_hash(extra), total=len(extra), query_version="0")
+    replay_ = replayed(client, old)["replay"]
+    assert replay_["status"] == "drifted"
+    assert (replay_["added"], replay_["removed"], replay_["membership_identical"]) == (0, 1, False)
+    diff = diffed(client, old)
+    assert [x["id"] for x in diff["removed"]] == ["op:iclr:2024:zzGoneSince"] and diff["added"] == []
+    assert diff["membership_identical"] is False
 
 
 def test_method_drift_names_tokenizer_schema_and_ranking_inputs(

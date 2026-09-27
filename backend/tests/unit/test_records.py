@@ -101,8 +101,11 @@ def fields(**overrides: Any) -> dict[str, Any]:
         "translations": [],
         "warnings": [],
         "ids_hash": ids_hash(IDS),
-        "dedup": {"merged": 0, "ambiguous_not_merged": 0},
+        "dedup": {"merged": 0, "ambiguous_not_merged": 0, "track_not_merged": 0, "venue_year_not_merged": 0},
         "semantic_version": None,
+        "sources": ["openreview_v2"],
+        "identification_citable": True,
+        "crawl_dates_kind": {"*": "crawl"},
     }
     return {**base, **overrides}
 
@@ -283,6 +286,37 @@ def test_a_full_store_refuses_saves_with_503(tmp_path: Path, monkeypatch: pytest
     assert tight.get("AAAAAAAAAAAA") is None
 
 
+def test_a_store_at_exactly_its_cap_is_full(tmp_path: Path) -> None:
+    """The cap is reached at `>=`: a store whose file is exactly `max_bytes` refuses the next save."""
+    probe = RecordStore(tmp_path / "probe")
+    probe.insert(fields(), IDS)
+    size = probe._used_bytes()
+    at_cap = RecordStore(tmp_path / "probe", max_bytes=size)
+    with pytest.raises(RecordStoreFull):
+        at_cap.insert(fields(), IDS)
+    RecordStore(tmp_path / "probe", max_bytes=size + 1).insert(fields(), IDS)  # one byte under: taken
+
+
+def test_insert_refuses_fields_whose_ids_hash_is_not_the_ids(store: RecordStore) -> None:
+    """A record whose `ids_hash` doesn't name its own stored list can never be written (it could only
+    replay as a mismatch)."""
+    with pytest.raises(InternalError, match="ids_hash"):
+        store.insert(fields(ids_hash=ids_hash(IDS[1:])), IDS)
+    with pytest.raises(InternalError, match="ids_hash"):
+        store.insert(fields(), IDS[1:])
+    assert not store.path.exists()  # refused before anything was created
+
+
+def test_the_stored_excluded_shape_is_the_live_one() -> None:
+    """Replay compares the live `excluded` with the stored one whole, so a key added to `Excluded.to_json`
+    would make every record a mismatch: a shape change must come with a `query_version` bump (search-records
+    skill), and this test is where it's noticed."""
+    from openproceedings.engine.exclusions import Excluded
+
+    live = Excluded(total=0, track={"unknown": 0}, status={"unknown": 0}).to_json()
+    assert set(live) == set(records.RecordExcluded.model_fields)
+
+
 def test_concurrent_inserts_from_threads_each_get_their_own_row(store: RecordStore) -> None:
     saved: list[str] = []
     errors: list[BaseException] = []
@@ -329,6 +363,26 @@ def test_a_committed_v1_body_stays_readable(store: RecordStore) -> None:
     assert got is not None and got.body_version == 1 and got.ids == ids
     assert [d.code for d in got.warnings] == ["WARN_RETIRED_FOR_THIS_TEST"]
     assert got.ids_hash == json.loads(body)["ids_hash"]
+    # v1 never recorded its sources, its window's kind or the other not-merged counts: unknown, never guessed
+    assert (got.sources, got.identification_citable, got.crawl_dates_kind) == (None, None, None)
+    assert (got.dedup.merged, got.dedup.ambiguous_not_merged) == (12, 1)
+    assert (got.dedup.track_not_merged, got.dedup.venue_year_not_merged) == (None, None)
+
+
+@pytest.mark.parametrize("missing", ["sources", "identification_citable", "crawl_dates_kind"])
+def test_a_v2_body_without_its_bootstrap_fields_is_refused(store: RecordStore, missing: str) -> None:
+    body = {**fields(), "record_id": "v2v2v2v2v2v2"}
+    del body[missing]
+    insert_raw(store, "v2v2v2v2v2v2", json.dumps(body), IDS)
+    with pytest.raises(InternalError):
+        store.get("v2v2v2v2v2v2")
+
+
+def test_a_v2_body_whose_citability_contradicts_its_sources_is_refused(store: RecordStore) -> None:
+    body = {**fields(sources=["ris"], identification_citable=True), "record_id": "liarliarliar"}
+    insert_raw(store, "liarliarliar", json.dumps(body), IDS)
+    with pytest.raises(InternalError):
+        store.get("liarliarliar")
 
 
 def test_a_body_from_a_newer_writer_is_refused(store: RecordStore) -> None:
@@ -362,7 +416,7 @@ def test_an_unreadable_body_is_refused(store: RecordStore) -> None:
 @pytest.fixture
 def data_dir(tmp_path: Path) -> Iterator[Path]:
     """One index manifest and one snapshot manifest, rendered as the real builders write them, with two
-    merges and two conflicts (one of them ambiguous)."""
+    merges and four conflicts (one each ambiguous, track and venue-year not merged, one field precedence)."""
     papers = tuple(
         sorted(
             (as_paper(Rec(id=f"fx:{n:04d}", title=f"t{n}", abstract=None)) for n in range(3)),
@@ -376,6 +430,8 @@ def data_dir(tmp_path: Path) -> Iterator[Path]:
     conflicts = (
         Conflict(papers[0].id, "title_key", "a", "ris", "b", "ris", "ambiguous_not_merged"),
         Conflict(papers[1].id, "title", "a", "ris", "b", "ris", "precedence:ris"),
+        Conflict(papers[2].id, "title_key", "a", "ris", "b", "ris", "track_not_merged"),
+        Conflict(papers[2].id, "forum_id", "a", "ris", "b", "ris", "venue_year_not_merged"),
     )
     files = render(DedupResult(papers, merges, conflicts), [], BUILT)
     snapshot = json.loads(files["manifest.json"])
@@ -410,18 +466,41 @@ def edit(path: Path, **changes: Any) -> None:
 def test_index_inputs_and_snapshot_facts_read_the_manifests(data_dir: Path) -> None:
     inputs = index_inputs(data_dir, the_version(data_dir))
     assert inputs["schema_version"] == SCHEMA_VERSION and inputs["snapshot"] == "snap"
-    crawl, dedup = snapshot_facts(data_dir, inputs)
+    facts = snapshot_facts(data_dir, inputs)
     window = json.loads((data_dir / "snapshots" / "snap" / "manifest.json").read_text())["crawl_window"]
-    assert crawl == {"*": window}
+    assert facts.crawl_dates == {"*": window}
+    dedup = facts.dedup
     assert (dedup.merged, dedup.ambiguous_not_merged) == (2, 1)  # the manifest's merges.total, one ambiguous
+    assert (dedup.track_not_merged, dedup.venue_year_not_merged) == (1, 1)
+
+
+def test_a_ris_only_snapshot_is_not_citable_and_its_window_is_scholar_query_dates(data_dir: Path) -> None:
+    """A bootstrap corpus (RIS only: an earlier Scholar search's output) is not a database: its counts are
+    not PRISMA identification numbers, and its window is Publish or Perish's query dates, in local time."""
+    facts = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+    assert facts.sources == ["ris"] and facts.identification_citable is False
+    assert facts.crawl_dates_kind == {"*": "scholar_query_dates"}
 
 
 def test_a_source_with_its_own_crawl_window_gets_its_own_key(data_dir: Path) -> None:
     path = data_dir / "snapshots" / "snap" / "manifest.json"
     own = {"from": "2026-03-01T00:00:00+00:00", "to": "2026-03-02T00:00:00+00:00"}
     edit(path, sources={"ris": [], "openreview_v2": {"crawl_window": own}})
-    crawl, _ = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
-    assert set(crawl) == {"*", "openreview_v2"} and crawl["openreview_v2"] == own
+    facts = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+    assert set(facts.crawl_dates) == {"*", "openreview_v2"} and facts.crawl_dates["openreview_v2"] == own
+    assert facts.sources == ["openreview_v2", "ris"] and facts.identification_citable is True
+    assert facts.crawl_dates_kind == {"*": "mixed", "openreview_v2": "crawl"}
+    edit(path, sources={"openreview_v2": {"crawl_window": own}})
+    crawled = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+    assert crawled.crawl_dates_kind == {"*": "crawl", "openreview_v2": "crawl"}
+
+
+def test_the_cli_and_the_record_share_one_bootstrap_test() -> None:
+    from openproceedings import cli, vocab
+
+    assert records.bootstrap_only is vocab.bootstrap_only and cli.bootstrap_only is vocab.bootstrap_only
+    assert vocab.bootstrap_only(["ris"]) and not vocab.bootstrap_only(["ris", "openreview_v2"])
+    assert not vocab.bootstrap_only([])  # no sources named: not known to be a bootstrap corpus
 
 
 @pytest.mark.parametrize(

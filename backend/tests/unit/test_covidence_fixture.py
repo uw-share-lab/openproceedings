@@ -18,7 +18,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-from openproceedings.export import Provenance, write
+import pytest
+from openproceedings.export import Provenance, venue_name, write
 
 FIXTURE = Path(__file__).resolve().parents[3] / "docs" / "results" / "2026-09-27-covidence-fixture.ris"
 PROVENANCE = Provenance("fixture0000a", "0" * 64, "2026-09-27")
@@ -192,6 +193,18 @@ OTHER_DATABASE = [
         ("VL", "37"),
     ],
 ]  # written as the writer writes RIS (`ER  - ` keeps its trailing space, which an editor would strip)
+# probes 4 and 5: a fixture record with one field changed the way another database might write it
+YEAR_EARLIER = "op:iclr:2025:bT4kR8sW1n"  # probe 4: fixture record 3 with `PY` one year earlier, nothing else
+INITIALS = "op:neurips:2023:Hn3vQ6eYt0"  # probe 5: fixture record 6 with initials-only authors, nothing else
+INITIALS_AUTHORS = [
+    "Şahin, E.",
+    "Nguyễn, T. H.",
+    "Zhang, Y.",
+    "O'Neill, A.",
+    "García-López, M.",
+    "Van der Berg, P.",
+    "Kowalczyk, Ł.",
+]
 CHECK = FIXTURE.with_name("2026-09-27-covidence-check.md")
 IMPORTED_SHA = re.compile(r"^- Fixture sha256 imported: `([0-9a-f]*)`$", re.MULTILINE)
 TASK_DIRS = [FIXTURE.parents[2] / "backlog" / d for d in ("tasks", "completed")]
@@ -203,11 +216,33 @@ def render(records: list[dict[str, Any]] = RECORDS) -> str:
     return out.getvalue()
 
 
+def fixture_record(record_id: str) -> dict[str, Any]:
+    (record,) = [r for r in RECORDS if r["id"] == record_id]
+    return record
+
+
 def render_probe() -> str:
-    (record,) = [r for r in RECORDS if r["id"] == VL_ONLY]
     t2 = f"T2  - {T2[VL_ONLY]}\n"
     others = "".join("".join(f"{t}  - {v}\n" for t, v in lines) + "ER  - \n\n" for lines in OTHER_DATABASE)
-    return render([record]).replace(t2, t2 + "VL  - 36\n") + others
+    earlier = fixture_record(YEAR_EARLIER)
+    year = f"PY  - {earlier['year']}\n"
+    initials = fixture_record(INITIALS)
+    authors = "".join(f"AU  - {a}\n" for a in initials["authors"])
+    return (
+        render([fixture_record(VL_ONLY)]).replace(t2, t2 + "VL  - 36\n")
+        + others
+        + render([earlier]).replace(year, f"PY  - {earlier['year'] - 1}\n")
+        + render([initials]).replace(authors, "".join(f"AU  - {a}\n" for a in INITIALS_AUTHORS))
+    )
+
+
+def probe_lines(n: int) -> list[str]:
+    """Probe `n` (1-based) of the probe file, as lines."""
+    return PROBE.read_text(encoding="utf-8").split("ER  - \n\n")[n - 1].splitlines()
+
+
+def fixture_lines(record_id: str) -> list[str]:
+    return render([fixture_record(record_id)]).split("ER  - \n\n")[0].splitlines()
 
 
 def regenerate() -> None:
@@ -224,13 +259,24 @@ def test_the_first_probe_differs_from_its_fixture_record_by_the_volume_alone() -
 
     assert PROBE.read_bytes() == render_probe().encode("utf-8")
     parsed = parse_ris(PROBE.read_text(encoding="utf-8"), PROBE.name)
-    assert [r.fields["TY"] for r in parsed] == [["CPAPER"], ["CONF"], ["JOUR"]]  # three records, all read
-    assert [r.fields.get("VL") for r in parsed] == [["36"], None, ["37"]]
-    (record,) = [r for r in RECORDS if r["id"] == VL_ONLY]
-    probe = PROBE.read_text(encoding="utf-8").split("ER  - \n\n")[0].splitlines()
-    assert [line for line in probe if line != "VL  - 36"] == render([record]).split("ER  - \n\n")[
-        0
-    ].splitlines()
+    assert [r.fields["TY"] for r in parsed] == [["CPAPER"], ["CONF"], ["JOUR"], ["CPAPER"], ["CPAPER"]]
+    assert [r.fields.get("VL") for r in parsed] == [["36"], None, ["37"], None, None]
+    assert [line for line in probe_lines(1) if line != "VL  - 36"] == fixture_lines(VL_ONLY)
+
+
+def test_probe_4_differs_from_fixture_record_3_by_a_year_earlier_alone() -> None:
+    probe, record = probe_lines(4), fixture_lines(YEAR_EARLIER)
+    assert [(a, b) for a, b in zip(probe, record, strict=True) if a != b] == [("PY  - 2024", "PY  - 2025")]
+
+
+def test_probe_5_differs_from_fixture_record_6_by_initials_only_authors_alone() -> None:
+    probe, record = probe_lines(5), fixture_lines(INITIALS)
+    changed = [(a, b) for a, b in zip(probe, record, strict=True) if a != b]
+    assert [a for a, _ in changed] == [f"AU  - {x}" for x in INITIALS_AUTHORS]
+    assert [b for _, b in changed] == [f"AU  - {x}" for x in fixture_record(INITIALS)["authors"]]
+    for short, full in zip(INITIALS_AUTHORS, fixture_record(INITIALS)["authors"], strict=True):
+        family, given = full.split(", ")
+        assert short == f"{family}, " + " ".join(f"{g[0]}." for g in given.split())  # the same person
 
 
 def test_git_never_rewrites_the_line_endings_of_a_pinned_ris_file() -> None:
@@ -247,10 +293,31 @@ def test_git_never_rewrites_the_line_endings_of_a_pinned_ris_file() -> None:
     assert out.splitlines() == [f"{p.relative_to(root)}: text: unset" for p in paths]
 
 
+def recorded_sha(check: str) -> str:
+    """The sha256 the check's Outcome records ("" while the import is pending); a malformed line fails with
+    the format it must have."""
+    found = IMPORTED_SHA.findall(check)
+    assert len(found) == 1, (
+        f"{CHECK.name}'s Outcome needs exactly one line `- Fixture sha256 imported: `<64 lowercase hex>`` "
+        f"(nothing between the backticks until the import is done); found {len(found)} such lines"
+    )
+    return str(found[0])
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["- Fixture sha256 imported: ABC123", "- Fixture sha256 imported: `ABCDEF`", "Fixture sha256: `00`", ""],
+)
+def test_a_malformed_sha_line_names_the_format_it_needs(line: str) -> None:
+    with pytest.raises(AssertionError, match=r"- Fixture sha256 imported: `<64 lowercase hex>`"):
+        recorded_sha(f"## Outcome (fill in)\n{line}\n")
+    assert recorded_sha("- Fixture sha256 imported: ``\n") == ""
+
+
 def test_the_hand_imported_fixture_is_the_pinned_one() -> None:
     """Active once the check records the sha256 of the file a person imported, or once TASK-004 AC#1 is
     ticked: the imported file must be this one, so the check still describes what the writer writes."""
-    (recorded,) = IMPORTED_SHA.findall(CHECK.read_text(encoding="utf-8"))
+    recorded = recorded_sha(CHECK.read_text(encoding="utf-8"))
     ticked = any(
         "- [x] #1 " in p.read_text(encoding="utf-8")
         for d in TASK_DIRS
@@ -275,4 +342,7 @@ def test_the_covidence_fixture_reads_back_with_the_reference_parser() -> None:
             [" ".join(r["abstract"].split())] if r["abstract"] else []
         )
         assert got["KW"] == [r["track"], f"status:{r['status']}"]
+        status_note = f"Submitted to {venue_name(r['venue'], r['year'])}; status: {r['status']} (not in its proceedings)."
+        assert got["N1"] == ([] if r["status"] == "accepted" else [status_note]) + [PROVENANCE.line()]
+    assert PROVENANCE.line().endswith(" · exported 2026-09-27")
     assert {rid: r.fields["T2"] for rid, r in parsed.items()} == {rid: [t2] for rid, t2 in T2.items()}

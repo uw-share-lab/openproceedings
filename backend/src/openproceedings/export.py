@@ -2,19 +2,23 @@
 
 Each writer takes the engine's display records in id order (`TantivyEngine.documents`) and streams one
 format to a text stream: nothing is paginated, truncated or held whole in memory. Every format carries its
-provenance (`openproceedings <index_version> · query <canonical_hash> · <UTC date>`) and each record's
+provenance (`openproceedings <index_version> · query <canonical_hash> · exported <UTC date>`, plus
+` · record <record_id> · searched <UTC date>` for an export pinned by a search record) and each record's
 openproceedings id, so an export round-trips to the ids it came from.
 
 - RIS (for Covidence): `TY  - CPAPER`, TI, AB, one AU per author, PY, T2 (the conference and that year's acronym), UR (forum,
-  then pdf, then proceedings), DO, ID, KW (the track, then `status:<status>`), N1 (provenance), ER. RIS is
-  line-based, so line breaks inside a value become single spaces.
-- CSV: the record fields of spec 01 plus `index_version`, `canonical_hash` and `exported_at`, UTF-8 with a BOM (Excel).
-  Lists (authors, keywords) are joined with "; ".
+  then pdf, then proceedings), DO, ID, KW (the track, then `status:<status>`), N1 (for a paper not accepted,
+  first `Submitted to <venue>; status: <status in words> (not in its proceedings).`), N1 (provenance), ER. RIS
+  is line-based, so line breaks inside a value become single spaces.
+- CSV: the record fields of spec 01 plus `index_version`, `canonical_hash`, `exported_at`, `record_id` and
+  `searched_at` (the last two empty unless pinned by a record), UTF-8 with a BOM (Excel). Lists (authors,
+  keywords) are joined with "; ".
 - BibTeX: `@inproceedings` for an accepted paper, `@unpublished` (no `booktitle`; `note` starts "Submitted to
-  <venue>, status: <status>.") for any other; keyed `<first author's last name><year><first title word>`
-  (ASCII, lower-case), a repeat key suffixed a, b, … (decision-007); `keywords` holds the track and
-  `status:<status>`, `note` the provenance and `openproceedings_id` the id.
-- JSONL: one JSON object per record, with `index_version`, `canonical_hash` and `exported_at`.
+  <venue>, status: <status in words>.") for any other; keyed `<first author's last name><year><first title
+  word>` (ASCII, lower-case), a repeat key suffixed a, b, … (decision-007); `keywords` holds the track and
+  `status:<status>`, `note` the provenance and `openproceedings_id` the id. Every `@` is written `{@}`.
+- JSONL: one JSON object per record, with `index_version`, `canonical_hash`, `exported_at`, `record_id` and
+  `searched_at` (null unless pinned by a record).
 """
 
 from __future__ import annotations
@@ -36,18 +40,30 @@ FORMATS = ("ris", "csv", "bibtex", "jsonl")
 CSV_COLUMNS = (
     "id", "title", "abstract", "authors", "venue", "year", "track", "status", "presentation",
     "venue_id_raw", "forum", "pdf", "proceedings", "doi", "keywords", "index_version", "canonical_hash",
-    "exported_at",
+    "exported_at", "record_id", "searched_at",
 )  # fmt: skip
 
 
 @dataclass(frozen=True, slots=True)
 class Provenance:
+    """Where an export came from. `record_id` and `searched_at` (the record's, UTC ISO 8601) are set together,
+    only for an export pinned by a search record (`GET /export?record_id=`)."""
+
     index_version: str
     canonical_hash: str
     date: str  # the UTC date of the export, YYYY-MM-DD
+    record_id: str | None = None
+    searched_at: str | None = None
+
+    def __post_init__(self) -> None:
+        if (self.record_id is None) != (self.searched_at is None):
+            raise ValueError("a record-pinned export names both record_id and searched_at")
 
     def line(self) -> str:
-        return f"openproceedings {self.index_version} · query {self.canonical_hash} · {self.date}"
+        line = f"openproceedings {self.index_version} · query {self.canonical_hash} · exported {self.date}"
+        if self.record_id is not None and self.searched_at is not None:
+            line += f" · record {self.record_id} · searched {self.searched_at[:10]}"
+        return line
 
 
 def utc_date() -> str:
@@ -86,13 +102,32 @@ def _status(r: dict[str, Any]) -> str:
     return r.get("status") or "unknown"
 
 
+def _status_words(status: str) -> str:
+    """A status as a sentence reads it (`desk_rejected` → `desk rejected`); keywords keep the machine form."""
+    return status.replace("_", " ")
+
+
+def _not_accepted(venue: str, status: str) -> str:
+    """RIS's first `N1` for a paper that was not accepted: the venue it was submitted to, and that it is not in
+    that venue's proceedings (for `unknown`, not known to be)."""
+    where = "not known to be in its proceedings" if status == "unknown" else "not in its proceedings"
+    return f"Submitted to {venue}; status: {_status_words(status)} ({where})."
+
+
 def _one_line(text: str) -> str:
     """One line: whitespace runs (line breaks included) become one space; control characters go."""
     return " ".join(_printable(text).split())
 
 
+# the control characters (Unicode Cc) that aren't whitespace: \t \n \v \f \r, \x1c-\x1f and \x85 are
+# `str.isspace`, so they stay (one regex pass: a per-character generator was ~60% of an export's CPU)
+_CONTROL = re.compile(r"[\x00-\x08\x0e-\x1b\x7f-\x84\x86-\x9f]")
+
+
 def _printable(text: str) -> str:
-    return "".join(ch for ch in text if ch.isspace() or unicodedata.category(ch) != "Cc")
+    """`text` without its non-whitespace control characters (equal, on every code point, to keeping `ch`
+    when `ch.isspace() or unicodedata.category(ch) != "Cc"`; pinned by an exhaustive test)."""
+    return _CONTROL.sub("", text)
 
 
 def _urls(r: dict[str, Any]) -> list[str]:
@@ -110,7 +145,11 @@ def _ris(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         lines += [("UR", _one_line(u)) for u in _urls(r)]  # validated at ingest; one line here regardless
         if (r.get("urls") or {}).get("doi"):
             lines.append(("DO", _one_line(r["urls"]["doi"])))
-        lines += [("ID", r["id"]), ("KW", r["track"]), ("KW", f"status:{_status(r)}"), ("N1", p.line())]
+        status = _status(r)
+        lines += [("ID", r["id"]), ("KW", r["track"]), ("KW", f"status:{status}")]
+        if status != "accepted":
+            lines.append(("N1", _not_accepted(venue_name(r["venue"], r["year"]), status)))
+        lines.append(("N1", p.line()))
         yield "".join(f"{tag}  - {value}\n" for tag, value in lines) + "ER  - \n\n"
 
 
@@ -132,6 +171,8 @@ def _csv(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             "index_version": p.index_version,
             "canonical_hash": p.canonical_hash,
             "exported_at": p.date,
+            "record_id": p.record_id,
+            "searched_at": p.searched_at,
         }
         yield _csv_row(_cell(row[c]) for c in CSV_COLUMNS)
 
@@ -214,18 +255,24 @@ def _debraced(text: str) -> str:
 
 
 _EVEN_BACKSLASHES = r"(?<!\\)((?:\\\\)*)"  # an even run (or none): the next character is not
+_AT = re.compile(r"(\\*)@")  # an `@` and the backslash run before it
+_BARE_UNDERSCORE = re.compile(r"(?<!\\)_")
 
 
 def _braced(text: str) -> str:
     """A BibTeX `{…}` value every parser reads the same way. Braces stay when they balance and none is
     escaped (LaTeX such as `{BERT}` keeps its meaning); otherwise they are dropped, since BibTeX counts braces
     without regard to backslashes while other parsers honour `\\{`, and an entry that one reads differently
-    can swallow the next. `&`, `%` and `#` are escaped (they break LaTeX and BibTeX); `$…$` math stays. A
-    value never ends on a backslash, which would escape the closing brace."""
+    can swallow the next. `&`, `%` and `#` are escaped (they break LaTeX and BibTeX); `$…$` math stays. Every
+    `@` is written `{@}`: BibTeX and refaudit start an entry at a bare `@` wherever it stands, so
+    `@article{x,` in a title would become an entry of its own. An odd backslash run before it loses one
+    backslash (as `_debraced` does before a brace), so the added brace is never escaped. A value never ends
+    on a backslash, which would escape the closing brace."""
     text = _one_line(text)
     if not (_balances(text, escaped_count=True) and _balances(text, escaped_count=False)):
         text = _debraced(text)
     text = re.sub(_EVEN_BACKSLASHES + r"([&%#])", r"\1\\\2", text)  # `&` → `\\&`, `\\\\&` → `\\\\\\&`
+    text = _AT.sub(lambda m: m.group(1)[: len(m.group(1)) // 2 * 2] + "{@}", text)
     if text.endswith("\\"):
         text += " "
     return "{" + text + "}"
@@ -260,8 +307,12 @@ def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         if (r.get("urls") or {}).get("doi"):
             fields.append(("doi", _braced(r["urls"]["doi"])))
         fields.append(("keywords", _braced(", ".join(k for k in (r.get("track"), f"status:{status}") if k))))
-        note = p.line() if accepted else f"Submitted to {venue}, status: {status}. {p.line()}"
-        fields += [("note", _braced(note)), ("openproceedings_id", _braced(r["id"]))]
+        note = p.line() if accepted else f"Submitted to {venue}, status: {_status_words(status)}. {p.line()}"
+        # a styled `note` is typeset: a record id's `_` would be a subscript outside math, so it is escaped
+        fields += [
+            ("note", _braced(_BARE_UNDERSCORE.sub(r"\\_", note))),
+            ("openproceedings_id", _braced(r["id"])),
+        ]
         body = ",\n".join(f"  {name} = {value}" for name, value in fields)
         yield f"@{'inproceedings' if accepted else 'unpublished'}{{{key},\n{body}\n}}\n\n"
 
@@ -291,6 +342,8 @@ def _jsonl(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             "index_version": p.index_version,
             "canonical_hash": p.canonical_hash,
             "exported_at": p.date,
+            "record_id": p.record_id,
+            "searched_at": p.searched_at,
         }
         text = json.dumps(row, ensure_ascii=False, sort_keys=True)
         # characters `str.splitlines()` breaks on, escaped so a record stays one line for every reader

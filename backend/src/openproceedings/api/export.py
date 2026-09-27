@@ -5,7 +5,8 @@ Transport only: the bytes are `openproceedings.export`'s `header` and `entries`,
 runs, over `TantivyEngine.documents`, so the body equals `op export`'s output for the same query, index
 and UTC date. The export is of `q` (with `mode` and an optional `index_version`) or of a stored search
 record (`record_id` alone): exactly the record's stored ids, the set it cites, read from the index it names
-(never a re-run query, so a later query_version doesn't change what is handed to screening); refused 409
+(never a re-run query, so a later query_version doesn't change what is handed to screening), its provenance
+naming the record and its search date; refused 409
 `API_INDEX_VERSION_UNAVAILABLE` when that index isn't here and 409 `API_RECORD_MISMATCH` when the replay is
 a mismatch.
 
@@ -115,6 +116,7 @@ def export(
         # the cited set exactly: the record's stored ids, from the index it names (never a re-run query)
         canonical_hash = record.canonical_hash
         total, documents = len(ids), stored_documents(engine, ids)
+        pinned_by = {"record_id": record.record_id, "searched_at": record.searched_at}  # in the provenance
         annotate(request, canonical_hash=canonical_hash)
     else:
         if q is None:
@@ -127,10 +129,11 @@ def export(
                 DiagnosticCode.API_INTERNAL, "an export ran on a query that didn't parse"
             )
         canonical_hash = result.canonical_hash
+        pinned_by = {}
         expanded(engine, ast)  # an over-cap wildcard is a located 422 before anything is compiled
         total, documents = engine.documents(ast)  # the one collection; records are read as they stream
     annotate(request, total=total)
-    provenance = Provenance(engine.index_version, canonical_hash, utc_date())
+    provenance = Provenance(engine.index_version, canonical_hash, utc_date(), **pinned_by)
     media, ext = MEDIA[fmt]
     filename = f"openproceedings-{engine.index_version}-{canonical_hash[:12]}.{ext}"
     return StreamingResponse(

@@ -44,7 +44,7 @@ server parser by `backend/tests/contract/test_frontend_wrap_golden.py`.
 | `/` | Search home: the editor, example queries (the review's strings), a coverage summary line |
 | `/search` | The main workspace (below) |
 | `/paper/[id]` | Full record: abstract with the current query's highlights, all links, provenance table |
-| `/record/[id]` | Search-record page: the input string as typed, its `mode`, and every translation notice (Scholar mode), the identification string and the default clauses, full index version, search date and crawl date, total, exclusions (`unknown` on its own line), replay status (`reproduced` / `drifted` with its reason / `mismatch`), a "Copy methods text" button, and export buttons pinned to the record's index. On `mismatch` the page is a blocking **"do not cite — replay mismatch"** state with no methods text and no export |
+| `/record/[id]` | Search-record page: the input string as typed, its `mode`, and every translation notice (Scholar mode), the identification string and the default clauses, full index version, search date and the crawl window (`crawl_dates["*"]`, "crawl run <from> to <to>"; only `*` exists until M4 adds per-source windows; when `crawl_dates_kind["*"]` is `scholar_query_dates` it reads "Scholar searches run <from> to <to> (local time)", never "crawl"), total, exclusions (`unknown` on its own line), replay status (`reproduced` / `drifted` with its reason and `+<added_total> / −<removed_total>`, or "membership-identical" on `+0 / −0` / `mismatch`; a replay whose canonical no longer runs reads "could not be re-run: `<refused code>`" with no counts), a "Copy methods text" button, and export buttons that **must** call `/export?record_id=<id>` (the record's stored ids from its own index, never a re-run of `q`). When `identification_citable` is `false` the page shows the CLI's caution, "bootstrap corpus (sources: <sources>): these counts describe that corpus, not a database; they are not PRISMA identification numbers", and **no methods text** (exports stay); when it is null (a v1 record) the caution says this wasn't recorded, also with no methods text. On `mismatch` the page is a blocking **"do not cite — replay mismatch"** state with no methods text and no export |
 | `/coverage` | Venue × year × track table with source and snapshot date, missing-abstract counts, `unknown` counts |
 | `/help/syntax` | Language reference generated from the 02 golden table (it cannot drift from the tests) |
 
@@ -99,13 +99,17 @@ server parser by `backend/tests/contract/test_frontend_wrap_golden.py`.
 7. **Export menu.** RIS (Covidence), CSV, BibTeX, JSONL. Shows the count before downloading.
 8. **Save search record.** Creates `/records` and shows the permanent link plus generated methods text
    that says which string reproduces which number:
-   *"We searched openproceedings on 2026-09-25 (index `a1b2c3d4e5f6`, built from a crawl of 2026-09-20) with
-   the string `<identification_query>`, which identified 716 records within the limits it states
+   *"We searched openproceedings on 2026-09-25 (index `a1b2c3d4e5f6`, built from a crawl run 2026-09-18 to
+   2026-09-20) with the string `<identification_query>`, which identified 716 records within the limits it states
    (`year:2020..2026`). Default filters `track:(main OR datasets_benchmarks OR position)` and
    `status:accepted` removed 304 of them before screening (212 workshop, 4 competition, 88 rejected); that
    count includes 0 unclassified records (track or status unknown), itemised separately. Cross-source
-   duplicates were merged at ingest, before indexing (merge counts are in the search record). Database scope: coverage
+   duplicates were merged at ingest, before indexing (merge counts, and look-alike pairs kept apart by
+   track or venue-year, are in the search record). Database scope: coverage
    report for snapshot `<snapshot_hash>`. 412 records were screened. Search record: <url>."*
+   The crawl clause is always the window `crawl_dates["*"]` from–to (a crawl spans days), never one date.
+   No methods text is generated unless `identification_citable` is `true` (a bootstrap corpus's counts
+   are not identification numbers; prisma-reporting skill).
    If `identification_query` is `""` the text reads "all indexed records"; if it is all-negative, the text
    cites `canonical` instead (prisma-reporting skill). Counts always come from `identification_ast`. The
    text also cites the input string as typed when it differs from the identification string, and when

@@ -34,7 +34,7 @@ from refaudit.bibtex import parse_string
 from scholarmend.parse import parse_ris
 
 from tests.contract.conftest import SECRET, Store, build, make_app, point_current
-from tests.contract.test_records import save, tampered
+from tests.contract.test_records import MISMATCHES, mismatched, save, tampered
 from tests.fixtures.corpus.synthetic_5k import records
 
 EXPORT = "/api/v1/export"
@@ -127,7 +127,7 @@ def test_every_format_round_trips_to_the_matched_ids_in_id_order(
 
 def test_the_bibtex_note_and_ris_n1_carry_the_provenance(client: TestClient, store: Store) -> None:
     q = "trust AND calibrat*"
-    line = f"openproceedings {store.big} · query {parse(q).canonical_hash} · {DATE}"
+    line = f"openproceedings {store.big} · query {parse(q).canonical_hash} · exported {DATE}"
     entries = parse_string(ok(client, q, "bibtex").text)
     assert entries and all(e.entry_type == "inproceedings" and e.fields["note"] == line for e in entries)
     records = parse_ris(ok(client, q, "ris").text, "export.ris")
@@ -501,7 +501,16 @@ def test_a_record_exports_its_own_query_on_its_own_index(
     assert r.status_code == 200, r.text
     assert r.headers["x-index-version"] == store.big and int(r.headers["x-total"]) == stored["total"]
     assert ids_of("jsonl", r.content) == stored["ids"]  # the record's membership, exactly
-    assert r.content == op_export(store, stored["canonical"], "jsonl", tmp_path)
+    # `op export` of the canonical gives the same records; the pinned export also names the record
+    pinned = {"record_id": record_id, "searched_at": stored["searched_at"]}
+    cli_rows = [json.loads(x) for x in op_export(store, stored["canonical"], "jsonl", tmp_path).splitlines()]
+    assert [json.loads(x) for x in r.content.splitlines()] == [{**x, **pinned} for x in cli_rows]
+    line = (f"openproceedings {store.big} · query {stored['canonical_hash']} · exported {DATE} · record "
+            f"{record_id} · searched {stored['searched_at'][:10]}")  # fmt: skip
+    ris = parse_ris(recorded.get(EXPORT, params={"record_id": record_id, "format": "ris"}).text, "r.ris")
+    assert ris and all(x.fields["N1"][-1] == line for x in ris)
+    bib = parse_string(recorded.get(EXPORT, params={"record_id": record_id, "format": "bibtex"}).text)
+    assert bib and all(e.fields["note"].endswith(line.replace("_", "\\_")) for e in bib)
     # after a swap the record still exports from the index it names
     point_current(data_dir, store.small)
     assert recorded.app.state.index.load()  # type: ignore[attr-defined]
@@ -509,14 +518,71 @@ def test_a_record_exports_its_own_query_on_its_own_index(
     assert after.headers["x-index-version"] == store.big and after.content == r.content
 
 
-def test_exporting_a_mismatch_record_is_409_and_streams_nothing(recorded: TestClient, data_dir: Path) -> None:
-    from openproceedings.records import ids_hash
+def pinned(fmt: str, body: bytes, record_id: str, searched_at: str) -> bytes:
+    """`op export`'s bytes as a record-pinned export writes them: the provenance names the record."""
+    tail = f" · record {record_id} · searched {searched_at[:10]}"
+    text = body.decode("utf-8")
+    if fmt == "ris":
+        text = text.replace(f" · exported {DATE}\n", f" · exported {DATE}{tail}\n")
+    elif fmt == "bibtex":
+        text = text.replace(
+            f" · exported {DATE}}}", f" · exported {DATE}{tail.replace('_', chr(92) + '_')}}}"
+        )
+    elif fmt == "csv":
+        text = text.replace(f",{DATE},,\r\n", f",{DATE},{exporter._cell(record_id)},{searched_at}\r\n")
+    else:
+        text = text.replace('"record_id": null', f'"record_id": "{record_id}"')
+        text = text.replace('"searched_at": null', f'"searched_at": "{searched_at}"')
+    return text.encode("utf-8")
 
+
+@pytest.mark.parametrize("fmt", get_args(route.ExportFormat))
+def test_a_record_export_is_op_exports_bytes_with_the_record_named(
+    recorded: TestClient, store: Store, tmp_path: Path, fmt: str
+) -> None:
+    record_id = save(recorded, "trust OR calibrat*")
+    stored = recorded.get(f"/api/v1/records/{record_id}").json()["record"]
+    r = recorded.get(EXPORT, params={"record_id": record_id, "format": fmt})
+    assert r.status_code == 200, r.text
+    cli_bytes = op_export(store, stored["canonical"], fmt, tmp_path)
+    assert cli_bytes != r.content  # the record is named: the two differ exactly by that
+    assert r.content == pinned(fmt, cli_bytes, record_id, stored["searched_at"])
+
+
+@pytest.mark.parametrize("what", MISMATCHES)
+def test_exporting_a_mismatch_record_is_409_and_streams_nothing(
+    recorded: TestClient, data_dir: Path, what: str
+) -> None:
+    """Every kind of mismatch, most of which only the replay (`refuse_mismatch`) can see: an `excluded`
+    or canonical mismatch has a stored list that hashes right, so the route's own check would pass it."""
     good = save(recorded, "trust")
-    ids = recorded.get(f"/api/v1/records/{good}", params={"include": "ids"}).json()["record"]["ids"]
-    bad = tampered(data_dir, good, ids_hash=ids_hash([*ids, "op:iclr:2024:forged"]))
+    bad = mismatched(recorded, data_dir, good, what)
     e = error(recorded.get(EXPORT, params={"record_id": bad, "format": "ris"}), 409, "API_RECORD_MISMATCH")
     assert bad not in e["message"]
+
+
+def test_a_drifted_record_whose_stored_list_is_not_its_hash_is_409(
+    recorded: TestClient, data_dir: Path
+) -> None:
+    """A drifted record passes the replay's gate (only `mismatch` is refused there), so the route's own
+    check that the stored list hashes to `ids_hash` is what stops it streaming a set it doesn't cite."""
+    good = save(recorded, "trust")
+    ids = recorded.get(f"/api/v1/records/{good}", params={"include": "ids"}).json()["record"]["ids"]
+    bad = tampered(data_dir, good, ids=ids[1:], query_version="0")
+    assert recorded.get(f"/api/v1/records/{bad}").json()["replay"]["status"] == "drifted"
+    error(recorded.get(EXPORT, params={"record_id": bad, "format": "jsonl"}), 409, "API_RECORD_MISMATCH")
+
+
+def test_a_record_export_past_the_first_chunk_has_every_id(
+    recorded: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(route, "STORED_CHUNK", 2)
+    record_id = save(recorded, "trust OR calibrat*")
+    stored = recorded.get(f"/api/v1/records/{record_id}", params={"include": "ids"}).json()["record"]
+    assert stored["total"] > 5  # several chunks of 2, and a last partial one when odd
+    r = recorded.get(EXPORT, params={"record_id": record_id, "format": "jsonl"})
+    assert r.status_code == 200, r.text
+    assert int(r.headers["x-total"]) == stored["total"] and ids_of("jsonl", r.content) == stored["ids"]
 
 
 def test_a_record_exports_its_stored_ids_even_after_the_query_version_changed(
