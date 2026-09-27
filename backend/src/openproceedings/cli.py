@@ -453,12 +453,10 @@ def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:
 
 
 def _export(ns: argparse.Namespace) -> int:
-    from datetime import UTC, datetime
-
     from openproceedings.diagnostics import DiagnosticCode
     from openproceedings.engine.protocol import EngineInternalError
     from openproceedings.engine.tantivy_engine import TantivyEngine
-    from openproceedings.export import Provenance, write
+    from openproceedings.export import Provenance, utc_date, write
 
     started = time.perf_counter()
     result = _parsed(ns)
@@ -472,7 +470,7 @@ def _export(ns: argparse.Namespace) -> int:
         raise _usage(f"--out {ns.out}: no directory {ns.out.parent}")
     engine = TantivyEngine(_index_path(ns))
     total, documents = engine.documents(ast)
-    provenance = Provenance(engine.index_version, result.canonical_hash, datetime.now(UTC).date().isoformat())
+    provenance = Provenance(engine.index_version, result.canonical_hash, utc_date())
 
     def checked(n: int) -> None:
         if n != total:

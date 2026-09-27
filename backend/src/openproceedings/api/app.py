@@ -27,13 +27,15 @@ from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from openproceedings import __version__
-from openproceedings.api import coverage, health, meta, papers, search
+from openproceedings.api import coverage, export, health, meta, papers, search
 from openproceedings.api.config import ApiConfig
 from openproceedings.api.errors import install_error_handlers
 from openproceedings.api.middleware import API_PREFIX, AccessLog, LastCatch, RateLimit
 from openproceedings.api.state import IndexState, Opener, install_sighup
 
-ROUTERS: tuple[APIRouter, ...] = (search.router, papers.router, meta.router, health.router, coverage.router)
+ROUTERS: tuple[APIRouter, ...] = (
+    search.router, papers.router, meta.router, health.router, coverage.router, export.router
+)
 EXPOSED_HEADERS = ("X-Total", "X-Index-Version", "Retry-After")  # spec 04 §Exports, §Error handling
 
 

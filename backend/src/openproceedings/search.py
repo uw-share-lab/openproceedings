@@ -77,10 +77,7 @@ def run(
     ast = parsed.effective_ast
     if ast is None:
         raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "a search needs a query that parses.")
-    try:
-        expansions = engine.expansions(ast)
-    except EngineInputError as e:
-        raise _located(engine, ast, e) from None
+    expansions = expanded(engine, ast)
     total, page = engine.page(ast, sort=sort, offset=offset, limit=limit)  # one collection: ids and scores
     gone = excluded(engine, parsed, total)
     shown = engine.display([i for i, _score in page])
@@ -94,6 +91,15 @@ def run(
         for i, score in page
     )
     return Search(total, hits, gone, expansions, engine.facets(ast) if facets else None)
+
+
+def expanded(engine: TantivyEngine, ast: Node) -> Expansions:
+    """Every wildcard of `ast` expanded on `engine`, before anything is compiled; an over-cap wildcard is
+    refused as a `QueryRefused` that locates each one in `q` (what `/search` and `/export` both answer)."""
+    try:
+        return engine.expansions(ast)
+    except EngineInputError as e:
+        raise _located(engine, ast, e) from None
 
 
 class QueryRefused(EngineInputError):

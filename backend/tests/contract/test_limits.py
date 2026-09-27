@@ -59,9 +59,9 @@ def test_forwarded_for_from_an_untrusted_peer_is_ignored(store: Store) -> None:
 def test_healthz_costs_nothing_and_an_export_costs_its_weight(store: Store) -> None:
     with limited(store, capacity=3, export_weight=3) as c:
         assert statuses(c, 5, path="/api/v1/healthz") == [200] * 5
-        # /export is task-036; the weight is charged before routing, so its 404 still costs 3 tokens
-        assert c.get("/api/v1/export").status_code == 404
-        assert c.get("/api/v1/export").status_code == 429
+        # the weight is charged before routing, so an export refused for a missing `q` still costs 3 tokens
+        assert c.get("/api/v1/export").status_code == 422
+        assert c.get("/api/v1/export", params={"q": "trust", "format": "ris"}).status_code == 429
         assert statuses(c, 1) == [429]
 
 

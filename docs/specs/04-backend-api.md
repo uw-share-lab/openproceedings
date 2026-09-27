@@ -129,7 +129,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC date>}`.
   Every entry carries `openproceedings_id = {<id>}`, so a round-trip recovers the id of every record,
   proceedings-only (PMLR, NeurIPS) ones included. Output must pass `refaudit.bibtex.parse_string` (the pinned `refaudit` PyPI package).
-- As built (task-030, `export.py`, used by `op export`; the endpoints are task-036):
+- As built (task-030, `export.py`, used by `op export` and, byte for byte, by `GET /export` since task-036):
   - **RIS:** `TY  - CPAPER`, with `UR` forum, then pdf, then proceedings. Each record ends `ER  - `. Line breaks
     inside a value become single spaces and control characters are dropped, since RIS is line-based. URLs
     are validated at ingest as one-line http(s) addresses, so none can carry a forged record.
@@ -287,7 +287,7 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     that is the ParseResult as spec 02 defines it (`errors` non-empty, every Optional null), which the
     editor draws as squiggles. Only an over-long query (422 `PARSE_TOO_LONG`, before parsing) and a
     malformed body (422 `API_BAD_PARAM`) are refused. The 422-on-parse-error rule applies to `/search`
-    (and later `/export`), which cannot run a query that doesn't parse.
+    and `/export`, which cannot run a query that doesn't parse.
   - `GET /papers/{id}` answers `{index_version, tokenizer_version, query_version, paper}`, where `paper` is
     the spec 01 `PaperRecord` (provenance and `content_hash` included). The served index decides whether the
     id exists (else 404 `API_PAPER_NOT_FOUND`, whose message never repeats the id). The index stores only
@@ -321,6 +321,35 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     the one before it, so a hot swap gets a fresh entry. One `coverage_computed` INFO line per computation.
   - Not yet: which statuses a venue-year's sources *can* contain (spec 07 §C "statuses indexed") and crawl
     dates per source; neither is in the manifest (task-082).
+- As built (task-036, `api/export.py`):
+  - `GET /export` takes `q` (required), `format` (`ris` | `csv` | `bibtex` | `jsonl`, required), `mode`
+    (default `native`) and `index_version` (optional). Its body is the bytes `op export` writes for the same
+    query, index and UTC date: both run `export.header` and `export.entries` over
+    `TantivyEngine.documents`, and a contract test compares them for every format. Records are sent in
+    chunks of about 64 KiB.
+  - Everything that can refuse happens before the first byte, in the one envelope: the length cap and the
+    parse (422 with diagnostics), the pin, every wildcard's expansion (422 `WILDCARD_TOO_MANY_EXPANSIONS`,
+    each over-cap wildcard located in `q` by `search.expanded`, as `/search` does), then the one collection
+    of the match set that gives `X-Total`. Then a sync generator streams from the engine the request took,
+    so an export started before a hot swap finishes on its index (contract test). A failure after the
+    first byte is logged by the last catch and marks the access line `aborted: true`. A stream whose
+    record count differs from `X-Total` fails the same way after its last record; it never ends as if
+    complete.
+  - Headers: `X-Total`, `X-Index-Version`, `Content-Disposition: attachment;
+    filename="openproceedings-<index_version>-<first 12 of canonical_hash>.<ext>"` (`ris`, `csv`, `bib`,
+    `jsonl`), and `Content-Type` `application/x-research-info-systems`, `text/csv`, `application/x-bibtex`
+    or `application/x-ndjson`, each with `; charset=utf-8`. The access line carries `canonical_hash`,
+    `total` and the `index_version` exported.
+  - `index_version` must look like one (`[0-9a-f][0-9a-f-]{0,63}`; `current` is not a version), else 422
+    `API_BAD_PARAM`. The served version is the served engine. Any other is `IndexState.pinned`: it resolves
+    `<data_dir>/indexes/<v>` exactly as the configured index is (`state.index_path`; never
+    `cli.resolve_snapshot`), refuses a name that resolves to another directory (an alias symlink) or whose
+    manifest names another version, opens it read-only once (`index_pinned_opened` INFO) and keeps one such
+    engine besides the served one. Not on this instance: 409 `API_INDEX_VERSION_UNAVAILABLE`. A pinned
+    index that fails verification is a 500.
+  - `record_id` is not accepted yet (task-037): it will resolve to the record's `index_version` in
+    `export.pinned_engine`, before the stream starts, with 409 `API_RECORD_MISMATCH` for a `mismatch`
+    record.
 
 ## Testing
 
