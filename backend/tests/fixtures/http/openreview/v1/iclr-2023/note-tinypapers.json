@@ -1,0 +1,76 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?id=xmY_plRB15j",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "xmY_plRB15j",
+     "original": "miVTPc8oRku",
+     "number": 243,
+     "cdate": 1679008998988,
+     "pdate": null,
+     "odate": 1679008962054,
+     "mdate": null,
+     "ddate": null,
+     "tcdate": 1679008998988,
+     "tmdate": 1685567994307,
+     "tddate": null,
+     "forum": "xmY_plRB15j",
+     "replyto": null,
+     "invitation": "ICLR.cc/2023/TinyPapers/-/Blind_Submission",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "authorids": [
+       "~Synthetic_Person2",
+       "synthetic.person3@example.org",
+       "~Synthetic_Person4"
+      ],
+      "authors": [
+       "Synthetic Author 5",
+       "Synthetic Author 6",
+       "Synthetic Author 7"
+      ],
+      "keywords": [
+       "Synthetic keywords text 8.",
+       "Synthetic keywords text 9."
+      ],
+      "TL;DR": "Synthetic tl;dr text 10.",
+      "abstract": "Synthetic abstract text 11.",
+      "pdf": "/pdf/1d4009f1c3a273c28542d3c96d5009fccde030bb.pdf",
+      "paperhash": "synthetic|synthetic_title_12",
+      "_bibtex": "synthetic.person13@example.org",
+      "venue": "synthetic.person14@example.org",
+      "venueid": "ICLR.cc/2023/TinyPapers"
+     },
+     "signatures": [
+      "ICLR.cc/2023/TinyPapers"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2023/TinyPapers"
+     ],
+     "details": {
+      "writable": false
+     }
+    }
+   ],
+   "count": 1
+  }
+ }
+}

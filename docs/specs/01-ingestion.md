@@ -32,10 +32,10 @@ build.
 | `track` | Source signal |
 |---|---|
 | `main` | `<Venue>.cc/<Y>/Conference` (accepted), PMLR main ICML volume, NeurIPS main proceedings |
-| `datasets_benchmarks` | `NeurIPS.cc/<Y>/Track/Datasets_and_Benchmarks` or `…/Datasets_and_Benchmarks_Track`; NeurIPS ≤2023 proceedings `Datasets_and_Benchmarks` aliased to `_Track` (scholarmend fix) |
-| `position` | ICML position-paper track; NeurIPS position-paper track (verify the venueid form at M4) |
+| `datasets_benchmarks` | `NeurIPS.cc/<Y>/Track/Datasets_and_Benchmarks` (2021 as `…/Round1`, `…/Round2`; 2022–2023) or `NeurIPS.cc/<Y>/Datasets_and_Benchmarks_Track` (2024–2025); NeurIPS ≤2023 proceedings `Datasets_and_Benchmarks` aliased to `_Track` (scholarmend fix); 2021 on its own host (`datasets-benchmarks-proceedings.neurips.cc`, `-round1`/`-round2`). NeurIPS 2026 renamed the track `Evaluations_and_Datasets_Track`: `other` until TASK-090 decides |
+| `position` | `ICML.cc/<Y>/Position_Paper_Track` (2025+); `NeurIPS.cc/<Y>/Position_Paper_Track` (2025+, verified 2026-09-27; `classify.py` maps it in TASK-090). ICML 2024's position papers carry `ICML.cc/2024/Conference` with no marker, so they are `main` on OpenReview and `unknown` from PMLR v235 |
 | `workshop` | `<Venue>.cc/<Y>/Workshop/…`, including satellite paths like `Workshop_Mexico_City/…` |
-| `competition` | NeurIPS Competition Track, PMLR competition volumes |
+| `competition` | `NeurIPS.cc/<Y>/Competition_Track` (2024+; mapped in TASK-090), PMLR competition volumes (v123, v133, v176, v220) |
 | `tiny_papers` | ICLR Tiny Papers (2023–2024) |
 | `blogpost` | ICLR Blogpost track |
 | `other` | A recognised track not listed above. Keeps `venue_id_raw` for audit. |
@@ -43,16 +43,36 @@ build.
 
 The rule is carried over from scholarmend: **only `content.venueid` on the submission note decides the track
 and status.** A venue must never be derived from an invitation. Doing that once turned a rejected ICLR paper
-into an ICLR main-track paper (scholarmend note, `zkNCWtw2fd`).
+into an ICLR main-track paper (scholarmend note, `zkNCWtw2fd`). **In API v1 years the venueid is not status
+evidence** (verified 2026-09-27, `docs/research/2026-09-27-openreview-and-proceedings-facts.md`): ICLR 2017,
+2022 and 2023, NeurIPS 2021–2022 and D&B 2021 put the bare venue path on rejected submissions too. There the
+status comes from `content.venue` (`ICLR 2022 Submitted`, `Submitted to ICLR 2023`), the decision note, or
+the withdrawn / desk-rejected invitation, and the venueid only confirms venue, year and track (TASK-091).
+
+### Status handling (decision-012)
+
+| `status` | v2 (2023/2024+) | v1 (≤2023) | Proceedings, PMLR |
+|---|---|---|---|
+| `accepted` | bare venueid (`ICLR.cc/2025/Conference`) | accept decision or venue string (`ICLR 2021 Poster`, `NeurIPS 2022 Accept`, ICLR 2013 `conferenceOral-iclr2013-conference`) | listed |
+| `rejected` | `…/Rejected_Submission` | reject decision, `… Submitted` / `Submitted to …` venue | never |
+| `withdrawn` | `…/Withdrawn_Submission` | the `…/-/Withdrawn_Submission` invitation | never |
+| `desk_rejected` | `…/Desk_Rejected_Submission` | the `…/-/Desk_Rejected_Submission` invitation | never |
+| `unknown` | `…/Submission` (under review) or no venueid | no decision (ICLR 2014: `submitted, no decision`; ICLR 2023 Tiny Papers) | never |
+
+Every public submission is ingested and indexed whatever its status; the default `status:accepted`
+(02 §Default filters) excludes the others and counts them. What is public differs: ICLR publishes every
+rejected, withdrawn and desk-rejected submission; NeurIPS and ICML only rejected papers whose authors opt in
+(NeurIPS 2024 main: 201; ICML 2025: 162; ICML 2023–2024: none), and almost no withdrawn ones. So a status
+count is complete for ICLR and a floor elsewhere, and coverage (07 §C) says which.
 
 ## Sources
 
 | Source | Covers | Access |
 |---|---|---|
-| OpenReview API v2 (`api2.openreview.net`) | ICLR 2024+, NeurIPS 2023+, ICML 2023+ | Authenticated with `.env` credentials. The anonymous API returns 429 quickly (verified 2026-09-23). |
-| OpenReview API v1 (`api.openreview.net`) | ICLR 2018–2023, NeurIPS 2021–2022 | Status comes from decision notes or `content.venue`. A per-year adapter handles each schema. |
-| NeurIPS proceedings (`proceedings.neurips.cc`) | NeurIPS main and D&B, all years; the only source before 2021 | HTML/JSON pages. Also cross-checks OpenReview acceptance. |
-| PMLR (`proceedings.mlr.press`) | ICML 2020–2022 (v119, v139, v162); confirms 2023+ | Volume index plus per-paper pages. The volume → year/track table is `ingest/volumes.py`, checked in tests; a volume that mixes main and position papers (v235, v267) gives track `unknown`. |
+| OpenReview API v2 (`api2.openreview.net`) | ICLR 2024+, NeurIPS 2023+ (with 2023 D&B), ICML 2023+ | Authenticated with `.env` credentials (`OPENREVIEW_USERNAME`, `OPENREVIEW_PASSWORD`). Anonymous requests get HTTP 200 with an HTML browser-challenge page, never JSON (verified 2026-09-27), so a non-JSON response is an auth failure. `limit` ≤ 1000; `count` only when `offset` is sent. |
+| OpenReview API v1 (`api.openreview.net`) | ICLR 2013, 2014, 2016–2023 (2016: workshop track only), NeurIPS 2021–2022 (main and D&B) | Same login. Status comes from decision notes, `content.venue` or `content.decision` (2013), never the bare venueid (§Track taxonomy). A per-year adapter handles each schema. ICLR 2014 has no decisions and ICLR 2015 is not on OpenReview (TASK-092). |
+| NeurIPS proceedings (`proceedings.neurips.cc`) | NeurIPS main, 2013 to the latest published year (2024 on 2026-09-27), and D&B 2022+; 2021 D&B on `datasets-benchmarks-proceedings.neurips.cc`. The only source before 2021 | Year index pages plus abstract pages. The URL has no track token before 2022. Also cross-checks OpenReview acceptance. |
+| PMLR (`proceedings.mlr.press`) | ICML 2013–2022 (v28, v32, v37, v48, v70, v80, v97, v119, v139, v162); confirms 2023–2025 (v202, v235, v267) | Volume index plus per-paper pages. The volume → year/track table is `ingest/volumes.py`, checked in tests; a volume that mixes main and position papers (v235, v267) gives track `unknown`. |
 | RIS importer (`ingest/ris.py`) | The Trust-Evals corpus (M2 bootstrap): two searches, 2025–26 and 2020–24, one scholarmend output each | Reads a `mended.ris` with `scholarmend.parse.parse_file` (pinned `scholarmend` PyPI package) and the `resolved.json` beside it, entry by entry (a count or title mismatch is an error). Only scholarmend's identifying claims decide identity, track and status: a venueid plus its forum id; else a NeurIPS/ICLR `proceedings_url` claim (`nips-`/`iclr-<hash>`); else a `pmlr_url` claim in an ICML volume (`pmlr-v<N>-<key>`, track from `ingest/volumes.py`). `status` comes from a claim only: a venueid → its status; a proceedings listing → `accepted`, overriding a venueid that names the same venue, year and track (decision-005); a listing that disagrees makes the record a `conflict`. Never inferred from appearing in Scholar. Abstract: OpenReview's, else the proceedings page's, else `null` (never Scholar's or Semantic Scholar's). Authors from `AU` without Scholar's `...`. Every claim has `source = "ris"`, its origin in `evidence`, and `fetched_at` from the `M1` Query date: Publish or Perish's local time, stored labelled UTC because the offset isn't recorded, so a crawl date can be a day off near midnight (task-077 records the offset). Skipped records are counted by reason (`out_of_scope`, `unresolved`, `no_id`, `ambiguous`, `conflict`, `no_query_date`) in an `ImportReport`; none is given a minted id. A proceedings listing whose URL year is before its venue was held under its name (`papers.nips.cc/paper/1986/…`, `proceedings.iclr.cc/paper/2012/…`) is `unresolved`: skipped and counted, never an abort of the whole file. |
 
 The M2 bootstrap is deliberately the existing corpus: the Trust-Evals review's Scholar results as
@@ -62,6 +82,10 @@ screened them; 90% main track, the rest D&B (160), position (16), one other and 
 full crawl lands in M4. **Its counts are not PRISMA identification numbers:** the corpus is already the
 output of a search and a screening, so `identified` and `excluded` on an M2 index describe that corpus,
 not a database; cite them only once the M4 crawl indexes the proceedings themselves.
+
+**Crawl window (decision-013):** every venue from 2013, ICLR's first year, to the current year, wherever
+a source above holds the venue-year; a year range is the query's `year:` filter, never a crawl limit. The
+facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-openreview-and-proceedings-facts.md`).
 
 ## Pipeline
 

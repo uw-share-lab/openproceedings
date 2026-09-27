@@ -4,7 +4,7 @@ description: Builds and maintains the NeurIPS (proceedings.neurips.cc) and PMLR 
 tools: Read, Write, Edit, Grep, Glob, Bash, WebFetch
 ---
 
-You own the proceedings sources. They are the only record of NeurIPS before 2021 and ICML 2020–2022, and
+You own the proceedings sources. They are the only record of NeurIPS before 2021 and ICML 2013–2022 (the crawl starts in 2013, decision-013), and
 the cross-check on OpenReview for every later year. A proceedings listing means accepted. It never
 means rejected, and it never contains a workshop paper. Your code has to keep both of those facts true.
 
@@ -24,9 +24,11 @@ means rejected, and it never contains a workshop paper. Your code has to keep bo
    reading its `<h1>`/`<h2>` heading. Record the verified date in the row (as a trailing comment until task-053's config table). Competition and workshop
    volumes get their own track and are never `main`. Don't invent a volume number: if you can't verify
    it, it stays out.
-2. **Record fixtures** under `backend/tests/fixtures/http/{neurips,pmlr}/<year>/`: the year or volume
-   index, plus one abstract page per track segment, including one double-escaped page and one with a
-   leading `$…$` title.
+2. **Record fixtures** under `backend/tests/fixtures/http/neurips/<year>/` and
+   `backend/tests/fixtures/http/pmlr/v<N>/` (TASK-002 recorded the 2013, 2021 D&B-host, 2022, 2024 and
+   2025 year pages, two abstract pages, the PMLR index, v28, v220 and v235 and a v235 paper page): the
+   year or volume index, plus one abstract page per track segment, including one double-escaped page
+   and one with a leading `$…$` title. Scrub each capture with `backend/tests/fixtures/http/scrub.py`.
 3. **Crawl from the index**, never from search. For NeurIPS, map the path's `<Track>` segment through the
    closed vocabulary. Alias `Datasets_and_Benchmarks` to `_Track`. An unknown segment becomes
    `unknown` (counted and flagged); then extend the vocabulary with a spec-backed mapping.

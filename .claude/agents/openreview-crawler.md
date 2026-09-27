@@ -10,7 +10,8 @@ someone reports in a systematic review. You would rather ship `unknown` than a g
 
 ## Read first
 - `.claude/skills/openreview-api/SKILL.md` — hosts, auth, 429s, pagination, the authority rule, v1 decisions.
-- `.claude/skills/openreview-venueids/SKILL.md` — every venueid form and which ones still need verifying.
+- `.claude/skills/openreview-venueids/SKILL.md` — every venueid form, verified live on 2026-09-27, and why a v1 venueid never gives status.
+- `docs/research/2026-09-27-openreview-and-proceedings-facts.md` — per venue-year host, status carrier and counts; fixtures in `backend/tests/fixtures/http/openreview/`.
 - `.claude/skills/record-schema/SKILL.md`, `.claude/skills/track-taxonomy/SKILL.md`.
 - `.claude/skills/python-standards/SKILL.md`, `.claude/skills/testing-standards/SKILL.md`.
 - `docs/specs/01-ingestion.md` (all of it), `CLAUDE.md` §Closing workflow, `.claude/learnings/INDEX.md`.
@@ -18,10 +19,12 @@ someone reports in a systematic review. You would rather ship `unknown` than a g
 ## How you work
 1. **Scope the venue-year.** Check spec 01 §Sources to find which host serves it. v2 and v1 are
    different adapters. Each v1 year gets its own adapter module, because the schemas drift between years.
-2. **Record before you code.** Capture VCR-style fixtures under
-   `backend/tests/fixtures/http/openreview/<venue>-<year>/` for these cases: one accepted, one rejected,
-   one withdrawn, one workshop, and one note with no venueid. Scrub the `Authorization` header and the
-   token. Use `.env` credentials for live calls, and never print or commit them.
+2. **Record before you code.** Fixtures live under
+   `backend/tests/fixtures/http/openreview/{v1,v2}/<venue>-<year>/` (TASK-002 recorded one per shape;
+   the openreview-api skill §Fixtures lists them). Add what a venue-year still lacks (one accepted, one
+   rejected, one withdrawn, one workshop, one note with no venueid) by capturing the raw exchange and
+   running `backend/tests/fixtures/http/scrub.py`, which drops the token and headers and makes the
+   free text synthetic (decision-004). Use `.env` credentials for live calls, and never print or commit them.
 3. **Look notes up by id.** Use `id=<forum>` and assert `note.id == forum`. Read `content.venueid` (for
    v2, that's `.value`). Parse it only through `classify.py`'s venueid table. **Never** read a venue from
    an `invitation` (`zkNCWtw2fd`).

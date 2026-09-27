@@ -59,7 +59,10 @@ of sources lives in `docs/results/coverage-sources.md`, each with a citation).
 ±1%. Cells with no official count are reported but not gated. The same definition appears in 00 and in the
 `coverage-reporting` skill. Also report, per cell: missing-abstract count, `unknown`-track count, and
 **statuses indexed**, meaning which statuses the sources for that venue-year can even contain. For example,
-pre-2021 NeurIPS and ICML 2020–22 come from proceedings only, so no rejected papers exist there to exclude.
+NeurIPS 2013–2020 and ICML 2013–2022 come from proceedings only, so no rejected papers exist there to
+exclude; NeurIPS and ICML on OpenReview hold only the rejected papers whose authors opted in, while ICLR
+holds every rejected, withdrawn and desk-rejected submission (decision-012). The crawl window is 2013 on
+(decision-013); a venue-year with no source (ICLR 2015, TASK-092) is a reported gap, never a silent zero.
 As built, the missing-abstract count is per venue-year, not per cell (the snapshot manifest's granularity),
 until task-082 adds per-track counts.
 The methods text cites the coverage report (with its snapshot hash) as the database-scope caveat.
