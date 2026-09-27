@@ -128,6 +128,8 @@ def _listing(
         if len(sha) != 32 or len(years) != 1 or len(tracks) != 1:
             return "unresolved"
         year, track = int(years.pop()), tracks.pop()
+        if year >= 2100:  # the same ceiling as an OpenReview venueid's year (classify._YEARS)
+            return "unresolved"
         try:  # the URL takes any 4-digit year; one before the venue was held would fail PaperRecord.build
             venue_name(venue, year)  # and abort the file, so it skips this entry instead
         except ValueError:

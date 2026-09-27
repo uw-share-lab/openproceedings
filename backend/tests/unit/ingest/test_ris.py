@@ -265,6 +265,7 @@ def listing_year(year: str, host: str | None = None) -> Callable[[Entries], None
         # the URL pattern takes any 4-digit year; one before the venue was held is skipped, not fatal
         ("a NeurIPS listing year before 1987", listing_year("1986"), "unresolved"),
         ("an ICLR listing year before 2013", listing_year("2012", "proceedings.iclr.cc"), "unresolved"),
+        ("a listing year past 2099", listing_year("9999"), "unresolved"),
         ("an unparseable PMLR URL", pmlr_urls("https://proceedings.mlr.press/v202/"), "unresolved"),
         ("a venueid of another conference", set_venueid("AAAI.org/2025/Workshop/X"), "out_of_scope"),
         ("a malformed in-scope venueid", set_venueid("ICML.cc/2026//X"), "unresolved"),
