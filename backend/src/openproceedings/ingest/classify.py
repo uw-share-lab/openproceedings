@@ -1,7 +1,8 @@
 """Track and status from source evidence (spec 01 §Track taxonomy; openreview-venueids and track-taxonomy skills).
 
-Only an OpenReview `content.venueid` or a proceedings listing decides track and status, never an invitation
-(the scholarmend lesson, forum `zkNCWtw2fd`). A venueid is `<Org>.cc/<YYYY>/<rest>`, parsed exactly:
+Only an OpenReview `content.venueid` (for status in API v1 years, `content.venue`: last bullet) or a proceedings
+listing decides track and status, never an invitation (the scholarmend lesson, forum `zkNCWtw2fd`). A venueid
+is `<Org>.cc/<YYYY>/<rest>`, parsed exactly:
 
 - The last segment is the status when it is one of `_STATUS_SUFFIX`; any other status-like last segment
   (`Blind_Submission`, `Withdrawn`, `Post_Decision`, …) is status `unknown`, never `accepted`. A suffix
@@ -12,6 +13,11 @@ Only an OpenReview `content.venueid` or a proceedings listing decides track and 
 - A `-` segment (an invitation path), a year outside 2013–2099, or anything off the grammar doesn't parse:
   `unknown`/`unknown`, logged at DEBUG per record. The RIS importer then skips the record, as
   `unresolved` when the venueid names one of the three venues, else `out_of_scope`, and counts it.
+- **An API v1 venue-year's venueid is never status evidence** (`_V1_YEARS`; TASK-095): v1 puts the bare
+  venue path on rejected submissions too (ICLR 2017/2022/2023, NeurIPS 2021–2022, D&B 2021), so there the
+  venueid gives venue, year and track, and status `unknown`. A v1 note's status comes from its
+  `content.venue` string (`classify_v1_venue`), its decision note, or its withdrawn / desk-rejected
+  invitation (decision-012; the v1 adapters, TASK-051).
 """
 
 from __future__ import annotations
@@ -24,6 +30,9 @@ log = logging.getLogger(__name__)
 
 _VENUEID = re.compile(r"(NeurIPS|ICLR|ICML)\.cc/([0-9]{4})/(.+)")
 _YEARS = range(2013, 2100)  # ICLR's first year onward
+# Venue-years OpenReview serves through API v1 (docs/research/2026-09-27-openreview-and-proceedings-facts.md
+# §Hosts and API versions): ICLR 2013–2023 and NeurIPS 2021–2022, main and D&B. Their venueid never gives status.
+_V1_YEARS: dict[str, range] = {"ICLR": range(2013, 2024), "NeurIPS": range(2021, 2023)}
 _STATUS_SUFFIX = {
     "Submission": "unknown",  # under review, or never decided
     "Rejected_Submission": "rejected",
@@ -42,8 +51,12 @@ _TRACKS: dict[tuple[str | None, tuple[str, ...]], str] = {
     ("NeurIPS", ("Datasets_and_Benchmarks_Track",)): "datasets_benchmarks",
     ("NeurIPS", ("Track", "Datasets_and_Benchmarks", "Round1")): "datasets_benchmarks",
     ("NeurIPS", ("Track", "Datasets_and_Benchmarks", "Round2")): "datasets_benchmarks",
+    # NeurIPS renamed D&B for 2026 (a live group, no public notes on 2026-09-27; TASK-094)
+    ("NeurIPS", ("Evaluations_and_Datasets_Track",)): "datasets_benchmarks",
     ("NeurIPS", ("Track", "Competition")): "competition",
+    ("NeurIPS", ("Competition_Track",)): "competition",  # 2024+, live (2024: 16; `LYvWVFdGZN`)
     ("ICML", ("Position_Paper_Track",)): "position",
+    ("NeurIPS", ("Position_Paper_Track",)): "position",  # 2025+, live (40 accepted; `VZnOKzQ5qW`)
     ("ICLR", ("TinyPapers",)): "tiny_papers",
     ("ICLR", ("BlogPosts",)): "blogpost",
 }
@@ -98,11 +111,63 @@ def classify_venueid(venueid: str) -> Classification:
     else:
         path = tuple(segments)
         track = _TRACKS.get((venue, path)) or _TRACKS.get((None, path)) or "other"
-    if suffix is not None:
+    year = int(m.group(2))
+    if is_v1(venue, year):
+        status = "unknown"  # v1 puts the bare path on rejected papers too: status comes from elsewhere
+    elif suffix is not None:
         status = _STATUS_SUFFIX.get(suffix, "unknown")
     else:  # the bare path means accepted only for a form we know (skill: rule 2); `other` stays unknown
         status = "accepted" if track != "other" else "unknown"
-    return Classification(track=track, status=status, venue=venue, year=int(m.group(2)), venue_id_raw=venueid)
+    return Classification(track=track, status=status, venue=venue, year=year, venue_id_raw=venueid)
+
+
+def is_v1(venue: str, year: int) -> bool:
+    """Whether OpenReview serves this venue-year through API v1, where a venueid is not status evidence."""
+    return year in _V1_YEARS.get(venue, range(0))
+
+
+def _v1(venue: str, year: int, track: str, **by_status: str) -> dict[str, tuple[str, int, str, str]]:
+    return {v: (venue, year, track, status) for status, vs in by_status.items() for v in vs.split("|")}
+
+
+# `content.venue` on an API v1 submission note, exactly as seen live (research doc §How status is
+# represented): string → (venue, year, track, status). Only the years whose venue string carries the
+# decision; ICLR 2018–2020 and ICLR 2021's rejected notes have none (the decision note decides, TASK-051).
+# An unlisted string is `unknown`, never guessed from its wording.
+_V1_VENUE: dict[str, tuple[str, int, str, str]] = {
+    **_v1("ICLR", 2017, "main", accepted="ICLR 2017 Oral|ICLR 2017 Poster", rejected="Submitted to ICLR 2017"),
+    # invited to the workshop track: not a main-track acceptance, and whether it was presented isn't said
+    **_v1("ICLR", 2017, "workshop", unknown="ICLR 2017 Invite to Workshop"),
+    **_v1("ICLR", 2021, "main", accepted="ICLR 2021 Oral|ICLR 2021 Spotlight|ICLR 2021 Poster"),
+    **_v1("ICLR", 2022, "main", accepted="ICLR 2022 Oral|ICLR 2022 Spotlight|ICLR 2022 Poster",
+          rejected="ICLR 2022 Submitted"),
+    **_v1("ICLR", 2023, "main", accepted="ICLR 2023 notable top 5%|ICLR 2023 notable top 25%|ICLR 2023 poster",
+          rejected="Submitted to ICLR 2023"),
+    **_v1("ICLR", 2023, "tiny_papers", unknown="Submitted to Tiny Papers @ ICLR 2023"),  # all 219 say this
+    **_v1("ICLR", 2023, "blogpost", accepted="Blogposts @ ICLR 2023", rejected="Submitted to Blogposts @ ICLR 2023",
+          unknown="Blogposts @ ICLR 2023 Conditional"),
+    **_v1("NeurIPS", 2021, "main", accepted="NeurIPS 2021 Oral|NeurIPS 2021 Spotlight|NeurIPS 2021 Poster",
+          rejected="NeurIPS 2021 Submitted"),
+    **_v1("NeurIPS", 2022, "main", accepted="NeurIPS 2022 Accept", rejected="NeurIPS 2022 Submitted"),
+    **_v1("NeurIPS", 2021, "datasets_benchmarks",
+          accepted="NeurIPS 2021 Datasets and Benchmarks Track (Round 1)|"
+          "NeurIPS 2021 Datasets and Benchmarks Track (Round 2)",
+          rejected="Submitted to NeurIPS 2021 Datasets and Benchmarks Track (Round 1)|"
+          "Submitted to NeurIPS 2021 Datasets and Benchmarks Track (Round 2)"),
+    **_v1("NeurIPS", 2022, "datasets_benchmarks", accepted="NeurIPS 2022 Datasets and Benchmarks "),  # sic: space
+}  # fmt: skip
+
+
+def classify_v1_venue(venue_string: str) -> Classification:
+    """Venue, year, track and status from an API v1 submission note's `content.venue`, matched exactly: a v1
+    year's status evidence, with the decision note and the withdrawn / desk-rejected invitations. An unlisted
+    string is `unknown`/`unknown`, unparsed. The caller checks venue and year against the note's venueid."""
+    hit = _V1_VENUE.get(venue_string)
+    if hit is None:
+        log.debug("v1_venue_unparsed")  # the string itself can be free text (scrubbed fixtures show emails)
+        return Classification(track="unknown", status="unknown", parsed=False)
+    venue, year, track, status = hit
+    return Classification(track=track, status=status, venue=venue, year=year)
 
 
 def classify_proceedings(track_token: str) -> Classification:

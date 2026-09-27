@@ -1,5 +1,6 @@
 {
  "_recorded": {
+  "corrected": "TASK-095: content.venue restored to the real string (all 219 ICLR 2023 Tiny Papers notes carry it; research doc); scrub.py had read its @ as an email",
   "date": "2026-09-27",
   "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
   "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
@@ -52,7 +53,7 @@
       "pdf": "/pdf/1d4009f1c3a273c28542d3c96d5009fccde030bb.pdf",
       "paperhash": "synthetic|synthetic_title_12",
       "_bibtex": "synthetic.person13@example.org",
-      "venue": "synthetic.person14@example.org",
+      "venue": "Submitted to Tiny Papers @ ICLR 2023",
       "venueid": "ICLR.cc/2023/TinyPapers"
      },
      "signatures": [

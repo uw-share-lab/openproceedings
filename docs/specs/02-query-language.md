@@ -202,7 +202,7 @@ Rules:
 | `title:` / `abstract:` | text | that field only |
 | `venue:` | filter | `NeurIPS`, `ICLR`, `ICML`. Case-insensitive, exact. |
 | `year:` | filter | `2024`, `2020..2026` (inclusive) |
-| `track:` | filter | 01 taxonomy (`main`, `datasets_benchmarks`, `workshop`, …) |
+| `track:` | filter | 01 taxonomy (`main`, `datasets_benchmarks`, `workshop`, …). `datasets_benchmarks` includes NeurIPS 2026's renamed `Evaluations_and_Datasets_Track`, and `position` includes the NeurIPS and ICML position-paper tracks (TASK-094) |
 | `status:` | filter | `accepted`, `rejected`, `withdrawn`, … |
 | `source:` | compat | Scholar-style. Mapped to `venue:` through an alias table ("neural information processing systems", "PMLR" → ICML *with a warning* because PMLR hosts other venues). Unknown values are errors, never silent substrings. |
 
