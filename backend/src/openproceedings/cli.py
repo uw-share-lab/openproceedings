@@ -329,9 +329,9 @@ def _report(
     engine: TantivyEngine, result: ParseResult, total: int, gone: Excluded, snapshot: dict[str, Any] | None
 ) -> list[str]:
     """The PRISMA-ready header of a ranked search (prisma-reporting skill): when it was searched and against
-    what (the index, its crawl window, the versions); a caution when the index holds only a bootstrap corpus,
-    whose counts are not identification numbers (spec 01), or when its snapshot can't be found; the records identified within the query's own
-    limits; those the default filters removed, ineligible (track or status) and unclassified apart; the
+    what (the index, its crawl window, the versions); a caution when the index holds only a bootstrap
+    corpus, whose counts are not identification numbers (spec 01), or when its snapshot can't be found; the
+    records identified within the query's own limits; those the default filters removed, ineligible (track or status) and unclassified apart; the
     screened total; then the strings that reproduce them and every wildcard's expansion, its first 10
     terms and its count (guarantee 6; every term with --explain)."""
     from datetime import UTC, datetime
@@ -345,13 +345,18 @@ def _report(
     )
     unclassified = gone.track["unknown"] + gone.status["unknown"]
     searched = datetime.now(UTC).strftime("%Y-%m-%dT%H:%MZ")
-    window = (snapshot or {}).get("crawl_window") or {}
+    window = (snapshot or {}).get("crawl_window")
+    ends = (
+        [e for e in (window.get(k) for k in ("from", "to")) if isinstance(e, str) and e]
+        if isinstance(window, dict)
+        else []
+    )
     crawl = (
         "unknown (snapshot not found)"
         if snapshot is None
-        else f"{window['from'][:10]} to {window['to'][:10]}"  # every fetch, not only the last (spec 04)
-        if window.get("from") and window.get("to")
-        else snapshot.get("crawl_date", "unknown")
+        else f"{ends[0][:10]} to {ends[1][:10]}"  # every fetch, not only the last (spec 04)
+        if len(ends) == 2
+        else str(snapshot.get("crawl_date", "unknown"))
     )
     lines = [
         f"searched {searched} · index {engine.index_version} · crawl {crawl} · tokenizer {TOKENIZER_VERSION} "
@@ -360,7 +365,8 @@ def _report(
     sources = sorted((snapshot or {}).get("sources") or {})
     if snapshot is None:
         lines.append(
-            "note: the index's snapshot is not in <data-dir>/snapshots, so its sources are unknown, and so is "
+            "note: the index's snapshot is not in <data-dir>/snapshots (or its hash differs), so its sources are "
+            "unknown, and so is "
             "whether these counts are PRISMA identification numbers (spec 01)"
         )
     elif sources and set(sources) <= BOOTSTRAP_SOURCES:

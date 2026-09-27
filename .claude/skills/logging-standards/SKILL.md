@@ -68,9 +68,9 @@ at the level of its kind: DEBUG for the user's own input (`UserInputError`: a ba
 ERROR with the traceback for an `InternalError`, ERROR without it for a broken guarantee (`ParityError`,
 whose message quotes corpus tokens), WARNING for any other refusal (a snapshot, an index, a file). An
 exception nothing anticipated is one `cli_failed` ERROR line with the traceback; a traceback's last line is
-the exception's message, which can quote input,
-so the API (task-034) logs frames and type, not the message. Long jobs say they're alive: `index_build_started`, `index_build_progress` every 10k
-documents, `index_built`; `index_parity_ok` when a parity check passes.
+the exception's message, which can quote input, so the API (task-034) logs frames and type, not the
+message. Long jobs say they're alive: `index_build_started`, `index_build_progress` every 10k documents,
+`index_built`; `index_parity_ok` when a parity check passes.
 
 ## Review checklist (`observability-reviewer`)
 1. Does every new failure path produce exactly one log at the right level?

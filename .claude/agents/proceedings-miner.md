@@ -21,7 +21,7 @@ means rejected, and it never contains a workshop paper. Your code has to keep bo
 1. **The table first.** For an ICML year, add the volume row to
    `ICML_PMLR_VOLUMES` in `backend/src/openproceedings/ingest/volumes.py` (a config file with verification
    columns comes with task-053) only after fetching the volume index and
-   reading its `<h1>`/`<h2>` heading. Record the verified date in the row. Competition and workshop
+   reading its `<h1>`/`<h2>` heading. Record the verified date in the row (as a trailing comment until task-053's config table). Competition and workshop
    volumes get their own track and are never `main`. Don't invent a volume number: if you can't verify
    it, it stays out.
 2. **Record fixtures** under `backend/tests/fixtures/http/{neurips,pmlr}/<year>/`: the year or volume

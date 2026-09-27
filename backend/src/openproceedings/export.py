@@ -241,8 +241,8 @@ def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
 
 
 def _name(author: str) -> str:
-    """An author (brace-free, from `_debraced`) as BibTeX's name list reads one: a name that holds a standalone `and`, or is `others`, is
-    braced so it isn't split into two people or read as et al."""
+    """An author (brace-free, from `_debraced`) as BibTeX's name list reads one: a name that holds a
+    standalone `and`, or is `others`, is braced so it isn't split into two people or read as et al."""
     if re.search(r"(?i)\band\b", author) or author.strip().lower() == "others":
         return "{" + author + "}"
     return author

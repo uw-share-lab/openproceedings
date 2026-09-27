@@ -290,6 +290,9 @@ def test_a_bootstrap_corpus_says_its_counts_arent_identification_numbers(data_di
     )
     assert not any(line.startswith("note:") for line in crawled)
     assert " · crawl 2026-09-23 · " in crawled[0]  # no window recorded: the last fetch
+    for bad in ("x", {"from": 1, "to": None}, {"from": "2026-09-19"}):  # a hand-edited window: no traceback
+        odd = _report(engine, result, total, gone, {"crawl_date": "2026-09-23", "crawl_window": bad})
+        assert " · crawl 2026-09-23 · " in odd[0]
     unknown = _report(engine, result, total, gone, None)
     assert " · crawl unknown (snapshot not found) · " in unknown[0]
     assert unknown[1].startswith("note: the index's snapshot is not in <data-dir>/snapshots")
