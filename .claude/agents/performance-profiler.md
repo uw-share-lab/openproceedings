@@ -45,7 +45,7 @@ Read timings only from a quiet machine (no tests, reviews or builds running) wit
 the p95 isn't the slowest round (200 warm searches in the 80k report). A 20-round p95 under load read 147 ms
 for a search whose quiet 200-round p95 was 68.7 ms (a separate probe: 95 ms), and a task was filed, then
 archived, on it (2026-09-26). A cold run clears every cache (`verified`, `expanded`, `compiled`): clearing
-one left a 10.9 s query reading 77 ms (a report run at 04ea8d9, discarded rather than committed).
+one left a 10.5 s query (10.9 s then) reading 77 ms (a report run at 04ea8d9, discarded rather than committed).
 
 ## Output
 A table of benchmark · branch · main · Δ% · budget · pass/fail, each regression's cause with a profile

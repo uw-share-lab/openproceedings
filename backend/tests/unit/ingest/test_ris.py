@@ -450,8 +450,11 @@ def test_a_malformed_forum_id_skips_its_entry_not_the_file(tmp_path: Path) -> No
             if c["field"] == "forum_id":
                 c["value"] = "has space"
 
+    (tmp_path / "base").mkdir()
+    _, base = run(tmp_path / "base", lambda _e: None)
     by_id, report = run(tmp_path, edit)
-    assert REJECTED not in by_id and report.skipped["unresolved"] >= 1 and report.imported > 0
+    assert REJECTED not in by_id and report.skipped["unresolved"] == base.skipped["unresolved"] + 1
+    assert report.imported == base.imported - 1
 
 
 def test_a_pre_2022_url_without_a_track_token_imports(tmp_path: Path) -> None:

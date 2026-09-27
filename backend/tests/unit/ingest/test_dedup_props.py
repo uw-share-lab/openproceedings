@@ -115,6 +115,11 @@ SAME_TITLE_OTHER_VENUE = [
     paper("AbCd1234", "Trust in AI", source="openreview_v2", venue="ICLR", year=2023),
     paper("AbCd1234", "Trust in AI", source="ris", venue="NeurIPS", year=2023),
 ]
+# … and at the same venue in another year
+SAME_TITLE_OTHER_YEAR = [
+    paper("AbCd1234", "Trust in AI", source="openreview_v2", venue="ICLR", year=2023),
+    paper("AbCd1234", "Trust in AI", source="ris", venue="ICLR", year=2024),
+]
 
 
 @given(pools)
@@ -143,6 +148,7 @@ def test_order_independent(xs: list[PaperRecord], rnd: random.Random) -> None:
 @example(TWO_PROCEEDINGS_IDS)
 @example(WORKSHOP_INTO_RIS_LISTING)
 @example(SAME_TITLE_OTHER_VENUE)
+@example(SAME_TITLE_OTHER_YEAR)
 def test_conservation_and_no_cross_venue_year_merges(xs: list[PaperRecord]) -> None:
     result = dedup(xs)
     outputs = Counter(r.id for r in result.records)

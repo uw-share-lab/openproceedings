@@ -382,6 +382,10 @@ def test_a_tree_compiles_once_per_engine(engines: tuple[TantivyEngine, Reference
     first = engine.compile(ast)  # type: ignore[arg-type]
     again = engine.compile(ast)  # type: ignore[arg-type]
     assert again.query is first.query and again.explain == first.explain  # the memo, not a recompile
+    explain, verified = list(first.explain), list(first.verified)
     again.explain.append("changed")  # a caller's copy: never what the next caller gets
-    assert engine.compile(ast).explain == first.explain  # type: ignore[arg-type]
+    again.verified.append(again.verified[0] if again.verified else None)  # type: ignore[arg-type]
+    fresh = engine.compile(ast)  # type: ignore[arg-type]
+    assert fresh.explain == explain and fresh.verified == verified
+    assert again.explain is not first.explain and again.verified is not first.verified
     assert engine.compile(parse("alpha OR beta").ast).query is not first.query  # type: ignore[arg-type]

@@ -175,12 +175,12 @@ _BRACE = re.compile(r"(\\*)[{}]")  # a brace and the backslash run before it
 
 def _balances(text: str, *, escaped_count: bool) -> bool:
     """Do the braces nest? Counted as BibTeX does (every brace, `escaped_count`) or as parsers that honour
-    `\\{` do (escaped ones skipped). A value is kept as written only when both agree it nests."""
+    `\\{` do (escaped ones skipped). A value is kept as written only when both agree it nests, and never when
+    a brace follows two or more backslashes (`\\\\{`), which readers disagree on (bibtexparser 2 reads it as
+    escaped)."""
     depth = 0
     for m in _BRACE.finditer(text):
-        if (
-            len(m.group(1)) >= 2
-        ):  # `\\{`: readers disagree (bibtexparser 2 reads it as escaped), so never keep it
+        if len(m.group(1)) >= 2:
             return False
         if not escaped_count and len(m.group(1)) % 2 == 1:
             continue
@@ -188,6 +188,11 @@ def _balances(text: str, *, escaped_count: bool) -> bool:
         if depth < 0:
             return False
     return depth == 0
+
+
+def _debraced(text: str) -> str:
+    """`text` with every brace dropped, and the backslash that escaped one, so no `\\x` command is left."""
+    return _one_line(_BRACE.sub(lambda m: m.group(1)[: len(m.group(1)) // 2 * 2], _one_line(text)))
 
 
 _EVEN_BACKSLASHES = r"(?<!\\)((?:\\\\)*)"  # an even run (or none): the next character is not
@@ -201,8 +206,7 @@ def _braced(text: str) -> str:
     value never ends on a backslash, which would escape the closing brace."""
     text = _one_line(text)
     if not (_balances(text, escaped_count=True) and _balances(text, escaped_count=False)):
-        # drop every brace, and the backslash that escaped one, so no `\\x` command is left behind
-        text = _one_line(_BRACE.sub(lambda m: m.group(1)[: len(m.group(1)) // 2 * 2], text))
+        text = _debraced(text)
     text = re.sub(_EVEN_BACKSLASHES + r"([&%#])", r"\1\\\2", text)  # `&` → `\\&`, `\\\\&` → `\\\\\\&`
     if text.endswith("\\"):
         text += " "
@@ -219,9 +223,8 @@ def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         issued.add(key)
         fields = [("title", _braced(r["title"]))]
         # each name brace-free before it's protected, so one stray brace can't unbrace the others
-        names = [
-            _name(_one_line(a).replace("{", "").replace("}", "")) for a in r.get("authors") or [] if a.split()
-        ]
+        # (and no trailing backslash, which would escape the brace `_name` may close it with)
+        names = [_name(n) for n in (_debraced(a).rstrip("\\ ") for a in r.get("authors") or []) if n]
         if names:
             fields.append(("author", _braced(" and ".join(names))))
         fields += [("booktitle", _braced(proceedings_name(r["venue"], r["year"]))), ("year", str(r["year"]))]
@@ -238,10 +241,10 @@ def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
 
 
 def _name(author: str) -> str:
-    """An author as BibTeX's name list reads one: a name that holds a standalone `and`, or is `others`, is
+    """An author (brace-free, from `_debraced`) as BibTeX's name list reads one: a name that holds a standalone `and`, or is `others`, is
     braced so it isn't split into two people or read as et al."""
     if re.search(r"(?i)\band\b", author) or author.strip().lower() == "others":
-        return "{" + _one_line(author).replace("{", "").replace("}", "") + "}"
+        return "{" + author + "}"
     return author
 
 

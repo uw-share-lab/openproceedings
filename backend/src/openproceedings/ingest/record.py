@@ -52,7 +52,7 @@ _PROCEEDINGS_NATIVE = {
     "nips": (re.compile(r"nips-[0-9a-f]{32}"), "NeurIPS"),
     "iclr": (re.compile(r"iclr-[0-9a-f]{32}"), "ICLR"),
 }
-_FORUM_ID = re.compile(r"(?=.*[A-Za-z0-9])[A-Za-z0-9_-]{4,64}")
+FORUM_ID = re.compile(r"(?=.*[A-Za-z0-9])[A-Za-z0-9_-]{4,64}")
 _SNIPPET = (
     "…"  # a Scholar snippet starts or ends with an ellipsis; a real abstract may contain one (`x₁, …, x_n`)
 )
@@ -111,22 +111,27 @@ class Claim(BaseModel):
 def _url(v: str) -> str:
     """An http(s) URL on one line: no whitespace, control, line or paragraph separator (an export writes it
     as one RIS/BibTeX line, and a newline in it could forge a record)."""
-    if not v.startswith(("https://", "http://")) or not _SINGLE_LINE.fullmatch(v) or not urlparse(v).netloc:
+    if not v.startswith(("https://", "http://")) or not _single_line(v) or not urlparse(v).hostname:
         raise ValueError("a URL must be http(s) with a host and no whitespace, control or format characters")
     return v
 
 
 def _doi(v: str) -> str:
-    if not re.fullmatch(r"10\.\d+(?:\.\d+)*/\S+", v) or not _SINGLE_LINE.fullmatch(v):
+    if not re.fullmatch(r"10\.\d+(?:\.\d+)*/\S+", v) or not _single_line(v):
         raise ValueError("a DOI must look like 10.NNNN/suffix, with no whitespace or control characters")
     return v
 
 
-# no whitespace, and nothing in the control (Cc), format-line (Zl) or paragraph (Zp) categories
-# nor zero-width or bidi-override format characters, which could make an exported URL read as another
-_SINGLE_LINE = re.compile(
-    r"[^\s\x00-\x1f\x7f-\x9f\u2028\u2029\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]+"
-)
+# no whitespace and nothing in the control (Cc), line (Zl) or paragraph (Zp) categories
+_SINGLE_LINE = re.compile(r"[^\s\x00-\x1f\x7f-\x9f\u2028\u2029]+")
+
+
+def _single_line(v: str) -> bool:
+    """One printable line: `_SINGLE_LINE`, and no format (Cf) character (zero-width, bidi controls, soft
+    hyphen, tags), which could make an exported URL read as another."""
+    return bool(_SINGLE_LINE.fullmatch(v)) and not any(unicodedata.category(c) == "Cf" for c in v)
+
+
 Url = Annotated[Text, AfterValidator(_url)]
 
 
@@ -235,7 +240,7 @@ class PaperRecord(BaseModel):
                 raise ValueError(
                     f"native id {native!r} is not a valid {venue} proceedings id for {self.venue}"
                 )
-        elif not _FORUM_ID.fullmatch(native):
+        elif not FORUM_ID.fullmatch(native):
             raise ValueError(f"native id {native!r} is neither an OpenReview forum id nor a proceedings id")
         expected = content_hash(
             title=self.title,

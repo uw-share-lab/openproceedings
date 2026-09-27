@@ -42,7 +42,7 @@ from urllib.parse import urlparse
 from scholarmend.parse import parse_file
 
 from openproceedings.ingest.classify import Classification, classify_proceedings, classify_venueid
-from openproceedings.ingest.record import _FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Urls, is_url
+from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Urls, is_url
 from openproceedings.ingest.urls import PREFIX, pmlr, proceedings, proceedings_parts
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 
@@ -180,7 +180,7 @@ def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
         if not forums:
             return "no_id"
         fid = forums.pop()
-        if not _FORUM_ID.fullmatch(str(fid)):  # a malformed id skips this entry, not the whole file
+        if not FORUM_ID.fullmatch(str(fid)):  # a malformed id skips this entry, not the whole file
             return "unresolved"
         evidence = dict.fromkeys(four, ("openreview_api", f"venueid={vid}"))
         url_claims: tuple[tuple[ClaimField, str, str], ...] = (

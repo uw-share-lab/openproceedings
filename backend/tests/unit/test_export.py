@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
 import re
 from pathlib import Path
 
@@ -210,7 +211,8 @@ def test_op_search_ranks_and_reports_exclusions(data_dir: Path, capsys: pytest.C
     out = capsys.readouterr().out.splitlines()
     # PRISMA-ready: when and against what (the crawl date from the snapshot); identified, removed, screened
     assert re.fullmatch(
-        r"searched \d{4}-\d\d-\d\dT\d\d:\d\dZ · index \w{12} · crawl \d{4}-\d\d-\d\d · tokenizer \d+ · query \d+",
+        r"searched \d{4}-\d\d-\d\dT\d\d:\d\dZ · index \w{12} · crawl (\d{4}-\d\d-\d\d) to \d{4}-\d\d-\d\d · tokenizer \d+ "
+        r"· query \d+",
         out[0],
     )
     assert out[1].startswith("note: bootstrap corpus (sources: ris)")  # the fixture snapshot is RIS-only
@@ -270,8 +272,15 @@ def test_a_bootstrap_corpus_says_its_counts_arent_identification_numbers(data_di
     result = parse("trust*")
     total = len(engine.match_ids(result.effective_ast))  # type: ignore[arg-type]
     gone = excluded(engine, result, total)
-    ris_only = _report(engine, result, total, gone, {"crawl_date": "2026-09-23", "sources": {"ris": []}})
-    assert " · crawl 2026-09-23 · " in ris_only[0]
+    window = {"from": "2026-09-19T00:54:21+00:00", "to": "2026-09-23T12:14:34+00:00"}
+    ris_only = _report(
+        engine,
+        result,
+        total,
+        gone,
+        {"crawl_date": "2026-09-23", "crawl_window": window, "sources": {"ris": []}},
+    )
+    assert " · crawl 2026-09-19 to 2026-09-23 · " in ris_only[0]  # the whole window, not the last fetch
     assert (
         ris_only[1].startswith("note: bootstrap corpus (sources: ris)")
         and "not PRISMA identification" in ris_only[1]
@@ -280,8 +289,10 @@ def test_a_bootstrap_corpus_says_its_counts_arent_identification_numbers(data_di
         engine, result, total, gone, {"crawl_date": "2026-09-23", "sources": {"ris": [], "openreview": []}}
     )
     assert not any(line.startswith("note:") for line in crawled)
+    assert " · crawl 2026-09-23 · " in crawled[0]  # no window recorded: the last fetch
     unknown = _report(engine, result, total, gone, None)
     assert " · crawl unknown (snapshot not found) · " in unknown[0]
+    assert unknown[1].startswith("note: the index's snapshot is not in <data-dir>/snapshots")
     assert unknown[-1] == "expansion: trust* → 2 terms (trust, trusta)"
 
 
@@ -302,6 +313,53 @@ def test_an_expansion_line_says_term_or_terms_and_where_the_rest_are(data_dir: P
         in lines
     )
     assert "expansion: b$ → 1 term (b)" in lines
+    ten = {("c", "*"): tuple(f"c{i}" for i in range(10))}
+    engine.expansions = lambda _ast: ten
+    lines = _report(engine, parse("c*"), 0, Excluded(0, {"unknown": 0}, {"unknown": 0}), None)  # type: ignore[arg-type]
+    assert lines[-1] == "expansion: c* → 10 terms (c0, c1, c2, c3, c4, c5, c6, c7, c8, c9)"  # no "…" at 10
+
+
+@pytest.mark.parametrize("damage", ["other snapshot hash", "no snapshots dir"])
+def test_the_header_never_takes_a_crawl_date_from_another_snapshot(
+    data_dir: Path, tmp_path: Path, damage: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+    import shutil
+
+    root = tmp_path / "data"
+    shutil.copytree(data_dir, root, ignore=shutil.ignore_patterns(".lock"))
+    snap = next((root / "snapshots").iterdir())
+    if damage == "no snapshots dir":
+        shutil.rmtree(
+            root / "snapshots",
+            onexc=lambda f, p, _e: (os.chmod(os.path.dirname(p), 0o700), os.chmod(p, 0o700), f(p)),
+        )
+    else:  # a same-named snapshot that isn't the one the index was built from
+        (snap / "manifest.json").chmod(0o600)
+        m = json.loads((snap / "manifest.json").read_text(encoding="utf-8"))
+        m["snapshot_hash"] = "0" * 64
+        (snap / "manifest.json").write_text(json.dumps(m), encoding="utf-8")
+    assert run(root, "search", "trust", "--limit", "0") == 0
+    out = capsys.readouterr().out.splitlines()
+    assert " · crawl unknown (snapshot not found) · " in out[0]
+    assert out[1].startswith("note: the index's snapshot is not in") and not out[1].startswith(
+        "note: bootstrap"
+    )
+
+
+def test_op_search_writes_utf8_whatever_the_locale(data_dir: Path) -> None:
+    import subprocess
+    import sys
+
+    env = {**os.environ, "PYTHONIOENCODING": "ascii", "LC_ALL": "C"}
+    got = subprocess.run(
+        [sys.executable, "-c", "import sys; from openproceedings.cli import main; sys.exit(main(sys.argv[1:]))",
+         "--data-dir", str(data_dir), "search", "trust*", "--limit", "9",
+         "--index", index_of(data_dir).name],
+        capture_output=True, env=env, check=False,
+    )  # fmt: skip
+    assert got.returncode == 0, got.stderr[-500:]
+    assert "→".encode() in got.stdout  # non-ASCII, written as UTF-8
 
 
 def test_op_search_shows_every_wildcard_expansion(data_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -504,6 +562,20 @@ def test_one_names_stray_brace_never_unbraces_the_others() -> None:
     record = {"id": "x", "title": "t", "year": 2024, "venue": "ICLR", "authors": ["Jo{hn Doe", "X and Y"]}
     (entry,) = parse_string("".join(export._bibtex([record], PROVENANCE)))
     assert entry.fields["author"] == "John Doe and {X and Y}"
+
+
+@pytest.mark.parametrize(
+    ("authors", "want"),
+    [
+        (["Jo\\{hn, D", "Roe, K"], "{John, D and Roe, K}"),  # the escaping backslash goes with its brace
+        (["X and Y\\", "Roe, K"], "{{X and Y} and Roe, K}"),  # no trailing `\` to escape `_name`'s brace
+        (["Doe, J", "{}", "{", "Roe, K"], "{Doe, J and Roe, K}"),  # a name that was only braces is no name
+    ],
+)
+def test_author_names_are_debraced_like_every_other_value(authors: list[str], want: str) -> None:
+    record = {"id": "x", "title": "t", "year": 2024, "venue": "ICLR", "authors": authors}
+    text = "".join(export._bibtex([record], PROVENANCE))
+    assert f"  author = {want}," in text
 
 
 def test_a_brace_after_a_backslash_run_is_never_kept() -> None:

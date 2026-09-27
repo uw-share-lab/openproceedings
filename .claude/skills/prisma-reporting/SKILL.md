@@ -10,7 +10,7 @@ description: How openproceedings output maps onto a PRISMA 2020 flow diagram and
 |---|---|---|
 | Records identified from databases (n) | the count of `identification_ast`, the set `identification_query` names (the canonical query minus the default conjuncts, 02 §Default filters; never re-parsed, since the string can be `""` or all-negative) = `total + excluded.total` | 03 §Exclusion accounting |
 | Records removed before screening: *marked as ineligible by automation tools* (n) | the default-filter buckets except `unknown`, itemized: `track: workshop 212, competition 4`; `status: rejected 88` | `SearchResponse.excluded` |
-| Records removed before screening: *removed for other reasons* (n) — unclassified (`excluded.track.unknown`, `excluded.status.unknown`) | on its **own line**, never folded into "ineligible". Unclassified is not ineligible: the review chooses to report them or screen them | 03 §Exclusion accounting |
+| Records removed before screening: *removed for other reasons* (n) — unclassified (`excluded.track.unknown`, `excluded.status.unknown`) | its **own count**, labelled apart from "ineligible" and never folded into it (`op search` prints both on the "removed by default filters" line, each named). Unclassified is not ineligible: the review chooses to report them or screen them | 03 §Exclusion accounting |
 | Records removed before screening: duplicates (n) | **0 at this stage** — cross-source duplicates were merged at ingest, before indexing (01 §Pipeline). Duplicates against other databases are removed later in Covidence | 01 §Pipeline |
 | Records screened (n) | `total` (what the export contains, `X-Total`) | 04 §Exports |
 

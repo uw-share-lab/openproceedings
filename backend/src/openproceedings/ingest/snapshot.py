@@ -216,15 +216,13 @@ def render(result: DedupResult, reports: Sequence[ImportReport], built_at: datet
     }
 
 
-AUDITED = ("files", "tokenizer_version", "record_schema_version")
+AUDITED = ("files", "tokenizer_version", "record_schema_version")  # what a rebuild must reproduce exactly
 AUDIT_FILES = ("merges.csv", "conflicts.csv")
 
 
 def _audit(snapshot: Path) -> dict[str, str]:
     """The audit files' hashes, as a manifest's `files` records them (both, always)."""
-    return {
-        f: _sha256((snapshot / f).read_bytes()) for f in AUDIT_FILES
-    }  # what a rebuild must reproduce exactly
+    return {f: _sha256((snapshot / f).read_bytes()) for f in AUDIT_FILES}
 
 
 def _holds(snapshot: Path, snapshot_hash: str, fresh: dict[str, Any] | None = None) -> bool:

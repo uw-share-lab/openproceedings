@@ -329,10 +329,11 @@ def _report(
     engine: TantivyEngine, result: ParseResult, total: int, gone: Excluded, snapshot: dict[str, Any] | None
 ) -> list[str]:
     """The PRISMA-ready header of a ranked search (prisma-reporting skill): when it was searched and against
-    what (the index, its crawl date, the versions); a caution when the index holds only a bootstrap corpus,
-    whose counts are not identification numbers (spec 01); the records identified within the query's own
+    what (the index, its crawl window, the versions); a caution when the index holds only a bootstrap corpus,
+    whose counts are not identification numbers (spec 01), or when its snapshot can't be found; the records identified within the query's own
     limits; those the default filters removed, ineligible (track or status) and unclassified apart; the
-    screened total; then the strings that reproduce them and every wildcard expansion (guarantee 6)."""
+    screened total; then the strings that reproduce them and every wildcard's expansion, its first 10
+    terms and its count (guarantee 6; every term with --explain)."""
     from datetime import UTC, datetime
 
     from openproceedings.query import QUERY_VERSION
@@ -344,13 +345,25 @@ def _report(
     )
     unclassified = gone.track["unknown"] + gone.status["unknown"]
     searched = datetime.now(UTC).strftime("%Y-%m-%dT%H:%MZ")
-    crawl = (snapshot or {}).get("crawl_date", "unknown (snapshot not found)")
+    window = (snapshot or {}).get("crawl_window") or {}
+    crawl = (
+        "unknown (snapshot not found)"
+        if snapshot is None
+        else f"{window['from'][:10]} to {window['to'][:10]}"  # every fetch, not only the last (spec 04)
+        if window.get("from") and window.get("to")
+        else snapshot.get("crawl_date", "unknown")
+    )
     lines = [
         f"searched {searched} · index {engine.index_version} · crawl {crawl} · tokenizer {TOKENIZER_VERSION} "
         f"· query {QUERY_VERSION}"
     ]
     sources = sorted((snapshot or {}).get("sources") or {})
-    if sources and set(sources) <= BOOTSTRAP_SOURCES:
+    if snapshot is None:
+        lines.append(
+            "note: the index's snapshot is not in <data-dir>/snapshots, so its sources are unknown, and so is "
+            "whether these counts are PRISMA identification numbers (spec 01)"
+        )
+    elif sources and set(sources) <= BOOTSTRAP_SOURCES:
         lines.append(
             f"note: bootstrap corpus (sources: {', '.join(sources)}): these counts describe that corpus, "
             "not a database; they are not PRISMA identification numbers (spec 01)"
@@ -526,9 +539,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (SnapshotError, IndexBuildError, EngineError, OpenProceedingsError, ValueError, OSError) as e:
         from openproceedings.engine.parity import ParityError
 
-        # the level by kind (logging-standards): the user's own input at DEBUG, a broken guarantee or an
-        # internal failure at ERROR with its traceback, any other refusal (a snapshot, an index, a file) at
-        # WARNING; the code, never the message (messages may quote input)
+        # the level by kind (logging-standards): the user's own input at DEBUG; an internal failure at ERROR
+        # with its traceback; a broken guarantee (parity) at ERROR without one, since its traceback would
+        # quote corpus tokens; any other refusal (a snapshot, an index, a file) at WARNING; the code, never
+        # the message (messages may quote input)
         broken = isinstance(e, InternalError | ParityError)
         level = (
             logging.DEBUG if isinstance(e, UserInputError) else logging.ERROR if broken else logging.WARNING

@@ -19,7 +19,8 @@ means rejected, and it never contains a workshop paper. Your code has to keep bo
 
 ## How you work
 1. **The table first.** For an ICML year, add the volume row to
-   `backend/src/openproceedings/ingest/config/pmlr_volumes.toml` only after fetching the volume index and
+   `ICML_PMLR_VOLUMES` in `backend/src/openproceedings/ingest/volumes.py` (a config file with verification
+   columns comes with task-053) only after fetching the volume index and
    reading its `<h1>`/`<h2>` heading. Record the verified date in the row. Competition and workshop
    volumes get their own track and are never `main`. Don't invent a volume number: if you can't verify
    it, it stays out.

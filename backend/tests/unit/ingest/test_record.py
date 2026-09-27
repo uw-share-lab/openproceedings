@@ -321,17 +321,28 @@ def test_claims_for_a_field() -> None:
 
 @pytest.mark.parametrize(
     "bad",
-    ["\n", "\r", "\x85", "\u2028", "\u2029", "\x00", " ", "\t", "\x9b", "\xa0", "\u202e", "\u200b", "\ufeff"],
+    [
+        *("\n", "\r", "\x85", "\u2028", "\u2029", "\x00", " ", "\t", "\x9b"),  # line breaks, controls
+        *("\xa0", "\u1680", "\u2000", "\u3000"),  # whitespace that isn't a plain space
+        *("\u202e", "\u2066", "\u061c", "\u200b", "\u2060", "\ufeff", "\xad", "\U000e0001"),  # format (Cf)
+    ],
 )
 @pytest.mark.parametrize("field", ["forum", "pdf", "proceedings", "doi"])
 def test_a_url_with_a_line_break_or_control_char_is_refused(field: str, bad: str) -> None:
-    # a newline in a URL would be written into an RIS/BibTeX line and could forge a record (security gate)
+    # a newline in a URL would be written into an RIS/BibTeX line and could forge a record, and a format
+    # character could make it read as another (security gate); the value holds nothing else to refuse
     from openproceedings.ingest.record import Urls, is_url
 
-    value = f"10.1234/ab{bad}cd" if field == "doi" else f"https://example.org/a{bad}ER  - "
+    value = f"10.1234/ab{bad}cd" if field == "doi" else f"https://example.org/a{bad}b"
     with pytest.raises(ValueError):
         Urls(**{field: value})
     assert field == "doi" or not is_url(value)
+
+
+def test_a_url_carrying_an_ris_line_is_refused() -> None:
+    from openproceedings.ingest.record import is_url
+
+    assert not is_url("https://example.org/a\nER  - ")
 
 
 def test_urls_must_be_http_and_dois_well_formed() -> None:
@@ -343,6 +354,8 @@ def test_urls_must_be_http_and_dois_well_formed() -> None:
         {"proceedings": "ftp://x/y"},
         {"doi": "doi:10.1/x"},
         {"forum": "https://"},
+        {"forum": "https://@"},
+        {"forum": "https://:80"},
     ):
         with pytest.raises(ValueError):
             Urls(**bad)  # type: ignore[arg-type]

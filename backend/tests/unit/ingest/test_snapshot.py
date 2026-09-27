@@ -683,6 +683,17 @@ def test_a_rebuild_refuses_a_snapshot_whose_audit_files_this_code_wouldnt_write(
         build(cache, snapshots, BUILT)
 
 
+def test_a_rebuild_refuses_an_audit_file_changed_behind_its_manifest(cache: Path, tmp_path: Path) -> None:
+    # merges.csv edited, the manifest left alone: its `files` no longer hold, so this isn't the snapshot
+    snapshots = tmp_path / "snapshots"
+    a = build(cache, snapshots, BUILT).path
+    for p in [a, *a.iterdir()]:
+        p.chmod(p.stat().st_mode | stat.S_IWUSR)
+    (a / "merges.csv").write_bytes((a / "merges.csv").read_bytes() + b"forged,row\n")
+    with pytest.raises(SnapshotError, match="immutable"):
+        build(cache, snapshots, BUILT)
+
+
 def test_diff_never_calls_a_split_a_rekey(cache: Path, tmp_path: Path) -> None:
     a = build(cache, tmp_path / "snapshots", BUILT).path
 

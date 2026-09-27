@@ -204,9 +204,8 @@ class TantivyEngine:
     def compile(self, ast: Node) -> Compiled:
         """The compiled query, memoised per tree: the index is immutable, so a tree compiles the same way every
         time, and a search, its pages and its facets needn't build the Boolean again (task-076 headroom)."""
-        key = (
-            ast.model_dump_json()
-        )  # spans included: ` trust` and `trust` compile apart (a miss, never wrong)
+        # spans included: ` trust` and `trust` compile apart (a miss, never wrong)
+        key = ast.model_dump_json()
         if key in self.compiled:
             return self._copy(self.compiled[key])
         if len(self.verified) > 1_000:

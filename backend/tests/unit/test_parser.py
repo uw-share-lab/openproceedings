@@ -455,9 +455,9 @@ def test_parsing_is_linear_in_the_query_length() -> None:
     def cost(q: str) -> float:
         best = float("inf")
         for _ in range(3):
-            start = time.perf_counter()
+            start = time.thread_time()  # CPU time: other load on a shared runner doesn't count
             parse(q)
-            best = min(best, time.perf_counter() - start)
+            best = min(best, time.thread_time() - start)
         return best
 
     for unit in (

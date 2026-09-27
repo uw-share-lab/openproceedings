@@ -171,9 +171,9 @@ def test_near_over_a_long_field_is_not_quadratic() -> None:
     r = rec("t", "trust ai " * 1_500)
     best = float("inf")
     for _ in range(3):  # best of 3: one busy moment on a shared runner isn't a regression
-        t = time.perf_counter()
+        t = time.thread_time()  # CPU time: other load on a shared runner doesn't count
         got = lit("trust NEAR/100 ai", r)["abstract"]
-        best = min(best, time.perf_counter() - t)
+        best = min(best, time.thread_time() - t)
     assert len(got) == 3_000 and best < 1.0  # every pair checked took ~13 s
 
 
