@@ -1,9 +1,10 @@
 ---
 id: TASK-086
 title: Count facets and exclusion buckets from fast fields over one collection
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-27 11:08'
+updated_date: '2026-09-27 11:37'
 labels:
   - engine
   - performance
@@ -25,7 +26,19 @@ Structural fix: collect the query without its top-level filter conjuncts once, r
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every disjunctive facet and exclusion bucket comes from one collection of the query without its top-level filters (plus the page's collection, unless it is shared too)
-- [ ] #2 backend/tests/differential and test_exclusions stay green: no count or ID set changes
-- [ ] #3 report_80k's /search first-page column is under 100 ms p95 CPU for every Trust-Evals string at 80k, or spec 03 records the measured exception
+- [x] #1 Every disjunctive facet and exclusion bucket comes from one collection of the query without its top-level filters (plus the page's collection, unless it is shared too)
+- [x] #2 backend/tests/differential and test_exclusions stay green: no count or ID set changes
+- [x] #3 report_80k's /search first-page column is under 100 ms p95 CPU for every Trust-Evals string at 80k, or spec 03 records the measured exception
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+All ACs met and checked; final summary written. Left In Progress only because the agent sandbox refuses the backlog complete command, and check_backlog.py fails a Done task left in backlog/tasks. Run: backlog task complete task-086
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Facets and both exclusion buckets now come from one collection of the query without its top-level facet-field filters: counts per (venue, year, track, status) from one nested terms aggregation (tantivy-py can't read text fast columns per document), then every field counted in Python (a combo counts for F when it passes every set-aside filter not on F). Memoised per base in TantivyEngine.faceted (task-080 rules, MAX_FACET_COMBOS budget). Equality: test_facets_equal.py (Hypothesis over the 5k corpus, generated trees plus extra top-level Filter/NOT Filter conjuncts) against a frozen copy of the per-kept-set implementation (facets_before.py) and ReferenceEngine, for facets and exclusion counts; five mutants of the filter evaluation and the memo key are killed; differential and golden suites green. 80k first page, p95 CPU (load 7-19): 75-93 ms for seven strings, main-1 117 ms and main-3-sources 109 ms still over (was 153-276 ms); spec 03 records the exception and the breakdown, task-087 holds what's left.
+<!-- SECTION:FINAL_SUMMARY:END -->

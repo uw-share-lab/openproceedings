@@ -135,6 +135,29 @@ memoised per kept set (`TantivyEngine.faceted`), so a first page collects five t
 214 ms), and a later page of the same query, reading the memo, 51–76 ms. The first page is still over
 budget; task-086 is the structural fix (every facet and exclusion bucket from one collection's fast
 columns). `report_80k` now has both `/search` columns, in CPU time.
+
+**After task-086 (same index and method, load 7–19).** Facets and both exclusion buckets now come from one
+collection of the query without its top-level filters (counts per venue × year × track × status from one
+nested terms aggregation, the rest in Python), memoised per base, so a first page collects the text query
+twice (page + base). p95 CPU, first page / later page:
+
+| String | First page | Later page |
+|---|---|---|
+| main-1 | 116.7 ms | 82.1 ms |
+| main-2-pop | 93.3 ms | 67.8 ms |
+| main-3-sources | 109.0 ms | 76.0 ms |
+| main-4-sources | 92.1 ms | 64.0 ms |
+| main-5-sources | 86.1 ms | 61.5 ms |
+| main-6-sources | 75.2 ms | 55.2 ms |
+| main-7-most-updated | 74.6 ms | 54.7 ms |
+| narrow | 87.2 ms | 67.6 ms |
+| human-centered | 88.2 ms | 61.1 ms |
+| llm-as-judge | 1.2 ms | 0.8 ms |
+
+`main-1` and `main-3-sources` are still over 100 ms. `main-1`'s first page, median CPU: the page's collection
+34 ms, the base's combo aggregation 37 ms, highlighting 50 hits 33 ms (nearly all
+`normalize._tokenize_each_char`, the non-ASCII slow path, which the synthetic text hits about twice as often
+as real abstracts), facet and exclusion counting 3 ms, display records 1 ms. task-087 holds what's left.
 The same run's index build took 21.9 s (30.3 s in `2026-09-27-bench.md`): the build tokenizes every record,
 so it gains from the tokenizer's shortcuts too.
 
