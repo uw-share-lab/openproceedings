@@ -77,8 +77,13 @@ class Token:
     # The end of the raw characters the token took a piece from, WHOLE: the same as `end` except inside a
     # U+0338 cluster, where `end` stops at the piece's own characters (task-075) and `reach` covers the
     # cluster. The lexer decides a detached wildcard (`abcd⒈` + slash + `*`) from `reach`, so per-piece
-    # highlight spans never change what parses. Not part of equality; set by `tokenize`.
+    # highlight spans never change what parses. Not part of equality; set by `tokenize`, and a Token built
+    # without it reaches its `end`, which is right everywhere outside a U+0338 cluster (never a silent -1).
     reach: int = field(default=-1, compare=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if self.reach < 0:
+            object.__setattr__(self, "reach", self.end)
 
 
 def _is_word_char(ch: str) -> bool:

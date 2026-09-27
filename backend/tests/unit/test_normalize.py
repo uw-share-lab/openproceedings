@@ -368,3 +368,9 @@ def test_token_spans_are_valid_and_never_overlap(text: str) -> None:
         if b.start < a.end:
             shared = text[b.start : a.end]
             assert len(shared) == 1 and len(unicodedata.normalize("NFKC", shared)) > 1, (text, a, b)
+
+
+def test_a_token_built_without_reach_reaches_its_end() -> None:
+    # task-075 review: an unset reach must not read as -1, or the lexer would call every wildcard detached
+    assert Token("abc", 2, 5).reach == 5
+    assert Token("abc", 2, 5, reach=7).reach == 7
