@@ -1,10 +1,10 @@
 ---
 id: TASK-004
 title: 'Pin remaining export details (RIS TY, venue strings, BibTeX key suffixes)'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-25 22:06'
-updated_date: '2026-09-27 08:13'
+updated_date: '2026-09-27 17:50'
 labels:
   - api
 milestone: m-3
@@ -22,7 +22,7 @@ Left open by spec 04; ris-format and bibtex-format skills flag them.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 RIS TY value chosen (CPAPER vs JOUR) and checked by importing into Covidence
+- [x] #1 RIS TY value chosen (CPAPER vs JOUR) and checked by importing into Covidence
 - [x] #2 Canonical T2 venue strings for NeurIPS, ICLR and ICML by year
 - [x] #3 BibTeX collision rule: whether the first colliding key stays bare or gets 'a'
 - [x] #4 Spec 04 updated
@@ -44,4 +44,12 @@ AC#4: spec 04 §Exports, ris-format and bibtex-format skills updated.
 Follow-up: TASK-081 (write VL if the Covidence probe shows an empty volume blocks dedup).
 
 Review fixes (fix-004-review): status in every export (RIS KW status:<s>; BibTeX @unpublished + no booktitle for non-accepted, status in keywords/note); venue-year validated at ingest (PaperRecord), table moved to vocab.py; Covidence fixture regenerated (7 records incl. a rejected one; sha256 a98583c81604e20156ead8b4cae807475c519e23aebd9db6bcefbf926ae024ee), probe now isolates VL; check doc records the imported sha and a test enforces it once AC#1 is ticked. AC#1 still pending the human import.
+
+AC#1 done 2026-09-27: the fixture (sha256 11716554…73fde0) imported into a throwaway Covidence review with every field intact; CPAPER kept. Findings recorded in the checklist and spec 04: Covidence shows neither KW nor N1 to screeners (exclude by status before import); a different-year copy isn't matched as a duplicate.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Pinned the RIS/BibTeX export details: TY CPAPER (verified in Covidence 2026-09-27), per-year conference venue strings (NIPS→NeurIPS 2018), the BibTeX collision rule (decision-007), status in every format, provenance lines. Covidence hand check done; TASK-081 closed without a VL change.
+<!-- SECTION:FINAL_SUMMARY:END -->

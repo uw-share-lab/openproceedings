@@ -136,11 +136,13 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   in its proceedings).` (`unknown` reads "not known to be in its proceedings"; `desk_rejected` reads "desk
   rejected"), so the Notes a screener sees say it plainly; `TY` and `T2` are unchanged. Checked against
   the reference RIS parser, `scholarmend.parse.parse_ris` (the pinned `scholarmend` PyPI package), plus one
-  fixture imported into Covidence by hand (`docs/results/2026-09-27-covidence-check.md`, **pending**).
+  fixture imported into Covidence by hand (`docs/results/2026-09-27-covidence-check.md`, done 2026-09-27).
 - **Status in every format** (task-004 review). The venue string names the conference a paper was
   *submitted to*, so a rejected or withdrawn paper still reads "ICLR 2024". A screener sees its status as
-  RIS `KW  - status:rejected` and the status `N1` sentence (whether Covidence shows keywords to screeners is
-  **pending** the hand check; if it doesn't, the `N1` sentence is what they read), CSV and JSONL have the
+  RIS `KW  - status:rejected` and the status `N1` sentence, but **Covidence shows neither to screeners**
+  (the 2026-09-27 hand check: its screening card has no keywords, notes or URL), so a review screening in
+  Covidence must exclude by status before import: keep the default `status:accepted` filter, or filter the
+  CSV's `status` column. Zotero and EndNote do show both. CSV and JSONL have the
   `status` column, and BibTeX has
   it in `keywords` and in the entry type below. RIS keeps `TY  - CPAPER` for every status, so one export
   imports as one reference type.
@@ -151,9 +153,11 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   Title *within one reference type*, so a copy of the same paper exported as `JOUR` or `CONF` by another
   database is only caught if the Reference Type box is unticked in its Duplicates preferences. Covidence
   matches duplicates on title, year, volume and authors, not on type
-  ([Covidence FAQ](https://support.covidence.org/help/how-does-covidence-detect-duplicates)). Whether
-  Covidence shows every `CPAPER` field, and whether our empty volume blocks a match against a copy that has
-  one, is the hand check above. Its fixture is pinned byte for byte by
+  ([Covidence FAQ](https://support.covidence.org/help/how-does-covidence-detect-duplicates)). The hand
+  check above found `CPAPER` imports cleanly (title, abstract, authors, year, source line, DOI, our `ID` as
+  Ref ID), and that Covidence matches our record against copies with a volume, another type (`CONF`,
+  `JOUR`), another source string, or initials-only authors, but **not** against a copy dated a different
+  year, which screeners merge by hand. Its fixture is pinned byte for byte by
   `backend/tests/unit/test_covidence_fixture.py`.
 - **Venue string** (`T2`, and BibTeX `booktitle`; task-004): `<conference name> (<acronym that year> <year>)`,
   one string per venue and year whatever the track or status, so every copy of a venue-year reads alike and

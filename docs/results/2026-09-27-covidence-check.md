@@ -1,6 +1,7 @@
-# Covidence import check for the RIS export (task-004 AC#1): pending
+# Covidence import check for the RIS export (task-004 AC#1): done 2026-09-27
 
-**Status: not yet run.** Only a person can do this import. When it's done:
+**Status: run 2026-09-27** in a throwaway review (practice review under the University of Waterloo Library
+account; the live Trust Evaluation review was not touched). Results below. The steps that followed:
 1. Fill in the Result columns and the Outcome section, including the fixture's sha256.
 2. Tick TASK-004 AC#1 (`backlog task edit TASK-004 --check-ac 1`) and TASK-036 AC#1
    (`backlog task edit TASK-036 --check-ac 1`: the API's RIS body is byte for byte `op export`'s).
@@ -75,13 +76,13 @@ Write "ok" in the Result column, or what differed.
 
 | # | Record (`ID`) | What to look for | Result |
 |---|---|---|---|
-| 1 | `op:iclr:2024:Wd8nJ3cV5r`: ICLR 2024, **rejected** | Keywords show `status:rejected` (where, if at all, a screener sees them). Notes show `Submitted to … (ICLR 2024); status: rejected (not in its proceedings).` then the provenance line. Year 2024. Source `International Conference on Learning Representations (ICLR 2024)` | |
-| 2 | `op:iclr:2024:Xq7Lm2Pz9A`: ICLR 2024 | Title shows `𝒪(log n)` and `𝔽` (outside the BMP). **No abstract**: nothing shown, not an empty quote or garbage. Year 2024 | |
-| 3 | `op:iclr:2025:bT4kR8sW1n`: ICLR 2025 | Full abstract. 3 authors. Year 2025 | |
-| 4 | `op:icml:2023:pmlr-v202-okafor23a`: ICML 2023, PMLR only | LaTeX in the abstract (`$\epsilon$`) kept as written. URL is the PMLR PDF. Year 2023. Source `International Conference on Machine Learning (ICML 2023)` | |
-| 5 | `op:neurips:2017:nips-3f9a…`: NeurIPS 2017, proceedings only | Source says **NIPS 2017**: `Conference on Neural Information Processing Systems (NIPS 2017)`. URL is the proceedings page. Year 2017 | |
-| 6 | `op:neurips:2023:Hn3vQ6eYt0`: NeurIPS 2023 | **7 authors in order**, from `Şahin, Elif` to `Kowalczyk, Łukasz`, with `Nguyễn, Thị Hương` intact. Year 2023 | |
-| 7 | `op:neurips:2024:Rk2wP5dLx8`: NeurIPS 2024, datasets and benchmarks | DOI `10.5555/trustbench.2024.001`. Keywords `datasets_benchmarks`, `status:accepted`. Year 2024 | |
+| 1 | `op:iclr:2024:Wd8nJ3cV5r`: ICLR 2024, **rejected** | Keywords show `status:rejected` (where, if at all, a screener sees them). Notes show `Submitted to … (ICLR 2024); status: rejected (not in its proceedings).` then the provenance line. Year 2024. Source `International Conference on Learning Representations (ICLR 2024)` || Title, abstract, authors, year 2024 and source ok. **Keywords and notes are not shown anywhere a screener looks** (neither the screening card nor its Note box): the rejected status is invisible while screening |
+| 2 | `op:iclr:2024:Xq7Lm2Pz9A`: ICLR 2024 | Title shows `𝒪(log n)` and `𝔽` (outside the BMP). **No abstract**: nothing shown, not an empty quote or garbage. Year 2024 || ok: `𝒪(log n)` and `𝔽` shown exactly; no abstract, cleanly (no empty quote) |
+| 3 | `op:iclr:2025:bT4kR8sW1n`: ICLR 2025 | Full abstract. 3 authors. Year 2025 || ok |
+| 4 | `op:icml:2023:pmlr-v202-okafor23a`: ICML 2023, PMLR only | LaTeX in the abstract (`$\epsilon$`) kept as written. URL is the PMLR PDF. Year 2023. Source `International Conference on Machine Learning (ICML 2023)` || ok; LaTeX kept as written. URL not shown on the screening card |
+| 5 | `op:neurips:2017:nips-3f9a…`: NeurIPS 2017, proceedings only | Source says **NIPS 2017**: `Conference on Neural Information Processing Systems (NIPS 2017)`. URL is the proceedings page. Year 2017 || ok: source `Conference on Neural Information Processing Systems (NIPS 2017)`. URL not shown on the card |
+| 6 | `op:neurips:2023:Hn3vQ6eYt0`: NeurIPS 2023 | **7 authors in order**, from `Şahin, Elif` to `Kowalczyk, Łukasz`, with `Nguyễn, Thị Hương` intact. Year 2023 || ok: 7 authors in order, diacritics intact |
+| 7 | `op:neurips:2024:Rk2wP5dLx8`: NeurIPS 2024, datasets and benchmarks | DOI `10.5555/trustbench.2024.001`. Keywords `datasets_benchmarks`, `status:accepted`. Year 2024 || ok: DOI shown (linked). Keywords not shown |
 
 Also record once: the reference type Covidence shows for a `CPAPER`, and whether the `op:…` id shows
 anywhere (not required).
@@ -89,12 +90,12 @@ anywhere (not required).
 ## Dedup checks (steps 4 and 5)
 | Import | Expected | Result |
 |---|---|---|
-| Fixture again | 7 duplicates, 0 new | |
-| Probe 1: NeurIPS 2023, identical but for `VL  - 36` | A duplicate only if Covidence ignores a volume that is empty on one side | |
-| Probe 2: ICML 2023 as `CONF`, PMLR title, no `VL` | A duplicate: title, year and authors match, and neither record has a volume | |
-| Probe 3: NeurIPS 2024 as `JOUR` + `VL  - 37` | The same result as probe 1, unless the type or source also matters | |
-| Probe 4: ICLR 2025 record with `PY  - 2024` | Not a duplicate if Covidence matches the exact year (its FAQ says it compares year) | |
-| Probe 5: NeurIPS 2023 record with initials-only authors | Unknown: a duplicate only if Covidence normalises author names to initials | |
+| Fixture again | 7 duplicates, 0 new || 0 new, 7 duplicates ✓ |
+| Probe 1: NeurIPS 2023, identical but for `VL  - 36` | A duplicate only if Covidence ignores a volume that is empty on one side || **duplicate** (empty `VL` doesn't block a match) |
+| Probe 2: ICML 2023 as `CONF`, PMLR title, no `VL` | A duplicate: title, year and authors match, and neither record has a volume || **duplicate** |
+| Probe 3: NeurIPS 2024 as `JOUR` + `VL  - 37` | The same result as probe 1, unless the type or source also matters || **duplicate** (type and source string don't matter) |
+| Probe 4: ICLR 2025 record with `PY  - 2024` | Not a duplicate if Covidence matches the exact year (its FAQ says it compares year) || **not a duplicate**: imported as a new study |
+| Probe 5: NeurIPS 2023 record with initials-only authors | Unknown: a duplicate only if Covidence normalises author names to initials || **duplicate** (initials tolerated) |
 
 ## If `CPAPER` fails: the `JOUR` fallback
 Make a `JOUR` copy and repeat steps 1–3 in a **new** throwaway review:
@@ -106,25 +107,26 @@ sed 's/^TY  - CPAPER$/TY  - JOUR/' docs/results/2026-09-27-covidence-fixture.ris
 Record the result below. The export only changes to `JOUR` through a spec 04 change.
 
 ## Outcome (fill in)
-- Fixture sha256 imported: ``
-  (`shasum -a 256 docs/results/2026-09-27-covidence-fixture.ris`, run on the file you imported. Paste the
-  64 hex characters between the backticks.)
-- `CPAPER` imports cleanly, with every field above shown: yes / no. If no, what broke, and whether the `JOUR`
-  fallback fixes it.
-- Any year shown differently from the table: none / which.
-- Empty `VL` against `VL  - 36` (probe 1): matched / not matched. If not matched, TASK-081 decides whether the
-  export writes `VL`.
-- KW (status) visible to screeners in *Title and abstract screening*: yes / no. If no, the status reaches
-  them only through the first `N1` note (record 1's "Submitted to …; status: rejected (not in its
-  proceedings)."): check that note is visible to screeners instead. If neither is, a rejected paper can't be
-  told apart while screening: say so here, and the review must exclude by status before import (export
-  with the default `status:accepted` filter, or filter the CSV's `status` column).
-- Year one earlier (probe 4): matched / not matched. Initials-only authors (probe 5): matched / not matched.
-- **What must be deduplicated by hand:** list each probe Covidence did *not* mark as a duplicate (for
-  example "probe 4: a copy dated a year earlier elsewhere"): those are the cross-database copies screeners
-  must merge by hand in Covidence's duplicate review.
+- Fixture sha256 imported: `11716554eeaf98a24a2f596134ea613d0b7ceeb9386a94be6b097b11b973fde0`
+- `CPAPER` imports cleanly: **yes**. Covidence shows the reference as a journal-style line
+  (`<T2> <year>;():`) with the year, the DOI when present and our `ID` as **Ref ID**; no `JOUR` fallback
+  needed. Two re-imports of an identical file through the same upload widget needed a manual upload (a
+  browser-automation artefact, not Covidence behaviour).
+- Any year shown differently from the table: **none**.
+- Empty `VL` against `VL  - 36` (probe 1): **matched**. The export doesn't need to write `VL` (TASK-081
+  closes without a change).
+- KW (status) visible to screeners in *Title and abstract screening*: **no**, and the first `N1` note isn't
+  visible either (Covidence shows neither keywords, notes nor URLs on the screening card; its Note box holds
+  only the team's own notes). **A rejected or withdrawn paper can't be told apart while screening**, so a
+  review must exclude by status before import: export with the default `status:accepted` filter, or filter
+  the CSV's `status` column. Spec 04 §Exports and the ris-format skill say so.
+- Year one earlier (probe 4): **not matched**. Initials-only authors (probe 5): **matched**.
+- **What must be deduplicated by hand:** copies of a paper dated a different year elsewhere (probe 4: e.g. a
+  preprint or OpenReview posting year). Covidence imports them as new studies; screeners merge them in
+  Covidence's duplicate review.
 - Where the duplicates Covidence finds are reported: in the PRISMA flow diagram's **duplicates removed**
   box (the review's own deduplication across databases). openproceedings' dedup statement (the search
   record's `dedup` counts, PRISMA-S item 16) covers only merges inside openproceedings at ingest; never add
   Covidence's count to it, or its count to Covidence's.
-- Date, reviewer role, and that the throwaway review was deleted.
+- 2026-09-27, run by the project owner with the assistant driving the browser for the first import. The
+  throwaway review is to be deleted by the owner (deleting a review is left to a person).
