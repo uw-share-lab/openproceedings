@@ -11,7 +11,7 @@ import SyntaxHelpPage, { metadata as syntaxMeta } from "./help/syntax/page";
 import NotFound, { metadata as notFoundMeta } from "./not-found";
 import HomePage from "./page";
 import { metadata as paperMeta } from "./paper/[id]/page";
-import { metadata as recordMeta } from "./record/[id]/page";
+import { generateMetadata as recordMeta } from "./record/[id]/page";
 import SearchPage, { metadata as searchMeta } from "./search/page";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }), usePathname: () => "/search" }));
@@ -35,10 +35,19 @@ describe("page titles (layout template `%s · openproceedings`)", () => {
     [coverageMeta, "Coverage"],
     [syntaxMeta, "Query syntax"],
     [paperMeta, "Paper"],
-    [recordMeta, "Search record"],
     [notFoundMeta, "Page not found"],
   ])("%j", (meta, title) => {
     expect(meta.title).toBe(title);
+  });
+});
+
+describe("record page title (copy RC-1)", () => {
+  it("names the record", async () => {
+    const meta = await recordMeta({
+      params: Promise.resolve({ id: "Ab3dE5fG7hJ9" }),
+      searchParams: Promise.resolve({}),
+    });
+    expect(meta.title).toBe("Search record Ab3dE5fG7hJ9");
   });
 });
 

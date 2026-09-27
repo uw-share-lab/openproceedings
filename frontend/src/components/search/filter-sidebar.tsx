@@ -184,12 +184,15 @@ function ValueFieldset({
   counts,
   vocabulary,
   sidebarNote,
+  anchor,
 }: {
   field: ValueField;
   controls: Controls;
   counts: Readonly<Record<string, number>>;
   vocabulary: readonly string[];
   sidebarNote: string;
+  /** The fieldset's id: the export menu's "Show the Status filter" moves focus here (design E2). */
+  anchor: string;
 }) {
   const noteId = useId();
   const { parse } = controls;
@@ -213,7 +216,7 @@ function ValueFieldset({
   const title = FIELD_TITLE[field];
   const describedBy = block?.code === "DRAFT_DIRTY" || block?.code === "NO_FILTERS" ? sidebarNote : noteId;
   return (
-    <fieldset className="space-y-1">
+    <fieldset id={anchor} tabIndex={-1} className="space-y-1">
       <legend className="text-sm font-semibold">
         {title}
         {isDefault && (
@@ -461,6 +464,11 @@ export interface FilterSidebarProps {
   readonly hiddenWhenNarrow: boolean;
 }
 
+/** The id of a field's fieldset in the sidebar `sidebarId` (the export menu moves focus to it). */
+export function filterAnchor(sidebarId: string, field: string): string {
+  return `${sidebarId}-${field}`;
+}
+
 export function FilterSidebar({ id, controls, facets, vocabulary, hiddenWhenNarrow }: FilterSidebarProps) {
   const noteId = useId();
   const { dirty, parse, state } = controls;
@@ -485,6 +493,7 @@ export function FilterSidebar({ id, controls, facets, vocabulary, hiddenWhenNarr
         counts={facets.venue}
         vocabulary={vocabulary.venue ?? []}
         sidebarNote={noteId}
+        anchor={filterAnchor(id, "venue")}
       />
       <YearFieldset
         key={`${state.q}\u0000${state.mode}\u0000${parse?.q === state.q && parse.mode === state.mode ? "parsed" : ""}`}
@@ -498,6 +507,7 @@ export function FilterSidebar({ id, controls, facets, vocabulary, hiddenWhenNarr
         counts={facets.track}
         vocabulary={vocabulary.track ?? []}
         sidebarNote={noteId}
+        anchor={filterAnchor(id, "track")}
       />
       <ValueFieldset
         field="status"
@@ -505,6 +515,7 @@ export function FilterSidebar({ id, controls, facets, vocabulary, hiddenWhenNarr
         counts={facets.status}
         vocabulary={vocabulary.status ?? []}
         sidebarNote={noteId}
+        anchor={filterAnchor(id, "status")}
       />
     </section>
   );

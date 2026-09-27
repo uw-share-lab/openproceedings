@@ -27,17 +27,21 @@ import {
   whyBlocked,
   type SearchAction,
   type SearchState,
+  type ParsedFilters,
   type Sort,
 } from "@/lib/search-state";
+import { fieldWarning, type FieldWarning } from "@/lib/export";
 import { CopyButton } from "../copy-button";
+import { ExportMenu } from "../export/export-menu";
+import { SaveRecord } from "../record/save-record";
 import { parseViewOf, useAfter, type Controls, type ParseView } from "./controls";
 import { ExclusionBanner } from "./exclusion-banner";
 import { limitsOf, type Limit } from "./exclusions";
 import { ExpansionsRow } from "./expansions-row";
-import { FilterSidebar } from "./filter-sidebar";
+import { filterAnchor, FilterSidebar } from "./filter-sidebar";
 import { HitItem } from "./hit-item";
 import { FailureBlock, IndexSwapNotice, StaleNotice } from "./search-states";
-import { SearchWorkspace, type SearchRefusal } from "./search-workspace";
+import { DRAFT_DIRTY_MESSAGE, SearchWorkspace, type SearchRefusal } from "./search-workspace";
 import { useWorkspaceSlot } from "./workspace-slot";
 import { sameSearch, useSearch, type SearchOutcome, type SearchResponse } from "./use-search";
 
@@ -49,6 +53,10 @@ export const SORT_LABELS: Record<Sort, string> = {
   year_asc: "Year, oldest first",
   title: "Title",
 };
+
+/** Why Export and Save are off while the results shown aren't the searched query's (copy EX-E6, SV-7). */
+export const STALE_EXPORT_MESSAGE =
+  "The results shown are from an earlier query — search again or restore it before exporting.";
 
 /** "Searching…" appears only after this long, so a fast answer doesn't flash it (W4). */
 export const SEARCHING_QUIET_MS = 300;
@@ -207,6 +215,14 @@ function Results({ state, current, good, fetching, refetch, swap, onDismissSwap 
   const searching = useAfter(current === null && fetching, SEARCHING_QUIET_MS);
   const sidebarId = useId();
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // "Show the Status filter" (design E2): open Filters (narrow screens), then focus that field once drawn
+  const focusField = useRef<string | null>(null);
+  const [focusAsked, setFocusAsked] = useState(0);
+  useEffect(() => {
+    if (focusField.current === null) return;
+    document.getElementById(filterAnchor(sidebarId, focusField.current))?.focus();
+    focusField.current = null;
+  }, [focusAsked, sidebarId]);
 
   const is422 = failure?.kind === "refused" && failure.status === 422;
   const errorCount =
@@ -256,6 +272,12 @@ function Results({ state, current, good, fetching, refetch, swap, onDismissSwap 
             go({ type: "page", page }, `Page ${page}.`, "replace");
           }}
           onIncluded={() => count.current?.focus()}
+          onShowFilter={(field) => {
+            setFiltersOpen(true);
+            focusField.current = field;
+            setFocusAsked((n) => n + 1);
+          }}
+          onSearchAgain={refetch}
         />
       )}
     </div>
@@ -281,6 +303,8 @@ interface BodyProps {
   readonly onSort: (sort: Sort) => void;
   readonly onPage: (page: number) => void;
   readonly onIncluded: () => void;
+  readonly onShowFilter: (field: "status" | "track") => void;
+  readonly onSearchAgain: () => void;
 }
 
 function ResultsBody({
@@ -301,6 +325,8 @@ function ResultsBody({
   onSort,
   onPage,
   onIncluded,
+  onShowFilter,
+  onSearchAgain,
 }: BodyProps) {
   const { parse } = controls;
   const current = parse !== null && parse.q === shownState.q && parse.mode === shownState.mode;
@@ -310,6 +336,15 @@ function ResultsBody({
       : [];
   const total = response.total;
   const pages = pageCount(total);
+  // Export and Save act on the search shown, so they are off while it isn't the searched query's (E1, S1)
+  const offReason = controls.dirty ? DRAFT_DIRTY_MESSAGE : dim ? STALE_EXPORT_MESSAGE : null;
+  const warnings: FieldWarning[] | null =
+    current && parse.filters !== null
+      ? (["status", "track"] as const).flatMap((f) => {
+          const w = fieldWarning(f, parse.filters as ParsedFilters, parse.defaults, response.facets[f]);
+          return w === null ? [] : [w];
+        })
+      : null;
   const zero = total === 0;
   return (
     <div className={dim ? "opacity-60" : undefined}>
@@ -327,6 +362,28 @@ function ResultsBody({
             <CopyButton text={response.index_version} label="Copy index version" />
             {searching && <span className="text-muted-foreground">Searching…</span>}
           </p>
+          <div className="flex flex-wrap items-start gap-2">
+            <ExportMenu
+              source={{
+                kind: "search",
+                q: shownState.q,
+                mode: shownState.mode,
+                indexVersion: response.index_version,
+                total,
+              }}
+              disabledReason={offReason}
+              warnings={warnings}
+              onShowFilter={onShowFilter}
+              onSearchAgain={onSearchAgain}
+            />
+            <SaveRecord
+              q={shownState.q}
+              mode={shownState.mode}
+              indexVersion={response.index_version}
+              total={total}
+              disabledReason={offReason}
+            />
+          </div>
           <p role="status" aria-live="polite" className="sr-only">
             {announcement}
           </p>

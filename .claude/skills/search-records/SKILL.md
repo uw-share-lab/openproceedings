@@ -149,6 +149,12 @@ A record must go (a legal request, personal data in `input`). With the API stopp
   ceilings). `GET /records/{id}?replay=false` is the stored record with `replay: null`, no run, one token,
   answered during `API_BUSY` (decision-014: the only v1 field allowed to become nullable).
 
+## The record page and the methods text (TASK-044; spec 05 §Components 8 *As built*)
+`frontend/src/components/record/record-view.tsx` reads `?replay=false` first and the replay second; the
+methods text (`frontend/src/lib/methods-text.ts`) and the record's exports (`/export?record_id=` only) wait for
+the replay, so a `mismatch` renders neither. Every number the page and the methods text show is a record field;
+`record-fixture.json` (real API answers, `backend/tests/contract/record_fixture.py`) pins them in the tests.
+
 ## The CLI: `op record save` / `op record replay` (task-083; spec 08 §CLI)
 - The same functions: `save` is `records.freeze` + `RecordStore.insert` (the record equals `POST /records`'s
   for the same query and index in every field but `record_id` and `searched_at`; tested), `replay` is

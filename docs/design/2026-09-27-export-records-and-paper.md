@@ -316,6 +316,33 @@ fields, following spec 05 §Components 8 verbatim (change it only by spec PR):
 Counts come from the record: identified = `total + excluded.total` and unclassified =
 `excluded.track.unknown + excluded.status.unknown` (see API fields needed).
 
+### As built (TASK-044)
+- **Export menu.** Menu-button semantics as specified; the heading and each warning are the `role=menu`'s
+  `aria-describedby`, and the warning's **Show the …filter** and the Covidence disclosure are outside the menu
+  (reached by Tab), since a menu holds only actions. The formats stay disabled ("Checking the query's filters…")
+  until `/parse` has reported on the shown query, so a status warning can't be missed by a fast click. A value
+  the clause admits but the export holds none of (facet 0) isn't listed; with none left, there is no warning.
+  The popup opens from the button's left edge. After a failed export the notice stays in the menu until the
+  next export starts.
+- **Save.** The request always carries the shown `index_version` (TASK-091), so SV-8 appears only if a 201
+  names another index anyway. A 422 on save lists the diagnostics in the panel ("The search couldn't be saved:
+  it no longer runs on this index.") rather than on the editor. The saved panel's non-reproduced status reuses
+  the record page's line.
+- **Record page.** The stored read (`?replay=false`) renders at once; the replay is then requested
+  automatically (no button: the e2e flow expects `reproduced` on arrival). The methods text and the exports are
+  drawn only once the replay has answered or failed to run, so a `mismatch` never shows them even briefly.
+  "Replay: waiting" (429, `API_BUSY`) and "Replay: not checked" (anything else) keep the recorded values,
+  methods text and exports, with Retry. The diff opens on request (it costs a replay). Default filters on the
+  page come from the same `/parse(canonical)` report as the methods text; under another query version the row
+  says they couldn't be separated.
+- **Strings added here that the copy deck doesn't have** (for the ux-writer): "Checking the query's filters…",
+  "Nothing was downloaded." (announcement), "Checking the record: re-running its search on this instance…",
+  "Replay: waiting / not checked — re-running this record's search to check it was refused just now (…): … The
+  recorded values below stand as recorded.", "Writing the methods text…", "Loading the search record…", "The
+  record couldn't be loaded just now: …", "Loading the differences…", "None on this page.", the save's
+  index-moved and 422 messages, the Default filters row's "Not separated from the canonical query here …", and
+  the methods-text variants listed in spec 05 §Components 8 *As built*.
+
 ## Paper page `/paper/[id]` (TASK-042)
 
 ### P1 Matched (reached from a hit)
