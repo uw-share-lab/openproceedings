@@ -288,6 +288,11 @@ describe("filter rewrites refuse what they cannot do exactly", () => {
     );
   });
 
+  it("refuses a rewrite one code point past MAX_QUERY_LENGTH (1,987 + 14)", () => {
+    const action = addWorkshop(1987);
+    refused(() => reduce(at(sourceOf(action)), action), "TOO_LONG");
+  });
+
   it("allows a rewrite that lands exactly on MAX_QUERY_LENGTH (1,986 + 14)", () => {
     const action = addWorkshop(1986);
     expect(codePointLength(reduce(at(sourceOf(action)), action).q)).toBe(MAX_QUERY_LENGTH);
@@ -605,6 +610,18 @@ describe("whyBlocked (controls are disabled with the reason, not refused after t
       clause: atEnd("track", "trust", DEFAULT_TRACKS),
     };
     expect(whyBlocked(at("trust"), include)?.code).toBe("ALREADY_INCLUDED");
+  });
+
+  it("rethrows an error that is not a SearchStateError (a bug is never shown as a disabled control)", () => {
+    const broken = {
+      type: "facetToggle",
+      field: "track",
+      value: "workshop",
+      get clause(): never {
+        throw new TypeError("boom");
+      },
+    } as unknown as SearchAction;
+    expect(() => whyBlocked(at("trust"), broken)).toThrow(TypeError);
   });
 });
 

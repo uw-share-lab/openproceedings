@@ -151,12 +151,23 @@ def lint_commands() -> None:
             err(f"{p.relative_to(ROOT)}: description is required")
 
 
+def tooling_markdown() -> list[Path]:
+    """Every .md under .claude/ except .claude/worktrees/ (gitignored agent checkouts, each a full copy of
+    the repo), pruned during the walk: filtering an rglob afterwards still walks those GBs."""
+    found: list[Path] = []
+    for directory, dirs, files in os.walk(C):
+        if Path(directory) == C:
+            dirs[:] = [d for d in dirs if d != "worktrees"]
+        found += [Path(directory) / f for f in files if f.endswith(".md")]
+    return sorted(found)
+
+
 def lint_refs(agents: set[str], skills: set[str], commands: set[str]) -> None:
     referenced: set[str] = set()
     agent_refs: set[str] = set()
     # .claude/worktrees/ holds gitignored agent checkouts, each a full copy of the repo; linting them
     # reports every file again under a path whose parts no longer match COMMAND_CONTEXT's exemptions.
-    in_repo = [p for p in C.rglob("*.md") if not p.is_relative_to(C / "worktrees")]
+    in_repo = tooling_markdown()
     sources = [*in_repo, ROOT / "CLAUDE.md", ROOT / "CONTRIBUTING.md"]
     for p in sources:
         if not p.exists() or p.is_relative_to(C / "learnings"):  # the journal, not the learnings skill

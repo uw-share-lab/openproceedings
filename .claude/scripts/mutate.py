@@ -31,13 +31,23 @@ TABLES = sorted(
     for p in [*ROOT.glob(".claude/hooks/tests/*.sh"), *ROOT.glob(".claude/scripts/tests/*.sh")]
 )
 IGNORE = shutil.ignore_patterns(
-    ".git", ".venv", "node_modules", "__pycache__", "data", ".ruff_cache", ".mypy_cache", "worktrees"
+    ".git", ".venv", "node_modules", "__pycache__", "data", ".ruff_cache", ".mypy_cache"
 )
+
+
+def _ignore(directory: str, names: list[str]) -> set[str]:
+    """IGNORE, plus .claude/worktrees/ (gitignored agent checkouts) — only there, not any `worktrees`."""
+    skip = set(IGNORE(directory, names))
+    if Path(directory).resolve() == (ROOT / ".claude").resolve() and "worktrees" in names:
+        skip.add("worktrees")
+    return skip
+
+
 ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}  # never touch the real repo
 
 
 def copy_tree(dest: Path) -> None:
-    shutil.copytree(ROOT, dest, ignore=IGNORE)
+    shutil.copytree(ROOT, dest, ignore=_ignore)
     if (ROOT / ".venv").exists():
         os.symlink(ROOT / ".venv", dest / ".venv")
 
