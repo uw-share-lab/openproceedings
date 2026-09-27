@@ -782,3 +782,11 @@ def test_a_parity_failure_logs_at_error_without_its_tokens(
     )
     (entry,) = [e for e in logged(capsys.readouterr().err) if e.get("event") == "cli_refused"]
     assert (entry["level"], entry["error"]) == ("WARNING", "IndexBuildError")
+
+
+@pytest.mark.parametrize("fmt", ["xml", "RIS", ""])
+def test_an_unknown_format_is_refused_by_header_and_entries_alike(fmt: str) -> None:
+    with pytest.raises(ValueError, match="unknown export format"):
+        export.header(fmt)
+    with pytest.raises(ValueError, match="unknown export format"):
+        export.entries(fmt, [], PROVENANCE)

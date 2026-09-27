@@ -67,7 +67,8 @@ Statuses and codes are exactly spec 04 §Error handling (the only table; the reg
 
 ## Exports are contract too
 The response headers `X-Total` (equal to the `/search` `total` for the same `q`) and `X-Index-Version`
-say exactly which set was exported. Exports are ordered by `id` and are never paginated or truncated. An
+say exactly which set was exported; `X-Tokenizer-Version` and `X-Query-Version` carry the other two
+versions a JSON response has in its body. Exports are ordered by `id` and are never paginated or truncated. An
 export started during an index hot-swap finishes on the index it began on. The field mapping of each
 format is pinned in `.claude/skills/ris-format/SKILL.md` and `.claude/skills/bibtex-format/SKILL.md`. CSV
 is one row per paper: the 01 schema columns plus `index_version` and `canonical_hash` provenance columns,

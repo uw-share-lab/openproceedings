@@ -2505,18 +2505,9 @@
     },
     "/api/v1/export": {
       "get": {
-        "description": "Every record the query matches, in `format`, from the pinned `index_version` (else the served index).\nNever paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and index.",
+        "description": "Every record the query matches, in `format`: of `q` (with `mode`, default `native`) on the pinned\n`index_version` (else the served index), or of the stored search record `record_id` (alone: its query,\nmode and index_version). Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same\nquery and index.",
         "operationId": "export",
         "parameters": [
-          {
-            "in": "query",
-            "name": "q",
-            "required": true,
-            "schema": {
-              "title": "Q",
-              "type": "string"
-            }
-          },
           {
             "in": "query",
             "name": "format",
@@ -2534,16 +2525,38 @@
           },
           {
             "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
             "name": "mode",
             "required": false,
             "schema": {
-              "default": "native",
-              "enum": [
-                "native",
-                "scholar"
+              "anyOf": [
+                {
+                  "enum": [
+                    "native",
+                    "scholar"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
               ],
-              "title": "Mode",
-              "type": "string"
+              "title": "Mode"
             }
           },
           {
@@ -2562,6 +2575,23 @@
               ],
               "title": "Index Version"
             }
+          },
+          {
+            "in": "query",
+            "name": "record_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(?:[A-Za-z0-9_-]{12})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Record Id"
+            }
           }
         ],
         "responses": {
@@ -2572,7 +2602,7 @@
               "application/x-research-info-systems": {},
               "text/csv": {}
             },
-            "description": "The entire matched set, ordered by id, with `X-Total` and `X-Index-Version`."
+            "description": "The entire matched set, ordered by id, with `X-Total`, `X-Index-Version`, `X-Tokenizer-Version` and `X-Query-Version`."
           },
           "default": {
             "content": {

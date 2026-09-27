@@ -134,3 +134,57 @@ def test_the_real_server_logs_one_access_line_per_request_and_nothing_else_of_uv
     assert not [line for line in lines if line["logger"] == "uvicorn.access"]
     assert any(line["logger"].startswith("uvicorn") for line in lines)  # uvicorn's own lines, as JSON
     assert SECRET not in stream.getvalue()
+
+
+EVERYTHING = (
+    "year:1900..2100 track:(main OR datasets_benchmarks OR position OR workshop OR competition OR tiny_papers"
+    " OR blogpost OR other OR unknown) status:(accepted OR rejected OR withdrawn OR desk_rejected OR unknown)"
+)
+
+
+def requests_in(stream: io.StringIO, n: int) -> list[dict[str, Any]]:
+    deadline = time.monotonic() + 20  # the access line is written once the response is done
+    while time.monotonic() < deadline:
+        lines = [json.loads(line) for line in stream.getvalue().splitlines()]
+        found = [line for line in lines if line["event"] == "request"]
+        if len(found) >= n:
+            return found
+        time.sleep(0.02)
+    raise AssertionError("no access line")
+
+
+def test_a_client_that_leaves_mid_export_is_logged_as_disconnected_not_complete(
+    running: tuple[int, io.StringIO],
+) -> None:
+    """The whole 5k corpus as JSONL is megabytes: the client reads a little and hangs up. The access line
+    must not read as a complete export (task-036 review S5), and nothing is logged as a failure of ours."""
+    import socket
+
+    port, stream = running
+    query = urllib.parse.urlencode({"q": EVERYTHING, "format": "jsonl"})
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)  # so the server can't hand it all over
+    sock.connect(("127.0.0.1", port))
+    sock.sendall(f"GET /api/v1/export?{query} HTTP/1.1\r\nHost: localhost\r\n\r\n".encode())
+    assert sock.recv(1024).startswith(b"HTTP/1.1 200")
+    sock.close()
+    (line,) = requests_in(stream, 1)
+    assert line["route"] == "/api/v1/export" and line["status"] == 200
+    assert line["client_disconnected"] is True and "aborted" not in line
+    lines = [json.loads(x) for x in stream.getvalue().splitlines()]
+    assert not [x for x in lines if x["level"] == "ERROR"]  # not our failure, and not uvicorn's either
+
+
+def test_a_complete_export_through_the_real_server_carries_neither_flag(
+    running: tuple[int, io.StringIO],
+) -> None:
+    port, stream = running
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=20)
+    try:
+        conn.request("GET", "/api/v1/export?" + urllib.parse.urlencode({"q": "trust", "format": "ris"}))
+        r = conn.getresponse()
+        assert r.status == 200 and r.read()
+    finally:
+        conn.close()
+    (line,) = requests_in(stream, 1)
+    assert "client_disconnected" not in line and "aborted" not in line

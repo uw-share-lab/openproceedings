@@ -57,8 +57,8 @@ translations that changed later cannot alter the replay.
 
 ## As built (task-037)
 - Code: `backend/src/openproceedings/records.py` (`ids_hash`, `SearchRecord`, `identify`, `freeze`,
-  `RecordStore`, `replay`), `api/records.py` (routes and the `/export` hook), `api/pinned.py` (older indexes,
-  loaded on demand read-only). Tests: `backend/tests/unit/test_records.py` (known answers, triggers,
+  `RecordStore`, `replay`), `api/records.py` (routes and the `/export` hook), `IndexState.pinned` in `api/state.py`
+  (older indexes, loaded on demand read-only; the one loader, shared with `/export`). Tests: `backend/tests/unit/test_records.py` (known answers, triggers,
   concurrency) and `backend/tests/contract/test_records.py` (the replay matrix, diff, errors, logs).
 - `identify` is the one membership computation, at save and at replay: `search.run` (so `total`/`excluded`
   equal `/search`'s) plus `match_ids`.

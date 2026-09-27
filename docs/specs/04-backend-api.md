@@ -13,7 +13,9 @@ reviews without the UI.
 - Base path `/api/v1`. JSON. Pydantic v2 models are the contract. The OpenAPI schema is exported to
   `frontend/src/api/schema.ts` via codegen, so the two sides can't drift. CI fails if the generated file is
   stale.
-- Every response carries `index_version`, `tokenizer_version` and `query_version`. `query_version` versions
+- Every response carries `index_version`, `tokenizer_version` and `query_version`. A JSON response carries
+  them in the body. A non-JSON response (an export) carries them as `X-Index-Version`, `X-Tokenizer-Version`
+  and `X-Query-Version` headers, exposed to CORS. `query_version` versions
   the query *semantics* that live outside the index: the parser, the compiler (NEAR/slop, wildcard rules),
   the default-filter set and the `source:` alias table. It is bumped by the same rule as
   `TOKENIZER_VERSION` (03): whenever some query could mean something different.
@@ -37,7 +39,7 @@ reviews without the UI.
 | `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side). Called as you type, debounced. |
 | `GET` | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | `GET` | `/papers/{id}` | The full record, provenance included |
-| `GET` | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl`, optional `record_id` **or** `index_version` → a stream of the **entire** matched set, ordered by `id`, served from the pinned index. A `record_id` whose replay status is `mismatch` is refused (409 `API_RECORD_MISMATCH`) |
+| `GET` | `/export` | `format=ris\|csv\|bibtex\|jsonl` and either `q` (with `mode` and an optional `index_version`) or `record_id` alone → a stream of the **entire** matched set, ordered by `id`, served from the pinned index. A `record_id` whose replay status is `mismatch` is refused (409 `API_RECORD_MISMATCH`) |
 | `POST` | `/records` | Freezes a search as an immutable **search record** → `{record_id, url}` |
 | `GET` | `/records/{id}` | The stored record, plus a replay check (see below) |
 | `GET` | `/records/{id}/diff` | For a `drifted` record: added and removed ids (with titles), and which `index_version` inputs changed |
@@ -175,7 +177,8 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   Each format is checked round-trip to its ids; BibTeX also against the pinned `refaudit==0.4.9`. `op
   export` counts what it wrote against the query's total before renaming its temporary file into place.
 - Exports stream, and are not paginated or truncated. The response headers `X-Total` (equal to the search's
-  `total`) and `X-Index-Version` say exactly which set was exported. An export started during an index
+  `total`) and `X-Index-Version` say exactly which set was exported (with `X-Tokenizer-Version` and
+  `X-Query-Version`). An export started during an index
   hot-swap finishes on the index it began on.
 - An export pinned by `record_id` to a record whose replay status is `mismatch` is refused with 409
   `API_RECORD_MISMATCH` (§Error handling): a set that breaks guarantee 4 is never handed to screening.
@@ -209,8 +212,8 @@ The record page (05) is what a methods section cites. Records are stored in `dat
 (append-only, backed up with the snapshots).
 
 As built (task-037; `backend/src/openproceedings/records.py` holds the record, `ids_hash`, the store and the
-replay, so a later `op record` calls the same functions; `api/records.py` is the transport, `api/pinned.py`
-loads older indexes):
+replay, so a later `op record` calls the same functions; `api/records.py` is the transport, `IndexState.pinned`
+in `api/state.py` loads older indexes):
 - **`POST /records`** takes `{q, mode}` (no other keys) and answers **201** `{record_id, url, index_version,
   tokenizer_version, query_version}`. `url` is the record page's path, `/record/<record_id>` (05 §Pages),
   relative to the site. The query is refused exactly as `/search` refuses it (422 with diagnostics,
@@ -252,8 +255,9 @@ loads older indexes):
 - **Pinned indexes** load on demand, read-only, by the served index's rules (`state.index_path`: an
   index_version resolving to itself directly under `<data_dir>/indexes/`; never `resolve_snapshot`), and
   are opened (verified) by the same engine class, so "available" means loadable by this code: an index built
-  with another tokenizer or schema version is not, and its records replay as `drifted`. Two are held
-  (least recently used dropped). An unloadable one is one WARNING line `pinned_index_unavailable`.
+  with another tokenizer or schema version is not, and its records replay as `drifted`. The loader is
+  `IndexState.pinned` (§Implementation notes, pinned indexes: the LRU, the remembered refusals and the log
+  level per reason).
 - **`GET /records/{id}/diff`** answers `{…versions, record_id, status, recorded_index_version, changed,
   added: [{id, title}], removed: [{id, title}], membership_identical}` for any status. A title comes from the
   index the replay ran on, else the record's pinned index; null when no index here holds the paper.
@@ -428,35 +432,53 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     `coverage_computed` INFO line is written per load.
   - Not yet: which statuses a venue-year's sources *can* contain (spec 07 §C "statuses indexed") and crawl
     dates per source; neither is in the manifest (task-082).
-- As built (task-036, `api/export.py`):
-  - `GET /export` takes `q` (required), `format` (`ris` | `csv` | `bibtex` | `jsonl`, required), `mode`
-    (default `native`) and `index_version` (optional). Its body is the bytes `op export` writes for the same
-    query, index and UTC date: both run `export.header` and `export.entries` over
-    `TantivyEngine.documents`, and a contract test compares them for every format. Records are sent in
-    chunks of about 64 KiB.
-  - Everything that can refuse happens before the first byte, in the one envelope: the length cap and the
-    parse (422 with diagnostics), the pin, every wildcard's expansion (422 `WILDCARD_TOO_MANY_EXPANSIONS`,
-    each over-cap wildcard located in `q` by `search.expanded`, as `/search` does), then the one collection
-    of the match set that gives `X-Total`. Then a sync generator streams from the engine the request took,
-    so an export started before a hot swap finishes on its index (contract test). A failure after the
-    first byte is logged by the last catch and marks the access line `aborted: true`. A stream whose
-    record count differs from `X-Total` fails the same way after its last record; it never ends as if
-    complete.
-  - Headers: `X-Total`, `X-Index-Version`, `Content-Disposition: attachment;
-    filename="openproceedings-<index_version>-<first 12 of canonical_hash>.<ext>"` (`ris`, `csv`, `bib`,
-    `jsonl`), and `Content-Type` `application/x-research-info-systems`, `text/csv`, `application/x-bibtex`
-    or `application/x-ndjson`, each with `; charset=utf-8`. The access line carries `canonical_hash`,
-    `total` and the `index_version` exported.
+- As built (task-036, `api/export.py`; review fixes 2026-09-27):
+  - `GET /export` takes either `q` (with `mode` and an optional `index_version`) or `record_id` alone;
+    `format` (`ris` | `csv` | `bibtex` | `jsonl`) is always required. With `record_id`, the query, mode and
+    index_version are the stored record's (its `canonical`, parsed as native syntax, as its replay runs
+    it); passing `q`, `mode` or `index_version` as well is 422 `API_BAD_PARAM`, as is neither `q` nor
+    `record_id`. `mode` defaults to `native`. The body is the bytes `op export` writes for the same query,
+    index and UTC date: both run `export.header` and `export.entries` over `TantivyEngine.documents`, and a
+    contract test compares them for every format. Records are sent in chunks of whole records, each at most
+    `CHUNK` (64 Ki characters) plus one record (a contract test reads the ASGI messages).
+  - Everything that can refuse happens before the first byte, in the one envelope: the parameters, the
+    length cap and the parse (422 with diagnostics), a record's replay (`api.records.require_citable`: 404
+    `API_RECORD_NOT_FOUND`, 409 `API_RECORD_MISMATCH` for a `mismatch`), the pin, every wildcard's expansion
+    (422 `WILDCARD_TOO_MANY_EXPANSIONS`, each over-cap wildcard located in `q` by `search.expanded`, as
+    `/search` does), then the one collection of the match set that gives `X-Total`. Then a sync generator
+    streams from the engine the request took, so an export started before a hot swap finishes on its index
+    (contract test). A failure after the first byte is logged by the last catch and marks the access line
+    `aborted: true`. A stream whose record count is below or above `X-Total` fails the same way after its
+    last record; it never ends as if complete. A client that hangs up mid-stream is `client_disconnected:
+    true` on the access line (tested through uvicorn).
+  - Headers: `X-Total`, `X-Index-Version`, `X-Tokenizer-Version`, `X-Query-Version` (all exposed to CORS),
+    `Content-Disposition: attachment; filename="openproceedings-<index_version>-<first 12 of
+    canonical_hash>.<ext>"` (`ris`, `csv`, `bib`, `jsonl`), and `Content-Type`
+    `application/x-research-info-systems`, `text/csv`, `application/x-bibtex` or `application/x-ndjson`,
+    each with `; charset=utf-8`. The access line carries `canonical_hash`, `total` and the `index_version`
+    exported.
   - `index_version` must look like one (`[0-9a-f][0-9a-f-]{0,63}`; `current` is not a version), else 422
-    `API_BAD_PARAM`. The served version is the served engine. Any other is `IndexState.pinned`: it resolves
-    `<data_dir>/indexes/<v>` exactly as the configured index is (`state.index_path`; never
-    `cli.resolve_snapshot`), refuses a name that resolves to another directory (an alias symlink) or whose
-    manifest names another version, opens it read-only once (`index_pinned_opened` INFO) and keeps one such
-    engine besides the served one. Not on this instance: 409 `API_INDEX_VERSION_UNAVAILABLE`. A pinned
-    index that fails verification is a 500.
-  - `record_id` is not accepted yet (task-037): it will resolve to the record's `index_version` in
-    `export.pinned_engine`, before the stream starts, with 409 `API_RECORD_MISMATCH` for a `mismatch`
-    record.
+    `API_BAD_PARAM`. The served version is the served engine; any other comes from `IndexState.pinned`
+    (§Implementation notes, pinned indexes). Anything but `ok` is 409 `API_INDEX_VERSION_UNAVAILABLE`:
+    absent, unloadable by this code, or tampered with (a copied or changed directory). **Chosen: 409, not
+    500**, for a pinned index that fails verification: from the client's side that version is not
+    available here; the ERROR line tells the operator why.
+- Pinned indexes (task-036/037 review; `api/state.py`): `IndexState.pinned(version) -> Pinned(engine,
+  reason)` is the one loader, for exports and for a record's replay and diff (`api/records.py` passes
+  `lambda v: state.pinned(v).engine`). `reason` is `ok`, `absent` (not a version directory here, or a
+  name that resolves to another directory, such as an alias symlink or `current`; DEBUG, since a client can
+  name any version), `unloadable` (`EngineInternalError`: another tokenizer, schema or Tantivy version; or a
+  `ValueError`, `OSError` or `RuntimeError` from Tantivy or the filesystem; one WARNING) or `tampered`
+  (`IndexBuildError` from verification, or an engine that reports another version; one ERROR). Each refusal
+  is one `pinned_index_unavailable` line with `index_version`, `reason` and the error type, then remembered
+  for `ApiConfig.pinned_refusal_seconds` (default 300; at most 256 held) or until the next reload
+  (SIGHUP), so a broken or stale index is not re-verified per request. Engines are held in an LRU of
+  `ApiConfig.pinned_indexes` (default 4; size it to the versions the instance holds). A cache hit takes only
+  the short map lock, never a lock an open holds; opens of different versions run side by side, and one
+  version asked for at once is opened once. An engine dropped from the LRU stays alive while a stream still
+  holds it, so memory is bounded by the LRU plus the exports in flight (each costs `export_weight` of the
+  rate limit). `GET /meta`'s `index_versions` leaves out a version this code can't serve (its manifest's
+  tokenizer, schema or Tantivy version, read without re-hashing) and one currently refused.
 
 ## Testing
 

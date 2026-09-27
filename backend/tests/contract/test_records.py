@@ -336,7 +336,7 @@ def test_a_changed_snapshot_with_the_pinned_index_gone_is_drifted_with_exact_cou
     # the removed papers are in no index this instance holds (the pinned one is gone): titles are null
     assert diff["removed"] == [{"id": i, "title": None} for i in removed]
     assert mismatch_lines(logs) == []
-    assert any(x["event"] == "pinned_index_unavailable" and x["level"] == "WARNING" for x in logs())
+    assert any(x["event"] == "pinned_index_unavailable" and x["reason"] == "absent" for x in logs())
 
 
 def test_diff_titles_removed_papers_from_the_pinned_index_when_it_is_still_here(

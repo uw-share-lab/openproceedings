@@ -49,6 +49,12 @@ class ApiConfig(BaseModel):
     # local dev only: lets the log formatter keep query-text fields (spec 04). No log call passes one today
     # (the access line never carries q), so it changes nothing until one does.
     log_query_text: bool = False
+    # pinned index_versions (an export's `index_version`, a record's replay): engines held open besides the
+    # served one, least recently used dropped first; size it to the versions the instance holds
+    pinned_indexes: int = Field(default=4, ge=1)
+    # how long a refused pin (absent, unloadable, tampered) is remembered before it is checked again; a
+    # SIGHUP reload forgets every refusal at once
+    pinned_refusal_seconds: float = Field(default=300.0, gt=0)
     load_in_background: bool = True  # /healthz answers (index_loaded false) while the index loads
     handle_sighup: bool = True  # SIGHUP reloads `index` and swaps it in (main thread only)
 

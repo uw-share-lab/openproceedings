@@ -43,7 +43,8 @@ ROUTERS: tuple[APIRouter, ...] = (
     coverage.router,
     export.router,
 )
-EXPOSED_HEADERS = ("X-Total", "X-Index-Version", "Retry-After")  # spec 04 §Exports, §Error handling
+# spec 04 §Conventions, §Exports, §Error handling
+EXPOSED_HEADERS = ("X-Total", "X-Index-Version", "X-Tokenizer-Version", "X-Query-Version", "Retry-After")
 
 
 def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
@@ -53,7 +54,13 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
         from openproceedings.engine.tantivy_engine import TantivyEngine
 
         opener = TantivyEngine
-    state = IndexState(config.data_dir, config.index, opener)
+    state = IndexState(
+        config.data_dir,
+        config.index,
+        opener,
+        keep_pinned=config.pinned_indexes,
+        refusal_seconds=config.pinned_refusal_seconds,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -82,7 +89,7 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
     )
     app.state.index = state
     app.state.config = config
-    records.install(app, config.data_dir, opener)
+    records.install(app, config.data_dir, state)
     install_error_handlers(app)
     for router in ROUTERS:
         if router.prefix != API_PREFIX:
