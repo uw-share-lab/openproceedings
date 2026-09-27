@@ -1,0 +1,89 @@
+TY  - CPAPER
+TI  - 𝒪(log n) Regret for 𝔽-Divergence Bandits
+AU  - Varga, Eszter
+AU  - Mensah, Kofi
+PY  - 2024
+T2  - International Conference on Learning Representations (ICLR 2024)
+UR  - https://openreview.net/forum?id=Xq7Lm2Pz9A
+UR  - https://openreview.net/pdf?id=Xq7Lm2Pz9A
+ID  - op:iclr:2024:Xq7Lm2Pz9A
+KW  - main
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · 2026-09-27
+ER  - 
+
+TY  - CPAPER
+TI  - Calibrated Trust in Language-Model Assistants Under Distribution Shift
+AB  - People rely on language-model assistants more when the assistant sounds confident, whether or not it is right. We study how that reliance changes under distribution shift, where the assistant's accuracy drops but its stated confidence does not. In three preregistered experiments (N = 1,204) we find that verbalised uncertainty reduces over-reliance by 23% without reducing appropriate reliance, and that the effect survives a shift in task domain.
+AU  - Lindqvist, Maja
+AU  - Okonkwo, Adaeze
+AU  - Park, Joon-ho
+PY  - 2025
+T2  - International Conference on Learning Representations (ICLR 2025)
+UR  - https://openreview.net/forum?id=bT4kR8sW1n
+UR  - https://openreview.net/pdf?id=bT4kR8sW1n
+ID  - op:iclr:2025:bT4kR8sW1n
+KW  - main
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · 2026-09-27
+ER  - 
+
+TY  - CPAPER
+TI  - Sample-Efficient Evaluation of Human-AI Teams
+AB  - Evaluating a human-AI team is expensive because every data point needs a person. We propose an adaptive design that chooses which items to show next, and prove that it estimates team accuracy within $\epsilon$ using $O(\log(1/\delta)/\epsilon^2)$ items. On two crowdsourced tasks it matches the full evaluation with 38% of the annotations.
+AU  - Okafor, Chidi
+AU  - Brennan, Siobhán
+PY  - 2023
+T2  - International Conference on Machine Learning (ICML 2023)
+UR  - https://proceedings.mlr.press/v202/okafor23a/okafor23a.pdf
+UR  - https://proceedings.mlr.press/v202/okafor23a.html
+ID  - op:icml:2023:pmlr-v202-okafor23a
+KW  - main
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · 2026-09-27
+ER  - 
+
+TY  - CPAPER
+TI  - Learning When to Defer to an Expert
+AB  - A classifier that may defer a decision to a human expert should do so when the expert is more likely to be right. We give a consistent surrogate loss for learning the classifier and the deferral rule jointly, and show on three medical imaging tasks that the joint system is more accurate than either the classifier or the expert alone.
+AU  - Moreau, Élodie
+AU  - Tanaka, Hiroshi
+PY  - 2017
+T2  - Conference on Neural Information Processing Systems (NIPS 2017)
+UR  - https://proceedings.neurips.cc/paper_files/paper/2017/hash/3f9a1c0d5e7b2a4c6d8e0f1a2b3c4d5e-Abstract.html
+ID  - op:neurips:2017:nips-3f9a1c0d5e7b2a4c6d8e0f1a2b3c4d5e
+KW  - main
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · 2026-09-27
+ER  - 
+
+TY  - CPAPER
+TI  - Explanations That Help: A Benchmark for Appropriate Reliance
+AB  - Explanations are meant to help people decide when to follow an AI's advice. We release a benchmark of 14 decision tasks with ground truth, human baselines and a protocol for measuring appropriate reliance, and evaluate nine explanation methods. None improves appropriate reliance over showing the model's confidence alone.
+AU  - Şahin, Elif
+AU  - Nguyễn, Thị Hương
+AU  - Zhang, Yíhán
+AU  - O'Neill, Aoife
+AU  - García-López, Mateo
+AU  - Van der Berg, Pieter
+AU  - Kowalczyk, Łukasz
+PY  - 2023
+T2  - Conference on Neural Information Processing Systems (NeurIPS 2023)
+UR  - https://openreview.net/forum?id=Hn3vQ6eYt0
+UR  - https://openreview.net/pdf?id=Hn3vQ6eYt0
+ID  - op:neurips:2023:Hn3vQ6eYt0
+KW  - main
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · 2026-09-27
+ER  - 
+
+TY  - CPAPER
+TI  - TrustBench: Measuring Over-Reliance on AI Advice at Scale
+AB  - We introduce TrustBench, a dataset of 52,000 human decisions made with and without AI advice across 11 domains, and use it to compare six measures of over-reliance.
+AU  - Adeyemi, Tolu
+AU  - Fischer, Lena
+PY  - 2024
+T2  - Conference on Neural Information Processing Systems (NeurIPS 2024)
+UR  - https://openreview.net/forum?id=Rk2wP5dLx8
+UR  - https://openreview.net/pdf?id=Rk2wP5dLx8
+DO  - 10.5555/trustbench.2024.001
+ID  - op:neurips:2024:Rk2wP5dLx8
+KW  - datasets_benchmarks
+N1  - openproceedings fixture0000a · query 0000000000000000000000000000000000000000000000000000000000000000 · 2026-09-27
+ER  - 
+

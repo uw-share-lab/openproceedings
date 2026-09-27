@@ -75,14 +75,57 @@ rewrites the query (guarantee 3). No hidden facet state exists.
 
 ## Exports (built to be imported into Covidence)
 
-- **RIS:** `TY JOUR`/`CPAPER`, `TI`, `AB` (full), `AU` (one line each), `PY`, `T2` (for example "International
-  Conference on Learning Representations (ICLR 2025)"), `UR` (forum then pdf), `DO` if present, `ID` (the openproceedings paper id, so exports round-trip), `KW`
+- **RIS:** `TY  - CPAPER`, `TI`, `AB` (full), `AU` (one line each), `PY`, `T2` (the venue string below), `UR` (forum then pdf), `DO` if present, `ID` (the openproceedings paper id, so exports round-trip), `KW`
   track, and `N1` = `openproceedings <index_version> · query <canonical_hash> · <UTC date>`. Checked against
-  the RIS parser venuetriage already uses, plus one fixture imported into Covidence by hand.
+  the RIS parser venuetriage already uses, plus one fixture imported into Covidence by hand
+  (`docs/results/2026-09-27-covidence-check.md`, **pending**).
+- **`TY` is `CPAPER`, not `JOUR`** (task-004). Every exported paper is a conference paper. Zotero's RIS
+  translator (`RIS.js`, 2026-01-05) imports `CPAPER` as `conferencePaper` and puts `T2` in its
+  `conferenceName`; a `JOUR` would become a `journalArticle` with the conference in `publicationTitle`.
+  EndNote reads `CPAPER` as *Conference Paper*. EndNote's default duplicate check compares Author, Year and
+  Title *within one reference type*, so a copy of the same paper exported as `JOUR` or `CONF` by another
+  database is only caught if the Reference Type box is unticked in its Duplicates preferences. Covidence
+  matches duplicates on title, year, volume and authors, not on type
+  ([Covidence FAQ](https://support.covidence.org/help/how-does-covidence-detect-duplicates)). Whether
+  Covidence shows every `CPAPER` field, and whether our empty volume blocks a match against a copy that has
+  one, is the hand check above. Its fixture is pinned byte for byte by
+  `backend/tests/unit/test_covidence_fixture.py`.
+- **Venue string** (`T2`, and BibTeX `booktitle`; task-004): `<conference name> (<acronym that year> <year>)`,
+  one string per venue and year whatever the track or status, so every copy of a venue-year reads alike and
+  `PY` equals the year it names. It is the conference's name, not a proceedings title ("Advances in Neural
+  Information Processing Systems 36", "Proceedings of the 40th International Conference on Machine
+  Learning"): an export also holds workshop, rejected and withdrawn papers, and all of ICLR, which no
+  proceedings volume contains. The table is `CONFERENCES` in `export.py`; `venue_name()` refuses a year before
+  the venue was held, so an `op export --out` leaves no file.
+
+  | Venue | Years | String |
+  |---|---|---|
+  | NeurIPS | 1987–2017 | `Conference on Neural Information Processing Systems (NIPS <year>)` |
+  | NeurIPS | 2018 on | `Conference on Neural Information Processing Systems (NeurIPS <year>)` |
+  | ICLR | 2013 on | `International Conference on Learning Representations (ICLR <year>)` |
+  | ICML | 1988 on | `International Conference on Machine Learning (ICML <year>)` |
+
+  This covers every year the sources can yield, and every year each venue was held under its name (spec 01
+  §Sources: NeurIPS proceedings for all years, from 1987; ICLR from 2018 on OpenReview; ICML from 2020 on PMLR,
+  whose first ICML volume is 2013's v28; the crawl's earliest year is TASK-049, proposed 2018). Sources,
+  checked 2026-09-27: [proceedings.neurips.cc](https://proceedings.neurips.cc/) labels 1987–2017 "NIPS" and
+  2018 on "NeurIPS"; the board announced the new acronym on 16 November 2018, before that December's
+  meeting ([Synced, 2018-11-19](https://syncedreview.com/2018/11/19/name-flip-flop-nips-is-now-neurips/));
+  [neurips.cc](https://neurips.cc/) calls 2026 "The Fortieth Annual Conference on Neural Information
+  Processing Systems" (so 1987 is the first). [iclr.cc](https://iclr.cc/About) lists its conferences from 2013.
+  [icml.cc](https://icml.cc/) calls 2026 the "Forty-Third International Conference on Machine Learning" and
+  PMLR's v202 is the 40th (2023), so, counting back annually, 1988 is the 5th, the first held as a conference
+  (the earlier meetings were workshops). `backend/tests/unit/test_export.py` pins each era's first year, the
+  rename and recent years by hand, and every venue from 2013 to 2026.
 - **CSV:** one row per paper, the columns of the schema in 01 plus `index_version` and `canonical_hash`
   provenance columns, UTF-8 with a BOM (so Excel opens it
   correctly).
-- **BibTeX:** `@inproceedings`. Keys are `<firstauthorlast><year><firsttitleword>`, de-duplicated with a/b.
+- **BibTeX:** `@inproceedings`. Keys are `<firstauthorlast><year><firsttitleword>`, de-duplicated with a/b:
+  the first paper with a key keeps it bare, and each later one, in id order, takes the next suffix not yet
+  issued in the file (decision-007: what Better BibTeX and JabRef do, and it streams). Keys are unique per file,
+  not identifiers. A superset export keeps every earlier key when the added papers sort after them in id
+  order; an added paper that sorts first takes the bare key and shifts the rest. Merge successive exports on
+  `openproceedings_id`, not on the key. `booktitle` is the venue string above.
   Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC date>}`.
   Every entry carries `openproceedings_id = {<id>}`, so a round-trip recovers the id of every record,
   proceedings-only (PMLR, NeurIPS) ones included. Output must pass `refaudit.bibtex.parse_string` (the pinned `refaudit` PyPI package).
