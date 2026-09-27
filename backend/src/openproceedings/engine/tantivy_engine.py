@@ -66,13 +66,19 @@ class TantivyEngine:
     only once it is complete, never mutated after. A clear or a lost race only costs a recomputation, which
     gives the same value, so concurrent searches never see each other's partial work (guarantee 4).
     The design relies only on each single dict operation being atomic, which holds under the GIL and on
-    free-threaded builds (3.13t) alike; never iterate a memo, or check-then-act across two operations."""
+    free-threaded builds (3.13t) alike; never iterate a memo, or check-then-act across two operations.
+    Each memo's size budget is kept by an append-only ledger (`charges`), lock-free as well: see `_trim`."""
 
-    # each memo is cleared when it grows past its bound, so a long-running API never grows it without limit
-    # (the check and the clear aren't atomic: racing threads may clear twice, or overshoot by a few entries)
-    MAX_COMPILED = 1_000
-    MAX_VERIFIED = 1_000
-    MAX_EXPANDED = 10_000
+    # Each memo is bounded by what it holds, not by its entry count (a verified entry can hold every id in the
+    # index, ~5 MB on 80k): it is cleared once the weights charged to it since its last clear pass its budget.
+    # Weights, in ids/terms (~60 bytes each as Python strings): a verified clause, its ids + 1; an expansion,
+    # its terms + 1 (an over-cap count, 1); a compiled query, `Compiled.held` + 1 (the ids and terms inside its
+    # Tantivy query, plus its explain lines). So ≲ 30 + 30 + 6 MB per engine, and the API holds the served
+    # engine plus `pinned_indexes` more. A memo exceeds its budget only by what compiles in flight store (one
+    # entry per thread), never more: see `_trim`.
+    MAX_COMPILED_UNITS = 500_000
+    MAX_VERIFIED_IDS = 500_000
+    MAX_EXPANDED_TERMS = 100_000
 
     def __init__(self, path: Path) -> None:
         manifest = verify_index(path)
@@ -88,6 +94,9 @@ class TantivyEngine:
         self.verified: dict[tuple[str, str], list[str]] = {}  # position-verified clauses, per engine
         # each wildcard's terms, or just the count of an over-cap one
         self.expanded: dict[tuple[str, str], tuple[str, ...] | int] = {}
+        # each memo's ledger: the weight of every entry stored since its last clear (see `_trim`)
+        self.charges: dict[str, list[int]] = {"compiled": [], "verified": [], "expanded": []}
+        self.tallied: dict[str, tuple[list[int], int, int]] = {}  # each ledger's running sum (see `_trim`)
 
     @property
     def universe(self) -> frozenset[str]:
@@ -109,9 +118,9 @@ class TantivyEngine:
                         found.add(term)
             # an over-cap stem keeps only its count: a refused query never holds its terms in memory
             terms = tuple(sorted(found)) if len(found) <= MAX_EXPANSIONS else len(found)
-            if len(self.expanded) > self.MAX_EXPANDED:
-                self.expanded.clear()
+            self._trim("expanded", self.expanded, self.MAX_EXPANDED_TERMS)
             self.expanded[key] = terms
+            self.charges["expanded"].append(1 if isinstance(terms, int) else len(terms) + 1)
         if isinstance(terms, int) or len(terms) > MAX_EXPANSIONS:  # checked on every call, cached or not
             count = terms if isinstance(terms, int) else len(terms)
             raise EngineInputError(
@@ -232,15 +241,40 @@ class TantivyEngine:
         hit = self.compiled.get(key)  # one read: the memo may be cleared by another thread at any time
         if hit is not None:
             return self._copy(hit)
-        if len(self.verified) > self.MAX_VERIFIED:
-            self.verified.clear()
-        if len(self.compiled) > self.MAX_COMPILED:
-            self.compiled.clear()
+        self._trim("verified", self.verified, self.MAX_VERIFIED_IDS)
+        self._trim("compiled", self.compiled, self.MAX_COMPILED_UNITS)
         compiled = Compiler(
             self.index.schema, self.expansions(ast), self.read, self.verified, self.ranking["field_weights"]
         ).compile(ast)
         self.compiled[key] = compiled
+        self.charges["compiled"].append(compiled.held + 1)
+        if compiled.stored:
+            self.charges["verified"].append(compiled.stored)
         return self._copy(compiled)
+
+    def _trim(self, name: str, memo: dict[Any, Any], budget: int) -> None:
+        """Clear `memo` once the weights charged to it since its last clear pass `budget`.
+
+        Lock-free, under task-080's rules, and every race errs towards clearing early, never towards holding
+        more than the budget plus what the compiles in flight store: a charge is one `list.append` (atomic, so
+        concurrent charges are never lost, as `+=` on a counter can be), made after its entry is stored; a
+        clear swaps in a new ledger *before* clearing the memo, so an entry stored in between is charged to the
+        new ledger although the clear removes it (an over-count), and one stored after is charged normally. Two
+        threads may both see the ledger over budget and clear twice, which only costs recomputation. The ledger
+        is a list, not a memo: slicing it while another thread appends sees that charge or doesn't. The sum is
+        kept incrementally, so a check costs only the charges since the last one: `tallied` holds (ledger,
+        items summed, their sum), one tuple rebound whole, so a thread that stores an older tally only makes
+        the next check sum more; a tally of a swapped-out ledger is ignored."""
+        ledger = self.charges[name]
+        seen, count, total = self.tallied.get(name, (None, 0, 0))
+        if seen is not ledger:
+            count, total = 0, 0
+        new = ledger[count:]  # one slice: charges appended after it are summed by the next check
+        count, total = count + len(new), total + sum(new)
+        self.tallied[name] = (ledger, count, total)
+        if total > budget:
+            self.charges[name] = []  # first: see above
+            memo.clear()
 
     @staticmethod
     def _copy(compiled: Compiled) -> Compiled:

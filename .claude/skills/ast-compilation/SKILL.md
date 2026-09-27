@@ -54,7 +54,11 @@ on a synthetic 80k index stopword cases take 2.3–3.3 s cold and the wildcard-p
 10.1 s (`docs/results/2026-09-27-bench.md`); its candidate
 query holds each distinct item once, so a repeated term isn't scored twice. `facets` compiles each distinct
 filter-free query once, and the engine memoises every verified clause (per field), so facets after a match
-cost 0.1–0.3 s on 80k. The memos (`compiled`, `verified`, `expanded`; bounds `TantivyEngine.MAX_*`) are
+cost 0.1–0.3 s on 80k. The memos (`compiled`, `verified`, `expanded`) are bounded by what they hold, not
+by entry count (one verified clause can hold every id): `TantivyEngine.MAX_VERIFIED_IDS`, `MAX_EXPANDED_TERMS`
+and `MAX_COMPILED_UNITS` budget the ids/terms charged to each, and a memo is cleared once its append-only ledger
+(`charges`, summed incrementally; `_trim`) passes its budget — every race over-counts, never under
+(`tests/unit/engine/test_memo_budget.py`). They are
 shared by the API's thread pool with no lock (task-080): read an entry with one `.get()`, never `in` then
 `[key]` (another thread may clear the memo between them), and store an entry only once it is complete. Every
 value is a pure function of its key and the immutable index, so a clear or a lost race only recomputes the

@@ -102,7 +102,7 @@ def index_path(tmp_path: Path) -> Path:
 @pytest.fixture
 def engine(index_path: Path, monkeypatch: pytest.MonkeyPatch) -> TantivyEngine:
     # bound 0: every miss clears the memo, so reads race clears as often as they can
-    for bound in ("MAX_COMPILED", "MAX_VERIFIED", "MAX_EXPANDED"):
+    for bound in ("MAX_COMPILED_UNITS", "MAX_VERIFIED_IDS", "MAX_EXPANDED_TERMS"):
         monkeypatch.setattr(TantivyEngine, bound, 0)
     engine = TantivyEngine(index_path)
     engine.compiled, engine.verified, engine.expanded = Yielding(), Yielding(), Yielding()
@@ -128,7 +128,7 @@ def test_concurrent_searches_with_clearing_memos_equal_a_serial_run(
     # the reference comes from a separate engine with plain, default-bounded memos, so a memo bug that is
     # wrong the same way every time can't make the threaded results and their reference agree
     fresh = TantivyEngine(index_path)
-    fresh.MAX_COMPILED = fresh.MAX_VERIFIED = fresh.MAX_EXPANDED = 10_000
+    fresh.MAX_COMPILED_UNITS = fresh.MAX_VERIFIED_IDS = fresh.MAX_EXPANDED_TERMS = 10**9
     serial = [outcome(fresh, ast) for ast in asts]
     assert serial == [outcome(engine, ast) for ast in asts]  # the racing engine agrees before any thread runs
 
