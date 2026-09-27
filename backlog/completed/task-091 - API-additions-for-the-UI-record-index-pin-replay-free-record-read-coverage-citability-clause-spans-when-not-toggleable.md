@@ -3,10 +3,10 @@ id: TASK-091
 title: >-
   API additions for the UI: record index pin, replay-free record read, coverage
   citability, clause spans when not toggleable
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 20:29'
-updated_date: '2026-09-27 20:55'
+updated_date: '2026-09-27 21:04'
 labels:
   - api
 milestone: m-3

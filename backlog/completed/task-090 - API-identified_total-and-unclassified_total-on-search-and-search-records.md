@@ -1,10 +1,10 @@
 ---
 id: TASK-090
 title: 'API: identified_total and unclassified_total on /search and search records'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 20:29'
-updated_date: '2026-09-27 20:54'
+updated_date: '2026-09-27 21:04'
 labels:
   - api
 milestone: m-3
