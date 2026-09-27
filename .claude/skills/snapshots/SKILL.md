@@ -58,7 +58,8 @@ tracks, abstract_missing with `abstract_title_mismatch` and `page_missing`, unkn
 crawl window); `coverage.crawl_dates` picks up each `crawl_window`. `build` (`load_sources`) replays every
 finished crawl offline through one mechanism (`sources/crawl.replay_all` over each source's `common.Crawls`:
 OpenReview v2, v1, NeurIPS, PMLR, in that order; every source's reports share `common.Report`, whose fetch
-times make each `crawl_window`), and adds the conflicts a v1 crawl found inside one source to
+times make each `crawl_window`; `op ingest` writes each source's markers through the same `Crawls.ingest`, so a
+marker lands where the replay reads it), and adds the conflicts a v1 crawl found inside one source to
 `conflicts.csv` (`with_crawl_conflicts`). The manifest may hold build times; `records.jsonl` may not. `/coverage`
 (spec 04) and `coverage-auditor` read these counts directly.
 
