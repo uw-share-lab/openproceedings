@@ -1,10 +1,10 @@
 ---
 id: TASK-036
 title: 'Exports: RIS, CSV, BibTeX, JSONL pinned to an index'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 01:35'
+updated_date: '2026-09-27 08:04'
 labels:
   - api
 milestone: m-3
@@ -23,12 +23,22 @@ Spec 04 §Exports (ris-format, bibtex-format skills).
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 RIS imports into Covidence (one manual fixture) and round-trips through venuetriage's parser
-- [ ] #2 BibTeX parses with refaudit; note carries provenance
+- [x] #2 BibTeX parses with refaudit; note carries provenance
 - [ ] #3 X-Total and X-Index-Version headers; record_id or index_version pins the source index
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. export.py: split write() into header()/entries() + utc_date() so op export and the API share bytes. 2. search.expanded(): located wildcard refusal shared by /search and /export. 3. IndexState.pinned(v): other index_versions validated like the configured index. 4. api/export.py router: parse/pin/expand/collect before the first byte, sync generator StreamingResponse, count check. 5. Contract tests + spec 04 as-built + CLAUDE.md layout.
+<!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Validate BibTeX with refaudit.bibtex.parse_string and RIS with scholarmend.parse.parse_ris, both from PyPI, pinned as root dev dependencies (refaudit 0.4.9 at 2026-09-25).
+
+Built GET /api/v1/export (api/export.py): q, format, mode, index_version. Body == op export bytes (contract test per format x 4 queries). X-Total/X-Index-Version/Content-Type/Content-Disposition. Pinned index_version via IndexState.pinned (index_path rules; alias symlink and 'current' refused; 409 API_INDEX_VERSION_UNAVAILABLE). Round-trips over the API: RIS via scholarmend.parse_ris, BibTeX via refaudit.parse_string (note = provenance), CSV, JSONL, all == match_ids in id order. Hot-swap and mid-stream-abort tests use the real route. Tests: backend/tests/contract/test_export.py.
+AC#1 NOT ticked: its automated half (scholarmend round-trip over the API) is done, but 'imports into Covidence (one manual fixture)' is TASK-004 AC#1's pending human import (docs/results/2026-09-27-covidence-check.md); the API body is byte-identical to op export, so that check covers it once done.
+AC#3 NOT ticked: X-Total/X-Index-Version and index_version pinning are done; the record_id half is TASK-037's. Hook: api/export.py::pinned_engine(request, served, index_version) — add a record_id param to the route, resolve it to the record's index_version there (422 both given / malformed, 404 API_RECORD_NOT_FOUND, 409 API_RECORD_MISMATCH for a mismatch replay), before the stream starts; extend test_the_openapi_document_describes_the_export's param set.
 <!-- SECTION:NOTES:END -->

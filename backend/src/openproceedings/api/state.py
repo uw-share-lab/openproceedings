@@ -11,7 +11,8 @@ do requests get 503 `API_INDEX_NOT_LOADED`.
 
 Index selection is restricted (task-034 notes; `cli.resolve_snapshot` is not reused): the configured name
 must match `config.INDEX_NAME`, and what it resolves to — through the `current` symlink — must be a
-directory directly under `<data_dir>/indexes/` whose name is an index_version.
+directory directly under `<data_dir>/indexes/` whose name is an index_version. A request pinned to another
+index_version (`GET /export?index_version=`) gets it from `IndexState.pinned`, selected by the same rule.
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 VERSION_DIR = re.compile(r"[0-9a-f][0-9a-f-]{0,63}")
+KEEP_PINNED = 1  # engines of other index_versions held open for pinned requests (besides the served one)
 
 type Opener = Callable[[Path], TantivyEngine]  # TantivyEngine itself; tests wrap it to slow a load down
 
@@ -64,6 +66,8 @@ class IndexState:
         self._opener = opener
         self._engine: TantivyEngine | None = None
         self._reloading = threading.Lock()  # one load at a time; readers never take it
+        self._pinned: dict[str, TantivyEngine] = {}  # engines of other versions opened for a pin (`pinned`)
+        self._pinning = threading.Lock()  # one pinned open at a time
 
     @property
     def engine(self) -> TantivyEngine | None:
@@ -122,6 +126,40 @@ class IndexState:
         if engine is not None:
             found.add(engine.index_version)
         return sorted(found)
+
+    def pinned(self, version: str) -> TantivyEngine | None:
+        """The engine of index_version `version` (an export pinned by `index_version`; spec 04 §Exports), or
+        None when this instance doesn't hold it. The served engine if it is that version; otherwise
+        `<data_dir>/indexes/<version>`, validated exactly as the configured index is (`index_path`: an
+        index_version name, a directory directly under `indexes/`; `current` and aliases are refused), opened
+        read-only on first use and kept (`KEEP_PINNED` of them, the oldest dropped first)."""
+        engine = self._engine
+        if engine is not None and engine.index_version == version:
+            return engine
+        if not VERSION_DIR.fullmatch(version):
+            return None
+        with self._pinning:
+            found = self._pinned.get(version)
+            if found is not None:
+                return found
+            try:
+                path = index_path(self._data_dir, version)
+            except IndexSelectionError:
+                return None
+            if path.name != version:  # a symlink named like a version: not the version asked for
+                return None
+            started = time.perf_counter()
+            found = self._opener(path)  # verifies every file, as a load does
+            if found.index_version != version:  # a directory whose manifest names another version
+                return None
+            self._pinned[version] = found
+            while len(self._pinned) > KEEP_PINNED:
+                del self._pinned[next(iter(self._pinned))]
+            log.info(
+                "index_pinned_opened",
+                extra={"index_version": version, "ms": round((time.perf_counter() - started) * 1000)},
+            )
+            return found
 
     def load_in_background(self) -> threading.Thread:
         thread = threading.Thread(target=self.load, name="op-index-load", daemon=True)

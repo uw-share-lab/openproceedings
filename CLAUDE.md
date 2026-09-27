@@ -22,7 +22,8 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   `ast.py`, `canonical.py`, `defaults.py`, `compat.py`), `engine/` (`protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py`, `exclusions.py`, `highlight.py`, `parity.py`), `ingest/`
   (`record.py`, `classify.py`, `urls.py`, `volumes.py`, `ris.py`, `dedup.py`, `snapshot.py`), `api/` (`app.py`
   `create_app`, `config.py`, `state.py`, `deps.py`, `errors.py`, `middleware.py`, `models.py` (the response
-  contract), routers `search.py` (parse and search), `papers.py`, `meta.py`, `health.py`, `server.py` → `op serve`);
+  contract), routers `search.py` (parse and search), `papers.py`, `meta.py`, `health.py`, `export.py` (streamed
+  exports, `op export`'s writers), `server.py` → `op serve`);
   `semantic/ eval/` arrive with their tasks). Tests in `backend/tests/`; `uv run pytest` from the root.
 - Root `package.json` is the **npm workspace** root (`workspaces: ["frontend"]`, one `package-lock.json`,
   dependencies hoisted to `./node_modules`; Node from `.nvmrc`).

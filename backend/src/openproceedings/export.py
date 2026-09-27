@@ -23,6 +23,7 @@ import re
 import unicodedata
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, TextIO
 
 FORMATS = ("ris", "csv", "bibtex", "jsonl")
@@ -56,17 +57,30 @@ class Provenance:
         return f"openproceedings {self.index_version} · query {self.canonical_hash} · {self.date}"
 
 
+def utc_date() -> str:
+    """Today's UTC date, YYYY-MM-DD: an export's provenance date (`op export` and `GET /export` both)."""
+    return datetime.now(UTC).date().isoformat()
+
+
+def header(fmt: str) -> str:
+    """What `fmt` writes before its first record: CSV's BOM (so Excel reads UTF-8) and column row."""
+    if fmt not in FORMATS:
+        raise ValueError(f"unknown export format {fmt!r}")
+    return "\ufeff" + _csv_row(CSV_COLUMNS) if fmt == "csv" else ""
+
+
+def entries(fmt: str, records: Iterable[dict[str, Any]], provenance: Provenance) -> Iterator[str]:
+    """One string per record of `records`, as `fmt` writes it (after `header(fmt)`)."""
+    writer = {"ris": _ris, "csv": _csv, "bibtex": _bibtex, "jsonl": _jsonl}[fmt]
+    return writer(records, provenance)
+
+
 def write(fmt: str, records: Iterable[dict[str, Any]], provenance: Provenance, out: TextIO) -> int:
-    """Stream `records` to `out` as `fmt`; the number written. Each writer yields one string per record."""
-    header, writer = {
-        "ris": ("", _ris),
-        "csv": ("\ufeff" + _csv_row(CSV_COLUMNS), _csv),  # the BOM, so Excel reads UTF-8
-        "bibtex": ("", _bibtex),
-        "jsonl": ("", _jsonl),
-    }[fmt]
-    out.write(header)
+    """Stream `records` to `out` as `fmt`; the number written. `op export` writes a file or stdout with
+    it; `GET /api/v1/export` streams the same `header` and `entries`, so both give the same bytes."""
+    out.write(header(fmt))
     n = 0
-    for chunk in writer(records, provenance):
+    for chunk in entries(fmt, records, provenance):
         out.write(chunk)
         n += 1
     return n
