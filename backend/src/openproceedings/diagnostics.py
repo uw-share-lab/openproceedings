@@ -68,6 +68,7 @@ class DiagnosticCode(StrEnum):
     API_NOT_FOUND = "API_NOT_FOUND"  # no such endpoint (task-034)
     API_METHOD_NOT_ALLOWED = "API_METHOD_NOT_ALLOWED"  # an endpoint that exists, another method (task-034)
     API_REPLAY_MISMATCH = "API_REPLAY_MISMATCH"  # log code only — never an HTTP error
+    API_RECORDS_STORE_FULL = "API_RECORDS_STORE_FULL"  # a save refused: the record store is full (task-037)
 
 
 _API_STATUS: dict[DiagnosticCode, int] = {
@@ -81,6 +82,7 @@ _API_STATUS: dict[DiagnosticCode, int] = {
     DiagnosticCode.API_INTERNAL: 500,
     DiagnosticCode.API_NOT_FOUND: 404,
     DiagnosticCode.API_METHOD_NOT_ALLOWED: 405,
+    DiagnosticCode.API_RECORDS_STORE_FULL: 503,
 }
 
 

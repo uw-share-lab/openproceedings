@@ -322,7 +322,6 @@
         "type": "object"
       },
       "Dedup": {
-        "additionalProperties": false,
         "description": "Corpus-wide ingest merges from the snapshot manifest (PRISMA-S item 16): a process statement, never a\nremoval count of this search.",
         "properties": {
           "ambiguous_not_merged": {
@@ -429,7 +428,8 @@
           "API_INTERNAL",
           "API_NOT_FOUND",
           "API_METHOD_NOT_ALLOWED",
-          "API_REPLAY_MISMATCH"
+          "API_REPLAY_MISMATCH",
+          "API_RECORDS_STORE_FULL"
         ],
         "title": "DiagnosticCode",
         "type": "string"
@@ -1647,6 +1647,17 @@
             "title": "Added",
             "type": "array"
           },
+          "added_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added Total"
+          },
           "changed": {
             "items": {
               "$ref": "#/components/schemas/ChangedInput"
@@ -1658,9 +1669,24 @@
             "title": "Index Version",
             "type": "string"
           },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
           "membership_identical": {
-            "title": "Membership Identical",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership Identical"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
           },
           "query_version": {
             "title": "Query Version",
@@ -1674,12 +1700,33 @@
             "title": "Recorded Index Version",
             "type": "string"
           },
+          "refused": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosticCode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "removed": {
             "items": {
               "$ref": "#/components/schemas/DiffEntry"
             },
             "title": "Removed",
             "type": "array"
+          },
+          "removed_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed Total"
           },
           "status": {
             "enum": [
@@ -1702,7 +1749,12 @@
           "record_id",
           "status",
           "recorded_index_version",
+          "refused",
           "changed",
+          "offset",
+          "limit",
+          "added_total",
+          "removed_total",
           "added",
           "removed",
           "membership_identical"
@@ -1711,7 +1763,6 @@
         "type": "object"
       },
       "RecordExcluded": {
-        "additionalProperties": false,
         "description": "03's exclusion accounting, verbatim: buckets by count (largest first, ties by name), `unknown` last.",
         "properties": {
           "status": {
@@ -1800,8 +1851,15 @@
         "additionalProperties": false,
         "properties": {
           "added": {
-            "title": "Added",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added"
           },
           "changed": {
             "items": {
@@ -1844,8 +1902,15 @@
             "type": "string"
           },
           "membership_identical": {
-            "title": "Membership Identical",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership Identical"
           },
           "query_version": {
             "title": "Query Version",
@@ -1862,8 +1927,15 @@
             ]
           },
           "removed": {
-            "title": "Removed",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed"
           },
           "status": {
             "enum": [
@@ -1905,9 +1977,12 @@
         "type": "object"
       },
       "SearchRecord": {
-        "additionalProperties": false,
-        "description": "Every field of spec 04 §Search records, plus `schema_version` and `ranking_params` (the index's other\ntwo inputs), so a drifted replay can name a method change even after the pinned index is gone.",
+        "description": "Every field of spec 04 §Search records, plus `body_version`, `schema_version` and `ranking_params`\n(the index's other two inputs, so a drifted replay can name a method change after the pinned index is\ngone). `ids` is None when the caller didn't ask for them.",
         "properties": {
+          "body_version": {
+            "title": "Body Version",
+            "type": "integer"
+          },
           "canonical": {
             "title": "Canonical",
             "type": "string"
@@ -1947,11 +2022,18 @@
             "type": "string"
           },
           "ids": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Ids",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ids"
           },
           "ids_hash": {
             "title": "Ids Hash",
@@ -1966,10 +2048,6 @@
             "type": "string"
           },
           "mode": {
-            "enum": [
-              "native",
-              "scholar"
-            ],
             "title": "Mode",
             "type": "string"
           },
@@ -2021,20 +2099,21 @@
           },
           "translations": {
             "items": {
-              "$ref": "#/components/schemas/Diagnostic"
+              "$ref": "#/components/schemas/StoredDiagnostic"
             },
             "title": "Translations",
             "type": "array"
           },
           "warnings": {
             "items": {
-              "$ref": "#/components/schemas/Diagnostic"
+              "$ref": "#/components/schemas/StoredDiagnostic"
             },
             "title": "Warnings",
             "type": "array"
           }
         },
         "required": [
+          "body_version",
           "record_id",
           "input",
           "mode",
@@ -2054,7 +2133,6 @@
           "expansions",
           "translations",
           "warnings",
-          "ids",
           "ids_hash",
           "dedup"
         ],
@@ -2170,6 +2248,46 @@
           }
         ],
         "type": "array"
+      },
+      "StoredDiagnostic": {
+        "description": "A diagnostic as the record saved it: its code is a string, so a retired code stays readable.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "StoredDiagnostic",
+        "type": "object"
       },
       "Term": {
         "additionalProperties": false,
@@ -2505,7 +2623,7 @@
     },
     "/api/v1/export": {
       "get": {
-        "description": "Every record the query matches, in `format`: of `q` (with `mode`, default `native`) on the pinned\n`index_version` (else the served index), or of the stored search record `record_id` (alone: its query,\nmode and index_version). Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same\nquery and index.",
+        "description": "Every record the query matches, in `format`: of `q` (with `mode`, default `native`) on the pinned\n`index_version` (else the served index), or the stored ids of search record `record_id` (alone) from the\nindex it names. Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and\nindex (for a record, its stored `total`).",
         "operationId": "export",
         "parameters": [
           {
@@ -2756,7 +2874,7 @@
     },
     "/api/v1/records": {
       "post": {
-        "description": "Freeze a search as an immutable record: re-run here on the served index, then one INSERT.",
+        "description": "Freeze a search as an immutable record: re-run here on the served index, then one transaction.",
         "operationId": "create_record",
         "requestBody": {
           "content": {
@@ -2795,7 +2913,7 @@
     },
     "/api/v1/records/{id}": {
       "get": {
-        "description": "The stored record and a replay of it now (HTTP 200 whatever the status).",
+        "description": "The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless\n`include=ids`; `/export?record_id=` streams the papers themselves.",
         "operationId": "get_record",
         "parameters": [
           {
@@ -2805,6 +2923,23 @@
             "schema": {
               "title": "Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "ids",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Include"
             }
           }
         ],
@@ -2835,7 +2970,7 @@
     },
     "/api/v1/records/{id}/diff": {
       "get": {
-        "description": "The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. A\ntitle comes from the index the replay ran on, else the record's pinned index; null if neither holds it.",
+        "description": "The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each\nlist is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A\ntitle comes from the index the replay ran on, null if it doesn't hold the paper. A refused replay\ncompared nothing: empty lists, null totals.",
         "operationId": "diff_record",
         "parameters": [
           {
@@ -2845,6 +2980,29 @@
             "schema": {
               "title": "Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 0,
+              "title": "Limit",
+              "type": "integer"
             }
           }
         ],

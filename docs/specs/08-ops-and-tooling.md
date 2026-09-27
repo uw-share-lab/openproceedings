@@ -33,7 +33,7 @@ openproceedings/
 ├── docs/{specs,plans,results,design,usability,research}/   # created as needed
 ├── backlog/                     # Backlog.md: tasks, completed, docs, decisions — CLI only
 ├── deploy/                      # (M6, planned) Dockerfiles, compose.yml
-└── data/                        # gitignored: cache/, snapshots/, indexes/, embeddings/, research/, records.sqlite
+└── data/                        # gitignored: cache/, snapshots/, indexes/, embeddings/, research/, records/ (records.sqlite)
 ```
 
 **Environment:** uv for all Python. `uv sync` at the root installs every workspace member and the dev tools
@@ -131,7 +131,8 @@ checks the head repo, so a fork branch named `dev` cannot use it.
 
 `deploy/compose.yml`: `api` (uvicorn, loads `data/indexes/current`) and `web` (Next.js standalone), with
 Caddy in front for TLS. Caddy must not log query strings: `GET /api/v1/search?q=…` carries the query
-(spec 04 §Implementation notes). The data volume is read-only in `api`, except `records.sqlite`, and it
+(spec 04 §Implementation notes). The data volume is read-only in `api`, except the `records/` directory
+(`records/records.sqlite` and the WAL files SQLite writes beside it; spec 04 §Search records), and it
 holds each served index's snapshot beside it (`/papers/{id}` reads provenance from it). Refreshing the index
 means building a new `index_version` offline, switching the `current` symlink, and sending SIGHUP. Hosting is
 still open (00, question 5).

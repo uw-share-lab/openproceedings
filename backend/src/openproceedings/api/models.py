@@ -158,11 +158,13 @@ class ReplayInfo(Model):
     ids_hash: str | None
     ids_match: bool
     excluded_match: bool
-    refused: DiagnosticCode | None  # why the canonical string no longer runs on a drifted replay
+    # why the canonical string no longer runs (it doesn't parse, or the engine refuses it); the status stays
+    # `drifted`, or `mismatch` under the record's own versions, and no membership comparison happened
+    refused: DiagnosticCode | None
     changed: list[ChangedInput]  # empty unless drifted
-    added: int  # ids the replay matched that the record doesn't hold
-    removed: int  # ids the record holds that the replay didn't match
-    membership_identical: bool  # added == removed == 0 (a drifted +0/−0 is reported, not hidden)
+    added: int | None  # ids the replay matched that the record doesn't hold; null when `refused`
+    removed: int | None  # ids the record holds that the replay didn't match; null when `refused`
+    membership_identical: bool | None  # added == removed == 0 (+0/−0 is reported); null when `refused`
 
 
 class RecordResponse(Versioned):
@@ -179,10 +181,15 @@ class RecordDiff(Versioned):
     record_id: str
     status: Literal["reproduced", "drifted", "mismatch"]
     recorded_index_version: str
+    refused: DiagnosticCode | None  # as in ReplayInfo: then both lists are empty and the totals null
     changed: list[ChangedInput]
+    offset: int
+    limit: int  # each list is the page [offset, offset + limit) of its full, id-sorted list
+    added_total: int | None
+    removed_total: int | None
     added: list[DiffEntry]  # sorted by id
     removed: list[DiffEntry]
-    membership_identical: bool
+    membership_identical: bool | None
 
 
 # --- /meta -------------------------------------------------------------------------------------------

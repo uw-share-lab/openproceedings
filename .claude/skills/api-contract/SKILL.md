@@ -11,7 +11,7 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 | POST | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations). Debounced, called as the user types. Any well-formed body is a 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body is a 422 `API_BAD_PARAM`. |
 | GET | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | GET | `/papers/{id}` | full record with provenance |
-| GET | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl`, optional `record_id` **or** `index_version` → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; a `mismatch` record's `record_id` → 409 `API_RECORD_MISMATCH` |
+| GET | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl`, optional `record_id` **or** `index_version` → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; `record_id` → exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if gone, 409 `API_RECORD_MISMATCH` on a `mismatch`) |
 | POST | `/records` | freeze a search as an immutable search record → `{record_id, url}` (`.claude/skills/search-records/SKILL.md`) |
 | GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`) |
 | GET | `/records/{id}/diff` | for a `drifted` record: added and removed ids (with titles), and which `index_version` inputs changed |

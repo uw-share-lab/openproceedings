@@ -16,7 +16,7 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `backend/src/openproceedings/ingest/` | 01: `record.py`, `classify.py`, `urls.py`, `volumes.py`, `ris.py`, `dedup.py`, `snapshot.py`; `sources/` (M4 crawlers) | Only place that makes network calls |
 | `backend/src/openproceedings/query/` | 02: `normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`, `ast.py`, `canonical.py`, `defaults.py`, `compat.py` | Pure; no I/O |
 | `backend/src/openproceedings/engine/` | 03: `protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py` (ranking included), `exclusions.py`, `highlight.py`, `parity.py` | Pure except index file reads |
-| `backend/src/openproceedings/api/` | 04: app, routers, `exporters/`, `records.py` | The only writer of `data/records.sqlite` |
+| `backend/src/openproceedings/api/` | 04: app, routers, `exporters/`, `records.py` | The only writer of `data/records/records.sqlite` |
 | `backend/src/openproceedings/semantic/` | 06 (phase 2) | Never imported by `query/` or `engine/` matching code |
 | `backend/src/openproceedings/eval/` | 07 report generators | Writes to `docs/results/` |
 | `backend/src/openproceedings/diagnostics.py` | The error-code registry (`error-diagnostics`) | |
@@ -34,7 +34,7 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `backlog/` | Backlog.md store: tasks, completed, docs, decisions | CLI only (`decision-records`) |
 | `.claude/` | Agents, skills, commands, hooks, learnings | Committed; linted by `lint_tooling.py`; roster in the generated `.claude/README.md` |
 | `deploy/` | Dockerfiles, `compose.yml` | |
-| `data/` | `cache/`, `snapshots/`, `indexes/`, `embeddings/`, `research/`, `records.sqlite` | **Gitignored. Never committed.** Snapshots and indexes are immutable |
+| `data/` | `cache/`, `snapshots/`, `indexes/`, `embeddings/`, `research/`, `records/` (`records.sqlite`) | **Gitignored. Never committed.** Snapshots and indexes are immutable |
 
 ## Never committed
 `data/` in any form (no `git add -f data/`; `protect-data-dir.sh` blocks it), `.env` (OpenReview

@@ -1,6 +1,6 @@
 ---
 name: search-records
-description: The search-record standard behind reproducibility (guarantee 4) and PRISMA reporting — which fields a record freezes, the exact ids_hash definition, the three replay statuses (reproduced / drifted / mismatch, all HTTP 200) and the diff endpoint, the append-only data/records.sqlite store, and what a methods section cites. Use when touching backend/src/openproceedings/api/records.py, POST/GET /records, the record page, or anything that changes what a stored record means.
+description: The search-record standard behind reproducibility (guarantee 4) and PRISMA reporting — which fields a record freezes, the exact ids_hash definition, the three replay statuses (reproduced / drifted / mismatch, all HTTP 200) and the diff endpoint, the append-only data/records/records.sqlite store, and what a methods section cites. Use when touching backend/src/openproceedings/api/records.py, POST/GET /records, the record page, or anything that changes what a stored record means.
 ---
 
 # Search records (spec 04 §Search records)
@@ -46,30 +46,64 @@ which `index_version` inputs changed. An export pinned to a `mismatch` record (`
 refused with 409 `API_RECORD_MISMATCH` (spec 04 §Error handling). Replay re-parses `canonical`, not `input`, so compatibility
 translations that changed later cannot alter the replay.
 
-## Store: `data/records.sqlite`
-- **Append-only.** The only statement allowed is `INSERT`. Add `BEFORE UPDATE` and `BEFORE DELETE`
-  triggers that `RAISE(ABORT, …)`, and a test that tries both.
-- A `schema_version` table. Migrations only add columns or tables and never rewrite rows.
-- Open it with WAL mode. It is the one writable file on the otherwise read-only data volume (08 §Deploy).
-- It is backed up with the snapshots and never committed (`data/` is gitignored).
+## Store: `data/records/records.sqlite`
+- **Its own directory** (`<data_dir>/records/`, mode 0700; the file 0600): WAL mode writes `-wal` and `-shm`
+  beside the database, so the directory must be writable. It is the one writable place on the otherwise
+  read-only data volume (08 §Deploy). Backed up with the snapshots, never committed (`data/` is gitignored).
+- **Append-only.** The only statement the code issues is `INSERT` (plus `CREATE … IF NOT EXISTS`). Every
+  table has `BEFORE UPDATE` and `BEFORE DELETE` triggers that `RAISE(ABORT, …)`, and `records` and
+  `id_sets` a `BEFORE INSERT … WHEN EXISTS (same key)` trigger: SQLite's REPLACE deletes the old row
+  *without* firing DELETE triggers unless `recursive_triggers` is on, so update/delete triggers alone don't
+  stop `INSERT OR REPLACE` from a plain `sqlite3` shell. Tests try each.
+- **The triggers are not a security boundary.** They stop mistakes (a stray `UPDATE`, a REPLACE); anyone
+  with write access to the file can drop them. Protect the file with the volume's permissions.
+- A `schema_version` table (currently 1). Migrations only add columns or tables and never rewrite rows; a
+  store with a newer version is refused.
+- **Content-addressed id sets:** `id_sets (ids_hash, ids)` holds each distinct id list once (zlib of the
+  `\n`-joined sorted list, re-hashed against its key on every read); `records (record_id, index_version,
+  searched_at, id_set, body)` points at it. Saving the same set again costs one body (~1 KB).
+- **Bodies are versioned** (`body_version`, now 1) and read with frozen, tolerant types (a diagnostic's
+  `code` is a string, unknown keys ignored), so changing a live enum never makes an old record unreadable.
+  `backend/tests/fixtures/records/record-v1.json` must stay readable; a newer `body_version` is a 500.
+- **Capacity:** a save is refused (503 `API_RECORDS_STORE_FULL`) when the store is at
+  `ApiConfig.records_max_bytes` or its disk below `records_min_free_bytes`. All three record routes cost the
+  rate limit's `export_weight`.
 - `POST /records` re-runs the query server-side to compute `total`, `excluded` and `ids_hash`. Never trust
   counts sent by the client.
 
-## As built (task-037)
+### Takedown runbook (the one sanctioned deletion)
+A record must go (a legal request, personal data in `input`). With the API stopped:
+1. Back up `records/` (all three files).
+2. `sqlite3 data/records/records.sqlite`: `DROP TRIGGER records_no_delete;`, then
+   `DELETE FROM records WHERE record_id = '<id>';`. Leave `id_sets` alone (other records may share the set).
+3. Re-create the trigger exactly as `records.py`'s `_SCHEMA` declares it (starting the API also re-creates any
+   missing trigger: every statement is `CREATE … IF NOT EXISTS`), and check `.schema records` shows all
+   three triggers.
+4. Record the takedown (date, id, reason, who) in the operator log; the record page then 404s.
+
+## As built (task-037 and its review fixes)
 - Code: `backend/src/openproceedings/records.py` (`ids_hash`, `SearchRecord`, `identify`, `freeze`,
-  `RecordStore`, `replay`), `api/records.py` (routes and the `/export` hook), `IndexState.pinned` in `api/state.py`
-  (older indexes, loaded on demand read-only; the one loader, shared with `/export`). Tests: `backend/tests/unit/test_records.py` (known answers, triggers,
-  concurrency) and `backend/tests/contract/test_records.py` (the replay matrix, diff, errors, logs).
+  `RecordStore`, `replay`), `api/records.py` (routes and the `/export` hook), `IndexState.pinned` in
+  `api/state.py` (older indexes, loaded on demand read-only; the one loader, shared with `/export`). Tests: `backend/tests/unit/test_records.py` (known answers, triggers, id sets,
+  capacity, tolerant bodies, manifest checks, concurrency) and `backend/tests/contract/test_records.py` (the
+  replay matrix, refused replays, diff pages, ids on request, cost, errors, logs).
 - `identify` is the one membership computation, at save and at replay: `search.run` (so `total`/`excluded`
   equal `/search`'s) plus `match_ids`.
-- Store columns: `record_id`, `index_version`, `searched_at`, `body` (JSON without `ids`), `ids`
-  (zlib of the `\n`-joined list). A `BEFORE INSERT` trigger refuses an existing id: SQLite's REPLACE
-  deletes the old row *without* firing DELETE triggers unless `recursive_triggers` is on, so the update and
-  delete triggers alone don't stop `INSERT OR REPLACE` from a plain `sqlite3` shell. `RecordStore.pinned(v)` is the retention count. A read never creates the file.
-- A mismatch test inserts a *new* row (a copy with a wrong `ids_hash` or `excluded`) through
-  `RecordStore.insert`: the store stays append-only in tests too.
-- The export hook: `api.records.require_citable(request, record_id, engine)` → the record, or 409
-  `API_RECORD_MISMATCH`. Spec 04 §Search records "As built" has the full response shapes.
+- Replay runs on the record's own index whenever it is here (even when only the query version drifted, so
+  `changed` isolates that), and an engine handed back for another version counts as unavailable. A refused
+  replay (the canonical no longer runs) reports `added`/`removed`/`membership_identical` as null, never
+  "everything removed".
+- `API_REPLAY_MISMATCH` is ERROR once per record per process, DEBUG after that.
+- `GET /records/{id}` leaves `ids` out unless `?include=ids`; `/diff` pages each list (`offset`, `limit` ≤
+  200) and keeps `added_total`/`removed_total` in full.
+- A mismatch test inserts a *new* row (a copy with a wrong `ids_hash`, `excluded`, one bucket, or
+  `canonical_hash`) through `RecordStore.insert`: the store stays append-only in tests too.
+- `/export?record_id=` hands over exactly the cited set: the record's **stored** ids, from the index it
+  names, never a re-run of the query (so a later query version changes nothing). 409
+  `API_INDEX_VERSION_UNAVAILABLE` when that index is gone; 409 `API_RECORD_MISMATCH` when the replay is a
+  `mismatch` (`api.records.stored_record` + `refuse_mismatch`; `require_citable` is both). A `reproduced`
+  replay also requires the stored list to hash to `ids_hash`. Spec 04 §Search records "As built" has the
+  full response shapes.
 
 ## What a methods section cites
 The record page (05) shows, and a methods section quotes: the `identification_query` and the default

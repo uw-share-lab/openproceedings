@@ -43,7 +43,7 @@ not behaviour. If a response differs from what `op search` or `op export` return
 ## Rules
 - No search, parse or ranking logic in routers.
 - No query text in logs, exception messages or metrics labels unless `log_query_text` is on.
-- `data/indexes/` is read-only to the app. `data/records.sqlite` is the one writable file.
+- `data/indexes/` is read-only to the app. `data/records/` (`records.sqlite` and its WAL files) is the one writable place.
 
 ## Output
 The diff summary, the OpenAPI diff (additive or breaking, and why), test commands with their real

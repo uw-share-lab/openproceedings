@@ -1,16 +1,47 @@
-"""`ids_hash` known answers and the append-only record store (spec 04 §Search records; search-records skill)."""
+"""`ids_hash` known answers, the append-only record store, and the manifest reads a record freezes (spec 04
+§Search records; search-records skill)."""
 
 from __future__ import annotations
 
+import json
+import os
 import sqlite3
+import stat
 import threading
+import zlib
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
 from openproceedings import records
-from openproceedings.diagnostics import InternalError
-from openproceedings.records import RECORD_ID, RecordStore, ids_hash, valid_record_id
+from openproceedings.diagnostics import DiagnosticCode, InternalError, http_status
+from openproceedings.engine.index import RANKING_PARAMS, SCHEMA_VERSION
+from openproceedings.engine.index import index_version as index_version_of
+from openproceedings.ingest.dedup import Conflict, DedupResult, Merge
+from openproceedings.ingest.snapshot import render
+from openproceedings.query.normalize import TOKENIZER_VERSION
+from openproceedings.query.parser import parse
+from openproceedings.records import (
+    BODY_VERSION,
+    RECORD_ID,
+    RECORDS_FILE,
+    RecordStore,
+    RecordStoreFull,
+    SearchRecord,
+    changed_inputs,
+    ids_hash,
+    index_inputs,
+    snapshot_facts,
+    valid_record_id,
+)
+
+from tests.corpus import Rec
+from tests.golden.test_tantivy_200 import as_paper
+from tests.unit.engine.test_exclusions import BUILT
+
+FIXTURES = Path(__file__).parent.parent / "fixtures" / "records"
 
 
 # --- ids_hash: pinned by known answers (changing it turns every stored record into a mismatch) ----------
@@ -45,8 +76,12 @@ def test_record_ids_are_12_url_safe_characters() -> None:
 
 
 # --- the store --------------------------------------------------------------------------------------------
+IDS = ["op:a", "op:b"]
+
+
 def fields(**overrides: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
+        "body_version": BODY_VERSION,
         "input": "trust",
         "mode": "native",
         "canonical": "(trust AND status:accepted)",
@@ -58,45 +93,80 @@ def fields(**overrides: Any) -> dict[str, Any]:
         "schema_version": "2",
         "ranking_params": {"bm25": {"b": 0.75, "k1": 1.2}},
         "snapshot_hash": "s" * 64,
-        "crawl_dates": {"all": {"from": "2026-01-01T00:00:00+00:00", "to": "2026-01-02T00:00:00+00:00"}},
+        "crawl_dates": {"*": {"from": "2026-01-01T00:00:00+00:00", "to": "2026-01-02T00:00:00+00:00"}},
         "searched_at": "2026-09-27T12:00:00Z",
         "total": 2,
         "excluded": {"total": 1, "track": {"workshop": 1, "unknown": 0}, "status": {"unknown": 0}},
         "expansions": {},
         "translations": [],
         "warnings": [],
-        "ids_hash": ids_hash(["op:a", "op:b"]),
+        "ids_hash": ids_hash(IDS),
         "dedup": {"merged": 0, "ambiguous_not_merged": 0},
         "semantic_version": None,
     }
     return {**base, **overrides}
 
 
-def test_insert_then_get_round_trips_every_field(tmp_path: Path) -> None:
-    store = RecordStore(tmp_path / "records.sqlite")
-    saved = store.insert(fields(), ["op:a", "op:b"])
+@pytest.fixture
+def store(tmp_path: Path) -> RecordStore:
+    return RecordStore(tmp_path / "records")
+
+
+def raw(store: RecordStore) -> sqlite3.Connection:
+    return sqlite3.connect(store.path)
+
+
+def test_insert_then_get_round_trips_every_field(store: RecordStore) -> None:
+    saved = store.insert(fields(), IDS)
     got = store.get(saved.record_id)
     assert got == saved and got is not None
-    assert got.ids == ["op:a", "op:b"]
+    assert got.ids == IDS and got.body_version == BODY_VERSION
     assert list(got.excluded.track) == ["workshop", "unknown"]  # the stored bucket order is kept
     assert store.pinned("0123456789ab") == 1 and store.pinned("ffffffffffff") == 0
+    without = store.get(saved.record_id, with_ids=False)
+    assert without is not None and without.ids is None
 
 
-def test_a_read_never_creates_the_store(tmp_path: Path) -> None:
-    store = RecordStore(tmp_path / "records.sqlite")
+def test_the_store_lives_in_its_own_private_directory(tmp_path: Path) -> None:
+    store = RecordStore(tmp_path / "records")
+    store.insert(fields(), IDS)
+    assert store.path == tmp_path / "records" / RECORDS_FILE
+    assert stat.S_IMODE((tmp_path / "records").stat().st_mode) == 0o700
+    assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
+
+
+def test_a_read_never_creates_the_store(store: RecordStore) -> None:
     assert store.get("abcdefghijkl") is None and store.pinned("0123456789ab") == 0
-    assert not (tmp_path / "records.sqlite").exists()
+    assert not store.path.exists()
 
 
-def test_store_uses_wal_and_records_its_schema_version(tmp_path: Path) -> None:
-    store = RecordStore(tmp_path / "records.sqlite")
-    store.insert(fields(), ["op:a", "op:b"])
-    conn = sqlite3.connect(tmp_path / "records.sqlite")
+def test_store_uses_wal_and_records_its_schema_version(store: RecordStore) -> None:
+    store.insert(fields(), IDS)
+    conn = raw(store)
     try:
         assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert conn.execute("SELECT version FROM schema_version").fetchall() == [(1,)]
     finally:
         conn.close()
+
+
+def test_identical_id_sets_are_stored_once(store: RecordStore) -> None:
+    """A repeated save costs its body, not another copy of the ids (content-addressed id_sets)."""
+    big = [f"op:iclr:2024:{n:06d}" for n in range(20_000)]
+    first = store.insert(fields(ids_hash=ids_hash(big), total=len(big)), big)
+    size = store._used_bytes()
+    for n in range(50):
+        store.insert(fields(ids_hash=ids_hash(big), total=len(big), input=f"q{n}"), big)
+    conn = raw(store)
+    try:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        assert conn.execute("SELECT count(*) FROM id_sets").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM records").fetchone()[0] == 51
+    finally:
+        conn.close()
+    grown = store._used_bytes() - size
+    assert grown < 51 * 4096, grown  # ~1-2 KB per record, never another ~100 KB id blob
+    assert store.get(first.record_id) == first
 
 
 @pytest.mark.parametrize(
@@ -105,14 +175,15 @@ def test_store_uses_wal_and_records_its_schema_version(tmp_path: Path) -> None:
         "UPDATE records SET body = '{}'",
         "UPDATE records SET index_version = 'ffffffffffff'",
         "DELETE FROM records",
+        "UPDATE id_sets SET ids = x''",
+        "DELETE FROM id_sets",
         "UPDATE schema_version SET version = 2",
         "DELETE FROM schema_version",
     ],
 )
-def test_update_and_delete_are_refused_by_the_triggers(tmp_path: Path, statement: str) -> None:
-    store = RecordStore(tmp_path / "records.sqlite")
-    saved = store.insert(fields(), ["op:a", "op:b"])
-    conn = sqlite3.connect(tmp_path / "records.sqlite")  # a plain connection: the triggers live in the file
+def test_update_and_delete_are_refused_by_the_triggers(store: RecordStore, statement: str) -> None:
+    saved = store.insert(fields(), IDS)
+    conn = raw(store)  # a plain connection: the triggers live in the file
     try:
         with pytest.raises(sqlite3.IntegrityError, match="append-only"):
             conn.execute(statement)
@@ -123,52 +194,103 @@ def test_update_and_delete_are_refused_by_the_triggers(tmp_path: Path, statement
 
 @pytest.mark.parametrize("statement", ["INSERT OR REPLACE", "REPLACE", "INSERT OR IGNORE", "INSERT"])
 @pytest.mark.parametrize("own", [True, False])
-def test_an_existing_id_is_never_replaced(tmp_path: Path, statement: str, own: bool) -> None:
+def test_an_existing_row_is_never_replaced(store: RecordStore, statement: str, own: bool) -> None:
     """SQLite's REPLACE deletes the old row without firing DELETE triggers unless `recursive_triggers` is on;
-    the BEFORE INSERT trigger refuses it from any client (`own`: the store's connection, else a plain one)."""
-    store = RecordStore(tmp_path / "records.sqlite")
-    saved = store.insert(fields(), ["op:a", "op:b"])
-    conn = store._connect() if own else sqlite3.connect(tmp_path / "records.sqlite")
+    BEFORE INSERT triggers refuse it from any client (`own`: the store's connection, else a plain one)."""
+    saved = store.insert(fields(), IDS)
+    conn = store._connect() if own else raw(store)
     try:
         with pytest.raises(sqlite3.IntegrityError, match="append-only"):
-            conn.execute(f"{statement} INTO records VALUES (?, 'x', 'x', '{{}}', x'')", (saved.record_id,))
+            conn.execute(
+                f"{statement} INTO records VALUES (?, 'x', 'x', ?, '{{}}')", (saved.record_id, ids_hash(IDS))
+            )
+        with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+            conn.execute(f"{statement} INTO id_sets VALUES (?, x'')", (ids_hash(IDS),))
     finally:
         conn.close()
     assert store.get(saved.record_id) == saved
 
 
-def test_a_taken_id_is_redrawn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = RecordStore(tmp_path / "records.sqlite")
+def test_a_taken_id_is_redrawn(store: RecordStore, monkeypatch: pytest.MonkeyPatch) -> None:
     draws = iter(["AAAAAAAAAAAA", "AAAAAAAAAAAA", "BBBBBBBBBBBB"])
     monkeypatch.setattr(records, "new_record_id", lambda: next(draws))
-    first = store.insert(fields(), ["op:a", "op:b"])
-    second = store.insert(fields(input="other"), ["op:a", "op:b"])
+    first = store.insert(fields(), IDS)
+    second = store.insert(fields(input="other"), IDS)
     assert (first.record_id, second.record_id) == ("AAAAAAAAAAAA", "BBBBBBBBBBBB")
     assert store.get("AAAAAAAAAAAA") == first  # never overwritten
 
 
-def test_ids_must_be_sorted_and_one_line(tmp_path: Path) -> None:
-    store = RecordStore(tmp_path / "records.sqlite")
-    for ids in (["op:b", "op:a"], ["op:a\nop:b"]):
-        with pytest.raises(InternalError):
-            store.insert(fields(), ids)
+def test_only_an_id_collision_is_retried(store: RecordStore, monkeypatch: pytest.MonkeyPatch) -> None:
+    store.insert(fields(), IDS)
+    conn = raw(store)
+    conn.execute(
+        "CREATE TRIGGER broken BEFORE INSERT ON records BEGIN SELECT RAISE(ABORT, 'disk says no'); END"
+    )
+    conn.commit()
+    conn.close()
+    drawn: list[str] = []
+    real = records.new_record_id
+
+    def draw() -> str:
+        drawn.append(real())
+        return drawn[-1]
+
+    monkeypatch.setattr(records, "new_record_id", draw)
+    with pytest.raises(sqlite3.IntegrityError, match="disk says no"):
+        store.insert(fields(), IDS)
+    assert len(drawn) == 1
 
 
-def test_empty_id_list_round_trips(tmp_path: Path) -> None:
-    store = RecordStore(tmp_path / "records.sqlite")
+@pytest.mark.parametrize("ids", [["op:b", "op:a"], ["op:a", "op:a"], ["op:a\nop:b"]])
+def test_ids_must_be_strictly_increasing_and_one_line(store: RecordStore, ids: list[str]) -> None:
+    with pytest.raises(InternalError):
+        store.insert(fields(), ids)
+
+
+def test_empty_id_list_round_trips(store: RecordStore) -> None:
     saved = store.insert(fields(total=0, ids_hash=ids_hash([])), [])
     assert store.get(saved.record_id) == saved and saved.ids == []
 
 
-def test_concurrent_inserts_from_threads_each_get_their_own_row(tmp_path: Path) -> None:
-    store = RecordStore(tmp_path / "records.sqlite")
+def test_a_store_whose_file_was_removed_is_recreated(store: RecordStore) -> None:
+    store.insert(fields(), IDS)
+    for suffix in ("", "-wal", "-shm"):
+        Path(f"{store.path}{suffix}").unlink(missing_ok=True)
+    again = store.insert(fields(), IDS)
+    assert store.get(again.record_id) == again
+
+
+def test_a_store_from_a_newer_schema_is_refused(tmp_path: Path) -> None:
+    RecordStore(tmp_path / "records").insert(fields(), IDS)
+    conn = sqlite3.connect(tmp_path / "records" / RECORDS_FILE)
+    conn.execute("INSERT INTO schema_version (version) VALUES (2)")
+    conn.commit()
+    conn.close()
+    with pytest.raises(InternalError):
+        RecordStore(tmp_path / "records").insert(fields(), IDS)
+
+
+def test_a_full_store_refuses_saves_with_503(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    assert http_status(DiagnosticCode.API_RECORDS_STORE_FULL) == 503
+    small = RecordStore(tmp_path / "small", max_bytes=1)
+    small.insert(fields(), IDS)  # the first save finds an empty store
+    with pytest.raises(RecordStoreFull) as e:
+        small.insert(fields(), IDS)
+    assert e.value.code == DiagnosticCode.API_RECORDS_STORE_FULL
+    tight = RecordStore(tmp_path / "tight", min_free_bytes=1 << 62)  # more than any disk has free
+    with pytest.raises(RecordStoreFull):
+        tight.insert(fields(), IDS)
+    assert tight.get("AAAAAAAAAAAA") is None
+
+
+def test_concurrent_inserts_from_threads_each_get_their_own_row(store: RecordStore) -> None:
     saved: list[str] = []
     errors: list[BaseException] = []
 
     def work(n: int) -> None:
         try:
             for i in range(10):
-                saved.append(store.insert(fields(input=f"q{n}-{i}"), ["op:a", "op:b"]).record_id)
+                saved.append(store.insert(fields(input=f"q{n}-{i}"), IDS).record_id)
         except BaseException as e:  # surfaced below
             errors.append(e)
 
@@ -179,3 +301,222 @@ def test_concurrent_inserts_from_threads_each_get_their_own_row(tmp_path: Path) 
         t.join()
     assert not errors and len(set(saved)) == 80
     assert all(store.get(i) is not None for i in saved)
+
+
+# --- reading stored bodies: versioned, tolerant ----------------------------------------------------------
+def insert_raw(store: RecordStore, record_id: str, body: str, ids: list[str], key: str | None = None) -> None:
+    """A row written as an older (or broken) writer would have: straight into the file."""
+    store.insert(fields(), IDS)  # creates the schema
+    conn = raw(store)
+    blob = zlib.compress("\n".join(ids).encode())
+    key = key or ids_hash(ids)
+    conn.execute(
+        "INSERT INTO id_sets SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM id_sets WHERE ids_hash = ?)",
+        (key, blob, key),
+    )
+    conn.execute("INSERT INTO records VALUES (?, 'x', 'x', ?, ?)", (record_id, key, body))
+    conn.commit()
+    conn.close()
+
+
+def test_a_committed_v1_body_stays_readable(store: RecordStore) -> None:
+    """The v1 body fixture was written by task-037's first writer. It holds a diagnostic code this code no
+    longer registers: stored bodies are read with frozen, tolerant types, never the live enums."""
+    body = (FIXTURES / "record-v1.json").read_text(encoding="utf-8")
+    ids = ["op:iclr:2024:FxA", "op:neurips:2023:FxB"]
+    insert_raw(store, "v1v1v1v1v1v1", body, ids)
+    got = store.get("v1v1v1v1v1v1")
+    assert got is not None and got.body_version == 1 and got.ids == ids
+    assert [d.code for d in got.warnings] == ["WARN_RETIRED_FOR_THIS_TEST"]
+    assert got.ids_hash == json.loads(body)["ids_hash"]
+
+
+def test_a_body_from_a_newer_writer_is_refused(store: RecordStore) -> None:
+    body = json.dumps({**fields(body_version=BODY_VERSION + 1), "record_id": "newnewnewnew"})
+    insert_raw(store, "newnewnewnew", body, IDS)
+    with pytest.raises(InternalError):
+        store.get("newnewnewnew")
+
+
+def test_a_body_naming_another_record_is_refused(store: RecordStore) -> None:
+    body = json.dumps({**fields(), "record_id": "otherotherot"})
+    insert_raw(store, "mineminemine", body, IDS)
+    with pytest.raises(InternalError):
+        store.get("mineminemine")
+
+
+def test_an_id_set_that_does_not_hash_to_its_key_is_refused(store: RecordStore) -> None:
+    body = json.dumps({**fields(), "record_id": "keykeykeykey"})
+    insert_raw(store, "keykeykeykey", body, ["op:x"], key="0" * 64)
+    with pytest.raises(InternalError):
+        store.get("keykeykeykey")
+
+
+def test_an_unreadable_body_is_refused(store: RecordStore) -> None:
+    insert_raw(store, "junkjunkjunk", "{not json", IDS)
+    with pytest.raises(InternalError):
+        store.get("junkjunkjunk")
+
+
+# --- the manifests a record freezes ---------------------------------------------------------------------
+@pytest.fixture
+def data_dir(tmp_path: Path) -> Iterator[Path]:
+    """One index manifest and one snapshot manifest, rendered as the real builders write them, with two
+    merges and two conflicts (one of them ambiguous)."""
+    papers = tuple(
+        sorted(
+            (as_paper(Rec(id=f"fx:{n:04d}", title=f"t{n}", abstract=None)) for n in range(3)),
+            key=lambda p: p.id,
+        )
+    )
+    merges = (
+        Merge(papers[0].id, "op:iclr:2024:m1", "forum_id", "k", "ICLR", 2024, "ris"),
+        Merge(papers[1].id, "op:iclr:2024:m2", "native_id", "k", "ICLR", 2024, "ris"),
+    )
+    conflicts = (
+        Conflict(papers[0].id, "title_key", "a", "ris", "b", "ris", "ambiguous_not_merged"),
+        Conflict(papers[1].id, "title", "a", "ris", "b", "ris", "precedence:ris"),
+    )
+    files = render(DedupResult(papers, merges, conflicts), [], BUILT)
+    snapshot = json.loads(files["manifest.json"])
+    root = tmp_path / "data"
+    (root / "snapshots" / "snap").mkdir(parents=True)
+    (root / "snapshots" / "snap" / "manifest.json").write_bytes(files["manifest.json"])
+    version = index_version_of(snapshot["snapshot_hash"])
+    (root / "indexes" / version).mkdir(parents=True)
+    manifest = {
+        "index_version": version,
+        "snapshot": "snap",
+        "snapshot_hash": snapshot["snapshot_hash"],
+        "tokenizer_version": TOKENIZER_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        "ranking_params": RANKING_PARAMS,
+    }
+    (root / "indexes" / version / "manifest.json").write_text(json.dumps(manifest))
+    yield root
+
+
+def the_version(data_dir: Path) -> str:
+    return next(p.name for p in (data_dir / "indexes").iterdir())
+
+
+def edit(path: Path, **changes: Any) -> None:
+    doc = json.loads(path.read_text())
+    doc.update(changes)
+    os.chmod(path, 0o644)
+    path.write_text(json.dumps(doc))
+
+
+def test_index_inputs_and_snapshot_facts_read_the_manifests(data_dir: Path) -> None:
+    inputs = index_inputs(data_dir, the_version(data_dir))
+    assert inputs["schema_version"] == SCHEMA_VERSION and inputs["snapshot"] == "snap"
+    crawl, dedup = snapshot_facts(data_dir, inputs)
+    window = json.loads((data_dir / "snapshots" / "snap" / "manifest.json").read_text())["crawl_window"]
+    assert crawl == {"*": window}
+    assert (dedup.merged, dedup.ambiguous_not_merged) == (2, 1)  # the manifest's merges.total, one ambiguous
+
+
+def test_a_source_with_its_own_crawl_window_gets_its_own_key(data_dir: Path) -> None:
+    path = data_dir / "snapshots" / "snap" / "manifest.json"
+    own = {"from": "2026-03-01T00:00:00+00:00", "to": "2026-03-02T00:00:00+00:00"}
+    edit(path, sources={"ris": [], "openreview_v2": {"crawl_window": own}})
+    crawl, _ = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+    assert set(crawl) == {"*", "openreview_v2"} and crawl["openreview_v2"] == own
+
+
+@pytest.mark.parametrize(
+    "window",
+    [
+        {"from": None, "to": "2026-01-01T00:00:00+00:00"},
+        {"from": "yesterday", "to": "2026-01-01"},
+        {"from": "2026-01-01"},
+    ],
+)
+def test_a_crawl_window_that_is_not_iso_dates_is_refused(data_dir: Path, window: dict[str, Any]) -> None:
+    edit(data_dir / "snapshots" / "snap" / "manifest.json", crawl_window=window)
+    with pytest.raises(InternalError):
+        snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+
+
+@pytest.mark.parametrize(
+    "inputs_change",
+    [
+        {"snapshot": "../snap"},
+        {"snapshot": ".hidden"},
+        {"snapshot": ""},
+        {"snapshot_hash": "0" * 64},
+        {"snapshot": "gone"},
+    ],
+)
+def test_snapshot_facts_refuse_a_snapshot_that_is_not_the_indexs(
+    data_dir: Path, inputs_change: dict[str, Any]
+) -> None:
+    inputs = {**index_inputs(data_dir, the_version(data_dir)), **inputs_change}
+    with pytest.raises(InternalError):
+        snapshot_facts(data_dir, inputs)
+
+
+def test_snapshot_facts_refuse_a_manifest_without_merge_counts(data_dir: Path) -> None:
+    edit(data_dir / "snapshots" / "snap" / "manifest.json", merges={})
+    with pytest.raises(InternalError):
+        snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+
+
+def test_index_inputs_refuse_a_bad_name_and_a_manifest_that_does_not_give_its_version(data_dir: Path) -> None:
+    for name in ("current", "../x", "ABC"):
+        with pytest.raises(InternalError):
+            index_inputs(data_dir, name)
+    version = the_version(data_dir)
+    edit(data_dir / "indexes" / version / "manifest.json", schema_version="999")
+    with pytest.raises(InternalError):
+        index_inputs(data_dir, version)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "kind"),
+    [
+        ("snapshot_hash", "0" * 64, "corpus"),
+        ("tokenizer_version", "old", "method"),
+        ("schema_version", "1", "method"),
+        ("ranking_params", {"bm25": {"b": 0.5, "k1": 1.2}}, "method"),
+    ],
+)
+def test_changed_inputs_name_each_input_and_its_kind(field: str, value: Any, kind: str) -> None:
+    current = {
+        k: fields()[k] for k in ("snapshot_hash", "tokenizer_version", "schema_version", "ranking_params")
+    }
+    record = SearchRecord.model_validate(
+        {**fields(**{field: value}), "record_id": "AAAAAAAAAAAA", "ids": IDS}
+    )
+    changed = changed_inputs(record, current, "1")
+    assert [(c.input, c.kind, c.recorded, c.current) for c in changed] == [
+        (field, kind, value, current[field])
+    ]
+    assert [c.input for c in changed_inputs(record, current, "2")] == [field, "query_version"]
+
+
+@dataclass(frozen=True)
+class NoEngine:
+    """Only an index_version: `freeze` must refuse before it ever searches."""
+
+    index_version: str
+
+
+def test_freeze_refuses_a_query_that_did_not_parse(data_dir: Path) -> None:
+    engine: Any = NoEngine(the_version(data_dir))
+    with pytest.raises(InternalError):
+        records.freeze(engine, parse("(trust"), "(trust", data_dir)
+
+
+def test_freeze_refuses_an_index_built_with_another_tokenizer(data_dir: Path) -> None:
+    version = the_version(data_dir)
+    manifest = json.loads((data_dir / "indexes" / version / "manifest.json").read_text())
+    old = index_version_of(manifest["snapshot_hash"], "0")
+    (data_dir / "indexes" / old).mkdir()
+    (data_dir / "indexes" / old / "manifest.json").write_text(
+        json.dumps({**manifest, "index_version": old, "tokenizer_version": "0"})
+    )
+    assert index_inputs(data_dir, old)["tokenizer_version"] == "0"
+    engine: Any = NoEngine(old)
+    with pytest.raises(InternalError):
+        records.freeze(engine, parse("trust"), "trust", data_dir)

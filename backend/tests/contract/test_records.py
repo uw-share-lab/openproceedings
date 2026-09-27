@@ -1,9 +1,11 @@
 """`POST /api/v1/records`, `GET /api/v1/records/{id}` and `/diff` (task-037; spec 04 §Search records, §Testing).
 
 The replay matrix: reproduced (on the served index, and on a pinned older one loaded on demand), drifted
-(a changed snapshot with the pinned index gone; a changed query_version), and mismatch (fixture rows
-inserted with a wrong `ids_hash`, and separately a wrong `excluded`: 200, `mismatch`, exactly one ERROR
-`API_REPLAY_MISMATCH` line, never `drifted`). Plus the diff, the errors, and no query text in any log line.
+(a changed snapshot with the pinned index gone; a changed query version, replayed on the pinned index; the
+method inputs), refused (null counts), and mismatch (fixture rows inserted with a wrong `ids_hash`,
+`excluded`, one bucket, or `canonical_hash`: 200, `mismatch`, exactly one ERROR `API_REPLAY_MISMATCH` line,
+never `drifted`). Plus the diff and its pages, ids on request, the cost, a full store, the errors, and no
+query text in any log line.
 """
 
 from __future__ import annotations
@@ -19,13 +21,14 @@ from typing import Any
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
+from openproceedings.api import RateLimit
 from openproceedings.api import records as api_records
 from openproceedings.api.state import IndexState
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.defaults import DEFAULT_CLAUSES
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import parse
-from openproceedings.records import RECORD_ID, RecordStore, SearchRecord, ids_hash
+from openproceedings.records import RECORD_ID, RECORDS_DIR, RecordStore, SearchRecord, ids_hash, replay
 
 from tests.contract.conftest import SECRET, Store, build, make_app, point_current
 from tests.corpus import Rec
@@ -54,19 +57,29 @@ def save(client: TestClient, q: str, mode: str = "native") -> str:
     return str(r.json()["record_id"])
 
 
-def replayed(client: TestClient, record_id: str) -> dict[str, Any]:
-    r = client.get(f"/api/v1/records/{record_id}")
+def replayed(client: TestClient, record_id: str, *, ids: bool = False) -> dict[str, Any]:
+    r = client.get(f"/api/v1/records/{record_id}", params={"include": "ids"} if ids else {})
     assert r.status_code == 200, r.text
     return r.json()  # type: ignore[no-any-return]
 
 
-def mismatch_lines(logs: Logs) -> list[dict[str, Any]]:
-    return [x for x in logs() if x.get("code") == "API_REPLAY_MISMATCH"]
+def diffed(client: TestClient, record_id: str, **params: Any) -> dict[str, Any]:
+    r = client.get(f"/api/v1/records/{record_id}/diff", params=params)
+    assert r.status_code == 200, r.text
+    return r.json()  # type: ignore[no-any-return]
+
+
+def mismatch_lines(logs: Logs, level: str = "ERROR") -> list[dict[str, Any]]:
+    return [x for x in logs() if x.get("code") == "API_REPLAY_MISMATCH" and x["level"] == level]
+
+
+def store_of(data_dir: Path) -> RecordStore:
+    return RecordStore(data_dir / RECORDS_DIR)
 
 
 @pytest.fixture
 def client(data_dir: Path) -> Iterator[TestClient]:
-    """The app over a private data directory (its records.sqlite is this test's own)."""
+    """The app over a private data directory (its record store is this test's own)."""
     with TestClient(make_app(data_dir)) as c:
         yield c
 
@@ -83,8 +96,9 @@ def test_post_freezes_every_field_of_spec_04s_table(client: TestClient, data_dir
         store.big, TOKENIZER_VERSION, QUERY_VERSION,
     )  # fmt: skip
 
-    record = replayed(client, created["record_id"])["record"]
-    assert set(record) == SPEC_FIELDS | {"record_id", "schema_version", "ranking_params"}
+    record = replayed(client, created["record_id"], ids=True)["record"]
+    assert set(record) == SPEC_FIELDS | {"record_id", "body_version", "schema_version", "ranking_params"}
+    assert record["body_version"] == 1
     search = client.get("/api/v1/search", params={"q": q, "limit": 200}).json()
     parsed = parse(q)
     assert record["input"] == q and record["mode"] == "native"
@@ -105,10 +119,11 @@ def test_post_freezes_every_field_of_spec_04s_table(client: TestClient, data_dir
     assert (record["tokenizer_version"], record["query_version"]) == (TOKENIZER_VERSION, QUERY_VERSION)
     for f in ("snapshot_hash", "schema_version", "ranking_params"):
         assert record[f] == manifest[f]
-    assert record["crawl_dates"] == {"all": snapshot["crawl_window"]}
+    assert record["crawl_dates"] == {"*": snapshot["crawl_window"]}
     assert record["dedup"] == {"merged": 0, "ambiguous_not_merged": 0}
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", record["searched_at"])
     assert record["semantic_version"] is None
+    assert (data_dir / RECORDS_DIR / "records.sqlite").is_file()  # its own writable directory
 
 
 def test_post_scholar_mode_keeps_input_and_translations_and_reproduces(client: TestClient) -> None:
@@ -128,22 +143,24 @@ def test_post_refuses_what_search_refuses_and_writes_nothing(client: TestClient,
     error(client.post("/api/v1/records", json={"q": "x" * 2001}), 422, "PARSE_TOO_LONG")
     error(client.post("/api/v1/records", json={"q": "trust", "total": 3}), 422, "API_BAD_PARAM")
     error(client.post("/api/v1/records", json={"q": "trust", "mode": "wos"}), 422, "API_BAD_PARAM")
-    assert not (data_dir / "records.sqlite").exists()
+    assert not (data_dir / RECORDS_DIR).exists()
 
 
 # --- replay: reproduced -----------------------------------------------------------------------------------
 def test_replay_on_the_same_index_is_reproduced(client: TestClient, store: Store) -> None:
     record_id = save(client, "trust AND calibrat*")
     body = replayed(client, record_id)
-    replay = body["replay"]
-    assert replay["status"] == "reproduced"
-    assert replay["index_version"] == body["index_version"] == store.big
+    replay_ = body["replay"]
+    assert replay_["status"] == "reproduced"
+    assert replay_["index_version"] == body["index_version"] == store.big
     assert (
-        replay["ids_hash"] == body["record"]["ids_hash"] and replay["ids_match"] and replay["excluded_match"]
+        replay_["ids_hash"] == body["record"]["ids_hash"]
+        and replay_["ids_match"]
+        and replay_["excluded_match"]
     )
-    assert replay["total"] == body["record"]["total"] and replay["excluded"] == body["record"]["excluded"]
-    assert (replay["added"], replay["removed"], replay["membership_identical"]) == (0, 0, True)
-    assert replay["changed"] == [] and replay["refused"] is None
+    assert replay_["total"] == body["record"]["total"] and replay_["excluded"] == body["record"]["excluded"]
+    assert (replay_["added"], replay_["removed"], replay_["membership_identical"]) == (0, 0, True)
+    assert replay_["changed"] == [] and replay_["refused"] is None
 
 
 def test_replay_loads_the_pinned_index_after_a_swap(data_dir: Path, store: Store, logs: Logs) -> None:
@@ -165,16 +182,14 @@ def test_a_record_id_is_never_a_path(client: TestClient) -> None:
         e = error(client.get(f"/api/v1/records/{bad}"), 422, "API_BAD_PARAM")
         assert bad not in e["message"]
         error(client.get(f"/api/v1/records/{bad}/diff"), 422, "API_BAD_PARAM")
-    error(
-        client.get("/api/v1/records/ab%2F..%2Fcdefg"), 404, "API_NOT_FOUND"
-    )  # a `/` never reaches the route
+    error(client.get("/api/v1/records/ab%2F..%2Fcdefg"), 404, "API_NOT_FOUND")  # `/` never reaches the route
 
 
 def test_an_unknown_record_is_404_without_creating_the_store(client: TestClient, data_dir: Path) -> None:
     e = error(client.get("/api/v1/records/AAAAAAAAAAAA"), 404, "API_RECORD_NOT_FOUND")
     assert "AAAAAAAAAAAA" not in e["message"]
     error(client.get("/api/v1/records/AAAAAAAAAAAA/diff"), 404, "API_RECORD_NOT_FOUND")
-    assert not (data_dir / "records.sqlite").exists()
+    assert not (data_dir / RECORDS_DIR).exists()
     save(client, "trust")
     error(client.get("/api/v1/records/AAAAAAAAAAAA"), 404, "API_RECORD_NOT_FOUND")
 
@@ -182,42 +197,54 @@ def test_an_unknown_record_is_404_without_creating_the_store(client: TestClient,
 # --- replay: mismatch (fixture rows; the store stays append-only) ----------------------------------------
 def tampered(data_dir: Path, record_id: str, **changes: Any) -> str:
     """A fixture row: a copy of record `record_id` with `changes`, inserted as a new record."""
-    store = RecordStore(data_dir / "records.sqlite")
+    store = store_of(data_dir)
     original = store.get(record_id)
-    assert original is not None
-    fields = original.model_dump(exclude={"record_id", "ids"})
+    assert original is not None and original.ids is not None
+    fields = original.model_dump(mode="json", exclude={"record_id", "ids"})
     return store.insert({**fields, **changes}, original.ids).record_id
 
 
-@pytest.mark.parametrize("what", ["ids_hash", "excluded"])
+@pytest.mark.parametrize("what", ["ids_hash", "excluded", "bucket", "canonical_hash"])
 def test_a_tampered_record_is_a_mismatch_logged_once_never_drifted(
     client: TestClient, data_dir: Path, logs: Logs, what: str
 ) -> None:
     good = save(client, f"trust OR {SECRET}")
-    record = replayed(client, good)["record"]
+    record = replayed(client, good, ids=True)["record"]
+    excluded = json.loads(json.dumps(record["excluded"]))
+    change: dict[str, Any]
     if what == "ids_hash":
-        change: dict[str, Any] = {"ids_hash": ids_hash([*record["ids"], "op:iclr:2024:forged"])}
-    else:
-        excluded = json.loads(json.dumps(record["excluded"]))
+        change = {"ids_hash": ids_hash([*record["ids"], "op:iclr:2024:forged"])}
+    elif what == "excluded":
         excluded["total"] += 1
         excluded["track"]["unknown"] += 1
         change = {"excluded": excluded}
+    elif what == "bucket":  # one record moved between buckets: the total still adds up
+        moved = next(k for k, n in excluded["track"].items() if k != "unknown" and n > 0)
+        excluded["track"][moved] -= 1
+        excluded["track"]["unknown"] += 1
+        change = {"excluded": excluded}
+    else:
+        change = {"canonical_hash": "0" * 64}
     bad = tampered(data_dir, good, **change)
     before = len(mismatch_lines(logs))
 
     body = replayed(client, bad)
     assert body["replay"]["status"] == "mismatch"
     assert body["replay"]["ids_match"] is (what != "ids_hash")
-    assert body["replay"]["excluded_match"] is (what != "excluded")
+    assert body["replay"]["excluded_match"] is (what not in ("excluded", "bucket"))
     assert body["replay"]["changed"] == []  # same index, same query version: never drifted
     lines = mismatch_lines(logs)[before:]
     assert len(lines) == 1, lines
-    assert lines[0]["level"] == "ERROR" and lines[0]["record_id"] == bad
+    assert lines[0]["record_id"] == bad
+    assert lines[0]["canonical_match"] is (what != "canonical_hash")
     assert SECRET not in json.dumps(logs())
 
     diff = client.get(f"/api/v1/records/{bad}/diff")
     assert diff.status_code == 200 and diff.json()["status"] == "mismatch"
-    assert len(mismatch_lines(logs)[before:]) == 2  # one per replay
+    replayed(client, bad)
+    # at ERROR once per record per process; its later replays are DEBUG with the same code
+    assert len(mismatch_lines(logs)[before:]) == 1
+    assert len([x for x in mismatch_lines(logs, "DEBUG") if x["record_id"] == bad]) == 2
     assert replayed(client, good)["replay"]["status"] == "reproduced"  # the original is untouched
 
 
@@ -248,16 +275,79 @@ def test_a_changed_query_version_is_drifted_and_membership_identical(
 ) -> None:
     good = save(client, "trust AND calibrat*")
     old = tampered(data_dir, good, query_version="0")
-    body = replayed(client, old)
-    replay = body["replay"]
-    assert replay["status"] == "drifted"
-    assert replay["changed"] == [
+    replay_ = replayed(client, old)["replay"]
+    assert replay_["status"] == "drifted"
+    assert replay_["changed"] == [
         {"input": "query_version", "kind": "method", "recorded": "0", "current": QUERY_VERSION}
     ]
-    assert (replay["added"], replay["removed"], replay["membership_identical"]) == (0, 0, True)
-    diff = client.get(f"/api/v1/records/{old}/diff").json()
+    assert (replay_["added"], replay_["removed"], replay_["membership_identical"]) == (0, 0, True)
+    diff = diffed(client, old)
     assert (diff["added"], diff["removed"], diff["membership_identical"]) == ([], [], True)
+    assert (diff["added_total"], diff["removed_total"], diff["refused"]) == (0, 0, None)
     assert mismatch_lines(logs) == []
+
+
+def test_method_drift_names_tokenizer_schema_and_ranking_inputs(
+    client: TestClient, data_dir: Path, store: Store
+) -> None:
+    good = save(client, "trust")
+    manifest = json.loads((data_dir / "indexes" / store.big / "manifest.json").read_text())
+    ranking = {"bm25": {"b": 0.5, "k1": 1.2}}
+    old = tampered(
+        data_dir, good, index_version="ffffffffffff", tokenizer_version="0", schema_version="1",
+        ranking_params=ranking,
+    )  # fmt: skip
+    assert replayed(client, old)["replay"]["changed"] == [
+        {"input": "tokenizer_version", "kind": "method", "recorded": "0", "current": TOKENIZER_VERSION},
+        {"input": "schema_version", "kind": "method", "recorded": "1", "current": manifest["schema_version"]},
+        {
+            "input": "ranking_params",
+            "kind": "method",
+            "recorded": ranking,
+            "current": manifest["ranking_params"],
+        },
+    ]
+
+
+def test_an_engine_of_another_version_is_never_used_as_the_pinned_one(data_dir: Path, store: Store) -> None:
+    """Defence in depth: a loader that hands back the wrong index counts as unavailable, never as a replay
+    on the pinned version (which could report `reproduced` or `mismatch` for the wrong index)."""
+    app = make_app(data_dir)
+    with TestClient(app) as client:
+        good = save(client, "trust")
+        small = json.loads((data_dir / "indexes" / store.small / "manifest.json").read_text())
+        # as if saved on the small index (same query, so on the big one its ids would still match)
+        old = tampered(data_dir, good, index_version=store.small, snapshot_hash=small["snapshot_hash"])
+        record = store_of(data_dir).get(old)
+        served = app.state.index.engine
+        assert record is not None and served is not None
+        result = replay(record, served, lambda _v: served, data_dir)  # a loader that lies
+    assert result.status == "drifted" and result.engine is served  # never "reproduced" on the wrong index
+    assert [c.input for c in result.changed] == ["snapshot_hash"]
+
+
+def test_a_canonical_that_no_longer_runs_is_refused_with_null_counts(
+    client: TestClient, data_dir: Path, logs: Logs
+) -> None:
+    """No comparison happened, so added, removed and membership_identical are null, never "all removed"."""
+    good = save(client, "trust")
+    for query_version, status in (("0", "drifted"), (QUERY_VERSION, "mismatch")):
+        bad = tampered(data_dir, good, canonical="(trust", query_version=query_version)
+        replay_ = replayed(client, bad)["replay"]
+        assert replay_["status"] == status and replay_["refused"] == "PARSE_UNBALANCED_PAREN"
+        for k in ("added", "removed", "membership_identical", "total", "excluded", "ids_hash"):
+            assert replay_[k] is None, k
+        assert (replay_["ids_match"], replay_["excluded_match"]) == (False, False)
+        diff = diffed(client, bad)
+        assert diff["status"] == status and diff["refused"] == "PARSE_UNBALANCED_PAREN"
+        assert (diff["added"], diff["removed"]) == ([], [])
+        assert (diff["added_total"], diff["removed_total"], diff["membership_identical"]) == (
+            None,
+            None,
+            None,
+        )
+    lines = mismatch_lines(logs)
+    assert len(lines) == 1 and lines[0]["refused"] == "PARSE_UNBALANCED_PAREN"
 
 
 @dataclass(frozen=True)
@@ -305,19 +395,22 @@ def test_a_changed_snapshot_with_the_pinned_index_gone_is_drifted_with_exact_cou
         record_id = save(client, EVERYTHING)
         assert replayed(client, record_id)["replay"]["status"] == "reproduced"
     second = only(drift, "after", drift.after, tmp_path / "second")
-    shutil.copy(first / "records.sqlite", second / "records.sqlite")  # the record moves; its index doesn't
+    shutil.copytree(first / RECORDS_DIR, second / RECORDS_DIR)  # the record moves; its index doesn't
 
     added, removed = kept(drift.added), kept(drift.removed)
-    assert added and removed  # the fixture really drifts under the defaults
+    assert added and len(removed) > 1  # the fixture really drifts under the defaults
     with TestClient(make_app(second)) as client:
         body = replayed(client, record_id)
-        diff = client.get(f"/api/v1/records/{record_id}/diff").json()
-    replay = body["replay"]
-    assert replay["status"] == "drifted" and replay["index_version"] == drift.after
+        diff = diffed(client, record_id)
+        page = diffed(client, record_id, offset=1, limit=1)
+        error(client.get(f"/api/v1/records/{record_id}/diff", params={"limit": 201}), 422, "API_BAD_PARAM")
+        error(client.get(f"/api/v1/records/{record_id}/diff", params={"offset": -1}), 422, "API_BAD_PARAM")
+    replay_ = body["replay"]
+    assert replay_["status"] == "drifted" and replay_["index_version"] == drift.after
     assert body["record"]["index_version"] == drift.before  # the stored record is unchanged
     before_manifest = json.loads((drift.root / "indexes" / drift.before / "manifest.json").read_text())
     after_manifest = json.loads((drift.root / "indexes" / drift.after / "manifest.json").read_text())
-    assert replay["changed"] == [
+    assert replay_["changed"] == [
         {
             "input": "snapshot_hash",
             "kind": "corpus",
@@ -325,23 +418,29 @@ def test_a_changed_snapshot_with_the_pinned_index_gone_is_drifted_with_exact_cou
             "current": after_manifest["snapshot_hash"],
         }
     ]
-    assert (replay["added"], replay["removed"]) == (len(added), len(removed))
-    assert replay["membership_identical"] is False and replay["ids_match"] is False
-    assert replay["total"] == body["record"]["total"] + len(added) - len(removed)
+    assert (replay_["added"], replay_["removed"]) == (len(added), len(removed))
+    assert replay_["membership_identical"] is False and replay_["ids_match"] is False
+    assert replay_["total"] == body["record"]["total"] + len(added) - len(removed)
 
     assert diff["status"] == "drifted" and diff["recorded_index_version"] == drift.before
-    assert diff["changed"] == replay["changed"]
+    assert diff["changed"] == replay_["changed"] and diff["refused"] is None
     titles = {as_paper(r).id: as_paper(r).title for r in drift.added}
     assert diff["added"] == [{"id": i, "title": titles[i]} for i in added]
     # the removed papers are in no index this instance holds (the pinned one is gone): titles are null
     assert diff["removed"] == [{"id": i, "title": None} for i in removed]
+    assert (diff["added_total"], diff["removed_total"]) == (len(added), len(removed))
+    # a page: at most `limit` of each list from `offset`, the totals always in full
+    assert page["removed"] == [{"id": i, "title": None} for i in removed[1:2]] and page["added"] == []
+    assert (page["added_total"], page["removed_total"]) == (len(added), len(removed))
     assert mismatch_lines(logs) == []
     assert any(x["event"] == "pinned_index_unavailable" and x["reason"] == "absent" for x in logs())
 
 
-def test_diff_titles_removed_papers_from_the_pinned_index_when_it_is_still_here(
+def test_a_changed_query_version_replays_on_the_pinned_index_when_it_is_here(
     drift: Drift, tmp_path: Path
 ) -> None:
+    """Only the query version drifted: the replay runs on the record's own index, so `changed` isolates the
+    method drift instead of mixing in the corpus change of the served index."""
     both = only(drift, "before", drift.before, tmp_path / "both")
     shutil.copytree(drift.root / "snapshots" / "after", both / "snapshots" / "after")
     shutil.copytree(drift.root / "indexes" / drift.after, both / "indexes" / drift.after)
@@ -350,18 +449,49 @@ def test_diff_titles_removed_papers_from_the_pinned_index_when_it_is_still_here(
     point_current(both, drift.after)
     old = tampered(both, good, query_version="0")  # the pinned index is here, but not the query version
     with TestClient(make_app(both)) as client:
-        diff = client.get(f"/api/v1/records/{old}/diff").json()
-    assert diff["status"] == "drifted"
-    assert [c["input"] for c in diff["changed"]] == ["snapshot_hash", "query_version"]
-    titles = {as_paper(r).id: as_paper(r).title for r in drift.removed}
-    assert diff["removed"] == [{"id": i, "title": titles[i]} for i in kept(drift.removed)]
+        body = replayed(client, old)
+        diff = diffed(client, old)
+    assert body["replay"]["status"] == "drifted" and body["replay"]["index_version"] == drift.before
+    assert [c["input"] for c in diff["changed"]] == ["query_version"]
+    assert diff["membership_identical"] is True and diff["removed"] == []
 
 
 def test_diff_of_a_reproduced_record_is_empty(client: TestClient) -> None:
     record_id = save(client, "trust")
-    diff = client.get(f"/api/v1/records/{record_id}/diff").json()
+    diff = diffed(client, record_id)
     assert diff["status"] == "reproduced" and diff["changed"] == []
     assert (diff["added"], diff["removed"], diff["membership_identical"]) == ([], [], True)
+
+
+# --- ids on request; cost; a full store ------------------------------------------------------------------
+def test_ids_are_left_out_unless_asked_for(client: TestClient) -> None:
+    record_id = save(client, "trust")
+    assert replayed(client, record_id)["record"]["ids"] is None
+    ids = replayed(client, record_id, ids=True)["record"]["ids"]
+    assert ids and ids == sorted(ids)
+    error(client.get(f"/api/v1/records/{record_id}", params={"include": "abstracts"}), 422, "API_BAD_PARAM")
+
+
+def test_record_routes_cost_the_export_weight(data_dir: Path) -> None:
+    limit = RateLimit(capacity=20, refill_per_second=0.001, export_weight=10)
+    with TestClient(make_app(data_dir, rate_limit=limit)) as client:
+        record_id = save(client, "trust")  # 10 of 20
+        assert client.get(f"/api/v1/records/{record_id}").status_code == 200  # 20 of 20
+        error(client.get(f"/api/v1/records/{record_id}/diff"), 429, "API_RATE_LIMITED")
+    limit = RateLimit(capacity=10, refill_per_second=0.001, export_weight=10)
+    with TestClient(make_app(data_dir, rate_limit=limit)) as client:
+        assert client.get("/api/v1/meta").status_code == 200  # 1 of 10: a record route no longer fits
+        error(client.post("/api/v1/records", json={"q": "trust"}), 429, "API_RATE_LIMITED")
+
+
+@pytest.mark.parametrize("limits", [{"records_max_bytes": 1}, {"records_min_free_bytes": 1 << 62}])
+def test_a_full_store_refuses_saves_with_503(data_dir: Path, limits: dict[str, int]) -> None:
+    with TestClient(make_app(data_dir, **limits)) as client:
+        if "records_max_bytes" in limits:
+            first = save(client, "trust")  # an empty store takes the first
+            assert replayed(client, first)["replay"]["status"] == "reproduced"
+        e = error(client.post("/api/v1/records", json={"q": "trust"}), 503, "API_RECORDS_STORE_FULL")
+        assert "full" in e["message"]
 
 
 # --- privacy ----------------------------------------------------------------------------------------------
@@ -378,5 +508,5 @@ def test_no_query_text_in_any_log_line(client: TestClient, logs: Logs) -> None:
 
 def test_the_stored_record_holds_the_query_text(client: TestClient, data_dir: Path) -> None:
     record_id = save(client, f"{SECRET} OR trust")
-    stored = RecordStore(data_dir / "records.sqlite").get(record_id)
+    stored = store_of(data_dir).get(record_id)
     assert isinstance(stored, SearchRecord) and SECRET in stored.input  # the record keeps what the logs don't

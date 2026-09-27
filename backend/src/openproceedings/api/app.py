@@ -89,7 +89,7 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
     )
     app.state.index = state
     app.state.config = config
-    records.install(app, config.data_dir, state)
+    records.install(app, config, state)
     install_error_handlers(app)
     for router in ROUTERS:
         if router.prefix != API_PREFIX:
