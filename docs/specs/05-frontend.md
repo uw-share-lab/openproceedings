@@ -148,6 +148,16 @@ warnings, the save's index check), the design doc says so; its open questions li
    term can be a word, phrase or wildcard, with a per-term field scope. The builder round-trips through the
    AST. Switching from text to builder is allowed only when the AST fits the group shape; otherwise the
    builder shows "this query is too complex for the builder" and stays read-only.
+   *As built (TASK-043, `frontend/src/builder/`):* the Text/Builder tabs share one draft string, which stays
+   canonical. The builder reads the server's `ast` (`read.ts`: groups, one optional Exclude row, and the
+   top-level filters as read-only limits kept as written) and writes the draft back only after an edit
+   (`write.ts`: fully parenthesised, uppercase operators, each term exactly one lexeme, checked with the
+   editor's mirror of the server lexer). Two goldens tie it to the parser:
+   `builder-read-golden.json` (the backend's own reading of 300+ queries, which `read.ts` must equal) and
+   `builder-write-golden.json` (what the builder writes, unedited and after seeded random edits, which
+   `backend/tests/contract/test_frontend_builder_golden.py` parses: an unedited rewrite keeps the
+   `canonical`, and an edited query means exactly what its chips say). At run time the builder checks the
+   server's reading of each query it wrote and says so if it differs.
 4. **Filter sidebar.** Venue, year range, track, status. Workshop is **off by default**. Each control shows
    its count and **edits the `track:`/`status:` clauses in `q`**.
 5. **Exclusion banner.** "212 workshop · 4 competition · 88 rejected excluded by default filters", with

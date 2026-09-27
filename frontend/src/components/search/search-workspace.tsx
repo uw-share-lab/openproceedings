@@ -12,14 +12,23 @@
  * `/parse`, labelled "Draft — not searched", and the searched query's warnings stay one click away.
  */
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useMeta } from "@/api/hooks";
-import { codePointLength } from "@/api/spans";
+import { codePointLength, codePointSpanToUtf16 } from "@/api/spans";
+import { ConceptBuilder } from "@/builder/concept-builder";
+import { panelId, QueryTabList, tabId, type QueryTab } from "@/builder/query-tabs";
 import { countText, editorDiagnostics, itemOf, itemsOf, plural, type Item } from "@/editor/diagnostics";
 import type { ErrorEnvelope, ParseOutcome, ParseResponse } from "@/editor/parse";
 import { QueryEditor, type QueryEditorHandle } from "@/editor/query-editor";
 import { useDraftParse, useSearchedParse } from "@/editor/use-parse";
-import { DEFAULT_LIMITS, reduce, searchHref, type Mode, type SearchState } from "@/lib/search-state";
+import {
+  DEFAULT_LIMITS,
+  reduce,
+  searchHref,
+  type Mode,
+  type SearchAction,
+  type SearchState,
+} from "@/lib/search-state";
 import { DiagnosticsRow } from "./diagnostics-row";
 import { EmptyState } from "./empty-state";
 import type { Example } from "./examples";
@@ -231,18 +240,43 @@ export function SearchWorkspace({ state, refusal = null, openTree = false }: Sea
     }
   });
 
+  // ---- Text/Builder tabs (TASK-043): see src/builder/query-tabs.tsx and concept-builder.tsx
+  const [tab, setTab] = useState<QueryTab>("text");
+  const [enterBuilder, setEnterBuilder] = useState(false);
+  const tabsId = useId();
+  // Where the editor's cursor goes once the Text panel is showing again (UTF-16 offsets)
+  const editorSelection = useRef<readonly [number, number] | null>(null);
+  useEffect(() => {
+    const at = editorSelection.current;
+    if (tab !== "text" || at === null) return;
+    editorSelection.current = null;
+    editor.current?.select(at[0], at[1]);
+  });
+  const toText = (span?: readonly [number, number]) => {
+    setTab("text");
+    editorSelection.current =
+      span === undefined ? [draft.text.length, draft.text.length] : codePointSpanToUtf16(draft.text, span);
+  };
+  const selectTab = (next: QueryTab, enter: boolean) => {
+    if (next === "text" && enter) toText();
+    else setTab(next);
+    setEnterBuilder(next === "builder" && enter);
+  };
+  const builderFocused = useCallback(() => setEnterBuilder(false), []);
+
   const submit = () => {
-    const next = reduce(
-      state,
-      { type: "submit", q: draft.text, mode: draft.mode },
-      meta?.limits ?? DEFAULT_LIMITS,
-    );
+    // From the Builder tab, Search dispatches builderEdit (design §Interaction spec); a Syntax change goes too
+    const action: SearchAction =
+      tab === "builder" && draft.mode === state.mode
+        ? { type: "builderEdit", q: draft.text }
+        : { type: "submit", q: draft.text, mode: draft.mode };
+    const next = reduce(state, action, meta?.limits ?? DEFAULT_LIMITS);
     router.push(searchHref(next));
   };
 
   const load = (next: Draft) => {
     setDraft(next);
-    editor.current?.focus();
+    if (tab === "text") editor.current?.focus();
   };
 
   const shownDirty = shown !== null && isDirty(shown, state);
@@ -263,6 +297,7 @@ export function SearchWorkspace({ state, refusal = null, openTree = false }: Sea
         }}
       >
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <QueryTabList tab={tab} onSelect={selectTab} idBase={tabsId} />
           <label htmlFor={modeId} className="flex items-center gap-2">
             Syntax
             <select
@@ -301,17 +336,41 @@ export function SearchWorkspace({ state, refusal = null, openTree = false }: Sea
             </button>
           </div>
         </div>
-        <QueryEditor
-          handle={editor}
-          value={draft.text}
-          onChange={(text) => setDraft((d) => ({ ...d, text }))}
-          onSubmit={submit}
-          diagnostics={squiggles}
-          diagnosticsFor={shown?.text ?? null}
-          describedBy={summaryId}
-          meta={meta}
-          autoFocus={state.q === ""}
-        />
+        <div
+          role="tabpanel"
+          id={panelId(tabsId, "text")}
+          aria-labelledby={tabId(tabsId, "text")}
+          hidden={tab !== "text"}
+        >
+          <QueryEditor
+            handle={editor}
+            value={draft.text}
+            onChange={(text) => setDraft((d) => ({ ...d, text }))}
+            onSubmit={submit}
+            diagnostics={squiggles}
+            diagnosticsFor={shown?.text ?? null}
+            describedBy={summaryId}
+            meta={meta}
+            autoFocus={state.q === ""}
+          />
+        </div>
+        <div
+          role="tabpanel"
+          id={panelId(tabsId, "builder")}
+          aria-labelledby={tabId(tabsId, "builder")}
+          hidden={tab !== "builder"}
+        >
+          {tab === "builder" && (
+            <ConceptBuilder
+              text={draft.text}
+              mode={draft.mode}
+              onEdit={(text) => setDraft((d) => ({ ...d, text }))}
+              onEditInText={toText}
+              focusOnOpen={enterBuilder}
+              onFocused={builderFocused}
+            />
+          )}
+        </div>
       </form>
 
       <p id={summaryId} role="status" aria-live="polite" className="min-h-5 text-sm text-muted-foreground">

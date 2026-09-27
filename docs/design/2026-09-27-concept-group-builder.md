@@ -156,6 +156,44 @@ Copy deck §Builder.
 chip) and S10 (empty builder) are fixed above, as are the self-check's SC-10 to SC-13 (named blocking
 construct; untouched text round-trips verbatim; focus after removal; per-term diagnostics).
 
+## As built (TASK-043)
+
+Code: `frontend/src/builder/` (`model.ts`, `read.ts`, `terms.ts`, `write.ts`, `edits.ts`,
+`concept-builder.tsx`, `query-tabs.tsx`); the workspace mounts the tabs (`search-workspace.tsx`). Where it
+differs from or adds to the design above:
+
+- **Two more blocker kinds.** The fit table implies them but BD-7 doesn't word them: a `NOT` inside a group
+  (`trust (bias OR NOT fairness)`) is "NOT inside OR", and a second top-level `NOT` is "a second NOT". For
+  "AND inside OR", "a limit inside OR" and "NOT inside OR" the named construct is the whole group (as in the
+  table's examples); for proximity it is the `NEAR`, for "NOT of a combination" and "a second NOT" the `NOT`.
+  An `OR` of only filters (main-7's `(source:… OR …)`) and a `NOT` of a filter are limits.
+- **The Exclude row keeps its written place.** It is shown last, but a query read with its `NOT` elsewhere
+  (`NOT (a OR b) trust`) writes it back there after an edit, so an edit elsewhere doesn't reorder the
+  canonical query; a new Exclude row is written last.
+- **Terms.** A term's text is written as typed when it is exactly one word, wildcard or phrase lexeme
+  (checked with `lex.ts`, the server lexer's generated mirror, both alone and between `(`/`)`/spaces);
+  lowercase `and`/`or`/`not` are quoted; anything else becomes one phrase (quote marks become spaces,
+  backslashes go) and the chip says "searched as one phrase". A typed `title:`/`abstract:` prefix sets the
+  chip's scope; the edit box holds the term without its scope. A read leaf that isn't one lexeme (a Scholar
+  unquoted phrase) is written in its canonical spelling (`"large language model$"`). After writing, the
+  whole string is lexed again; a term that no longer lexes as itself next to its neighbours (a LaTeX `$`
+  pairing across terms) is left out and its chip says so.
+- **Tabs.** ←/→/Home/End select a tab and keep focus on the tabs (so the reader can go back); a click, Enter
+  or Space selects it and moves focus into the panel (the first term, the read-only notice, or the editor
+  with the cursor at the end). The builder panel is mounted only while selected; the editor stays mounted.
+- **Run-time check.** When the server answers for a query the builder wrote, the builder reads that `ast`
+  and requires exactly its terms at the spans it wrote them, in its groups, with their scopes; otherwise it
+  shows an alert ("The server reads the builder's query differently from these groups…"). The goldens make
+  that unreachable for every case they hold.
+- **Not built here:** the wildcard expansions under a group "after Search" (they come from `/search`, whose
+  results are TASK-042's) and the dimmed "groups that did fit" under the B2 notice.
+- **Tests:** `read.test.ts` (the fit rule against the backend's reading), `write.test.ts` (the write golden,
+  seeded edits, the writer's rules), `concept-builder.test.tsx` (every state, keyboard, focus and
+  announcements, `/parse` answered from the backend's real `ast`s), and
+  `backend/tests/contract/test_frontend_builder_golden.py`. Regenerate: `(cd backend && uv run python -m
+  tests.contract.test_frontend_builder_golden --write)`, then `UPDATE_BUILDER_GOLDEN=1 npm test --workspace
+  frontend -- builder`.
+
 ## Open questions
 1. Should the builder offer NEAR between two groups? Not in M3b (spec 05 defines rows as OR lists); revisit
    after TASK-047.
