@@ -125,10 +125,13 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
 
         def exclusion_run(ast: object = ast, result: object = result) -> None:
             engine.verified.clear()
+            engine.compiled.clear()  # the compiled query holds verified results too
             engine.expanded.clear()
             excluded(engine, result, len(engine.match_ids(ast)))  # type: ignore[arg-type]
 
         engine.verified.clear()
+
+        engine.compiled.clear()  # the compiled query holds verified results too
         engine.expanded.clear()
         cold = timed(lambda ast=ast: engine.search(ast, limit=50), rounds=1)[0]  # type: ignore[misc]
         warm = p95(timed(lambda ast=ast: engine.search(ast, limit=50), WARM_ROUNDS))  # type: ignore[misc]
@@ -155,6 +158,7 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
         ast = parse(q).effective_ast
         assert ast is not None
         engine.verified.clear()
+        engine.compiled.clear()  # the compiled query holds verified results too
         engine.expanded.clear()
         t = time.perf_counter()
         total = len(engine.match_ids(ast))

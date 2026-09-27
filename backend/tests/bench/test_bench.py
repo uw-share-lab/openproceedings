@@ -81,7 +81,8 @@ def test_match_ids_with_exclusion_accounting(benchmark: Any, engine: TantivyEngi
     assert ast is not None
 
     def run() -> object:
-        engine.verified.clear()  # a cold verified-clause cache, as for a new query
+        engine.verified.clear()  # cold, as for a new query: no verified clauses and no compiled query
+        engine.compiled.clear()
         ids = engine.match_ids(ast)
         return excluded(engine, result, len(ids))
 
