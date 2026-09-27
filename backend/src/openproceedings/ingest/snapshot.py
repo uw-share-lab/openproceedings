@@ -7,7 +7,8 @@ cache proceedings pages (`sources/crawl.py`). `build` imports everything cached 
 OpenReview crawl replayed from its cached responses, and each finished NeurIPS/PMLR crawl re-mined from its cached
 pages), dedups, adds the conflicts a crawl found inside one source (`with_crawl_conflicts`), and writes
 `<snapshots>/<crawl date>-<shorthash>/` with `records.jsonl`, `manifest.json`, `merges.csv` and
-`conflicts.csv`. It never fetches, so it works offline.
+`conflicts.csv`. It never fetches, so it works offline. It also reports (and logs) each venue-year status
+its records hold that their sources can't supply (`status_check`, TASK-109), without changing the snapshot.
 
 Determinism: records sorted by id, one canonical JSON line each; `snapshot_hash` is the sha256 of the
 `records.jsonl` bytes; the directory's date is the newest claim's fetch date (never the build clock); only
@@ -45,6 +46,7 @@ from openproceedings.ingest.dedup import Conflict, DedupResult, Merge, dedup
 from openproceedings.ingest.record import RECORD_SCHEMA_VERSION, PaperRecord
 from openproceedings.ingest.ris import ImportReport, import_ris
 from openproceedings.ingest.sources.common import Report, sources_manifest
+from openproceedings.ingest.status_check import UnexpectedStatus, unexpected_statuses
 from openproceedings.logs import elapsed_ms
 from openproceedings.query.normalize import TOKENIZER_VERSION
 
@@ -103,6 +105,9 @@ class BuildResult:
     path: Path
     snapshot_hash: str
     created: bool  # False when this snapshot already existed
+    # each (venue, year, status) its records hold that their sources can't supply (TASK-109): reported and
+    # logged, never written into the snapshot
+    unexpected_statuses: tuple[UnexpectedStatus, ...] = ()
 
 
 def _sha256(data: bytes) -> str:
@@ -361,6 +366,7 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
     began = time.monotonic()
     records, reports, crawls = load_sources(cache)
     result = with_crawl_conflicts(dedup(records), crawls)
+    unexpected = tuple(unexpected_statuses(result.records))
     files = render(result, reports, built_at or datetime.now(UTC), crawls)
     manifest = json.loads(files["manifest.json"])
     snapshot_hash = manifest["snapshot_hash"]
@@ -375,7 +381,7 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
                 )
             storage.lock(target)  # a crash between placing and locking left it writable
             log.info("snapshot_exists", extra={"snapshot": target.name, "snapshot_hash": snapshot_hash})
-            return BuildResult(target, snapshot_hash, created=False)
+            return BuildResult(target, snapshot_hash, created=False, unexpected_statuses=unexpected)
         with storage.staging(snapshots) as tmp:
             for name, data in files.items():
                 (tmp / name).write_bytes(data)
@@ -384,9 +390,9 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
         "snapshot_built" if created else "snapshot_exists",
         extra={"snapshot": target.name, "snapshot_hash": snapshot_hash, "records": manifest["record_count"],
                "merges": manifest["merges"]["total"], "conflicts": manifest["conflicts"]["total"],
-               "ms": elapsed_ms(began, time.monotonic)},
+               "unexpected_statuses": len(unexpected), "ms": elapsed_ms(began, time.monotonic)},
     )  # fmt: skip
-    return BuildResult(target, snapshot_hash, created=created)
+    return BuildResult(target, snapshot_hash, created=created, unexpected_statuses=unexpected)
 
 
 class _OnePass:

@@ -232,11 +232,16 @@ def note_record(
 def _pages(client: OpenReviewClient, path: str, params: Mapping[str, str | int], key: str,
            page_size: int) -> Iterator[tuple[dict[str, Any], list[Any]]]:  # fmt: skip
     """Each page's cache entry and its items, `offset` by `page_size`, until a short page. A page holding
-    only ids already seen means the API ignored the offset: refused, never looped on."""
+    only ids already seen means the API ignored the offset: refused, never looped on. A listing is re-fetched
+    as a whole: once one page has expired (TASK-102), every later page is fetched again too, so the pages
+    come from one moment and agree."""
     offset = 0
     seen: set[str] = set()
+    stale = False
     while True:
-        entry = client.get(path, {**params, "limit": page_size, "offset": offset})
+        expired = client.stats.expired
+        entry = client.get(path, {**params, "limit": page_size, "offset": offset}, refresh=stale)
+        stale = stale or client.stats.expired > expired
         items = entry["json"].get(key)
         if not isinstance(items, list):
             raise CrawlError(f"{entry['url']} has no {key} list", reason="unexpected_shape")

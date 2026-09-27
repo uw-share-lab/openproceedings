@@ -15,7 +15,9 @@ OpenReview's policy, its login and its JSON cache entries on top.
 - **Cache.** Every successful GET is stored under `<cache>/openreview/<api>/http/` as `{"key": url, "payload":
   {url, fetched_at, headers, json}}` (the layout scholarmend's `Cache` wrote, so an older cache replays), keyed
   by the canonical URL (parameters sorted). `offline=True` never touches the network (`http.CacheMiss`);
-  `refresh=True` refetches and overwrites.
+  `refresh=True` refetches and overwrites. A live client also refetches an entry past its TTL (`ttl`, TASK-102;
+  spec 01 §Pipeline): a listing that can still change expires sooner than one that has settled, and API v1
+  (every venue-year on it is over) never expires. Offline, nothing expires.
 
 Nothing here logs or raises with a credential, the token, a request body or response text.
 """
@@ -26,12 +28,13 @@ import json
 import logging
 import os
 import random
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from openproceedings.ingest.sources.http import (
     USER_AGENT,
@@ -56,11 +59,55 @@ API_V2 = "https://api2.openreview.net"
 API_V1 = "https://api.openreview.net"
 HOSTS = frozenset({"api2.openreview.net", "api.openreview.net"})
 KEPT_HEADERS = ("content-type", "ratelimit-policy", "ratelimit-remaining", "ratelimit-reset")
+
+# --- expiry (TASK-102; spec 01 §Pipeline, Cache expiry) ----------------------------------------------------
+
+DAY = 86400.0
+# (listing kind) → (TTL while its venue-year is open, TTL once it is over), in seconds. A venue-year is open
+# from its call until the end of its calendar year: its decisions may not be out, a withdrawal or an opted-in
+# rejected paper can still appear. After that the accepted list has settled; a status list can still gain a
+# late opt-in, so it is looked at again sooner.
+TTL: dict[str, tuple[float, float]] = {
+    "accepted": (7 * DAY, 365 * DAY),  # grows once, at decisions; camera-ready edits until the conference
+    "status": (1 * DAY, 90 * DAY),  # submissions, rejected, withdrawn, desk-rejected: change until decisions
+    "groups": (1 * DAY, 90 * DAY),  # a year's groups (a workshop added) and a venue's group (its venueids)
+    "other": (1 * DAY, 1 * DAY),  # a request naming no venue-year: the shortest
+}
+_STATUS_LIST = ("/Submission", "/Rejected_Submission", "/Withdrawn_Submission", "/Desk_Rejected_Submission")
+_YEAR = re.compile(r"\.cc/(\d{4})(?:/|$)")
+
+
+def listing_kind(url: str) -> tuple[str, int | None]:
+    """What a cached API v2 GET lists (a `TTL` key) and the venue-year it names (None if it names none)."""
+    parts = urlsplit(url)
+    params = {k: v[0] for k, v in parse_qs(parts.query).items()}
+    if parts.path == "/notes" and (vid := params.get("content.venueid")):
+        kind = "status" if vid.endswith(_STATUS_LIST) else "accepted"
+        named = vid
+    elif parts.path == "/groups" and (named := params.get("parent") or params.get("id") or ""):
+        kind = "groups"
+    else:
+        return "other", None
+    m = _YEAR.search(named)
+    return (kind, int(m.group(1))) if m else ("other", None)
+
+
+def ttl(url: str, now: datetime) -> float | None:
+    """How long a cached OpenReview response stays fresh (`Policy.ttl`): API v1 never expires (its venue-years,
+    ICLR ≤2023 and NeurIPS 2021–2022, are over and v1 is frozen); an API v2 listing by its kind, and by whether
+    its venue-year is still open (its year is this calendar year or later) or over (`TTL`)."""
+    if urlsplit(url).hostname == "api.openreview.net":
+        return None
+    kind, year = listing_kind(url)
+    open_ttl, settled_ttl = TTL[kind]
+    return open_ttl if year is None or year >= now.year else settled_ttl
+
+
 # the widest window OpenReview advertises is an hour; a hostile header can't park a run longer
 POLICY = Policy(
     hosts=HOSTS, accept="application/json", expect="json", keep_query=True, attempts=6, backoff=(1.0, 60.0),
     jitter=random.random, hint_pad=1.0, max_wait=3700.0, cap_waits=True, wait_after_last=False,
-    max_body=64 * 1024 * 1024, timeout=60.0, log_prefix="openreview",
+    max_body=64 * 1024 * 1024, timeout=60.0, log_prefix="openreview", ttl=ttl,
 )  # fmt: skip
 
 Entry = dict[str, Any]  # {"url", "fetched_at", "headers", "json"}
@@ -119,7 +166,12 @@ class EntryCodec:
         payload = document["payload"]
         if not isinstance(payload.get("json"), dict) or payload.get("url") != document["key"]:
             raise ValueError("not an OpenReview response entry")
+        if datetime.fromisoformat(payload["fetched_at"]).tzinfo is None:
+            raise ValueError("naive fetched_at")
         return str(document["key"]), payload
+
+    def fetched_at(self, entry: Entry) -> datetime:
+        return datetime.fromisoformat(entry["fetched_at"])
 
 
 class OpenReviewClient(HttpClient[Entry]):
@@ -170,8 +222,9 @@ class OpenReviewClient(HttpClient[Entry]):
         query = urlencode(sorted((k, str(v)) for k, v in params.items()), safe="/")
         return f"{self.base}{path}" + (f"?{query}" if query else "")
 
-    def get(self, path: str, params: Mapping[str, str | int]) -> Entry:
-        """The cached entry for this GET, fetched (and cached) first if the cache lacks it."""
+    def get(self, path: str, params: Mapping[str, str | int], *, refresh: bool = False) -> Entry:
+        """The cached entry for this GET, fetched (and cached) first if the cache lacks it, it has expired, or
+        `refresh` (this call) or the client's `refresh` (every call) asks."""
 
         def fetch(url: str) -> tuple[Entry, bool]:
             response, data = self._authenticated_get(url)
@@ -183,7 +236,7 @@ class OpenReviewClient(HttpClient[Entry]):
             }
             return entry, True
 
-        return self.through_cache(self.url(path, params), fetch, refresh=self.refresh)
+        return self.through_cache(self.url(path, params), fetch, refresh=self.refresh or refresh)
 
     def _login(self) -> str:
         if self._credentials is None:

@@ -365,7 +365,8 @@ def _snapshot_build(ns: argparse.Namespace) -> int:
     from openproceedings.ingest.snapshot import build
 
     result = build(ns.cache or ns.data_dir / "cache", ns.out or ns.data_dir / "snapshots")
-    _print({"path": str(result.path), "snapshot_hash": result.snapshot_hash, "created": result.created})
+    _print({"path": str(result.path), "snapshot_hash": result.snapshot_hash, "created": result.created,
+            "unexpected_statuses": [u.to_json() for u in result.unexpected_statuses]})  # fmt: skip
     return 0
 
 

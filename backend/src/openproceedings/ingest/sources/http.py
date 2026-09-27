@@ -20,6 +20,10 @@ NeurIPS proceedings, PMLR) fetches through `HttpClient`, and only the source's o
   proceedings' fixture-shaped pages (`PageCodec`), OpenReview's `{key, payload}` documents. A client without a
   transport reads the cache only; a miss is `CacheMiss`, never a network call. The entry's fetch time is what
   every claim built from it carries.
+- **Expiry** (TASK-102). `Policy.ttl(url, now)` is how long an entry for `url` stays fresh (seconds; None: never
+  expires). A live client re-fetches an entry older than that, logs `<prefix>_cache_expired` and overwrites it;
+  a client without a transport never expires anything, so an offline replay (`op snapshot build`) reads the
+  same bytes whenever it runs. The proceedings never expire; OpenReview's TTLs are `openreview_client.ttl`.
 - **Errors.** One hierarchy under `SourceError` (each with a `reason` constant for the log), handled once in
   `cli.main` and in `snapshot.load_sources`. No message holds a credential, a token or response text.
 
@@ -223,6 +227,11 @@ def _no_jitter() -> float:
     return 0.0
 
 
+def never_expires(url: str, now: datetime) -> float | None:
+    """The default `Policy.ttl`: a cached response stays fresh for good (only `--refresh` re-fetches it)."""
+    return None
+
+
 @dataclass(frozen=True)
 class Policy:
     """One source's rules for the shared client. The defaults are the proceedings crawlers';
@@ -242,7 +251,10 @@ class Policy:
     wait_after_last: bool = True  # back off after the last attempt too (a resumed run starts rested)
     max_body: int = 20 * 1024 * 1024
     timeout: float = 30.0
-    log_prefix: str = "crawl"  # `<prefix>_retry_wait`, `<prefix>_budget_wait`
+    log_prefix: str = "crawl"  # `<prefix>_retry_wait`, `<prefix>_budget_wait`, `<prefix>_cache_expired`
+    # how long a cached response to `url` stays fresh at `now` (seconds; None: for good); only a live client
+    # expires anything (module docstring, Expiry)
+    ttl: Callable[[str, datetime], float | None] = never_expires
 
 
 @dataclass
@@ -250,6 +262,7 @@ class FetchStats:
     network: int = 0  # requests sent (every attempt, login included)
     cached: int = 0  # answered from the cache
     retries: int = 0
+    expired: int = 0  # cache entries past their TTL, re-fetched
 
 
 # --- the cache ---------------------------------------------------------------------------------------------
@@ -263,6 +276,7 @@ class Codec[T](Protocol):
     def key(self, entry: T) -> str: ...
     def encode(self, entry: T) -> dict[str, Any]: ...
     def decode(self, document: dict[str, Any]) -> tuple[str, T]: ...  # (the URL it names, the entry)
+    def fetched_at(self, entry: T) -> datetime: ...  # when the entry was fetched (its age, for expiry)
 
 
 class ResponseCache[T]:
@@ -324,9 +338,11 @@ class HttpClient[T]:
 
     def through_cache(self, url: str, fetch: Callable[[str], tuple[T, bool]], *, refresh: bool = False) -> T:
         """The cached entry for `url` unless `refresh`; else `fetch(url)` → (entry, keep?), stored when kept.
-        Offline, a miss raises instead of fetching."""
+        A live client re-fetches an entry past its TTL (`Policy.ttl`); offline, nothing expires and a miss
+        raises instead of fetching."""
         url = self.check(url)
-        if not refresh and (hit := self.cache.get(url)) is not None:
+        hit = None if refresh else self.cache.get(url)
+        if hit is not None and (self.transport is None or not self._expired(url, hit)):
             self.stats.cached += 1
             return hit
         if self.transport is None:
@@ -335,6 +351,19 @@ class HttpClient[T]:
         if keep:
             self.cache.put(entry)
         return entry
+
+    def _expired(self, url: str, entry: T) -> bool:
+        """Whether `entry` (cached for `url`) is past the policy's TTL; an expiry is counted and logged."""
+        now = self.clock.now()
+        if (ttl := self.policy.ttl(url, now)) is None:
+            return False
+        age = (now - self.cache.codec.fetched_at(entry)).total_seconds()
+        if age <= ttl:
+            return False
+        self.stats.expired += 1
+        log.info(f"{self.policy.log_prefix}_cache_expired",
+                 extra={"url": url, "age_s": round(age), "ttl_s": round(ttl)})  # fmt: skip
+        return True
 
     def send(self, request: Request) -> Response:
         """One request, paced, retried on 429, 5xx, a network error and a truncated 200; any other response
@@ -476,6 +505,9 @@ class PageCodec:
             "response": {"status": entry.status, "headers": {"content-type": entry.content_type},
                          "text": entry.text},
         }  # fmt: skip
+
+    def fetched_at(self, entry: Page) -> datetime:
+        return entry.fetched_at
 
     def decode(self, document: dict[str, Any]) -> tuple[str, Page]:
         url, response = document["request"]["url"], document["response"]
