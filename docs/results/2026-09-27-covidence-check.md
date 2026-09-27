@@ -129,4 +129,4 @@ Record the result below. The export only changes to `JOUR` through a spec 04 cha
   record's `dedup` counts, PRISMA-S item 16) covers only merges inside openproceedings at ingest; never add
   Covidence's count to it, or its count to Covidence's.
 - 2026-09-27, run by the project owner with the assistant driving the browser for the first import. The
-  throwaway review is to be deleted by the owner (deleting a review is left to a person).
+  owner deleted the throwaway review the same day.

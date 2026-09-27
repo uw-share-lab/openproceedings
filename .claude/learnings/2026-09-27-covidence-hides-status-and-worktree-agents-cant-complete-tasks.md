@@ -37,7 +37,7 @@ Trust-Evals one), then land the M3 follow-ups: `/parse` filter clauses (078), pa
   screening card, the RIS `KW  - status:` line would reach screeners with no export change.
 
 ## Follow-ups
-- [ ] The owner deletes the throwaway Covidence review "TEST - openproceedings RIS import check" (#830022).
+- [x] The owner deleted the throwaway Covidence review "TEST - openproceedings RIS import check" (#830022), 2026-09-27.
 
 ## Propagated to
 - `docs/specs/04-backend-api.md` §Exports; `.claude/skills/ris-format/SKILL.md`;
