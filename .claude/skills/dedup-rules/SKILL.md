@@ -1,6 +1,6 @@
 ---
 name: dedup-rules
-description: The deduplication standard for ingestion — the two-step merge order (identical forum id, then normalized title within the same venue and year), the hard never-merge rules including the venuetriage (title, "") no-year over-merge trap, how merged fields and claims combine, and the merges.csv / conflicts.csv audit formats and property tests. Use when writing or reviewing backend/src/openproceedings/ingest/dedup.py, reading merges.csv or conflicts.csv, or investigating a paper that vanished or doubled between snapshots.
+description: The deduplication standard for ingestion — the merge order (identical id, then the OpenReview forum link a PMLR listing carries, then normalized title within the same venue and year), the hard never-merge rules including the venuetriage (title, "") no-year over-merge trap, how merged fields and claims combine, and the merges.csv / conflicts.csv audit formats and property tests. Use when writing or reviewing backend/src/openproceedings/ingest/dedup.py, reading merges.csv or conflicts.csv, or investigating a paper that vanished or doubled between snapshots.
 ---
 
 # Dedup rules (spec 01 §Pipeline 4)
@@ -11,10 +11,20 @@ into one. **An over-merge is worse than a duplicate:** a duplicate shows up in t
 over-merge silently deletes a paper from someone's systematic review.
 
 ## Merge order (as built: `backend/src/openproceedings/ingest/dedup.py`)
-1. **Identical id**, in any source: the same OpenReview forum id (case-sensitive) in the same venue and
+1. **Identical id, then the forum link**, in any source: the same OpenReview forum id (case-sensitive) in the same venue and
    year, including a RIS record whose URL carries `?id=<forum>`, or the same proceedings id (one paper
    reached by both Trust-Evals searches). One forum id in two venue-years is a conflict
    (`venue_year_not_merged`), never a merge.
+   **Then the forum link (TASK-105).** A cluster's forum ids are its own (an OpenReview native id) plus
+   every forum id a kept `urls.forum` claim names (`urls.forum_id()`: `openreview.net/forum?id=<id>`, one
+   `id`). PMLR's index links each paper's forum from ICML 2023 (v202 per the research notes; only v235 is
+   recorded in `backend/tests/fixtures/http/pmlr/`, and v28 has no link). Clusters that share a forum id
+   in the same venue and year merge **whatever their titles say**, before any title match. The link is
+   refused (a `conflicts.csv` row with `field = forum_id`, never a merge) when the forum id's records are
+   in different venue-years (`venue_year_not_merged`), when the group would hold two forum ids or two
+   proceedings ids, such as two listings linking one forum (`ambiguous_not_merged`), or when the track
+   rule below fails (`track_not_merged`, e.g. a workshop note linked from a proceedings volume). One
+   source on both sides doesn't block a link: the id, not the title, says which paper it is.
 2. **Same dedup title key, same `venue`, same `year`.** Build the key from the token-contract
    `normalize()` output joined by single spaces (`.claude/skills/token-contract/SKILL.md`), so dedup and
    search agree on what counts as the same title. Never write a second normaliser.
@@ -34,7 +44,8 @@ safe direction.
   validation). This is the venuetriage lesson: a `(title, "")` key merged every year-less record that
   shared a title.
 - When `title_key` is empty (a title of punctuation or math only).
-- When the key matches **more than one** candidate from one source, two different forum ids, or two
+- When the key matches **more than one** candidate from one source, two different forum ids (own or
+  linked: a PMLR listing whose link names forum Y never title-merges with note X), or two
   different proceedings papers (proceedings ids come from native ids *and* `urls.proceedings`/`urls.pdf`
   claims, `ingest/urls.py`). That's ambiguous: write a `conflicts.csv` row and keep them all separate.
   The same holds when two keys chain clusters that must not share a record: every cluster in the chain
@@ -70,19 +81,22 @@ safe direction.
 
 ## Audit files (in the snapshot directory)
 `merges.csv`: `survivor_id,merged_id,rule,key,venue,year,sources`, where `rule` is `forum_id`,
-`native_id` (the same proceedings id) or `title_venue_year`, and `key` is the forum id, the native id or
-the first shared title key. Step-1 rows point from a cluster's id to itself (`survivor_id ==
-merged_id`: one row per extra copy of that id); a `title_venue_year` row then points from the cluster id
-to the final survivor. So every input id is an output id or a `merged_id`, once per copy, and following
-`title_venue_year` rows from any `merged_id` reaches an output record.
+`native_id` (the same proceedings id), `forum_link` or `title_venue_year`, and `key` is the forum id, the
+native id, the linked forum id or the first shared title key. Step-1 rows point from a cluster's id to
+itself (`survivor_id == merged_id`: one row per extra copy of that id); a `forum_link` row points from a
+linked cluster's id (the PMLR listing) to the forum id's; a `title_venue_year` row then points from the
+cluster id to the final survivor. So every input id is an output id or a `merged_id`, once per copy, and
+following the `forum_link` and `title_venue_year` rows from any `merged_id` reaches an output record
+(`snapshot.with_crawl_conflicts` follows them the same way).
 
 `conflicts.csv`: `id,field,value_a,source_a,value_b,source_b,resolution`, where `resolution` is
 `precedence:<source>` (the winner is `value_a`), `newest:<source>` or `tie:<source>` (one source, two
 values; the kept one is `value_a`), `ambiguous_not_merged`, `track_not_merged`,
 `venue_year_not_merged`, or `unresolved:openreview_v1` (not dedup's: a v1 crawl found one note's own evidence
 disagreeing, such as a withdrawn invitation and an accepted `content.venue`; the record holds `unknown` for that
-field, and `value_a`/`value_b` name each value with its evidence; `snapshot.with_crawl_conflicts` adds it). For the not-merged resolutions, `field` is `title_key`, `title_key_chain` or
-`forum_id` and the values are the two record ids, with their sources. Every row names an output record:
+field, and `value_a`/`value_b` name each value with its evidence; `snapshot.with_crawl_conflicts` adds it). For the not-merged resolutions, `field` is `title_key`, `title_key_chain`,
+`forum_id` (one forum id, own or linked, on records that stayed apart) or `forum_id_chain`, and the values
+are the two record ids, with their sources. Every row names an output record:
 the not-merged rows are judged on the output records (every shared title key and forum id among records
 that stayed apart), so a second run reports exactly the same rows; only `newest:`/`tie:` rows disappear,
 because the merged record no longer holds the superseded claims.
@@ -92,12 +106,15 @@ Both files are sorted and deterministic. They're counted in `manifest.json` and 
 
 ## Property tests (`backend/tests/unit/ingest/test_dedup_props.py`, Hypothesis)
 Pools collide on purpose (four titles, three forum ids, two proceedings papers per venue, every source,
-track and status, tied fetch times), plus a `chains` strategy that builds the chain shape; `@example`
-rows pin the two over-merges a review found.
+track and status, tied fetch times, a `urls.forum` on a quarter of the records), plus a `chains` strategy
+that builds the chain shape and a `links` strategy that builds the forum link's (a note and one or two
+listings linking it or another forum, from its venue-year or another); `@example` rows pin the two
+over-merges a review found and the link cases. Table tests from the recorded v235 and ICML 2024 note
+fixtures: `test_dedup_forum_link.py`.
 - No output record combines inputs with different `(venue, year)`.
 - Idempotent: `dedup(dedup(xs)).records == dedup(xs).records`, and the same conflict rows apart from
   `newest:`/`tie:`.
 - Order-independent: `dedup(shuffle(xs)) == dedup(xs)`.
 - Conservation: every input id is an output id or a `merged_id`, once per copy.
-- Never folds two papers: distinct forum ids, or distinct proceedings ids, never share a record, and a
-  merge into a proceedings listing keeps a proceedings track.
+- Never folds two papers: distinct forum ids (own, or linked by a `urls.forum` claim), or distinct
+  proceedings ids, never share a record, and a merge into a proceedings listing keeps a proceedings track.

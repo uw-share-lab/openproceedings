@@ -101,10 +101,13 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    records its evidence claim.
 4. **Deduplicate.** The same paper appears on OpenReview and in the proceedings (NeurIPS, ICML 2023+).
    `ingest/dedup.py`. Merge on (a) an identical id (the same forum ID in the same venue and year, or the
-   same proceedings id), then (b) a normalized title (the token contract) with the same venue and year. Two
+   same proceedings id), then (a′) the forum link (TASK-105): records naming the same OpenReview forum id,
+   as their id or in a `urls.forum` claim (PMLR's index links the forum from ICML 2023), merge in the same
+   venue and year whatever their titles say; a link across venue-years, to a track the proceedings don't
+   host, or shared by two listings is a `conflicts.csv` row, never a merge. Then (b) a normalized title (the token contract) with the same venue and year. Two
    records are merged **only** when venue and year agree. That lesson comes from venuetriage: records
    with no year must never merge on `(title, "")`. **Two OpenReview records with different forum IDs are
-   never merged**: a main-track paper and its same-year workshop version can share a title. Title
+   never merged**, nor a listing linking one forum with a note of another: a main-track paper and its same-year workshop version can share a title. Title
    matching only links records *across* sources (OpenReview ↔ proceedings ↔ RIS), never joins two different
    proceedings papers, and never puts a paper whose track the proceedings don't host (workshop, other,
    `unknown`) into a proceedings listing. A merged record's fields
@@ -183,7 +186,9 @@ under `neurips_proceedings` / `pmlr`.
   and scrubbed of real text (titles, abstracts, authors replaced; structure kept), per decision-004.
 - A venueid-parsing table test covering every venueid form seen in scholarmend's 90 validated cases, plus
   the known workshop forms.
-- Dedup property tests. Never merge across venue or year. Merging is idempotent.
+- Dedup property tests. Never merge across venue or year. Merging is idempotent and order-independent,
+  and never folds two forum ids (own or linked). The forum link has table tests from the recorded v235
+  index and ICML 2024 note (`test_dedup_forum_link.py`).
 - Snapshot determinism: the same inputs give a byte-identical `records.jsonl` and hash.
 - Proceedings miners (`test_neurips.py`, `test_pmlr.py`, `test_fetch.py`): the recorded year and volume
   pages seeded into a page cache, and a scripted transport for the fetcher (pacing, `Retry-After`, 4xx,

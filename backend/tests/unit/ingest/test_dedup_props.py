@@ -2,7 +2,8 @@
 
 The pools are small on purpose (four titles, three forum ids, two proceedings papers per venue, two
 years), so records collide often: every source, venue, track and status appears, OpenReview records
-sometimes carry a proceedings URL, and the fetch times tie.
+sometimes carry a proceedings URL, any record may link a forum id (its own or another: the forum link,
+TASK-105), and the fetch times tie.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from collections import Counter
 
 from hypothesis import event, example, given
 from hypothesis import strategies as st
+from openproceedings.ingest import urls
 from openproceedings.ingest.dedup import DedupResult, dedup
 from openproceedings.ingest.record import PaperRecord
 
@@ -45,6 +47,10 @@ def records(draw: st.DrawFn) -> PaperRecord:
         extra["urls_pdf"] = (
             f"https://papers.nips.cc/paper/2021/file/{H[draw(st.sampled_from([1, 2]))]}-Paper.pdf"
         )
+    if (
+        draw(st.integers(0, 3)) == 0
+    ):  # a forum link: a listing's (PMLR v235), a note's own, or a contradicting one
+        extra["urls_forum"] = forum_url(draw(st.sampled_from(FORUMS)))
     return paper(
         native,
         draw(st.sampled_from(TITLES)),
@@ -80,7 +86,32 @@ def chains(draw: st.DrawFn) -> list[PaperRecord]:
     return base + draw(st.lists(records(), max_size=3))
 
 
-pools = st.one_of(st.lists(records(), max_size=10), chains())
+@st.composite
+def links(draw: st.DrawFn) -> list[PaperRecord]:
+    """One OpenReview paper and the listings that link its forum, under any title, sometimes from another
+    venue-year or track, sometimes two listings for one forum, plus noise: the forum link's shapes."""
+    fid = draw(st.sampled_from(FORUMS))
+    year = draw(st.sampled_from([2023, 2024]))
+    base = [  # weighted towards the listings' venue-year, so most links can hold
+        paper(
+            fid, draw(st.sampled_from(TITLES)), venue=draw(st.sampled_from(["ICML", "ICML", "ICLR"])),
+            year=draw(st.sampled_from([year, year, 2023, 2024])),
+            source=draw(st.sampled_from(["openreview_v2", "openreview_v1", "ris"])),
+            track=draw(st.sampled_from(["main", "main", "position", "workshop"])), urls_forum=forum_url(fid),
+        ),
+    ]  # fmt: skip
+    for key in draw(st.lists(st.sampled_from(["key1", "key2"]), min_size=1, max_size=2, unique=True)):
+        base.append(
+            paper(
+                f"pmlr-v202-{key}", draw(st.sampled_from(TITLES)), venue="ICML", year=year,
+                source=draw(st.sampled_from(["pmlr", "ris"])), track=draw(st.sampled_from(["main", "unknown"])),
+                urls_forum=forum_url(draw(st.sampled_from([fid, fid, *FORUMS]))),
+            )
+        )  # fmt: skip
+    return base + draw(st.lists(records(), max_size=3))
+
+
+pools = st.one_of(st.lists(records(), max_size=10), chains(), links(), links())  # links() twice: weighted
 
 # the reviewer's two over-merges, pinned
 TWO_PROCEEDINGS_IDS = [
@@ -96,11 +127,51 @@ CHAIN = [
 ]
 
 
+def forum_url(fid: str) -> str:
+    return f"https://openreview.net/forum?id={fid}"
+
+
+# the forum link's pinned cases: a listing linking the note under another title; the same across years
+LINK_OTHER_TITLE = [
+    paper("AbCd1234", "Trust in AI", venue="ICML", year=2023, urls_forum=forum_url("AbCd1234")),
+    paper("pmlr-v202-key1", "Trust in Machines", source="pmlr", venue="ICML", year=2023, track="unknown",
+          urls_forum=forum_url("AbCd1234")),
+]  # fmt: skip
+LINK_OTHER_YEAR = [
+    paper("AbCd1234", "Trust in AI", venue="ICML", year=2024, urls_forum=forum_url("AbCd1234")),
+    LINK_OTHER_TITLE[1],
+]
+# the title matches one note, the link names another: neither merge may happen by title
+LINK_AGAINST_TITLE = [
+    paper("AbCd1234", "Trust in AI", venue="ICML", year=2023),
+    paper("EfGh5678", "Other", venue="ICML", year=2023),
+    paper("pmlr-v202-key1", "Trust in AI", source="pmlr", venue="ICML", year=2023, urls_forum=forum_url("EfGh5678")),
+]  # fmt: skip
+
+
 def final_ids(result: DedupResult) -> dict[str, str]:
-    """Every input id → the output record it ended in (title rows point from a cluster id to a survivor)."""
-    title = {m.merged_id: m.survivor_id for m in result.merges if m.rule == "title_venue_year"}
+    """Every input id → the output record it ended in, following forum_link and title rows (each points from
+    a cluster id to its survivor)."""
+    step = {m.merged_id: m.survivor_id for m in result.merges if m.merged_id != m.survivor_id}
     ids = {m.merged_id for m in result.merges} | {r.id for r in result.records}
-    return {i: title.get(i, i) for i in ids}
+
+    def end(i: str) -> str:
+        while i in step:
+            i = step[i]
+        return i
+
+    return {i: end(i) for i in ids}
+
+
+def linked_forums(records: list[PaperRecord]) -> set[str]:
+    """Every forum id the records name, as their id or in a `urls.forum` claim dedup would keep."""
+    kept = [c for r in dedup(records).records for c in r.provenance]
+    own = {f for r in records if (f := r.forum_id)}
+    return own | {
+        f
+        for c in kept
+        if c.field == "urls.forum" and isinstance(c.value, str) and (f := urls.forum_id(c.value))
+    }
 
 
 def note(result: DedupResult) -> None:
@@ -126,6 +197,9 @@ SAME_TITLE_OTHER_YEAR = [
 @example(TWO_PROCEEDINGS_IDS)
 @example(WORKSHOP_INTO_RIS_LISTING)
 @example(CHAIN)
+@example(LINK_OTHER_TITLE)
+@example(LINK_OTHER_YEAR)
+@example(LINK_AGAINST_TITLE)
 def test_idempotent(xs: list[PaperRecord]) -> None:
     once = dedup(xs)
     note(once)
@@ -138,6 +212,7 @@ def test_idempotent(xs: list[PaperRecord]) -> None:
 
 @given(pools, st.randoms(use_true_random=False))
 @example(CHAIN, random.Random(0))
+@example(LINK_AGAINST_TITLE, random.Random(0))
 def test_order_independent(xs: list[PaperRecord], rnd: random.Random) -> None:
     shuffled = list(xs)
     rnd.shuffle(shuffled)
@@ -149,6 +224,7 @@ def test_order_independent(xs: list[PaperRecord], rnd: random.Random) -> None:
 @example(WORKSHOP_INTO_RIS_LISTING)
 @example(SAME_TITLE_OTHER_VENUE)
 @example(SAME_TITLE_OTHER_YEAR)
+@example(LINK_OTHER_YEAR)
 def test_conservation_and_no_cross_venue_year_merges(xs: list[PaperRecord]) -> None:
     result = dedup(xs)
     outputs = Counter(r.id for r in result.records)
@@ -165,6 +241,7 @@ def test_conservation_and_no_cross_venue_year_merges(xs: list[PaperRecord]) -> N
 @example(TWO_PROCEEDINGS_IDS)
 @example(WORKSHOP_INTO_RIS_LISTING)
 @example(CHAIN)
+@example(LINK_AGAINST_TITLE)
 def test_never_folds_two_papers(xs: list[PaperRecord]) -> None:
     result = dedup(xs)
     ends = final_ids(result)
@@ -174,6 +251,10 @@ def test_never_folds_two_papers(xs: list[PaperRecord]) -> None:
         groups.setdefault(ends[x.id], set()).add(x.native)
     for out, natives in groups.items():
         assert len(natives & set(FORUMS)) <= 1  # distinct forum ids never share a record
+        if len(natives) > 1:  # a merge across ids: every id's own and linked forum ids name one submission
+            members = [x for x in xs if ends[x.id] == out]
+            copies_of = {i: [x for x in members if x.id == i] for i in {x.id for x in members}}
+            assert len(set().union(*(linked_forums(copies) for copies in copies_of.values()))) <= 1
         assert len(natives & set(PROCEEDINGS)) <= 1  # nor do distinct proceedings papers
         if len(natives) > 1 and natives & set(PROCEEDINGS):  # merged into a proceedings listing
             # a proceedings track, or unknown when every side was a listing without one (a mixed PMLR volume)

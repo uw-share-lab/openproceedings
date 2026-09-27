@@ -61,8 +61,9 @@ tracks.
 **Position papers:** no ICML volume marks them (v235 and v267 have no section headings), so the track
 comes from OpenReview (`ICML.cc/2025/Position_Paper_Track`), and PMLR only confirms acceptance. ICML 2024's
 position papers aren't marked on OpenReview either (they carry `ICML.cc/2024/Conference`).
-v235's paper entries link the OpenReview forum (`openreview.net/forum?id=…`): use that id to join
-PMLR and OpenReview for 2023+, not the title.
+v235's paper entries link the OpenReview forum (`openreview.net/forum?id=…`): dedup's forum link joins
+PMLR and OpenReview on that id for 2023+, before and whatever the title (TASK-105, `dedup-rules`). Only
+v235 is recorded with the link; v28 has none.
 
 ## Page structure
 - Volume index: `https://proceedings.mlr.press/v<N>/`. Its heading reads `Volume N: <proceedings title>`.
