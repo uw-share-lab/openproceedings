@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-27 11:38'
-updated_date: '2026-09-27 12:34'
+updated_date: '2026-09-27 16:20'
 labels:
   - engine
   - performance
@@ -34,3 +34,9 @@ What remains is headroom, for M4: (2) a tokenizer fast path for non-ASCII Latin 
 - [ ] #3 A non-ASCII Latin fast path in query/normalize.py tokenize, pinned to the frozen copy (no TOKENIZER_VERSION bump), measured in CPU per request
 - [ ] #4 report_80k's /search columns re-measured on the real M4 corpus, on a quiet machine, and spec 03's Measured updated
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+PR #6 bench (advisory): test_match_ids_with_exclusions_on_a_broad_query min +31% vs dev on the 5k fixture (~1.46 → 1.91 ms), because exclusion accounting now uses the one combos collection (TASK-086). Option: let exclusion-only callers (op search without facets) skip the combos aggregation.
+<!-- SECTION:NOTES:END -->

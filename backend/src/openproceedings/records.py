@@ -659,6 +659,23 @@ def changed_inputs(
     return tuple(out)
 
 
+def _log_mismatch(record: SearchRecord, refused: object | None, **checks: object) -> None:
+    """The one `replay_mismatch` line (spec 04): ERROR the first time this process sees the record mismatch,
+    DEBUG after that; the checks that ran, and `refused` (the refusal code when the canonical didn't run)."""
+    fields = {
+        "code": str(DiagnosticCode.API_REPLAY_MISMATCH),
+        "record_id": record.record_id,
+        "index_version": record.index_version,
+        "query_version": record.query_version,
+        **checks,
+        "refused": str(refused) if refused is not None else None,
+    }
+    if _first_mismatch(record.record_id):
+        log.error("replay_mismatch", extra=fields)
+    else:
+        log.debug("replay_mismatch", extra=fields)
+
+
 def replay(
     record: SearchRecord,
     served: TantivyEngine,
@@ -730,29 +747,31 @@ def replay(
         else:
             status = "reproduced" if matched else "mismatch"
         if status == "mismatch":
-            fields = {
-                "code": str(DiagnosticCode.API_REPLAY_MISMATCH),
-                "record_id": record.record_id,
-                "index_version": record.index_version,
-                "query_version": record.query_version,
-                "ids_match": ids_match,
-                "excluded_match": excluded_match,
-                "canonical_match": canonical_match,
-                "identification_match": identification_match,
-                "expansions_match": expansions_match,
-                "inputs_match": inputs_match,
-                "stored_ids_match": stored_match,
-                "refused": str(refused) if refused is not None else None,
-            }
-            if _first_mismatch(record.record_id):
-                log.error("replay_mismatch", extra=fields)
-            else:
-                log.debug("replay_mismatch", extra=fields)
+            _log_mismatch(
+                record,
+                refused,
+                ids_match=ids_match,
+                excluded_match=excluded_match,
+                canonical_match=canonical_match,
+                identification_match=identification_match,
+                expansions_match=expansions_match,
+                inputs_match=inputs_match,
+                stored_ids_match=stored_match,
+            )
     else:
         changed = changed_inputs(record, index_inputs(data_dir, ran_on.index_version), QUERY_VERSION)
-        if not changed:  # a different index_version always has different inputs; anything else is a bug
-            raise InternalError(DiagnosticCode.API_INTERNAL, "a drifted replay found no changed input")
-        status = "drifted"
+        # on its own index only the query version can differ (a real drift); on another index at least one
+        # index input must, since a different index_version always has different index inputs
+        if on_own_index or any(c.input != "query_version" for c in changed):
+            status = "drifted"
+        else:
+            # a different index_version always has different index inputs, so a record naming another version
+            # whose index inputs are the served index's own (a query_version change aside) was forged or
+            # corrupted (e.g. a hand-written row): a mismatch, "do not cite", never a 500 or a drift
+            status = "mismatch"
+            _log_mismatch(
+                record, refused, ran_on=ran_on.index_version, inputs_match=True, index_version_match=False
+            )
     added = removed = None
     if found is not None:
         if record.ids is None:

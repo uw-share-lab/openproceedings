@@ -3,8 +3,9 @@ implements it (spec 08 §CLI). The CLI and the API call the same functions.
 
 Implemented: `op ingest ris`, `op snapshot build`, `op snapshot diff` (task-022), `op index build`
 (task-023), `op index parity` (task-029), `op search` (ranked, `--ids`, `--explain`, `--engine reference`;
-task-024/030), `op export` (task-030), `op serve` (task-034) and `op openapi` (task-040). Results go to stdout; logs go to stderr; a refused operation exits
-1 with its reason, a usage error or a stub exits 2.
+task-024/030), `op export` (task-030), `op serve` (task-034), `op openapi` (task-040) and `op record save` /
+`op record replay` (task-083). Results go to stdout; logs go to stderr; a refused operation exits 1 with its
+reason, a usage error or a stub exits 2, and `op record replay` exits 3 on a `mismatch` (`EXIT_MISMATCH`).
 """
 
 from __future__ import annotations
@@ -32,21 +33,27 @@ FORMATS = ("ris", "csv", "bibtex", "jsonl")  # export formats (export.FORMATS; i
 SORTS = ("relevance", "year_desc", "year_asc", "title")  # tantivy_engine.SORTS
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
     from pydantic import ValidationError
 
+    from openproceedings.api.models import ReplayInfo
     from openproceedings.engine.exclusions import Excluded
     from openproceedings.engine.reference import ReferenceEngine
     from openproceedings.engine.tantivy_engine import TantivyEngine
     from openproceedings.query.parser import ParseResult
+    from openproceedings.records import RecordStore, SearchRecord
 
 log = logging.getLogger(__name__)
 
 # subcommand -> (help text, the Backlog task that implements it)
 PLANNED: dict[str, tuple[str, str]] = {
-    "record": ("save or replay a search record (spec 04)", "task-083"),
     "embed": ("build SPECTER2 embeddings for the current index (spec 06)", "task-058"),
     "eval": ("evaluation reports: scholar | coverage | audit | near-miss (spec 07)", "task-054"),
 }
+# `op record replay`'s exit status on a `mismatch` (spec 08 §Error handling): a broken guarantee 4, which a
+# script must tell apart from a refusal (1), a usage error (2) and drift (0)
+EXIT_MISMATCH = 3
 # `op ingest <source>` sources still to come -> the task that implements them
 PLANNED_SOURCES: dict[str, str] = {"openreview": "task-050", "proceedings": "task-052"}
 
@@ -146,6 +153,32 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--format", choices=FORMATS, required=True)
     export.add_argument("--out", type=Path, help="write to this file (default standard output)")
     export.set_defaults(run=_export)
+
+    record = sub.add_parser(
+        "record", help="save or replay a search record: reproduced | drifted | mismatch (spec 04)"
+    )
+    record_actions = record.add_subparsers(dest="action", metavar="<action>", required=True)
+    rs = record_actions.add_parser(
+        "save", help="freeze a search as a search record in <data-dir>/records (what POST /records writes)"
+    )
+    rs.add_argument("query")
+    rs.add_argument("--index", help="`current` (default) or an index_version under <data-dir>/indexes")
+    rs.add_argument("--mode", choices=("native", "scholar"), default="native")
+    rs.add_argument("--json", action="store_true", help="print the stored record (without its ids) as JSON")
+    rs.set_defaults(run=_record_save)
+    rr = record_actions.add_parser(
+        "replay",
+        help="replay a search record (what GET /records/{id} runs); exit 0 reproduced or drifted, "
+        f"{EXIT_MISMATCH} mismatch",
+    )
+    rr.add_argument("record_id", metavar="id")
+    rr.add_argument(
+        "--index",
+        help="the index to replay on when the record's own index_version isn't here: `current` (default) or "
+        "an index_version",
+    )
+    rr.add_argument("--json", action="store_true", help="print GET /records/{id}'s replay block as JSON")
+    rr.set_defaults(run=_record_replay)
 
     serve = sub.add_parser("serve", help="run the HTTP API (spec 04) over <data-dir>/indexes/<index>")
     serve.add_argument("--host", default="127.0.0.1", help="default 127.0.0.1")
@@ -288,6 +321,11 @@ def _usage(message: str) -> Exception:
     return UserInputError(DiagnosticCode.API_BAD_PARAM, message)
 
 
+def _command(ns: argparse.Namespace) -> str:
+    """The full command name a log line carries (`record save`, `index build`, `search`)."""
+    return " ".join(filter(None, (ns.command, getattr(ns, "source", None), getattr(ns, "action", None))))
+
+
 def _parsed(ns: argparse.Namespace) -> ParseResult | None:
     """The query's parse, its diagnostics printed to stderr as user output (never logged: they quote the
     query); None when it doesn't parse."""
@@ -297,7 +335,9 @@ def _parsed(ns: argparse.Namespace) -> ParseResult | None:
     for d in [*result.errors, *result.warnings, *result.translations]:
         print(f"{d.code}: {d.message}", file=sys.stderr)
     if result.effective_ast is None:
-        log.debug("cli_refused", extra={"command": ns.command, "error": "parse"})  # user input: DEBUG at most
+        log.debug(
+            "cli_refused", extra={"command": _command(ns), "error": "parse"}
+        )  # user input: DEBUG at most
         return None
     return result
 
@@ -341,8 +381,7 @@ def _search(ns: argparse.Namespace) -> int:
     from openproceedings.search import run
 
     started = time.perf_counter()
-    with contextlib.suppress(AttributeError, ValueError):  # UTF-8 whatever the locale, as `op export` writes
-        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+    _utf8_stdout()
     result = _parsed(ns)  # a bad query is reported first, whatever the index
     if result is None:
         return 1
@@ -382,6 +421,25 @@ def _search(ns: argparse.Namespace) -> int:
     return 0
 
 
+def _utf8_stdout() -> None:
+    with contextlib.suppress(AttributeError, ValueError):  # UTF-8 whatever the locale, as `op export` writes
+        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+
+
+def _removed_line(removed: int, track: Mapping[str, int], status: Mapping[str, int]) -> str:
+    """Those the default filters removed, ineligible (track or status) and unclassified apart (03's
+    exclusion accounting; a search's header and a record's summary)."""
+    ineligible = "; ".join(
+        f"{f}: " + (", ".join(f"{v} {n}" for v, n in b.items() if v != "unknown") or "none")
+        for f, b in (("track", track), ("status", status))
+    )
+    unclassified = track["unknown"] + status["unknown"]
+    return (
+        f"removed by default filters {removed}: ineligible {removed - unclassified} ({ineligible}), "
+        f"unclassified {unclassified} (track unknown {track['unknown']}, status unknown {status['unknown']})"
+    )
+
+
 def _report(
     engine: TantivyEngine, result: ParseResult, total: int, gone: Excluded, snapshot: dict[str, Any] | None
 ) -> list[str]:
@@ -396,11 +454,6 @@ def _report(
     from openproceedings.query import QUERY_VERSION
     from openproceedings.query.normalize import TOKENIZER_VERSION
 
-    ineligible = "; ".join(
-        f"{f}: " + (", ".join(f"{v} {n}" for v, n in b.items() if v != "unknown") or "none")
-        for f, b in (("track", gone.track), ("status", gone.status))
-    )
-    unclassified = gone.track["unknown"] + gone.status["unknown"]
     searched = datetime.now(UTC).strftime("%Y-%m-%dT%H:%MZ")
     window = (snapshot or {}).get("crawl_window")
     ends = (
@@ -433,8 +486,7 @@ def _report(
         )
     lines += [
         f"identified {total + gone.total} (within the query's own limits)",
-        f"removed by default filters {gone.total}: ineligible {gone.total - unclassified} ({ineligible}), "
-        f"unclassified {unclassified} (track unknown {gone.track['unknown']}, status unknown {gone.status['unknown']})",
+        _removed_line(gone.total, gone.track, gone.status),
         f"screened (total) {total}",
         f"canonical: {result.canonical}",
         f"identification: {result.identification_query or '(every record)'}",
@@ -522,6 +574,244 @@ def _export(ns: argparse.Namespace) -> int:
     print(f"exported {n} records ({ns.format}) · {provenance.line()}", file=sys.stderr)
     _search_run(ns, started, engine.index_version, result, total)
     return 0
+
+
+# --- op record save / op record replay (task-083; spec 04 §Search records) --------------------------------
+# The same functions as POST /records and GET /records/{id}: `records.freeze` + `RecordStore.insert`, and
+# `records.replay`. What the CLI leaves out is the API's serving policy only: the rate limit and save
+# ceilings, and the verified-clause cap and candidate ceiling that withhold a replay (decision-010). The
+# operator runs these on their own machine, as `op search` runs any query, so a replay is never withheld and
+# its `refused` is only ever a canonical that no longer runs. The store's size cap and free-space floor
+# (ApiConfig's defaults) apply: they protect the data volume, not the server.
+def _selected_index(ns: argparse.Namespace, name: str, hint: str) -> TantivyEngine:
+    """The engine of index `name` (`current` or an index_version) under <data-dir>/indexes, by the API's
+    selection rule (`api.state.index_path`; never `resolve_snapshot`, never an arbitrary directory): a
+    record pins an index_version that a replay must find by name. A directory not named for the index it
+    holds is refused too, since a replay could never find it again."""
+    from openproceedings.api.state import IndexSelectionError, index_path
+    from openproceedings.engine.tantivy_engine import TantivyEngine
+
+    try:
+        path = index_path(ns.data_dir, name)
+    except IndexSelectionError as e:
+        raise _usage(f"{e.args[0]}; {hint}") from None
+    engine = TantivyEngine(path)
+    if engine.index_version != path.name:
+        raise _usage(f"indexes/{path.name} holds index {engine.index_version}, not one named for it; {hint}")
+    return engine
+
+
+def _record_store(data_dir: Path) -> RecordStore:
+    """`<data-dir>/records/records.sqlite` with the API's default size cap and free-space floor."""
+    from openproceedings.api.config import ApiConfig
+    from openproceedings.records import RECORDS_DIR, RecordStore
+
+    limits = ApiConfig.model_fields
+    return RecordStore(
+        data_dir / RECORDS_DIR,
+        max_bytes=limits["records_max_bytes"].default,
+        min_free_bytes=limits["records_min_free_bytes"].default,
+    )
+
+
+def _record_lines(record: SearchRecord) -> list[str]:
+    """What a methods section quotes from a record (prisma-reporting skill): the versions, when it was
+    searched and what the dates of the corpus are, the counts, `ids_hash` and the strings that reproduce it."""
+    window = record.crawl_dates.get("*")
+    kind = (record.crawl_dates_kind or {}).get("*")
+    label = {"scholar_query_dates": "Scholar searches run", "mixed": "crawl and Scholar searches"}.get(
+        kind or "", "crawl"
+    )
+    dates = f"{window.from_[:10]} to {window.to[:10]}" if window is not None else "unknown"
+    lines = [
+        f"searched {record.searched_at} · index {record.index_version} · tokenizer {record.tokenizer_version} "
+        f"· query {record.query_version}",
+        f"{label} {dates} · sources {', '.join(record.sources) if record.sources is not None else 'not recorded'}",
+    ]
+    if record.identification_citable is False:
+        lines.append(
+            "note: bootstrap corpus: these counts describe that corpus, not a database; they are not PRISMA "
+            "identification numbers (spec 01)"
+        )
+    elif record.identification_citable is None:
+        lines.append("note: this record doesn't say whether its counts are PRISMA identification numbers")
+    ex = record.excluded
+    lines += [
+        f"identified {record.total + ex.total} (within the query's own limits)",
+        _removed_line(ex.total, ex.track, ex.status),
+        f"screened (total) {record.total}",
+        f"ids_hash {record.ids_hash}",
+        f"canonical: {record.canonical}",
+        f"identification: {record.identification_query or '(every record)'}",
+    ]
+    return lines
+
+
+def _record_save(ns: argparse.Namespace) -> int:
+    from openproceedings.api.records import RECORD_PAGE
+    from openproceedings.records import freeze
+
+    started = time.perf_counter()
+    _utf8_stdout()
+    result = _parsed(ns)  # refused as POST /records refuses it (the parse checks the length cap first)
+    if result is None:
+        return 1
+    engine = _selected_index(
+        ns, ns.index or "current", "pass --index current or an index_version under <data-dir>/indexes"
+    )
+    fields, found = freeze(engine, result, ns.query, ns.data_dir)
+    record = _record_store(ns.data_dir).insert(fields, found.ids)
+    page = RECORD_PAGE.format(record_id=record.record_id)
+    log.info(
+        "record_saved",
+        extra={
+            "record_id": record.record_id,
+            "mode": ns.mode,
+            "index_version": record.index_version,
+            "query_version": record.query_version,
+            "canonical_hash": record.canonical_hash,
+            "total": record.total,
+            "ms": elapsed_ms(started),
+        },
+    )
+    if ns.json:
+        _print({**record.model_dump(mode="json", exclude={"ids"}), "page": page})
+    else:
+        print("\n".join([f"saved record {record.record_id} · page {page}", *_record_lines(record)]))
+    withheld = _withheld_by_default(engine, result)
+    if withheld is not None:
+        print(
+            f"note: a default-configured API instance refuses this query ({withheld}: over its limits on slow "
+            f"position checks). It would not have saved it, and it withholds this record's replay: `drifted`, "
+            f"`refused: {withheld}`, no counts. `op record replay` runs it.",
+            file=sys.stderr,
+        )
+    return 0
+
+
+def _withheld_by_default(engine: TantivyEngine, result: ParseResult) -> str | None:
+    """The code a default-configured API instance withholds this query's replay with (`api.deps.admit_replay`
+    under ApiConfig's default `max_verified_clauses` and `max_verification_candidates`), or None: the CLI
+    runs every replay, but a record saved here is meant to be replayed through the API too."""
+    from openproceedings.api.config import ApiConfig
+    from openproceedings.diagnostics import DiagnosticCode
+    from openproceedings.engine.compile import verified_clauses
+    from openproceedings.search import expanded
+
+    ast = result.effective_ast
+    clauses = verified_clauses(ast)
+    if ast is None or not clauses:
+        return None
+    limits = ApiConfig.model_fields
+    if len(clauses) > limits["max_verified_clauses"].default:
+        return str(DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES)
+    expanded(engine, ast)  # as `api.deps.verification_candidates`: the search already ran, so within the cap
+    if sum(n for _c, _f, n in engine.candidates(ast)) > limits["max_verification_candidates"].default:
+        return str(DiagnosticCode.API_QUERY_TOO_COSTLY)
+    return None
+
+
+def _pinned_loader(data_dir: Path) -> Callable[[str], TantivyEngine | None]:
+    """`api.state.open_pinned` (the rule `IndexState.pinned` serves, without the server's cache, open slot and
+    verification gate), each version opened (and re-hashed) at most once per command."""
+    from openproceedings.api.state import open_pinned
+    from openproceedings.engine.tantivy_engine import TantivyEngine
+
+    opened: dict[str, TantivyEngine | None] = {}
+
+    def load(version: str) -> TantivyEngine | None:
+        if version not in opened:
+            opened[version] = open_pinned(data_dir, version, TantivyEngine).engine
+        return opened[version]
+
+    return load
+
+
+def _record_replay(ns: argparse.Namespace) -> int:
+    from openproceedings.api.records import replay_info
+    from openproceedings.diagnostics import DiagnosticCode, UserInputError
+    from openproceedings.engine.compile import verified_clauses
+    from openproceedings.query.parser import parse
+    from openproceedings.records import replay, valid_record_id
+
+    started = time.perf_counter()
+    _utf8_stdout()
+    if not valid_record_id(ns.record_id):  # never a path: the id is not repeated back
+        raise _usage("a record id is 12 characters from A–Z, a–z, 0–9, `-` and `_`")
+    record = _record_store(ns.data_dir).get(ns.record_id)  # a read never creates the store
+    if record is None:
+        raise UserInputError(
+            DiagnosticCode.API_RECORD_NOT_FOUND, "no search record with that id in <data-dir>/records"
+        )
+    pinned = _pinned_loader(ns.data_dir)
+    # the record's own index when it is here (then --index and `current` aren't opened at all), else the
+    # one to replay on: a drift report against it
+    served = pinned(record.index_version) or _selected_index(
+        ns,
+        ns.index or "current",
+        f"the record's own index {record.index_version} isn't here either: pass --index <index_version> to "
+        "replay it on another",
+    )
+    parsed = parse(record.canonical, "native")  # never `input`: translations that changed can't alter it
+    result = replay(record, served, pinned, ns.data_dir, parsed=parsed)  # no `admit`: never withheld here
+    ast = parsed.effective_ast
+    info = replay_info(result, len(verified_clauses(ast)) if ast is not None else None)
+    if ns.json:
+        _print(
+            {
+                "record_id": record.record_id,
+                "recorded_index_version": record.index_version,
+                **info.model_dump(mode="json"),
+            }
+        )
+    else:
+        print("\n".join(_replay_lines(record, info)))
+    log.info(
+        "record_replayed",
+        extra={
+            "record_id": record.record_id,
+            "status": info.status,
+            "index_version": info.index_version,
+            "recorded_index_version": record.index_version,
+            "canonical_hash": record.canonical_hash,
+            "query_version": info.query_version,
+            "total": info.total,
+            "added_total": info.added_total,
+            "removed_total": info.removed_total,
+            "refused": str(info.refused) if info.refused is not None else None,
+            "ms": elapsed_ms(started),
+        },
+    )
+    return EXIT_MISMATCH if info.status == "mismatch" else 0
+
+
+def _replay_lines(record: SearchRecord, info: ReplayInfo) -> list[str]:
+    """A replay for reading: the status, what was recorded and what ran, each changed input, the diff's
+    counts (`+0 / −0` said, not hidden), and "do not cite" on a mismatch."""
+    lines = [
+        f"record {record.record_id}: {info.status}",
+        f"recorded on index {record.index_version} · query {record.query_version} · searched "
+        f"{record.searched_at} · total {record.total} · ids_hash {record.ids_hash}",
+    ]
+    ran = f"replayed on index {info.index_version} · query {info.query_version}"
+    if info.refused is not None:
+        lines.append(f"{ran} · not run: {info.refused} (nothing was compared)")
+    else:
+        lines.append(f"{ran} · total {info.total} · ids_hash {info.ids_hash}")
+    for c in info.changed:
+        recorded, current = (
+            v if isinstance(v, str) else json.dumps(v, sort_keys=True) for v in (c.recorded, c.current)
+        )
+        lines.append(f"changed: {c.input} ({c.kind}) {recorded} → {current}")
+    if info.added_total is not None and info.removed_total is not None:
+        same = " (membership-identical)" if info.membership_identical else ""
+        lines.append(f"added +{info.added_total} · removed −{info.removed_total}{same}")
+    if info.status == "mismatch":
+        lines.append(
+            f"mismatch: do not cite this record (ids match: {info.ids_match}, excluded match: "
+            f"{info.excluded_match}); API_REPLAY_MISMATCH is logged for the maintainers"
+        )
+    return lines
 
 
 def _serve(ns: argparse.Namespace) -> int:
@@ -641,7 +931,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"op {name}: not implemented yet — planned in {task} (backlog task view {task})", file=sys.stderr
         )
         return 2
-    name = " ".join(filter(None, (ns.command, getattr(ns, "source", None), getattr(ns, "action", None))))
+    name = _command(ns)
     try:
         code: int = ns.run(ns)
     except BrokenPipeError:  # the reader stopped (`op export … | head`): not a failure, and nothing to log

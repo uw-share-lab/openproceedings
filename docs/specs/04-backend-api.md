@@ -27,7 +27,7 @@ reviews without the UI.
   title containing an astral-plane character.
 - Errors use one shape: `{error: {code, message, diagnostics?: [Diagnostic]}}`. A query that doesn't parse
   is a `422` carrying 02's diagnostics (spans included) on every endpoint that **runs** it (`/search`,
-  `/export`, `POST /records`). `POST /parse` **reports** a parse: any well-formed body is a `200` whose
+  `/export`, `POST /records`, and `GET /papers/{id}` given a `q`). `POST /parse` **reports** a parse: any well-formed body is a `200` whose
   `errors` hold those same diagnostics; only a malformed body is a `422 API_BAD_PARAM`.
 - No authentication in v1. Rate limiting is per IP (a token bucket in the app, set in config). CORS
   allowlist comes from config.
@@ -62,7 +62,7 @@ reviews without the UI.
     on an enum in neither). **Open** — a new value may appear within v1, and a client handles one it doesn't
     know (the schema says "Open set"): error codes, diagnostic codes (a stored record's are plain strings),
     `venue`, `track`, `status`, `presentation`, a provenance claim's `source` and `field`, the text and filter
-    field names, and `ChangedInput.input`. **Closed** — a new value is a breaking change: `mode`, `sort`, the
+    field names, `ChangedInput.input`, and a `/parse` filter clause's `reason` (decision-011). **Closed** — a new value is a breaking change: `mode`, `sort`, the
     export `format`, the replay `status`, `ChangedInput.kind`, a wildcard's `op`, `include`.
   - **`ErrorBody.code` is its own schema, `ErrorCode`**: exactly the registry's codes that have an HTTP status
     (`PARSE_*`, `FIELD_*`, `WILDCARD_*`, the `API_*` ones but the log-only `API_REPLAY_MISMATCH`), derived from
@@ -74,7 +74,7 @@ reviews without the UI.
     `Content-Disposition`; every route's 405 declares `Allow` and its 429 `Retry-After` (not `/healthz`'s,
     which is never limited; the 429's description names every bucket that can refuse: the client's, its
     network's, a query's position-verified clauses, the save ceilings); every route that runs a query
-    (`/search`, `/export`, `POST /records`, `GET /records/{id}`, `/diff`) declares its 503 with `Retry-After`
+    (`/search`, `/export`, `/papers/{id}`, `POST /records`, `GET /records/{id}`, `/diff`) declares its 503 with `Retry-After`
     (sent with `API_BUSY`); `POST /records`'s 201 declares `Location`. CORS exposes all of them.
   - `info.version` is the API version, `v1`. operationIds are `verb_noun`: `search`, `parse_query`, `export`,
     `get_paper`, `get_coverage`, `get_meta`, `get_healthz`, `create_record`, `get_record`, `get_record_diff`.
@@ -85,15 +85,15 @@ reviews without the UI.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side). Called as you type, debounced. |
+| `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side), plus `filters`: each filter field's top-level clause (span, values, `toggleable`, `reason`) for facet clicks (02 §Filter clauses; decision-011). Called as you type, debounced. |
 | `GET` | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
-| `GET` | `/papers/{id}` | The full record, provenance included |
+| `GET` | `/papers/{id}` | The full record, provenance included; with an optional `q` (and `mode`), whether that query matches it and its `highlights`, exactly as `/search` gives them for that paper (task-087) |
 | `GET` | `/export` | `format=ris\|csv\|bibtex\|jsonl` and either `q` (with `mode` and an optional `index_version`) or `record_id` (with `mode` at most `native`) → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; with `record_id`, exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if that index is gone, 409 `API_RECORD_MISMATCH` if its replay is a `mismatch`) |
 | `POST` | `/records` | Freezes a search as an immutable **search record** → 201 `{record_id, page}` plus the three versions, with `Location: /api/v1/records/<record_id>` |
 | `GET` | `/records/{id}` | The stored record, plus a replay check (see below) |
 | `GET` | `/records/{id}/diff` | For a record of any status: added and removed ids (with titles), paged, and which `index_version` inputs changed (empty unless `drifted`) |
 | `GET` | `/coverage` | Counts per venue × year × track × status, abstract-missing counts, snapshot date |
-| `GET` | `/meta` | Current and servable `index_version`s, the field names and the venue, track and status vocabularies (these feed the UI's autocomplete) |
+| `GET` | `/meta` | Current and servable `index_version`s, the field names and the venue, track and status vocabularies (these feed the UI's autocomplete), and this instance's query `limits` |
 | `GET` | `/healthz` | Liveness and whether the index is loaded |
 | `GET` | `/near-misses` | **M5 only**: the semantic suggestion panel, a separate resource (see 06) |
 
@@ -136,11 +136,13 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   in its proceedings).` (`unknown` reads "not known to be in its proceedings"; `desk_rejected` reads "desk
   rejected"), so the Notes a screener sees say it plainly; `TY` and `T2` are unchanged. Checked against
   the reference RIS parser, `scholarmend.parse.parse_ris` (the pinned `scholarmend` PyPI package), plus one
-  fixture imported into Covidence by hand (`docs/results/2026-09-27-covidence-check.md`, **pending**).
+  fixture imported into Covidence by hand (`docs/results/2026-09-27-covidence-check.md`, done 2026-09-27).
 - **Status in every format** (task-004 review). The venue string names the conference a paper was
   *submitted to*, so a rejected or withdrawn paper still reads "ICLR 2024". A screener sees its status as
-  RIS `KW  - status:rejected` and the status `N1` sentence (whether Covidence shows keywords to screeners is
-  **pending** the hand check; if it doesn't, the `N1` sentence is what they read), CSV and JSONL have the
+  RIS `KW  - status:rejected` and the status `N1` sentence, but **Covidence shows neither to screeners**
+  (the 2026-09-27 hand check: its screening card has no keywords, notes or URL), so a review screening in
+  Covidence must exclude by status before import: keep the default `status:accepted` filter, or filter the
+  CSV's `status` column. Zotero and EndNote do show both. CSV and JSONL have the
   `status` column, and BibTeX has
   it in `keywords` and in the entry type below. RIS keeps `TY  - CPAPER` for every status, so one export
   imports as one reference type.
@@ -151,9 +153,11 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   Title *within one reference type*, so a copy of the same paper exported as `JOUR` or `CONF` by another
   database is only caught if the Reference Type box is unticked in its Duplicates preferences. Covidence
   matches duplicates on title, year, volume and authors, not on type
-  ([Covidence FAQ](https://support.covidence.org/help/how-does-covidence-detect-duplicates)). Whether
-  Covidence shows every `CPAPER` field, and whether our empty volume blocks a match against a copy that has
-  one, is the hand check above. Its fixture is pinned byte for byte by
+  ([Covidence FAQ](https://support.covidence.org/help/how-does-covidence-detect-duplicates)). The hand
+  check above found `CPAPER` imports cleanly (title, abstract, authors, year, source line, DOI, our `ID` as
+  Ref ID), and that Covidence matches our record against copies with a volume, another type (`CONF`,
+  `JOUR`), another source string, or initials-only authors, but **not** against a copy dated a different
+  year, which screeners merge by hand. Its fixture is pinned byte for byte by
   `backend/tests/unit/test_covidence_fixture.py`.
 - **Venue string** (`T2`, and BibTeX `booktitle`; task-004): `<conference name> (<acronym that year> <year>)`,
   one string per venue and year whatever the track or status, so every copy of a venue-year reads alike and
@@ -282,7 +286,7 @@ The record page (05) is what a methods section cites. Records are stored in `dat
 (append-only, backed up with the snapshots).
 
 As built (task-037 and its review fixes; `backend/src/openproceedings/records.py` holds the record,
-`ids_hash`, the store and the replay, so a later `op record` calls the same functions; `api/records.py` is the
+`ids_hash`, the store and the replay, so `op record save`/`replay` (task-083) call the same functions; `api/records.py` is the
 transport, `IndexState.pinned` in `api/state.py` loads older indexes):
 - **`POST /records`** takes `{q, mode}` (no other keys) and answers **201** `{record_id, page, index_version,
   tokenizer_version, query_version}` with `Location: /api/v1/records/<record_id>` (the API resource). `page`
@@ -366,7 +370,11 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   `mismatch`: ERROR `replay_mismatch` (`code` `API_REPLAY_MISMATCH`, `record_id`, the versions, which of
   `ids_match`, `excluded_match`, `canonical_match`, `identification_match`, `expansions_match`,
   `inputs_match` and `stored_ids_match` failed, and `refused`: the refusal
-  code when the canonical no longer runs, else null) the first time this process sees that record mismatch, DEBUG after that. Any
+  code when the canonical no longer runs, else null) the first time this process sees that record mismatch, DEBUG after that. A
+  record naming an `index_version` this instance doesn't hold, whose index inputs are nonetheless the served
+  index's own (whatever its query version), was forged or corrupted (a different version always has
+  different index inputs): also `mismatch`,
+  logged the same way with `index_version_match: false` and `ran_on`, never a 500. Any
   other case is `drifted`: when only the query version differs and the record's own index is here, the replay
   runs on that index, so `changed` holds just `query_version`; otherwise `replay.changed` lists each
   differing input (`snapshot_hash` kind `corpus`; `tokenizer_version`, `schema_version`, `ranking_params`,
@@ -647,6 +655,12 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     `/export`, `POST /records`). **Correction to TASK-035 AC #2** (the task is completed, so the CLI can't
     edit it): the AC says "Parse errors are 422", but that holds only for endpoints that run the query.
     `/parse` reports them in a 200 (task-035 review, Should 5).
+  - `POST /parse`'s `filters` (TASK-078, decision-011) is `query.clauses.filter_clauses(q, result)`, the one
+    call the route adds: `{venue, year, track, status}`, each `{field, negated, span, toggleable, reason}`
+    plus `values` (venue, track, status) or `ranges` (year), every key always sent (a null included); null
+    exactly when `errors` is non-empty. The rules (the flattened canonical tree, the zero-width span of a
+    default or unrestricted field, the reasons, the widest-edit cap check) are 02 §Filter clauses. Goldens:
+    `frontend/src/lib/filter-clause-golden.json` (`tests/contract/test_parse_filters.py`).
   - `GET /papers/{id}` answers `{index_version, tokenizer_version, query_version, paper}`, where `paper` is
     the spec 01 `PaperRecord` (provenance and `content_hash` included). The served index decides whether the
     id exists. Otherwise the answer is 404 `API_PAPER_NOT_FOUND`, whose message never repeats the id. An id
@@ -664,10 +678,50 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     `API_INDEX_NOT_LOADED`; on SIGHUP the old index keeps serving. It is never a record without its
     provenance, and never a re-hash per request. Only a snapshot file that becomes unreadable after the load
     is a per-request 500 `API_INTERNAL`.
+  - **Paper-page highlights (task-087).** `GET /papers/{id}` takes an optional `q` and `mode` (`native` |
+    `scholar`, default `native`) and always sends two more fields, `matched` and `highlights` (additive
+    under v1: a new optional parameter whose absence keeps the old answer, two new always-sent nullable
+    fields). Without `q` both are null. With `q`:
+    - `matched` is whether the **effective** query (the default filters included) matches the paper on the
+      served index: whether `/search` counts it in `total`. So a workshop paper whose text matches `trust` is
+      `matched: false` for `trust` (the default `track:main` removes it) and `true` for `trust track:workshop`.
+    - `highlights` is `{title, abstract}` in the `/search` hit's shape and span units (code points over the
+      raw stored text). For a matched paper they are **the spans `/search` gives that paper as a hit** for the
+      same `q`, `mode` and index: `search.highlight` builds the same `Highlighter` over the same display record
+      and the same wildcard expansions (`Highlighter.match`, which `/search`'s per-hit call wraps).
+      `tests/contract/test_paper_highlights.py` compares them hit by hit over every Trust-Evals protocol
+      string (Scholar mode) and a set of native queries on the 5k fixture, plus the astral-plane golden.
+    - A query that doesn't match the paper is **not an error**: `matched: false`, both highlight lists empty.
+      A query that matches only through filters (`venue:ICLR`) is `matched: true` with nothing lit.
+    - `q` is **admitted exactly as `/search` admits it**, so a `q` this route runs is one `/search` runs:
+      strict parameters (unknown or repeated is 422 `API_BAD_PARAM`; so is `mode=scholar` without `q`), the
+      2,000-code-point cap (`PARSE_TOO_LONG` before parsing), the parse (422 with its diagnostics), an
+      over-cap wildcard (its located 422), the verified-clause cap and per-clause charge (`deps.searchable`),
+      and the candidate ceiling (`deps.check_candidates`, 422 `API_QUERY_TOO_COSTLY`). The query is admitted
+      before the id is looked up, so an unknown paper with a verified `q` is charged and then 404. The route
+      declares the 503 `API_BUSY` as every query route does, but today never sends it: the paper's own text
+      is evaluated (the highlighter's verdict, which a unit test holds to ReferenceEngine's on every
+      fixture record), so no collection runs and nothing is position-verified, and no verification slot or
+      deadline applies. The per-verified-clause charge is still taken, deliberately: nothing is verified
+      today, but the charge is `/search`'s admission for the same `q`, so this route can't be used to
+      price a query below `/search`, and the charge stays right if highlighting ever runs a collection. The
+      paper's display record is read once, for the existence check, and highlighted as read. The access line
+      carries the parse fields (`canonical_hash`, token count, codes, `verified_clauses`), never `q`.
+    - Chosen over carrying the hit's spans from the `/search` response the reader came from (the other option
+      TASK-087 named): that way a direct or shared link to a paper page would show no highlights, the page
+      would depend on client state the URL doesn't hold (guarantee 3 keeps `q` as the only result-set state),
+      and a reload would lose them. The paper page links as `/paper/<id>?q=…&mode=…` instead (spec 05).
   - `GET /meta` answers the three versions, plus `index_versions` (every index this instance can serve,
     sorted, with the served one included; which are left out: §Implementation notes, pinned indexes), `text_fields` (`title`, `abstract`), `filter_fields` (`venue`,
     `year`, `track`, `status`), and `values` (`venue`, `track` and `status`: the vocabularies the parser checks
-    filter values against, so autocomplete never offers a value it refuses).
+    filter values against, so autocomplete never offers a value it refuses), and `limits` (task-089):
+    `max_query_length` (the parser's `MAX_QUERY_LENGTH`, 2,000 code points; not configurable),
+    `max_query_depth` (the parser's `MAX_DEPTH`, 64 nested groups and `NOT`s, deeper is `PARSE_TOO_DEEP`;
+    not configurable; additive),
+    `max_verified_clauses` and `max_verification_candidates` (this instance's `op serve` values, defaults 16
+    and 300,000), the limits behind `PARSE_TOO_LONG`, `API_TOO_MANY_VERIFIED_CLAUSES` and
+    `API_QUERY_TOO_COSTLY`, so a client need not hard-code them. The frontend reducer takes both caps from it
+    (spec 05 §URL is state).
   - Every route that reports `index_version` needs a loaded engine, `/parse` and `/meta` included (503
     `API_INDEX_NOT_LOADED` before the first load).
 - As built (task-038, `api/coverage.py`, `coverage.py`): `GET /coverage` answers the three versions plus

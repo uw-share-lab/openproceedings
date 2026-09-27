@@ -95,7 +95,8 @@ export interface paths {
         /**
          * Get Paper
          * @description The paper with this id in the served index, as its snapshot holds it (the records loaded with that
-         *     very engine: one bundle, whatever swaps happen meanwhile).
+         *     very engine: one bundle, whatever swaps happen meanwhile); with `q`, whether that query matches it and
+         *     its highlights, as `/search` gives them.
          */
         get: operations["get_paper"];
         put?: never;
@@ -519,6 +520,34 @@ export interface components {
             year: number;
         };
         JsonValue: unknown;
+        /**
+         * Limits
+         * @description This instance's limits on a query (TASK-089), so a client need not hard-code them: the parser's length
+         *     and depth caps, and the served config's verification limits (`op serve` flags; another instance may
+         *     differ).
+         */
+        Limits: {
+            /**
+             * Max Query Depth
+             * @description the deepest nesting of groups and `NOT`s a `q` may have; deeper is 422 `PARSE_TOO_DEEP` (from `/parse`, a 200 whose `errors` hold it)
+             */
+            max_query_depth: number;
+            /**
+             * Max Query Length
+             * @description the longest `q` in Unicode code points; a longer one, or one whose canonical form is longer, is 422 `PARSE_TOO_LONG` (from `/parse`, a 200 whose `errors` hold it)
+             */
+            max_query_length: number;
+            /**
+             * Max Verification Candidates
+             * @description the most candidate documents a query's position-verified clauses may read, summed over each clause's fields; more is 422 `API_QUERY_TOO_COSTLY`
+             */
+            max_verification_candidates: number;
+            /**
+             * Max Verified Clauses
+             * @description the most position-verified clauses a query may have; more is 422 `API_TOO_MANY_VERIFIED_CLAUSES`
+             */
+            max_verified_clauses: number;
+        };
         /** MetaResponse */
         MetaResponse: {
             /** Filter Fields */
@@ -530,6 +559,7 @@ export interface components {
              * @description every index this instance can serve, sorted, the served one included: an index this code can't open (another tokenizer, schema or Tantivy version) or one currently refused is left out
              */
             index_versions: string[];
+            limits: components["schemas"]["Limits"];
             /** Query Version */
             query_version: string;
             /** Text Fields */
@@ -641,8 +671,15 @@ export interface components {
         };
         /** PaperResponse */
         PaperResponse: {
+            /** @description With `q`: the spans `/search` gives this paper as a hit for that query, over `paper.title` and `paper.abstract` (code points over the raw text); both lists empty when `matched` is false. Null without `q`. */
+            highlights: components["schemas"]["Highlights"] | null;
             /** Index Version */
             index_version: string;
+            /**
+             * Matched
+             * @description With `q`: whether the query (default filters included) matches this paper on this index, i.e. whether `/search` would count it in `total`. Null without `q`.
+             */
+            matched: boolean | null;
             paper: components["schemas"]["PaperRecord"];
             /** Query Version */
             query_version: string;
@@ -666,8 +703,9 @@ export interface components {
         };
         /**
          * ParseResponse
-         * @description 02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints). A query
-         *     with errors is still a 200 here: `errors` holds them, and every Optional is null.
+         * @description 02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus
+         *     `filters` (`query.clauses.filter_clauses`, TASK-078). A query with errors is still a 200 here: `errors`
+         *     holds them, and every Optional is null.
          */
         ParseResponse: {
             /** Ast */
@@ -682,6 +720,8 @@ export interface components {
             effective_ast: (components["schemas"]["Term"] | components["schemas"]["Wildcard"] | components["schemas"]["Phrase"] | components["schemas"]["Near"] | components["schemas"]["Filter"] | components["schemas"]["Not"] | components["schemas"]["And"] | components["schemas"]["Or"]) | null;
             /** Errors */
             errors: components["schemas"]["Diagnostic"][];
+            /** @description Each filter field's top-level clause, for facet and include clicks (spec 02 §Filter clauses; decision-011): its code-point span in `q` and the values it admits, or a zero-width span at the end for an applied default or an unrestricted field; `toggleable` false with a `reason` when a click can't rewrite it. Null exactly when `errors` is non-empty. */
+            filters: components["schemas"]["ParsedFilters"] | null;
             /** Identification Query */
             identification_query: string | null;
             /** Index Version */
@@ -699,6 +739,96 @@ export interface components {
             translations: components["schemas"]["Diagnostic"][];
             /** Warnings */
             warnings: components["schemas"]["Diagnostic"][];
+        };
+        /**
+         * ParsedClause
+         * @description A `venue`, `track` or `status` clause.
+         */
+        ParsedClause: {
+            /**
+             * Field
+             * @description The filter field: always equal to this clause's key in `filters`. Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @enum {string}
+             */
+            field: "venue" | "year" | "track" | "status";
+            /**
+             * Negated
+             * @description The clause is `NOT field:…`. A negated clause is never toggleable.
+             */
+            negated: boolean;
+            /**
+             * Reason
+             * @description Why it can't be, exactly when `toggleable` is false.
+             */
+            reason: ("multiple_clauses" | "nested" | "mixed_fields" | "negated" | "too_long" | "too_deep" | "unparsable_edit") | null;
+            /**
+             * Span
+             * @description Half-open code-point range of the clause in `q`. Zero-width at the end, `[len(q), len(q)]`, when the field has no clause of its own (an applied default, or no restriction): a click writes it out as `(q) AND field:(…)`. Null when the field has no single top-level clause (`reason` says why).
+             */
+            span: [
+                number,
+                number
+            ] | null;
+            /**
+             * Toggleable
+             * @description A facet or include click may rewrite this clause.
+             */
+            toggleable: boolean;
+            /**
+             * Values
+             * @description The values the clause admits, sorted: an applied default's, or every value for an unrestricted field. Null exactly when `span` is.
+             */
+            values: string[] | null;
+        };
+        /**
+         * ParsedFilters
+         * @description Every filter field's clause (`POST /parse` `filters`).
+         */
+        ParsedFilters: {
+            status: components["schemas"]["ParsedClause"];
+            track: components["schemas"]["ParsedClause"];
+            venue: components["schemas"]["ParsedClause"];
+            year: components["schemas"]["ParsedYearClause"];
+        };
+        /**
+         * ParsedYearClause
+         * @description The `year` clause. Years are ranges, not a value list.
+         */
+        ParsedYearClause: {
+            /**
+             * Field
+             * @description The filter field: always equal to this clause's key in `filters`. Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @enum {string}
+             */
+            field: "venue" | "year" | "track" | "status";
+            /**
+             * Negated
+             * @description The clause is `NOT field:…`. A negated clause is never toggleable.
+             */
+            negated: boolean;
+            /**
+             * Ranges
+             * @description The year ranges the clause admits, sorted and merged; `1000..9999` for no restriction. Null exactly when `span` is.
+             */
+            ranges: components["schemas"]["YearRange"][] | null;
+            /**
+             * Reason
+             * @description Why it can't be, exactly when `toggleable` is false.
+             */
+            reason: ("multiple_clauses" | "nested" | "mixed_fields" | "negated" | "too_long" | "too_deep" | "unparsable_edit") | null;
+            /**
+             * Span
+             * @description Half-open code-point range of the clause in `q`. Zero-width at the end, `[len(q), len(q)]`, when the field has no clause of its own (an applied default, or no restriction): a click writes it out as `(q) AND field:(…)`. Null when the field has no single top-level clause (`reason` says why).
+             */
+            span: [
+                number,
+                number
+            ] | null;
+            /**
+             * Toggleable
+             * @description A facet or include click may rewrite this clause.
+             */
+            toggleable: boolean;
         };
         /**
          * Phrase
@@ -1327,7 +1457,12 @@ export interface operations {
     };
     get_paper: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Optional: a query (spec 02 grammar) whose highlights to return for this paper, admitted exactly as `/search` admits `q` (at most 2,000 code points, else 422 `PARSE_TOO_LONG`; one that doesn't parse is a 422 with its diagnostics). Without it, `matched` and `highlights` are null. */
+                q?: string | null;
+                /** @description `native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). Only with `q`: `scholar` without `q` is 422 `API_BAD_PARAM`. */
+                mode?: "native" | "scholar";
+            };
             header?: never;
             path: {
                 /** @description A paper id, `op:<venue>:<year>:<native>`. Any other shape is 422 `API_BAD_PARAM`. */
@@ -1361,6 +1496,17 @@ export interface operations {
             429: {
                 headers: {
                     /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
+            503: {
+                headers: {
+                    /** @description Sent with API_BUSY: whole seconds to wait before retrying */
                     "Retry-After"?: number;
                     [name: string]: unknown;
                 };

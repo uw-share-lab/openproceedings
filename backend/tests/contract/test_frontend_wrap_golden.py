@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.query.clauses import filter_clauses
 from openproceedings.query.parser import Mode, parse
 
 GOLDEN = Path(__file__).resolve().parents[3] / "frontend" / "src" / "lib" / "wrap-golden.json"
@@ -56,3 +57,19 @@ def test_refused_q_would_break_when_wrapped(case: dict[str, Any], mode: Mode) ->
 
 def test_golden_has_both_kinds() -> None:
     assert any("expected" in c for c in CASES) and any("refused" in c for c in CASES)
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("case", CASES, ids=_id)
+def test_parse_reports_the_clause_the_golden_wraps(case: dict[str, Any], mode: Mode) -> None:
+    """TASK-078: `/parse` hands the reducer exactly the clause each golden starts from: the applied default at
+    the zero-width span `(len(q), len(q))` with the golden's values, toggleable; a refused `q` (its wrap would
+    not parse) is reported not toggleable, so the UI disables the control before the reducer sees it."""
+    filters = filter_clauses(case["q"], parse(case["q"], mode))
+    assert filters is not None
+    clause = getattr(filters, case["field"])
+    assert clause.span == (len(case["q"]), len(case["q"])) and sorted(clause.values) == sorted(case["values"])
+    if "expected" in case:
+        assert clause.toggleable, clause.reason
+    else:
+        assert (clause.toggleable, clause.reason) == (False, "unparsable_edit")

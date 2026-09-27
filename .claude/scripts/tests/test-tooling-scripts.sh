@@ -41,6 +41,9 @@ python3 "$TMP/r/.claude/scripts/learnings_index.py" >/dev/null 2>&1   # regenera
 expect err "impossible date in the name"                                learnings_index.py --check
 fresh; printf '# t\n\n**Key lesson:**\n- **Date:** x\n' > "$L/2026-09-26-empty-key.md"
 expect err "empty key lesson (must not borrow the next line)"           learnings_index.py --check
+fresh; printf '# t\n\n**Key lesson:** a lesson wrapped\nonto a second line\n\n- **Date:** x\n' > "$L/2026-09-26-wrapped.md"
+python3 "$TMP/r/.claude/scripts/learnings_index.py" >/dev/null 2>&1
+expect err "key lesson wrapped onto a second line"                      learnings_index.py --check
 fresh; printf '# t\n\n**Key lesson:** k\n' > "$L/2026-09-26-Upper-Slug.md"
 expect err "uppercase slug"                                             learnings_index.py --check
 fresh; mkdir -p "$L/sub"; printf '# t\n\n**Key lesson:** k\n' > "$L/sub/2026-09-26-x.md"

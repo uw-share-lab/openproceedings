@@ -52,20 +52,24 @@ description: The openproceedings Next.js standard — App Router layout, output 
   (`PAGE_SIZE` 50, `MAX_PAGE` 10,000). `fromURL` returns `{state, notices}`: unknown, repeated and invalid
   params (including a page over `MAX_PAGE`) are reported, never silently used. Actions: `submit`,
   `builderEdit`, `setMode`, `facetToggle`, `includeExcluded`, `sort`, `page`. Filter actions take a
-  `FilterClause {field, negated: false, source, mode, span, values}` from `/parse` (code-point span into
-  `source`; zero-width at the end = applied default, written out as `(q) AND field:(…)`). They refuse a clause
+  `FilterClause {field, negated: false, source, mode, span, values}`, derived from the generated
+  `ParsedClause` of `/parse`'s `filters` by `clauseFromParse(filters[field], q, mode)` (TASK-078, decision-011;
+  code-point span into `source`; zero-width at the end = applied default or unrestricted field, written out
+  as `(q) AND field:(…)`), or `clause: null` plus `/parse`'s `reason`, which words the refusal. They refuse a clause
   whose `(source, mode)` differs from `resultSetKey`, one for another field, a negated one (adding a value
   inside `-track:x` would flip it), and a wrap of a `q` ending in an odd run of backslashes (the escape would
   swallow the `)`; goldens in `src/lib/wrap-golden.json`, checked by the backend parser in
   `backend/tests/contract/test_frontend_wrap_golden.py`). Every refusal throws `SearchStateError` rather than
   no-op, with a `code` (`STALE_CLAUSE`, `WRONG_FIELD`, `NEGATED_CLAUSE`, `NO_EDITABLE_CLAUSE` for
   `clause: null`, `BAD_VALUE`, `LAST_VALUE`, `BAD_SPAN`, `EMPTY_QUERY`, `TRAILING_ESCAPE`, `TOO_LONG` past
-  `MAX_QUERY_LENGTH` = 2,000 code points, `ALREADY_INCLUDED`, `BAD_PAGE`) and a what — why. fix message.
-  Controls call `whyBlocked(state, action)` and render disabled with the reason instead of failing on
+  the instance's `max_query_length` (`/meta`'s `limits`, passed as `reduce`/`whyBlocked`'s `limits`; `DEFAULT_LIMITS`
+  = 2,000 code points from `src/lib/default-limits.json` until `/meta` is fetched, checked against `/meta` by
+  `test_meta_limits.py`) or for `/parse`'s `too_long`, `TOO_DEEP` for its `too_deep`,
+  `ALREADY_INCLUDED`, `BAD_PAGE`) and a what — why. fix message. `src/lib/filter-clause-golden.json` pins
+  `/parse`'s report and the reducer's result together (backend: `test_clauses.py`, `test_parse_filters.py`).
+  Controls call `whyBlocked(state, action, limits)` and render disabled with the reason instead of failing on
   click. "Top-level" clause means top-level on the flattened canonical tree (spec 05 §URL is state).
-  `describeNotice`/`noticeText` word the URL notices from the same constants the reducer checks. Until
-  `/parse` reports per-field clause spans, `FilterClause` is a local type (TASK-078 adds the spans to
-  `/parse`; then it is derived from the schema).
+  `describeNotice`/`noticeText` word the URL notices from the same constants the reducer checks.
 - The editor draft is not state until submitted; submitting `router.push`es. Paging uses `replace`.
 
 ## Security headers

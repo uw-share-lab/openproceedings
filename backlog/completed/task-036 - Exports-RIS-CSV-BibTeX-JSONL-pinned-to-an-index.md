@@ -1,10 +1,10 @@
 ---
 id: TASK-036
 title: 'Exports: RIS, CSV, BibTeX, JSONL pinned to an index'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-27 11:33'
+updated_date: '2026-09-27 17:50'
 labels:
   - api
 milestone: m-3
@@ -22,7 +22,7 @@ Spec 04 §Exports (ris-format, bibtex-format skills).
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 RIS imports into Covidence (one manual fixture) and round-trips through scholarmend.parse.parse_ris
+- [x] #1 RIS imports into Covidence (one manual fixture) and round-trips through scholarmend.parse.parse_ris
 - [x] #2 BibTeX parses with refaudit; note carries provenance
 - [x] #3 X-Total and X-Index-Version headers; record_id or index_version pins the source index
 <!-- AC:END -->
@@ -45,4 +45,12 @@ AC#3 NOT ticked: X-Total/X-Index-Version and index_version pinning are done; the
 2026-09-27 review round (branch fix-036-pinned): record_id wired (either q [+mode, index_version] or record_id alone; record_id + q/mode/index_version = 422; api.records.require_citable gives 404 / 409 API_RECORD_MISMATCH before any byte). X-Tokenizer-Version and X-Query-Version headers added and exposed to CORS. Pinned loaders unified: IndexState.pinned(version) -> Pinned(engine, reason ok|absent|unloadable|tampered); api/pinned.py removed. Review Shoulds S1-S5 and nits fixed with tests (test_export.py, test_pinned.py, test_serve.py). AC#1 still pending the human Covidence import (TASK-004 AC#1), so the task stays In Progress.
 
 2026-09-27 M3a docs gate: AC#1's parser is scholarmend.parse.parse_ris (the pinned PyPI package), not venuetriage's; AC#1 stays unticked until the human Covidence import (docs/results/2026-09-27-covidence-check.md). AC#3 was ticked after the record_id review round (fix-036-pinned), which wired /export?record_id=.
+
+AC#1 done 2026-09-27 via the Covidence hand check (the API's RIS body is byte for byte op export's; fixture pinned).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+GET /api/v1/export streams RIS/CSV/BibTeX/JSONL byte-identical to op export, pinned by index_version or record_id (stored ids), refusals before the first byte, X-Total and version headers; RIS verified in Covidence 2026-09-27.
+<!-- SECTION:FINAL_SUMMARY:END -->

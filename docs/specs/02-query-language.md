@@ -240,6 +240,60 @@ The UI toggles edit these same clauses; they are not a separate state.
   `WARN_NESTED_FILTER` fires whenever a default applies, whether inserted, typed or replayed, once per
   nested clause of that field.
 
+### Filter clauses (what a facet click edits)
+
+The UI's facet and include clicks rewrite `q` (spec 05 §URL is state). They never re-parse filters on the
+client: `POST /parse` reports each filter field's clause as `filters` (decision-011, TASK-078). The report
+is `query/clauses.py::filter_clauses(q, parse(q, mode))`, a separate function rather than a `ParseResult`
+field, because it parses the edited string, which `/search` and replay don't need.
+
+```python
+ParsedFilters = {venue: ParsedClause, year: ParsedYearClause, track: ParsedClause, status: ParsedClause}
+ParsedClause  = {field, negated: bool, span: [start, end] | None, toggleable: bool,
+                 reason: ClauseReason | None, values: [str] | None}          # sorted
+ParsedYearClause = {…the same…, ranges: [YearRange] | None}                  # sorted, merged
+ClauseReason = "multiple_clauses" | "nested" | "mixed_fields" | "negated"
+             | "too_long" | "too_deep" | "unparsable_edit"                    # an open set
+```
+
+"Top-level" is judged on the **flattened canonical tree**, the one the default rule reads: parenthesised
+`AND` groups are flattened, `NOT NOT x` is `x`, and an `OR` of one field's filters is one clause. For each field:
+
+| The field has | `span`, `values` | `toggleable`, `reason` |
+|---|---|---|
+| one top-level clause, written as one top-level conjunct | the written conjunct's code-point span (all of `(track:a OR track:b)` or `NOT NOT track:a`, so a splice replaces it whole); the canonical values | true |
+| one, negated (`-track:workshop`, `NOT (track:a OR track:b)`) | its span and values, `negated: true` | false, `negated` (adding a value inside it would flip what it removes) |
+| more than one (`track:workshop llm AND (venue:NeurIPS track:workshop)`; two written copies the canonical form deduplicates, `track:main track:main`) | null | false, `multiple_clauses` (a splice over one leaves the other ANDed in) |
+| none top-level, but nested under an `OR` or `NOT` group | null | false, `mixed_fields` if a top-level `OR` joins filters of several fields (`track:workshop OR venue:ICLR`), else `nested` |
+| none at all | zero-width `(len(q), len(q))`, the default's spot; the default's values (track, status), every vocabulary value (venue), or `1000..9999` (year) | true: a click writes it out as `(q) AND field:(…)` |
+
+A nested clause beside a single top-level one doesn't block it (`track:main (track:workshop OR x)` edits
+`track:main`); the nested one stays applied, as the disjunctive facet counts assume (decision-001).
+
+**The caps.** A click always writes the grouped form, `field:(v1 OR …)`, even for one value (`field:(v)`;
+the same canonical form and hash as `field:v`), so its `)` ends every edit and no edit can touch a group
+that follows the clause (`track:(main OR workshop)(x OR y)` → `track:(workshop)(x OR y)`, where a bare
+`track:workshop(x OR y)` would be `PARSE_PAREN_TOUCHES_WORD`). A toggleable clause is checked by making the
+widest edit a click can make and parsing it in the query's mode: every vocabulary value (for year, one
+`(dddd..dddd)` range), spliced over the span or wrapped around `q`, exactly as the reducer writes it. Every
+narrower edit is then sound too: a property test (`test_clauses.py`) applies every single-value toggle and
+include to every toggleable clause of generated queries and checks that the edited query parses and that
+nothing outside the clicked field's top-level clause changes. If that edited `q` is refused, the clause is not
+toggleable: `too_long` (over 2,000 code points, raw or canonical: decision-008), `too_deep` (the wrap nests
+`q` one level deeper, so a `q` already 64 deep is `PARSE_TOO_DEEP`) or `unparsable_edit` (any other
+error; for example a `q` ending in an escaping backslash, which would escape the wrap's `)`). It is also not
+toggleable if the edited `q` does not end with exactly that one top-level clause of the field
+(`multiple_clauses`, e.g. `track:main NOT NOT (track:main a)`). A splice inside `q` adds no nesting:
+`track:(…)` is not a group level. The check is conservative near the cap, since it tests the widest edit
+and not the value clicked. Every field with no clause is checked by one parse that writes them all out at
+once, and each alone only when that edit can't be made (the answer is the per-field one; a property test
+compares them); a typed clause costs one parse of its own. So `/parse` adds one parse for a query with no
+typed clause, and at most five (`test_clauses.py` counts them), so the worst case, short words near the
+cap where the combined wrap is too long to write at once and each field is checked alone, is about six
+parses of `q`.
+Goldens: `frontend/src/lib/filter-clause-golden.json`, read by `backend/tests/unit/test_clauses.py`,
+`backend/tests/contract/test_parse_filters.py` and the reducer's test.
+
 ## Compatibility input modes
 
 The review's existing strings must work **unchanged** or come back with a precise explanation:
@@ -281,6 +335,8 @@ ParseResult = {               # `query/parser.py`; every Optional below is None 
   errors: [Diagnostic],        # non-empty ⇒ no search
   translations: [Diagnostic],  # Scholar-mode rewrites and notices (e.g. COMPAT_NO_STEMMING)
 }
+filter_clauses(q, parse(q, mode)) -> ParsedFilters | None   # `query/clauses.py`: None exactly when errors
+                                                              #   is non-empty (§Filter clauses; /parse `filters`)
 ```
 
 `canonical` is deterministic: `parse(canonical).canonical == canonical`. That idempotence is tested with

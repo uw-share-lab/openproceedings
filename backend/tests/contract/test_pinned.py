@@ -16,7 +16,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from openproceedings.api.state import IndexState, Pinned
+from openproceedings.api.state import IndexState, Pinned, open_pinned
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.index import IndexBuildError
 from openproceedings.engine.protocol import EngineInternalError
@@ -155,6 +155,68 @@ def test_an_index_that_wont_open_is_refused_with_its_reason_and_logged_once(
         (level, reason, type(error).__name__, cause)
     ]
     assert "unreadable" not in str(lines) and "corrupt" not in str(lines)  # the type, never the message
+
+
+@pytest.mark.parametrize(
+    "version, fail, names, want, cause",
+    [
+        ("aaaa01", None, {}, "ok", None),
+        ("current", None, {}, "absent", "name_invalid"),  # a name, never a version
+        ("dddd04", None, {}, "absent", "not_found"),
+        ("eeee05", None, {}, "absent", "alias"),
+        ("aaaa01", IndexBuildError("x", reason="files_mismatch"), {}, "tampered", "files_mismatch"),
+        ("aaaa01", ValueError("corrupt"), {}, "unloadable", None),  # no reason constant: the key is left out
+        ("aaaa01", None, {"aaaa01": "bbbb02"}, "tampered", "index_version_mismatch"),
+    ],
+)
+def test_open_pinned_is_the_rule_without_the_cache(
+    indexes: Path,
+    logs: Logs,
+    version: str,
+    fail: BaseException | None,
+    names: dict[str, str],
+    want: str,
+    cause: str | None,
+) -> None:
+    """`open_pinned`, the one function behind `IndexState.pinned` and `op record replay`: each call decides
+    afresh (nothing is remembered), with one line per refusal whose `cause_reason` is left out when none."""
+    (indexes / "indexes" / "eeee05").symlink_to("aaaa01")
+    opener = Opener()
+    opener.names.update(names)
+    if fail is not None:
+        opener.fail["aaaa01"] = fail
+    for _ in range(2):
+        found = open_pinned(indexes, version, opener)
+        assert found.reason == want and (found.engine is not None) == (want == "ok")
+    lines = [x for x in logs() if x["event"] == "pinned_index_unavailable"]
+    assert len(lines) == (0 if want == "ok" else 2)
+    for line in lines:
+        assert line["reason"] == want and line.get("cause_reason", "left out") == (cause or "left out")
+
+
+def test_a_pinned_engine_takes_the_states_verification_slots(indexes: Path) -> None:
+    """`IndexState.pinned` gates what `open_pinned` opens (cold verification on a pinned index takes the same
+    slots as on the served one, spec 04 §Rate limit); the CLI's ungated open leaves the engine's own."""
+    s = state(indexes, Opener())
+    engine = s.pinned("aaaa01").engine
+    assert engine is not None and engine.verification_gate == s.verification_slot
+    assert not hasattr(open_pinned(indexes, "aaaa01", Opener()).engine, "verification_gate")
+
+
+def test_open_pinned_holds_the_slot_only_for_the_open(indexes: Path) -> None:
+    """A name that isn't here is refused without taking the slot (a stat or two); an open takes it."""
+    slot = threading.Lock()
+    slot.acquire()  # held by another open: an absent name must not wait for it
+    assert open_pinned(indexes, "dddd04", Opener(), slot=slot).reason == "absent"
+    slot.release()
+    seen: list[bool] = []
+
+    def opener(path: Path) -> Any:
+        seen.append(slot.locked())
+        return SimpleNamespace(index_version=path.name)
+
+    assert open_pinned(indexes, "aaaa01", opener, slot=slot).reason == "ok"
+    assert seen == [True] and not slot.locked()
 
 
 def test_a_refusal_is_forgotten_after_its_ttl_and_on_reload(indexes: Path) -> None:

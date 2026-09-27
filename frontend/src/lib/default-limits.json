@@ -1,0 +1,4 @@
+{
+  "max_query_length": 2000,
+  "max_query_depth": 64
+}

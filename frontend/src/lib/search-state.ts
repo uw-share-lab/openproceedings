@@ -12,7 +12,9 @@
  * server's `/parse` result (`FilterClause`) and splices a new clause in; the server then re-parses.
  * Every function here is pure.
  */
-import { codePointLength, codePointSpanToUtf16, type CodePointSpan } from "@/api/spans";
+import type { components } from "@/api/schema";
+import { codePointLength, codePointSpanToUtf16 } from "@/api/spans";
+import defaultLimits from "./default-limits.json";
 
 export const MODES = ["native", "scholar"] as const;
 export type Mode = (typeof MODES)[number];
@@ -28,11 +30,23 @@ export const PAGE_SIZE = 50;
 export const MAX_PAGE = 10_000;
 
 /**
- * Longest `q` in code points. Mirrors the API parser's `MAX_QUERY_LENGTH` (spec 02 §Error handling; a longer
- * `q` is `PARSE_TOO_LONG`, a 422, and so is one whose canonical form is longer (decision-008), which only the
- * server can judge). `/meta` does not serve it yet, so keep the two equal by hand.
+ * The limits the reducer checks: `max_query_length`, the longest `q` in code points (spec 02 §Error handling;
+ * a longer `q` is `PARSE_TOO_LONG`, a 422, and so is one whose canonical form is longer (decision-008), which
+ * only the server can judge), and `max_query_depth`, the deepest nesting of groups and `NOT`s (`PARSE_TOO_DEEP`),
+ * which words `/parse`'s `too_deep` refusal. The type is `/meta`'s `limits` (TASK-089), so it follows the
+ * contract.
  */
-export const MAX_QUERY_LENGTH = 2000;
+export type QueryLimits = Pick<components["schemas"]["Limits"], "max_query_length" | "max_query_depth">;
+
+/**
+ * The limits to use until `/meta` is fetched (TASK-041/042 wire the fetch; then pass its `limits` to `reduce`
+ * and `whyBlocked`). The value is `default-limits.json`, which the backend's contract test
+ * (`test_meta_limits.py`) checks against the caps `/meta` serves, so it can't drift from the parser.
+ */
+export const DEFAULT_LIMITS: QueryLimits = {
+  max_query_length: defaultLimits.max_query_length,
+  max_query_depth: defaultLimits.max_query_depth,
+};
 
 export interface SearchState {
   readonly q: string;
@@ -56,6 +70,7 @@ export type SearchStateErrorCode =
   | "NO_EDITABLE_CLAUSE"
   | "EMPTY_QUERY"
   | "TOO_LONG"
+  | "TOO_DEEP"
   | "BAD_PAGE";
 
 /**
@@ -264,15 +279,36 @@ export function toSearchRequest(state: SearchState): {
 // ---------------------------------------------------------------------------------------------------------
 // Actions
 
-export type FilterField = "venue" | "track" | "status";
+/** One filter field's clause as `POST /parse` reports it in `filters` (spec 02 §Filter clauses; generated). */
+export type ParsedClause = components["schemas"]["ParsedClause"];
+export type ParsedFilters = components["schemas"]["ParsedFilters"];
 
 /**
- * A field's single top-level filter clause, as the server's `/parse` reported it for `(source, mode)`.
- * "Top-level" is judged on the flattened canonical tree: parenthesised AND groups are flattened, so in
- * `track:workshop llm AND (venue:NeurIPS track:workshop)` both `track:` clauses are top-level. A field
- * with more than one such clause (or one only inside an OR or NOT) has no editable clause: `/parse` says
- * so and the action carries `clause: null`, which the reducer refuses (`NO_EDITABLE_CLAUSE`). Splicing
- * over one of two clauses would leave the other ANDed in, so the edit would silently change nothing.
+ * Why `/parse` reported a field's clause as not toggleable. An open set (decision-009): a reason this code
+ * doesn't know is worded generically, never assumed away.
+ */
+export type ClauseReason = NonNullable<ParsedClause["reason"]>;
+
+/** The fields a click edits: the `filters` keys whose clause is a value list (`year` is ranges). */
+export type FilterField = {
+  [K in keyof ParsedFilters]: ParsedFilters[K] extends ParsedClause ? K : never;
+}[keyof ParsedFilters];
+
+const FILTER_FIELDS: readonly FilterField[] = ["venue", "track", "status"];
+
+function isFilterField(field: string): field is FilterField {
+  return (FILTER_FIELDS as readonly string[]).includes(field);
+}
+
+/**
+ * A field's single top-level filter clause, as the server's `/parse` reported it for `(source, mode)`: the
+ * generated `ParsedClause` narrowed to one a click may rewrite (`clauseFromParse` builds it), keyed by the
+ * query it was parsed from. "Top-level" is judged on the flattened canonical tree: parenthesised AND groups
+ * are flattened, so in `track:workshop llm AND (venue:NeurIPS track:workshop)` both `track:` clauses are
+ * top-level. A field with more than one such clause (or one only inside an OR or NOT) has no editable
+ * clause: `/parse` says so with a `reason`, and the action carries `clause: null`, which the reducer refuses
+ * (`NO_EDITABLE_CLAUSE`, or the reason's own code). Splicing over one of two clauses would leave the other
+ * ANDed in, so the edit would silently change nothing.
  * - `field` and `negated: false`: the clause's field and polarity. A clause for another field, or a
  *   negated one (`-track:workshop`: adding `main` inside it would flip its meaning), is refused.
  * - `source` and `mode`: the query it was parsed from, keyed like `resultSetKey`; a stale clause is refused.
@@ -280,16 +316,41 @@ export type FilterField = "venue" | "track" | "status";
  *   span `(len(q), len(q))`) or an unrestricted field is a zero-width span at the end, and the clause is
  *   then written out explicitly: `(q) AND field:(…)`.
  * - `values`: the values that clause admits (for a default, the default values; for an unrestricted
- *   field, every value in `/meta`), in the order to keep them.
- * TODO(TASK-078): derive this from the generated `/parse` schema once it reports clause spans.
+ *   field, every value), in the order to keep them.
  */
-export interface FilterClause {
-  readonly field: FilterField;
-  readonly negated: false;
-  readonly source: string;
-  readonly mode: Mode;
-  readonly span: CodePointSpan;
-  readonly values: readonly string[];
+export type FilterClause = Readonly<{
+  field: FilterField;
+  negated: false;
+  source: string;
+  mode: Mode;
+  span: Readonly<NonNullable<ParsedClause["span"]>>;
+  values: Readonly<NonNullable<ParsedClause["values"]>>;
+}>;
+
+/** What a click action carries about its field's clause: the clause, or none and `/parse`'s reason. */
+export interface ClauseChoice {
+  readonly clause: FilterClause | null;
+  /** Why there is no clause; `null` when `/parse` gave none (the query did not parse). */
+  readonly reason: ClauseReason | null;
+}
+
+/**
+ * The clause a click on a field may rewrite, from `/parse`'s report for that field (`filters[field]`;
+ * `null` or `undefined` when the query did not parse) and the `(source, mode)` it was parsed from. Spread
+ * the result into a `facetToggle` or `includeExcluded` action. Only a toggleable, positive clause with a
+ * span is returned; otherwise `clause` is `null` with the server's reason.
+ */
+export function clauseFromParse(
+  parsed: ParsedClause | null | undefined,
+  source: string,
+  mode: Mode,
+): ClauseChoice {
+  if (parsed === null || parsed === undefined) return { clause: null, reason: null };
+  const { field, negated, span, values, toggleable, reason } = parsed;
+  if (!toggleable || negated || span === null || values === null || !isFilterField(field)) {
+    return { clause: null, reason };
+  }
+  return { clause: { field, negated, source, mode, span, values }, reason: null };
 }
 
 export type SearchAction =
@@ -302,6 +363,8 @@ export type SearchAction =
       readonly value: string;
       /** `null`: `/parse` reported no single editable clause for the field. */
       readonly clause: FilterClause | null;
+      /** `/parse`'s reason when `clause` is `null` (`clauseFromParse`); it words the refusal. */
+      readonly reason?: ClauseReason | null;
     }
   | {
       readonly type: "includeExcluded";
@@ -309,6 +372,8 @@ export type SearchAction =
       readonly value: string;
       /** `null`: `/parse` reported no single editable clause for the field. */
       readonly clause: FilterClause | null;
+      /** `/parse`'s reason when `clause` is `null` (`clauseFromParse`); it words the refusal. */
+      readonly reason?: ClauseReason | null;
     }
   | { readonly type: "sort"; readonly sort: Sort }
   | { readonly type: "page"; readonly page: number };
@@ -316,9 +381,14 @@ export type SearchAction =
 /** Taxonomy values (spec 01) are bare identifiers; anything else would need quoting the client can't judge. */
 const FILTER_VALUE = /^[A-Za-z0-9_]+$/;
 
+/**
+ * A clause as the reducer writes it: always grouped, `field:(v)` even for one value (the server's
+ * `query/clauses.py::_format`). A bare `field:v` spliced before a group would touch it
+ * (`track:workshop(x OR y)` is PARSE_PAREN_TOUCHES_WORD); the group's `)` never does, and the canonical form
+ * (and so the hash) is the same either way.
+ */
 function formatClause(field: FilterField, values: readonly string[]): string {
-  const only = values.length === 1 ? values[0] : undefined;
-  return only !== undefined ? `${field}:${only}` : `${field}:(${values.join(" OR ")})`;
+  return `${field}:(${values.join(" OR ")})`;
 }
 
 /** A query ending in an odd run of backslashes: the last one would escape a `)` written after it (spec 02). */
@@ -327,14 +397,62 @@ function endsInEscape(q: string): boolean {
   return run % 2 === 1;
 }
 
-/** The clause, or NO_EDITABLE_CLAUSE when `/parse` reported none that can be edited. */
-function editable(field: FilterField, clause: FilterClause | null): FilterClause {
-  if (clause !== null) return clause;
-  throw new SearchStateError(
-    "NO_EDITABLE_CLAUSE",
-    `The ${field} filter cannot be changed here — the query has more than one top-level \`${field}:\` clause, ` +
-      "or one inside an OR or NOT. Edit it in the query text.",
+function negatedClause(field: FilterField): SearchStateError {
+  return new SearchStateError(
+    "NEGATED_CLAUSE",
+    `The \`${field}:\` clause is negated — changing its values would flip which papers it removes. ` +
+      "Edit it in the query text instead.",
   );
+}
+
+/** The refusal for a field `/parse` reported no editable clause for, worded from its reason. */
+function noEditableClause(
+  field: FilterField,
+  reason: ClauseReason | null | undefined,
+  limits: QueryLimits,
+): SearchStateError {
+  const head = `The ${field} filter cannot be changed here — `;
+  const refuse = (why: string) =>
+    new SearchStateError("NO_EDITABLE_CLAUSE", `${head}${why} Edit it in the query text.`);
+  switch (reason) {
+    case "negated":
+      return negatedClause(field);
+    case "too_long":
+      return new SearchStateError(
+        "TOO_LONG",
+        `${head}written out in full, the changed query would be over the ` +
+          `${limits.max_query_length.toLocaleString("en-US")}-character limit. Shorten the query text first.`,
+      );
+    case "too_deep":
+      return new SearchStateError(
+        "TOO_DEEP",
+        `${head}the changed query would nest groups or NOTs more than ${limits.max_query_depth} deep. ` +
+          "Remove a level of parentheses first.",
+      );
+    case "multiple_clauses":
+      return refuse(`the query has more than one top-level \`${field}:\` clause.`);
+    case "nested":
+      return refuse(`its only \`${field}:\` clause is inside an OR or NOT.`);
+    case "mixed_fields":
+      return refuse(`its \`${field}:\` clause is ORed with another field's clause.`);
+    case "unparsable_edit":
+      return refuse("the changed query would not parse.");
+    default: // no reason given, or one this code doesn't know (an open set)
+      return refuse(
+        `the query has more than one top-level \`${field}:\` clause, or one inside an OR or NOT.`,
+      );
+  }
+}
+
+/** The clause, or the refusal `/parse`'s reason calls for when it reported none that can be edited. */
+function editable(
+  field: FilterField,
+  clause: FilterClause | null,
+  reason: ClauseReason | null | undefined,
+  limits: QueryLimits,
+): FilterClause {
+  if (clause !== null) return clause;
+  throw noEditableClause(field, reason, limits);
 }
 
 function rewriteClause(
@@ -342,14 +460,15 @@ function rewriteClause(
   field: FilterField,
   clause: FilterClause,
   values: readonly string[],
+  limits: QueryLimits,
 ): string {
   const next = spliceClause(state, field, clause, values);
   const length = codePointLength(next);
-  if (length > MAX_QUERY_LENGTH) {
+  if (length > limits.max_query_length) {
     throw new SearchStateError(
       "TOO_LONG",
       `The changed query would be ${length.toLocaleString("en-US")} characters long — the limit is ` +
-        `${MAX_QUERY_LENGTH.toLocaleString("en-US")}. Shorten the query text first.`,
+        `${limits.max_query_length.toLocaleString("en-US")}. Shorten the query text first.`,
     );
   }
   return next;
@@ -378,13 +497,7 @@ function spliceClause(
     );
   }
   // Checked at runtime too: a caller holding untyped /parse data could pass `negated: true`.
-  if ((clause.negated as boolean) !== false) {
-    throw new SearchStateError(
-      "NEGATED_CLAUSE",
-      `The \`${field}:\` clause is negated — changing its values would flip which papers it removes. ` +
-        "Edit it in the query text instead.",
-    );
-  }
+  if ((clause.negated as boolean) !== false) throw negatedClause(field);
   for (const v of [...clause.values, ...values]) {
     if (!FILTER_VALUE.test(v)) {
       throw new SearchStateError(
@@ -442,7 +555,15 @@ function spliceClause(
   return q.slice(0, utf16[0]) + text + q.slice(utf16[1]);
 }
 
-export function reduce(state: SearchState, action: SearchAction): SearchState {
+/**
+ * The next state after `action`, or a `SearchStateError` saying why it can't be applied. `limits` are the
+ * instance's (`/meta`'s `limits`); `DEFAULT_LIMITS` until it is fetched.
+ */
+export function reduce(
+  state: SearchState,
+  action: SearchAction,
+  limits: QueryLimits = DEFAULT_LIMITS,
+): SearchState {
   switch (action.type) {
     case "submit":
       return { ...state, q: action.q, mode: action.mode ?? state.mode, page: 1 };
@@ -451,15 +572,15 @@ export function reduce(state: SearchState, action: SearchAction): SearchState {
     case "setMode":
       return { ...state, mode: action.mode, page: 1 };
     case "facetToggle": {
-      const clause = editable(action.field, action.clause);
+      const clause = editable(action.field, action.clause, action.reason, limits);
       const { values } = clause;
       const next = values.includes(action.value)
         ? values.filter((v) => v !== action.value)
         : [...values, action.value];
-      return { ...state, q: rewriteClause(state, action.field, clause, next), page: 1 };
+      return { ...state, q: rewriteClause(state, action.field, clause, next, limits), page: 1 };
     }
     case "includeExcluded": {
-      const clause = editable(action.field, action.clause);
+      const clause = editable(action.field, action.clause, action.reason, limits);
       const { values } = clause;
       if (values.includes(action.value)) {
         throw new SearchStateError(
@@ -469,7 +590,7 @@ export function reduce(state: SearchState, action: SearchAction): SearchState {
         );
       }
       const next = [...values, action.value];
-      return { ...state, q: rewriteClause(state, action.field, clause, next), page: 1 };
+      return { ...state, q: rewriteClause(state, action.field, clause, next, limits), page: 1 };
     }
     case "sort":
       return { ...state, sort: action.sort, page: 1 };
@@ -490,9 +611,13 @@ export function reduce(state: SearchState, action: SearchAction): SearchState {
  * description, instead of being refused after the click (spec 05 §URL is state). `STALE_CLAUSE` is the
  * usual case: the query changed and `/parse` has not answered for it yet.
  */
-export function whyBlocked(state: SearchState, action: SearchAction): SearchStateError | null {
+export function whyBlocked(
+  state: SearchState,
+  action: SearchAction,
+  limits: QueryLimits = DEFAULT_LIMITS,
+): SearchStateError | null {
   try {
-    reduce(state, action);
+    reduce(state, action, limits);
     return null;
   } catch (e) {
     if (e instanceof SearchStateError) return e;

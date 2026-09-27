@@ -16,6 +16,7 @@ from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.ingest.record import PaperRecord, Presentation, Urls
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import MIN_YEAR, FilterField, Node, TextField
+from openproceedings.query.clauses import ParsedFilters
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import MAX_QUERY_LENGTH, Mode
 from openproceedings.records import Excluded as Excluded  # one schema for the exclusion accounting
@@ -79,8 +80,9 @@ class ParseRequest(Model):
 
 
 class ParseResponse(Versioned):
-    """02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints). A query
-    with errors is still a 200 here: `errors` holds them, and every Optional is null."""
+    """02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus
+    `filters` (`query.clauses.filter_clauses`, TASK-078). A query with errors is still a 200 here: `errors`
+    holds them, and every Optional is null."""
 
     mode: Mode
     ast: Node | None  # as typed, spans into q
@@ -92,6 +94,12 @@ class ParseResponse(Versioned):
     warnings: list[Diagnostic]
     errors: list[Diagnostic]
     translations: list[Diagnostic]
+    filters: ParsedFilters | None = Field(
+        description="Each filter field's top-level clause, for facet and include clicks (spec 02 §Filter "
+        "clauses; decision-011): its code-point span in `q` and the values it admits, or a zero-width span at "
+        "the end for an applied default or an unrestricted field; `toggleable` false with a `reason` when a "
+        "click can't rewrite it. Null exactly when `errors` is non-empty."
+    )
 
 
 # --- /search -----------------------------------------------------------------------------------------
@@ -144,8 +152,25 @@ class SearchResponse(Versioned):
 
 
 # --- /papers/{id} ------------------------------------------------------------------------------------
+PAPER_Q_DOC = (
+    f"Optional: a query (spec 02 grammar) whose highlights to return for this paper, admitted exactly as "
+    f"`/search` admits `q` (at most {MAX_QUERY_LENGTH:,} code points, else 422 `PARSE_TOO_LONG`; one that "
+    "doesn't parse is a 422 with its diagnostics). Without it, `matched` and `highlights` are null."
+)
+PAPER_MODE_DOC = f"{MODE_DOC} Only with `q`: `scholar` without `q` is 422 `API_BAD_PARAM`."
+
+
 class PaperResponse(Versioned):
     paper: PaperRecord  # the snapshot record the index was built from (spec 01), provenance included
+    matched: bool | None = Field(
+        description="With `q`: whether the query (default filters included) matches this paper on this "
+        "index, i.e. whether `/search` would count it in `total`. Null without `q`."
+    )
+    highlights: Highlights | None = Field(
+        description="With `q`: the spans `/search` gives this paper as a hit for that query, over "
+        "`paper.title` and `paper.abstract` (code points over the raw text); both lists empty when "
+        "`matched` is false. Null without `q`."
+    )
 
 
 # --- /records (task-037; spec 04 §Search records) -----------------------------------------------------
@@ -224,6 +249,29 @@ class Vocabularies(Model):
     status: list[Status]
 
 
+class Limits(Model):
+    """This instance's limits on a query (TASK-089), so a client need not hard-code them: the parser's length
+    and depth caps, and the served config's verification limits (`op serve` flags; another instance may
+    differ)."""
+
+    max_query_length: int = Field(
+        description="the longest `q` in Unicode code points; a longer one, or one whose canonical form is "
+        "longer, is 422 `PARSE_TOO_LONG` (from `/parse`, a 200 whose `errors` hold it)"
+    )
+    max_query_depth: int = Field(
+        description="the deepest nesting of groups and `NOT`s a `q` may have; deeper is 422 `PARSE_TOO_DEEP` "
+        "(from `/parse`, a 200 whose `errors` hold it)"
+    )
+    max_verified_clauses: int = Field(
+        description="the most position-verified clauses a query may have; more is 422 "
+        "`API_TOO_MANY_VERIFIED_CLAUSES`"
+    )
+    max_verification_candidates: int = Field(
+        description="the most candidate documents a query's position-verified clauses may read, summed over "
+        "each clause's fields; more is 422 `API_QUERY_TOO_COSTLY`"
+    )
+
+
 class MetaResponse(Versioned):
     index_versions: list[str] = Field(
         description="every index this instance can serve, sorted, the served one included: an index this "
@@ -232,6 +280,7 @@ class MetaResponse(Versioned):
     text_fields: list[TextField]
     filter_fields: list[FilterField]
     values: Vocabularies
+    limits: Limits
 
 
 # --- /coverage ---------------------------------------------------------------------------------------

@@ -37,27 +37,38 @@ and ignoring `trust`.", with `""` marking an empty value). The notice box ends w
 link** (the canonical URL of the state actually shown); the page never redirects on its own.
 
 Facet and include clicks rewrite `q` from the server's `/parse` report of that field's top-level clause
-(field, polarity, code-point span, values, and the `(q, mode)` it was parsed from). **Pending TASK-078:**
-`/parse` doesn't report these clauses yet, so the reducer takes a `FilterClause` it declares itself
-(`search-state.ts`) until the generated schema has one. **"Top-level" is judged
+(field, polarity, code-point span, values, and the `(q, mode)` it was parsed from): `/parse`'s `filters`
+(02 §Filter clauses, decision-011). `clauseFromParse(filters[field], q, mode)` turns the generated
+`ParsedClause` into the reducer's `FilterClause` (a positive, toggleable clause with a span) or `clause: null`
+with the server's `reason`, which the action carries so the refusal says why. **"Top-level" is judged
 on the flattened canonical tree**, where parenthesised AND groups are flattened: in
 `track:workshop "large language model" AND (venue:NeurIPS track:workshop)` both `track:` clauses are
 top-level. A field with more than one such clause, or with its only clause inside an OR or NOT, has no
-editable clause: `/parse` says so (TASK-078), and splicing over one clause would leave the other ANDed in,
-so the edit would silently change nothing. The rewritten clause is `field:v` for one value and
-`field:(v1 OR v2 …)` for several. An applied default is written out as `(q) AND field:(…)`; a `q` ending in
+editable clause: `/parse` says so (`multiple_clauses`, `nested`, `mixed_fields`), and splicing over one clause would leave the other ANDed in,
+so the edit would silently change nothing. The rewritten clause is always grouped, `field:(v1 OR v2 …)`, and
+`field:(v)` for one value: a bare `field:v` spliced before a group would touch it (`trust
+track:workshop(x OR y)` is `PARSE_PAREN_TOUCHES_WORD`), while the group's `)` never touches what follows, so
+`/parse`'s check of the widest edit covers every edit a click makes. The canonical form, and so the search
+record's hash, is the same as the bare form's. An applied default is written out as `(q) AND field:(…)`; a `q` ending in
 an odd run of backslashes is refused, because the last backslash would escape the `)` (spec 02). The wrap
 goldens are `frontend/src/lib/wrap-golden.json`, checked against the server parser by
 `backend/tests/contract/test_frontend_wrap_golden.py`.
 
 The reducer refuses, with a `SearchStateError` whose `code` the UI branches on and whose message follows
 the ux-writing pattern (what happened — why. How to fix): `STALE_CLAUSE` (parsed from another `q` or
-`mode`), `WRONG_FIELD`, `NEGATED_CLAUSE`, `NO_EDITABLE_CLAUSE` (the field has no single editable clause),
-`BAD_VALUE` (not a bare identifier), `LAST_VALUE` (removing it would exclude every record), `BAD_SPAN`,
-`EMPTY_QUERY`, `TRAILING_ESCAPE`, `TOO_LONG` (the new `q` would pass `MAX_QUERY_LENGTH`, 2,000 code points,
-which mirrors the API parser's cap until `/meta` serves it; a wrapped `q` that fits but whose canonical form
-is over the cap, decision-008, is refused only by the server: `/parse` reporting such a field as not
-toggleable is pending TASK-078), `ALREADY_INCLUDED` and `BAD_PAGE`. **Controls
+`mode`), `WRONG_FIELD`, `NEGATED_CLAUSE` (also for `/parse`'s reason `negated`), `NO_EDITABLE_CLAUSE` (the
+field has no single editable clause: `multiple_clauses`, `nested`, `mixed_fields`, `unparsable_edit`, or a
+reason this code doesn't know, each worded in the message), `BAD_VALUE` (not a bare identifier), `LAST_VALUE`
+(removing it would exclude every record), `BAD_SPAN`, `EMPTY_QUERY`, `TRAILING_ESCAPE`, `TOO_LONG` (the new
+`q` would pass the instance's `max_query_length`, which `/meta` serves in `limits` (TASK-089) and `reduce` and
+`whyBlocked` take as an argument; until `/meta` is fetched (TASK-041/042) they use `DEFAULT_LIMITS`, 2,000 code
+points, from `frontend/src/lib/default-limits.json`, which the backend's `test_meta_limits.py` checks equals the
+cap `/meta` serves; or `/parse` reported `too_long`: the widest edit's canonical form would be over the cap,
+decision-008),
+`TOO_DEEP` (`/parse` reported `too_deep`: the wrap would nest `q` past the instance's `max_query_depth`, 64,
+also from `/meta`'s `limits` and `default-limits.json`),
+`ALREADY_INCLUDED` and `BAD_PAGE`. The golden cases in `frontend/src/lib/filter-clause-golden.json` pin
+`/parse`'s report and the reducer's result together. **Controls
 are disabled with the reason, not refused after the click:** a facet toggle or include button calls
 `whyBlocked(state, action)` while rendering and, when it returns an error, renders disabled with the
 message as its description. `STALE_CLAUSE` is the usual case, while `/parse` catches up with a new `q`.
@@ -76,7 +87,7 @@ clauses to an existing top-level AND instead of re-wrapping.
 |---|---|
 | `/` | Search home: the editor, example queries (the review's strings), a coverage summary line |
 | `/search` | The main workspace (below) |
-| `/paper/[id]` | Full record: abstract with the current query's highlights, all links, provenance table. `GET /papers/{id}` takes no `q` and returns no highlights, so the page needs TASK-087 first |
+| `/paper/[id]` | Full record: abstract with the current query's highlights, all links, provenance table. The result list links to `/paper/<id>?q=<q>&mode=<mode>` (the query rides in the URL, so a shared or reloaded link shows the same highlights), and the page calls `GET /papers/{id}?q=…&mode=…` (04 §Endpoints, task-087): it draws `highlights` exactly as the result list does (API spans only, never re-matched), and when `matched` is false it says the paper doesn't match that query (e.g. the default filters remove it) with nothing lit. A link without `q` (a direct link) calls `GET /papers/{id}` alone and shows the record with no highlights and no match line. If the `q` in the URL is refused (a 422 or 429), the page fetches the paper without `q` and shows it unhighlighted with a one-line notice that the query in the link couldn't be run; a 404, or a 422 `API_BAD_PARAM` for the id, is the not-found state |
 | `/record/[id]` | Search-record page: the input string as typed, its `mode`, and every translation notice (Scholar mode), the identification string and the default clauses, full index version, search date and the crawl window (`crawl_dates["*"]`, "crawl run <from> to <to>"; only `*` exists until M4 adds per-source windows; when `crawl_dates_kind["*"]` is `scholar_query_dates` it reads "Scholar searches run <from> to <to> (local time)", never "crawl"), total, exclusions (`unknown` on its own line), replay status (`reproduced` / `drifted` with its reason and `+<added_total> / −<removed_total>`, or "membership-identical" on `+0 / −0` / `mismatch`; a replay whose canonical no longer runs reads "could not be re-run: `<refused code>`" with no counts; a replay this instance withholds (04 §Search records: `refused` `API_TOO_MANY_VERIFIED_CLAUSES` or `API_QUERY_TOO_COSTLY`, status `drifted`, `changed` empty) reads "could not be re-run: `API_TOO_MANY_VERIFIED_CLAUSES` — this instance's limit is below the record's <verified_clauses> position-verified clauses", or for `API_QUERY_TOO_COSTLY` "— its position checks would read more documents than this instance allows in one query", never as reproduced, as membership-identical or as a drift with no reason; its exports stay, the record's stored ids), a "Copy methods text" button, and export buttons that **must** call `/export?record_id=<id>` (the record's stored ids from its own index, never a re-run of `q`). When `identification_citable` is `false` the page shows the CLI's caution, "bootstrap corpus (sources: <sources>): these counts describe that corpus, not a database; they are not PRISMA identification numbers", and **no methods text** (exports stay); when it is null (a v1 record) the caution reads "not recorded whether this index is a bootstrap corpus: these counts may not be PRISMA identification numbers", also with no methods text. On `mismatch` the page is a blocking **"do not cite — replay mismatch"** state with no methods text and no export |
 | `/coverage` | Venue × year × track table with source and snapshot date, missing-abstract counts, `unknown` counts |
 | `/help/syntax` | Language reference generated from the 02 golden table (it cannot drift from the tests) |

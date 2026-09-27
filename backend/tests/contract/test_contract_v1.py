@@ -190,6 +190,7 @@ def test_the_error_code_schema_is_exactly_the_registrys_http_codes() -> None:
 QUERY_ROUTES = [
     ("/api/v1/search", "get"),
     ("/api/v1/export", "get"),
+    ("/api/v1/papers/{id}", "get"),  # with `q` (task-087)
     ("/api/v1/records", "post"),
     ("/api/v1/records/{id}", "get"),
     ("/api/v1/records/{id}/diff", "get"),

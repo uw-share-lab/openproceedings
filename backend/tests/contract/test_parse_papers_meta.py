@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from openproceedings.ingest.snapshot import load_records
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import FILTER_FIELDS
+from openproceedings.query.clauses import filter_clauses
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import MAX_QUERY_LENGTH, parse
 from openproceedings.vocab import STATUSES, TRACKS, VENUES
@@ -49,14 +50,17 @@ def error(r: Any, status: int, code: str) -> dict[str, Any]:
         ("", "native"),
     ],
 )
-def test_parse_is_02s_parse_result_without_identification_ast(
+def test_parse_is_02s_parse_result_without_identification_ast_plus_filters(
     client: TestClient, store: Store, q: str, mode: str
 ) -> None:
     r = client.post("/api/v1/parse", json={"q": q, "mode": mode})
     assert r.status_code == 200, r.text
     body = r.json()
     versions_of(body, store)
-    expected = parse(q, mode).model_dump(mode="json", exclude={"identification_ast"})  # type: ignore[arg-type]
+    result = parse(q, mode)  # type: ignore[arg-type]
+    expected = result.model_dump(mode="json", exclude={"identification_ast"})
+    filters = filter_clauses(q, result)  # TASK-078: served beside the ParseResult
+    expected["filters"] = None if filters is None else filters.model_dump(mode="json")
     assert {k: v for k, v in body.items() if k not in VERSIONS} == expected
 
 
@@ -106,7 +110,7 @@ def test_a_paper_is_its_full_snapshot_record(client: TestClient, store: Store) -
     r = client.get(f"/api/v1/papers/{hit['id']}")
     assert r.status_code == 200, r.text
     body = r.json()
-    assert set(body) == VERSIONS | {"paper"}
+    assert set(body) == VERSIONS | {"paper", "matched", "highlights"}
     versions_of(body, store)
     snapshot = load_records(store.indexes.parent / "snapshots" / "big")
     assert body["paper"] == snapshot[hit["id"]].model_dump(mode="json")

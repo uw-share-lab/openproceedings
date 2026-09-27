@@ -46,7 +46,7 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from types import FrameType
@@ -122,6 +122,63 @@ def index_path(data_dir: Path, name: str) -> Path:
             f"`{name}` does not resolve to an index directory directly under indexes/", "outside_indexes"
         )
     return target
+
+
+def open_pinned(
+    data_dir: Path,
+    version: str,
+    opener: Opener,
+    *,
+    slot: AbstractContextManager[object] | None = None,
+    gate: Callable[[TantivyEngine], TantivyEngine] | None = None,
+) -> Pinned:
+    """Index `version` read-only if `data_dir` holds it under its own name, else why not (module docstring):
+    the one rule of `IndexState.pinned` (which adds its cache, its one open `slot` and its verification
+    `gate`) and `op record replay` (none of them). The name is resolved first, a stat or two, so an absent or
+    alias name is refused without waiting for the slot; only the open, which re-hashes every file, takes it.
+    Never raises for a version that is absent, unloadable or tampered with: each refusal is one line."""
+    if not VERSION_NAME.fullmatch(version):  # `current` too: it is a name, never a version
+        return _refuse(version, "absent", None, detail="name_invalid")
+    try:
+        path = index_path(data_dir, version)
+    except IndexSelectionError as e:
+        return _refuse(version, "absent", e)
+    if path.name != version:  # a symlink named like a version: not the version asked for
+        return _refuse(version, "absent", None, detail="alias")
+    with slot or nullcontext():
+        started = time.perf_counter()
+        try:
+            engine = opener(path)  # verifies every file (the manifest names this directory)
+            if gate is not None:
+                engine = gate(engine)
+        except IndexBuildError as e:  # its files or manifest don't verify
+            return _refuse(version, "tampered", e)
+        except (OpenProceedingsError, OSError, ValueError, RuntimeError) as e:
+            # another tokenizer/schema/Tantivy version (EngineInternalError), or Tantivy can't read a
+            # segment (ValueError), or the files can't be read
+            return _refuse(version, "unloadable", e)
+        if engine.index_version != version:  # defence in depth: verify_index already ties the two
+            return _refuse(version, "tampered", None, detail="index_version_mismatch")
+        log.info("pinned_index_opened", extra={"index_version": version, "ms": elapsed_ms(started)})
+        return Pinned(engine, "ok")
+
+
+def _refuse(
+    version: str, reason: PinnedReason, error: BaseException | None, *, detail: str | None = None
+) -> Pinned:
+    """One line per refusal: `absent` at DEBUG (a client can name any version), `unloadable` at WARNING,
+    `tampered` at ERROR. The error's type and its reason constant (`cause_reason`: e.g. `alias`,
+    `files_mismatch`, `tokenizer_version_mismatch`, `ENOENT`; left out when there is none), never its message
+    (it names paths)."""
+    level = {"absent": logging.DEBUG, "unloadable": logging.WARNING, "tampered": logging.ERROR}[reason]
+    fields: dict[str, object] = {"index_version": version, "reason": reason}
+    if error is not None:
+        fields["error"] = type(error).__name__
+        detail = detail or reason_of(error)
+    if detail is not None:
+        fields["cause_reason"] = detail
+    log.log(level, "pinned_index_unavailable", extra=fields)
+    return Pinned(None, reason)
 
 
 def snapshot_records(data_dir: Path, index: Path, index_version: str) -> RecordFile:
@@ -423,50 +480,8 @@ class IndexState:
                 self._refused.popitem(last=False)
 
     def _resolve_and_open(self, version: str) -> Pinned:
-        """Resolve `version`'s directory first (a stat or two: an absent or alias name is refused here, without
-        waiting for the open slot), then open it in the one open slot."""
-        try:
-            path = index_path(self._data_dir, version)
-        except IndexSelectionError as e:
-            return self._refuse(version, "absent", e)
-        if path.name != version:  # a symlink named like a version: not the version asked for
-            return self._refuse(version, "absent", None, detail="alias")
-        with self._open_slot:  # one open of any version at a time
-            return self._open_pinned(version, path)
-
-    def _open_pinned(self, version: str, path: Path) -> Pinned:
-        started = time.perf_counter()
-        try:
-            engine = self._gated(
-                self._opener(path)
-            )  # verifies every file (the manifest names this directory)
-        except IndexBuildError as e:  # its files or manifest don't verify
-            return self._refuse(version, "tampered", e)
-        except (OpenProceedingsError, OSError, ValueError, RuntimeError) as e:
-            # another tokenizer/schema/Tantivy version (EngineInternalError), or Tantivy can't read a
-            # segment (ValueError), or the files can't be read
-            return self._refuse(version, "unloadable", e)
-        if engine.index_version != version:  # defence in depth: verify_index already ties the two
-            return self._refuse(version, "tampered", None, detail="index_version_mismatch")
-        log.info("pinned_index_opened", extra={"index_version": version, "ms": elapsed_ms(started)})
-        return Pinned(engine, "ok")
-
-    def _refuse(
-        self, version: str, reason: PinnedReason, error: BaseException | None, *, detail: str | None = None
-    ) -> Pinned:
-        """One line per refusal (then it is remembered): `absent` at DEBUG (a client can name any version),
-        `unloadable` at WARNING, `tampered` at ERROR. The error's type and its reason constant
-        (`cause_reason`: the load failure's reasons, e.g. `files_mismatch`, `tokenizer_version_mismatch`,
-        `ENOENT`), never its message (it names paths)."""
-        level = {"absent": logging.DEBUG, "unloadable": logging.WARNING, "tampered": logging.ERROR}[reason]
-        fields: dict[str, object] = {"index_version": version, "reason": reason}
-        if error is not None:
-            fields["error"] = type(error).__name__
-            detail = detail or reason_of(error)
-        if detail is not None:
-            fields["cause_reason"] = detail
-        log.log(level, "pinned_index_unavailable", extra=fields)
-        return Pinned(None, reason)
+        """`open_pinned` with this state's opener, its one open slot and its verification gate."""
+        return open_pinned(self._data_dir, version, self._opener, slot=self._open_slot, gate=self._gated)
 
     def load_in_background(self) -> threading.Thread:
         thread = threading.Thread(target=self.load, name="op-index-load", daemon=True)
