@@ -6,7 +6,10 @@ description: The proceedings.neurips.cc source — the paper_files URL grammar, 
 # NeurIPS proceedings (spec 01 §Sources)
 
 ## Role
-- **The only source** for NeurIPS before 2021 (main track; D&B starts in 2021).
+- **The only source** for NeurIPS before 2021 (main track; D&B starts in 2021). The crawl covers 2013 on
+  (decision-013); the site index `https://proceedings.neurips.cc/` links every year 1987–2025.
+- Published late: on 2026-09-27 the 2025 page listed only 64 Creative AI papers (no main or D&B yet), so
+  OpenReview is the only source for a year until its proceedings appear. Re-crawl; never infer absence.
 - A **cross-check** for 2021+ (OpenReview v1/v2 is primary for track and status). An OpenReview-accepted
   paper missing from the proceedings, or the reverse, is a `conflicts.csv` row. It never silently flips
   status.
@@ -16,8 +19,22 @@ description: The proceedings.neurips.cc source — the paper_files URL grammar, 
 
 ## URL grammar
 ```
-https://proceedings.neurips.cc/paper_files/paper/<YYYY>/{hash|file}/<sha>-{Abstract|Paper}-<Track>.{html|pdf}
+https://proceedings.neurips.cc/paper_files/paper/<YYYY>/{hash|file}/<sha>-{Abstract|Paper}[-<Track>].{html|pdf}
 ```
+Checked on every year page from 2013 to 2025 (2026-09-27, `docs/research/2026-09-27-openreview-and-proceedings-facts.md`):
+
+| Years | Abstract link | Year-page entry |
+|---|---|---|
+| 1987–2021 | `<sha>-Abstract.html`: **no track token** (all main track) | `<li class="" data-track="none">` |
+| 2022–2023 | `-Abstract-Conference.html`, `-Abstract-Datasets_and_Benchmarks.html` | `<li class="conference">`, `"datasets_and_benchmarks"` |
+| 2024 | `-Abstract-Conference.html`, `-Abstract-Datasets_and_Benchmarks_Track.html` | `data-track="datasets_and_benchmarks_track"` |
+| 2025 (so far) | `-Abstract-Creative_AI_Track.html` | `data-track="creative_ai_track"` |
+| 2021 D&B | `https://datasets-benchmarks-proceedings.neurips.cc/paper/2021` → `/paper_files/paper/2021/hash/<sha>-Abstract-round1.html` / `-round2.html` | `<li class="round1">`, authors in `<i>` |
+
+`classify_proceedings("")` returns track `unknown`, so the miner must give token-less 1987–2021
+listings on `proceedings.neurips.cc` track `main` from the host and year (the year page has no other
+track), and the 2021 D&B host's `round1`/`round2` listings `datasets_benchmarks`, each as its own
+evidence rule with a fixture.
 - `papers.nips.cc` is the legacy host with the same papers. Normalize to `proceedings.neurips.cc` in
   `urls.proceedings`.
 - The year index `https://proceedings.neurips.cc/paper_files/paper/<YYYY>` lists every paper for that year.
@@ -27,8 +44,14 @@ https://proceedings.neurips.cc/paper_files/paper/<YYYY>/{hash|file}/<sha>-{Abstr
 - Drop the query string (real links carry `?utm_source=…`).
 - `proceedings.iclr.cc` uses the same grammar. It is not a spec 01 source today, so don't crawl it
   without a spec change.
-- NeurIPS 2021 D&B may be on a separate host (`datasets-benchmarks-proceedings.neurips.cc`). Verify at
-  implementation time and record the answer in the miner's docstring.
+- **NeurIPS 2021 D&B is on its own host**, `datasets-benchmarks-proceedings.neurips.cc` (verified
+  2026-09-27; its index lists 2021 only): 174 papers, 66 Round 1 + 108 Round 2, equal to OpenReview's
+  accepted Round 1 and Round 2. 2022+ D&B is on the main host.
+- Year-page counts (2026-09-27): 2013 360, 2020 1,898, 2021 2,334, 2022 2,671 + 163 D&B, 2023 3,218 +
+  322 D&B, 2024 4,034 + 459 D&B. 2022–2023 and 2024 D&B equal OpenReview's accepted counts; 2024 main is
+  one short of OpenReview's 4,035, and 2021 main is 296 short of the 2,630 OpenReview v1 venues call
+  accepted (TASK-054 resolves both).
+- Pre-2022 abstract pages also link `<sha>-Metadata.json` and `<sha>-Reviews.html`.
 
 ## Track vocabulary (closed)
 | Path `<Track>` | `track` |
@@ -36,7 +59,9 @@ https://proceedings.neurips.cc/paper_files/paper/<YYYY>/{hash|file}/<sha>-{Abstr
 | `Conference` | `main` |
 | `Datasets_and_Benchmarks_Track` | `datasets_benchmarks` |
 | `Datasets_and_Benchmarks` (≤2023 spelling) | alias → `Datasets_and_Benchmarks_Track` → `datasets_benchmarks` |
-| `Position_Paper_Track` | `position` (verify with the spec owner: spec 01 names only ICML's position track) |
+| `Position_Paper_Track` | `position` (spec 01 lists NeurIPS's position track, `NeurIPS.cc/<Y>/Position_Paper_Track` on OpenReview from 2025; no proceedings page carries the token yet) |
+| `round1`, `round2` (2021 D&B host only) | `datasets_benchmarks` |
+| none (1987–2021 on `proceedings.neurips.cc`) | `main`, by host and year (see the grammar table) |
 | `Creative_AI_Track` | `other` (keep the raw segment for audit) |
 | anything else | `unknown`, counted (`unknown_track` in the import report) and flagged for attention; never a default (as built: `classify_proceedings`) |
 
@@ -49,7 +74,7 @@ The alias means one track never counts as two in the manifest. Mapping an unknow
   record's title (tolerate a leading `$…$` formula that other sources drop).
 - Abstract: the `<p class="paper-abstract">` block. Block tags (`p`, `br`, `div`, `li`) become a space;
   inline tags (`<i>`, `<sub>`) vanish, so `<i>k</i>-means` stays `k-means`.
-- Some pages are **double-escaped** (`&amp;amp;`). Unescape once, then decode only complete leftover
+- Some pages are **double-escaped** (`&amp;amp;`; the 2025 year page has an author `&amp;quot;…&amp;quot;`). Unescape once, then decode only complete leftover
   entities. A bare `&` in `R&D` survives.
 - Collapse whitespace. Keep LaTeX verbatim. Reject any string containing `…`, which is a snippet and not
   an abstract.

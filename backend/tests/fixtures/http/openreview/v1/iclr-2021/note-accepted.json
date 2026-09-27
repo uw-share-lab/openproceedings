@@ -1,0 +1,83 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?id=5NsEIflpbSv",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "5NsEIflpbSv",
+     "original": "QgJp4bY5PXJ",
+     "number": 2910,
+     "cdate": 1601308322795,
+     "ddate": null,
+     "tcdate": 1601308322795,
+     "tmdate": 1683307334093,
+     "tddate": null,
+     "forum": "5NsEIflpbSv",
+     "replyto": null,
+     "invitation": "ICLR.cc/2021/Conference/-/Blind_Submission",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "authorids": [
+       "~Synthetic_Person2",
+       "~Synthetic_Person3",
+       "synthetic.person4@example.org",
+       "~Synthetic_Person5",
+       "~Synthetic_Person6"
+      ],
+      "authors": [
+       "Synthetic Author 7",
+       "Synthetic Author 8",
+       "Synthetic Author 9",
+       "Synthetic Author 10",
+       "Synthetic Author 11"
+      ],
+      "keywords": [
+       "Synthetic keywords text 12.",
+       "Synthetic keywords text 13.",
+       "Synthetic keywords text 14.",
+       "Synthetic keywords text 15."
+      ],
+      "abstract": "Synthetic abstract text 16.",
+      "one-sentence_summary": "Synthetic one-sentence summary text 17.",
+      "code_of_ethics": "Synthetic code of ethics text 18.",
+      "paperhash": "synthetic|synthetic_title_19",
+      "pdf": "/pdf/4538feaf2c0ace4bc3472484186d4cda25dc7c01.pdf",
+      "data": "Synthetic data text 20.",
+      "venue": "ICLR 2021 Poster",
+      "venueid": "ICLR.cc/2021/Conference",
+      "_bibtex": "synthetic.person21@example.org"
+     },
+     "signatures": [
+      "ICLR.cc/2021/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2021/Conference"
+     ],
+     "pdate": 1610474014323,
+     "odate": 1601660524146,
+     "details": {
+      "writable": false
+     }
+    }
+   ],
+   "count": 1
+  }
+ }
+}

@@ -1,0 +1,35 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?id=g1SzIRLQXMM",
+  "authenticated": true
+ },
+ "response": {
+  "status": 404,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-ratelimit-limit": "500",
+   "x-ratelimit-remaining": "254",
+   "x-ratelimit-reset": "1790543172",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-limit": "500",
+   "ratelimit-remaining": "254",
+   "ratelimit-reset": "2221"
+  },
+  "json": {
+   "name": "NotFoundError",
+   "message": "The Note g1SzIRLQXMM was not found (2026-09-27-8520898)",
+   "status": 404,
+   "details": {
+    "path": "id",
+    "value": "g1SzIRLQXMM",
+    "reqId": "2026-09-27-8520898"
+   }
+  }
+ }
+}

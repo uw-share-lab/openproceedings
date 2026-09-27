@@ -122,10 +122,13 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
 1. **Abstract redistribution (M6).** Can a public instance serve abstracts? OpenReview's terms and the
    NeurIPS and PMLR proceedings terms differ. The code is MIT either way. The corpus is never committed
    to git.
-2. **Rejected and withdrawn ICLR submissions (M4).** They are public on OpenReview. Proposal: index them
-   with `status:rejected` / `status:withdrawn` and apply `status:accepted` by default, the same pattern
-   as workshops.
-3. **Earliest year (M4).** The review uses 2020–2026. Proposal: crawl from 2018 (ICLR's first year on
-   OpenReview) and filter by year in the query.
+2. ~~**Rejected and withdrawn ICLR submissions (M4).**~~ **Closed 2026-09-27 (decision-012):** every
+   public rejected, withdrawn and desk-rejected submission is indexed with `status:rejected`,
+   `status:withdrawn` or `status:desk_rejected` and excluded by the default `status:accepted`, counted
+   in the exclusion banner. ICLR publishes all of them; NeurIPS and ICML only those whose authors opt in.
+3. ~~**Earliest year (M4).**~~ **Closed 2026-09-27 (decision-013):** every venue is crawled from 2013
+   (ICLR's first year, when it was already on OpenReview) wherever a spec 01 source holds the
+   venue-year; the query's `year:` filter narrows it. ICLR 2014's acceptance, 2015 and the 2016
+   conference track have no source yet (TASK-092).
 4. **Planning tool (M0).** Backlog.md CLI (as in Kreate) or GitHub Issues.
 5. **Hosting (M6).** A lab VM, a university server, or a PaaS.

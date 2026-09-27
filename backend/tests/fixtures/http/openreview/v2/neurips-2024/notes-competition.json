@@ -1,0 +1,157 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=NeurIPS.cc/2024/Competition_Track&limit=1",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-ratelimit-limit": "500",
+   "x-ratelimit-remaining": "260",
+   "x-ratelimit-reset": "1790543172",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-limit": "500",
+   "ratelimit-remaining": "260",
+   "ratelimit-reset": "2236"
+  },
+  "json": {
+   "notes": [
+    {
+     "content": {
+      "title": {
+       "value": "Synthetic title text 1."
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 2",
+        "Synthetic Author 3",
+        "Synthetic Author 4",
+        "Synthetic Author 5",
+        "Synthetic Author 6",
+        "Synthetic Author 7",
+        "Synthetic Author 8",
+        "Synthetic Author 9",
+        "Synthetic Author 10",
+        "Synthetic Author 11",
+        "Synthetic Author 12",
+        "Synthetic Author 13",
+        "Synthetic Author 14",
+        "Synthetic Author 15",
+        "Synthetic Author 16",
+        "Synthetic Author 17",
+        "Synthetic Author 18"
+       ]
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person19",
+        "~Synthetic_Person20",
+        "~Synthetic_Person21",
+        "~Synthetic_Person22",
+        "~Synthetic_Person23",
+        "~Synthetic_Person24",
+        "~Synthetic_Person25",
+        "~Synthetic_Person26",
+        "~Synthetic_Person27",
+        "~Synthetic_Person28",
+        "~Synthetic_Person29",
+        "~Synthetic_Person30",
+        "~Synthetic_Person31",
+        "~Synthetic_Person32",
+        "~Synthetic_Person33",
+        "~Synthetic_Person34",
+        "~Synthetic_Person35"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 36.",
+        "Synthetic keywords text 37.",
+        "Synthetic keywords text 38.",
+        "Synthetic keywords text 39.",
+        "Synthetic keywords text 40."
+       ]
+      },
+      "TLDR": {
+       "value": "Synthetic tldr text 41."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 42."
+      },
+      "pdf": {
+       "value": "/pdf/95204ec26583ed1cd573d0a90a840aa2dda91ee6.pdf"
+      },
+      "venue": {
+       "value": "NeurIPS 2024 Competition Track"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2024/Competition_Track"
+      },
+      "_bibtex": {
+       "value": "synthetic.person43@example.org"
+      },
+      "Competition_timeline": {
+       "value": "Synthetic competition timeline text 44."
+      },
+      "Website": {
+       "value": "Synthetic website text 45."
+      },
+      "Primary_contact_email": {
+       "value": "synthetic.person46@example.org"
+      },
+      "Participant_contact_email": {
+       "value": "synthetic.person47@example.org"
+      },
+      "Workshop_format": {
+       "value": "Synthetic workshop format text 48."
+      },
+      "Preferred_timezone": {
+       "value": "Synthetic preferred timezone text 49."
+      },
+      "logo_image": {
+       "value": "Synthetic logo image text 50."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_51"
+      }
+     },
+     "id": "LYvWVFdGZN",
+     "forum": "LYvWVFdGZN",
+     "license": "CC0 1.0",
+     "signatures": [
+      "NeurIPS.cc/2024/Competition_Track/Submission48/Authors"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "writers": [
+      "NeurIPS.cc/2024/Competition_Track",
+      "NeurIPS.cc/2024/Competition_Track/Submission48/Authors"
+     ],
+     "number": 48,
+     "invitations": [
+      "NeurIPS.cc/2024/Competition_Track/-/Submission",
+      "NeurIPS.cc/2024/Competition_Track/-/Post_Submission",
+      "NeurIPS.cc/2024/Competition_Track/Submission48/-/Camera_Ready_Submission",
+      "NeurIPS.cc/2024/Competition_Track/-/Edit"
+     ],
+     "domain": "NeurIPS.cc/2024/Competition_Track",
+     "tcdate": 1712392623189,
+     "cdate": 1712392623189,
+     "tmdate": 1723605681129,
+     "mdate": 1723605681129,
+     "odate": 1712406540987,
+     "pdate": 1723605681055,
+     "version": 2
+    }
+   ]
+  }
+ }
+}
