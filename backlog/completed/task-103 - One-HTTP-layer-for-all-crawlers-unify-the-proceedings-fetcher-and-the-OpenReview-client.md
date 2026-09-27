@@ -3,10 +3,10 @@ id: TASK-103
 title: >-
   One HTTP layer for all crawlers: unify the proceedings fetcher and the
   OpenReview client
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 21:34'
-updated_date: '2026-09-27 23:16'
+updated_date: '2026-09-27 23:24'
 labels:
   - ingest
 milestone: m-4

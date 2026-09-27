@@ -4,7 +4,7 @@ title: Coverage report and the M4 gate
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-27 21:34'
+updated_date: '2026-09-27 23:24'
 labels:
   - eval
 milestone: m-4
@@ -38,4 +38,6 @@ TASK-002 count checks (2026-09-27): NeurIPS 2021 main proceedings 2,334 vs OpenR
 From TASK-050: check each live crawl's counts against the venue's published numbers (the openreview-crawler agent's 1% rule) here, not in the crawler.
 
 From TASK-052/053: the first live crawl (NeurIPS 2013-2024, ICML v28-v267) checks per-listing counts against the page's stated count and the PMLR volume table. Out of scope for now: NeurIPS competition volumes (would need spec 01 and record-schema changes, pmlr- ids are ICML-only).
+
+From TASK-103: NeurIPS/PMLR fetches no longer follow redirects (3xx is a refusal). If the first live crawl hits one, add an on-host redirect rule to http.Policy.
 <!-- SECTION:NOTES:END -->
