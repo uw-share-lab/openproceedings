@@ -251,7 +251,7 @@ class RecordResponse(Versioned):
     record: SearchRecord
     replay: ReplayInfo | None = Field(
         description="The replay check (HTTP 200 whatever its status). Null exactly when the request asked "
-        "`replay=false`; never null otherwise (decision-012)."
+        "`replay=false`; never null otherwise (decision-014)."
     )
 
 

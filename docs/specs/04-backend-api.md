@@ -362,7 +362,7 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   the rate limit rather than `export_weight` (`middleware.stored_read`: a GET of `/records/{id}` whose
   parameters are only `replay`, false by the route's own bool rule, and `include`, each once; anything else
   pays the record route's weight). `replay` defaults to `true`, the old answer, and is never null without
-  `replay=false` (decision-012: the one response field allowed to become nullable within v1, because only
+  `replay=false` (decision-014: the one response field allowed to become nullable within v1, because only
   the new opt-in parameter produces the null). The access line carries `canonical_hash`, never `q`.
 - **`ids_hash`** is `sha256("\n".join(sorted(ids)))`, code-point order, no trailing newline, with
   known-answer tests (the empty set is `sha256("")`).

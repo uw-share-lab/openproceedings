@@ -13,7 +13,7 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 | GET | `/papers/{id}` | full record with provenance; optional `q` (+ `mode`) → `matched` and `highlights`, equal to `/search`'s for that paper (null without `q`; `matched: false` + empty lists when the query doesn't match it; `q` admitted exactly as `/search` admits it; task-087) |
 | GET | `/export` | `format=ris\|csv\|bibtex\|jsonl` plus either `q` (with `mode` and optional `index_version`) or `record_id` (with at most `mode=native`, the declared default some clients always send; `scholar` is 422 "with record_id, mode may only be native") → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; `record_id` → exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if gone, 409 `API_RECORD_MISMATCH` on a `mismatch`) |
 | POST | `/records` | freeze a search as an immutable search record → 201 `{record_id, page}` plus the three versions, + `Location: /api/v1/records/<id>` (`.claude/skills/search-records/SKILL.md`); optional `index_version` pin: 409 `API_INDEX_VERSION_UNAVAILABLE` unless it is the served index (TASK-091) |
-| GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`; a replay over this instance's verification limits is withheld: 200, `refused`, never a 422); `replay=false`: the stored record, `replay: null`, no run, one token (TASK-091, decision-012) |
+| GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`; a replay over this instance's verification limits is withheld: 200, `refused`, never a 422); `replay=false`: the stored record, `replay: null`, no run, one token (TASK-091, decision-014) |
 | GET | `/records/{id}/diff` | for a record of any status: added and removed ids (with titles, paged), and which `index_version` inputs changed |
 | GET | `/coverage` | counts per venue × year × track × status, abstract-missing counts, snapshot date; `snapshot.crawl_dates_kind` and `identification_citable`, a record's derivation (TASK-091) |
 | GET | `/meta` | current and servable `index_version`s, field names, venue, track and status vocabularies, and `limits` (`max_query_length`, the parser's; `max_verified_clauses` and `max_verification_candidates`, the served config's; task-089) |
@@ -110,7 +110,7 @@ schema; an old client ignores it: response schemas carry no `additionalPropertie
 optional parameter with the old behaviour as its default.
 
 One recorded exception: `RecordResponse.replay` is nullable, null only for the opt-in `replay=false`
-(decision-012). `backend/tests/contract/test_openapi_additive.py` diffs the snapshot against the released one
+(decision-014). `backend/tests/contract/test_openapi_additive.py` diffs the snapshot against the released one
 on `origin/dev` by these rules (`ALLOWED` lists that exception); run it before any contract change lands.
 
 **Breaking**, which needs `/api/v2` or a decision record (`.claude/skills/decision-records/SKILL.md`):

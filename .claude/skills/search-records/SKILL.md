@@ -147,7 +147,7 @@ A record must go (a legal request, personal data in `input`). With the API stopp
   counts; `replay.*` carries the replay's (null when refused). `POST /records {…, index_version}` refuses a
   save on any index but that one (409 `API_INDEX_VERSION_UNAVAILABLE`, checked before the parse and the save
   ceilings). `GET /records/{id}?replay=false` is the stored record with `replay: null`, no run, one token,
-  answered during `API_BUSY` (decision-012: the only v1 field allowed to become nullable).
+  answered during `API_BUSY` (decision-014: the only v1 field allowed to become nullable).
 
 ## The CLI: `op record save` / `op record replay` (task-083; spec 08 §CLI)
 - The same functions: `save` is `records.freeze` + `RecordStore.insert` (the record equals `POST /records`'s

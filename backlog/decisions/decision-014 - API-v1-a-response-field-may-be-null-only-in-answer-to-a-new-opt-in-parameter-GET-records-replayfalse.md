@@ -1,5 +1,5 @@
 ---
-id: decision-012
+id: decision-014
 title: >-
   API v1: a response field may be null only in answer to a new opt-in parameter
   (GET records replay=false)

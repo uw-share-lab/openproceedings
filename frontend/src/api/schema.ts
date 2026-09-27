@@ -971,7 +971,7 @@ export interface components {
             /** Query Version */
             query_version: string;
             record: components["schemas"]["SearchRecord"];
-            /** @description The replay check (HTTP 200 whatever its status). Null exactly when the request asked `replay=false`; never null otherwise (decision-012). */
+            /** @description The replay check (HTTP 200 whatever its status). Null exactly when the request asked `replay=false`; never null otherwise (decision-014). */
             replay: components["schemas"]["ReplayInfo"] | null;
             /** Tokenizer Version */
             tokenizer_version: string;

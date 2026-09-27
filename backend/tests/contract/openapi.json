@@ -2260,7 +2260,7 @@
                 "type": "null"
               }
             ],
-            "description": "The replay check (HTTP 200 whatever its status). Null exactly when the request asked `replay=false`; never null otherwise (decision-012)."
+            "description": "The replay check (HTTP 200 whatever its status). Null exactly when the request asked `replay=false`; never null otherwise (decision-014)."
           },
           "tokenizer_version": {
             "title": "Tokenizer Version",

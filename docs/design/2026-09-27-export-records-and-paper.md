@@ -387,7 +387,7 @@ Copy deck §Export, §Save, §Record, §Paper.
 | citability, crawl kind, sources, dedup | `SearchRecord.identification_citable`, `crawl_dates_kind`, `sources`, `dedup` | exists |
 | **identified total** and **unclassified total** for the methods text and the record's Records line | `record.identified_total`, `record.unclassified_total` (and the replay's, and `SearchResponse`'s top-level pair) | **exists** (TASK-090; pre-pass S1): derived server-side, equal to what `op search` prints, so the UI adds no numbers. Everywhere else the page itemises unclassified per map |
 | the default clauses and the user's limit clauses as text | `/parse(canonical)` `defaults` + `filters[*].span` sliced from `canonical` | **works only while `replay.query_version` equals the record's**; otherwise the page cites `canonical` and says the clauses couldn't be separated. Proposed: store `default_clauses` and `limit_clauses` in the record body (v3), or return them at read |
-| a record readable without a replay (when the replay is refused for load) | `GET /records/{id}?replay=false` (`replay: null`, one token, answered during `API_BUSY`) | **exists** (TASK-091; pre-pass S4; decision-012): the page renders the recorded fields and methods text with "Replay: waiting" during a 429 or `API_BUSY` |
+| a record readable without a replay (when the replay is refused for load) | `GET /records/{id}?replay=false` (`replay: null`, one token, answered during `API_BUSY`) | **exists** (TASK-091; pre-pass S4; decision-014): the page renders the recorded fields and methods text with "Replay: waiting" during a 429 or `API_BUSY` |
 | the index the save ran on vs the one shown | 201 `index_version`; `RecordRequest.index_version` | exists; the save sends the shown index_version and a moved index is 409 `API_INDEX_VERSION_UNAVAILABLE` with nothing saved (TASK-091; pre-pass M3) |
 
 ## Heuristic pass
@@ -402,5 +402,5 @@ confirmation names permanence and publicity).
 2. The export menu's status warning lists counts from `facets.status`; if TASK-047 shows reviewers want one
    number, that needs an API field, not a client sum.
 3. ~~A record page during `API_BUSY` or a 429 shows nothing of the record, because the record comes only with
-   a replay.~~ Resolved by TASK-091: `GET /records/{id}?replay=false` (decision-012) gives the recorded fields
+   a replay.~~ Resolved by TASK-091: `GET /records/{id}?replay=false` (decision-014) gives the recorded fields
    and methods text while the replay waits.

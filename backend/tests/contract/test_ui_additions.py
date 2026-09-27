@@ -258,7 +258,7 @@ def test_replay_false_is_answered_while_every_verification_slot_is_taken(data_di
 
 
 def test_every_replay_is_still_non_null_without_the_parameter(client: TestClient) -> None:
-    """decision-012: `replay` is null only when the client asked `replay=false`."""
+    """decision-014: `replay` is null only when the client asked `replay=false`."""
     record_id = client.post(RECORDS, json={"q": VERIFIED}).json()["record_id"]
     assert client.get(f"{RECORDS}/{record_id}").json()["replay"] is not None
     assert client.get(f"{RECORDS}/{record_id}/diff").status_code == 200  # the diff has no such parameter

@@ -27,7 +27,7 @@ REPO = Path(__file__).resolve().parents[3]
 TEXT = frozenset({"description", "title", "examples", "readOnly"})  # documentation, not contract
 # (schema.property, what): exceptions, each with its decision record
 ALLOWED = {
-    # decision-012: null only in answer to the new opt-in `replay=false` (TASK-091); never null otherwise
+    # decision-014: null only in answer to the new opt-in `replay=false` (TASK-091); never null otherwise
     ("RecordResponse.replay", "nullable"),
 }
 
@@ -237,7 +237,7 @@ def test_additive_changes_pass(doc: dict[str, Any], edit: Any) -> None:
 
 
 def test_the_one_allowed_widening_is_only_the_record_replay(doc: dict[str, Any]) -> None:
-    """decision-012 allows `RecordResponse.replay` to be nullable; the same widening anywhere else is breaking."""
+    """decision-014 allows `RecordResponse.replay` to be nullable; the same widening anywhere else is breaking."""
     old = copy.deepcopy(doc)
     replay = _schemas(old)["RecordResponse"]["properties"]["replay"]
     replay.pop("anyOf", None)

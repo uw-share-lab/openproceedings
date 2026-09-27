@@ -3,7 +3,7 @@
 **Key lesson:** Put a count that a stored record can derive (`identified_total = total + excluded.total`) in a pydantic `computed_field` and exclude it from the stored body (`records.DERIVED`). Then every old body reads with it, no stored value can disagree with its own counts, and the OpenAPI schema still marks it required. Check each /api/v1 change with `test_openapi_additive.py` against `origin/dev`, not by reading the diff.
 
 - **Date:** 2026-09-27 · **Task:** task-090, task-091 · **Area:** api
-- **Artifacts:** `backend/src/openproceedings/records.py` (`SearchRecord.identified_total`, `DERIVED`), `backend/src/openproceedings/api/middleware.py` (`stored_read`), `backend/tests/contract/test_openapi_additive.py`, `backend/tests/contract/test_ui_additions.py`, decision-012
+- **Artifacts:** `backend/src/openproceedings/records.py` (`SearchRecord.identified_total`, `DERIVED`), `backend/src/openproceedings/api/middleware.py` (`stored_read`), `backend/tests/contract/test_openapi_additive.py`, `backend/tests/contract/test_ui_additions.py`, decision-014
 
 ## What we set out to do
 Add the fields the M3b UI design asked for (identified and unclassified counts, a save pinned to the shown
@@ -22,7 +22,7 @@ index, a record read without a replay, coverage citability and clause spans), al
   parameter pays the full weight (evidence: `test_a_request_the_route_refuses_is_charged_in_full`, whose
   `replay=false&x=1` case failed until the unknown-key check was added).
 - **Widening nullability is breaking by the skill's rules, even when only an opt-in parameter sends the
-  null.** A typed client's type widens. The exception is written down as decision-012 and allowed by name in
+  null.** A typed client's type widens. The exception is written down as decision-014 and allowed by name in
   the additive checker, and a test shows the same widening anywhere else is still caught.
 
 ## Dead ends — don't repeat these
@@ -42,7 +42,7 @@ index, a record read without a replay, coverage citability and clause spans), al
 - [ ] none: the UI tasks that consume these (TASK-042, TASK-044, TASK-045) already exist.
 
 ## Propagated to
-- Skill / agent / CLAUDE.md updated? `.claude/skills/api-contract/SKILL.md` (derived counts, decision-012,
+- Skill / agent / CLAUDE.md updated? `.claude/skills/api-contract/SKILL.md` (derived counts, decision-014,
   the additive checker), `.claude/skills/search-records/SKILL.md` (derived fields never stored, the pin,
   `replay=false`).
 - Test or hook added? `backend/tests/contract/test_openapi_additive.py`, `backend/tests/contract/test_ui_additions.py`.
