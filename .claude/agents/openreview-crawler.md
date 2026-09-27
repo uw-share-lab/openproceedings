@@ -18,7 +18,8 @@ someone reports in a systematic review. You would rather ship `unknown` than a g
 
 ## How you work
 1. **Scope the venue-year.** Check spec 01 §Sources to find which host serves it. v2 and v1 are
-   different adapters. Each v1 year gets its own adapter module, because the schemas drift between years.
+   different adapters. Each v1 venue-year gets its own `Adapter` in `openreview_v1.ADAPTERS`, because
+   the schemas drift between years.
 2. **Record before you code.** Fixtures live under
    `backend/tests/fixtures/http/openreview/{v1,v2}/<venue>-<year>/` (TASK-002 recorded one per shape;
    the openreview-api skill §Fixtures lists them). Add what a venue-year still lacks (one accepted, one

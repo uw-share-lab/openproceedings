@@ -125,19 +125,30 @@ op snapshot build [--from <cache>]      # merge sources → new immutable snapsh
 op snapshot diff <a> <b>                # added / removed / changed records
 ```
 
-As built (task-022, task-050, task-052/053): `ingest ris`, `ingest openreview`, `ingest neurips`, `ingest pmlr`,
-`snapshot build` and `snapshot diff`. `ingest openreview` (API v2
-only: ICLR 2024+, NeurIPS 2023+, ICML 2023+; a v1 year is refused until TASK-051) takes `--venue`,
+As built (task-022, task-050, task-051, task-052/053): `ingest ris`, `ingest openreview`, `ingest neurips`,
+`ingest pmlr`, `snapshot build` and `snapshot diff`. `ingest openreview` (task-050 API v2: ICLR 2024+, NeurIPS
+2023+, ICML 2023+; task-051 API v1: ICLR 2013–2023, NeurIPS 2021–2022; each year goes to the API that holds it,
+and a year on neither, such as NeurIPS 2020, refuses the whole request before anything is fetched) takes `--venue`,
 `--years YYYY[-YYYY]` (or `--year`) and one of `--offline` (replay the cache; a miss is refused), `--dry-run` (no
 network and no writes: prints each venue-year's report with `complete: false` and the first uncached request of
-each branch in `would_fetch`) or `--refresh` (fetch every response again). It lists the year's groups
+each branch in `would_fetch`) or `--refresh` (fetch every response again). A v2 year lists the year's groups
 (`Workshop`, `Workshop_<City>` and `Track` are expanded; proposal groups and groups that aren't v2 venues are
 skipped and reported), then every venue's accepted, submission, rejected, withdrawn and desk-rejected venueids
-(decision-012), 1,000 notes a page sorted by `number`. Responses are cached under
-`<data-dir>/cache/openreview/v2/http/` (scholarmend's `Cache`, keyed by the canonical URL) and a finished
-venue-year writes `…/v2/crawls/<Venue>-<Year>.json`, which `snapshot build` replays offline. Code:
-`ingest/sources/openreview_client.py` (auth, pacing, retries, cache) and `ingest/sources/openreview_v2.py`
-(enumeration, records). `op --data-dir <dir> <command>` (a global option; default `$OP_DATA_DIR`, else the repository's
+(decision-012), 1,000 notes a page sorted by `number`. A v1 year runs its adapter (`openreview_v1.ADAPTERS`, one
+per venue-year schema): it lists the year's exact submission, withdrawn and desk-rejected invitations
+(`?invitation=`, 1,000 a page, `count` checked), takes status from `content.decision` (ICLR 2013), `content.venue`
+(`classify_v1_venue`: ICLR 2017, 2022, 2023, NeurIPS), the decision note fetched per forum (`?forum=`; ICLR
+2018–2020, and 2021 notes without a venue string) or the withdrawn / desk-rejected invitation, never the v1
+venueid; ICLR 2014 and 2016 have no decisions (`unknown`), and ICLR 2015 has nothing to crawl. What OpenReview
+can't answer for a year is listed in the report's `coverage_gaps`, never raised. A note whose own evidence
+disagrees (the withdrawn ICLR 2021 note `xGZG2kS5bFk` says `ICLR 2021 Poster`; two decision notes that disagree;
+a venueid naming another track) gets `unknown` for that field and an `unresolved:openreview_v1` row in
+`conflicts.csv`. Responses are cached under
+`<data-dir>/cache/openreview/{v2,v1}/http/` (scholarmend's `Cache`, keyed by the canonical URL; a v1 client logs
+in on api2, whose token api1 accepts) and a finished venue-year writes `…/{v2,v1}/crawls/<Venue>-<Year>.json`,
+which `snapshot build` replays offline. Code: `ingest/sources/openreview_client.py` (auth, pacing, retries,
+cache), `ingest/sources/openreview_v2.py` (enumeration, records) and `ingest/sources/openreview_v1.py` (the
+per-year adapters). `op --data-dir <dir> <command>` (a global option; default `$OP_DATA_DIR`, else the repository's
 `data/`, gitignored); results go to stdout as JSON, a refusal exits 1 with a one-line reason that never
 quotes record text.
 

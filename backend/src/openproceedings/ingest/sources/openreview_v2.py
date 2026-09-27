@@ -1,6 +1,6 @@
 """The OpenReview API v2 crawler (TASK-050; spec 01 §Sources; openreview-api and openreview-venueids skills).
 
-One venue-year at a time (ICLR 2024+, NeurIPS 2023+, ICML 2023+; earlier years are API v1, TASK-051):
+One venue-year at a time (ICLR 2024+, NeurIPS 2023+, ICML 2023+; earlier years are API v1, `openreview_v1`):
 
 1. **Venue groups.** `GET /groups?parent=<Org>.cc/<Y>` lists the year's groups; `Workshop`,
    `Workshop_<City>` and `Track` are containers whose children are listed too. A group whose path names a
@@ -82,7 +82,7 @@ def check_scope(venue: str, year: int) -> None:
     if first is None:
         raise ValueError(f"unknown venue {venue!r}: one of {', '.join(FIRST_V2_YEAR)}")
     if year < first:
-        raise ValueError(f"{venue} {year} is on OpenReview API v1, not v2 (its adapters are TASK-051)")
+        raise ValueError(f"{venue} {year} is not on OpenReview API v2 (API v1 years: `openreview_v1`)")
 
 
 class CrawlError(OpenReviewError):
@@ -117,12 +117,14 @@ class CrawlReport:
     fetched: list[str] = field(default_factory=list)  # every response's fetched_at (for the crawl window)
     would_fetch: list[str] = field(default_factory=list)  # dry run: the uncached requests met first
 
+    api = "v2"
+
     def crawl_window(self) -> dict[str, str] | None:
         return {"from": min(self.fetched), "to": max(self.fetched)} if self.fetched else None
 
     def to_manifest(self) -> dict[str, Any]:
         out: dict[str, Any] = {
-            "api": "v2",
+            "api": self.api,
             "venue": self.venue,
             "year": self.year,
             "complete": self.complete,

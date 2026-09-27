@@ -130,6 +130,31 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   `proposal` skip) is built from the research run's description; no `?parent=` listing is recorded yet, so
   record one per venue before the first full crawl.
 
+## The v1 crawler as built (TASK-051)
+- `ingest/sources/openreview_v1.py`: `ADAPTERS`, one `Adapter` per venue-year (ICLR 2013–2023 including an
+  empty 2015, NeurIPS 2021–2022). Each names its exact listing invitations (with the track submitted to and
+  the role: `submission`, `withdrawn`, `desk_rejected`), where status comes from (`decision_field`, `none`,
+  `venue`, `decision_note`, `venue_then_decision_note`), its decision table and its `coverage_gaps`.
+  `api_for(venue, year)` picks v1 or v2; `op ingest openreview` sends each year to its API.
+- `make_client` points the shared client at `https://api.openreview.net`, logs in on api2
+  (`login_base`), and caches under `<data-dir>/cache/openreview/v1/http/`; crawl files go to
+  `…/v1/crawls/<Venue>-<Year>.json` and `replay` rebuilds them offline for `op snapshot build`.
+- Listings use `?invitation=<exact>` with `limit`/`offset` and no `sort` (the v1 sort parameter isn't verified;
+  rows == distinct ids == `count` catches a listing that moved). Decision notes come from `?forum=<id>`, only
+  for years whose status needs one and notes without a deciding venue string: a note counts as the decision
+  only if its invitation is the year's exact one (with `Paper<number>` of this submission), its `forum` is
+  the submission and its `replyto` is the submission.
+- Status strings are exact-match tables (`classify_v1_venue` for `content.venue`, the adapter's tables for
+  `content.decision` and decision notes). Only strings seen live are listed: ICLR 2020's and 2021's accept
+  decision strings are not, so those notes are `unknown` and counted in the report's `unmapped` until a live
+  accepted forum is recorded. The v1 venueid confirms venue and year and must agree with the decided track.
+- A note's own disagreement (withdrawn invitation vs an accepted `content.venue`, two decision notes, a
+  venueid naming another track) makes that field `unknown` and adds an `unresolved:openreview_v1` row that
+  `snapshot.with_crawl_conflicts` writes to `conflicts.csv` (following merges to the surviving record).
+- Early ICLR 2017 notes give `content.authors` as one string: kept out (`authors_unsplit` in the report), never
+  split by guess. Not crawled until verified live: ICLR 2023 Blogposts, NeurIPS 2021–2022 withdrawn and
+  desk-rejected invitations (each named in the year's `coverage_gaps`).
+
 ## Fixtures
 `backend/tests/fixtures/http/openreview/{v1,v2}/<venue>-<year>/*.json`, one file per exchange:
 `{"_recorded", "request": {"method", "url", "authenticated"}, "response": {"status", "headers", "json" |
