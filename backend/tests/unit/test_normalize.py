@@ -5,7 +5,7 @@ import unicodedata
 from itertools import pairwise
 
 import pytest
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 from openproceedings.query.mathsyms import GREEK, LETTER_LOOKALIKES, OPERATOR_COMMANDS, OPERATORS
 from openproceedings.query.normalize import TOKENIZER_VERSION, Token, normalize, tokenize
@@ -284,8 +284,42 @@ def test_leading_accent_markup_is_in_the_word_span(text: str, spans: list[tuple[
     assert [(t.start, t.end) for t in tokenize(text)] == spans
 
 
+# A slash cluster (task-075): a character, then combining marks including U+0338 (SL below), folded whole.
+# Each piece spans the raw characters it came from, so two tokens share at most one multi-piece code point.
+@pytest.mark.parametrize(
+    ("text", "spans"),
+    [
+        ("x\u00bd\u0338y", [(0, 2), (1, 4)]),  # x 1/2 SL y -> x1, 2y: they share the 1/2 and only it
+        ("x\u00bdy", [(0, 2), (1, 3)]),  # no slash: unchanged
+        ("x\u00bd\u0338", [(0, 2), (1, 3)]),  # the last piece's token covers the slash
+        ("x\u2474\u0338y", [(0, 1), (1, 2), (3, 4)]),  # parenthesized 1 is `(1)`; SL is on `)`, not on 1
+        ("x\u222c\u0338y", [(0, 1), (1, 2), (1, 3), (3, 4)]),  # double integral SL -> int, int
+        ("\u01c6\u0338", [(0, 2)]),  # dz digraph SL -> dz: one word, the whole cluster
+        ("a \u2208\u0338 b", [(0, 1), (2, 4), (5, 6)]),  # element-of SL composes to notin: the whole cluster
+        # U+0345 (ypogegrammeni) folds to the letter iota: after a piece that isn't a letter it starts a word
+        # at its own mark, and the pieces before it end there
+        ("=\u0338\u0345x", [(0, 2), (2, 4)]),  # neq, iota x
+        ("\u2a76\u0338\u0345x", [(0, 2), (2, 4)]),  # `===` SL -> `==` neq iota: found by a 300k differential
+        ("=\u0345\u0338", [(0, 1), (1, 3)]),  # marks in the other order: neq ends where iota starts
+        ("\u2208\u0338\u0345", [(0, 2), (2, 3)]),  # notin, iota
+        (
+            "\u03b1\u0338\u0345",
+            [(0, 3)],
+        ),  # after a letter, iota joins its word (alpha iota): the whole cluster
+        # accent markup before a character belongs to its first piece: a word after an operator or separator
+        # piece starts at its own piece, never back at the markup (starts would go backwards)
+        ('\\"\u222d\u0338\u0345', [(2, 3), (2, 3), (2, 4), (4, 5)]),  # triple integral SL iota: int x3, iota
+        ('\\"\u2474', [(2, 3)]),  # parenthesized 1: `(` is a separator piece, so 1 doesn't take the markup
+        ('\\"\u00bd', [(0, 3), (2, 3)]),  # 1/2: 1 is the first piece and takes it; 2 shares the 1/2
+    ],
+)
+def test_slash_cluster_pieces_span_what_they_came_from(text: str, spans: list[tuple[int, int]]) -> None:
+    assert [(t.start, t.end) for t in tokenize(text)] == spans
+
+
 LATEX_PIECES = ["$", "\\(", "\\)", " ", "a", "O", "5", "{", "}", "^", "_", '\\"', "\\'", "\\v", "\\H", "\\-",
-                "\\leq", "\\times", "\\alpha", "\\not", "=", "\\in", "\u0301", "\u200b", "中", "é", "-"]  # fmt: skip
+                "\\leq", "\\times", "\\alpha", "\\not", "=", "\\in", "\u0301", "\u200b", "中", "é", "-",
+                "\u00bd", "\u2474", "\u0338", "\u0345"]  # fmt: skip
 
 
 @given(
@@ -293,12 +327,17 @@ LATEX_PIECES = ["$", "\\(", "\\)", " ", "a", "O", "5", "{", "}", "^", "_", '\\"'
     .map("".join)
     .flatmap(lambda t: st.sampled_from([t, f"${t}$"]))
 )
+@example("a\u00bd\u0338a")  # task-075: `a1` and `2a` overlapped on the 1/2 and the slash
+@example("=\u0338\u0345")  # task-075: neq and the iota word both spanned the whole cluster
+@example('\\"\u222d\u0338\u0345')  # task-075: the iota word took the markup's start, before the ints'
 def test_token_spans_are_valid_and_never_overlap(text: str) -> None:
     tokens = tokenize(text)
     for t in tokens:
         assert 0 <= t.start < t.end <= len(text), (text, t)
     for a, b in pairwise(tokens):
-        # pieces of one non-ASCII code point that folds to several share its span; the alphabet has no such
-        # point or combining-slash cluster, so here nothing overlaps (a pre-existing cluster case is out of scope)
-        shared = b.start < a.end and a.end - b.start <= 1 and not text[b.start : a.end].isascii()
-        assert b.start >= a.end or shared, (text, a, b)
+        assert a.start <= b.start, (text, a, b)
+        # Two spans overlap only on one code point that NFKC folds to several pieces (`½` → 1, 2), each piece's
+        # token covering it; the marks of a slash cluster belong to the pieces they fold into (task-075)
+        if b.start < a.end:
+            shared = text[b.start : a.end]
+            assert len(shared) == 1 and len(unicodedata.normalize("NFKC", shared)) > 1, (text, a, b)

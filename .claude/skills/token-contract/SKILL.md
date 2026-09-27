@@ -38,7 +38,8 @@ splitting beyond punctuation, number normalization (`GPT-4` stays `gpt` `4`).
 list[Token]` (each with the raw half-open code-point span it came from, for highlights: a math command's span
 is its name; markup that opens a word (an accent macro such as `\"{O}del` or `\v{S}`, `\-`, or a math
 `^`/`_`: `$^2x$` spans `^2x`) starts the span at its first character,
-task-074) and
+task-074; spans overlap only on one code point that folds to several pieces, `½` → `1`, `2`: inside a
+U+0338 cluster each piece spans the raw characters it came from, task-075) and
 `normalize(text) -> list[str]`. It works character by character; a Hypothesis property pins it equal to an
 independent whole-string definition (block ranges, not Unicode names), including an adversarial Unicode
 alphabet, and the nightly workflow checks every code point in 8 contexts (`OP_EXHAUSTIVE=1`). The index is fed its output joined by spaces, and the Tantivy analyzer only splits on

@@ -102,7 +102,8 @@ lights one span per occurrence; NEAR lights the operand occurrences that form a 
 AND lights its children, OR only the children that matched; NOT and filters light nothing. A node that
 doesn't match has no spans, so a branch that didn't match lights nothing. Overlapping spans merge. A LaTeX
 math command's span is its name without the backslash (`$\alpha$` lights `alpha`); markup that opens a word
-(an accent macro, `\-`, or a math `^`/`_`) is part of the word (`\"{O}del` and `$^2x$` light all of it; task-074). The highlighter's verdict
+(an accent macro, `\-`, or a math `^`/`_`) is part of the word (`\"{O}del` and `$^2x$` light all of it; task-074). Two tokens' spans overlap only on one character that folds
+to several pieces (`½`), never on a combining slash's cluster (task-075). The highlighter's verdict
 is checked against ReferenceEngine on every fixture record for all 44 golden queries.
 Measured (task-027 review): a 50-hit page of ~400-word abstracts takes ~174 ms to highlight, almost all
 of it `tokenize`, over the 100 ms page budget; task-073 moves it inside (precomputed offsets or a cache,

@@ -49,7 +49,11 @@ The query side and the index side run the **same** normalization function (`norm
 
 `tokenize(text)` returns each token with the half-open code-point span of the **raw** text it came from
 (spec 04 §Conventions); `normalize(text)` is just the token strings. One raw character can yield two
-tokens that share its span (`½` → `1`, `2`). LaTeX markup that opens a word (an accent macro, `\-`, a math
+tokens that share its span (`½` → `1`, `2`), and that one character is the only overlap two spans ever have:
+in a combining-slash cluster (a character, then marks including U+0338, folded whole) each piece spans what it
+came from, so in `x½` + U+0338 + `y` the slash is `2y`'s alone (`x1` spans `x½`) and a U+0345 that folds
+to `ι` after an operator starts its own word (task-075). Markup before a character that folds to several
+pieces belongs to its first piece only. LaTeX markup that opens a word (an accent macro, `\-`, a math
 `^`/`_`) is part of that word's span (`\"{O}del` spans all eight characters); a math command's span is its
 name, and a word after an operator command starts after the operator's name. The full token case list is
 `backend/tests/golden/test_tokens.py`; the span cases are in `backend/tests/unit/test_normalize.py`.

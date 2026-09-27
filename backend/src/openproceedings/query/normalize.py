@@ -29,7 +29,8 @@ normalization. Changing what ANY input tokenizes to requires bumping TOKENIZER_V
 
 `tokenize` works character by character so every token carries the half-open code-point span of the RAW
 text it came from (spec 04 §Conventions); highlights use those spans. A single raw character can produce
-more than one token (`½` → `1`, `2`), in which case they share its span.
+more than one token (`½` → `1`, `2`), in which case they share its span; that is the only way two spans
+overlap (a combining-slash cluster gives each piece the raw characters it came from: `_cluster_spans`).
 """
 
 from __future__ import annotations
@@ -134,6 +135,40 @@ def _fold(c: str, base: str | None) -> tuple[list[str | _Op], str | None]:
             out.append(ch)
             base = ch if _is_word_char(ch) else None
     return out, base
+
+
+def _cluster_spans(
+    text: str, i: int, j: int, folded: list[str | _Op], base: str | None
+) -> list[tuple[int, int]]:
+    """The raw span of each piece of `folded`, the `_fold` of the slash cluster `text[i:j]` (a character, then
+    combining marks, one of them U+0338), so pieces that land in different tokens don't claim the same marks
+    (task-075). Offsets only: the pieces are always the whole cluster's `_fold`, so tokens can't change.
+
+    NFKC attaches the marks to the last starter of the character's own NFKC form, so two kinds of piece can
+    end one token and start another inside a cluster, and each gets the raw characters it came from:
+    - pieces before that starter come from the character alone (`½` + slash is `1⁄2` + slash): `1` spans
+      `½`, not the slash, so `x½` + slash + `y` gives `x1` and `2y`, which share `½` and nothing else;
+    - U+0345 (ypogegrammeni) is the only mark that folds to a letter, `ι`, and its combining class (240, the
+      highest, and its alone) sorts it after every other mark, so its `ι`s are the fold's last pieces. After
+      a piece that isn't a letter (`⩶` + slash + U+0345 → `==`, `neq`, `ι`) they start a word of their own, which starts at
+      the first raw U+0345, and the pieces before it end there.
+    Every other piece spans the whole cluster, as a combining mark extends the word it follows."""
+    spans = [(i, j)] * len(folded)
+    nfkc = unicodedata.normalize("NFKC", text[i])
+    last = max((k for k, ch in enumerate(nfkc) if not unicodedata.combining(ch)), default=0)
+    if last:
+        head, _ = _fold(nfkc[:last], base)
+        if folded[: len(head)] == head:
+            spans[: len(head)] = [(i, i + 1)] * len(head)
+    iotas = [m for m in range(i + 1, j) if text[m] == "\u0345"]
+    q = len(iotas)
+    if q and len(folded) > q and all(p == "\u03b9" for p in folded[-q:]):
+        before = folded[-q - 1]
+        if isinstance(before, _Op) or not _is_word_char(before):
+            m1 = iotas[0]
+            spans[:-q] = [(a, min(b, m1)) for a, b in spans[:-q]]
+            spans[-q:] = [(m1, j)] * q
+    return spans
 
 
 def _find_closing_dollar(text: str, i: int) -> int:
@@ -453,28 +488,33 @@ def tokenize(text: str) -> list[Token]:
         j = i + 1
         while j < n and latex[j] == KEEP and unicodedata.combining(text[j]):
             j += 1
-        if "\u0338" in text[i + 1 : j]:
+        cluster = "\u0338" in text[i + 1 : j]
+        if cluster:
             # a slash among the marks after a character: NFKC the whole cluster, as the whole-string rule
             # would (`∈` + slash is `∉`, full-width `＝` + slash is `≠`, whatever the marks' order)
             c, stop = text[i:j], j
-        folded, base = _fold(c, base)
+        folded, folded_base = _fold(c, base)
+        spans = _cluster_spans(text, i, j, folded, base) if cluster else [(i, stop)] * len(folded)
+        base = folded_base
         if not folded:  # combining mark or invisible format char: extends an open word, never starts one
             if buf:
                 end = stop
             i = stop
             continue
-        for piece in folded:
+        for piece, (piece_start, piece_end) in zip(folded, spans, strict=True):
             if isinstance(piece, _Op):
                 close()
-                out.append(Token(piece.name, i, stop, op=True))
+                out.append(Token(piece.name, piece_start, piece_end, op=True))
             elif _is_word_char(piece):
                 if not buf:
-                    start = i if first is None else first
-                first = None
+                    start = piece_start if first is None else first
                 buf.append(piece)
-                end = stop
+                end = piece_end
             else:
                 close()
+            # markup before this character belongs to its first piece only: a word that starts after an
+            # operator or a separator piece (`\\"∭` + slash + U+0345 → int ×3, then ι) starts at its own piece (task-075)
+            first = None
         i = stop
     close()
     return out
