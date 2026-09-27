@@ -798,6 +798,21 @@ def too_long(q: str) -> Diagnostic | None:
     )
 
 
+def canonical_too_long(q: str, canonical: str) -> Diagnostic | None:
+    """PARSE_TOO_LONG for an accepted query whose canonical string is over MAX_QUERY_LENGTH: the canonical
+    string is what a search record keeps and replay re-parses, so it must itself be a valid query
+    (`parse(canonical)` accepted and idempotent). The span is the whole input: no one part is too long."""
+    if len(canonical) <= MAX_QUERY_LENGTH:
+        return None
+    return Diagnostic(
+        code=DiagnosticCode.PARSE_TOO_LONG,
+        message=f"Its canonical form (what a saved search keeps: the default filters explicit, every implicit "
+        f"AND, field and parenthesis written out) is {len(canonical)} characters, {len(canonical) - len(q)} more "
+        f"than typed, and the limit is {MAX_QUERY_LENGTH} — shorten it or split it into several searches.",
+        span=(0, len(q)),
+    )
+
+
 def parse(q: str, mode: Mode = "native") -> ParseResult:
     """Parse `q`. Never raises; `ast`, `canonical` and `canonical_hash` are None exactly when `errors` is
     non-empty. `mode="scholar"` accepts Scholar/PoP syntax and reports every rewrite in `translations`."""
@@ -837,6 +852,9 @@ def parse(q: str, mode: Mode = "native") -> ParseResult:
         notes = sorted([*notes, *_stemming_notice(ast, len(q))], key=by_position)
     d = apply_defaults(ast, len(q))
     canonical = render(d.effective)
+    overflow = canonical_too_long(q, canonical)
+    if overflow is not None:  # it could be saved but never replayed or pasted back (decision-008)
+        return ParseResult(mode=mode, ast=None, warnings=warnings, errors=[overflow], translations=notes)
     return ParseResult(
         mode=mode,
         translations=notes,

@@ -213,3 +213,29 @@ def queries(draw: st.DrawFn, depth: int = 0) -> str:
     if draw(st.integers(0, 5)) == 0:
         body = f"{body} x NEAR/2 y"
     return body
+
+
+# Near the 2,000-code-point cap: whatever the parser accepts there must have a canonical string that is
+# itself an accepted query (decision-008), however much the canonical form adds (defaults, ANDs, prefixes)
+NEAR_CAP_PARTS = st.one_of(
+    queries(),
+    st.integers(0, 99_999).map(lambda i: f"w{i}"),  # distinct words, so deduplication doesn't shrink it
+    st.integers(0, 99_999).map(lambda i: f"title:(t{i} OR u{i})"),  # a prefix per leaf in canonical form
+    st.sampled_from(["gpt-4*", "abcd⒈", "abcd½*", "(a b) OR c", "track:main", "status:accepted"]),
+)
+
+
+@st.composite
+def near_cap_queries(draw: st.DrawFn, low: int = 1_500, high: int = 2_000) -> str:
+    """A query of `low`..`high` code points: parts joined by one separator, cut back to fit."""
+    target = draw(st.integers(low, high))
+    sep = draw(st.sampled_from([" ", " OR ", " AND ", " | "]))
+    parts: list[str] = []
+    size = 0
+    while size < target:
+        part = draw(NEAR_CAP_PARTS)
+        parts.append(part)
+        size += len(part) + len(sep)
+    while len(parts) > 1 and len(sep.join(parts)) > high:
+        parts.pop()
+    return sep.join(parts)

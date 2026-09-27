@@ -152,7 +152,7 @@ def test_canonical_strings_reparse_without_warnings() -> None:
 
 
 def test_query_version_is_defined() -> None:
-    assert QUERY_VERSION == "1"
+    assert QUERY_VERSION == "2"
 
 
 @pytest.mark.parametrize("q", [q for q, _ in GOLDEN])

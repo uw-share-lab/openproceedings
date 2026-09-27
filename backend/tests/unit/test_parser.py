@@ -8,7 +8,7 @@ from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.query.ast import And, Filter, Near, Node, Not, Or, Phrase, Term, Wildcard, YearRange
 from openproceedings.query.canonical import canonicalize, render
-from openproceedings.query.parser import MAX_DEPTH, parse
+from openproceedings.query.parser import MAX_DEPTH, MAX_QUERY_LENGTH, parse
 
 
 def show(n: Node) -> str:
@@ -505,23 +505,69 @@ def test_a_year_is_at_most_four_digits_alone_or_in_a_range() -> None:
     assert [e.code for e in parse("year:00002020..2024").errors] == [DiagnosticCode.FIELD_UNKNOWN_VALUE]
 
 
-# task-075 review: a wildcard straight after a character that folds to several pieces is attached, with or
-# without a U+0338 slash on it. Whether it is detached is decided by the raw characters the last word took a
-# piece from (Token.reach), never by its highlight span, so per-piece spans can't change what parses.
+# A wildcard must directly follow a letter or digit, judged on the folded pieces (spec 02; decision-008
+# replaced task-075's raw-character `reach` rule): `abcd⒈*` is `abcd1.*`, so it is detached like `abcd1.*`,
+# and a U+0338 on the `.` changes nothing. The message names the piece, and the raw text it came from.
 @pytest.mark.parametrize(
-    ("q", "tree"),
+    ("q", "piece", "hint"),
     [
-        ("abcd⒈*", "abcd1*"),  # DIGIT ONE FULL STOP: `1.`
-        ("abcd⒈̸*", "abcd1*"),  # the slash is on the `.`, a piece the word didn't take
-        ("abcd⑴*", '"abcd 1*"'),  # PARENTHESIZED DIGIT ONE: `(1)`
-        ("abcd⑴̸*", '"abcd 1*"'),
-        ("abcd½̸*", '"abcd1 2*"'),  # the 1/2: the last piece carries the slash
-        ("abcd≠ͅ*", '"abcd neq ι*"'),  # U+0345 after neq: its own word, iota
-        ('"trust abcd⒈̸*"', '"trust abcd1*"'),
+        ("abcd⒈*", "`.` (from `⒈`)", "`abcd1*`"),  # DIGIT ONE FULL STOP: `1.`, last piece `.`
+        ("abcd⒈̸*", "`.` (from `⒈̸`)", "`abcd1*`"),  # the slash on the `.` folds away
+        ("abcd⑴*", "`)` (from `⑴`)", '`"abcd 1*"`'),  # PARENTHESIZED DIGIT ONE: `(1)`, last piece `)`
+        ("abcd⑴̸*", "`)` (from `⑴̸`)", '`"abcd 1*"`'),
+        ('"trust abcd⒈̸*"', "`.` (from `⒈̸`)", "`abcd1*`"),
+        ("abcd1.*", "`.`", "`abcd1*`"),  # the look-alike's NFKC spelling: the same verdict
+        ("abc．*", "`.` (from `．`)", "`abc*`"),  # FULLWIDTH FULL STOP
+        ("vision-*", "`-`", "`vision*`"),
     ],
     ids=ascii,
 )
-def test_wildcard_after_a_multi_piece_character_stays_attached(q: str, tree: str) -> None:
+def test_wildcard_after_a_non_word_piece_is_detached(q: str, piece: str, hint: str) -> None:
+    [error] = parse(q).errors
+    assert error.code is DiagnosticCode.PARSE_WILDCARD_DETACHED
+    assert f"follows {piece}, not a letter or digit" in error.message and f"e.g. {hint}." in error.message
+
+
+@pytest.mark.parametrize(
+    ("q", "tree"),
+    [
+        ("abcd½*", '"abcd1 2*"'),  # VULGAR FRACTION ONE HALF: `1⁄2`, last piece `2`
+        ("abcd½̸*", '"abcd1 2*"'),  # the slash on the `2` folds away (a digit's mark)
+        ("abcd≠ͅ*", '"abcd neq ι*"'),  # U+0345 after neq folds to `ι`, a letter, the last piece
+        ("abcde\u0301*", "abcde*"),  # a decomposed accent is no piece: it folds away
+        ("bench\\-*", "bench*"),  # `\-` is markup that joins the word, not a piece
+    ],
+    ids=ascii,
+)
+def test_wildcard_after_a_word_piece_is_attached(q: str, tree: str) -> None:
     result = parse(q)
     assert result.errors == []
     assert result.ast is not None and render(canonicalize(result.ast)) == tree
+
+
+# decision-008: the canonical string is what a search record keeps and replay re-parses, so a query whose
+# canonical string is over the cap is refused, even though the input itself fits
+def test_a_query_whose_canonical_form_is_over_the_cap_is_too_long() -> None:
+    words = [f"w{i:04d}" for i in range(300)]
+    q = " ".join(words)  # 1,799 code points; juxtaposition prints as ` AND `, and the defaults are added
+    canonical = (
+        "("
+        + " AND ".join(words)
+        + " AND track:(datasets_benchmarks OR main OR position) AND status:accepted)"
+    )
+    result = parse(q)
+    assert len(q) == 1_799 and result.ast is None and result.canonical is None
+    [error] = result.errors
+    assert error.code is DiagnosticCode.PARSE_TOO_LONG and error.span == (0, len(q))
+    assert f"is {len(canonical)} characters, {len(canonical) - len(q)} more than typed" in error.message
+    assert "default filters" in error.message
+
+
+def test_a_canonical_string_exactly_at_the_cap_is_accepted() -> None:
+    clauses = " AND track:main AND status:accepted)"
+    at_cap = "(" + "x" * (MAX_QUERY_LENGTH - 1 - len(clauses)) + clauses
+    assert len(at_cap) == MAX_QUERY_LENGTH and parse(at_cap).canonical == at_cap
+    over = "trust " + at_cap[: -len(clauses)] + " AND status:accepted)"  # canonical: 2,001 code points
+    assert len(over) <= MAX_QUERY_LENGTH
+    result = parse(over)
+    assert [e.code for e in result.errors] == [DiagnosticCode.PARSE_TOO_LONG], len(result.canonical or "")

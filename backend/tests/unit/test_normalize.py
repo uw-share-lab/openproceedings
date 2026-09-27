@@ -8,7 +8,15 @@ import pytest
 from hypothesis import example, given
 from hypothesis import strategies as st
 from openproceedings.query.mathsyms import GREEK, LETTER_LOOKALIKES, OPERATOR_COMMANDS, OPERATORS
-from openproceedings.query.normalize import TOKENIZER_VERSION, Token, normalize, tokenize
+from openproceedings.query.normalize import (
+    TOKENIZER_VERSION,
+    Tail,
+    Token,
+    _tokenize_each_char,
+    normalize,
+    tokenize,
+    tokenize_with_tail,
+)
 
 # Text without LaTeX syntax: the whole-string reference below doesn't model LaTeX.
 PLAIN = st.text(alphabet=st.characters(blacklist_characters="\\$", blacklist_categories=("Cs",)), max_size=60)
@@ -326,7 +334,7 @@ LATEX_PIECES = ["$", "\\(", "\\)", " ", "a", "O", "5", "{", "}", "^", "_", '\\"'
 
 
 # `reach` is the end of the whole characters a token took a piece from: `end`, except that inside a slash
-# cluster it covers the cluster (the lexer's detached-wildcard check reads it; task-075 review)
+# cluster it covers the cluster (task-075 review; since decision-008 nothing that parses reads it)
 @pytest.mark.parametrize(
     ("text", "reaches"),
     [
@@ -371,6 +379,79 @@ def test_token_spans_are_valid_and_never_overlap(text: str) -> None:
 
 
 def test_a_token_built_without_reach_reaches_its_end() -> None:
-    # task-075 review: an unset reach must not read as -1, or the lexer would call every wildcard detached
+    # task-075 review: an unset reach must not read as -1, as the frozen task-073 oracle compares it
     assert Token("abc", 2, 5).reach == 5
     assert Token("abc", 2, 5, reach=7).reach == 7
+
+
+def full(tokens: list[Token]) -> list[tuple[str, int, int, bool, int]]:
+    """Everything a token carries (`reach` is not part of Token equality)."""
+    return [(t.text, t.start, t.end, t.op, t.reach) for t in tokens]
+
+
+# --- the Tail: what a text ends with after its last word or operator piece (the lexer's detached-wildcard
+# test, spec 02 "directly after a letter or digit", judged on the folded pieces; decision-008) ---------------
+@pytest.mark.parametrize(
+    ("text", "start", "pieces"),
+    [
+        ("abcd⒈", 4, "."),  # `1.`: the `1` joins the word, the `.` is the tail
+        ("abcd⒈̸", 4, "."),  # the slash on the `.` folds away
+        ("abcd⑴", 4, ")"),  # `(1)`
+        ("abcd½", 5, ""),  # `1⁄2`: ends on `2`
+        ("abcd≠ͅ", 6, ""),  # neq, then iota: a letter
+        ("abc×", 4, ""),  # ends on an operator piece (the lexer's own message covers it)
+        ("vision-", 6, "-"),
+        ("abc．", 3, "."),  # full-width full stop
+        ("abc\\%", 3, "\\%"),  # LaTeX separators are pieces
+        ("bench\\-", 7, ""),  # markup that joins the word is not
+        ("abcé", 5, ""),  # nor is a mark that folds away
+        ("abc⁡", 3, " "),  # an invisible math operator separates
+        ("", 0, ""),
+        ("...", 0, "..."),
+    ],
+    ids=ascii,
+)
+def test_tail_is_the_folded_pieces_after_the_last_word(text: str, start: int, pieces: str) -> None:
+    tokens, tail = tokenize_with_tail(text)
+    assert tail == Tail(start, pieces)
+    assert full(tokens) == full(tokenize(text))
+
+
+@given(
+    st.one_of(
+        PLAIN,
+        st.lists(st.sampled_from([*LATEX_PIECES, "⒈", "⑴", "½", "×", "."]), max_size=12).map("".join),
+    )
+)
+@example("abcd⒈̸")
+@example("abcd⑴")
+def test_tail_says_whether_a_letter_after_the_text_joins_its_last_word(text: str) -> None:
+    """Independent of how the tail is tracked: a letter written after a text with a tail is a word of its
+    own; after a text that ends on a word piece it extends that word."""
+    tokens, tail = tokenize_with_tail(text)
+    assert full(tokens) == full(tokenize(text))
+    assert 0 <= tail.start <= len(text) and (tail.pieces or tail.start == len(text))
+    if "$" in text or "\\" in text:
+        return  # an appended letter can change what LaTeX means (`\cmd` + x, a math closer before x)
+    after = normalize(text + "x")
+    if tail.pieces or not tokens or tokens[-1].op:
+        assert after == [t.text for t in tokens] + ["x"], (text, tail)
+    else:
+        assert after == [t.text for t in tokens[:-1]] + [tokens[-1].text + "x"], (text, tail)
+
+
+# --- task-073's fast paths (the whole-text ASCII path in `tokenize`, the ASCII branch of the loop) rely on
+# no ASCII character folding to an operator or a letter look-alike (exactness-guardian, M3a gate) -------------
+def test_no_operator_or_letter_lookalike_is_ascii() -> None:
+    assert [c for c in OPERATORS if any(ch.isascii() for ch in c)] == []
+    assert [c for c in LETTER_LOOKALIKES if any(ch.isascii() for ch in c)] == []
+
+
+@pytest.mark.parametrize(
+    "text", [chr(c) for c in range(128)] + [f"a{chr(c)}b" for c in range(128)], ids=ascii
+)
+def test_every_ascii_character_tokenizes_the_same_on_the_fast_paths(text: str) -> None:
+    assert full(tokenize(text)) == full(_tokenize_each_char(text))
+    slow: list[Tail] = []
+    _tokenize_each_char(text, slow)
+    assert [tokenize_with_tail(text)[1]] == slow

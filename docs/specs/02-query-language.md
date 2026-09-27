@@ -57,9 +57,10 @@ pieces before the first raw U+0345 end at it, even if a later mark belongs to th
 `neq` spans only `=`, and the slash is in the `ι` word's span), since two contiguous spans can't split
 interleaved marks. Markup before a character that folds to several pieces belongs to its first piece only,
 in or out of a slash cluster (`\"⑴`: `1` spans `⑴` alone, (2,3), where it spanned the markup, (0,3), before
-task-075). Each token also has `reach`, the end of the whole characters it took a piece from (`end`, except
-that inside a slash cluster it covers the cluster); the lexer decides a detached wildcard from `reach`, not
-`end`, so per-piece spans never change what parses (`abcd⒈` + U+0338 + `*` is `abcd1*`). LaTeX markup that opens a word (an accent macro, `\-`, a math
+task-075). No span decides what parses: the lexer's detached-wildcard test reads the stem's folded pieces
+(`tokenize_with_tail`, §Grammar; decision-008). Each token also has `reach`, the end of the whole characters
+it took a piece from (`end`, except that inside a slash cluster it covers the cluster); nothing that parses
+reads it any more. LaTeX markup that opens a word (an accent macro, `\-`, a math
 `^`/`_`) is part of that word's span (`\"{O}del` spans all eight characters); a math command's span is its
 name, and a word after an operator command starts after the operator's name. The full token case list is
 `backend/tests/golden/test_tokens.py`; the span cases are in `backend/tests/unit/test_normalize.py`.
@@ -157,7 +158,13 @@ Rules:
     `title :trust` is `PARSE_STRAY_COLON`. `source:` is Scholar syntax: in native mode it is
     `FIELD_COMPAT_ONLY` (Scholar mode translates it to `venue:`).
   - Wildcards: `*` or `$` at the end of a word, directly after a letter or digit (`vision-*` is
-    `PARSE_WILDCARD_DETACHED`). A `*` or `$` elsewhere (`behavio$r`, `model$*`) is
+    `PARSE_WILDCARD_DETACHED`). That is judged on the stem's **folded pieces** (steps 1–4 of §Token
+    semantics; decision-008), since look-alikes act as what they fold to: the last piece must be a letter
+    or digit. Invisible characters, folded-away marks and LaTeX markup that joins a word (`bench\-*`) are
+    not pieces. So `abcd⒈*` (`⒈` is `1.`) is detached like `abcd1.*`, and so is `abcd⒈̸*` (the U+0338
+    on the `.` folds away); `abcd⑴*` (`⑴` is `(1)`) is detached after `)`; `abcd½*` (`½` is `1⁄2`, last
+    piece `2`) is attached, `"abcd1 2*"`. The error names the piece and what it came from (`.` from
+    `⒈`). A `*` or `$` elsewhere (`behavio$r`, `model$*`) is
     `PARSE_WILDCARD_NOT_SUFFIX`, except inside LaTeX math (found exactly as the tokenizer finds it, so
     `$f(x)$-DP` is one word) and a `$` before a digit (currency, `US$5`).
   - A bare uppercase `NEAR` between terms is `PARSE_BAD_NEAR` (Web of Science reads it as `NEAR/15`);
@@ -290,7 +297,7 @@ keep their written order; a bare term that a sibling filter's field could read a
 (`title:(a OR b)` → `(title:a OR title:b)`). `gpt-4*` prints as `"gpt 4*"` (in a phrase the earlier
 words count toward a wildcard's stem). Semantically equal spellings
 (`trust venue:ICLR`, `venue:iclr Trust`) therefore share one hash. `QUERY_VERSION`
-(`openproceedings.query`) is `"1"`.
+(`openproceedings.query`) is `"2"` (decision-008: canonical overflow and folded-piece wildcard detachment).
 
 ## Error handling
 
@@ -301,7 +308,11 @@ nested text field, a malformed filter group, nesting deeper than 64, an ambiguou
 detached or mid-word wildcard, `source:` outside Scholar mode, an unknown field, an unknown filter value
 (listing the valid ones), a range with start > end, an all-negative query, a quote or parenthesis glued
 to a word (`"trust in "AI"`, `model(s)`), or a query longer than 2,000 code points (`PARSE_TOO_LONG`,
-checked before any other work). Diagnostics are capped at 20 per code ("… and N more"), and user text
+checked before any other work). The canonical string is capped too: a query whose canonical form (the
+defaults explicit, ` AND ` for juxtaposition, a field prefix on every leaf, parentheses) is over 2,000 code
+points is `PARSE_TOO_LONG`, spanning the whole input and saying how much the canonical form adds
+(decision-008), since a search record keeps that string and replay re-parses it. So every accepted query's
+canonical string is itself accepted; long juxtaposed queries hit this from about 1,200 code points. Diagnostics are capped at 20 per code ("… and N more"), and user text
 quoted in a message is clipped to 40 characters, so no diagnostic grows with the input. The codes are in
 `diagnostics.py`; the `PARSE_*`, `FIELD_*` and `WILDCARD_*` errors are 422s where a query is run (spec 04); `/parse`
 returns them as values.

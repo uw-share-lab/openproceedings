@@ -31,7 +31,8 @@ normalization. Changing what ANY input tokenizes to requires bumping TOKENIZER_V
 text it came from (spec 04 §Conventions); highlights use those spans. A single raw character can produce
 more than one token (`½` → `1`, `2`), in which case they share its span; two spans overlap only on exactly
 one such code point (a combining-slash cluster gives each piece the raw characters it came from:
-`_cluster_spans`). What a query parses to never depends on those spans: the lexer reads `Token.reach`.
+`_cluster_spans`). What a query parses to never depends on those spans: the lexer's detached-wildcard test
+reads the folded pieces after the last word (`tokenize_with_tail`), never a span.
 """
 
 from __future__ import annotations
@@ -77,9 +78,9 @@ class Token:
     op: bool = False  # an operator's name (`×` → `times`), not a word of the text: never a wildcard stem
     # The end of the raw characters the token took a piece from, WHOLE: the same as `end` except inside a
     # U+0338 cluster, where `end` stops at the piece's own characters (task-075) and `reach` covers the
-    # cluster. The lexer decides a detached wildcard (`abcd⒈` + slash + `*`) from `reach`, so per-piece
-    # highlight spans never change what parses. Not part of equality; set by `tokenize`, and a Token built
-    # without it reaches its `end`, which is right everywhere outside a U+0338 cluster (never a silent -1).
+    # cluster. Nothing that decides what parses reads it any more: the lexer's detached-wildcard test reads
+    # the folded pieces (`Tail`, decision-008). Kept for the frozen task-073 oracle, which compares it. Not
+    # part of equality; set by `tokenize`, and a Token built without it reaches its `end`.
     reach: int = field(default=-1, compare=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -456,13 +457,42 @@ _ASCII_WORD = re.compile(r"[A-Za-z0-9]+")
 
 def tokenize(text: str) -> list[Token]:
     """Tokens of `text` with their raw code-point spans."""
-    if text.isascii() and "\\" not in text and "$" not in text:
+    if _plain_ascii(text):
         return [Token(m.group().lower(), m.start(), m.end()) for m in _ASCII_WORD.finditer(text)]
     return _tokenize_each_char(text)
 
 
-def _tokenize_each_char(text: str) -> list[Token]:
-    """`tokenize`'s definition for any text, one raw character at a time (steps 1-5 above)."""
+@dataclass(frozen=True, slots=True)
+class Tail:
+    """What `text` ends with after its last word or operator piece (`tokenize_with_tail`): the folded
+    pieces, in order (`abcd⒈` → `.`, `vision-` → `-`, `x⑴` → `)`), and the raw offset of the character the
+    first of them came from. Empty `pieces` means `text` ends on a letter, digit or operator piece (or has
+    no piece at all). Invisible characters, dropped marks and LaTeX markup that joins a word are not pieces."""
+
+    start: int
+    pieces: str
+
+
+def tokenize_with_tail(text: str) -> tuple[list[Token], Tail]:
+    """`tokenize(text)` plus its `Tail`, from the same pass: the lexer's detached-wildcard test (spec 02:
+    a wildcard goes directly after a letter or digit, judged on the folded pieces)."""
+    if _plain_ascii(text):
+        tokens = tokenize(text)
+        end = tokens[-1].end if tokens else 0
+        return tokens, Tail(end, text[end:])
+    out: list[Tail] = []
+    tokens = _tokenize_each_char(text, out)
+    return tokens, out[0]
+
+
+def _plain_ascii(text: str) -> bool:
+    """ASCII with no LaTeX: every character is a word character or a separator, as it stands (task-073)."""
+    return text.isascii() and "\\" not in text and "$" not in text
+
+
+def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token]:
+    """`tokenize`'s definition for any text, one raw character at a time (steps 1-5 above). Given a `tail`
+    list, it appends the text's `Tail` to it."""
     subs: dict[int, tuple[str, bool, int, bool]] = {}
     latex = _latex_mask(text, subs=subs)
     out: list[Token] = []
@@ -470,6 +500,8 @@ def _tokenize_each_char(text: str) -> list[Token]:
     start = end = reach = 0
     base: str | None = None
     lead: int | None = None  # where markup before a word began (`\\"{O}del`): the word's span starts there
+    rest: list[str] = []  # the separator pieces since the last word or operator piece (the Tail)
+    rest_start = len(text)
 
     def close() -> None:
         nonlocal buf
@@ -497,6 +529,7 @@ def _tokenize_each_char(text: str) -> list[Token]:
                     start = i + 1 if lead is None else lead
                 buf.extend(p for p in folded if isinstance(p, str))
                 end = reach = cmd_end
+            rest = []
             lead = None
             # an operator's name is its own token's: skip it, so no word after it starts inside it (`\\leq5`)
             i = cmd_end if operator else i + 1
@@ -504,6 +537,9 @@ def _tokenize_each_char(text: str) -> list[Token]:
         if latex[i] == SEP:
             close()
             base = lead = None
+            if not rest:
+                rest_start = i
+            rest.append(c)
             i += 1
             continue
         if latex[i] == JOIN:  # markup inside a word: keep the word open and cover the markup in its span
@@ -523,9 +559,14 @@ def _tokenize_each_char(text: str) -> list[Token]:
                 base = c.lower()
                 buf.append(base)
                 end = reach = stop
+                if rest:
+                    rest = []
             else:
                 close()
                 base = None
+                if not rest:
+                    rest_start = i
+                rest.append(c)
             i = stop
             continue
         j = i + 1
@@ -548,18 +589,26 @@ def _tokenize_each_char(text: str) -> list[Token]:
             if isinstance(piece, _Op):
                 close()
                 out.append(Token(piece.name, piece_start, piece_end, op=True, reach=stop))
+                rest = []
             elif _is_word_char(piece):
                 if not buf:
                     start = piece_start if first is None else first
                 buf.append(piece)
                 end, reach = piece_end, stop
+                if rest:
+                    rest = []
             else:
                 close()
+                if not rest:
+                    rest_start = i
+                rest.append(piece)
             # markup before this character belongs to its first piece only: a word that starts after an
             # operator or a separator piece (`\\"∭` + slash + U+0345 → int ×3, then ι) starts at its own piece (task-075)
             first = None
         i = stop
     close()
+    if tail is not None:
+        tail.append(Tail(rest_start, "".join(rest)) if rest else Tail(len(text), ""))
     return out
 
 
