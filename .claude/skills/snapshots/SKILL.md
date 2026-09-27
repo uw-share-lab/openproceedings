@@ -43,8 +43,12 @@ value); `record_count`; `counts` nested venue → year → track → status; `ab
 resolution kind); `files` (the sha256 of `merges.csv` and `conflicts.csv`, which `snapshot_hash` doesn't
 cover); and `sources` — for RIS, one `ImportReport.to_manifest()` per cached file (both inputs' sha256,
 the installed scholarmend `parser_version`, read / imported / skipped by reason, abstract_missing,
-unknown_track, status_overrides, track × status). The crawlers add their own source entries (crawl window, API host
-and version, page counts) in M4. The manifest may hold build times; `records.jsonl` may not. `/coverage`
+unknown_track, status_overrides, track × status) under `ris` (present whenever no crawl is); and, once
+`op ingest openreview` has finished a venue-year, `openreview_v2`: its own `crawl_window` (which search records'
+`crawl_dates` and `/coverage` read) and one `CrawlReport.to_manifest()` per venue-year (groups crawled and skipped
+with the reason, each group's `public_*` flags, notes per venueid, read / imported / skipped by reason,
+unknown_track, abstract_missing, track × status, page size). `build` replays each finished crawl offline from
+the cached responses (`load_sources`); the proceedings crawlers add their entries later in M4. The manifest may hold build times; `records.jsonl` may not. `/coverage`
 (spec 04) and `coverage-auditor` read these counts directly.
 
 ## The cache
