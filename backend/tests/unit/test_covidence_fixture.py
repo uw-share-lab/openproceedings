@@ -1,8 +1,9 @@
 """The RIS file a person imports into Covidence by hand (task-004 AC#1; checklist in
-`docs/results/2026-09-27-covidence-check.md`) is exactly what the RIS writer produces today: six synthetic
-records, one per venue and naming era, a multi-author record with non-ASCII names, an astral-plane title, a
-record with no abstract, and proceedings-only records with no forum URL. If the writer changes, this test
-fails, and the hand import has to be redone before the fixture is regenerated:
+`docs/results/2026-09-27-covidence-check.md`) is exactly what the RIS writer produces today: seven synthetic
+records covering each venue and naming era, a multi-author record with non-ASCII names, an astral-plane
+title, a record with no abstract, proceedings-only records with no forum URL, and a rejected paper. The dedup
+probe beside it is pinned too. If the writer changes, these tests fail, and the hand import has to be redone
+after the fixture is regenerated:
 
     uv run python -c "from tests.unit.test_covidence_fixture import regenerate; regenerate()"
 
@@ -11,7 +12,9 @@ fails, and the hand import has to be redone before the fixture is regenerated:
 
 from __future__ import annotations
 
+import hashlib
 import io
+import re
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +33,7 @@ RECORDS: list[dict[str, Any]] = [
         "venue": "ICLR",
         "year": 2024,
         "track": "main",
+        "status": "accepted",
         "urls": {
             "forum": "https://openreview.net/forum?id=Xq7Lm2Pz9A",
             "pdf": "https://openreview.net/pdf?id=Xq7Lm2Pz9A",
@@ -49,6 +53,7 @@ RECORDS: list[dict[str, Any]] = [
         "venue": "ICLR",
         "year": 2025,
         "track": "main",
+        "status": "accepted",
         "urls": {
             "forum": "https://openreview.net/forum?id=bT4kR8sW1n",
             "pdf": "https://openreview.net/pdf?id=bT4kR8sW1n",
@@ -67,6 +72,7 @@ RECORDS: list[dict[str, Any]] = [
         "venue": "ICML",
         "year": 2023,
         "track": "main",
+        "status": "accepted",
         "urls": {
             "pdf": "https://proceedings.mlr.press/v202/okafor23a/okafor23a.pdf",
             "proceedings": "https://proceedings.mlr.press/v202/okafor23a.html",
@@ -85,6 +91,7 @@ RECORDS: list[dict[str, Any]] = [
         "venue": "NeurIPS",
         "year": 2017,
         "track": "main",
+        "status": "accepted",
         "urls": {
             "proceedings": f"https://proceedings.neurips.cc/paper_files/paper/2017/hash/{NIPS_HASH}-Abstract.html",
         },
@@ -110,6 +117,7 @@ RECORDS: list[dict[str, Any]] = [
         "venue": "NeurIPS",
         "year": 2023,
         "track": "main",
+        "status": "accepted",
         "urls": {
             "forum": "https://openreview.net/forum?id=Hn3vQ6eYt0",
             "pdf": "https://openreview.net/pdf?id=Hn3vQ6eYt0",
@@ -126,27 +134,133 @@ RECORDS: list[dict[str, Any]] = [
         "venue": "NeurIPS",
         "year": 2024,
         "track": "datasets_benchmarks",
+        "status": "accepted",
         "urls": {
             "forum": "https://openreview.net/forum?id=Rk2wP5dLx8",
             "pdf": "https://openreview.net/pdf?id=Rk2wP5dLx8",
             "doi": "10.5555/trustbench.2024.001",
         },
     },
+    {
+        "id": "op:iclr:2024:Wd8nJ3cV5r",
+        "title": "Do Confidence Displays Reduce Automation Bias? A Null Result",
+        "abstract": (
+            "We tested whether showing a model's confidence reduces automation bias in a loan-approval task "
+            "(N = 312) and found no effect. We report the study as a null result."
+        ),
+        "authors": ["Haddad, Rania", "Kim, Seo-yeon"],
+        "venue": "ICLR",
+        "year": 2024,
+        "track": "main",
+        "status": "rejected",
+        "urls": {
+            "forum": "https://openreview.net/forum?id=Wd8nJ3cV5r",
+            "pdf": "https://openreview.net/pdf?id=Wd8nJ3cV5r",
+        },
+    },
 ]
 
+T2 = {  # every record's venue string, written out by hand
+    "op:iclr:2024:Xq7Lm2Pz9A": "International Conference on Learning Representations (ICLR 2024)",
+    "op:iclr:2024:Wd8nJ3cV5r": "International Conference on Learning Representations (ICLR 2024)",
+    "op:iclr:2025:bT4kR8sW1n": "International Conference on Learning Representations (ICLR 2025)",
+    "op:icml:2023:pmlr-v202-okafor23a": "International Conference on Machine Learning (ICML 2023)",
+    f"op:neurips:2017:nips-{NIPS_HASH}": "Conference on Neural Information Processing Systems (NIPS 2017)",
+    "op:neurips:2023:Hn3vQ6eYt0": "Conference on Neural Information Processing Systems (NeurIPS 2023)",
+    "op:neurips:2024:Rk2wP5dLx8": "Conference on Neural Information Processing Systems (NeurIPS 2024)",
+}
 
-def render() -> str:
+PROBE = FIXTURE.with_name("2026-09-27-covidence-dedup-probe.ris")
+VL_ONLY = "op:neurips:2023:Hn3vQ6eYt0"  # probe 1 is this fixture record with `VL  - 36` added, nothing else
+# probes 2 and 3: copies as another database might export them (title, authors and year unchanged)
+OTHER_DATABASE = [
+    [
+        ("TY", "CONF"),
+        ("TI", "Sample-Efficient Evaluation of Human-AI Teams"),
+        ("AU", "Okafor, Chidi"),
+        ("AU", "Brennan, Siobhán"),
+        ("PY", "2023"),
+        ("T2", "Proceedings of the 40th International Conference on Machine Learning"),
+    ],
+    [
+        ("TY", "JOUR"),
+        ("TI", "TrustBench: Measuring Over-Reliance on AI Advice at Scale"),
+        ("AU", "Adeyemi, Tolu"),
+        ("AU", "Fischer, Lena"),
+        ("PY", "2024"),
+        ("T2", "Advances in Neural Information Processing Systems"),
+        ("VL", "37"),
+    ],
+]  # written as the writer writes RIS (`ER  - ` keeps its trailing space, which an editor would strip)
+CHECK = FIXTURE.with_name("2026-09-27-covidence-check.md")
+IMPORTED_SHA = re.compile(r"^- Fixture sha256 imported: `([0-9a-f]*)`$", re.MULTILINE)
+TASK_DIRS = [FIXTURE.parents[2] / "backlog" / d for d in ("tasks", "completed")]
+
+
+def render(records: list[dict[str, Any]] = RECORDS) -> str:
     out = io.StringIO()
-    assert write("ris", sorted(RECORDS, key=lambda r: r["id"]), PROVENANCE, out) == len(RECORDS)
+    assert write("ris", sorted(records, key=lambda r: r["id"]), PROVENANCE, out) == len(records)
     return out.getvalue()
+
+
+def render_probe() -> str:
+    (record,) = [r for r in RECORDS if r["id"] == VL_ONLY]
+    t2 = f"T2  - {T2[VL_ONLY]}\n"
+    others = "".join("".join(f"{t}  - {v}\n" for t, v in lines) + "ER  - \n\n" for lines in OTHER_DATABASE)
+    return render([record]).replace(t2, t2 + "VL  - 36\n") + others
 
 
 def regenerate() -> None:
     FIXTURE.write_bytes(render().encode("utf-8"))
+    PROBE.write_bytes(render_probe().encode("utf-8"))
 
 
 def test_the_covidence_fixture_is_what_the_writer_writes() -> None:
     assert FIXTURE.read_bytes() == render().encode("utf-8"), "writer changed: redo the Covidence import"
+
+
+def test_the_first_probe_differs_from_its_fixture_record_by_the_volume_alone() -> None:
+    from scholarmend.parse import parse_ris
+
+    assert PROBE.read_bytes() == render_probe().encode("utf-8")
+    parsed = parse_ris(PROBE.read_text(encoding="utf-8"), PROBE.name)
+    assert [r.fields["TY"] for r in parsed] == [["CPAPER"], ["CONF"], ["JOUR"]]  # three records, all read
+    assert [r.fields.get("VL") for r in parsed] == [["36"], None, ["37"]]
+    (record,) = [r for r in RECORDS if r["id"] == VL_ONLY]
+    probe = PROBE.read_text(encoding="utf-8").split("ER  - \n\n")[0].splitlines()
+    assert [line for line in probe if line != "VL  - 36"] == render([record]).split("ER  - \n\n")[
+        0
+    ].splitlines()
+
+
+def test_git_never_rewrites_the_line_endings_of_a_pinned_ris_file() -> None:
+    """`.gitattributes` marks every `.ris` `-text`, so a checkout with `core.autocrlf` can't turn the LF
+    fixture into CRLF (which would change its sha256 and the bytes the writer is compared with)."""
+    import subprocess
+
+    root = FIXTURE.parents[2]
+    paths = [FIXTURE, PROBE, root / "backend" / "tests" / "fixtures" / "ris" / "mended.ris"]
+    out = subprocess.run(
+        ["git", "check-attr", "text", "--", *(str(p.relative_to(root)) for p in paths)],
+        cwd=root, capture_output=True, text=True, check=True,
+    ).stdout  # fmt: skip
+    assert out.splitlines() == [f"{p.relative_to(root)}: text: unset" for p in paths]
+
+
+def test_the_hand_imported_fixture_is_the_pinned_one() -> None:
+    """Active once the check records the sha256 of the file a person imported, or once TASK-004 AC#1 is
+    ticked: the imported file must be this one, so the check still describes what the writer writes."""
+    (recorded,) = IMPORTED_SHA.findall(CHECK.read_text(encoding="utf-8"))
+    ticked = any(
+        "- [x] #1 " in p.read_text(encoding="utf-8")
+        for d in TASK_DIRS
+        if d.is_dir()
+        for p in d.glob("task-004 *")
+    )
+    if not recorded and not ticked:
+        return  # the import is still pending: nothing to compare yet
+    assert recorded, "TASK-004 AC#1 is ticked: record the imported fixture's sha256 in the check's Outcome"
+    assert recorded == hashlib.sha256(FIXTURE.read_bytes()).hexdigest(), "the imported fixture isn't this one"
 
 
 def test_the_covidence_fixture_reads_back_with_the_reference_parser() -> None:
@@ -160,8 +274,5 @@ def test_the_covidence_fixture_reads_back_with_the_reference_parser() -> None:
         assert got["PY"] == [str(r["year"])] and got.get("AB", []) == (
             [" ".join(r["abstract"].split())] if r["abstract"] else []
         )
-    t2 = {r["id"].split(":")[1] + r["id"].split(":")[2]: parsed[r["id"]].fields["T2"][0] for r in RECORDS}
-    assert t2["neurips2017"] == "Conference on Neural Information Processing Systems (NIPS 2017)"
-    assert t2["neurips2023"] == "Conference on Neural Information Processing Systems (NeurIPS 2023)"
-    assert t2["icml2023"] == "International Conference on Machine Learning (ICML 2023)"
-    assert t2["iclr2025"] == "International Conference on Learning Representations (ICLR 2025)"
+        assert got["KW"] == [r["track"], f"status:{r['status']}"]
+    assert {rid: r.fields["T2"] for rid, r in parsed.items()} == {rid: [t2] for rid, t2 in T2.items()}

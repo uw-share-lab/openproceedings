@@ -1,6 +1,6 @@
 ---
 name: bibtex-format
-description: The openproceedings BibTeX export standard — @inproceedings entries, the <firstauthorlast><year><firsttitleword> key scheme with a/b de-duplication, field set, brace and special-character escaping, and the exact behaviour of refaudit's BibTeX parser that every export must satisfy. Use when writing or reviewing the BibTeX exporter under backend/src/openproceedings/api/exporters/, `op export --format bibtex`, or a .bib fixture.
+description: The openproceedings BibTeX export standard — @inproceedings entries for accepted papers and @unpublished for every other status, the <firstauthorlast><year><firsttitleword> key scheme with a/b de-duplication, field set, brace and special-character escaping, and the exact behaviour of refaudit's BibTeX parser that every export must satisfy. Use when writing or reviewing the BibTeX exporter under backend/src/openproceedings/api/exporters/, `op export --format bibtex`, or a .bib fixture.
 ---
 
 # BibTeX export (spec 04 §Exports)
@@ -15,7 +15,7 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
   url       = {https://…},
   doi       = {…},
   abstract  = {…},
-  keywords  = {main},
+  keywords  = {main, status:accepted},
   openproceedings_id = {op:iclr:2024:iilhN2MycO},
   note      = {openproceedings a1b2c3d4e5f6 · query 9f8e7d… · 2026-09-25}
 }
@@ -23,11 +23,16 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
 - Every value is **brace-delimited**, even `year`. Never quote-delimited: quotes and braces have
   different escaping rules, and one convention keeps the escaping code small.
 - `title` gets an inner brace pair so that bibliography styles keep its capitalisation.
-- `booktitle` is the same venue string as RIS `T2` (`export.venue_name()`, `.claude/skills/ris-format/SKILL.md`):
-  the conference's name, not a proceedings title, since workshop and rejected papers are in no proceedings. `keywords` is
-  the track. Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC
-  date>}` (spec 04 §Exports), the same line as RIS `N1`: `·` is U+00B7, the date `YYYY-MM-DD` UTC. Omit `doi`, `url` and `abstract` when they
-  are absent. Never write an empty field.
+- **Only `status: accepted` is `@inproceedings`** (spec 04 §Exports, task-004 review). Any other status
+  (`rejected`, `withdrawn`, `desk_rejected`, `unknown`) is `@unpublished`, with **no `booktitle`**. Its
+  `note` is `Submitted to <venue string>, status: <status>. <provenance line>`. A rejected paper must never
+  become a citation into a conference.
+- `booktitle` is the same venue string as RIS `T2` (`vocab.venue_name()`, also importable from `export`,
+  `.claude/skills/ris-format/SKILL.md`). It is the conference's name, not a proceedings title, since workshop
+  and rejected papers are in no proceedings. `keywords = {<track>, status:<status>}` on every entry. Provenance
+  goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC date>}` (spec 04
+  §Exports), the same line as RIS `N1`: `·` is U+00B7, the date `YYYY-MM-DD` UTC. Omit `doi`, `url` and
+  `abstract` when they are absent. Never write an empty field.
 - `openproceedings_id = {<id>}` is on **every** entry (spec 04 §Exports), so a round-trip recovers the id
   of every record, proceedings-only ones (PMLR, NeurIPS `nips-<hash>`) included, which have no forum `url`
   to parse. refaudit's field regex `(\w+)\s*=` accepts the underscore.

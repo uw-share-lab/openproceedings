@@ -35,3 +35,45 @@ QUERY_FILTER_FIELDS = (  # every filter field a query may name, incl. Scholar's 
     "status",
     "source",
 )
+
+# The venue string, RIS `T2` and BibTeX `booktitle` (spec 04 §Exports, task-004, which cites the sources):
+# the conference's full name, then the acronym it went by that year, and the year. Each venue lists its
+# (first year, acronym) eras in year order. A year before the first era has no name, and a record for it is
+# refused when it is built (`PaperRecord`), so an export never meets one. NeurIPS was NIPS until 2017
+# (proceedings.neurips.cc labels 2018 on "NeurIPS"; the board renamed it on 2018-11-16, before that
+# December's meeting). ICLR began in 2013 (iclr.cc). ICML is held annually as a conference from 1988, its 5th
+# meeting (icml.cc calls 2026 the 43rd). It is the conference's name, not a proceedings title ("Advances in
+# Neural Information Processing Systems 36", "Proceedings of the 40th International Conference on Machine
+# Learning"), because an export also holds workshop, rejected and ICLR papers that no proceedings contain.
+type ConferenceTable = dict[str, tuple[str, tuple[tuple[int, str], ...]]]
+CONFERENCES: ConferenceTable = {
+    "NeurIPS": ("Conference on Neural Information Processing Systems", ((1987, "NIPS"), (2018, "NeurIPS"))),
+    "ICLR": ("International Conference on Learning Representations", ((2013, "ICLR"),)),
+    "ICML": ("International Conference on Machine Learning", ((1988, "ICML"),)),
+}
+
+
+def check_conferences(table: ConferenceTable) -> None:
+    """Every venue has eras, in strictly increasing year order (`venue_name` takes the last one begun)."""
+    for venue, (_name, eras) in table.items():
+        if not eras:
+            raise ValueError(f"{venue} has no eras")
+        years = [first for first, _acronym in eras]
+        if years != sorted(set(years)):
+            raise ValueError(f"{venue} eras are not in year order: {years}")
+
+
+check_conferences(CONFERENCES)
+
+
+def venue_name(venue: str, year: int) -> str:
+    """`Conference on Neural Information Processing Systems (NIPS 2017)`: one string per venue and year,
+    whatever a paper's track or status, so every copy of a venue-year reads the same in a reference manager.
+    Raises ValueError for a venue without a table, or a year before the venue was held under its name."""
+    if venue not in CONFERENCES:
+        raise ValueError(f"no conference table for venue {venue!r}")
+    name, eras = CONFERENCES[venue]
+    acronyms = [acronym for first, acronym in eras if first <= year]
+    if not acronyms:
+        raise ValueError(f"no conference name for {venue} {year}: it was not held under that name then")
+    return f"{name} ({acronyms[-1]} {year})"

@@ -6,12 +6,14 @@ provenance (`openproceedings <index_version> · query <canonical_hash> · <UTC d
 openproceedings id, so an export round-trips to the ids it came from.
 
 - RIS (for Covidence): `TY  - CPAPER`, TI, AB, one AU per author, PY, T2 (the conference and that year's acronym), UR (forum,
-  then pdf, then proceedings), DO, ID, KW (the track), N1 (provenance), ER. RIS is line-based, so line
-  breaks inside a value become single spaces.
+  then pdf, then proceedings), DO, ID, KW (the track, then `status:<status>`), N1 (provenance), ER. RIS is
+  line-based, so line breaks inside a value become single spaces.
 - CSV: the record fields of spec 01 plus `index_version`, `canonical_hash` and `exported_at`, UTF-8 with a BOM (Excel).
   Lists (authors, keywords) are joined with "; ".
-- BibTeX: `@inproceedings`, keyed `<first author's last name><year><first title word>` (ASCII, lower-case),
-  a repeat key suffixed a, b, …; `note` holds the provenance and `openproceedings_id` the id.
+- BibTeX: `@inproceedings` for an accepted paper, `@unpublished` (no `booktitle`; `note` starts "Submitted to
+  <venue>, status: <status>.") for any other; keyed `<first author's last name><year><first title word>`
+  (ASCII, lower-case), a repeat key suffixed a, b, … (decision-007); `keywords` holds the track and
+  `status:<status>`, `note` the provenance and `openproceedings_id` the id.
 - JSONL: one JSON object per record, with `index_version`, `canonical_hash` and `exported_at`.
 """
 
@@ -26,20 +28,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, TextIO
 
+from openproceedings.vocab import CONFERENCES, venue_name
+
+__all__ = ["CONFERENCES", "CSV_COLUMNS", "FORMATS", "Provenance", "bibtex_key", "venue_name", "write"]
+
 FORMATS = ("ris", "csv", "bibtex", "jsonl")
-# The venue string, RIS `T2` and BibTeX `booktitle` (spec 04 §Exports, task-004, which cites the sources):
-# the conference's full name, then the acronym it went by that year, and the year. Each venue lists its
-# (first year, acronym) eras; a year before the first era has no name. NeurIPS was NIPS until 2017
-# (proceedings.neurips.cc labels 2018 on "NeurIPS"; the board renamed it on 2018-11-16, before that
-# December's meeting). ICLR began in 2013 (iclr.cc). ICML is held annually as a conference from 1988, its 5th
-# meeting (icml.cc calls 2026 the 43rd). It is the conference's name, not a proceedings title ("Advances in
-# Neural Information Processing Systems 36", "Proceedings of the 40th International Conference on Machine
-# Learning"), because an export also holds workshop, rejected and ICLR papers that no proceedings contain.
-CONFERENCES: dict[str, tuple[str, tuple[tuple[int, str], ...]]] = {
-    "NeurIPS": ("Conference on Neural Information Processing Systems", ((1987, "NIPS"), (2018, "NeurIPS"))),
-    "ICLR": ("International Conference on Learning Representations", ((2013, "ICLR"),)),
-    "ICML": ("International Conference on Machine Learning", ((1988, "ICML"),)),
-}
 CSV_COLUMNS = (
     "id", "title", "abstract", "authors", "venue", "year", "track", "status", "presentation",
     "venue_id_raw", "forum", "pdf", "proceedings", "doi", "keywords", "index_version", "canonical_hash",
@@ -86,15 +79,9 @@ def write(fmt: str, records: Iterable[dict[str, Any]], provenance: Provenance, o
     return n
 
 
-def venue_name(venue: str, year: int) -> str:
-    """`Conference on Neural Information Processing Systems (NIPS 2017)`: one string per venue and year,
-    whatever a paper's track or status, so every copy of a venue-year reads the same in a reference manager.
-    A year the venue wasn't held under its name raises ValueError (`op export --out` then leaves no file)."""
-    name, eras = CONFERENCES.get(venue, ("", ()))
-    acronyms = [acronym for first, acronym in eras if first <= year]
-    if not acronyms:
-        raise ValueError(f"no conference name for {venue} {year}: it was not held under that name then")
-    return f"{name} ({acronyms[-1]} {year})"
+def _status(r: dict[str, Any]) -> str:
+    """The record's status; a record without one is treated as `unknown`, never as accepted."""
+    return r.get("status") or "unknown"
 
 
 def _one_line(text: str) -> str:
@@ -121,7 +108,7 @@ def _ris(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         lines += [("UR", _one_line(u)) for u in _urls(r)]  # validated at ingest; one line here regardless
         if (r.get("urls") or {}).get("doi"):
             lines.append(("DO", _one_line(r["urls"]["doi"])))
-        lines += [("ID", r["id"]), ("KW", r["track"]), ("N1", p.line())]
+        lines += [("ID", r["id"]), ("KW", r["track"]), ("KW", f"status:{_status(r)}"), ("N1", p.line())]
         yield "".join(f"{tag}  - {value}\n" for tag, value in lines) + "ER  - \n\n"
 
 
@@ -256,7 +243,13 @@ def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         names = [_name(n) for n in (_debraced(a).rstrip("\\ ") for a in r.get("authors") or []) if n]
         if names:
             fields.append(("author", _braced(" and ".join(names))))
-        fields += [("booktitle", _braced(venue_name(r["venue"], r["year"]))), ("year", str(r["year"]))]
+        # only an accepted paper is cited as in its conference; any other status (rejected, withdrawn,
+        # desk-rejected, unknown) is `@unpublished`, the venue string moved into `note` (spec 04 §Exports)
+        status, venue = _status(r), venue_name(r["venue"], r["year"])
+        accepted = status == "accepted"
+        if accepted:
+            fields.append(("booktitle", _braced(venue)))
+        fields.append(("year", str(r["year"])))
         if r.get("abstract"):
             fields.append(("abstract", _braced(r["abstract"])))
         urls = _urls(r)
@@ -264,9 +257,11 @@ def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             fields.append(("url", _braced(urls[0])))
         if (r.get("urls") or {}).get("doi"):
             fields.append(("doi", _braced(r["urls"]["doi"])))
-        fields += [("note", _braced(p.line())), ("openproceedings_id", _braced(r["id"]))]
+        fields.append(("keywords", _braced(", ".join(k for k in (r.get("track"), f"status:{status}") if k))))
+        note = p.line() if accepted else f"Submitted to {venue}, status: {status}. {p.line()}"
+        fields += [("note", _braced(note)), ("openproceedings_id", _braced(r["id"]))]
         body = ",\n".join(f"  {name} = {value}" for name, value in fields)
-        yield f"@inproceedings{{{key},\n{body}\n}}\n\n"
+        yield f"@{'inproceedings' if accepted else 'unpublished'}{{{key},\n{body}\n}}\n\n"
 
 
 def _name(author: str) -> str:
