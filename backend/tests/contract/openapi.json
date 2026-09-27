@@ -2910,6 +2910,165 @@
         "title": "Term",
         "type": "object"
       },
+      "TrackCoverage": {
+        "description": "One spec 07 §C cell, venue × year × track (TASK-082): what the snapshot indexed for the track, beside\nthe official accepted count where one is sourced (`official_counts.py`, each with its citation).",
+        "properties": {
+          "abstract_missing": {
+            "description": "Of `records`, those without an abstract (title-only).",
+            "title": "Abstract Missing",
+            "type": "integer"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`indexed_accepted` − `official_accepted`; null without one.",
+            "title": "Delta"
+          },
+          "delta_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`delta` as a percentage of `official_accepted` (unrounded); null without one.",
+            "title": "Delta Pct"
+          },
+          "gated": {
+            "description": "Whether the M4 coverage gate applies: a main-track or D&B cell with an official count.",
+            "title": "Gated",
+            "type": "boolean"
+          },
+          "indexed_accepted": {
+            "description": "Of `records`, those with status `accepted`.",
+            "title": "Indexed Accepted",
+            "type": "integer"
+          },
+          "official_accepted": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The official accepted count for this venue, year and track; null where none is sourced.",
+            "title": "Official Accepted"
+          },
+          "official_accessed": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When `official_citation` was read.",
+            "title": "Official Accessed"
+          },
+          "official_citation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where `official_accepted` comes from: a URL or citation.",
+            "title": "Official Citation"
+          },
+          "official_counts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What `official_accepted` counts (e.g. orals, spotlights and posters, after withdrawals).",
+            "title": "Official Counts"
+          },
+          "records": {
+            "description": "Records of this track, every status.",
+            "title": "Records",
+            "type": "integer"
+          },
+          "sources": {
+            "description": "The sources the track's records came from (claim sources).",
+            "items": {
+              "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+              "enum": [
+                "openreview_v2",
+                "openreview_v1",
+                "neurips_proceedings",
+                "pmlr",
+                "ris"
+              ],
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "track": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "main",
+              "datasets_benchmarks",
+              "position",
+              "workshop",
+              "competition",
+              "tiny_papers",
+              "blogpost",
+              "other",
+              "unknown"
+            ],
+            "title": "Track",
+            "type": "string"
+          },
+          "within_gate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a gated cell, whether |`delta`| is at most 1% of `official_accepted`; null otherwise.",
+            "title": "Within Gate"
+          }
+        },
+        "required": [
+          "track",
+          "records",
+          "indexed_accepted",
+          "abstract_missing",
+          "sources",
+          "official_accepted",
+          "official_counts",
+          "official_citation",
+          "official_accessed",
+          "delta",
+          "delta_pct",
+          "gated",
+          "within_gate"
+        ],
+        "title": "TrackCoverage",
+        "type": "object"
+      },
       "Urls": {
         "properties": {
           "doi": {
@@ -2984,6 +3143,30 @@
             "title": "Records",
             "type": "integer"
           },
+          "statuses_indexed": {
+            "description": "The statuses this venue-year's sources can contain at all, in vocabulary order (spec 07 §C): a proceedings-only venue-year lists `accepted` alone, since no rejected paper exists there to exclude. A status can be listed with no record in `cells`.",
+            "items": {
+              "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+              "enum": [
+                "accepted",
+                "rejected",
+                "withdrawn",
+                "desk_rejected",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            "title": "Statuses Indexed",
+            "type": "array"
+          },
+          "tracks": {
+            "description": "One entry per track with records here, in vocabulary order (`unknown` last).",
+            "items": {
+              "$ref": "#/components/schemas/TrackCoverage"
+            },
+            "title": "Tracks",
+            "type": "array"
+          },
           "unknown_status": {
             "title": "Unknown Status",
             "type": "integer"
@@ -3014,7 +3197,9 @@
           "abstract_missing",
           "unknown_track",
           "unknown_status",
-          "cells"
+          "cells",
+          "statuses_indexed",
+          "tracks"
         ],
         "title": "VenueYearCoverage",
         "type": "object"

@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.engine.index import VERSION_NAME
-from openproceedings.ingest.record import PaperRecord, Presentation, Urls
+from openproceedings.ingest.record import PaperRecord, Presentation, Source, Urls
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import MIN_YEAR, FilterField, Node, TextField
 from openproceedings.query.clauses import ParsedFilters
@@ -324,6 +324,37 @@ class CoverageCell(Model):
     count: int
 
 
+class TrackCoverage(Model):
+    """One spec 07 §C cell, venue × year × track (TASK-082): what the snapshot indexed for the track, beside
+    the official accepted count where one is sourced (`official_counts.py`, each with its citation)."""
+
+    track: Track
+    records: int = Field(description="Records of this track, every status.")
+    indexed_accepted: int = Field(description="Of `records`, those with status `accepted`.")
+    abstract_missing: int = Field(description="Of `records`, those without an abstract (title-only).")
+    sources: list[Source] = Field(description="The sources the track's records came from (claim sources).")
+    official_accepted: int | None = Field(
+        description="The official accepted count for this venue, year and track; null where none is sourced."
+    )
+    official_counts: str | None = Field(
+        description="What `official_accepted` counts (e.g. orals, spotlights and posters, after withdrawals)."
+    )
+    official_citation: str | None = Field(
+        description="Where `official_accepted` comes from: a URL or citation."
+    )
+    official_accessed: date | None = Field(description="When `official_citation` was read.")
+    delta: int | None = Field(description="`indexed_accepted` − `official_accepted`; null without one.")
+    delta_pct: float | None = Field(
+        description="`delta` as a percentage of `official_accepted` (unrounded); null without one."
+    )
+    gated: bool = Field(
+        description="Whether the M4 coverage gate applies: a main-track or D&B cell with an official count."
+    )
+    within_gate: bool | None = Field(
+        description="For a gated cell, whether |`delta`| is at most 1% of `official_accepted`; null otherwise."
+    )
+
+
 class VenueYearCoverage(Model):
     """One venue-year of the snapshot (`coverage.breakdown`): its cells in vocabulary order (`unknown`
     last, never folded), and its unknown and missing-abstract counts, 0 included."""
@@ -335,6 +366,14 @@ class VenueYearCoverage(Model):
     unknown_track: int
     unknown_status: int
     cells: list[CoverageCell]
+    statuses_indexed: list[Status] = Field(  # TASK-082: additive
+        description="The statuses this venue-year's sources can contain at all, in vocabulary order (spec 07 "
+        "§C): a proceedings-only venue-year lists `accepted` alone, since no rejected paper exists there to "
+        "exclude. A status can be listed with no record in `cells`."
+    )
+    tracks: list[TrackCoverage] = Field(  # TASK-082: additive
+        description="One entry per track with records here, in vocabulary order (`unknown` last)."
+    )
 
 
 class CoverageTotals(Model):

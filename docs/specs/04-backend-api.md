@@ -92,7 +92,7 @@ reviews without the UI.
 | `POST` | `/records` | Freezes a search as an immutable **search record** → 201 `{record_id, page}` plus the three versions, with `Location: /api/v1/records/<record_id>`; an optional `index_version` pins the save to the index the search was shown on (409 otherwise) |
 | `GET` | `/records/{id}` | The stored record, plus a replay check (see below); `replay=false` for the stored record alone |
 | `GET` | `/records/{id}/diff` | For a record of any status: added and removed ids (with titles), paged, and which `index_version` inputs changed (empty unless `drifted`) |
-| `GET` | `/coverage` | Counts per venue × year × track × status, abstract-missing counts, snapshot date, what kind its window is and whether its counts are citable |
+| `GET` | `/coverage` | Counts per venue × year × track × status, abstract-missing counts, snapshot date, what kind its window is and whether its counts are citable; per venue-year the statuses indexed, per venue × year × track the spec 07 §C cell (official count, delta, gate) |
 | `GET` | `/meta` | Current and servable `index_version`s, the field names and the venue, track and status vocabularies (these feed the UI's autocomplete), and this instance's query `limits` |
 | `GET` | `/healthz` | Liveness and whether the index is loaded |
 | `GET` | `/near-misses` | **M5 only**: the semantic suggestion panel, a separate resource (see 06) |
@@ -767,26 +767,34 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
   on this snapshot are PRISMA identification numbers), `totals` (`records`, `abstract_missing`, `unknown_track`, `unknown_status`) and
   `venue_years`: one entry per venue-year, ordered by venue name then year, with the same four counts and
   `cells`, a `{track, status, count}` per non-empty cell in vocabulary order (`vocab.py`; `unknown` last).
+  TASK-082 adds, additively: per venue-year `statuses_indexed` (the statuses its sources can contain, spec
+  07 §C, from the manifest) and `tracks`, one spec 07 §C cell per track with records, in vocabulary order:
+  `records`, `indexed_accepted`, `abstract_missing`, `sources` (claim sources), the official count with
+  `official_counts`, `official_citation` and `official_accessed` (`official_counts.py`, the copy of
+  `docs/results/coverage-sources.md`; null while none is sourced), `delta`, `delta_pct` (unrounded percent),
+  `gated` (a main-track or D&B cell with an official count) and `within_gate` (|delta| ≤ 1% of the official
+  count, exact; null unless gated). `snapshot.crawl_dates` gains a key per claim source (format 2's
+  `crawl_windows`), in a search record too.
   - The numbers are the manifest of the snapshot the served index was built from (`counts`,
     `abstract_missing`, `unknown_track`, `record_count`: counted from the records once, at snapshot build),
     reshaped by `coverage.breakdown`, which never recounts. `unknown` is never folded: it is its own cell,
     and every venue-year carries `unknown_track` and `unknown_status`, 0 included. Missing abstracts are per
-    venue-year, the manifest's granularity (the M4 abstract threshold is per venue-year too).
+    venue-year and, since manifest format 2, per track. A format-1 manifest (built before TASK-082) has no
+    per-track keys: the load takes each track's missing abstracts and sources from its one pass over the
+    verified records, the statuses indexed from `ingest/sources.py`, and `crawl_dates` holds `*` alone.
   - Computed **when the index is loaded** (`IndexState._load` → `api/coverage.py::compute`, right after the
     snapshot is verified and before the swap; task-038 review). It is part of the served bundle, beside the
     snapshot's records (`IndexState.served`). The load's one pass over the records
-    also counts them per (venue, year, track, status) and counts missing abstracts per venue-year. These
-    counts must equal the manifest's cells and `abstract_missing`, and the records must number the index's
-    documents. Any of these failures makes the load fail, logged as `index_load_failed` (ERROR) with a
+    also counts them per (venue, year, track, status), missing abstracts per venue-year and per track, and
+    each track's claim sources. These must equal the manifest's cells, `abstract_missing`,
+    `abstract_missing_by_track` and `sources_by_track`, and the records must number the index's documents. Any of these failures makes the load fail, logged as `index_load_failed` (ERROR) with a
     `reason` constant and never a path: a manifest whose maps disagree, a track or status outside the
     vocabulary, a manifest that disagrees with the records, a missing or different snapshot, or a record
     count that differs from the index's document count. The reasons are `snapshot_missing`,
     `snapshot_unreadable`, `snapshot_hash_mismatch`, `index_manifest_invalid`, `manifest_invalid`,
-    `counts_mismatch`, `abstract_missing_mismatch` and `doc_count_mismatch`. At startup the failure is 503 `API_INDEX_NOT_LOADED`; on SIGHUP the old index and
+    `counts_mismatch`, `abstract_missing_mismatch`, `track_facts_mismatch` and `doc_count_mismatch`. At startup the failure is 503 `API_INDEX_NOT_LOADED`; on SIGHUP the old index and
     its coverage keep serving. Coverage is never partial and never recomputed per request. One
     `coverage_computed` INFO line is written per load.
-  - Not yet: which statuses a venue-year's sources *can* contain (spec 07 §C "statuses indexed") and crawl
-    dates per source; neither is in the manifest (task-082).
 - As built (task-036, `api/export.py`; review fixes 2026-09-27):
   - `GET /export` takes either `q` (with `mode` and an optional `index_version`) or `record_id` alone;
     `format` (`ris` | `csv` | `bibtex` | `jsonl`) is always required. With `record_id`, the export is the
