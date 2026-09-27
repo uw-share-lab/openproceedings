@@ -1,10 +1,10 @@
 ---
 id: TASK-052
 title: NeurIPS proceedings miner
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-27 21:19'
+updated_date: '2026-09-27 21:34'
 labels:
   - ingest
 milestone: m-4
