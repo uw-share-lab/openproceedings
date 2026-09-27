@@ -250,7 +250,8 @@ field, because it parses the edited string, which `/search` and replay don't nee
 ```python
 ParsedFilters = {venue: ParsedClause, year: ParsedYearClause, track: ParsedClause, status: ParsedClause}
 ParsedClause  = {field, negated: bool, span: [start, end] | None, toggleable: bool,
-                 reason: ClauseReason | None, values: [str] | None}          # sorted
+                 reason: ClauseReason | None, blocking_spans: [[start, end]],
+                 values: [str] | None}                                       # sorted
 ParsedYearClause = {…the same…, ranges: [YearRange] | None}                  # sorted, merged
 ClauseReason = "multiple_clauses" | "nested" | "mixed_fields" | "negated"
              | "too_long" | "too_deep" | "unparsable_edit"                    # an open set
@@ -266,6 +267,14 @@ ClauseReason = "multiple_clauses" | "nested" | "mixed_fields" | "negated"
 | more than one (`track:workshop llm AND (venue:NeurIPS track:workshop)`; two written copies the canonical form deduplicates, `track:main track:main`) | null | false, `multiple_clauses` (a splice over one leaves the other ANDed in) |
 | none top-level, but nested under an `OR` or `NOT` group | null | false, `mixed_fields` if a top-level `OR` joins filters of several fields (`track:workshop OR venue:ICLR`), else `nested` |
 | none at all | zero-width `(len(q), len(q))`, the default's spot; the default's values (track, status), every vocabulary value (venue), or `1000..9999` (year) | true: a click writes it out as `(q) AND field:(…)` |
+
+**`blocking_spans`** (TASK-091, additive): for `multiple_clauses`, `nested` and `mixed_fields`, the clauses
+behind the reason, so the UI can point at them ("Show the clauses", spec 05) without walking the AST: the
+code-point span in `q` of each written top-level conjunct (`AND` groups flattened, nothing else rewritten)
+that holds a filter of the field anywhere, sorted. `track:workshop llm AND (venue:NeurIPS track:workshop)`
+gives both `track:workshop`; `llm (a OR track:workshop)` gives `(a OR track:workshop)`; `track:main NOT NOT
+(track:main a)` gives `track:main` and `NOT NOT (track:main a)`. Empty for every other clause, toggleable or
+not (the other reasons are about the edit, not about clauses in `q`).
 
 A nested clause beside a single top-level one doesn't block it (`track:main (track:workshop OR x)` edits
 `track:main`); the nested one stays applied, as the disjunctive facet counts assume (decision-001).

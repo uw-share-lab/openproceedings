@@ -30,12 +30,11 @@ from fastapi.responses import StreamingResponse
 from openproceedings.api.deps import EngineDep, annotate, check_candidates, searchable
 from openproceedings.api.errors import ApiError
 from openproceedings.api.middleware import API_PREFIX
-from openproceedings.api.models import MODE_DOC, Q_DOC
+from openproceedings.api.models import MODE_DOC, Q_DOC, VERSION_PARAM
 from openproceedings.api.openapi import BUSY, response_header
 from openproceedings.api.records import refuse_mismatch, stored_record
 from openproceedings.api.state import IndexState
 from openproceedings.diagnostics import DiagnosticCode
-from openproceedings.engine.index import VERSION_NAME
 from openproceedings.engine.protocol import EngineInternalError
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.export import Provenance, check_count, entries, header, utc_date
@@ -56,7 +55,6 @@ MEDIA: dict[str, tuple[str, str]] = {
     "jsonl": ("application/x-ndjson; charset=utf-8", "jsonl"),
 }
 CHUNK = 64 * 1024  # characters per body chunk (64 Ki): whole records, never split or reordered
-VERSION_PARAM = f"^(?:{VERSION_NAME.pattern})$"
 RECORD_PARAM = f"^(?:{RECORD_ID.pattern})$"
 
 

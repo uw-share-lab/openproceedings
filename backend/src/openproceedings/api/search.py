@@ -33,6 +33,7 @@ from openproceedings.api.models import (
     versions,
 )
 from openproceedings.api.openapi import BUSY
+from openproceedings.engine.exclusions import identified_total, unclassified_total
 from openproceedings.ingest.record import Urls
 from openproceedings.query.clauses import filter_clauses
 from openproceedings.query.parser import Mode
@@ -99,6 +100,8 @@ def search(
         ),
         total=found.total,
         excluded=Excluded.model_validate(found.excluded.to_json()),
+        identified_total=identified_total(found.total, found.excluded.total),
+        unclassified_total=unclassified_total(found.excluded.track, found.excluded.status),
         facets=Facets.model_validate(found.facets),
         hits=[_hit(h) for h in found.hits],
     )

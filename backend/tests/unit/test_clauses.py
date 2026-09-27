@@ -314,10 +314,12 @@ def test_models_refuse_inconsistent_reports() -> None:
         "span": (0, 1),
         "toggleable": True,
         "reason": None,
+        "blocking_spans": [],
     }
     ParsedClause(**ok, values=["ICLR"])
     for bad in (
         {**ok, "span": None},  # values without a span
+        {**ok, "blocking_spans": [(0, 1)]},  # blocking spans on a toggleable clause
         {**ok, "reason": "nested"},  # toggleable with a reason
         {**ok, "toggleable": False},  # not toggleable without one
         {**ok, "negated": True},  # a negated clause is never toggleable
@@ -327,3 +329,44 @@ def test_models_refuse_inconsistent_reports() -> None:
     with pytest.raises(ValidationError):
         ParsedYearClause(**ok, ranges=None)
     ParsedYearClause(**ok, ranges=[YearRange(lo=2020, hi=2021)])
+    negated = {**ok, "toggleable": False, "negated": True, "reason": "negated"}
+    with pytest.raises(ValidationError):  # only multiple_clauses, nested and mixed_fields name clauses
+        ParsedClause(**{**negated, "blocking_spans": [(0, 1)]}, values=["ICLR"])
+    nested = {**ok, "span": None, "toggleable": False, "reason": "nested", "blocking_spans": [(0, 1)]}
+    ParsedClause(**nested, values=None)
+
+
+BLOCKING_CASES = [  # (q, field, reason, the clauses behind it, as text)
+    ("track:workshop llm AND (venue:NeurIPS track:workshop)", "track", "multiple_clauses",
+     ["track:workshop", "track:workshop"]),
+    ("track:main NOT NOT (track:main a)", "track", "multiple_clauses", ["track:main", "NOT NOT (track:main a)"]),
+    ("llm (a OR track:workshop)", "track", "nested", ["(a OR track:workshop)"]),
+    ("NOT NOT (a track:workshop) b", "track", "nested", ["NOT NOT (a track:workshop)"]),
+    ("x (track:workshop OR venue:ICLR)", "venue", "mixed_fields", ["(track:workshop OR venue:ICLR)"]),
+    ("x (track:workshop OR venue:ICLR)", "track", "mixed_fields", ["(track:workshop OR venue:ICLR)"]),
+    ("𝔘ber trust year:2020 (year:2021 y)", "year", "multiple_clauses", ["year:2020", "year:2021"]),
+]  # fmt: skip
+
+
+@pytest.mark.parametrize(("q", "field", "reason", "texts"), BLOCKING_CASES)
+def test_blocking_spans_are_the_clauses_behind_the_reason(
+    q: str, field: str, reason: str, texts: list[str]
+) -> None:
+    """TASK-091: code-point spans into `q` (an astral character before them counts one) of each written
+    top-level conjunct holding a filter of the field, in order."""
+    filters = filter_clauses(q, parse(q))
+    assert filters is not None
+    clause = getattr(filters, field)
+    assert (clause.reason, clause.span, clause.toggleable) == (reason, None, False)
+    assert [q[a:b] for a, b in clause.blocking_spans] == texts
+    assert clause.blocking_spans == sorted(clause.blocking_spans)
+
+
+@pytest.mark.parametrize("q", ["trust venue:ICLR", "trust", "NOT track:main x", "a" * 1950 + " track:main"])
+def test_no_blocking_spans_for_any_other_clause(q: str) -> None:
+    filters = filter_clauses(q, parse(q))
+    assert filters is not None
+    for field in ("venue", "year", "track", "status"):
+        clause = getattr(filters, field)
+        assert clause.reason not in ("multiple_clauses", "nested", "mixed_fields")
+        assert clause.blocking_spans == []

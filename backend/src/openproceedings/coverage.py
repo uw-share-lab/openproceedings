@@ -20,7 +20,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from openproceedings.ingest.snapshot import SnapshotError
-from openproceedings.vocab import STATUSES, TRACKS, VENUES
+from openproceedings.vocab import STATUSES, TRACKS, VENUES, bootstrap_only, crawl_dates_kind
 
 ALL_SOURCES = "*"  # records.ALL_SOURCES: the corpus-wide window's key (a test pins them equal)
 
@@ -70,18 +70,24 @@ def breakdown(manifest: Mapping[str, Any], name: str) -> dict[str, Any]:
         counts = _map(manifest["counts"], "counts")
         missing = _map(manifest["abstract_missing"], "abstract_missing")
         unknown = _map(manifest["unknown_track"], "unknown_track")
+        sources = sorted(_map(manifest["sources"], "sources"))
+        windows = crawl_dates(manifest)
         snapshot = {
             "name": name,
             "snapshot_hash": manifest["snapshot_hash"],
             "crawl_date": manifest["crawl_date"],
-            "crawl_dates": crawl_dates(manifest),
+            "crawl_dates": windows,
             "built_at": manifest["built_at"],
-            "sources": sorted(_map(manifest["sources"], "sources")),
+            "sources": sources,
+            # derived exactly as a search record's (TASK-091; `records.snapshot_facts`)
+            "crawl_dates_kind": crawl_dates_kind(windows, sources, ALL_SOURCES),
+            "identification_citable": not bootstrap_only(sources),
         }
         record_count = _count(manifest["record_count"])
     except KeyError as e:
         raise SnapshotError(f"the snapshot manifest has no {e.args[0]!r}") from None
-    if not all(isinstance(v, str) and v for k, v in snapshot.items() if k not in ("sources", "crawl_dates")):
+    derived = ("sources", "crawl_dates", "crawl_dates_kind", "identification_citable")
+    if not all(isinstance(v, str) and v for k, v in snapshot.items() if k not in derived):
         raise SnapshotError("the snapshot manifest's hash, dates or name are not strings")
 
     venue_years: list[dict[str, Any]] = []

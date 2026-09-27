@@ -85,14 +85,14 @@ reviews without the UI.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side), plus `filters`: each filter field's top-level clause (span, values, `toggleable`, `reason`) for facet clicks (02 §Filter clauses; decision-011). Called as you type, debounced. |
+| `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side), plus `filters`: each filter field's top-level clause (span, values, `toggleable`, `reason`, and for a clause blocked by other clauses their `blocking_spans`) for facet clicks (02 §Filter clauses; decision-011). Called as you type, debounced. |
 | `GET` | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | `GET` | `/papers/{id}` | The full record, provenance included; with an optional `q` (and `mode`), whether that query matches it and its `highlights`, exactly as `/search` gives them for that paper (task-087) |
 | `GET` | `/export` | `format=ris\|csv\|bibtex\|jsonl` and either `q` (with `mode` and an optional `index_version`) or `record_id` (with `mode` at most `native`) → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; with `record_id`, exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if that index is gone, 409 `API_RECORD_MISMATCH` if its replay is a `mismatch`) |
-| `POST` | `/records` | Freezes a search as an immutable **search record** → 201 `{record_id, page}` plus the three versions, with `Location: /api/v1/records/<record_id>` |
-| `GET` | `/records/{id}` | The stored record, plus a replay check (see below) |
+| `POST` | `/records` | Freezes a search as an immutable **search record** → 201 `{record_id, page}` plus the three versions, with `Location: /api/v1/records/<record_id>`; an optional `index_version` pins the save to the index the search was shown on (409 otherwise) |
+| `GET` | `/records/{id}` | The stored record, plus a replay check (see below); `replay=false` for the stored record alone |
 | `GET` | `/records/{id}/diff` | For a record of any status: added and removed ids (with titles), paged, and which `index_version` inputs changed (empty unless `drifted`) |
-| `GET` | `/coverage` | Counts per venue × year × track × status, abstract-missing counts, snapshot date |
+| `GET` | `/coverage` | Counts per venue × year × track × status, abstract-missing counts, snapshot date, what kind its window is and whether its counts are citable |
 | `GET` | `/meta` | Current and servable `index_version`s, the field names and the venue, track and status vocabularies (these feed the UI's autocomplete), and this instance's query `limits` |
 | `GET` | `/healthz` | Liveness and whether the index is loaded |
 | `GET` | `/near-misses` | **M5 only**: the semantic suggestion panel, a separate resource (see 06) |
@@ -111,6 +111,8 @@ reviews without the UI.
   "excluded": { "total": 304,
                 "track": { "workshop": 212, "competition": 4, "unknown": 0 },
                 "status": { "rejected": 88, "unknown": 0 } },
+  "identified_total": 716,
+  "unclassified_total": 0,
   "facets": { "venue": {...}, "year": {...}, "track": {...}, "status": {...} },
   "hits": [ { "id": "...", "title": "...", "abstract": "...", "authors": [...], "venue": "ICLR",
               "year": 2025, "track": "main", "status": "accepted", "presentation": "poster", "score": 12.3,
@@ -122,6 +124,14 @@ reviews without the UI.
 accounting) plus a `track` and a `status` map whose buckets sum to it. Each map always carries an `unknown`
 key, even when 0, so unclassified records are itemised and never folded into another bucket. Buckets are
 ordered by count, largest first, ties by name, with `unknown` last, so a stored record's JSON is stable.
+
+`identified_total` and `unclassified_total` (TASK-090, additive) are the two derived counts a methods section
+and the PRISMA line quote, sent so no client adds numbers (ux-design): `identified_total` is `total +
+excluded.total`, the `identification_ast`'s own count (records identified within the query's own limits),
+and `unclassified_total` is `excluded.track.unknown + excluded.status.unknown`. They are exactly the
+`identified` and `unclassified` numbers `op search` and `op record save` print (both call
+`engine/exclusions.py::identified_total` and `unclassified_total`; `tests/contract/test_search.py` and
+`test_ui_additions.py` compare them). A search record and its replay carry the same two fields.
 
 `facets` are disjunctive: each facet field is counted over the matched set with every filter applied **except that field's own top-level conjuncts** (a filter nested under an `OR` stays applied; decision-001). So the track facet still shows how many workshop papers you would get by including them. Clicking a facet in the UI
 rewrites the query (guarantee 3). No hidden facet state exists.
@@ -288,15 +298,23 @@ The record page (05) is what a methods section cites. Records are stored in `dat
 As built (task-037 and its review fixes; `backend/src/openproceedings/records.py` holds the record,
 `ids_hash`, the store and the replay, so `op record save`/`replay` (task-083) call the same functions; `api/records.py` is the
 transport, `IndexState.pinned` in `api/state.py` loads older indexes):
-- **`POST /records`** takes `{q, mode}` (no other keys) and answers **201** `{record_id, page, index_version,
+- **`POST /records`** takes `{q, mode, index_version?}` (no other keys) and answers **201** `{record_id, page, index_version,
   tokenizer_version, query_version}` with `Location: /api/v1/records/<record_id>` (the API resource). `page`
   is the record page's path, `/record/<record_id>` (05 §Pages), relative to the site (renamed from `url`
   before the first release: it is not the resource's URL). The query is refused exactly as `/search` refuses it (422 with diagnostics,
   `PARSE_TOO_LONG` before parsing, or after canonicalising when the canonical form is over the cap,
   decision-008) and nothing is written. It is re-run on the request's one engine:
   `search.run` (so `total`, `excluded` and `expansions` equal `/search`'s) plus `match_ids` for the ids.
+- **The save's pin** (TASK-091, additive; design pre-pass M3). `index_version`, optional (null or absent: the
+  served index, as before), is the index the search was shown on: when the served index is another (a hot
+  swap between the search and the save), the save is 409 `API_INDEX_VERSION_UNAVAILABLE` and nothing is
+  written, so a record never freezes the query on an index other than the one whose counts the save dialog
+  showed. It is checked first, before the parse, the verified-clause charge and the save ceilings, so a
+  refused save spends no save. A record is saved only on the served index; a pin naming an older index this
+  instance still holds is refused the same way. The value must look like an index_version
+  (`[0-9a-f][0-9a-f-]{0,63}`, the `/export` parameter's pattern), else 422 `API_BAD_PARAM`.
 - **Cost and capacity.** `POST /records`, `GET /records/{id}` and `/diff` each run a whole query, so each
-  costs the rate limit's `export_weight`. A save is refused with 503 `API_RECORDS_STORE_FULL` (nothing
+  costs the rate limit's `export_weight` (`GET /records/{id}?replay=false` runs none: one token). A save is refused with 503 `API_RECORDS_STORE_FULL` (nothing
   written) once the store holds `ApiConfig.records_max_bytes` (default 1 GiB; `None` for no cap) or its disk
   has less than `records_min_free_bytes` free (default 256 MiB). An empty store always takes its first save.
   Reads are never refused. The store logs `records_store_full` (WARNING) when it fills and
@@ -333,6 +351,19 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   (M5). `excluded` keeps the pinned bucket order.
 - **`ids` are left out of `GET /records/{id}`** (`record.ids` is null) unless `?include=ids`; to fetch the
   papers themselves use `GET /export?record_id=` (§Exports).
+- **`record.identified_total` and `record.unclassified_total`** (TASK-090, additive) are derived when the
+  record is read, from its own `total` and `excluded` (§SearchResponse), never stored (`records.DERIVED`), so
+  a v1 body has them too and no body can contradict its own counts. `replay.identified_total` and
+  `replay.unclassified_total` are the replay's, null when it was refused or withheld.
+- **`GET /records/{id}?replay=false`** (TASK-091, additive; design pre-pass S4) answers the stored record
+  alone: `replay` is null, nothing is parsed, compiled or verified, and the top-level versions are the served
+  index's and this code's. So the record page can show the recorded fields and the methods text while a
+  replay would be a 429 or 503 `API_BUSY` ("Replay: waiting"). It is the one read that costs one token of
+  the rate limit rather than `export_weight` (`middleware.stored_read`: a GET of `/records/{id}` whose
+  parameters are only `replay`, false by the route's own bool rule, and `include`, each once; anything else
+  pays the record route's weight). `replay` defaults to `true`, the old answer, and is never null without
+  `replay=false` (decision-012: the one response field allowed to become nullable within v1, because only
+  the new opt-in parameter produces the null). The access line carries `canonical_hash`, never `q`.
 - **`ids_hash`** is `sha256("\n".join(sorted(ids)))`, code-point order, no trailing newline, with
   known-answer tests (the empty set is `sha256("")`).
 - **Record ids** are `secrets.token_urlsafe(9)`: 12 characters of `[A-Za-z0-9_-]`, about 72 random bits,
@@ -429,7 +460,7 @@ once released: changing one is a breaking change under `/api/v1`.
 | Query does not parse, uses an unknown field or value, or has a bad wildcard (incl. more than 200 expansions) (on endpoints that run the query) | 422 | `PARSE_*`, `FIELD_*`, `WILDCARD_*` (diagnostics carry the spans); a query over 2,000 code points is `PARSE_TOO_LONG`, rejected before parsing, and so is one whose canonical form is over 2,000 code points, refused after canonicalising (decision-008) |
 | A parameter is invalid (bad `sort`, `limit` > 200, unknown `format`, a malformed paper or record id), unknown to the route, or given twice; or a body is malformed | 422 | `API_BAD_PARAM` |
 | Paper or search record not found (a well-formed id) | 404 | `API_PAPER_NOT_FOUND` / `API_RECORD_NOT_FOUND` |
-| A pinned `index_version` is not available on this instance | 409 | `API_INDEX_VERSION_UNAVAILABLE` |
+| A pinned `index_version` is not available on this instance (an export's; a record save's `index_version` that is not the served index, TASK-091) | 409 | `API_INDEX_VERSION_UNAVAILABLE` |
 | Export requested for a record whose replay status is `mismatch` | 409 | `API_RECORD_MISMATCH` |
 | A request body over `max_body_bytes` (64 KiB), by `Content-Length` or by the bytes of a chunked body, refused before it is read and before any other check (task-079) | 413 | `API_BODY_TOO_LARGE` |
 | Rate limit exceeded: the client's or its network's bucket, a position-verified query's extra weight, or the record-save ceiling (its network's or the instance-wide one) | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
@@ -490,7 +521,8 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     both hold its cost, and a refusal by one spends nothing from the other. `/healthz` (GET or
     HEAD, for uptime monitors; HEAD is its own route, left out of the OpenAPI document so operation ids stay
     unique) costs nothing; `/export` and every record route (`POST /records`, `GET /records/{id}`, `/diff`)
-    cost `export_weight`, charged before routing. A
+    cost `export_weight`, charged before routing (but `GET /records/{id}?replay=false`, which runs no query:
+    one token). A
     query's **position-verified clauses** (spec 03: a phrase with a wildcard, a NEAR the index can't answer)
     are counted from the AST (`engine.compile.verified_clauses`, by `verifies`'s rule; a test holds the
     count equal to the compiler's own): more than `ApiConfig.max_verified_clauses` (default 16: a backstop, admitting every Trust-Evals string) is 422
@@ -658,7 +690,9 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
   - `POST /parse`'s `filters` (TASK-078, decision-011) is `query.clauses.filter_clauses(q, result)`, the one
     call the route adds: `{venue, year, track, status}`, each `{field, negated, span, toggleable, reason}`
     plus `values` (venue, track, status) or `ranges` (year), every key always sent (a null included); null
-    exactly when `errors` is non-empty. The rules (the flattened canonical tree, the zero-width span of a
+    exactly when `errors` is non-empty. `blocking_spans` (TASK-091, additive) gives the code-point spans of
+    the clauses behind a `multiple_clauses`, `nested` or `mixed_fields` reason, empty otherwise (02 §Filter
+    clauses). The rules (the flattened canonical tree, the zero-width span of a
     default or unrestricted field, the reasons, the widest-edit cap check) are 02 §Filter clauses. Goldens:
     `frontend/src/lib/filter-clause-golden.json` (`tests/contract/test_parse_filters.py`).
   - `GET /papers/{id}` answers `{index_version, tokenizer_version, query_version, paper}`, where `paper` is
@@ -727,7 +761,10 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
 - As built (task-038, `api/coverage.py`, `coverage.py`): `GET /coverage` answers the three versions plus
   `snapshot` (`name`, `snapshot_hash`, `crawl_date` (the last fetch's UTC date), `crawl_dates` (a search
   record's shape, `{"*": {from, to}}`, plus a key per source that carries its own window; `coverage.crawl_dates`),
-  `built_at`, `sources`), `totals` (`records`, `abstract_missing`, `unknown_track`, `unknown_status`) and
+  `built_at`, `sources`, and (TASK-091, additive) `crawl_dates_kind` and `identification_citable`, derived
+  exactly as a search record's (`vocab.crawl_dates_kind`, `vocab.bootstrap_only`; a unit test compares the
+  two source for source), so the coverage page can say "crawled" or "Scholar searches run" and whether counts
+  on this snapshot are PRISMA identification numbers), `totals` (`records`, `abstract_missing`, `unknown_track`, `unknown_status`) and
   `venue_years`: one entry per venue-year, ordered by venue name then year, with the same four counts and
   `cells`, a `{track, status, count}` per non-empty cell in vocabulary order (`vocab.py`; `unknown` last).
   - The numbers are the manifest of the snapshot the served index was built from (`counts`,

@@ -105,6 +105,7 @@ def test_numbers_match_the_snapshot_manifest_exactly(client: TestClient, store: 
             (venue, year): n for venue, years in manifest[key].items() for year, n in years.items()
         }
     assert body["totals"]["records"] == manifest["record_count"]
+    assert sorted(manifest["sources"]) == ["ris"]
     assert body["snapshot"] == {
         "name": snapshot.name,
         "snapshot_hash": manifest["snapshot_hash"],
@@ -113,6 +114,9 @@ def test_numbers_match_the_snapshot_manifest_exactly(client: TestClient, store: 
         "crawl_dates": {"*": {k: utc_z(v) for k, v in manifest["crawl_window"].items()}},
         "built_at": utc_z(manifest["built_at"]),
         "sources": sorted(manifest["sources"]),
+        # derived as a search record's (TASK-091): the fixture's one source is RIS, a bootstrap source
+        "crawl_dates_kind": {"*": "scholar_query_dates"},
+        "identification_citable": False,
     }
     assert manifest["built_at"].endswith("+00:00") and body["snapshot"]["built_at"].endswith("Z")
 
@@ -121,6 +125,15 @@ def test_crawl_dates_are_a_search_records(recorded_coverage: tuple[dict[str, Any
     """One shape for the crawl window everywhere (M3a review): `/coverage` and a record of the same index."""
     coverage, record = recorded_coverage
     assert coverage["snapshot"]["crawl_dates"] == record["crawl_dates"]
+
+
+def test_crawl_kind_and_citability_are_a_search_records(
+    recorded_coverage: tuple[dict[str, Any], dict[str, Any]],
+) -> None:
+    """TASK-091: `/coverage` says what kind its window is and whether counts are citable, as a record does."""
+    coverage, record = recorded_coverage
+    for key in ("sources", "crawl_dates_kind", "identification_citable"):
+        assert coverage["snapshot"][key] == record[key]
 
 
 @pytest.fixture

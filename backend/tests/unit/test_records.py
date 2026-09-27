@@ -540,6 +540,35 @@ def test_a_source_with_its_own_crawl_window_gets_its_own_key(data_dir: Path) -> 
     assert crawled.crawl_dates_kind == {"*": "crawl", "openreview_v2": "crawl"}
 
 
+OWN_WINDOW = {"from": "2026-03-01T00:00:00+00:00", "to": "2026-03-02T00:00:00+00:00"}
+
+
+@pytest.mark.parametrize(
+    "sources",
+    [
+        {"ris": []},
+        {"openreview_v2": []},
+        {"ris": [], "openreview_v2": {"crawl_window": OWN_WINDOW}},
+        {"openreview_v2": {"crawl_window": OWN_WINDOW}, "pmlr": []},
+    ],
+    ids=["bootstrap", "crawl", "mixed-own-window", "crawl-own-window"],
+)
+def test_coverage_derives_crawl_kind_and_citability_as_a_record_does(
+    data_dir: Path, sources: dict[str, Any]
+) -> None:
+    """TASK-091: `/coverage`'s `crawl_dates_kind` and `identification_citable` are a record's, source for source."""
+    from openproceedings.coverage import breakdown
+
+    path = data_dir / "snapshots" / "snap" / "manifest.json"
+    edit(path, sources=sources)
+    facts = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+    snapshot = breakdown(json.loads(path.read_text()), "snap")["snapshot"]
+    assert snapshot["sources"] == facts.sources
+    assert set(snapshot["crawl_dates"]) == set(facts.crawl_dates)
+    assert snapshot["crawl_dates_kind"] == facts.crawl_dates_kind
+    assert snapshot["identification_citable"] is facts.identification_citable
+
+
 def test_the_cli_and_the_record_share_one_bootstrap_test() -> None:
     from openproceedings import cli, vocab
 

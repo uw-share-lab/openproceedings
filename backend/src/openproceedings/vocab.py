@@ -51,6 +51,28 @@ def bootstrap_only(sources: Iterable[str]) -> bool:
     return bool(named) and named <= BOOTSTRAP_SOURCES
 
 
+# What a crawl window's ends are (a search record's and `/coverage`'s `crawl_dates_kind`, spec 04): fetch times
+# (UTC), a bootstrap source's Publish or Perish query dates (local wall time stored labelled UTC, so an end
+# can be a day off), or the corpus-wide window over both kinds
+CRAWL = "crawl"
+SCHOLAR_QUERY_DATES = "scholar_query_dates"
+MIXED = "mixed"
+
+
+def window_kind(sources: Iterable[str]) -> str:
+    """The kind of the crawl window over `sources`: one kind if they share it, else `mixed` (none: `crawl`)."""
+    kinds = {SCHOLAR_QUERY_DATES if s in BOOTSTRAP_SOURCES else CRAWL for s in sources}
+    return kinds.pop() if len(kinds) == 1 else MIXED if kinds else CRAWL
+
+
+def crawl_dates_kind(windows: Iterable[str], sources: Iterable[str], everything: str = "*") -> dict[str, str]:
+    """Per `crawl_dates` key (`windows`), its window's kind: `everything` (`*`, the corpus-wide window) over
+    every one of `sources`, any other key over that source alone. The one derivation a search record and
+    `/coverage` share (TASK-091)."""
+    named = list(sources)
+    return {k: window_kind(named if k == everything else [k]) for k in windows}
+
+
 # The venue string, RIS `T2` and BibTeX `booktitle` (spec 04 §Exports, task-004, which cites the sources):
 # the conference's full name, then the acronym it went by that year, and the year. Each venue lists its
 # (first year, acronym) eras in year order. A year before the first era has no name, and a record for it is

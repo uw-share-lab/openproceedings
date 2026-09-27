@@ -174,8 +174,9 @@ PRISMA's "duplicates removed" box, never added to openproceedings' dedup stateme
 - **Index check** (pre-pass M3): `POST /records` takes only `{q, mode}`, so a hot swap between the search and
   the save would freeze the query on another index. The panel compares the 201's `index_version` with the
   shown one; if they differ, it leads with a warning block (copy SV-8) naming both versions and the record's
-  own total (from the follow-up `GET`), before the link. Proposed for the API owner: an optional
-  `index_version` on `RecordRequest`, refused with 409 `API_INDEX_VERSION_UNAVAILABLE` like the export.
+  own total (from the follow-up `GET`), before the link. Built since (TASK-091): the save can send the shown
+  `index_version` on `RecordRequest`, and a moved index is then 409 `API_INDEX_VERSION_UNAVAILABLE` with
+  nothing saved, like the export (copy EX-E4's wording applies).
 - After the 201, the panel calls `GET /records/{id}` (one replay, charged the export weight) for the status
   and the fields the methods text needs. If that call is refused (429/503), the panel keeps the link and
   says "The record is saved. Its methods text is on the record page." (Open record page ▸).
@@ -384,10 +385,10 @@ Copy deck §Export, §Save, §Record, §Paper.
 | status counts for the warning | `facets.status`, `/parse` `filters.status` | exists |
 | record status, changes, counts, diff | `RecordResponse.replay`, `/records/{id}/diff` | exists |
 | citability, crawl kind, sources, dedup | `SearchRecord.identification_citable`, `crawl_dates_kind`, `sources`, `dedup` | exists |
-| **identified total** and **unclassified total** for the methods text and the record's Records line | none: `total + excluded.total` and `excluded.track.unknown + excluded.status.unknown` | **gap, blocking TASK-044 AC#1** (pre-pass S1): the UI would add numbers, which ux-design forbids. Proposed additive read-time fields on `RecordResponse` (and `SearchResponse.excluded`): `identified_total`, `unclassified_total`. The main session files it for the API owner; TASK-044 depends on it. Everywhere else the page itemises unclassified per map |
+| **identified total** and **unclassified total** for the methods text and the record's Records line | `record.identified_total`, `record.unclassified_total` (and the replay's, and `SearchResponse`'s top-level pair) | **exists** (TASK-090; pre-pass S1): derived server-side, equal to what `op search` prints, so the UI adds no numbers. Everywhere else the page itemises unclassified per map |
 | the default clauses and the user's limit clauses as text | `/parse(canonical)` `defaults` + `filters[*].span` sliced from `canonical` | **works only while `replay.query_version` equals the record's**; otherwise the page cites `canonical` and says the clauses couldn't be separated. Proposed: store `default_clauses` and `limit_clauses` in the record body (v3), or return them at read |
-| a record readable without a replay (when the replay is refused for load) | none: `GET /records/{id}` always replays | **gap** (pre-pass S4): proposed `?replay=false` (additive), so the page renders the recorded fields and methods text with "Replay: waiting" during a 429 or `API_BUSY`; the main session files it for the API owner; until then RC-16 |
-| the index the save ran on vs the one shown | 201 `index_version` | exists; the optional `RecordRequest.index_version` pin is proposed (pre-pass M3) |
+| a record readable without a replay (when the replay is refused for load) | `GET /records/{id}?replay=false` (`replay: null`, one token, answered during `API_BUSY`) | **exists** (TASK-091; pre-pass S4; decision-012): the page renders the recorded fields and methods text with "Replay: waiting" during a 429 or `API_BUSY` |
+| the index the save ran on vs the one shown | 201 `index_version`; `RecordRequest.index_version` | exists; the save sends the shown index_version and a moved index is 409 `API_INDEX_VERSION_UNAVAILABLE` with nothing saved (TASK-091; pre-pass M3) |
 
 ## Heuristic pass
 [Pre-pass](2026-09-27-heuristic-prepass.md) Musts M3 (save on a swapped index) and M4 (exclusions on re-run)
@@ -400,6 +401,6 @@ confirmation names permanence and publicity).
    spec's form in M3b; TASK-047 asks reviewers what they paste into.
 2. The export menu's status warning lists counts from `facets.status`; if TASK-047 shows reviewers want one
    number, that needs an API field, not a client sum.
-3. A record page during `API_BUSY` or a 429 shows nothing of the record, because the record comes only with a
-   replay. An additive `?replay=false` (or a separate replay resource) would let the page show the recorded
-   fields and methods text while the replay waits. Proposed in TASK-044's notes for the API owner.
+3. ~~A record page during `API_BUSY` or a 429 shows nothing of the record, because the record comes only with
+   a replay.~~ Resolved by TASK-091: `GET /records/{id}?replay=false` (decision-012) gives the recorded fields
+   and methods text while the replay waits.

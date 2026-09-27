@@ -15,6 +15,9 @@ are flattened, `NOT NOT x` is `x`, an OR of one field's filters is one filter). 
   one would leave the other ANDed in, so the edit would silently change nothing;
 - **none at the top level but some nested** under an OR or NOT: not toggleable, `mixed_fields` when a
   top-level OR joins filters of several fields (`track:workshop OR venue:ICLR`), else `nested`;
+- for these three reasons, `blocking_spans` (TASK-091) are the clauses behind the reason, so the UI can point
+  at them: the span in `q` of each written top-level conjunct (AND groups flattened, as `_written`) that holds
+  a filter of the field anywhere, in order. Empty for every other clause;
 - **none at all**: the zero-width span `(len(q), len(q))`, the spot a default is inserted at, with the
   default's values (track, status) or every value the field can take (venue: the vocabulary; year: one
   range `1000..9999`). A click writes it out as `(q) AND field:(…)`.
@@ -68,6 +71,8 @@ ClauseReason = Literal[
     "multiple_clauses", "nested", "mixed_fields", "negated", "too_long", "too_deep", "unparsable_edit"
 ]
 CLAUSE_REASONS: tuple[ClauseReason, ...] = get_args(ClauseReason)
+# the reasons that name clauses in `q` a click can't rewrite (`blocking_spans`); the others are about the edit
+BLOCKING: frozenset[ClauseReason] = frozenset({"multiple_clauses", "nested", "mixed_fields"})
 VOCABULARY: dict[FilterField, tuple[str, ...]] = {
     "venue": tuple(sorted(VENUES.values())),
     "track": tuple(sorted(TRACKS)),
@@ -91,8 +96,15 @@ class _Clause(BaseModel):
     )
     toggleable: bool = Field(description="A facet or include click may rewrite this clause.")
     reason: ClauseReason | None = Field(description="Why it can't be, exactly when `toggleable` is false.")
+    blocking_spans: list[Span] = Field(
+        description="For `reason` `multiple_clauses`, `nested` or `mixed_fields`: the clauses behind it, as "
+        "half-open code-point ranges in `q`, in order: each top-level conjunct (AND groups flattened) that "
+        "holds a filter of this field, so the UI can point at them. Empty for any other clause (TASK-091)."
+    )
 
     def _check(self, admitted: object) -> None:
+        if self.blocking_spans and self.reason not in BLOCKING:
+            raise ValueError("only a multiple_clauses, nested or mixed_fields clause has blocking spans")
         if (self.span is None) != (admitted is None):
             raise ValueError("a clause has both a span and its values, or neither")
         if self.toggleable == (self.reason is not None):
@@ -277,6 +289,11 @@ def _report(
     return None
 
 
+def _blocking(written: list[Node], field: FilterField) -> list[Span]:
+    """The spans in `q` of the written top-level conjuncts holding a filter of `field` (module docstring)."""
+    return sorted({c.span for c in written if _filters(c, field)})
+
+
 def filter_clauses(q: str, result: ParseResult) -> ParsedFilters | None:
     """Each filter field's clause in `q`, as `parse(q, mode)` read it (`result`); None when it has errors."""
     if result.ast is None:
@@ -286,6 +303,7 @@ def filter_clauses(q: str, result: ParseResult) -> ParsedFilters | None:
     found = {field: _report(q, result.mode, typed, canon, field) for field in FILTER_FIELDS}
     wraps = _check_wraps(q, result.mode, tuple(f for f, r in found.items() if r is None))
     end = (len(q), len(q))
+    written = _written(result.ast)
     reports: dict[str, ParsedClause | ParsedYearClause] = {}
     for field, report in found.items():
         # No clause at all: the zero-width span at the end, where a click writes it out as `(q) AND field:(…)`,
@@ -298,6 +316,7 @@ def filter_clauses(q: str, result: ParseResult) -> ParsedFilters | None:
             "span": span,
             "toggleable": reason is None,
             "reason": reason,
+            "blocking_spans": _blocking(written, field) if reason in BLOCKING else [],
         }
         if field == "year":
             ranges = None if values is None else [v for v in values if isinstance(v, YearRange)]
