@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SearchWorkspace } from "@/components/search/search-workspace";
+import { SearchView } from "@/components/search/search-view";
 import { describeNotice, fromURL, searchHref } from "@/lib/search-state";
 
 // The search workspace (spec 05 §`/search` layout). The URL is the whole search (guarantee 3): it is read here,
-// on the server, and the workspace edits it only through the reducer. Results, sidebar and banner arrive in
-// TASK-042.
+// on the server, and the workspace edits it only through the reducer.
 export const metadata: Metadata = { title: "Search" };
 
 export default async function SearchPage({ searchParams }: PageProps<"/search">) {
@@ -47,7 +46,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
           </p>
         </div>
       )}
-      <SearchWorkspace state={state} />
+      <SearchView state={state} />
     </section>
   );
 }

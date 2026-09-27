@@ -38,8 +38,9 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   (CSP and the other headers, set by `next.config.ts`), `src/components/` (`site-nav.tsx`, `theme-picker.tsx`,
   `theme-provider.tsx`, `providers.tsx` (API client + TanStack Query), `search/` (the workspace)), `src/editor/`
   (CodeMirror 6 + a token-only Lezer grammar whose tables and golden are generated from `lexer.py`;
-  `codemirror-lezer` skill). The home and search pages have the editor (TASK-041); the others are placeholders
-  until TASK-042–045. Tests are Vitest + Testing Library
+  `codemirror-lezer` skill). The home and search pages have the editor (TASK-041); the search page also has the results, banner,
+  sidebar and paging, and the paper page the full record (TASK-042); the others are placeholders until
+  TASK-043–045. Tests are Vitest + Testing Library
   (`src/**/*.test.{ts,tsx}`); `npm test --workspace frontend`.
 - `docs/specs` · `docs/{plans,results,design,usability,research}` (created as needed).
 - `backlog/`: Backlog.md, CLI only.

@@ -33,9 +33,11 @@ description: The openproceedings Next.js standard — App Router layout, output 
 | `src/lib/search-state.ts` | the URL↔state reducer (pure, unit-tested) |
 | `src/editor/`, `src/builder/` | CodeMirror (`codemirror-lezer`, built in TASK-041) and concept-group builder |
 | `src/components/providers.tsx` | `Providers` (in the root layout): the typed API client (`useApi()`) and TanStack Query (`retry: false`, no refetch on focus) |
-| `src/components/search/` | the `/search` workspace (TASK-041: editor, diagnostics row, "How we read your query", expansions row, empty state; TASK-042 adds results) |
+| `src/components/search/` | the `/search` workspace (TASK-041: editor, diagnostics row, "How we read your query", expansions row, empty state; TASK-042: `search-view.tsx` (runs `/search`, draws the results in `SearchWorkspace`'s `results` slot, `workspace-slot.ts`), `use-search.ts`, `controls.ts` (`blockOf`, `parseViewOf`), `exclusions.ts` (banner and Limits line, pure), `exclusion-banner.tsx`, `filter-sidebar.tsx` (incl. the year control on the TASK-092 actions), `hit-item.tsx`, `search-states.tsx`) |
+| `src/components/paper/` | `/paper/[id]` (TASK-042): `GET /papers/{id}?q=&mode=`, key `["paper", id, q, mode]`; a refused `q` falls back to the paper alone |
+| `src/components/{highlighted,paper-badges,paper-links,coded}.tsx`, `src/lib/excerpt.ts`, `src/api/outcome.ts` | shared by results and the paper page: `<mark>` at API spans, badges, links, backticked reducer messages as code; span conversion + excerpt window; every GET answer as data (`Outcome`) |
 | `src/api/hooks.ts` | `useMeta()` (`["meta"]`), `useCoverage()` (`["coverage"]`) |
-| `src/test/api-stub.tsx` | tests only: a stubbed fetch behind the real client, `renderWithApi`, fake-timer `pass(ms)`, jsdom layout polyfill |
+| `src/test/api-stub.tsx` | tests only: a stubbed fetch behind the real client (each `Call` has `path`, `query`, `body`), `renderWithApi`, fake-timer `pass(ms)`, jsdom layout polyfill |
 | `e2e/` | Playwright (`e2e-tester`) |
 
 `/help/syntax` is rendered from the 02 golden table data, not hand-written prose, so it cannot drift.
@@ -87,7 +89,7 @@ eslint error.
 
 ## TanStack Query
 Keys: `["meta"]` (long `staleTime`), `["parse", q, mode]`, `["search", q, mode, sort, page]`,
-`["paper", id]`, `["record", id]`. `placeholderData: keepPreviousData` for search so the list doesn't
+`["paper", id, q, mode]`, `["record", id]`. `placeholderData: keepPreviousData` for search so the list doesn't
 flash. A 422 is data, not an exception: render its `diagnostics` (spec 04 error shape). `openapi-fetch`'s
 `data` type is not `Schemas[...]` (its `Readable<>` widens tuple spans to `number[]`): type a response with
 `MethodResponse<Api, method, path>` and validate spans where they are used, never cast.
