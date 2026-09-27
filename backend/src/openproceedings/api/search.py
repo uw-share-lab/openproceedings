@@ -34,6 +34,7 @@ from openproceedings.api.models import (
 )
 from openproceedings.api.openapi import BUSY
 from openproceedings.ingest.record import Urls
+from openproceedings.query.clauses import filter_clauses
 from openproceedings.query.parser import Mode
 from openproceedings.search import Hit as Found
 from openproceedings.search import expansions_json, run
@@ -59,6 +60,7 @@ def parse_query(request: Request, engine: EngineDep, body: ParseRequest) -> Pars
         warnings=result.warnings,
         errors=result.errors,
         translations=result.translations,
+        filters=filter_clauses(body.q, result),
     )
 
 

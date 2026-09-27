@@ -37,13 +37,14 @@ and ignoring `trust`.", with `""` marking an empty value). The notice box ends w
 link** (the canonical URL of the state actually shown); the page never redirects on its own.
 
 Facet and include clicks rewrite `q` from the server's `/parse` report of that field's top-level clause
-(field, polarity, code-point span, values, and the `(q, mode)` it was parsed from). **Pending TASK-078:**
-`/parse` doesn't report these clauses yet, so the reducer takes a `FilterClause` it declares itself
-(`search-state.ts`) until the generated schema has one. **"Top-level" is judged
+(field, polarity, code-point span, values, and the `(q, mode)` it was parsed from): `/parse`'s `filters`
+(02 §Filter clauses, decision-011). `clauseFromParse(filters[field], q, mode)` turns the generated
+`ParsedClause` into the reducer's `FilterClause` (a positive, toggleable clause with a span) or `clause: null`
+with the server's `reason`, which the action carries so the refusal says why. **"Top-level" is judged
 on the flattened canonical tree**, where parenthesised AND groups are flattened: in
 `track:workshop "large language model" AND (venue:NeurIPS track:workshop)` both `track:` clauses are
 top-level. A field with more than one such clause, or with its only clause inside an OR or NOT, has no
-editable clause: `/parse` says so (TASK-078), and splicing over one clause would leave the other ANDed in,
+editable clause: `/parse` says so (`multiple_clauses`, `nested`, `mixed_fields`), and splicing over one clause would leave the other ANDed in,
 so the edit would silently change nothing. The rewritten clause is `field:v` for one value and
 `field:(v1 OR v2 …)` for several. An applied default is written out as `(q) AND field:(…)`; a `q` ending in
 an odd run of backslashes is refused, because the last backslash would escape the `)` (spec 02). The wrap
@@ -52,12 +53,15 @@ goldens are `frontend/src/lib/wrap-golden.json`, checked against the server pars
 
 The reducer refuses, with a `SearchStateError` whose `code` the UI branches on and whose message follows
 the ux-writing pattern (what happened — why. How to fix): `STALE_CLAUSE` (parsed from another `q` or
-`mode`), `WRONG_FIELD`, `NEGATED_CLAUSE`, `NO_EDITABLE_CLAUSE` (the field has no single editable clause),
-`BAD_VALUE` (not a bare identifier), `LAST_VALUE` (removing it would exclude every record), `BAD_SPAN`,
-`EMPTY_QUERY`, `TRAILING_ESCAPE`, `TOO_LONG` (the new `q` would pass `MAX_QUERY_LENGTH`, 2,000 code points,
-which mirrors the API parser's cap until `/meta` serves it; a wrapped `q` that fits but whose canonical form
-is over the cap, decision-008, is refused only by the server: `/parse` reporting such a field as not
-toggleable is pending TASK-078), `ALREADY_INCLUDED` and `BAD_PAGE`. **Controls
+`mode`), `WRONG_FIELD`, `NEGATED_CLAUSE` (also for `/parse`'s reason `negated`), `NO_EDITABLE_CLAUSE` (the
+field has no single editable clause: `multiple_clauses`, `nested`, `mixed_fields`, `unparsable_edit`, or a
+reason this code doesn't know, each worded in the message), `BAD_VALUE` (not a bare identifier), `LAST_VALUE`
+(removing it would exclude every record), `BAD_SPAN`, `EMPTY_QUERY`, `TRAILING_ESCAPE`, `TOO_LONG` (the new
+`q` would pass `MAX_QUERY_LENGTH`, 2,000 code points, which mirrors the API parser's cap until `/meta` serves
+it; or `/parse` reported `too_long`: the widest edit's canonical form would be over the cap, decision-008),
+`TOO_DEEP` (`/parse` reported `too_deep`: the wrap would nest `q` past `MAX_QUERY_DEPTH`, 64),
+`ALREADY_INCLUDED` and `BAD_PAGE`. The golden cases in `frontend/src/lib/filter-clause-golden.json` pin
+`/parse`'s report and the reducer's result together. **Controls
 are disabled with the reason, not refused after the click:** a facet toggle or include button calls
 `whyBlocked(state, action)` while rendering and, when it returns an error, renders disabled with the
 message as its description. `STALE_CLAUSE` is the usual case, while `/parse` catches up with a new `q`.

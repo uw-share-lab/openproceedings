@@ -19,7 +19,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 - `backend/`: the uv workspace member, Python package `openproceedings` (`cli.py` → `op`, `search.py` (one
   ranked search, which `op search` and the API search route both run), `export.py`, `logs.py`,
   `diagnostics.py`, `vocab.py`, `storage.py`, `records.py` (search records: `ids_hash`, the append-only store, replay), `coverage.py` (the snapshot manifest's venue × year × track × status breakdown), `timestamps.py` (the API's one UTC `Z` timestamp form), `query/` (`normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`,
-  `ast.py`, `canonical.py`, `defaults.py`, `compat.py`), `engine/` (`protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py`, `exclusions.py`, `highlight.py`, `parity.py`), `ingest/`
+  `ast.py`, `canonical.py`, `defaults.py`, `clauses.py` (each filter field's clause for facet clicks), `compat.py`), `engine/` (`protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py`, `exclusions.py`, `highlight.py`, `parity.py`), `ingest/`
   (`record.py`, `classify.py`, `urls.py`, `volumes.py`, `ris.py`, `dedup.py`, `snapshot.py`), `api/` (`app.py`
   `create_app`, `config.py`, `state.py` (the served index and `pinned`, the one loader of
   other index_versions), `deps.py`, `errors.py`, `middleware.py`, `models.py` (the response

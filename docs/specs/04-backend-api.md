@@ -62,7 +62,7 @@ reviews without the UI.
     on an enum in neither). **Open** — a new value may appear within v1, and a client handles one it doesn't
     know (the schema says "Open set"): error codes, diagnostic codes (a stored record's are plain strings),
     `venue`, `track`, `status`, `presentation`, a provenance claim's `source` and `field`, the text and filter
-    field names, and `ChangedInput.input`. **Closed** — a new value is a breaking change: `mode`, `sort`, the
+    field names, `ChangedInput.input`, and a `/parse` filter clause's `reason` (decision-011). **Closed** — a new value is a breaking change: `mode`, `sort`, the
     export `format`, the replay `status`, `ChangedInput.kind`, a wildcard's `op`, `include`.
   - **`ErrorBody.code` is its own schema, `ErrorCode`**: exactly the registry's codes that have an HTTP status
     (`PARSE_*`, `FIELD_*`, `WILDCARD_*`, the `API_*` ones but the log-only `API_REPLAY_MISMATCH`), derived from
@@ -85,7 +85,7 @@ reviews without the UI.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side). Called as you type, debounced. |
+| `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side), plus `filters`: each filter field's top-level clause (span, values, `toggleable`, `reason`) for facet clicks (02 §Filter clauses; decision-011). Called as you type, debounced. |
 | `GET` | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | `GET` | `/papers/{id}` | The full record, provenance included; with an optional `q` (and `mode`), whether that query matches it and its `highlights`, exactly as `/search` gives them for that paper (task-087) |
 | `GET` | `/export` | `format=ris\|csv\|bibtex\|jsonl` and either `q` (with `mode` and an optional `index_version`) or `record_id` (with `mode` at most `native`) → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; with `record_id`, exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if that index is gone, 409 `API_RECORD_MISMATCH` if its replay is a `mismatch`) |
@@ -651,6 +651,12 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     `/export`, `POST /records`). **Correction to TASK-035 AC #2** (the task is completed, so the CLI can't
     edit it): the AC says "Parse errors are 422", but that holds only for endpoints that run the query.
     `/parse` reports them in a 200 (task-035 review, Should 5).
+  - `POST /parse`'s `filters` (TASK-078, decision-011) is `query.clauses.filter_clauses(q, result)`, the one
+    call the route adds: `{venue, year, track, status}`, each `{field, negated, span, toggleable, reason}`
+    plus `values` (venue, track, status) or `ranges` (year), every key always sent (a null included); null
+    exactly when `errors` is non-empty. The rules (the flattened canonical tree, the zero-width span of a
+    default or unrestricted field, the reasons, the widest-edit cap check) are 02 §Filter clauses. Goldens:
+    `frontend/src/lib/filter-clause-golden.json` (`tests/contract/test_parse_filters.py`).
   - `GET /papers/{id}` answers `{index_version, tokenizer_version, query_version, paper}`, where `paper` is
     the spec 01 `PaperRecord` (provenance and `content_hash` included). The served index decides whether the
     id exists. Otherwise the answer is 404 `API_PAPER_NOT_FOUND`, whose message never repeats the id. An id

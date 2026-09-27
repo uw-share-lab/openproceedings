@@ -674,8 +674,9 @@ export interface components {
         };
         /**
          * ParseResponse
-         * @description 02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints). A query
-         *     with errors is still a 200 here: `errors` holds them, and every Optional is null.
+         * @description 02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus
+         *     `filters` (`query.clauses.filter_clauses`, TASK-078). A query with errors is still a 200 here: `errors`
+         *     holds them, and every Optional is null.
          */
         ParseResponse: {
             /** Ast */
@@ -690,6 +691,8 @@ export interface components {
             effective_ast: (components["schemas"]["Term"] | components["schemas"]["Wildcard"] | components["schemas"]["Phrase"] | components["schemas"]["Near"] | components["schemas"]["Filter"] | components["schemas"]["Not"] | components["schemas"]["And"] | components["schemas"]["Or"]) | null;
             /** Errors */
             errors: components["schemas"]["Diagnostic"][];
+            /** @description Each filter field's top-level clause, for facet and include clicks (spec 02 §Filter clauses; decision-011): its code-point span in `q` and the values it admits, or a zero-width span at the end for an applied default or an unrestricted field; `toggleable` false with a `reason` when a click can't rewrite it. Null exactly when `errors` is non-empty. */
+            filters: components["schemas"]["ParsedFilters"] | null;
             /** Identification Query */
             identification_query: string | null;
             /** Index Version */
@@ -707,6 +710,96 @@ export interface components {
             translations: components["schemas"]["Diagnostic"][];
             /** Warnings */
             warnings: components["schemas"]["Diagnostic"][];
+        };
+        /**
+         * ParsedClause
+         * @description A `venue`, `track` or `status` clause.
+         */
+        ParsedClause: {
+            /**
+             * Field
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @enum {string}
+             */
+            field: "venue" | "year" | "track" | "status";
+            /**
+             * Negated
+             * @description The clause is `NOT field:…`. A negated clause is never toggleable.
+             */
+            negated: boolean;
+            /**
+             * Reason
+             * @description Why it can't be, exactly when `toggleable` is false.
+             */
+            reason: ("multiple_clauses" | "nested" | "mixed_fields" | "negated" | "too_long" | "too_deep" | "unparsable_edit") | null;
+            /**
+             * Span
+             * @description Half-open code-point range of the clause in `q`. Zero-width at the end, `[len(q), len(q)]`, when the field has no clause of its own (an applied default, or no restriction): a click writes it out as `(q) AND field:(…)`. Null when the field has no single top-level clause (`reason` says why).
+             */
+            span: [
+                number,
+                number
+            ] | null;
+            /**
+             * Toggleable
+             * @description A facet or include click may rewrite this clause.
+             */
+            toggleable: boolean;
+            /**
+             * Values
+             * @description The values the clause admits, sorted: an applied default's, or every value for an unrestricted field. Null exactly when `span` is.
+             */
+            values: string[] | null;
+        };
+        /**
+         * ParsedFilters
+         * @description Every filter field's clause (`POST /parse` `filters`).
+         */
+        ParsedFilters: {
+            status: components["schemas"]["ParsedClause"];
+            track: components["schemas"]["ParsedClause"];
+            venue: components["schemas"]["ParsedClause"];
+            year: components["schemas"]["ParsedYearClause"];
+        };
+        /**
+         * ParsedYearClause
+         * @description The `year` clause. Years are ranges, not a value list.
+         */
+        ParsedYearClause: {
+            /**
+             * Field
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @enum {string}
+             */
+            field: "venue" | "year" | "track" | "status";
+            /**
+             * Negated
+             * @description The clause is `NOT field:…`. A negated clause is never toggleable.
+             */
+            negated: boolean;
+            /**
+             * Ranges
+             * @description The year ranges the clause admits, sorted and merged; `1000..9999` for no restriction. Null exactly when `span` is.
+             */
+            ranges: components["schemas"]["YearRange"][] | null;
+            /**
+             * Reason
+             * @description Why it can't be, exactly when `toggleable` is false.
+             */
+            reason: ("multiple_clauses" | "nested" | "mixed_fields" | "negated" | "too_long" | "too_deep" | "unparsable_edit") | null;
+            /**
+             * Span
+             * @description Half-open code-point range of the clause in `q`. Zero-width at the end, `[len(q), len(q)]`, when the field has no clause of its own (an applied default, or no restriction): a click writes it out as `(q) AND field:(…)`. Null when the field has no single top-level clause (`reason` says why).
+             */
+            span: [
+                number,
+                number
+            ] | null;
+            /**
+             * Toggleable
+             * @description A facet or include click may rewrite this clause.
+             */
+            toggleable: boolean;
         };
         /**
          * Phrase
