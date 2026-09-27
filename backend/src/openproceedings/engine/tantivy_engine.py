@@ -44,7 +44,9 @@ class TantivyEngine:
     immutable index, and each touched without a lock under two rules: an entry is read with one `.get()`
     (never `in` then `[key]`, since another thread may clear the memo in between), and an entry is stored
     only once it is complete, never mutated after. A clear or a lost race only costs a recomputation, which
-    gives the same value, so concurrent searches never see each other's partial work (guarantee 4)."""
+    gives the same value, so concurrent searches never see each other's partial work (guarantee 4).
+    The design relies only on each single dict operation being atomic, which holds under the GIL and on
+    free-threaded builds (3.13t) alike; never iterate a memo, or check-then-act across two operations."""
 
     # each memo is cleared when it grows past its bound, so a long-running API never grows it without limit
     # (the check and the clear aren't atomic: racing threads may clear twice, or overshoot by a few entries)

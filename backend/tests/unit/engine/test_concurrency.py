@@ -12,10 +12,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from openproceedings.engine.exclusions import excluded
 from openproceedings.engine.index import build_index
 from openproceedings.engine.tantivy_engine import TantivyEngine
-from openproceedings.query.ast import Node
-from openproceedings.query.parser import parse
+from openproceedings.query.parser import ParseResult, parse
 
 from tests.unit.engine.test_compile import BUILT, CORPUS
 from tests.unit.engine.test_index import snapshot_of
@@ -42,9 +42,12 @@ ROUNDS = 12
 type Outcome = tuple[object, ...]
 
 
-def outcome(engine: TantivyEngine, ast: Node) -> Outcome:
-    """Everything a request reads from the engine: the set, pages with exact scores, every sort, facets and
-    the explain text (the memo's copy)."""
+def outcome(engine: TantivyEngine, parsed: ParseResult) -> Outcome:
+    """Everything a request reads from the engine: the set, pages with exact scores, every sort, facets,
+    the exclusion accounting and the explain text (the memo's copy)."""
+    ast = parsed.ast
+    assert ast is not None
+    total = len(engine.match_ids(ast))
     return (
         engine.match_ids(ast),
         engine.page(ast, limit=100),
@@ -52,6 +55,7 @@ def outcome(engine: TantivyEngine, ast: Node) -> Outcome:
         engine.ranked(ast, "title"),
         engine.facets(ast),
         engine.explain(ast),
+        excluded(engine, parsed, total).to_json(),
     )
 
 
@@ -91,13 +95,16 @@ class Yielding(dict[Any, Any]):
 
 
 @pytest.fixture
-def engine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TantivyEngine:
+def index_path(tmp_path: Path) -> Path:
+    return build_index(snapshot_of(CORPUS, tmp_path / "snap"), tmp_path / "indexes", BUILT).path
+
+
+@pytest.fixture
+def engine(index_path: Path, monkeypatch: pytest.MonkeyPatch) -> TantivyEngine:
     # bound 0: every miss clears the memo, so reads race clears as often as they can
     for bound in ("MAX_COMPILED", "MAX_VERIFIED", "MAX_EXPANDED"):
         monkeypatch.setattr(TantivyEngine, bound, 0)
-    engine = TantivyEngine(
-        build_index(snapshot_of(CORPUS, tmp_path / "snap"), tmp_path / "indexes", BUILT).path
-    )
+    engine = TantivyEngine(index_path)
     engine.compiled, engine.verified, engine.expanded = Yielding(), Yielding(), Yielding()
     return engine
 
@@ -114,14 +121,16 @@ def switch_often() -> Iterator[None]:
 
 
 @pytest.mark.usefixtures("switch_often")
-def test_concurrent_searches_with_clearing_memos_equal_a_serial_run(engine: TantivyEngine) -> None:
-    asts: list[Node] = []
-    for q in QUERIES:
-        ast = parse(q).ast
-        assert ast is not None, q
-        asts.append(ast)
-    serial = [outcome(engine, ast) for ast in asts]
-    assert serial == [outcome(engine, ast) for ast in asts]  # deterministic before any thread runs
+def test_concurrent_searches_with_clearing_memos_equal_a_serial_run(
+    engine: TantivyEngine, index_path: Path
+) -> None:
+    asts = [parse(q) for q in QUERIES]
+    # the reference comes from a separate engine with plain, default-bounded memos, so a memo bug that is
+    # wrong the same way every time can't make the threaded results and their reference agree
+    fresh = TantivyEngine(index_path)
+    fresh.MAX_COMPILED = fresh.MAX_VERIFIED = fresh.MAX_EXPANDED = 10_000
+    serial = [outcome(fresh, ast) for ast in asts]
+    assert serial == [outcome(engine, ast) for ast in asts]  # the racing engine agrees before any thread runs
 
     start = threading.Barrier(THREADS)
     errors: list[BaseException] = []
