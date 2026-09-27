@@ -55,7 +55,11 @@ Positions are mandatory on `title`/`abstract` (phrases, NEAR, highlights). Any c
    match the manifest, so the file checked is the file read) in chunks of 4,096, never all loaded at once.
    `normalize()` is the whole cost, so once a first chunk holds at least 2,000 records a process pool
    shares it (results come back in order); then add documents through a one-thread writer. Commit (only
-   after the last record, so a refusal at the end leaves nothing), then wait for merges.
+   after the last record, so a refusal at the end leaves nothing), then wait for merges. A build that fails
+   rolls its writer back and waits for its merge threads (dropping Tantivy's lock) before it removes the
+   staging directory, since the failing frame's traceback keeps the writer alive and Tantivy could rewrite
+   `.tantivy-meta.lock` behind `rmtree`; a directory that still survives is a WARNING
+   (`index_build_tmp_left`), and the next build's sweep removes it (`engine/index.py` `_release`).
 4. Check the doc count. Write a manifest (`index_version`, snapshot name and hash, `TOKENIZER_VERSION`,
    `SCHEMA_VERSION`, ranking params, tantivy-py version, doc count, build time and ms, and the sha256 of
    every index file).

@@ -5,13 +5,24 @@ ids, scores, `total` and `excluded` are the same for the same query and `index_v
 for the disjunctive facets and each hit's highlights; the CLI, which prints neither, doesn't pay for them.
 
 Order of work, on one engine: every wildcard is expanded first (the 200-term cap refuses a query before
-anything is compiled), then one collection of the match set gives `total` and the page, then exclusion
-accounting reuses that `total`, then the page's display records are read.
+anything is compiled), then the effective tree is compiled, so any cold position-verified clause is checked
+here, in the calling thread, holding at most one verification slot (task-088). When facets are asked for,
+their aggregation (one collection of the query without its top-level filters, `TantivyEngine.facets`) then
+runs on a worker thread while the caller collects the page, reads its display records and highlights it:
+Tantivy releases the GIL while it collects, so the two collections overlap. The facet tree's verified
+clauses are the effective tree's, just checked, so the worker reads them from the engine's memo. Then
+exclusion accounting reuses `total` and the facet memo. The result is the sequential one, field for field
+(`tests/unit/test_search_overlap.py`); only wall time changes, not CPU time.
 """
 
 from __future__ import annotations
 
+import atexit
+import contextvars
+import os
+import threading
 from collections.abc import Mapping
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
@@ -84,20 +95,38 @@ def run(
     if ast is None:
         raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "a search needs a query that parses.")
     expansions = expanded(engine, ast)
-    total, page = engine.page(ast, sort=sort, offset=offset, limit=limit)  # one collection: ids and scores
-    gone = excluded(engine, parsed, total)
-    shown = engine.display([i for i, _score in page])
-    lit = Highlighter(ast, expansions) if highlight else None  # one per page: the query's work done once
-    hits = tuple(
-        Hit(
-            id=i,
-            score=score,
-            record=shown[i],
-            highlights=lit(Shown.of(shown[i])) if lit else None,
+    faceting: Future[dict[str, dict[str, int]]] | None = None
+    if facets:
+        engine.check_page(sort, offset, limit)  # a bad argument is refused before any work, as before
+        # compiled first, here: a cold verified clause takes its slot in this thread, and the worker's facet
+        # tree (the same clauses, less top-level filters) then finds each one verified
+        engine.compile(ast)
+        faceting = _submit(engine, ast)
+    try:
+        # one collection: ids and scores
+        total, page = engine.page(ast, sort=sort, offset=offset, limit=limit)
+        shown = engine.display([i for i, _score in page])
+        lit = Highlighter(ast, expansions) if highlight else None  # one per page: the query's work done once
+        hits = tuple(
+            Hit(
+                id=i,
+                score=score,
+                record=shown[i],
+                highlights=lit(Shown.of(shown[i])) if lit else None,
+            )
+            for i, score in page
         )
-        for i, score in page
-    )
-    return Search(total, hits, gone, expansions, engine.facets(ast) if facets else None)
+    except BaseException:
+        if faceting is not None:
+            faceting.cancel()  # not started yet: never run; running: its result (or error) is dropped
+        raise  # the caller's error first, as when facets ran after the page
+    counted: dict[str, dict[str, int]] | None = None
+    if faceting is not None:
+        counted = faceting.result()  # the worker's error, re-raised as it was raised
+    elif facets:
+        counted = engine.facets(ast)  # no worker (the pool is shutting down): counted here instead
+    gone = excluded(engine, parsed, total)
+    return Search(total, hits, gone, expansions, counted)
 
 
 def expanded(engine: TantivyEngine, ast: Node) -> Expansions:
@@ -123,3 +152,43 @@ def _located(engine: TantivyEngine, ast: Node, error: EngineInputError) -> Engin
                 found.append(Diagnostic(code=e.code, message=e.message, span=w.span))
     error.diagnostics = tuple(found)  # the same exception and type: the CLI logs it as before (spec 08)
     return error
+
+
+# The facet workers (task-088): the aggregation is Tantivy's collection (the GIL released) plus a few ms of
+# Python, so more workers than CPUs only queue. Started on first use, forgotten in a forked child (its threads
+# don't survive the fork, and the lock may have been held when it happened), and shut down at interpreter exit.
+_POOL: ThreadPoolExecutor | None = None
+_POOL_LOCK = threading.Lock()
+
+
+def _submit(engine: TantivyEngine, ast: Node) -> Future[dict[str, dict[str, int]]] | None:
+    """`engine.facets(ast)` started on a worker, in a copy of the caller's context (a request's log fields
+    follow it), or None if the pool is shutting down (`run` then counts them itself)."""
+    global _POOL
+    with _POOL_LOCK:
+        if _POOL is None:
+            _POOL = ThreadPoolExecutor(max(4, os.cpu_count() or 4), thread_name_prefix="op-facets")
+        pool = _POOL
+    try:
+        return pool.submit(contextvars.copy_context().run, engine.facets, ast)
+    except RuntimeError:  # shut down between the lock and the submit (interpreter exit, or `shutdown()`)
+        return None
+
+
+def shutdown() -> None:
+    """Stop the facet workers (waiting for any in flight); a later search starts new ones. Registered at exit."""
+    global _POOL
+    with _POOL_LOCK:
+        pool, _POOL = _POOL, None
+    if pool is not None:
+        pool.shutdown(wait=True)  # queued work runs too: a search waiting on it gets its counts
+
+
+def _forget_after_fork() -> None:
+    global _POOL, _POOL_LOCK
+    _POOL, _POOL_LOCK = None, threading.Lock()
+
+
+atexit.register(shutdown)
+if hasattr(os, "register_at_fork"):  # POSIX
+    os.register_at_fork(after_in_child=_forget_after_fork)

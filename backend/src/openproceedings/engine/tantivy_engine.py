@@ -92,8 +92,11 @@ class TantivyEngine:
     # Weights, in ids/terms (~60 bytes each as Python strings): a verified clause, its ids + 1; an expansion,
     # its terms + 1 (an over-cap count, 1); a compiled query, `Compiled.held` + 1 (the ids and terms inside its
     # Tantivy query, plus its explain lines); a base's facet combos, their number + 1. So ≲ 30 + 30 + 6 + a few MB per
-    # engine, and the API holds the served engine plus `pinned_indexes` more. A memo exceeds its budget only by
-    # what the computations in flight store (one entry per thread), never more: see `_trim`.
+    # engine, and the API holds the served engine plus `pinned_indexes` more. Every memo is checked before each
+    # entry is stored and charged right after (`verified` clause by clause, inside a compile: `_store_verified`),
+    # so it exceeds its budget by at most one entry per thread storing concurrently (each thread's check may
+    # predate the others' charges), never more; a single compile, however many verified clauses it has,
+    # overshoots `verified` by at most one clause's ids. See `_trim`.
     MAX_COMPILED_UNITS = 500_000
     MAX_VERIFIED_IDS = 500_000
     MAX_EXPANDED_TERMS = 100_000
@@ -167,12 +170,23 @@ class TantivyEngine:
         self, ast: Node, *, sort: str = "relevance", offset: int = 0, limit: int = 50
     ) -> tuple[int, list[tuple[str, float]]]:
         """`search`'s page with each hit's exact score, from one collection of the match set."""
-        if offset < 0 or limit < 0:
-            raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "offset and limit must be ≥ 0.")
+        self.check_page(sort, offset, limit)
         keyed = self.keyed(ast, sort)
         # top offset+limit of the full order: keys end in the unique id, so ties at a page boundary are exact
         top = heapq.nsmallest(offset + limit, keyed)
         return len(keyed), [(i, score) for _key, i, score in top[offset:]]
+
+    @staticmethod
+    def check_page(sort: str, offset: int = 0, limit: int = 0) -> None:
+        """Refuse a page's arguments as `page` does, before anything is compiled or collected (`search.run`
+        checks them before it starts the facet worker, so a bad argument is still refused first)."""
+        if offset < 0 or limit < 0:
+            raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "offset and limit must be ≥ 0.")
+        if sort not in SORTS:
+            hint = " (semantic ordering needs embeddings: task-059)" if sort == "semantic" else ""
+            raise EngineInputError(
+                DiagnosticCode.API_BAD_PARAM, f"sort must be one of {', '.join(SORTS)}{hint}."
+            )
 
     def ranked(self, ast: Node, sort: str = "relevance") -> list[tuple[str, float]]:
         """(Tests' whole-order view; searches use `page`.) Every match with its exact score, in `sort` order, ties always broken by id: `relevance` is
@@ -184,11 +198,7 @@ class TantivyEngine:
         """Every match as (sort key, id, score): ordering by the tuple orders by the key, then the id (unique,
         so the score after it never decides anything).
         For relevance the key is -score; year sorts ∓year; title the build-time title rank."""
-        if sort not in SORTS:
-            hint = " (semantic ordering needs embeddings: task-059)" if sort == "semantic" else ""
-            raise EngineInputError(
-                DiagnosticCode.API_BAD_PARAM, f"sort must be one of {', '.join(SORTS)}{hint}."
-            )
+        self.check_page(sort)
         hits = self.searcher.search(self.compile(ast).query, max(1, self.searcher.num_docs)).hits
         if not hits:
             return []
@@ -305,7 +315,6 @@ class TantivyEngine:
         hit = self.compiled.get(key)  # one read: the memo may be cleared by another thread at any time
         if hit is not None:
             return self._copy(hit)
-        self._trim("verified", self.verified, self.MAX_VERIFIED_IDS)
         self._trim("compiled", self.compiled, self.MAX_COMPILED_UNITS)
         compiled = Compiler(
             self.index.schema,
@@ -314,18 +323,26 @@ class TantivyEngine:
             self.verified,
             self.ranking["field_weights"],
             gate=self.verification_gate,
+            store=self._store_verified,
         ).compile(ast)
         self.compiled[key] = compiled
         self.charges["compiled"].append(compiled.held + 1)
-        if compiled.stored:
-            self.charges["verified"].append(compiled.stored)
         return self._copy(compiled)
+
+    def _store_verified(self, key: tuple[str, str], ids: list[str]) -> None:
+        """Store one newly verified clause, keeping `verified`'s budget clause by clause (trim, store, charge,
+        as every memo does per entry): a query with many verified clauses can't overshoot the budget by more
+        than its last clause's ids, however many it verifies (a clear mid-compile drops only the memo's
+        entries; this compile keeps its own ids in its query)."""
+        self._trim("verified", self.verified, self.MAX_VERIFIED_IDS)
+        self.verified[key] = ids
+        self.charges["verified"].append(len(ids) + 1)
 
     def _trim(self, name: str, memo: dict[Any, Any], budget: int) -> None:
         """Clear `memo` once the weights charged to it since its last clear pass `budget`.
 
         Lock-free, under task-080's rules, and every race errs towards clearing early, never towards holding
-        more than the budget plus what the compiles in flight store: a charge is one `list.append` (atomic, so
+        more than the budget plus the entries in flight (one per storing thread): a charge is one `list.append` (atomic, so
         concurrent charges are never lost, as `+=` on a counter can be), made after its entry is stored; a
         clear swaps in a new ledger *before* clearing the memo, so an entry stored in between is charged to the
         new ledger although the clear removes it (an over-count), and one stored after is charged normally. Two

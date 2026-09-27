@@ -64,12 +64,19 @@ The memos (`compiled`, `verified`, `expanded`, `faceted`) are bounded by what th
 by entry count (one verified clause can hold every id): `TantivyEngine.MAX_VERIFIED_IDS`, `MAX_EXPANDED_TERMS`,
 `MAX_COMPILED_UNITS` and `MAX_FACET_COMBOS` budget the ids/terms charged to each, and a memo is cleared once its append-only ledger
 (`charges`, summed incrementally; `_trim`) passes its budget — every race over-counts, never under
-(`tests/unit/engine/test_memo_budget.py`). They are
+(`tests/unit/engine/test_memo_budget.py`). Every entry is checked, stored and charged on its own, `verified`
+clause by clause inside a compile (`Compiler(store=engine._store_verified)`), never once per compile: so one
+query of many verified clauses overshoots by at most one clause, and a compile refused partway (503
+`API_BUSY` on a later clause) has already charged every clause it stored. They are
 shared by the API's thread pool with no lock (task-080): read an entry with one `.get()`, never `in` then
 `[key]` (another thread may clear the memo between them), and store an entry only once it is complete. Every
 value is a pure function of its key and the immutable index, so a clear or a lost race only recomputes the
 same value (`tests/unit/engine/test_concurrency.py`). Only single dict operations are assumed atomic (true under
-the GIL and on free-threaded 3.13t), so never iterate a memo or check-then-act across two operations. Candidates hold each distinct item once, and an item implied by a narrower one
+the GIL and on free-threaded 3.13t), so never iterate a memo or check-then-act across two operations.
+`search.run` counts facets on a worker thread (`_pool()`, overlapping the page's collection: task-088) only
+after compiling the effective tree in the caller, so a cold verified clause takes its one verification slot
+there and the worker's filter-free tree finds it memoised; start no engine work on another thread before
+the tree it shares clauses with is compiled, or one request can be refused (API_BUSY) against itself. Candidates hold each distinct item once, and an item implied by a narrower one
 (`trust` implies `trust*`) is dropped, so no term is scored twice; that is how a verified clause scores
 (field-weighted-bm25 skill). Spec 03 records the budget exception for verified clauses. Checked: the 44 golden queries of the 200-record fixture, a row per table line against
 ReferenceEngine, and (locally) the ten Trust-Evals protocol strings on the real corpus, identical sets.

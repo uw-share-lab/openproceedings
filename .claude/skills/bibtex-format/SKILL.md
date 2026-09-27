@@ -72,6 +72,11 @@ text screeners see.
 - The `@type{key,` pattern must never appear inside a value. refaudit finds entries with a regex over
   the whole file, not only at line starts. Write `@` in values as `{@}`.
 - Collapse newlines inside values to spaces (refaudit normalises whitespace anyway).
+- `export._braced` runs once per field of every exported record, so each pass is skipped when its
+  character doesn't occur (no brace: no balance count; no `&%#`: no escaping; no `@`: no `{@}`), and `&%#`
+  are escaped in one pass that reads each backslash run whole (`(\\*)([&%#])`, escaped only after an even
+  run). A speed-up here must stay byte-identical: `tests/unit/test_export_braced.py` holds `_braced` to a
+  frozen copy of the pre-guard function under Hypothesis.
 
 ## refaudit's parser (`refaudit.bibtex`, from the pinned `refaudit` PyPI package)
 - Entries match `@(\w+)\s*[{(]\s*([^,\s{}]+)\s*,`. `@comment`, `@preamble` and `@string` are skipped.

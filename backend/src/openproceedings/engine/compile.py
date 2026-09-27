@@ -56,11 +56,10 @@ class Compiled:
     query: tantivy.Query
     explain: list[str] = field(default_factory=list)  # the readable tree, one line per clause
     verified: list[str] = field(default_factory=list)  # which clauses took the position-verified fallback
-    # what the engine's memos charge against their budgets (TantivyEngine.MAX_*): `held` is what this
-    # compiled query keeps alive (ids in its verified term sets, terms in its expansions, one per explain
-    # line); `stored` is what this compile added to the verified cache (each new clause's ids, plus one)
+    # what the engine's compiled memo charges against its budget (TantivyEngine.MAX_COMPILED_UNITS): what
+    # this compiled query keeps alive (ids in its verified term sets, terms in its expansions, one per
+    # explain line). The verified memo is charged clause by clause, as each is stored (`Compiler.store`)
     held: int = 0
-    stored: int = 0
 
 
 def wildcards(n: Node) -> Iterator[Wildcard]:
@@ -92,6 +91,7 @@ class Compiler:
         verified_cache: dict[tuple[str, str], list[str]] | None = None,
         weights: dict[str, float] | None = None,
         gate: Callable[[], AbstractContextManager[object]] = nullcontext,
+        store: Callable[[tuple[str, str], list[str]], None] | None = None,
     ) -> None:
         self.schema = schema
         self.weights = weights if weights is not None else dict.fromkeys(FIELDS, 1.0)
@@ -100,6 +100,10 @@ class Compiler:
         # (field, clause) → the ids it verified: an index never changes, so a clause is checked once per
         # engine, however many times facets or later queries recompile it
         self.verified_cache = {} if verified_cache is None else verified_cache
+        # how a newly verified clause is stored: the engine's keeps the cache's budget as each clause is
+        # stored (trim, store, charge), so no single compile, however many clauses it verifies, overshoots
+        # the budget by more than one clause's ids; by default a plain store
+        self.store = store if store is not None else self.verified_cache.__setitem__
         # entered around each cold verification (a cache miss), the one slow path: the API bounds how many
         # run at once and refuses one more (503 API_BUSY) rather than queueing it
         self.gate = gate
@@ -216,8 +220,7 @@ class Compiler:
         if ids is None:
             with self.gate():
                 ids = [doc_id for doc_id, tokens in self.read(candidates, f) if self.holds(n, tokens)]
-            self.verified_cache[key] = ids  # stored complete, never changed after
-            self.out.stored += len(ids) + 1
+            self.store(key, ids)  # stored complete, never changed after
         self.out.held += len(ids)
         what = f"NEAR/{n.distance}" if isinstance(n, Near) else "phrase"
         self.line(depth, f"{f}: {what} verified by position ({len(ids)} documents)")

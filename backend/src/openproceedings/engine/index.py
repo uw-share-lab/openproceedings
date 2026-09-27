@@ -16,6 +16,7 @@ in it.) A version that already exists is verified and reported, never rebuilt.
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 import logging
@@ -348,6 +349,22 @@ def _add_all(
     return added
 
 
+def _release(writer: Any) -> None:
+    """Stop a failed build's writer before its directory is removed: roll back what it added, wait for its
+    merge threads, which drops Tantivy's writer and its directory lock. Left alive (the failing frame's
+    traceback holds it), Tantivy could write `.tantivy-meta.lock` again after `rmtree` had walked the
+    directory, and the `.tmp-*` would survive the build (M3a review gate round 2: 9 leaks in 320 failed
+    builds). Best effort: the build's own error is the one raised."""
+    if writer is None:
+        return
+    for step in (writer.rollback, writer.wait_merging_threads):
+        try:
+            step()
+        except Exception:  # already failing: the directory is removed either way
+            log.debug("index_build_release_failed", extra={"step": step.__name__})
+    gc.collect()  # anything else the failure left holding the index's files
+
+
 def build_index(
     snapshot: Path,
     indexes: Path,
@@ -377,6 +394,8 @@ def build_index(
             return IndexBuildResult(target, version_id, created=False)
         log.info("index_build_started", extra={"index_version": version_id, "snapshot_hash": snapshot_hash})
         tmp = Path(tempfile.mkdtemp(dir=indexes, prefix=storage.TMP))
+        index: tantivy.Index | None = None
+        writer: Any = None
         try:
             index = tantivy.Index(schema(), path=str(tmp))
             exact = analyzer()
@@ -419,9 +438,13 @@ def build_index(
             except IndexBuildError as e:
                 raise IndexBuildError(f"{e}; the placed index is broken: retire it and build again") from None
         finally:
-            if tmp.exists():
+            if tmp.exists():  # the build failed before placing it
+                _release(writer)
+                index = writer = None
                 storage.writable(tmp)
                 shutil.rmtree(tmp, ignore_errors=True)
+                if tmp.exists():  # the next build's sweep removes it; say so rather than hide it
+                    log.warning("index_build_tmp_left", extra={"index_version": version_id, "path": tmp.name})
     log.info(
         "index_built",
         extra={"index_version": version_id, "docs": manifest["doc_count"], "ms": float(manifest["build_ms"])},

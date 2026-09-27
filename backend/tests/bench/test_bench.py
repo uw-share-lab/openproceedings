@@ -38,6 +38,7 @@ from tests.golden.test_trust_evals import STRINGS
 from tests.unit.engine.test_exclusions import tantivy_of
 
 ROUNDS = 30
+ENDPOINT_ROUNDS = 100  # the `/search` rows: its p95 over fewer rounds is little more than the slowest one
 
 
 @pytest.fixture(scope="module")
@@ -54,7 +55,7 @@ def p95(benchmark: Any) -> float | None:
     return data[min(len(data) - 1, int(0.95 * len(data)))]
 
 
-def measure(benchmark: Any, f: Callable[[], object]) -> object:
+def measure(benchmark: Any, f: Callable[[], object], rounds: int = ROUNDS) -> object:
     """ROUNDS rounds of at least ~1 ms each: a sub-millisecond call is repeated within a round, so a 20% gate
     compares real work, not timer and scheduler noise."""
     f()  # the first call is cold (compile, expansion, verified clauses): size the rounds on a warm one
@@ -62,7 +63,7 @@ def measure(benchmark: Any, f: Callable[[], object]) -> object:
     f()
     once = time.perf_counter() - t
     iterations = max(1, min(1_000, round(0.001 / max(once, 1e-7))))
-    return benchmark.pedantic(f, rounds=ROUNDS, iterations=iterations, warmup_rounds=1)
+    return benchmark.pedantic(f, rounds=rounds, iterations=iterations, warmup_rounds=1)
 
 
 def trust_evals(name: str) -> ParseResult:
@@ -103,7 +104,8 @@ def search_endpoint(
     engine: TantivyEngine, parsed: ParseResult, offset: int = 0, first: bool = True
 ) -> object:
     """The whole of `GET /api/v1/search`'s engine work: `search.run` with facets and highlights (page, display
-    records, highlights, exclusion accounting, disjunctive facets). `first` forgets the facet memo, so the
+    records, highlights, exclusion accounting, disjunctive facets, the last on a worker thread overlapping the
+    page, so its wall time is below its CPU time). `first` forgets the facet memo, so the
     call pays as a query's first page does (compiled queries and verified clauses stay warm); otherwise it
     is a later page of the same query."""
     if first:
@@ -114,7 +116,7 @@ def search_endpoint(
 @pytest.mark.parametrize("name", list(STRINGS))
 def test_search_endpoint_first_page(benchmark: Any, engine: TantivyEngine, name: str) -> None:
     parsed = trust_evals(name)
-    measure(benchmark, lambda: search_endpoint(engine, parsed))
+    measure(benchmark, lambda: search_endpoint(engine, parsed), ENDPOINT_ROUNDS)  # wall time: facets overlap
     time = p95(benchmark)
     assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
 
