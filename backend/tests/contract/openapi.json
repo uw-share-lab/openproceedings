@@ -899,7 +899,7 @@
       },
       "JsonValue": {},
       "Limits": {
-        "description": "This instance's limits on a query (TASK-089), so a client need not hard-code them: the parser's length\ncap, and the served config's verification limits (`op serve` flags; another instance may differ).",
+        "description": "This instance's limits on a query (TASK-089), so a client need not hard-code them: the parser's length\nand depth caps, and the served config's verification limits (`op serve` flags; another instance may\ndiffer).",
         "properties": {
           "max_query_depth": {
             "description": "the deepest nesting of groups and `NOT`s a `q` may have; deeper is 422 `PARSE_TOO_DEEP` (from `/parse`, a 200 whose `errors` hold it)",

@@ -251,7 +251,8 @@ class Vocabularies(Model):
 
 class Limits(Model):
     """This instance's limits on a query (TASK-089), so a client need not hard-code them: the parser's length
-    cap, and the served config's verification limits (`op serve` flags; another instance may differ)."""
+    and depth caps, and the served config's verification limits (`op serve` flags; another instance may
+    differ)."""
 
     max_query_length: int = Field(
         description="the longest `q` in Unicode code points; a longer one, or one whose canonical form is "

@@ -765,6 +765,7 @@ def replay(
                 "query_version": record.query_version,
                 "inputs_match": True,
                 "index_version_match": False,
+                "refused": None,
             }
             if _first_mismatch(record.record_id):
                 log.error("replay_mismatch", extra=fields)

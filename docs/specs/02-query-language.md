@@ -288,8 +288,10 @@ toggleable if the edited `q` does not end with exactly that one top-level clause
 and not the value clicked. Every field with no clause is checked by one parse that writes them all out at
 once, and each alone only when that edit can't be made (the answer is the per-field one; a property test
 compares them); a typed clause costs one parse of its own. So `/parse` adds one parse for a query with no
-typed clause, and at most five (`test_clauses.py` counts them): for a 1,700-code-point phrase about 5 ms
-(20 ms with a parse per field), and about 21 ms in the worst case, a wrap too long to write at once.
+typed clause, and at most five (`test_clauses.py` counts them), so the worst case is about six parses of
+`q`: a 1,700-code-point phrase costs about 5 ms more (20 ms with a parse per field), while short words near
+the cap, where the combined wrap is too long to write at once and each field is checked alone, cost about
+50–80 ms (M3 follow-ups review gate, round 2).
 Goldens: `frontend/src/lib/filter-clause-golden.json`, read by `backend/tests/unit/test_clauses.py`,
 `backend/tests/contract/test_parse_filters.py` and the reducer's test.
 
