@@ -23,8 +23,10 @@ reviews without the UI.
   offset map that highlight computation uses. The frontend converts to
   UTF-16 indices exactly once, in one helper (`nextjs-conventions` skill). A golden contract test covers a
   title containing an astral-plane character.
-- Errors use one shape: `{error: {code, message, diagnostics?: [Diagnostic]}}`. A parse error is a `422`
-  with 02's diagnostics, spans included.
+- Errors use one shape: `{error: {code, message, diagnostics?: [Diagnostic]}}`. A query that doesn't parse
+  is a `422` carrying 02's diagnostics (spans included) on every endpoint that **runs** it (`/search`,
+  `/export`, `POST /records`). `POST /parse` **reports** a parse: any well-formed body is a `200` whose
+  `errors` hold those same diagnostics; only a malformed body is a `422 API_BAD_PARAM`.
 - No authentication in v1. Rate limiting is per IP (a token bucket in the app, set in config). CORS
   allowlist comes from config.
 
@@ -60,7 +62,7 @@ reviews without the UI.
                 "status": { "rejected": 88, "unknown": 0 } },
   "facets": { "venue": {...}, "year": {...}, "track": {...} },
   "hits": [ { "id": "...", "title": "...", "abstract": "...", "authors": [...], "venue": "ICLR",
-              "year": 2025, "track": "main", "presentation": "poster", "score": 12.3,
+              "year": 2025, "track": "main", "status": "accepted", "presentation": "poster", "score": 12.3,
               "highlights": { "title": [[0,5]], "abstract": [[102,114]] }, "urls": {...} } ]
 }
 ```
@@ -270,7 +272,7 @@ once released: changing one is a breaking change under `/api/v1`.
 
 | Situation | HTTP | `code` |
 |---|---|---|
-| Query does not parse, uses an unknown field or value, or has a bad wildcard (incl. more than 200 expansions) | 422 | `PARSE_*`, `FIELD_*`, `WILDCARD_*` (diagnostics carry the spans); a query over 2,000 code points is `PARSE_TOO_LONG`, rejected before parsing |
+| Query does not parse, uses an unknown field or value, or has a bad wildcard (incl. more than 200 expansions) (on endpoints that run the query) | 422 | `PARSE_*`, `FIELD_*`, `WILDCARD_*` (diagnostics carry the spans); a query over 2,000 code points is `PARSE_TOO_LONG`, rejected before parsing |
 | A query parameter is invalid (bad `sort`, `limit` > 200, unknown `format`, malformed `record_id`) | 422 | `API_BAD_PARAM` |
 | Paper or search record not found | 404 | `API_PAPER_NOT_FOUND` / `API_RECORD_NOT_FOUND` |
 | A pinned `index_version` is not available on this instance | 409 | `API_INDEX_VERSION_UNAVAILABLE` |
@@ -312,7 +314,8 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     bind reports IPv4 peers) counts as its IPv4 address, both as a key and when matching trusted proxies.
     IPv6 clients are bucketed per /64. One host usually holds a whole /64, but an attacker holding a /48 gets
     65,536 buckets, so the per-/64 limit bounds one host, not a determined network. `/healthz` (GET or
-    HEAD, for uptime monitors) costs nothing; `/export` costs `export_weight`, charged before routing. The
+    HEAD, for uptime monitors; HEAD is its own route, left out of the OpenAPI document so operation ids stay
+    unique) costs nothing; `/export` costs `export_weight`, charged before routing. The
     429 carries `Retry-After` in whole seconds.
   - Access line: one `request` line per request (INFO; `/healthz` at DEBUG) with `request_id`, `method`,
     `route` (the template; null when nothing matched, a 429 included), `status`, `ms`, `index_version`, and
@@ -329,11 +332,15 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
   - Error mapping beyond the table: any other 4xx a framework raises is 422 `API_BAD_PARAM`, logged at DEBUG
     (nothing of ours raises one). A `PARSE_*`/`FIELD_*`/`WILDCARD_*` refusal from the engine carries
     `diagnostics`: `/search` locates each over-cap wildcard by its span in `q`
-    (`search.QueryRefused`), and a refusal it can't locate has one diagnostic with `span: null`.
+    (`search.run` sets `EngineInputError.diagnostics`; the exception type is unchanged, so `op search`
+    still logs `EngineInputError`), and a refusal it can't locate has one diagnostic with `span: null`.
   - `op serve [--host] [--port] [--index] [--cors-origin …] [--trusted-proxy …] [--rate-capacity]
     [--rate-refill] [--export-weight] [--no-rate-limit] [--log-query-text]` runs one uvicorn process with
     its own access log off, `proxy_headers` off, and a 64 KiB request-head limit (uvicorn's 16 KiB would
-    refuse a valid 2,000-code-point query in the URL). uvicorn's loggers go through the JSON handler;
+    refuse a valid 2,000-code-point query in the URL). **Deploy note:** `GET /search?q=…` carries the query
+    in the URL, so the reverse proxy in front (Caddy, task-065) must not log query strings. Log the path
+    only, or turn its access log off; the app's own access line never holds `q`. uvicorn's loggers go
+    through the JSON handler;
     httpx/httpcore are pinned to WARNING, and the root logger gets the same JSON handler at WARNING, so another
     library's warning (asyncio, fastapi) is JSON too. `--log-query-text` only lets the formatter keep
     query-text fields; no log call passes one today (the access line never carries `q`), so it changes nothing.
@@ -370,18 +377,26 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     `proceedings` and `doi`, and a missing one is null.
   - `POST /parse` takes `{q, mode}` (no other keys) and answers **200 even when the query has errors**:
     that is the ParseResult as spec 02 defines it (`errors` non-empty, every Optional null), which the
-    editor draws as squiggles. Only an over-long query (422 `PARSE_TOO_LONG`, before parsing) and a
-    malformed body (422 `API_BAD_PARAM`) are refused. The 422-on-parse-error rule applies to `/search`
-    and `/export`, which cannot run a query that doesn't parse.
+    editor draws as squiggles. That includes an over-long query: `parse` checks the 2,000-code-point cap
+    first, in O(1), and returns `errors=[PARSE_TOO_LONG]` without lexing. Only a malformed body is refused
+    (422 `API_BAD_PARAM`). The 422-on-parse-error rule applies to endpoints that run the query (`/search`,
+    `/export`, `POST /records`). **Correction to TASK-035 AC #2** (the task is completed, so the CLI can't
+    edit it): the AC says "Parse errors are 422", but that holds only for endpoints that run the query.
+    `/parse` reports them in a 200 (task-035 review, Should 5).
   - `GET /papers/{id}` answers `{index_version, tokenizer_version, query_version, paper}`, where `paper` is
     the spec 01 `PaperRecord` (provenance and `content_hash` included). The served index decides whether the
-    id exists (else 404 `API_PAPER_NOT_FOUND`, whose message never repeats the id). The index stores only
-    the display record, so the full one comes from the snapshot it was built from:
+    id exists. Otherwise the answer is 404 `API_PAPER_NOT_FOUND`, whose message never repeats the id. An id
+    that isn't shaped `op:<venue>:<year>:<native>` gets that 404 without the index being asked. The index
+    stores only the display record, so the full one comes from the snapshot it was built from:
     `<data_dir>/snapshots/<the index manifest's snapshot>`, which must hash to the manifest's
-    `snapshot_hash`. `ingest.snapshot.RecordFile` makes one verifying pass and holds each record's byte
-    range, for the served index and the one before it. **A deployment must ship that snapshot beside the
-    index.** If it is missing or different, the answer is 500 `API_INTERNAL`, never a record without its
-    provenance.
+    `snapshot_hash`. That snapshot is verified **when the index is loaded**
+    (`api/state.py::snapshot_records`, next to opening the engine and before the swap).
+    `ingest.snapshot.RecordFile` makes one verifying pass and holds each record's byte range, for the
+    served index and the one before it. **A deployment must ship that snapshot beside the index.** If it is
+    missing or different, the load fails (`index_load_failed`, ERROR). At startup that means 503
+    `API_INDEX_NOT_LOADED`; on SIGHUP the old index keeps serving. It is never a record without its
+    provenance, and never a re-hash per request. Only a snapshot file that becomes unreadable after the load
+    is a per-request 500 `API_INTERNAL`.
   - `GET /meta` answers the three versions, plus `index_versions` (every index directory on the instance,
     sorted, with the served one included), `text_fields` (`title`, `abstract`), `filter_fields` (`venue`,
     `year`, `track`, `status`), and `values` (`venue`, `track` and `status`: the vocabularies the parser checks
@@ -398,12 +413,19 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     reshaped by `coverage.breakdown`, which never recounts. `unknown` is never folded: it is its own cell,
     and every venue-year carries `unknown_track` and `unknown_status`, 0 included. Missing abstracts are per
     venue-year, the manifest's granularity (the M4 abstract threshold is per venue-year too).
-  - The snapshot is found and verified as `/papers/{id}` does (`Papers.records`: the index manifest's
-    snapshot, whose records hash to its `snapshot_hash`). A manifest whose maps disagree with one another, a
-    track or status outside the vocabulary, or a total different from the records' or the index's
-    document count is a 500 `API_INTERNAL`, never partial coverage.
-  - Computed once per `index_version` (`Coverages`; task-080's memo rule) and kept for the served index and
-    the one before it, so a hot swap gets a fresh entry. One `coverage_computed` INFO line per computation.
+  - Computed **when the index is loaded** (`IndexState._load` → `api/coverage.py::compute`, right after the
+    snapshot is verified and before the swap; task-038 review). It is stored beside the snapshot's records,
+    for the served index and the one before it (`IndexState.coverage`). The load's one pass over the records
+    also counts them per (venue, year, track, status) and counts missing abstracts per venue-year. These
+    counts must equal the manifest's cells and `abstract_missing`, and the records must number the index's
+    documents. Any of these failures makes the load fail, logged as `index_load_failed` (ERROR) with a
+    `reason` constant and never a path: a manifest whose maps disagree, a track or status outside the
+    vocabulary, a manifest that disagrees with the records, a missing or different snapshot, or a record
+    count that differs from the index's document count. The reasons are `snapshot_missing`,
+    `snapshot_hash_mismatch`, `manifest_invalid`, `counts_mismatch`, `abstract_missing_mismatch` and
+    `doc_count_mismatch`. At startup the failure is 503 `API_INDEX_NOT_LOADED`; on SIGHUP the old index and
+    its coverage keep serving. Coverage is never partial and never recomputed per request. One
+    `coverage_computed` INFO line is written per load.
   - Not yet: which statuses a venue-year's sources *can* contain (spec 07 §C "statuses indexed") and crawl
     dates per source; neither is in the manifest (task-082).
 - As built (task-036, `api/export.py`):

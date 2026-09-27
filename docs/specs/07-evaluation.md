@@ -60,6 +60,8 @@ of sources lives in `docs/results/coverage-sources.md`, each with a citation).
 `coverage-reporting` skill. Also report, per cell: missing-abstract count, `unknown`-track count, and
 **statuses indexed**, meaning which statuses the sources for that venue-year can even contain. For example,
 pre-2021 NeurIPS and ICML 2020–22 come from proceedings only, so no rejected papers exist there to exclude.
+As built, the missing-abstract count is per venue-year, not per cell (the snapshot manifest's granularity),
+until task-082 adds per-track counts.
 The methods text cites the coverage report (with its snapshot hash) as the database-scope caveat.
 `/coverage` in the UI renders the same data.
 

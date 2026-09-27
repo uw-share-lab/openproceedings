@@ -82,8 +82,6 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
     )
     app.state.index = state
     app.state.config = config
-    app.state.papers = papers.Papers(config.data_dir)
-    app.state.coverage = coverage.Coverages()
     records.install(app, config.data_dir, opener)
     install_error_handlers(app)
     for router in ROUTERS:

@@ -37,8 +37,9 @@ router = APIRouter(prefix=API_PREFIX)
 
 @router.post("/parse", response_model=ParseResponse)
 def parse_query(request: Request, engine: EngineDep, body: ParseRequest) -> ParseResponse:
-    """02's ParseResult for `q` (debounced as the user types). A query that doesn't parse is a 200 whose
-    `errors` say why; only an over-long query (`PARSE_TOO_LONG`) or a malformed body is refused."""
+    """02's ParseResult for `q` (debounced as the user types). It reports a parse: any well-formed body is
+    a 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body
+    is refused (422 `API_BAD_PARAM`)."""
     result = parsed(request, body.q, body.mode)
     return ParseResponse(
         **versions(engine.index_version),
@@ -102,6 +103,7 @@ def _hit(found: Found) -> Hit:
         venue=r["venue"],
         year=r["year"],
         track=r["track"],
+        status=r["status"],
         presentation=r["presentation"],
         score=found.score,
         highlights=Highlights(title=found.highlights["title"], abstract=found.highlights["abstract"]),

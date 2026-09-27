@@ -2,69 +2,68 @@
 abstracts, unknowns and the crawl dates (spec 04 §Endpoints, spec 07 §C; coverage-reporting skill).
 
 The numbers are the manifest of the snapshot the served index was built from, reshaped by
-`openproceedings.coverage.breakdown` (no second count). The snapshot is the one `/papers/{id}` reads:
-`Papers.records` finds it through the index manifest and checks, in one pass, that its records hash to the
-index's `snapshot_hash`. The records must also number exactly the index's documents. A missing, different
-or inconsistent snapshot is a 500 `API_INTERNAL`, never partial coverage.
-
-Computed once per index_version and kept in `Coverages` (task-080's rule: one `.get()` per read, only a
-complete value stored, and a lost race only recomputes the same value). A hot swap serves a new
-index_version, so it gets its own entry; only the last `KEEP` are held.
+`openproceedings.coverage.breakdown` (no second count). `compute` runs once per index, when it is loaded
+(`api/state.py`, before the swap), on the `RecordFile` the load already verified: the manifest it read
+with the records (so no second read to re-check), and the counts that one pass took of the records. Every
+cell and every venue-year's missing abstracts must equal the records' own count, and the records must
+number exactly the index's documents. Anything else fails the load (`index_load_failed` with a `reason`):
+503 at startup, the old index kept on SIGHUP. Coverage is never partial, never recomputed per request.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import time
+from collections import Counter
 
 from fastapi import APIRouter, Request
 
 from openproceedings.api.deps import EngineDep
 from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import CoverageResponse, versions
-from openproceedings.api.papers import Papers
+from openproceedings.api.state import IndexState
 from openproceedings.coverage import breakdown
 from openproceedings.diagnostics import DiagnosticCode, InternalError
 from openproceedings.engine.tantivy_engine import TantivyEngine
-from openproceedings.ingest.snapshot import SnapshotError
+from openproceedings.ingest.snapshot import RecordFile, SnapshotError
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix=API_PREFIX)
-KEEP = 2  # the served index's coverage and the previous one's (a request in flight across a swap)
 
 
-class Coverages:
-    def __init__(self) -> None:
-        self._memo: dict[str, CoverageResponse] = {}  # index_version → its coverage (frozen, complete)
-
-    def get(self, engine: TantivyEngine, papers: Papers) -> CoverageResponse:
-        found = self._memo.get(engine.index_version)  # one read (task-080)
-        if found is None:
-            found = compute(engine, papers)
-            if len(self._memo) >= KEEP:
-                self._memo.clear()  # not atomic with the check: at worst a recomputation
-            self._memo[engine.index_version] = found
-        return found
-
-
-def compute(engine: TantivyEngine, papers: Papers) -> CoverageResponse:
-    """The coverage of `engine`'s index, from its snapshot's manifest."""
+def compute(engine: TantivyEngine, records: RecordFile) -> CoverageResponse:
+    """The coverage of `engine`'s index from its verified snapshot's manifest, checked against the records
+    and the index. SnapshotError (with a `reason`) if they disagree."""
     started = time.perf_counter()
-    records = papers.records(engine.index_version)  # 500 API_INTERNAL if it isn't the index's snapshot
-    snapshot = records.path.parent
     try:
-        manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
-        if not isinstance(manifest, dict) or manifest.get("snapshot_hash") != records.snapshot_hash:
-            raise SnapshotError("the snapshot's manifest changed after its records were verified")
-        data = breakdown(manifest, snapshot.name)
-        if not data["totals"]["records"] == len(records) == len(engine.ids):
-            raise SnapshotError("the snapshot's counts, its records and the index's documents differ")
-        coverage = CoverageResponse.model_validate({**versions(engine.index_version), **data})
-    except (OSError, ValueError, TypeError, SnapshotError) as e:
-        raise InternalError(
-            DiagnosticCode.API_INTERNAL, "this instance's snapshot manifest doesn't describe its index"
-        ) from e
+        data = breakdown(records.manifest, records.path.parent.name)
+    except (TypeError, ValueError) as e:
+        raise SnapshotError(
+            f"the snapshot manifest is malformed ({type(e).__name__})", reason="manifest_invalid"
+        ) from None
+    except SnapshotError as e:
+        raise SnapshotError(str(e), reason="manifest_invalid") from None
+    cells = Counter(
+        {
+            (vy["venue"], vy["year"], c["track"], c["status"]): c["count"]
+            for vy in data["venue_years"]
+            for c in vy["cells"]
+        }
+    )
+    if cells != records.cells:
+        raise SnapshotError(
+            "the manifest's cells don't count the snapshot's records", reason="counts_mismatch"
+        )
+    missing = {(vy["venue"], vy["year"]): vy["abstract_missing"] for vy in data["venue_years"]}
+    if {k: n for k, n in missing.items() if n} != dict(records.abstract_missing):
+        raise SnapshotError(
+            "the manifest's abstract_missing doesn't count the records", reason="abstract_missing_mismatch"
+        )
+    if len(records) != len(engine.ids):  # the cells sum to record_count and to the records (checked above)
+        raise SnapshotError(
+            "the snapshot's records and the index's documents differ", reason="doc_count_mismatch"
+        )
+    coverage = CoverageResponse.model_validate({**versions(engine.index_version), **data})
     log.info(
         "coverage_computed",
         extra={
@@ -79,6 +78,9 @@ def compute(engine: TantivyEngine, papers: Papers) -> CoverageResponse:
 
 @router.get("/coverage", response_model=CoverageResponse)
 def coverage(request: Request, engine: EngineDep) -> CoverageResponse:
-    """The served index's coverage, as the snapshot it was built from counts it."""
-    coverages: Coverages = request.app.state.coverage
-    return coverages.get(engine, request.app.state.papers)
+    """The served index's coverage, computed and checked when it was loaded."""
+    state: IndexState = request.app.state.index
+    found = state.coverage(engine.index_version)
+    if found is None:  # loaded with its engine, before the swap: an invariant broken
+        raise InternalError(DiagnosticCode.API_INTERNAL, "the served index has no coverage")
+    return found

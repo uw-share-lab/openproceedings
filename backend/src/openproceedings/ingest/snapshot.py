@@ -51,7 +51,12 @@ SHORT = 12
 
 
 class SnapshotError(Exception):
-    """A snapshot or cache operation refused: the message says why and what to do (never record text)."""
+    """A snapshot or cache operation refused: the message says why and what to do (never record text).
+    `reason` is a short constant a log line may carry (never a path), e.g. `snapshot_missing`."""
+
+    def __init__(self, message: str, *, reason: str = "snapshot_invalid") -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -330,14 +335,19 @@ class RecordFile:
     `GET /papers/{id}`: the full record, provenance included, which the index doesn't store).
 
     Opening makes one pass over `records.jsonl`: ids strictly ascending, and the bytes hashing to the
-    manifest's `snapshot_hash` (so the file indexed is the snapshot named). A lookup reads its one line and
+    manifest's `snapshot_hash` (so the file indexed is the snapshot named). The same pass counts the records
+    per (venue, year, track, status) and the missing abstracts per (venue, year), and keeps the manifest it
+    read, so `GET /coverage` checks the manifest's counts against the records. A lookup reads its one line and
     validates it as a `PaperRecord`, which re-checks its `content_hash`. Snapshots are sealed read-only, so
     the bytes can't change underneath. Thread-safe: every lookup opens the file itself."""
 
     def __init__(self, snapshot: Path) -> None:
         self.path = snapshot / "records.jsonl"
+        self.cells: Counter[tuple[str, int, str, str]] = Counter()  # (venue, year, track, status) → records
+        self.abstract_missing: Counter[tuple[str, int]] = Counter()  # (venue, year) → no abstract
         try:
             manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+            self.manifest: dict[str, Any] = manifest
             self.snapshot_hash: str = manifest["snapshot_hash"]
             digest = hashlib.sha256()
             self._at: dict[str, tuple[int, int]] = {}
@@ -345,15 +355,28 @@ class RecordFile:
             with self.path.open("rb") as fh:
                 for n, raw in enumerate(fh, start=1):
                     digest.update(raw)
-                    rid = json.loads(raw)["id"]
+                    line = json.loads(raw)
+                    rid = line["id"]
                     if not isinstance(rid, str) or rid <= previous:
                         raise SnapshotError(f"{snapshot.name} line {n}: ids are not unique and ascending")
                     self._at[rid] = (offset, len(raw))
+                    self.cells[(line["venue"], line["year"], line["track"], line["status"])] += 1
+                    if line["abstract"] is None:
+                        self.abstract_missing[(line["venue"], line["year"])] += 1
                     previous, offset = rid, offset + len(raw)
+        except FileNotFoundError:
+            raise SnapshotError(
+                f"{snapshot.name} is not on this instance", reason="snapshot_missing"
+            ) from None
         except (OSError, ValueError, KeyError, TypeError) as e:
-            raise SnapshotError(f"{snapshot.name} is not a snapshot ({type(e).__name__})") from None
+            raise SnapshotError(
+                f"{snapshot.name} is not a snapshot ({type(e).__name__})", reason="snapshot_unreadable"
+            ) from None
         if digest.hexdigest() != self.snapshot_hash:
-            raise SnapshotError(f"{snapshot.name}: records.jsonl doesn't match its manifest's snapshot_hash")
+            raise SnapshotError(
+                f"{snapshot.name}: records.jsonl doesn't match its manifest's snapshot_hash",
+                reason="snapshot_hash_mismatch",
+            )
 
     def __len__(self) -> int:
         return len(self._at)

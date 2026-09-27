@@ -66,9 +66,24 @@ def test_parse_errors_are_values_with_code_point_spans(client: TestClient) -> No
     assert body["canonical"] is None and body["effective_ast"] is None and body["mode"] == "native"
 
 
-def test_parse_refuses_an_over_long_query_before_parsing(client: TestClient) -> None:
-    e = error(client.post("/api/v1/parse", json={"q": "a " * MAX_QUERY_LENGTH}), 422, "PARSE_TOO_LONG")
-    assert e["diagnostics"][0]["code"] == "PARSE_TOO_LONG"
+def test_parse_reports_an_over_long_query_as_a_value_without_parsing_it(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """/parse reports a parse (spec 04 §Conventions): PARSE_TOO_LONG is a 200 whose `errors` hold it, and
+    the cap still comes before any lexing."""
+    from openproceedings.query import parser
+
+    def refuse(q: str) -> Any:
+        raise AssertionError(f"lexed a query of {len(q)} characters")
+
+    monkeypatch.setattr(parser, "lex", refuse)
+    q = "a " * MAX_QUERY_LENGTH
+    r = client.post("/api/v1/parse", json={"q": q})
+    assert r.status_code == 200, r.text
+    assert [(e["code"], e["span"]) for e in r.json()["errors"]] == [
+        ("PARSE_TOO_LONG", [MAX_QUERY_LENGTH, len(q)])
+    ]
+    assert r.json()["canonical"] is None
 
 
 @pytest.mark.parametrize(
@@ -119,24 +134,62 @@ def test_an_unknown_paper_is_404_api_paper_not_found(client: TestClient, rid: st
     assert rid not in e["message"]
 
 
-def test_a_missing_snapshot_is_a_500_never_a_partial_record(store: Store, tmp_path: Path, logs: Logs) -> None:
+def only_snapshots(store: Store, tmp_path: Path, snapshots: dict[str, str]) -> Path:
+    """A data directory with both indexes and the given snapshots (published name → the store's name)."""
     data = tmp_path / "data"
-    shutil.copytree(store.indexes, data / "indexes", symlinks=True)  # indexes only
+    shutil.copytree(store.indexes, data / "indexes", symlinks=True)
+    for name, source in snapshots.items():
+        shutil.copytree(store.indexes.parent / "snapshots" / source, data / "snapshots" / name)
+    return data
+
+
+@pytest.mark.parametrize(
+    "snapshots",
+    [{}, {"big": "small"}],  # missing; a different snapshot under the index's snapshot name
+    ids=["missing", "different"],
+)
+def test_an_index_without_its_snapshot_is_not_loaded(
+    store: Store, tmp_path: Path, logs: Logs, snapshots: dict[str, str]
+) -> None:
+    """The snapshot is verified at load, beside the index (task-035 review): a bad deploy is 503 at
+    startup, one ERROR line, never a per-request re-hash or a record without provenance."""
+    with TestClient(make_app(only_snapshots(store, tmp_path, snapshots))) as c:
+        assert c.get("/api/v1/healthz").json()["index_loaded"] is False
+        error(c.get("/api/v1/papers/op:iclr:2024:Fx0001"), 503, "API_INDEX_NOT_LOADED")
+        error(c.get("/api/v1/search", params={"q": "trust"}), 503, "API_INDEX_NOT_LOADED")
+    (failed,) = [line for line in logs() if line["event"] == "index_load_failed"]
+    assert failed["level"] == "ERROR" and failed["error"] == "SnapshotError"
+
+
+def test_a_swap_to_an_index_without_its_snapshot_keeps_serving_the_old_one(
+    store: Store, tmp_path: Path, logs: Logs
+) -> None:
+    from tests.contract.conftest import point_current
+
+    data = only_snapshots(store, tmp_path, {"big": "big"})  # the small index's snapshot is missing
+    app = make_app(data)
+    with TestClient(app) as c:
+        rid = c.get("/api/v1/search", params={"q": "trust", "limit": 1}).json()["hits"][0]["id"]
+        point_current(data, store.small)
+        assert app.state.index.load() is False
+        assert c.get("/api/v1/healthz").json()["index_version"] == store.big
+        assert c.get(f"/api/v1/papers/{rid}").json()["paper"]["id"] == rid
+    assert [line["error"] for line in logs() if line["event"] == "index_load_failed"] == ["SnapshotError"]
+
+
+def test_a_snapshot_that_vanishes_after_load_is_a_500(store: Store, tmp_path: Path, logs: Logs) -> None:
+    import os
+
+    data = only_snapshots(store, tmp_path, {"big": "big"})
     with TestClient(make_app(data)) as c:
         rid = c.get("/api/v1/search", params={"q": "trust", "limit": 1}).json()["hits"][0]["id"]
+        snap = data / "snapshots" / "big"
+        os.chmod(snap, 0o755)
+        (snap / "records.jsonl").rename(snap / "gone.jsonl")
         e = error(c.get(f"/api/v1/papers/{rid}"), 500, "API_INTERNAL")
     assert "snapshot" not in e["message"]  # the client learns only the request id
     (failed,) = [line for line in logs() if line["event"] == "request_failed"]
-    assert failed["cause"] == "SnapshotError"
-
-
-def test_a_different_snapshot_under_the_name_is_a_500(store: Store, tmp_path: Path) -> None:
-    data = tmp_path / "data"
-    shutil.copytree(store.indexes, data / "indexes", symlinks=True)
-    shutil.copytree(store.indexes.parent / "snapshots" / "small", data / "snapshots" / "big")
-    with TestClient(make_app(data)) as c:
-        rid = c.get("/api/v1/search", params={"q": "trust", "limit": 1}).json()["hits"][0]["id"]
-        error(c.get(f"/api/v1/papers/{rid}"), 500, "API_INTERNAL")
+    assert failed["level"] == "ERROR"
 
 
 def test_the_paper_line_logs_the_template_not_the_id(client: TestClient, logs: Logs) -> None:
@@ -203,3 +256,37 @@ def test_the_openapi_document_describes_the_routes_and_their_models(client: Test
     assert "Diagnostic" in schemas
     limit = next(p for p in doc["paths"]["/api/v1/search"]["get"]["parameters"] if p["name"] == "limit")
     assert limit["schema"]["maximum"] == 200
+
+
+def test_a_malformed_paper_id_is_a_404_without_asking_the_index(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = client.app.state.index.engine  # type: ignore[attr-defined]
+
+    def refuse(ids: list[str]) -> Any:
+        raise AssertionError("the index was asked about a malformed id")
+
+    monkeypatch.setattr(engine, "display", refuse)
+    for rid in ("nope", "op:iclr:24:x", "op:acl:2024:x", "x" * 5000):
+        error(client.get(f"/api/v1/papers/{rid}"), 404, "API_PAPER_NOT_FOUND")
+
+
+def test_meta_lists_the_index_the_request_read(client: TestClient, store: Store) -> None:
+    """`available` takes the request's engine (read once), never the state's reference a second time."""
+    from types import SimpleNamespace
+
+    state = client.app.state.index  # type: ignore[attr-defined]
+    listed = state.available(SimpleNamespace(index_version="ffffffffffff"))
+    assert listed == sorted([store.big, store.small, "ffffffffffff"])
+
+
+def test_openapi_operation_ids_are_unique(client: TestClient) -> None:
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # FastAPI warns "Duplicate Operation ID" while building the schema
+        client.app.openapi_schema = None  # type: ignore[attr-defined]
+        doc = client.app.openapi()  # type: ignore[attr-defined]
+    ids = [op["operationId"] for path in doc["paths"].values() for op in path.values()]
+    assert len(ids) == len(set(ids)), ids
+    assert "head" not in doc["paths"]["/api/v1/healthz"]  # HEAD is served, not documented

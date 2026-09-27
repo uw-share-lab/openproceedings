@@ -5,6 +5,7 @@ and every refusal in the one envelope."""
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from collections.abc import Iterator
 from typing import Any, get_args
@@ -36,7 +37,8 @@ QUERIES = [
     "agents NEAR/3 reliance",
 ]
 HIT_KEYS = {
-    "id", "title", "abstract", "authors", "venue", "year", "track", "presentation", "score", "highlights", "urls",
+    "id", "title", "abstract", "authors", "venue", "year", "track", "status", "presentation", "score",
+    "highlights", "urls",
 }  # fmt: skip
 
 
@@ -128,13 +130,60 @@ def test_the_match_set_and_ranking_equal_op_search(
     expected = capsys.readouterr().out.split()
     ids = [h["id"] for body in pages(client, q) for h in body["hits"]]
     assert sorted(ids) == expected and len(ids) == len(set(ids))
-    assert cli.main(["--data-dir", data, "search", q, "--limit", "20"]) == 0
-    ranked = [
-        line.split()[2]
-        for line in capsys.readouterr().out.splitlines()
-        if line[:5].strip().rstrip(".").isdigit()
-    ]
-    assert [h["id"] for h in ok(client, q, limit=20)["hits"]] == ranked
+
+
+def cli_report(out: str) -> dict[str, Any]:
+    """`op search`'s PRISMA header and ranked lines, read back: identified, the default-filter buckets,
+    screened, and each hit's (id, score)."""
+    lines = out.splitlines()
+    one = {
+        k: next(line for line in lines if line.startswith(k))
+        for k in ("identified ", "removed by ", "screened ")
+    }
+    removed = re.fullmatch(
+        r"removed by default filters (\d+): ineligible \d+ \(track: (.*); status: (.*)\), "
+        r"unclassified \d+ \(track unknown (\d+), status unknown (\d+)\)",
+        one["removed by "],
+    )
+    assert removed is not None, one["removed by "]
+
+    def buckets(text: str, unknown: str) -> dict[str, int]:
+        named = {} if text == "none" else {v: int(n) for v, n in (b.rsplit(" ", 1) for b in text.split(", "))}
+        return {**named, "unknown": int(unknown)}
+
+    return {
+        "identified": int(one["identified "].split()[1]),
+        "excluded": {
+            "total": int(removed.group(1)),
+            "track": buckets(removed.group(2), removed.group(4)),
+            "status": buckets(removed.group(3), removed.group(5)),
+        },
+        "total": int(one["screened "].split()[2]),
+        "hits": [
+            (line.split()[2], float(line.split()[1]))
+            for line in lines
+            if line[:5].strip().rstrip(".").isdigit()
+        ],
+    }
+
+
+@pytest.mark.parametrize("sort", get_args(Sort))
+@pytest.mark.parametrize("q", QUERIES)
+def test_the_counts_and_the_ranked_page_equal_op_search(
+    client: TestClient, store: Store, q: str, sort: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Spec 04 as built: the ids, order, `total` and `excluded` equal `op search`'s, for every sort."""
+    assert (
+        cli.main(["--data-dir", str(store.indexes.parent), "search", q, "--sort", sort, "--limit", "20"]) == 0
+    )
+    report = cli_report(capsys.readouterr().out)
+    body = ok(client, q, sort=sort, limit=20)
+    assert body["total"] == report["total"]
+    assert body["excluded"] == report["excluded"]
+    assert list(body["excluded"]["track"]) == list(report["excluded"]["track"])  # the same bucket order
+    assert report["identified"] == body["total"] + body["excluded"]["total"]
+    assert [h["id"] for h in body["hits"]] == [i for i, _s in report["hits"]]
+    assert [round(h["score"], 4) for h in body["hits"]] == [s for _i, s in report["hits"]]
 
 
 @pytest.mark.parametrize("sort", get_args(Sort))
@@ -299,4 +348,56 @@ def test_an_over_cap_wildcard_is_refused_with_its_own_code(
     assert [(d["code"], d["span"]) for d in e["diagnostics"]] == [
         ("WILDCARD_TOO_MANY_EXPANSIONS", [9, 18]),
         ("WILDCARD_TOO_MANY_EXPANSIONS", [29, 38]),
+    ]
+
+
+def test_a_hit_shows_its_status(client: TestClient) -> None:
+    """Coordinator decision (task-035 review): a hit carries `status`, so an included rejected paper says so."""
+    rejected = ok(client, "trust status:rejected", limit=MAX_LIMIT)["hits"]
+    assert rejected and {h["status"] for h in rejected} == {"rejected"}
+    assert {h["status"] for h in ok(client, "trust", limit=MAX_LIMIT)["hits"]} == {"accepted"}
+
+
+@pytest.mark.parametrize(
+    ("q", "title", "spans"),
+    [
+        # `ﬁ` (one code point) is `fi` (two) after NFKC: spans after it stay over the raw title
+        ("ﬁne-tuning trust", "ﬁne-tuning 𝐓rust agents", [[0, 10], [11, 16]]),
+        # LaTeX before a match: `α` lights the command name `alpha` (no backslash), `trust` is over the raw text
+        ("α trust", "$\\alpha$-divergence trust", [[2, 7], [20, 25]]),
+    ],
+)
+def test_golden_highlights_after_length_changing_text_are_over_the_raw_title(
+    store: Store, tmp_path: Any, q: str, title: str, spans: list[list[int]]
+) -> None:
+    """An API-level golden: NFKC and LaTeX change lengths, highlights never move (spec 04 §Span units)."""
+    from tests.contract.conftest import build, make_app, point_current
+    from tests.corpus import Rec
+
+    version = build([Rec(id="fx:0001", title=title, abstract=None)], tmp_path / "data" / "snapshots", "one",
+                    tmp_path / "data" / "indexes")  # fmt: skip
+    point_current(tmp_path / "data", version)
+    with TestClient(make_app(tmp_path / "data")) as c:
+        (hit,) = ok(c, f"title:({q.replace(' ', ' AND ')})")["hits"]
+    assert hit["title"] == title
+    assert hit["highlights"]["title"] == spans
+
+
+def test_op_search_logs_an_over_cap_wildcard_as_engine_input_error(
+    store: Store, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Locating the refused wildcard (for the API's diagnostics) keeps the logged type stable (spec 08)."""
+    import json
+
+    import openproceedings.engine.tantivy_engine as te
+
+    monkeypatch.setattr(te, "MAX_EXPANSIONS", 1)
+    argv = ["--data-dir", str(store.indexes.parent), "--log-level", "DEBUG", "search", "calibrat*"]
+    assert cli.main(argv) == 1
+    err = capsys.readouterr().err
+    refused = [
+        json.loads(line) for line in err.splitlines() if line.startswith("{") and "cli_refused" in line
+    ]
+    assert [(r["error"], r["code"]) for r in refused] == [
+        ("EngineInputError", "WILDCARD_TOO_MANY_EXPANSIONS")
     ]

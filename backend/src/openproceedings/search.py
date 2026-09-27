@@ -95,24 +95,16 @@ def run(
 
 def expanded(engine: TantivyEngine, ast: Node) -> Expansions:
     """Every wildcard of `ast` expanded on `engine`, before anything is compiled; an over-cap wildcard is
-    refused as a `QueryRefused` that locates each one in `q` (what `/search` and `/export` both answer)."""
+    refused as the engine's `EngineInputError` with `diagnostics` locating each one in `q` (what `/search`
+    and `/export` both answer; the type stays the engine's, so `op search` logs it as before)."""
     try:
         return engine.expansions(ast)
     except EngineInputError as e:
         raise _located(engine, ast, e) from None
 
 
-class QueryRefused(EngineInputError):
-    """An engine refused a parsed query, located: `diagnostics` point at what it refused in `q` (e.g. each
-    wildcard over the 200-term cap), for the API's 422 (spec 04 §Error handling, row 1)."""
-
-    def __init__(self, code: DiagnosticCode, message: str, diagnostics: tuple[Diagnostic, ...] = ()) -> None:
-        super().__init__(code, message)
-        self.diagnostics = diagnostics
-
-
-def _located(engine: TantivyEngine, ast: Node, error: EngineInputError) -> QueryRefused:
-    """`error` with a diagnostic per wildcard that raises it on its own (only on this refusal path; the
+def _located(engine: TantivyEngine, ast: Node, error: EngineInputError) -> EngineInputError:
+    """`error`, its `diagnostics` set to one per wildcard that raises it on its own (only on this refusal path; the
     engine's expansions are the answer otherwise). A wildcard's span is into `q` (an inserted default has
     no wildcard)."""
     found: list[Diagnostic] = []
@@ -122,4 +114,5 @@ def _located(engine: TantivyEngine, ast: Node, error: EngineInputError) -> Query
         except EngineInputError as e:
             if e.code == error.code:
                 found.append(Diagnostic(code=e.code, message=e.message, span=w.span))
-    return QueryRefused(error.code, error.message, tuple(found))
+    error.diagnostics = tuple(found)  # the same exception and type: the CLI logs it as before (spec 08)
+    return error

@@ -110,6 +110,7 @@ class Hit(Model):
     venue: Venue
     year: int
     track: Track
+    status: Status  # the record schema's (task-035 review decision)
     presentation: Presentation | None
     score: float
     highlights: Highlights

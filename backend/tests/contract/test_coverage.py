@@ -132,9 +132,10 @@ def test_the_response_carries_the_three_versions(client: TestClient, store: Stor
     }
 
 
-def test_the_order_is_stable_and_unknown_is_its_own_cell(client: TestClient) -> None:
+def test_the_order_is_stable_and_unknown_is_its_own_cell(client: TestClient, store: Store) -> None:
     first = client.get("/api/v1/coverage")
-    assert first.content == client.get("/api/v1/coverage").content  # byte-identical
+    with TestClient(make_app(store.indexes.parent)) as fresh:  # computed again, by another app
+        assert first.content == fresh.get("/api/v1/coverage").content  # byte-identical
     body = first.json()
     keys = [(vy["venue"], vy["year"]) for vy in body["venue_years"]]
     assert keys == sorted(keys) and len(set(keys)) == len(keys)
@@ -177,14 +178,19 @@ def test_it_answers_503_before_an_index_loads(tmp_path: Path) -> None:
         error(c.get("/api/v1/coverage"), 503, "API_INDEX_NOT_LOADED")
 
 
-def test_a_missing_snapshot_is_a_500_never_partial_coverage(store: Store, tmp_path: Path, logs: Logs) -> None:
+def load_failed(logs: Logs) -> list[str]:
+    """The `reason` of each `index_load_failed` line (a constant, never a path)."""
+    return [line["reason"] for line in logs() if line["event"] == "index_load_failed"]
+
+
+def test_a_missing_snapshot_fails_the_load_never_partial_coverage(
+    store: Store, tmp_path: Path, logs: Logs
+) -> None:
     data = tmp_path / "data"
     shutil.copytree(store.indexes, data / "indexes", symlinks=True)  # indexes only
     with TestClient(make_app(data)) as c:
-        e = error(c.get("/api/v1/coverage"), 500, "API_INTERNAL")
-    assert "snapshot" not in e["message"]
-    (failed,) = [line for line in logs() if line["event"] == "request_failed"]
-    assert failed["cause"] == "SnapshotError"
+        error(c.get("/api/v1/coverage"), 503, "API_INDEX_NOT_LOADED")
+    assert load_failed(logs) == ["snapshot_missing"]
 
 
 def _writable_copy(store: Store, tmp_path: Path) -> Path:
@@ -196,18 +202,41 @@ def _writable_copy(store: Store, tmp_path: Path) -> Path:
     return data
 
 
+def _move_a_cell(manifest: dict[str, Any]) -> None:
+    """−1 in one cell, +1 in another of the same venue-year (neither `unknown`): every sum and map in the
+    manifest still agrees with itself; only the records disagree."""
+    for years in manifest["counts"].values():
+        for cell in years.values():
+            known = [(t, st) for t, ss in cell.items() if t != "unknown" for st in ss]
+            source = next(((t, st) for t, st in known if cell[t][st] >= 2), None)
+            if source is not None and len(known) >= 2:
+                target = next(k for k in known if k != source)
+                cell[source[0]][source[1]] -= 1
+                cell[target[0]][target[1]] += 1
+                return
+    raise AssertionError("no venue-year to move a record within")
+
+
+def _no_missing_abstracts(manifest: dict[str, Any]) -> None:
+    venue, year = next(
+        (v, y) for v, ys in manifest["abstract_missing"].items() for y, n in ys.items() if n > 0
+    )
+    manifest["abstract_missing"][venue][year] = 0
+
+
 @pytest.mark.parametrize(
-    "tamper",
+    ("tamper", "reason"),
     [
-        "move_a_cell",  # the counts no longer describe the records' index (a cell's count moved)
-        "fold_unknown",  # unknown track folded into main: the unknown_track map disagrees
-        "record_count",
-        "track_outside_vocabulary",
-        "hash",  # the manifest names another snapshot
+        ("move_a_cell", "counts_mismatch"),  # consistent with itself, not with the records
+        ("abstract_missing_zero", "abstract_missing_mismatch"),
+        ("fold_unknown", "manifest_invalid"),  # the unknown_track map disagrees with the cells
+        ("record_count", "manifest_invalid"),
+        ("track_outside_vocabulary", "manifest_invalid"),
+        ("hash", "snapshot_hash_mismatch"),  # the manifest names another snapshot
     ],
 )
-def test_a_manifest_that_doesnt_describe_the_index_is_a_500(
-    store: Store, tmp_path: Path, tamper: str
+def test_a_manifest_that_doesnt_describe_the_index_fails_the_load(
+    store: Store, tmp_path: Path, logs: Logs, tamper: str, reason: str
 ) -> None:
     data = _writable_copy(store, tmp_path)
     path = data / "snapshots" / "big" / "manifest.json"
@@ -216,9 +245,9 @@ def test_a_manifest_that_doesnt_describe_the_index_is_a_500(
     year = next(iter(manifest["counts"][venue]))
     cell = manifest["counts"][venue][year]
     if tamper == "move_a_cell":
-        track = next(iter(cell))
-        status = next(iter(cell[track]))
-        cell[track][status] += 1
+        _move_a_cell(manifest)
+    elif tamper == "abstract_missing_zero":
+        _no_missing_abstracts(manifest)
     elif tamper == "fold_unknown":
         venue, year = next(
             (v, y) for v, ys in manifest["counts"].items() for y, ts in ys.items() if "unknown" in ts
@@ -234,7 +263,39 @@ def test_a_manifest_that_doesnt_describe_the_index_is_a_500(
         manifest["snapshot_hash"] = "0" * 64
     path.write_text(json.dumps(manifest))
     with TestClient(make_app(data)) as c:
-        error(c.get("/api/v1/coverage"), 500, "API_INTERNAL")
+        error(c.get("/api/v1/coverage"), 503, "API_INDEX_NOT_LOADED")
+        error(c.get("/api/v1/search", params={"q": "trust"}), 503, "API_INDEX_NOT_LOADED")
+    assert load_failed(logs) == [reason]
+
+
+def test_records_that_arent_the_indexs_documents_fail_the_load(
+    store: Store, data_dir: Path, logs: Logs
+) -> None:
+    """The snapshot's counts, record_count and records agree with one another, but not with the index's
+    document count (an opener that drops one id stands in for a mismatched index)."""
+    from openproceedings.engine.tantivy_engine import TantivyEngine
+
+    def short(path: Path) -> TantivyEngine:
+        engine = TantivyEngine(path)
+        engine.ids = engine.ids[:-1]
+        return engine
+
+    with TestClient(make_app(data_dir, opener=short)) as c:
+        error(c.get("/api/v1/coverage"), 503, "API_INDEX_NOT_LOADED")
+    assert load_failed(logs) == ["doc_count_mismatch"]
+
+
+def test_a_swap_to_an_index_with_a_bad_manifest_keeps_the_old_coverage(
+    store: Store, tmp_path: Path, logs: Logs
+) -> None:
+    data = _writable_copy(store, tmp_path)  # the small index's snapshot isn't there
+    app = make_app(data)
+    with TestClient(app) as c:
+        before = c.get("/api/v1/coverage").json()
+        point_current(data, store.small)
+        assert app.state.index.load() is False  # type: ignore[attr-defined]
+        assert c.get("/api/v1/coverage").json() == before
+    assert load_failed(logs) == ["snapshot_missing"]
 
 
 def test_the_openapi_document_describes_coverage(client: TestClient) -> None:
