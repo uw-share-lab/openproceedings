@@ -10,7 +10,7 @@ description: The frontend TypeScript standard for openproceedings — strict tsc
   `exactOptionalPropertyTypes`, `noFallthroughCasesInSwitch`. As built (TASK-039) Next 16 and the shadcn
   helpers compile under all of them; keep them on.
 - `frontend/` is the member of the **npm workspace** rooted at the repo root (`package.json`,
-  `package-lock.json`, deps hoisted to `./node_modules`); `make sync` runs `npm ci` at the root. Use npm,
+  `package-lock.json`, deps hoisted to `./node_modules`); `make sync` runs `npm ci --ignore-scripts` at the root. Use npm,
   not another client, and never install inside `frontend/`.
 - `autofix.sh` (PostToolUse) runs `prettier --write` and `eslint --fix` on each edited frontend file (once
   the root `node_modules/` exists) and reports what remains; `make fmt` does the whole repo

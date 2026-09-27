@@ -46,7 +46,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 
 ## Environment
 - **uv** for Python. `uv sync` at the repo root; never `pip install` into the workspace.
-- **npm** for the frontend: `npm ci` at the repo root (or `make sync`), never inside `frontend/`. Node 22
+- **npm** for the frontend: `npm ci --ignore-scripts` at the repo root (or `make sync`), never inside `frontend/`. Node 22
   (`.nvmrc`, as in CI).
 - `scripts/setup-dev.sh` once per clone (git hooks, `.env`).
 

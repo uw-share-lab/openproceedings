@@ -407,7 +407,7 @@ once released: changing one is a breaking change under `/api/v1`.
 | A pinned `index_version` is not available on this instance | 409 | `API_INDEX_VERSION_UNAVAILABLE` |
 | Export requested for a record whose replay status is `mismatch` | 409 | `API_RECORD_MISMATCH` |
 | A request body over `max_body_bytes` (64 KiB), by `Content-Length` or by the bytes of a chunked body, refused before it is read and before any other check (task-079) | 413 | `API_BODY_TOO_LARGE` |
-| Rate limit exceeded: the client's or its network's bucket, a position-verified query's extra weight, or the instance-wide record-save ceiling | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
+| Rate limit exceeded: the client's or its network's bucket, a position-verified query's extra weight, or the record-save ceiling (its network's or the instance-wide one) | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
 | A search record can't be saved: the record store is over its size cap or its disk under the free-space floor (task-037) | 503 | `API_RECORDS_STORE_FULL` |
 | A query needs a cold position verification and every verification slot is taken (refused, never queued) | 503 | `API_BUSY` (with `Retry-After`) |
 | A query (or a replayed record's canonical) has more position-verified clauses than `ApiConfig.max_verified_clauses` (default 8), refused before it compiles (decision-010) | 422 | `API_TOO_MANY_VERIFIED_CLAUSES` (diagnostics: one per clause, spanning it in `q`; a replay's one diagnostic has `span: null`) |
