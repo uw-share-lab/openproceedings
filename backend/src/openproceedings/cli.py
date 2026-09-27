@@ -41,7 +41,7 @@ log = logging.getLogger(__name__)
 
 # subcommand -> (help text, the Backlog task that implements it)
 PLANNED: dict[str, tuple[str, str]] = {
-    "record": ("save or replay a search record (spec 04)", "task-037"),
+    "record": ("save or replay a search record (spec 04)", "task-083"),
     "embed": ("build SPECTER2 embeddings for the current index (spec 06)", "task-058"),
     "eval": ("evaluation reports: scholar | coverage | audit | near-miss (spec 07)", "task-054"),
 }

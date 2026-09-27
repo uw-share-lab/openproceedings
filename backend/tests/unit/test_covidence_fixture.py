@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from openproceedings.export import Provenance, venue_name, write
+from openproceedings.export import Provenance, write
+from openproceedings.vocab import venue_name
 
 FIXTURE = Path(__file__).resolve().parents[3] / "docs" / "results" / "2026-09-27-covidence-fixture.ris"
 PROVENANCE = Provenance("fixture0000a", "0" * 64, "2026-09-27")

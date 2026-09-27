@@ -4,7 +4,7 @@ import pytest
 from openproceedings import cli
 
 PLANNED = {
-    "record": "task-037",
+    "record": "task-083",
     "embed": "task-058",
     "eval": "task-054",
 }

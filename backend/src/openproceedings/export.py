@@ -32,9 +32,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, TextIO
 
-from openproceedings.vocab import CONFERENCES, venue_name
+from openproceedings.vocab import venue_name
 
-__all__ = ["CONFERENCES", "CSV_COLUMNS", "FORMATS", "Provenance", "bibtex_key", "venue_name", "write"]
+__all__ = ["CSV_COLUMNS", "FORMATS", "Provenance", "bibtex_key", "entries", "header", "utc_date", "write"]
 
 FORMATS = ("ris", "csv", "bibtex", "jsonl")
 CSV_COLUMNS = (
