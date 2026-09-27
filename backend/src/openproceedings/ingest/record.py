@@ -52,6 +52,14 @@ _PROCEEDINGS_NATIVE = {
     "nips": (re.compile(r"nips-[0-9a-f]{32}"), "NeurIPS"),
     "iclr": (re.compile(r"iclr-[0-9a-f]{32}"), "ICLR"),
 }
+
+
+def is_paper_id(text: str) -> bool:
+    """Whether `text` has the shape of a record id, `op:<venue>:<year>:<native>` (a cheap check before any
+    lookup; the record itself checks the rest)."""
+    return _ID.fullmatch(text) is not None
+
+
 FORUM_ID = re.compile(r"(?=.*[A-Za-z0-9])[A-Za-z0-9_-]{4,64}")
 _SNIPPET = (
     "…"  # a Scholar snippet starts or ends with an ellipsis; a real abstract may contain one (`x₁, …, x_n`)

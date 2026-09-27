@@ -6,8 +6,11 @@ side and replaces the reference in one assignment; the live engine is never muta
 reference once (`api/deps.py::current_engine`) and uses that object for the whole request, streaming
 included, so a request in flight finishes on the index it started on.
 
-A failed reload keeps the engine already being served (and logs ERROR); only when nothing was ever loaded
-do requests get 503 `API_INDEX_NOT_LOADED`.
+Loading an index also verifies the snapshot it was built from (`snapshot_records`: `/papers/{id}` reads
+the full record, provenance included, from it) and computes its coverage (`api/coverage.py::compute`, the
+manifest's counts checked against the records and the index), before the swap, so an index is served with
+its snapshot and coverage or not at all. A failed load or reload keeps the engine already being served (and logs ERROR
+`index_load_failed`); only when nothing was ever loaded do requests get 503 `API_INDEX_NOT_LOADED`.
 
 Index selection is restricted (task-034 notes; `cli.resolve_snapshot` is not reused): the configured name
 must match `config.INDEX_NAME`, and what it resolves to — through the `current` symlink — must be a
@@ -17,6 +20,7 @@ index_version (`GET /export?index_version=`) gets it from `IndexState.pinned`, s
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import signal
@@ -30,8 +34,10 @@ from typing import TYPE_CHECKING
 from openproceedings.api.config import INDEX_NAME
 from openproceedings.api.errors import frames
 from openproceedings.diagnostics import OpenProceedingsError
+from openproceedings.ingest.snapshot import RecordFile, SnapshotError
 
 if TYPE_CHECKING:
+    from openproceedings.api.models import CoverageResponse
     from openproceedings.engine.tantivy_engine import TantivyEngine
 
 log = logging.getLogger(__name__)
@@ -59,12 +65,49 @@ def index_path(data_dir: Path, name: str) -> Path:
     return target
 
 
+def snapshot_records(data_dir: Path, index: Path, index_version: str) -> RecordFile:
+    """The records of the snapshot index `index` was built from: `<data_dir>/snapshots/<its manifest's
+    snapshot>`, which must hash to the manifest's `snapshot_hash` (one verifying pass). SnapshotError
+    otherwise (missing, another snapshot under that name, or a manifest that names no plain directory)."""
+    try:
+        manifest = json.loads((index / "manifest.json").read_text(encoding="utf-8"))
+        name, expected = manifest["snapshot"], manifest["snapshot_hash"]
+        if manifest["index_version"] != index_version:
+            raise SnapshotError(
+                "the index directory's manifest names another index_version", reason="index_manifest_invalid"
+            )
+    except (OSError, ValueError, KeyError, TypeError):
+        raise SnapshotError(
+            "the index manifest doesn't name its snapshot", reason="index_manifest_invalid"
+        ) from None
+    if not isinstance(name, str) or not name or "/" in name or "\\" in name or name.startswith("."):
+        raise SnapshotError(
+            "the index manifest's snapshot is not a directory name", reason="index_manifest_invalid"
+        )
+    records = RecordFile(data_dir / "snapshots" / name)
+    if records.snapshot_hash != expected:
+        raise SnapshotError(
+            "the snapshot of that name is not the one the index was built from",
+            reason="snapshot_hash_mismatch",
+        )
+    return records
+
+
+def coverage_of(engine: TantivyEngine, records: RecordFile) -> CoverageResponse:
+    from openproceedings.api.coverage import compute  # the router module; imported here, not at the top
+
+    return compute(engine, records)
+
+
 class IndexState:
     def __init__(self, data_dir: Path, name: str, opener: Opener) -> None:
         self._data_dir = data_dir
         self._name = name
         self._opener = opener
         self._engine: TantivyEngine | None = None
+        # the served index's snapshot records and coverage, and the previous one's (a request in flight
+        # across a swap); both are built and checked at load, before the swap
+        self._loaded: dict[str, tuple[RecordFile, CoverageResponse]] = {}
         self._reloading = threading.Lock()  # one load at a time; readers never take it
         self._pinned: dict[str, TantivyEngine] = {}  # engines of other versions opened for a pin (`pinned`)
         self._pinning = threading.Lock()  # one pinned open at a time
@@ -90,14 +133,20 @@ class IndexState:
                 log.info("index_unchanged", extra={"index_version": kept})
                 return True
             engine = self._opener(path)  # verifies every file; the live engine is untouched meanwhile
+            records = snapshot_records(self._data_dir, path, engine.index_version)
+            coverage = coverage_of(engine, records)  # the manifest checked against the records and the index
         except Exception as e:  # the handling layer: logged once, and the service keeps what it has
             fields: dict[str, object] = {"error": type(e).__name__, "index_version_kept": kept}
             if isinstance(e, OpenProceedingsError):
                 fields["code"] = str(e.code)
-            if not isinstance(e, IndexSelectionError | OSError | OpenProceedingsError):
+            if isinstance(e, SnapshotError):
+                fields["reason"] = e.reason  # a constant (snapshot_missing, counts_mismatch, …), never a path
+            if not isinstance(e, IndexSelectionError | OSError | OpenProceedingsError | SnapshotError):
                 fields["frames"] = frames(e)
             log.error("index_load_failed", extra=fields)  # the type, never the message (it names paths)
             return False
+        kept_loaded = {kept: self._loaded[kept]} if kept is not None and kept in self._loaded else {}
+        self._loaded = {**kept_loaded, engine.index_version: (records, coverage)}  # before the swap
         self._engine = engine  # the atomic swap: one reference assignment
         log.info(
             "index_loaded" if previous is None else "index_swapped",
@@ -109,10 +158,20 @@ class IndexState:
         )
         return True
 
-    def available(self) -> list[str]:
+    def records(self, index_version: str) -> RecordFile | None:
+        """The snapshot records loaded with index `index_version` (the served one or the one before)."""
+        loaded = self._loaded.get(index_version)
+        return loaded[0] if loaded is not None else None
+
+    def coverage(self, index_version: str) -> CoverageResponse | None:
+        """The coverage computed when index `index_version` was loaded (the served one or the one before)."""
+        loaded = self._loaded.get(index_version)
+        return loaded[1] if loaded is not None else None
+
+    def available(self, engine: TantivyEngine | None) -> list[str]:
         """Every index_version on this instance (`GET /meta`), sorted: each directory directly under
         `<data_dir>/indexes/` named like one and holding a manifest (the `current` symlink and `.tmp-`
-        leftovers are not versions), plus the one being served."""
+        leftovers are not versions), plus `engine`'s (the one this request read)."""
         indexes = self._data_dir / "indexes"
         try:
             found = {
@@ -122,7 +181,6 @@ class IndexState:
             }
         except OSError:
             found = set()
-        engine = self._engine
         if engine is not None:
             found.add(engine.index_version)
         return sorted(found)

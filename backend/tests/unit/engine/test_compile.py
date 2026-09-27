@@ -376,6 +376,20 @@ def test_an_over_cap_wildcard_is_refused_every_time_and_keeps_only_its_count(tmp
     assert engine.expand(small) == [f"trust{i:03d}" for i in range(10)]  # the caller gets a copy
 
 
+def test_an_over_cap_message_clips_the_quoted_stem(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Spec 02: user text quoted in a message is clipped to 40 characters, so it never grows with the input."""
+    import openproceedings.engine.tantivy_engine as te
+
+    stem = "trust" + "x" * 95
+    records = [paper(f"Cc{i:03d}", f"{stem}{i}") for i in range(3)]
+    engine = TantivyEngine(build_index(snapshot_of(records, tmp_path / "s"), tmp_path / "i", BUILT).path)
+    monkeypatch.setattr(te, "MAX_EXPANSIONS", 1)
+    with pytest.raises(EngineInputError) as e:
+        engine.expand(parse(f"{stem}*").ast)  # type: ignore[arg-type]
+    quoted = e.value.message.split("`")[1]
+    assert len(quoted) == 40 and quoted.endswith("…") and stem[:10] in quoted
+
+
 def test_a_tree_compiles_once_per_engine(engines: tuple[TantivyEngine, ReferenceEngine]) -> None:
     engine = engines[0]
     ast = parse("alpha OR trust*").ast

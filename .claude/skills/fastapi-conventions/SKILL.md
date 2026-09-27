@@ -39,7 +39,7 @@ the engine blocks every other request. Exports use a **sync generator** in `Stre
 `{"error": {"code": "<CODE>", "message": "<human text>", "diagnostics": [Diagnostic]?}}`
 
 Statuses and codes are **exactly** spec 04 §Error handling; this skill keeps no table of its own. In short:
-422 `PARSE_*` (02 diagnostics, spans included), 422 `API_BAD_PARAM` (bad `sort`, `limit` > 200, unknown
+422 `PARSE_*` (02 diagnostics, spans included) on endpoints that run the query (`POST /parse` reports them as a 200's `errors`), 422 `API_BAD_PARAM` (bad `sort`, `limit` > 200, unknown
 `format`, malformed `record_id`: reject it, never clamp silently), 404 `API_PAPER_NOT_FOUND` /
 `API_RECORD_NOT_FOUND`, 409 `API_INDEX_VERSION_UNAVAILABLE`, 409 `API_RECORD_MISMATCH` (export of a
 `mismatch` record), 429 `API_RATE_LIMITED` + `Retry-After`, 503 `API_INDEX_NOT_LOADED`, 500 `API_INTERNAL`

@@ -174,7 +174,7 @@ QUERY_CODES = ("PARSE_", "FIELD_", "WILDCARD_")  # spec 04 row 1: these refusals
 async def _openproceedings(request: Request, exc: Exception) -> JSONResponse:
     """A typed failure from the shared functions: a user-input one is refused with its own code (e.g. 422
     `WILDCARD_TOO_MANY_EXPANSIONS`), and a query refusal carries its diagnostics: the located ones a
-    `search.QueryRefused` holds, else one without a span; an internal one, or one without an HTTP status,
+    an `EngineInputError` holds (`search.run` locates them), else one without a span; an internal one, or one without an HTTP status,
     is a 500."""
     assert isinstance(exc, OpenProceedingsError)
     if isinstance(exc, InternalError) or http_status(exc.code) is None:

@@ -109,8 +109,9 @@ def checked_query(q: str) -> str:
 
 
 def parsed(request: Request, q: str, mode: Mode) -> ParseResult:
-    """`parse(q, mode)`, annotated on the access line, after the length cap (`checked_query`)."""
-    result = parse(checked_query(q), mode)
+    """`parse(q, mode)`, annotated on the access line: a report, never a refusal (`POST /parse`). `parse`
+    checks the length cap first, in O(1), so an over-long query is `errors=[PARSE_TOO_LONG]`, never lexed."""
+    result = parse(q, mode)
     annotate_parse(request, result)
     return result
 
@@ -118,7 +119,7 @@ def parsed(request: Request, q: str, mode: Mode) -> ParseResult:
 def searchable(request: Request, q: str, mode: Mode) -> ParseResult:
     """`parsed`, refusing a query that doesn't parse: 422 with the first error's code and every error as a
     diagnostic, spans into `q` (spec 04 §Error handling). The engine never sees it (spec 03)."""
-    result = parsed(request, q, mode)
+    result = parsed(request, checked_query(q), mode)
     if result.effective_ast is None:
         first = result.errors[0]
         raise ApiError(first.code, first.message, diagnostics=result.errors)

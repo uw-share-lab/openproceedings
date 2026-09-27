@@ -8,7 +8,7 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 ## Endpoints (`/api/v1`)
 | Method | Path | In → out |
 |---|---|---|
-| POST | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations). Debounced, called as the user types. A query with errors is a 200 whose `errors` say why (only `PARSE_TOO_LONG` and a malformed body are 422s). |
+| POST | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations). Debounced, called as the user types. Any well-formed body is a 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body is a 422 `API_BAD_PARAM`. |
 | GET | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | GET | `/papers/{id}` | full record with provenance |
 | GET | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl`, optional `record_id` **or** `index_version` → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; a `mismatch` record's `record_id` → 409 `API_RECORD_MISMATCH` |
@@ -24,7 +24,7 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 `query {input, canonical, canonical_hash, identification_query, warnings[], translations[],
 expansions{pattern: [terms]}}`,
 `index_version`, `tokenizer_version`, `query_version`, `total`, `excluded`, `facets`, `hits[]`. Each hit
-has `id, title, abstract, authors, venue, year, track, presentation, score, highlights{field:
+has `id, title, abstract, authors, venue, year, track, status, presentation, score, highlights{field:
 [[start,end]]}, urls`.
 
 **Every response** (not only `/search`) carries `index_version`, `tokenizer_version` and `query_version`

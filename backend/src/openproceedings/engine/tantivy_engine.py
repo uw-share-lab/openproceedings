@@ -18,7 +18,7 @@ from typing import Any
 
 import tantivy
 
-from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.diagnostics import DiagnosticCode, clip
 from openproceedings.engine.compile import FIELDS, Compiled, Compiler, Expansions, wildcards
 from openproceedings.engine.index import IDS, SCHEMA_VERSION, open_index, record_of, verify_index
 from openproceedings.engine.protocol import (
@@ -109,7 +109,7 @@ class TantivyEngine:
             count = terms if isinstance(terms, int) else len(terms)
             raise EngineInputError(
                 DiagnosticCode.WILDCARD_TOO_MANY_EXPANSIONS,
-                f"`{wildcard.stem}{wildcard.op}` expands to {count} terms (more than {MAX_EXPANSIONS}) — use a "
+                f"`{clip(wildcard.stem + wildcard.op)}` expands to {count} terms (more than {MAX_EXPANSIONS}) — use a "
                 "longer stem.",
             )
         return list(terms)

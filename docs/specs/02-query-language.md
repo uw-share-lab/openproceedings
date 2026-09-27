@@ -303,7 +303,8 @@ detached or mid-word wildcard, `source:` outside Scholar mode, an unknown field,
 to a word (`"trust in "AI"`, `model(s)`), or a query longer than 2,000 code points (`PARSE_TOO_LONG`,
 checked before any other work). Diagnostics are capped at 20 per code ("… and N more"), and user text
 quoted in a message is clipped to 40 characters, so no diagnostic grows with the input. The codes are in
-`diagnostics.py`; the `PARSE_*`, `FIELD_*` and `WILDCARD_*` errors are 422s (spec 04).
+`diagnostics.py`; the `PARSE_*`, `FIELD_*` and `WILDCARD_*` errors are 422s where a query is run (spec 04); `/parse`
+returns them as values.
 
 ## Testing
 

@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Coverage
-         * @description The served index's coverage, as the snapshot it was built from counts it.
+         * @description The served index's coverage, computed and checked when it was loaded.
          */
         get: operations["coverage"];
         put?: never;
@@ -114,8 +114,9 @@ export interface paths {
         put?: never;
         /**
          * Parse Query
-         * @description 02's ParseResult for `q` (debounced as the user types). A query that doesn't parse is a 200 whose
-         *     `errors` say why; only an over-long query (`PARSE_TOO_LONG`) or a malformed body is refused.
+         * @description 02's ParseResult for `q` (debounced as the user types). It reports a parse: any well-formed body is
+         *     a 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body
+         *     is refused (422 `API_BAD_PARAM`).
          */
         post: operations["parse_query"];
         delete?: never;
@@ -452,6 +453,11 @@ export interface components {
             presentation: ("oral" | "spotlight" | "poster") | null;
             /** Score */
             score: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "accepted" | "rejected" | "withdrawn" | "desk_rejected" | "unknown";
             /** Title */
             title: string;
             /**

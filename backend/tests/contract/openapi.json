@@ -745,6 +745,17 @@
             "title": "Score",
             "type": "number"
           },
+          "status": {
+            "enum": [
+              "accepted",
+              "rejected",
+              "withdrawn",
+              "desk_rejected",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -789,6 +800,7 @@
           "venue",
           "year",
           "track",
+          "status",
           "presentation",
           "score",
           "highlights",
@@ -2464,7 +2476,7 @@
   "paths": {
     "/api/v1/coverage": {
       "get": {
-        "description": "The served index's coverage, as the snapshot it was built from counts it.",
+        "description": "The served index's coverage, computed and checked when it was loaded.",
         "operationId": "coverage",
         "responses": {
           "200": {
@@ -2675,7 +2687,7 @@
     },
     "/api/v1/parse": {
       "post": {
-        "description": "02's ParseResult for `q` (debounced as the user types). A query that doesn't parse is a 200 whose\n`errors` say why; only an over-long query (`PARSE_TOO_LONG`) or a malformed body is refused.",
+        "description": "02's ParseResult for `q` (debounced as the user types). It reports a parse: any well-formed body is\na 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body\nis refused (422 `API_BAD_PARAM`).",
         "operationId": "parse_query",
         "requestBody": {
           "content": {

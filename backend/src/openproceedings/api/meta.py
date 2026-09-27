@@ -21,7 +21,7 @@ def meta(request: Request, engine: EngineDep) -> MetaResponse:
     state: IndexState = request.app.state.index
     return MetaResponse(
         **versions(engine.index_version),
-        index_versions=state.available(),
+        index_versions=state.available(engine),
         text_fields=list(TEXT_FIELDS),
         filter_fields=list(FILTER_FIELDS),
         values=Vocabularies.model_validate(
