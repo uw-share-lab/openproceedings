@@ -51,3 +51,18 @@ autofix and CI, and write the URL↔state reducer.
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/{nextjs-conventions,typescript-standards,autolint}/SKILL.md`, `CLAUDE.md`, `CONTRIBUTING.md`, specs 05 and 08
 - Test or hook added? — `.claude/hooks/tests/test-openproceedings-gates.sh` (autofix row now uses the root `node_modules`) and its mutant in `.claude/scripts/mutants/gates.json`; `Makefile` `frontend-deps`
+
+## Addendum — 2026-09-27 (review round 1)
+- **Splicing text into `q` needs the server lexer's view of the text next to the splice.** `foo\` parses,
+  but `(foo\) AND track:(…)` is `PARSE_UNBALANCED_PAREN`, because a backslash escapes the next non-space
+  character (evidence: `uv run python -c 'parse("(foo\\) AND track:main")'`; an even run of backslashes is
+  fine). The reducer now refuses a `q` ending in an odd run, and the goldens live in one JSON file that both
+  vitest and a backend contract test read (`frontend/src/lib/wrap-golden.json`,
+  `backend/tests/contract/test_frontend_wrap_golden.py`), so the two sides can't drift.
+- **A clause handed to the reducer must say what it is.** Without `field` and polarity, "add main" to
+  `-track:workshop` produced `-track:(workshop OR main)`, silently flipping the query. Without `mode`, a
+  clause fetched before `setMode` still applied. `FilterClause` now carries `field`, `negated: false` and
+  `mode`, and each is checked (TASK-078 AC #4).
+- A toggle's accessible name must contain its visible text (WCAG 2.5.3): "Light" shown with the name
+  "Switch to dark theme" fails. Stable text "Dark theme" plus `aria-pressed`, tested with Testing Library
+  under jsdom (which needs a `matchMedia` stub for next-themes).

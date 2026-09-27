@@ -22,9 +22,20 @@ TanStack Query and CodeMirror join with the tasks that use them.
 ## URL is state (guarantee 3)
 
 `/search?q=<input>&mode=native|scholar&sort=relevance&page=2`. Nothing that affects the result set lives
-outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copying the URL copies the search.
-`mode` is part of the search too (it says how `q` is read), so the result set is keyed on `(q, mode)`; `sort`
-and `page` only order and window it. The reducer is `frontend/src/lib/search-state.ts`.
+outside `q` and `mode` (which says how `q` is read). Filters, facet clicks and builder edits all **rewrite
+`q`**. Copying the URL copies the search. The result set is keyed on `(q, mode)`; `sort` and `page` only order
+and window it. The reducer is `frontend/src/lib/search-state.ts`.
+
+Paging: `PAGE_SIZE = 50` results per page, so `page=n` requests `GET /search?offset=(n-1)×50&limit=50`
+(spec 04). `page` is an integer from 1 to 10,000 (`MAX_PAGE`); any other value, and any unknown or repeated
+parameter, is shown to the reader as a URL notice and replaced by the default, never used silently.
+
+Facet and include clicks rewrite `q` from the server's `/parse` report of that field's top-level clause
+(field, polarity, code-point span, values, and the `(q, mode)` it was parsed from). A clause parsed from
+another `q` or `mode`, for another field, or negated is refused. An applied default is written out as
+`(q) AND field:(…)`; a `q` ending in an odd run of backslashes is refused, because the last backslash would
+escape the `)` (spec 02). The wrap goldens are `frontend/src/lib/wrap-golden.json`, checked against the
+server parser by `backend/tests/contract/test_frontend_wrap_golden.py`.
 
 ## Pages
 

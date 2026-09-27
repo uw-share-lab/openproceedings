@@ -13,6 +13,8 @@ brew install shellcheck       # or apt-get install shellcheck — used by make l
 `make help` lists the entry points: `sync` runs `uv sync` and `npm ci`, `fmt` fixes the whole repo, `lint`
 is exactly what CI checks (frontend included: prettier, eslint, `next typegen` + `tsc --noEmit`; it fails if
 `node_modules/` is missing), and `tooling` runs the roster, backlog and hook checks.
+**Backend-only contributors need Node too:** the pre-push hook runs `make lint`, which checks `frontend/`,
+so install Node 22 and run `npm ci` once even if you never touch the UI.
 Put OpenReview credentials in `.env` (gitignored). The anonymous API rate-limits almost immediately.
 
 ## Flow: `feature → PR → dev → PR → main`

@@ -45,12 +45,16 @@ description: The openproceedings Next.js standard — App Router layout, output 
 - Tests pin exact strings: `facetToggle(track=workshop)` on input X yields exactly string Y.
 - **As built (TASK-039, `src/lib/search-state.ts`):** `SearchState = {q, mode, sort, page}` and nothing
   else; `resultSetKey` is `[q, mode]`; `toSearchRequest` derives the API's `offset`/`limit` from `page`
-  (`PAGE_SIZE` 50). `fromURL` returns `{state, notices}`: unknown, repeated and invalid params are reported,
-  never silently used. Actions: `submit`, `builderEdit`, `setMode`, `facetToggle`, `includeExcluded`,
-  `sort`, `page`. Filter actions take a `FilterClause {source, span, values}` from `/parse` (code-point
-  span into `source`; zero-width at the end = applied default, written out as `(q) AND field:(…)`), refuse a
-  clause parsed from another `q`, and throw `SearchStateError` rather than no-op (last value removed,
-  non-identifier value, bad span). Until `/parse` reports per-field clause spans, `FilterClause` is a local
+  (`PAGE_SIZE` 50, `MAX_PAGE` 10,000). `fromURL` returns `{state, notices}`: unknown, repeated and invalid
+  params (including a page over `MAX_PAGE`) are reported, never silently used. Actions: `submit`,
+  `builderEdit`, `setMode`, `facetToggle`, `includeExcluded`, `sort`, `page`. Filter actions take a
+  `FilterClause {field, negated: false, source, mode, span, values}` from `/parse` (code-point span into
+  `source`; zero-width at the end = applied default, written out as `(q) AND field:(…)`). They refuse a clause
+  whose `(source, mode)` differs from `resultSetKey`, one for another field, a negated one (adding a value
+  inside `-track:x` would flip it), and a wrap of a `q` ending in an odd run of backslashes (the escape would
+  swallow the `)`; goldens in `src/lib/wrap-golden.json`, checked by the backend parser in
+  `backend/tests/contract/test_frontend_wrap_golden.py`). Every refusal throws `SearchStateError` rather than
+  no-op (also: last value removed, non-identifier value, bad span). Until `/parse` reports per-field clause spans, `FilterClause` is a local
   type (TASK-078 adds the spans to `/parse`; then it is derived from the schema).
 - The editor draft is not state until submitted; submitting `router.push`es. Paging uses `replace`.
 

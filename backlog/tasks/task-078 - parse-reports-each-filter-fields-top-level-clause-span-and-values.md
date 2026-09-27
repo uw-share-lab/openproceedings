@@ -4,6 +4,7 @@ title: /parse reports each filter field's top-level clause span and values
 status: To Do
 assignee: []
 created_date: '2026-09-27 07:21'
+updated_date: '2026-09-27 07:46'
 labels:
   - api
   - frontend
@@ -24,4 +25,11 @@ Found in TASK-039. The URL↔state reducer (frontend/src/lib/search-state.ts) re
 - [ ] #1 ParseResult (spec 02) and /parse (spec 04) return, per filter field (track, status, venue, year), the top-level clause's code-point span and values, or a zero-width span at len(q) with the default/all values; a field that cannot be toggled (nested, negated, OR of mixed fields) says so
 - [ ] #2 Golden cases pin the spans for typed, default, canonical-pasted and astral-character queries
 - [ ] #3 frontend FilterClause is derived from the generated schema (no local type)
+- [ ] #4 Each reported clause carries its field and polarity (negated: bool); the frontend offers value toggles only on positive clauses and FilterClause keeps field + negated: false (TASK-039 review)
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+TASK-039 review: writing an applied default out as (q) AND field:(…) adds one nesting level and about 10+ characters to q, so a q near the limits can fail after a facet click. Add golden cases at PARSE_TOO_DEEP (depth 64) and PARSE_TOO_LONG (2,000 code points) for the wrapped form, and decide whether /parse should report that a field cannot be toggled for such a q.
+<!-- SECTION:NOTES:END -->
