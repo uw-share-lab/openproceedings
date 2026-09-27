@@ -168,8 +168,8 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
 
 Regenerate with `uv run python -m tests.bench.report_80k` (from `backend/`, on a quiet machine: other load
 inflates the timings); never edit by hand. Budgets are
-spec 03 §Performance budgets. Verified clauses are exempt from the `match_ids` budget (spec 03), so they
-are reported, not gated.
+spec 03 §Performance budgets. Position-verified clauses are exempt from the search and `match_ids` budgets
+when cold (spec 03), so they are reported, not gated.
 
 - Machine: {platform.platform()}, {platform.machine()}, {os.cpu_count()} CPUs; Python {platform.python_version()},
   tantivy {version("tantivy")}; commit `{commit}`; index `{built.name}`.

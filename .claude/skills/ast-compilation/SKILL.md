@@ -50,7 +50,8 @@ three or more clauses (And/Or children, the per-field OR, year ranges, wildcard 
 candidates) goes through `combine`, a balanced binary tree, so identical texts score identically. Filters are `ConstScoreQuery(…, 0.0)`: they never change a score
 (tested). The verified fallback finds each operand's occurrences from a token→positions map and pairs NEAR
 operands by binary search (each operand's width is fixed), so its cost is linear in the candidates' text:
-on an 80k index the worst stopword queries take 2–11 s (the reference engine 27–45 s); its candidate
+on a synthetic 80k index stopword cases take 2.2–3.3 s cold and the wildcard-phrase string `main-2-pop`
+10.3 s (`docs/results/2026-09-26-bench.md`); its candidate
 query holds each distinct item once, so a repeated term isn't scored twice. `facets` compiles each distinct
 filter-free query once, and the engine memoises every verified clause (per field), so facets after a match
 cost 0.1–0.3 s on 80k. Candidates hold each distinct item once, and an item implied by a narrower one
@@ -63,8 +64,8 @@ ReferenceEngine, and (locally) the ten Trust-Evals protocol strings on the real 
 (the effective query, default filters included), the index_version, the compiled query as a readable tree
 (field, clause kind, slop, and whether it is a filter), the wildcard expansions, and which clauses took the
 verification fallback. `op search <q> --ids` prints the sorted id set. Both take `--index` (a directory or
-an index_version; default `indexes/current`) and `--mode native|scholar`. `--engine reference` and ranked
-output arrive with task-030. Every differential counterexample is reported with this output.
+an index_version; default `indexes/current`) and `--mode native|scholar`; as built (task-030), ranked output
+by default, and `--ids --engine reference` runs the oracle over the index's snapshot. Every differential counterexample is reported with this output.
 
 ## Review checklist
 - [ ] every row has a golden case in `backend/tests/golden/`, run through both engines

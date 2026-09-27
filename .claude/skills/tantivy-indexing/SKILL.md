@@ -75,11 +75,11 @@ Positions are mandatory on `title`/`abstract` (phrases, NEAR, highlights). Any c
 only.
 
 ## Budgets
-Build in < 2 min, and an index under 500 MB on disk (spec 03), on the ~80k M4 corpus (CI bench plus
-nightly). Measured 2026-09-26 on an 8-core laptop with 81k records made from the real corpus's text with
-every field filled: 38.8 s, a 140 MB index, peak memory 510 MB in the builder (682 MB with its workers),
-growing with the corpus (316 MB at 20k, 612 MB at 162k) as Tantivy's writer buffers segments (129.9 s
-before normalizing in parallel; 2 GB before streaming). Tokenizer parity is read back from the built index
+Build in < 2 min, and an index under 500 MB on disk (spec 03), on the ~80k M4 corpus. Measured by
+`backend/tests/bench/report_80k.py` into `docs/results/2026-09-26-bench.md` (synthetic 80k, abstracts of
+120-250 words): 33 s, a 99 MB index, 386 MB in the largest single process; nightly on the full index is
+task-057. An earlier local, undated measurement from the real corpus's text replicated to 81k gave 38.8 s,
+140 MB and a 510 MB builder (129.9 s before normalizing in parallel; 2 GB before streaming). Tokenizer parity is read back from the built index
 (task-029, `engine/parity.py`, `op index parity`): stored fields through `exact_v1`, positions by a
 phrase query per field, and every term's document frequency from the term dictionary
 (`terms_with_prefix(field, "")` lists all of it, across segments, deleted documents left out), against

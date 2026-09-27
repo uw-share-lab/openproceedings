@@ -40,7 +40,7 @@ means every *source's* claim, including the ones precedence overruled.
 
 **Not yet built:** "OpenReview says accepted but the crawled proceedings don't list it → `unknown` plus a
 `conflicts.csv` row" needs the set of crawled proceedings venue-years, which only the proceedings
-crawlers produce. It is a reconcile step after dedup, tracked as its own task (blocked by 052/053).
+crawlers produce. It is a reconcile step after dedup: task-072 (M4, blocked by 052/053).
 
 ## Consequences
 

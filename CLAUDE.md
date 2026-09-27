@@ -17,8 +17,9 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 - Root: `pyproject.toml` is the **uv workspace** root, with repo-wide ruff config and one `uv.lock`.
   `Makefile` has `sync`, `fmt`, `lint`, `tooling`, `test` and `hooks`.
 - `backend/`: the uv workspace member, Python package `openproceedings` (`cli.py` → `op`, `export.py`, `logs.py`,
-  `diagnostics.py`, `vocab.py`, `storage.py`, `query/`, `engine/` (`protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py`, `exclusions.py`, `highlight.py`, `parity.py`), `ingest/`
-  (`record.py`, `classify.py`, `ris.py`, `volumes.py`, `dedup.py`); `api/ semantic/ eval/` arrive with
+  `diagnostics.py`, `vocab.py`, `storage.py`, `query/` (`normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`,
+  `ast.py`, `canonical.py`, `defaults.py`, `compat.py`), `engine/` (`protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py`, `exclusions.py`, `highlight.py`, `parity.py`), `ingest/`
+  (`record.py`, `classify.py`, `urls.py`, `volumes.py`, `ris.py`, `dedup.py`, `snapshot.py`); `api/ semantic/ eval/` arrive with
   their tasks). Tests in `backend/tests/`; `uv run pytest` from the root.
 - `frontend/` (planned, M3): Next.js, an npm workspace.
 - `docs/specs` · `docs/{plans,results,design,usability,research}` (created as needed).

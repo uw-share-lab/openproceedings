@@ -53,10 +53,14 @@ into an ICLR main-track paper (scholarmend note, `zkNCWtw2fd`).
 | OpenReview API v1 (`api.openreview.net`) | ICLR 2018–2023, NeurIPS 2021–2022 | Status comes from decision notes or `content.venue`. A per-year adapter handles each schema. |
 | NeurIPS proceedings (`proceedings.neurips.cc`) | NeurIPS main and D&B, all years; the only source before 2021 | HTML/JSON pages. Also cross-checks OpenReview acceptance. |
 | PMLR (`proceedings.mlr.press`) | ICML 2020–2022 (v119, v139, v162); confirms 2023+ | Volume index plus per-paper pages. The volume → year/track table is `ingest/volumes.py`, checked in tests; a volume that mixes main and position papers (v235, v267) gives track `unknown`. |
-| RIS importer (`ingest/ris.py`) | The Trust-Evals corpus (M2 bootstrap): two searches, 2025–26 and 2020–24, one scholarmend output each | Reads a `mended.ris` with `scholarmend.parse.parse_file` (pinned `scholarmend` PyPI package) and the `resolved.json` beside it, entry by entry (a count or title mismatch is an error). Only scholarmend's identifying claims decide identity, track and status: a venueid plus its forum id; else a NeurIPS/ICLR `proceedings_url` claim (`nips-`/`iclr-<hash>`); else a `pmlr_url` claim in an ICML volume (`pmlr-v<N>-<key>`, track from `ingest/volumes.py`). `status` comes from a claim only: a venueid → its status; a proceedings listing → `accepted`, overriding a venueid that names the same venue, year and track (decision-005); a listing that disagrees makes the record a `conflict`. Never inferred from appearing in Scholar. Abstract: OpenReview's, else the proceedings page's, else `null` (never Scholar's or Semantic Scholar's). Authors from `AU` without Scholar's `...`. Every claim has `source = "ris"`, its origin in `evidence`, and `fetched_at` from the `M1` Query date (PoP local time, stored labelled UTC). Skipped records are counted by reason (`out_of_scope`, `unresolved`, `no_id`, `ambiguous`, `conflict`, `no_query_date`) in an `ImportReport`; none is given a minted id. |
+| RIS importer (`ingest/ris.py`) | The Trust-Evals corpus (M2 bootstrap): two searches, 2025–26 and 2020–24, one scholarmend output each | Reads a `mended.ris` with `scholarmend.parse.parse_file` (pinned `scholarmend` PyPI package) and the `resolved.json` beside it, entry by entry (a count or title mismatch is an error). Only scholarmend's identifying claims decide identity, track and status: a venueid plus its forum id; else a NeurIPS/ICLR `proceedings_url` claim (`nips-`/`iclr-<hash>`); else a `pmlr_url` claim in an ICML volume (`pmlr-v<N>-<key>`, track from `ingest/volumes.py`). `status` comes from a claim only: a venueid → its status; a proceedings listing → `accepted`, overriding a venueid that names the same venue, year and track (decision-005); a listing that disagrees makes the record a `conflict`. Never inferred from appearing in Scholar. Abstract: OpenReview's, else the proceedings page's, else `null` (never Scholar's or Semantic Scholar's). Authors from `AU` without Scholar's `...`. Every claim has `source = "ris"`, its origin in `evidence`, and `fetched_at` from the `M1` Query date: Publish or Perish's local time, stored labelled UTC because the offset isn't recorded, so a crawl date can be a day off near midnight (task-077 records the offset). Skipped records are counted by reason (`out_of_scope`, `unresolved`, `no_id`, `ambiguous`, `conflict`, `no_query_date`) in an `ImportReport`; none is given a minted id. |
 
-The M2 bootstrap is deliberately the existing corpus (≈1,834 screened records plus workshop records
-auto-removed). This lets the team use the engine for the live review before the full crawl lands in M4.
+The M2 bootstrap is deliberately the existing corpus: the Trust-Evals review's Scholar results as
+scholarmend mended them (1,834 records read; 1,805 imported, nearly all accepted main-track papers, since
+the review had already screened them). This lets the team use the engine for the live review before the
+full crawl lands in M4. **Its counts are not PRISMA identification numbers:** the corpus is already the
+output of a search and a screening, so `identified` and `excluded` on an M2 index describe that corpus,
+not a database; cite them only once the M4 crawl indexes the proceedings themselves.
 
 ## Pipeline
 
@@ -93,7 +97,7 @@ op snapshot diff <a> <b>                # added / removed / changed records
 ```
 
 As built (task-022): `ingest ris`, `snapshot build` and `snapshot diff`; the crawler sources are stubs
-naming task-050/052. Every command takes `--data-dir` (default `$OP_DATA_DIR`, else the repository's
+naming task-050/052. `op --data-dir <dir> <command>` (a global option; default `$OP_DATA_DIR`, else the repository's
 `data/`, gitignored); results go to stdout as JSON, a refusal exits 1 with a one-line reason that never
 quotes record text.
 
@@ -106,7 +110,7 @@ quotes record text.
   it): keep both claims, set `status` from the higher-priority source, and write `conflicts.csv`. The
   per-field precedence table is decision-005: OpenReview first for title, abstract and authors (the
   proceedings only where OpenReview lacks the paper); the official proceedings decide acceptance where
-  they are published (OpenReview-accepted but unlisted → `unknown` + a conflict row); OpenReview's venueid
+  they are published (OpenReview-accepted but unlisted → `unknown` + a conflict row; not yet built: task-072, M4); OpenReview's venueid
   decides track, and status elsewhere. A title that differs between merged sources is a conflict row too.
 
 ## Testing

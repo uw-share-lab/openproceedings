@@ -14,7 +14,7 @@ build). Others are reports (they're regenerated and committed as dated results, 
 | Golden tokens | 02's table plus 100 or more normalization cases | 100% pass |
 | Golden queries | Query → expected ID set on a hand-built 200-record fixture, with the cases written to be tricky (benchmark/benchmarking, trust/trustworthy, hyphens, LaTeX, phrases that span fields, NEAR ordering) | 100% pass |
 | Differential | Hypothesis random ASTs: `TantivyEngine == ReferenceEngine` on the synthetic 5k fixture snapshot (decision-004) | 0 counterexamples in 2,000 examples per CI run, 50k nightly |
-| Tokenizer parity | Index tokens == `normalize.py` tokens over the whole corpus | 0 diffs |
+| Tokenizer parity | Stored text, positions (phrase read-back) and every term's document frequency in the index == `normalize.py`, over the whole corpus (term frequency only as far as the phrases imply) | 0 diffs |
 | Semantic invariant | Search results identical with 06 on and off | 0 diffs |
 | Determinism | Same canonical query + `index_version` → identical order and scores | 0 diffs |
 

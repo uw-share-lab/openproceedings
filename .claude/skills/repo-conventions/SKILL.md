@@ -13,8 +13,8 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `.githooks/` | `commit-msg` (attribution), `pre-push` (`make lint` + `make tooling`) | Installed by `scripts/setup-dev.sh` |
 | `.github/` | Workflows, `dependabot.yml` | Actions pinned by SHA |
 | `backend/` (M1) | The uv workspace member, package `openproceedings` (`backend/pyproject.toml`) | |
-| `backend/src/openproceedings/ingest/` | 01: `sources/`, `classify.py`, `dedup.py`, `snapshot.py`, `ris.py` | Only place that makes network calls |
-| `backend/src/openproceedings/query/` | 02: `normalize.py`, `lexer.py`, `parser.py`, `ast.py`, `canonical.py`, `compat.py` | Pure; no I/O |
+| `backend/src/openproceedings/ingest/` | 01: `record.py`, `classify.py`, `urls.py`, `volumes.py`, `ris.py`, `dedup.py`, `snapshot.py`; `sources/` (M4 crawlers) | Only place that makes network calls |
+| `backend/src/openproceedings/query/` | 02: `normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`, `ast.py`, `canonical.py`, `defaults.py`, `compat.py` | Pure; no I/O |
 | `backend/src/openproceedings/engine/` | 03: `protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py` (ranking included), `exclusions.py`, `highlight.py`, `parity.py` | Pure except index file reads |
 | `backend/src/openproceedings/api/` | 04: app, routers, `exporters/`, `records.py` | The only writer of `data/records.sqlite` |
 | `backend/src/openproceedings/semantic/` | 06 (phase 2) | Never imported by `query/` or `engine/` matching code |
@@ -22,8 +22,10 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `backend/src/openproceedings/diagnostics.py` | The error-code registry (`error-diagnostics`) | |
 | `backend/src/openproceedings/vocab.py` | Venue, track and status vocabularies (spec 01), shared by ingest and the query language | Pure |
 | `backend/src/openproceedings/logs.py` | The only place logging is configured (`logging-standards`) | |
+| `backend/src/openproceedings/storage.py` | Locks, staging, fsync and read-only sealing (`snapshots`, `tantivy-indexing`) | The only code that places or seals `data/` directories |
+| `backend/src/openproceedings/export.py` | 04 exports (RIS, CSV, BibTeX, JSONL) | Shared by `op export` and the API (task-036) |
 | `backend/src/openproceedings/cli.py` | `op` entry point | Thin: calls the same functions as the API |
-| `backend/tests/{unit,golden,differential,contract,fixtures}/` | Tests by kind (`testing-standards`) | |
+| `backend/tests/{unit,golden,differential,bench,contract,fixtures}/` | Tests by kind (`testing-standards`) | |
 | `frontend/` (M3) | 05: Next.js app, an npm workspace | `frontend/src/api/schema.ts` is generated |
 | `docs/specs/` | `NN-name.md`, changed only by PR (`spec-writing`) | |
 | `docs/{design,usability,research}/` | Created as needed | |

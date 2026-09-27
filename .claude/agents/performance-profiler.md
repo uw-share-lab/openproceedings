@@ -43,7 +43,8 @@ however large the speed-up. Every optimisation you suggest has to keep the diffe
 
 Read timings only from a quiet machine (no tests, reviews or builds running) with enough rounds that
 the p95 isn't the slowest round (200 warm searches in the 80k report). A 20-round p95 under load read 147 ms
-for a search whose quiet 200-round p95 is 62–95 ms across runs, and a task was filed, then archived, on it (2026-09-26).
+for a search whose quiet 200-round p95 is 68.7 ms in the report (a separate 200-run probe, not in
+`docs/results/`, gave p95 95 ms), and a task was filed, then archived, on it (2026-09-26).
 
 ## Output
 A table of benchmark · branch · main · Δ% · budget · pass/fail, each regression's cause with a profile

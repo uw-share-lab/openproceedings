@@ -33,7 +33,8 @@ contract keeps distinct), no stemmer and no stopword filter. The query side does
 Tantivy's query parser. We compile our own AST. To keep the two sides from drifting, the index is fed
 **pre-normalized text** from `normalize.py` (02). Tantivy then only needs to split on whitespace, so the
 Rust side contains no normalization logic of its own. A test asserts that tokenizing through the index
-and through `normalize.py` gives identical token streams across the whole corpus. Tantivy silently drops
+and through `normalize.py` agrees across the whole corpus (the stored text, the positions by phrase
+read-back, and every term's document frequency; see the as-built note below for what that does not cover). Tantivy silently drops
 a token over 65,530 UTF-8 bytes, so the build refuses a record with one rather than index less than the
 reference engine matches (`engine/index.py`, `op index build`).
 
@@ -170,13 +171,15 @@ as "current" and can load a pinned older version to replay a search record.
 - A wildcard expansion of up to 200 terms: under 50 ms.
 - **Exception, as built (task-024):** a clause that takes the position-verified fallback (a phrase with a
   wildcard item; NEAR with a phrase or wildcard operand, or a term with itself) costs time linear in its
-  candidates' text and can exceed the `match_ids` budget: on an 80k corpus, stopword cases such as
-  `the NEAR/5 the` take 2–11 s (the reference engine 27–45 s). It is never capped, because a cap would make
+  candidates' text and can exceed the search and `match_ids` budgets when cold: on a synthetic 80k corpus,
+  stopword cases such as `the NEAR/5 the` take 2.2–3.3 s cold, and the wildcard-phrase protocol string
+  `main-2-pop` 10.3 s to search and 11.5 s for `match_ids` + exclusions (`docs/results/2026-09-26-bench.md`). It is never capped, because a cap would make
   a query's result depend on the corpus's size and break replaying search records; task-031 measures these
   cases, and an engine caches each verified clause, so facets and repeats don't pay again.
 - Measured (task-031, `docs/results/2026-09-26-bench.md`, a synthetic 80k corpus, quiet machine): build 33 s,
   99 MB, 386 MB peak in the largest single process. Every Trust-Evals string's search and `match_ids` +
-  exclusions is within budget, except `main-2-pop` (wildcard phrases) when cold: 10 s, the exception above.
+  exclusions is within budget, except `main-2-pop` (wildcard phrases) when cold: 10.3 s to search and 11.5 s
+  for `match_ids` + exclusions, the exception above.
   Its warm search is 69 ms p95 over 200 runs, a thin margin that task-076 widens.
 
 ## Testing

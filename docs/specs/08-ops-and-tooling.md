@@ -15,17 +15,19 @@ openproceedings/
 ├── backend/                     # uv workspace member: Python package `openproceedings` (Python 3.12, .python-version)
 │   ├── pyproject.toml
 │   ├── src/openproceedings/
-│   │   ├── ingest/              # 01: sources/, classify.py, dedup.py, snapshot.py, ris.py
-│   │   ├── query/               # 02: normalize.py, lexer.py, parser.py, ast.py, canonical.py, defaults.py, compat.py
-│   │   ├── engine/              # 03: protocol.py, reference.py, index.py, compile.py, tantivy_engine.py, exclusions.py, highlight.py, parity.py (built); export.py beside cli.py
+│   │   ├── ingest/              # 01: record.py, classify.py, urls.py, volumes.py, ris.py, dedup.py, snapshot.py (built); sources/ (M4, crawlers)
+│   │   ├── query/               # 02: normalize.py, mathsyms.py, lexer.py, parser.py, ast.py, canonical.py, defaults.py, compat.py
+│   │   ├── engine/              # 03: protocol.py, reference.py, index.py, compile.py, tantivy_engine.py, exclusions.py, highlight.py, parity.py
 │   │   ├── semantic/            # 06 (phase 2)
 │   │   ├── api/                 # 04: FastAPI app, routers, exporters/, records.py
 │   │   ├── eval/                # 07 report generators
 │   │   ├── diagnostics.py       # error-code registry (one Diagnostic shape; error-diagnostics skill)
 │   │   ├── vocab.py             # venue/track/status vocabularies (spec 01), shared by ingest and query
 │   │   ├── logs.py              # the only place logging is configured (logging-standards skill)
+│   │   ├── storage.py           # locks, staging, fsync and read-only sealing for snapshots and indexes
+│   │   ├── export.py            # 04 exports (RIS, CSV, BibTeX, JSONL), shared by `op export` and the API
 │   │   └── cli.py               # `op` entry point
-│   └── tests/{unit,golden,differential,contract,fixtures}/
+│   └── tests/{unit,golden,differential,bench,contract,fixtures}/
 ├── frontend/                    # (M3) Next.js app, npm workspace
 ├── docs/{specs,plans,results,design,usability,research}/   # created as needed
 ├── backlog/                     # Backlog.md: tasks, completed, docs, decisions — CLI only
@@ -43,7 +45,7 @@ into one `.venv` from one `uv.lock`. New Python packages join by adding their di
 |---|---|
 | `op ingest openreview\|proceedings\|ris … [--offline]` | fetch sources (`--offline`: cache only, no network) |
 | `op snapshot build` · `op snapshot diff <a> <b>` | build an immutable snapshot, or compare two |
-| `op index build [--snapshot <id>]` · `op index parity --index <v> [--snapshot <id>]` · `op index retire <index_version>` | build an immutable index; check it holds `normalize()`'s tokens for its snapshot (local, over the real corpus); retire an old one (refuses if any search record pins it) |
+| `op index build --snapshot <dir\|name\|hash prefix> [--out <dir>]` · `op index parity --index <v> [--snapshot <id>]` · `op index retire <index_version>` | build an immutable index; check it holds `normalize()`'s tokens for its snapshot (local, over the real corpus); retire an old one (refuses if any search record pins it) |
 | `op search "<q>" [--mode scholar] [--explain \| --ids] [--engine tantivy\|reference] [--sort <s>] [--limit <n>] [--index <dir\|version>]` | ranked hits with the total and the default-filter exclusions (default); the sorted id set (`--ids`; `--engine reference` runs the oracle over the index's snapshot, `--ids` only); or the compiled query (`--explain`). Diagnostics go to stderr as user output; one `search_run` INFO line per run (task-030) |
 | `op export "<q>" --format ris\|csv\|bibtex\|jsonl [--mode scholar] [--index <dir\|version>] [--out <file>]` | export the full matched set in id order (spec 04 §Exports), streamed to stdout or written whole to `--out` (never a partial file); the count is checked against the query's total |
 | `op record save "<q>" [--mode scholar]` · `op record replay <id>` | freeze a search as a search record (the same function as `POST /records`); replay one and print its status, `reproduced` / `drifted` / `mismatch` (the same function as `GET /records/{id}`) |
