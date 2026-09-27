@@ -61,7 +61,8 @@ def get_paper(
         )
     result = searchable(request, q, mode) if q is not None else None  # refused before the index is asked
     # the pattern admits any venue (an open enum); one this code doesn't know is no paper here: 404
-    if not is_paper_id(id) or id not in engine.display([id]):
+    shown = engine.display([id]).get(id) if is_paper_id(id) else None  # read once: highlight reuses it
+    if shown is None:
         raise ApiError(
             DiagnosticCode.API_PAPER_NOT_FOUND, f"No paper with that id in index {engine.index_version}."
         )
@@ -77,7 +78,7 @@ def get_paper(
         return PaperResponse(**versions(engine.index_version), paper=record, matched=None, highlights=None)
     assert result.effective_ast is not None  # searchable refuses a query that doesn't parse
     check_candidates(request, engine, result.effective_ast)  # 422 API_QUERY_TOO_COSTLY, as /search
-    spans = highlight(engine, result, id)
+    spans = highlight(engine, result, shown)
     return PaperResponse(
         **versions(engine.index_version),
         paper=record,

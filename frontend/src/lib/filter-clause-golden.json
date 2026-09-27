@@ -162,7 +162,70 @@
         "field": "track",
         "value": "workshop"
       },
-      "expected": "x track:main"
+      "expected": "x track:(main)"
+    },
+    {
+      "name": "a clause followed by a group: one value is still written grouped, so it can't touch the group",
+      "q": "trust track:(main OR workshop)(x OR y)",
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": [6, 30],
+          "toggleable": true,
+          "reason": null,
+          "values": ["main", "workshop"]
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "track",
+        "value": "main"
+      },
+      "expected": "trust track:(workshop)(x OR y)"
+    },
+    {
+      "name": "an OR of one field's filters followed by a group, down to one value",
+      "q": "(track:main OR track:workshop)(x)",
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": [0, 30],
+          "toggleable": true,
+          "reason": null,
+          "values": ["main", "workshop"]
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "track",
+        "value": "main"
+      },
+      "expected": "track:(workshop)(x)"
+    },
+    {
+      "name": "a venue clause followed by a group, down to one value",
+      "q": "venue:(ICLR OR ICML)(x)",
+      "mode": "native",
+      "filters": {
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": [0, 20],
+          "toggleable": true,
+          "reason": null,
+          "values": ["ICLR", "ICML"]
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "venue",
+        "value": "ICLR"
+      },
+      "expected": "venue:(ICML)(x)"
     },
     {
       "name": "Scholar mode: source: is the venue clause",
@@ -435,6 +498,157 @@
         "value": "workshop"
       },
       "refused": "TOO_LONG"
+    },
+    {
+      "name": "1,901 code points ending in a typed venue clause: its widest splice fits the canonical cap",
+      "q_parts": [
+        ["a", 1890],
+        [" venue:ICLR", 1]
+      ],
+      "mode": "native",
+      "filters": {
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": [1891, 1901],
+          "toggleable": true,
+          "reason": null,
+          "values": ["ICLR"]
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "venue",
+        "value": "NeurIPS"
+      },
+      "expected_parts": [
+        ["a", 1890],
+        [" venue:(ICLR OR NeurIPS)", 1]
+      ]
+    },
+    {
+      "name": "1,902 code points ending in a typed venue clause: its widest splice's canonical form is over 2,000",
+      "q_parts": [
+        ["a", 1891],
+        [" venue:ICLR", 1]
+      ],
+      "mode": "native",
+      "filters": {
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": [1892, 1902],
+          "toggleable": false,
+          "reason": "too_long",
+          "values": ["ICLR"]
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "venue",
+        "value": "NeurIPS"
+      },
+      "refused": "TOO_LONG"
+    },
+    {
+      "name": "NOT NOT around two track clauses: both are top-level once flattened",
+      "q": "NOT NOT (track:main track:workshop) x",
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": null,
+          "toggleable": false,
+          "reason": "multiple_clauses",
+          "values": null
+        }
+      },
+      "click": {
+        "type": "includeExcluded",
+        "field": "track",
+        "value": "position"
+      },
+      "refused": "NO_EDITABLE_CLAUSE"
+    },
+    {
+      "name": "an OR of several fields' filters and a term is nested, not mixed",
+      "q": "x (track:workshop OR venue:ICLR OR y)",
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": null,
+          "toggleable": false,
+          "reason": "nested",
+          "values": null
+        },
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": null,
+          "toggleable": false,
+          "reason": "nested",
+          "values": null
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "venue",
+        "value": "NeurIPS"
+      },
+      "refused": "NO_EDITABLE_CLAUSE"
+    },
+    {
+      "name": "an OR of one field's filters, one negated, is nested, not mixed",
+      "q": "x (track:workshop OR NOT track:main)",
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": null,
+          "toggleable": false,
+          "reason": "nested",
+          "values": null
+        }
+      },
+      "click": {
+        "type": "includeExcluded",
+        "field": "track",
+        "value": "position"
+      },
+      "refused": "NO_EDITABLE_CLAUSE"
+    },
+    {
+      "name": "an OR of two fields' filters, one negated, is mixed",
+      "q": "x (track:workshop OR NOT venue:ICLR)",
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": null,
+          "toggleable": false,
+          "reason": "mixed_fields",
+          "values": null
+        },
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": null,
+          "toggleable": false,
+          "reason": "mixed_fields",
+          "values": null
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "venue",
+        "value": "NeurIPS"
+      },
+      "refused": "NO_EDITABLE_CLAUSE"
     },
     {
       "name": "a trailing escape: the wrap would not parse",

@@ -901,6 +901,11 @@
       "Limits": {
         "description": "This instance's limits on a query (TASK-089), so a client need not hard-code them: the parser's length\ncap, and the served config's verification limits (`op serve` flags; another instance may differ).",
         "properties": {
+          "max_query_depth": {
+            "description": "the deepest nesting of groups and `NOT`s a `q` may have; deeper is 422 `PARSE_TOO_DEEP` (from `/parse`, a 200 whose `errors` hold it)",
+            "title": "Max Query Depth",
+            "type": "integer"
+          },
           "max_query_length": {
             "description": "the longest `q` in Unicode code points; a longer one, or one whose canonical form is longer, is 422 `PARSE_TOO_LONG` (from `/parse`, a 200 whose `errors` hold it)",
             "title": "Max Query Length",
@@ -919,6 +924,7 @@
         },
         "required": [
           "max_query_length",
+          "max_query_depth",
           "max_verified_clauses",
           "max_verification_candidates"
         ],
@@ -1655,7 +1661,7 @@
         "description": "A `venue`, `track` or `status` clause.",
         "properties": {
           "field": {
-            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "description": "The filter field: always equal to this clause's key in `filters`. Open set: new values may be added within /api/v1; handle a value you don't know.",
             "enum": [
               "venue",
               "year",
@@ -1775,7 +1781,7 @@
         "description": "The `year` clause. Years are ranges, not a value list.",
         "properties": {
           "field": {
-            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "description": "The filter field: always equal to this clause's key in `filters`. Open set: new values may be added within /api/v1; handle a value you don't know.",
             "enum": [
               "venue",
               "year",

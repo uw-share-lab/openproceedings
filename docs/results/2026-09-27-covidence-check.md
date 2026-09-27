@@ -1,5 +1,7 @@
 # Covidence import check for the RIS export (task-004 AC#1): done 2026-09-27
 
+Run 2026-09-27; see Outcome. The steps below stay as the runbook for a regenerated fixture.
+
 **Status: run 2026-09-27** in a throwaway review (practice review under the University of Waterloo Library
 account; the live Trust Evaluation review was not touched). Results below. The steps that followed:
 1. Fill in the Result columns and the Outcome section, including the fixture's sha256.

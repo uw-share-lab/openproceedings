@@ -239,3 +239,68 @@ def near_cap_queries(draw: st.DrawFn, low: int = 1_500, high: int = 2_000) -> st
     while len(parts) > 1 and len(sep.join(parts)) > high:
         parts.pop()
     return sep.join(parts)
+
+
+# Filter-clause queries (spec 02 §Filter clauses): every clause shape a facet click may meet (bare, grouped, an
+# OR of one field's filters, parenthesised, negated), mixed with words and groups, joined with and without
+# spaces so a clause can be followed directly by a group (`track:(main OR workshop)(x OR y)`), and sometimes
+# padded toward the 2,000-code-point cap or nested toward the depth limit.
+CLAUSE_VALUES: dict[str, tuple[str, ...]] = {
+    "venue": ("ICLR", "ICML", "NeurIPS"),
+    "track": tuple(TRACKS),
+    "status": tuple(STATUSES),
+}
+CLAUSE_WORDS = st.sampled_from(
+    [
+        "trust",
+        "llm",
+        "calibrat*",
+        '"language model"',
+        "title:agents",
+        "abstract:(a OR b)",
+        "x",
+        "model$",
+        "(x OR y)",
+    ]
+)
+
+
+@st.composite
+def filter_clause_strings(draw: st.DrawFn) -> str:
+    field = draw(st.sampled_from(["venue", "track", "status", "year", "track", "status"]))
+    if field == "year":
+        return draw(st.sampled_from(["year:2021", "year:2020..2022", "year:(2019 OR 2023..2024)"]))
+    pool = CLAUSE_VALUES[field]
+    values = draw(st.lists(st.sampled_from(pool), min_size=1, max_size=min(3, len(pool)), unique=True))
+    if field == "venue" and draw(st.integers(0, 3)) == 0:
+        values = [v.lower() for v in values]
+    shape = draw(st.sampled_from(["bare", "bare", "grouped", "or", "paren"]))
+    if shape == "or" and len(values) > 1:
+        return "(" + " OR ".join(f"{field}:{v}" for v in values) + ")"
+    if shape == "paren":
+        return f"({field}:{values[0]})"
+    if shape == "grouped" or len(values) > 1:
+        return f"{field}:({' OR '.join(values)})"
+    return f"{field}:{values[0]}"
+
+
+@st.composite
+def clause_queries(draw: st.DrawFn, depth: int = 0) -> str:
+    """A query built from filter clauses and words (see above)."""
+    atom = draw(st.one_of(filter_clause_strings(), filter_clause_strings(), CLAUSE_WORDS))
+    atom = draw(st.sampled_from(["", "", "", "", "-", "NOT ", "NOT NOT "])) + atom
+    if depth >= 2 or draw(st.booleans()):
+        body = atom
+    else:
+        parts = draw(st.lists(clause_queries(depth + 1), min_size=2, max_size=4))
+        body = draw(st.sampled_from([" ", " ", " AND ", " OR ", ""])).join(parts)
+        if depth > 0 and draw(st.booleans()):
+            body = f"({body})"
+    if depth == 0:
+        pad = draw(st.integers(0, 19))
+        if pad == 0:  # toward the cap: distinct words, so nothing deduplicates
+            body += "".join(f" w{i}" for i in range(draw(st.integers(330, 400))))
+        elif pad == 1:  # toward the depth limit
+            deep = draw(st.integers(58, 64))
+            body = "(" * deep + body + ")" * deep
+    return body

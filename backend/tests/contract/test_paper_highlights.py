@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from openproceedings import search
 from openproceedings.api import RateLimit
 from openproceedings.query.parser import MAX_QUERY_LENGTH, parse
 
@@ -237,3 +238,47 @@ def test_the_access_line_holds_no_query_text(client: TestClient, logs: Logs) -> 
 def test_the_snapshot_record_is_unchanged_by_q(client: TestClient) -> None:
     pid = some_paper(client)
     assert paper(client, pid, q="trust")["paper"] == paper(client, pid)["paper"]
+
+
+# --- round-1 review: matched is the engine's membership on every paper ---------------------------------------
+FULL_CORPUS = [
+    ("trust", "native"),  # the default filters
+    ("trust track:workshop status:(accepted OR rejected)", "native"),  # both defaults overridden
+    ("calibrat* (track:workshop OR benchmark*)", "native"),  # a nested filter: the default still applies
+    ("trust NOT calibrat*", "native"),  # NOT
+    ('"trust calibrat*" OR agents NEAR/3 reliance', "native"),  # position-verified
+    ("trust source:ICLR", "scholar"),
+]
+
+
+@pytest.mark.parametrize(("q", "mode"), FULL_CORPUS, ids=[q for q, _m in FULL_CORPUS])
+def test_matched_is_membership_for_every_paper_in_the_corpus(client: TestClient, q: str, mode: str) -> None:
+    """`search.highlight` says a paper matches exactly when the engine's `match_ids` holds it, for all 5k
+    fixture papers (not a sample of non-hits): the highlighter's evaluation and the engine's agree on
+    defaults, overrides, a nested filter, NOT and verified clauses."""
+    engine = client.app.state.index.engine  # type: ignore[attr-defined]
+    parsed = parse(q, mode)
+    assert parsed.effective_ast is not None
+    matched = engine.match_ids(parsed.effective_ast)
+    shown = engine.display(sorted(engine.ids))
+    assert 0 < len(matched) < len(shown)
+    lit = {pid for pid, record in shown.items() if search.highlight(engine, parsed, record) is not None}
+    assert lit == matched
+
+
+def test_the_paper_page_reads_the_display_record_once(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The existence check's display record is the one highlighted (spec 04: no second index read)."""
+    engine = client.app.state.index.engine  # type: ignore[attr-defined]
+    pid = some_paper(client)
+    reads: list[list[str]] = []
+    real = type(engine).display
+
+    def display(self: Any, ids: list[str]) -> dict[str, dict[str, Any]]:
+        reads.append(list(ids))
+        return real(self, ids)  # type: ignore[no-any-return]
+
+    monkeypatch.setattr(type(engine), "display", display)
+    assert paper(client, pid, q="trust")["matched"] is True
+    assert reads == [[pid]]

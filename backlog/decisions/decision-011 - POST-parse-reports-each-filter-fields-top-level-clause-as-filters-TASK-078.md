@@ -61,6 +61,19 @@ top-level one editable, and the nested one stays applied (decision-001's facet r
 - Being conservative near the caps has a cost: the check uses the widest edit, not the value clicked. A
   query within about 100 code points of the cap can have a toggle disabled that a single-value click would
   have fit. Revisit if usability testing shows it matters (per-value reporting would be additive).
+- A click always writes the grouped form, `field:(v)` even for one value (m3-followups gate, query-semantics
+  review): a bare `field:v` spliced before a group touched it (`trust track:(main OR workshop)(x OR y)` →
+  `trust track:workshop(x OR y)`, `PARSE_PAREN_TOUCHES_WORD`, a 422 after a toggle `/parse` had allowed). With
+  every edit ending in the clause's `)`, the widest-edit check covers every edit shape; a property test
+  applies every single-value toggle and include to generated queries. The canonical form and hash are
+  unchanged (`field:(v)` canonicalises to `field:v`).
+- The `nested` rule is conservative for `track` and `status`. When a field's only clauses are nested (`x
+  (track:workshop OR y)`), the default is still applied, yet the field is reported `nested` and not
+  toggleable, so the banner's include button is disabled exactly when the default removes papers. The
+  zero-width wrap `(q) AND track:(…)` would work there: the review's fuzz found about 2,900 such cases among
+  its generated queries. Kept for now (it never offers an edit that could fail or mislead, and the query
+  text stays editable); it can be relaxed later by reporting the zero-width span for a field whose default
+  applies despite a nested clause, which would be additive (a `nested` report becoming toggleable).
 - Revisit when a filter field is added (it gets a key in `ParsedFilters`, which is additive) or when year
   gets a UI control (its widest edit would then need to match what that control writes).
 

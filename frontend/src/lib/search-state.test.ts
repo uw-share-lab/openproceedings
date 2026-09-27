@@ -159,6 +159,17 @@ interface ClauseGolden {
   readonly refused?: SearchStateErrorCode;
 }
 
+/** What each `/parse` reason's refusal must say (`FIELD` is the clicked field). */
+const REASON_WORDING: Readonly<Record<ClauseReason, string>> = {
+  multiple_clauses: "the query has more than one top-level `FIELD:` clause.",
+  nested: "its only `FIELD:` clause is inside an OR or NOT.",
+  mixed_fields: "its `FIELD:` clause is ORed with another field's clause.",
+  negated: "The `FIELD:` clause is negated",
+  too_long: `-character limit`,
+  too_deep: `more than ${defaultLimits.max_query_depth} deep`,
+  unparsable_edit: "the changed query would not parse.",
+};
+
 /** A golden string: as written, or its [text, times] runs concatenated. */
 const spelled = (text: string | undefined, parts: ClauseGolden["q_parts"]): string =>
   text ?? (parts ?? []).map(([run, times]) => run.repeat(times)).join("");
@@ -197,9 +208,13 @@ describe("/parse filters → click (filter-clause-golden.json, shared with the b
       });
     } else {
       const code = c.refused;
-      it(`${c.name}: refuses with ${code}, and whyBlocked says so before the click`, () => {
-        refused(() => reduce(state, action), code);
+      it(`${c.name}: refuses with ${code}, worded for its reason, and whyBlocked says so before the click`, () => {
+        const err = refused(() => reduce(state, action), code);
         expect(whyBlocked(state, action)?.code).toBe(code);
+        // Each reason has its own wording, never the generic one for a reason this code doesn't know.
+        const fragment = parsed.reason === null ? undefined : REASON_WORDING[parsed.reason];
+        expect(fragment, `a golden refusal's reason: ${String(parsed.reason)}`).toBeDefined();
+        expect(err.message).toContain(fragment?.replaceAll("FIELD", field));
       });
     }
   }
@@ -244,6 +259,21 @@ describe("clauseFromParse", () => {
     expect(clauseFromParse(year, "x", "native")).toEqual({ clause: null, reason: null });
   });
 
+  it("offers no clause from inconsistent untyped /parse data that claims to be toggleable", () => {
+    // The server's model refuses these (test_models_refuse_inconsistent_reports); a caller holding
+    // hand-built or stale JSON still gets no clause, so the reducer refuses rather than splicing.
+    for (const bad of [
+      { ...typed, negated: true },
+      { ...typed, span: null },
+      { ...typed, values: null },
+    ]) {
+      const choice = clauseFromParse(bad as ParsedClause, "trust venue:ICLR", "native");
+      expect(choice).toEqual({ clause: null, reason: null });
+      const action = { type: "facetToggle", field: "venue", value: "ICML", ...choice } as const;
+      refused(() => reduce(at("trust venue:ICLR"), action), "NO_EDITABLE_CLAUSE");
+    }
+  });
+
   it("words a reason it doesn't know generically (the reasons are an open set)", () => {
     const err = refused(
       () =>
@@ -277,7 +307,7 @@ describe("facetToggle rewrites q exactly", () => {
     },
   );
 
-  it("writes one value as field:v and several as field:(…)", () => {
+  it("writes the grouped form field:(…) even for one value, so it never touches a following group", () => {
     const q = "trust track:(main OR workshop)";
     const one = reduce(at(q), {
       type: "facetToggle",
@@ -285,7 +315,15 @@ describe("facetToggle rewrites q exactly", () => {
       value: "workshop",
       clause: clause("track", q, [6, 30], ["main", "workshop"]),
     });
-    expect(one.q).toBe("trust track:main");
+    expect(one.q).toBe("trust track:(main)");
+    const before = "trust track:(main OR workshop)(x OR y)";
+    const touching = reduce(at(before), {
+      type: "facetToggle",
+      field: "track",
+      value: "main",
+      clause: clause("track", before, [6, 30], ["main", "workshop"]),
+    });
+    expect(touching.q).toBe("trust track:(workshop)(x OR y)");
   });
 
   it("replaces a typed clause in place, removing a value", () => {
@@ -297,7 +335,7 @@ describe("facetToggle rewrites q exactly", () => {
       value: "workshop",
       clause: clause("track", q, [10, 34], ["main", "workshop"]),
     });
-    expect(next.q).toBe("trust AND track:main AND year:2024");
+    expect(next.q).toBe("trust AND track:(main) AND year:2024");
   });
 
   it("replaces a single-value clause with a group when adding", () => {
@@ -443,13 +481,15 @@ describe("filter rewrites refuse what they cannot do exactly", () => {
 
   it("takes the cap from the limits it is given (an instance whose /meta serves another cap)", () => {
     const action = addWorkshop(1986); // lands on 2,000: allowed by the default
-    const limits: QueryLimits = { max_query_length: 1999 };
+    const limits: QueryLimits = { ...DEFAULT_LIMITS, max_query_length: 1999 };
     const e = refused(() => reduce(at(sourceOf(action)), action, limits), "TOO_LONG");
     expect(e.message).toBe(
       "The changed query would be 2,000 characters long — the limit is 1,999. Shorten the query text first.",
     );
     expect(whyBlocked(at(sourceOf(action)), action, limits)?.code).toBe("TOO_LONG");
-    expect(whyBlocked(at(sourceOf(action)), action, { max_query_length: 2000 })).toBeNull();
+    expect(
+      whyBlocked(at(sourceOf(action)), action, { ...DEFAULT_LIMITS, max_query_length: 2000 }),
+    ).toBeNull();
   });
 
   it("words /parse's too_long refusal with the given cap", () => {
@@ -458,11 +498,27 @@ describe("filter rewrites refuse what they cannot do exactly", () => {
         reduce(
           at("trust"),
           { type: "facetToggle", field: "track", value: "workshop", clause: null, reason: "too_long" },
-          { max_query_length: 1234 },
+          { ...DEFAULT_LIMITS, max_query_length: 1234 },
         ),
       "TOO_LONG",
     );
     expect(e.message).toContain("over the 1,234-character limit");
+  });
+
+  it("words /parse's too_deep refusal with the given depth cap (/meta's max_query_depth)", () => {
+    const action = {
+      type: "includeExcluded",
+      field: "track",
+      value: "workshop",
+      clause: null,
+      reason: "too_deep",
+    } as const;
+    const e = refused(
+      () => reduce(at("trust"), action, { ...DEFAULT_LIMITS, max_query_depth: 12 }),
+      "TOO_DEEP",
+    );
+    expect(e.message).toContain("more than 12 deep");
+    expect(refused(() => reduce(at("trust"), action), "TOO_DEEP").message).toContain("more than 64 deep");
   });
 
   it("refuses a clause parsed from a different q", () => {

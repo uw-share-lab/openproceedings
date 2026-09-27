@@ -32,19 +32,21 @@ export const MAX_PAGE = 10_000;
 /**
  * The limits the reducer checks: `max_query_length`, the longest `q` in code points (spec 02 §Error handling;
  * a longer `q` is `PARSE_TOO_LONG`, a 422, and so is one whose canonical form is longer (decision-008), which
- * only the server can judge). The type is `/meta`'s `limits` (TASK-089), so it follows the contract.
+ * only the server can judge), and `max_query_depth`, the deepest nesting of groups and `NOT`s (`PARSE_TOO_DEEP`),
+ * which words `/parse`'s `too_deep` refusal. The type is `/meta`'s `limits` (TASK-089), so it follows the
+ * contract.
  */
-export type QueryLimits = Pick<components["schemas"]["Limits"], "max_query_length">;
+export type QueryLimits = Pick<components["schemas"]["Limits"], "max_query_length" | "max_query_depth">;
 
 /**
  * The limits to use until `/meta` is fetched (TASK-041/042 wire the fetch; then pass its `limits` to `reduce`
  * and `whyBlocked`). The value is `default-limits.json`, which the backend's contract test
- * (`test_meta_limits.py`) checks against the cap `/meta` serves, so it can't drift from the parser.
+ * (`test_meta_limits.py`) checks against the caps `/meta` serves, so it can't drift from the parser.
  */
-export const DEFAULT_LIMITS: QueryLimits = { max_query_length: defaultLimits.max_query_length };
-
-/** Deepest nesting of groups and `NOT`s the API parser accepts (spec 02 §Error handling, `PARSE_TOO_DEEP`). */
-export const MAX_QUERY_DEPTH = 64;
+export const DEFAULT_LIMITS: QueryLimits = {
+  max_query_length: defaultLimits.max_query_length,
+  max_query_depth: defaultLimits.max_query_depth,
+};
 
 export interface SearchState {
   readonly q: string;
@@ -379,9 +381,14 @@ export type SearchAction =
 /** Taxonomy values (spec 01) are bare identifiers; anything else would need quoting the client can't judge. */
 const FILTER_VALUE = /^[A-Za-z0-9_]+$/;
 
+/**
+ * A clause as the reducer writes it: always grouped, `field:(v)` even for one value (the server's
+ * `query/clauses.py::_format`). A bare `field:v` spliced before a group would touch it
+ * (`track:workshop(x OR y)` is PARSE_PAREN_TOUCHES_WORD); the group's `)` never does, and the canonical form
+ * (and so the hash) is the same either way.
+ */
 function formatClause(field: FilterField, values: readonly string[]): string {
-  const only = values.length === 1 ? values[0] : undefined;
-  return only !== undefined ? `${field}:${only}` : `${field}:(${values.join(" OR ")})`;
+  return `${field}:(${values.join(" OR ")})`;
 }
 
 /** A query ending in an odd run of backslashes: the last one would escape a `)` written after it (spec 02). */
@@ -419,7 +426,7 @@ function noEditableClause(
     case "too_deep":
       return new SearchStateError(
         "TOO_DEEP",
-        `${head}the changed query would nest groups or NOTs more than ${MAX_QUERY_DEPTH} deep. ` +
+        `${head}the changed query would nest groups or NOTs more than ${limits.max_query_depth} deep. ` +
           "Remove a level of parentheses first.",
       );
     case "multiple_clauses":

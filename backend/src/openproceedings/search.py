@@ -144,17 +144,17 @@ def run(
     return Search(total, hits, gone, expansions, counted)
 
 
-def highlight(engine: TantivyEngine, parsed: ParseResult, id: str) -> Spans | None:
-    """Paper `id`'s highlights for `parsed` on `engine` (it must hold `id`), as `run(..., highlight=True)` gives
-    them when `id` is a hit: the same display record, expansions and `Highlighter` (`GET /papers/{id}?q=`,
-    task-087). None when the query doesn't match the paper (its effective tree, default filters included):
+def highlight(engine: TantivyEngine, parsed: ParseResult, shown: Mapping[str, Any]) -> Spans | None:
+    """A paper's highlights for `parsed` on `engine`, as `run(..., highlight=True)` gives them when it is a hit:
+    `shown` is its display record on `engine` (`engine.display([id])[id]`, which the caller has already read to
+    know the paper is there), with the same expansions and `Highlighter` (`GET /papers/{id}?q=`, task-087). None when the query doesn't match the paper (its effective tree, default filters included):
     no collection is run and nothing is position-verified; the evaluation is the highlighter's, which a test
     holds to ReferenceEngine's verdict on every record."""
     ast = parsed.effective_ast
     if ast is None:
         raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "a search needs a query that parses.")
     expansions = expanded(engine, ast)
-    return Highlighter(ast, expansions).match(Shown.of(engine.display([id])[id]))
+    return Highlighter(ast, expansions).match(Shown.of(shown))
 
 
 def expanded(engine: TantivyEngine, ast: Node) -> Expansions:
