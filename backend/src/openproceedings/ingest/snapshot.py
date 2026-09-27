@@ -349,8 +349,12 @@ def _id_order(previous: str, rid: str) -> str | None:
 
 
 # RecordFile's cheap per-line check, named in pydantic's words as iter_records' full validation names them
-_LINE_KIND = {"JSONDecodeError": "json_invalid", "ValueError": "json_invalid", "KeyError": "missing",
-              "TypeError": "type_error"}
+_LINE_KIND = {
+    "JSONDecodeError": "json_invalid",
+    "ValueError": "json_invalid",
+    "KeyError": "missing",
+    "TypeError": "type_error",
+}
 
 
 def iter_records(snapshot: Path) -> Iterator[PaperRecord]:
