@@ -6,7 +6,9 @@
  * says whether the query parses: `POST /parse` does all of that. It exists so that a colour always sits on the
  * same characters as the server's lexeme, which `grammar.test.ts` checks against every backend golden input
  * (`lexer-golden.json`, generated from `lexer.py`, so the two cannot drift silently). The character classes are
- * imported from `lexer-tables.json`, generated from the same module.
+ * imported from `lexer-tables.json`, generated from the same module. The concept-group builder uses the same
+ * boundaries to write each term as exactly one lexeme (`src/builder/terms.ts`, `write.ts`); the meaning is
+ * still the server's.
  *
  * Positions are **code points**, as in `lexer.py` (an astral character is one position). The Lezer tokenizer
  * (`tokens.ts`) reads the document through a `Source` and converts the end back to UTF-16 units.
