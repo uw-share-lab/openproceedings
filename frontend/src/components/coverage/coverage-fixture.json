@@ -1,0 +1,984 @@
+{
+  "index_version": "c60faee23898",
+  "tokenizer_version": "2",
+  "query_version": "2",
+  "snapshot": {
+    "name": "slice",
+    "snapshot_hash": "81203b1c8c1ba1f81792c0377c332561fffbcdefdc82a8625888818f00580e5d",
+    "crawl_date": "2026-09-26",
+    "crawl_dates": {
+      "*": {
+        "from": "2026-09-26T00:00:00Z",
+        "to": "2026-09-26T00:00:00Z"
+      },
+      "ris": {
+        "from": "2026-09-26T00:00:00Z",
+        "to": "2026-09-26T00:00:00Z"
+      }
+    },
+    "built_at": "2026-09-26T00:00:00Z",
+    "sources": ["ris"],
+    "crawl_dates_kind": {
+      "*": "scholar_query_dates",
+      "ris": "scholar_query_dates"
+    },
+    "identification_citable": false
+  },
+  "totals": {
+    "records": 39,
+    "abstract_missing": 3,
+    "unknown_track": 2,
+    "unknown_status": 11
+  },
+  "venue_years": [
+    {
+      "venue": "ICLR",
+      "year": 2019,
+      "records": 2,
+      "abstract_missing": 0,
+      "unknown_track": 0,
+      "unknown_status": 0,
+      "cells": [
+        {
+          "track": "workshop",
+          "status": "withdrawn",
+          "count": 1
+        },
+        {
+          "track": "blogpost",
+          "status": "desk_rejected",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+      "tracks": [
+        {
+          "track": "workshop",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "blogpost",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "ICLR",
+      "year": 2021,
+      "records": 1,
+      "abstract_missing": 0,
+      "unknown_track": 0,
+      "unknown_status": 1,
+      "cells": [
+        {
+          "track": "main",
+          "status": "unknown",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+      "tracks": [
+        {
+          "track": "main",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "ICLR",
+      "year": 2022,
+      "records": 3,
+      "abstract_missing": 1,
+      "unknown_track": 0,
+      "unknown_status": 1,
+      "cells": [
+        {
+          "track": "tiny_papers",
+          "status": "unknown",
+          "count": 1
+        },
+        {
+          "track": "blogpost",
+          "status": "rejected",
+          "count": 1
+        },
+        {
+          "track": "blogpost",
+          "status": "desk_rejected",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+      "tracks": [
+        {
+          "track": "tiny_papers",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "blogpost",
+          "records": 2,
+          "indexed_accepted": 0,
+          "abstract_missing": 1,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "ICLR",
+      "year": 2025,
+      "records": 2,
+      "abstract_missing": 0,
+      "unknown_track": 0,
+      "unknown_status": 1,
+      "cells": [
+        {
+          "track": "tiny_papers",
+          "status": "accepted",
+          "count": 1
+        },
+        {
+          "track": "other",
+          "status": "unknown",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+      "tracks": [
+        {
+          "track": "tiny_papers",
+          "records": 1,
+          "indexed_accepted": 1,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "other",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "ICLR",
+      "year": 2026,
+      "records": 1,
+      "abstract_missing": 0,
+      "unknown_track": 0,
+      "unknown_status": 0,
+      "cells": [
+        {
+          "track": "other",
+          "status": "accepted",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+      "tracks": [
+        {
+          "track": "other",
+          "records": 1,
+          "indexed_accepted": 1,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "ICML",
+      "year": 2019,
+      "records": 1,
+      "abstract_missing": 0,
+      "unknown_track": 0,
+      "unknown_status": 0,
+      "cells": [
+        {
+          "track": "main",
+          "status": "withdrawn",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "withdrawn"],
+      "tracks": [
+        {
+          "track": "main",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "ICML",
+      "year": 2020,
+      "records": 3,
+      "abstract_missing": 0,
+      "unknown_track": 1,
+      "unknown_status": 0,
+      "cells": [
+        {
+          "track": "main",
+          "status": "desk_rejected",
+          "count": 1
+        },
+        {
+          "track": "competition",
+          "status": "rejected",
+          "count": 1
+        },
+        {
+          "track": "unknown",
+          "status": "withdrawn",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected"],
+      "tracks": [
+        {
+          "track": "main",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "competition",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "unknown",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "ICML",
+      "year": 2021,
+      "records": 1,
+      "abstract_missing": 0,
+      "unknown_track": 0,
+      "unknown_status": 1,
+      "cells": [
+        {
+          "track": "position",
+          "status": "unknown",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "unknown"],
+      "tracks": [
+        {
+          "track": "position",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "ICML",
+      "year": 2023,
+      "records": 4,
+      "abstract_missing": 0,
+      "unknown_track": 0,
+      "unknown_status": 1,
+      "cells": [
+        {
+          "track": "datasets_benchmarks",
+          "status": "accepted",
+          "count": 1
+        },
+        {
+          "track": "workshop",
+          "status": "withdrawn",
+          "count": 1
+        },
+        {
+          "track": "competition",
+          "status": "desk_rejected",
+          "count": 1
+        },
+        {
+          "track": "competition",
+          "status": "unknown",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+      "tracks": [
+        {
+          "track": "datasets_benchmarks",
+          "records": 1,
+          "indexed_accepted": 1,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "workshop",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "competition",
+          "records": 2,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "ICML",
+      "year": 2024,
+      "records": 4,
+      "abstract_missing": 0,
+      "unknown_track": 0,
+      "unknown_status": 0,
+      "cells": [
+        {
+          "track": "datasets_benchmarks",
+          "status": "accepted",
+          "count": 2
+        },
+        {
+          "track": "tiny_papers",
+          "status": "rejected",
+          "count": 1
+        },
+        {
+          "track": "blogpost",
+          "status": "rejected",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+      "tracks": [
+        {
+          "track": "datasets_benchmarks",
+          "records": 2,
+          "indexed_accepted": 2,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "tiny_papers",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "blogpost",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "ICML",
+      "year": 2025,
+      "records": 2,
+      "abstract_missing": 0,
+      "unknown_track": 0,
+      "unknown_status": 1,
+      "cells": [
+        {
+          "track": "position",
+          "status": "accepted",
+          "count": 1
+        },
+        {
+          "track": "other",
+          "status": "unknown",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+      "tracks": [
+        {
+          "track": "position",
+          "records": 1,
+          "indexed_accepted": 1,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "other",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "ICML",
+      "year": 2026,
+      "records": 2,
+      "abstract_missing": 0,
+      "unknown_track": 0,
+      "unknown_status": 1,
+      "cells": [
+        {
+          "track": "position",
+          "status": "desk_rejected",
+          "count": 1
+        },
+        {
+          "track": "position",
+          "status": "unknown",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+      "tracks": [
+        {
+          "track": "position",
+          "records": 2,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "NeurIPS",
+      "year": 2019,
+      "records": 1,
+      "abstract_missing": 1,
+      "unknown_track": 0,
+      "unknown_status": 0,
+      "cells": [
+        {
+          "track": "main",
+          "status": "accepted",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted"],
+      "tracks": [
+        {
+          "track": "main",
+          "records": 1,
+          "indexed_accepted": 1,
+          "abstract_missing": 1,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "NeurIPS",
+      "year": 2020,
+      "records": 1,
+      "abstract_missing": 0,
+      "unknown_track": 0,
+      "unknown_status": 1,
+      "cells": [
+        {
+          "track": "tiny_papers",
+          "status": "unknown",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "unknown"],
+      "tracks": [
+        {
+          "track": "tiny_papers",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "NeurIPS",
+      "year": 2021,
+      "records": 3,
+      "abstract_missing": 0,
+      "unknown_track": 1,
+      "unknown_status": 0,
+      "cells": [
+        {
+          "track": "datasets_benchmarks",
+          "status": "desk_rejected",
+          "count": 1
+        },
+        {
+          "track": "other",
+          "status": "rejected",
+          "count": 1
+        },
+        {
+          "track": "unknown",
+          "status": "rejected",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+      "tracks": [
+        {
+          "track": "datasets_benchmarks",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "other",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "unknown",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "NeurIPS",
+      "year": 2022,
+      "records": 2,
+      "abstract_missing": 0,
+      "unknown_track": 0,
+      "unknown_status": 0,
+      "cells": [
+        {
+          "track": "datasets_benchmarks",
+          "status": "desk_rejected",
+          "count": 1
+        },
+        {
+          "track": "position",
+          "status": "rejected",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+      "tracks": [
+        {
+          "track": "datasets_benchmarks",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "position",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "NeurIPS",
+      "year": 2024,
+      "records": 4,
+      "abstract_missing": 1,
+      "unknown_track": 0,
+      "unknown_status": 1,
+      "cells": [
+        {
+          "track": "position",
+          "status": "withdrawn",
+          "count": 1
+        },
+        {
+          "track": "workshop",
+          "status": "unknown",
+          "count": 1
+        },
+        {
+          "track": "competition",
+          "status": "accepted",
+          "count": 1
+        },
+        {
+          "track": "other",
+          "status": "withdrawn",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+      "tracks": [
+        {
+          "track": "position",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "workshop",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "competition",
+          "records": 1,
+          "indexed_accepted": 1,
+          "abstract_missing": 1,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "other",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    },
+    {
+      "venue": "NeurIPS",
+      "year": 2025,
+      "records": 2,
+      "abstract_missing": 0,
+      "unknown_track": 0,
+      "unknown_status": 2,
+      "cells": [
+        {
+          "track": "competition",
+          "status": "unknown",
+          "count": 1
+        },
+        {
+          "track": "other",
+          "status": "unknown",
+          "count": 1
+        }
+      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
+      "tracks": [
+        {
+          "track": "competition",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        },
+        {
+          "track": "other",
+          "records": 1,
+          "indexed_accepted": 0,
+          "abstract_missing": 0,
+          "sources": ["ris"],
+          "official_accepted": null,
+          "official_counts": null,
+          "official_citation": null,
+          "official_accessed": null,
+          "delta": null,
+          "delta_pct": null,
+          "gated": false,
+          "within_gate": null
+        }
+      ]
+    }
+  ]
+}

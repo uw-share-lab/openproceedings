@@ -512,8 +512,9 @@ def test_index_inputs_and_snapshot_facts_read_the_manifests(data_dir: Path) -> N
     inputs = index_inputs(data_dir, the_version(data_dir))
     assert inputs["schema_version"] == SCHEMA_VERSION and inputs["snapshot"] == "snap"
     facts = snapshot_facts(data_dir, inputs)
-    window = json.loads((data_dir / "snapshots" / "snap" / "manifest.json").read_text())["crawl_window"]
-    assert facts.crawl_dates == {"*": window}
+    manifest = json.loads((data_dir / "snapshots" / "snap" / "manifest.json").read_text())
+    # the corpus-wide window and (format 2, TASK-082) each claim source's own
+    assert facts.crawl_dates == {"*": manifest["crawl_window"], "ris": manifest["crawl_windows"]["ris"]}
     dedup = facts.dedup
     assert (dedup.merged, dedup.ambiguous_not_merged) == (2, 1)  # the manifest's merges.total, one ambiguous
     assert (dedup.track_not_merged, dedup.venue_year_not_merged) == (1, 1)
@@ -524,18 +525,18 @@ def test_a_ris_only_snapshot_is_not_citable_and_its_window_is_scholar_query_date
     not PRISMA identification numbers, and its window is Publish or Perish's query dates, in local time."""
     facts = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
     assert facts.sources == ["ris"] and facts.identification_citable is False
-    assert facts.crawl_dates_kind == {"*": "scholar_query_dates"}
+    assert facts.crawl_dates_kind == {"*": "scholar_query_dates", "ris": "scholar_query_dates"}
 
 
 def test_a_source_with_its_own_crawl_window_gets_its_own_key(data_dir: Path) -> None:
     path = data_dir / "snapshots" / "snap" / "manifest.json"
     own = {"from": "2026-03-01T00:00:00+00:00", "to": "2026-03-02T00:00:00+00:00"}
-    edit(path, sources={"ris": [], "openreview_v2": {"crawl_window": own}})
+    edit(path, sources={"ris": [], "openreview_v2": {"crawl_window": own}}, crawl_windows={})
     facts = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
     assert set(facts.crawl_dates) == {"*", "openreview_v2"} and facts.crawl_dates["openreview_v2"] == own
     assert facts.sources == ["openreview_v2", "ris"] and facts.identification_citable is True
     assert facts.crawl_dates_kind == {"*": "mixed", "openreview_v2": "crawl"}
-    edit(path, sources={"openreview_v2": {"crawl_window": own}})
+    edit(path, sources={"openreview_v2": {"crawl_window": own}}, crawl_windows={})
     crawled = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
     assert crawled.crawl_dates_kind == {"*": "crawl", "openreview_v2": "crawl"}
 
@@ -560,7 +561,7 @@ def test_coverage_derives_crawl_kind_and_citability_as_a_record_does(
     from openproceedings.coverage import breakdown
 
     path = data_dir / "snapshots" / "snap" / "manifest.json"
-    edit(path, sources=sources)
+    edit(path, sources=sources, crawl_windows={})
     facts = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
     snapshot = breakdown(json.loads(path.read_text()), "snap")["snapshot"]
     assert snapshot["sources"] == facts.sources

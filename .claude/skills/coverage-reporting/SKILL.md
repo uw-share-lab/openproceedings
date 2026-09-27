@@ -8,7 +8,9 @@ description: The spec 07 §C coverage standard — indexed accepted counts per v
 ## What is measured
 For every **venue × year × track** cell, from a pinned snapshot / `index_version`:
 - `indexed_accepted` — records with `status:accepted` in that cell.
-- `official_accepted` — from `docs/results/coverage-sources.md`.
+- `official_accepted` — from `docs/results/coverage-sources.md` (its machine-readable copy is
+  `backend/src/openproceedings/official_counts.py`, which `GET /coverage` serves; a row goes into both in one
+  change, and `test_official_counts.py` fails when they differ).
 - `delta = indexed − official`, `delta_pct = delta / official`.
 - Plus per cell (spec 07 §C): `missing_abstract` count, `track:unknown` count, and **statuses indexed**:
   which statuses the sources for that venue-year can even contain. For example, pre-2021 NeurIPS and ICML
@@ -17,6 +19,11 @@ For every **venue × year × track** cell, from a pinned snapshot / `index_versi
 
 `op eval coverage` writes `docs/results/<YYYY-MM-DD>-coverage.md`. `GET /coverage` and the `/coverage` page
 render the **same data** (no second computation in the UI), with source and snapshot date shown per cell.
+As built (TASK-082): `GET /coverage` serves each venue-year's `statuses_indexed` (from
+`ingest/sources.py`, recorded in the snapshot manifest) and its `tracks`, one per cell, with `records`,
+`indexed_accepted`, `abstract_missing`, `sources`, `official_accepted`/`official_counts`/
+`official_citation`/`official_accessed`, `delta`, `delta_pct` (unrounded percent), `gated` and
+`within_gate` (null unless gated); `snapshot.crawl_dates` has each source's own window.
 
 ## The gate (M4)
 Exactly spec 07 §C: **every main-track and D&B cell for which an official accepted count exists is within

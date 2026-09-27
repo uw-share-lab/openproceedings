@@ -39,13 +39,19 @@ As built (`backend/src/openproceedings/ingest/snapshot.py`, `render`): `format_v
 `openproceedings_version`; `snapshot_hash`; `crawl_date` (the newest claim's fetch date, which also names
 the directory) and `crawl_window` (the oldest and newest fetch times); `built_at` (the only build-time
 value); `record_count`; `counts` nested venue → year → track → status; `abstract_missing` and
-`unknown_track` per venue → year; `merges` and `conflicts` (a `total` plus a count per rule /
+`unknown_track` per venue → year; since format 2 (TASK-082), `abstract_missing_by_track` (venue → year →
+track, 0 included), `sources_by_track` (venue → year → track → the claim sources of its records),
+`statuses_indexed` (venue → year → the statuses its sources can contain, from `ingest/sources.py`, plus any
+its records hold) and `crawl_windows` (per claim source, its first and last `fetched_at`); `merges` and `conflicts` (a `total` plus a count per rule /
 resolution kind); `files` (the sha256 of `merges.csv` and `conflicts.csv`, which `snapshot_hash` doesn't
 cover); and `sources` — for RIS, one `ImportReport.to_manifest()` per cached file (both inputs' sha256,
 the installed scholarmend `parser_version`, read / imported / skipped by reason, abstract_missing,
 unknown_track, status_overrides, track × status). The crawlers add their own source entries (crawl window, API host
 and version, page counts) in M4. The manifest may hold build times; `records.jsonl` may not. `/coverage`
-(spec 04) and `coverage-auditor` read these counts directly.
+(spec 04) and `coverage-auditor` read these counts directly. A format-1 manifest (built before TASK-082)
+still loads: `/coverage` then takes the per-track facts from the records the load verified, and the statuses
+indexed from the source table. A rebuild of the same inputs finds the format-1 directory "not in the current
+format" and is refused, as for any format change: keep serving it, or retire it and rebuild.
 
 ## The cache
 `op ingest ris <mended.ris>...` checks each scholarmend output imports cleanly, then copies it and the

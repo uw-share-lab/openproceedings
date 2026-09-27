@@ -1211,6 +1211,79 @@ export interface components {
             /** Token */
             token: string;
         };
+        /**
+         * TrackCoverage
+         * @description One spec 07 §C cell, venue × year × track (TASK-082): what the snapshot indexed for the track, beside
+         *     the official accepted count where one is sourced (`official_counts.py`, each with its citation).
+         */
+        TrackCoverage: {
+            /**
+             * Abstract Missing
+             * @description Of `records`, those without an abstract (title-only).
+             */
+            abstract_missing: number;
+            /**
+             * Delta
+             * @description `indexed_accepted` − `official_accepted`; null without one.
+             */
+            delta: number | null;
+            /**
+             * Delta Pct
+             * @description `delta` as a percentage of `official_accepted` (unrounded); null without one.
+             */
+            delta_pct: number | null;
+            /**
+             * Gated
+             * @description Whether the M4 coverage gate applies: a main-track or D&B cell with an official count.
+             */
+            gated: boolean;
+            /**
+             * Indexed Accepted
+             * @description Of `records`, those with status `accepted`.
+             */
+            indexed_accepted: number;
+            /**
+             * Official Accepted
+             * @description The official accepted count for this venue, year and track; null where none is sourced.
+             */
+            official_accepted: number | null;
+            /**
+             * Official Accessed
+             * @description When `official_citation` was read.
+             */
+            official_accessed: string | null;
+            /**
+             * Official Citation
+             * @description Where `official_accepted` comes from: a URL or citation.
+             */
+            official_citation: string | null;
+            /**
+             * Official Counts
+             * @description What `official_accepted` counts (e.g. orals, spotlights and posters, after withdrawals).
+             */
+            official_counts: string | null;
+            /**
+             * Records
+             * @description Records of this track, every status.
+             */
+            records: number;
+            /**
+             * Sources
+             * @description The sources the track's records came from (claim sources).
+             */
+            sources: ("openreview_v2" | "openreview_v1" | "neurips_proceedings" | "pmlr" | "ris")[];
+            /**
+             * Track
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @enum {string}
+             */
+            track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "other" | "unknown";
+            /**
+             * Within Gate
+             * @description For a gated cell, whether |`delta`| is at most 1% of `official_accepted`; null otherwise.
+             */
+            within_gate: boolean | null;
+        };
         /** Urls */
         Urls: {
             /** Doi */
@@ -1234,6 +1307,16 @@ export interface components {
             cells: components["schemas"]["CoverageCell"][];
             /** Records */
             records: number;
+            /**
+             * Statuses Indexed
+             * @description The statuses this venue-year's sources can contain at all, in vocabulary order (spec 07 §C): a proceedings-only venue-year lists `accepted` alone, since no rejected paper exists there to exclude. A status can be listed with no record in `cells`.
+             */
+            statuses_indexed: ("accepted" | "rejected" | "withdrawn" | "desk_rejected" | "unknown")[];
+            /**
+             * Tracks
+             * @description One entry per track with records here, in vocabulary order (`unknown` last).
+             */
+            tracks: components["schemas"]["TrackCoverage"][];
             /** Unknown Status */
             unknown_status: number;
             /** Unknown Track */

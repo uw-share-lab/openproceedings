@@ -40,12 +40,17 @@ from openproceedings import __version__, storage
 from openproceedings.ingest.dedup import Conflict, DedupResult, Merge, dedup
 from openproceedings.ingest.record import RECORD_SCHEMA_VERSION, PaperRecord
 from openproceedings.ingest.ris import ImportReport, import_ris
+from openproceedings.ingest.sources import statuses_indexed
 from openproceedings.logs import elapsed_ms
 from openproceedings.query.normalize import TOKENIZER_VERSION
 
 log = logging.getLogger(__name__)
 
-FORMAT_VERSION = "1"  # the snapshot directory's layout and manifest keys
+# the snapshot directory's layout and manifest keys. 2 (TASK-082) adds `crawl_windows`, `abstract_missing_by_track`,
+# `sources_by_track` and `statuses_indexed`; a format-1 manifest still loads (`GET /coverage` then takes the
+# per-track facts from the records it verified, and names no per-source window)
+FORMAT_VERSION = "2"
+READABLE_FORMATS = ("1", FORMAT_VERSION)
 HASHED = ("title", "abstract", "venue", "year", "track", "status")  # content_hash's fields (record-schema)
 DISPLAY = ("authors", "urls", "keywords", "presentation", "venue_id_raw")  # shown, never hashed
 SHORT = 12
@@ -216,6 +221,50 @@ def _nested(
     return plain
 
 
+def _plain(value: dict[str, Any]) -> dict[str, Any]:
+    """`value` as plain JSON values, keys sorted at every level."""
+    plain: dict[str, Any] = json.loads(json.dumps(value, sort_keys=True))
+    return plain
+
+
+def _per_track(records: Iterable[PaperRecord]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """venue → year → track → missing abstracts (0 included), → the claim sources of its records (sorted),
+    and venue → year → the statuses those sources can contain, those its records hold included
+    (`sources.statuses_indexed`)."""
+    missing: dict[str, Any] = {}
+    sources: dict[str, Any] = {}
+    present: dict[tuple[str, str], set[str]] = {}
+    for r in records:
+        present.setdefault((r.venue, str(r.year)), set()).add(r.status)
+        at = missing.setdefault(r.venue, {}).setdefault(str(r.year), {})
+        at[r.track] = at.get(r.track, 0) + (r.abstract is None)
+        sources.setdefault(r.venue, {}).setdefault(str(r.year), {}).setdefault(r.track, set()).update(
+            c.source for c in r.provenance
+        )
+    statuses = {
+        venue: {
+            year: statuses_indexed(set().union(*tracks.values()), venue, int(year), present[(venue, year)])
+            for year, tracks in years.items()
+        }
+        for venue, years in sources.items()
+    }
+    named = {
+        v: {y: {t: sorted(s) for t, s in ts.items()} for y, ts in ys.items()} for v, ys in sources.items()
+    }
+    return _plain(missing), _plain(named), _plain(statuses)
+
+
+def _windows(records: Iterable[PaperRecord]) -> dict[str, dict[str, str]]:
+    """Per claim source, its crawl window: the first and last `fetched_at` of its claims."""
+    by_source: dict[str, list[datetime]] = {}
+    for r in records:
+        for c in r.provenance:
+            by_source.setdefault(c.source, []).append(c.fetched_at)
+    return {
+        s: {"from": min(ts).isoformat(), "to": max(ts).isoformat()} for s, ts in sorted(by_source.items())
+    }
+
+
 def render(result: DedupResult, reports: Sequence[ImportReport], built_at: datetime) -> dict[str, bytes]:
     """The snapshot's files. Everything but manifest.json's `built_at` is a function of the inputs."""
     records = sorted(result.records, key=lambda r: r.id)
@@ -225,6 +274,7 @@ def render(result: DedupResult, reports: Sequence[ImportReport], built_at: datet
         raise SnapshotError("a record has no provenance claims; every value must say where it came from")
     fetched = [c.fetched_at for r in records for c in r.provenance]
     lines = "".join(record_line(r) + "\n" for r in records).encode("utf-8")
+    missing_by_track, sources_by_track, statuses = _per_track(records)
     merges = _csv((f.name for f in fields(Merge)), (astuple(m) for m in sorted(result.merges)))
     conflicts = _csv((f.name for f in fields(Conflict)), (astuple(c) for c in sorted(result.conflicts)))
     manifest = {
@@ -240,6 +290,10 @@ def render(result: DedupResult, reports: Sequence[ImportReport], built_at: datet
         "counts": _nested(records),
         "abstract_missing": _nested(records, lambda r: r.abstract is None),
         "unknown_track": _nested(records, lambda r: r.track == "unknown"),
+        "abstract_missing_by_track": missing_by_track,
+        "sources_by_track": sources_by_track,
+        "statuses_indexed": statuses,
+        "crawl_windows": _windows(records),
         "merges": {"total": len(result.merges), **Counter(m.rule for m in result.merges)},
         "conflicts": {"total": len(result.conflicts), **Counter(c.resolution.split(":")[0] for c in result.conflicts)},
         "files": {"merges.csv": _sha256(merges), "conflicts.csv": _sha256(conflicts)},
@@ -405,8 +459,9 @@ class RecordFile:
 
     Opening makes one pass over `records.jsonl`: ids strictly ascending, and the bytes hashing to the
     manifest's `snapshot_hash` (so the file indexed is the snapshot named). The same pass counts the records
-    per (venue, year, track, status) and the missing abstracts per (venue, year), and keeps the manifest it
-    read, so `GET /coverage` checks the manifest's counts against the records. A lookup reads its one line and
+    per (venue, year, track, status), the missing abstracts per (venue, year) and per (venue, year, track), and
+    the claim sources per (venue, year, track), and keeps the manifest it read, so `GET /coverage` checks the
+    manifest's counts against the records. A lookup reads its one line and
     validates it as a `PaperRecord`, which re-checks its `content_hash`. Snapshots are sealed read-only, so
     the bytes can't change underneath. Thread-safe: every lookup opens the file itself."""
 
@@ -414,6 +469,9 @@ class RecordFile:
         self.path = snapshot / "records.jsonl"
         self.cells: Counter[tuple[str, int, str, str]] = Counter()  # (venue, year, track, status) → records
         self.abstract_missing: Counter[tuple[str, int]] = Counter()  # (venue, year) → no abstract
+        # (venue, year, track) → no abstract (0 included), and the claim sources of its records (TASK-082)
+        self.track_missing: Counter[tuple[str, int, str]] = Counter()
+        self.track_sources: dict[tuple[str, int, str], set[str]] = {}
         try:
             read = _OnePass(snapshot)
             manifest = read.manifest
@@ -429,7 +487,8 @@ class RecordFile:
                     rid = line["id"]
                     cell = (line["venue"], line["year"], line["track"], line["status"])
                     no_abstract = line["abstract"] is None
-                    if not isinstance(rid, str):
+                    claimed = {c["source"] for c in line["provenance"]}
+                    if not isinstance(rid, str) or not all(isinstance(c, str) for c in claimed):
                         raise TypeError(rid)
                 except (ValueError, KeyError, TypeError) as e:
                     raise SnapshotError(
@@ -439,6 +498,9 @@ class RecordFile:
                     raise SnapshotError(f"{snapshot.name} line {n}: {out_of_order}")
                 self._at[rid] = (offset, len(raw))
                 self.cells[cell] += 1
+                track = (line["venue"], line["year"], line["track"])
+                self.track_missing[track] += no_abstract
+                self.track_sources.setdefault(track, set()).update(claimed)
                 if no_abstract:
                     self.abstract_missing[(line["venue"], line["year"])] += 1
                 previous, offset = rid, offset + len(raw)

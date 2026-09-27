@@ -5,8 +5,8 @@ The numbers are the manifest of the snapshot the served index was built from, re
 `openproceedings.coverage.breakdown` (no second count). `compute` runs once per index, when it is loaded
 (`api/state.py`, before the swap), on the `RecordFile` the load already verified: the manifest it read
 with the records (so no second read to re-check), and the counts that one pass took of the records. Every
-cell and every venue-year's missing abstracts must equal the records' own count, and the records must
-number exactly the index's documents. Anything else fails the load (`index_load_failed` with a `reason`):
+cell, every venue-year's missing abstracts, and every track's missing abstracts and claim sources must equal
+the records' own count, and the records must number exactly the index's documents. Anything else fails the load (`index_load_failed` with a `reason`):
 503 at startup, the old index kept on SIGHUP. Coverage is never partial, never recomputed per request.
 """
 
@@ -21,7 +21,7 @@ from fastapi import APIRouter
 from openproceedings.api.deps import ServedDep
 from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import CoverageResponse, versions
-from openproceedings.coverage import breakdown
+from openproceedings.coverage import TrackFacts, breakdown
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.ingest.snapshot import RecordFile, SnapshotError
 from openproceedings.logs import elapsed_ms
@@ -34,8 +34,9 @@ def compute(engine: TantivyEngine, records: RecordFile) -> CoverageResponse:
     """The coverage of `engine`'s index from its verified snapshot's manifest, checked against the records
     and the index. SnapshotError (with a `reason`) if they disagree."""
     started = time.perf_counter()
+    observed = TrackFacts(records.track_missing, records.track_sources)
     try:
-        data = breakdown(records.manifest, records.path.parent.name)
+        data = breakdown(records.manifest, records.path.parent.name, observed)
     except (TypeError, ValueError) as e:
         raise SnapshotError(
             f"the snapshot manifest is malformed ({type(e).__name__})", reason="manifest_invalid"
@@ -57,6 +58,14 @@ def compute(engine: TantivyEngine, records: RecordFile) -> CoverageResponse:
     if {k: n for k, n in missing.items() if n} != dict(records.abstract_missing):
         raise SnapshotError(
             "the manifest's abstract_missing doesn't count the records", reason="abstract_missing_mismatch"
+        )
+    per_track = {(vy["venue"], vy["year"], t["track"]): t for vy in data["venue_years"] for t in vy["tracks"]}
+    if {k: t["abstract_missing"] for k, t in per_track.items()} != dict(records.track_missing) or {
+        k: t["sources"] for k, t in per_track.items()
+    } != {k: sorted(v) for k, v in records.track_sources.items()}:
+        raise SnapshotError(
+            "the manifest's per-track missing abstracts or sources don't match the records",
+            reason="track_facts_mismatch",
         )
     if len(records) != len(engine.ids):  # the cells sum to record_count and to the records (checked above)
         raise SnapshotError(
