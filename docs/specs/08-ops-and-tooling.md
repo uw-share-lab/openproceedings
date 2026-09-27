@@ -16,7 +16,7 @@ openproceedings/
 ├── backend/                     # uv workspace member: Python package `openproceedings` (Python 3.12, .python-version)
 │   ├── pyproject.toml
 │   ├── src/openproceedings/
-│   │   ├── ingest/              # 01: record.py, classify.py, urls.py, volumes.py, ris.py, dedup.py, snapshot.py (built); sources/ (M4, crawlers)
+│   │   ├── ingest/              # 01: record.py, classify.py, urls.py, volumes.py (+ pmlr_volumes.toml), ris.py, dedup.py, snapshot.py; sources/ (M4 crawlers: http.py, neurips.py, pmlr.py, crawl.py)
 │   │   ├── query/               # 02: normalize.py, mathsyms.py, lexer.py, parser.py, ast.py, canonical.py, defaults.py, compat.py
 │   │   ├── engine/              # 03: protocol.py, reference.py, index.py, compile.py, tantivy_engine.py, exclusions.py, highlight.py, parity.py
 │   │   ├── semantic/            # 06 (phase 2)

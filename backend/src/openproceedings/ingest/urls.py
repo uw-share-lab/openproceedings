@@ -14,11 +14,14 @@ from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 _PROCEEDINGS_HOSTS = {
     "proceedings.neurips.cc": "NeurIPS",
     "papers.nips.cc": "NeurIPS",
+    # NeurIPS 2021 Datasets and Benchmarks only (its index lists 2021 alone): `-Abstract-round1/2.html`
+    "datasets-benchmarks-proceedings.neurips.cc": "NeurIPS",
     "proceedings.iclr.cc": "ICLR",
 }
-# 2022+: /paper_files/paper/<y>/hash/<h>-Abstract-<Track>.html; up to 2021: /paper/<y>/hash/<h>-Abstract.html
+# 2022+: /paper_files/paper/<y>/hash/<h>-Abstract-<Track>.html; up to 2021: /paper/<y>/hash/<h>-Abstract.html;
+# the 2021 D&B host's tokens carry a digit (`round1`, `round2`)
 _PROCEEDINGS_PATH = re.compile(
-    r"(?:/paper_files)?/paper/([0-9]{4})/(?:hash|file)/([0-9a-fA-F]+)-(?:Abstract|Paper)(?:-([A-Za-z_]+))?\.(?:html|pdf)"
+    r"(?:/paper_files)?/paper/([0-9]{4})/(?:hash|file)/([0-9a-fA-F]+)-(?:Abstract|Paper)(?:-([A-Za-z0-9_]+))?\.(?:html|pdf)"
 )
 _PMLR_HOSTS = {"proceedings.mlr.press", "mlr.press"}
 _PMLR_PATH = re.compile(r"/v([0-9]+)/([A-Za-z0-9_-]+?)(?:\.html|\.pdf|/.*)?")

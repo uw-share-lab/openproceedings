@@ -170,8 +170,20 @@ def ingest_ris(mended: Sequence[Path], cache: Path) -> list[ImportReport]:
 
 
 def load_cache(cache: Path) -> tuple[list[PaperRecord], list[ImportReport]]:
-    """Every cached source, imported (M2: RIS only), in cached-name order. Hidden and `.tmp-` entries are
-    never sources."""
+    """Every cached source's records (RIS imports, then the finished NeurIPS and PMLR crawls, re-mined
+    offline) and the RIS import reports; `load_sources` also returns the crawlers' manifest entries."""
+    records, reports, _ = load_sources(cache)
+    return records, reports
+
+
+def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], dict[str, Any]]:
+    """Every cached source: RIS files in cached-name order (hidden and `.tmp-` entries are never sources),
+    then every crawl with a finished marker, re-mined from the page cache with no network
+    (`sources/crawl.py`). Refuses an empty cache."""
+    from openproceedings.ingest.sources.common import MinerError
+    from openproceedings.ingest.sources.crawl import load_crawls
+    from openproceedings.ingest.sources.http import CacheError
+
     records: list[PaperRecord] = []
     reports: list[ImportReport] = []
     for entry in sorted((cache / "ris").glob("*/mended.ris")):
@@ -180,11 +192,13 @@ def load_cache(cache: Path) -> tuple[list[PaperRecord], list[ImportReport]]:
         recs, report = import_ris(entry)
         records += recs
         reports.append(report)
-    if not reports:
-        raise SnapshotError(
-            f"nothing cached under {cache.name}/ris; run `op ingest ris <mended.ris>...` first"
-        )
-    return records, reports
+    try:
+        crawled, crawls = load_crawls(cache)
+    except (MinerError, CacheError) as e:
+        raise SnapshotError(str(e), reason=getattr(e, "reason", "cache_invalid")) from e
+    if not reports and not crawls:
+        raise SnapshotError(f"nothing cached under {cache.name}; run `op ingest ris|neurips|pmlr ...` first")
+    return records + crawled, reports, crawls
 
 
 def record_line(record: PaperRecord) -> str:
@@ -216,8 +230,14 @@ def _nested(
     return plain
 
 
-def render(result: DedupResult, reports: Sequence[ImportReport], built_at: datetime) -> dict[str, bytes]:
-    """The snapshot's files. Everything but manifest.json's `built_at` is a function of the inputs."""
+def render(
+    result: DedupResult,
+    reports: Sequence[ImportReport],
+    built_at: datetime,
+    crawls: Mapping[str, Any] | None = None,
+) -> dict[str, bytes]:
+    """The snapshot's files. Everything but manifest.json's `built_at` is a function of the inputs.
+    `crawls` holds the crawlers' `sources` entries (`neurips_proceedings`, `pmlr`), beside `ris`."""
     records = sorted(result.records, key=lambda r: r.id)
     if not records:
         raise SnapshotError("no records to snapshot")
@@ -243,7 +263,7 @@ def render(result: DedupResult, reports: Sequence[ImportReport], built_at: datet
         "merges": {"total": len(result.merges), **Counter(m.rule for m in result.merges)},
         "conflicts": {"total": len(result.conflicts), **Counter(c.resolution.split(":")[0] for c in result.conflicts)},
         "files": {"merges.csv": _sha256(merges), "conflicts.csv": _sha256(conflicts)},
-        "sources": {"ris": [r.to_manifest() for r in reports]},
+        "sources": {"ris": [r.to_manifest() for r in reports], **(crawls or {})},
     }  # fmt: skip
     return {
         "records.jsonl": lines,
@@ -289,8 +309,8 @@ def _holds(snapshot: Path, snapshot_hash: str, fresh: dict[str, Any] | None = No
 def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> BuildResult:
     """Import, dedup and write a new immutable snapshot (or report the one that already has this hash)."""
     began = time.monotonic()
-    records, reports = load_cache(cache)
-    files = render(dedup(records), reports, built_at or datetime.now(UTC))
+    records, reports, crawls = load_sources(cache)
+    files = render(dedup(records), reports, built_at or datetime.now(UTC), crawls)
     manifest = json.loads(files["manifest.json"])
     snapshot_hash = manifest["snapshot_hash"]
     target = snapshots / f"{manifest['crawl_date']}-{snapshot_hash[:SHORT]}"

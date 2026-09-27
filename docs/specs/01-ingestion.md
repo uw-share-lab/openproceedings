@@ -71,9 +71,9 @@ count is complete for ICLR and a floor elsewhere, and coverage (07 §C) says whi
 |---|---|---|
 | OpenReview API v2 (`api2.openreview.net`) | ICLR 2024+, NeurIPS 2023+ (with 2023 D&B), ICML 2023+ | Authenticated with `.env` credentials (`OPENREVIEW_USERNAME`, `OPENREVIEW_PASSWORD`). Anonymous requests get HTTP 200 with an HTML browser-challenge page, never JSON (verified 2026-09-27), so a non-JSON response is an auth failure. `limit` ≤ 1000; `count` only when `offset` is sent. |
 | OpenReview API v1 (`api.openreview.net`) | ICLR 2013, 2014, 2016–2023 (2016: workshop track only), NeurIPS 2021–2022 (main and D&B) | Same login. Status comes from decision notes, `content.venue` or `content.decision` (2013), never the bare venueid (§Track taxonomy). A per-year adapter handles each schema. ICLR 2014 has no decisions and ICLR 2015 is not on OpenReview (TASK-096). |
-| NeurIPS proceedings (`proceedings.neurips.cc`) | NeurIPS main, 2013 to the latest published year (2024 on 2026-09-27), and D&B 2022+; 2021 D&B on `datasets-benchmarks-proceedings.neurips.cc`. The only source before 2021 | Year index pages plus abstract pages. The URL has no track token before 2022. Also cross-checks OpenReview acceptance. |
-| PMLR (`proceedings.mlr.press`) | ICML 2013–2022 (v28, v32, v37, v48, v70, v80, v97, v119, v139, v162); confirms 2023–2025 (v202, v235, v267) | Volume index plus per-paper pages. The volume → year/track table is `ingest/volumes.py`, checked in tests; a volume that mixes main and position papers (v235, v267) gives track `unknown`. |
-| RIS importer (`ingest/ris.py`) | The Trust-Evals corpus (M2 bootstrap): two searches, 2025–26 and 2020–24, one scholarmend output each | Reads a `mended.ris` with `scholarmend.parse.parse_file` (pinned `scholarmend` PyPI package) and the `resolved.json` beside it, entry by entry (a count or title mismatch is an error). Only scholarmend's identifying claims decide identity, track and status: a venueid plus its forum id; else a NeurIPS/ICLR `proceedings_url` claim (`nips-`/`iclr-<hash>`); else a `pmlr_url` claim in an ICML volume (`pmlr-v<N>-<key>`, track from `ingest/volumes.py`). `status` comes from a claim only: a venueid → its status; a proceedings listing → `accepted`, overriding a venueid that names the same venue, year and track (decision-005); a listing that disagrees makes the record a `conflict`. Never inferred from appearing in Scholar. Abstract: OpenReview's, else the proceedings page's, else `null` (never Scholar's or Semantic Scholar's). Authors from `AU` without Scholar's `...`. Every claim has `source = "ris"`, its origin in `evidence`, and `fetched_at` from the `M1` Query date: Publish or Perish's local time, stored labelled UTC because the offset isn't recorded, so a crawl date can be a day off near midnight (task-077 records the offset). Skipped records are counted by reason (`out_of_scope`, `unresolved`, `no_id`, `ambiguous`, `conflict`, `no_query_date`) in an `ImportReport`; none is given a minted id. A proceedings listing whose URL year is before its venue was held under its name (`papers.nips.cc/paper/1986/…`, `proceedings.iclr.cc/paper/2012/…`) is `unresolved`: skipped and counted, never an abort of the whole file. |
+| NeurIPS proceedings (`proceedings.neurips.cc`) | NeurIPS main, 2013 to the latest published year (2024 on 2026-09-27), and D&B 2022+; 2021 D&B on `datasets-benchmarks-proceedings.neurips.cc`. The only source before 2021 | Year index pages plus abstract pages (`ingest/sources/neurips.py`). The URL has no track token before 2022, so a token-less listing on the main host up to 2021 is `main` by host and year; the 2021 D&B host's `round1`/`round2` are `datasets_benchmarks`; `Datasets_and_Benchmarks` is the ≤2023 alias (`classify.classify_neurips_listing`, each rule named in the track claim's evidence). An abstract is taken only when the page's `citation_title` is the listed title. A year page's "See also" volume (2025 links `vol38-main-conference`) is reported, not crawled, until its page is verified. Also cross-checks OpenReview acceptance. |
+| PMLR (`proceedings.mlr.press`) | ICML 2013–2022 (v28, v32, v37, v48, v70, v80, v97, v119, v139, v162); confirms 2023–2025 (v202, v235, v267) | Volume index plus per-paper pages (`ingest/sources/pmlr.py`). The volume table is data, `ingest/pmlr_volumes.toml` (venue, year, track, role, verified paper count, heading, index title, verified date, source per row), loaded and checked by `ingest/volumes.py` and pinned by tests against the recorded index and volume pages. A volume the table lacks, or lists as competition or workshop (`out_of_scope`), is never crawled or imported as ICML; a volume whose page heading the table doesn't name stops the crawl. A volume that mixes main and position papers (v235, v267) gives track `unknown`. |
+| RIS importer (`ingest/ris.py`) | The Trust-Evals corpus (M2 bootstrap): two searches, 2025–26 and 2020–24, one scholarmend output each | Reads a `mended.ris` with `scholarmend.parse.parse_file` (pinned `scholarmend` PyPI package) and the `resolved.json` beside it, entry by entry (a count or title mismatch is an error). Only scholarmend's identifying claims decide identity, track and status: a venueid plus its forum id; else a NeurIPS/ICLR `proceedings_url` claim (`nips-`/`iclr-<hash>`); else a `pmlr_url` claim in an ingested ICML volume of the volume table (`pmlr-v<N>-<key>`, year and track from `ingest/pmlr_volumes.toml`; since task-053 that includes v28–v97, so a URL in ICML 2013–2019 now imports where it used to be skipped as `no_id`/`out_of_scope`, a change a snapshot diff shows). A NeurIPS listing's track token must agree with the claim by the miner's host/year rules (`classify_neurips_listing`: the 2021 D&B host's `round1`/`round2` are D&B). `status` comes from a claim only: a venueid → its status; a proceedings listing → `accepted`, overriding a venueid that names the same venue, year and track (decision-005); a listing that disagrees makes the record a `conflict`. Never inferred from appearing in Scholar. Abstract: OpenReview's, else the proceedings page's, else `null` (never Scholar's or Semantic Scholar's). Authors from `AU` without Scholar's `...`. Every claim has `source = "ris"`, its origin in `evidence`, and `fetched_at` from the `M1` Query date: Publish or Perish's local time, stored labelled UTC because the offset isn't recorded, so a crawl date can be a day off near midnight (task-077 records the offset). Skipped records are counted by reason (`out_of_scope`, `unresolved`, `no_id`, `ambiguous`, `conflict`, `no_query_date`) in an `ImportReport`; none is given a minted id. A proceedings listing whose URL year is before its venue was held under its name (`papers.nips.cc/paper/1986/…`, `proceedings.iclr.cc/paper/2012/…`) is `unresolved`: skipped and counted, never an abort of the whole file. |
 
 The M2 bootstrap is deliberately the existing corpus: the Trust-Evals review's Scholar results as
 scholarmend mended them: 1,834 records read and 1,805 imported, all accepted, since the review had already
@@ -115,16 +115,30 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
 
 ```
 op ingest openreview --venue ICLR --years 2020-2026
-op ingest proceedings --venue NeurIPS --years 2020-2025
+op ingest neurips --year 2013-2024 [--dry-run | --offline] [--refresh] [--delay 1]
+op ingest pmlr --year 2013-2025 [--dry-run | --offline] [--refresh] [--delay 1]
 op ingest ris <mended.ris>...           # cache scholarmend outputs (resolved.json beside each)
 op snapshot build [--from <cache>]      # merge sources → new immutable snapshot
 op snapshot diff <a> <b>                # added / removed / changed records
 ```
 
-As built (task-022): `ingest ris`, `snapshot build` and `snapshot diff`; the crawler sources are stubs
-naming task-050/052. `op --data-dir <dir> <command>` (a global option; default `$OP_DATA_DIR`, else the repository's
-`data/`, gitignored); results go to stdout as JSON, a refusal exits 1 with a one-line reason that never
-quotes record text.
+As built (task-022, task-052/053): `ingest ris`, `ingest neurips`, `ingest pmlr`, `snapshot build` and
+`snapshot diff`; `ingest openreview` is a stub naming task-050. `op --data-dir <dir> <command>` (a global
+option; default `$OP_DATA_DIR`, else the repository's `data/`, gitignored); results go to stdout as JSON, a
+refusal exits 1 with a one-line reason that never quotes record text.
+
+The proceedings crawlers (`ingest/sources/`): `--year` takes a year or an inclusive range and repeats.
+Every request goes through the page cache `<data-dir>/cache/{neurips,pmlr}/pages/` (one JSON entry per
+URL, fixture-shaped, written atomically, with the fetch time every claim carries), one request per second
+per crawl by default (`--delay`, never under 0.5 s), retrying 429/5xx with `Retry-After` and refusing
+other 4xx at once, on the source's own hosts only. A crawl resumes from the cache; when a listing's
+pages are all cached it writes a marker (`<cache>/<source>/crawls/<year|vN>.json`), and `op snapshot
+build` re-mines every marked listing from the cache alone, so a snapshot never fetches. `--dry-run` reads
+only the index pages and reports what a crawl would fetch (`to_fetch`); `--offline` reads only the cache;
+`--refresh` re-fetches index pages (a year published since). `ingest pmlr` maps a year to its ICML volume
+through the volume table and refuses a year the table lacks. Each listing's report (stated vs listed
+count, tracks, abstracts missing and why, unknown tracks, crawl window) goes into the manifest's `sources`
+under `neurips_proceedings` / `pmlr`.
 
 ## Error handling
 
@@ -146,3 +160,8 @@ quotes record text.
   the known workshop forms.
 - Dedup property tests. Never merge across venue or year. Merging is idempotent.
 - Snapshot determinism: the same inputs give a byte-identical `records.jsonl` and hash.
+- Proceedings miners (`test_neurips.py`, `test_pmlr.py`, `test_fetch.py`): the recorded year and volume
+  pages seeded into a page cache, and a scripted transport for the fetcher (pacing, `Retry-After`, 4xx,
+  truncation, off-host redirects, resume after a failure). Scrubbing gave each abstract page another
+  synthetic title than its listing, so a case needing them to agree edits the recorded page and says so;
+  the untouched page is the title-mismatch case.

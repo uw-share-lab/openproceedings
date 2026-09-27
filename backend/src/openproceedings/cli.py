@@ -1,8 +1,8 @@
 """The `op` command line. Every planned subcommand exists from M1 on; each stub names the task that
 implements it (spec 08 §CLI). The CLI and the API call the same functions.
 
-Implemented: `op ingest ris`, `op snapshot build`, `op snapshot diff` (task-022), `op index build`
-(task-023), `op index parity` (task-029), `op search` (ranked, `--ids`, `--explain`, `--engine reference`;
+Implemented: `op ingest ris`, `op snapshot build`, `op snapshot diff` (task-022), `op ingest neurips` /
+`op ingest pmlr` (task-052/053), `op index build` (task-023), `op index parity` (task-029), `op search` (ranked, `--ids`, `--explain`, `--engine reference`;
 task-024/030), `op export` (task-030), `op serve` (task-034), `op openapi` (task-040) and `op record save` /
 `op record replay` (task-083). Results go to stdout; logs go to stderr; a refused operation exits 1 with its
 reason, a usage error or a stub exits 2, and `op record replay` exits 3 on a `mismatch` (`EXIT_MISMATCH`).
@@ -16,6 +16,7 @@ import io
 import json
 import logging
 import os
+import re
 import secrets
 import sys
 import time
@@ -55,7 +56,8 @@ PLANNED: dict[str, tuple[str, str]] = {
 # script must tell apart from a refusal (1), a usage error (2) and drift (0)
 EXIT_MISMATCH = 3
 # `op ingest <source>` sources still to come -> the task that implements them
-PLANNED_SOURCES: dict[str, str] = {"openreview": "task-050", "proceedings": "task-052"}
+PLANNED_SOURCES: dict[str, str] = {"openreview": "task-050"}
+MIN_DELAY = 0.5  # seconds between requests to a proceedings host: never faster (politeness)
 
 
 def default_data_dir() -> Path:
@@ -87,7 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
     ingest = sub.add_parser(
-        "ingest", help="fetch sources into the cache: ris | openreview | proceedings (spec 01)"
+        "ingest", help="fetch sources into the cache: ris | neurips | pmlr | openreview (spec 01)"
     )
     sources = ingest.add_subparsers(dest="source", metavar="<source>", required=True)
     ris = sources.add_parser(
@@ -95,6 +97,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ris.add_argument("files", nargs="+", type=Path, metavar="mended.ris")
     ris.set_defaults(run=_ingest_ris)
+    for name, about in (
+        ("neurips", "NeurIPS proceedings years (proceedings.neurips.cc; 2021 adds the D&B host)"),
+        ("pmlr", "ICML years from PMLR (the volume in ingest/pmlr_volumes.toml)"),
+    ):
+        crawl = sources.add_parser(name, help=f"crawl {about} into <data-dir>/cache/{name}")
+        crawl.add_argument(
+            "--year", dest="years", action="append", required=True, type=_years, metavar="YYYY[-YYYY]",
+            help="a year or an inclusive range; repeatable",
+        )  # fmt: skip
+        crawl.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="read only the index pages; report what a crawl would fetch",
+        )
+        crawl.add_argument("--offline", action="store_true", help="use the page cache only (no network)")
+        crawl.add_argument(
+            "--refresh", action="store_true", help="re-fetch the index pages (a newly published year)"
+        )
+        crawl.add_argument(
+            "--delay",
+            type=float,
+            default=1.0,
+            help=f"seconds between requests (default 1, at least {MIN_DELAY})",
+        )
+        crawl.set_defaults(run=_ingest_crawl)
     for name, task in PLANNED_SOURCES.items():
         _stub(sources.add_parser(name, help=f"planned in {task}"), f"ingest {name}", task)
 
@@ -258,6 +285,33 @@ def _ingest_ris(ns: argparse.Namespace) -> int:
 
     reports = ingest_ris(ns.files, ns.data_dir / "cache")
     _print([r.to_manifest() for r in reports])
+    return 0
+
+
+def _years(text: str) -> list[int]:
+    """`2013` or `2013-2024` (inclusive) as years; argparse reports an ArgumentTypeError as a usage error."""
+    m = re.fullmatch(r"([0-9]{4})(?:-([0-9]{4}))?", text)
+    if m is None:
+        raise argparse.ArgumentTypeError(f"not a year or a YYYY-YYYY range: {text!r}")
+    lo, hi = int(m.group(1)), int(m.group(2) or m.group(1))
+    if hi < lo:
+        raise argparse.ArgumentTypeError(f"an empty range: {text!r}")
+    return list(range(lo, hi + 1))
+
+
+def _ingest_crawl(ns: argparse.Namespace) -> int:
+    from openproceedings.ingest.sources.crawl import ingest_neurips, ingest_pmlr
+
+    if ns.delay < MIN_DELAY:
+        raise _usage(f"--delay must be at least {MIN_DELAY} seconds (politeness)")
+    if ns.dry_run and ns.offline:
+        raise _usage("--dry-run and --offline don't combine: a dry run reads the live index pages")
+    run = ingest_neurips if ns.source == "neurips" else ingest_pmlr
+    years = sorted({y for chunk in ns.years for y in chunk})
+    _print(
+        run(years, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run, refresh=ns.refresh,
+            min_interval=ns.delay)
+    )  # fmt: skip
     return 0
 
 
@@ -914,6 +968,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     from openproceedings.engine.index import IndexBuildError
     from openproceedings.engine.protocol import EngineError
     from openproceedings.ingest.snapshot import SnapshotError
+    from openproceedings.ingest.sources.common import MinerError
+    from openproceedings.ingest.sources.http import CacheError, FetchError
 
     parser = build_parser()
     args = list(sys.argv[1:] if argv is None else argv)
@@ -939,20 +995,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         with contextlib.suppress(OSError):
             os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         return 0
-    except (SnapshotError, IndexBuildError, EngineError, OpenProceedingsError, ValueError, OSError) as e:
+    except (
+        SnapshotError, IndexBuildError, EngineError, OpenProceedingsError, MinerError, FetchError, CacheError,
+        ValueError, OSError,
+    ) as e:  # fmt: skip
         from openproceedings.engine.parity import ParityError
 
         # the level by kind (logging-standards): the user's own input at DEBUG; an internal failure at ERROR
         # with its traceback; a broken guarantee (parity) at ERROR without one, since its traceback would
-        # quote corpus tokens; any other refusal (a snapshot, an index, a file) at WARNING; the code, never
-        # the message (messages may quote input)
-        broken = isinstance(e, InternalError | ParityError)
+        # quote corpus tokens; an aborted crawl (a fetch that failed) at ERROR, since a person must re-run it;
+        # any other refusal (a snapshot, an index, a file, a volume) at WARNING; the code or reason, never the
+        # message (messages may quote input)
+        broken = isinstance(e, InternalError | ParityError | FetchError)
         level = (
             logging.DEBUG if isinstance(e, UserInputError) else logging.ERROR if broken else logging.WARNING
         )
         fields: dict[str, object] = {"command": name, "error": type(e).__name__}
         if isinstance(e, OpenProceedingsError):
             fields["code"] = str(e.code)
+        if isinstance(e, MinerError | FetchError):
+            fields["reason"] = e.reason
         log.log(level, "cli_refused", extra=fields, exc_info=isinstance(e, InternalError))
         print(f"op {name}: {_reason(e)}", file=sys.stderr)
         return 1

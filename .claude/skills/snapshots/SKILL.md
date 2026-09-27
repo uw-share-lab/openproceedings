@@ -43,14 +43,25 @@ value); `record_count`; `counts` nested venue → year → track → status; `ab
 resolution kind); `files` (the sha256 of `merges.csv` and `conflicts.csv`, which `snapshot_hash` doesn't
 cover); and `sources` — for RIS, one `ImportReport.to_manifest()` per cached file (both inputs' sha256,
 the installed scholarmend `parser_version`, read / imported / skipped by reason, abstract_missing,
-unknown_track, status_overrides, track × status). The crawlers add their own source entries (crawl window, API host
-and version, page counts) in M4. The manifest may hold build times; `records.jsonl` may not. `/coverage`
+unknown_track, status_overrides, track × status). The proceedings crawlers (task-052/053) add
+`neurips_proceedings` and `pmlr`: each `{crawl_window, listings}`, one report per listing (venue, year,
+volume, listing URL, role, `stated` vs `listed` and `count_ok`, records, skipped by reason, tracks,
+abstract_missing with `abstract_title_mismatch` and `page_missing`, unknown_track, `see_also`, its own
+crawl window); `coverage.crawl_dates` picks up each `crawl_window`. OpenReview adds its own in task-050.
+The manifest may hold build times; `records.jsonl` may not. `/coverage`
 (spec 04) and `coverage-auditor` read these counts directly.
 
 ## The cache
 `op ingest ris <mended.ris>...` checks each scholarmend output imports cleanly, then copies it and the
 `resolved.json` beside it to `<data-dir>/cache/ris/<its directory name>/`. Re-ingesting identical files is
 a no-op; different files under a cached name are refused (a snapshot may already cite them).
+
+`op ingest neurips|pmlr` fills a page cache, `<data-dir>/cache/{neurips,pmlr}/pages/<sha256[:2]>/<sha256>.json`
+(one fixture-shaped entry per URL with its `fetched_at`, each written atomically; a 404 paper page is
+cached as a stable absence), and writes `<data-dir>/cache/<source>/crawls/<year|vN>.json` once a listing's
+pages are all cached. `op snapshot build` re-mines only marked listings, from the cache with no network; a
+marked listing whose pages have gone is a refusal, never a smaller snapshot. An empty cache (no RIS and no
+marked crawl) is refused.
 
 ## Immutability
 - A build or ingest holds an exclusive `flock` on `<dir>/.lock` in the directory it writes into, so
