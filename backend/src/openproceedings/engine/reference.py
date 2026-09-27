@@ -45,6 +45,7 @@ from openproceedings.query.ast import (
 )
 from openproceedings.query.normalize import normalize
 
+# its own copy: the oracle imports only the AST, the token contract and the protocol (a test pins it to vocab)
 TEXT_FIELDS: tuple[TextField, ...] = ("title", "abstract")
 
 

@@ -1,6 +1,6 @@
 ---
 name: ranking-engineer
-description: Owns ordering inside the matched set in backend/src/openproceedings/engine/rank.py — field-weighted BM25 boosts (title 2.0, abstract 1.0, k1 1.2, b 0.75), non-scoring negations and filters, the id tie-break for every sort, stable pagination, and ranking_params in index_version. Use for relevance or sort changes, weight tuning, pagination bugs, or a determinism failure.
+description: Owns ordering inside the matched set (backend/src/openproceedings/engine/tantivy_engine.py, boosts in compile.py) — field-weighted BM25 boosts (title 2.0, abstract 1.0, k1 1.2, b 0.75), non-scoring negations and filters, the id tie-break for every sort, stable pagination, and ranking_params in index_version. Use for relevance or sort changes, weight tuning, pagination bugs, or a determinism failure.
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
@@ -22,7 +22,8 @@ it reports the full set.
 2. Write the tests first, on a tiny hand-built fixture where the scores can be computed by hand: expected
    order, ties broken by `id`, and the claim that adding `year:` or `NOT x` leaves the relative order of the
    remaining documents unchanged.
-3. Implement in `engine/rank.py`, with boosts attached through `engine/compile.py`. Check in the pinned
+3. Implement in `engine/tantivy_engine.py` (`keyed`/`ranked`/`search`), with boosts attached through
+   `engine/compile.py`. Check in the pinned
    tantivy-py whether k1/b are configurable before claiming to set them.
 4. Check that membership is invariant: for each `sort`, the union of all pages (`offset` 0..total step
    `limit`) equals `match_ids`, with no duplicates.
@@ -34,6 +35,8 @@ it reports the full set.
 ## Rules
 - Never call it "BM25F" in code, docs or UI. It is field-weighted BM25.
 - Never break ties by Tantivy doc order or segment order.
+- Never build a flat Boolean of three or more clauses: use `compile.combine` (balanced binary tree), or
+  identical texts score an ulp apart.
 - Never round scores before sorting.
 - `sort=semantic` belongs to 06 (`embedding-engineer`), and it still ends in the `id` tie-break.
 

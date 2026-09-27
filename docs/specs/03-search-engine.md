@@ -33,7 +33,21 @@ contract keeps distinct), no stemmer and no stopword filter. The query side does
 Tantivy's query parser. We compile our own AST. To keep the two sides from drifting, the index is fed
 **pre-normalized text** from `normalize.py` (02). Tantivy then only needs to split on whitespace, so the
 Rust side contains no normalization logic of its own. A test asserts that tokenizing through the index
-and through `normalize.py` gives identical token streams across the whole corpus.
+and through `normalize.py` agrees across the whole corpus (the stored text, the positions by phrase
+read-back, and every term's document frequency; see the as-built note below for what that does not cover). Tantivy silently drops
+a token over 65,530 UTF-8 bytes, so the build refuses a record with one rather than index less than the
+reference engine matches (`engine/index.py`, `op index build`).
+
+As built (task-029, `engine/parity.py`, `op index parity`): record by record, in id order, against
+`normalize()` of the snapshot's raw text:
+- the stored field through `exact_v1` gives the same tokens (the text round-trips);
+- the positions Tantivy indexed are read back with a phrase query over each field of 2+ tokens,
+  restricted to the record;
+- each term's document frequency in the term dictionary matches, in both directions.
+
+Term frequencies are checked only as far as the phrase read-back implies. The first difference fails,
+naming the record, field and token (or the term). That message quotes tokens: it is local terminal output,
+never logged. It runs on the synthetic 5k corpus in CI; on the real corpus it runs locally (decision-004).
 
 ## Index schema
 
@@ -44,7 +58,7 @@ and through `normalize.py` gives identical token streams across the whole corpus
 | `abstract` | text, positions | ✓ | ✓ | |
 | `venue`, `track`, `status` | text (raw, facet) | ✓ | ✓ | ✓ |
 | `year` | u64 | ✓ | ✓ | ✓ |
-| `record` | JSON (authors, urls, presentation, keywords) | | ✓ | |
+| `record` | bytes: compact JSON of the display fields (original title and abstract, authors, urls, presentation, keywords, venue_id_raw); stored, never indexed (a JSON field would be) | | ✓ | |
 
 ## AST → Tantivy compilation
 
@@ -52,7 +66,7 @@ and through `normalize.py` gives identical token streams across the whole corpus
 |---|---|
 | `Term t` (no field) | `Boolean(SHOULD title:t, SHOULD abstract:t)` |
 | `Phrase` | `PhraseQuery` per field, combined with OR. Never across fields. |
-| `Near(a, b, n)` | Per field: `PhraseQuery([a, b], slop=n)` OR the reversed order. Multi-token operands are handled through the reference definition, with a documented fallback: the postings are candidate-filtered by Tantivy, then verified by position in Python. |
+| `Near(a, b, n)` | Two different single terms: per field, `PhraseQuery([a, b], slop=n)` OR the reversed order (exact on tantivy 0.26.2, measured). A phrase or wildcard operand, a term with itself, or a phrase with a wildcard item takes the documented fallback: candidates filtered by Tantivy, then verified by position in Python over the stored token streams. |
 | `Wildcard` | Expanded via the term dictionary (the FST behind `RegexQuery` / term streaming) into an explicit OR of terms. The expansion is returned to the caller. |
 | `And` / `Or` / `Not` | `BooleanQuery` MUST / SHOULD / MUST_NOT |
 | `Filter` | `TermQuery` or `RangeQuery` on the fast fields, applied as a non-scoring filter |
@@ -69,12 +83,31 @@ Every compiled query is also rendered as a readable string for debugging (`op se
 - Other sorts: `year_desc`, `year_asc`, `title`. The tie-breaker is always `id`, so the order is fully
   deterministic.
 - `sort=semantic` is supplied by 06 when it is enabled.
+- As built (task-025, `engine/tantivy_engine.py`): the weights are per-field boosts; k1 and b are
+  Tantivy's fixed constants, checked against a hand-computed score; the whole match set is ordered by the
+  sort's key with `id` last (never Tantivy's hit order), then paged; the sort definitions are part of
+  `ranking_params`. Every Boolean is compiled as a balanced binary tree, so identical texts get identical
+  scores whatever the index layout (a flat union of three or more clauses leaves them an ulp apart).
+  The engine refuses an index built with another schema, tokenizer or Tantivy version, or other bm25 params.
 
 ## Highlights
 
 For each hit, return the match spans per field, computed from the **AST** (not from Tantivy's snippet
 generator), so what's highlighted is exactly what matched. That covers phrase spans and expanded wildcard
 terms.
+
+As built (task-027, `engine/highlight.py`): `highlights(ast, record, expansions)` evaluates the AST on one
+record over `tokenize`'s offset map. A term or expanded wildcard term lights each token it matches; a phrase
+lights one span per occurrence; NEAR lights the operand occurrences that form a pair within the distance;
+AND lights its children, OR only the children that matched; NOT and filters light nothing. A node that
+doesn't match has no spans, so a branch that didn't match lights nothing. Overlapping spans merge. A LaTeX
+math command's span is its name without the backslash (`$\alpha$` lights `alpha`); markup that opens a word
+(an accent macro, `\-`, or a math `^`/`_`) is part of the word (`\"{O}del` and `$^2x$` light all of it; task-074). The highlighter's verdict
+is checked against ReferenceEngine on every fixture record for all 44 golden queries.
+Measured (task-027 review): a 50-hit page of ~400-word abstracts takes ~174 ms to highlight, almost all
+of it `tokenize`, over the 100 ms page budget; task-073 moves it inside (precomputed offsets or a cache,
+decided with the API's page assembly). A NEAR over a long field is a binary search per occurrence, never
+a check of every pair. A hit the highlighter doesn't match raises `EngineInternalError`.
 
 ## Exclusion accounting (guarantee 6, PRISMA)
 
@@ -101,6 +134,14 @@ Counting rules (so the PRISMA number is never double-counted):
   itemised separately (`excluded.track.unknown`, `excluded.status.unknown`) and are never folded into
   another bucket. The UI and the methods text show them on their own line, so a review can choose to report
   them or screen them.
+- As built (task-026, `engine/exclusions.py`): `excluded(engine, parsed, total)` uses only the Engine protocol,
+  so both engines compute it the same way. The track buckets are the track facet of `identification ∧
+  track-default` (the facet drops that clause, so it counts every identified record). The status buckets
+  are the status facet of the effective query (every identified record that passed the track default).
+  `|identified|` is the first default's facet total, and `total` is the search's own count, passed in, so
+  the query runs no third time (no default applied: 0, with no evaluation). Buckets that don't sum to
+  `|identified| − total` are an `EngineInternalError` (`API_INTERNAL`, a 5xx), never a silent report. Tested against a brute-force count on the 200-record fixture,
+  for both engines, including an `identification_query` of `""` and an all-negative one.
 
 ## Error handling
 
@@ -128,12 +169,25 @@ as "current" and can load a pinned older version to replay a search record.
 - p95 latency: under 100 ms for a search returning the first 50 hits, and under 300 ms for `match_ids`
   with exclusion accounting.
 - A wildcard expansion of up to 200 terms: under 50 ms.
+- **Exception, as built (task-024):** a clause that takes the position-verified fallback (a phrase with a
+  wildcard item; NEAR with a phrase or wildcard operand, or a term with itself) costs time linear in its
+  candidates' text and can exceed the search and `match_ids` budgets when cold: on a synthetic 80k corpus,
+  stopword cases such as `the NEAR/5 the` take 2.3–3.3 s cold, and the wildcard-phrase protocol string
+  `main-2-pop` 10.1 s to search and 10.5 s for `match_ids` + exclusions (`docs/results/2026-09-27-bench.md`). It is never capped, because a cap would make
+  a query's result depend on the corpus's size and break replaying search records; task-031 measures these
+  cases, and an engine caches each verified clause, so facets and repeats don't pay again.
+- Measured (task-031, `docs/results/2026-09-27-bench.md`, a synthetic 80k corpus, quiet machine): build 30 s,
+  99 MB, 391 MB peak in the largest single process. Every Trust-Evals string's search and `match_ids` +
+  exclusions is within budget, except `main-2-pop` (wildcard phrases) when cold: 10.1 s to search and 10.5 s
+  for `match_ids` + exclusions, the exception above. Warm (the engine's verified-clause cache and compiled-
+  query memo), its search is 27 ms p95 over 200 runs.
 
 ## Testing
 
 - Differential testing (a CI gate): Hypothesis generates random ASTs over the corpus vocabulary (including
   rare terms, phrases, NEAR, wildcards and filters). Assert that
-  `TantivyEngine.match_ids == ReferenceEngine.match_ids` on a 5k-record fixture snapshot.
+  `TantivyEngine.match_ids == ReferenceEngine.match_ids` on a synthetic 5k-record fixture snapshot
+  (decision-004).
 - Golden fixtures from 02 run end to end through both engines.
 - Determinism: the same query and `index_version` give identical order and scores.
 - A tokenizer-parity test over the full corpus.

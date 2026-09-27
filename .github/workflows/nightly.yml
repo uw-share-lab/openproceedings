@@ -1,7 +1,8 @@
 name: nightly
 # Every property test at 50,000 examples, the exhaustive tokenizer check, and the full mutation run of every
 # gate and tooling check (make mutate). Reviews run only `make mutate-changed`; this catches anything that
-# slipped. Differential@50k and full-corpus parity join this job with the Tantivy engine (task-057).
+# slipped. The differential suite (backend/tests/differential, ~1 h at 50k locally) gets its own job in
+# task-057; until then it runs at 2,000 examples in the test workflow and is excluded here.
 on:
   schedule:
     - cron: "17 7 * * *"
@@ -17,6 +18,7 @@ jobs:
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
         run: uv sync --locked
@@ -27,6 +29,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
         run: uv sync --locked
@@ -36,11 +39,13 @@ jobs:
         run: >-
           uv run --locked pytest -q --hypothesis-profile=nightly -k "not exhaustive"
           --ignore=backend/tests/unit/test_properties.py --ignore=backend/tests/golden/test_reference_200.py
+          --ignore=backend/tests/differential
   mutate:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
         run: uv sync --locked

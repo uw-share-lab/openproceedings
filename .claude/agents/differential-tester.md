@@ -35,6 +35,18 @@ small enough to fix in minutes.
    (`.claude/agents/index-engineer.md`), or to `reference-oracle-keeper`
    (`.claude/agents/reference-oracle-keeper.md`) if the oracle looks wrong.
 
+As built (task-028): the suite is `backend/tests/differential/test_differential.py` over the synthetic 5k
+corpus (`tests/fixtures/corpus/synthetic_5k.py`: generated in memory and hash-pinned; a Zipfian vocabulary of
+~6,400 terms with ~800 hapaxes and roots whose 2-letter stems pass the 200-term cap; every venue × year ×
+track × status). Trees come from `engine_asts(vocab())`, the corpus's own dictionary: the 600 most frequent
+terms, rare terms (df 1-3) a third of the time, an over-cap stem one wildcard in twenty. It checks match
+sets, `expand` results or refusals, disjunctive facets, `total` for every sort, the `year_asc` order, and,
+for trees that parse, `excluded()` against a record-by-record count. Every failure message ends with
+`regression: <AST JSON>`: add `{"ast": …, "note": …}` to `differential-regressions.json`, which is
+replayed on every run; that entry is step 6's golden test. 18 engine mutants (NEAR slop and order, phrase
+slop, `$` as `*`, empty expansions, year edges, multi-value filters, NOT, verified-clause caching, facets,
+totals, exclusion order) each fail it.
+
 ## Rules
 - Never reduce example counts, add `assume()` or skip a node kind to get green. A strategy gap is a finding.
 - Compare against the oracle only. Two Tantivy runs agreeing proves nothing about exactness.

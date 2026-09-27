@@ -15,17 +15,19 @@ openproceedings/
 ├── backend/                     # uv workspace member: Python package `openproceedings` (Python 3.12, .python-version)
 │   ├── pyproject.toml
 │   ├── src/openproceedings/
-│   │   ├── ingest/              # 01: sources/, classify.py, dedup.py, snapshot.py, ris.py
-│   │   ├── query/               # 02: normalize.py, lexer.py, parser.py, ast.py, canonical.py, defaults.py, compat.py
-│   │   ├── engine/              # 03: protocol.py, reference.py (built); tantivy_engine.py, compile.py, rank.py, highlight.py
+│   │   ├── ingest/              # 01: record.py, classify.py, urls.py, volumes.py, ris.py, dedup.py, snapshot.py (built); sources/ (M4, crawlers)
+│   │   ├── query/               # 02: normalize.py, mathsyms.py, lexer.py, parser.py, ast.py, canonical.py, defaults.py, compat.py
+│   │   ├── engine/              # 03: protocol.py, reference.py, index.py, compile.py, tantivy_engine.py, exclusions.py, highlight.py, parity.py
 │   │   ├── semantic/            # 06 (phase 2)
 │   │   ├── api/                 # 04: FastAPI app, routers, exporters/, records.py
 │   │   ├── eval/                # 07 report generators
 │   │   ├── diagnostics.py       # error-code registry (one Diagnostic shape; error-diagnostics skill)
 │   │   ├── vocab.py             # venue/track/status vocabularies (spec 01), shared by ingest and query
 │   │   ├── logs.py              # the only place logging is configured (logging-standards skill)
+│   │   ├── storage.py           # locks, staging, fsync and read-only sealing for snapshots and indexes
+│   │   ├── export.py            # 04 exports (RIS, CSV, BibTeX, JSONL), shared by `op export` and the API
 │   │   └── cli.py               # `op` entry point
-│   └── tests/{unit,golden,differential,contract,fixtures}/
+│   └── tests/{unit,golden,differential,bench,contract,fixtures}/
 ├── frontend/                    # (M3) Next.js app, npm workspace
 ├── docs/{specs,plans,results,design,usability,research}/   # created as needed
 ├── backlog/                     # Backlog.md: tasks, completed, docs, decisions — CLI only
@@ -43,9 +45,9 @@ into one `.venv` from one `uv.lock`. New Python packages join by adding their di
 |---|---|
 | `op ingest openreview\|proceedings\|ris … [--offline]` | fetch sources (`--offline`: cache only, no network) |
 | `op snapshot build` · `op snapshot diff <a> <b>` | build an immutable snapshot, or compare two |
-| `op index build [--snapshot <id>]` · `op index retire <index_version>` | build an immutable index; retire an old one (refuses if any search record pins it) |
-| `op search "<q>" [--mode scholar] [--explain] [--engine tantivy\|reference] [--ids]` | search; `--engine reference` runs the oracle |
-| `op export "<q>" --format ris\|csv\|bibtex\|jsonl [--index-version <v>]` | export the full matched set |
+| `op index build --snapshot <dir\|name\|hash prefix> [--out <dir>]` · `op index parity --index <v> [--snapshot <id>]` · `op index retire <index_version>` (planned, task-065) | build an immutable index; check it holds `normalize()`'s tokens for its snapshot (local, over the real corpus); retire an old one (refuses if any search record pins it) |
+| `op search "<q>" [--mode scholar] [--explain \| --ids] [--engine tantivy\|reference] [--sort <s>] [--limit <n>] [--index <dir\|version>]` | ranked hits under a PRISMA header (default): searched time, index, crawl window (first to last fetch), tokenizer and query versions; a bootstrap-corpus caution when the index holds only RIS, or a caution that the sources are unknown when its snapshot isn't in the data dir or its hash differs; identified, removed by default filters (ineligible and unclassified), screened; the canonical and identification strings; every wildcard's expansion (its count and first 10 terms; every term with `--explain`); the sorted id set (`--ids`; `--engine reference` runs the oracle over the index's snapshot, `--ids` only); or the compiled query (`--explain`). Diagnostics go to stderr as user output; one `search_run` INFO line per run (task-030) |
+| `op export "<q>" --format ris\|csv\|bibtex\|jsonl [--mode scholar] [--index <dir\|version>] [--out <file>]` | export the full matched set in id order (spec 04 §Exports), streamed to stdout or written whole to `--out` (never a partial file); the count is checked against the query's total |
 | `op record save "<q>" [--mode scholar]` · `op record replay <id>` | freeze a search as a search record (the same function as `POST /records`); replay one and print its status, `reproduced` / `drifted` / `mismatch` (the same function as `GET /records/{id}`) |
 | `op serve` | run the API |
 | `op embed build` | build embeddings for the current index (06) |
@@ -99,8 +101,9 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 | `test` → `test` | pytest (unit, golden, differential@2k, contract); vitest; OpenAPI → TS types freshness |
 | `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`), every hook case table (`.claude/hooks/tests/`) and the tooling-script table (`.claude/scripts/tests/test-tooling-scripts.sh`) |
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha |
-| `nightly` (scheduled, not a PR check) | Three parallel jobs, each with its own time limit: the oracle-backed properties at 50,000 examples; the exhaustive tokenizer check (`OP_EXHAUSTIVE=1`) plus every other property at 50,000; and `make mutate` (every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent). Differential@50k and full-corpus parity join it with the Tantivy engine (task-057, M4) |
-| *(planned, M1+)* `e2e`, `bench` | Playwright; pytest-benchmark vs main |
+| `nightly` (scheduled, not a PR check) | Three parallel jobs, each with its own time limit: the oracle-backed properties at 50,000 examples; the exhaustive tokenizer check (`OP_EXHAUSTIVE=1`) plus every other property at 50,000; and `make mutate` (every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent). Differential@50k gets its own job in task-057 (M4); full-corpus parity stays local (decision-004) |
+| `bench` → `bench` (advisory: not a required check yet) | pytest-benchmark on the 5k fixture index (`backend/tests/bench`, task-031): the PR's base and head on one runner; a minimum time over 20% slower than the base fails, and each benchmark asserts its spec 03 budget (p95). It becomes required once it has run green on a few PRs without false failures (runner noise); a maintainer adds it to `dev`'s required checks |
+| *(planned, M3)* `e2e` | Playwright |
 
 `review-attested` is an **honesty check** against forgetting to review, not an access control. Anyone who
 can edit the PR body could paste the marker. The access control is branch protection plus human review on

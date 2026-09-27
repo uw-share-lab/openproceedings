@@ -350,10 +350,16 @@ version = "0.0.0"
 source = { editable = "backend" }
 dependencies = [
     { name = "pydantic" },
+    { name = "scholarmend" },
+    { name = "tantivy" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pydantic", specifier = ">=2.8" }]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.8" },
+    { name = "scholarmend", specifier = "==0.1.3" },
+    { name = "tantivy", specifier = "==0.26.2" },
+]
 
 [[package]]
 name = "openproceedings-monorepo"
@@ -368,6 +374,8 @@ dev = [
     { name = "hypothesis" },
     { name = "mypy" },
     { name = "pytest" },
+    { name = "pytest-benchmark" },
+    { name = "refaudit" },
     { name = "ruff" },
 ]
 
@@ -379,6 +387,8 @@ dev = [
     { name = "hypothesis", specifier = ">=6.112" },
     { name = "mypy", specifier = ">=1.18" },
     { name = "pytest", specifier = ">=8.3" },
+    { name = "pytest-benchmark", specifier = ">=5.1" },
+    { name = "refaudit", specifier = "==0.4.9" },
     { name = "ruff", specifier = ">=0.13" },
 ]
 
@@ -407,6 +417,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
+name = "py-cpuinfo2"
+version = "10.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/dc/97/a8b1ddada14c8280a047c0746f95cb05d94a31b1a331cea22bcdc2b2a82d/py_cpuinfo2-10.1.1.tar.gz", hash = "sha256:7861133863663f16e06eca63b12904ef100b5760415e92372dac0162799a4771", size = 100840, upload-time = "2026-03-25T21:49:40.797Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/23/0a/ba69d2dde1ae12ef1d389ea5a216384c5ff6ef7a1e7a48d1e9b6686f6790/py_cpuinfo2-10.1.1-py3-none-any.whl", hash = "sha256:adc53396bfb206e6498d078ec2ab407f85799ecd819584ac36a8f80a2d4d762d", size = 23791, upload-time = "2026-03-25T21:49:39.574Z" },
 ]
 
 [[package]]
@@ -525,6 +544,28 @@ wheels = [
 ]
 
 [[package]]
+name = "pytest-benchmark"
+version = "5.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "py-cpuinfo2" },
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/63/8f/83a15e40dbc34a580ee56eb56983cae5394c6e94d50cf28fe268e457be25/pytest_benchmark-5.3.0.tar.gz", hash = "sha256:358444d4e89be901ee2b6404fb043ac3d7684002ad7f3563cc153fca6339c965", size = 375410, upload-time = "2026-08-23T17:45:08.891Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/42/7e80f7cfa191e0a766d1de99b4661847415ad5db34f8209d81fd42175b59/pytest_benchmark-5.3.0-py3-none-any.whl", hash = "sha256:920ab1dfcffa718d49aa15ba144c7e357bda59216a0dc308016cc1c7236f719d", size = 48401, upload-time = "2026-08-23T17:45:07.094Z" },
+]
+
+[[package]]
+name = "refaudit"
+version = "0.4.9"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a4/75/c66de17b9d4c6fb132a2efda34a9bd68a527165e75cab8fd28b57f132b80/refaudit-0.4.9.tar.gz", hash = "sha256:8d538f9a3b34f2f3c7ec00878261c5bebda13b005c595416f7feb6ba52e696b8", size = 141434, upload-time = "2026-09-01T01:11:20.486Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bf/77/8f48ff040128a9b661ecfd82f0c672acd1d7ad78c6fa67c5e4b7186d31a3/refaudit-0.4.9-py3-none-any.whl", hash = "sha256:893b45f8f09c2eaece6f8b878b6d234ae797b44efc1006b9c45e6d81a37970ec", size = 64297, upload-time = "2026-09-01T01:11:19.005Z" },
+]
+
+[[package]]
 name = "ruff"
 version = "0.16.9"
 source = { registry = "https://pypi.org/simple" }
@@ -550,12 +591,44 @@ wheels = [
 ]
 
 [[package]]
+name = "scholarmend"
+version = "0.1.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a4/b3/221c7c22bd12c448c72e5b703afd7a5ca8accce2943f2c7a30ad301a5254/scholarmend-0.1.3.tar.gz", hash = "sha256:f94a9a9243799215f1f1af755aea12cbfc97876257e05533e134e10f04d73f7c", size = 60176, upload-time = "2026-09-26T03:42:22.52Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/25/f2/964caa5646c497b3a263cfba08d34015356c716ffee97aaea4f2f8b3359e/scholarmend-0.1.3-py3-none-any.whl", hash = "sha256:e8233110cd9dbb8eb72232d25e1ff86d1598ce6fcb905e6bd298502016ce103f", size = 38215, upload-time = "2026-09-26T03:42:21.201Z" },
+]
+
+[[package]]
 name = "sortedcontainers"
 version = "2.4.0"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
+]
+
+[[package]]
+name = "tantivy"
+version = "0.26.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/e2/019c16b6f498d826c0458f4a40df86adfccbc8c9670f3e7c0f6dadce2f2d/tantivy-0.26.2.tar.gz", hash = "sha256:93519eb9f18c298a6779d132505d67f158741318413c181e9ec488381edf2721", size = 196884, upload-time = "2026-09-17T02:00:28.751Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/32/68/6fac685e7bd3f8693ca5416177faf7e74ad14b1c0f5d0a0bcc3ee78760b8/tantivy-0.26.2-cp312-cp312-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:e3a403dae92dfbe8aa8ff1523c69f437797969288586f37bb26ca141edb43a32", size = 8167627, upload-time = "2026-09-17T01:59:58.528Z" },
+    { url = "https://files.pythonhosted.org/packages/25/7d/d0f1d77d4d6b310770062e5e7df3a7fe271592229e71cc8975e22b8a1128/tantivy-0.26.2-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:d7327a683831d0bf92af99585c0d28c52fe2481b2f2a3ea1ac01b2c6603d84ea", size = 4204358, upload-time = "2026-09-17T02:00:00.82Z" },
+    { url = "https://files.pythonhosted.org/packages/e7/58/cc3ff44b45a763d9f290cc2686f1cf630cc13b2d606a20e03f540e8a4f69/tantivy-0.26.2-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:8718266dca4c24bbae10f6dee43412df62473ddc9a1b89004d0fa83012e20d67", size = 4663886, upload-time = "2026-09-17T02:00:02.655Z" },
+    { url = "https://files.pythonhosted.org/packages/68/e4/28c0639bf477834e45e49d27fb24ecff1dbb04a7c937bed965232c8899ef/tantivy-0.26.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:34b097ad4a99143598d66a88cf7c480617d140c9ad20acf5b0eb9e694471551a", size = 4519290, upload-time = "2026-09-17T02:00:04.92Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/fb/6e522c3a76782ec7a5028cd759c198678483e519a2ae99e1e55b5e57c379/tantivy-0.26.2-cp312-cp312-win_amd64.whl", hash = "sha256:87329cb316e121e12cc1b222a6bb015b6b5d9eb1bb3e1d073fb7cd1e703a5db5", size = 3730971, upload-time = "2026-09-17T02:00:06.68Z" },
+    { url = "https://files.pythonhosted.org/packages/b6/ac/50305ddc0c1aab5e83bfafe6e695522d5aea471125bc710c608f2f4599fc/tantivy-0.26.2-cp313-cp313-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:bda3f74cdf9978315585dd5fe93fc92b9154aaa12ab90f66329859a6170a54f8", size = 8165009, upload-time = "2026-09-17T02:00:08.671Z" },
+    { url = "https://files.pythonhosted.org/packages/98/dd/df77782ac5e38a927542f5cedee6e019556ff81a43d3b25953735c8838c4/tantivy-0.26.2-cp313-cp313-macosx_10_12_x86_64.whl", hash = "sha256:121bd56976d0026bbcd064390871b305ee7273bd6fda0154481da908fd735e2d", size = 4204043, upload-time = "2026-09-17T02:00:10.539Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/12/1a3a303e2eb0aaec8a2b58574244f2e1f31f3b9bd9c1c5f834c579717008/tantivy-0.26.2-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:535aec467b3be366f7109b4bdd71d5c0c7a2aef54b8ea5424ea90a5636fa3660", size = 4663039, upload-time = "2026-09-17T02:00:12.906Z" },
+    { url = "https://files.pythonhosted.org/packages/a2/ff/56dbb5d0cf3d1d0faf6e284b38953764cd480e1c71a71305ab0f5b2de0bf/tantivy-0.26.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0c083f1cde4d78abf9b0964664e84c76534270f45d8d430746c69a625ae6c75b", size = 4519676, upload-time = "2026-09-17T02:00:14.697Z" },
+    { url = "https://files.pythonhosted.org/packages/00/3c/739570cab12282f91e6aa61e7365b0931cb9c1b2826e62ec8fb284ed9c93/tantivy-0.26.2-cp313-cp313-win_amd64.whl", hash = "sha256:b7d336a19e0c4003999b737d5012d25a6900248205a3a80bb3c1a63a9430cf8d", size = 3730328, upload-time = "2026-09-17T02:00:16.427Z" },
+    { url = "https://files.pythonhosted.org/packages/3d/45/5ef1411d70223f07744cee652ba0816b76bd3345c2c60443fda29eb20c43/tantivy-0.26.2-cp314-cp314-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:46969fcc1d3fb93401c6eee5777b00e35b098630e4de9c30c1c6ed650ae03c0c", size = 8170463, upload-time = "2026-09-17T02:00:18.825Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/f7/e10af1292dc73d2017f45d2ca86bd56a03f37d0460baa8ef9b439946b4be/tantivy-0.26.2-cp314-cp314-macosx_10_12_x86_64.whl", hash = "sha256:7e3b53e5fb5717e1722abc8ad1145aa3f3717590dc2252673adb2652b8274aaa", size = 4207670, upload-time = "2026-09-17T02:00:20.979Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/08/5a5dd16149bd0a51e60526ec672109363f824ab3d7ae0ecc559fdb1d5f92/tantivy-0.26.2-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1c3c5ffbab74c5d318c59af52f6749ccf44972f85e282f01e84749c2d78a08a7", size = 4664509, upload-time = "2026-09-17T02:00:23.017Z" },
+    { url = "https://files.pythonhosted.org/packages/35/91/65549d5772c852f1fcf5d27764b3793a0b86edbe306783218bc355bad233/tantivy-0.26.2-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:04ff39f365840aa75977dbd823164c9324031fe62a0676d0f5a8f6ea9d8abf20", size = 4519057, upload-time = "2026-09-17T02:00:25.105Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/d3/3eec5b39bd4ae062c34121d8a06ba271d9d15c308dbd9b9b38dbc9f9cf00/tantivy-0.26.2-cp314-cp314-win_amd64.whl", hash = "sha256:0dfd17073890de5045d87fc12c7b28c5e427e4b1254619a8487bf651a3c5bf8e", size = 3732401, upload-time = "2026-09-17T02:00:27.209Z" },
 ]
 
 [[package]]

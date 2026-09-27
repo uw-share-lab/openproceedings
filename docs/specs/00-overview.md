@@ -51,7 +51,7 @@ venues.
    the same canonical query. A saved query string fully describes its result set.
 4. **Reproducibility.** Every search response states `index_version`. Re-running a canonical query on
    the same `index_version` returns the identical ID set.
-5. **Ranking never changes membership.** BM25F and the semantic layer only *order* the matched set, or
+5. **Ranking never changes membership.** Field-weighted BM25 and the semantic layer only *order* the matched set, or
    *suggest* papers in a clearly separate panel. They never add to or remove from it, or change `total`.
 6. **Transparency.** Wildcard expansions, parse warnings, and per-filter exclusion counts are shown to
    the user, never applied silently.

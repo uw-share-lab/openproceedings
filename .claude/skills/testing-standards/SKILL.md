@@ -11,23 +11,25 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 | Unit | `backend/tests/unit/` | inline values | 100% pass |
 | Golden tokens | `backend/tests/golden/test_tokens.py` | 02 table + ≥100 cases | 100% pass |
 | Golden queries | `backend/tests/golden/` | hand-built **200-record** fixture | 100% pass, exact ID sets |
-| Differential | `backend/tests/differential/` | **5k fixture snapshot** | `TantivyEngine == ReferenceEngine`, 0 counterexamples in 2,000 (CI) / 50k (nightly) |
+| Differential | `backend/tests/differential/` | **5k fixture snapshot** | `TantivyEngine == ReferenceEngine`, 0 counterexamples in 2,000 (CI) / 50k (nightly, its own job: task-057) |
 | Contract | `backend/tests/contract/` | 5k fixture index via `TestClient` | every endpoint, OpenAPI snapshot, export round-trips, record replay (reproduced + drifted + mismatch) |
 | Frontend unit | `frontend/**/*.test.ts(x)` (Vitest) | mocked API from generated types | builder↔AST, URL reducer |
 | e2e | Playwright | `op serve` over the fixture index | the 05 §Testing flow end to end |
-| Bench | pytest-benchmark | fixture index (CI), full index (nightly) | >20% relative regression fails |
+| Bench | pytest-benchmark | fixture index (`bench` workflow, advisory), 80k report (`report_80k.py`) | >20% regression of the minimum fails the `bench` check |
 | Nightly | — | full corpus | differential@50k, tokenizer parity (0 diffs), semantic invariant, determinism |
 
 ## Fixtures (`backend/tests/fixtures/`)
 - **Golden 200:** hand-built records whose text is written to be tricky (benchmark/benchmarking,
   trust/trustworthy, hyphens, LaTeX, phrases spanning title/abstract, NEAR order). Every expected ID set is
   written by a person and cross-checked against `ReferenceEngine`.
-- **5k snapshot:** a deterministic sample of the real corpus in the snapshot format (`records.jsonl` +
-  `manifest.json`), stratified across venue × year × track × status so filters and exclusion accounting
-  are exercised. It is versioned: regenerating it is a PR with its own manifest diff, and changes the
-  fixture `index_version`. Verify at implementation time that abstract licensing (00 open question 1)
-  allows committing the sample; if not, it is built in CI from a pinned cache.
-- Recorded HTTP fixtures (VCR-style) for each crawler source and year schema (01 §Testing). Tests never
+- **5k snapshot (decision-004): synthetic**, generated deterministically by a committed script in the
+  snapshot format (`records.jsonl` + `manifest.json`), covering every venue × year × track × status so
+  filters and exclusion accounting are exercised, with realistic vocabulary, LaTeX and Unicode. It is
+  versioned: regenerating it is a PR with its own manifest diff, and changes the fixture `index_version`.
+  Real-corpus checks (tokenizer parity, task-029) run locally against the maintainer's snapshot, never in
+  CI, because abstract licensing (00 open question 1) is unresolved.
+- Recorded HTTP fixtures (VCR-style) for each crawler source and year schema (01 §Testing), scrubbed of
+  real text (decision-004). Tests never
   hit the network, and it is **enforced**: `backend/tests/conftest.py` makes every non-loopback socket
   connection and DNS lookup raise `NetworkBlockedError` for the whole session (`test_no_network.py`). A test
   that needs a response gets a recorded fixture; there is no marker to opt out. Recording fixtures is a

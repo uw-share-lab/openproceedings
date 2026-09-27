@@ -67,7 +67,8 @@ reviews without the UI.
 
 `excluded` always has this shape: `total` (= the `identification_ast` count − `total`, 03 §Exclusion
 accounting) plus a `track` and a `status` map whose buckets sum to it. Each map always carries an `unknown`
-key, even when 0, so unclassified records are itemised and never folded into another bucket.
+key, even when 0, so unclassified records are itemised and never folded into another bucket. Buckets are
+ordered by count, largest first, ties by name, with `unknown` last, so a stored record's JSON is stable.
 
 `facets` are disjunctive: each facet field is counted over the matched set with every filter applied **except that field's own top-level conjuncts** (a filter nested under an `OR` stays applied; decision-001). So the track facet still shows how many workshop papers you would get by including them. Clicking a facet in the UI
 rewrites the query (guarantee 3). No hidden facet state exists.
@@ -85,6 +86,30 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC date>}`.
   Every entry carries `openproceedings_id = {<id>}`, so a round-trip recovers the id of every record,
   proceedings-only (PMLR, NeurIPS) ones included. Output must pass `refaudit.bibtex.parse_string` (the pinned `refaudit` PyPI package).
+- As built (task-030, `export.py`, used by `op export`; the endpoints are task-036):
+  - **RIS:** `TY  - CPAPER`, with `UR` forum, then pdf, then proceedings. Each record ends `ER  - `. Line breaks
+    inside a value become single spaces and control characters are dropped, since RIS is line-based. URLs
+    are validated at ingest as one-line http(s) addresses, so none can carry a forged record.
+  - **CSV:** UTF-8 with a BOM (Excel); every field of the stored display record plus the facets and the
+    provenance columns `index_version`, `canonical_hash` and `exported_at` (the UTC date). Two fields of
+    spec 01 are left out: `provenance` (per-field claims, a nested list) and `content_hash`. Both stay in the
+    snapshot that `index_version` pins. Lists are joined with "; " (ambiguous if a value holds one; JSONL
+    keeps lists). A text cell starting, after leading spaces, with `=`, `+`, `-` or `@` (full-width forms
+    too), or with a tab or a carriage return, is prefixed with `'`, so a spreadsheet never runs it (OWASP's
+    CSV-injection guard); control characters are dropped.
+  - **BibTeX:** keys are ASCII and lower-case: the first author's last name, the year and the first run of
+    letters and digits in the title (`anon` without authors, `untitled` without a word; `ø`, `ß`, `ł`, `æ` …
+    are spelled out first). A repeat key takes the next unused suffix, so a suffixed key never meets a real
+    one. Braces are kept when they nest both as BibTeX counts them (every brace) and as parsers that honour
+    `\{` do; otherwise every brace is dropped with the backslash that escaped it, since an entry the two read
+    differently can swallow the next. `&`, `%` and `#` are escaped. A value never ends on a backslash. An
+    author name holding a standalone `and`, or `others`, is braced, so it isn't split or read as et al.
+  - **JSONL:** one object per record, with `index_version`, `canonical_hash` and `exported_at`: the lossless
+    format (CSV's formula guard adds a `'` to some cells). U+2028, U+2029 and U+0085 are escaped, so a record
+    stays one line for every reader.
+
+  Each format is checked round-trip to its ids; BibTeX also against the pinned `refaudit==0.4.9`. `op
+  export` counts what it wrote against the query's total before renaming its temporary file into place.
 - Exports stream, and are not paginated or truncated. The response headers `X-Total` (equal to the search's
   `total`) and `X-Index-Version` say exactly which set was exported. An export started during an index
   hot-swap finishes on the index it began on.

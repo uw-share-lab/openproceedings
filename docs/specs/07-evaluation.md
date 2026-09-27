@@ -13,10 +13,23 @@ build). Others are reports (they're regenerated and committed as dated results, 
 |---|---|---|
 | Golden tokens | 02's table plus 100 or more normalization cases | 100% pass |
 | Golden queries | Query → expected ID set on a hand-built 200-record fixture, with the cases written to be tricky (benchmark/benchmarking, trust/trustworthy, hyphens, LaTeX, phrases that span fields, NEAR ordering) | 100% pass |
-| Differential | Hypothesis random ASTs: `TantivyEngine == ReferenceEngine` on the 5k fixture snapshot | 0 counterexamples in 2,000 examples per CI run, 50k nightly |
-| Tokenizer parity | Index tokens == `normalize.py` tokens over the whole corpus | 0 diffs |
+| Differential | Hypothesis random ASTs: `TantivyEngine == ReferenceEngine` on the synthetic 5k fixture snapshot (decision-004) | 0 counterexamples in 2,000 examples per CI run, 50k nightly |
+| Tokenizer parity | Stored text, positions (phrase read-back) and every term's document frequency in the index == `normalize.py`, over the whole corpus (term frequency only as far as the phrases imply) | 0 diffs |
 | Semantic invariant | Search results identical with 06 on and off | 0 diffs |
 | Determinism | Same canonical query + `index_version` → identical order and scores | 0 diffs |
+
+As built (task-028): the differential is `backend/tests/differential/`, on a synthetic 5k corpus generated
+in memory and hash-pinned (decision-004), with a Zipfian vocabulary: rare terms, hapaxes, and stems that
+pass the 200-term cap. Trees are drawn from the corpus's own dictionary. For any tree an engine may get,
+all-negative ones included, it compares:
+- match sets;
+- wildcard expansions, or the refusal;
+- disjunctive facets;
+- `total` for every sort, and the `year_asc` order;
+- for trees that parse, the exclusion counts.
+
+Shrunk counterexamples are kept in `differential-regressions.json` and replayed on every run. The 50k
+nightly job is task-057.
 
 ## B. Scholar comparison (report, `op eval scholar`)
 
@@ -61,6 +74,18 @@ is the specific failure this project exists to prevent.
 
 The 03 budgets are measured with `pytest-benchmark` on the fixture index in CI (a relative regression over
 20% fails) and on the full index nightly.
+
+As built (task-031): `backend/tests/bench/test_bench.py` runs on the synthetic 5k index. It covers every
+Trust-Evals string (a 50-hit search and `match_ids` with exclusions, cold cache) and the widest expansion
+under the cap and one past it, and asserts each budget on the p95 of 30 rounds. In ordinary runs benchmarks
+are disabled and run once as tests; the `bench` workflow enables them and compares the head with the base
+(the minimum time, the statistic least moved by runner noise). It also covers every sort, a broad query (thousands of matches),
+the widest wildcard inside a search, a multi-token NEAR, a nested NOT, draining an export, and a 500-record build. The check is advisory until it has proven
+free of false failures on shared runners (spec 08); sub-millisecond calls repeat within a round (≥ ~1 ms each). The search benchmark is warm after one warm-up round; `match_ids` clears every cache
+(verified clauses, expansions, compiled queries) every round, so it is cold.
+The ~80k numbers, and the position-verified cases spec 03 exempts, are a report
+(`backend/tests/bench/report_80k.py` → `docs/results/<date>-bench.md`), from the same synthetic generator at
+80k with abstracts of realistic length. The nightly full-index run is task-057.
 
 ## F. Usefulness of near-misses (report, M5)
 

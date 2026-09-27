@@ -9,6 +9,7 @@ the awkward cases: operator words, filter values, digits, marks kept by the toke
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from hypothesis import strategies as st
@@ -26,6 +27,7 @@ from openproceedings.query.ast import (
     YearRange,
 )
 from openproceedings.query.normalize import normalize
+from openproceedings.vocab import STATUSES, TRACKS
 
 _ROWS = [
     json.loads(line)
@@ -62,6 +64,34 @@ SPAN = (0, 0)
 FIELDS: list[TextField | None] = [None, "title", "abstract"]
 
 
+@dataclass(frozen=True)
+class Vocab:
+    """What trees are drawn from: terms (the rare ones, df 1-3, drawn a third of the time), wildcard stems
+    (one in twenty from `wide`, stems past the 200-term cap, so refusals are exercised), and n-grams that
+    occur (so phrases and NEAR match)."""
+
+    terms: tuple[str, ...]
+    stems: tuple[str, ...]
+    ngrams: tuple[tuple[str, ...], ...]
+    rare: tuple[str, ...] = ()
+    wide: tuple[str, ...] = ()
+
+    def term(self) -> st.SearchStrategy[str]:
+        return _mixed(self.terms, self.rare, 3)
+
+    def stem(self) -> st.SearchStrategy[str]:
+        return _mixed(self.stems, self.wide, 20)
+
+
+def _mixed(common: tuple[str, ...], special: tuple[str, ...], one_in: int) -> st.SearchStrategy[str]:
+    if not special:
+        return st.sampled_from(common)
+    return st.integers(0, one_in - 1).flatmap(lambda k: st.sampled_from(special if k == 0 else common))
+
+
+FIXTURE = Vocab(tuple(VOCABULARY), tuple(STEMS), tuple(NGRAMS))
+
+
 def _term(token: str, field: TextField | None = None) -> Term:
     return Term(span=SPAN, token=token, field=field)
 
@@ -71,21 +101,21 @@ def _wildcard(stem: str, op: str, field: TextField | None = None) -> Wildcard:
 
 
 @st.composite
-def leaves(draw: st.DrawFn, field: TextField | None = None) -> Term | Wildcard | Phrase:
+def leaves(
+    draw: st.DrawFn, field: TextField | None = None, vocab: Vocab = FIXTURE
+) -> Term | Wildcard | Phrase:
     kind = draw(st.sampled_from(["term", "wildcard", "phrase", "phrase"]))
     if kind == "term":
-        return _term(draw(st.sampled_from(VOCABULARY)), field)
+        return _term(draw(vocab.term()), field)
     if kind == "wildcard":
-        return _wildcard(draw(st.sampled_from(STEMS)), draw(st.sampled_from("*$")), field)
+        return _wildcard(draw(vocab.stem()), draw(st.sampled_from("*$")), field)
     words = list(
-        draw(
-            st.one_of(st.sampled_from(NGRAMS), st.lists(st.sampled_from(VOCABULARY), min_size=2, max_size=4))
-        )
+        draw(st.one_of(st.sampled_from(vocab.ngrams), st.lists(vocab.term(), min_size=2, max_size=4)))
     )
     items: list[Term | Wildcard] = [_term(w) for w in words]
     if draw(st.booleans()):  # a wildcard item, at any position (decision-001)
         i = draw(st.integers(0, len(items) - 1))
-        items[i] = _wildcard(draw(st.sampled_from(STEMS)), draw(st.sampled_from("*$")))
+        items[i] = _wildcard(draw(vocab.stem()), draw(st.sampled_from("*$")))
     return Phrase(span=SPAN, items=tuple(items), field=field)
 
 
@@ -102,46 +132,55 @@ def filters(draw: st.DrawFn) -> Filter:
     else:
         pool = {
             "venue": ["NeurIPS", "ICLR", "ICML"],
-            "track": ["main", "datasets_benchmarks", "position", "workshop", "unknown"],
-            "status": ["accepted", "rejected", "withdrawn", "unknown"],
+            "track": list(TRACKS),
+            "status": list(STATUSES),
         }[field]
         values = list(draw(st.lists(st.sampled_from(pool), min_size=1, max_size=3)))
     return Filter(span=SPAN, field=field, values=tuple(values))  # type: ignore[arg-type]
 
 
 @st.composite
-def _node(draw: st.DrawFn, depth: int) -> Node:
+def _node(draw: st.DrawFn, depth: int, vocab: Vocab = FIXTURE) -> Node:
     options = ["leaf", "near", "filter"] + (["not", "and", "or"] if depth < 3 else [])
     kind = draw(st.sampled_from(options))
     if kind == "leaf":
-        return draw(leaves(draw(st.sampled_from(FIELDS))))
+        return draw(leaves(draw(st.sampled_from(FIELDS)), vocab))
     if kind == "near":
         field = draw(st.sampled_from(FIELDS))
         return Near(
-            span=SPAN, left=draw(leaves(field)), right=draw(leaves(field)), distance=draw(st.integers(0, 5))
+            span=SPAN,
+            left=draw(leaves(field, vocab)),
+            right=draw(leaves(field, vocab)),
+            distance=draw(st.integers(0, 5)),
         )
     if kind == "filter":
         return draw(filters())
     if kind == "not":
-        return Not(span=SPAN, child=draw(_node(depth + 1)))
-    children = tuple(draw(st.lists(_node(depth + 1), min_size=2, max_size=3)))
+        return Not(span=SPAN, child=draw(_node(depth + 1, vocab)))
+    children = tuple(draw(st.lists(_node(depth + 1, vocab), min_size=2, max_size=3)))
     return And(span=SPAN, children=children) if kind == "and" else Or(span=SPAN, children=children)
 
 
 @st.composite
-def negative_asts(draw: st.DrawFn) -> Node:
+def negative_asts(draw: st.DrawFn, vocab: Vocab = FIXTURE) -> Node:
     """A tree with no positive part (NOT x, or an OR with a negated branch): must be PARSE_ALL_NEGATIVE."""
-    negated = Not(span=SPAN, child=draw(_node(1)))
+    negated = Not(span=SPAN, child=draw(_node(1, vocab)))
     if draw(st.booleans()):
         return negated
-    return Or(span=SPAN, children=(draw(_node(1)), negated))
+    return Or(span=SPAN, children=(draw(_node(1, vocab)), negated))
+
+
+def engine_asts(vocab: Vocab = FIXTURE) -> st.SearchStrategy[Node]:
+    """Any tree an engine may be handed: parser-valid ones, and bare or all-negative ones the parser would
+    refuse (an engine takes any AST; spec 03 §Two engines, one contract)."""
+    return st.one_of(asts(vocab), _node(0, vocab), negative_asts(vocab))
 
 
 @st.composite
-def asts(draw: st.DrawFn) -> Node:
+def asts(draw: st.DrawFn, vocab: Vocab = FIXTURE) -> Node:
     """A valid tree with a positive part (a term ANDed in front), so its canonical string parses."""
-    anchor = _term(draw(st.sampled_from(VOCABULARY)))
-    return And(span=SPAN, children=(anchor, draw(_node(0))))
+    anchor = _term(draw(vocab.term()))
+    return And(span=SPAN, children=(anchor, draw(_node(0, vocab))))
 
 
 WORDS = st.sampled_from(

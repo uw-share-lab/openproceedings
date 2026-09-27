@@ -14,9 +14,17 @@ description: The exact normalization contract shared by the query parser and the
 4. **LaTeX** (a three-state mask — keep / separate / join — so offsets survive): `\cmd{X}` → `X`; a bare
    `\cmd` outside math is dropped; math is `$…$` (Pandoc rule: opener followed by a non-space, closer
    preceded by a non-space and not followed by a digit), `$$…$$`, `\(…\)`, `\[…\]`, and inside it a
-   command name is a word; accent macros (`\"o`, `\H{o}`, `\"{\i}`) and `\-` join the word; `\%` `\&` `\$` `\\`
-   separate.
-5. **Split** on every char that is not a Unicode letter, digit or non-combining mark. Invisible characters
+   command name is a word — except math with a Unicode spelling (decision-006, `query/mathsyms.py`): a
+   Greek command is its letter (`$\alpha$` → `α`), an operator command its operator's name (`$\le$` →
+   `leq`, `\not\in` → `notin`), and `^`/`_` join one ASCII letter/digit or a braced run of them (`$n^2$` →
+   `n2`); a fourth mask state, SUB, marks those commands, and a Greek letter right after another command's
+   name starts a new word (`\hat\theta` → `hat θ`); accent macros (`\"o`, `\H{o}`, `\"{\i}`) and `\-` join the word; `\%` `\&` `\$` `\\`
+   separate. The scan is linear (task-070): each opener's closer comes from a table built in one right-to-left
+   pass (`_Closers`), so an opener that never closes costs a lookup, not a scan to the end of the text.
+5. **Split** on every char that is not a Unicode letter, digit or non-combining mark; a Unicode operator
+   in `mathsyms.OPERATORS`, looked up **after NFKC** (so `∬` → `int int`, `𝛁` → `nabla`, `ŀ` → `l cdot`), is
+   a token of its own, its LaTeX name (`×` → `times`); a U+0338 slash composes with the character before
+   it (`∈`+U+0338 → `∉` → `notin`); `∆` is read as `Δ`. Invisible characters
    **join** (Cf, variation selectors, enclosing marks, CGJ); the invisible math operators U+2061–2064
    **separate**.
 
@@ -27,7 +35,10 @@ splitting beyond punctuation, number normalization (`GPT-4` stays `gpt` `4`).
 
 ## Single source of truth
 `backend/src/openproceedings/query/normalize.py` is the only implementation: `tokenize(text) ->
-list[Token]` (each with the raw half-open code-point span it came from, for highlights) and
+list[Token]` (each with the raw half-open code-point span it came from, for highlights: a math command's span
+is its name; markup that opens a word (an accent macro such as `\"{O}del` or `\v{S}`, `\-`, or a math
+`^`/`_`: `$^2x$` spans `^2x`) starts the span at its first character,
+task-074) and
 `normalize(text) -> list[str]`. It works character by character; a Hypothesis property pins it equal to an
 independent whole-string definition (block ranges, not Unicode names), including an adversarial Unicode
 alphabet, and the nightly workflow checks every code point in 8 contexts (`OP_EXHAUSTIVE=1`). The index is fed its output joined by spaces, and the Tantivy analyzer only splits on
@@ -43,7 +54,11 @@ highlighter, a script, a test helper — is a bug; import or call the API instea
 | `naïve Bayes` | `naive`, `bayes` |
 | `GPT-4o` | `gpt`, `4o` |
 | `model's` | `model`, `s` |
-| `$\epsilon$-DP` | `epsilon`, `dp` |
+| `$\epsilon$-DP` | `ε`, `dp` (tokenizer 2; `epsilon` in 1) |
+| `$\hat\theta$` | `hat`, `θ` (a Greek letter after another command's name starts a word) |
+| `∈` + U+0338 (a decomposed `∉`) | `notin` (NFKC before the operator table, never `in`) |
+| `5×3`, `$5 \times 3$` | `5`, `times`, `3` |
+| `O(n²)`, `$O(n^2)$` | `o`, `n2` |
 | `\textit{TrustLLM}` | `trustllm` |
 | `ﬁne-tuning` (ligature) | `fine`, `tuning` |
 | `STRASSE` / `Straße` | `strasse` / `strasse` |

@@ -4,11 +4,6 @@ import pytest
 from openproceedings import cli
 
 PLANNED = {
-    "ingest": "task-019",
-    "snapshot": "task-022",
-    "index": "task-023",
-    "search": "task-030",
-    "export": "task-030",
     "serve": "task-034",
     "record": "task-037",
     "openapi": "task-040",
@@ -23,7 +18,7 @@ def test_help_lists_every_planned_subcommand(capsys: pytest.CaptureFixture[str])
     assert exc.value.code == 0
     out = capsys.readouterr().out
     listed = {line.split()[0] for line in out.splitlines() if line.startswith("    ") and line.split()}
-    assert set(PLANNED) <= listed
+    assert set(PLANNED) | {"ingest", "snapshot", "index", "search"} <= listed
 
 
 @pytest.mark.parametrize(("name", "task"), sorted(PLANNED.items()))
@@ -33,6 +28,22 @@ def test_stub_exits_2_and_names_its_task(name: str, task: str, capsys: pytest.Ca
     assert f"op {name}" in err
     assert task in err
     assert "not implemented yet" in err
+
+
+@pytest.mark.parametrize(("source", "task"), [("openreview", "task-050"), ("proceedings", "task-052")])
+def test_planned_ingest_sources_name_their_task(
+    source: str, task: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["ingest", source, "--venue", "ICLR"]) == 2
+    err = capsys.readouterr().err
+    assert f"op ingest {source}" in err and task in err and "not implemented yet" in err
+
+
+@pytest.mark.parametrize("argv", [["ingest"], ["snapshot"], ["ingest", "ris"], ["snapshot", "diff", "a"]])
+def test_implemented_commands_need_their_arguments(argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(argv)
+    assert exc.value.code == 2
 
 
 def test_no_subcommand_prints_help_and_exits_2(capsys: pytest.CaptureFixture[str]) -> None:
@@ -53,26 +64,26 @@ def test_stub_list_matches_the_planned_table() -> None:
 
 def test_bad_log_level_is_a_usage_error_not_a_traceback(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exc:
-        cli.main(["--log-level", "verbose", "search"])
+        cli.main(["--log-level", "verbose", "serve"])
     assert exc.value.code == 2
     err = capsys.readouterr().err
     assert "Traceback" not in err and "--log-level" in err
 
 
 def test_log_level_is_case_insensitive() -> None:
-    assert cli.main(["--log-level", "debug", "search"]) == 2  # the stub's exit code, not a usage error
+    assert cli.main(["--log-level", "debug", "serve"]) == 2  # the stub's exit code, not a usage error
 
 
 def test_default_log_format_is_json() -> None:
-    assert cli.build_parser().parse_args(["search"]).log_format == "json"
+    assert cli.build_parser().parse_args(["serve"]).log_format == "json"
 
 
 @pytest.mark.parametrize(
     "argv",
     [
-        ["search", "trust AND x", "--explain"],
-        ["--log-level", "debug", "--log-format", "json", "index", "build"],
-        ["export", "q", "--format", "ris"],
+        ["serve", "--port", "8000"],
+        ["--log-level", "debug", "--log-format", "json", "index", "retire", "old"],
+        ["record", "replay", "abc123"],
     ],
 )
 def test_stub_accepts_the_future_arguments_of_its_command(
@@ -84,6 +95,6 @@ def test_stub_accepts_the_future_arguments_of_its_command(
 
 def test_subcommand_help_exits_0(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exc:
-        cli.main(["search", "--help"])
+        cli.main(["export", "--help"])
     assert exc.value.code == 0
-    assert "usage: op search" in capsys.readouterr().out
+    assert "usage: op export" in capsys.readouterr().out

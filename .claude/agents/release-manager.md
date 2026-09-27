@@ -31,7 +31,7 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    second person's approval — request it; never self-approve or bypass the ruleset. Tag after merge.
 4. **Index promotion (runbook, spec 08 §Deploy).** Offline: `op snapshot build`, `op snapshot diff <old>
    <new>`, `op index build --snapshot <new>` → `data/indexes/<index_version>/`. Verify on that version:
-   golden + contract suites, tokenizer parity, `op eval coverage`, and replay of a sample of stored search
+   golden + contract suites, tokenizer parity (`op index parity --index <index_version>`), `op eval coverage`, and replay of a sample of stored search
    records. Then atomically repoint `data/indexes/current` (`ln -sfn` to a temp link + `mv -T`), send
    SIGHUP to `api`, and check `/api/v1/meta` and `/healthz` report the new version. Rollback = repoint to
    the previous version and SIGHUP.

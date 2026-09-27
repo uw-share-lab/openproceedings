@@ -2,9 +2,12 @@
 whole-string definition of the token contract (spec 02 §Token semantics)."""
 
 import unicodedata
+from itertools import pairwise
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from openproceedings.query.mathsyms import GREEK, LETTER_LOOKALIKES, OPERATOR_COMMANDS, OPERATORS
 from openproceedings.query.normalize import TOKENIZER_VERSION, Token, normalize, tokenize
 
 # Text without LaTeX syntax: the whole-string reference below doesn't model LaTeX.
@@ -53,7 +56,11 @@ def _invisible(c: str) -> bool:
 
 def reference(text: str) -> list[str]:
     """The token contract stated as simply as possible, over the whole string (no LaTeX)."""
-    s = unicodedata.normalize("NFD", unicodedata.normalize("NFKC", text).casefold())
+    # NFKC first (it composes `∈` + U+0338 into `∉`); then an operator is its own word, and a look-alike
+    # letter (`∆`) is the letter
+    text = unicodedata.normalize("NFKC", text)
+    text = "".join(f" {OPERATORS[c]} " if c in OPERATORS else LETTER_LOOKALIKES.get(c, c) for c in text)
+    s = unicodedata.normalize("NFD", text.casefold())
     kept, base = [], None
     for c in s:
         if c in INVISIBLE_SEPARATORS:
@@ -212,3 +219,86 @@ def test_adversarial_char_by_char_equals_whole_string_definition(text: str) -> N
 def test_adversarial_reindexing_is_idempotent(text: str) -> None:
     tokens = normalize(text)
     assert normalize(" ".join(tokens)) == tokens
+
+
+# --- decision-006: every table entry, both spellings, one token -----------------------------------------------
+
+
+@pytest.mark.parametrize("name", sorted(GREEK))
+def test_every_greek_command_is_its_letter(name: str) -> None:
+    assert normalize(f"${chr(92)}{name}$") == normalize(GREEK[name])
+
+
+@pytest.mark.parametrize("command", sorted(OPERATOR_COMMANDS))
+def test_every_operator_command_is_its_operators_token(command: str) -> None:
+    name = OPERATOR_COMMANDS[command]
+    assert normalize(f"$a {chr(92)}{command} b$") == ["a", name, "b"]
+    symbols = [c for c, n in OPERATORS.items() if n == name]
+    assert all(normalize(f"a {c} b") == ["a", name, "b"] for c in symbols)
+
+
+def test_command_tokens_span_the_command_name() -> None:
+    assert tokenize("$\\le$") == [Token("leq", 2, 4, op=True)]
+    assert tokenize("$x\\alpha$") == [Token("xα", 1, 8)]
+    assert tokenize("$\\alpha$") == [Token("α", 2, 7)]
+    assert tokenize("$\\not\\in$") == [Token("notin", 2, 8, op=True)]
+    assert tokenize("a ∈\u0338 b") == [Token("a", 0, 1), Token("notin", 2, 4, op=True), Token("b", 5, 6)]
+    assert tokenize("5×3") == [Token("5", 0, 1), Token("times", 1, 2, op=True), Token("3", 2, 3)]
+
+
+def test_script_join_is_linear() -> None:
+    import time
+
+    def secs(n: int) -> float:
+        text = "$" + "^{a" * n + "x$"
+        t = time.thread_time()  # CPU time: being preempted on a busy machine doesn't count
+        normalize(text)
+        return time.thread_time() - t
+
+    secs(1000)  # warm up
+    # best of 9: one busy moment on a shared machine can't push the ratio over (task-070's lesson)
+    small, large = min(secs(5_000) for _ in range(9)), min(secs(20_000) for _ in range(9))
+    assert large < small * 8  # 4× the input: linear is ~4×, quadratic ~16×
+
+
+@pytest.mark.parametrize(
+    ("text", "spans"),
+    [
+        ('\\"{O}del', [(0, 8)]),  # a word that begins with an accent macro starts at its backslash (task-074)
+        ("\\v{S}ekar", [(0, 9)]),
+        ('x \\"{O}del', [(0, 1), (2, 10)]),
+        ("\\'{E}cole and \\H{O}", [(0, 9), (10, 13), (14, 19)]),
+        ('a \\"{\\i}ve', [(0, 1), (2, 10)]),
+        ('G\\"odel', [(0, 7)]),  # inside a word: unchanged
+        ("\\-mark", [(0, 6)]),
+        ("$n\\leq5$", [(1, 2), (3, 6), (6, 7)]),  # after an operator command, a word starts after its name
+        ("$^2x$", [(1, 4)]),  # a script that opens a word is markup too: `^2x` lights the caret
+        ("CT$^2$S", [(0, 2), (3, 5), (6, 7)]),
+        ("$_{ij}$", [(1, 6)]),
+        ("$\\neq1$", [(2, 5), (5, 6)]),
+        ("$\\not=x$", [(2, 6), (6, 7)]),
+        ("$3\\times10^5$", [(1, 2), (3, 8), (8, 12)]),
+    ],
+)
+def test_leading_accent_markup_is_in_the_word_span(text: str, spans: list[tuple[int, int]]) -> None:
+    assert [(t.start, t.end) for t in tokenize(text)] == spans
+
+
+LATEX_PIECES = ["$", "\\(", "\\)", " ", "a", "O", "5", "{", "}", "^", "_", '\\"', "\\'", "\\v", "\\H", "\\-",
+                "\\leq", "\\times", "\\alpha", "\\not", "=", "\\in", "\u0301", "\u200b", "中", "é", "-"]  # fmt: skip
+
+
+@given(
+    st.lists(st.sampled_from(LATEX_PIECES), max_size=12)
+    .map("".join)
+    .flatmap(lambda t: st.sampled_from([t, f"${t}$"]))
+)
+def test_token_spans_are_valid_and_never_overlap(text: str) -> None:
+    tokens = tokenize(text)
+    for t in tokens:
+        assert 0 <= t.start < t.end <= len(text), (text, t)
+    for a, b in pairwise(tokens):
+        # pieces of one non-ASCII code point that folds to several share its span; the alphabet has no such
+        # point or combining-slash cluster, so here nothing overlaps (a pre-existing cluster case is out of scope)
+        shared = b.start < a.end and a.end - b.start <= 1 and not text[b.start : a.end].isascii()
+        assert b.start >= a.end or shared, (text, a, b)

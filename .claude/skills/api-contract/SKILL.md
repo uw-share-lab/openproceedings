@@ -41,7 +41,10 @@ has `id, title, abstract, authors, venue, year, track, presentation, score, high
 - **`identification_query`** is the canonical string minus the default conjuncts (02 §Default filters);
   its count is `total + excluded.total`.
 - **`expansions`** always lists every wildcard's terms (guarantee 6). It is never omitted when non-empty.
-- **Highlights** are spans computed from the AST, never from a snippet generator.
+- **Highlights** are spans computed from the AST, never from a snippet generator. Built: `engine/highlight.py::highlights(ast,
+  record, engine.expansions(ast))`, which returns both fields, each a sorted list (spec 03 §Highlights). Call it only on the
+  engine's hits: a record the query doesn't match raises `EngineInternalError` (a 500). Spans that touch
+  (an operator token and its neighbour, `5×3`) stay separate; only overlaps merge.
 
 ## Span units (spec 04 §Conventions)
 Every span is a half-open `[start, end)` range of **Unicode code points** over the **raw source string**:

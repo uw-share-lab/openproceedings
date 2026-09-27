@@ -37,7 +37,12 @@ Warnings, raised where an operator would have made sense: a lowercase `and`/`or`
 two terms (WARN_LOWERCASE_OPERATOR); a word that starts with a dash or single quote that only looks like
 an operator (`−bias`, `‘trust`, a paired `’…’`: WARN_LOOKALIKE_OPERATOR); a word or phrase part that loses
 something to the tokenizer (`C++` → `c`, `.NET` → `net`, a bare `\\epsilon` or an empty `\\alpha{}` outside
-math: WARN_SYMBOLS_DROPPED); CJK text, which is not split into words (WARN_CJK_RUN). Bad input is a diagnostic, never an exception.
+math: WARN_SYMBOLS_DROPPED); CJK text, which is not split into words (WARN_CJK_RUN); a logic sign (`∨`,
+`∧`, `¬`), which is searched as its word, not as an operator (WARN_LOOKALIKE_OPERATOR); a spelled Greek
+name (`alpha`), which finds only the word since abstracts' `$\\alpha$` and `α` are indexed as `α`
+(WARN_SPELLED_GREEK; not for filter values, wildcards, or when the query already has the letter). A
+wildcard straight after an operator (`vision×*`, `$\\le$*`) is PARSE_WILDCARD_DETACHED (decision-006).
+Bad input is a diagnostic, never an exception.
 """
 
 from __future__ import annotations
@@ -49,6 +54,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip
+from openproceedings.query.mathsyms import GREEK, OPERATORS
 from openproceedings.query.normalize import first_math_end, math_regions, tokenize
 from openproceedings.vocab import QUERY_FILTER_FIELDS, TEXT_FIELDS
 
@@ -153,6 +159,12 @@ def _is_cjk(c: str) -> bool:
 
 _COMMAND = re.compile(r"\\([A-Za-z]+)")
 _EMPTY_BRACES = re.compile(r"\{[{}]*\}")  # `{}`, `{{}}`: braces that keep nothing
+
+
+_FILTER_FIELDS = frozenset((*QUERY_FILTER_FIELDS, "source"))
+_GREEK_NAMES = frozenset(
+    name for name in GREEK if name.islower() and not name.startswith("var") and name != "ell"
+)
 
 
 def _wordy(c: str) -> bool:
@@ -458,6 +470,7 @@ class _Lexer:
                 end,
             )
         if not in_phrase:
+            self.check_math_words(raw, stem, wildcard, start, end)
             self.check_word(raw, stem, start, end)
             self.check_dropped(raw, stem, start, end)
         return Lexeme(Kind.WORD, start, end, raw, stem=stem, wildcard=wildcard)
@@ -469,6 +482,14 @@ class _Lexer:
                 DiagnosticCode.WILDCARD_STEM_TOO_SHORT,
                 f"The wildcard `{clip(raw)}` keeps fewer than {MIN_STEM} letters or digits before `{wildcard}`, so it "
                 "would match too many words — use a longer stem (e.g. `bench*`, not `be*`).",
+                start,
+                end,
+            )
+        elif toks[-1].op:
+            self.error(
+                DiagnosticCode.PARSE_WILDCARD_DETACHED,
+                f"The `{wildcard}` in `{clip(raw)}` follows an operator (searched as `{clip(toks[-1].text)}`), not a "
+                "letter or digit — a wildcard extends a word, so put it straight after one.",
                 start,
                 end,
             )
@@ -516,6 +537,47 @@ class _Lexer:
                 end,
             )
 
+    def check_math_words(self, raw: str, stem: str, wildcard: str | None, start: int, end: int) -> None:
+        """A logic sign looks like an operator but is searched as a word (decision-006); a spelled Greek
+        name finds only the word, since abstracts' `$\\alpha$` and `α` are indexed as `α`. Both are read
+        after NFKC (`￢` is `¬`, `ａｌｐｈａ` is `alpha`)."""
+        folded = unicodedata.normalize("NFKC", stem)
+        prev = self.out[-1] if self.out else None
+        if any(c in "∨∧" for c in folded):
+            sign = next(c for c in folded if c in "∨∧")
+            op, example = {"∨": ("OR", "a OR b"), "∧": ("AND", "a AND b")}[sign]
+            self.warn(
+                DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+                f"`{sign}` in `{clip(raw)}` is searched as the word `{OPERATORS[sign]}`, not as {op} — write "
+                f"`{example}` for that.",
+                start,
+                end,
+            )
+        elif "¬" in folded:
+            rest = folded.split("¬", 1)[1] or "word"
+            self.warn(
+                DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+                f"`¬` in `{clip(raw)}` is searched as the word `neg`, not NOT — to exclude, write `-{clip(rest)}`.",
+                start,
+                end,
+            )
+        elif wildcard is None and folded.casefold() in _GREEK_NAMES:
+            if prev is not None and prev.kind is Kind.FIELD and prev.field in _FILTER_FIELDS:
+                return  # a filter value (`venue:pi`) is never searched as text
+            name = folded.casefold()
+            letter = GREEK[name]
+            if letter in unicodedata.normalize("NFKC", self.q).casefold():
+                return  # the query already searches the letter
+            negated = prev is not None and prev.kind is Kind.NOT and prev.end == start
+            advice = f"add `-{letter}` to exclude it too" if negated else f"search `{clip(stem)} OR {letter}`"
+            self.warn(
+                DiagnosticCode.WARN_SPELLED_GREEK,
+                f"`{clip(raw)}` finds the word only: abstracts' `$\\{name}$` and `{letter}` are indexed as "
+                f"`{letter}`, so {advice}.",
+                start,
+                end,
+            )
+
     def check_dropped(self, raw: str, stem: str, start: int, end: int) -> None:
         """WARN_SYMBOLS_DROPPED when part of a word or phrase part silently disappears: leading or trailing
         symbols (`C++`, `.NET`), or a bare LaTeX command outside math (`\\epsilon-greedy` → `greedy`)."""
@@ -531,7 +593,7 @@ class _Lexer:
         elif self.bare_command(stem):
             dropped = (
                 "a LaTeX command outside math is not indexed (type the character itself, or put a math command "
-                "inside `$…$` to search its name)"
+                "inside `$…$` to search it)"
             )
         else:
             return

@@ -19,16 +19,17 @@ means rejected, and it never contains a workshop paper. Your code has to keep bo
 
 ## How you work
 1. **The table first.** For an ICML year, add the volume row to
-   `backend/src/openproceedings/ingest/config/pmlr_volumes.toml` only after fetching the volume index and
-   reading its `<h1>`/`<h2>` heading. Record the verified date in the row. Competition and workshop
+   `ICML_PMLR_VOLUMES` in `backend/src/openproceedings/ingest/volumes.py` (a config file with verification
+   columns comes with task-053) only after fetching the volume index and
+   reading its `<h1>`/`<h2>` heading. Record the verified date in the row (as a trailing comment until task-053's config table). Competition and workshop
    volumes get their own track and are never `main`. Don't invent a volume number: if you can't verify
    it, it stays out.
 2. **Record fixtures** under `backend/tests/fixtures/http/{neurips,pmlr}/<year>/`: the year or volume
    index, plus one abstract page per track segment, including one double-escaped page and one with a
    leading `$…$` title.
 3. **Crawl from the index**, never from search. For NeurIPS, map the path's `<Track>` segment through the
-   closed vocabulary. Alias `Datasets_and_Benchmarks` to `_Track`. On an unknown segment, raise
-   `UnknownTrack`, then stop and extend the vocabulary with a spec-backed mapping.
+   closed vocabulary. Alias `Datasets_and_Benchmarks` to `_Track`. An unknown segment becomes
+   `unknown` (counted and flagged); then extend the vocabulary with a spec-backed mapping.
 4. **Extract carefully.** Match `citation_title` before taking an abstract. Turn block tags into spaces,
    drop inline tags, decode double escapes once more, collapse whitespace, keep LaTeX verbatim. Reject
    `…`. If it's missing, set `abstract=null` and count it.

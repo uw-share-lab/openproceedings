@@ -38,11 +38,11 @@ https://proceedings.neurips.cc/paper_files/paper/<YYYY>/{hash|file}/<sha>-{Abstr
 | `Datasets_and_Benchmarks` (≤2023 spelling) | alias → `Datasets_and_Benchmarks_Track` → `datasets_benchmarks` |
 | `Position_Paper_Track` | `position` (verify with the spec owner: spec 01 names only ICML's position track) |
 | `Creative_AI_Track` | `other` (keep the raw segment for audit) |
-| anything else | **raise `UnknownTrack`**, never default |
+| anything else | `unknown`, counted (`unknown_track` in the import report) and flagged for attention; never a default (as built: `classify_proceedings`) |
 
-The alias means one track never counts as two in the manifest. Raising on an unknown segment is
-deliberate: a new track silently defaulted to `main` is a confident false keep, which is much harder to
-notice than a crash.
+The alias means one track never counts as two in the manifest. Mapping an unknown segment to `unknown`
+(counted as `unknown_track` and flagged for attention) is deliberate: a new track silently defaulted to
+`main` is a confident false keep.
 
 ## Abstract extraction (from the abstract page)
 - Title: `<meta name="citation_title" content="…">`. Only take the abstract if this title matches the

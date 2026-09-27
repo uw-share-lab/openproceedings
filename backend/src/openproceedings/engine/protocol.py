@@ -5,10 +5,11 @@ Only types live here, so the two engines can share it without sharing any matchi
 
 from __future__ import annotations
 
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-from openproceedings.diagnostics import OpenProceedingsError, UserInputError
+from openproceedings.diagnostics import InternalError, OpenProceedingsError, UserInputError
 from openproceedings.query.ast import FILTER_FIELDS, Node, Wildcard
 
 
@@ -39,6 +40,10 @@ class EngineInputError(EngineError, UserInputError):
     """An engine rejected the query or its arguments (e.g. more than MAX_EXPANSIONS expansions): a 4xx."""
 
 
+class EngineInternalError(EngineError, InternalError):
+    """An engine broke an invariant or can't serve its index (a stale version, counts that don't add up): a 5xx."""
+
+
 @dataclass(frozen=True, slots=True)
 class SearchResult:
     total: int
@@ -46,6 +51,7 @@ class SearchResult:
 
 
 FACET_FIELDS: tuple[str, ...] = FILTER_FIELDS
+Expansions = Mapping[tuple[str, str], Collection[str]]  # (stem, op) → the terms it expands to
 MAX_EXPANSIONS = 200  # spec 02: more distinct expanded terms than this is an error, never a truncation
 
 
@@ -58,3 +64,6 @@ class Engine(Protocol):
     def match_ids(self, ast: Node) -> frozenset[str]: ...
     def expand(self, wildcard: Wildcard) -> list[str]: ...
     def facets(self, ast: Node, fields: tuple[str, ...] = FACET_FIELDS) -> dict[str, dict[str, int]]: ...
+    def expansions(self, ast: Node) -> Expansions:
+        """Every wildcard in `ast`, (stem, op) → its terms, each expanded once (the cap applies)."""
+        ...

@@ -1,6 +1,6 @@
 ---
 name: pmlr-proceedings
-description: The PMLR (proceedings.mlr.press) source for ICML — the volume-to-venue/year/track table that lives in config and is checked in tests, the known ICML volumes, competition and workshop volumes, page structure and parsing gotchas, and why an unfamiliar volume is never coerced into ICML. Use when writing or reviewing the PMLR miner, editing the volume table, or adding an ICML year.
+description: The PMLR (proceedings.mlr.press) source for ICML — the volume-to-venue/year/track table (`ICML_PMLR_VOLUMES` in ingest/volumes.py, pinned by test_ris.py; a config file comes with task-053), the known ICML volumes, competition and workshop volumes, page structure and parsing gotchas, and why an unfamiliar volume is never coerced into ICML. Use when writing or reviewing the PMLR miner, editing the volume table, or adding an ICML year.
 ---
 
 # PMLR proceedings (spec 01 §Sources)
@@ -10,10 +10,10 @@ source for ICML 2023+ (OpenReview v2 is primary there; a paper on OpenReview but
 reverse, is a `conflicts.csv` row).
 
 ## The volume table is data
-It lives in config, e.g. `backend/src/openproceedings/ingest/config/pmlr_volumes.toml`, one row per volume:
-`volume`, `venue`, `year`, `track`, `status_source` (`primary` | `confirm`), and `verified` (the date and
-how). Code never contains a volume number. `backend/tests/unit/ingest/test_pmlr_volumes.py` checks every
-row against a recorded fixture of that volume's index page heading.
+As built (task-019): `backend/src/openproceedings/ingest/volumes.py`, `ICML_PMLR_VOLUMES` (volume → year,
+track); no other module holds a volume number, and `test_ris.py` pins the table. A config file with
+`status_source`/`verified` columns and a check of each row against a recorded index-page fixture are the
+PMLR adapter's (task-053): add them there, not a second table.
 
 | Volume | Venue | Year | Track | Role | Confidence |
 |---|---|---|---|---|---|
@@ -21,8 +21,8 @@ row against a recorded fixture of that volume's index page heading.
 | v139 | ICML | 2021 | `main` | primary | spec 01 |
 | v162 | ICML | 2022 | `main` | primary | spec 01 |
 | v202 | ICML | 2023 | `main` | confirm | spec 01 |
-| v235 | ICML | 2024 | `main` | confirm | spec 01 |
-| v267 | ICML | 2025 | `main` | confirm | verify (scholarmend notes v267 = ICML 2025) |
+| v235 | ICML | 2024 | `unknown` | confirm | as built: the volume holds main and position papers |
+| v267 | ICML | 2025 | `unknown` | confirm | as built: main and position papers (scholarmend: v267 = ICML 2025) |
 | later | ICML | 2026+ | `main` | confirm | verify each from its index heading before adding |
 | NeurIPS competition volumes | NeurIPS | per volume | `competition` | primary | verify each volume number |
 | ICML workshop volumes (if any) | ICML | per volume | `workshop` | primary | verify; never `main` |

@@ -27,11 +27,13 @@ accepted paper the bare venue path and keeps a `Submission` suffix on everything
 | `<Org>.cc/<Y>/Workshop/<name>` | `workshop` | `accepted` | validated |
 | `<Org>.cc/<Y>/Workshop_<City>/<name>` (e.g. `NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM`) | `workshop` | `accepted` | validated |
 | `<Org>.cc/<Y>/Workshop/<name>/Submission` or `/Rejected_Submission` | `workshop` | per suffix | verify |
-| ICML position-paper track | `position` | per suffix | verify: whether it is its own path (e.g. `…/Position_Paper_Track`) or `Conference` + a `content.venue` label |
+| `ICML.cc/<Y>/Position_Paper_Track` | `position` | per suffix | seen (Trust-Evals gold venueids, 2026-09-26) |
 | `ICLR.cc/<Y>/TinyPapers` (2023–2024) | `tiny_papers` | `accepted` | verify spelling |
 | `ICLR.cc/<Y>/BlogPosts` | `blogpost` | `accepted` | verify spelling |
 | NeurIPS Competition Track path | `competition` | per suffix | verify |
-| any other `<Org>.cc/<Y>/<rest>` that parses | `other` | per suffix | keep `venue_id_raw` |
+| `NeurIPS.cc/<Y>/Track/Creative_AI` | `other` | per suffix, else `unknown` | verify (only the proceedings token `Creative_AI_Track` has been seen) |
+| any other `<Org>.cc/<Y>/<rest>` that parses | `other` | a mapped suffix's status, else `unknown` (a bare path means `accepted` only for a form in this table) | keep `venue_id_raw` |
+| `<Org>.cc/<Y>/Workshop/<name>` whose name looks like a status (`Rejected`, `Data_Submission`) | `workshop` | `accepted` (the segment after `Workshop` is always the name) | rule |
 | anything that does not match the grammar | `unknown` | `unknown` | log, show on coverage |
 
 Rows marked **verify** must be checked against a live note (by forum id, authenticated) before they get a
@@ -41,8 +43,13 @@ fixture, and the checked forum id goes in the test's comment.
 1. **Workshop wins.** Any segment `Workshop` or `Workshop_<anything>` makes the track `workshop`, whatever
    follows. A workshop venueid must never classify as `main`: that is the failure this project exists to
    prevent (spec 07 §D target ≥99%).
-2. **Suffix is status, not track.** Strip the trailing `*_Submission` / `Submission` to get the track
-   path; map the suffix to status. Keep `venue_id_raw` verbatim either way.
+2. **Suffix is status, not track.** Strip a trailing `Submission`, `Rejected_Submission`,
+   `Withdrawn_Submission` or `Desk_Rejected_Submission` and map it to status; any other status-like last
+   segment (`Blind_Submission`, `Rejected_Submissions`, `Withdrawn`, `Desk_Rejected`, `Post_Decision`) is
+   stripped with status `unknown`, never `accepted` (status words match in any case). A suffix needs a
+   track in front of it, and the segment right after a `Workshop*` segment is the workshop's name, never a
+   status. A bare path is `accepted` only for a form in the table; `other` is `unknown`. A `-` segment
+   (an invitation path) or a year outside 2013–2099 doesn't parse. Keep `venue_id_raw` verbatim.
 3. **Venue and year from the venueid must agree with the crawl scope.** A note found while crawling
    ICLR 2024 whose venueid says `ICLR.cc/2023/…` is a conflict, never silently re-yeared.
 4. **Aliases collapse to one track.** `Datasets_and_Benchmarks` and `Datasets_and_Benchmarks_Track`
@@ -51,7 +58,12 @@ fixture, and the checked forum id goes in the test's comment.
    taxonomy. Neither is ever included by the default filter.
 6. **Never from an invitation** (see `.claude/skills/openreview-api/SKILL.md`, `zkNCWtw2fd`).
 
+The code (`classify.py` `_TRACKS`) matches each track path as an **exact tuple per organisation**: only
+the rows above reach a default-filter track, and any other path that parses (a different order, another
+organisation's track, an unseen spelling) is `other`. Aliases not in the table are not accepted.
+
 ## Table test
+Code: `backend/src/openproceedings/ingest/classify.py` (`classify_venueid`, `classify_proceedings`).
 `backend/tests/unit/ingest/test_venueid.py` is a parametrised table: every validated venueid from
 scholarmend's 90 cases plus one row per form above. Add a row for every new form seen in a crawl log;
 never delete one.

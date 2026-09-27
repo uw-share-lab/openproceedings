@@ -5,9 +5,11 @@ Filter values in a query are checked against these; ingestion never writes a val
 
 from __future__ import annotations
 
-# canonical spelling, keyed by the lowercase form a query may use (`venue:` is case-insensitive)
-VENUES = {"neurips": "NeurIPS", "iclr": "ICLR", "icml": "ICML"}
-TRACKS = (
+from typing import Literal, get_args
+
+# The types are the single source; the value tuples derive from them, so they can't drift apart.
+Venue = Literal["NeurIPS", "ICLR", "ICML"]
+Track = Literal[
     "main",
     "datasets_benchmarks",
     "position",
@@ -17,9 +19,15 @@ TRACKS = (
     "blogpost",
     "other",
     "unknown",
-)
-STATUSES = ("accepted", "rejected", "withdrawn", "desk_rejected", "unknown")
-TEXT_FIELDS = ("title", "abstract")
+]
+Status = Literal["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"]
+
+# canonical spelling, keyed by the lowercase form a query may use (`venue:` is case-insensitive)
+VENUES: dict[str, str] = {v.lower(): v for v in get_args(Venue)}
+TRACKS: tuple[str, ...] = get_args(Track)
+STATUSES: tuple[str, ...] = get_args(Status)
+# the searched fields (guarantee 2): every module that names them imports this one tuple
+TEXT_FIELDS: tuple[Literal["title", "abstract"], ...] = ("title", "abstract")
 QUERY_FILTER_FIELDS = (  # every filter field a query may name, incl. Scholar's `source:` (cf. ast.FILTER_FIELDS)
     "venue",
     "year",

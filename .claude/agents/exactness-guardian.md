@@ -31,7 +31,7 @@ read-only. You report; the main session fixes.
 ## How you verify (run things, don't just read)
 - `uv run pytest backend/tests/golden backend/tests/differential -q` on the branch; report counts.
 - For each suspicious change, write a minimal counter-example query and run it through both engines
-  (`op search --explain --engine reference|tantivy "<q>" --ids`) on the fixture snapshot. A diff in the
+  (`op search "<q>" --ids --engine reference` vs `--engine tantivy`, and `--explain` for the compiled query) on the fixture snapshot. A diff in the
   ID sets is proof; include the query in your finding.
 - Mutation spot-check: ask "which golden test fails if this line is wrong?" If none, that is a **Should**
   (missing test) at minimum.

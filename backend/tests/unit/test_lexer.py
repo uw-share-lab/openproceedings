@@ -11,6 +11,7 @@ from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.query import lexer
 from openproceedings.query.lexer import MAX_NEAR, Kind, Lexeme, lex
+from openproceedings.query.parser import parse
 
 C = DiagnosticCode
 
@@ -180,6 +181,12 @@ ERRORS: list[tuple[str, DiagnosticCode, tuple[int, int]]] = [
     ("model$$", C.PARSE_WILDCARD_NOT_SUFFIX, (5, 6)),
     # a wildcard must directly follow a letter or digit
     ("vision-*", C.PARSE_WILDCARD_DETACHED, (0, 8)),
+    ("vision×*", C.PARSE_WILDCARD_DETACHED, (0, 8)),  # an operator is a word of its own, not a stem
+    ("≤*", C.PARSE_WILDCARD_DETACHED, (0, 2)),
+    ("$\\le$*", C.PARSE_WILDCARD_DETACHED, (0, 6)),
+    ("∈\u0338*", C.PARSE_WILDCARD_DETACHED, (0, 3)),  # a decomposed ∉ is an operator too
+    ("x∉*", C.PARSE_WILDCARD_DETACHED, (0, 3)),
+    ("abcŀ*", C.PARSE_WILDCARD_DETACHED, (0, 5)),  # ŀ is l + the operator ·
     ("gpt-$", C.PARSE_WILDCARD_DETACHED, (0, 5)),
     # phrases
     ('"trust in AI', C.PARSE_UNTERMINATED_PHRASE, (0, 12)),
@@ -289,6 +296,24 @@ WARNINGS: list[tuple[str, DiagnosticCode, list[tuple[int, int]]]] = [
     ('"a or b"', C.WARN_LOWERCASE_OPERATOR, []),  # inside a phrase it is plainly a word
     ("a oregon b", C.WARN_LOWERCASE_OPERATOR, []),
     ("trust −bias", C.WARN_LOOKALIKE_OPERATOR, [(6, 11)]),  # U+2212 minus sign
+    ("a ∨ b", C.WARN_LOOKALIKE_OPERATOR, [(2, 3)]),  # a logic sign is searched as a word (decision-006)
+    ("a ∧ b", C.WARN_LOOKALIKE_OPERATOR, [(2, 3)]),
+    ("trust ¬bias", C.WARN_LOOKALIKE_OPERATOR, [(6, 11)]),
+    ('"a ∨ b"', C.WARN_LOOKALIKE_OPERATOR, []),  # inside a phrase it is plainly literal
+    ("alpha divergence", C.WARN_SPELLED_GREEK, [(0, 5)]),
+    ("a∨b", C.WARN_LOOKALIKE_OPERATOR, [(0, 3)]),  # a logic sign inside a word too
+    ("￢bias", C.WARN_LOOKALIKE_OPERATOR, [(0, 5)]),  # full-width ¬
+    ("Alpha divergence", C.WARN_SPELLED_GREEK, [(0, 5)]),  # any case
+    ("ａｌｐｈａ", C.WARN_SPELLED_GREEK, [(0, 5)]),  # full-width
+    ("title:alpha", C.WARN_SPELLED_GREEK, [(6, 11)]),
+    ("alpha OR α", C.WARN_SPELLED_GREEK, []),  # the letter is already searched
+    ("venue:pi", C.WARN_SPELLED_GREEK, []),  # a filter value is never text
+    ("alpha* x", C.WARN_SPELLED_GREEK, []),  # a wildcard word isn't the name alone
+    ("Epsilon-DP", C.WARN_SPELLED_GREEK, []),  # a hyphenated word is not the name alone
+    ("epsilon greedy", C.WARN_SPELLED_GREEK, [(0, 7)]),
+    ("α divergence", C.WARN_SPELLED_GREEK, []),
+    ("varepsilon", C.WARN_SPELLED_GREEK, []),  # only the plain lower-case names
+    ("alphabet", C.WARN_SPELLED_GREEK, []),
     ("trust –bias", C.WARN_LOOKALIKE_OPERATOR, [(6, 11)]),  # en dash
     ("‘trust in AI’", C.WARN_LOOKALIKE_OPERATOR, [(0, 6)]),
     ("C++ code", C.WARN_SYMBOLS_DROPPED, [(0, 3)]),
@@ -540,3 +565,10 @@ def test_m1_final_nits() -> None:
     assert lex("’80s AI’s role").warnings == ()  # an in-word apostrophe does not pair with the leading `’`
     assert C.WARN_SYMBOLS_DROPPED in [w.code for w in lex("\\alpha{{}}-divergence").warnings]  # nested empty
     assert lex('"a b').errors[0].code is C.PARSE_UNTERMINATED_PHRASE
+
+
+def test_spelled_greek_advice_fits_a_negation() -> None:
+    [w] = [d for d in parse("trust -alpha").warnings if d.code is C.WARN_SPELLED_GREEK]
+    assert "add `-α` to exclude it too" in w.message
+    [w] = [d for d in parse("alpha").warnings if d.code is C.WARN_SPELLED_GREEK]
+    assert "search `alpha OR α`" in w.message

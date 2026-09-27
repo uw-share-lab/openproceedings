@@ -24,26 +24,53 @@ questions 1).
 - Sort by `id` using plain code-point order.
 - One line per record: `json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`,
   followed by `\n`, UTF-8, with no BOM.
-- Sort lists with no natural order (`provenance` by `(field, source, url)`). Keep `authors` in display
+- Sort lists with no natural order: `provenance` by `Claim.sort_key()`, which is `(field, source, url or "",
+  fetched_at)` (a missing url sorts first); `PaperRecord` enforces this order on load. Keep `authors` in display
   order.
 - Take `fetched_at` from the cache entry, **not** the build clock. Take no values from the environment
   (hostname, cwd, locale).
 - `snapshot_hash = sha256(records.jsonl bytes)`, and `<shorthash>` is a fixed-length prefix of it. The
-  same cache gives the same bytes and the same hash. `backend/tests/unit/ingest/test_snapshot_determinism.py`
+  same cache gives the same bytes and the same hash. `backend/tests/unit/ingest/test_snapshot.py`
   builds twice from fixtures and compares the bytes.
 
 ## manifest.json
-Includes: `snapshot_hash`; `crawl_date`; `built_at`; `record_count`; `counts` nested venue → year →
-track → status; `abstract_missing` per venue-year; `unknown_track` per venue-year; `merges` and
-`conflicts` totals; and `sources` (for each source, the crawl window, API host and version, and the
-PMLR/NeurIPS page counts). The manifest may hold build times; `records.jsonl` may not. `/coverage`
+As built (`backend/src/openproceedings/ingest/snapshot.py`, `render`): `format_version`,
+`record_schema_version` (`record.py`), `tokenizer_version` (dedup's title keys use it) and
+`openproceedings_version`; `snapshot_hash`; `crawl_date` (the newest claim's fetch date, which also names
+the directory) and `crawl_window` (the oldest and newest fetch times); `built_at` (the only build-time
+value); `record_count`; `counts` nested venue → year → track → status; `abstract_missing` and
+`unknown_track` per venue → year; `merges` and `conflicts` (a `total` plus a count per rule /
+resolution kind); `files` (the sha256 of `merges.csv` and `conflicts.csv`, which `snapshot_hash` doesn't
+cover); and `sources` — for RIS, one `ImportReport.to_manifest()` per cached file (both inputs' sha256,
+the installed scholarmend `parser_version`, read / imported / skipped by reason, abstract_missing,
+unknown_track, status_overrides, track × status). The crawlers add their own source entries (crawl window, API host
+and version, page counts) in M4. The manifest may hold build times; `records.jsonl` may not. `/coverage`
 (spec 04) and `coverage-auditor` read these counts directly.
 
+## The cache
+`op ingest ris <mended.ris>...` checks each scholarmend output imports cleanly, then copies it and the
+`resolved.json` beside it to `<data-dir>/cache/ris/<its directory name>/`. Re-ingesting identical files is
+a no-op; different files under a cached name are refused (a snapshot may already cite them).
+
 ## Immutability
-- Build into a temporary directory next to the target and `os.replace` it into place. A crash never
-  leaves a half snapshot under the final name.
-- If the target already exists, **refuse**. If a snapshot with the same `snapshot_hash` already exists,
-  report it and exit 0 with no rewrite.
+- A build or ingest holds an exclusive `flock` on `<dir>/.lock` in the directory it writes into, so
+  concurrent runs take turns and a sweep never touches a live run's staging directory.
+- Build into a `.tmp-` directory next to the target, fsync the files and the directory (`F_FULLFSYNC` on
+  macOS), rename it into place, check it holds what was written, then make it read-only (files 0444,
+  directory 0555: a read-only directory can't be renamed). To delete a cache or scratch copy by hand,
+  `chmod -R u+w` it first. A
+  crash never leaves a half snapshot under the final name; the next build sweeps `.tmp-` leftovers, and
+  a hidden or `.tmp-` cache entry is never read as a source. The cache (`op ingest ris`) is written the
+  same way, all inputs or none, as the exact bytes that were checked; a cache name that differs from
+  another only in case or Unicode form is refused (macOS folds both), and a symlinked input is read from
+  where it points. `resolved.json`'s shape is checked, so bad input is a one-line refusal.
+- If the target exists, is complete, its `records.jsonl` re-hashes to this snapshot's hash (never
+  trusting the manifest) and its manifest names that hash and the current `format_version`, report it
+  and exit 0 with no rewrite (`created: false`), re-locking it if a crash left it writable; otherwise
+  **refuse** and say to retire it (an old-format snapshot is retired and rebuilt, never patched). A target that
+  appears while building is judged the same way.
+- Reading a snapshot (`load_records`, used by `diff`) requires a manifest whose `snapshot_hash` matches
+  `records.jsonl`, unique ids and valid records; errors name the line and the error kind, never text.
 - `.claude/hooks/protect-data-dir.sh` blocks Write/Edit under `data/snapshots/` and `data/indexes/`,
   blocks `rm`/`mv`/`truncate`/`sed -i` there, and blocks `git add -f data/`. A block is correct
   behaviour, not an obstacle. Build a new snapshot instead.
@@ -51,10 +78,14 @@ PMLR/NeurIPS page counts). The manifest may hold build times; `records.jsonl` ma
   hand while a search record references them.
 
 ## CLI
-- `op snapshot build [--from <cache>]` merges all cached sources, then classify → dedup → write. It never
-  fetches, so it works offline.
-- `op snapshot diff <a> <b>` prints the ids **added**, **removed** and **changed** (where `content_hash`
-  differs, with the changed fields named), plus a separate count of provenance-only changes. Every
+- `op [--data-dir data] snapshot build [--from <cache>] [--out <snapshots>]` imports all cached sources,
+  then dedup → write. It never fetches, so it works offline. It prints `{path, snapshot_hash, created}`;
+  `created: false` means a snapshot with that hash already existed and nothing was written.
+- `op snapshot diff <a> <b>` prints (JSON) the ids **added**, **removed**, **rekeyed** (the same native
+  id under a new venue or year, with the fields that differ) and **changed** (where `content_hash`
+  differs, with the changed fields named), plus separate counts of **display-only** changes (`authors`,
+  `urls`, `keywords`, `presentation` or `venue_id_raw` differ but the hash doesn't) and provenance-only
+  changes. Every
   snapshot promotion needs one: a removed id in a stable venue-year is a regression until explained.
 
 ## Checklist

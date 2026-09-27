@@ -28,8 +28,11 @@ however large the speed-up. Every optimisation you suggest has to keep the diffe
 1. Find the benchmark suite (`grep -rl "benchmark" backend/tests`). Make sure a benchmark exists for each
    path the diff touches. Add missing ones, with a fixed query set: the Trust-Evals strings, a 200-term
    wildcard, a multi-token NEAR, a deep nested NOT.
-2. Run `uv run pytest backend/tests -m benchmark --benchmark-compare` (verify the marker and flags in
-   `pyproject.toml`) on the branch and on `main`, on the same machine. Report medians and p95.
+2. Run `uv run pytest backend/tests/bench --benchmark-enable --benchmark-only --benchmark-save=base` on the
+   base, then `… --benchmark-compare --benchmark-compare-fail=min:20%` on the branch, on the same machine
+   (benchmarks are disabled in ordinary runs by pyproject's addopts; the `bench` workflow does exactly this).
+   Report medians and p95. For the ~80k corpus and the verified-clause cases, run
+   `uv run python -m tests.bench.report_80k` from `backend/` (it writes `docs/results/<date>-bench.md`).
 3. For a regression, profile it (`uv run python -m cProfile -o <scratch>/prof.out -m openproceedings.cli
    search "<q>" --ids`, or py-spy if installed). Name the function and the reason, e.g. the NEAR fallback
    verifying too many candidates, or the expansion scanning the vocabulary instead of streaming a prefix.
@@ -37,6 +40,12 @@ however large the speed-up. Every optimisation you suggest has to keep the diffe
    it.
 5. Save measured numbers under `docs/results/<date>-bench.md` with machine, commit and index_version. Never
    quote numbers from memory.
+
+Read timings only from a quiet machine (no tests, reviews or builds running) with enough rounds that
+the p95 isn't the slowest round (200 warm searches in the 80k report). A 20-round p95 under load read 147 ms
+for a search whose quiet 200-round p95 was 68.7 ms (a separate probe: 95 ms), and a task was filed, then
+archived, on it (2026-09-26). A cold run clears every cache (`verified`, `expanded`, `compiled`): clearing
+one left a 10.5 s query (10.9 s then) reading 77 ms (a report run at 04ea8d9, discarded rather than committed).
 
 ## Output
 A table of benchmark · branch · main · Δ% · budget · pass/fail, each regression's cause with a profile

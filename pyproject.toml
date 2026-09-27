@@ -20,7 +20,14 @@ openproceedings = { workspace = true }
 members = ["backend"]
 
 [dependency-groups]
-dev = ["ruff>=0.13", "mypy>=1.18", "pytest>=8.3", "hypothesis>=6.112"]
+dev = [
+    "ruff>=0.13",
+    "mypy>=1.18",
+    "pytest>=8.3",
+    "hypothesis>=6.112",
+    "refaudit==0.4.9",
+    "pytest-benchmark>=5.1",
+]
 
 [tool.ruff]
 line-length = 110
@@ -42,7 +49,7 @@ quote-style = "double"
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers --benchmark-disable"  # the bench workflow enables them
 
 [tool.mypy]
 python_version = "3.12"

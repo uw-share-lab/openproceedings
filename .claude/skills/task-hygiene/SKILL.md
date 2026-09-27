@@ -22,6 +22,11 @@ writes under `backlog/` are blocked by `enforce-backlog-cli.sh`, Bash `mv`/`git 
 `backlog/` are blocked by `protect-data-dir.sh`, and CI's `check_backlog.py` catches a Done task left
 behind in `tasks/`. Archive (`backlog task archive`) is only for tasks that were dropped
 unfinished. Give the reason in the notes first.
+Backlog.md 1.53 reuses an archived task's id: the next `backlog task create` after an archive gets the
+same number (task-075 twice, 2026-09-26). After archiving, say which task an id means in both tasks' notes,
+or prefer finishing a task (Done + complete) with a "not reproduced" summary over archiving it.
+Write `--final-summary` before `backlog task complete`: 1.53 can't edit a task once it is in `completed/` or
+`archive/` ("Task not found"), and the files there are hand-edit-protected (M2 gate, 2026-09-26).
 
 ## Docs, specs, READMEs, every `.md`
 | You changed… | Update in the same commit |

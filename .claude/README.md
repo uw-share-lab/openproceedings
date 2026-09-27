@@ -82,7 +82,7 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
 |---|---|
 | [`openreview-crawler`](agents/openreview-crawler.md) | Builds and maintains the OpenReview API v2 and v1 crawlers and their per-venue-year schema adapters under backend/src/openproceedings/ingest/sources/ |
 | [`proceedings-miner`](agents/proceedings-miner.md) | Builds and maintains the NeurIPS (proceedings.neurips.cc) and PMLR (proceedings.mlr.press) miners and the PMLR volume→venue/year/track config table |
-| [`ris-importer`](agents/ris-importer.md) | Builds and maintains `op ingest ris` (backend/src/openproceedings/ingest/ris.py), the M2 bootstrap that turns scholarmend's mended.ris into PaperRecords with full abstracts, corrected year and venue, and track taken from scholarmend's venueid claims, all with provenance.source = "ris". |
+| [`ris-importer`](agents/ris-importer.md) | Builds and maintains the RIS importer, backend/src/openproceedings/ingest/ris.py (the `op ingest ris` wiring is task-022). |
 | [`track-classifier-auditor`](agents/track-classifier-auditor.md) | Read-only auditor of track and status classification |
 | [`dedup-auditor`](agents/dedup-auditor.md) | Read-only auditor of deduplication |
 | [`coverage-auditor`](agents/coverage-auditor.md) | Read-only auditor of corpus coverage |
@@ -134,7 +134,7 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
 | [`exactness-guardian`](agents/exactness-guardian.md) | Read-only guardian of guarantee 1 (exactness) |
 | [`reference-oracle-keeper`](agents/reference-oracle-keeper.md) | Owns backend/src/openproceedings/engine/reference.py (ReferenceEngine), the naive pure-Python evaluator that defines correct matching |
 | [`differential-tester`](agents/differential-tester.md) | Runs and extends the TantivyEngine vs ReferenceEngine differential suites |
-| [`ranking-engineer`](agents/ranking-engineer.md) | Owns ordering inside the matched set in backend/src/openproceedings/engine/rank.py |
+| [`ranking-engineer`](agents/ranking-engineer.md) | Owns ordering inside the matched set (backend/src/openproceedings/engine/tantivy_engine.py, boosts in compile.py) |
 | [`performance-profiler`](agents/performance-profiler.md) | Measures and defends the spec 03 performance budgets |
 
 

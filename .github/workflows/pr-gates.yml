@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 0 }
+        with: { fetch-depth: 0, persist-credentials: false }
       - name: No AI authorship in commits or PR text
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -35,7 +35,7 @@ jobs:
     if: ${{ !(github.head_ref == 'dev' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 0 }
+        with: { fetch-depth: 0, persist-credentials: false }
       - name: Branch adds a .claude/learnings/ entry (or is labelled no-learning)
         if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-learning') }}
         run: |
