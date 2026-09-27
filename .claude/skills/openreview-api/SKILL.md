@@ -129,6 +129,11 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   storing `{url, fetched_at, headers (content-type and ratelimit-* only), json}`; an unreadable entry, or one
   naming another URL, is a `CacheError` (delete it), never a silent refetch. Errors are the shared
   `http.SourceError` family (`CacheMiss`, `RetriesExhausted`, `HTTPRefused`; `OpenReviewAuthError` on top).
+- Cache expiry (TASK-102; spec 01 §Pipeline, Cache expiry): `openreview_client.ttl` is `POLICY.ttl`. A live
+  client re-fetches an API v2 entry past its TTL (accepted listing 7 days while its venue-year is open, 365
+  after; status listings and groups 1 day, then 90; API v1 never) and logs `openreview_cache_expired`; an
+  offline client (`--offline`, a dry run, `snapshot build`) never expires anything. Once one page of a
+  listing expires, `_pages` re-fetches every later page too, so a listing's pages never mix two moments.
 - `ingest/sources/openreview_v2.py`: `crawl` (groups → venueids → pages → records), `note_record` (the
   authority rule), `ingest` (writes `…/v2/crawls/<Venue>-<Year>.json` for a finished crawl) and `replay`
   (what `op snapshot build` calls). The group-tree enumeration (`?parent=` listings, containers, the

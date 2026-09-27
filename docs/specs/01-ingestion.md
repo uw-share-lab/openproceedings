@@ -96,6 +96,25 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    goes through a disk cache keyed by the canonical URL (and, for an API, its sorted parameters), written
    atomically; only the source's hosts are called and no redirect is followed; one pacing and retry rule set
    honours `Retry-After` and `ratelimit-reset`; the sources differ only in their `Policy`. A crawl can resume.
+
+   **Cache expiry (TASK-102).** Each `Policy` has a TTL per URL (`Policy.ttl`). A live crawl re-fetches an
+   entry older than its TTL, overwrites it and logs `<source>_cache_expired` (`url`, `age_s`, `ttl_s`).
+   An offline client (`--offline`, `--dry-run`, `op snapshot build`) never expires anything, so a replay is a
+   function of the cache and rebuilds the same bytes whenever it runs; `--refresh` still re-fetches at once.
+   A venue-year is *open* until the end of its calendar year (its decisions may still be out, a withdrawal
+   or an opted-in rejected paper may still appear) and *over* after that:
+
+   | Listing | Open | Over | Why |
+   |---|---|---|---|
+   | OpenReview v2 accepted venueid (`/notes?content.venueid=<Venue>.cc/<Y>/Conference`) | 7 days | 365 days | Grows once, at decisions; camera-ready edits until the conference; then settled |
+   | OpenReview v2 submission, rejected, withdrawn, desk-rejected venueids | 1 day | 90 days | Change until decisions; an opted-in rejected paper can appear later |
+   | OpenReview v2 groups (a year's groups, a venue's group) | 1 day | 90 days | A workshop added; a venue's venueids |
+   | OpenReview v2 request naming no venue-year | 1 day | 1 day | Unclassified: the shortest |
+   | OpenReview API v1 (every request) | never | never | Its venue-years (ICLR ≤2023, NeurIPS 2021–2022) are over and v1 is frozen |
+   | NeurIPS proceedings, PMLR (index and abstract pages) | never | never | Effectively immutable once published; a newly published year is `--refresh` |
+
+   A listing is re-fetched as a whole: once one page of it expires, every later page is fetched again too,
+   so its pages agree (`count`, rows and ids; a mismatch is still refused, re-run with `--refresh`).
 2. **Normalize.** Map each source's shape to `PaperRecord`. Strip HTML. Keep LaTeX verbatim (03 decides
    how it is tokenized).
 3. **Classify.** Derive `track`, `status` and `presentation` using the rules above. Every classification
@@ -117,6 +136,12 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
 5. **Snapshot.** Write `data/snapshots/<date>-<shorthash>/records.jsonl` (sorted by `id`) and
    `manifest.json`. The manifest holds counts per venue × year × track × status, source versions,
    the crawl date and the snapshot hash. Snapshots are immutable. `data/` is gitignored.
+   The build also checks each venue-year's statuses against what its claim sources can supply
+   (`ingest/status_check.py`, TASK-109: OpenReview every status; a proceedings listing `accepted` only; RIS
+   every status where OpenReview holds the venue-year, else `accepted`). Each (venue, year, status) its
+   records hold that none of its sources can supply is logged (`snapshot_unexpected_status`) and listed with
+   its record ids in `op snapshot build`'s output (`unexpected_statuses`). It points at a classification
+   error; it is a report, never a refusal, and never changes the snapshot's bytes.
 
 ## CLI
 

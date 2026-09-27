@@ -102,8 +102,12 @@ marked crawl) is refused.
 
 ## CLI
 - `op [--data-dir data] snapshot build [--from <cache>] [--out <snapshots>]` imports all cached sources,
-  then dedup → write. It never fetches, so it works offline. It prints `{path, snapshot_hash, created}`;
-  `created: false` means a snapshot with that hash already existed and nothing was written.
+  then dedup → write. It never fetches, so it works offline, and an offline cache never expires (TASK-102),
+  so the same cache rebuilds the same bytes at any date. It prints `{path, snapshot_hash, created,
+  unexpected_statuses}`; `created: false` means a snapshot with that hash already existed and nothing was
+  written. `unexpected_statuses` (TASK-109, `ingest/status_check.py`) lists each (venue, year, status) whose
+  records hold a status none of the venue-year's claim sources can supply, with the record ids: a
+  classification error to chase, never written into the snapshot.
 - `op snapshot diff <a> <b>` prints (JSON) the ids **added**, **removed**, **rekeyed** (the same native
   id under a new venue or year, with the fields that differ) and **changed** (where `content_hash`
   differs, with the changed fields named), plus separate counts of **display-only** changes (`authors`,
