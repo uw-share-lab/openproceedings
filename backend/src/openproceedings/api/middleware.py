@@ -309,9 +309,8 @@ class TokenBucket:
                     continue
                 if fallback is None:
                     fallback = k
-                if (
-                    tokens + (now - last) * self.refill >= 0
-                ):  # only debt still owed protects a bucket (round 6)
+                # only debt still owed protects a bucket (round 6), not a debt the refill has repaid
+                if tokens + (now - last) * self.refill >= 0:
                     victim = k
                     break
             del self._buckets[victim if victim is not None else fallback]  # type: ignore[arg-type]
