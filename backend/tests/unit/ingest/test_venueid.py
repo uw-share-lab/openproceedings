@@ -321,7 +321,7 @@ V1_NOTES: list[tuple[str, str, str, str]] = [
     ("v1/iclr-2017/note-rejected-bare-venueid.json", "other", "main", "rejected"),  # `Submitted to ICLR 2017`
     ("v1/iclr-2017/note-invite-to-workshop.json", "other", "workshop", "unknown"),
     ("v1/iclr-2021/note-accepted.json", "main", "main", "accepted"),
-    # the venue string alone says accepted; the withdrawn invitation disagrees, a conflict for TASK-051
+    # the venue string alone says accepted; the withdrawn invitation disagrees: the v1 adapter makes it unknown + a conflict row
     ("v1/iclr-2021/note-withdrawn-with-accepted-venue.json", "main", "main", "accepted"),
     ("v1/iclr-2022/note-rejected-bare-venueid.json", "main", "main", "rejected"),  # `ICLR 2022 Submitted`
     ("v1/iclr-2023/note-rejected-bare-venueid.json", "main", "main", "rejected"),  # `Submitted to ICLR 2023`

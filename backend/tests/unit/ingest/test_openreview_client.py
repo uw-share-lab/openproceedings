@@ -151,6 +151,8 @@ def test_the_base_url_must_be_an_openreview_api_host(tmp_path: Path) -> None:
     for base in ("https://evil.example", "http://api2.openreview.net", "https://api2.openreview.net/x"):
         with pytest.raises(ValueError, match="base URL"):
             OpenReviewClient(tmp_path, credentials=None, base=base)
+        with pytest.raises(ValueError, match="base URL"):  # the login host too (a v1 client logs in on api2)
+            OpenReviewClient(tmp_path, credentials=None, base="https://api.openreview.net", login_base=base)
 
 
 # --- rate limits and retries (fake clock) -------------------------------------------------------------------

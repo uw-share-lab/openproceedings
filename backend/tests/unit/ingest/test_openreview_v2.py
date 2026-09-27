@@ -256,7 +256,7 @@ def test_an_ignored_offset_is_refused_not_looped(tmp_path: Path) -> None:
 def test_a_v1_year_or_unknown_venue_is_refused(tmp_path: Path) -> None:
     for venue, year, message in (
         ("ICLR", 2023, "API v1"),
-        ("NeurIPS", 2022, "TASK-051"),
+        ("NeurIPS", 2022, "openreview_v1"),
         ("AAAI", 2024, "unknown"),
     ):
         with pytest.raises(ValueError, match=message):
@@ -364,8 +364,8 @@ def test_cli_offline_replays_and_dry_run_reports(tmp_path: Path, capsys: pytest.
 
 def test_cli_refusals(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     base = ["--data-dir", str(tmp_path), "ingest", "openreview", "--venue", "ICLR"]
-    assert cli.main([*base, "--years", "2022-2024", "--offline"]) == 1
-    assert "API v1" in capsys.readouterr().err
+    assert cli.main([*base, "--years", "2022-2024", "--offline"]) == 1  # 2022-2023 go to v1: uncached
+    assert "not cached" in capsys.readouterr().err
     assert cli.main([*base, "--years", "2024", "--offline"]) == 1
     assert "not cached" in capsys.readouterr().err
     for bad in ("24", "2026-2024", "2024-x"):

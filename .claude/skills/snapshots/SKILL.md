@@ -47,8 +47,13 @@ unknown_track, status_overrides, track × status) under `ris` (present whenever 
 `op ingest openreview` has finished a venue-year, `openreview_v2`: its own `crawl_window` (which search records'
 `crawl_dates` and `/coverage` read) and one `CrawlReport.to_manifest()` per venue-year (groups crawled and skipped
 with the reason, each group's `public_*` flags, notes per venueid, read / imported / skipped by reason,
-unknown_track, abstract_missing, track × status, page size). `build` replays each finished crawl offline from
-the cached responses (`load_sources`); the proceedings crawlers add their entries later in M4. The manifest may hold build times; `records.jsonl` may not. `/coverage`
+unknown_track, abstract_missing, track × status, page size); and likewise `openreview_v1` for API v1 years
+(TASK-051: its `crawl_window`, absent when its crawls fetched nothing such as ICLR 2015 alone, and one v1
+`CrawlReport.to_manifest()` per venue-year: notes per invitation, forums read, read / imported / skipped by
+reason, `unmapped` status strings by evidence kind, unknown_track, unknown_status, `authors_unsplit`, the
+number of conflicts, track × status and the year's `coverage_gaps`). `build` replays each finished crawl offline
+from the cached responses (`load_sources`) and adds the conflicts a v1 crawl found inside one source to
+`conflicts.csv` (`with_crawl_conflicts`); the proceedings crawlers add their entries later in M4. The manifest may hold build times; `records.jsonl` may not. `/coverage`
 (spec 04) and `coverage-auditor` read these counts directly.
 
 ## The cache

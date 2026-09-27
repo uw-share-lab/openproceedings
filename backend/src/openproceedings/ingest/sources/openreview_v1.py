@@ -1,0 +1,732 @@
+"""The OpenReview API v1 crawler: one adapter per venue-year schema (TASK-051; spec 01 §Sources, §Track taxonomy;
+openreview-api skill §API v1; decision-012, decision-013).
+
+API v1 (`api.openreview.net`) holds ICLR 2013, 2014, 2016–2023 and NeurIPS 2021–2022 (main and D&B), each year
+with its own schema, so each venue-year has its own `Adapter` in `ADAPTERS`. An adapter names:
+
+- **Listings**: the exact invitations whose notes are that year's submissions (`?invitation=<inv>`, 1,000 a page,
+  `count` checked against the rows and distinct ids), each with the track it was submitted to and its role.
+  The submission invitation means "submitted", nothing more. The withdrawn and desk-rejected invitations are
+  crawled explicitly (decision-012); a note listed there is `withdrawn` / `desk_rejected`.
+- **Where status comes from** (`status_from`), per the research run (docs/research/2026-09-27-…-facts.md):
+  `decision_field` (ICLR 2013: `content.decision` on the submission, track too), `none` (ICLR 2014 and 2016:
+  no decisions on OpenReview, so `unknown`), `venue` (`content.venue` through `classify.classify_v1_venue`:
+  ICLR 2017, 2022, 2023, NeurIPS 2021–2022), `decision_note` (ICLR 2018–2020: the decision note in the forum,
+  fetched with `?forum=<id>`, matched by its exact invitation, `forum` and `replyto`), or `venue_then_decision_note`
+  (ICLR 2021: accepted notes carry `content.venue`; the others need the decision note).
+- **Coverage gaps**: what OpenReview can't answer for the year (ICLR 2015 has no group; 2014 has no decisions;
+  2016 has only its workshop track), reported in the crawl report, never raised as an error.
+
+The authority rules (never broken):
+1. Only the submission note (`id == forum`) becomes a record.
+2. **A v1 `content.venueid` never gives status** (TASK-095: rejected papers carry the bare venue path too). It
+   only confirms venue and year (a note naming another venue-year is skipped as `out_of_scope`, never
+   re-yeared) and, where it names a known track, must agree with the track the status evidence gives
+   (otherwise the track is `unknown` and the disagreement is a conflict row).
+3. Status and track strings are matched exactly against a table; an unlisted string is `unknown`, counted in
+   `unmapped` and logged with the forum id (never the string, which can be free text).
+4. When a note's own evidence disagrees (a withdrawn-invitation note whose `content.venue` says accepted, such
+   as ICLR 2021 `xGZG2kS5bFk`; two decision notes that disagree), the status is `unknown` and the disagreement
+   is a `conflicts.csv` row (`unresolved:openreview_v1`), never resolved by picking one side.
+
+Every value is a claim with `source="openreview_v1"`, the page URL it came from (the listing page, or the
+forum page for a decision note) and that page's `fetched_at` from the cache. A finished crawl writes
+`<cache>/openreview/v1/crawls/<Venue>-<Year>.json`, which `op snapshot build` replays offline.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+import time
+from collections import Counter
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Literal
+
+from pydantic import ValidationError
+
+from openproceedings import storage
+from openproceedings.ingest.classify import Classification, classify_v1_venue, classify_venueid
+from openproceedings.ingest.dedup import Conflict
+from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Source, Urls
+from openproceedings.ingest.sources.openreview_client import (
+    API_V1,
+    API_V2,
+    OpenReviewCacheMiss,
+    OpenReviewClient,
+)
+from openproceedings.ingest.sources.openreview_v2 import (
+    FIRST_V2_YEAR,
+    SKIP_REASONS,
+    CrawlError,
+    _pages,
+    _strings,
+    _text,
+    _write_json,
+)
+from openproceedings.logs import elapsed_ms
+
+log = logging.getLogger(__name__)
+
+SOURCE: Source = "openreview_v1"
+PAGE_SIZE = 1000  # the API's maximum (`limit=1001` is a 400 on v1 too)
+CONFLICT = "unresolved:openreview_v1"  # conflicts.csv resolution: the record's value is `unknown`
+_FORUM_URL = "https://openreview.net/forum?id={}"
+
+Role = Literal["submission", "withdrawn", "desk_rejected"]
+StatusFrom = Literal["decision_field", "none", "venue", "decision_note", "venue_then_decision_note"]
+# (track, status, presentation) a status string maps to; track None: the string doesn't name one (`Reject`,
+# `Accept (Poster)`), so the track stays the one the note was submitted to (its listing's)
+Outcome = tuple[str | None, str, str | None]
+
+
+@dataclass(frozen=True)
+class Listing:
+    invitation: (
+        str  # exact; v1 invitation filters are prefix regexes, and these contain no regex metacharacter
+    )
+    track: str  # the track the note was submitted to, until its status evidence says otherwise
+    role: Role = "submission"
+
+
+@dataclass(frozen=True)
+class DecisionNotes:
+    """How a year's decision note is found in a forum and read. `invitation` may hold `{number}`, the
+    submission's number (`ICLR.cc/2020/Conference/Paper<N>/-/Decision`), so a note from another paper's
+    forum can never be taken for this one's."""
+
+    invitation: str
+    field: str  # `decision`, or ICLR 2019's meta-review `recommendation`
+    values: Mapping[str, Outcome]
+
+
+@dataclass(frozen=True)
+class Adapter:
+    venue: str
+    year: int
+    listings: tuple[Listing, ...]
+    status_from: StatusFrom
+    decisions: Mapping[str, Outcome] = field(
+        default_factory=dict
+    )  # `decision_field`: content.decision → outcome
+    decision_notes: DecisionNotes | None = None
+    no_decision: frozenset[str] = frozenset()  # `none`: the content.decision values that mean "never decided"
+    gaps: tuple[str, ...] = ()  # coverage gaps, reported with every crawl of the year
+
+
+def _conf(org: str, year: int, *, desk_rejected: bool = True, withdrawn: bool = True) -> tuple[Listing, ...]:
+    """A year's `<Org>.cc/<Y>/Conference/-/Blind_Submission` listing and its withdrawn / desk-rejected ones."""
+    base = f"{org}.cc/{year}/Conference/-/"
+    out = [Listing(base + "Blind_Submission", "main")]
+    if withdrawn:
+        out.append(Listing(base + "Withdrawn_Submission", "main", "withdrawn"))
+    if desk_rejected:
+        out.append(Listing(base + "Desk_Rejected_Submission", "main", "desk_rejected"))
+    return tuple(out)
+
+
+_ICLR_2014_GAP = (
+    "ICLR 2014: no decisions on OpenReview (`submitted, no decision`), so every status is unknown (TASK-096)"
+)
+_ICLR_2020_GAP = ("ICLR 2020: only the `Reject` decision string is verified live; an accepted forum must be "
+                  "recorded before its accept strings are mapped (until then they are `unknown`, counted in unmapped)")  # fmt: skip
+
+# Every string below was seen live on 2026-09-27 (TASK-002; research doc and `backend/tests/fixtures/http/openreview/v1/`).
+# Add one only after seeing it on a live note, with a fixture or a checked forum id.
+ADAPTERS: dict[tuple[str, int], Adapter] = {
+    ("ICLR", 2013): Adapter(
+        "ICLR", 2013, (Listing("ICLR.cc/2013/conference/-/submission", "main"),), "decision_field",
+        decisions={
+            "conferenceOral-iclr2013-conference": ("main", "accepted", "oral"),
+            "conferencePoster-iclr2013-conference": ("main", "accepted", "poster"),
+            "conferenceOral-iclr2013-workshop": ("workshop", "accepted", "oral"),
+            "conferencePoster-iclr2013-workshop": ("workshop", "accepted", "poster"),
+            "reject": (None, "rejected", None),
+        },
+    ),
+    ("ICLR", 2014): Adapter(
+        "ICLR", 2014,
+        (Listing("ICLR.cc/2014/conference/-/submission", "main"), Listing("ICLR.cc/2014/workshop/-/submission", "workshop")),
+        "none", no_decision=frozenset({"submitted, no decision"}), gaps=(_ICLR_2014_GAP,),
+    ),
+    ("ICLR", 2015): Adapter(
+        "ICLR", 2015, (), "none",
+        gaps=("ICLR 2015 has no OpenReview group (`/groups?parent=ICLR.cc` skips 2015): nothing to crawl (TASK-096)",),
+    ),
+    ("ICLR", 2016): Adapter(
+        "ICLR", 2016, (Listing("ICLR.cc/2016/workshop/-/submission", "workshop"),), "none",
+        gaps=("ICLR 2016: the conference track is not on OpenReview (`ICLR.cc/2016/conference/-/submission` has 0 "
+              "notes; TASK-096)", "ICLR 2016: workshop notes carry no decision, so every status is unknown"),
+    ),
+    ("ICLR", 2017): Adapter(
+        "ICLR", 2017,
+        (Listing("ICLR.cc/2017/conference/-/submission", "main"), Listing("ICLR.cc/2017/workshop/-/submission", "workshop")),
+        "venue",
+    ),
+    ("ICLR", 2018): Adapter(
+        "ICLR", 2018, _conf("ICLR", 2018, desk_rejected=False), "decision_note",
+        decision_notes=DecisionNotes("ICLR.cc/2018/Conference/-/Acceptance_Decision", "decision", {
+            "Accept (Oral)": (None, "accepted", "oral"),
+            "Accept (Poster)": (None, "accepted", "poster"),
+            # invited to the workshop track: not a main-track acceptance (as classify.py reads 2017's string)
+            "Invite to Workshop Track": ("workshop", "unknown", None),
+            "Reject": (None, "rejected", None),
+        }),
+    ),
+    ("ICLR", 2019): Adapter(
+        "ICLR", 2019, _conf("ICLR", 2019, desk_rejected=False), "decision_note",
+        decision_notes=DecisionNotes("ICLR.cc/2019/Conference/-/Paper{number}/Meta_Review", "recommendation", {
+            "Accept (Oral)": (None, "accepted", "oral"),
+            "Accept (Poster)": (None, "accepted", "poster"),
+            "Reject": (None, "rejected", None),
+        }),
+    ),
+    ("ICLR", 2020): Adapter(
+        "ICLR", 2020, _conf("ICLR", 2020), "decision_note",
+        decision_notes=DecisionNotes("ICLR.cc/2020/Conference/Paper{number}/-/Decision", "decision", {
+            "Reject": (None, "rejected", None),
+        }),
+        gaps=(_ICLR_2020_GAP,),
+    ),
+    ("ICLR", 2021): Adapter(
+        "ICLR", 2021, _conf("ICLR", 2021), "venue_then_decision_note",
+        decision_notes=DecisionNotes("ICLR.cc/2021/Conference/Paper{number}/-/Decision", "decision", {
+            "Reject": (None, "rejected", None),
+        }),
+    ),
+    ("ICLR", 2022): Adapter("ICLR", 2022, _conf("ICLR", 2022), "venue"),
+    ("ICLR", 2023): Adapter(
+        "ICLR", 2023, (*_conf("ICLR", 2023), Listing("ICLR.cc/2023/TinyPapers/-/Blind_Submission", "tiny_papers")),
+        "venue",
+        gaps=("ICLR 2023 Blogposts: not crawled until its submission invitation is recorded live",
+              "ICLR 2023 Tiny Papers: every note says `Submitted to Tiny Papers @ ICLR 2023`, so status is unknown"),
+    ),
+    ("NeurIPS", 2021): Adapter(
+        "NeurIPS", 2021,
+        (Listing("NeurIPS.cc/2021/Conference/-/Blind_Submission", "main"),
+         Listing("NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round1/-/Submission", "datasets_benchmarks"),
+         Listing("NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round2/-/Submission", "datasets_benchmarks")),
+        "venue",
+        gaps=("NeurIPS 2021: rejected papers are public only when the authors opted in; withdrawn and desk-rejected "
+              "invitations are not crawled until one is verified live",),
+    ),
+    ("NeurIPS", 2022): Adapter(
+        "NeurIPS", 2022,
+        (Listing("NeurIPS.cc/2022/Conference/-/Blind_Submission", "main"),
+         Listing("NeurIPS.cc/2022/Track/Datasets_and_Benchmarks/-/Submission", "datasets_benchmarks")),
+        "venue",
+        gaps=("NeurIPS 2022: rejected papers are public only when the authors opted in (D&B: only accepted papers "
+              "are public); withdrawn and desk-rejected invitations are not crawled until one is verified live",),
+    ),
+}  # fmt: skip
+
+# `content.venue` → presentation, for the venue strings that state one (the status table is classify.py's)
+_PRESENTATION: dict[str, str] = {
+    **{f"ICLR {y} {w}": w.lower() for y in (2017, 2021, 2022) for w in ("Oral", "Spotlight", "Poster")},
+    **{f"NeurIPS 2021 {w}": w.lower() for w in ("Oral", "Spotlight", "Poster")},
+    "ICLR 2023 poster": "poster",
+}
+_NOT_A_TRACK = frozenset({"other", "unknown"})  # a venueid track that can't disagree with anything
+
+
+def api_for(venue: str, year: int) -> Literal["v1", "v2"]:
+    """Which OpenReview API serves a venue-year; refuses a year OpenReview doesn't hold (its source is the
+    proceedings) and an unknown venue."""
+    first = FIRST_V2_YEAR.get(venue)
+    if first is None:
+        raise ValueError(f"unknown venue {venue!r}: one of {', '.join(FIRST_V2_YEAR)}")
+    if year >= first:
+        return "v2"
+    if (venue, year) in ADAPTERS:
+        return "v1"
+    raise ValueError(
+        f"{venue} {year} is not on OpenReview: its source is the proceedings (`op ingest proceedings`, TASK-052/053)"
+    )
+
+
+def adapter(venue: str, year: int) -> Adapter:
+    if api_for(venue, year) != "v1":
+        raise ValueError(f"{venue} {year} is on OpenReview API v2, not v1 (`openreview_v2`)")
+    return ADAPTERS[(venue, year)]
+
+
+def cache_root(cache: Path) -> Path:
+    return cache / "openreview" / "v1"
+
+
+def http_dir(cache: Path) -> Path:
+    return cache_root(cache) / "http"
+
+
+def crawls_dir(cache: Path) -> Path:
+    return cache_root(cache) / "crawls"
+
+
+def make_client(cache: Path, **kw: Any) -> OpenReviewClient:
+    """A client for api1 (logging in on api2, whose token api1 accepts), caching under `…/v1/http/`."""
+    return OpenReviewClient(http_dir(cache), base=API_V1, login_base=API_V2, **kw)
+
+
+# --- the report ---------------------------------------------------------------------------------------------
+
+
+@dataclass
+class CrawlReport:
+    """What one v1 venue-year gave; `to_manifest()` goes into the crawl file and the snapshot manifest."""
+
+    venue: str
+    year: int
+    page_size: int = PAGE_SIZE
+    complete: bool = True  # False on a dry run that met an uncached response
+    listings: dict[str, int] = field(default_factory=dict)  # invitation → notes listed
+    forums: int = 0  # forum listings read for a decision note
+    notes_read: int = 0
+    imported: int = 0
+    skipped: Counter[str] = field(default_factory=lambda: Counter(dict.fromkeys(SKIP_REASONS, 0)))
+    unmapped: Counter[str] = field(
+        default_factory=Counter
+    )  # evidence kind → notes whose string isn't in a table
+    unknown_track: int = 0
+    unknown_status: int = 0
+    abstract_missing: int = 0
+    authors_unsplit: int = (
+        0  # `content.authors` was one string (early ICLR 2017): kept out, never split by guess
+    )
+    track_status: dict[str, Counter[str]] = field(default_factory=dict)
+    gaps: tuple[str, ...] = ()
+    conflicts: list[Conflict] = field(default_factory=list)
+    fetched: list[str] = field(default_factory=list)
+    would_fetch: list[str] = field(default_factory=list)
+    forums_uncached: int = 0  # dry run: forum listings a real run would fetch
+
+    api = "v1"
+
+    def crawl_window(self) -> dict[str, str] | None:
+        return {"from": min(self.fetched), "to": max(self.fetched)} if self.fetched else None
+
+    def to_manifest(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "api": self.api,
+            "venue": self.venue,
+            "year": self.year,
+            "complete": self.complete,
+            "page_size": self.page_size,
+            "listings": dict(sorted(self.listings.items())),
+            "forums": self.forums,
+            "notes_read": self.notes_read,
+            "imported": self.imported,
+            "skipped": dict(sorted(self.skipped.items())),
+            "unmapped": dict(sorted(self.unmapped.items())),
+            "unknown_track": self.unknown_track,
+            "unknown_status": self.unknown_status,
+            "abstract_missing": self.abstract_missing,
+            "authors_unsplit": self.authors_unsplit,
+            "conflicts": len(self.conflicts),
+            "track_status": {t: dict(sorted(s.items())) for t, s in sorted(self.track_status.items())},
+            "coverage_gaps": list(self.gaps),
+            "crawl_window": self.crawl_window(),
+        }
+        if not self.complete:
+            out["would_fetch"] = list(self.would_fetch)
+            out["forums_uncached"] = self.forums_uncached
+        return out
+
+
+@dataclass(frozen=True)
+class Crawl:
+    records: tuple[PaperRecord, ...]
+    report: CrawlReport
+
+
+# --- status evidence ------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Page:
+    """Where a claim came from: a cached response's URL and fetch time."""
+
+    url: str
+    fetched_at: datetime
+
+
+@dataclass(frozen=True)
+class Verdict:
+    track: str
+    status: str
+    presentation: str | None
+    track_evidence: str
+    status_evidence: str
+    track_page: Page
+    status_page: Page  # the listing page, or the forum page holding the decision note
+    conflicts: tuple[
+        tuple[str, str, str], ...
+    ] = ()  # (field, value_a with its evidence, value_b with its evidence)
+    unmapped: str | None = None  # the evidence kind whose string isn't in a table
+
+
+ForumReader = Callable[[str], tuple[Page, list[Mapping[str, Any]]] | None]
+
+
+def _content_str(content: Mapping[str, Any], key: str) -> str | None:
+    value = content.get(key)
+    return value if isinstance(value, str) and value else None
+
+
+@dataclass(frozen=True)
+class _Found:
+    """What one kind of status evidence said: an outcome, or why there is none."""
+
+    outcome: Outcome | None
+    evidence: str
+    page: Page | None = None  # the forum page, when a decision note was read
+    unmapped: str | None = None  # the evidence kind whose string isn't in a table
+    conflicts: tuple[tuple[str, str, str], ...] = ()
+
+
+def _decision_note(ad: Adapter, note: Mapping[str, Any], read_forum: ForumReader) -> _Found:
+    """The forum's decision note: the reply whose invitation is this year's (with the submission's number),
+    in this forum, replying to the submission itself."""
+    spec = ad.decision_notes
+    assert spec is not None
+    nid, number = note["id"], note.get("number")
+    if "{number}" in spec.invitation and not isinstance(number, int):
+        return _Found(None, "no submission number to find its decision note by", unmapped="decision_note")
+    invitation = spec.invitation.format(number=number)
+    got = read_forum(nid)
+    if got is None:
+        return _Found(None, "decision note not fetched (dry run)")
+    page, notes = got
+    decisions = sorted(
+        (n["id"], value)
+        for n in notes
+        if n.get("invitation") == invitation and n.get("forum") == nid and n.get("replyto") == nid
+        and isinstance(n.get("id"), str) and n["id"] != nid and isinstance(n.get("content"), Mapping)
+        and isinstance(value := n["content"].get(spec.field), str)
+    )  # fmt: skip
+    if not decisions:
+        return _Found(None, "no decision note in the forum", page, "decision_note")
+    if any(value not in spec.values for _, value in decisions):
+        return _Found(None, "decision note string not in the table", page, "decision_note")
+    if len({spec.values[value] for _, value in decisions}) > 1:
+        (a, va), (b, vb) = decisions[0], decisions[-1]
+        conflict = (
+            "status",
+            f"{spec.values[va][1]} (decision note {a})",
+            f"{spec.values[vb][1]} (decision note {b})",
+        )
+        return _Found(None, "decision notes disagree", page, conflicts=(conflict,))
+    did, value = decisions[0]
+    return _Found(spec.values[value], f"decision note {did} ({spec.field}={value})", page)
+
+
+def _submission_evidence(ad: Adapter, content: Mapping[str, Any], by_venue: Classification | None,
+                         note: Mapping[str, Any], read_forum: ForumReader) -> _Found:  # fmt: skip
+    """A submission-listing note's status evidence, by the year's `status_from`."""
+    venue_string = _content_str(content, "venue")
+    if ad.status_from == "decision_field":
+        decision = _content_str(content, "decision")
+        if decision is None or decision not in ad.decisions:
+            return _Found(None, "content.decision not in the table", unmapped="content.decision")
+        return _Found(ad.decisions[decision], f"content.decision={decision}")
+    if ad.status_from == "none":
+        decision = _content_str(content, "decision")
+        unmapped = "content.decision" if decision is not None and decision not in ad.no_decision else None
+        return _Found(None, "no decision on OpenReview for this venue-year", unmapped=unmapped)
+    if by_venue is not None and by_venue.parsed and venue_string is not None:
+        presentation = _PRESENTATION.get(venue_string)
+        return _Found((by_venue.track, by_venue.status, presentation), f"content.venue={venue_string}")
+    if ad.status_from == "venue":
+        return _Found(None, "content.venue absent or not in the v1 table", unmapped="content.venue")
+    return _decision_note(ad, note, read_forum)  # decision_note, or venue_then_decision_note without a venue
+
+
+def judge(ad: Adapter, listing: Listing, note: Mapping[str, Any], listing_page: Page,
+          read_forum: ForumReader) -> Verdict | str:  # fmt: skip
+    """A listed note's track, status and presentation from this year's evidence (module docstring), or the
+    reason it is skipped (`out_of_scope`)."""
+    content: Mapping[str, Any] = note["content"] if isinstance(note.get("content"), Mapping) else {}
+    venue_string = _content_str(content, "venue")
+    by_venue = classify_v1_venue(venue_string) if venue_string else None
+    if by_venue is not None and by_venue.parsed and (by_venue.venue, by_venue.year) != (ad.venue, ad.year):
+        return "out_of_scope"
+    raw = _content_str(content, "venueid")
+    by_id = classify_venueid(raw) if raw else None
+    if by_id is not None and by_id.parsed and (by_id.venue, by_id.year) != (ad.venue, ad.year):
+        return "out_of_scope"  # never re-yeared (openreview-venueids rule 3)
+
+    listed = f"invitation={listing.invitation}"
+    conflicts: list[tuple[str, str, str]] = []
+    if listing.role != "submission":  # the withdrawn / desk-rejected invitation (decision-012)
+        found = _Found((None, listing.role, None), listed)
+        if by_venue is not None and by_venue.parsed and by_venue.status == "accepted":
+            # e.g. ICLR 2021 xGZG2kS5bFk: never resolved by picking a side
+            conflicts.append(
+                ("status", f"{listing.role} ({listed})", f"accepted (content.venue={venue_string})")
+            )
+            found = _Found((None, "unknown", None), f"conflict: {listed} vs content.venue={venue_string}")
+    else:
+        found = _submission_evidence(ad, content, by_venue, note, read_forum)
+        conflicts += found.conflicts
+    status_page = found.page or listing_page
+    named_track, status, presentation = found.outcome or (None, "unknown", None)
+    if named_track is None:
+        track, track_ev, track_page = listing.track, listed, listing_page
+    else:
+        track, track_ev, track_page = named_track, found.evidence, status_page
+    if (by_id is not None and by_id.parsed and by_id.track not in _NOT_A_TRACK and track not in _NOT_A_TRACK
+            and by_id.track != track):  # fmt: skip
+        conflicts.append(("track", f"{track} ({track_ev})", f"{by_id.track} (venueid={raw})"))
+        track, track_ev, track_page, presentation = (
+            "unknown",
+            f"conflict: {track_ev} vs venueid={raw}",
+            listing_page,
+            None,
+        )
+    return Verdict(track, status, presentation, track_ev, found.evidence, track_page, status_page,
+                   tuple(conflicts), found.unmapped)  # fmt: skip
+
+
+# --- notes → records ---------------------------------------------------------------------------------------------
+
+
+def _pdf(nid: str, value: Any) -> str | None:
+    """An OpenReview PDF path (`/pdf/<sha1>.pdf`, or ICLR 2016's `/pdf/<forum id>.pdf`) as a URL; anything else
+    (ICLR 2013–2014 link arXiv abstract pages) is not a PDF of this note and is dropped."""
+    if isinstance(value, str) and (
+        re.fullmatch(r"/pdf/[0-9a-f]{40}\.pdf", value) or value == f"/pdf/{nid}.pdf"
+    ):
+        return f"https://openreview.net{value}"
+    return None
+
+
+def note_record(
+    ad: Adapter, listing: Listing, note: Mapping[str, Any], listing_page: Page, read_forum: ForumReader,
+    report: CrawlReport | None = None,
+) -> PaperRecord | str:  # fmt: skip
+    """The record for one listed note, or the reason it is skipped (one of SKIP_REASONS)."""
+    nid = note.get("id")
+    if not isinstance(nid, str) or nid != note.get("forum"):
+        return "not_submission"
+    if not FORUM_ID.fullmatch(nid):
+        return "invalid"
+    content: Mapping[str, Any] = note["content"] if isinstance(note.get("content"), Mapping) else {}
+    title = _text(content.get("title"))
+    if title is None:
+        return "no_title"
+    verdict = judge(ad, listing, note, listing_page, read_forum)
+    if isinstance(verdict, str):
+        return verdict
+    venue, year = ad.venue, ad.year
+    rid = f"op:{venue.lower()}:{year}:{nid}"
+    abstract = _text(content.get("abstract"))
+    if abstract is not None and (abstract.startswith("…") or abstract.endswith("…")):
+        abstract = None
+    raw_authors = content.get("authors")
+    authors = _strings(raw_authors)
+    keywords = _strings(content.get("keywords"))
+    vid = _content_str(content, "venueid")
+    urls = Urls(forum=_FORUM_URL.format(nid), pdf=_pdf(nid, content.get("pdf")))
+
+    def claim(fld: ClaimField, value: ClaimValue, ev: str, page: Page = listing_page) -> Claim:
+        return Claim(
+            field=fld, value=value, source=SOURCE, url=page.url, fetched_at=page.fetched_at, evidence=ev
+        )
+
+    provenance = [
+        claim("venue", venue, f"invitation={listing.invitation}"),
+        claim("year", year, f"invitation={listing.invitation}"),
+        claim("track", verdict.track, verdict.track_evidence, verdict.track_page),
+        claim("status", verdict.status, verdict.status_evidence, verdict.status_page),
+        claim("title", title, "content.title"),
+        claim("authors", authors, "content.authors"),
+        claim("urls.forum", urls.forum, "note.id"),
+    ]  # fmt: skip
+    if verdict.presentation is not None:
+        provenance.append(
+            claim("presentation", verdict.presentation, verdict.status_evidence, verdict.status_page)
+        )
+    if abstract is not None:
+        provenance.append(claim("abstract", abstract, "content.abstract"))
+    if keywords:
+        provenance.append(claim("keywords", keywords, "content.keywords"))
+    if vid is not None:
+        provenance.append(claim("venue_id_raw", vid, "content.venueid"))
+    if urls.pdf:
+        provenance.append(claim("urls.pdf", urls.pdf, "content.pdf"))
+    try:
+        record = PaperRecord.build(
+            id=rid, title=title, abstract=abstract, authors=authors, venue=venue, year=year, track=verdict.track,
+            status=verdict.status, presentation=verdict.presentation, venue_id_raw=vid, urls=urls,
+            keywords=keywords, provenance=tuple(provenance),
+        )  # fmt: skip
+    except ValidationError:
+        return "invalid"
+    if report is not None:
+        if isinstance(raw_authors, str) and raw_authors.strip():
+            report.authors_unsplit += 1
+        if verdict.unmapped is not None:
+            report.unmapped[verdict.unmapped] += 1
+            log.warning("openreview_v1_unmapped", extra={"forum": nid, "evidence": verdict.unmapped})
+        for fld, a, b in verdict.conflicts:
+            report.conflicts.append(Conflict(rid, fld, a, SOURCE, b, SOURCE, CONFLICT))
+            log.warning("openreview_v1_conflict", extra={"forum": nid, "field": fld})
+    return record
+
+
+# --- the crawl ----------------------------------------------------------------------------------------------------
+
+
+def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = False,
+          page_size: int = PAGE_SIZE) -> Crawl:  # fmt: skip
+    """Every public submission of one v1 venue-year as records (module docstring). A dry run reads only the
+    cache (the client must be offline): an uncached listing is noted in `would_fetch`, an uncached forum
+    counted (its note's status stays `unknown` in the dry run's counts)."""
+    ad = adapter(venue, year)
+    if dry_run and not client.offline:
+        raise ValueError("a dry run needs an offline client")
+    began = time.monotonic()
+    report = CrawlReport(venue, year, page_size=page_size, gaps=ad.gaps)
+    records: dict[str, PaperRecord] = {}
+
+    def read_forum(fid: str) -> tuple[Page, list[Mapping[str, Any]]] | None:
+        notes: list[Mapping[str, Any]] = []
+        first: Page | None = None
+        try:
+            for entry, items in _pages(client, "/notes", {"forum": fid}, "notes", page_size):
+                report.fetched.append(entry["fetched_at"])
+                first = first or Page(entry["url"], datetime.fromisoformat(entry["fetched_at"]))
+                notes += [n for n in items if isinstance(n, Mapping)]
+        except OpenReviewCacheMiss as e:
+            if not dry_run:
+                raise
+            report.forums_uncached += 1
+            if report.forums_uncached == 1:
+                report.would_fetch.append(e.url)
+            report.complete = False
+            return None
+        report.forums += 1
+        assert first is not None
+        return first, notes
+
+    for listing in ad.listings:
+        try:
+            _listing(client, ad, listing, report, records, read_forum, page_size)
+        except OpenReviewCacheMiss as e:
+            if not dry_run:
+                raise
+            report.complete = False
+            report.would_fetch.append(e.url)
+    for r in records.values():
+        report.track_status.setdefault(r.track, Counter())[r.status] += 1
+    report.imported = len(records)
+    report.unknown_track = sum(r.track == "unknown" for r in records.values())
+    report.unknown_status = sum(r.status == "unknown" for r in records.values())
+    report.abstract_missing = sum(r.abstract is None for r in records.values())
+    report.conflicts.sort()
+    log.info("openreview_crawl_finished",
+             extra={"api": "v1", "venue": venue, "year": year, "complete": report.complete,
+                    "listings": len(report.listings), "forums": report.forums, "notes_read": report.notes_read,
+                    "imported": report.imported, "skipped": sum(report.skipped.values()),
+                    "unknown_track": report.unknown_track, "unknown_status": report.unknown_status,
+                    "conflicts": len(report.conflicts), "requests": client.requests, "cached": client.cached,
+                    "ms": elapsed_ms(began, time.monotonic)})  # fmt: skip
+    if ad.gaps:
+        log.info("openreview_coverage_gap", extra={"venue": venue, "year": year, "gaps": len(ad.gaps)})
+    if (
+        report.unknown_track
+        or report.conflicts
+        or sum(report.unmapped.values())
+        or report.skipped["out_of_scope"]
+    ):
+        log.warning("openreview_crawl_attention",
+                    extra={"api": "v1", "venue": venue, "year": year, "unknown_track": report.unknown_track,
+                           "unmapped": sum(report.unmapped.values()), "conflicts": len(report.conflicts),
+                           "out_of_scope": report.skipped["out_of_scope"]})  # fmt: skip
+    return Crawl(tuple(sorted(records.values(), key=lambda r: r.id)), report)
+
+
+def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: CrawlReport,
+             records: dict[str, PaperRecord], read_forum: ForumReader, page_size: int) -> None:  # fmt: skip
+    """Page through one invitation's notes into `records`, checking the listing is consistent (v1 sends
+    `count` on every page)."""
+    seen: set[str] = set()
+    rows = 0
+    counts: set[int] = set()
+    for entry, notes in _pages(client, "/notes", {"invitation": listing.invitation}, "notes", page_size):
+        report.fetched.append(entry["fetched_at"])
+        if isinstance(count := entry["json"].get("count"), int):
+            counts.add(count)
+        seen |= {i for n in notes if isinstance(n, Mapping) and isinstance(i := n.get("id"), str)}
+        rows += len(notes)
+        page = Page(entry["url"], datetime.fromisoformat(entry["fetched_at"]))
+        for note in notes:
+            report.notes_read += 1
+            if not isinstance(note, Mapping):
+                report.skipped["invalid"] += 1
+                continue
+            got = note_record(ad, listing, note, page, read_forum, report)
+            if isinstance(got, str):
+                report.skipped[got] += 1
+                log.debug("openreview_note_skipped", extra={"forum": note.get("id"), "reason": got})
+            elif got.id in records:
+                report.skipped["duplicate"] += 1
+                log.warning(
+                    "openreview_v1_duplicate",
+                    extra={"forum": note.get("id"), "invitation": listing.invitation},
+                )
+            else:
+                records[got.id] = got
+    if rows != len(seen) or len(counts) > 1 or (counts and counts.pop() != rows):
+        raise CrawlError(
+            f"the listing of {listing.invitation} changed between its cached pages (rows, distinct ids and count "
+            "disagree); re-run with --refresh to fetch it again"
+        )
+    report.listings[listing.invitation] = rows
+
+
+# --- the crawl files ------------------------------------------------------------------------------------------
+
+
+def crawl_file(cache: Path, venue: str, year: int) -> Path:
+    return crawls_dir(cache) / f"{venue}-{year}.json"
+
+
+def ingest(client: OpenReviewClient, cache: Path, venue: str, years: Sequence[int], *,
+           dry_run: bool = False, page_size: int = PAGE_SIZE) -> list[CrawlReport]:  # fmt: skip
+    """Crawl each v1 year into the cache (one crawl at a time per cache: `.lock`) and, for a complete,
+    non-dry-run crawl, write its crawl file so `op snapshot build` replays it."""
+    for year in years:
+        adapter(venue, year)  # refuse the whole request before fetching anything
+    reports = []
+    with storage.exclusive(cache_root(cache)):
+        for year in years:
+            result = crawl(client, venue, year, dry_run=dry_run, page_size=page_size)
+            reports.append(result.report)
+            if not dry_run and result.report.complete:
+                _write_json(crawl_file(cache, venue, year), result.report.to_manifest())
+    return reports
+
+
+def cached_crawls(cache: Path) -> list[tuple[str, int, int]]:
+    """The v1 venue-years (and page size) with a finished crawl in the cache, in file-name order."""
+    out = []
+    for path in sorted(crawls_dir(cache).glob("*.json")):
+        if path.name.startswith("."):
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            out.append((str(data["venue"]), int(data["year"]), int(data["page_size"])))
+        except (OSError, ValueError, KeyError, TypeError):
+            raise CrawlError(f"crawl file {path.name} is unreadable; crawl that venue-year again",
+                             reason="crawl_file_invalid") from None  # fmt: skip
+    return out
+
+
+def replay(cache: Path) -> list[Crawl]:
+    """Every finished v1 crawl, rebuilt from the cache alone (no credentials, no network)."""
+    client = make_client(cache, credentials=None, offline=True)
+    return [crawl(client, venue, year, page_size=size) for venue, year, size in cached_crawls(cache)]

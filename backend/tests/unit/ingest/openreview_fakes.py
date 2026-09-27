@@ -1,5 +1,5 @@
 """Test doubles for the OpenReview crawler: a fake clock, and a fake api2 server built from the recorded,
-scrubbed fixtures under `fixtures/http/openreview/v2/` (TASK-002). No network: the client's transport is
+scrubbed fixtures under `fixtures/http/openreview/v2/` (TASK-002), and a fake api1 from `v1/` (TASK-051). No network: the client's transport is
 swapped for these (and conftest refuses any real connection anyway).
 
 Where a test needs more notes than a fixture holds (pagination), `clone` copies a recorded note and changes
@@ -149,3 +149,91 @@ class FakeOpenReview:
                 page["count"] = len(listed) + self.count_bias
             return json_response(page)
         raise AssertionError(f"unexpected request {request.url}")
+
+
+# --- API v1 (TASK-051) --------------------------------------------------------------------------------------
+
+FIXTURES_V1 = FIXTURES.parent / "v1"
+
+
+def recorded_v1(name: str) -> dict[str, Any]:
+    data: dict[str, Any] = json.loads((FIXTURES_V1 / name).read_text(encoding="utf-8"))
+    return data
+
+
+def v1_notes(name: str) -> list[dict[str, Any]]:
+    """Every note of a recorded v1 response (a listing, a note by id, or a forum), deep-copied."""
+    notes: list[dict[str, Any]] = copy.deepcopy(recorded_v1(name)["response"]["json"]["notes"])
+    return notes
+
+
+def v1_note(name: str) -> dict[str, Any]:
+    """The submission note of a recorded v1 response (`id == forum`; a forum listing is not ordered)."""
+    [note] = [n for n in v1_notes(name) if n["id"] == n["forum"]]
+    return note
+
+
+def v1_clone(note: Mapping[str, Any], nid: str, number: int | None = None, **content: Any) -> dict[str, Any]:
+    """A recorded v1 note with another id (and forum), optionally another number and content values
+    (`None` deletes a key)."""
+    out = copy.deepcopy(dict(note))
+    out["id"] = out["forum"] = nid
+    if number is not None:
+        out["number"] = number
+    for key, value in content.items():
+        if value is None:
+            out["content"].pop(key, None)
+        else:
+            out["content"][key] = value
+    return out
+
+
+class FakeOpenReviewV1:
+    """A fake api1 (`/notes?invitation=` and `/notes?forum=`, with `limit`/`offset` and `count` on every
+    page, as v1 sends it) plus api2's `/login`, where a v1 client logs in. `override(url)` may answer any
+    GET first."""
+
+    def __init__(
+        self,
+        listings: Mapping[str, list[dict[str, Any]]] | None = None,
+        forums: Mapping[str, list[dict[str, Any]]] | None = None,
+        override: Callable[[Request], Response | None] | None = None,
+    ) -> None:
+        self.listings = dict(listings or {})
+        self.forums = dict(forums or {})
+        self.override = override
+        self.calls: list[Request] = []
+        self.count_bias = 0
+
+    def gets(self) -> list[str]:
+        return [c.url for c in self.calls if c.method == "GET"]
+
+    def logins(self) -> int:
+        return sum(c.method == "POST" for c in self.calls)
+
+    def __call__(self, request: Request) -> Response:
+        self.calls.append(request)
+        parts = urlsplit(request.url)
+        if request.method == "POST":
+            assert (parts.hostname, parts.path) == ("api2.openreview.net", "/login")
+            body = json.loads(request.body or b"{}")
+            if (body.get("id"), body.get("password")) != (USERNAME, PASSWORD):
+                return json_response(
+                    {"name": "LoginError", "message": "Invalid username or password"}, 400, JSON
+                )
+            return json_response({"token": TOKEN}, headers=JSON)
+        assert parts.hostname == "api.openreview.net" and parts.path == "/notes"
+        if self.override is not None and (answer := self.override(request)) is not None:
+            return answer
+        if request.headers.get("Authorization") != f"Bearer {TOKEN}":
+            return response("errors/anonymous-challenge.json")
+        q = {k: v[0] for k, v in parse_qs(parts.query).items()}
+        limit, offset = int(q.get("limit", 1000)), int(q.get("offset", 0))
+        if "invitation" in q:
+            listed = self.listings.get(q["invitation"], [])
+        elif "forum" in q:
+            listed = self.forums.get(q["forum"], [])
+        else:
+            raise AssertionError(f"unexpected request {request.url}")
+        page = {"notes": listed[offset : offset + limit], "count": len(listed) + self.count_bias}
+        return json_response(page, headers=JSON)  # authenticated api1 sends no rate-limit headers

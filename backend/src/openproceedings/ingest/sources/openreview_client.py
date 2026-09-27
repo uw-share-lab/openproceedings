@@ -1,11 +1,11 @@
 """The OpenReview HTTP client (openreview-api skill; spec 01 §Sources): authenticated, cached, paced.
 
-- **Hosts.** Only `api2.openreview.net` (and `api.openreview.net`, for TASK-051) are ever called. URLs are
+- **Hosts.** Only `api2.openreview.net` and `api.openreview.net` (API v1, TASK-051) are ever called. URLs are
   built from a fixed base and a path, never taken from a response. Redirects are not followed (an API has
   no reason to send one, and following it would carry the bearer token to another host).
 - **Auth.** `OPENREVIEW_USERNAME` / `OPENREVIEW_PASSWORD` from the environment or `.env`, nowhere else. Login
-  is lazy: a run served entirely from the cache needs no credentials and makes no network call. A 401, or an
-  HTML page where JSON was asked for (the "Verifying your browser" challenge anonymous callers get with
+  (`POST <login_base>/login`; a v1 client logs in on api2, whose token api1 accepts) is lazy: a run served
+  entirely from the cache needs no credentials and makes no network call. A 401, or an HTML page where JSON was asked for (the "Verifying your browser" challenge anonymous callers get with
   HTTP 200), logs in again once, then fails as `OpenReviewAuthError`: never read as an empty page.
 - **Politeness.** At least `min_interval` seconds between requests. When `ratelimit-remaining` reaches 0,
   wait `ratelimit-reset` (seconds from now; never `x-ratelimit-reset`, an epoch), capped at about an hour.
@@ -45,6 +45,7 @@ from openproceedings import __version__
 log = logging.getLogger(__name__)
 
 API_V2 = "https://api2.openreview.net"
+API_V1 = "https://api.openreview.net"
 HOSTS = frozenset({"api2.openreview.net", "api.openreview.net"})
 USER_AGENT = f"openproceedings/{__version__} (+https://github.com/uw-share-lab/openproceedings)"
 # the widest window OpenReview advertises is an hour; a hostile header can't park a run longer
@@ -227,6 +228,7 @@ class OpenReviewClient:
         *,
         credentials: Credentials | None,
         base: str = API_V2,
+        login_base: str | None = None,
         transport: Transport = urllib_transport,
         clock: Clock | None = None,
         offline: bool = False,
@@ -235,12 +237,14 @@ class OpenReviewClient:
         max_attempts: int = 6,
         jitter: Callable[[], float] = random.random,
     ) -> None:
-        if urlsplit(base).scheme != "https" or urlsplit(base).hostname not in HOSTS or urlsplit(base).path:
-            raise ValueError(
-                "the OpenReview base URL must be https://api2.openreview.net or api.openreview.net"
-            )
+        for url in (base, login_base or base):
+            if urlsplit(url).scheme != "https" or urlsplit(url).hostname not in HOSTS or urlsplit(url).path:
+                raise ValueError(
+                    "the OpenReview base URL must be https://api2.openreview.net or api.openreview.net"
+                )
         self.cache = Cache(cache_dir)
         self.base = base
+        self.login_base = login_base or base
         self._credentials = credentials
         self._transport = transport
         self._clock: Clock = clock or SystemClock()
@@ -345,7 +349,7 @@ class OpenReviewClient:
                 reason="credentials_missing",
             )
         body = json.dumps({"id": self._credentials.username, "password": self._credentials.password})
-        request = Request("POST", f"{self.base}/login",
+        request = Request("POST", f"{self.login_base}/login",
                           {"Content-Type": "application/json", "Accept": "application/json",
                            "User-Agent": USER_AGENT}, body.encode("utf-8"))  # fmt: skip
         response = self._send(request, "login")
@@ -359,7 +363,7 @@ class OpenReviewClient:
                 f"{', ' + name if (name := _error_name(response)) else ''}); "
                 "check OPENREVIEW_USERNAME and OPENREVIEW_PASSWORD"
             )
-        log.info("openreview_logged_in", extra={"host": urlsplit(self.base).hostname})
+        log.info("openreview_logged_in", extra={"host": urlsplit(self.login_base).hostname})
         return token
 
     def _authenticated_get(self, url: str) -> tuple[Response, dict[str, Any]]:

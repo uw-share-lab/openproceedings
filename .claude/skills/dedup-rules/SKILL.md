@@ -78,8 +78,10 @@ to the final survivor. So every input id is an output id or a `merged_id`, once 
 
 `conflicts.csv`: `id,field,value_a,source_a,value_b,source_b,resolution`, where `resolution` is
 `precedence:<source>` (the winner is `value_a`), `newest:<source>` or `tie:<source>` (one source, two
-values; the kept one is `value_a`), `ambiguous_not_merged`, `track_not_merged` or
-`venue_year_not_merged`. For the not-merged resolutions, `field` is `title_key`, `title_key_chain` or
+values; the kept one is `value_a`), `ambiguous_not_merged`, `track_not_merged`,
+`venue_year_not_merged`, or `unresolved:openreview_v1` (not dedup's: a v1 crawl found one note's own evidence
+disagreeing, such as a withdrawn invitation and an accepted `content.venue`; the record holds `unknown` for that
+field, and `value_a`/`value_b` name each value with its evidence; `snapshot.with_crawl_conflicts` adds it). For the not-merged resolutions, `field` is `title_key`, `title_key_chain` or
 `forum_id` and the values are the two record ids, with their sources. Every row names an output record:
 the not-merged rows are judged on the output records (every shared title key and forum id among records
 that stayed apart), so a second run reports exactly the same rows; only `newest:`/`tie:` rows disappear,

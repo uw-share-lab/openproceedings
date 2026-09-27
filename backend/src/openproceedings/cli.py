@@ -1,7 +1,7 @@
 """The `op` command line. Every planned subcommand exists from M1 on; each stub names the task that
 implements it (spec 08 §CLI). The CLI and the API call the same functions.
 
-Implemented: `op ingest ris`, `op ingest openreview` (API v2, task-050), `op snapshot build`, `op snapshot diff` (task-022), `op index build`
+Implemented: `op ingest ris`, `op ingest openreview` (API v2, task-050; API v1, task-051), `op snapshot build`, `op snapshot diff` (task-022), `op index build`
 (task-023), `op index parity` (task-029), `op search` (ranked, `--ids`, `--explain`, `--engine reference`;
 task-024/030), `op export` (task-030), `op serve` (task-034), `op openapi` (task-040) and `op record save` /
 `op record replay` (task-083). Results go to stdout; logs go to stderr; a refused operation exits 1 with its
@@ -97,8 +97,9 @@ def build_parser() -> argparse.ArgumentParser:
     ris.set_defaults(run=_ingest_ris)
     orv = sources.add_parser(
         "openreview",
-        help="crawl OpenReview API v2 venue-years into <data-dir>/cache/openreview (ICLR 2024+, NeurIPS "
-        "2023+, ICML 2023+); credentials OPENREVIEW_USERNAME/OPENREVIEW_PASSWORD from .env",
+        help="crawl OpenReview venue-years into <data-dir>/cache/openreview: API v2 (ICLR 2024+, NeurIPS 2023+, "
+        "ICML 2023+) or v1 (ICLR 2013-2023, NeurIPS 2021-2022), picked by year; credentials "
+        "OPENREVIEW_USERNAME/OPENREVIEW_PASSWORD from .env",
     )
     orv.add_argument("--venue", required=True, choices=("ICLR", "NeurIPS", "ICML"))
     orv.add_argument("--years", "--year", dest="years", required=True, type=_years, metavar="YYYY[-YYYY]")
@@ -291,17 +292,28 @@ def _years(text: str) -> list[int]:
 
 
 def _ingest_openreview(ns: argparse.Namespace) -> int:
-    from openproceedings.ingest.sources import openreview_v2
+    """Each year goes to the API that holds it (`openreview_v1.api_for`): v1 years through their per-year
+    adapters, v2 years through the v2 crawler. The whole request is refused before anything is fetched if a
+    year is on neither. Reports are printed in year order."""
+    from openproceedings.ingest.sources import openreview_v1, openreview_v2
     from openproceedings.ingest.sources.openreview_client import OpenReviewClient, env_credentials
 
+    apis = {y: openreview_v1.api_for(ns.venue, y) for y in ns.years}
     cache = ns.data_dir / "cache"
     offline = ns.offline or ns.dry_run
     creds = None if offline else env_credentials()  # never read for a run that can't fetch
-    client = OpenReviewClient(
-        openreview_v2.http_dir(cache), credentials=creds, offline=offline, refresh=ns.refresh
-    )
-    reports = openreview_v2.ingest(client, cache, ns.venue, ns.years, dry_run=ns.dry_run)
-    _print([r.to_manifest() for r in reports])
+    reports: dict[int, dict[str, Any]] = {}
+    if v1_years := [y for y in ns.years if apis[y] == "v1"]:
+        v1 = openreview_v1.make_client(cache, credentials=creds, offline=offline, refresh=ns.refresh)
+        for r1 in openreview_v1.ingest(v1, cache, ns.venue, v1_years, dry_run=ns.dry_run):
+            reports[r1.year] = r1.to_manifest()
+    if v2_years := [y for y in ns.years if apis[y] == "v2"]:
+        v2 = OpenReviewClient(
+            openreview_v2.http_dir(cache), credentials=creds, offline=offline, refresh=ns.refresh
+        )
+        for r2 in openreview_v2.ingest(v2, cache, ns.venue, v2_years, dry_run=ns.dry_run):
+            reports[r2.year] = r2.to_manifest()
+    _print([reports[y] for y in sorted(reports)])
     return 0
 
 
