@@ -55,9 +55,12 @@ PRISMA "records identified from databases". A search record says so: `sources` (
 names) and `identification_citable: false`, from the same `vocab.bootstrap_only` test `op search` uses for
 its "note: bootstrap corpus" line. Its window is not a crawl: `crawl_dates_kind["*"]` is
 `scholar_query_dates` (Publish or Perish's query dates, local time labelled UTC, so an end can be a day
-off), and must be worded "Scholar searches run <from> to <to>", never "a crawl". The record page shows the
-CLI's caution and **no methods text** when `identification_citable` is false; a v1 record (null: not
-recorded) shows the caution "not recorded whether this index is a bootstrap corpus" and no methods text either.
+off), and must be worded "Scholar searches run <from> to <to>", never "a crawl"; a `mixed` window (real
+crawls plus a bootstrap source, from M4) reads "crawls and Scholar searches run <from> to <to> (Scholar dates
+in local time)" (spec 05 §Save search record). The record page shows the CLI's caution and **no methods
+text** when `identification_citable` is false; a v1 record (null: not recorded) shows the caution "not
+recorded whether this index is a bootstrap corpus: these counts may not be PRISMA identification numbers"
+and no methods text either.
 
 ## Search record fields (04 §Search records) — all required
 The full table is in `.claude/skills/search-records/SKILL.md`: `input`, `mode`, `canonical`,
