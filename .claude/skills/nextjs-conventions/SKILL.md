@@ -35,6 +35,8 @@ description: The openproceedings Next.js standard — App Router layout, output 
 | `src/components/providers.tsx` | `Providers` (in the root layout): the typed API client (`useApi()`) and TanStack Query (`retry: false`, no refetch on focus) |
 | `src/components/search/` | the `/search` workspace (TASK-041: editor, diagnostics row, "How we read your query", expansions row, empty state; TASK-042: `search-view.tsx` (runs `/search`, draws the results in `SearchWorkspace`'s `results` slot, `workspace-slot.ts`), `use-search.ts`, `controls.ts` (`blockOf`, `parseViewOf`), `exclusions.ts` (banner and Limits line, pure), `exclusion-banner.tsx`, `filter-sidebar.tsx` (incl. the year control on the TASK-092 actions), `hit-item.tsx`, `search-states.tsx`) |
 | `src/components/paper/` | `/paper/[id]` (TASK-042): `GET /papers/{id}?q=&mode=`, key `["paper", id, q, mode]`; a refused `q` falls back to the paper alone |
+| `src/components/export/`, `src/lib/export.ts` | the Export menu and a record's exports (TASK-044): `GET /export` pinned to the shown `index_version` (or `record_id` alone), headers read before the body, status/track warnings from `facets` |
+| `src/components/record/`, `src/lib/{methods-text,replay-status}.ts` | Save search record and `/record/[id]` (TASK-044): the stored read (`?replay=false`) then the replay; the methods text from the record and `/parse(canonical)`; tests read `record-fixture.json` (the API's own answers) through `src/test/record-fixture.ts` |
 | `src/components/{highlighted,paper-badges,paper-links,coded}.tsx`, `src/lib/excerpt.ts`, `src/api/outcome.ts` | shared by results and the paper page: `<mark>` at API spans, badges, links, backticked reducer messages as code; span conversion + excerpt window; every GET answer as data (`Outcome`) |
 | `src/api/hooks.ts` | `useMeta()` (`["meta"]`), `useCoverage()` (`["coverage"]`) |
 | `src/test/api-stub.tsx` | tests only: a stubbed fetch behind the real client (each `Call` has `path`, `query`, `body`), `renderWithApi`, fake-timer `pass(ms)`, jsdom layout polyfill |
@@ -89,7 +91,8 @@ eslint error.
 
 ## TanStack Query
 Keys: `["meta"]` (long `staleTime`), `["parse", q, mode]`, `["search", q, mode, sort, page]`,
-`["paper", id, q, mode]`, `["record", id]`. `placeholderData: keepPreviousData` for search so the list doesn't
+`["paper", id, q, mode]`, `["record", id, "stored"]` (`?replay=false`), `["record", id]` (with its replay),
+`["record-diff", id, offset]`. `placeholderData: keepPreviousData` for search so the list doesn't
 flash. A 422 is data, not an exception: render its `diagnostics` (spec 04 error shape). `openapi-fetch`'s
 `data` type is not `Schemas[...]` (its `Readable<>` widens tuple spans to `number[]`): type a response with
 `MethodResponse<Api, method, path>` and validate spans where they are used, never cast.

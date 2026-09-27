@@ -734,3 +734,46 @@ describe("refusals and failures (W6, W9, W10, W12)", () => {
     expect(screen.queryByText(/The index changed while you were working/)).toBeNull();
   });
 });
+
+describe("Export and Save in the results header (TASK-044)", () => {
+  /** `/parse` for `q` with a written status clause admitting rejected (so the status warning shows). */
+  function withStatus(q: string): ParsedFilters {
+    const n = [...q].length;
+    return { ...unrestricted(q), status: clause("status", [n - 29, n], ["accepted", "rejected"]) };
+  }
+  const Q = "trust AND status:(accepted OR rejected)";
+  const withWarning = () =>
+    handler({ parse: (q) => json(parsed(q, { filters: withStatus(q), defaults: ["track"] })) });
+
+  it("pins the export to the shown search and warns about the non-accepted papers it holds", async () => {
+    await setup(stateOf({ q: Q }), withWarning());
+    const exportButton = screen.getByRole("button", { name: "Export 412 papers" });
+    expect(exportButton.getAttribute("aria-disabled")).toBeNull();
+    expect(screen.getByRole("button", { name: /Includes 88 rejected papers/ })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Save search record" }).getAttribute("aria-disabled"),
+    ).toBeNull();
+  });
+
+  it("Show the Status filter moves focus to the sidebar's Status field", async () => {
+    await setup(stateOf({ q: Q }), withWarning());
+    fireEvent.click(screen.getByRole("button", { name: "Export 412 papers" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show the Status filter" }));
+    await pass(0);
+    expect(document.activeElement?.tagName).toBe("FIELDSET");
+    expect(document.activeElement?.querySelector("legend")?.textContent).toContain("Status");
+  });
+
+  it("disables both with DRAFT_DIRTY while the editor has unsearched edits", async () => {
+    const { view } = await setup();
+    act(() => {
+      view.dispatch({ changes: { from: view.state.doc.length, insert: " x" } });
+    });
+    await pass(300);
+    for (const name of ["Export 412 papers", "Save search record"]) {
+      const b = screen.getByRole("button", { name });
+      expect(b.getAttribute("aria-disabled")).toBe("true");
+      expect(description(b)).toContain("The editor has changes you haven't searched");
+    }
+  });
+});

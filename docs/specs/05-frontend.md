@@ -215,6 +215,39 @@ warnings, the save's index check), the design doc says so; its open questions li
    (07 §C). A review may instead report the default filters as limits, citing the canonical string; the
    record stores both strings, so either framing can be cited.
 
+   *As built (TASK-044).* The methods text is `frontend/src/lib/methods-text.ts` (`methodsText`), pure: every
+   number is a field of the record the API sent (`identified_total`, `excluded`, `unclassified_total`,
+   `total`), and the default and limit clauses are slices of `canonical` at the spans of `POST /parse`'s report
+   of that same string (`clausesOf`: a field in `defaults` is a default clause; any other field with a clause
+   of its own is a limit, and one written more than once is each clause behind it; a filter nested in an OR or
+   NOT is part of the string, not a limit). Its test renders this section's example sentence from the spec
+   file itself and requires an exact match, and runs the API's own records (`record-fixture.json`, kept
+   current by `backend/tests/contract/test_frontend_record_fixture.py`) through it, checking that the prose
+   holds no number the record didn't send. Wording this section leaves open, now pinned by those tests: an
+   empty identification string reads "with no search string (all indexed records)"; an all-negative one
+   (`/parse` of it reports `PARSE_ALL_NEGATIVE`) "with the string `<canonical>`, which without its default
+   filters identified …"; one default filter reads "Default filter `status:accepted`"; none applied reads "No
+   default filter applied, so no records were removed before screening."; the input as typed is "The input as
+   typed was `<input>`."; a Scholar record with no translation recorded says so; a translation code this
+   version doesn't word is given by its recorded message; a crawl kind it doesn't know (or a v1 record's null)
+   reads "records collected <from> to <to>"; a count of one is singular. When `/parse` answers under another
+   `query_version` than the record's, the clauses aren't separated: the limits read "within any limits it
+   states" and the defaults "The default filters (written out in the canonical query `<canonical>`)".
+
+   *As built (TASK-044): export, save and the record page.* The Export menu (`components/export/export-menu.tsx`)
+   and Save (`components/record/save-record.tsx`) sit in the results header, both disabled with the reason
+   while the draft is dirty or the results are stale. An export is `GET /export?format&q&mode&index_version=<shown>`
+   (`lib/export.ts`): its headers are read before the body, and a different `X-Index-Version` ("the index
+   changed") or, on the same index, a different `X-Total` (a bug) abandons it with nothing saved. The menu's
+   status and track warnings list `facets[field][value]` for each value the searched clause admits beyond the
+   default (`fieldWarning`; zeros left out, never summed), or name the reason with no numbers when the clause is
+   negated, nested or written more than once; the formats wait until `/parse` has reported on the shown
+   query. Save posts `{q, mode, index_version}` (a moved index is 409 with nothing saved), then reads the record
+   back for its status and methods text; `API_RECORDS_STORE_FULL` turns saving off for the session
+   (`sessionStorage`). `/record/[id]` (`components/record/record-view.tsx`) reads the stored record first
+   (`?replay=false`), then its replay; the methods text and the exports appear once the replay has answered (or
+   couldn't run: "Replay: waiting" on a 429 or `API_BUSY`), so a `mismatch` never shows either.
+
 ## Error handling
 
 - API errors are shown from the envelope's `code` and `message` (04 §Error handling), never as a raw
