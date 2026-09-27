@@ -29,14 +29,15 @@ normalization. Changing what ANY input tokenizes to requires bumping TOKENIZER_V
 
 `tokenize` works character by character so every token carries the half-open code-point span of the RAW
 text it came from (spec 04 §Conventions); highlights use those spans. A single raw character can produce
-more than one token (`½` → `1`, `2`), in which case they share its span; that is the only way two spans
-overlap (a combining-slash cluster gives each piece the raw characters it came from: `_cluster_spans`).
+more than one token (`½` → `1`, `2`), in which case they share its span; two spans overlap only on exactly
+one such code point (a combining-slash cluster gives each piece the raw characters it came from:
+`_cluster_spans`). What a query parses to never depends on those spans: the lexer reads `Token.reach`.
 """
 
 from __future__ import annotations
 
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from openproceedings.query.mathsyms import (
     GREEK,
@@ -73,6 +74,11 @@ class Token:
     start: int  # raw code-point offset, inclusive
     end: int  # raw code-point offset, exclusive
     op: bool = False  # an operator's name (`×` → `times`), not a word of the text: never a wildcard stem
+    # The end of the raw characters the token took a piece from, WHOLE: the same as `end` except inside a
+    # U+0338 cluster, where `end` stops at the piece's own characters (task-075) and `reach` covers the
+    # cluster. The lexer decides a detached wildcard (`abcd⒈` + slash + `*`) from `reach`, so per-piece
+    # highlight spans never change what parses. Not part of equality; set by `tokenize`.
+    reach: int = field(default=-1, compare=False, repr=False)
 
 
 def _is_word_char(ch: str) -> bool:
@@ -151,7 +157,10 @@ def _cluster_spans(
     - U+0345 (ypogegrammeni) is the only mark that folds to a letter, `ι`, and its combining class (240, the
       highest, and its alone) sorts it after every other mark, so its `ι`s are the fold's last pieces. After
       a piece that isn't a letter (`⩶` + slash + U+0345 → `==`, `neq`, `ι`) they start a word of their own, which starts at
-      the first raw U+0345, and the pieces before it end there.
+      the first raw U+0345, and the pieces before it end there. The one exception to "each piece spans what
+      it came from": the pieces before the first raw U+0345 end at it, even if a later mark belongs to them
+      (`=` + U+0345 + slash: `neq` spans only `=`, and the slash is in the `ι` word's span). Contiguous spans
+      can't split interleaved marks, and this keeps them from overlapping.
     Every other piece spans the whole cluster, as a combining mark extends the word it follows."""
     spans = [(i, j)] * len(folded)
     nfkc = unicodedata.normalize("NFKC", text[i])
@@ -438,7 +447,7 @@ def tokenize(text: str) -> list[Token]:
     latex = _latex_mask(text, subs=subs)
     out: list[Token] = []
     buf: list[str] = []
-    start = end = 0
+    start = end = reach = 0
     base: str | None = None
     lead: int | None = None  # where markup before a word began (`\\"{O}del`): the word's span starts there
 
@@ -448,7 +457,7 @@ def tokenize(text: str) -> list[Token]:
             word = unicodedata.normalize("NFC", "".join(buf))
             # A run of marks with no letter (a lone vowel sign) is not a word.
             if not all(unicodedata.category(ch).startswith("M") for ch in word):
-                out.append(Token(word, start, end))
+                out.append(Token(word, start, end, reach=reach))
             buf = []
 
     n = len(text)
@@ -460,14 +469,14 @@ def tokenize(text: str) -> list[Token]:
             if operator or split:
                 close()
             if operator:  # a token of its own
-                out.append(Token(spelling, i + 1, cmd_end, op=True))
+                out.append(Token(spelling, i + 1, cmd_end, op=True, reach=cmd_end))
                 base = None
             else:  # a Greek letter: part of the word, like the letter itself
                 folded, base = _fold(spelling, base)
                 if not buf:
                     start = i + 1 if lead is None else lead
                 buf.extend(p for p in folded if isinstance(p, str))
-                end = cmd_end
+                end = reach = cmd_end
             lead = None
             # an operator's name is its own token's: skip it, so no word after it starts inside it (`\\leq5`)
             i = cmd_end if operator else i + 1
@@ -479,7 +488,7 @@ def tokenize(text: str) -> list[Token]:
             continue
         if latex[i] == JOIN:  # markup inside a word: keep the word open and cover the markup in its span
             if buf:
-                end = i + 1
+                end = reach = i + 1
             elif lead is None:  # markup before any letter: a word starting next starts here
                 lead = i
             i += 1
@@ -498,18 +507,18 @@ def tokenize(text: str) -> list[Token]:
         base = folded_base
         if not folded:  # combining mark or invisible format char: extends an open word, never starts one
             if buf:
-                end = stop
+                end = reach = stop
             i = stop
             continue
         for piece, (piece_start, piece_end) in zip(folded, spans, strict=True):
             if isinstance(piece, _Op):
                 close()
-                out.append(Token(piece.name, piece_start, piece_end, op=True))
+                out.append(Token(piece.name, piece_start, piece_end, op=True, reach=stop))
             elif _is_word_char(piece):
                 if not buf:
                     start = piece_start if first is None else first
                 buf.append(piece)
-                end = piece_end
+                end, reach = piece_end, stop
             else:
                 close()
             # markup before this character belongs to its first piece only: a word that starts after an

@@ -300,7 +300,10 @@ def test_leading_accent_markup_is_in_the_word_span(text: str, spans: list[tuple[
         # at its own mark, and the pieces before it end there
         ("=\u0338\u0345x", [(0, 2), (2, 4)]),  # neq, iota x
         ("\u2a76\u0338\u0345x", [(0, 2), (2, 4)]),  # `===` SL -> `==` neq iota: found by a 300k differential
-        ("=\u0345\u0338", [(0, 1), (1, 3)]),  # marks in the other order: neq ends where iota starts
+        # Trade-off: marks in the other order. The slash belongs to neq, but neq ends at the first U+0345
+        # and the slash falls in iota's span: contiguous spans can't split interleaved marks, so the one
+        # exception is "pieces before the first U+0345 end at it" (spec 02), and nothing overlaps
+        ("=\u0345\u0338", [(0, 1), (1, 3)]),
         ("\u2208\u0338\u0345", [(0, 2), (2, 3)]),  # notin, iota
         (
             "\u03b1\u0338\u0345",
@@ -320,6 +323,30 @@ def test_slash_cluster_pieces_span_what_they_came_from(text: str, spans: list[tu
 LATEX_PIECES = ["$", "\\(", "\\)", " ", "a", "O", "5", "{", "}", "^", "_", '\\"', "\\'", "\\v", "\\H", "\\-",
                 "\\leq", "\\times", "\\alpha", "\\not", "=", "\\in", "\u0301", "\u200b", "中", "é", "-",
                 "\u00bd", "\u2474", "\u0338", "\u0345"]  # fmt: skip
+
+
+# `reach` is the end of the whole characters a token took a piece from: `end`, except that inside a slash
+# cluster it covers the cluster (the lexer's detached-wildcard check reads it; task-075 review)
+@pytest.mark.parametrize(
+    ("text", "reaches"),
+    [
+        ("x½̸y", [3, 4]),  # x1 ends at 2 but reaches over the slash; 2y ends and reaches at 4
+        ("abcd⒈̸", [3 + 3]),  # abcd1 ends at 5, before the slash on `.`, and reaches 6
+        ("≠ͅx", [3, 4]),  # neq ends at 2 (iota starts there) and reaches the cluster's end
+        ("x½y", [2, 3]),  # no slash: reach is end
+        ("$\\le$ á", [4, 8]),
+    ],
+    ids=ascii,
+)
+def test_reach_covers_the_whole_cluster(text: str, reaches: list[int]) -> None:
+    assert [t.reach for t in tokenize(text)] == reaches
+
+
+@given(st.lists(st.sampled_from([*LATEX_PIECES, "⒈", "ͅ"]), max_size=12).map("".join))
+def test_reach_is_end_plus_only_combining_marks(text: str) -> None:
+    for t in tokenize(text):
+        assert t.end <= t.reach <= len(text), (text, t, t.reach)
+        assert all(unicodedata.combining(c) for c in text[t.end : t.reach]), (text, t, t.reach)
 
 
 @given(
