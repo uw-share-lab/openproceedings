@@ -38,7 +38,11 @@ MODE_DOC = "`native` (this grammar) or `scholar` (Google Scholar / Publish or Pe
 SORT_DOC = "The order of `hits`. Never changes `total` or membership (guarantee 5)."
 OFFSET_DOC = "Hits to skip. Past the end is an empty page, not an error."
 LIMIT_DOC = "Hits per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped."
-PAPER_ID = r"^op:(neurips|iclr|icml):[0-9]{4}:\S+$"  # `op:<venue>:<year>:<native>` (spec 01 §Ids)
+DIFF_OFFSET_DOC = "Entries of each list (`added`, `removed`) to skip. Past the end is an empty list."
+DIFF_LIMIT_DOC = "Entries of each list per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped."
+# `op:<venue>:<year>:<native>` (spec 01 §Ids). `venue` is an open enum (decision-009), so the pattern takes
+# any venue-shaped name: a venue this code doesn't know is a 404 (`is_paper_id` refuses it), never a 422
+PAPER_ID = r"^op:[a-z][a-z0-9]*:[0-9]{4}:[A-Za-z0-9_-]+$"
 RECORD_ID = r"^[A-Za-z0-9_-]{12}$"  # records.RECORD_ID (a test pins them equal)
 PAPER_ID_DOC = "A paper id, `op:<venue>:<year>:<native>`. Any other shape is 422 `API_BAD_PARAM`."
 RECORD_ID_DOC = (
@@ -173,8 +177,8 @@ class ReplayInfo(Model):
     total: int | None  # null when the canonical string no longer runs (`refused`)
     excluded: Excluded | None
     ids_hash: str | None
-    ids_match: bool
-    excluded_match: bool
+    ids_match: bool | None  # null when `refused`: nothing was compared
+    excluded_match: bool | None  # null when `refused`
     # why the canonical string no longer runs (it doesn't parse, or the engine refuses it); the status stays
     # `drifted`, or `mismatch` under the record's own versions, and no membership comparison happened
     refused: DiagnosticCode | None

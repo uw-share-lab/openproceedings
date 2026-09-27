@@ -1,5 +1,9 @@
 """The `op` CLI skeleton: every planned subcommand exists and says which task implements it."""
 
+import argparse
+import json
+from pathlib import Path
+
 import pytest
 from openproceedings import cli
 
@@ -26,6 +30,22 @@ def test_stub_exits_2_and_names_its_task(name: str, task: str, capsys: pytest.Ca
     assert f"op {name}" in err
     assert task in err
     assert "not implemented yet" in err
+
+
+@pytest.mark.parametrize(("name", "found"), [("snap", True), ("../outside", False), (".hidden", False)])
+def test_the_search_header_finds_its_snapshot_by_the_one_rule(tmp_path: Path, name: str, found: bool) -> None:
+    """`op search`'s header reads the index's snapshot through `indexed_snapshot` (M3a round 2): a plain
+    directory name under <data-dir>/snapshots, never a path that leaves it."""
+    data = tmp_path / "data"
+    for where in (data / "snapshots" / "snap", data / "outside", data / "snapshots" / ".hidden"):
+        where.mkdir(parents=True)
+        (where / "manifest.json").write_text(json.dumps({"snapshot_hash": "h"}), encoding="utf-8")
+    index = data / "indexes" / "abc"
+    index.mkdir(parents=True)
+    manifest = {"snapshot": name, "snapshot_hash": "h"}
+    (index / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    got = cli._snapshot_of(argparse.Namespace(data_dir=data), index)
+    assert got == ({"snapshot_hash": "h"} if found else None)
 
 
 @pytest.mark.parametrize(("source", "task"), [("openreview", "task-050"), ("proceedings", "task-052")])

@@ -243,7 +243,10 @@ def tampered(data_dir: Path, record_id: str, *, ids: list[str] | None = None, **
     return new_id
 
 
-MISMATCHES = ["ids_hash", "excluded", "bucket", "canonical_hash", "canonical", "stored_ids"]
+MISMATCHES = [
+    "ids_hash", "excluded", "bucket", "canonical_hash", "canonical", "stored_ids", "total",
+    "identification_query", "expansions", "snapshot_hash",
+]  # fmt: skip
 
 
 def mismatched(client: TestClient, data_dir: Path, good: str, what: str) -> str:
@@ -267,6 +270,14 @@ def mismatched(client: TestClient, data_dir: Path, good: str, what: str) -> str:
     elif what == "canonical":  # the same query, stored in a non-canonical spelling (its hash unchanged)
         assert " AND " in record["canonical"]
         change = {"canonical": record["canonical"].replace(" AND ", "  AND  ")}
+    elif what == "total":  # the stored count isn't the stored list's length (an export sends the length)
+        change = {"total": record["total"] + 100}
+    elif what == "identification_query":  # quoted in a methods section
+        change = {"identification_query": record["identification_query"] + " OR forged"}
+    elif what == "expansions":
+        change = {"expansions": {**record["expansions"], "forg*": ["forged"]}}
+    elif what == "snapshot_hash":  # the corpus the record cites isn't the one its index was built from
+        change = {"snapshot_hash": "0" * 64}
     else:  # the stored list is not the one `ids_hash` names (the replay itself still matches `ids_hash`)
         assert len(record["ids"]) > 1
         return tampered(data_dir, good, ids=record["ids"][1:])
@@ -291,8 +302,11 @@ def test_a_tampered_record_is_a_mismatch_logged_once_never_drifted(
     assert lines[0]["record_id"] == bad
     assert lines[0]["canonical_match"] is (what not in ("canonical_hash", "canonical"))
     assert lines[0]["stored_ids_match"] is (
-        what not in ("ids_hash", "stored_ids")
+        what not in ("ids_hash", "stored_ids", "total")
     )  # a forged hash names no list
+    assert lines[0]["identification_match"] is (what != "identification_query")
+    assert lines[0]["expansions_match"] is (what != "expansions")
+    assert lines[0]["inputs_match"] is (what != "snapshot_hash")
     assert lines[0]["refused"] is None
     assert SECRET not in json.dumps(logs())
 
@@ -390,9 +404,9 @@ def test_a_canonical_that_no_longer_runs_is_refused_with_null_counts(
         bad = tampered(data_dir, good, canonical="(trust", query_version=query_version)
         replay_ = replayed(client, bad)["replay"]
         assert replay_["status"] == status and replay_["refused"] == "PARSE_UNBALANCED_PAREN"
-        for k in ("added_total", "removed_total", "membership_identical", "total", "excluded", "ids_hash"):
-            assert replay_[k] is None, k
-        assert (replay_["ids_match"], replay_["excluded_match"]) == (False, False)
+        for k in ("added_total", "removed_total", "membership_identical", "total", "excluded", "ids_hash",
+                  "ids_match", "excluded_match"):  # fmt: skip
+            assert replay_[k] is None, k  # compared nothing: never a false that reads as "differed"
         diff = diffed(client, bad)
         assert diff["status"] == status and diff["refused"] == "PARSE_UNBALANCED_PAREN"
         assert (diff["added"], diff["removed"]) == ([], [])
@@ -565,3 +579,59 @@ def test_the_stored_record_holds_the_query_text(client: TestClient, data_dir: Pa
     record_id = save(client, f"{SECRET} OR trust")
     stored = store_of(data_dir).get(record_id)
     assert isinstance(stored, SearchRecord) and SECRET in stored.input  # the record keeps what the logs don't
+
+
+def test_a_record_still_replays_and_exports_after_the_bootstrap_sources_change(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Citability is checked on write only (M3a round 2): the fixture's `ris` source stops being a bootstrap
+    one, and a record saved before still reads, replays and exports (guarantee 4), its citability as saved."""
+    import openproceedings.vocab as vocab
+
+    record_id = save(client, "trust")
+    monkeypatch.setattr(vocab, "BOOTSTRAP_SOURCES", frozenset())
+    body = replayed(client, record_id)
+    assert body["replay"]["status"] == "reproduced" and body["record"]["identification_citable"] is False
+    export = client.get("/api/v1/export", params={"record_id": record_id, "format": "ris"})
+    assert export.status_code == 200
+
+
+def test_an_add_only_drift_is_not_membership_identical(drift: Drift, tmp_path: Path) -> None:
+    """Papers added, none removed (M3a round 2: a check of `removed` alone would call this identical)."""
+    grown_version = build(list(records())[:320], tmp_path / "grown-src" / "snapshots", "grown",
+                          tmp_path / "grown-src" / "indexes")  # fmt: skip
+    first = only(drift, "before", drift.before, tmp_path / "first")
+    with TestClient(make_app(first)) as client:
+        record_id = save(client, EVERYTHING)
+    second = tmp_path / "second"
+    (second / "indexes").mkdir(parents=True)
+    shutil.copytree(tmp_path / "grown-src" / "snapshots", second / "snapshots")
+    shutil.copytree(tmp_path / "grown-src" / "indexes" / grown_version, second / "indexes" / grown_version)
+    (second / "indexes" / "current").symlink_to(grown_version)
+    shutil.copytree(first / RECORDS_DIR, second / RECORDS_DIR)
+    with TestClient(make_app(second)) as client:
+        replay_ = replayed(client, record_id)["replay"]
+        diff = diffed(client, record_id)
+    assert replay_["status"] == "drifted" and replay_["removed_total"] == 0 and replay_["added_total"] > 0
+    assert replay_["membership_identical"] is False
+    assert diff["removed"] == [] and diff["added"] and diff["membership_identical"] is False
+
+
+def test_a_record_id_never_starts_with_a_csv_formula_character(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A drawn id starting with `-` is drawn again (M3a round 2): the CSV formula guard would write it as
+    `'-…`, and the export's record_id cell wouldn't read back as the id."""
+    import csv
+    import io
+
+    import openproceedings.records as records_module
+
+    draws = iter(["-AAAAAAAAAAA", "BBBBBBBBBBBB"])
+    monkeypatch.setattr(records_module.secrets, "token_urlsafe", lambda n: next(draws))
+    record_id = save(client, "trust")
+    assert record_id == "BBBBBBBBBBBB"
+    monkeypatch.undo()
+    body = client.get("/api/v1/export", params={"record_id": record_id, "format": "csv"}).text
+    rows = list(csv.DictReader(io.StringIO(body)))
+    assert rows and {row["record_id"] for row in rows} == {record_id}  # round-trips as itself

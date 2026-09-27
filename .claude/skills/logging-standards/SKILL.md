@@ -31,8 +31,9 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   type, frames and reason too (`cause`, `cause_frames`, `cause_reason`).
 - **A state, not a stream.** A condition that persists (a full record store, an unreadable index
   directory) logs once when it starts and once when it ends (`records_store_full` /
-  `records_store_recovered`, `index_list_failed` / `index_list_recovered`), never once per request that
-  meets it.
+  `records_store_recovered`, `index_list_failed` / `index_list_recovered`, `record_saves_throttled` /
+  `record_saves_recovered`), never once per request that meets it. The flip of the state and its line happen
+  under one lock, so two threads meeting the change log it once.
 
 ## Levels mean something
 | Level | Use for | Example |
@@ -67,9 +68,10 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 
 ## API access line (INFO, exactly one per request)
 `request` event with: `request_id`, `method`, `route` (the template, e.g. `/api/v1/papers/{id}`, not the
-concrete path), `status`, `ms`, `index_version`, `canonical_hash` (search/export), `total`. Health checks
+concrete path), `status`, `ms`, `index_version`, `canonical_hash` (search/export), `total`, and `code` (the
+error envelope's code, on every refusal and every 500; `api.errors.note_code`). Health checks
 log at DEBUG. An unexpected failure is one `request_failed` ERROR line beside it: `code`, `error`, `frames`,
-and for a wrapped one `cause`, `cause_frames` (where it really failed: Starlette wraps an error its handler
+and for a wrapped one (only then: never `cause: null`) `cause`, `cause_frames` (where it really failed: Starlette wraps an error its handler
 catches after a stream started in a RuntimeError whose frames stop at the handler) and `cause_reason`. `status` is what the client was sent. If a handler fails after the response started (a
 stream cut short), the line adds `aborted: true`, beside that failure's one `request_failed` ERROR line;
 uvicorn then also logs `ASGI callable returned without completing response.` at ERROR (it closes the

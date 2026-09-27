@@ -587,6 +587,18 @@ def test_a_drifted_record_whose_stored_list_is_not_its_hash_is_409(
     error(recorded.get(EXPORT, params={"record_id": bad, "format": "jsonl"}), 409, "API_RECORD_MISMATCH")
 
 
+def test_a_drifted_record_whose_total_is_not_its_lists_length_is_409(
+    recorded: TestClient, data_dir: Path
+) -> None:
+    """X-Total is the stored list's length; a record whose `total` says otherwise is refused by the route's
+    own check (a drifted record passes the replay's gate), never streamed under a count it doesn't cite."""
+    good = save(recorded, "trust")
+    stored = recorded.get(f"/api/v1/records/{good}").json()["record"]
+    bad = tampered(data_dir, good, total=stored["total"] + 100, query_version="0")
+    assert recorded.get(f"/api/v1/records/{bad}").json()["replay"]["status"] == "drifted"
+    error(recorded.get(EXPORT, params={"record_id": bad, "format": "jsonl"}), 409, "API_RECORD_MISMATCH")
+
+
 def test_a_record_export_past_the_first_chunk_has_every_id(
     recorded: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -631,8 +643,7 @@ def test_a_record_whose_index_is_gone_is_409_unavailable(recorded: TestClient, d
     "extra",
     [
         {"q": "trust"},
-        {"mode": "native"},  # the default, sent explicitly: still refused (read from the query string)
-        {"mode": "scholar"},
+        {"mode": "scholar"},  # a record's canonical string is native syntax
         {"index_version": "0123456789ab"},
         {"q": "trust", "mode": "native", "index_version": "0123456789ab"},
     ],
@@ -645,7 +656,16 @@ def test_a_record_id_with_a_query_mode_or_version_is_422(recorded: TestClient, e
     e = error(
         recorded.get(EXPORT, params={"record_id": record_id, "format": "ris", **extra}), 422, "API_BAD_PARAM"
     )
-    assert "record_id alone" in e["message"]
+    assert "record_id (mode native at most)" in e["message"]
+
+
+def test_a_record_id_with_the_declared_default_mode_is_served(recorded: TestClient) -> None:
+    """`mode=native` is `mode`'s declared default, which some generated clients always send (M3a round 2):
+    a record replays its canonical string natively, so it is accepted; only `scholar` is refused."""
+    record_id = save(recorded, "trust")
+    plain = recorded.get(EXPORT, params={"record_id": record_id, "format": "ris"})
+    native = recorded.get(EXPORT, params={"record_id": record_id, "format": "ris", "mode": "native"})
+    assert native.status_code == 200 and native.content == plain.content
 
 
 def test_an_unknown_record_is_404(recorded: TestClient) -> None:

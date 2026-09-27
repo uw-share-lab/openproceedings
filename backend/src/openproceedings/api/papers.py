@@ -33,7 +33,8 @@ def get_paper(
     """The paper with this id in the served index, as its snapshot holds it (the records loaded with that
     very engine: one bundle, whatever swaps happen meanwhile)."""
     engine = served.engine
-    if not is_paper_id(id) or id not in engine.display([id]):  # the pattern is is_paper_id's (tested)
+    # the pattern admits any venue (an open enum); one this code doesn't know is no paper here: 404
+    if not is_paper_id(id) or id not in engine.display([id]):
         raise ApiError(
             DiagnosticCode.API_PAPER_NOT_FOUND, f"No paper with that id in index {engine.index_version}."
         )

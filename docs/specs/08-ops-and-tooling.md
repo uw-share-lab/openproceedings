@@ -137,10 +137,45 @@ checks the head repo, so a fork branch named `dev` cannot use it.
 Caddy in front for TLS. Caddy must not log query strings: `GET /api/v1/search?q=…` carries the query
 (spec 04 §Implementation notes). **`op serve` must sit behind that proxy**, never face clients directly:
 uvicorn (h11) has no request-header or slow-body timeout of its own, so the proxy's timeouts are what bound a
-client that sends its request slowly; the app caps a body at 64 KiB (413 `API_BODY_TOO_LARGE`) and uvicorn's
-`limit_concurrency` (`ApiConfig.limit_concurrency`, default 64) bounds the connections one process holds. The
-proxy is also the one trusted proxy (`--trusted-proxy <its address>`); `0.0.0.0/0` and `::/0` are refused, as
-is `--no-rate-limit` with a non-loopback `--host`. The data volume is read-only in `api`, except the `records/` directory
+client that sends its request slowly; the app caps a body at 64 KiB (413 `API_BODY_TOO_LARGE`), uvicorn's
+`limit_concurrency` (`ApiConfig.limit_concurrency`, default 256) bounds the connections one process holds,
+and `timeout_keep_alive` (`keep_alive_seconds`, default 5) closes an idle one. The Caddyfile **must** set
+(Caddy v2 directive names, checked against the Caddy docs 2026-09-27):
+
+```caddy
+{
+	servers {
+		timeouts {
+			read_header 5s   # a client's request line and headers (default: no timeout)
+			read_body   10s  # its body (default: no timeout)
+			idle        2m   # a keep-alive connection between requests
+			# no `write` timeout: an export of the whole matched set streams for as long as it takes
+		}
+		max_header_size 64KB  # the API's own request-head limit (a 2,000-code-point q fits)
+	}
+}
+openproceedings.example {
+	request_body {
+		max_size 64KB  # the API's own body cap: refuse larger before forwarding
+	}
+	reverse_proxy /api/* api:8000 {
+		request_buffers 64KB  # read the whole (capped) body before opening the upstream request
+	}
+	log {
+		format filter {  # never the query: GET /api/v1/search?q=… carries it, and so does a Referer
+			request>uri delete
+			request>headers>Referer delete
+		}
+	}
+}
+```
+
+`read_header` and `read_body` bound a slow client at the proxy, so only whole requests reach uvicorn;
+`request_buffers` makes the proxy read the body before it takes an upstream connection, so a client that
+trickles its body holds a proxy goroutine, not one of the API's `limit_concurrency` slots. The proxy is also
+the one trusted proxy (`--trusted-proxy <its address>`); a trusted network wider than /8 (IPv4) or /32 (IPv6)
+is refused, as is `--no-rate-limit` with a non-loopback `--host`. Swagger UI (`/api/v1/docs`, scripts from a
+CDN) is off on a non-loopback `--host` unless `--docs` is passed; leave it off in production. The data volume is read-only in `api`, except the `records/` directory
 (`records/records.sqlite` and the WAL files SQLite writes beside it; spec 04 §Search records), and it
 holds each served index's snapshot beside it (`/papers/{id}` reads provenance from it). Refreshing the index
 means building a new `index_version` offline, switching the `current` symlink, and sending SIGHUP. Hosting is

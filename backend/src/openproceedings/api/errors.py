@@ -55,7 +55,8 @@ class ErrorBody(BaseModel):
 
     code: ErrorCode
     message: str
-    # present (non-empty) on a query refusal (`PARSE_*`, `FIELD_*`, `WILDCARD_*`), absent otherwise; never null
+    # present (non-empty) on a query refusal (`PARSE_*`, `FIELD_*`, `WILDCARD_*`,
+    # `API_TOO_MANY_VERIFIED_CLAUSES`), absent otherwise; never null
     diagnostics: list[Diagnostic] | SkipJsonSchema[None] = Field(default=None)
 
 
@@ -130,6 +131,13 @@ def request_id(scope: Mapping[str, object]) -> str:
     return str(fields.get("request_id", "")) if isinstance(fields, dict) else ""
 
 
+def note_code(scope: Mapping[str, object], code: DiagnosticCode | str) -> None:
+    """Put an error envelope's code on the request's access line (`code`): every refusal and every 500."""
+    fields = scope.get(ACCESS)
+    if isinstance(fields, dict):
+        fields["code"] = str(code)
+
+
 def internal_error(scope: Mapping[str, object], exc: BaseException) -> JSONResponse:
     """Log an unexpected failure once (ERROR: type and frames, never the message) and answer 500
     `API_INTERNAL` naming the request id, so a report can be matched to the log line."""
@@ -137,10 +145,10 @@ def internal_error(scope: Mapping[str, object], exc: BaseException) -> JSONRespo
     fields: dict[str, object] = {
         "code": str(DiagnosticCode.API_INTERNAL),
         "error": type(exc).__name__,
-        "cause": type(cause).__name__ if cause is not None else None,
         "frames": frames(exc),
     }
-    if cause is not None:
+    if cause is not None:  # absent, not null, when there is none
+        fields["cause"] = type(cause).__name__
         # Starlette wraps an exception its handlers catch after the response started (a stream failing
         # mid-body) in a RuntimeError whose own frames stop at the handler; where it failed is the cause's
         fields["cause_frames"] = frames(cause)
@@ -148,6 +156,7 @@ def internal_error(scope: Mapping[str, object], exc: BaseException) -> JSONRespo
         if reason is not None:
             fields["cause_reason"] = reason
     log.error("request_failed", extra=fields)
+    note_code(scope, DiagnosticCode.API_INTERNAL)
     rid = request_id(scope)
     return error_response(
         DiagnosticCode.API_INTERNAL,
@@ -155,13 +164,15 @@ def internal_error(scope: Mapping[str, object], exc: BaseException) -> JSONRespo
     )
 
 
-def _refused(code: DiagnosticCode | str) -> None:
-    log.debug("request_refused", extra={"code": str(code)})  # the client's own request: DEBUG at most
+def refused(scope: Mapping[str, object], code: DiagnosticCode | str) -> None:
+    """A refusal of the client's own request: its code on the access line, and a DEBUG line at most."""
+    note_code(scope, code)
+    log.debug("request_refused", extra={"code": str(code)})
 
 
 async def _api_error(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, ApiError)
-    _refused(exc.code)
+    refused(request.scope, exc.code)
     return error_response(exc.code, exc.message, diagnostics=exc.diagnostics, headers=exc.headers)
 
 
@@ -173,7 +184,7 @@ async def _validation(request: Request, exc: Exception) -> JSONResponse:
     problems = [
         f"{'.'.join(str(p) for p in e.get('loc', ()))}: {e.get('msg', 'invalid')}" for e in exc.errors()
     ]
-    _refused(DiagnosticCode.API_BAD_PARAM)
+    refused(request.scope, DiagnosticCode.API_BAD_PARAM)
     return error_response(
         DiagnosticCode.API_BAD_PARAM, "Check the request's parameters — " + "; ".join(problems) + "."
     )
@@ -183,12 +194,12 @@ async def _http(request: Request, exc: Exception) -> JSONResponse:
     """Starlette's routing refusals: no such endpoint (404) or another method (405, with `Allow`)."""
     assert isinstance(exc, StarletteHTTPException)
     if exc.status_code == 404:
-        _refused(DiagnosticCode.API_NOT_FOUND)
+        refused(request.scope, DiagnosticCode.API_NOT_FOUND)
         return error_response(
             DiagnosticCode.API_NOT_FOUND, "There is no such endpoint; the API lives under /api/v1."
         )
     if exc.status_code == 405:
-        _refused(DiagnosticCode.API_METHOD_NOT_ALLOWED)
+        refused(request.scope, DiagnosticCode.API_METHOD_NOT_ALLOWED)
         allow = (exc.headers or {}).get("Allow", "")
         return error_response(
             DiagnosticCode.API_METHOD_NOT_ALLOWED,
@@ -196,7 +207,7 @@ async def _http(request: Request, exc: Exception) -> JSONResponse:
             headers={"Allow": allow} if allow else None,
         )
     if 400 <= exc.status_code < 500:  # nothing of ours raises one, but a 4xx is the client's, never a 500
-        _refused(DiagnosticCode.API_BAD_PARAM)
+        refused(request.scope, DiagnosticCode.API_BAD_PARAM)
         return error_response(DiagnosticCode.API_BAD_PARAM, "The request can't be served as sent.")
     return internal_error(request.scope, exc)
 
@@ -212,7 +223,7 @@ async def _openproceedings(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, OpenProceedingsError)
     if isinstance(exc, InternalError) or http_status(exc.code) is None:
         return internal_error(request.scope, exc)
-    _refused(exc.code)
+    refused(request.scope, exc.code)
     diagnostics: list[Diagnostic] | None = None
     if str(exc.code).startswith(QUERY_CODES):
         located = getattr(exc, "diagnostics", None)

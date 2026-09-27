@@ -27,7 +27,9 @@ WARNING) or `tampered` (its files or manifest don't verify, one ERROR). Engines 
 `ApiConfig.pinned_indexes`; a refusal is remembered for `pinned_refusal_seconds`, or until the next reload
 (SIGHUP); client-chosen `absent` refusals are held in a map of their own, so naming many absent versions
 can't evict a remembered `tampered` or `unloadable` one. A cache hit takes no lock that an open holds; at
-most one pinned index is opened (and so re-hashed) at a time, whatever its version.
+most one pinned index is opened (and so re-hashed) at a time, whatever its version. A name is resolved
+before that one-at-a-time slot is taken, so a version this instance doesn't hold is refused at once, never
+queued behind another version's open.
 
 Every failure line carries a `reason` constant, never a message (messages name paths): an
 `IndexSelectionError`'s (`name_invalid`, `not_found`, `outside_indexes`), an `IndexBuildError`'s
@@ -184,6 +186,7 @@ class IndexState:
         # many versions would multiply that cost (a request waits here, then finds its version cached)
         self._open_slot = threading.Lock()
         self._listing_failed = False  # `available` logs a failing listing once per change of state
+        self._listing_lock = threading.Lock()  # guards the flip of `_listing_failed` and its log line
         # cold position verification, on every engine this state opens: at most `verification_slots` at a
         # time, across all requests and indexes; one more is refused, never queued (spec 04 §Rate limit)
         self._verifying = threading.BoundedSemaphore(verification_slots)
@@ -247,6 +250,7 @@ class IndexState:
         except Exception as e:  # the handling layer: logged once, and the service keeps what it has
             fields: dict[str, object] = {
                 "error": type(e).__name__,
+                "index_name": self._name,  # the configured name (`current` or an index_version), never a path
                 "index_version_attempted": attempted,  # null when the name didn't resolve to an index
                 "index_version_kept": kept,
             }
@@ -291,13 +295,17 @@ class IndexState:
             }
         except OSError as e:
             found = set()
-            if not self._listing_failed:  # once per change of state, not once per /meta
-                self._listing_failed = True
-                log.warning("index_list_failed", extra={"error": type(e).__name__, "reason": reason_of(e)})
+            with self._listing_lock:  # once per change of state, not once per /meta (nor per racing thread)
+                if not self._listing_failed:
+                    self._listing_failed = True
+                    log.warning(
+                        "index_list_failed", extra={"error": type(e).__name__, "reason": reason_of(e)}
+                    )
         else:
-            if self._listing_failed:
-                self._listing_failed = False
-                log.info("index_list_recovered")
+            with self._listing_lock:
+                if self._listing_failed:
+                    self._listing_failed = False
+                    log.info("index_list_recovered")
         if engine is not None:
             found.add(engine.index_version)
         return sorted(found)
@@ -319,8 +327,7 @@ class IndexState:
         with opening:  # one open of this version at a time; others wait, then find it cached
             cached = self._cached(version)
             if cached is None:
-                with self._open_slot:  # and one open of any version at a time
-                    cached = self._open_pinned(version)
+                cached = self._resolve_and_open(version)
                 with self._cache_lock:
                     self._remember(version, cached)
         with self._cache_lock:
@@ -360,14 +367,20 @@ class IndexState:
             while len(self._refused) > MAX_REFUSALS:
                 self._refused.popitem(last=False)
 
-    def _open_pinned(self, version: str) -> Pinned:
-        started = time.perf_counter()
+    def _resolve_and_open(self, version: str) -> Pinned:
+        """Resolve `version`'s directory first (a stat or two: an absent or alias name is refused here, without
+        waiting for the open slot), then open it in the one open slot."""
         try:
             path = index_path(self._data_dir, version)
         except IndexSelectionError as e:
             return self._refuse(version, "absent", e)
         if path.name != version:  # a symlink named like a version: not the version asked for
             return self._refuse(version, "absent", None, detail="alias")
+        with self._open_slot:  # one open of any version at a time
+            return self._open_pinned(version, path)
+
+    def _open_pinned(self, version: str, path: Path) -> Pinned:
+        started = time.perf_counter()
         try:
             engine = self._gated(
                 self._opener(path)
@@ -427,6 +440,10 @@ def _servable(index: Path) -> bool:
 
     try:
         manifest = json.loads((index / "manifest.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError) as e:  # not listed; DEBUG, as `/meta` asks on every call
+        log.debug(
+            "index_manifest_unreadable",
+            extra={"index_version": index.name, "error": type(e).__name__, "reason": reason_of(e)},
+        )
         return False
     return isinstance(manifest, dict) and unservable(manifest) is None

@@ -45,7 +45,7 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, model_validator
 
 from openproceedings.diagnostics import DiagnosticCode, InternalError, OpenProceedingsError
 from openproceedings.engine.index import VERSION_NAME
@@ -82,7 +82,12 @@ def ids_hash(ids: Iterable[str]) -> str:
 
 
 def new_record_id() -> str:
-    return secrets.token_urlsafe(9)
+    """12 URL-safe characters, the first a letter or digit: an id starting with `-` (or `=`, `+`, `@`) would
+    be written to a CSV cell with the formula guard's `'` and not read back as itself (spec 04 §Exports)."""
+    while True:
+        drawn = secrets.token_urlsafe(9)
+        if drawn[0].isascii() and drawn[0].isalnum():
+            return drawn
 
 
 def valid_record_id(value: str) -> bool:
@@ -164,16 +169,20 @@ class SearchRecord(_Stored):
     identification_citable: bool | None = None  # v2: not bootstrap_only(sources)
     # v2, per crawl_dates key: "crawl" (fetch times, UTC), "scholar_query_dates" (Publish or Perish's query
     # dates: local wall time stored labelled UTC, so an end can be a day off) or "mixed" (`*` over both)
-    crawl_dates_kind: dict[str, str] | None = None
+    crawl_dates_kind: dict[str, str] | None = Field(
+        default=None,
+        description="Per `crawl_dates` key, what its window's ends are: `crawl`, `scholar_query_dates` or "
+        "`mixed` today. Open set: new values may be added within /api/v1; handle a value you don't know.",
+    )
 
     @model_validator(mode="after")
     def _v2_fields(self) -> SearchRecord:
-        """A v2 body has every v2 field, and its citability is the one its sources give."""
+        """A v2 body has every v2 field. Its citability is checked against its sources on write only
+        (`RecordStore.insert`): which sources are bootstrap ones is this code's `vocab.BOOTSTRAP_SOURCES`, and
+        a stored body outlives the code that wrote it, so a later change there must never make it unreadable."""
         if self.body_version >= 2:
             if self.sources is None or self.identification_citable is None or self.crawl_dates_kind is None:
                 raise ValueError("a v2 record body names its sources, citability and window kinds")
-            if self.identification_citable == bootstrap_only(self.sources):
-                raise ValueError("a record's identification_citable contradicts its sources")
             if set(self.crawl_dates_kind) != set(self.crawl_dates):
                 raise ValueError("a record's crawl_dates_kind has other keys than its crawl_dates")
         return self
@@ -242,10 +251,10 @@ def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> SnapshotFacts:
     `scholar_query_dates`, not a crawl; `*` over bootstrap sources alone is too, over both is `mixed`."""
     try:
         _path, manifest = indexed_snapshot(data_dir, inputs)  # the name and hash rule of the API's load
-        sources = sorted(manifest.get("sources", {}))
+        sources = sorted(manifest["sources"])  # required: no sources named is not "a crawl, citable"
         crawl = {ALL_SOURCES: _window(manifest["crawl_window"])}
         kinds = {ALL_SOURCES: _kind(sources)}
-        for source, entry in sorted(manifest.get("sources", {}).items()):
+        for source, entry in sorted(manifest["sources"].items()):
             if source == ALL_SOURCES:
                 raise ValueError("a source can't be named `*`")
             if isinstance(entry, dict) and "crawl_window" in entry:
@@ -390,6 +399,7 @@ class RecordStore:
         self._ready = False
         self._init = threading.Lock()
         self._full = False  # the last save's view: its log line is written on a change, not per refusal
+        self._full_lock = threading.Lock()  # guards the flip of `_full` and its log line
 
     def _connect(self, *, read_only: bool = False) -> sqlite3.Connection:
         if read_only:
@@ -442,17 +452,18 @@ class RecordStore:
         if not full and self.min_free_bytes:
             at = next(p for p in (self.directory, *self.directory.parents) if p.exists())
             full = shutil.disk_usage(at).free < self.min_free_bytes
-        if full != self._full:  # one line per change of state (full, then recovered), not one per refusal
-            self._full = full
-            log.log(
-                logging.WARNING if full else logging.INFO,
-                "records_store_full" if full else "records_store_recovered",
-                extra={
-                    "bytes": self._used_bytes(),
-                    "max_bytes": self.max_bytes,
-                    "min_free_bytes": self.min_free_bytes,
-                },
-            )
+        with self._full_lock:  # one line per change of state (full, then recovered), even across threads
+            if full != self._full:
+                self._full = full
+                log.log(
+                    logging.WARNING if full else logging.INFO,
+                    "records_store_full" if full else "records_store_recovered",
+                    extra={
+                        "bytes": self._used_bytes(),
+                        "max_bytes": self.max_bytes,
+                        "min_free_bytes": self.min_free_bytes,
+                    },
+                )
         if full:
             raise RecordStoreFull(
                 DiagnosticCode.API_RECORDS_STORE_FULL,
@@ -472,6 +483,11 @@ class RecordStore:
         if fields.get("ids_hash") != key:
             raise InternalError(
                 DiagnosticCode.API_INTERNAL, "a record's ids_hash must be the hash of its ids"
+            )
+        sources, citable = fields.get("sources"), fields.get("identification_citable")
+        if isinstance(sources, list) and citable == bootstrap_only(sources):  # on write only (`_v2_fields`)
+            raise InternalError(
+                DiagnosticCode.API_INTERNAL, "a record's identification_citable contradicts its sources"
             )
         self._check_room()  # before the file exists, so an empty store always takes its first record
         self._ensure()
@@ -582,8 +598,8 @@ class Replay:
     changed: tuple[Changed, ...]  # empty unless drifted
     added: tuple[str, ...] | None  # ids the replay matched that the record doesn't hold; None if refused
     removed: tuple[str, ...] | None  # ids the record holds that the replay didn't match; None if refused
-    ids_match: bool
-    excluded_match: bool
+    ids_match: bool | None  # None when refused: nothing was compared
+    excluded_match: bool | None
 
     @property
     def membership_identical(self) -> bool | None:
@@ -640,9 +656,11 @@ def replay(record: SearchRecord, served: TantivyEngine, pinned: PinnedLoader, da
 
     - on the record's own index if this instance has it (the served one, or `pinned`'s engine, which must
       be that very version: any other counts as unavailable); else on the served index;
-    - `reproduced` when it ran on its own index under its own query version and `ids_hash`, `excluded` and
-      the canonical re-parse all match; `mismatch` when those versions match but something else doesn't
-      (ERROR `API_REPLAY_MISMATCH`, once per record per process, then DEBUG);
+    - `reproduced` when it ran on its own index under its own query version and `ids_hash`, `excluded`,
+      the canonical re-parse (canonical string, hash and identification query), the expansions, the index's
+      inputs (snapshot_hash, tokenizer, schema, ranking) and the stored list (its hash and its `total`) all
+      match; `mismatch` when those versions match but something else doesn't (ERROR `API_REPLAY_MISMATCH`,
+      once per record per process, then DEBUG);
     - otherwise `drifted`, naming each changed input (only the query version, when its own index is here).
     A canonical that no longer runs (`refused`) compares nothing: `added` and `removed` are None.
     """
@@ -656,17 +674,36 @@ def replay(record: SearchRecord, served: TantivyEngine, pinned: PinnedLoader, da
     on_own_index = engine is not None
     ran_on = engine if engine is not None else served
     parsed, found, refused = _run(ran_on, record.canonical)
-    ids_match = found is not None and found.ids_hash == record.ids_hash
-    excluded_match = found is not None and found.excluded == record.excluded.model_dump()
+    # a refused replay compares nothing: both null, never a false that reads as "compared and differed"
+    ids_match = found.ids_hash == record.ids_hash if found is not None else None
+    excluded_match = found.excluded == record.excluded.model_dump() if found is not None else None
     status: Status
     if on_own_index and record.query_version == QUERY_VERSION:
         changed: tuple[Changed, ...] = ()
         canonical_match = (
             parsed.canonical == record.canonical and parsed.canonical_hash == record.canonical_hash
         )
-        # the stored list is the one `ids_hash` names (an export hands over that list, not the replay's)
-        stored_match = record.ids is not None and ids_hash(record.ids) == record.ids_hash
-        matched = canonical_match and ids_match and excluded_match and stored_match
+        # quoted in a methods section, so a stored one that the re-parse and re-run don't give is a mismatch
+        identification_match = parsed.identification_query == record.identification_query
+        expansions_match = found.expansions == record.expansions if found is not None else None
+        # the index's own inputs, from its manifest: the record names them (snapshot_hash is cited)
+        inputs_match = not changed_inputs(record, index_inputs(data_dir, record.index_version), QUERY_VERSION)
+        # the stored list is the one `ids_hash` names and `total` counts (an export hands over that list and
+        # sends its length as X-Total, not the replay's)
+        stored_match = (
+            record.ids is not None
+            and ids_hash(record.ids) == record.ids_hash
+            and record.total == len(record.ids)
+        )
+        matched = (
+            canonical_match
+            and identification_match
+            and bool(expansions_match)
+            and inputs_match
+            and bool(ids_match)
+            and bool(excluded_match)
+            and stored_match
+        )
         status = "reproduced" if matched else "mismatch"
         if status == "mismatch":
             fields = {
@@ -677,6 +714,9 @@ def replay(record: SearchRecord, served: TantivyEngine, pinned: PinnedLoader, da
                 "ids_match": ids_match,
                 "excluded_match": excluded_match,
                 "canonical_match": canonical_match,
+                "identification_match": identification_match,
+                "expansions_match": expansions_match,
+                "inputs_match": inputs_match,
                 "stored_ids_match": stored_match,
                 "refused": str(refused) if refused is not None else None,
             }

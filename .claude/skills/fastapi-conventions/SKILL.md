@@ -75,17 +75,23 @@ raised mid-stream: `errors.internal_error` logs the cause's frames and reason, s
 ## Rate limit, body cap and CORS
 - An in-app token bucket per client IP, and one per client network (IPv4 /24, IPv6 /48) checked with it,
   with capacity and refill set in config. Behind Caddy, take the client IP from `X-Forwarded-For` **only**
-  when the peer is a configured trusted proxy (never `0.0.0.0/0` or `::/0`: refused). Otherwise every user
+  when the peer is a configured trusted proxy (no network wider than /8 IPv4 or /32 IPv6: refused). Otherwise every user
   shares Caddy's IP, or anyone can spoof theirs.
-- An export or a record route costs `export_weight` (it touches the whole set). A query with a
-  position-verified clause costs `verified_weight`: a cost known only after the parse is charged with
-  `middleware.charge(request.scope, total)` (`deps.searchable` does it for every route that runs a query).
+- An export or a record route costs `export_weight` (it touches the whole set). A query's
+  position-verified clauses are counted from the AST (`deps.verified_clauses`): over
+  `ApiConfig.max_verified_clauses` is 422 `API_TOO_MANY_VERIFIED_CLAUSES` (decision-010), else each costs
+  `verified_weight` (at most the bucket): a cost known only after the parse is charged with
+  `middleware.charge(request.scope, total)` (`deps.charge_verified`, from `deps.searchable` for every route
+  that runs a query and from the record routes for a replay).
   Cold verification is bounded by `ApiConfig.verification_slots` through `TantivyEngine.verification_gate`
   (set by `IndexState` on every engine it opens) and refused with 503 `API_BUSY`, never queued.
-- Record saves are held to an instance-wide ceiling (`record_saves_burst`, `record_saves_per_hour`).
+- Record saves are held to a per-network ceiling (`record_saves_network_burst`,
+  `record_saves_network_per_hour`) and an instance-wide one (`record_saves_burst`, `record_saves_per_hour`),
+  taken together (`api/records.py::SaveCeiling`); a save that then saves nothing is refunded.
 - `BodyLimit` refuses a body over `ApiConfig.max_body_bytes` (64 KiB) before anything reads it, on
-  `Content-Length` and on a chunked body's bytes. uvicorn runs with `limit_concurrency`; `op serve` sits
-  behind the proxy (spec 08 §Deploy).
+  `Content-Length` and on a chunked body's bytes. uvicorn runs with `limit_concurrency` and
+  `timeout_keep_alive`; `op serve` sits behind the proxy, whose timeouts and request buffering spec 08 §Deploy
+  requires. Swagger UI (CDN scripts) is off unless `ApiConfig.serve_docs` (`op serve`: loopback only).
 - CORS: an explicit origin allowlist from config. No `*`, no regex wildcards. v1 has no auth and no
   cookies, so `allow_credentials=False`.
 

@@ -71,6 +71,8 @@ class DiagnosticCode(StrEnum):
     API_RECORDS_STORE_FULL = "API_RECORDS_STORE_FULL"  # a save refused: the record store is full (task-037)
     API_BODY_TOO_LARGE = "API_BODY_TOO_LARGE"  # a request body over the cap (task-079)
     API_BUSY = "API_BUSY"  # position verification's slots are all taken: retry shortly (M3a review)
+    # more position-verified clauses than the instance runs in one query (M3a review round 2, decision-010)
+    API_TOO_MANY_VERIFIED_CLAUSES = "API_TOO_MANY_VERIFIED_CLAUSES"
 
 
 _API_STATUS: dict[DiagnosticCode, int] = {
@@ -87,6 +89,7 @@ _API_STATUS: dict[DiagnosticCode, int] = {
     DiagnosticCode.API_RECORDS_STORE_FULL: 503,
     DiagnosticCode.API_BODY_TOO_LARGE: 413,
     DiagnosticCode.API_BUSY: 503,
+    DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES: 422,
 }
 
 

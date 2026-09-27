@@ -276,17 +276,20 @@ def test_a_malformed_paper_id_is_a_422_like_a_malformed_record_id_without_asking
         raise AssertionError("the index was asked about a malformed id")
 
     monkeypatch.setattr(engine, "display", refuse)
-    for rid in ("nope", "op:iclr:24:x", "op:acl:2024:x", "x" * 5000, SECRET, "op:iclr:2024:Fx0001 x"):
+    for rid in ("nope", "op:iclr:24:x", "op:ACL:2024:x", "x" * 5000, SECRET, "op:iclr:2024:Fx0001 x"):
         e = error(client.get(f"/api/v1/papers/{rid}"), 422, "API_BAD_PARAM")
         assert rid not in e["message"]
+    # a venue this code doesn't know is well-formed (venue is an open enum, decision-009): not found
+    error(client.get("/api/v1/papers/op:acl:2024:x"), 404, "API_PAPER_NOT_FOUND")
     for rid in ("nope", "short", "x" * 13):
         e = error(client.get(f"/api/v1/records/{rid}"), 422, "API_BAD_PARAM")
         e = error(client.get(f"/api/v1/records/{rid}/diff"), 422, "API_BAD_PARAM")
         assert rid not in e["message"]
 
 
-def test_the_path_patterns_are_the_ids_own_checks() -> None:
-    """The documented `pattern`s are what the code checks (`is_paper_id`, `records.RECORD_ID`)."""
+def test_the_path_patterns_admit_every_id_the_code_makes(client: TestClient) -> None:
+    """The paper `pattern` admits every id the code makes (a superset of `is_paper_id` on real ids, any venue
+    included: an open enum); the record one is exactly `records.RECORD_ID`."""
     import re
 
     from openproceedings.api.models import PAPER_ID, RECORD_ID
@@ -294,14 +297,14 @@ def test_the_path_patterns_are_the_ids_own_checks() -> None:
     from openproceedings.records import RECORD_ID as RECORD_ID_RE
     from openproceedings.records import valid_record_id
 
-    for text in (
-        "op:iclr:2024:x",
-        "op:neurips:1987:a-b_c.d",
-        "op:icml:2023:Fx0001 x",
-        "op:acl:2024:x",
-        "nope",
-    ):
-        assert bool(re.fullmatch(PAPER_ID, text)) == is_paper_id(text), text
+    engine = client.app.state.index.engine  # type: ignore[attr-defined]
+    made = [*engine.ids, "op:icml:2023:pmlr-v202-x_y", "op:neurips:2019:nips-" + "0" * 32, "op:acl:2024:x"]
+    for text in made:
+        assert re.fullmatch(PAPER_ID, text), text
+    for text in engine.ids:
+        assert is_paper_id(text), text
+    for text in ("nope", "op:iclr:24:x", "op:icml:2023:Fx0001 x", "op:ICLR:2024:x", "op:iclr:2024:"):
+        assert not re.fullmatch(PAPER_ID, text), text
     assert f"^{RECORD_ID_RE.pattern}$" == RECORD_ID
     for text in ("AAAAAAAAAAAA", "a-_b" * 3, "short", "x" * 13):
         assert bool(re.fullmatch(RECORD_ID, text)) == valid_record_id(text), text

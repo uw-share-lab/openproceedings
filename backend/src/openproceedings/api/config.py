@@ -18,15 +18,18 @@ from openproceedings.engine.index import VERSION_NAME
 # Nothing else — no `/`, no `..` — so a name can never leave `<data_dir>/indexes/` (task-034 notes).
 INDEX_NAME = re.compile(rf"current|{VERSION_NAME.pattern}")
 # An exact origin: scheme, host, optional port; no path, no wildcard (fastapi-conventions §Rate limit and CORS).
+# the widest network a trusted proxy may be named by, per IP version: a proxy is a host or a small network
+MIN_PROXY_PREFIX = {4: 8, 6: 32}
 ORIGIN = re.compile(r"https?://(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(:[0-9]{1,5})?")
 
 
 class RateLimit(BaseModel):
     """A per-client token bucket: `capacity` tokens, refilled at `refill_per_second`. A request costs one
     token; an export or a record route costs `export_weight` (it touches the whole matched set), and a query
-    with a position-verified clause (spec 03: a phrase with a wildcard, a NEAR the index can't answer) costs
-    at least `verified_weight` (None: `export_weight`), the rest charged once the route has parsed it.
-    `/healthz` is free. Every request is also charged to its client's network (IPv4 /24, IPv6 /48), a
+    with position-verified clauses (spec 03: a phrase with a wildcard, a NEAR the index can't answer) costs
+    `verified_weight` (None: `export_weight`) per such clause, capped at the smaller bucket's capacity (so a
+    query within `ApiConfig.max_verified_clauses` can always run), the rest charged once the route has parsed
+    it. `/healthz` is free. Every request is also charged to its client's network (IPv4 /24, IPv6 /48), a
     bucket of `network_capacity` (None: 4 × `capacity`) refilled at `network_refill_per_second` (None:
     4 × `refill_per_second`), so one host holding many addresses is bounded too."""
 
@@ -36,14 +39,20 @@ class RateLimit(BaseModel):
     capacity: float = Field(default=60.0, gt=0)
     refill_per_second: float = Field(default=1.0, gt=0)
     export_weight: float = Field(default=10.0, ge=1)
-    verified_weight: float | None = Field(default=None, ge=0)
+    verified_weight: float | None = Field(default=None, ge=0)  # per position-verified clause
     network_capacity: float | None = Field(default=None, gt=0)
     network_refill_per_second: float | None = Field(default=None, gt=0)
     max_clients: int = Field(default=100_000, ge=1)  # buckets held in memory; the least recent is dropped
 
     @property
     def verified_cost(self) -> float:
+        """What one position-verified clause costs."""
         return self.export_weight if self.verified_weight is None else self.verified_weight
+
+    def verified_charge(self, clauses: int) -> float:
+        """What a query with `clauses` position-verified clauses costs in all: `verified_cost` each, at most
+        the smaller bucket's capacity (a larger charge could never be paid)."""
+        return min(clauses * self.verified_cost, self.capacity, self.network_bucket[0])
 
     @property
     def network_bucket(self) -> tuple[float, float]:
@@ -101,8 +110,22 @@ class ApiConfig(BaseModel):
     # time; a query that would need another slot is 503 API_BUSY with `Retry-After: busy_retry_seconds`
     verification_slots: int = Field(default=1, ge=1)
     busy_retry_seconds: int = Field(default=5, ge=1)
-    # uvicorn's limit_concurrency: connections and tasks beyond it get a 503 from uvicorn itself
-    limit_concurrency: int | None = Field(default=64, ge=1)
+    # a query with more position-verified clauses than this is 422 API_TOO_MANY_VERIFIED_CLAUSES (each clause
+    # is one cold verification, holding a slot for seconds on a large index), before anything compiles it
+    max_verified_clauses: int = Field(default=8, ge=1)
+    # one client network (IPv4 /24, IPv6 /48) at most `record_saves_network_burst` saves at once, refilled at
+    # `record_saves_network_per_hour`, so one network can't spend the instance-wide ceiling for everyone
+    record_saves_network_burst: int = Field(default=10, ge=1)
+    record_saves_network_per_hour: float = Field(default=60.0, gt=0)
+    # uvicorn's limit_concurrency: connections and tasks beyond it get a 503 from uvicorn itself. Behind the
+    # reverse proxy (spec 08 §Deploy) these are the proxy's pooled upstream connections, not clients
+    limit_concurrency: int | None = Field(default=256, ge=1)
+    # uvicorn's timeout_keep_alive: an idle keep-alive connection is closed after this many seconds, so an
+    # idle connection doesn't hold one of `limit_concurrency` for long
+    keep_alive_seconds: int = Field(default=5, ge=1)
+    # Swagger UI at /api/v1/docs (it loads its script and styles from a CDN). Off unless asked for: `op serve`
+    # turns it on for a loopback --host only (a local instance), or with --docs. openapi.json is always served
+    serve_docs: bool = False
 
     @field_validator("index")
     @classmethod
@@ -115,10 +138,11 @@ class ApiConfig(BaseModel):
     @classmethod
     def _proxies(cls, v: tuple[IPvAnyNetwork, ...]) -> tuple[IPvAnyNetwork, ...]:
         for network in v:
-            if network.prefixlen == 0:  # 0.0.0.0/0 or ::/0: every client could forge its address
+            shortest = MIN_PROXY_PREFIX[network.version]
+            if network.prefixlen < shortest:  # 0.0.0.0/0, ::/0, or near enough: clients could forge addresses
                 raise ValueError(
-                    f"trusted proxy {network} trusts every address, so any client could set its own "
-                    "X-Forwarded-For; name the proxy's own address or network"
+                    f"trusted proxy {network} is wider than /{shortest}, so clients inside it could set their "
+                    "own X-Forwarded-For; name the proxy's own address or network"
                 )
         return v
 

@@ -35,7 +35,7 @@ from collections.abc import Callable, Sequence
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from openproceedings.api.config import RateLimit as RateLimitConfig
-from openproceedings.api.errors import ACCESS, ApiError, error_response, internal_error
+from openproceedings.api.errors import ACCESS, ApiError, error_response, internal_error, refused
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.logs import bind, elapsed_ms
 
@@ -54,6 +54,7 @@ ANNOTATIONS = (
     "n_errors",
     "error_codes",
     "warning_codes",
+    "code",  # the error envelope's code, on every refusal and every 500 (api/errors.py::note_code)
 )
 
 type Network = ipaddress.IPv4Network | ipaddress.IPv6Network
@@ -167,6 +168,8 @@ class BodyLimit:
         while True:
             message = await receive()
             if message["type"] != "http.request":  # the client went away: let the app see it
+                # (an equivalent mutant drops this append: an ASGI server answers every `receive` after a
+                # disconnect with `http.disconnect` again, so `replay`'s fall-through gives the app the same)
                 chunks.append(message)
                 break
             size += len(message.get("body", b""))
@@ -183,7 +186,7 @@ class BodyLimit:
         await self.app(scope, replay, send)
 
     async def _refuse(self, scope: Scope, receive: Receive, send: Send) -> None:
-        log.debug("request_refused", extra={"code": str(DiagnosticCode.API_BODY_TOO_LARGE)})
+        refused(scope, DiagnosticCode.API_BODY_TOO_LARGE)
         response = error_response(
             DiagnosticCode.API_BODY_TOO_LARGE,
             f"The request body is over {self.max_bytes:,} bytes; a query fits in far less.",
@@ -287,30 +290,43 @@ class TokenBucket:
         """Spend `cost` tokens for `key`: 0 if allowed, else the seconds until it would be."""
         return take_all([(self, key)], cost)
 
+    def refund(self, key: str, cost: float) -> None:
+        """Give back `cost` tokens `key` spent on work that then didn't happen (never above `capacity`)."""
+        with self.lock:
+            held = self._buckets.get(key)
+            if held is not None:
+                tokens, last = held
+                self._buckets[key] = (min(self.capacity, tokens + cost), last)
 
-def take_all(buckets: Sequence[tuple[TokenBucket, str]], cost: float) -> float:
-    """Spend `cost` from every (bucket, key) if each holds it: 0. Else spend nothing and return the longest
-    wait, so a refusal by one bucket never drains another."""
+
+def take_each(buckets: Sequence[tuple[TokenBucket, str]], cost: float) -> list[float]:
+    """Spend `cost` from every (bucket, key) if each holds it. Returns each one's wait (all 0: spent); if any
+    is over 0, nothing is spent, so a refusal by one bucket never drains another."""
     locks = sorted({id(b): b.lock for b, _key in buckets}.items())
     for _id, lock in locks:
         lock.acquire()
     try:
-        wait = max(bucket.wait(key, cost) for bucket, key in buckets)
-        if wait == 0:
+        waits = [bucket.wait(key, cost) for bucket, key in buckets]
+        if max(waits) == 0:
             for bucket, key in buckets:
                 bucket.spend(key, cost)
-        return wait
+        return waits
     finally:
         for _id, lock in reversed(locks):
             lock.release()
 
 
-def rate_limited(wait: float) -> ApiError:
-    """429 `API_RATE_LIMITED` with `Retry-After` in whole seconds."""
+def take_all(buckets: Sequence[tuple[TokenBucket, str]], cost: float) -> float:
+    """`take_each`, as the longest wait (0: spent)."""
+    return max(take_each(buckets, cost))
+
+
+def rate_limited(wait: float, who: str = "Too many requests from this address") -> ApiError:
+    """429 `API_RATE_LIMITED` with `Retry-After` in whole seconds; the message is `who`, then when to retry."""
     seconds = max(1, math.ceil(wait))
     return ApiError(
         DiagnosticCode.API_RATE_LIMITED,
-        f"Too many requests from this address; try again in {seconds} s.",
+        f"{who}; try again in {seconds} s.",
         headers={"Retry-After": str(seconds)},
     )
 
@@ -361,7 +377,7 @@ class RateLimit:
         wait = take_all(held, cost)
         if wait > 0:
             error = rate_limited(wait)
-            log.debug("request_refused", extra={"code": str(error.code)})
+            refused(scope, error.code)
             response = error_response(error.code, error.message, headers=error.headers)
             await response(scope, receive, send)
             return
