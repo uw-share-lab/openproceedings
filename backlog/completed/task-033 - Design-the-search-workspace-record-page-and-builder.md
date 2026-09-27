@@ -1,10 +1,10 @@
 ---
 id: TASK-033
 title: 'Design the search workspace, record page and builder'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-27 20:28'
+updated_date: '2026-09-27 20:29'
 labels:
   - ux
   - frontend
