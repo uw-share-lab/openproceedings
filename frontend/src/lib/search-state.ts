@@ -24,6 +24,9 @@ export type Sort = (typeof SORTS)[number];
 /** Results per page; the API's `limit` (spec 03 default 50, spec 04 max 200). */
 export const PAGE_SIZE = 50;
 
+/** Highest page the URL may name: offsets stay under 500,000, several times the whole corpus. */
+export const MAX_PAGE = 10_000;
+
 export interface SearchState {
   readonly q: string;
   readonly mode: Mode;
@@ -65,9 +68,14 @@ function isSort(value: string): value is Sort {
   return (SORTS as readonly string[]).includes(value);
 }
 
+function isPage(page: number): boolean {
+  return Number.isInteger(page) && page >= 1 && page <= MAX_PAGE;
+}
+
 function parsePage(value: string): number | null {
   if (!/^[1-9][0-9]{0,8}$/.test(value)) return null;
-  return Number(value);
+  const page = Number(value);
+  return isPage(page) ? page : null;
 }
 
 export function fromURL(params: URLSearchParams): { state: SearchState; notices: UrlNotice[] } {
@@ -152,17 +160,22 @@ export function toSearchRequest(state: SearchState): {
 export type FilterField = "venue" | "track" | "status";
 
 /**
- * A field's single top-level filter clause, as the server's `/parse` reported it for `source`.
+ * A field's single top-level filter clause, as the server's `/parse` reported it for `(source, mode)`.
+ * - `field` and `negated: false`: the clause's field and polarity. A clause for another field, or a
+ *   negated one (`-track:workshop`: adding `main` inside it would flip its meaning), is refused.
+ * - `source` and `mode`: the query it was parsed from, keyed like `resultSetKey`; a stale clause is refused.
  * - `span`: code points into `source`. An applied default (spec 02: inserted defaults have the zero-width
  *   span `(len(q), len(q))`) or an unrestricted field is a zero-width span at the end, and the clause is
  *   then written out explicitly: `(q) AND field:(…)`.
  * - `values`: the values that clause admits (for a default, the default values; for an unrestricted
  *   field, every value in `/meta`), in the order to keep them.
- * Only a positive clause belongs here; the caller does not offer the toggle for a negated one.
  * TODO(TASK-078): derive this from the generated `/parse` schema once it reports clause spans.
  */
 export interface FilterClause {
+  readonly field: FilterField;
+  readonly negated: false;
   readonly source: string;
+  readonly mode: Mode;
   readonly span: CodePointSpan;
   readonly values: readonly string[];
 }
@@ -194,14 +207,29 @@ function formatClause(field: FilterField, values: readonly string[]): string {
   return only !== undefined ? `${field}:${only}` : `${field}:(${values.join(" OR ")})`;
 }
 
+/** A query ending in an odd run of backslashes: the last one would escape a `)` written after it (spec 02). */
+function endsInEscape(q: string): boolean {
+  const run = /\\+$/.exec(q)?.[0].length ?? 0;
+  return run % 2 === 1;
+}
+
 function rewriteClause(
-  q: string,
+  state: SearchState,
   field: FilterField,
   clause: FilterClause,
   values: readonly string[],
 ): string {
-  if (clause.source !== q) {
-    throw new SearchStateError("the filter clause was parsed from a different query; re-parse first");
+  const { q } = state;
+  const [stateQ, stateMode] = resultSetKey(state);
+  if (clause.source !== stateQ || clause.mode !== stateMode) {
+    throw new SearchStateError("the filter clause was parsed from a different query or mode; re-parse first");
+  }
+  if (clause.field !== field) {
+    throw new SearchStateError(`a ${clause.field} clause cannot be edited as ${field}`);
+  }
+  // Checked at runtime too: a caller holding untyped /parse data could pass `negated: true`.
+  if ((clause.negated as boolean) !== false) {
+    throw new SearchStateError(`the ${field} clause is negated; editing its values would flip its meaning`);
   }
   for (const v of [...clause.values, ...values]) {
     if (!FILTER_VALUE.test(v)) throw new SearchStateError(`not a ${field} value: ${JSON.stringify(v)}`);
@@ -214,7 +242,11 @@ function rewriteClause(
   const qLength = codePointLength(q);
   if (start === end) {
     if (end !== qLength) throw new SearchStateError("a zero-width clause span must be at the end of q");
-    return q.trim() === "" ? text : `(${q}) AND ${text}`;
+    if (q.trim() === "") return text;
+    if (endsInEscape(q)) {
+      throw new SearchStateError("q ends in an escaping backslash, which would swallow the closing ')'");
+    }
+    return `(${q}) AND ${text}`;
   }
   let utf16: readonly [number, number];
   try {
@@ -238,7 +270,7 @@ export function reduce(state: SearchState, action: SearchAction): SearchState {
       const next = values.includes(action.value)
         ? values.filter((v) => v !== action.value)
         : [...values, action.value];
-      return { ...state, q: rewriteClause(state.q, action.field, action.clause, next), page: 1 };
+      return { ...state, q: rewriteClause(state, action.field, action.clause, next), page: 1 };
     }
     case "includeExcluded": {
       const { values } = action.clause;
@@ -246,12 +278,12 @@ export function reduce(state: SearchState, action: SearchAction): SearchState {
         throw new SearchStateError(`${action.field}:${action.value} is already included`);
       }
       const next = [...values, action.value];
-      return { ...state, q: rewriteClause(state.q, action.field, action.clause, next), page: 1 };
+      return { ...state, q: rewriteClause(state, action.field, action.clause, next), page: 1 };
     }
     case "sort":
       return { ...state, sort: action.sort, page: 1 };
     case "page":
-      if (!Number.isInteger(action.page) || action.page < 1) {
+      if (!isPage(action.page)) {
         throw new SearchStateError(`not a page number: ${action.page}`);
       }
       return { ...state, page: action.page };

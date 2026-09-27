@@ -4,6 +4,7 @@ title: OpenAPI snapshot and generated TypeScript types
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
+updated_date: '2026-09-27 07:46'
 labels:
   - api
   - frontend
@@ -24,4 +25,5 @@ op openapi → frontend/src/api/schema.ts; CI freshness check (api-contract skil
 <!-- AC:BEGIN -->
 - [ ] #1 OpenAPI snapshot test shows contract changes in PR diffs
 - [ ] #2 CI fails if schema.ts is stale
+- [ ] #3 Replace the hashFiles(frontend/src/api/schema.ts) guard in .github/workflows/test.yml with an unconditional OpenAPI freshness step
 <!-- AC:END -->

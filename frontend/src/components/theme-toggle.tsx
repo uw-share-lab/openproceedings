@@ -5,7 +5,11 @@ import { useSyncExternalStore } from "react";
 
 const subscribe = () => () => {};
 
-/** Light/dark switch. Renders a stable placeholder on the server: the resolved theme is only known client-side. */
+/**
+ * Dark-theme toggle button. The name is stable ("Dark theme") and the state is `aria-pressed`, so the
+ * visible label is the accessible name (WCAG 2.5.3 Label in Name). The resolved theme is only known on
+ * the client, so the server renders the button without a pressed state.
+ */
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const mounted = useSyncExternalStore(
@@ -13,15 +17,15 @@ export function ThemeToggle() {
     () => true,
     () => false,
   );
-  const next = resolvedTheme === "dark" ? "light" : "dark";
+  const dark = resolvedTheme === "dark";
   return (
     <button
       type="button"
-      onClick={() => setTheme(next)}
-      className="rounded-md border px-2 py-1 text-xs"
-      aria-label={mounted ? `Switch to ${next} theme` : "Switch theme"}
+      onClick={() => setTheme(dark ? "light" : "dark")}
+      className="rounded-md border px-2 py-1 text-xs aria-pressed:bg-muted"
+      aria-pressed={mounted ? dark : undefined}
     >
-      {mounted ? (resolvedTheme === "dark" ? "Dark" : "Light") : "Theme"}
+      Dark theme
     </button>
   );
 }
