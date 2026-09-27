@@ -172,13 +172,13 @@ as "current" and can load a pinned older version to replay a search record.
 - **Exception, as built (task-024):** a clause that takes the position-verified fallback (a phrase with a
   wildcard item; NEAR with a phrase or wildcard operand, or a term with itself) costs time linear in its
   candidates' text and can exceed the search and `match_ids` budgets when cold: on a synthetic 80k corpus,
-  stopword cases such as `the NEAR/5 the` take 2.2–3.3 s cold, and the wildcard-phrase protocol string
-  `main-2-pop` 10.8 s to search and 10.9 s for `match_ids` + exclusions (`docs/results/2026-09-27-bench.md`). It is never capped, because a cap would make
+  stopword cases such as `the NEAR/5 the` take 2.3–3.3 s cold, and the wildcard-phrase protocol string
+  `main-2-pop` 10.1 s to search and 10.5 s for `match_ids` + exclusions (`docs/results/2026-09-27-bench.md`). It is never capped, because a cap would make
   a query's result depend on the corpus's size and break replaying search records; task-031 measures these
   cases, and an engine caches each verified clause, so facets and repeats don't pay again.
-- Measured (task-031, `docs/results/2026-09-27-bench.md`, a synthetic 80k corpus, quiet machine): build 32 s,
-  99 MB, 396 MB peak in the largest single process. Every Trust-Evals string's search and `match_ids` +
-  exclusions is within budget, except `main-2-pop` (wildcard phrases) when cold: 10.8 s to search and 10.9 s
+- Measured (task-031, `docs/results/2026-09-27-bench.md`, a synthetic 80k corpus, quiet machine): build 30 s,
+  99 MB, 391 MB peak in the largest single process. Every Trust-Evals string's search and `match_ids` +
+  exclusions is within budget, except `main-2-pop` (wildcard phrases) when cold: 10.1 s to search and 10.5 s
   for `match_ids` + exclusions, the exception above. Warm (the engine's verified-clause cache and compiled-
   query memo), its search is 27 ms p95 over 200 runs.
 

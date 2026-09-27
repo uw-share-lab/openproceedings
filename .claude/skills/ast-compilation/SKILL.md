@@ -50,8 +50,8 @@ three or more clauses (And/Or children, the per-field OR, year ranges, wildcard 
 candidates) goes through `combine`, a balanced binary tree, so identical texts score identically. Filters are `ConstScoreQuery(…, 0.0)`: they never change a score
 (tested). The verified fallback finds each operand's occurrences from a token→positions map and pairs NEAR
 operands by binary search (each operand's width is fixed), so its cost is linear in the candidates' text:
-on a synthetic 80k index stopword cases take 2.2–3.3 s cold and the wildcard-phrase string `main-2-pop`
-10.8 s (`docs/results/2026-09-27-bench.md`); its candidate
+on a synthetic 80k index stopword cases take 2.3–3.3 s cold and the wildcard-phrase string `main-2-pop`
+10.1 s (`docs/results/2026-09-27-bench.md`); its candidate
 query holds each distinct item once, so a repeated term isn't scored twice. `facets` compiles each distinct
 filter-free query once, and the engine memoises every verified clause (per field), so facets after a match
 cost 0.1–0.3 s on 80k. Candidates hold each distinct item once, and an item implied by a narrower one

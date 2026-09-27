@@ -4,7 +4,7 @@ title: Headroom for warm searches over wildcard phrases at 80k
 status: To Do
 assignee: []
 created_date: '2026-09-26 23:03'
-updated_date: '2026-09-27 00:45'
+updated_date: '2026-09-27 01:04'
 labels:
   - engine
   - performance
@@ -36,4 +36,6 @@ From the M2 gate: TantivyEngine.compile is now memoised per tree (bounded), so a
 M2 gate: with the compiled-query memo, docs/results/2026-09-27-bench.md (200 warm rounds, quiet, 2700e19) gives main-2-pop warm p95 27.3 ms (was 68.7). AC#1's p95 < 50 ms is met in that report; its p99 < 100 ms isn't measured by the report yet (add a p99 column, or a probe) before closing.
 
 Correction: after the AC reorder, the p95/p99 criterion is AC#2 (AC#1 is the differential suite); AC#2's p95 < 50 ms is met in the report, its p99 not yet measured.
+
+Report regenerated at f0de68b (clean, quiet): main-2-pop warm p95 27.5 ms, cold search 10.1 s, match_ids + exclusions 10.5 s. Supersedes the 2700e19 figures above.
 <!-- SECTION:NOTES:END -->
