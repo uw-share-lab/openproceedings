@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 import heapq
+import json
 from collections.abc import Iterator
 from importlib.metadata import version
 from pathlib import Path
@@ -60,19 +61,26 @@ def unservable(manifest: dict[str, Any]) -> str | None:
 
 class TantivyEngine:
     """One engine serves every request of the API, from FastAPI's thread pool (task-080). Its only mutable
-    state is three memos (`compiled`, `verified`, `expanded`), each a pure function of its key and the
-    immutable index, and each touched without a lock under two rules: an entry is read with one `.get()`
+    state is four memos (`compiled`, `verified`, `expanded`, `faceted`), each a pure function of its key and
+    the immutable index, and each touched without a lock under two rules: an entry is read with one `.get()`
     (never `in` then `[key]`, since another thread may clear the memo in between), and an entry is stored
     only once it is complete, never mutated after. A clear or a lost race only costs a recomputation, which
     gives the same value, so concurrent searches never see each other's partial work (guarantee 4).
     The design relies only on each single dict operation being atomic, which holds under the GIL and on
-    free-threaded builds (3.13t) alike; never iterate a memo, or check-then-act across two operations."""
+    free-threaded builds (3.13t) alike; never iterate a memo, or check-then-act across two operations.
+    Each memo's size budget is kept by an append-only ledger (`charges`), lock-free as well: see `_trim`."""
 
-    # each memo is cleared when it grows past its bound, so a long-running API never grows it without limit
-    # (the check and the clear aren't atomic: racing threads may clear twice, or overshoot by a few entries)
-    MAX_COMPILED = 1_000
-    MAX_VERIFIED = 1_000
-    MAX_EXPANDED = 10_000
+    # Each memo is bounded by what it holds, not by its entry count (a verified entry can hold every id in the
+    # index, ~5 MB on 80k): it is cleared once the weights charged to it since its last clear pass its budget.
+    # Weights, in ids/terms (~60 bytes each as Python strings): a verified clause, its ids + 1; an expansion,
+    # its terms + 1 (an over-cap count, 1); a compiled query, `Compiled.held` + 1 (the ids and terms inside its
+    # Tantivy query, plus its explain lines); a facet count, its buckets + 1. So ≲ 30 + 30 + 6 + a few MB per
+    # engine, and the API holds the served engine plus `pinned_indexes` more. A memo exceeds its budget only by
+    # what the computations in flight store (one entry per thread), never more: see `_trim`.
+    MAX_COMPILED_UNITS = 500_000
+    MAX_VERIFIED_IDS = 500_000
+    MAX_EXPANDED_TERMS = 100_000
+    MAX_FACET_BUCKETS = 100_000  # `faceted`: a field's buckets over a kept set, + 1 (~100 buckets a set)
 
     def __init__(self, path: Path) -> None:
         manifest = verify_index(path)
@@ -88,6 +96,11 @@ class TantivyEngine:
         self.verified: dict[tuple[str, str], list[str]] = {}  # position-verified clauses, per engine
         # each wildcard's terms, or just the count of an over-cap one
         self.expanded: dict[tuple[str, str], tuple[str, ...] | int] = {}
+        # each memo's ledger: the weight of every entry stored since its last clear (see `_trim`)
+        # each kept set's facet counts, per field (see `facets`)
+        self.faceted: dict[tuple[str, str], dict[str, int]] = {}
+        self.charges: dict[str, list[int]] = {"compiled": [], "verified": [], "expanded": [], "faceted": []}
+        self.tallied: dict[str, tuple[list[int], int, int]] = {}  # each ledger's running sum (see `_trim`)
 
     @property
     def universe(self) -> frozenset[str]:
@@ -109,9 +122,9 @@ class TantivyEngine:
                         found.add(term)
             # an over-cap stem keeps only its count: a refused query never holds its terms in memory
             terms = tuple(sorted(found)) if len(found) <= MAX_EXPANSIONS else len(found)
-            if len(self.expanded) > self.MAX_EXPANDED:
-                self.expanded.clear()
+            self._trim("expanded", self.expanded, self.MAX_EXPANDED_TERMS)
             self.expanded[key] = terms
+            self.charges["expanded"].append(1 if isinstance(terms, int) else len(terms) + 1)
         if isinstance(terms, int) or len(terms) > MAX_EXPANSIONS:  # checked on every call, cached or not
             count = terms if isinstance(terms, int) else len(terms)
             raise EngineInputError(
@@ -197,23 +210,46 @@ class TantivyEngine:
 
     def facets(self, ast: Node, fields: tuple[str, ...] = FACET_FIELDS) -> dict[str, dict[str, int]]:
         """Disjunctive facets (spec 04, decision-001 rule 6): field F is counted over the matches of the
-        query without F's own top-level conjuncts (a filter on F, or NOT of one; nested ones stay)."""
+        query without F's own top-level conjuncts (a filter on F, or NOT of one; nested ones stay).
+
+        Fields whose kept conjuncts are the same share one `aggregate` (one named terms aggregation per
+        field): its cost is the query's collection, not the aggregations (~31 ms either way at 80k). Every
+        facet field's counts over a kept set are memoised (`faceted`, by the set's conjuncts with spans
+        dropped and sorted: order and position never change a count), so another page of the query, its
+        exclusion accounting and a later query sharing the set don't collect it again."""
         unknown = [f for f in fields if f not in FACET_FIELDS]
         if unknown:
             raise EngineInputError(DiagnosticCode.API_BAD_PARAM, f"facet fields must be among {FACET_FIELDS}")
         self.expansions(ast)  # the cap applies even when no facet field is asked for
-        out: dict[str, dict[str, int]] = {}
-        compiled: dict[str, tantivy.Query] = {}  # one compile per distinct kept set (verification is costly)
+        conjuncts = [(c, _spanless(c)) for c in _conjuncts(ast)]
+        groups: dict[str, tuple[list[Node], list[str]]] = {}  # kept set → its conjuncts, the fields over it
         for f in fields:
-            kept = [c for c in _conjuncts(ast) if _filter_field(c) != f]
-            key = "\x00".join(c.model_dump_json() for c in kept)
-            if key not in compiled:
-                node = kept[0] if len(kept) == 1 else And(span=(0, 0), children=tuple(kept)) if kept else None
-                compiled[key] = tantivy.Query.all_query() if node is None else self.compile(node).query
-            query = compiled[key]
-            result = self.searcher.aggregate(query, {"f": {"terms": {"field": f, "size": 100_000}}})
-            out[f] = dict(sorted((str(b["key"]), int(b["doc_count"])) for b in result["f"]["buckets"]))
-        return out
+            pairs = [(c, k) for c, k in conjuncts if _filter_field(c) != f]
+            key = "\x00".join(sorted(k for _c, k in pairs))
+            groups.setdefault(key, ([c for c, _k in pairs], []))[1].append(f)
+        out: dict[str, dict[str, int]] = {}
+        for key, (kept, group) in groups.items():
+            counts = {f: self.faceted.get((key, f)) for f in group}  # one read each (task-080)
+            if any(c is None for c in counts.values()):
+                counts.update(self._aggregate(key, kept))
+            for f in group:
+                out[f] = dict(counts[f] or {})  # the caller's copy, never the memo's dict
+        return {f: out[f] for f in fields}
+
+    def _aggregate(self, key: str, kept: list[Node]) -> dict[str, dict[str, int]]:
+        """Every facet field's counts over the matches of `kept`'s conjunction, in one collection, each
+        stored in `faceted` once complete."""
+        node = kept[0] if len(kept) == 1 else And(span=(0, 0), children=tuple(kept)) if kept else None
+        query = tantivy.Query.all_query() if node is None else self.compile(node).query
+        aggs = {f: {"terms": {"field": f, "size": 100_000}} for f in FACET_FIELDS}
+        result = self.searcher.aggregate(query, aggs)
+        self._trim("faceted", self.faceted, self.MAX_FACET_BUCKETS)
+        counts: dict[str, dict[str, int]] = {}
+        for f in FACET_FIELDS:
+            counts[f] = dict(sorted((str(b["key"]), int(b["doc_count"])) for b in result[f]["buckets"]))
+            self.faceted[(key, f)] = counts[f]  # stored complete, never changed after
+            self.charges["faceted"].append(len(counts[f]) + 1)
+        return counts
 
     # --- compilation and explain ---------------------------------------------------------------------
     def expansions(self, ast: Node) -> Expansions:
@@ -232,15 +268,40 @@ class TantivyEngine:
         hit = self.compiled.get(key)  # one read: the memo may be cleared by another thread at any time
         if hit is not None:
             return self._copy(hit)
-        if len(self.verified) > self.MAX_VERIFIED:
-            self.verified.clear()
-        if len(self.compiled) > self.MAX_COMPILED:
-            self.compiled.clear()
+        self._trim("verified", self.verified, self.MAX_VERIFIED_IDS)
+        self._trim("compiled", self.compiled, self.MAX_COMPILED_UNITS)
         compiled = Compiler(
             self.index.schema, self.expansions(ast), self.read, self.verified, self.ranking["field_weights"]
         ).compile(ast)
         self.compiled[key] = compiled
+        self.charges["compiled"].append(compiled.held + 1)
+        if compiled.stored:
+            self.charges["verified"].append(compiled.stored)
         return self._copy(compiled)
+
+    def _trim(self, name: str, memo: dict[Any, Any], budget: int) -> None:
+        """Clear `memo` once the weights charged to it since its last clear pass `budget`.
+
+        Lock-free, under task-080's rules, and every race errs towards clearing early, never towards holding
+        more than the budget plus what the compiles in flight store: a charge is one `list.append` (atomic, so
+        concurrent charges are never lost, as `+=` on a counter can be), made after its entry is stored; a
+        clear swaps in a new ledger *before* clearing the memo, so an entry stored in between is charged to the
+        new ledger although the clear removes it (an over-count), and one stored after is charged normally. Two
+        threads may both see the ledger over budget and clear twice, which only costs recomputation. The ledger
+        is a list, not a memo: slicing it while another thread appends sees that charge or doesn't. The sum is
+        kept incrementally, so a check costs only the charges since the last one: `tallied` holds (ledger,
+        items summed, their sum), one tuple rebound whole, so a thread that stores an older tally only makes
+        the next check sum more; a tally of a swapped-out ledger is ignored."""
+        ledger = self.charges[name]
+        seen, count, total = self.tallied.get(name, (None, 0, 0))
+        if seen is not ledger:
+            count, total = 0, 0
+        new = ledger[count:]  # one slice: charges appended after it are summed by the next check
+        count, total = count + len(new), total + sum(new)
+        self.tallied[name] = (ledger, count, total)
+        if total > budget:
+            self.charges[name] = []  # first: see above
+            memo.clear()
 
     @staticmethod
     def _copy(compiled: Compiled) -> Compiled:
@@ -292,6 +353,20 @@ def _ord(value: object) -> int:
 def _conjuncts(n: Node) -> list[Node]:
     """Top-level AND conjuncts, nested ANDs flattened."""
     return [x for c in n.children for x in _conjuncts(c)] if isinstance(n, And) else [n]
+
+
+def _spanless(n: Node) -> str:
+    """`n` as JSON without its spans (anywhere in the tree): what a kept conjunct means, not where it was
+    written, so an inserted default and the same filter built by exclusion accounting key alike."""
+    return json.dumps(_drop_spans(n.model_dump(mode="json")), sort_keys=True, ensure_ascii=False)
+
+
+def _drop_spans(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: _drop_spans(v) for k, v in value.items() if k != "span"}
+    if isinstance(value, list):
+        return [_drop_spans(v) for v in value]
+    return value
 
 
 def _filter_field(n: Node) -> str | None:

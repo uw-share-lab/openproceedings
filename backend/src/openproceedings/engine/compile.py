@@ -55,6 +55,11 @@ class Compiled:
     query: tantivy.Query
     explain: list[str] = field(default_factory=list)  # the readable tree, one line per clause
     verified: list[str] = field(default_factory=list)  # which clauses took the position-verified fallback
+    # what the engine's memos charge against their budgets (TantivyEngine.MAX_*): `held` is what this
+    # compiled query keeps alive (ids in its verified term sets, terms in its expansions, one per explain
+    # line); `stored` is what this compile added to the verified cache (each new clause's ids, plus one)
+    held: int = 0
+    stored: int = 0
 
 
 def wildcards(n: Node) -> Iterator[Wildcard]:
@@ -97,6 +102,7 @@ class Compiler:
 
     def compile(self, n: Node) -> Compiled:
         self.out.query = self.node(n, 0)
+        self.out.held += len(self.out.explain)
         return self.out
 
     def line(self, depth: int, text: str) -> None:
@@ -175,6 +181,7 @@ class Compiler:
     def term_set(self, f: TextField, terms: tuple[str, ...]) -> tantivy.Query:
         if not terms:
             return tantivy.Query.empty_query()  # matches nothing: never a dropped (widening) clause
+        self.out.held += len(terms)
         # SHOULD of term queries (not a TermSetQuery, which scores every match 1): each expansion scores as
         # its own term (field-weighted-bm25 skill)
         return combine(tantivy.Occur.Should, [tantivy.Query.term_query(self.schema, f, t) for t in terms])
@@ -204,6 +211,8 @@ class Compiler:
         if ids is None:
             ids = [doc_id for doc_id, tokens in self.read(candidates, f) if self.holds(n, tokens)]
             self.verified_cache[key] = ids  # stored complete, never changed after
+            self.out.stored += len(ids) + 1
+        self.out.held += len(ids)
         what = f"NEAR/{n.distance}" if isinstance(n, Near) else "phrase"
         self.line(depth, f"{f}: {what} verified by position ({len(ids)} documents)")
         self.out.verified.append(f"{f}: {what}")
