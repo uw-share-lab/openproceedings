@@ -473,7 +473,7 @@ class _Lexer:
                     if letters(stem) >= MIN_STEM
                     else "; search the whole run as written in the abstract"
                 )
-                + " (spec 02 §Known limits).",
+                + ".",
                 start,
                 end,
             )
@@ -536,6 +536,14 @@ class _Lexer:
         words = " ".join(t.text for t in toks) + wildcard
         return words if len(toks) == 1 or in_phrase else f'"{words}"'
 
+    def colon_context(self, raw: str, end: int) -> str:
+        """A stray colon on its own is quoted with the word after it (`: model`), so the message says which
+        colon; a colon already joined to its word (`:model`) is quoted as written."""
+        if raw.strip("".join(COLONS)):
+            return raw
+        after = re.match(r"\s*[^\s()]+", self.q[end:])
+        return raw + after.group() if after else raw
+
     def check_word(self, raw: str, stem: str, start: int, end: int) -> None:
         """Checks for a top-level WORD (not a phrase part, where these characters are plainly literal)."""
         if raw[0] in MINUSES:
@@ -549,7 +557,8 @@ class _Lexer:
         elif raw[0] in COLONS:
             self.error(
                 DiagnosticCode.PARSE_STRAY_COLON,
-                f"`{clip(raw)}` starts with a colon — a field name must touch its colon, e.g. `title:trust`.",
+                f"`{clip(self.colon_context(raw, end))}` starts with a colon, so no field is named — a field name "
+                "must touch its colon, e.g. `title:trust`.",
                 start,
                 end,
             )

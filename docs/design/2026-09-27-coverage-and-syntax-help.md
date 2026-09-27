@@ -99,7 +99,7 @@ words; allowed inside a phrase ("large language model$").
 ## Messages
 ### PARSE_UNBALANCED_PAREN  {id="parse_unbalanced_paren"}
 Example: `(trust OR reliance`
-Message: This `(` is never closed — add a `)`.
+Message: `(trust OR reliance` has no closing parenthesis — add `)` where the group ends.
 Fix: `(trust OR reliance)`   [Search with this example ▸]
 …
 ### Slow clauses: API_TOO_MANY_VERIFIED_CLAUSES, API_QUERY_TOO_COSTLY  {id="slow-clauses"}

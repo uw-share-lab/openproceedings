@@ -25,7 +25,8 @@ are flattened, `NOT NOT x` is `x`, an OR of one field's filters is one filter). 
 A click always writes the grouped form, `field:(v)` even for one value, so the clause's `)` ends every edit
 and no edit can touch a group that follows it (a bare `track:workshop(x)` is PARSE_PAREN_TOUCHES_WORD); the
 canonical form is the same either way. An editable clause is then checked by making the widest edit a click
-can make (every vocabulary value; for year, one `(dddd..dddd)` range) exactly as the reducer writes it, and
+can make (every vocabulary value; for year, `MAX_YEAR_RANGES` disjoint `dddd..dddd` ranges, the most a year
+action writes) exactly as the reducer writes it, and
 parsing that with the parser itself, in the query's mode, so the answer is the server's own. The clause is not toggleable when the edited `q` would
 be `too_long` (over 2,000 code points raw or canonical, decision-008), `too_deep` (the wrap nests `q` one
 level deeper; PARSE_TOO_DEEP), an `unparsable_edit` for another reason (a `q` ending in an escaping
@@ -79,8 +80,19 @@ VOCABULARY: dict[FilterField, tuple[str, ...]] = {
     "status": tuple(sorted(STATUSES)),
 }
 EVERY_YEAR = YearRange(lo=MIN_YEAR, hi=MAX_YEAR)
-# the longest single range a click writes, grouped as every clause is
-_WIDEST_YEAR = f"year:({MIN_YEAR}..{MAX_YEAR})"
+# The most ranges a year action writes (the reducer refuses more: TOO_MANY_RANGES). Shared with the reducer
+# through `frontend/src/lib/year-clause-golden.json`, which both sides' tests read.
+MAX_YEAR_RANGES = 4
+_STEP = (MAX_YEAR - MIN_YEAR + 1) // MAX_YEAR_RANGES
+# The widest year edit: MAX_YEAR_RANGES disjoint, non-adjacent `dddd..dddd` ranges (the canonical form keeps
+# them apart), so no year clause the reducer writes is longer, raw or canonical.
+WIDEST_YEAR: tuple[YearRange, ...] = tuple(
+    YearRange(
+        lo=MIN_YEAR + i * _STEP, hi=MAX_YEAR if i == MAX_YEAR_RANGES - 1 else MIN_YEAR + (i + 1) * _STEP - 2
+    )
+    for i in range(MAX_YEAR_RANGES)
+)
+_WIDEST_YEAR = "year:(" + " OR ".join(f"{r.lo}..{r.hi}" for r in WIDEST_YEAR) + ")"
 
 
 class _Clause(BaseModel):
@@ -194,7 +206,7 @@ def _format(field: FilterField, values: tuple[str, ...]) -> str:
 
 
 def _widest_clause(field: FilterField) -> str:
-    """The longest clause a click can write for `field`: every vocabulary value, or one `(dddd..dddd)` range.
+    """The longest clause a click can write for `field`: every vocabulary value, or `MAX_YEAR_RANGES` ranges.
     Its `)` ends every edit, so the one check covers every edit shape: none can touch what follows."""
     return _WIDEST_YEAR if field == "year" else _format(field, VOCABULARY[field])
 
@@ -213,7 +225,7 @@ def _edit_reason(edited: str, mode: Mode, fields: tuple[FilterField, ...]) -> Cl
     conjuncts = _conjuncts(parsed.effective_ast)
     for field in fields:
         top = [c for c in conjuncts if _clause_field(c) == field]
-        widest = (EVERY_YEAR,) if field == "year" else VOCABULARY[field]
+        widest = WIDEST_YEAR if field == "year" else VOCABULARY[field]
         # Only `len(top) != 1` is reachable today: the canonical form never merges two clauses of a field, so
         # the one left is the clause written. The rest is defence against a canonical rule that would.
         if len(top) != 1 or not isinstance(top[0], Filter) or top[0].values != widest:

@@ -68,8 +68,22 @@ decision-008),
 `TOO_DEEP` (`/parse` reported `too_deep`: the wrap would nest `q` past the instance's `max_query_depth`, 64,
 also from `/meta`'s `limits` and `default-limits.json`),
 `ALREADY_INCLUDED` and `BAD_PAGE`. The golden cases in `frontend/src/lib/filter-clause-golden.json` pin
-`/parse`'s report and the reducer's result together. **Controls
-are disabled with the reason, not refused after the click:** a facet toggle or include button calls
+`/parse`'s report and the reducer's result together.
+
+**Year** has its own actions (TASK-092), since a year clause is ranges, not values:
+`yearClauseFromParse(filters.year, q, mode)` narrows `/parse`'s `ParsedYearClause` as `clauseFromParse` does,
+and `yearSet` (exactly one range), `yearClear` (every year: `year:(1000..9999)`, rewritten in place, never
+deleted), `yearAdd` and `yearRemove` (a range added to or taken out of the clause's ranges) write the whole
+clause, grouped and merged as the canonical form keeps it (`year:(2018..2020 OR 2022..2024)`, one year bare:
+`year:(2024)`), over the clause's span or as `(q) AND year:(…)`. They refuse as the other fields do
+(`STALE_CLAUSE`, `WRONG_FIELD`, `NEGATED_CLAUSE`, `/parse`'s reasons, `TOO_LONG`, `TOO_DEEP`, `BAD_SPAN`,
+`EMPTY_QUERY`, `TRAILING_ESCAPE`), with `BAD_VALUE` for a range that is not two four-digit years from 1000 to
+9999 in order, `ALREADY_INCLUDED` (the clause already admits the years, or already is the range set),
+`NOT_INCLUDED` (removing years it doesn't admit), `LAST_VALUE` (removing its last year) and
+`TOO_MANY_RANGES` (more than `MAX_YEAR_RANGES`, 4, the most `/parse`'s widest year edit covers: 02 §Filter
+clauses). Their goldens are `frontend/src/lib/year-clause-golden.json`, shared with the backend's `/parse`
+tests, which also parse every expected string and check that only the year clause changed. **Controls
+are disabled with the reason, not refused after the click:** a facet toggle, include button or year control calls
 `whyBlocked(state, action)` while rendering and, when it returns an error, renders disabled with the
 message as its description. `STALE_CLAUSE` is the usual case, while `/parse` catches up with a new `q`.
 
