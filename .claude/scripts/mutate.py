@@ -31,7 +31,7 @@ TABLES = sorted(
     for p in [*ROOT.glob(".claude/hooks/tests/*.sh"), *ROOT.glob(".claude/scripts/tests/*.sh")]
 )
 IGNORE = shutil.ignore_patterns(
-    ".git", ".venv", "node_modules", "__pycache__", "data", ".ruff_cache", ".mypy_cache"
+    ".git", ".venv", "node_modules", "__pycache__", "data", ".ruff_cache", ".mypy_cache", "worktrees"
 )
 ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}  # never touch the real repo
 

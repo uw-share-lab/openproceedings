@@ -702,5 +702,11 @@
   "file": "backend/tests/conftest.py",
   "old": "    if isinstance(sockaddr, tuple) and sockaddr[0] in _LOOPBACK:\n        return _real_getnameinfo(sockaddr, flags)",
   "new": "    if True:\n        return _real_getnameinfo(sockaddr, flags)"
+ },
+ {
+  "label": "lint_tooling lints agent worktrees",
+  "file": ".claude/scripts/lint_tooling.py",
+  "old": "in_repo = [p for p in C.rglob(\"*.md\") if not p.is_relative_to(C / \"worktrees\")]",
+  "new": "in_repo = list(C.rglob(\"*.md\"))"
  }
 ]

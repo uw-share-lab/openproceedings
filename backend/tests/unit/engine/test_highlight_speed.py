@@ -125,19 +125,20 @@ def test_every_trust_evals_string_lights_the_same_spans_on_the_5k_corpus(name: s
     same_spans(ast, SYNTHETIC_REFERENCE, SYNTHETIC)
 
 
-@settings(deadline=None)
+# capped at 10,000 (the nightly profile's 50,000 would take over an hour here, ~80 ms an example)
+@settings(deadline=None, max_examples=min(settings().max_examples, 10_000))
 @given(asts())
 def test_generated_trees_light_the_same_spans_on_every_fixture_record(ast: Node) -> None:
     same_spans(ast, REFERENCE, RECORDS)
 
 
 # the old highlighter tokenizes each hit with the old tokenizer: slow on thousands of hits, so the first 20;
-# and a tenth of the profile's examples (200 in CI, 5,000 nightly): each one runs the oracle over 5k records,
-# and the 200-record property above takes the profile's full count
+# and a tenth of the profile's examples, at most 500 (200 in CI, 500 nightly): each one runs the oracle over
+# 5k records, up to ~1 s an example
 @settings(
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
-    max_examples=max(10, settings().max_examples // 10),
+    max_examples=min(max(10, settings().max_examples // 10), 500),
 )
 @given(engine_asts(vocab()))
 def test_generated_trees_light_the_same_spans_on_the_5k_corpus(ast: Node) -> None:
