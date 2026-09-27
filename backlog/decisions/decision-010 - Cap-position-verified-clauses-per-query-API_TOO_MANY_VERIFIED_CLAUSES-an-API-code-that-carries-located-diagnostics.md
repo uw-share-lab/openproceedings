@@ -125,9 +125,7 @@ API runs it.
   (not a new code: the client's move is the same, retry later, and the message names the limit). Nothing
   partial is kept (the list dies with the loop's frame: no memo, scope or compiled query), the per-clause
   charge is refunded, and the CPU used is debited. A replay past it is that 503 too, not a withheld replay:
-  it depends on the moment's load, so it is transient. 30 s: main-2-pop needs 10.2 s idle at 80k, so it
-  finishes under load that triples its wall time (4 busy clients measured ~2.3×), and no query holds the
-  slot for minutes. The slot-time debit now charges the verifying thread's CPU (`time.thread_time`), not
+  it depends on the moment's load, so it is transient. 30 s: main-2-pop needs 10.2 s idle at 80k and is served under paced load (idle 9.8 s; two clients at 1–2 requests/s each: 13.8 s and 21.1 s), but two clients paging as fast as their own rate limit allows pushed it past 30 s in 2 of 3 runs (round 6); a retry then finishes, since the clauses verified before the deadline were kept; no query holds the slot for minutes. The slot-time debit now charges the verifying thread's CPU (`time.thread_time`), not
   wall time: by wall time one main-2-pop query was debited 155 tokens idle and 1,090 under contention,
   billing a reviewer for other people's load. A verified clause with no candidates takes no slot.
 - Revisit if cold verification gets cheaper (task-080's successors) or runs outside the request.

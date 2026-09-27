@@ -534,8 +534,9 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     and before each clause. Past it the loop stops and the request is 503 `API_BUSY` with `Retry-After`
     and a message naming the limit: the partial id list is dropped (no memo, scope or compiled query holds
     any of it), the per-clause charge is refunded, and the CPU time used is still debited. 30 s because
-    main-2-pop, the heaviest real query, needs 10.2 s idle at 80k, so it still finishes under load that
-    triples its wall time, while no query holds the slot for minutes. A replay past it is the same 503, not
+    main-2-pop, the heaviest real query, needs 10.2 s idle at 80k: it is served under paced load (idle 9.8 s; two clients at 1–2 requests/s each: 13.8 s and 21.1 s), but two clients paging as fast as their own rate limit allows pushed it past 30 s in 2 of 3 runs (round 6); a retry then finishes, since the clauses verified before the deadline were kept. No query holds the
+    slot for minutes. The 503's `Retry-After` is the slot's; the CPU debit lands after the response, so the
+    retry may be a 429 with its own, longer `Retry-After`. A replay past it is the same 503, not
     a withheld replay: the deadline depends on the moment's load, so it is the client's retry, not the
     record's `refused`. A verified clause with no candidates takes no slot and verifies nothing. Cold verification (a cache miss: seconds of pure Python per clause) runs in at most
     `ApiConfig.verification_slots` (default 1) at a time, on every engine the state opens

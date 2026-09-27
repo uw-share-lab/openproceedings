@@ -121,8 +121,10 @@ class ApiConfig(BaseModel):
     slow_verification_seconds: float = Field(default=5.0, gt=0)
     # a request's cold verifications together get this much wall time from its first slot; past it the verify
     # loop stops and the request is 503 API_BUSY (Retry-After), nothing stored (round 5). 30 s: main-2-pop, the
-    # heaviest real query, needs 10.2 s idle at 80k, so it finishes under load that triples its wall time
-    # (four concurrent page requests measured ~2.3x), while one query can't hold the slot for minutes
+    # heaviest real query, needs 10.2 s idle at 80k and is served under paced load; under heavy load it can
+    # pass 30 s and its retry finishes (finished clauses are kept). One query can't hold the slot for minutes.
+    # The 503's Retry-After is the slot's; the CPU debit is applied after the response, so a retry may then
+    # get a 429 with its own (longer) Retry-After
     max_verification_seconds: float = Field(default=30.0, gt=0)
     # one client network (IPv4 /24, IPv6 /48) at most `record_saves_network_burst` saves at once, refilled at
     # `record_saves_network_per_hour`, so one network can't spend the instance-wide ceiling for everyone

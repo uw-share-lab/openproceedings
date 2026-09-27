@@ -73,8 +73,9 @@ def test_back_to_back_cold_queries_are_throttled_to_their_share_and_another_clie
         assert search("198.51.100.7", 5).status_code == 200  # B: its own cold verification, served
     lines = [x for x in logs() if x["event"] == "request" and x["status"] == 200]
     first = lines[0]
-    assert first["verify_ms"] >= 2 * READ_S * 1000 and first["verify_tokens"] == pytest.approx(
-        first["verify_ms"] / 100, abs=0.01
+    # the debit follows the verifying thread's CPU (round 5), not the wall time, which load inflates
+    assert first["verify_cpu_ms"] >= 2 * READ_S * 1000 and first["verify_tokens"] == pytest.approx(
+        first["verify_cpu_ms"] / 100, abs=0.01
     )
 
 

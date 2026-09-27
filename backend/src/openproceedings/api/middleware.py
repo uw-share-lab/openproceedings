@@ -303,12 +303,15 @@ class TokenBucket:
         touched, is never dropped (its caller spends from it next). Under `lock`."""
         while len(self._buckets) > self.max_clients:
             victim = fallback = None  # a scan from the oldest that stops at the first bucket not in debt:
-            for k, (tokens, _last) in self._buckets.items():  # O(1) unless debtors are the oldest
+            now = self.clock()
+            for k, (tokens, last) in self._buckets.items():  # O(1) unless debtors are the oldest
                 if k == keep:
                     continue
                 if fallback is None:
                     fallback = k
-                if tokens >= 0:
+                if (
+                    tokens + (now - last) * self.refill >= 0
+                ):  # only debt still owed protects a bucket (round 6)
                     victim = k
                     break
             del self._buckets[victim if victim is not None else fallback]  # type: ignore[arg-type]
@@ -359,6 +362,18 @@ def take_each(buckets: Sequence[tuple[TokenBucket, str]], cost: float) -> list[f
             lock.release()
 
 
+def wait_all(buckets: Sequence[tuple[TokenBucket, str]], cost: float) -> float:
+    """Seconds until every (bucket, key) holds `cost` tokens, spending nothing."""
+    locks = sorted({id(b): b.lock for b, _key in buckets}.items())
+    for _id, lock in locks:
+        lock.acquire()
+    try:
+        return max(bucket.wait(key, cost) for bucket, key in buckets)
+    finally:
+        for _id, lock in reversed(locks):
+            lock.release()
+
+
 def take_all(buckets: Sequence[tuple[TokenBucket, str]], cost: float) -> float:
     """`take_each`, as the longest wait (0: spent)."""
     return max(take_each(buckets, cost))
@@ -385,9 +400,11 @@ def charge(scope: Scope, total: float) -> None:
     buckets, paid, base = held
     if total <= paid:
         return
-    wait = take_all(buckets, total - paid)
-    if wait > 0:
-        raise rate_limited(wait)
+    if take_all(buckets, total - paid) > 0:
+        # the wait is for the whole `total`, not the shortfall: a retry pays the middleware's weight again
+        # before this charge, so a client that honours Retry-After is admitted then (round 6: with the
+        # shortfall alone it spent the one refilled token on each retry and was never served)
+        raise rate_limited(wait_all(buckets, total))
     scope[BUCKETS] = (buckets, total, base)
 
 
