@@ -64,7 +64,6 @@ class IndexState:
         self._opener = opener
         self._engine: TantivyEngine | None = None
         self._reloading = threading.Lock()  # one load at a time; readers never take it
-        self.attempted = threading.Event()  # set once the first load has finished, loaded or not
 
     @property
     def engine(self) -> TantivyEngine | None:
@@ -75,10 +74,7 @@ class IndexState:
         """Load the configured index and swap it in; True if an engine is being served afterwards and it is
         the configured one. Never raises: a failure is one ERROR line, and the previous engine stays."""
         with self._reloading:
-            try:
-                return self._load()
-            finally:
-                self.attempted.set()
+            return self._load()
 
     def _load(self) -> bool:
         started = time.perf_counter()

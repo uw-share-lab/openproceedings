@@ -56,7 +56,9 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 ## API access line (INFO, exactly one per request)
 `request` event with: `request_id`, `method`, `route` (the template, e.g. `/api/v1/papers/{id}`, not the
 concrete path), `status`, `ms`, `index_version`, `canonical_hash` (search/export), `total`. Health checks
-log at DEBUG.
+log at DEBUG. `status` is what the client was sent. If a handler fails after the response started (a
+stream cut short), the line adds `aborted: true`, beside that failure's one `request_failed` ERROR line. The
+key is absent otherwise.
 
 ## CLI search line (INFO, at most one per `op search` / `op export`)
 `search_run` event with: `command`, `mode`, `engine`, `index_version`, `canonical_hash`, `total`, `ms`: the

@@ -158,7 +158,7 @@ once released: changing one is a breaking change under `/api/v1`.
 | A pinned `index_version` is not available on this instance | 409 | `API_INDEX_VERSION_UNAVAILABLE` |
 | Export requested for a record whose replay status is `mismatch` | 409 | `API_RECORD_MISMATCH` |
 | Rate limit exceeded | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
-| No index loaded yet (startup, failed swap) | 503 | `API_INDEX_NOT_LOADED` |
+| No index loaded yet (startup, or the first load failed; a failed swap keeps serving the old index) | 503 | `API_INDEX_NOT_LOADED` |
 | Anything unexpected | 500 | `API_INTERNAL` (logged at ERROR with the request id; message never echoes input) |
 | No such endpoint (task-034) | 404 | `API_NOT_FOUND` |
 | An endpoint that exists, called with another method (task-034) | 405 | `API_METHOD_NOT_ALLOWED` (with `Allow`) |
@@ -190,20 +190,35 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     flight finishes on the index it started on. `deps.checked_query(q)` raises 422 `PARSE_TOO_LONG` (the
     parser's own diagnostic, `parser.too_long`) before anything reads the query.
   - The client for the rate limit is the TCP peer, or, when the peer is a trusted proxy, the right-most
-    `X-Forwarded-For` hop that is not one (IPv6 per /64). `/healthz` costs nothing; `/export` costs
-    `export_weight`, charged before routing. The 429 carries `Retry-After` in whole seconds.
+    `X-Forwarded-For` hop that is not one. An IPv4-mapped IPv6 address (`::ffff:a.b.c.d`, as a dual-stack
+    bind reports IPv4 peers) counts as its IPv4 address, both as a key and when matching trusted proxies.
+    IPv6 clients are bucketed per /64. One host usually holds a whole /64, but an attacker holding a /48 gets
+    65,536 buckets, so the per-/64 limit bounds one host, not a determined network. `/healthz` (GET or
+    HEAD, for uptime monitors) costs nothing; `/export` costs `export_weight`, charged before routing. The
+    429 carries `Retry-After` in whole seconds.
   - Access line: one `request` line per request (INFO; `/healthz` at DEBUG) with `request_id`, `method`,
     `route` (the template; null when nothing matched, a 429 included), `status`, `ms`, `index_version`, and
     what a route adds with `deps.annotate`/`annotate_parse`: `canonical_hash`, `total`, `token_count`,
     `n_errors`, `error_codes`, `warning_codes` (at most 10 distinct codes, then `+N`). Never `q`, the
     canonical or identification strings, messages or spans. An unexpected exception is one
     `request_failed` ERROR line with its type and frames (never its message) and a 500 whose message names
-    the request id; nothing is re-raised to the server.
+    the request id; nothing is re-raised to the server. Layers, outermost first: the access line, CORS,
+    the last catch (`LastCatch`), the rate limit, then the app, so a 500 carries the CORS headers like any
+    response. If the exception comes after the response started (a stream), the client has its status, so
+    the access line keeps `status` as sent and adds `aborted: true`. A CORS preflight from an origin that
+    isn't allowed is Starlette's plain-text 400 `Disallowed CORS origin`, not the envelope (it never reaches
+    the app), and it still gets its access line.
+  - Error mapping beyond the table: any other 4xx a framework raises is 422 `API_BAD_PARAM`, logged at DEBUG
+    (nothing of ours raises one). A `PARSE_*`/`FIELD_*`/`WILDCARD_*` refusal from the engine carries
+    `diagnostics`: `/search` locates each over-cap wildcard by its span in `q`
+    (`search.QueryRefused`), and a refusal it can't locate has one diagnostic with `span: null`.
   - `op serve [--host] [--port] [--index] [--cors-origin …] [--trusted-proxy …] [--rate-capacity]
     [--rate-refill] [--export-weight] [--no-rate-limit] [--log-query-text]` runs one uvicorn process with
     its own access log off, `proxy_headers` off, and a 64 KiB request-head limit (uvicorn's 16 KiB would
     refuse a valid 2,000-code-point query in the URL). uvicorn's loggers go through the JSON handler;
-    httpx/httpcore are pinned to WARNING.
+    httpx/httpcore are pinned to WARNING, and the root logger gets the same JSON handler at WARNING, so another
+    library's warning (asyncio, fastapi) is JSON too. `--log-query-text` only lets the formatter keep
+    query-text fields; no log call passes one today (the access line never carries `q`), so it changes nothing.
   - The OpenAPI document and Swagger UI are served under `/api/v1` (`openapi.json`, `docs`); the snapshot
     and codegen are task-040.
 - As built (task-035, `api/search.py`, `api/papers.py`, `api/meta.py`, `api/models.py`; the models are the

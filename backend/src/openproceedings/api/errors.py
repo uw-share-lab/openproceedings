@@ -86,7 +86,10 @@ def error_response(
             code=code, message=message, diagnostics=list(diagnostics) if diagnostics is not None else None
         )
     )
-    return JSONResponse(body.model_dump(mode="json", exclude_none=True), status_code=status, headers=headers)
+    content = body.model_dump(mode="json")
+    if diagnostics is None:
+        del content["error"]["diagnostics"]  # absent, not null; a diagnostic's own null span stays
+    return JSONResponse(content, status_code=status, headers=headers)
 
 
 def frames(exc: BaseException) -> list[str]:
@@ -131,7 +134,8 @@ async def _api_error(request: Request, exc: Exception) -> JSONResponse:
 
 async def _validation(request: Request, exc: Exception) -> JSONResponse:
     """A malformed parameter or body: 422 `API_BAD_PARAM`, naming each bad location and what is wrong
-    (pydantic's own text; the offending input is left out)."""
+    (pydantic's own text). The offending *value* is left out, but a location can name a key the client
+    sent (an unexpected body key). The message goes to that client only; the log gets the code alone."""
     assert isinstance(exc, RequestValidationError)
     problems = [
         f"{'.'.join(str(p) for p in e.get('loc', ()))}: {e.get('msg', 'invalid')}" for e in exc.errors()
@@ -158,17 +162,31 @@ async def _http(request: Request, exc: Exception) -> JSONResponse:
             f"This endpoint doesn't take that method; use {allow or 'another'}.",
             headers={"Allow": allow} if allow else None,
         )
-    return internal_error(request.scope, exc)  # nothing of ours raises another status
+    if 400 <= exc.status_code < 500:  # nothing of ours raises one, but a 4xx is the client's, never a 500
+        _refused(DiagnosticCode.API_BAD_PARAM)
+        return error_response(DiagnosticCode.API_BAD_PARAM, "The request can't be served as sent.")
+    return internal_error(request.scope, exc)
+
+
+QUERY_CODES = ("PARSE_", "FIELD_", "WILDCARD_")  # spec 04 row 1: these refusals carry diagnostics
 
 
 async def _openproceedings(request: Request, exc: Exception) -> JSONResponse:
     """A typed failure from the shared functions: a user-input one is refused with its own code (e.g. 422
-    `WILDCARD_TOO_MANY_EXPANSIONS`); an internal one, or one without an HTTP status, is a 500."""
+    `WILDCARD_TOO_MANY_EXPANSIONS`), and a query refusal carries its diagnostics: the located ones a
+    `search.QueryRefused` holds, else one without a span; an internal one, or one without an HTTP status,
+    is a 500."""
     assert isinstance(exc, OpenProceedingsError)
     if isinstance(exc, InternalError) or http_status(exc.code) is None:
         return internal_error(request.scope, exc)
     _refused(exc.code)
-    return error_response(exc.code, exc.message)
+    diagnostics: list[Diagnostic] | None = None
+    if str(exc.code).startswith(QUERY_CODES):
+        located = getattr(exc, "diagnostics", None)
+        diagnostics = (
+            list(located) if located else [Diagnostic(code=exc.code, message=exc.message, span=None)]
+        )
+    return error_response(exc.code, exc.message, diagnostics=diagnostics)
 
 
 def install_error_handlers(app: FastAPI) -> None:

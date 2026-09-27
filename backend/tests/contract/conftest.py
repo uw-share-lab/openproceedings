@@ -109,6 +109,22 @@ def add_probes(
 
         return StreamingResponse(chunks(), media_type="text/plain")
 
+    @app.get("/api/v1/_probe/stream-fail")
+    def probe_stream_fail(q: str = "") -> StreamingResponse:
+        """A stream that fails after its first chunk: the response has started when it raises."""
+
+        def chunks() -> Iterator[str]:
+            yield "first\n"
+            raise RuntimeError(f"failed mid-stream on {q}")
+
+        return StreamingResponse(chunks(), media_type="text/plain")
+
+    @app.get("/api/v1/_probe/http/{status}")
+    def probe_http(status: int) -> None:
+        from starlette.exceptions import HTTPException
+
+        raise HTTPException(status_code=status)
+
     @app.get("/api/v1/_probe/boom/{item}")
     def probe_boom(item: str, q: str = "") -> None:
         raise RuntimeError(f"failed on {q} {item}")  # the message quotes the query

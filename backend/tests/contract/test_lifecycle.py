@@ -115,6 +115,37 @@ def test_sighup_swaps_atomically_and_a_request_in_flight_keeps_its_engine(
         restore()
 
 
+def test_the_production_lifespan_installs_the_sighup_reload_and_restores_it(
+    data_dir: Path, store: Store
+) -> None:
+    """`handle_sighup=True` (what `op serve` runs): the lifespan, entered on the main thread, installs the
+    handler, a SIGHUP then swaps the index, and leaving the lifespan puts the previous handler back."""
+    import asyncio
+
+    assert threading.current_thread() is threading.main_thread()
+    app = make_app(data_dir, handle_sighup=True)
+    state: IndexState = app.state.index
+    previous = signal.getsignal(signal.SIGHUP)
+    seen: dict[str, Any] = {}
+
+    async def run() -> None:
+        async with app.router.lifespan_context(app):
+            seen["inside"] = signal.getsignal(signal.SIGHUP)
+            before = state.engine
+            assert before is not None and before.index_version == store.big
+            point_current(data_dir, store.small)
+            os.kill(os.getpid(), signal.SIGHUP)
+            deadline = time.monotonic() + 20
+            while state.engine is before and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            seen["swapped"] = state.engine.index_version if state.engine is not None else None
+
+    asyncio.run(run())
+    assert seen["inside"] is not previous and callable(seen["inside"])
+    assert seen["swapped"] == store.small
+    assert signal.getsignal(signal.SIGHUP) is previous
+
+
 def test_a_stream_started_before_a_swap_finishes_on_its_index(data_dir: Path, store: Store) -> None:
     hold, entered = threading.Event(), threading.Event()
     app = make_app(data_dir, hold=hold, entered=entered)

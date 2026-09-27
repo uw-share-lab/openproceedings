@@ -63,6 +63,35 @@ def test_the_access_line_names_the_route_template_not_the_path(client: TestClien
     assert [line["route"] for line in lines] == ["/api/v1/_probe/boom/{item}", "/api/v1/search"]
 
 
+def test_the_routers_templates_are_full_paths_and_health_checks_log_at_debug(
+    client: TestClient, logs: Logs
+) -> None:
+    """The real routers, not probes: a nested router's template dropped `/api/v1` (task-035)."""
+    client.get("/api/v1/healthz")
+    client.head("/api/v1/healthz")
+    client.post("/api/v1/healthz")  # 405: routed to the template, then refused
+    client.get("/api/v1/papers/nope")
+    lines = access(logs)
+    assert [(line["route"], line["status"], line["level"]) for line in lines] == [
+        ("/api/v1/healthz", 200, "DEBUG"),
+        ("/api/v1/healthz", 200, "DEBUG"),
+        ("/api/v1/healthz", 405, "DEBUG"),
+        ("/api/v1/papers/{id}", 404, "INFO"),
+    ]
+
+
+def test_a_failure_after_the_response_started_is_logged_as_aborted(client: TestClient, logs: Logs) -> None:
+    r = client.get("/api/v1/_probe/stream-fail", params={"q": SECRET})
+    assert r.status_code == 200  # the response had started when the stream failed
+    (line,) = access(logs)
+    assert line["status"] == 200 and line["aborted"] is True
+    failed = [entry for entry in logs() if entry["event"] == "request_failed"]
+    assert len(failed) == 1 and failed[0]["level"] == "ERROR"
+    assert SECRET not in logs.raw.getvalue()  # type: ignore[attr-defined]
+    client.get("/api/v1/search", params={"q": "trust"})
+    assert "aborted" not in access(logs)[-1]  # only an aborted response carries it
+
+
 def test_a_search_line_has_the_hash_count_and_total_and_no_query_text(
     client: TestClient, store: Store, logs: Logs
 ) -> None:
@@ -127,7 +156,7 @@ def test_token_count_counts_search_terms(q: str, n: int) -> None:
 @pytest.fixture
 def routed() -> Iterator[io.StringIO]:
     """Our JSON handler with the server loggers routed (what `op serve` sets up); undone afterwards."""
-    names = ("uvicorn", "uvicorn.error", "uvicorn.access", *QUIET_LOGGERS)
+    names = ("", "uvicorn", "uvicorn.error", "uvicorn.access", *QUIET_LOGGERS)  # "": the root
     saved = {n: (logging.getLogger(n).handlers[:], logging.getLogger(n).level, logging.getLogger(n).propagate,
                  logging.getLogger(n).disabled) for n in names}  # fmt: skip
     stream = io.StringIO()
@@ -138,6 +167,21 @@ def routed() -> Iterator[io.StringIO]:
         lg.handlers[:] = handlers
         lg.setLevel(level)
         lg.propagate, lg.disabled = propagate, disabled
+
+
+def test_other_libraries_warnings_are_json_too(routed: io.StringIO) -> None:
+    logging.getLogger("asyncio").warning("Executing %s took %.3f seconds", "<Task>", 0.2)
+    logging.getLogger("fastapi").warning("fastapi_warned")
+    logging.getLogger("asyncio").info("asyncio_info")  # below WARNING: not routed
+    lines = [json.loads(line) for line in routed.getvalue().splitlines()]
+    assert [(line["logger"], line["level"]) for line in lines] == [
+        ("asyncio", "WARNING"),
+        ("fastapi", "WARNING"),
+    ]
+    configure_logging(
+        "INFO", "json", stream=routed, route_server_loggers=True
+    )  # idempotent: one root handler
+    assert sum(1 for h in logging.getLogger().handlers if getattr(h, "_openproceedings_handler", False)) == 1
 
 
 def test_server_loggers_go_through_the_json_handler(routed: io.StringIO) -> None:

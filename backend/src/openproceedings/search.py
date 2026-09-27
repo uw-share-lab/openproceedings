@@ -15,12 +15,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.diagnostics import Diagnostic, DiagnosticCode
+from openproceedings.engine.compile import wildcards
 from openproceedings.engine.exclusions import Excluded, excluded
 from openproceedings.engine.highlight import highlights
 from openproceedings.engine.protocol import EngineInputError, Expansions
 from openproceedings.engine.tantivy_engine import TantivyEngine
-from openproceedings.query.ast import TextField
+from openproceedings.query.ast import Node, TextField
 from openproceedings.query.parser import ParseResult
 
 type Spans = Mapping[TextField, list[tuple[int, int]]]
@@ -76,7 +77,10 @@ def run(
     ast = parsed.effective_ast
     if ast is None:
         raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "a search needs a query that parses.")
-    expansions = engine.expansions(ast)
+    try:
+        expansions = engine.expansions(ast)
+    except EngineInputError as e:
+        raise _located(engine, ast, e) from None
     total, page = engine.page(ast, sort=sort, offset=offset, limit=limit)  # one collection: ids and scores
     gone = excluded(engine, parsed, total)
     shown = engine.display([i for i, _score in page])
@@ -90,3 +94,26 @@ def run(
         for i, score in page
     )
     return Search(total, hits, gone, expansions, engine.facets(ast) if facets else None)
+
+
+class QueryRefused(EngineInputError):
+    """An engine refused a parsed query, located: `diagnostics` point at what it refused in `q` (e.g. each
+    wildcard over the 200-term cap), for the API's 422 (spec 04 §Error handling, row 1)."""
+
+    def __init__(self, code: DiagnosticCode, message: str, diagnostics: tuple[Diagnostic, ...] = ()) -> None:
+        super().__init__(code, message)
+        self.diagnostics = diagnostics
+
+
+def _located(engine: TantivyEngine, ast: Node, error: EngineInputError) -> QueryRefused:
+    """`error` with a diagnostic per wildcard that raises it on its own (only on this refusal path; the
+    engine's expansions are the answer otherwise). A wildcard's span is into `q` (an inserted default has
+    no wildcard)."""
+    found: list[Diagnostic] = []
+    for w in dict.fromkeys(wildcards(ast)):
+        try:
+            engine.expand(w)
+        except EngineInputError as e:
+            if e.code == error.code:
+                found.append(Diagnostic(code=e.code, message=e.message, span=w.span))
+    return QueryRefused(error.code, error.message, tuple(found))

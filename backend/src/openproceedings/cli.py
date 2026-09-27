@@ -164,7 +164,9 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--export-weight", type=float, default=10.0, help="tokens one export costs")
     serve.add_argument("--no-rate-limit", action="store_true", help="turn the rate limit off (local use)")
     serve.add_argument(
-        "--log-query-text", action="store_true", help="keep query text in logs (a local dev instance only)"
+        "--log-query-text",
+        action="store_true",
+        help="let the log formatter keep query-text fields (a local dev instance only); no log line passes one today",
     )
     serve.set_defaults(run=_serve)
 

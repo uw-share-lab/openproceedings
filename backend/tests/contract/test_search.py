@@ -288,6 +288,15 @@ def test_an_over_cap_wildcard_is_refused_with_its_own_code(
 
     from tests.contract.conftest import make_app
 
-    monkeypatch.setattr(te, "MAX_EXPANSIONS", 1)  # calibrat* has 2
+    monkeypatch.setattr(te, "MAX_EXPANSIONS", 1)  # calibrat* has 2, trust has none
     with TestClient(make_app(store.indexes.parent)) as c:
-        error(c.get(SEARCH, params={"q": "calibrat*"}), 422, "WILDCARD_TOO_MANY_EXPANSIONS")
+        e = error(
+            c.get(SEARCH, params={"q": "𝔸I trust calibrat* OR (x AND calibrat*)"}),
+            422,
+            "WILDCARD_TOO_MANY_EXPANSIONS",
+        )
+    # every over-cap wildcard, located by code point in q (spec 04 row 1: the diagnostics carry the spans)
+    assert [(d["code"], d["span"]) for d in e["diagnostics"]] == [
+        ("WILDCARD_TOO_MANY_EXPANSIONS", [9, 18]),
+        ("WILDCARD_TOO_MANY_EXPANSIONS", [29, 38]),
+    ]

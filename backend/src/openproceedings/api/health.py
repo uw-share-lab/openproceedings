@@ -26,7 +26,7 @@ class Health(BaseModel):
     query_version: str
 
 
-@router.get("/healthz", response_model=Health)
+@router.api_route("/healthz", methods=["GET", "HEAD"], response_model=Health)
 def healthz(request: Request) -> Health:
     """Always 200 while the process serves requests; `index_loaded` is false until the first load succeeds
     (search routes answer 503 `API_INDEX_NOT_LOADED` meanwhile)."""

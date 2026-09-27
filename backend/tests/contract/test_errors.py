@@ -37,7 +37,20 @@ def test_404_unknown_route(client: TestClient) -> None:
 def test_405_wrong_method_names_the_allowed_one(client: TestClient) -> None:
     r = client.post("/api/v1/healthz")
     envelope(r, "API_METHOD_NOT_ALLOWED")
-    assert r.headers["allow"] == "GET"
+    assert set(r.headers["allow"].split(", ")) == {"GET", "HEAD"}
+
+
+def test_healthz_answers_head_for_uptime_monitors(client: TestClient) -> None:
+    r = client.head("/api/v1/healthz")
+    assert r.status_code == 200 and r.content == b""
+
+
+@pytest.mark.parametrize("status", [400, 413, 418])
+def test_any_other_4xx_is_the_clients_not_a_500(
+    client: TestClient, status: int, logs: Callable[[], list[dict[str, Any]]]
+) -> None:
+    envelope(client.get(f"/api/v1/_probe/http/{status}"), "API_BAD_PARAM")
+    assert not [line for line in logs() if line["level"] == "ERROR"]
 
 
 @pytest.mark.parametrize(
@@ -65,7 +78,38 @@ def test_422_parse_error_carries_diagnostics_with_spans(client: TestClient) -> N
 
 
 def test_422_an_engine_refusal_keeps_its_own_code(client: TestClient) -> None:
-    envelope(client.get("/api/v1/_probe/too-many", params={"q": "re*"}), "WILDCARD_TOO_MANY_EXPANSIONS")
+    error = envelope(
+        client.get("/api/v1/_probe/too-many", params={"q": "re*"}), "WILDCARD_TOO_MANY_EXPANSIONS"
+    )
+    # spec 04 row 1: a PARSE_/FIELD_/WILDCARD_ refusal carries diagnostics (no span when none is known)
+    assert error["diagnostics"] == [
+        {"code": "WILDCARD_TOO_MANY_EXPANSIONS", "message": error["message"], "span": None}
+    ]
+
+
+def test_a_500_carries_the_cors_headers(store: Store) -> None:
+    app = make_app(store.indexes.parent, cors_origins=("https://openproceedings.example",))
+    with TestClient(app) as c:
+        r = c.get("/api/v1/_probe/boom/x", headers={"Origin": "https://openproceedings.example"})
+    envelope(r, "API_INTERNAL")
+    assert r.headers["access-control-allow-origin"] == "https://openproceedings.example"
+
+
+def test_a_disallowed_cors_preflight_is_a_plain_400_and_is_logged(
+    store: Store, logs: Callable[[], list[dict[str, Any]]]
+) -> None:
+    """Starlette's CORS middleware answers it before our routes (spec 04 as built): plain text, not the
+    envelope; the access line still records it."""
+    app = make_app(store.indexes.parent, cors_origins=("https://openproceedings.example",))
+    with TestClient(app) as c:
+        r = c.options(
+            "/api/v1/search",
+            headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"},
+        )
+    assert r.status_code == 400 and r.headers["content-type"].startswith("text/plain")
+    assert "access-control-allow-origin" not in r.headers
+    (line,) = [entry for entry in logs() if entry["event"] == "request"]
+    assert (line["method"], line["status"]) == ("OPTIONS", 400)
 
 
 def test_429_rate_limited_with_retry_after(store: Store) -> None:
