@@ -1,7 +1,7 @@
 """The `op` command line. Every planned subcommand exists from M1 on; each stub names the task that
 implements it (spec 08 §CLI). The CLI and the API call the same functions.
 
-Implemented: `op ingest ris`, `op snapshot build`, `op snapshot diff` (task-022), `op index build`
+Implemented: `op ingest ris`, `op ingest openreview` (API v2, task-050), `op snapshot build`, `op snapshot diff` (task-022), `op index build`
 (task-023), `op index parity` (task-029), `op search` (ranked, `--ids`, `--explain`, `--engine reference`;
 task-024/030), `op export` (task-030), `op serve` (task-034), `op openapi` (task-040) and `op record save` /
 `op record replay` (task-083). Results go to stdout; logs go to stderr; a refused operation exits 1 with its
@@ -55,7 +55,7 @@ PLANNED: dict[str, tuple[str, str]] = {
 # script must tell apart from a refusal (1), a usage error (2) and drift (0)
 EXIT_MISMATCH = 3
 # `op ingest <source>` sources still to come -> the task that implements them
-PLANNED_SOURCES: dict[str, str] = {"openreview": "task-050", "proceedings": "task-052"}
+PLANNED_SOURCES: dict[str, str] = {"proceedings": "task-052"}
 
 
 def default_data_dir() -> Path:
@@ -95,6 +95,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ris.add_argument("files", nargs="+", type=Path, metavar="mended.ris")
     ris.set_defaults(run=_ingest_ris)
+    orv = sources.add_parser(
+        "openreview",
+        help="crawl OpenReview API v2 venue-years into <data-dir>/cache/openreview (ICLR 2024+, NeurIPS "
+        "2023+, ICML 2023+); credentials OPENREVIEW_USERNAME/OPENREVIEW_PASSWORD from .env",
+    )
+    orv.add_argument("--venue", required=True, choices=("ICLR", "NeurIPS", "ICML"))
+    orv.add_argument("--years", "--year", dest="years", required=True, type=_years, metavar="YYYY[-YYYY]")
+    mode = orv.add_mutually_exclusive_group()
+    mode.add_argument("--offline", action="store_true", help="replay the cache only; a miss is refused")
+    mode.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="no network, no writes: report what is cached and what would be fetched",
+    )
+    mode.add_argument(
+        "--refresh", action="store_true", help="fetch every response again (overwrites the cache)"
+    )
+    orv.set_defaults(run=_ingest_openreview)
     for name, task in PLANNED_SOURCES.items():
         _stub(sources.add_parser(name, help=f"planned in {task}"), f"ingest {name}", task)
 
@@ -257,6 +275,32 @@ def _ingest_ris(ns: argparse.Namespace) -> int:
     from openproceedings.ingest.snapshot import ingest_ris
 
     reports = ingest_ris(ns.files, ns.data_dir / "cache")
+    _print([r.to_manifest() for r in reports])
+    return 0
+
+
+def _years(text: str) -> list[int]:
+    """`2024` or `2024-2026` (inclusive)."""
+    first, _, last = text.partition("-")
+    if not first.isdigit() or len(first) != 4 or (last and (not last.isdigit() or len(last) != 4)):
+        raise argparse.ArgumentTypeError(f"{text!r} is not YYYY or YYYY-YYYY")
+    lo, hi = int(first), int(last or first)
+    if hi < lo:
+        raise argparse.ArgumentTypeError(f"{text!r}: the range runs backwards")
+    return list(range(lo, hi + 1))
+
+
+def _ingest_openreview(ns: argparse.Namespace) -> int:
+    from openproceedings.ingest.sources import openreview_v2
+    from openproceedings.ingest.sources.openreview_client import OpenReviewClient, env_credentials
+
+    cache = ns.data_dir / "cache"
+    offline = ns.offline or ns.dry_run
+    creds = None if offline else env_credentials()  # never read for a run that can't fetch
+    client = OpenReviewClient(
+        openreview_v2.http_dir(cache), credentials=creds, offline=offline, refresh=ns.refresh
+    )
+    reports = openreview_v2.ingest(client, cache, ns.venue, ns.years, dry_run=ns.dry_run)
     _print([r.to_manifest() for r in reports])
     return 0
 
@@ -914,6 +958,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from openproceedings.engine.index import IndexBuildError
     from openproceedings.engine.protocol import EngineError
     from openproceedings.ingest.snapshot import SnapshotError
+    from openproceedings.ingest.sources.openreview_client import OpenReviewError
 
     parser = build_parser()
     args = list(sys.argv[1:] if argv is None else argv)
@@ -939,7 +984,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         with contextlib.suppress(OSError):
             os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         return 0
-    except (SnapshotError, IndexBuildError, EngineError, OpenProceedingsError, ValueError, OSError) as e:
+    except (
+        SnapshotError, IndexBuildError, EngineError, OpenProceedingsError, OpenReviewError, ValueError, OSError
+    ) as e:  # fmt: skip
         from openproceedings.engine.parity import ParityError
 
         # the level by kind (logging-standards): the user's own input at DEBUG; an internal failure at ERROR
@@ -953,6 +1000,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         fields: dict[str, object] = {"command": name, "error": type(e).__name__}
         if isinstance(e, OpenProceedingsError):
             fields["code"] = str(e.code)
+        if isinstance(e, OpenReviewError | SnapshotError):
+            fields["reason"] = e.reason
         log.log(level, "cli_refused", extra=fields, exc_info=isinstance(e, InternalError))
         print(f"op {name}: {_reason(e)}", file=sys.stderr)
         return 1

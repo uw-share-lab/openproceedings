@@ -47,7 +47,7 @@ def test_the_search_header_finds_its_snapshot_by_the_one_rule(tmp_path: Path, na
     assert got == ({"snapshot_hash": "h"} if found else None)
 
 
-@pytest.mark.parametrize(("source", "task"), [("openreview", "task-050"), ("proceedings", "task-052")])
+@pytest.mark.parametrize(("source", "task"), [("proceedings", "task-052")])
 def test_planned_ingest_sources_name_their_task(
     source: str, task: str, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -110,6 +110,22 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
 - Record the decision note id (or the venue string) as the status claim's evidence, and a
   `presentation` claim when the decision states one.
 
+## The v2 crawler as built (TASK-050)
+- `ingest/sources/openreview_client.py`: `OpenReviewClient` over a swappable `transport` (default: urllib,
+  **no redirects**, 60 s timeout, 64 MiB body cap) and `clock` (tests use a fake one). Hosts are an allowlist
+  (the base URL is fixed; nothing is fetched from a URL a response names). Login lazily through the same
+  transport (not scholarmend's `login`, which bypasses it and would read the challenge page as a JSON error);
+  a 401 or a 200 HTML page logs in again once, then `OpenReviewAuthError`. Pacing `min_interval` (1 s),
+  budget wait on `ratelimit-remaining: 0`, 429 → `Retry-After` (seconds or HTTP date) → `ratelimit-reset` →
+  backoff, 5xx / network / truncated JSON → `min(2^n, 60) s + jitter`, `max_attempts` 6, every wait capped at
+  3,701 s. Cache: scholarmend's `Cache` under `<data-dir>/cache/openreview/v2/http/`, keyed by the canonical
+  URL (parameters sorted), storing `{url, fetched_at, headers (content-type and ratelimit-* only), json}`.
+- `ingest/sources/openreview_v2.py`: `crawl` (groups → venueids → pages → records), `note_record` (the
+  authority rule), `ingest` (writes `…/v2/crawls/<Venue>-<Year>.json` for a finished crawl) and `replay`
+  (what `op snapshot build` calls). The group-tree enumeration (`?parent=` listings, containers, the
+  `proposal` skip) is built from the research run's description; no `?parent=` listing is recorded yet, so
+  record one per venue before the first full crawl.
+
 ## Fixtures
 `backend/tests/fixtures/http/openreview/{v1,v2}/<venue>-<year>/*.json`, one file per exchange:
 `{"_recorded", "request": {"method", "url", "authenticated"}, "response": {"status", "headers", "json" |

@@ -121,8 +121,18 @@ op snapshot build [--from <cache>]      # merge sources → new immutable snapsh
 op snapshot diff <a> <b>                # added / removed / changed records
 ```
 
-As built (task-022): `ingest ris`, `snapshot build` and `snapshot diff`; the crawler sources are stubs
-naming task-050/052. `op --data-dir <dir> <command>` (a global option; default `$OP_DATA_DIR`, else the repository's
+As built (task-022): `ingest ris`, `snapshot build` and `snapshot diff`. `ingest openreview` (task-050, API v2
+only: ICLR 2024+, NeurIPS 2023+, ICML 2023+; a v1 year is refused until TASK-051) takes `--venue`,
+`--years YYYY[-YYYY]` (or `--year`) and one of `--offline` (replay the cache; a miss is refused), `--dry-run` (no
+network and no writes: prints each venue-year's report with `complete: false` and the first uncached request of
+each branch in `would_fetch`) or `--refresh` (fetch every response again). It lists the year's groups
+(`Workshop`, `Workshop_<City>` and `Track` are expanded; proposal groups and groups that aren't v2 venues are
+skipped and reported), then every venue's accepted, submission, rejected, withdrawn and desk-rejected venueids
+(decision-012), 1,000 notes a page sorted by `number`. Responses are cached under
+`<data-dir>/cache/openreview/v2/http/` (scholarmend's `Cache`, keyed by the canonical URL) and a finished
+venue-year writes `…/v2/crawls/<Venue>-<Year>.json`, which `snapshot build` replays offline. Code:
+`ingest/sources/openreview_client.py` (auth, pacing, retries, cache) and `ingest/sources/openreview_v2.py`
+(enumeration, records). The proceedings source is a stub naming task-052. `op --data-dir <dir> <command>` (a global option; default `$OP_DATA_DIR`, else the repository's
 `data/`, gitignored); results go to stdout as JSON, a refusal exits 1 with a one-line reason that never
 quotes record text.
 
