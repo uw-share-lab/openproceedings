@@ -40,8 +40,8 @@ Statuses and codes are **exactly** spec 04 §Error handling; this skill keeps no
 `format`, malformed `record_id`: reject it, never clamp silently), 404 `API_PAPER_NOT_FOUND` /
 `API_RECORD_NOT_FOUND`, 409 `API_INDEX_VERSION_UNAVAILABLE`, 409 `API_RECORD_MISMATCH` (export of a
 `mismatch` record), 429 `API_RATE_LIMITED` + `Retry-After`, 503 `API_INDEX_NOT_LOADED`, 500 `API_INTERNAL`
-(logged at ERROR with the request id; the message never echoes input). A replay `mismatch` is a `200`, not
-an error. Codes come from the registry (`.claude/skills/error-diagnostics/SKILL.md`).
+(logged at ERROR with the request id; the message never echoes input), and for routing 404 `API_NOT_FOUND`
+/ 405 `API_METHOD_NOT_ALLOWED` (task-034). A replay `mismatch` is a `200`, not an error. Codes come from the registry (`.claude/skills/error-diagnostics/SKILL.md`).
 
 **Gotcha:** FastAPI's built-in `RequestValidationError` and `HTTPException` handlers emit `{"detail": …}`.
 Override both, or the contract has two error shapes. See `.claude/skills/error-diagnostics/SKILL.md`.

@@ -19,8 +19,9 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 - `backend/`: the uv workspace member, Python package `openproceedings` (`cli.py` → `op`, `export.py`, `logs.py`,
   `diagnostics.py`, `vocab.py`, `storage.py`, `query/` (`normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`,
   `ast.py`, `canonical.py`, `defaults.py`, `compat.py`), `engine/` (`protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py`, `exclusions.py`, `highlight.py`, `parity.py`), `ingest/`
-  (`record.py`, `classify.py`, `urls.py`, `volumes.py`, `ris.py`, `dedup.py`, `snapshot.py`); `api/ semantic/ eval/` arrive with
-  their tasks). Tests in `backend/tests/`; `uv run pytest` from the root.
+  (`record.py`, `classify.py`, `urls.py`, `volumes.py`, `ris.py`, `dedup.py`, `snapshot.py`), `api/` (`app.py`
+  `create_app`, `config.py`, `state.py`, `deps.py`, `errors.py`, `middleware.py`, `health.py`, `server.py` → `op serve`);
+  `semantic/ eval/` arrive with their tasks). Tests in `backend/tests/`; `uv run pytest` from the root.
 - `frontend/` (planned, M3): Next.js, an npm workspace.
 - `docs/specs` · `docs/{plans,results,design,usability,research}` (created as needed).
 - `backlog/`: Backlog.md, CLI only.

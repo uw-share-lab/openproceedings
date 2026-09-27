@@ -4,7 +4,6 @@ import pytest
 from openproceedings import cli
 
 PLANNED = {
-    "serve": "task-034",
     "record": "task-037",
     "openapi": "task-040",
     "embed": "task-058",
@@ -18,7 +17,7 @@ def test_help_lists_every_planned_subcommand(capsys: pytest.CaptureFixture[str])
     assert exc.value.code == 0
     out = capsys.readouterr().out
     listed = {line.split()[0] for line in out.splitlines() if line.startswith("    ") and line.split()}
-    assert set(PLANNED) | {"ingest", "snapshot", "index", "search"} <= listed
+    assert set(PLANNED) | {"ingest", "snapshot", "index", "search", "serve"} <= listed
 
 
 @pytest.mark.parametrize(("name", "task"), sorted(PLANNED.items()))
@@ -64,24 +63,24 @@ def test_stub_list_matches_the_planned_table() -> None:
 
 def test_bad_log_level_is_a_usage_error_not_a_traceback(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exc:
-        cli.main(["--log-level", "verbose", "serve"])
+        cli.main(["--log-level", "verbose", "record"])
     assert exc.value.code == 2
     err = capsys.readouterr().err
     assert "Traceback" not in err and "--log-level" in err
 
 
 def test_log_level_is_case_insensitive() -> None:
-    assert cli.main(["--log-level", "debug", "serve"]) == 2  # the stub's exit code, not a usage error
+    assert cli.main(["--log-level", "debug", "record"]) == 2  # the stub's exit code, not a usage error
 
 
 def test_default_log_format_is_json() -> None:
-    assert cli.build_parser().parse_args(["serve"]).log_format == "json"
+    assert cli.build_parser().parse_args(["record"]).log_format == "json"
 
 
 @pytest.mark.parametrize(
     "argv",
     [
-        ["serve", "--port", "8000"],
+        ["embed", "build", "--index", "current"],
         ["--log-level", "debug", "--log-format", "json", "index", "retire", "old"],
         ["record", "replay", "abc123"],
     ],

@@ -164,11 +164,27 @@ class _TextFormatter(_Formatter):
         )
 
 
+# The server's loggers (task-034). `uvicorn` (and `uvicorn.error` under it) goes through our handler, so its
+# lines are JSON too. `uvicorn.access` is switched off: the API's own `request` line replaces it, and its
+# line holds the full path with the query string, i.e. `q`. httpx/httpcore (and their httpx2 forks, the
+# test client's) log every request URL at INFO, so they are pinned to WARNING (and routed like uvicorn).
+SERVER_LOGGERS = ("uvicorn",)
+SERVER_CHILDREN = ("uvicorn.error",)  # no handler of their own: they reach ours through `uvicorn`
+SILENCED_LOGGERS = ("uvicorn.access",)
+QUIET_LOGGERS = ("httpx", "httpcore", "httpx2", "httpcore2")
+
+
 def configure_logging(
-    level: str = "INFO", fmt: str = "json", *, stream: IO[str] | None = None, log_query_text: bool = False
+    level: str = "INFO",
+    fmt: str = "json",
+    *,
+    stream: IO[str] | None = None,
+    log_query_text: bool = False,
+    route_server_loggers: bool = False,
 ) -> None:
     """Configure the `openproceedings` logger. Idempotent: closes and replaces any handler a previous call
-    installed. Library loggers (uvicorn, httpx) are routed by the API startup (task-034), not here."""
+    installed. `route_server_loggers` (the API's startup, `op serve`) also sends uvicorn's loggers through the
+    same handler, silences `uvicorn.access` and pins httpx/httpcore to WARNING (QUIET_LOGGERS above)."""
     if level.upper() not in LEVELS:
         raise ValueError(f"unknown log level {level!r}; use one of {', '.join(LEVELS)}")
     formatters: dict[str, type[_Formatter]] = {"json": _JsonFormatter, "text": _TextFormatter}
@@ -183,3 +199,30 @@ def configure_logging(
     logger.addHandler(handler)
     logger.setLevel(level.upper())
     logger.propagate = False
+    if route_server_loggers:
+        for name in SERVER_LOGGERS:
+            server = logging.getLogger(name)
+            for h in list(server.handlers):
+                server.removeHandler(h)
+            server.addHandler(handler)
+            server.setLevel(level.upper())
+            server.propagate = False
+        for name in SERVER_CHILDREN:
+            child = logging.getLogger(name)
+            for h in list(child.handlers):
+                child.removeHandler(h)
+            child.setLevel(logging.NOTSET)
+            child.propagate = True
+        for name in SILENCED_LOGGERS:
+            silenced = logging.getLogger(name)
+            for h in list(silenced.handlers):
+                silenced.removeHandler(h)
+            silenced.propagate = False
+            silenced.disabled = True
+        for name in QUIET_LOGGERS:
+            quiet = logging.getLogger(name)
+            for h in list(quiet.handlers):
+                quiet.removeHandler(h)
+            quiet.addHandler(handler)
+            quiet.setLevel(logging.WARNING)
+            quiet.propagate = False

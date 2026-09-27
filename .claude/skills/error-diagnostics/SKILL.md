@@ -19,7 +19,7 @@ class Diagnostic(BaseModel):  # frozen, extra="forbid"
   carrying 02's diagnostics with spans), 422 `API_BAD_PARAM`, 404 `API_PAPER_NOT_FOUND` /
   `API_RECORD_NOT_FOUND`, 409 `API_INDEX_VERSION_UNAVAILABLE`, 409 `API_RECORD_MISMATCH` (export of a
   `mismatch` record), 429 `API_RATE_LIMITED` (with `Retry-After`), 503 `API_INDEX_NOT_LOADED`, 500
-  `API_INTERNAL`. A new or changed pair is a spec 04 change first (and breaking once released).
+  `API_INTERNAL`, and 404 `API_NOT_FOUND` / 405 `API_METHOD_NOT_ALLOWED` for routing (task-034). A new or changed pair is a spec 04 change first (and breaking once released).
 - The frontend uses the generated `Diagnostic` type and draws squiggles directly from `span`. It never
   recomputes positions (`typescript-standards`).
 
