@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   INITIAL_STATE,
   MAX_PAGE,
-  MAX_QUERY_LENGTH,
+  DEFAULT_LIMITS,
   PAGE_SIZE,
   SearchStateError,
   describeNotice,
@@ -20,12 +20,14 @@ import {
   type ParsedClause,
   type FilterField,
   type Mode,
+  type QueryLimits,
   type SearchAction,
   type SearchState,
   type SearchStateErrorCode,
 } from "./search-state";
 import { codePointLength } from "@/api/spans";
 import clauseGolden from "./filter-clause-golden.json";
+import defaultLimits from "./default-limits.json";
 import golden from "./wrap-golden.json";
 
 const DEFAULT_TRACKS = ["main", "datasets_benchmarks", "position"];
@@ -402,7 +404,7 @@ describe("filter rewrites refuse what they cannot do exactly", () => {
   };
   const sourceOf = (a: SearchAction) => (a.type === "facetToggle" && a.clause ? a.clause.source : "");
 
-  it("refuses a rewrite that would take q past MAX_QUERY_LENGTH code points (1,994 + 14)", () => {
+  it("refuses a rewrite that would take q past the default max_query_length code points (1,994 + 14)", () => {
     const action = addWorkshop(1994);
     const e = refused(() => reduce(at(sourceOf(action)), action), "TOO_LONG");
     expect(e.message).toBe(
@@ -410,18 +412,18 @@ describe("filter rewrites refuse what they cannot do exactly", () => {
     );
   });
 
-  it("refuses a rewrite one code point past MAX_QUERY_LENGTH (1,987 + 14)", () => {
+  it("refuses a rewrite one code point past the default max_query_length (1,987 + 14)", () => {
     const action = addWorkshop(1987);
     refused(() => reduce(at(sourceOf(action)), action), "TOO_LONG");
   });
 
-  it("allows a rewrite that lands exactly on MAX_QUERY_LENGTH (1,986 + 14)", () => {
+  it("allows a rewrite that lands exactly on the default max_query_length (1,986 + 14)", () => {
     const action = addWorkshop(1986);
-    expect(codePointLength(reduce(at(sourceOf(action)), action).q)).toBe(MAX_QUERY_LENGTH);
+    expect(codePointLength(reduce(at(sourceOf(action)), action).q)).toBe(DEFAULT_LIMITS.max_query_length);
   });
 
-  it("refuses a wrap that would take q past MAX_QUERY_LENGTH", () => {
-    const q = "a".repeat(MAX_QUERY_LENGTH - 20);
+  it("refuses a wrap that would take q past the default max_query_length", () => {
+    const q = "a".repeat(DEFAULT_LIMITS.max_query_length - 20);
     refused(
       () =>
         reduce(at(q), {
@@ -432,6 +434,35 @@ describe("filter rewrites refuse what they cannot do exactly", () => {
         }),
       "TOO_LONG",
     );
+  });
+
+  // TASK-089: the cap is the instance's, from `/meta`'s `limits`; the default only stands in until it is fetched.
+  it("defaults the cap to default-limits.json, the file the backend's /meta contract test checks", () => {
+    expect(DEFAULT_LIMITS).toEqual(defaultLimits);
+  });
+
+  it("takes the cap from the limits it is given (an instance whose /meta serves another cap)", () => {
+    const action = addWorkshop(1986); // lands on 2,000: allowed by the default
+    const limits: QueryLimits = { max_query_length: 1999 };
+    const e = refused(() => reduce(at(sourceOf(action)), action, limits), "TOO_LONG");
+    expect(e.message).toBe(
+      "The changed query would be 2,000 characters long — the limit is 1,999. Shorten the query text first.",
+    );
+    expect(whyBlocked(at(sourceOf(action)), action, limits)?.code).toBe("TOO_LONG");
+    expect(whyBlocked(at(sourceOf(action)), action, { max_query_length: 2000 })).toBeNull();
+  });
+
+  it("words /parse's too_long refusal with the given cap", () => {
+    const e = refused(
+      () =>
+        reduce(
+          at("trust"),
+          { type: "facetToggle", field: "track", value: "workshop", clause: null, reason: "too_long" },
+          { max_query_length: 1234 },
+        ),
+      "TOO_LONG",
+    );
+    expect(e.message).toContain("over the 1,234-character limit");
   });
 
   it("refuses a clause parsed from a different q", () => {

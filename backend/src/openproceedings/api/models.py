@@ -249,6 +249,24 @@ class Vocabularies(Model):
     status: list[Status]
 
 
+class Limits(Model):
+    """This instance's limits on a query (TASK-089), so a client need not hard-code them: the parser's length
+    cap, and the served config's verification limits (`op serve` flags; another instance may differ)."""
+
+    max_query_length: int = Field(
+        description="the longest `q` in Unicode code points; a longer one, or one whose canonical form is "
+        "longer, is 422 `PARSE_TOO_LONG` (from `/parse`, a 200 whose `errors` hold it)"
+    )
+    max_verified_clauses: int = Field(
+        description="the most position-verified clauses a query may have; more is 422 "
+        "`API_TOO_MANY_VERIFIED_CLAUSES`"
+    )
+    max_verification_candidates: int = Field(
+        description="the most candidate documents a query's position-verified clauses may read, summed over "
+        "each clause's fields; more is 422 `API_QUERY_TOO_COSTLY`"
+    )
+
+
 class MetaResponse(Versioned):
     index_versions: list[str] = Field(
         description="every index this instance can serve, sorted, the served one included: an index this "
@@ -257,6 +275,7 @@ class MetaResponse(Versioned):
     text_fields: list[TextField]
     filter_fields: list[FilterField]
     values: Vocabularies
+    limits: Limits
 
 
 # --- /coverage ---------------------------------------------------------------------------------------

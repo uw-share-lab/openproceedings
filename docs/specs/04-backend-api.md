@@ -93,7 +93,7 @@ reviews without the UI.
 | `GET` | `/records/{id}` | The stored record, plus a replay check (see below) |
 | `GET` | `/records/{id}/diff` | For a record of any status: added and removed ids (with titles), paged, and which `index_version` inputs changed (empty unless `drifted`) |
 | `GET` | `/coverage` | Counts per venue × year × track × status, abstract-missing counts, snapshot date |
-| `GET` | `/meta` | Current and servable `index_version`s, the field names and the venue, track and status vocabularies (these feed the UI's autocomplete) |
+| `GET` | `/meta` | Current and servable `index_version`s, the field names and the venue, track and status vocabularies (these feed the UI's autocomplete), and this instance's query `limits` |
 | `GET` | `/healthz` | Liveness and whether the index is loaded |
 | `GET` | `/near-misses` | **M5 only**: the semantic suggestion panel, a separate resource (see 06) |
 
@@ -707,7 +707,12 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
   - `GET /meta` answers the three versions, plus `index_versions` (every index this instance can serve,
     sorted, with the served one included; which are left out: §Implementation notes, pinned indexes), `text_fields` (`title`, `abstract`), `filter_fields` (`venue`,
     `year`, `track`, `status`), and `values` (`venue`, `track` and `status`: the vocabularies the parser checks
-    filter values against, so autocomplete never offers a value it refuses).
+    filter values against, so autocomplete never offers a value it refuses), and `limits` (task-089):
+    `max_query_length` (the parser's `MAX_QUERY_LENGTH`, 2,000 code points; not configurable),
+    `max_verified_clauses` and `max_verification_candidates` (this instance's `op serve` values, defaults 16
+    and 300,000), the limits behind `PARSE_TOO_LONG`, `API_TOO_MANY_VERIFIED_CLAUSES` and
+    `API_QUERY_TOO_COSTLY`, so a client need not hard-code them. The frontend reducer takes the cap from it
+    (spec 05 §URL is state).
   - Every route that reports `index_version` needs a loaded engine, `/parse` and `/meta` included (503
     `API_INDEX_NOT_LOADED` before the first load).
 - As built (task-038, `api/coverage.py`, `coverage.py`): `GET /coverage` answers the three versions plus
