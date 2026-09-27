@@ -198,11 +198,12 @@ class Compiler:
         distinct item once)."""
         candidates = combine(tantivy.Occur.Must, [self.item(i, f) for i in self.distinct(n)])
         key = (f, n.model_dump_json())
-        if key not in self.verified_cache:
-            self.verified_cache[key] = [
-                doc_id for doc_id, tokens in self.read(candidates, f) if self.holds(n, tokens)
-            ]
-        ids = self.verified_cache[key]
+        # one read, then the local list: the cache is an engine's, shared across threads, and may be cleared
+        # between any two operations on it (task-080); a miss recomputes the same ids from the immutable index
+        ids = self.verified_cache.get(key)
+        if ids is None:
+            ids = [doc_id for doc_id, tokens in self.read(candidates, f) if self.holds(n, tokens)]
+            self.verified_cache[key] = ids  # stored complete, never changed after
         what = f"NEAR/{n.distance}" if isinstance(n, Near) else "phrase"
         self.line(depth, f"{f}: {what} verified by position ({len(ids)} documents)")
         self.out.verified.append(f"{f}: {what}")

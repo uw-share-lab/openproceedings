@@ -54,7 +54,11 @@ on a synthetic 80k index stopword cases take 2.3–3.3 s cold and the wildcard-p
 10.1 s (`docs/results/2026-09-27-bench.md`); its candidate
 query holds each distinct item once, so a repeated term isn't scored twice. `facets` compiles each distinct
 filter-free query once, and the engine memoises every verified clause (per field), so facets after a match
-cost 0.1–0.3 s on 80k. Candidates hold each distinct item once, and an item implied by a narrower one
+cost 0.1–0.3 s on 80k. The memos (`compiled`, `verified`, `expanded`; bounds `TantivyEngine.MAX_*`) are
+shared by the API's thread pool with no lock (task-080): read an entry with one `.get()`, never `in` then
+`[key]` (another thread may clear the memo between them), and store an entry only once it is complete. Every
+value is a pure function of its key and the immutable index, so a clear or a lost race only recomputes the
+same value (`tests/unit/engine/test_concurrency.py`). Candidates hold each distinct item once, and an item implied by a narrower one
 (`trust` implies `trust*`) is dropped, so no term is scored twice; that is how a verified clause scores
 (field-weighted-bm25 skill). Spec 03 records the budget exception for verified clauses. Checked: the 44 golden queries of the 200-record fixture, a row per table line against
 ReferenceEngine, and (locally) the ten Trust-Evals protocol strings on the real corpus, identical sets.

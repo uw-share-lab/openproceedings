@@ -39,6 +39,19 @@ TANTIVY_BM25 = {"b": 0.75, "k1": 1.2}  # Tantivy's fixed constants: an index can
 
 
 class TantivyEngine:
+    """One engine serves every request of the API, from FastAPI's thread pool (task-080). Its only mutable
+    state is three memos (`compiled`, `verified`, `expanded`), each a pure function of its key and the
+    immutable index, and each touched without a lock under two rules: an entry is read with one `.get()`
+    (never `in` then `[key]`, since another thread may clear the memo in between), and an entry is stored
+    only once it is complete, never mutated after. A clear or a lost race only costs a recomputation, which
+    gives the same value, so concurrent searches never see each other's partial work (guarantee 4)."""
+
+    # each memo is cleared when it grows past its bound, so a long-running API never grows it without limit
+    # (the check and the clear aren't atomic: racing threads may clear twice, or overshoot by a few entries)
+    MAX_COMPILED = 1_000
+    MAX_VERIFIED = 1_000
+    MAX_EXPANDED = 10_000
+
     def __init__(self, path: Path) -> None:
         manifest = verify_index(path)
         self.index_version: str = manifest["index_version"]
@@ -77,7 +90,8 @@ class TantivyEngine:
         """Every indexed term (title or abstract) the wildcard matches, sorted; more than MAX_EXPANSIONS
         is an error, never a truncation. From the term dictionary, not a scan of the documents."""
         key = (wildcard.stem, wildcard.op)
-        terms = self.expanded.get(key)  # the index is immutable, so a stem's terms are too
+        # one read (task-080: never `in` then `[key]`); the index is immutable, so a stem's terms are too
+        terms = self.expanded.get(key)
         if terms is None:
             found: set[str] = set()
             for f in FIELDS:
@@ -86,8 +100,8 @@ class TantivyEngine:
                         found.add(term)
             # an over-cap stem keeps only its count: a refused query never holds its terms in memory
             terms = tuple(sorted(found)) if len(found) <= MAX_EXPANSIONS else len(found)
-            if len(self.expanded) > 10_000:
-                self.expanded.clear()  # bounded, like `verified`
+            if len(self.expanded) > self.MAX_EXPANDED:
+                self.expanded.clear()
             self.expanded[key] = terms
         if isinstance(terms, int) or len(terms) > MAX_EXPANSIONS:  # checked on every call, cached or not
             count = terms if isinstance(terms, int) else len(terms)
@@ -206,11 +220,12 @@ class TantivyEngine:
         time, and a search, its pages and its facets needn't build the Boolean again (task-076 headroom)."""
         # spans included: ` trust` and `trust` compile apart (a miss, never wrong)
         key = ast.model_dump_json()
-        if key in self.compiled:
-            return self._copy(self.compiled[key])
-        if len(self.verified) > 1_000:
-            self.verified.clear()  # bounded: a long-running API never grows it without limit
-        if len(self.compiled) > 1_000:
+        hit = self.compiled.get(key)  # one read: the memo may be cleared by another thread at any time
+        if hit is not None:
+            return self._copy(hit)
+        if len(self.verified) > self.MAX_VERIFIED:
+            self.verified.clear()
+        if len(self.compiled) > self.MAX_COMPILED:
             self.compiled.clear()
         compiled = Compiler(
             self.index.schema, self.expansions(ast), self.read, self.verified, self.ranking["field_weights"]
