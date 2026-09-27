@@ -599,7 +599,7 @@ messages (server registry, shown verbatim) and the ux-writer's review of each.
 | vocabulary for autocomplete and sidebar options; limits | `GET /meta` `values`, `limits` | exists |
 | coverage line on `/` | `GET /coverage` `totals.records` | exists |
 | wait time on 429/503 | `Retry-After` | exists (declared in the contract) |
-| span of a non-toggleable, non-negated clause (for "Show the clauses") | `ParsedClause.span` is null for `multiple_clauses`/`nested`/`mixed_fields` | **gap, worked around** by walking `ast`; a per-clause span list would be additive (proposed in TASK-042's notes, not blocking) |
+| span of a non-toggleable, non-negated clause (for "Show the clauses") | `ParsedClause.blocking_spans` (code-point spans of the clauses behind `multiple_clauses`/`nested`/`mixed_fields`) | **exists** (TASK-091); no AST walk needed |
 | per-year edit | a reducer action for `year` | **gap** (decision-011 defers it); Open questions 2 |
 
 ## Evidence

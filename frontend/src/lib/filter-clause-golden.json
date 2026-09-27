@@ -12,6 +12,7 @@
           "span": [6, 16],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["ICLR"]
         }
       },
@@ -33,6 +34,7 @@
           "span": [5, 5],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["datasets_benchmarks", "main", "position"]
         },
         "status": {
@@ -41,6 +43,7 @@
           "span": [5, 5],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["accepted"]
         },
         "year": {
@@ -49,6 +52,7 @@
           "span": [5, 5],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "ranges": [
             {
               "lo": 1000,
@@ -75,6 +79,7 @@
           "span": [5, 5],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["ICLR", "ICML", "NeurIPS"]
         }
       },
@@ -96,6 +101,7 @@
           "span": [11, 58],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["datasets_benchmarks", "main", "position"]
         },
         "status": {
@@ -104,6 +110,7 @@
           "span": [63, 78],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["accepted"]
         }
       },
@@ -125,6 +132,7 @@
           "span": [2, 12],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["ICLR"]
         },
         "track": {
@@ -133,6 +141,7 @@
           "span": [14, 14],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["datasets_benchmarks", "main", "position"]
         }
       },
@@ -154,6 +163,7 @@
           "span": [2, 32],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["main", "workshop"]
         }
       },
@@ -175,6 +185,7 @@
           "span": [6, 30],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["main", "workshop"]
         }
       },
@@ -196,6 +207,7 @@
           "span": [0, 30],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["main", "workshop"]
         }
       },
@@ -217,6 +229,7 @@
           "span": [0, 20],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["ICLR", "ICML"]
         }
       },
@@ -238,6 +251,7 @@
           "span": [0, 11],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["ICML"]
         }
       },
@@ -259,6 +273,10 @@
           "span": null,
           "toggleable": false,
           "reason": "multiple_clauses",
+          "blocking_spans": [
+            [0, 14],
+            [57, 71]
+          ],
           "values": null
         }
       },
@@ -280,6 +298,7 @@
           "span": [43, 56],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["NeurIPS"]
         }
       },
@@ -301,6 +320,10 @@
           "span": null,
           "toggleable": false,
           "reason": "multiple_clauses",
+          "blocking_spans": [
+            [0, 10],
+            [11, 21]
+          ],
           "values": null
         }
       },
@@ -322,6 +345,7 @@
           "span": [0, 15],
           "toggleable": false,
           "reason": "negated",
+          "blocking_spans": [],
           "values": ["workshop"]
         }
       },
@@ -343,6 +367,7 @@
           "span": null,
           "toggleable": false,
           "reason": "nested",
+          "blocking_spans": [[0, 27]],
           "values": null
         },
         "venue": {
@@ -351,6 +376,7 @@
           "span": [27, 27],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["ICLR", "ICML", "NeurIPS"]
         }
       },
@@ -372,6 +398,7 @@
           "span": null,
           "toggleable": false,
           "reason": "mixed_fields",
+          "blocking_spans": [[0, 28]],
           "values": null
         },
         "track": {
@@ -380,6 +407,7 @@
           "span": null,
           "toggleable": false,
           "reason": "mixed_fields",
+          "blocking_spans": [[0, 28]],
           "values": null
         }
       },
@@ -405,6 +433,7 @@
           "span": [127, 127],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["datasets_benchmarks", "main", "position"]
         }
       },
@@ -435,6 +464,7 @@
           "span": [129, 129],
           "toggleable": false,
           "reason": "too_deep",
+          "blocking_spans": [],
           "values": ["datasets_benchmarks", "main", "position"]
         }
       },
@@ -456,6 +486,7 @@
           "span": [1852, 1852],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["datasets_benchmarks", "main", "position"]
         }
       },
@@ -481,6 +512,7 @@
           "span": [1853, 1853],
           "toggleable": false,
           "reason": "too_long",
+          "blocking_spans": [],
           "values": ["datasets_benchmarks", "main", "position"]
         },
         "venue": {
@@ -489,6 +521,7 @@
           "span": [1853, 1853],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["ICLR", "ICML", "NeurIPS"]
         }
       },
@@ -513,6 +546,7 @@
           "span": [1891, 1901],
           "toggleable": true,
           "reason": null,
+          "blocking_spans": [],
           "values": ["ICLR"]
         }
       },
@@ -540,6 +574,7 @@
           "span": [1892, 1902],
           "toggleable": false,
           "reason": "too_long",
+          "blocking_spans": [],
           "values": ["ICLR"]
         }
       },
@@ -561,6 +596,7 @@
           "span": null,
           "toggleable": false,
           "reason": "multiple_clauses",
+          "blocking_spans": [[0, 35]],
           "values": null
         }
       },
@@ -582,6 +618,7 @@
           "span": null,
           "toggleable": false,
           "reason": "nested",
+          "blocking_spans": [[2, 37]],
           "values": null
         },
         "venue": {
@@ -590,6 +627,7 @@
           "span": null,
           "toggleable": false,
           "reason": "nested",
+          "blocking_spans": [[2, 37]],
           "values": null
         }
       },
@@ -611,6 +649,7 @@
           "span": null,
           "toggleable": false,
           "reason": "nested",
+          "blocking_spans": [[2, 36]],
           "values": null
         }
       },
@@ -632,6 +671,7 @@
           "span": null,
           "toggleable": false,
           "reason": "mixed_fields",
+          "blocking_spans": [[2, 36]],
           "values": null
         },
         "venue": {
@@ -640,6 +680,7 @@
           "span": null,
           "toggleable": false,
           "reason": "mixed_fields",
+          "blocking_spans": [[2, 36]],
           "values": null
         }
       },
@@ -661,6 +702,7 @@
           "span": [4, 4],
           "toggleable": false,
           "reason": "unparsable_edit",
+          "blocking_spans": [],
           "values": ["accepted"]
         }
       },

@@ -429,11 +429,13 @@ def _utf8_stdout() -> None:
 def _removed_line(removed: int, track: Mapping[str, int], status: Mapping[str, int]) -> str:
     """Those the default filters removed, ineligible (track or status) and unclassified apart (03's
     exclusion accounting; a search's header and a record's summary)."""
+    from openproceedings.engine.exclusions import unclassified_total
+
     ineligible = "; ".join(
         f"{f}: " + (", ".join(f"{v} {n}" for v, n in b.items() if v != "unknown") or "none")
         for f, b in (("track", track), ("status", status))
     )
-    unclassified = track["unknown"] + status["unknown"]
+    unclassified = unclassified_total(track, status)
     return (
         f"removed by default filters {removed}: ineligible {removed - unclassified} ({ineligible}), "
         f"unclassified {unclassified} (track unknown {track['unknown']}, status unknown {status['unknown']})"
@@ -451,6 +453,7 @@ def _report(
     terms and its count (guarantee 6; every term with --explain)."""
     from datetime import UTC, datetime
 
+    from openproceedings.engine.exclusions import identified_total
     from openproceedings.query import QUERY_VERSION
     from openproceedings.query.normalize import TOKENIZER_VERSION
 
@@ -485,7 +488,7 @@ def _report(
             "not a database; they are not PRISMA identification numbers (spec 01)"
         )
     lines += [
-        f"identified {total + gone.total} (within the query's own limits)",
+        f"identified {identified_total(total, gone.total)} (within the query's own limits)",
         _removed_line(gone.total, gone.track, gone.status),
         f"screened (total) {total}",
         f"canonical: {result.canonical}",
@@ -617,6 +620,8 @@ def _record_store(data_dir: Path) -> RecordStore:
 def _record_lines(record: SearchRecord) -> list[str]:
     """What a methods section quotes from a record (prisma-reporting skill): the versions, when it was
     searched and what the dates of the corpus are, the counts, `ids_hash` and the strings that reproduce it."""
+    from openproceedings.engine.exclusions import identified_total
+
     window = record.crawl_dates.get("*")
     kind = (record.crawl_dates_kind or {}).get("*")
     label = {"scholar_query_dates": "Scholar searches run", "mixed": "crawl and Scholar searches"}.get(
@@ -637,7 +642,7 @@ def _record_lines(record: SearchRecord) -> list[str]:
         lines.append("note: this record doesn't say whether its counts are PRISMA identification numbers")
     ex = record.excluded
     lines += [
-        f"identified {record.total + ex.total} (within the query's own limits)",
+        f"identified {identified_total(record.total, ex.total)} (within the query's own limits)",
         _removed_line(ex.total, ex.track, ex.status),
         f"screened (total) {record.total}",
         f"ids_hash {record.ids_hash}",

@@ -70,7 +70,7 @@ data tables).
 | Need | Status |
 |---|---|
 | everything in C1 | exists (`CoverageResponse`) |
-| what kind the collection window is (`crawl` / `scholar_query_dates` / `mixed`) and whether the corpus is bootstrap-only | **gap**: records carry `crawl_dates_kind` and `identification_citable`, `/coverage` doesn't. Proposed additive `snapshot.crawl_dates_kind` and `snapshot.identification_citable` (TASK-045 notes). Until then: "Collected", and no citability line |
+| what kind the collection window is (`crawl` / `scholar_query_dates` / `mixed`) and whether the corpus is bootstrap-only | **exists** (TASK-091): `snapshot.crawl_dates_kind` and `snapshot.identification_citable`, derived as a record's. The page can now word the window by its kind and show the citability line |
 
 ## `/help/syntax` (TASK-045)
 

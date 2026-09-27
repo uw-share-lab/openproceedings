@@ -109,7 +109,10 @@ def test_post_freezes_every_field_of_spec_04s_table(client: TestClient, data_dir
     )  # fmt: skip
 
     record = replayed(client, created["record_id"], ids=True)["record"]
-    assert set(record) == SPEC_FIELDS | {"record_id", "body_version", "schema_version", "ranking_params"}
+    assert set(record) == SPEC_FIELDS | {"record_id", "body_version", "schema_version", "ranking_params"} | {
+        "identified_total",  # derived on read, never stored (TASK-090)
+        "unclassified_total",
+    }
     assert record["body_version"] == 2
     search = client.get("/api/v1/search", params={"q": q, "limit": 200}).json()
     parsed = parse(q)

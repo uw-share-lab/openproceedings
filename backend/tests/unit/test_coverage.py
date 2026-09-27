@@ -39,6 +39,8 @@ def test_the_breakdown_of_a_hand_counted_manifest() -> None:
             "crawl_dates": {"*": {"from": "2026-09-20T10:00:00+00:00", "to": "2026-09-23T09:00:00+00:00"}},
             "built_at": "2026-09-24T00:00:00+00:00",
             "sources": ["openreview", "ris"],
+            "crawl_dates_kind": {"*": "mixed"},  # a crawl and a bootstrap source (TASK-091)
+            "identification_citable": True,
         },
         "totals": {"records": 12, "abstract_missing": 3, "unknown_track": 1, "unknown_status": 2},
         "venue_years": [  # by venue name, then year; cells in vocabulary order, unknown last

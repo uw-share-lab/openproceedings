@@ -227,6 +227,7 @@ describe("clauseFromParse", () => {
     span: [6, 16],
     toggleable: true,
     reason: null,
+    blocking_spans: [],
     values: ["ICLR"],
   };
 
