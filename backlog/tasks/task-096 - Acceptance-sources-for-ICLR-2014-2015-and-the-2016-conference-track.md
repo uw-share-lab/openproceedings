@@ -1,17 +1,15 @@
 ---
-id: TASK-092
+id: TASK-096
 title: 'Acceptance sources for ICLR 2014, 2015 and the 2016 conference track'
 status: To Do
 assignee: []
-created_date: '2026-09-27 20:35'
+created_date: '2026-09-27 20:49'
 labels:
   - ingest
 milestone: m-4
 dependencies: []
-references:
-  - docs/research/2026-09-27-openreview-and-proceedings-facts.md
 priority: medium
-ordinal: 89000
+ordinal: 93000
 ---
 
 ## Description

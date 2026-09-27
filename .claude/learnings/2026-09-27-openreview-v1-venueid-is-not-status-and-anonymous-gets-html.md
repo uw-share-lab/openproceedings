@@ -16,9 +16,9 @@ PMLR before the crawlers are written.
   `ICLR.cc/2022/Conference`, 1,523 of them `venue = ICLR 2022 Submitted`. ICLR 2023 and 2017, NeurIPS
   2021–2022 and D&B 2021 (`…/Round1`) do the same; ICLR 2017 also puts the conference venueid on workshop
   invitations. `classify_venueid` reads those as `main`/`accepted`. The v2 authority rule does not carry
-  back to v1 (TASK-091).
+  back to v1 (TASK-095).
 - **The spec's premises were off in both directions.** ICLR is on OpenReview from 2013 (not 2018), but
-  2015 is missing, 2014 has no decisions and 2016 has only its workshop track (TASK-092).
+  2015 is missing, 2014 has no decisions and 2016 has only its workshop track (TASK-096).
 - **Anonymous = HTML with status 200**, not the 429 the skill expected; `count` appears on v2 only when
   `offset` is sent; `limit` caps at 1000; `x-ratelimit-reset` is an epoch while `ratelimit-reset` is
   seconds.
@@ -44,9 +44,9 @@ PMLR before the crawlers are written.
   maintainer's scholarmend-era `.env` needs them added.
 
 ## Follow-ups
-- [ ] TASK-090 classify NeurIPS position/competition tracks; decide the 2026 Evaluations_and_Datasets_Track.
-- [ ] TASK-091 keep `classify_venueid` off v1 status; audit the M2 RIS corpus.
-- [ ] TASK-092 ICLR 2014/2015/2016 acceptance sources.
+- [ ] TASK-094 classify NeurIPS position/competition tracks; decide the 2026 Evaluations_and_Datasets_Track.
+- [ ] TASK-095 keep `classify_venueid` off v1 status; audit the M2 RIS corpus.
+- [ ] TASK-096 ICLR 2014/2015/2016 acceptance sources.
 - [ ] TASK-054: NeurIPS 2021 main 2,334 (proceedings) vs 2,630 (OpenReview v1 venues) unexplained.
 
 ## Propagated to

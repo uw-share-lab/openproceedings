@@ -1,10 +1,10 @@
 ---
 id: TASK-048
 title: 'Decide: index rejected and withdrawn submissions?'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-27 20:42'
+updated_date: '2026-09-27 20:48'
 labels:
   - decision
 milestone: m-4

@@ -1,20 +1,18 @@
 ---
-id: TASK-091
+id: TASK-095
 title: >-
   API v1 venueids are not status evidence: keep classify_venueid off v1 status
   and audit the RIS corpus
 status: To Do
 assignee: []
-created_date: '2026-09-27 20:35'
+created_date: '2026-09-27 20:49'
 labels:
   - ingest
   - classify
 milestone: m-4
 dependencies: []
-references:
-  - docs/research/2026-09-27-openreview-and-proceedings-facts.md
 priority: high
-ordinal: 88000
+ordinal: 92000
 ---
 
 ## Description

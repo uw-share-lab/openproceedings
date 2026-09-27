@@ -18,7 +18,7 @@ Every fact here was checked live on 2026-09-27 (TASK-002). The evidence, counts 
 - Not on OpenReview: ICLR 2015 (no group), the ICLR 2016 conference track, NeurIPS before 2021, ICML
   before 2023 (`ICML.cc/2020/Conference` exists but has no public notes). Use
   `.claude/skills/neurips-proceedings/SKILL.md` and `.claude/skills/pmlr-proceedings/SKILL.md`; ICLR's
-  gaps are TASK-092.
+  gaps are TASK-096.
 - `GET /groups?id=<venue>` on api2 tells the version of any venue: a v2 group has `domain = <its id>` and
   a `content` block naming its venueids; a v1 group has `domain = null` and a `web` script. A note is only
   on its own host: the other one answers `404 NotFoundError` by id, and an empty list (not an error) to a
@@ -85,7 +85,7 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
 - **v1 puts the bare venue path on rejected papers too**: ICLR 2017 (`ICLR.cc/2017/conference`, lower
   case, also on workshop invitations), ICLR 2022 and 2023, NeurIPS 2021–2022, NeurIPS 2021 D&B
   (`…/Round1`), ICLR 2023 Tiny Papers and Blogposts. `classify_venueid("ICLR.cc/2022/Conference")` says
-  `main`/`accepted`, so it must never set a v1 note's status (TASK-091). The venueid only confirms venue,
+  `main`/`accepted`, so it must never set a v1 note's status (TASK-095). The venueid only confirms venue,
   year and track.
 - Status per v1 year (the submission invitation lists what was **submitted**, never what was accepted):
 

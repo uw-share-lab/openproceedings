@@ -211,11 +211,11 @@ rate-limit headers are real (decision-004). Long listings are trimmed (the `_rec
 how). No test reads them yet; the crawler tasks do.
 
 ## Follow-ups
-- TASK-090: classify.py venueid table: NeurIPS `Position_Paper_Track` → position, `Competition_Track`
+- TASK-094: classify.py venueid table: NeurIPS `Position_Paper_Track` → position, `Competition_Track`
   → competition (both verified), and a spec decision for `Evaluations_and_Datasets_Track` (2026).
-- TASK-091: v1 venueids are not status evidence: keep `classify_venueid` off v1 notes' status, and
+- TASK-095: v1 venueids are not status evidence: keep `classify_venueid` off v1 notes' status, and
   audit the M2 RIS corpus for ICLR 2017/2022/2023, NeurIPS 2021–2022 and D&B 2021 records whose
   `accepted` came from a bare v1 venueid.
-- TASK-092: acceptance sources for the ICLR years OpenReview can't answer (2014 status, 2015, 2016
+- TASK-096: acceptance sources for the ICLR years OpenReview can't answer (2014 status, 2015, 2016
   conference track).
 - The NeurIPS 2021 and 2024 main-track count gaps go to TASK-054 (notes added there).

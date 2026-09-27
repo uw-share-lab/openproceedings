@@ -1,10 +1,10 @@
 ---
 id: TASK-002
 title: Verify unconfirmed OpenReview and proceedings facts against live data (M4)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-25 22:06'
-updated_date: '2026-09-27 20:42'
+updated_date: '2026-09-27 20:48'
 labels:
   - ingest
 milestone: m-4

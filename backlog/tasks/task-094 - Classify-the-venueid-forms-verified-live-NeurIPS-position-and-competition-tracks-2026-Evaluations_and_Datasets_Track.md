@@ -1,20 +1,18 @@
 ---
-id: TASK-090
+id: TASK-094
 title: >-
   Classify the venueid forms verified live: NeurIPS position and competition
   tracks, 2026 Evaluations_and_Datasets_Track
 status: To Do
 assignee: []
-created_date: '2026-09-27 20:35'
+created_date: '2026-09-27 20:49'
 labels:
   - ingest
   - classify
 milestone: m-4
 dependencies: []
-references:
-  - docs/research/2026-09-27-openreview-and-proceedings-facts.md
 priority: high
-ordinal: 87000
+ordinal: 91000
 ---
 
 ## Description

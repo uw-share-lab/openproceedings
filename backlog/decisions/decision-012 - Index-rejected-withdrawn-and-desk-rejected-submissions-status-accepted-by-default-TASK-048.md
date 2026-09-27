@@ -33,7 +33,7 @@ The owner decided (2026-09-27): we index every public rejected, withdrawn and de
 with `status:rejected`, `status:withdrawn` or `status:desk_rejected`, taken from the submission note's
 `content.venueid` suffix (v2), or in API v1 years from its `content.venue` string, decision note or
 withdrawn / desk-rejected invitation (never the bare v1 venueid, which rejected papers carry too:
-TASK-091), and the default `status:accepted` filter excludes them, each counted in the exclusion banner's status buckets.
+TASK-095), and the default `status:accepted` filter excludes them, each counted in the exclusion banner's status buckets.
 
 ## Consequences
 

@@ -36,7 +36,7 @@ OpenReview) and leave the year range to the query's `year:` filter.
 - Spec 01 §Sources gives each source's year range from 2013; the crawl window is 2013 to the current year.
 - ICLR 2015, the ICLR 2016 conference track and ICLR 2014's acceptance have no spec 01 source: they are
   coverage gaps, shown on the coverage page, until a source (iclr.cc's accepted-paper lists, or
-  `proceedings.iclr.cc` if it covers the years) is added by a spec change (TASK-092). ICLR 2014 papers
+  `proceedings.iclr.cc` if it covers the years) is added by a spec change (TASK-096). ICLR 2014 papers
   are indexed with `status:unknown`, which the default filter excludes and counts.
 - Older ICLR years (2013, 2014, 2016, 2017) use v1 schemas the M4 v1 adapters must handle; the v1
   adapter task (TASK-051) now covers ICLR 2013–2023, and ICML 2013–2019 comes from PMLR through the
