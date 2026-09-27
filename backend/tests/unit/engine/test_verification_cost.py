@@ -6,6 +6,7 @@ gate round 4): each clause's allowed-token sets are built once per compile, not 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from openproceedings.engine.compile import Compiler, verified_clauses
@@ -92,3 +93,68 @@ def test_wide_and_mixed_clauses_match_the_reference(built: Path, q: str) -> None
     assert ast is not None and verified_clauses(ast)
     got = {BACK[i] for i in TantivyEngine(built).match_ids(ast)}  # index ids -> the fixture's own
     assert got == set(REFERENCE.match_ids(ast))
+
+
+# --- the deadline and the empty clause (round 5) ------------------------------------------------------------------
+class Late(Exception):
+    """The gate's deadline check firing (the API's is a 503 `API_BUSY`)."""
+
+
+def test_a_verification_past_its_deadline_stops_and_leaves_nothing_behind(built: Path) -> None:
+    """The gate yields a deadline check; the loop calls it every `CHECK_EVERY` candidates. When it fires the
+    clause's partial id list is dropped: no memo (verified, compiled), no scope, holds any of it."""
+    from contextlib import contextmanager
+
+    from openproceedings.engine.compile import CHECK_EVERY
+    from openproceedings.engine.tantivy_engine import Scope
+
+    engine = TantivyEngine(built)
+    ast = parse(f"abstract:{wide(2)}").effective_ast  # one field, with more than CHECK_EVERY candidates
+    assert ast is not None
+    assert min(n for _c, _f, n in engine.candidates(ast)) > CHECK_EVERY
+    calls, read = [0], [0]
+
+    @contextmanager
+    def gate() -> Any:
+        def check() -> None:
+            calls[0] += 1
+            if calls[0] > 1:  # the entry check passes; the one at CHECK_EVERY candidates is late
+                raise Late
+
+        yield check
+
+    reader = engine.read
+
+    def counting(*args: Any) -> Any:
+        for doc in reader(*args):
+            read[0] += 1
+            yield doc
+
+    engine.verification_gate = gate
+    engine.read = counting  # type: ignore[method-assign]
+    scope = Scope()
+    with pytest.raises(Late):
+        engine.compile(ast, scope)
+    assert read[0] == CHECK_EVERY  # stopped at the check, not after reading every candidate
+    assert engine.verified == {} and engine.compiled == {} and scope.ids == {}
+
+
+def test_a_clause_with_no_candidates_takes_no_slot(built: Path) -> None:
+    from contextlib import contextmanager
+
+    engine = TantivyEngine(built)
+    entered: list[int] = []
+
+    @contextmanager
+    def gate() -> Any:
+        entered.append(1)
+        yield None
+
+    engine.verification_gate = gate
+    ast = parse('"tru* zzqqxxnotaword"').effective_ast
+    assert ast is not None and sum(n for _c, _f, n in engine.candidates(ast)) == 0
+    assert engine.match_ids(ast) == frozenset() and entered == []
+    assert engine.match_ids(parse(wide(2)).effective_ast) and entered == [
+        1,
+        1,
+    ]  # a clause with some: its slot

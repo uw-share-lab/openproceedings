@@ -113,11 +113,17 @@ class ApiConfig(BaseModel):
     max_verified_clauses: int = Field(default=16, ge=1)
     # a query whose position-verified clauses would read more candidate documents than this, summed over each
     # clause's fields, is 422 API_QUERY_TOO_COSTLY before any is verified (decision-010): a cold verification
-    # costs ~40 µs per candidate, so the default bounds one query's slot hold near 12 s (measured at 80k), above
-    # the heaviest real review query (Trust-Evals main-2-pop, Scholar mode: 247,793 candidates, 10.2 s)
+    # costs 37-56 µs per candidate by shape (wildcard-phrase NEARs the dearest), so the default bounds one
+    # query's work near 11-17 s idle at 80k (more wall time under load, which `max_verification_seconds` caps),
+    # above the heaviest real review query (Trust-Evals main-2-pop, Scholar mode: 247,793 candidates, 10.2 s)
     max_verification_candidates: int = Field(default=300_000, ge=1)
     # a request holding a verification slot longer than this logs `verification_slow` (WARNING)
     slow_verification_seconds: float = Field(default=5.0, gt=0)
+    # a request's cold verifications together get this much wall time from its first slot; past it the verify
+    # loop stops and the request is 503 API_BUSY (Retry-After), nothing stored (round 5). 30 s: main-2-pop, the
+    # heaviest real query, needs 10.2 s idle at 80k, so it finishes under load that triples its wall time
+    # (four concurrent page requests measured ~2.3x), while one query can't hold the slot for minutes
+    max_verification_seconds: float = Field(default=30.0, gt=0)
     # one client network (IPv4 /24, IPv6 /48) at most `record_saves_network_burst` saves at once, refilled at
     # `record_saves_network_per_hour`, so one network can't spend the instance-wide ceiling for everyone
     record_saves_network_burst: int = Field(default=10, ge=1)

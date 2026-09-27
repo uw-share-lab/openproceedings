@@ -21,7 +21,7 @@ from tests.contract.conftest import Store, make_app
 from tests.contract.test_abuse_limits import error
 
 SEARCH = "/api/v1/search"
-READ_S = 0.15  # each cold verification (one clause, one field) takes at least this long here
+READ_S = 0.15  # each cold verification (one clause, one field) burns at least this much CPU here
 
 
 def slowed(c: TestClient) -> None:
@@ -29,7 +29,9 @@ def slowed(c: TestClient) -> None:
     read = engine.read
 
     def slow(*args: Any) -> Any:
-        time.sleep(READ_S)
+        spent = time.thread_time() + READ_S  # busy, not asleep: the debit charges the thread's CPU (round 5)
+        while time.thread_time() < spent:
+            pass
         return read(*args)
 
     engine.read = slow

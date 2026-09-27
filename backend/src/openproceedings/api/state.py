@@ -64,6 +64,10 @@ if TYPE_CHECKING:
     from openproceedings.engine.tantivy_engine import TantivyEngine
 
 log = logging.getLogger(__name__)
+# the access-line key (never logged) holding a request's verification deadline, on the wall clock `_wall`
+DEADLINE = "_verify_deadline"
+_wall = time.monotonic  # the deadline's clock (module names, so a test can move them)
+_cpu = time.thread_time  # the verifying thread's CPU: what the slot-time debit charges
 MAX_REFUSALS = 256  # refused pins remembered per map (a client can name any number of absent versions)
 
 PinnedReason = Literal["ok", "absent", "unloadable", "tampered"]
@@ -162,6 +166,7 @@ class IndexState:
         verification_slots: int = 1,
         busy_retry_seconds: int = 5,
         slow_verification_seconds: float = 5.0,
+        max_verification_seconds: float = 30.0,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._data_dir = data_dir
@@ -193,11 +198,16 @@ class IndexState:
         self._verifying = threading.BoundedSemaphore(verification_slots)
         self._busy_retry_seconds = busy_retry_seconds
         self._slow_verification_ms = slow_verification_seconds * 1000
+        self._max_verification_seconds = max_verification_seconds
 
     @contextmanager
-    def verification_slot(self) -> Iterator[None]:
+    def verification_slot(self) -> Iterator[Callable[[], None]]:
         """Hold one of the cold-verification slots for the block, or raise 503 `API_BUSY` with
-        `Retry-After` at once if none is free (`TantivyEngine.verification_gate`). The time held is added to
+        `Retry-After` at once if none is free (`TantivyEngine.verification_gate`). It yields the request's
+        deadline check, which the verify loop calls every `compile.CHECK_EVERY` candidates: past
+        `max_verification_seconds` of wall time since the request's first slot, 503 `API_BUSY` with
+        `Retry-After`, the partial work dropped (M3a round 5: the candidate ceiling bounds work, not wall time,
+        and under GIL contention one admitted query held the slot 109 s). The time held is added to
         the request's access line (`verify_ms`, summed over its holds); a request whose holds pass
         `slow_verification_seconds` logs `verification_slow` (WARNING, once), the slot starving every other
         verified query meanwhile."""
@@ -208,23 +218,45 @@ class IndexState:
                 f"Try again in {self._busy_retry_seconds} s.",
                 headers={"Retry-After": str(self._busy_retry_seconds)},
             )
-        started = time.perf_counter()
+        fields = current_access.get()
+        started, cpu = _wall(), _cpu()
+        # one deadline per request, from its first slot: its verifications together get max_verification_seconds
+        until = fields.get(DEADLINE) if fields is not None else None
+        if not isinstance(until, float):
+            until = started + self._max_verification_seconds
+            if fields is not None:
+                fields[DEADLINE] = until
+        deadline = until
+
+        def check() -> None:
+            if _wall() > deadline:
+                raise ApiError(
+                    DiagnosticCode.API_BUSY,
+                    "This query's slow position checks ran past the time this instance gives one query "
+                    f"({self._max_verification_seconds:g} s): the server is too busy to finish them now. Try "
+                    f"again in {self._busy_retry_seconds} s, or narrow its phrases and NEARs.",
+                    headers={"Retry-After": str(self._busy_retry_seconds)},
+                )
+
         try:
-            yield
+            yield check
         finally:
             self._verifying.release()
-            self._held(elapsed_ms(started))
+            self._held((_wall() - started) * 1000, (_cpu() - cpu) * 1000)
 
-    def _held(self, ms: float) -> None:
+    def _held(self, ms: float, cpu_ms: float) -> None:
+        """Add one hold to the request's access line: `verify_ms` (wall: how long others were kept out) and
+        `verify_cpu_ms` (this thread's CPU: the work itself, what the rate limit debits, so a client isn't
+        billed for other requests' load on the GIL)."""
         fields = current_access.get()
         if fields is None:  # outside a request (a test driving the engine)
             return
-        held = fields.get("verify_ms", 0.0)
+        held, spent = fields.get("verify_ms", 0.0), fields.get("verify_cpu_ms", 0.0)
         before = held if isinstance(held, float) else 0.0
         after = round(before + ms, 1)
-        fields["verify_ms"] = (
-            after  # one request verifies in one thread at a time (its facet worker never does)
-        )
+        # one request verifies in one thread at a time (its facet worker never does)
+        fields["verify_ms"] = after
+        fields["verify_cpu_ms"] = round((spent if isinstance(spent, float) else 0.0) + cpu_ms, 1)
         if before <= self._slow_verification_ms < after:
             log.warning(
                 "verification_slow",
