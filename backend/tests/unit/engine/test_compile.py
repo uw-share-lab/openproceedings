@@ -145,13 +145,16 @@ def test_the_cap_is_inclusive_on_both_engines(
     monkeypatch.setattr(ref, "MAX_EXPANSIONS", cap)
     w = parse("trust*").ast
     engines[0].expanded.clear()  # the memo from earlier tests would skip the check being tested
-    for engine in engines:
-        engine_expand = engine.expand
-        if refused:
-            with pytest.raises(EngineInputError, match="expands to 5 terms"):
-                engine_expand(w)  # type: ignore[arg-type]
-        else:
-            assert len(engine_expand(w)) == 5  # type: ignore[arg-type]
+    try:
+        for engine in engines:
+            if refused:
+                with pytest.raises(EngineInputError, match="expands to 5 terms"):
+                    engine.expand(w)  # type: ignore[arg-type]
+            else:
+                assert len(engine.expand(w)) == 5  # type: ignore[arg-type]
+    finally:  # what was memoised under the patched cap must not leak into later tests
+        engines[0].expanded.clear()
+        engines[0].compiled.clear()
 
 
 def test_near_reversed_counts_the_tokens_between_exactly(tmp_path: Path) -> None:
@@ -344,6 +347,7 @@ def test_no_compiled_boolean_has_more_than_two_clauses(
 
     monkeypatch.setattr(comp, "tantivy", Tantivy())
     engines[0].verified.clear()
+    engines[0].compiled.clear()  # compile afresh, through the patched module
     before = set(both(engines, q))
     assert sizes and max(sizes) == 2, sizes
     monkeypatch.undo()
@@ -370,3 +374,11 @@ def test_an_over_cap_wildcard_is_refused_every_time_and_keeps_only_its_count(tmp
     got = engine.expand(small)  # type: ignore[arg-type]
     got.append("mutated")
     assert engine.expand(small) == [f"trust{i:03d}" for i in range(10)]  # the caller gets a copy
+
+
+def test_a_tree_compiles_once_per_engine(engines: tuple[TantivyEngine, ReferenceEngine]) -> None:
+    engine = engines[0]
+    ast = parse("alpha OR trust*").ast
+    first = engine.compile(ast)  # type: ignore[arg-type]
+    assert engine.compile(ast) is first  # type: ignore[arg-type]
+    assert engine.compile(parse("alpha OR beta").ast) is not first  # type: ignore[arg-type]

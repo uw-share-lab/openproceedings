@@ -61,10 +61,15 @@ class TantivyEngine:
         self.index = open_index(path)
         self.searcher = self.index.searcher()
         self.ids = (path / IDS).read_text(encoding="utf-8").splitlines()
-        self.universe = frozenset(self.ids)
+        self.compiled: dict[str, Compiled] = {}  # per tree (bounded), see compile()
         self.verified: dict[tuple[str, str], list[str]] = {}  # position-verified clauses, per engine
         # each wildcard's terms, or just the count of an over-cap one
         self.expanded: dict[tuple[str, str], tuple[str, ...] | int] = {}
+
+    @property
+    def universe(self) -> frozenset[str]:
+        """Every id in the index (tests and facet checks; built on demand, not held for every engine)."""
+        return frozenset(self.ids)
 
     # --- the Engine protocol -------------------------------------------------------------------------
     def expand(self, wildcard: Wildcard) -> list[str]:
@@ -196,11 +201,20 @@ class TantivyEngine:
         return out
 
     def compile(self, ast: Node) -> Compiled:
+        """The compiled query, memoised per tree: the index is immutable, so a tree compiles the same way every
+        time, and a search, its pages and its facets needn't build the Boolean again (task-076 headroom)."""
+        key = ast.model_dump_json()
+        if key in self.compiled:
+            return self.compiled[key]
         if len(self.verified) > 1_000:
             self.verified.clear()  # bounded: a long-running API never grows it without limit
-        return Compiler(
+        if len(self.compiled) > 1_000:
+            self.compiled.clear()
+        compiled = Compiler(
             self.index.schema, self.expansions(ast), self.read, self.verified, self.ranking["field_weights"]
         ).compile(ast)
+        self.compiled[key] = compiled
+        return compiled
 
     def explain(self, ast: Node) -> str:
         """The compiled query as a readable tree, its wildcard expansions and verified clauses (op search

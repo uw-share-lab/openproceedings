@@ -194,7 +194,8 @@ def _check_tokens(r: PaperRecord, fields: dict[str, list[str]], exact: tantivy.T
         )
     # facets can't reach the limit: they come from the vocabulary
     for field, tokens in fields.items():
-        if any(len(t.encode("utf-8")) > MAX_TOKEN_BYTES for t in tokens):
+        # a code point is at most 4 bytes, so only a token over a quarter of the limit needs encoding
+        if any(len(t) * 4 > MAX_TOKEN_BYTES and len(t.encode("utf-8")) > MAX_TOKEN_BYTES for t in tokens):
             raise IndexBuildError(
                 f"{r.id}: a {field} token is over {MAX_TOKEN_BYTES} bytes, which Tantivy would drop"
             )

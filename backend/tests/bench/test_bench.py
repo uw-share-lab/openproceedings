@@ -90,6 +90,59 @@ def test_match_ids_with_exclusion_accounting(benchmark: Any, engine: TantivyEngi
     assert time is None or time < 0.300, f"p95 {time * 1000:.1f} ms"
 
 
+SHAPES = {
+    "broad": "the",  # thousands of matches: the whole-set collection and the facets dominate
+    "widest wildcard": None,  # the widest expansion under the cap, inside a search (filled in below)
+    "multi-token NEAR": '"large language" NEAR/3 model',
+    "nested NOT": "trust NOT (model NOT (language OR NOT agent))",
+}
+
+
+@pytest.mark.parametrize("sort", ["relevance", "year_desc", "year_asc", "title"])
+@pytest.mark.parametrize("shape", list(SHAPES))
+def test_search_shapes_and_sorts(benchmark: Any, engine: TantivyEngine, shape: str, sort: str) -> None:
+    q = SHAPES[shape] or f"{widest_stem(engine)[0]}*"
+    ast = parse(q).effective_ast
+    assert ast is not None
+    measure(benchmark, lambda: engine.search(ast, sort=sort, limit=50))
+    time_ = p95(benchmark)
+    assert time_ is None or time_ < 0.100, f"p95 {time_ * 1000:.1f} ms"
+
+
+def test_match_ids_with_exclusions_on_a_broad_query(benchmark: Any, engine: TantivyEngine) -> None:
+    result = parse("the")
+    ast = result.effective_ast
+    assert ast is not None
+    measure(benchmark, lambda: excluded(engine, result, len(engine.match_ids(ast))))
+    time_ = p95(benchmark)
+    assert time_ is None or time_ < 0.300, f"p95 {time_ * 1000:.1f} ms"
+
+
+def test_an_export_drains_every_document(benchmark: Any, engine: TantivyEngine) -> None:
+    ast = parse("the").effective_ast
+    assert ast is not None
+    measure(benchmark, lambda: sum(1 for _ in engine.documents(ast)[1]))
+
+
+def test_a_small_index_build(benchmark: Any, tmp_path_factory: pytest.TempPathFactory) -> None:
+    # 500 records in one process: the build's own path (normalizing, title ranks, writing), for the 20% gate
+    from datetime import UTC, datetime
+
+    from openproceedings.engine.index import build_index
+
+    from tests.unit.engine.test_exclusions import BUILT, DedupResult, as_paper, render
+
+    papers = tuple(sorted((as_paper(r) for r in records()[:500]), key=lambda p: p.id))
+    snap = tmp_path_factory.mktemp("snap")
+    for name, data in render(DedupResult(papers, (), ()), [], BUILT).items():
+        (snap / name).write_bytes(data)
+
+    def build() -> object:
+        return build_index(snap, tmp_path_factory.mktemp("idx"), datetime(2026, 9, 26, tzinfo=UTC), workers=1)
+
+    benchmark.pedantic(build, rounds=5, iterations=1, warmup_rounds=0)
+
+
 def widest_stem(engine: TantivyEngine) -> tuple[str, int]:
     """The stem whose `*` expansion over the index is the largest at or under the cap."""
     terms = sorted({t for f in FIELDS for t, _df in engine.searcher.terms_with_prefix(f, "")})
