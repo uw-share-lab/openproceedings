@@ -300,6 +300,10 @@ def test_a_record_naming_another_index_with_the_served_ones_inputs_is_a_mismatch
     assert body["replay"]["status"] == "mismatch"
     lines = mismatch_lines(logs)[before:]
     assert len(lines) == 1 and lines[0]["index_version_match"] is False
+    assert lines[0]["ran_on"] == body["replay"]["index_version"] != claimed
+    assert lines[0]["refused"] == body["replay"]["refused"]
+    replayed(client, bad)  # the same record again: DEBUG, never a second ERROR
+    assert len(mismatch_lines(logs)[before:]) == 1
     assert SECRET not in json.dumps(logs())
 
 

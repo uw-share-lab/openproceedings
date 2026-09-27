@@ -139,6 +139,13 @@ def test_a_year_clause_followed_by_a_group_is_editable() -> None:
     assert (got["span"], got["toggleable"]) == ([0, 19], True)
 
 
+def test_a_year_clause_followed_by_a_word_is_editable_because_the_edit_is_grouped() -> None:
+    """`year:1000..9999status:accepted` doesn't parse (FIELD_UNKNOWN_VALUE), `year:(1000..9999)status:accepted`
+    does: the widest year edit must be written grouped, or this clause reads as not editable (review gate r2)."""
+    got = report("year:(2019)status:accepted")["year"]
+    assert (got["span"], got["toggleable"], got["reason"]) == ([0, 11], True, None)
+
+
 def test_a_typed_clause_at_depth_64_is_still_editable() -> None:
     """A splice inside the query adds no nesting (`track:(…)` is not a group level); only the wrap does. So
     `too_deep` is reachable only for a field with no clause: a typed clause's golden edge is `too_long`."""
