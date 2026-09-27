@@ -494,6 +494,12 @@
   "new": "git -C \"$root\" diff HEAD -- 'frontend/eslint.config.*'"
  },
  {
+  "label": "autofix looks for node_modules in frontend/ (the npm workspace hoists it to the root)",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "if [ -d \"$root/node_modules\" ]; then",
+  "new": "if [ -d \"$root/frontend/node_modules\" ]; then"
+ },
+ {
   "label": "git clean -x allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "        if ignored and not dry and not excluded and not outside:",

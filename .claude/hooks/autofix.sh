@@ -3,7 +3,7 @@
 # anything that still fails back to the agent. Never blocks (exit 0). Modelled on the naturalschema repo's
 # ruff hook, extended to the whole monorepo. Standard: .claude/skills/autolint/SKILL.md.
 #   *.py        → ruff format, ruff check --fix, py_compile        (root uv workspace)
-#   frontend/*  → prettier --write, eslint --fix (ts/tsx/js/jsx)   (only once frontend/node_modules exists)
+#   frontend/*  → prettier --write, eslint --fix (ts/tsx/js/jsx)   (only once the npm workspace is installed: ./node_modules)
 #   *.sh, .githooks/* → shellcheck (report only; it cannot fix)
 # Skips data/, backlog/, generated files, and anything outside the repo (compared by real path, so a
 # symlink or `..` cannot escape it).
@@ -40,7 +40,7 @@ case "$rel" in
     out=$(cd "$root" && python3 -m py_compile -- "$rel" 2>&1) || note "py_compile failed on $rel:"$'\n'"$out"
     ;;
   frontend/*.ts|frontend/*.tsx|frontend/*.js|frontend/*.jsx|frontend/*.json|frontend/*.css|frontend/*.md)
-    if [ -d "$root/frontend/node_modules" ]; then
+    if [ -d "$root/node_modules" ]; then   # npm workspace root: deps are hoisted there
       sub="${rel#frontend/}"
       (cd "$root/frontend" && npx --no-install prettier --write -- "$sub" >/dev/null 2>&1)
       case "$sub" in

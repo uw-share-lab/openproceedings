@@ -21,7 +21,12 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   `ast.py`, `canonical.py`, `defaults.py`, `compat.py`), `engine/` (`protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py`, `exclusions.py`, `highlight.py`, `parity.py`), `ingest/`
   (`record.py`, `classify.py`, `urls.py`, `volumes.py`, `ris.py`, `dedup.py`, `snapshot.py`); `api/ semantic/ eval/` arrive with
   their tasks). Tests in `backend/tests/`; `uv run pytest` from the root.
-- `frontend/` (planned, M3): Next.js, an npm workspace.
+- Root `package.json` is the **npm workspace** root (`workspaces: ["frontend"]`, one `package-lock.json`,
+  dependencies hoisted to `./node_modules`; Node from `.nvmrc`).
+- `frontend/`: Next.js App Router + TypeScript strict, `output: "standalone"`, Tailwind v4 + shadcn tokens
+  (`src/app/globals.css`), `src/lib/search-state.ts` (the URL↔state reducer: `q` is the only result-set
+  state), `src/api/spans.ts` (code-point spans → UTF-16; `schema.ts` arrives with TASK-040). Pages are
+  placeholders until TASK-041–045. Tests are Vitest (`src/**/*.test.ts`); `npm test --workspace frontend`.
 - `docs/specs` · `docs/{plans,results,design,usability,research}` (created as needed).
 - `backlog/`: Backlog.md, CLI only.
 - `.claude/`: agents, skills, commands, hooks and learnings, all committed. The roster is in
@@ -30,7 +35,8 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 
 ## Environment
 - **uv** for Python. `uv sync` at the repo root; never `pip install` into the workspace.
-- **npm** for the frontend.
+- **npm** for the frontend: `npm ci` at the repo root (or `make sync`), never inside `frontend/`. Node 22
+  (`.nvmrc`, as in CI).
 - `scripts/setup-dev.sh` once per clone (git hooks, `.env`).
 
 ## Tooling (`.claude/`)
