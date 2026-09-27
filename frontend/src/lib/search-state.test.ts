@@ -14,7 +14,10 @@ import {
   toSearchRequest,
   toURL,
   whyBlocked,
+  clauseFromParse,
+  type ClauseReason,
   type FilterClause,
+  type ParsedClause,
   type FilterField,
   type Mode,
   type SearchAction,
@@ -22,6 +25,7 @@ import {
   type SearchStateErrorCode,
 } from "./search-state";
 import { codePointLength } from "@/api/spans";
+import clauseGolden from "./filter-clause-golden.json";
 import golden from "./wrap-golden.json";
 
 const DEFAULT_TRACKS = ["main", "datasets_benchmarks", "position"];
@@ -134,6 +138,124 @@ describe("writing a default out explicitly (wrap-golden.json, shared with the ba
       });
     }
   }
+});
+
+/** A golden case of `filter-clause-golden.json`: what `/parse` reports for q, and what a click then does. */
+interface ClauseGolden {
+  readonly name: string;
+  readonly q?: string;
+  readonly q_parts?: readonly (readonly [string, number])[];
+  readonly mode: Mode;
+  readonly filters: Readonly<Record<string, unknown>>;
+  readonly click: {
+    readonly type: "facetToggle" | "includeExcluded";
+    readonly field: FilterField;
+    readonly value: string;
+  };
+  readonly expected?: string;
+  readonly expected_parts?: readonly (readonly [string, number])[];
+  readonly refused?: SearchStateErrorCode;
+}
+
+/** A golden string: as written, or its [text, times] runs concatenated. */
+const spelled = (text: string | undefined, parts: ClauseGolden["q_parts"]): string =>
+  text ?? (parts ?? []).map(([run, times]) => run.repeat(times)).join("");
+
+describe("/parse filters → click (filter-clause-golden.json, shared with the backend's /parse tests)", () => {
+  // The JSON is test data typed by hand; `ParsedClause` is the generated schema type the server fills.
+  const cases = clauseGolden.cases as unknown as readonly ClauseGolden[];
+
+  it("covers typed, default, pasted-canonical, astral, Scholar, nested, negated and both cap edges", () => {
+    const reasons = new Set(
+      cases.flatMap((c) => Object.values(c.filters).map((f) => (f as ParsedClause).reason)),
+    );
+    expect([...reasons].sort()).toEqual(
+      [
+        null,
+        "multiple_clauses",
+        "nested",
+        "mixed_fields",
+        "negated",
+        "too_long",
+        "too_deep",
+        "unparsable_edit",
+      ].sort(),
+    );
+  });
+
+  for (const c of cases) {
+    const q = spelled(c.q, c.q_parts);
+    const parsed = c.filters[c.click.field] as ParsedClause;
+    const { type, field, value } = c.click;
+    const action = { type, field, value, ...clauseFromParse(parsed, q, c.mode) } as SearchAction;
+    const state = at(q, { mode: c.mode });
+    if (c.refused === undefined) {
+      it(`${c.name}: writes the expected q`, () => {
+        expect(reduce(state, action).q).toBe(spelled(c.expected, c.expected_parts));
+      });
+    } else {
+      const code = c.refused;
+      it(`${c.name}: refuses with ${code}, and whyBlocked says so before the click`, () => {
+        refused(() => reduce(state, action), code);
+        expect(whyBlocked(state, action)?.code).toBe(code);
+      });
+    }
+  }
+});
+
+describe("clauseFromParse", () => {
+  const typed: ParsedClause = {
+    field: "venue",
+    negated: false,
+    span: [6, 16],
+    toggleable: true,
+    reason: null,
+    values: ["ICLR"],
+  };
+
+  it("keys a toggleable clause by the query it was parsed from", () => {
+    expect(clauseFromParse(typed, "trust venue:ICLR", "scholar")).toEqual({
+      clause: {
+        field: "venue",
+        negated: false,
+        source: "trust venue:ICLR",
+        mode: "scholar",
+        span: [6, 16],
+        values: ["ICLR"],
+      },
+      reason: null,
+    });
+  });
+
+  it("gives no clause, with the server's reason, for one that is not toggleable", () => {
+    const negated: ParsedClause = { ...typed, negated: true, toggleable: false, reason: "negated" };
+    expect(clauseFromParse(negated, "x", "native")).toEqual({ clause: null, reason: "negated" });
+  });
+
+  it("gives no clause and no reason when the query did not parse (filters is null)", () => {
+    expect(clauseFromParse(null, "(x", "native")).toEqual({ clause: null, reason: null });
+    expect(clauseFromParse(undefined, "(x", "native")).toEqual({ clause: null, reason: null });
+  });
+
+  it("never offers a year clause as a value list", () => {
+    const year = { ...typed, field: "year" } as const;
+    expect(clauseFromParse(year, "x", "native")).toEqual({ clause: null, reason: null });
+  });
+
+  it("words a reason it doesn't know generically (the reasons are an open set)", () => {
+    const err = refused(
+      () =>
+        reduce(at("x"), {
+          type: "facetToggle",
+          field: "venue",
+          value: "ICLR",
+          clause: null,
+          reason: "a_future_reason" as ClauseReason,
+        }),
+      "NO_EDITABLE_CLAUSE",
+    );
+    expect(err.message).toContain("more than one top-level `venue:` clause, or one inside an OR or NOT");
+  });
 });
 
 describe("facetToggle rewrites q exactly", () => {

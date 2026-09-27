@@ -16,6 +16,7 @@ from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.ingest.record import PaperRecord, Presentation, Urls
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import MIN_YEAR, FilterField, Node, TextField
+from openproceedings.query.clauses import ParsedFilters
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import MAX_QUERY_LENGTH, Mode
 from openproceedings.records import Excluded as Excluded  # one schema for the exclusion accounting
@@ -79,8 +80,9 @@ class ParseRequest(Model):
 
 
 class ParseResponse(Versioned):
-    """02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints). A query
-    with errors is still a 200 here: `errors` holds them, and every Optional is null."""
+    """02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus
+    `filters` (`query.clauses.filter_clauses`, TASK-078). A query with errors is still a 200 here: `errors`
+    holds them, and every Optional is null."""
 
     mode: Mode
     ast: Node | None  # as typed, spans into q
@@ -92,6 +94,12 @@ class ParseResponse(Versioned):
     warnings: list[Diagnostic]
     errors: list[Diagnostic]
     translations: list[Diagnostic]
+    filters: ParsedFilters | None = Field(
+        description="Each filter field's top-level clause, for facet and include clicks (spec 02 §Filter "
+        "clauses; decision-011): its code-point span in `q` and the values it admits, or a zero-width span at "
+        "the end for an applied default or an unrestricted field; `toggleable` false with a `reason` when a "
+        "click can't rewrite it. Null exactly when `errors` is non-empty."
+    )
 
 
 # --- /search -----------------------------------------------------------------------------------------

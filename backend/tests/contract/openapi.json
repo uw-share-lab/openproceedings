@@ -1376,7 +1376,7 @@
         "type": "object"
       },
       "ParseResponse": {
-        "description": "02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints). A query\nwith errors is still a 200 here: `errors` holds them, and every Optional is null.",
+        "description": "02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints), plus\n`filters` (`query.clauses.filter_clauses`, TASK-078). A query with errors is still a 200 here: `errors`\nholds them, and every Optional is null.",
         "properties": {
           "ast": {
             "anyOf": [
@@ -1519,6 +1519,17 @@
             "title": "Errors",
             "type": "array"
           },
+          "filters": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParsedFilters"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Each filter field's top-level clause, for facet and include clicks (spec 02 §Filter clauses; decision-011): its code-point span in `q` and the values it admits, or a zero-width span at the end for an applied default or an unrestricted field; `toggleable` false with a `reason` when a click can't rewrite it. Null exactly when `errors` is non-empty."
+          },
           "identification_query": {
             "anyOf": [
               {
@@ -1578,9 +1589,225 @@
           "defaults",
           "warnings",
           "errors",
-          "translations"
+          "translations",
+          "filters"
         ],
         "title": "ParseResponse",
+        "type": "object"
+      },
+      "ParsedClause": {
+        "description": "A `venue`, `track` or `status` clause.",
+        "properties": {
+          "field": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "venue",
+              "year",
+              "track",
+              "status"
+            ],
+            "title": "Field",
+            "type": "string"
+          },
+          "negated": {
+            "description": "The clause is `NOT field:…`. A negated clause is never toggleable.",
+            "title": "Negated",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+                "enum": [
+                  "multiple_clauses",
+                  "nested",
+                  "mixed_fields",
+                  "negated",
+                  "too_long",
+                  "too_deep",
+                  "unparsable_edit"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it can't be, exactly when `toggleable` is false.",
+            "title": "Reason"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Half-open code-point range of the clause in `q`. Zero-width at the end, `[len(q), len(q)]`, when the field has no clause of its own (an applied default, or no restriction): a click writes it out as `(q) AND field:(…)`. Null when the field has no single top-level clause (`reason` says why).",
+            "title": "Span"
+          },
+          "toggleable": {
+            "description": "A facet or include click may rewrite this clause.",
+            "title": "Toggleable",
+            "type": "boolean"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The values the clause admits, sorted: an applied default's, or every value for an unrestricted field. Null exactly when `span` is.",
+            "title": "Values"
+          }
+        },
+        "required": [
+          "field",
+          "negated",
+          "span",
+          "toggleable",
+          "reason",
+          "values"
+        ],
+        "title": "ParsedClause",
+        "type": "object"
+      },
+      "ParsedFilters": {
+        "description": "Every filter field's clause (`POST /parse` `filters`).",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ParsedClause"
+          },
+          "track": {
+            "$ref": "#/components/schemas/ParsedClause"
+          },
+          "venue": {
+            "$ref": "#/components/schemas/ParsedClause"
+          },
+          "year": {
+            "$ref": "#/components/schemas/ParsedYearClause"
+          }
+        },
+        "required": [
+          "venue",
+          "year",
+          "track",
+          "status"
+        ],
+        "title": "ParsedFilters",
+        "type": "object"
+      },
+      "ParsedYearClause": {
+        "description": "The `year` clause. Years are ranges, not a value list.",
+        "properties": {
+          "field": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "venue",
+              "year",
+              "track",
+              "status"
+            ],
+            "title": "Field",
+            "type": "string"
+          },
+          "negated": {
+            "description": "The clause is `NOT field:…`. A negated clause is never toggleable.",
+            "title": "Negated",
+            "type": "boolean"
+          },
+          "ranges": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/YearRange"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The year ranges the clause admits, sorted and merged; `1000..9999` for no restriction. Null exactly when `span` is.",
+            "title": "Ranges"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+                "enum": [
+                  "multiple_clauses",
+                  "nested",
+                  "mixed_fields",
+                  "negated",
+                  "too_long",
+                  "too_deep",
+                  "unparsable_edit"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it can't be, exactly when `toggleable` is false.",
+            "title": "Reason"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Half-open code-point range of the clause in `q`. Zero-width at the end, `[len(q), len(q)]`, when the field has no clause of its own (an applied default, or no restriction): a click writes it out as `(q) AND field:(…)`. Null when the field has no single top-level clause (`reason` says why).",
+            "title": "Span"
+          },
+          "toggleable": {
+            "description": "A facet or include click may rewrite this clause.",
+            "title": "Toggleable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "field",
+          "negated",
+          "span",
+          "toggleable",
+          "reason",
+          "ranges"
+        ],
+        "title": "ParsedYearClause",
         "type": "object"
       },
       "Phrase": {

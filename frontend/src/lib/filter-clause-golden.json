@@ -1,0 +1,461 @@
+{
+  "_comment": "Golden cases for /parse `filters` (TASK-078; spec 02 §Filter clauses, spec 05 §URL is state). Read by backend/tests/unit/test_clauses.py (query.clauses reports exactly `filters` for each field listed, and every expected string parses with the clicked field's clause admitting the new values), backend/tests/contract/test_parse_filters.py (POST /parse serves the same) and frontend/src/lib/search-state.test.ts (given that report, the reducer writes exactly the expected string or refuses with the `refused` code). `q_parts` and `expected_parts` spell a long string as [text, times] runs, concatenated. Spans are code points into q.",
+  "cases": [
+    {
+      "name": "typed clause",
+      "q": "trust venue:ICLR",
+      "mode": "native",
+      "filters": {
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": [6, 16],
+          "toggleable": true,
+          "reason": null,
+          "values": ["ICLR"]
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "venue",
+        "value": "NeurIPS"
+      },
+      "expected": "trust venue:(ICLR OR NeurIPS)"
+    },
+    {
+      "name": "applied default, written out",
+      "q": "trust",
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": [5, 5],
+          "toggleable": true,
+          "reason": null,
+          "values": ["datasets_benchmarks", "main", "position"]
+        },
+        "status": {
+          "field": "status",
+          "negated": false,
+          "span": [5, 5],
+          "toggleable": true,
+          "reason": null,
+          "values": ["accepted"]
+        },
+        "year": {
+          "field": "year",
+          "negated": false,
+          "span": [5, 5],
+          "toggleable": true,
+          "reason": null,
+          "ranges": [
+            {
+              "lo": 1000,
+              "hi": 9999
+            }
+          ]
+        }
+      },
+      "click": {
+        "type": "includeExcluded",
+        "field": "track",
+        "value": "workshop"
+      },
+      "expected": "(trust) AND track:(datasets_benchmarks OR main OR position OR workshop)"
+    },
+    {
+      "name": "unrestricted field: every value",
+      "q": "trust",
+      "mode": "native",
+      "filters": {
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": [5, 5],
+          "toggleable": true,
+          "reason": null,
+          "values": ["ICLR", "ICML", "NeurIPS"]
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "venue",
+        "value": "ICML"
+      },
+      "expected": "(trust) AND venue:(ICLR OR NeurIPS)"
+    },
+    {
+      "name": "canonical string pasted back",
+      "q": "(trust AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": [11, 58],
+          "toggleable": true,
+          "reason": null,
+          "values": ["datasets_benchmarks", "main", "position"]
+        },
+        "status": {
+          "field": "status",
+          "negated": false,
+          "span": [63, 78],
+          "toggleable": true,
+          "reason": null,
+          "values": ["accepted"]
+        }
+      },
+      "click": {
+        "type": "includeExcluded",
+        "field": "status",
+        "value": "rejected"
+      },
+      "expected": "(trust AND track:(datasets_benchmarks OR main OR position) AND status:(accepted OR rejected))"
+    },
+    {
+      "name": "astral characters before and after the clause",
+      "q": "𝐀 venue:ICLR 𝐁",
+      "mode": "native",
+      "filters": {
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": [2, 12],
+          "toggleable": true,
+          "reason": null,
+          "values": ["ICLR"]
+        },
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": [14, 14],
+          "toggleable": true,
+          "reason": null,
+          "values": ["datasets_benchmarks", "main", "position"]
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "venue",
+        "value": "ICML"
+      },
+      "expected": "𝐀 venue:(ICLR OR ICML) 𝐁"
+    },
+    {
+      "name": "an OR of one field's filters is one clause, spliced whole",
+      "q": "x (track:main OR track:workshop)",
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": [2, 32],
+          "toggleable": true,
+          "reason": null,
+          "values": ["main", "workshop"]
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "track",
+        "value": "workshop"
+      },
+      "expected": "x track:main"
+    },
+    {
+      "name": "Scholar mode: source: is the venue clause",
+      "q": "source:PMLR x",
+      "mode": "scholar",
+      "filters": {
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": [0, 11],
+          "toggleable": true,
+          "reason": null,
+          "values": ["ICML"]
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "venue",
+        "value": "NeurIPS"
+      },
+      "expected": "venue:(ICML OR NeurIPS) x"
+    },
+    {
+      "name": "flattened tree: two top-level track clauses",
+      "q": "track:workshop \"large language model\" AND (venue:NeurIPS track:workshop)",
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": null,
+          "toggleable": false,
+          "reason": "multiple_clauses",
+          "values": null
+        }
+      },
+      "click": {
+        "type": "includeExcluded",
+        "field": "track",
+        "value": "main"
+      },
+      "refused": "NO_EDITABLE_CLAUSE"
+    },
+    {
+      "name": "flattened tree: the venue clause inside the AND group is top-level",
+      "q": "track:workshop \"large language model\" AND (venue:NeurIPS track:workshop)",
+      "mode": "native",
+      "filters": {
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": [43, 56],
+          "toggleable": true,
+          "reason": null,
+          "values": ["NeurIPS"]
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "venue",
+        "value": "ICLR"
+      },
+      "expected": "track:workshop \"large language model\" AND (venue:(NeurIPS OR ICLR) track:workshop)"
+    },
+    {
+      "name": "a written copy the canonical form deduplicates",
+      "q": "track:main track:main",
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": null,
+          "toggleable": false,
+          "reason": "multiple_clauses",
+          "values": null
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "track",
+        "value": "workshop"
+      },
+      "refused": "NO_EDITABLE_CLAUSE"
+    },
+    {
+      "name": "negated clause",
+      "q": "-track:workshop llm",
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": true,
+          "span": [0, 15],
+          "toggleable": false,
+          "reason": "negated",
+          "values": ["workshop"]
+        }
+      },
+      "click": {
+        "type": "includeExcluded",
+        "field": "track",
+        "value": "main"
+      },
+      "refused": "NEGATED_CLAUSE"
+    },
+    {
+      "name": "nested under OR",
+      "q": "(track:workshop AND x) OR y",
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": null,
+          "toggleable": false,
+          "reason": "nested",
+          "values": null
+        },
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": [27, 27],
+          "toggleable": true,
+          "reason": null,
+          "values": ["ICLR", "ICML", "NeurIPS"]
+        }
+      },
+      "click": {
+        "type": "includeExcluded",
+        "field": "track",
+        "value": "workshop"
+      },
+      "refused": "NO_EDITABLE_CLAUSE"
+    },
+    {
+      "name": "OR of mixed fields",
+      "q": "track:workshop OR venue:ICLR",
+      "mode": "native",
+      "filters": {
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": null,
+          "toggleable": false,
+          "reason": "mixed_fields",
+          "values": null
+        },
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": null,
+          "toggleable": false,
+          "reason": "mixed_fields",
+          "values": null
+        }
+      },
+      "click": {
+        "type": "facetToggle",
+        "field": "venue",
+        "value": "NeurIPS"
+      },
+      "refused": "NO_EDITABLE_CLAUSE"
+    },
+    {
+      "name": "depth 63: the wrap reaches the limit of 64",
+      "q_parts": [
+        ["(", 63],
+        ["a", 1],
+        [")", 63]
+      ],
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": [127, 127],
+          "toggleable": true,
+          "reason": null,
+          "values": ["datasets_benchmarks", "main", "position"]
+        }
+      },
+      "click": {
+        "type": "includeExcluded",
+        "field": "track",
+        "value": "workshop"
+      },
+      "expected_parts": [
+        ["(", 64],
+        ["a", 1],
+        [")", 64],
+        [" AND track:(datasets_benchmarks OR main OR position OR workshop)", 1]
+      ]
+    },
+    {
+      "name": "depth 64: the wrap would be PARSE_TOO_DEEP",
+      "q_parts": [
+        ["(", 64],
+        ["a", 1],
+        [")", 64]
+      ],
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": [129, 129],
+          "toggleable": false,
+          "reason": "too_deep",
+          "values": ["datasets_benchmarks", "main", "position"]
+        }
+      },
+      "click": {
+        "type": "includeExcluded",
+        "field": "track",
+        "value": "workshop"
+      },
+      "refused": "TOO_DEEP"
+    },
+    {
+      "name": "1,852 code points: the widest track wrap fits the canonical cap",
+      "q_parts": [["a", 1852]],
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": [1852, 1852],
+          "toggleable": true,
+          "reason": null,
+          "values": ["datasets_benchmarks", "main", "position"]
+        }
+      },
+      "click": {
+        "type": "includeExcluded",
+        "field": "track",
+        "value": "workshop"
+      },
+      "expected_parts": [
+        ["(", 1],
+        ["a", 1852],
+        [") AND track:(datasets_benchmarks OR main OR position OR workshop)", 1]
+      ]
+    },
+    {
+      "name": "1,853 code points: the widest track wrap's canonical form is over 2,000",
+      "q_parts": [["a", 1853]],
+      "mode": "native",
+      "filters": {
+        "track": {
+          "field": "track",
+          "negated": false,
+          "span": [1853, 1853],
+          "toggleable": false,
+          "reason": "too_long",
+          "values": ["datasets_benchmarks", "main", "position"]
+        },
+        "venue": {
+          "field": "venue",
+          "negated": false,
+          "span": [1853, 1853],
+          "toggleable": true,
+          "reason": null,
+          "values": ["ICLR", "ICML", "NeurIPS"]
+        }
+      },
+      "click": {
+        "type": "includeExcluded",
+        "field": "track",
+        "value": "workshop"
+      },
+      "refused": "TOO_LONG"
+    },
+    {
+      "name": "a trailing escape: the wrap would not parse",
+      "q": "foo\\",
+      "mode": "native",
+      "filters": {
+        "status": {
+          "field": "status",
+          "negated": false,
+          "span": [4, 4],
+          "toggleable": false,
+          "reason": "unparsable_edit",
+          "values": ["accepted"]
+        }
+      },
+      "click": {
+        "type": "includeExcluded",
+        "field": "status",
+        "value": "rejected"
+      },
+      "refused": "NO_EDITABLE_CLAUSE"
+    }
+  ]
+}

@@ -8,7 +8,7 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 ## Endpoints (`/api/v1`)
 | Method | Path | In → out |
 |---|---|---|
-| POST | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations). Debounced, called as the user types. Any well-formed body is a 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body is a 422 `API_BAD_PARAM`. |
+| POST | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations) plus `filters`, each filter field's top-level clause for facet clicks (02 §Filter clauses, decision-011; `query/clauses.py`). Debounced, called as the user types. Any well-formed body is a 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body is a 422 `API_BAD_PARAM`. |
 | GET | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | GET | `/papers/{id}` | full record with provenance |
 | GET | `/export` | `format=ris\|csv\|bibtex\|jsonl` plus either `q` (with `mode` and optional `index_version`) or `record_id` (with at most `mode=native`, the declared default some clients always send; `scholar` is 422 "with record_id, mode may only be native") → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; `record_id` → exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if gone, 409 `API_RECORD_MISMATCH` on a `mismatch`) |
