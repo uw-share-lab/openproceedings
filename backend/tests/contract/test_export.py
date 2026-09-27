@@ -373,7 +373,20 @@ def test_the_openapi_document_describes_the_export(client: TestClient) -> None:
     assert set(params) == {"q", "format", "mode", "index_version", "record_id"}
     assert params["format"]["required"]  # q or record_id: one of the two, checked by the route
     assert not any(params[p].get("required") for p in ("q", "mode", "index_version", "record_id"))
+    assert params["mode"]["schema"]["default"] == "native"  # the default is in the contract (M3a review)
     assert set(op["responses"]["200"]["content"]) == {m.split(";")[0] for m, _ext in route.MEDIA.values()}
+    headers = op["responses"]["200"]["headers"]
+    assert set(headers) == {
+        "X-Total", "X-Index-Version", "X-Tokenizer-Version", "X-Query-Version", "Content-Disposition",
+    }  # fmt: skip
+    assert headers["X-Total"]["schema"]["type"] == "integer"
+
+
+def test_an_explicit_default_mode_is_a_q_export_like_none(client: TestClient) -> None:
+    """`mode=native` sent explicitly with `q` is the same export as no `mode` (the default)."""
+    a = client.get(EXPORT, params={"q": "trust", "format": "jsonl"})
+    b = client.get(EXPORT, params={"q": "trust", "format": "jsonl", "mode": "native"})
+    assert a.status_code == b.status_code == 200 and a.content == b.content
 
 
 # --- the body really streams (S4) ---------------------------------------------------------------------------
@@ -479,8 +492,9 @@ def test_an_index_this_code_cant_serve_is_409_logged_once_and_not_listed(
             )
     assert opened.count(stale) == 1  # the refusal is remembered, not re-verified per request
     refusals = [x for x in logs() if x["event"] == "pinned_index_unavailable"]
-    assert [(x["level"], x["reason"], x["error"]) for x in refusals] == [
-        ("WARNING", "unloadable", "EngineInternalError")
+    # the reason names the input that differs (M3a review), never the message's paths
+    assert [(x["level"], x["reason"], x["error"], x["cause_reason"]) for x in refusals] == [
+        ("WARNING", "unloadable", "IndexUnservable", "tokenizer_version_mismatch")
     ]
 
 
@@ -614,13 +628,24 @@ def test_a_record_whose_index_is_gone_is_409_unavailable(recorded: TestClient, d
 
 
 @pytest.mark.parametrize(
-    "extra", [{"q": "trust"}, {"mode": "native"}, {"mode": "scholar"}, {"index_version": "0123456789ab"}]
+    "extra",
+    [
+        {"q": "trust"},
+        {"mode": "native"},  # the default, sent explicitly: still refused (read from the query string)
+        {"mode": "scholar"},
+        {"index_version": "0123456789ab"},
+        {"q": "trust", "mode": "native", "index_version": "0123456789ab"},
+    ],
 )
 def test_a_record_id_with_a_query_mode_or_version_is_422(recorded: TestClient, extra: dict[str, str]) -> None:
+    """Each of q, mode and index_version alone turns a record export into a 422 (qa mutant E5: a check of
+    `q` alone must not pass); the same export without it is a 200, so the extra parameter is the cause."""
     record_id = save(recorded, "trust")
-    error(
+    assert recorded.get(EXPORT, params={"record_id": record_id, "format": "ris"}).status_code == 200
+    e = error(
         recorded.get(EXPORT, params={"record_id": record_id, "format": "ris", **extra}), 422, "API_BAD_PARAM"
     )
+    assert "record_id alone" in e["message"]
 
 
 def test_an_unknown_record_is_404(recorded: TestClient) -> None:

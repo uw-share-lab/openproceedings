@@ -9,28 +9,36 @@ the one loader).
 Every replay is a 200 whose `replay.status` is `reproduced`, `drifted` or `mismatch`. A malformed record id
 is 422 `API_BAD_PARAM`; an unknown one 404 `API_RECORD_NOT_FOUND` (the message never repeats it). A save
 into a full store is 503 `API_RECORDS_STORE_FULL`. All three routes cost the export weight in the rate
-limit (each runs a whole query).
+limit (each runs a whole query), and saves from every client together are held to
+`ApiConfig.record_saves_burst` at once, refilled at `record_saves_per_hour` (429 `API_RATE_LIMITED` with
+`Retry-After` beyond it): the store is append-only, so its growth is bounded in time as well as in bytes.
 
-The hook for `GET /export?record_id=` (task-036): `require_citable(request, record_id, engine)` returns the
-stored record, or raises 409 `API_RECORD_MISMATCH` when its replay is a `mismatch` (and the 422/404 above).
-`replay_status` answers just the status.
+What `GET /export?record_id=` (task-036) calls: `stored_record(request, record_id)` (the stored record,
+ids included; the 422/404 above), then, after pinning the record's index, `refuse_mismatch(request, record,
+engine)` (409 `API_RECORD_MISMATCH` when its replay is a `mismatch`).
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, FastAPI, Query, Request
+from fastapi import APIRouter, FastAPI, Query, Request, Response
+from fastapi import Path as PathParam
 
 from openproceedings.api.config import ApiConfig
-from openproceedings.api.deps import EngineDep, annotate, current_engine, searchable
+from openproceedings.api.deps import EngineDep, annotate, searchable
 from openproceedings.api.errors import ApiError
-from openproceedings.api.middleware import API_PREFIX
+from openproceedings.api.middleware import API_PREFIX, TokenBucket, take_all
 from openproceedings.api.models import (
     DEFAULT_LIMIT,
+    LIMIT_DOC,
     MAX_LIMIT,
+    OFFSET_DOC,
+    RECORD_ID,
+    RECORD_ID_DOC,
     ChangedInput,
     DiffEntry,
     Excluded,
@@ -41,6 +49,7 @@ from openproceedings.api.models import (
     ReplayInfo,
     versions,
 )
+from openproceedings.api.openapi import response_header
 from openproceedings.api.state import IndexState
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.tantivy_engine import TantivyEngine
@@ -50,7 +59,6 @@ from openproceedings.records import (
     RecordStore,
     Replay,
     SearchRecord,
-    Status,
     freeze,
     replay,
     valid_record_id,
@@ -58,6 +66,8 @@ from openproceedings.records import (
 
 router = APIRouter(prefix=API_PREFIX)
 RECORD_PAGE = "/record/{record_id}"  # the frontend's record page (spec 05 §Pages)
+RECORD_RESOURCE = API_PREFIX + "/records/{record_id}"  # the 201's `Location`
+RecordId = Annotated[str, PathParam(pattern=RECORD_ID, description=RECORD_ID_DOC)]
 
 
 @dataclass(frozen=True)
@@ -67,6 +77,10 @@ class Records:
     data_dir: Path
     store: RecordStore
     pinned: PinnedLoader  # `IndexState.pinned(v).engine`
+    saves: TokenBucket  # one bucket, key `*`: every client's saves together
+
+
+SAVES = "*"  # the save bucket's one key
 
 
 def install(app: FastAPI, config: ApiConfig, state: IndexState) -> None:
@@ -77,7 +91,20 @@ def install(app: FastAPI, config: ApiConfig, state: IndexState) -> None:
         max_bytes=config.records_max_bytes,
         min_free_bytes=config.records_min_free_bytes,
     )
-    app.state.records = Records(config.data_dir, store, lambda version: state.pinned(version).engine)
+    saves = TokenBucket(config.record_saves_burst, config.record_saves_per_hour / 3600, max_clients=1)
+    app.state.records = Records(config.data_dir, store, lambda version: state.pinned(version).engine, saves)
+
+
+def _save_allowed(records: Records) -> None:
+    """Take one save from the instance-wide bucket, or 429 `API_RATE_LIMITED` with `Retry-After`."""
+    wait = take_all([(records.saves, SAVES)], 1)
+    if wait > 0:
+        seconds = max(1, math.ceil(wait))
+        raise ApiError(
+            DiagnosticCode.API_RATE_LIMITED,
+            f"This instance is saving search records as fast as it allows; try again in {seconds} s.",
+            headers={"Retry-After": str(seconds)},
+        )
 
 
 def _records(request: Request) -> Records:
@@ -108,31 +135,16 @@ def _replayed(request: Request, engine: TantivyEngine, record: SearchRecord) -> 
     return result
 
 
-# --- the hook for /export (task-036) ------------------------------------------------------------------
-def replay_status(request: Request, record_id: str, engine: TantivyEngine | None = None) -> Status:
-    """The replay status of record `record_id` on this instance now (422/404 as the record routes). Pass the
-    request's engine (`EngineDep`) if the route has one, so the request never reads the served index twice."""
-    served = engine if engine is not None else current_engine(request)
-    return _replayed(request, served, _stored(request, record_id)).status
-
-
-def require_citable(request: Request, record_id: str, engine: TantivyEngine | None = None) -> SearchRecord:
-    """The stored record, if its replay isn't a `mismatch`; else 409 `API_RECORD_MISMATCH` (spec 04 §Error
-    handling: a set that breaks guarantee 4 is never handed to screening). The mismatch itself is logged by
-    the replay. Pass the request's engine as for `replay_status`."""
-    served = engine if engine is not None else current_engine(request)
-    record = stored_record(request, record_id)
-    refuse_mismatch(request, record, served)
-    return record
-
-
+# --- what /export?record_id= calls (task-036) ----------------------------------------------------------
 def stored_record(request: Request, record_id: str) -> SearchRecord:
     """The stored record, ids included (422 on a malformed id, 404 on an unknown one); no replay."""
     return _stored(request, record_id)
 
 
 def refuse_mismatch(request: Request, record: SearchRecord, served: TantivyEngine) -> None:
-    """409 `API_RECORD_MISMATCH` if `record`'s replay is a `mismatch` (logged by the replay)."""
+    """409 `API_RECORD_MISMATCH` if `record`'s replay is a `mismatch` (logged by the replay): a set that
+    breaks guarantee 4 is never handed to screening (spec 04 §Error handling). `served` is the request's
+    `EngineDep` engine, so the request never reads the served index twice."""
     if _replayed(request, served, record).status == "mismatch":
         raise ApiError(
             DiagnosticCode.API_RECORD_MISMATCH,
@@ -142,24 +154,42 @@ def refuse_mismatch(request: Request, record: SearchRecord, served: TantivyEngin
 
 
 # --- routes -----------------------------------------------------------------------------------------------
-@router.post("/records", response_model=RecordCreated, status_code=201)
-def create_record(request: Request, engine: EngineDep, body: RecordRequest) -> RecordCreated:
+@router.post(
+    "/records",
+    response_model=RecordCreated,
+    status_code=201,
+    responses={
+        201: {
+            "headers": {"Location": response_header("The new record's API resource, `/api/v1/records/<id>`")}
+        }
+    },
+)
+def create_record(
+    request: Request, response: Response, engine: EngineDep, body: RecordRequest
+) -> RecordCreated:
     """Freeze a search as an immutable record: re-run here on the served index, then one transaction."""
     parsed = searchable(request, body.q, body.mode)
     records = _records(request)
+    _save_allowed(records)  # after the parse (a refused query costs no save), before the query runs
     fields, found = freeze(engine, parsed, body.q, records.data_dir)
     record = records.store.insert(fields, found.ids)
     annotate(request, total=record.total)
+    response.headers["Location"] = RECORD_RESOURCE.format(record_id=record.record_id)
     return RecordCreated(
         **versions(engine.index_version),
         record_id=record.record_id,
-        url=RECORD_PAGE.format(record_id=record.record_id),
+        page=RECORD_PAGE.format(record_id=record.record_id),
     )
 
 
 @router.get("/records/{id}", response_model=RecordResponse)
 def get_record(
-    request: Request, engine: EngineDep, id: str, include: Literal["ids"] | None = None
+    request: Request,
+    engine: EngineDep,
+    id: RecordId,
+    include: Annotated[
+        Literal["ids"] | None, Query(description="`ids` to include the record's sorted id list.")
+    ] = None,
 ) -> RecordResponse:
     """The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless
     `include=ids`; `/export?record_id=` streams the papers themselves."""
@@ -180,20 +210,20 @@ def get_record(
             excluded_match=result.excluded_match,
             refused=result.refused,
             changed=_changed(result),
-            added=len(result.added) if result.added is not None else None,
-            removed=len(result.removed) if result.removed is not None else None,
+            added_total=len(result.added) if result.added is not None else None,
+            removed_total=len(result.removed) if result.removed is not None else None,
             membership_identical=result.membership_identical,
         ),
     )
 
 
 @router.get("/records/{id}/diff", response_model=RecordDiff)
-def diff_record(
+def get_record_diff(
     request: Request,
     engine: EngineDep,
-    id: str,
-    offset: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=0, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    id: RecordId,
+    offset: Annotated[int, Query(ge=0, description=OFFSET_DOC)] = 0,
+    limit: Annotated[int, Query(ge=0, le=MAX_LIMIT, description=LIMIT_DOC)] = DEFAULT_LIMIT,
 ) -> RecordDiff:
     """The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each
     list is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A

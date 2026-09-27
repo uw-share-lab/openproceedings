@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 from openproceedings import __version__
 from openproceedings.logs import FORMATS as LOG_FORMATS
-from openproceedings.logs import LEVELS, configure_logging
+from openproceedings.logs import LEVELS, configure_logging, elapsed_ms
 from openproceedings.vocab import bootstrap_only
 
 FORMATS = ("ris", "csv", "bibtex", "jsonl")  # export formats (export.FORMATS; imported lazily there)
@@ -305,7 +305,7 @@ def _search_run(
             "index_version": index_version,
             "canonical_hash": result.canonical_hash,
             "total": total,
-            "ms": round((time.perf_counter() - started) * 1000),
+            "ms": elapsed_ms(started),
         },
     )
 
@@ -457,10 +457,8 @@ def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:
 
 
 def _export(ns: argparse.Namespace) -> int:
-    from openproceedings.diagnostics import DiagnosticCode
-    from openproceedings.engine.protocol import EngineInternalError
     from openproceedings.engine.tantivy_engine import TantivyEngine
-    from openproceedings.export import Provenance, utc_date, write
+    from openproceedings.export import Provenance, check_count, utc_date, write
 
     started = time.perf_counter()
     result = _parsed(ns)
@@ -476,17 +474,13 @@ def _export(ns: argparse.Namespace) -> int:
     total, documents = engine.documents(ast)
     provenance = Provenance(engine.index_version, result.canonical_hash, utc_date())
 
-    def checked(n: int) -> None:
-        if n != total:
-            raise EngineInternalError(DiagnosticCode.API_INTERNAL, f"exported {n} records, but {total} match")
-
     if ns.out is None:  # UTF-8 and untranslated newlines whatever the terminal's locale (spec 04)
         out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="", write_through=True)
         try:
             n = write(ns.format, documents, provenance, out)
         finally:
             out.detach()  # leave sys.stdout usable
-        checked(n)
+        check_count(n, total)
     else:  # a temporary file beside the target, renamed once complete and counted: never a partial file
         partial = ns.out.with_name(f".{ns.out.name}.{secrets.token_hex(6)}.partial")
         # created 0666 so the kernel applies the umask, as `> file` would; an existing file keeps its mode
@@ -496,7 +490,7 @@ def _export(ns: argparse.Namespace) -> int:
                 os.fchmod(fd, ns.out.stat().st_mode & 0o777)
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as stream:
                 n = write(ns.format, documents, provenance, stream)
-            checked(n)
+            check_count(n, total)
             partial.replace(ns.out)
         finally:
             partial.unlink(missing_ok=True)
@@ -506,11 +500,22 @@ def _export(ns: argparse.Namespace) -> int:
 
 
 def _serve(ns: argparse.Namespace) -> int:
+    import ipaddress
+
     from pydantic import ValidationError
 
     from openproceedings.api.config import ApiConfig, RateLimit
     from openproceedings.api.server import serve
 
+    try:
+        loopback = ns.host == "localhost" or ipaddress.ip_address(ns.host).is_loopback
+    except ValueError:  # a host name
+        loopback = False
+    if ns.no_rate_limit and not loopback:
+        raise _usage(
+            "--no-rate-limit is for a local instance only: with a non-loopback --host, anyone who can reach "
+            "it could run unbounded exports"
+        )
     try:
         config = ApiConfig(
             data_dir=ns.data_dir,

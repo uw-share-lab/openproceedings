@@ -15,7 +15,12 @@ from openproceedings.api.deps import EngineDep, annotate, parsed, searchable
 from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import (
     DEFAULT_LIMIT,
+    LIMIT_DOC,
     MAX_LIMIT,
+    MODE_DOC,
+    OFFSET_DOC,
+    Q_DOC,
+    SORT_DOC,
     Excluded,
     Facets,
     Highlights,
@@ -30,7 +35,7 @@ from openproceedings.api.models import (
 from openproceedings.ingest.record import Urls
 from openproceedings.query.parser import Mode
 from openproceedings.search import Hit as Found
-from openproceedings.search import run
+from openproceedings.search import expansions_json, run
 
 router = APIRouter(prefix=API_PREFIX)
 
@@ -60,11 +65,11 @@ def parse_query(request: Request, engine: EngineDep, body: ParseRequest) -> Pars
 def search(
     request: Request,
     engine: EngineDep,
-    q: str,
-    mode: Mode = "native",
-    sort: Sort = "relevance",
-    offset: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=0, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    q: Annotated[str, Query(description=Q_DOC)],
+    mode: Annotated[Mode, Query(description=MODE_DOC)] = "native",
+    sort: Annotated[Sort, Query(description=SORT_DOC)] = "relevance",
+    offset: Annotated[int, Query(ge=0, description=OFFSET_DOC)] = 0,
+    limit: Annotated[int, Query(ge=0, le=MAX_LIMIT, description=LIMIT_DOC)] = DEFAULT_LIMIT,
 ) -> SearchResponse:
     """One page of the ranked matched set, with its total, exclusion accounting, disjunctive facets and
     highlights. `limit` over 200 is a 422 (never clamped); a query that doesn't parse is a 422 with its
@@ -83,7 +88,7 @@ def search(
             identification_query=result.identification_query,
             warnings=result.warnings,
             translations=result.translations,
-            expansions={f"{stem}{op}": list(terms) for (stem, op), terms in sorted(found.expansions.items())},
+            expansions=expansions_json(found.expansions),
         ),
         total=found.total,
         excluded=Excluded.model_validate(found.excluded.to_json()),

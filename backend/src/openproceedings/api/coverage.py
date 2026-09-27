@@ -16,16 +16,15 @@ import logging
 import time
 from collections import Counter
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 
-from openproceedings.api.deps import EngineDep
+from openproceedings.api.deps import ServedDep
 from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import CoverageResponse, versions
-from openproceedings.api.state import IndexState
 from openproceedings.coverage import breakdown
-from openproceedings.diagnostics import DiagnosticCode, InternalError
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.ingest.snapshot import RecordFile, SnapshotError
+from openproceedings.logs import elapsed_ms
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix=API_PREFIX)
@@ -70,17 +69,13 @@ def compute(engine: TantivyEngine, records: RecordFile) -> CoverageResponse:
             "index_version": engine.index_version,
             "records": coverage.totals.records,
             "venue_years": len(coverage.venue_years),
-            "ms": round((time.perf_counter() - started) * 1000),
+            "ms": elapsed_ms(started),
         },
     )
     return coverage
 
 
 @router.get("/coverage", response_model=CoverageResponse)
-def coverage(request: Request, engine: EngineDep) -> CoverageResponse:
-    """The served index's coverage, computed and checked when it was loaded."""
-    state: IndexState = request.app.state.index
-    found = state.coverage(engine.index_version)
-    if found is None:  # loaded with its engine, before the swap: an invariant broken
-        raise InternalError(DiagnosticCode.API_INTERNAL, "the served index has no coverage")
-    return found
+def get_coverage(served: ServedDep) -> CoverageResponse:
+    """The served index's coverage, computed and checked when it was loaded (with the engine, one bundle)."""
+    return served.coverage

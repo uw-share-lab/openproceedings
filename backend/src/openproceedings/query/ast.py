@@ -24,7 +24,8 @@ MIN_YEAR, MAX_YEAR = 1000, 9999
 
 
 class _Node(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    # `kind` and a null `field` are always sent: the API schema marks them required (spec 04 §Conventions)
+    model_config = ConfigDict(frozen=True, extra="forbid", json_schema_serialization_defaults_required=True)
     span: Span
 
     @field_validator("span")
@@ -87,7 +88,7 @@ class Near(_Node):
 
 
 class YearRange(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", json_schema_serialization_defaults_required=True)
     lo: int = Field(ge=MIN_YEAR, le=MAX_YEAR)
     hi: int = Field(ge=MIN_YEAR, le=MAX_YEAR)
 

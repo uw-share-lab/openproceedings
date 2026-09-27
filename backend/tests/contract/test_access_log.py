@@ -70,13 +70,15 @@ def test_the_routers_templates_are_full_paths_and_health_checks_log_at_debug(
     client.get("/api/v1/healthz")
     client.head("/api/v1/healthz")
     client.post("/api/v1/healthz")  # 405: routed to the template, then refused
-    client.get("/api/v1/papers/nope")
+    client.get("/api/v1/papers/op:iclr:2024:nope")
+    client.get("/api/v1/papers/nope")  # malformed: refused by the path's pattern, still on the template
     lines = access(logs)
     assert [(line["route"], line["status"], line["level"]) for line in lines] == [
         ("/api/v1/healthz", 200, "DEBUG"),
         ("/api/v1/healthz", 200, "DEBUG"),
         ("/api/v1/healthz", 405, "DEBUG"),
         ("/api/v1/papers/{id}", 404, "INFO"),
+        ("/api/v1/papers/{id}", 422, "INFO"),
     ]
 
 

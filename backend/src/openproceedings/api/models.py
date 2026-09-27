@@ -7,6 +7,7 @@ Spans are half-open `[start, end)` code-point ranges over the raw source: the st
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
@@ -14,10 +15,12 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.ingest.record import PaperRecord, Presentation, Urls
 from openproceedings.query import QUERY_VERSION
-from openproceedings.query.ast import FilterField, Node, TextField
+from openproceedings.query.ast import MIN_YEAR, FilterField, Node, TextField
 from openproceedings.query.normalize import TOKENIZER_VERSION
-from openproceedings.query.parser import Mode
+from openproceedings.query.parser import MAX_QUERY_LENGTH, Mode
+from openproceedings.records import Excluded as Excluded  # one schema for the exclusion accounting
 from openproceedings.records import SearchRecord
+from openproceedings.timestamps import CrawlWindow, Timestamp
 from openproceedings.vocab import Status, Track, Venue
 
 Sort = Literal["relevance", "year_desc", "year_asc", "title"]  # tantivy_engine.SORTS (a test pins them equal)
@@ -25,9 +28,29 @@ MAX_LIMIT = 200  # spec 04: `limit` above it is a 422 API_BAD_PARAM, never clamp
 DEFAULT_LIMIT = 50  # the Engine protocol's page size
 type Span = tuple[int, int]
 
+# parameter descriptions (the generated client shows them)
+Q_DOC = (
+    f"The query (spec 02 grammar). At most {MAX_QUERY_LENGTH:,} Unicode code points: a longer one is 422 "
+    "`PARSE_TOO_LONG`, refused before it is parsed; so is one whose canonical form (defaults written out) is "
+    "longer, refused after canonicalising."
+)
+MODE_DOC = "`native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated)."
+SORT_DOC = "The order of `hits`. Never changes `total` or membership (guarantee 5)."
+OFFSET_DOC = "Hits to skip. Past the end is an empty page, not an error."
+LIMIT_DOC = "Hits per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped."
+PAPER_ID = r"^op:(neurips|iclr|icml):[0-9]{4}:\S+$"  # `op:<venue>:<year>:<native>` (spec 01 §Ids)
+RECORD_ID = r"^[A-Za-z0-9_-]{12}$"  # records.RECORD_ID (a test pins them equal)
+PAPER_ID_DOC = "A paper id, `op:<venue>:<year>:<native>`. Any other shape is 422 `API_BAD_PARAM`."
+RECORD_ID_DOC = (
+    "A search record id: 12 characters of `A-Z a-z 0-9 - _`. Any other shape is 422 `API_BAD_PARAM`."
+)
+
 
 class Model(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    """A response model. Every field is always sent (a null included), so the schema marks every field
+    required, a defaulted one too (`json_schema_serialization_defaults_required`; spec 04 §Conventions)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", json_schema_serialization_defaults_required=True)
 
 
 class Versioned(Model):
@@ -47,8 +70,8 @@ def versions(index_version: str) -> dict[str, str]:
 
 # --- /parse ------------------------------------------------------------------------------------------
 class ParseRequest(Model):
-    q: str
-    mode: Mode = "native"
+    q: str = Field(description=Q_DOC)
+    mode: Mode = Field(default="native", description=MODE_DOC)
 
 
 class ParseResponse(Versioned):
@@ -78,15 +101,6 @@ class QueryInfo(Model):
     expansions: dict[str, list[str]]  # "<stem><op>" → every term it expands to (guarantee 6)
 
 
-class Excluded(Model):
-    """What the default filters removed (spec 03 §Exclusion accounting): the buckets sum to `total`, each
-    map is ordered by count (largest first, ties by name) with `unknown` last and always present."""
-
-    total: int
-    track: dict[str, int]
-    status: dict[str, int]
-
-
 class Facets(Model):
     """Disjunctive (decision-001): each field counted without its own top-level conjuncts. Values that
     occur only; years as strings."""
@@ -108,7 +122,7 @@ class Hit(Model):
     abstract: str | None
     authors: list[str]
     venue: Venue
-    year: int
+    year: int = Field(ge=MIN_YEAR)  # as PaperRecord.year: a hit and its paper agree field by field
     track: Track
     status: Status  # the record schema's (task-035 review decision)
     presentation: Presentation | None
@@ -133,13 +147,16 @@ class PaperResponse(Versioned):
 # --- /records (task-037; spec 04 §Search records) -----------------------------------------------------
 # The top-level versions of a record response are those the replay ran on; the record's own are in `record`.
 class RecordRequest(Model):
-    q: str
-    mode: Mode = "native"
+    q: str = Field(description=Q_DOC)
+    mode: Mode = Field(default="native", description=MODE_DOC)
 
 
 class RecordCreated(Versioned):
     record_id: str
-    url: str  # the record page's path (`/record/<record_id>`, spec 05), relative to the site
+    page: str = Field(
+        description="The record page's path on the site (`/record/<record_id>`, spec 05), relative to the "
+        "site's origin. The API resource is the `Location` header (`/api/v1/records/<record_id>`)."
+    )
 
 
 class ChangedInput(Model):
@@ -162,8 +179,8 @@ class ReplayInfo(Model):
     # `drifted`, or `mismatch` under the record's own versions, and no membership comparison happened
     refused: DiagnosticCode | None
     changed: list[ChangedInput]  # empty unless drifted
-    added: int | None  # ids the replay matched that the record doesn't hold; null when `refused`
-    removed: int | None  # ids the record holds that the replay didn't match; null when `refused`
+    added_total: int | None  # ids the replay matched that the record doesn't hold; null when `refused`
+    removed_total: int | None  # ids the record holds that the replay didn't match; null when `refused`
     membership_identical: bool | None  # added == removed == 0 (+0/−0 is reported); null when `refused`
 
 
@@ -240,10 +257,9 @@ class SnapshotInfo(Model):
 
     name: str
     snapshot_hash: str
-    crawl_date: str  # the last fetch's UTC date
-    crawl_from: str  # the first and last fetch (UTC)
-    crawl_to: str
-    built_at: str
+    crawl_date: date  # the last fetch's UTC date
+    crawl_dates: dict[str, CrawlWindow]  # as a search record's: `*` is the corpus-wide window
+    built_at: Timestamp
     sources: list[str]
 
 

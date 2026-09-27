@@ -2,9 +2,11 @@
 
 Layers, outermost first: `AccessLog` (request id, the one access line, preflights included) → CORS
 (exact allowlist, no credentials; a disallowed preflight is Starlette's plain-text 400) → `LastCatch`
-(an unexpected exception becomes a logged 500, which CORS then decorates) → `RateLimit` (per-client token
-bucket) → FastAPI (the error envelope handlers, then the `/api/v1` routers). Nothing is served outside
-`/api/v1`, the OpenAPI document included.
+(an unexpected exception becomes a logged 500, which CORS then decorates) → `BodyLimit` (413 for a body
+over `max_body_bytes`, before it is read) → `RateLimit` (per-client and per-network token buckets) →
+FastAPI (the error envelope handlers, the app-wide `strict_query` dependency, then the `/api/v1` routers).
+Nothing is served outside `/api/v1`, the OpenAPI document included, and a trailing slash is never
+redirected (`/search/` is a 404).
 
 The lifespan loads the index (in the background by default, so `/healthz` answers meanwhile) and, on the
 main thread, installs the SIGHUP reload. Logging is configured by the entry point (`op serve`,
@@ -23,15 +25,21 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import anyio
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
-from openproceedings import __version__
 from openproceedings.api import coverage, export, health, meta, papers, records, search
 from openproceedings.api.config import ApiConfig
+from openproceedings.api.deps import strict_query
 from openproceedings.api.errors import install_error_handlers
-from openproceedings.api.middleware import API_PREFIX, AccessLog, LastCatch, RateLimit
-from openproceedings.api.openapi import ERROR_RESPONSES, document_head_as_get, operation_id
+from openproceedings.api.middleware import API_PREFIX, AccessLog, BodyLimit, LastCatch, RateLimit
+from openproceedings.api.openapi import (
+    API_VERSION,
+    ERROR_RESPONSES,
+    HEALTH_RESPONSES,
+    document_head_as_get,
+    operation_id,
+)
 from openproceedings.api.state import IndexState, Opener, install_sighup
 
 ROUTERS: tuple[APIRouter, ...] = (
@@ -43,8 +51,16 @@ ROUTERS: tuple[APIRouter, ...] = (
     coverage.router,
     export.router,
 )
-# spec 04 §Conventions, §Exports, §Error handling
-EXPOSED_HEADERS = ("X-Total", "X-Index-Version", "X-Tokenizer-Version", "X-Query-Version", "Retry-After")
+# spec 04 §Conventions, §Exports, §Error handling; `Location` names a new search record (201)
+EXPOSED_HEADERS = (
+    "X-Total",
+    "X-Index-Version",
+    "X-Tokenizer-Version",
+    "X-Query-Version",
+    "Retry-After",
+    "Content-Disposition",
+    "Location",
+)
 
 
 def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
@@ -60,6 +76,8 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
         opener,
         keep_pinned=config.pinned_indexes,
         refusal_seconds=config.pinned_refusal_seconds,
+        verification_slots=config.verification_slots,
+        busy_retry_seconds=config.busy_retry_seconds,
     )
 
     @asynccontextmanager
@@ -79,8 +97,12 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
 
     app = FastAPI(
         title="openproceedings",
-        version=__version__,
+        version=API_VERSION,
         lifespan=lifespan,
+        # `/search/` is not `/search`: a 404 envelope, never a redirect to another URL (spec 04 §Conventions)
+        redirect_slashes=False,
+        # every route refuses a query parameter it doesn't declare, or one given twice (422 API_BAD_PARAM)
+        dependencies=[Depends(strict_query)],
         openapi_url=f"{API_PREFIX}/openapi.json",
         docs_url=f"{API_PREFIX}/docs",
         redoc_url=None,
@@ -94,10 +116,11 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
     for router in ROUTERS:
         if router.prefix != API_PREFIX:
             raise ValueError(f"a router must be declared with prefix={API_PREFIX!r}")
-        app.include_router(router, responses=ERROR_RESPONSES)
+        app.include_router(router, responses=HEALTH_RESPONSES if router is health.router else ERROR_RESPONSES)
     document_head_as_get(app)  # the committed snapshot is this document (`op openapi`, task-040)
     # added innermost first: the last one added wraps everything
     app.add_middleware(RateLimit, config=config.rate_limit, trusted=config.trusted_proxies)
+    app.add_middleware(BodyLimit, max_bytes=config.max_body_bytes)  # before anything reads the body
     app.add_middleware(LastCatch)  # inside CORS: a 500 gets the CORS headers like any response
     app.add_middleware(
         CORSMiddleware,

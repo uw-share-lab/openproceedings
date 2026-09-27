@@ -115,6 +115,47 @@ def test_sighup_swaps_atomically_and_a_request_in_flight_keeps_its_engine(
         restore()
 
 
+def test_a_request_that_outlives_two_swaps_keeps_its_own_records_and_coverage(
+    data_dir: Path, store: Store
+) -> None:
+    """The engine, its snapshot's records and its coverage are one reference (`Served`): a `/papers` or
+    `/coverage` request that read the 5k index answers from it even after the index was swapped twice (to the
+    300 index, then to a third), never a 500 for records the state no longer keeps (M3a review)."""
+    from tests.contract.conftest import build
+    from tests.fixtures.corpus.synthetic_5k import records
+
+    tiny = build(list(records())[:40], data_dir / "snapshots", "tiny", data_dir / "indexes")
+    armed, entered, release = threading.Event(), threading.Event(), threading.Event()
+
+    class Held(TantivyEngine):
+        def display(self, ids: Any) -> Any:  # /papers asks the index first: hold it there once
+            if armed.is_set() and not entered.is_set():
+                entered.set()
+                assert release.wait(10)
+            return super().display(ids)
+
+    app = make_app(data_dir, opener=Held)
+    state: IndexState = app.state.index
+    with TestClient(app) as c, ThreadPoolExecutor(2) as pool:
+        big_only = c.get("/api/v1/search", params={"q": "trust", "sort": "title", "limit": 200}).json()[
+            "hits"
+        ]
+        paper_id = next(h["id"] for h in big_only if h["id"] not in {r.id for r in list(records())[:300]})
+        coverage_before = c.get("/api/v1/coverage").json()
+        armed.set()
+        paper = pool.submit(c.get, f"/api/v1/papers/{paper_id}")
+        assert entered.wait(10)
+        for version in (store.small, tiny):  # two swaps while the request holds the 5k bundle
+            point_current(data_dir, version)
+            assert state.load() and state.engine is not None and state.engine.index_version == version
+        release.set()
+        r = paper.result(10)
+        assert r.status_code == 200, r.text
+        assert (r.json()["index_version"], r.json()["paper"]["id"]) == (store.big, paper_id)
+        assert c.get("/api/v1/coverage").json()["index_version"] == tiny
+    assert coverage_before["index_version"] == store.big and coverage_before["totals"]["records"] == 5_000
+
+
 def test_the_production_lifespan_installs_the_sighup_reload_and_restores_it(
     data_dir: Path, store: Store
 ) -> None:

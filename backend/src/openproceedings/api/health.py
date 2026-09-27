@@ -18,7 +18,7 @@ router = APIRouter(prefix=API_PREFIX)
 
 
 class Health(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", json_schema_serialization_defaults_required=True)
 
     index_loaded: bool
     index_version: str | None  # None until an index is loaded
@@ -27,7 +27,7 @@ class Health(BaseModel):
 
 
 @router.api_route("/healthz", methods=["GET", "HEAD"], response_model=Health)
-def healthz(request: Request) -> Health:
+def get_healthz(request: Request) -> Health:
     """Always 200 while the process serves requests; `index_loaded` is false until the first load succeeds
     (search routes answer 503 `API_INDEX_NOT_LOADED` meanwhile)."""
     state: IndexState = request.app.state.index

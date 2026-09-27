@@ -899,3 +899,14 @@ def test_printable_equals_the_per_character_definition_on_every_code_point() -> 
     every = "".join(chr(c) for c in range(0x110000) if not 0xD800 <= c <= 0xDFFF)
     assert export._printable(every) == _printable_before(every)
     assert export._printable("a\x00\t\n\x0b\x0c\r\x1c\x1f\x7f\x85\x9fb") == "a\t\n\x0b\x0c\r\x1c\x1f\x85b"
+
+
+def test_check_count_is_the_one_count_check_of_both_exports() -> None:
+    """`op export` and `GET /export` end with the same check (M3a review): short or long is an internal
+    error that names the counts, never the records."""
+    from openproceedings.engine.protocol import EngineInternalError
+
+    export.check_count(3, 3)
+    for written in (2, 4):
+        with pytest.raises(EngineInternalError, match=f"exported {written} records, but 3 match"):
+            export.check_count(written, 3)

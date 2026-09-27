@@ -12,7 +12,7 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 | GET | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | GET | `/papers/{id}` | full record with provenance |
 | GET | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl`, optional `record_id` **or** `index_version` → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; `record_id` → exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if gone, 409 `API_RECORD_MISMATCH` on a `mismatch`) |
-| POST | `/records` | freeze a search as an immutable search record → `{record_id, url}` (`.claude/skills/search-records/SKILL.md`) |
+| POST | `/records` | freeze a search as an immutable search record → 201 `{record_id, page}` + `Location: /api/v1/records/<id>` (`.claude/skills/search-records/SKILL.md`) |
 | GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`) |
 | GET | `/records/{id}/diff` | for a `drifted` record: added and removed ids (with titles), and which `index_version` inputs changed |
 | GET | `/coverage` | counts per venue × year × track × status, abstract-missing counts, snapshot date |
@@ -48,6 +48,27 @@ has `id, title, abstract, authors, venue, year, track, status, presentation, sco
   `Highlighter(ast, expansions)` and call it on each hit (`search.run` does; task-073): the query's work is
   done once, not per hit.
 
+## v1 shape rules (spec 04 §Conventions; frozen at the first release, M3a gate)
+Checked by `backend/tests/contract/test_contract_v1.py`; keep to them in every new model and route.
+- **Every field a response sends is required** in the schema (`json_schema_serialization_defaults_required`
+  on every response model, the shared ones in `ingest/record.py`, `diagnostics.py`, `query/ast.py` and
+  `records.py` included). The one optional key is `ErrorBody.diagnostics`: absent or a non-empty array,
+  never null (`SkipJsonSchema[None]`). A shape a hit shares with its paper is the same schema.
+- **Counts are `*_total`** (`added_total`, `removed_total`); a bare plural is a list.
+- **One timestamp form**: UTC RFC 3339 with `Z`, typed `format: date-time`, via `timestamps.Timestamp` (or a
+  UTC `datetime`); a date is `format: date`. Never pass a manifest's `…+00:00` text through.
+- **One crawl-window shape**: `crawl_dates: {"*": CrawlWindow, <source>: CrawlWindow}` everywhere.
+- **Parameters are exact**: every route refuses an unknown or repeated query parameter (the app-wide
+  `deps.strict_query`), a trailing slash is a 404 (`redirect_slashes=False`), and a path id carries its
+  `pattern` (a malformed id is 422 `API_BAD_PARAM`, an unknown one 404). Describe every parameter.
+- **Enums are open or closed** (decision-009): `OPEN_ENUMS` / `CLOSED_ENUMS` in `api/openapi.py`; the test
+  fails on an enum in neither. Open ones get "Open set: … handle a value you don't know." in the schema.
+- **`ErrorBody.code` is `ErrorCode`**: the registry's codes with an HTTP status, derived, never hand-listed.
+- **Status-specific headers are declared** (`response_header`): an export's 200 (`X-Total`, the three
+  versions, `Content-Disposition`), every 405 (`Allow`) and 429 (`Retry-After`), a 201 (`Location`); CORS
+  exposes each (`app.EXPOSED_HEADERS`).
+- `info.version` is the API version (`v1`), not the package's.
+
 ## Span units (spec 04 §Conventions)
 Every span is a half-open `[start, end)` range of **Unicode code points** over the **raw source string**:
 the stored title or abstract for `highlights`, the query input `q` for diagnostic `span`s. Never over
@@ -77,13 +98,16 @@ is one row per paper: the 01 schema columns plus `index_version` and `canonical_
 UTF-8 **with BOM**.
 
 ## Versioning rules
-Allowed within `v1` (additive): a new endpoint, a new **optional** response field, a new enum value in
-a field the clients treat as open, a new optional parameter with the old behaviour as its default.
+Allowed within `v1` (additive): a new endpoint, a new response field (always sent, so required in the
+schema; an old client ignores it), a new value in an enum listed **open** (`OPEN_ENUMS`, decision-009), a new
+optional parameter with the old behaviour as its default.
 
 **Breaking**, which needs `/api/v2` or a decision record (`.claude/skills/decision-records/SKILL.md`):
 removing or renaming a field, changing a field's type or nullability, making an optional field required,
 tightening validation (for example a lower `limit` cap), changing a default (`sort`, `mode`, default
-filters), changing what a field *means* (`total` counting something else), changing error codes, and
+filters), changing what a field *means* (`total` counting something else), changing error codes, a new
+value in a **closed** enum (`mode`, `sort`, `format`, the replay `status`, …) or moving an enum from open to
+closed, and
 changing an export's field mapping or byte format. External scripts and Covidence imports depend on
 those formats.
 
@@ -104,9 +128,11 @@ commit both files it writes. Never edit either by hand; never resolve a merge co
    differently under another `PYTHONHASHSEED`. CI's `test` job runs `make openapi` unconditionally and then
    `git diff --exit-code` on both files.
 4. Validity rules the app enforces (`api/app.py`, `api/openapi.py`): an **operationId is the handler's
-   function name** (`search`, `parse_query`, `paper`, `meta`, `healthz`), so it must be unique across
-   routers; every route documents the error envelope (`ErrorEnvelope`) as its **`default` response**,
-   which replaces FastAPI's `HTTPValidationError` 422 (never sent here); and the HEAD of a GET+HEAD route
-   is dropped from the document (FastAPI would repeat the GET's operationId).
+   function name, `verb_noun`**: `search`, `parse_query`, `export`, `get_paper`, `get_coverage`, `get_meta`,
+   `get_healthz`, `create_record`, `get_record`, `get_record_diff` (a test pins the list), so it must be
+   unique across routers; every route documents the error envelope (`ErrorEnvelope`) as its **`default`
+   response**, which replaces FastAPI's `HTTPValidationError` 422 (never sent here), plus its 405 (`Allow`)
+   and 429 (`Retry-After`; not `/healthz`, never limited); the HEAD of a GET+HEAD route is dropped from the
+   document (FastAPI would repeat the GET's operationId); and open enums are marked (`mark_open_enums`).
 5. Reviewing: read the snapshot diff first. It is the contract as shipped; classify each change with the
    versioning rules above. A model change with no snapshot diff means the change is not in the contract.

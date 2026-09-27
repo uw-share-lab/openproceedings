@@ -20,6 +20,7 @@ import pytest
 from fastapi.testclient import TestClient
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.normalize import TOKENIZER_VERSION
+from openproceedings.timestamps import utc_z
 from openproceedings.vocab import STATUSES, TRACKS
 
 from tests.contract.conftest import Store, make_app, point_current
@@ -108,11 +109,26 @@ def test_numbers_match_the_snapshot_manifest_exactly(client: TestClient, store: 
         "name": snapshot.name,
         "snapshot_hash": manifest["snapshot_hash"],
         "crawl_date": manifest["crawl_date"],
-        "crawl_from": manifest["crawl_window"]["from"],
-        "crawl_to": manifest["crawl_window"]["to"],
-        "built_at": manifest["built_at"],
+        # a search record's `crawl_dates` shape; every timestamp in the one UTC `…Z` form (spec 04)
+        "crawl_dates": {"*": {k: utc_z(v) for k, v in manifest["crawl_window"].items()}},
+        "built_at": utc_z(manifest["built_at"]),
         "sources": sorted(manifest["sources"]),
     }
+    assert manifest["built_at"].endswith("+00:00") and body["snapshot"]["built_at"].endswith("Z")
+
+
+def test_crawl_dates_are_a_search_records(recorded_coverage: tuple[dict[str, Any], dict[str, Any]]) -> None:
+    """One shape for the crawl window everywhere (M3a review): `/coverage` and a record of the same index."""
+    coverage, record = recorded_coverage
+    assert coverage["snapshot"]["crawl_dates"] == record["crawl_dates"]
+
+
+@pytest.fixture
+def recorded_coverage(data_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    with TestClient(make_app(data_dir)) as c:
+        created = c.post("/api/v1/records", json={"q": "trust"}).json()
+        record = c.get(f"/api/v1/records/{created['record_id']}").json()["record"]
+        return c.get("/api/v1/coverage").json(), record
 
 
 def test_the_response_carries_the_three_versions(client: TestClient, store: Store) -> None:

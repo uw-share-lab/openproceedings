@@ -17,7 +17,7 @@ router = APIRouter(prefix=API_PREFIX)
 
 
 @router.get("/meta", response_model=MetaResponse)
-def meta(request: Request, engine: EngineDep) -> MetaResponse:
+def get_meta(request: Request, engine: EngineDep) -> MetaResponse:
     state: IndexState = request.app.state.index
     return MetaResponse(
         **versions(engine.index_version),

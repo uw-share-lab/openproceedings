@@ -9,9 +9,16 @@ is re-raised, so the server never logs a traceback of its own (its last line wou
 can quote the query). A response that started but never sent its final body message, with nothing having
 failed, is a client that went away mid-stream: the line says `client_disconnected: true`.
 
-`RateLimit` is a token bucket per client. The client is the TCP peer, unless the peer is a configured
-trusted proxy: then it is the right-most `X-Forwarded-For` address that is not itself a trusted proxy.
-IPv6 clients are bucketed by /64 (one host holds a whole /64).
+`BodyLimit` refuses a request body over `ApiConfig.max_body_bytes` with 413 `API_BODY_TOO_LARGE` before
+the app reads it: on its `Content-Length`, or, for a body without one (chunked), once the bytes received pass
+the cap. It reads a body (at most the cap) before the app runs, so the refusal comes before routing and
+before any other check (an index that isn't loaded yet included).
+
+`RateLimit` is a token bucket per client, and a coarser one per client network (IPv4 /24, IPv6 /48), both
+checked for every request. The client is the TCP peer, unless the peer is a configured trusted proxy: then it
+is the right-most `X-Forwarded-For` address that is not itself a trusted proxy. IPv6 clients are bucketed by
+/64 (one host holds a whole /64); the network bucket bounds a host holding a whole /48. A route can charge
+more once it knows what the request costs (`charge`: a position-verified query, spec 04 §Rate limit).
 """
 
 from __future__ import annotations
@@ -19,6 +26,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import math
+import threading
 import time
 import uuid
 from collections import OrderedDict
@@ -27,15 +35,16 @@ from collections.abc import Callable, Sequence
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from openproceedings.api.config import RateLimit as RateLimitConfig
-from openproceedings.api.errors import ACCESS, error_response, internal_error
+from openproceedings.api.errors import ACCESS, ApiError, error_response, internal_error
 from openproceedings.diagnostics import DiagnosticCode
-from openproceedings.logs import bind
+from openproceedings.logs import bind, elapsed_ms
 
 log = logging.getLogger(__name__)
 API_PREFIX = "/api/v1"
 HEALTH_PATH = f"{API_PREFIX}/healthz"
 EXPORT_PATH = f"{API_PREFIX}/export"
 RECORDS_PATH = f"{API_PREFIX}/records"  # POST /records, GET /records/{id}, /diff: each runs a whole query
+BUCKETS = "openproceedings.rate"  # scope key: the request's rate-limit buckets and keys, for `charge`
 # fields a route may add to the access line (api/deps.py); anything else in the dict is not logged
 ANNOTATIONS = (
     "index_version",
@@ -84,7 +93,7 @@ class AccessLog:
                     "method": scope.get("method"),
                     "route": template,
                     "status": status,  # what the client was sent
-                    "ms": round((time.perf_counter() - started) * 1000, 1),
+                    "ms": elapsed_ms(started),
                     "index_version": fields.get("index_version"),
                 }
                 line.update({k: fields[k] for k in ANNOTATIONS if k in fields and k != "index_version"})
@@ -137,6 +146,62 @@ class LastCatch:
                 await response(scope, receive, send)
 
 
+class BodyLimit:
+    """413 `API_BODY_TOO_LARGE` for a body over `max_bytes` (module docstring). A body within the cap is
+    read here, whole, and replayed to the app; after it, `receive` is the server's own (a disconnect)."""
+
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        declared = _content_length(scope)
+        if declared is not None and declared > self.max_bytes:
+            await self._refuse(scope, receive, send)
+            return
+        chunks: list[Message] = []
+        size = 0
+        while True:
+            message = await receive()
+            if message["type"] != "http.request":  # the client went away: let the app see it
+                chunks.append(message)
+                break
+            size += len(message.get("body", b""))
+            if size > self.max_bytes:
+                await self._refuse(scope, receive, send)
+                return
+            chunks.append(message)
+            if not message.get("more_body", False):
+                break
+
+        async def replay() -> Message:
+            return chunks.pop(0) if chunks else await receive()
+
+        await self.app(scope, replay, send)
+
+    async def _refuse(self, scope: Scope, receive: Receive, send: Send) -> None:
+        log.debug("request_refused", extra={"code": str(DiagnosticCode.API_BODY_TOO_LARGE)})
+        response = error_response(
+            DiagnosticCode.API_BODY_TOO_LARGE,
+            f"The request body is over {self.max_bytes:,} bytes; a query fits in far less.",
+            headers={"Connection": "close"},  # the rest of the body is never read
+        )
+        await response(scope, receive, send)
+
+
+def _content_length(scope: Scope) -> int | None:
+    for name, value in scope.get("headers", ()):
+        if name.lower() == b"content-length":
+            try:
+                return int(value)
+            except ValueError:
+                return None  # the server refuses a malformed one before we see it
+    return None
+
+
 def _address(text: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
     """The address in `text`, an IPv4-mapped IPv6 one (`::ffff:a.b.c.d`, how a dual-stack bind reports an
     IPv4 peer) as the IPv4 address it is, so it keys and matches trusted proxies as IPv4."""
@@ -147,6 +212,17 @@ def _address(text: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
     if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
         return address.ipv4_mapped
     return address
+
+
+def network_key(client: str) -> str:
+    """The coarser bucket of a client key: its IPv4 /24 or its IPv6 /48 (a /64 key included); a key that
+    isn't an address (an in-process test client) is its own network."""
+    try:
+        network = ipaddress.ip_network(client, strict=False)
+    except ValueError:
+        return client
+    prefix = 24 if network.version == 4 else 48
+    return str(network.supernet(new_prefix=prefix)) if network.prefixlen > prefix else str(network)
 
 
 def client_key(scope: Scope, trusted: Sequence[Network]) -> str:
@@ -182,28 +258,78 @@ def client_key(scope: Scope, trusted: Sequence[Network]) -> str:
 
 class TokenBucket:
     """Buckets per key: `capacity` tokens, refilled continuously at `refill` per second. At most
-    `max_clients` buckets are held; the least recently seen is dropped first."""
+    `max_clients` buckets are held; the least recently seen is dropped first. Thread-safe: the middleware
+    takes on the event loop, a route charges more from its worker thread (`charge`)."""
 
     def __init__(
         self, capacity: float, refill: float, max_clients: int, clock: Callable[[], float] = time.monotonic
     ) -> None:
         self.capacity, self.refill, self.max_clients, self.clock = capacity, refill, max_clients, clock
         self._buckets: OrderedDict[str, tuple[float, float]] = OrderedDict()
+        self.lock = threading.Lock()
 
-    def take(self, key: str, cost: float) -> float:
-        """Spend `cost` tokens for `key`: 0 if allowed, else the seconds until it would be."""
+    def wait(self, key: str, cost: float) -> float:
+        """Seconds until `key` holds `cost` tokens (0: it does now), spending nothing. Under `lock`."""
         now = self.clock()
         tokens, last = self._buckets.pop(key, (self.capacity, now))
         tokens = min(self.capacity, tokens + (now - last) * self.refill)
-        wait = 0.0
-        if tokens >= cost:
-            tokens -= cost
-        else:
-            wait = (cost - tokens) / self.refill
         self._buckets[key] = (tokens, now)
         while len(self._buckets) > self.max_clients:
             self._buckets.popitem(last=False)
+        return 0.0 if tokens >= cost else (cost - tokens) / self.refill
+
+    def spend(self, key: str, cost: float) -> None:
+        """Spend `cost` of `key`'s tokens, which `wait` just found there. Under `lock`."""
+        tokens, last = self._buckets[key]
+        self._buckets[key] = (tokens - cost, last)
+
+    def take(self, key: str, cost: float) -> float:
+        """Spend `cost` tokens for `key`: 0 if allowed, else the seconds until it would be."""
+        return take_all([(self, key)], cost)
+
+
+def take_all(buckets: Sequence[tuple[TokenBucket, str]], cost: float) -> float:
+    """Spend `cost` from every (bucket, key) if each holds it: 0. Else spend nothing and return the longest
+    wait, so a refusal by one bucket never drains another."""
+    locks = sorted({id(b): b.lock for b, _key in buckets}.items())
+    for _id, lock in locks:
+        lock.acquire()
+    try:
+        wait = max(bucket.wait(key, cost) for bucket, key in buckets)
+        if wait == 0:
+            for bucket, key in buckets:
+                bucket.spend(key, cost)
         return wait
+    finally:
+        for _id, lock in reversed(locks):
+            lock.release()
+
+
+def rate_limited(wait: float) -> ApiError:
+    """429 `API_RATE_LIMITED` with `Retry-After` in whole seconds."""
+    seconds = max(1, math.ceil(wait))
+    return ApiError(
+        DiagnosticCode.API_RATE_LIMITED,
+        f"Too many requests from this address; try again in {seconds} s.",
+        headers={"Retry-After": str(seconds)},
+    )
+
+
+def charge(scope: Scope, total: float) -> None:
+    """Bring what this request costs its client (both buckets) up to `total` tokens, or raise 429
+    `API_RATE_LIMITED`: for a cost a route learns after routing (a position-verified query). What the
+    middleware already took counts toward it. A no-op when the rate limit is off or the request didn't
+    pass through it (a unit test)."""
+    held = scope.get(BUCKETS)
+    if not isinstance(held, tuple):
+        return
+    buckets, paid = held
+    if total <= paid:
+        return
+    wait = take_all(buckets, total - paid)
+    if wait > 0:
+        raise rate_limited(wait)
+    scope[BUCKETS] = (buckets, total)
 
 
 class RateLimit:
@@ -221,6 +347,7 @@ class RateLimit:
         self.config = config
         self.trusted = tuple(trusted)
         self.buckets = TokenBucket(config.capacity, config.refill_per_second, config.max_clients, clock)
+        self.networks = TokenBucket(*config.network_bucket, config.max_clients, clock)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         path = scope.get("path", "")
@@ -229,15 +356,14 @@ class RateLimit:
             return
         heavy = path in (EXPORT_PATH, RECORDS_PATH) or path.startswith(RECORDS_PATH + "/")
         cost = self.config.export_weight if heavy else 1.0
-        wait = self.buckets.take(client_key(scope, self.trusted), cost)
+        client = client_key(scope, self.trusted)
+        held = [(self.buckets, client), (self.networks, network_key(client))]
+        wait = take_all(held, cost)
         if wait > 0:
-            log.debug("request_refused", extra={"code": str(DiagnosticCode.API_RATE_LIMITED)})
-            seconds = max(1, math.ceil(wait))
-            response = error_response(
-                DiagnosticCode.API_RATE_LIMITED,
-                f"Too many requests from this address; try again in {seconds} s.",
-                headers={"Retry-After": str(seconds)},
-            )
+            error = rate_limited(wait)
+            log.debug("request_refused", extra={"code": str(error.code)})
+            response = error_response(error.code, error.message, headers=error.headers)
             await response(scope, receive, send)
             return
+        scope[BUCKETS] = (held, cost)
         await self.app(scope, receive, send)

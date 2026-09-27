@@ -144,6 +144,35 @@ def test_500_is_api_internal_names_the_request_and_never_echoes_input(
     assert any("probe_" in frame for frame in failed[0]["frames"])  # where, not what
 
 
+def test_a_typed_failure_mid_stream_logs_where_it_happened(
+    store: Store, logs: Callable[[], list[dict[str, Any]]]
+) -> None:
+    """Starlette wraps an OpenProceedingsError its handler catches after the response started in a
+    RuntimeError whose frames stop at the handler; the line carries the cause's frames (M3a review)."""
+    from collections.abc import Iterator
+
+    from fastapi.responses import StreamingResponse
+    from openproceedings.engine.protocol import EngineInternalError
+
+    app = make_app(store.indexes.parent)
+
+    @app.get("/api/v1/_probe/typed-stream-fail")
+    def probe_typed_stream_fail() -> StreamingResponse:
+        def failing_generator() -> Iterator[str]:
+            yield "first\n"
+            raise EngineInternalError(DiagnosticCode.API_INTERNAL, f"broke on {SECRET}")
+
+        return StreamingResponse(failing_generator(), media_type="text/plain")
+
+    with TestClient(app) as c:
+        assert c.get("/api/v1/_probe/typed-stream-fail").status_code == 200  # it had started
+    (failed,) = [line for line in logs() if line["event"] == "request_failed"]
+    assert (failed["error"], failed["cause"]) == ("RuntimeError", "EngineInternalError")
+    assert not any("failing_generator" in f for f in failed["frames"])  # the wrapper's frames stop short
+    assert any("failing_generator" in f for f in failed["cause_frames"])  # the cause's say where
+    assert SECRET not in str(logs())
+
+
 def test_500_does_not_reach_the_test_client_as_an_exception(store: Store) -> None:
     # the access middleware is the last catch: nothing is re-raised for the server to log with a traceback
     with TestClient(make_app(store.indexes.parent)) as c:  # raise_server_exceptions defaults to True

@@ -12,7 +12,8 @@ from __future__ import annotations
 import dataclasses
 import heapq
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, nullcontext
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -39,10 +40,20 @@ TANTIVY_PINNED = "0.26.2"
 TANTIVY_BM25 = {"b": 0.75, "k1": 1.2}  # Tantivy's fixed constants: an index can't claim others
 
 
-def unservable(manifest: dict[str, Any]) -> str | None:
+class IndexUnservable(EngineInternalError):
+    """This code can't serve the index (`unservable`). `reason` names the input that differs, a constant a
+    log line can carry (`tokenizer_version_mismatch`, `schema_version_mismatch`, `tantivy_version_mismatch`,
+    `bm25_mismatch`); the message names the versions."""
+
+    def __init__(self, code: DiagnosticCode, message: str, reason: str = "unservable") -> None:
+        super().__init__(code, message)
+        self.reason = reason
+
+
+def unservable(manifest: dict[str, Any]) -> tuple[str, str] | None:
     """Why this code can't serve an index with `manifest` (another schema, tokenizer or Tantivy version, or
-    BM25 parameters Tantivy doesn't apply), or None. Read from the manifest alone, without re-hashing, so the
-    API's `/meta` can leave such versions out (task-036 review)."""
+    BM25 parameters Tantivy doesn't apply), as `(reason, message)`, or None. Read from the manifest alone,
+    without re-hashing, so the API's `/meta` can leave such versions out (task-036 review)."""
     stale = {
         "schema_version": (manifest.get("schema_version"), SCHEMA_VERSION),
         "tokenizer_version": (manifest.get("tokenizer_version"), TOKENIZER_VERSION),
@@ -51,11 +62,14 @@ def unservable(manifest: dict[str, Any]) -> str | None:
     name = manifest.get("index_version")
     for field, (built, current) in stale.items():
         if built != current:  # queries are normalized and compiled for the current versions
-            return f"index {name} has {field} {built}, this code {current}: build a new index"
+            return (
+                f"{field}_mismatch",
+                f"index {name} has {field} {built}, this code {current}: build a new index",
+            )
     ranking = manifest.get("ranking_params")
     bm25 = ranking.get("bm25") if isinstance(ranking, dict) else None
     if bm25 != TANTIVY_BM25:
-        return f"index {name} records bm25 {bm25}, but Tantivy applies {TANTIVY_BM25}"
+        return "bm25_mismatch", f"index {name} records bm25 {bm25}, but Tantivy applies {TANTIVY_BM25}"
     return None
 
 
@@ -88,7 +102,7 @@ class TantivyEngine:
         self.ranking: dict[str, Any] = manifest["ranking_params"]  # the params this index's id was built with
         why = unservable(manifest)
         if why is not None:
-            raise EngineInternalError(DiagnosticCode.API_INTERNAL, why)
+            raise IndexUnservable(DiagnosticCode.API_INTERNAL, why[1], reason=why[0])
         self.index = open_index(path)
         self.searcher = self.index.searcher()
         self.ids = (path / IDS).read_text(encoding="utf-8").splitlines()
@@ -101,6 +115,9 @@ class TantivyEngine:
         self.faceted: dict[tuple[str, str], dict[str, int]] = {}
         self.charges: dict[str, list[int]] = {"compiled": [], "verified": [], "expanded": [], "faceted": []}
         self.tallied: dict[str, tuple[list[int], int, int]] = {}  # each ledger's running sum (see `_trim`)
+        # entered around each cold position verification (`Compiler.gate`); the API sets its own, which
+        # bounds how many run at once (spec 04 §Rate limit)
+        self.verification_gate: Callable[[], AbstractContextManager[object]] = nullcontext
 
     @property
     def universe(self) -> frozenset[str]:
@@ -271,7 +288,12 @@ class TantivyEngine:
         self._trim("verified", self.verified, self.MAX_VERIFIED_IDS)
         self._trim("compiled", self.compiled, self.MAX_COMPILED_UNITS)
         compiled = Compiler(
-            self.index.schema, self.expansions(ast), self.read, self.verified, self.ranking["field_weights"]
+            self.index.schema,
+            self.expansions(ast),
+            self.read,
+            self.verified,
+            self.ranking["field_weights"],
+            gate=self.verification_gate,
         ).compile(ast)
         self.compiled[key] = compiled
         self.charges["compiled"].append(compiled.held + 1)

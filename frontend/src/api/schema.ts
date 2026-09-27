@@ -12,10 +12,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Coverage
-         * @description The served index's coverage, computed and checked when it was loaded.
+         * Get Coverage
+         * @description The served index's coverage, computed and checked when it was loaded (with the engine, one bundle).
          */
-        get: operations["coverage"];
+        get: operations["get_coverage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -55,11 +55,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Healthz
+         * Get Healthz
          * @description Always 200 while the process serves requests; `index_loaded` is false until the first load succeeds
          *     (search routes answer 503 `API_INDEX_NOT_LOADED` meanwhile).
          */
-        get: operations["healthz"];
+        get: operations["get_healthz"];
         put?: never;
         post?: never;
         delete?: never;
@@ -75,8 +75,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Meta */
-        get: operations["meta"];
+        /** Get Meta */
+        get: operations["get_meta"];
         put?: never;
         post?: never;
         delete?: never;
@@ -93,10 +93,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Paper
-         * @description The paper with this id in the served index, as its snapshot holds it.
+         * Get Paper
+         * @description The paper with this id in the served index, as its snapshot holds it (the records loaded with that
+         *     very engine: one bundle, whatever swaps happen meanwhile).
          */
-        get: operations["paper"];
+        get: operations["get_paper"];
         put?: never;
         post?: never;
         delete?: never;
@@ -176,13 +177,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Diff Record
+         * Get Record Diff
          * @description The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each
          *     list is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A
          *     title comes from the index the replay ran on, null if it doesn't hold the paper. A refused replay
          *     compared nothing: empty lists, null totals.
          */
-        get: operations["diff_record"];
+        get: operations["get_record_diff"];
         put?: never;
         post?: never;
         delete?: never;
@@ -237,6 +238,7 @@ export interface components {
             current: components["schemas"]["JsonValue"];
             /**
              * Input
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             input: "snapshot_hash" | "tokenizer_version" | "schema_version" | "ranking_params" | "query_version";
@@ -254,7 +256,7 @@ export interface components {
          */
         Claim: {
             /** Evidence */
-            evidence?: string | null;
+            evidence: string | null;
             /**
              * Fetched At
              * Format: date-time
@@ -262,16 +264,18 @@ export interface components {
             fetched_at: string;
             /**
              * Field
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             field: "title" | "abstract" | "authors" | "venue" | "year" | "track" | "status" | "presentation" | "venue_id_raw" | "keywords" | "urls.forum" | "urls.pdf" | "urls.proceedings" | "urls.doi";
             /**
              * Source
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             source: "openreview_v2" | "openreview_v1" | "neurips_proceedings" | "pmlr" | "ris";
             /** Url */
-            url?: string | null;
+            url: string | null;
             value: components["schemas"]["ClaimValue"];
         };
         ClaimValue: string | number | string[] | null;
@@ -281,11 +285,13 @@ export interface components {
             count: number;
             /**
              * Status
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             status: "accepted" | "rejected" | "withdrawn" | "desk_rejected" | "unknown";
             /**
              * Track
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "other" | "unknown";
@@ -315,6 +321,23 @@ export interface components {
             unknown_track: number;
         };
         /**
+         * CrawlWindow
+         * @description When a source (or, under key `*`, the whole corpus) was fetched: the first and the last fetch. The
+         *     shape of `crawl_dates` in a search record and in `GET /coverage`'s `snapshot`.
+         */
+        CrawlWindow: {
+            /**
+             * From
+             * Format: date-time
+             */
+            from: string;
+            /**
+             * To
+             * Format: date-time
+             */
+            to: string;
+        };
+        /**
          * Dedup
          * @description Corpus-wide ingest merges from the snapshot manifest (PRISMA-S item 16): a process statement, never a
          *     removal count of this search. The not-merged counts are the manifest's conflicts by resolution: pairs
@@ -327,9 +350,9 @@ export interface components {
             /** Merged */
             merged: number;
             /** Track Not Merged */
-            track_not_merged?: number | null;
+            track_not_merged: number | null;
             /** Venue Year Not Merged */
-            venue_year_not_merged?: number | null;
+            venue_year_not_merged: number | null;
         };
         /**
          * Diagnostic
@@ -340,16 +363,17 @@ export interface components {
             /** Message */
             message: string;
             /** Span */
-            span?: [
+            span: [
                 number,
                 number
             ] | null;
         };
         /**
          * DiagnosticCode
+         * @description Open set: new values may be added within /api/v1; handle a value you don't know.
          * @enum {string}
          */
-        DiagnosticCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "WARN_LOWERCASE_OPERATOR" | "WARN_MIXED_AND_OR" | "WARN_NESTED_FILTER" | "WARN_FILTER_SCOPE" | "WARN_LOOKALIKE_OPERATOR" | "WARN_SYMBOLS_DROPPED" | "WARN_SOURCE_PARTIAL" | "WARN_CJK_RUN" | "WARN_SPELLED_GREEK" | "COMPAT_SOURCE_ALIAS" | "COMPAT_POP_DOLLAR" | "COMPAT_POP_PHRASE" | "COMPAT_NO_STEMMING" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_REPLAY_MISMATCH" | "API_RECORDS_STORE_FULL";
+        DiagnosticCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "WARN_LOWERCASE_OPERATOR" | "WARN_MIXED_AND_OR" | "WARN_NESTED_FILTER" | "WARN_FILTER_SCOPE" | "WARN_LOOKALIKE_OPERATOR" | "WARN_SYMBOLS_DROPPED" | "WARN_SOURCE_PARTIAL" | "WARN_CJK_RUN" | "WARN_SPELLED_GREEK" | "COMPAT_SOURCE_ALIAS" | "COMPAT_POP_DOLLAR" | "COMPAT_POP_PHRASE" | "COMPAT_NO_STEMMING" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_REPLAY_MISMATCH" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY";
         /** DiffEntry */
         DiffEntry: {
             /** Id */
@@ -359,20 +383,25 @@ export interface components {
         };
         /** ErrorBody */
         ErrorBody: {
-            code: components["schemas"]["DiagnosticCode"];
+            code: components["schemas"]["ErrorCode"];
             /** Diagnostics */
-            diagnostics?: components["schemas"]["Diagnostic"][] | null;
+            diagnostics?: components["schemas"]["Diagnostic"][];
             /** Message */
             message: string;
         };
+        /**
+         * ErrorCode
+         * @description An error envelope's code (spec 04 §Error handling). Open set: new values may be added within /api/v1; handle a value you don't know.
+         * @enum {string}
+         */
+        ErrorCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY";
         /** ErrorEnvelope */
         ErrorEnvelope: {
             error: components["schemas"]["ErrorBody"];
         };
         /**
          * Excluded
-         * @description What the default filters removed (spec 03 §Exclusion accounting): the buckets sum to `total`, each
-         *     map is ordered by count (largest first, ties by name) with `unknown` last and always present.
+         * @description 03's exclusion accounting, verbatim: buckets by count (largest first, ties by name), `unknown` last.
          */
         Excluded: {
             /** Status */
@@ -417,6 +446,7 @@ export interface components {
         Filter: {
             /**
              * Field
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             field: "venue" | "year" | "track" | "status";
@@ -466,6 +496,7 @@ export interface components {
             score: number;
             /**
              * Status
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             status: "accepted" | "rejected" | "withdrawn" | "desk_rejected" | "unknown";
@@ -473,12 +504,14 @@ export interface components {
             title: string;
             /**
              * Track
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "other" | "unknown";
             urls: components["schemas"]["Urls"];
             /**
              * Venue
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             venue: "NeurIPS" | "ICLR" | "ICML";
@@ -573,7 +606,7 @@ export interface components {
              */
             keywords: string[];
             /** Presentation */
-            presentation?: ("oral" | "spotlight" | "poster") | null;
+            presentation: ("oral" | "spotlight" | "poster") | null;
             /**
              * Provenance
              * @default []
@@ -581,6 +614,7 @@ export interface components {
             provenance: components["schemas"]["Claim"][];
             /**
              * Status
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             status: "accepted" | "rejected" | "withdrawn" | "desk_rejected" | "unknown";
@@ -588,6 +622,7 @@ export interface components {
             title: string;
             /**
              * Track
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "other" | "unknown";
@@ -595,11 +630,12 @@ export interface components {
             urls: components["schemas"]["Urls"];
             /**
              * Venue
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             venue: "NeurIPS" | "ICLR" | "ICML";
             /** Venue Id Raw */
-            venue_id_raw?: string | null;
+            venue_id_raw: string | null;
             /** Year */
             year: number;
         };
@@ -617,11 +653,15 @@ export interface components {
         ParseRequest: {
             /**
              * Mode
+             * @description `native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated).
              * @default native
              * @enum {string}
              */
             mode: "native" | "scholar";
-            /** Q */
+            /**
+             * Q
+             * @description The query (spec 02 grammar). At most 2,000 Unicode code points: a longer one is 422 `PARSE_TOO_LONG`, refused before it is parsed; so is one whose canonical form (defaults written out) is longer, refused after canonicalising.
+             */
             q: string;
         };
         /**
@@ -666,7 +706,7 @@ export interface components {
          */
         Phrase: {
             /** Field */
-            field?: ("title" | "abstract") | null;
+            field: ("title" | "abstract") | null;
             /** Items */
             items: (components["schemas"]["Term"] | components["schemas"]["Wildcard"])[];
             /**
@@ -703,14 +743,17 @@ export interface components {
         RecordCreated: {
             /** Index Version */
             index_version: string;
+            /**
+             * Page
+             * @description The record page's path on the site (`/record/<record_id>`, spec 05), relative to the site's origin. The API resource is the `Location` header (`/api/v1/records/<record_id>`).
+             */
+            page: string;
             /** Query Version */
             query_version: string;
             /** Record Id */
             record_id: string;
             /** Tokenizer Version */
             tokenizer_version: string;
-            /** Url */
-            url: string;
         };
         /** RecordDiff */
         RecordDiff: {
@@ -747,31 +790,19 @@ export interface components {
             /** Tokenizer Version */
             tokenizer_version: string;
         };
-        /**
-         * RecordExcluded
-         * @description 03's exclusion accounting, verbatim: buckets by count (largest first, ties by name), `unknown` last.
-         */
-        RecordExcluded: {
-            /** Status */
-            status: {
-                [key: string]: number;
-            };
-            /** Total */
-            total: number;
-            /** Track */
-            track: {
-                [key: string]: number;
-            };
-        };
         /** RecordRequest */
         RecordRequest: {
             /**
              * Mode
+             * @description `native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated).
              * @default native
              * @enum {string}
              */
             mode: "native" | "scholar";
-            /** Q */
+            /**
+             * Q
+             * @description The query (spec 02 grammar). At most 2,000 Unicode code points: a longer one is 422 `PARSE_TOO_LONG`, refused before it is parsed; so is one whose canonical form (defaults written out) is longer, refused after canonicalising.
+             */
             q: string;
         };
         /** RecordResponse */
@@ -787,8 +818,8 @@ export interface components {
         };
         /** ReplayInfo */
         ReplayInfo: {
-            /** Added */
-            added: number | null;
+            /** Added Total */
+            added_total: number | null;
             /** Changed */
             changed: components["schemas"]["ChangedInput"][];
             excluded: components["schemas"]["Excluded"] | null;
@@ -805,8 +836,8 @@ export interface components {
             /** Query Version */
             query_version: string;
             refused: components["schemas"]["DiagnosticCode"] | null;
-            /** Removed */
-            removed: number | null;
+            /** Removed Total */
+            removed_total: number | null;
             /**
              * Status
              * @enum {string}
@@ -836,34 +867,35 @@ export interface components {
             canonical_hash: string;
             /** Crawl Dates */
             crawl_dates: {
-                [key: string]: {
-                    [key: string]: string;
-                };
+                [key: string]: components["schemas"]["CrawlWindow"];
             };
             /** Crawl Dates Kind */
-            crawl_dates_kind?: {
+            crawl_dates_kind: {
                 [key: string]: string;
             } | null;
             dedup: components["schemas"]["Dedup"];
-            excluded: components["schemas"]["RecordExcluded"];
+            excluded: components["schemas"]["Excluded"];
             /** Expansions */
             expansions: {
                 [key: string]: string[];
             };
             /** Identification Citable */
-            identification_citable?: boolean | null;
+            identification_citable: boolean | null;
             /** Identification Query */
             identification_query: string;
             /** Ids */
-            ids?: string[] | null;
+            ids: string[] | null;
             /** Ids Hash */
             ids_hash: string;
             /** Index Version */
             index_version: string;
             /** Input */
             input: string;
-            /** Mode */
-            mode: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "native" | "scholar";
             /** Query Version */
             query_version: string;
             /** Ranking Params */
@@ -874,14 +906,17 @@ export interface components {
             record_id: string;
             /** Schema Version */
             schema_version: string;
-            /** Searched At */
+            /**
+             * Searched At
+             * Format: date-time
+             */
             searched_at: string;
             /** Semantic Version */
-            semantic_version?: string | null;
+            semantic_version: string | null;
             /** Snapshot Hash */
             snapshot_hash: string;
             /** Sources */
-            sources?: string[] | null;
+            sources: string[] | null;
             /** Tokenizer Version */
             tokenizer_version: string;
             /** Total */
@@ -912,14 +947,20 @@ export interface components {
          * @description The snapshot the served index was built from, as its manifest records it.
          */
         SnapshotInfo: {
-            /** Built At */
+            /**
+             * Built At
+             * Format: date-time
+             */
             built_at: string;
-            /** Crawl Date */
+            /**
+             * Crawl Date
+             * Format: date
+             */
             crawl_date: string;
-            /** Crawl From */
-            crawl_from: string;
-            /** Crawl To */
-            crawl_to: string;
+            /** Crawl Dates */
+            crawl_dates: {
+                [key: string]: components["schemas"]["CrawlWindow"];
+            };
             /** Name */
             name: string;
             /** Snapshot Hash */
@@ -941,7 +982,7 @@ export interface components {
             /** Message */
             message: string;
             /** Span */
-            span?: [
+            span: [
                 number,
                 number
             ] | null;
@@ -949,7 +990,7 @@ export interface components {
         /** Term */
         Term: {
             /** Field */
-            field?: ("title" | "abstract") | null;
+            field: ("title" | "abstract") | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -966,13 +1007,13 @@ export interface components {
         /** Urls */
         Urls: {
             /** Doi */
-            doi?: string | null;
+            doi: string | null;
             /** Forum */
-            forum?: string | null;
+            forum: string | null;
             /** Pdf */
-            pdf?: string | null;
+            pdf: string | null;
             /** Proceedings */
-            proceedings?: string | null;
+            proceedings: string | null;
         };
         /**
          * VenueYearCoverage
@@ -992,6 +1033,7 @@ export interface components {
             unknown_track: number;
             /**
              * Venue
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             venue: "NeurIPS" | "ICLR" | "ICML";
@@ -1013,7 +1055,7 @@ export interface components {
          */
         Wildcard: {
             /** Field */
-            field?: ("title" | "abstract") | null;
+            field: ("title" | "abstract") | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1048,7 +1090,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    coverage: {
+    get_coverage: {
         parameters: {
             query?: never;
             header?: never;
@@ -1066,6 +1108,28 @@ export interface operations {
                     "application/json": components["schemas"]["CoverageResponse"];
                 };
             };
+            /** @description API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method */
+            405: {
+                headers: {
+                    /** @description The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1) */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            429: {
+                headers: {
+                    /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description Error (spec 04 §Error handling) */
             default: {
                 headers: {
@@ -1080,10 +1144,15 @@ export interface operations {
     export: {
         parameters: {
             query: {
+                /** @description The file format. */
                 format: "ris" | "csv" | "bibtex" | "jsonl";
+                /** @description The query (spec 02 grammar). At most 2,000 Unicode code points: a longer one is 422 `PARSE_TOO_LONG`, refused before it is parsed; so is one whose canonical form (defaults written out) is longer, refused after canonicalising. Required unless `record_id` is given. */
                 q?: string | null;
-                mode?: ("native" | "scholar") | null;
+                /** @description `native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). Only with `q`. */
+                mode?: "native" | "scholar";
+                /** @description Export from this index (409 `API_INDEX_VERSION_UNAVAILABLE` if this instance can't serve it); the served one if absent. Only with `q`. */
                 index_version?: string | null;
+                /** @description Export exactly this search record's stored ids, from the index it names. Alone: not with `q`, `mode` or `index_version`. */
                 record_id?: string | null;
             };
             header?: never;
@@ -1092,9 +1161,19 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The entire matched set, ordered by id, with `X-Total`, `X-Index-Version`, `X-Tokenizer-Version` and `X-Query-Version`. */
+            /** @description The entire matched set, ordered by id. */
             200: {
                 headers: {
+                    /** @description attachment; filename="openproceedings-<index_version>-<first 12 of canonical_hash>.<ext>" */
+                    "Content-Disposition"?: string;
+                    /** @description The index the records were read from */
+                    "X-Index-Version"?: string;
+                    /** @description This code's query_version */
+                    "X-Query-Version"?: string;
+                    /** @description This code's tokenizer_version */
+                    "X-Tokenizer-Version"?: string;
+                    /** @description How many records the body holds: `/search`'s `total` for the same query and index (for a search record, its stored `total`) */
+                    "X-Total"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -1102,6 +1181,28 @@ export interface operations {
                     "application/x-ndjson": unknown;
                     "application/x-research-info-systems": unknown;
                     "text/csv": unknown;
+                };
+            };
+            /** @description API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method */
+            405: {
+                headers: {
+                    /** @description The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1) */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            429: {
+                headers: {
+                    /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             /** @description Error (spec 04 §Error handling) */
@@ -1115,7 +1216,7 @@ export interface operations {
             };
         };
     };
-    healthz: {
+    get_healthz: {
         parameters: {
             query?: never;
             header?: never;
@@ -1133,6 +1234,17 @@ export interface operations {
                     "application/json": components["schemas"]["Health"];
                 };
             };
+            /** @description API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method */
+            405: {
+                headers: {
+                    /** @description The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1) */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description Error (spec 04 §Error handling) */
             default: {
                 headers: {
@@ -1144,7 +1256,7 @@ export interface operations {
             };
         };
     };
-    meta: {
+    get_meta: {
         parameters: {
             query?: never;
             header?: never;
@@ -1162,6 +1274,28 @@ export interface operations {
                     "application/json": components["schemas"]["MetaResponse"];
                 };
             };
+            /** @description API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method */
+            405: {
+                headers: {
+                    /** @description The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1) */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            429: {
+                headers: {
+                    /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description Error (spec 04 §Error handling) */
             default: {
                 headers: {
@@ -1173,11 +1307,12 @@ export interface operations {
             };
         };
     };
-    paper: {
+    get_paper: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description A paper id, `op:<venue>:<year>:<native>`. Any other shape is 422 `API_BAD_PARAM`. */
                 id: string;
             };
             cookie?: never;
@@ -1191,6 +1326,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaperResponse"];
+                };
+            };
+            /** @description API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method */
+            405: {
+                headers: {
+                    /** @description The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1) */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            429: {
+                headers: {
+                    /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             /** @description Error (spec 04 §Error handling) */
@@ -1226,6 +1383,28 @@ export interface operations {
                     "application/json": components["schemas"]["ParseResponse"];
                 };
             };
+            /** @description API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method */
+            405: {
+                headers: {
+                    /** @description The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1) */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            429: {
+                headers: {
+                    /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description Error (spec 04 §Error handling) */
             default: {
                 headers: {
@@ -1253,10 +1432,34 @@ export interface operations {
             /** @description Successful Response */
             201: {
                 headers: {
+                    /** @description The new record's API resource, `/api/v1/records/<id>` */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["RecordCreated"];
+                };
+            };
+            /** @description API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method */
+            405: {
+                headers: {
+                    /** @description The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1) */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            429: {
+                headers: {
+                    /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             /** @description Error (spec 04 §Error handling) */
@@ -1273,10 +1476,12 @@ export interface operations {
     get_record: {
         parameters: {
             query?: {
+                /** @description `ids` to include the record's sorted id list. */
                 include?: "ids" | null;
             };
             header?: never;
             path: {
+                /** @description A search record id: 12 characters of `A-Z a-z 0-9 - _`. Any other shape is 422 `API_BAD_PARAM`. */
                 id: string;
             };
             cookie?: never;
@@ -1292,6 +1497,28 @@ export interface operations {
                     "application/json": components["schemas"]["RecordResponse"];
                 };
             };
+            /** @description API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method */
+            405: {
+                headers: {
+                    /** @description The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1) */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            429: {
+                headers: {
+                    /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description Error (spec 04 §Error handling) */
             default: {
                 headers: {
@@ -1303,14 +1530,17 @@ export interface operations {
             };
         };
     };
-    diff_record: {
+    get_record_diff: {
         parameters: {
             query?: {
+                /** @description Hits to skip. Past the end is an empty page, not an error. */
                 offset?: number;
+                /** @description Hits per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped. */
                 limit?: number;
             };
             header?: never;
             path: {
+                /** @description A search record id: 12 characters of `A-Z a-z 0-9 - _`. Any other shape is 422 `API_BAD_PARAM`. */
                 id: string;
             };
             cookie?: never;
@@ -1324,6 +1554,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecordDiff"];
+                };
+            };
+            /** @description API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method */
+            405: {
+                headers: {
+                    /** @description The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1) */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            429: {
+                headers: {
+                    /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             /** @description Error (spec 04 §Error handling) */
@@ -1340,10 +1592,15 @@ export interface operations {
     search: {
         parameters: {
             query: {
+                /** @description The query (spec 02 grammar). At most 2,000 Unicode code points: a longer one is 422 `PARSE_TOO_LONG`, refused before it is parsed; so is one whose canonical form (defaults written out) is longer, refused after canonicalising. */
                 q: string;
+                /** @description `native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). */
                 mode?: "native" | "scholar";
+                /** @description The order of `hits`. Never changes `total` or membership (guarantee 5). */
                 sort?: "relevance" | "year_desc" | "year_asc" | "title";
+                /** @description Hits to skip. Past the end is an empty page, not an error. */
                 offset?: number;
+                /** @description Hits per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped. */
                 limit?: number;
             };
             header?: never;
@@ -1359,6 +1616,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method */
+            405: {
+                headers: {
+                    /** @description The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1) */
+                    Allow?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            429: {
+                headers: {
+                    /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             /** @description Error (spec 04 §Error handling) */
