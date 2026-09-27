@@ -750,9 +750,26 @@ def replay(
                 log.debug("replay_mismatch", extra=fields)
     else:
         changed = changed_inputs(record, index_inputs(data_dir, ran_on.index_version), QUERY_VERSION)
-        if not changed:  # a different index_version always has different inputs; anything else is a bug
-            raise InternalError(DiagnosticCode.API_INTERNAL, "a drifted replay found no changed input")
-        status = "drifted"
+        if changed:
+            status = "drifted"
+        else:
+            # a different index_version always has different inputs, so a record naming another version whose
+            # inputs are the served index's own was forged or corrupted (e.g. a hand-written row): a mismatch,
+            # "do not cite", never a 500
+            status = "mismatch"
+            fields = {
+                "code": str(DiagnosticCode.API_REPLAY_MISMATCH),
+                "record_id": record.record_id,
+                "index_version": record.index_version,
+                "ran_on": ran_on.index_version,
+                "query_version": record.query_version,
+                "inputs_match": True,
+                "index_version_match": False,
+            }
+            if _first_mismatch(record.record_id):
+                log.error("replay_mismatch", extra=fields)
+            else:
+                log.debug("replay_mismatch", extra=fields)
     added = removed = None
     if found is not None:
         if record.ids is None:

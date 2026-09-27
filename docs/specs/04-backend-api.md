@@ -370,7 +370,10 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   `mismatch`: ERROR `replay_mismatch` (`code` `API_REPLAY_MISMATCH`, `record_id`, the versions, which of
   `ids_match`, `excluded_match`, `canonical_match`, `identification_match`, `expansions_match`,
   `inputs_match` and `stored_ids_match` failed, and `refused`: the refusal
-  code when the canonical no longer runs, else null) the first time this process sees that record mismatch, DEBUG after that. Any
+  code when the canonical no longer runs, else null) the first time this process sees that record mismatch, DEBUG after that. A
+  record naming an `index_version` this instance doesn't hold, whose inputs are nonetheless the served
+  index's own, was forged or corrupted (a different version always has different inputs): also `mismatch`,
+  logged the same way with `index_version_match: false` and `ran_on`, never a 500. Any
   other case is `drifted`: when only the query version differs and the record's own index is here, the replay
   runs on that index, so `changed` holds just `query_version`; otherwise `replay.changed` lists each
   differing input (`snapshot_hash` kind `corpus`; `tokenizer_version`, `schema_version`, `ranking_params`,
