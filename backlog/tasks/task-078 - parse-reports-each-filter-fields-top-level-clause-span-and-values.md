@@ -4,7 +4,7 @@ title: /parse reports each filter field's top-level clause span and values
 status: To Do
 assignee: []
 created_date: '2026-09-27 07:21'
-updated_date: '2026-09-27 07:46'
+updated_date: '2026-09-27 10:47'
 labels:
   - api
   - frontend
@@ -26,6 +26,7 @@ Found in TASK-039. The URL↔state reducer (frontend/src/lib/search-state.ts) re
 - [ ] #2 Golden cases pin the spans for typed, default, canonical-pasted and astral-character queries
 - [ ] #3 frontend FilterClause is derived from the generated schema (no local type)
 - [ ] #4 Each reported clause carries its field and polarity (negated: bool); the frontend offers value toggles only on positive clauses and FilterClause keeps field + negated: false (TASK-039 review)
+- [ ] #5 "Top-level" is judged on the flattened canonical tree (parenthesised AND groups are flattened): when a field has more than one top-level clause there, e.g. track:workshop "large language model" AND (venue:NeurIPS track:workshop), /parse reports no editable clause for that field with the reason, and the frontend passes clause: null so the reducer's NO_EDITABLE_CLAUSE disables the facet (M3a gate, query-semantics review)
 <!-- AC:END -->
 
 ## Implementation Notes

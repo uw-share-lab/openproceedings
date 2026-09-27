@@ -29,13 +29,42 @@ and window it. The reducer is `frontend/src/lib/search-state.ts`.
 Paging: `PAGE_SIZE = 50` results per page, so `page=n` requests `GET /search?offset=(n-1)×50&limit=50`
 (spec 04). `page` is an integer from 1 to 10,000 (`MAX_PAGE`); any other value, and any unknown or repeated
 parameter, is shown to the reader as a URL notice and replaced by the default, never used silently.
+Notices about `q` and `mode` come first (they say what was searched). Each names the value, why it was not
+used and what was used instead, listing the valid values from the reducer's own constants
+("`sort=random` is not a sort order — sort orders are `relevance`, `year_desc`, `year_asc`, `title`.
+Sorted by `relevance` instead."; a repeated param: "`q` appears more than once; using the first value `""`
+and ignoring `trust`.", with `""` marking an empty value). The notice box ends with a **Use corrected
+link** (the canonical URL of the state actually shown); the page never redirects on its own.
 
 Facet and include clicks rewrite `q` from the server's `/parse` report of that field's top-level clause
-(field, polarity, code-point span, values, and the `(q, mode)` it was parsed from). A clause parsed from
-another `q` or `mode`, for another field, or negated is refused. An applied default is written out as
-`(q) AND field:(…)`; a `q` ending in an odd run of backslashes is refused, because the last backslash would
-escape the `)` (spec 02). The wrap goldens are `frontend/src/lib/wrap-golden.json`, checked against the
-server parser by `backend/tests/contract/test_frontend_wrap_golden.py`.
+(field, polarity, code-point span, values, and the `(q, mode)` it was parsed from). **"Top-level" is judged
+on the flattened canonical tree**, where parenthesised AND groups are flattened: in
+`track:workshop "large language model" AND (venue:NeurIPS track:workshop)` both `track:` clauses are
+top-level. A field with more than one such clause, or with its only clause inside an OR or NOT, has no
+editable clause: `/parse` says so (TASK-078), and splicing over one clause would leave the other ANDed in,
+so the edit would silently change nothing. The rewritten clause is `field:v` for one value and
+`field:(v1 OR v2 …)` for several. An applied default is written out as `(q) AND field:(…)`; a `q` ending in
+an odd run of backslashes is refused, because the last backslash would escape the `)` (spec 02). The wrap
+goldens are `frontend/src/lib/wrap-golden.json`, checked against the server parser by
+`backend/tests/contract/test_frontend_wrap_golden.py`.
+
+The reducer refuses, with a `SearchStateError` whose `code` the UI branches on and whose message follows
+the ux-writing pattern (what happened — why. How to fix): `STALE_CLAUSE` (parsed from another `q` or
+`mode`), `WRONG_FIELD`, `NEGATED_CLAUSE`, `NO_EDITABLE_CLAUSE` (the field has no single editable clause),
+`BAD_VALUE` (not a bare identifier), `LAST_VALUE` (removing it would exclude every record), `BAD_SPAN`,
+`EMPTY_QUERY`, `TRAILING_ESCAPE`, `TOO_LONG` (the new `q` would pass `MAX_QUERY_LENGTH`, 2,000 code points,
+which mirrors the API parser's cap until `/meta` serves it), `ALREADY_INCLUDED` and `BAD_PAGE`. **Controls
+are disabled with the reason, not refused after the click:** a facet toggle or include button calls
+`whyBlocked(state, action)` while rendering and, when it returns an error, renders disabled with the
+message as its description. `STALE_CLAUSE` is the usual case, while `/parse` catches up with a new `q`.
+
+*M3b design consideration (open).* A facet toggle on an applied default wraps `q` once:
+`(trust) AND track:(main OR datasets_benchmarks OR position OR workshop)`. Toggling the value off again
+leaves the wrapped form (the clause is now typed, so it is edited in place, not unwrapped), and toggles on
+several fields nest a field at a time (`((trust) AND track:(…)) AND status:(…)`) because each wrap
+parenthesises the whole `q`. Both are correct but grow `q` and drift from what the reader typed. Before the
+sidebar ships, decide whether to unwrap a clause that returns to the default and to append later fields'
+clauses to an existing top-level AND instead of re-wrapping.
 
 ## Pages
 
@@ -137,8 +166,18 @@ server parser by `backend/tests/contract/test_frontend_wrap_golden.py`.
   on colour alone (they also use bold or underline).
 - Performance: search view interactive in under 1 s on the fixture API. Diagnostics feel instant (≤300 ms
   including the round trip).
-- Light and dark themes. Layout usable at 360 px wide (reading on a phone is allowed; writing queries on
-  a phone is not a goal).
+- Light and dark themes, chosen in the header as System / Light / Dark (a radio group; System follows the
+  OS). Layout usable at 360 px wide, and no sideways scroll at 320 px (reading on a phone is allowed;
+  writing queries on a phone is not a goal). The focus ring is a solid 2 px `--ring` outline, never
+  translucent. Every page has a skip link to `<main id="main">` and a title `<page> · openproceedings`.
+- Security headers on every route (`frontend/src/lib/security-headers.ts`, set by `next.config.ts`):
+  `Content-Security-Policy` (`default-src 'self'`; scripts and styles `'self' 'unsafe-inline'`, since the
+  App Router's streamed payload and the theme script are inline and a nonce would force dynamic rendering;
+  `connect-src` adds the API origin when `NEXT_PUBLIC_API_BASE_URL` is set; `object-src 'none'`,
+  `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`; `'unsafe-eval'` only under `next
+  dev`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Referrer-Policy: no-referrer`
+  (search URLs carry the query). Because inline scripts are allowed, HTML is never built from strings:
+  eslint's `react/no-danger` is an error, and highlights are text nodes cut at the API's spans.
 
 ## Testing
 

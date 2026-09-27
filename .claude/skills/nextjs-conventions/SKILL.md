@@ -58,9 +58,24 @@ description: The openproceedings Next.js standard — App Router layout, output 
   inside `-track:x` would flip it), and a wrap of a `q` ending in an odd run of backslashes (the escape would
   swallow the `)`; goldens in `src/lib/wrap-golden.json`, checked by the backend parser in
   `backend/tests/contract/test_frontend_wrap_golden.py`). Every refusal throws `SearchStateError` rather than
-  no-op (also: last value removed, non-identifier value, bad span). Until `/parse` reports per-field clause spans, `FilterClause` is a local
-  type (TASK-078 adds the spans to `/parse`; then it is derived from the schema).
+  no-op, with a `code` (`STALE_CLAUSE`, `WRONG_FIELD`, `NEGATED_CLAUSE`, `NO_EDITABLE_CLAUSE` for
+  `clause: null`, `BAD_VALUE`, `LAST_VALUE`, `BAD_SPAN`, `EMPTY_QUERY`, `TRAILING_ESCAPE`, `TOO_LONG` past
+  `MAX_QUERY_LENGTH` = 2,000 code points, `ALREADY_INCLUDED`, `BAD_PAGE`) and a what — why. fix message.
+  Controls call `whyBlocked(state, action)` and render disabled with the reason instead of failing on
+  click. "Top-level" clause means top-level on the flattened canonical tree (spec 05 §URL is state).
+  `describeNotice`/`noticeText` word the URL notices from the same constants the reducer checks. Until
+  `/parse` reports per-field clause spans, `FilterClause` is a local type (TASK-078 adds the spans to
+  `/parse`; then it is derived from the schema).
 - The editor draft is not state until submitted; submitting `router.push`es. Paging uses `replace`.
+
+## Security headers
+`next.config.ts` `headers()` sends `src/lib/security-headers.ts` on every route: a static CSP
+(`'self'` everywhere, `'unsafe-inline'` for scripts and styles because the App Router's payload and the
+theme script are inline, the API origin in `connect-src` when `NEXT_PUBLIC_API_BASE_URL` is set,
+`frame-ancestors 'none'`, `'unsafe-eval'` only in dev), `nosniff`, `X-Frame-Options: DENY` and
+`Referrer-Policy: no-referrer`. The set is in spec 05 §Non-functional requirements and pinned by
+`security-headers.test.ts`. Since inline scripts run, never build HTML from strings: `react/no-danger` is an
+eslint error.
 
 ## TanStack Query
 Keys: `["meta"]` (long `staleTime`), `["parse", q, mode]`, `["search", q, mode, sort, page]`,

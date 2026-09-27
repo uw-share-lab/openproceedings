@@ -5,7 +5,7 @@
 scripts/setup-dev.sh          # git hooks (.githooks: commit-msg, pre-push), executable tooling, .env skeleton
 uv sync                       # the root uv workspace: backend package + dev tools (Python 3.12, pinned by .python-version)
 uv run pytest                 # backend tests; `uv run op --help` for the CLI
-npm ci                        # the root npm workspace (frontend/); Node 22, pinned by .nvmrc
+npm ci --ignore-scripts       # the root npm workspace (frontend/); Node 22, pinned by .nvmrc
 npm test --workspace frontend # frontend tests (Vitest); `npm run dev --workspace frontend` serves the UI
 npm i -g backlog.md           # task tracking — https://github.com/MrLesk/Backlog.md
 brew install shellcheck       # or apt-get install shellcheck — used by make lint
