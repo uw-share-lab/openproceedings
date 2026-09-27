@@ -124,6 +124,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Record
+         * @description Freeze a search as an immutable record: re-run here on the served index, then one INSERT.
+         */
+        post: operations["create_record"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/records/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Record
+         * @description The stored record and a replay of it now (HTTP 200 whatever the status).
+         */
+        get: operations["get_record"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/records/{id}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Diff Record
+         * @description The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. A
+         *     title comes from the index the replay ran on, else the record's pinned index; null if neither holds it.
+         */
+        get: operations["diff_record"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search": {
         parameters: {
             query?: never;
@@ -164,6 +225,21 @@ export interface components {
                 number,
                 number
             ];
+        };
+        /** ChangedInput */
+        ChangedInput: {
+            current: components["schemas"]["JsonValue"];
+            /**
+             * Input
+             * @enum {string}
+             */
+            input: "snapshot_hash" | "tokenizer_version" | "schema_version" | "ranking_params" | "query_version";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "corpus" | "method";
+            recorded: components["schemas"]["JsonValue"];
         };
         /**
          * Claim
@@ -233,6 +309,17 @@ export interface components {
             unknown_track: number;
         };
         /**
+         * Dedup
+         * @description Corpus-wide ingest merges from the snapshot manifest (PRISMA-S item 16): a process statement, never a
+         *     removal count of this search.
+         */
+        Dedup: {
+            /** Ambiguous Not Merged */
+            ambiguous_not_merged: number;
+            /** Merged */
+            merged: number;
+        };
+        /**
          * Diagnostic
          * @description A warning, error or translation notice about a query, with a half-open code-point span into `q`.
          */
@@ -251,6 +338,13 @@ export interface components {
          * @enum {string}
          */
         DiagnosticCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "WARN_LOWERCASE_OPERATOR" | "WARN_MIXED_AND_OR" | "WARN_NESTED_FILTER" | "WARN_FILTER_SCOPE" | "WARN_LOOKALIKE_OPERATOR" | "WARN_SYMBOLS_DROPPED" | "WARN_SOURCE_PARTIAL" | "WARN_CJK_RUN" | "WARN_SPELLED_GREEK" | "COMPAT_SOURCE_ALIAS" | "COMPAT_POP_DOLLAR" | "COMPAT_POP_PHRASE" | "COMPAT_NO_STEMMING" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_REPLAY_MISMATCH";
+        /** DiffEntry */
+        DiffEntry: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string | null;
+        };
         /** ErrorBody */
         ErrorBody: {
             code: components["schemas"]["DiagnosticCode"];
@@ -374,6 +468,7 @@ export interface components {
             /** Year */
             year: number;
         };
+        JsonValue: unknown;
         /** MetaResponse */
         MetaResponse: {
             /** Filter Fields */
@@ -582,6 +677,175 @@ export interface components {
             identification_query: string;
             /** Input */
             input: string;
+            /** Translations */
+            translations: components["schemas"]["Diagnostic"][];
+            /** Warnings */
+            warnings: components["schemas"]["Diagnostic"][];
+        };
+        /** RecordCreated */
+        RecordCreated: {
+            /** Index Version */
+            index_version: string;
+            /** Query Version */
+            query_version: string;
+            /** Record Id */
+            record_id: string;
+            /** Tokenizer Version */
+            tokenizer_version: string;
+            /** Url */
+            url: string;
+        };
+        /** RecordDiff */
+        RecordDiff: {
+            /** Added */
+            added: components["schemas"]["DiffEntry"][];
+            /** Changed */
+            changed: components["schemas"]["ChangedInput"][];
+            /** Index Version */
+            index_version: string;
+            /** Membership Identical */
+            membership_identical: boolean;
+            /** Query Version */
+            query_version: string;
+            /** Record Id */
+            record_id: string;
+            /** Recorded Index Version */
+            recorded_index_version: string;
+            /** Removed */
+            removed: components["schemas"]["DiffEntry"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "reproduced" | "drifted" | "mismatch";
+            /** Tokenizer Version */
+            tokenizer_version: string;
+        };
+        /**
+         * RecordExcluded
+         * @description 03's exclusion accounting, verbatim: buckets by count (largest first, ties by name), `unknown` last.
+         */
+        RecordExcluded: {
+            /** Status */
+            status: {
+                [key: string]: number;
+            };
+            /** Total */
+            total: number;
+            /** Track */
+            track: {
+                [key: string]: number;
+            };
+        };
+        /** RecordRequest */
+        RecordRequest: {
+            /**
+             * Mode
+             * @default native
+             * @enum {string}
+             */
+            mode: "native" | "scholar";
+            /** Q */
+            q: string;
+        };
+        /** RecordResponse */
+        RecordResponse: {
+            /** Index Version */
+            index_version: string;
+            /** Query Version */
+            query_version: string;
+            record: components["schemas"]["SearchRecord"];
+            replay: components["schemas"]["ReplayInfo"];
+            /** Tokenizer Version */
+            tokenizer_version: string;
+        };
+        /** ReplayInfo */
+        ReplayInfo: {
+            /** Added */
+            added: number;
+            /** Changed */
+            changed: components["schemas"]["ChangedInput"][];
+            excluded: components["schemas"]["Excluded"] | null;
+            /** Excluded Match */
+            excluded_match: boolean;
+            /** Ids Hash */
+            ids_hash: string | null;
+            /** Ids Match */
+            ids_match: boolean;
+            /** Index Version */
+            index_version: string;
+            /** Membership Identical */
+            membership_identical: boolean;
+            /** Query Version */
+            query_version: string;
+            refused: components["schemas"]["DiagnosticCode"] | null;
+            /** Removed */
+            removed: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "reproduced" | "drifted" | "mismatch";
+            /** Total */
+            total: number | null;
+        };
+        /**
+         * SearchRecord
+         * @description Every field of spec 04 §Search records, plus `schema_version` and `ranking_params` (the index's other
+         *     two inputs), so a drifted replay can name a method change even after the pinned index is gone.
+         */
+        SearchRecord: {
+            /** Canonical */
+            canonical: string;
+            /** Canonical Hash */
+            canonical_hash: string;
+            /** Crawl Dates */
+            crawl_dates: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
+            dedup: components["schemas"]["Dedup"];
+            excluded: components["schemas"]["RecordExcluded"];
+            /** Expansions */
+            expansions: {
+                [key: string]: string[];
+            };
+            /** Identification Query */
+            identification_query: string;
+            /** Ids */
+            ids: string[];
+            /** Ids Hash */
+            ids_hash: string;
+            /** Index Version */
+            index_version: string;
+            /** Input */
+            input: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "native" | "scholar";
+            /** Query Version */
+            query_version: string;
+            /** Ranking Params */
+            ranking_params: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Record Id */
+            record_id: string;
+            /** Schema Version */
+            schema_version: string;
+            /** Searched At */
+            searched_at: string;
+            /** Semantic Version */
+            semantic_version?: string | null;
+            /** Snapshot Hash */
+            snapshot_hash: string;
+            /** Tokenizer Version */
+            tokenizer_version: string;
+            /** Total */
+            total: number;
             /** Translations */
             translations: components["schemas"]["Diagnostic"][];
             /** Warnings */
@@ -904,6 +1168,101 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ParseResponse"];
+                };
+            };
+            /** @description Error (spec 04 §Error handling) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    create_record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordCreated"];
+                };
+            };
+            /** @description Error (spec 04 §Error handling) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordResponse"];
+                };
+            };
+            /** @description Error (spec 04 §Error handling) */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    diff_record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordDiff"];
                 };
             };
             /** @description Error (spec 04 §Error handling) */

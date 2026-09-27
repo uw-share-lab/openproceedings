@@ -78,6 +78,44 @@
         "title": "And",
         "type": "object"
       },
+      "ChangedInput": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "input": {
+            "enum": [
+              "snapshot_hash",
+              "tokenizer_version",
+              "schema_version",
+              "ranking_params",
+              "query_version"
+            ],
+            "title": "Input",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "corpus",
+              "method"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "recorded": {
+            "$ref": "#/components/schemas/JsonValue"
+          }
+        },
+        "required": [
+          "input",
+          "kind",
+          "recorded",
+          "current"
+        ],
+        "title": "ChangedInput",
+        "type": "object"
+      },
       "Claim": {
         "additionalProperties": false,
         "description": "One source's statement about one field. Frozen and scalar (tuples for lists), so claims are\nhashable and set-comparable. `fetched_at` comes from the cache entry, never from build time.",
@@ -283,6 +321,26 @@
         "title": "CoverageTotals",
         "type": "object"
       },
+      "Dedup": {
+        "additionalProperties": false,
+        "description": "Corpus-wide ingest merges from the snapshot manifest (PRISMA-S item 16): a process statement, never a\nremoval count of this search.",
+        "properties": {
+          "ambiguous_not_merged": {
+            "title": "Ambiguous Not Merged",
+            "type": "integer"
+          },
+          "merged": {
+            "title": "Merged",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "merged",
+          "ambiguous_not_merged"
+        ],
+        "title": "Dedup",
+        "type": "object"
+      },
       "Diagnostic": {
         "additionalProperties": false,
         "description": "A warning, error or translation notice about a query, with a half-open code-point span into `q`.",
@@ -375,6 +433,32 @@
         ],
         "title": "DiagnosticCode",
         "type": "string"
+      },
+      "DiffEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "DiffEntry",
+        "type": "object"
       },
       "ErrorBody": {
         "additionalProperties": false,
@@ -713,6 +797,7 @@
         "title": "Hit",
         "type": "object"
       },
+      "JsonValue": {},
       "MetaResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1506,6 +1591,464 @@
         "title": "QueryInfo",
         "type": "object"
       },
+      "RecordCreated": {
+        "additionalProperties": false,
+        "properties": {
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "string"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "record_id",
+          "url"
+        ],
+        "title": "RecordCreated",
+        "type": "object"
+      },
+      "RecordDiff": {
+        "additionalProperties": false,
+        "properties": {
+          "added": {
+            "items": {
+              "$ref": "#/components/schemas/DiffEntry"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "changed": {
+            "items": {
+              "$ref": "#/components/schemas/ChangedInput"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "membership_identical": {
+            "title": "Membership Identical",
+            "type": "boolean"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "string"
+          },
+          "recorded_index_version": {
+            "title": "Recorded Index Version",
+            "type": "string"
+          },
+          "removed": {
+            "items": {
+              "$ref": "#/components/schemas/DiffEntry"
+            },
+            "title": "Removed",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "reproduced",
+              "drifted",
+              "mismatch"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "record_id",
+          "status",
+          "recorded_index_version",
+          "changed",
+          "added",
+          "removed",
+          "membership_identical"
+        ],
+        "title": "RecordDiff",
+        "type": "object"
+      },
+      "RecordExcluded": {
+        "additionalProperties": false,
+        "description": "03's exclusion accounting, verbatim: buckets by count (largest first, ties by name), `unknown` last.",
+        "properties": {
+          "status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Status",
+            "type": "object"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "track": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Track",
+            "type": "object"
+          }
+        },
+        "required": [
+          "total",
+          "track",
+          "status"
+        ],
+        "title": "RecordExcluded",
+        "type": "object"
+      },
+      "RecordRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "default": "native",
+            "enum": [
+              "native",
+              "scholar"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "q": {
+            "title": "Q",
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "title": "RecordRequest",
+        "type": "object"
+      },
+      "RecordResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/components/schemas/SearchRecord"
+          },
+          "replay": {
+            "$ref": "#/components/schemas/ReplayInfo"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "record",
+          "replay"
+        ],
+        "title": "RecordResponse",
+        "type": "object"
+      },
+      "ReplayInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "added": {
+            "title": "Added",
+            "type": "integer"
+          },
+          "changed": {
+            "items": {
+              "$ref": "#/components/schemas/ChangedInput"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "excluded": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Excluded"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "excluded_match": {
+            "title": "Excluded Match",
+            "type": "boolean"
+          },
+          "ids_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ids Hash"
+          },
+          "ids_match": {
+            "title": "Ids Match",
+            "type": "boolean"
+          },
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "membership_identical": {
+            "title": "Membership Identical",
+            "type": "boolean"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "refused": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosticCode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "removed": {
+            "title": "Removed",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "reproduced",
+              "drifted",
+              "mismatch"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "required": [
+          "status",
+          "index_version",
+          "query_version",
+          "total",
+          "excluded",
+          "ids_hash",
+          "ids_match",
+          "excluded_match",
+          "refused",
+          "changed",
+          "added",
+          "removed",
+          "membership_identical"
+        ],
+        "title": "ReplayInfo",
+        "type": "object"
+      },
+      "SearchRecord": {
+        "additionalProperties": false,
+        "description": "Every field of spec 04 §Search records, plus `schema_version` and `ranking_params` (the index's other\ntwo inputs), so a drifted replay can name a method change even after the pinned index is gone.",
+        "properties": {
+          "canonical": {
+            "title": "Canonical",
+            "type": "string"
+          },
+          "canonical_hash": {
+            "title": "Canonical Hash",
+            "type": "string"
+          },
+          "crawl_dates": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Crawl Dates",
+            "type": "object"
+          },
+          "dedup": {
+            "$ref": "#/components/schemas/Dedup"
+          },
+          "excluded": {
+            "$ref": "#/components/schemas/RecordExcluded"
+          },
+          "expansions": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Expansions",
+            "type": "object"
+          },
+          "identification_query": {
+            "title": "Identification Query",
+            "type": "string"
+          },
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ids",
+            "type": "array"
+          },
+          "ids_hash": {
+            "title": "Ids Hash",
+            "type": "string"
+          },
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "input": {
+            "title": "Input",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "native",
+              "scholar"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "ranking_params": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Ranking Params",
+            "type": "object"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "searched_at": {
+            "title": "Searched At",
+            "type": "string"
+          },
+          "semantic_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Version"
+          },
+          "snapshot_hash": {
+            "title": "Snapshot Hash",
+            "type": "string"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "translations": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "title": "Translations",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "record_id",
+          "input",
+          "mode",
+          "canonical",
+          "canonical_hash",
+          "identification_query",
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "schema_version",
+          "ranking_params",
+          "snapshot_hash",
+          "crawl_dates",
+          "searched_at",
+          "total",
+          "excluded",
+          "expansions",
+          "translations",
+          "warnings",
+          "ids",
+          "ids_hash",
+          "dedup"
+        ],
+        "title": "SearchRecord",
+        "type": "object"
+      },
       "SearchResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2167,6 +2710,125 @@
           }
         },
         "summary": "Parse Query"
+      }
+    },
+    "/api/v1/records": {
+      "post": {
+        "description": "Freeze a search as an immutable record: re-run here on the served index, then one INSERT.",
+        "operationId": "create_record",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Create Record"
+      }
+    },
+    "/api/v1/records/{id}": {
+      "get": {
+        "description": "The stored record and a replay of it now (HTTP 200 whatever the status).",
+        "operationId": "get_record",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Get Record"
+      }
+    },
+    "/api/v1/records/{id}/diff": {
+      "get": {
+        "description": "The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. A\ntitle comes from the index the replay ran on, else the record's pinned index; null if neither holds it.",
+        "operationId": "diff_record",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordDiff"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Diff Record"
       }
     },
     "/api/v1/search": {
