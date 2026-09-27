@@ -44,8 +44,7 @@ from openproceedings.query.ast import (
     YearRange,
 )
 from openproceedings.query.normalize import normalize
-
-TEXT_FIELDS: tuple[TextField, ...] = ("title", "abstract")
+from openproceedings.vocab import TEXT_FIELDS
 
 
 @dataclass(frozen=True, slots=True)

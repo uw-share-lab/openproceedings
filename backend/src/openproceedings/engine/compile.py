@@ -41,8 +41,9 @@ from openproceedings.query.ast import (
     Wildcard,
     YearRange,
 )
+from openproceedings.vocab import TEXT_FIELDS
 
-FIELDS: tuple[TextField, ...] = ("title", "abstract")
+FIELDS = TEXT_FIELDS  # the searched fields (vocab)
 Expansions = dict[tuple[str, str], tuple[str, ...]]  # (stem, op) → the sorted expanded terms
 # A field's stored token stream for each candidate document: (doc address, field) → tokens
 TokenReader = Callable[[tantivy.Query, TextField], Iterator[tuple[str, list[str]]]]

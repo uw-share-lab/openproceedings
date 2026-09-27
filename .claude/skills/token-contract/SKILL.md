@@ -36,7 +36,8 @@ splitting beyond punctuation, number normalization (`GPT-4` stays `gpt` `4`).
 ## Single source of truth
 `backend/src/openproceedings/query/normalize.py` is the only implementation: `tokenize(text) ->
 list[Token]` (each with the raw half-open code-point span it came from, for highlights: a math command's span
-is its name; markup that opens a word, such as `\"{O}del` or `\v{S}`, starts the span at its backslash,
+is its name; markup that opens a word (an accent macro such as `\"{O}del` or `\v{S}`, `\-`, or a math
+`^`/`_`: `$^2x$` spans `^2x`) starts the span at its first character,
 task-074) and
 `normalize(text) -> list[str]`. It works character by character; a Hypothesis property pins it equal to an
 independent whole-string definition (block ranges, not Unicode names), including an adversarial Unicode

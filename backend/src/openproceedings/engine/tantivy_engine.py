@@ -118,7 +118,7 @@ class TantivyEngine:
         return len(keyed), [(i, score) for _key, i, score in top[offset:]]
 
     def ranked(self, ast: Node, sort: str = "relevance") -> list[tuple[str, float]]:
-        """Every match with its exact score, in `sort` order, ties always broken by id: `relevance` is
+        """(Tests' whole-order view; searches use `page`.) Every match with its exact score, in `sort` order, ties always broken by id: `relevance` is
         (-score, id), `year_desc`/`year_asc` (∓year, id), `title` (casefold(NFKC(display title)), id). Ranking
         only orders: the set is the same for every sort."""
         return [(i, score) for _key, i, score in sorted(self.keyed(ast, sort))]

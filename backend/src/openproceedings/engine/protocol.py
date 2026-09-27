@@ -51,6 +51,7 @@ class SearchResult:
 
 
 FACET_FIELDS: tuple[str, ...] = FILTER_FIELDS
+Expansions = Mapping[tuple[str, str], Collection[str]]  # (stem, op) → the terms it expands to
 MAX_EXPANSIONS = 200  # spec 02: more distinct expanded terms than this is an error, never a truncation
 
 
@@ -63,6 +64,6 @@ class Engine(Protocol):
     def match_ids(self, ast: Node) -> frozenset[str]: ...
     def expand(self, wildcard: Wildcard) -> list[str]: ...
     def facets(self, ast: Node, fields: tuple[str, ...] = FACET_FIELDS) -> dict[str, dict[str, int]]: ...
-    def expansions(self, ast: Node) -> Mapping[tuple[str, str], Collection[str]]:
+    def expansions(self, ast: Node) -> Expansions:
         """Every wildcard in `ast`, (stem, op) → its terms, each expanded once (the cap applies)."""
         ...

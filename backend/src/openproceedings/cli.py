@@ -2,8 +2,9 @@
 implements it (spec 08 §CLI). The CLI and the API call the same functions.
 
 Implemented: `op ingest ris`, `op snapshot build`, `op snapshot diff` (task-022), `op index build`
-(task-023), `op search --explain / --ids` (task-024; ranked output and export are task-030). Results go to stdout as
-JSON; logs go to stderr; a refused operation exits 1 with its reason, a usage error or a stub exits 2.
+(task-023), `op index parity` (task-029), `op search` (ranked, `--ids`, `--explain`, `--engine reference`;
+task-024/030) and `op export` (task-030). Results go to stdout; logs go to stderr; a refused operation exits
+1 with its reason, a usage error or a stub exits 2.
 """
 
 from __future__ import annotations
@@ -356,11 +357,12 @@ def _report(engine: TantivyEngine, result: ParseResult, total: int, gone: Exclud
 
 def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:
     """The oracle over the snapshot an index was built from."""
-    from openproceedings.engine.index import IndexBuildError, verify_index
+    from openproceedings.engine.index import IndexBuildError
     from openproceedings.engine.reference import ReferenceEngine
     from openproceedings.ingest.snapshot import load_records
 
-    manifest = verify_index(index)
+    # the caller opened a TantivyEngine on `index` just now, which verified every file: not hashed twice
+    manifest = json.loads((index / "manifest.json").read_text(encoding="utf-8"))
     snapshot = resolve_snapshot(manifest["snapshot"], ns.data_dir / "snapshots")
     found = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))["snapshot_hash"]
     if (

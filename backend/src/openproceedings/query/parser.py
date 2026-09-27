@@ -512,7 +512,7 @@ class _Parser:
                 tok.end,
             )
             return None
-        node = self.primary(cast(TextField, name))
+        node = self.primary(name)
         return node.model_copy(update={"span": (tok.start, node.span[1])}) if node is not None else None
 
     def filter(self, tok: Lexeme, name: FilterField) -> Node | None:

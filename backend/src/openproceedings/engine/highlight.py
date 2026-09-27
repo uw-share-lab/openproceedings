@@ -19,10 +19,10 @@ markup that opens a word is in the word's span (`\\"{O}del` lights all of it), a
 from __future__ import annotations
 
 from bisect import bisect_left
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Iterable
 
 from openproceedings.diagnostics import DiagnosticCode
-from openproceedings.engine.protocol import EngineInternalError, Searchable
+from openproceedings.engine.protocol import EngineInternalError, Expansions, Searchable
 from openproceedings.query.ast import (
     And,
     Filter,
@@ -38,9 +38,8 @@ from openproceedings.query.ast import (
     YearRange,
 )
 from openproceedings.query.normalize import Token, tokenize
+from openproceedings.vocab import TEXT_FIELDS
 
-TEXT_FIELDS: tuple[TextField, ...] = ("title", "abstract")
-Expansions = Mapping[tuple[str, str], Collection[str]]  # (stem, op) → the terms it expands to
 Spans = dict[TextField, set[tuple[int, int]]]
 
 

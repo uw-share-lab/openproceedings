@@ -38,8 +38,9 @@ import tantivy
 
 from openproceedings import storage
 from openproceedings.ingest.record import PaperRecord
-from openproceedings.ingest.snapshot import iter_records
+from openproceedings.ingest.snapshot import DISPLAY, iter_records
 from openproceedings.query.normalize import TOKENIZER_VERSION, normalize
+from openproceedings.vocab import TEXT_FIELDS
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ log = logging.getLogger(__name__)
 # change to them is a new SCHEMA_VERSION (index-versioning skill).
 SCHEMA_VERSION = "2"  # 2: the ord and title_rank fast columns (task-024/025)
 ANALYZER = "exact_v1"
-TEXT = ("title", "abstract")
+TEXT: tuple[str, ...] = TEXT_FIELDS  # the searched fields (vocab), as the schema's field names
 FACETS = ("venue", "track", "status")
 # Tantivy drops a longer token without a word; a build refuses one instead (measured on tantivy 0.26.2).
 MAX_TOKEN_BYTES = 65_530
@@ -173,15 +174,8 @@ def _document(r: PaperRecord, fields: dict[str, list[str]], ord_: int, title_ran
     for field in FACETS:
         doc.add_text(field, getattr(r, field))
     doc.add_unsigned("year", r.year)
-    display = {
-        "title": r.title,  # display text: the indexed fields hold tokens, never shown
-        "abstract": r.abstract,
-        "authors": list(r.authors),
-        "urls": r.urls.model_dump(),
-        "presentation": r.presentation,
-        "keywords": list(r.keywords),
-        "venue_id_raw": r.venue_id_raw,
-    }
+    # the display text (the indexed fields hold tokens, never shown) and every display-only field (DISPLAY)
+    display = {f: _plain(getattr(r, f)) for f in ("title", "abstract", *DISPLAY)}
     compact = json.dumps(display, sort_keys=True, separators=(",", ":"), ensure_ascii=False)  # canonical JSON
     doc.add_bytes("record", compact.encode("utf-8"))
     return doc
@@ -233,8 +227,17 @@ def verify_index(path: Path) -> dict[str, Any]:
     return manifest
 
 
+def _plain(value: Any) -> Any:
+    """A record field as JSON holds it: a tuple as a list, a model as its dict."""
+    if isinstance(value, tuple):
+        return list(value)
+    return value.model_dump() if hasattr(value, "model_dump") else value
+
+
 def _seal(path: Path) -> None:
-    """Make every index file read-only except Tantivy's lock files (readers write those)."""
+    """Make every index file read-only except Tantivy's lock files (readers write those). The directory
+    itself stays writable, unlike a snapshot's: a reader takes `.tantivy-meta.lock` in it (tantivy-indexing
+    skill); `verify_index` re-hashes every file, so an added or swapped one is caught anyway."""
     for p in path.iterdir():
         if p.is_file() and p.name not in _LOCKS:
             p.chmod(0o444)

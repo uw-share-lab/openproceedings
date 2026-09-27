@@ -272,6 +272,9 @@ def test_script_join_is_linear() -> None:
         ('G\\"odel', [(0, 7)]),  # inside a word: unchanged
         ("\\-mark", [(0, 6)]),
         ("$n\\leq5$", [(1, 2), (3, 6), (6, 7)]),  # after an operator command, a word starts after its name
+        ("$^2x$", [(1, 4)]),  # a script that opens a word is markup too: `^2x` lights the caret
+        ("CT$^2$S", [(0, 2), (3, 5), (6, 7)]),
+        ("$_{ij}$", [(1, 6)]),
         ("$\\neq1$", [(2, 5), (5, 6)]),
         ("$\\not=x$", [(2, 6), (6, 7)]),
         ("$3\\times10^5$", [(1, 2), (3, 8), (8, 12)]),

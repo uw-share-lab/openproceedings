@@ -26,7 +26,8 @@ Status = Literal["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"
 VENUES: dict[str, str] = {v.lower(): v for v in get_args(Venue)}
 TRACKS: tuple[str, ...] = get_args(Track)
 STATUSES: tuple[str, ...] = get_args(Status)
-TEXT_FIELDS = ("title", "abstract")
+# the searched fields (guarantee 2): every module that names them imports this one tuple
+TEXT_FIELDS: tuple[Literal["title", "abstract"], ...] = ("title", "abstract")
 QUERY_FILTER_FIELDS = (  # every filter field a query may name, incl. Scholar's `source:` (cf. ast.FILTER_FIELDS)
     "venue",
     "year",

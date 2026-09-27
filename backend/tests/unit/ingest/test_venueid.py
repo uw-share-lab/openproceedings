@@ -170,6 +170,8 @@ def test_an_unmapped_status_is_unknown_never_accepted(suffix: str) -> None:
         "ICML.cc/2023/TinyPapers",  # TinyPapers is ICLR's
         "ICLR.cc/2024/Conference/Blind_Submission/Extra",
         "ICLR.cc/2024/Conference/Main",
+        "ICLR.cc/2024/conference",  # track segments match exactly, case included
+        "ICLR.cc/2024/CONFERENCE",
     ],
 )
 def test_forms_outside_the_table_are_other(venueid: str) -> None:
