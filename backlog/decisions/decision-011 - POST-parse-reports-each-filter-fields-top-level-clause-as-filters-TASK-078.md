@@ -70,7 +70,7 @@ top-level one editable, and the nested one stays applied (decision-001's facet r
 - The `nested` rule is conservative for `track` and `status`. When a field's only clauses are nested (`x
   (track:workshop OR y)`), the default is still applied, yet the field is reported `nested` and not
   toggleable, so the banner's include button is disabled exactly when the default removes papers. The
-  zero-width wrap `(q) AND track:(…)` would work there: the review's fuzz found many such cases in the review's fuzzing among
+  zero-width wrap `(q) AND track:(…)` would work there: the review's fuzz found many such cases among
   its generated queries. Kept for now (it never offers an edit that could fail or mislead, and the query
   text stays editable); it can be relaxed later by reporting the zero-width span for a field whose default
   applies despite a nested clause, which would be additive (a `nested` report becoming toggleable).
