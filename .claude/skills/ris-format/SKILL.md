@@ -16,7 +16,7 @@ fixtures. The reference parser strips values, so it reads either ending.
 ## Field mapping
 | Tag | Value | Notes |
 |---|---|---|
-| `TY` | `CPAPER` for every record | Chosen over `JOUR` (spec 04 §Exports, task-004): Zotero imports it as `conferencePaper` with `T2` as `conferenceName`, EndNote as *Conference Paper*. EndNote's default duplicate check stays within one reference type, so another database's `JOUR`/`CONF` copy of a paper is only caught with Reference Type unticked. The Covidence hand import is `docs/results/2026-09-27-covidence-check.md` (**pending**). |
+| `TY` | `CPAPER` for every record | Chosen over `JOUR` (spec 04 §Exports, task-004): Zotero imports it as `conferencePaper` with `T2` as `conferenceName`, EndNote as *Conference Paper*. EndNote's default duplicate check stays within one reference type, so another database's `JOUR`/`CONF` copy of a paper is only caught with Reference Type unticked. The Covidence hand import is `docs/results/2026-09-27-covidence-check.md` (done 2026-09-27). |
 | `TI` | full title | One line. No trailing period added. |
 | `AU` | one author per line, `Last, First` | Full names from the record. Never initials only, never an `...` sentinel line. |
 | `PY` | year | The file known to import cleanly (Trust-Evals `mended.ris`) used `2025///`. Plain `2025` is also valid RIS. The writer writes plain `2025`; the Covidence check confirmed it shows as the year. |

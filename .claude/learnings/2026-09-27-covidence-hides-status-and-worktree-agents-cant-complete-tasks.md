@@ -1,9 +1,6 @@
 # Covidence hides a paper's status from screeners, and worktree agents can't close Backlog tasks
 
-**Key lesson:** A screener in Covidence sees neither RIS `KW` nor `N1`, so a paper's review status must be
-enforced before import (the default `status:accepted` filter), never left to the screener. In this repo's
-agent worktrees `backlog task complete` is refused, so the agent sets the task Done back to In Progress and
-the main session completes it after the merge.
+**Key lesson:**A screener in Covidence sees neither RIS `KW` nor `N1`, so a paper's review status must be enforced before import (the default `status:accepted` filter), never left to the screener. In this repo's agent worktrees `backlog task complete` is refused, so the agent sets the task Done back to In Progress and the main session completes it after the merge.
 
 - **Date:** 2026-09-27 · **Task:** task-004, task-036, task-081, task-078, task-083, task-087, task-089 · **Area:** exports, tooling
 - **Artifacts:** `docs/results/2026-09-27-covidence-check.md`, `docs/specs/04-backend-api.md` §Exports,

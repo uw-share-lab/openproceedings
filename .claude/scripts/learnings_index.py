@@ -52,6 +52,9 @@ def build() -> tuple[str, list[str]]:
             problems.append(f"{p.name}: missing '# <title>' line")
         if not key:
             problems.append(f"{p.name}: missing '**Key lesson:** …' line")
+        elif (after := text[key.end() :].split("\n", 2)) and len(after) > 1 and after[1].strip():
+            # INDEX.md takes the key lesson's line only: a lesson wrapped onto the next line is cut short there
+            problems.append(f"{p.name}: the key lesson must be one line (it continues on the next)")
         try:
             dt.date.fromisoformat(m.group(1))
         except ValueError:
