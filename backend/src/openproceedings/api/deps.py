@@ -25,7 +25,6 @@ from openproceedings.api.errors import ACCESS, ApiError
 from openproceedings.api.middleware import charge
 from openproceedings.api.state import Served
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode, clip
-from openproceedings.engine.compile import verifies
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.query.ast import And, Near, Node, Not, Or, Phrase, Term, Wildcard
 from openproceedings.query.parser import Mode, ParseResult, parse, too_long
@@ -35,7 +34,9 @@ if TYPE_CHECKING:
 
 MAX_LOGGED_CODES = 10  # distinct diagnostic codes on one access line; more are counted, not listed
 MAX_NAMED_PARAMS = 5  # unknown or repeated parameters a refusal names; more are counted
-_DECLARED: dict[int, frozenset[str]] = {}  # route id -> its query parameters' names (routes live forever)
+# a route's query parameter names are cached on the route itself (it lives and dies with them): a global
+# map keyed by `id(route)` handed a new app's route the names of a collected one that had its id (M3a round 2)
+DECLARED_ATTR = "_openproceedings_declared_query"
 
 
 def _query_names(dependant: Dependant) -> set[str]:
@@ -48,17 +49,18 @@ def _query_names(dependant: Dependant) -> set[str]:
 def declared_query(route: APIRoute) -> frozenset[str]:
     """The query parameter names `route` declares (aliases, e.g. `/export`'s `format`), its dependencies'
     included."""
-    names = _DECLARED.get(id(route))
+    names: frozenset[str] | None = route.__dict__.get(DECLARED_ATTR)
     if names is None:
-        names = _DECLARED[id(route)] = frozenset(_query_names(route.dependant))
+        names = frozenset(_query_names(route.dependant))
+        setattr(route, DECLARED_ATTR, names)
     return names
 
 
-def strict_query(request: Request) -> None:
+async def strict_query(request: Request) -> None:
     """422 `API_BAD_PARAM` for a query parameter the route doesn't declare (`/search?limt=5` would otherwise
     be answered as if `limit` were the default) or one given more than once (`?q=a&q=b`: which one ran?).
     Every route has it (`create_app`'s app-wide dependency); it runs before the route's own parameters are
-    read. The message names the parameters (the client's own keys, clipped); the log gets the code only."""
+    read, on the event loop (`async`: it does no I/O, so it needs no worker thread). The message names the parameters (the client's own keys, clipped); the log gets the code only."""
     route = request.scope.get("route")
     if not isinstance(route, APIRoute):
         return
@@ -175,18 +177,70 @@ def searchable(request: Request, q: str, mode: Mode) -> ParseResult:
     if result.effective_ast is None:
         first = result.errors[0]
         raise ApiError(first.code, first.message, diagnostics=result.errors)
-    charge_verified(request, result)  # every route that runs a query parses it here
+    charge_verified(request, result.effective_ast)  # every route that runs a query parses it here
     return result
 
 
-def charge_verified(request: Request, result: ParseResult) -> None:
-    """A query with a position-verified clause (spec 03; `compile.verifies`) costs at least the rate limit's
-    `verified_weight`: charge the rest now, after the parse and before anything compiles it, or refuse 429
-    `API_RATE_LIMITED` (spec 04 §Rate limit)."""
-    if result.effective_ast is not None and verifies(result.effective_ast):
-        config = request.app.state.config
-        if config.rate_limit.enabled:
-            charge(request.scope, config.rate_limit.verified_cost)
+def verified_clauses(node: Node | None) -> list[Phrase | Near]:
+    """Every clause of `node` that compiles to the position-verified path, in query order: the rule of
+    `engine.compile.verifies` (a phrase with a wildcard item, a NEAR that isn't two distinct terms), counted
+    rather than tested. A test holds `bool(verified_clauses(n)) == verifies(n)` and the count equal to the
+    compiler's own."""
+    match node:
+        case Phrase() if not all(isinstance(i, Term) for i in node.items):
+            return [node]
+        case Near() if not (
+            isinstance(node.left, Term)
+            and isinstance(node.right, Term)
+            and node.left.token != node.right.token
+        ):
+            return [node]
+        case Not():
+            return verified_clauses(node.child)
+        case And() | Or():
+            return [clause for c in node.children for clause in verified_clauses(c)]
+        case _:
+            return []
+
+
+def too_many_verified(clauses: Sequence[Phrase | Near], cap: int, *, located: bool = True) -> ApiError:
+    """422 `API_TOO_MANY_VERIFIED_CLAUSES`: one diagnostic per verified clause, each spanning it in `q`
+    (`located=False`: a replay, whose query is the record's canonical string, not the client's `q`)."""
+    message = (
+        f"This query has {len(clauses)} clauses that need a slow position check (a phrase with a wildcard, "
+        f"or a NEAR of anything but two different words); this instance runs at most {cap} in one query. "
+        "Split it into several searches, or write some of them as plain phrases."
+    )
+    diagnostics = (
+        [
+            Diagnostic(
+                code=DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES,
+                message="This clause needs a slow position check.",
+                span=c.span,
+            )
+            for c in clauses
+        ]
+        if located
+        else [Diagnostic(code=DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES, message=message)]
+    )
+    return ApiError(DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES, message, diagnostics=diagnostics)
+
+
+def charge_verified(request: Request, ast: Node | None, *, located: bool = True) -> None:
+    """A query's position-verified clauses (spec 03), counted from the AST before anything compiles it: more
+    than `ApiConfig.max_verified_clauses` is 422 `API_TOO_MANY_VERIFIED_CLAUSES` (each is a cold
+    verification holding a slot for seconds, so one request could otherwise hold the slots for a minute);
+    otherwise the query costs `verified_weight` per clause (`RateLimit.verified_charge`): the rest is charged
+    now, or 429 `API_RATE_LIMITED` (spec 04 §Rate limit). Every route that runs a query calls this: through
+    `searchable`, or on a replay's re-parsed canonical (`api/records.py`)."""
+    clauses = verified_clauses(ast)
+    if not clauses:
+        return
+    config = request.app.state.config
+    if len(clauses) > config.max_verified_clauses:
+        raise too_many_verified(clauses, config.max_verified_clauses, located=located)
+    if config.rate_limit.enabled:
+        charge(request.scope, config.rate_limit.verified_charge(len(clauses)))
 
 
 def current_served(request: Request) -> Served:

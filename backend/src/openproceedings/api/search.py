@@ -32,6 +32,7 @@ from openproceedings.api.models import (
     Sort,
     versions,
 )
+from openproceedings.api.openapi import BUSY
 from openproceedings.ingest.record import Urls
 from openproceedings.query.parser import Mode
 from openproceedings.search import Hit as Found
@@ -61,7 +62,7 @@ def parse_query(request: Request, engine: EngineDep, body: ParseRequest) -> Pars
     )
 
 
-@router.get("/search", response_model=SearchResponse)
+@router.get("/search", response_model=SearchResponse, responses=BUSY)
 def search(
     request: Request,
     engine: EngineDep,

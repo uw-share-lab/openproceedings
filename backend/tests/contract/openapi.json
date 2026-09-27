@@ -2,7 +2,6 @@
   "components": {
     "schemas": {
       "And": {
-        "additionalProperties": false,
         "properties": {
           "children": {
             "items": {
@@ -80,7 +79,6 @@
         "type": "object"
       },
       "ChangedInput": {
-        "additionalProperties": false,
         "properties": {
           "current": {
             "$ref": "#/components/schemas/JsonValue"
@@ -119,7 +117,6 @@
         "type": "object"
       },
       "Claim": {
-        "additionalProperties": false,
         "description": "One source's statement about one field. Frozen and scalar (tuples for lists), so claims are\nhashable and set-comparable. `fetched_at` comes from the cache entry, never from build time.",
         "properties": {
           "evidence": {
@@ -217,7 +214,6 @@
         ]
       },
       "CoverageCell": {
-        "additionalProperties": false,
         "properties": {
           "count": {
             "title": "Count",
@@ -261,7 +257,6 @@
         "type": "object"
       },
       "CoverageResponse": {
-        "additionalProperties": false,
         "properties": {
           "index_version": {
             "title": "Index Version",
@@ -301,7 +296,6 @@
         "type": "object"
       },
       "CoverageTotals": {
-        "additionalProperties": false,
         "properties": {
           "abstract_missing": {
             "title": "Abstract Missing",
@@ -394,7 +388,6 @@
         "type": "object"
       },
       "Diagnostic": {
-        "additionalProperties": false,
         "description": "A warning, error or translation notice about a query, with a half-open code-point span into `q`.",
         "properties": {
           "code": {
@@ -486,13 +479,13 @@
           "API_REPLAY_MISMATCH",
           "API_RECORDS_STORE_FULL",
           "API_BODY_TOO_LARGE",
-          "API_BUSY"
+          "API_BUSY",
+          "API_TOO_MANY_VERIFIED_CLAUSES"
         ],
         "title": "DiagnosticCode",
         "type": "string"
       },
       "DiffEntry": {
-        "additionalProperties": false,
         "properties": {
           "id": {
             "title": "Id",
@@ -518,7 +511,6 @@
         "type": "object"
       },
       "ErrorBody": {
-        "additionalProperties": false,
         "properties": {
           "code": {
             "$ref": "#/components/schemas/ErrorCode"
@@ -580,13 +572,13 @@
           "API_METHOD_NOT_ALLOWED",
           "API_RECORDS_STORE_FULL",
           "API_BODY_TOO_LARGE",
-          "API_BUSY"
+          "API_BUSY",
+          "API_TOO_MANY_VERIFIED_CLAUSES"
         ],
         "title": "ErrorCode",
         "type": "string"
       },
       "ErrorEnvelope": {
-        "additionalProperties": false,
         "properties": {
           "error": {
             "$ref": "#/components/schemas/ErrorBody"
@@ -629,7 +621,6 @@
         "type": "object"
       },
       "Facets": {
-        "additionalProperties": false,
         "description": "Disjunctive (decision-001): each field counted without its own top-level conjuncts. Values that\noccur only; years as strings.",
         "properties": {
           "status": {
@@ -671,7 +662,6 @@
         "type": "object"
       },
       "Filter": {
-        "additionalProperties": false,
         "description": "`field:` restricted to any of `values` (a single-field OR group): YearRanges for `year`, canonical\nstrings (`vocab.py`) for the others.",
         "properties": {
           "field": {
@@ -731,7 +721,6 @@
         "type": "object"
       },
       "Health": {
-        "additionalProperties": false,
         "properties": {
           "index_loaded": {
             "title": "Index Loaded",
@@ -767,7 +756,6 @@
         "type": "object"
       },
       "Highlights": {
-        "additionalProperties": false,
         "properties": {
           "abstract": {
             "items": {
@@ -792,7 +780,6 @@
         "type": "object"
       },
       "Hit": {
-        "additionalProperties": false,
         "properties": {
           "abstract": {
             "anyOf": [
@@ -886,7 +873,7 @@
             "type": "string"
           },
           "year": {
-            "minimum": 1000.0,
+            "minimum": 1000,
             "title": "Year",
             "type": "integer"
           }
@@ -910,7 +897,6 @@
       },
       "JsonValue": {},
       "MetaResponse": {
-        "additionalProperties": false,
         "properties": {
           "filter_fields": {
             "items": {
@@ -975,12 +961,11 @@
         "type": "object"
       },
       "Near": {
-        "additionalProperties": false,
         "description": "Both operands within `distance` words of each other, in either order, in one field.",
         "properties": {
           "distance": {
-            "maximum": 100.0,
-            "minimum": 0.0,
+            "maximum": 100,
+            "minimum": 0,
             "title": "Distance",
             "type": "integer"
           },
@@ -1044,7 +1029,6 @@
         "type": "object"
       },
       "Not": {
-        "additionalProperties": false,
         "properties": {
           "child": {
             "discriminator": {
@@ -1118,7 +1102,6 @@
         "type": "object"
       },
       "Or": {
-        "additionalProperties": false,
         "properties": {
           "children": {
             "items": {
@@ -1196,7 +1179,6 @@
         "type": "object"
       },
       "PaperRecord": {
-        "additionalProperties": false,
         "properties": {
           "abstract": {
             "anyOf": [
@@ -1315,7 +1297,7 @@
             "title": "Venue Id Raw"
           },
           "year": {
-            "minimum": 1000.0,
+            "minimum": 1000,
             "title": "Year",
             "type": "integer"
           }
@@ -1340,7 +1322,6 @@
         "type": "object"
       },
       "PaperResponse": {
-        "additionalProperties": false,
         "properties": {
           "index_version": {
             "title": "Index Version",
@@ -1393,7 +1374,6 @@
         "type": "object"
       },
       "ParseResponse": {
-        "additionalProperties": false,
         "description": "02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints). A query\nwith errors is still a 200 here: `errors` holds them, and every Optional is null.",
         "properties": {
           "ast": {
@@ -1602,7 +1582,6 @@
         "type": "object"
       },
       "Phrase": {
-        "additionalProperties": false,
         "description": "Consecutive positions in one field. A wildcard item is expanded at its position (decision-001).",
         "properties": {
           "field": {
@@ -1667,7 +1646,6 @@
         "type": "object"
       },
       "QueryInfo": {
-        "additionalProperties": false,
         "properties": {
           "canonical": {
             "title": "Canonical",
@@ -1723,7 +1701,6 @@
         "type": "object"
       },
       "RecordCreated": {
-        "additionalProperties": false,
         "properties": {
           "index_version": {
             "title": "Index Version",
@@ -1758,7 +1735,6 @@
         "type": "object"
       },
       "RecordDiff": {
-        "additionalProperties": false,
         "properties": {
           "added": {
             "items": {
@@ -1908,7 +1884,6 @@
         "type": "object"
       },
       "RecordResponse": {
-        "additionalProperties": false,
         "properties": {
           "index_version": {
             "title": "Index Version",
@@ -1940,7 +1915,6 @@
         "type": "object"
       },
       "ReplayInfo": {
-        "additionalProperties": false,
         "properties": {
           "added_total": {
             "anyOf": [
@@ -1971,8 +1945,15 @@
             ]
           },
           "excluded_match": {
-            "title": "Excluded Match",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Match"
           },
           "ids_hash": {
             "anyOf": [
@@ -1986,8 +1967,15 @@
             "title": "Ids Hash"
           },
           "ids_match": {
-            "title": "Ids Match",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ids Match"
           },
           "index_version": {
             "title": "Index Version",
@@ -2102,6 +2090,7 @@
                 "type": "null"
               }
             ],
+            "description": "Per `crawl_dates` key, what its window's ends are: `crawl`, `scholar_query_dates` or `mixed` today. Open set: new values may be added within /api/v1; handle a value you don't know.",
             "title": "Crawl Dates Kind"
           },
           "dedup": {
@@ -2278,7 +2267,6 @@
         "type": "object"
       },
       "SearchResponse": {
-        "additionalProperties": false,
         "properties": {
           "excluded": {
             "$ref": "#/components/schemas/Excluded"
@@ -2327,7 +2315,6 @@
         "type": "object"
       },
       "SnapshotInfo": {
-        "additionalProperties": false,
         "description": "The snapshot the served index was built from, as its manifest records it.",
         "properties": {
           "built_at": {
@@ -2429,7 +2416,6 @@
         "type": "object"
       },
       "Term": {
-        "additionalProperties": false,
         "properties": {
           "field": {
             "anyOf": [
@@ -2483,7 +2469,6 @@
         "type": "object"
       },
       "Urls": {
-        "additionalProperties": false,
         "properties": {
           "doi": {
             "anyOf": [
@@ -2540,7 +2525,6 @@
         "type": "object"
       },
       "VenueYearCoverage": {
-        "additionalProperties": false,
         "description": "One venue-year of the snapshot (`coverage.breakdown`): its cells in vocabulary order (`unknown`\nlast, never folded), and its unknown and missing-abstract counts, 0 included.",
         "properties": {
           "abstract_missing": {
@@ -2594,7 +2578,6 @@
         "type": "object"
       },
       "Vocabularies": {
-        "additionalProperties": false,
         "properties": {
           "status": {
             "items": {
@@ -2653,7 +2636,6 @@
         "type": "object"
       },
       "Wildcard": {
-        "additionalProperties": false,
         "description": "A suffix wildcard on one normalised token: `*` is zero or more characters, `$` zero or one.",
         "properties": {
           "field": {
@@ -2717,17 +2699,16 @@
         "type": "object"
       },
       "YearRange": {
-        "additionalProperties": false,
         "properties": {
           "hi": {
-            "maximum": 9999.0,
-            "minimum": 1000.0,
+            "maximum": 9999,
+            "minimum": 1000,
             "title": "Hi",
             "type": "integer"
           },
           "lo": {
-            "maximum": 9999.0,
-            "minimum": 1000.0,
+            "maximum": 9999,
+            "minimum": 1000,
             "title": "Lo",
             "type": "integer"
           }
@@ -2788,12 +2769,12 @@
                 }
               }
             },
-            "description": "API_RATE_LIMITED: this client's token bucket is empty",
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
             "headers": {
               "Retry-After": {
                 "description": "Whole seconds until the request would be allowed",
                 "schema": {
-                  "minimum": 1.0,
+                  "minimum": 1,
                   "type": "integer"
                 }
               }
@@ -2854,13 +2835,13 @@
             }
           },
           {
-            "description": "`native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). Only with `q`.",
+            "description": "`native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). With `record_id`, only `native` (a record's canonical string is native syntax); `scholar` there is 422 `API_BAD_PARAM`.",
             "in": "query",
             "name": "mode",
             "required": false,
             "schema": {
               "default": "native",
-              "description": "`native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). Only with `q`.",
+              "description": "`native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). With `record_id`, only `native` (a record's canonical string is native syntax); `scholar` there is 422 `API_BAD_PARAM`.",
               "enum": [
                 "native",
                 "scholar"
@@ -2889,7 +2870,7 @@
             }
           },
           {
-            "description": "Export exactly this search record's stored ids, from the index it names. Alone: not with `q`, `mode` or `index_version`.",
+            "description": "Export exactly this search record's stored ids, from the index it names. Not with `q` or `index_version`; `mode`, if sent, must be `native`.",
             "in": "query",
             "name": "record_id",
             "required": false,
@@ -2903,7 +2884,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Export exactly this search record's stored ids, from the index it names. Alone: not with `q`, `mode` or `index_version`.",
+              "description": "Export exactly this search record's stored ids, from the index it names. Not with `q` or `index_version`; `mode`, if sent, must be `native`.",
               "title": "Record Id"
             }
           }
@@ -2931,7 +2912,7 @@
                 }
               },
               "X-Query-Version": {
-                "description": "This code's query_version",
+                "description": "This code's query_version (on a `record_id` export too, whatever the record's own)",
                 "schema": {
                   "type": "string"
                 }
@@ -2943,7 +2924,7 @@
                 }
               },
               "X-Total": {
-                "description": "How many records the body holds: `/search`'s `total` for the same query and index (for a search record, its stored `total`)",
+                "description": "How many records the body holds: `/search`'s `total` for the same query and index (for a search record, the number of its stored ids, which its `total` must equal: 409 `API_RECORD_MISMATCH` otherwise)",
                 "schema": {
                   "minimum": 0,
                   "type": "integer"
@@ -2977,10 +2958,29 @@
                 }
               }
             },
-            "description": "API_RATE_LIMITED: this client's token bucket is empty",
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
             "headers": {
               "Retry-After": {
                 "description": "Whole seconds until the request would be allowed",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "headers": {
+              "Retry-After": {
+                "description": "Sent with API_BUSY: whole seconds to wait before retrying",
                 "schema": {
                   "minimum": 1,
                   "type": "integer"
@@ -3089,12 +3089,12 @@
                 }
               }
             },
-            "description": "API_RATE_LIMITED: this client's token bucket is empty",
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
             "headers": {
               "Retry-After": {
                 "description": "Whole seconds until the request would be allowed",
                 "schema": {
-                  "minimum": 1.0,
+                  "minimum": 1,
                   "type": "integer"
                 }
               }
@@ -3126,7 +3126,7 @@
             "required": true,
             "schema": {
               "description": "A paper id, `op:<venue>:<year>:<native>`. Any other shape is 422 `API_BAD_PARAM`.",
-              "pattern": "^op:(neurips|iclr|icml):[0-9]{4}:\\S+$",
+              "pattern": "^op:[a-z][a-z0-9]*:[0-9]{4}:[A-Za-z0-9_-]+$",
               "title": "Id",
               "type": "string"
             }
@@ -3169,7 +3169,7 @@
                 }
               }
             },
-            "description": "API_RATE_LIMITED: this client's token bucket is empty",
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
             "headers": {
               "Retry-After": {
                 "description": "Whole seconds until the request would be allowed",
@@ -3245,12 +3245,12 @@
                 }
               }
             },
-            "description": "API_RATE_LIMITED: this client's token bucket is empty",
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
             "headers": {
               "Retry-After": {
                 "description": "Whole seconds until the request would be allowed",
                 "schema": {
-                  "minimum": 1.0,
+                  "minimum": 1,
                   "type": "integer"
                 }
               }
@@ -3329,12 +3329,31 @@
                 }
               }
             },
-            "description": "API_RATE_LIMITED: this client's token bucket is empty",
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
             "headers": {
               "Retry-After": {
                 "description": "Whole seconds until the request would be allowed",
                 "schema": {
-                  "minimum": 1.0,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "headers": {
+              "Retry-After": {
+                "description": "Sent with API_BUSY: whole seconds to wait before retrying",
+                "schema": {
+                  "minimum": 1,
                   "type": "integer"
                 }
               }
@@ -3428,10 +3447,29 @@
                 }
               }
             },
-            "description": "API_RATE_LIMITED: this client's token bucket is empty",
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
             "headers": {
               "Retry-After": {
                 "description": "Whole seconds until the request would be allowed",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "headers": {
+              "Retry-After": {
+                "description": "Sent with API_BUSY: whole seconds to wait before retrying",
                 "schema": {
                   "minimum": 1,
                   "type": "integer"
@@ -3471,26 +3509,26 @@
             }
           },
           {
-            "description": "Hits to skip. Past the end is an empty page, not an error.",
+            "description": "Entries of each list (`added`, `removed`) to skip. Past the end is an empty list.",
             "in": "query",
             "name": "offset",
             "required": false,
             "schema": {
               "default": 0,
-              "description": "Hits to skip. Past the end is an empty page, not an error.",
+              "description": "Entries of each list (`added`, `removed`) to skip. Past the end is an empty list.",
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
             }
           },
           {
-            "description": "Hits per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped.",
+            "description": "Entries of each list per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped.",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 50,
-              "description": "Hits per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped.",
+              "description": "Entries of each list per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped.",
               "maximum": 200,
               "minimum": 0,
               "title": "Limit",
@@ -3535,10 +3573,29 @@
                 }
               }
             },
-            "description": "API_RATE_LIMITED: this client's token bucket is empty",
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
             "headers": {
               "Retry-After": {
                 "description": "Whole seconds until the request would be allowed",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "headers": {
+              "Retry-After": {
+                "description": "Sent with API_BUSY: whole seconds to wait before retrying",
                 "schema": {
                   "minimum": 1,
                   "type": "integer"
@@ -3675,10 +3732,29 @@
                 }
               }
             },
-            "description": "API_RATE_LIMITED: this client's token bucket is empty",
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
             "headers": {
               "Retry-After": {
                 "description": "Whole seconds until the request would be allowed",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "headers": {
+              "Retry-After": {
+                "description": "Sent with API_BUSY: whole seconds to wait before retrying",
                 "schema": {
                   "minimum": 1,
                   "type": "integer"

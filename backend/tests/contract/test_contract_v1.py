@@ -5,6 +5,7 @@ redirect)."""
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Iterator
 from pathlib import Path
@@ -179,9 +180,25 @@ def test_the_error_code_schema_is_exactly_the_registrys_http_codes() -> None:
 
 
 # --- 10. headers ---------------------------------------------------------------------------------------------------
+QUERY_ROUTES = [
+    ("/api/v1/search", "get"),
+    ("/api/v1/export", "get"),
+    ("/api/v1/records", "post"),
+    ("/api/v1/records/{id}", "get"),
+    ("/api/v1/records/{id}/diff", "get"),
+]
+
+
 def test_the_status_specific_headers_are_in_the_contract() -> None:
     search = DOC["paths"]["/api/v1/search"]["get"]["responses"]
     assert "Retry-After" in search["429"]["headers"] and "Allow" in search["405"]["headers"]
+    # every route that runs a query can be 503 API_BUSY, which sends Retry-After (M3a round 2)
+    for path, method in QUERY_ROUTES:
+        busy = DOC["paths"][path][method]["responses"]["503"]
+        assert "Retry-After" in busy["headers"] and "API_BUSY" in busy["description"], path
+    # the 429 names every bucket that can refuse
+    for source in ("token bucket", "network", "position-verified", "save ceiling"):
+        assert source in search["429"]["description"], source
     assert "429" not in DOC["paths"]["/api/v1/healthz"]["get"]["responses"]  # never rate-limited
     created = DOC["paths"]["/api/v1/records"]["post"]["responses"]["201"]
     assert "Location" in created["headers"]
@@ -226,6 +243,39 @@ def test_every_query_parameter_is_described_and_q_names_its_cap() -> None:
     q = next(p for p in DOC["paths"]["/api/v1/search"]["get"]["parameters"] if p["name"] == "q")
     assert "2,000" in q["description"] and "PARSE_TOO_LONG" in q["description"]
     assert "2,000" in SCHEMAS["ParseRequest"]["properties"]["q"]["description"]
+
+
+def test_response_objects_are_open_to_new_keys_and_request_bodies_are_closed() -> None:
+    """Adding a response field is non-breaking (spec 04 §Conventions: clients ignore unknown keys), so no
+    response schema says `additionalProperties: false`; a request body does (the server refuses an unknown
+    key)."""
+
+    def closed(node: Any) -> bool:
+        if isinstance(node, dict):
+            return node.get("additionalProperties") is False or any(closed(v) for v in node.values())
+        if isinstance(node, list):
+            return any(closed(v) for v in node)
+        return False
+
+    assert [name for name in SCHEMAS if name not in REQUESTS and closed(SCHEMAS[name])] == []
+    for name in REQUESTS:
+        assert SCHEMAS[name]["additionalProperties"] is False, name
+
+
+def test_integer_bounds_are_integers() -> None:
+    year = SCHEMAS["PaperRecord"]["properties"]["year"]
+    assert year["minimum"] == 1000 and isinstance(year["minimum"], int)
+    assert "1000.0" not in json.dumps(DOC)
+
+
+def test_the_diff_pages_count_entries_not_hits() -> None:
+    params = {p["name"]: p for p in DOC["paths"]["/api/v1/records/{id}/diff"]["get"]["parameters"]}
+    for name in ("offset", "limit"):
+        assert "Entries" in params[name]["description"] and "Hits" not in params[name]["description"]
+
+
+def test_crawl_dates_kind_says_it_is_an_open_set() -> None:
+    assert OPEN_NOTE in SCHEMAS["SearchRecord"]["properties"]["crawl_dates_kind"]["description"]
 
 
 def test_path_ids_carry_their_pattern() -> None:

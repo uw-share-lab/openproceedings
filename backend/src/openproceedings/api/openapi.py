@@ -40,8 +40,9 @@ def response_header(description: str, schema: dict[str, Any] | None = None) -> d
 
 
 # Every non-2xx answer is the one error envelope (`api/errors.py`), a 422 included. Declaring it as the
-# `default` response also replaces FastAPI's `HTTPValidationError` 422, which this app never sends. The two
-# statuses that carry a header of their own are declared too, so the header is in the contract.
+# `default` response also replaces FastAPI's `HTTPValidationError` 422, which this app never sends. The
+# statuses that carry a header of their own are declared too, so the header is in the contract: 405 and 429
+# on every rate-limited route, and 503 on the routes that run a query (`BUSY`, declared per route).
 METHOD_NOT_ALLOWED: dict[int | str, dict[str, Any]] = {
     405: {
         "model": ErrorEnvelope,
@@ -54,10 +55,29 @@ METHOD_NOT_ALLOWED: dict[int | str, dict[str, Any]] = {
 RATE_LIMITED: dict[int | str, dict[str, Any]] = {
     429: {
         "model": ErrorEnvelope,
-        "description": "API_RATE_LIMITED: this client's token bucket is empty",
+        "description": (
+            "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay "
+            "for the request, a query's position-verified clauses included; or, on POST /records, the "
+            "save ceiling of this client's network or of the whole instance is reached"
+        ),
         "headers": {
             "Retry-After": response_header(
                 "Whole seconds until the request would be allowed", {"type": "integer", "minimum": 1}
+            )
+        },
+    }
+}
+BUSY: dict[int | str, dict[str, Any]] = {
+    503: {
+        "model": ErrorEnvelope,
+        "description": (
+            "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot "
+            "is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records "
+            "API_RECORDS_STORE_FULL (neither sends Retry-After)"
+        ),
+        "headers": {
+            "Retry-After": response_header(
+                "Sent with API_BUSY: whole seconds to wait before retrying", {"type": "integer", "minimum": 1}
             )
         },
     }
@@ -133,9 +153,59 @@ def mark_open_enums(document: dict[str, Any]) -> None:
             schema["description"] = " ".join(filter(None, (schema.get("description"), OPEN_NOTE)))
 
 
+def request_schemas(document: dict[str, Any]) -> set[str]:
+    """The component schemas a request body names (`ParseRequest`, `RecordRequest`)."""
+    names = set()
+    for item in document.get("paths", {}).values():
+        for op in item.values():
+            for media in op.get("requestBody", {}).get("content", {}).values():
+                ref = media.get("schema", {}).get("$ref", "")
+                if ref.startswith("#/components/schemas/"):
+                    names.add(ref.rsplit("/", 1)[1])
+    return names
+
+
+def open_response_objects(document: dict[str, Any]) -> None:
+    """Drop `additionalProperties: false` from every schema but a request body's. The server never sends an
+    unknown key (`extra="forbid"` holds it to that), but adding a response field is non-breaking within
+    /api/v1 (spec 04 §Conventions: clients ignore unknown keys), so the document must not tell a generated
+    client to reject one. A request body stays closed: the server refuses a key it doesn't know."""
+    requests = request_schemas(document)
+
+    def strip(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("additionalProperties") is False:
+                del node["additionalProperties"]
+            for value in node.values():
+                strip(value)
+        elif isinstance(node, list):
+            for value in node:
+                strip(value)
+
+    for name, schema in document.get("components", {}).get("schemas", {}).items():
+        if name not in requests:
+            strip(schema)
+
+
+def integer_bounds(node: Any) -> None:
+    """An integer schema's `minimum`/`maximum` as integers (pydantic emits `ge=1000` as `1000.0`)."""
+    if isinstance(node, dict):
+        if node.get("type") == "integer":
+            for key in ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"):
+                value = node.get(key)
+                if isinstance(value, float) and value.is_integer():
+                    node[key] = int(value)
+        for value in node.values():
+            integer_bounds(value)
+    elif isinstance(node, list):
+        for value in node:
+            integer_bounds(value)
+
+
 def document_head_as_get(app: FastAPI) -> None:
-    """Serve the document without the HEAD operations of routes that also answer GET (`/healthz`), and
-    with every open enum marked as open (`mark_open_enums`).
+    """Serve the document without the HEAD operations of routes that also answer GET (`/healthz`), with
+    every open enum marked as open (`mark_open_enums`), and with response objects open to new keys
+    (`open_response_objects`).
 
     FastAPI gives every method of one route the same operationId, so a GET+HEAD route yields an invalid
     document (a repeated id, which openapi-typescript keys `operations` by). HEAD is GET without a body
@@ -152,6 +222,8 @@ def document_head_as_get(app: FastAPI) -> None:
                 if "get" in item:
                     item.pop("head", None)
             mark_open_enums(schema)
+            open_response_objects(schema)
+            integer_bounds(schema)
             app.openapi_schema = schema
         return app.openapi_schema
 

@@ -104,7 +104,8 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
         # every route refuses a query parameter it doesn't declare, or one given twice (422 API_BAD_PARAM)
         dependencies=[Depends(strict_query)],
         openapi_url=f"{API_PREFIX}/openapi.json",
-        docs_url=f"{API_PREFIX}/docs",
+        # Swagger UI loads from a CDN: served only when configured (`op serve` on a loopback host, or --docs)
+        docs_url=f"{API_PREFIX}/docs" if config.serve_docs else None,
         redoc_url=None,
         swagger_ui_oauth2_redirect_url=None,
         generate_unique_id_function=operation_id,

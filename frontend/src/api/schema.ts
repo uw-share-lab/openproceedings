@@ -373,7 +373,7 @@ export interface components {
          * @description Open set: new values may be added within /api/v1; handle a value you don't know.
          * @enum {string}
          */
-        DiagnosticCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "WARN_LOWERCASE_OPERATOR" | "WARN_MIXED_AND_OR" | "WARN_NESTED_FILTER" | "WARN_FILTER_SCOPE" | "WARN_LOOKALIKE_OPERATOR" | "WARN_SYMBOLS_DROPPED" | "WARN_SOURCE_PARTIAL" | "WARN_CJK_RUN" | "WARN_SPELLED_GREEK" | "COMPAT_SOURCE_ALIAS" | "COMPAT_POP_DOLLAR" | "COMPAT_POP_PHRASE" | "COMPAT_NO_STEMMING" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_REPLAY_MISMATCH" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY";
+        DiagnosticCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "WARN_LOWERCASE_OPERATOR" | "WARN_MIXED_AND_OR" | "WARN_NESTED_FILTER" | "WARN_FILTER_SCOPE" | "WARN_LOOKALIKE_OPERATOR" | "WARN_SYMBOLS_DROPPED" | "WARN_SOURCE_PARTIAL" | "WARN_CJK_RUN" | "WARN_SPELLED_GREEK" | "COMPAT_SOURCE_ALIAS" | "COMPAT_POP_DOLLAR" | "COMPAT_POP_PHRASE" | "COMPAT_NO_STEMMING" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_REPLAY_MISMATCH" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY" | "API_TOO_MANY_VERIFIED_CLAUSES";
         /** DiffEntry */
         DiffEntry: {
             /** Id */
@@ -394,7 +394,7 @@ export interface components {
          * @description An error envelope's code (spec 04 §Error handling). Open set: new values may be added within /api/v1; handle a value you don't know.
          * @enum {string}
          */
-        ErrorCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY";
+        ErrorCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_RECORDS_STORE_FULL" | "API_BODY_TOO_LARGE" | "API_BUSY" | "API_TOO_MANY_VERIFIED_CLAUSES";
         /** ErrorEnvelope */
         ErrorEnvelope: {
             error: components["schemas"]["ErrorBody"];
@@ -824,11 +824,11 @@ export interface components {
             changed: components["schemas"]["ChangedInput"][];
             excluded: components["schemas"]["Excluded"] | null;
             /** Excluded Match */
-            excluded_match: boolean;
+            excluded_match: boolean | null;
             /** Ids Hash */
             ids_hash: string | null;
             /** Ids Match */
-            ids_match: boolean;
+            ids_match: boolean | null;
             /** Index Version */
             index_version: string;
             /** Membership Identical */
@@ -869,7 +869,10 @@ export interface components {
             crawl_dates: {
                 [key: string]: components["schemas"]["CrawlWindow"];
             };
-            /** Crawl Dates Kind */
+            /**
+             * Crawl Dates Kind
+             * @description Per `crawl_dates` key, what its window's ends are: `crawl`, `scholar_query_dates` or `mixed` today. Open set: new values may be added within /api/v1; handle a value you don't know.
+             */
             crawl_dates_kind: {
                 [key: string]: string;
             } | null;
@@ -1119,7 +1122,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            /** @description API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached */
             429: {
                 headers: {
                     /** @description Whole seconds until the request would be allowed */
@@ -1148,11 +1151,11 @@ export interface operations {
                 format: "ris" | "csv" | "bibtex" | "jsonl";
                 /** @description The query (spec 02 grammar). At most 2,000 Unicode code points: a longer one is 422 `PARSE_TOO_LONG`, refused before it is parsed; so is one whose canonical form (defaults written out) is longer, refused after canonicalising. Required unless `record_id` is given. */
                 q?: string | null;
-                /** @description `native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). Only with `q`. */
+                /** @description `native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). With `record_id`, only `native` (a record's canonical string is native syntax); `scholar` there is 422 `API_BAD_PARAM`. */
                 mode?: "native" | "scholar";
                 /** @description Export from this index (409 `API_INDEX_VERSION_UNAVAILABLE` if this instance can't serve it); the served one if absent. Only with `q`. */
                 index_version?: string | null;
-                /** @description Export exactly this search record's stored ids, from the index it names. Alone: not with `q`, `mode` or `index_version`. */
+                /** @description Export exactly this search record's stored ids, from the index it names. Not with `q` or `index_version`; `mode`, if sent, must be `native`. */
                 record_id?: string | null;
             };
             header?: never;
@@ -1168,11 +1171,11 @@ export interface operations {
                     "Content-Disposition"?: string;
                     /** @description The index the records were read from */
                     "X-Index-Version"?: string;
-                    /** @description This code's query_version */
+                    /** @description This code's query_version (on a `record_id` export too, whatever the record's own) */
                     "X-Query-Version"?: string;
                     /** @description This code's tokenizer_version */
                     "X-Tokenizer-Version"?: string;
-                    /** @description How many records the body holds: `/search`'s `total` for the same query and index (for a search record, its stored `total`) */
+                    /** @description How many records the body holds: `/search`'s `total` for the same query and index (for a search record, the number of its stored ids, which its `total` must equal: 409 `API_RECORD_MISMATCH` otherwise) */
                     "X-Total"?: number;
                     [name: string]: unknown;
                 };
@@ -1194,10 +1197,21 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            /** @description API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached */
             429: {
                 headers: {
                     /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
+            503: {
+                headers: {
+                    /** @description Sent with API_BUSY: whole seconds to wait before retrying */
                     "Retry-After"?: number;
                     [name: string]: unknown;
                 };
@@ -1285,7 +1299,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            /** @description API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached */
             429: {
                 headers: {
                     /** @description Whole seconds until the request would be allowed */
@@ -1339,7 +1353,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            /** @description API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached */
             429: {
                 headers: {
                     /** @description Whole seconds until the request would be allowed */
@@ -1394,7 +1408,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            /** @description API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached */
             429: {
                 headers: {
                     /** @description Whole seconds until the request would be allowed */
@@ -1451,10 +1465,21 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            /** @description API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached */
             429: {
                 headers: {
                     /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
+            503: {
+                headers: {
+                    /** @description Sent with API_BUSY: whole seconds to wait before retrying */
                     "Retry-After"?: number;
                     [name: string]: unknown;
                 };
@@ -1508,10 +1533,21 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            /** @description API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached */
             429: {
                 headers: {
                     /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
+            503: {
+                headers: {
+                    /** @description Sent with API_BUSY: whole seconds to wait before retrying */
                     "Retry-After"?: number;
                     [name: string]: unknown;
                 };
@@ -1533,9 +1569,9 @@ export interface operations {
     get_record_diff: {
         parameters: {
             query?: {
-                /** @description Hits to skip. Past the end is an empty page, not an error. */
+                /** @description Entries of each list (`added`, `removed`) to skip. Past the end is an empty list. */
                 offset?: number;
-                /** @description Hits per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped. */
+                /** @description Entries of each list per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped. */
                 limit?: number;
             };
             header?: never;
@@ -1567,10 +1603,21 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            /** @description API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached */
             429: {
                 headers: {
                     /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
+            503: {
+                headers: {
+                    /** @description Sent with API_BUSY: whole seconds to wait before retrying */
                     "Retry-After"?: number;
                     [name: string]: unknown;
                 };
@@ -1629,10 +1676,21 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_RATE_LIMITED: this client's token bucket is empty */
+            /** @description API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached */
             429: {
                 headers: {
                     /** @description Whole seconds until the request would be allowed */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
+            503: {
+                headers: {
+                    /** @description Sent with API_BUSY: whole seconds to wait before retrying */
                     "Retry-After"?: number;
                     [name: string]: unknown;
                 };

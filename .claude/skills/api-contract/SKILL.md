@@ -99,7 +99,8 @@ UTF-8 **with BOM**.
 
 ## Versioning rules
 Allowed within `v1` (additive): a new endpoint, a new response field (always sent, so required in the
-schema; an old client ignores it), a new value in an enum listed **open** (`OPEN_ENUMS`, decision-009), a new
+schema; an old client ignores it: response schemas carry no `additionalProperties: false`,
+`openapi.open_response_objects`), a new value in an enum listed **open** (`OPEN_ENUMS`, decision-009), a new
 optional parameter with the old behaviour as its default.
 
 **Breaking**, which needs `/api/v2` or a decision record (`.claude/skills/decision-records/SKILL.md`):

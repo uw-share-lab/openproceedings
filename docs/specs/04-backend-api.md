@@ -36,6 +36,10 @@ reviews without the UI.
     `Urls`, `PaperRecord`, `Diagnostic`, the AST nodes, a stored record: `json_schema_serialization_defaults_required`),
     so a client may rely on the key being there. The one optional key is an error's `diagnostics`: present
     (non-empty) on a query refusal, **absent otherwise, never null**. A hit and its paper agree field by field.
+  - **Clients ignore unknown keys.** Adding a response field is non-breaking within v1, so no response schema
+    says `additionalProperties: false` (`api/openapi.py::open_response_objects`; the server itself never sends
+    a key its model doesn't declare). Request bodies (`ParseRequest`, `RecordRequest`) stay closed: an
+    unknown key there is 422 `API_BAD_PARAM`. Integer bounds are integers (`minimum: 1000`, never `1000.0`).
   - **Counts are `*_total`**: `added_total`/`removed_total` in a replay and in a diff (where `added`/`removed`
     are the id lists), beside `total`.
   - **One timestamp form**: an RFC 3339 date-time in UTC with a `Z` suffix, `YYYY-MM-DDTHH:MM:SS[.ffffff]Z`
@@ -47,9 +51,12 @@ reviews without the UI.
     `/coverage`'s `snapshot`: `*` is the corpus-wide window, a source that carries its own adds its key.
   - **Parameters are exact.** Every route refuses a query parameter it doesn't declare, or one given twice,
     with 422 `API_BAD_PARAM` naming it (`/search?limt=5`, `/search?index_version=…`, `?q=a&q=b`), so a typo is
-    never answered as if the parameter were absent. A trailing slash is not redirected: `/search/` is 404
+    never answered as if the parameter were absent. The exceptions are FastAPI's own `/api/v1/openapi.json`
+    and `/api/v1/docs` (not API routes; they ignore any parameter). A trailing slash is not redirected: `/search/` is 404
     `API_NOT_FOUND`. A path id has its `pattern` in the schema; a **malformed paper id or record id is 422
-    `API_BAD_PARAM`**, an unknown well-formed one 404, and neither message repeats it. Every parameter is
+    `API_BAD_PARAM`**, an unknown well-formed one 404, and neither message repeats it. The paper-id pattern
+    is `^op:[a-z][a-z0-9]*:[0-9]{4}:[A-Za-z0-9_-]+$`: `venue` is an open enum, so a venue this code doesn't
+    know is well-formed and a 404, never a 422. Every parameter is
     described in the schema (`q` names its 2,000-code-point cap).
   - **Open and closed enums** (decision-009; `OPEN_ENUMS`/`CLOSED_ENUMS` in `api/openapi.py`, and a test fails
     on an enum in neither). **Open** — a new value may appear within v1, and a client handles one it doesn't
@@ -59,11 +66,15 @@ reviews without the UI.
     export `format`, the replay `status`, `ChangedInput.kind`, a wildcard's `op`, `include`.
   - **`ErrorBody.code` is its own schema, `ErrorCode`**: exactly the registry's codes that have an HTTP status
     (`PARSE_*`, `FIELD_*`, `WILDCARD_*`, the `API_*` ones but the log-only `API_REPLAY_MISMATCH`), derived from
-    the registry and tested against it.
+    the registry and tested against it. `diagnostics` is present on the `PARSE_*`, `FIELD_*` and `WILDCARD_*`
+    refusals and on `API_TOO_MANY_VERIFIED_CLAUSES` (decision-010), the one `API_*` code that points into `q`.
   - **Headers are in the contract**: an export's 200 declares `X-Total`, `X-Index-Version`,
-    `X-Tokenizer-Version`, `X-Query-Version` and `Content-Disposition`; every route's 405 declares `Allow` and
-    its 429 `Retry-After` (not `/healthz`'s, which is never limited); `POST /records`'s 201 declares
-    `Location`. CORS exposes all of them.
+    `X-Tokenizer-Version`, `X-Query-Version` (this code's, on a `record_id` export too) and
+    `Content-Disposition`; every route's 405 declares `Allow` and its 429 `Retry-After` (not `/healthz`'s,
+    which is never limited; the 429's description names every bucket that can refuse: the client's, its
+    network's, a query's position-verified clauses, the save ceilings); every route that runs a query
+    (`/search`, `/export`, `POST /records`, `GET /records/{id}`, `/diff`) declares its 503 with `Retry-After`
+    (sent with `API_BUSY`); `POST /records`'s 201 declares `Location`. CORS exposes all of them.
   - `info.version` is the API version, `v1`. operationIds are `verb_noun`: `search`, `parse_query`, `export`,
     `get_paper`, `get_coverage`, `get_meta`, `get_healthz`, `create_record`, `get_record`, `get_record_diff`.
   - A request body over `ApiConfig.max_body_bytes` (64 KiB; the longest valid body, 2,000 astral code points
@@ -76,7 +87,7 @@ reviews without the UI.
 | `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side). Called as you type, debounced. |
 | `GET` | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | `GET` | `/papers/{id}` | The full record, provenance included |
-| `GET` | `/export` | `format=ris\|csv\|bibtex\|jsonl` and either `q` (with `mode` and an optional `index_version`) or `record_id` alone → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; with `record_id`, exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if that index is gone, 409 `API_RECORD_MISMATCH` if its replay is a `mismatch`) |
+| `GET` | `/export` | `format=ris\|csv\|bibtex\|jsonl` and either `q` (with `mode` and an optional `index_version`) or `record_id` (with `mode` at most `native`) → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; with `record_id`, exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if that index is gone, 409 `API_RECORD_MISMATCH` if its replay is a `mismatch`) |
 | `POST` | `/records` | Freezes a search as an immutable **search record** → 201 `{record_id, page}` plus the three versions, with `Location: /api/v1/records/<record_id>` |
 | `GET` | `/records/{id}` | The stored record, plus a replay check (see below) |
 | `GET` | `/records/{id}/diff` | For a record of any status: added and removed ids (with titles), paged, and which `index_version` inputs changed (empty unless `drifted`) |
@@ -237,7 +248,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   nothing about what is exported (task-037 review). It is refused with 409 `API_INDEX_VERSION_UNAVAILABLE`
   when that index isn't on this instance, and with 409 `API_RECORD_MISMATCH` (§Error handling) when the
   record's replay status is `mismatch` or its stored list doesn't hash to its `ids_hash`: a set that breaks
-  guarantee 4 is never handed to screening. `X-Total` is the record's `total`.
+  guarantee 4 is never handed to screening. `X-Total` is the stored list's length, which the record's `total` must equal (409 `API_RECORD_MISMATCH` otherwise).
 
 ## Search records (reproducibility, PRISMA)
 
@@ -285,14 +296,23 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   has less than `records_min_free_bytes` free (default 256 MiB). An empty store always takes its first save.
   Reads are never refused. The store logs `records_store_full` (WARNING) when it fills and
   `records_store_recovered` (INFO) when a save fits again: one line per change of state, not per refusal.
-  Saves from every client together are also held to `ApiConfig.record_saves_burst` (default 60) at once,
-  refilled at `record_saves_per_hour` (default 600): beyond it a save is 429 `API_RATE_LIMITED` with
-  `Retry-After`, checked after the parse (a query that doesn't parse costs no save) and before the query
-  runs. The store is append-only, so its growth is bounded in time as well as in bytes.
+  Saves are also held to two ceilings (`api/records.py::SaveCeiling`), taken together (a refusal by one
+  spends nothing from the other): each client **network** (IPv4 /24, IPv6 /48, by the rate limit's client
+  rule) to `ApiConfig.record_saves_network_burst` (default 10) at once, refilled at
+  `record_saves_network_per_hour` (default 60), and every client together to `record_saves_burst` (default
+  60), refilled at `record_saves_per_hour` (default 600), the backstop. Beyond either a save is 429
+  `API_RATE_LIMITED` with `Retry-After` (the message says whether the instance or the client's network is
+  at its ceiling), checked after the parse (a query that doesn't parse costs no save) and before the query
+  runs; a save whose query then fails to run, or whose store is full, is refunded to both. A ceiling's first
+  refusal logs `record_saves_throttled` (WARNING, `scope` `instance` or `network`, `burst`, `per_hour`;
+  never the network itself) and its next allowed save `record_saves_recovered` (INFO). The store is
+  append-only, so its growth is bounded in time as well as in bytes, and one network can't spend the whole
+  instance's ceiling.
 - **The record** holds every field of the table, plus `record_id`, `body_version` (2), `schema_version` and
   `ranking_params` (the index's two other inputs, so a drifted replay can name a method change after the
   pinned index is gone). `crawl_dates` is keyed by source: `*` is the snapshot manifest's corpus-wide
-  `crawl_window` (today's manifests have only that), and a source entry that carries its own
+  `crawl_window` (today's manifests have only that; a manifest must name its `sources`, or the save is a
+  500: no sources named is not evidence of a crawl), and a source entry that carries its own
   `crawl_window` (the M4 crawlers) adds its own key. Every end is checked to be an ISO 8601 date-time and is
   sent in the one timestamp form (§Conventions; a stored `…+00:00` reads back as `…Z`).
   `crawl_dates_kind` has the same keys: a source in `vocab.BOOTSTRAP_SOURCES` (`ris`) gives
@@ -307,8 +327,9 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   papers themselves use `GET /export?record_id=` (§Exports).
 - **`ids_hash`** is `sha256("\n".join(sorted(ids)))`, code-point order, no trailing newline, with
   known-answer tests (the empty set is `sha256("")`).
-- **Record ids** are `secrets.token_urlsafe(9)`: 12 characters of `[A-Za-z0-9_-]`, 72 random bits, redrawn
-  only when the drawn id is taken. Anything else is 422 `API_BAD_PARAM` (the path parameter's `pattern`, as
+- **Record ids** are `secrets.token_urlsafe(9)`: 12 characters of `[A-Za-z0-9_-]`, about 72 random bits,
+  redrawn when the drawn id is taken or doesn't start with a letter or digit (an id starting with `-` would
+  be written to a CSV cell with the formula guard's `'` and not read back as itself). Anything else is 422 `API_BAD_PARAM` (the path parameter's `pattern`, as
   for a paper id); an unknown id is 404 `API_RECORD_NOT_FOUND`, and neither message repeats the id.
 - **The store** is `<data_dir>/records/records.sqlite`: its own directory (mode 0700, file 0600), because
   WAL mode writes `-wal` and `-shm` files beside the database, so the directory, not just the file, must be
@@ -328,15 +349,19 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   committed v1 body that must stay readable. **Body version 2** added `sources`, `identification_citable`,
   `crawl_dates_kind` and `dedup.track_not_merged` / `venue_year_not_merged`: a v1 body reads them as null
   ("not recorded", never guessed; the record page treats a null `identification_citable` as not citable),
-  and a v2 body missing them, or whose `identification_citable` contradicts its `sources`, is unreadable (500).
+  and a v2 body missing them, or whose `crawl_dates_kind` keys aren't its `crawl_dates` keys, is unreadable (500). Citability is checked against `sources` on write only (a record whose `identification_citable` contradicts them is never written): which sources are bootstrap ones is this code's `vocab.BOOTSTRAP_SOURCES`, and a stored body must outlive a change there, read and replayed with its citability as saved.
 - **Replay** (`GET /records/{id}`, 200 `{index_version, tokenizer_version, query_version, record, replay}`;
   the top-level versions are those the replay ran on) re-parses the stored `canonical` in native mode, never
   `input`. It runs on the record's own index when this instance has it (served, or loaded on demand; an
   engine handed back for another version counts as unavailable), else on the served index. On its own index
-  and under its own `query_version`, it is `reproduced` if `ids_hash` and `excluded` both match and the
-  canonical re-parses to the same `canonical_hash` and the stored id list hashes to `ids_hash`, otherwise
+  and under its own `query_version`, it is `reproduced` if `ids_hash` and `excluded` both match, the
+  canonical re-parses to the same canonical string, `canonical_hash` and `identification_query`, the
+  re-run's `expansions` are the stored ones, the index's manifest gives the stored `snapshot_hash`,
+  `tokenizer_version`, `schema_version` and `ranking_params`, and the stored id list hashes to `ids_hash`
+  and has `total` ids (an export sends that list and its length); otherwise
   `mismatch`: ERROR `replay_mismatch` (`code` `API_REPLAY_MISMATCH`, `record_id`, the versions, which of
-  `ids_match`, `excluded_match`, `canonical_match` and `stored_ids_match` failed, and `refused`: the refusal
+  `ids_match`, `excluded_match`, `canonical_match`, `identification_match`, `expansions_match`,
+  `inputs_match` and `stored_ids_match` failed, and `refused`: the refusal
   code when the canonical no longer runs, else null) the first time this process sees that record mismatch, DEBUG after that. Any
   other case is `drifted`: when only the query version differs and the record's own index is here, the replay
   runs on that index, so `changed` holds just `query_version`; otherwise `replay.changed` lists each
@@ -345,8 +370,8 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   `excluded`, `ids_hash`, `ids_match`, `excluded_match`, `added_total`, `removed_total` (counts, named as
   in the diff) and `membership_identical` (true on `+0/−0`).
 - **A refused replay** (the canonical string no longer parses, or a wildcard now expands past the cap) has
-  `refused` set to that code and compares nothing: `total`, `excluded`, `ids_hash`, `added_total`,
-  `removed_total` and `membership_identical` are null. Its status stays `drifted`, or `mismatch` under the record's own versions.
+  `refused` set to that code and compares nothing: `total`, `excluded`, `ids_hash`, `ids_match`,
+  `excluded_match`, `added_total`, `removed_total` and `membership_identical` are null. Its status stays `drifted`, or `mismatch` under the record's own versions.
 - **Pinned indexes** load on demand, read-only, by the served index's rules (`state.index_path`: an
   index_version resolving to itself directly under `<data_dir>/indexes/`; never `resolve_snapshot`), and
   are opened (verified) by the same engine class, so "available" means loadable by this code: an index built
@@ -385,6 +410,7 @@ once released: changing one is a breaking change under `/api/v1`.
 | Rate limit exceeded: the client's or its network's bucket, a position-verified query's extra weight, or the instance-wide record-save ceiling | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
 | A search record can't be saved: the record store is over its size cap or its disk under the free-space floor (task-037) | 503 | `API_RECORDS_STORE_FULL` |
 | A query needs a cold position verification and every verification slot is taken (refused, never queued) | 503 | `API_BUSY` (with `Retry-After`) |
+| A query (or a replayed record's canonical) has more position-verified clauses than `ApiConfig.max_verified_clauses` (default 8), refused before it compiles (decision-010) | 422 | `API_TOO_MANY_VERIFIED_CLAUSES` (diagnostics: one per clause, spanning it in `q`; a replay's one diagnostic has `span: null`) |
 | No index loaded yet (startup, or the first load failed; a failed swap keeps serving the old index) | 503 | `API_INDEX_NOT_LOADED` |
 | Anything unexpected | 500 | `API_INTERNAL` (logged at ERROR with the request id; message never echoes input) |
 | No such endpoint (task-034) | 404 | `API_NOT_FOUND` |
@@ -392,6 +418,12 @@ once released: changing one is a breaking change under `/api/v1`.
 
 A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "mismatch"`, logged as
 `API_REPLAY_MISMATCH` (§Search records).
+
+**The only responses that are not the envelope** come from outside the app, before it runs: a CORS
+preflight from an origin that isn't allowed (Starlette's plain-text 400 `Disallowed CORS origin`), uvicorn's
+own plain-text 503 once `limit_concurrency` connections or tasks are held, and uvicorn's 400 for a request
+head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "busy, retry" (spec 05
+§Error states).
 
 ## Implementation notes
 
@@ -433,10 +465,16 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     HEAD, for uptime monitors; HEAD is its own route, left out of the OpenAPI document so operation ids stay
     unique) costs nothing; `/export` and every record route (`POST /records`, `GET /records/{id}`, `/diff`)
     cost `export_weight`, charged before routing. A
-    query with a **position-verified clause** (spec 03: a phrase with a wildcard, a NEAR the index can't answer;
-    `engine.compile.verifies`, tested equal to the compiler's own path) costs at least `verified_weight`
-    (default `export_weight`): the rest is charged after the parse and before compiling (`deps.searchable`,
-    `middleware.charge`). Cold verification (a cache miss: seconds of pure Python per clause) runs in at most
+    query's **position-verified clauses** (spec 03: a phrase with a wildcard, a NEAR the index can't answer)
+    are counted from the AST (`deps.verified_clauses`, by `engine.compile.verifies`'s rule; a test holds the
+    count equal to the compiler's own): more than `ApiConfig.max_verified_clauses` (default 8) is 422
+    `API_TOO_MANY_VERIFIED_CLAUSES` (decision-010), one diagnostic per clause, before anything compiles;
+    otherwise the query costs `verified_weight` (default `export_weight`) **per clause**, at most the smaller
+    bucket's capacity (`RateLimit.verified_charge`, so a query within the cap can always run): the rest is
+    charged after the parse and before compiling (`deps.charge_verified` from `deps.searchable`,
+    `middleware.charge`). A replay (`GET /records/{id}`, `/diff`, `/export?record_id=`) is counted, capped
+    and charged the same way on its re-parsed canonical string, its one diagnostic without a span (the
+    canonical is not the client's `q`). Cold verification (a cache miss: seconds of pure Python per clause) runs in at most
     `ApiConfig.verification_slots` (default 1) at a time, on every engine the state opens
     (`TantivyEngine.verification_gate`); a query that needs another slot is refused at once with 503
     `API_BUSY` and `Retry-After: busy_retry_seconds` (default 5), never queued, so it can't hold a worker
@@ -445,7 +483,9 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
   - Access line: one `request` line per request (INFO; `/healthz` at DEBUG) with `request_id`, `method`,
     `route` (the template; null when nothing matched, a 429 included), `status`, `ms`, `index_version`, and
     what a route adds with `deps.annotate`/`annotate_parse`: `canonical_hash`, `total`, `token_count`,
-    `n_errors`, `error_codes`, `warning_codes` (at most 10 distinct codes, then `+N`). Never `q`, the
+    `n_errors`, `error_codes`, `warning_codes` (at most 10 distinct codes, then `+N`), and `code`, the error
+    envelope's code, on every refusal (the body cap's 413, the rate limit's 429, a routing 404, `API_BUSY`, …)
+    and every 500 (`errors.note_code`). Never `q`, the
     canonical or identification strings, messages or spans. `ms` is milliseconds to one decimal, the one form
     of every log line's `ms` (`logs.elapsed_ms`). An unexpected exception is one
     `request_failed` ERROR line with its type and frames (never its message), its cause's type, the cause's
@@ -469,16 +509,28 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     its own access log off, `proxy_headers` off, and a 64 KiB request-head limit (uvicorn's 16 KiB would
     refuse a valid 2,000-code-point query in the URL). **Deploy note:** `GET /search?q=…` carries the query
     in the URL, so the reverse proxy in front (Caddy, task-065) must not log query strings. Log the path
-    only, or turn its access log off; the app's own access line never holds `q`. uvicorn's loggers go
+    only, or turn its access log off; the app's own access line never holds `q`. The proxy's timeouts and
+    request buffering are required settings (spec 08 §Deploy). uvicorn's loggers go
     through the JSON handler;
     httpx/httpcore are pinned to WARNING, and the root logger gets the same JSON handler at WARNING, so another
     library's warning (asyncio, fastapi) is JSON too. `--log-query-text` only lets the formatter keep
     query-text fields; no log call passes one today (the access line never carries `q`), so it changes nothing.
-    uvicorn runs with `limit_concurrency` (`ApiConfig.limit_concurrency`, default 64). A trusted proxy of
-    `0.0.0.0/0` or `::/0` is refused (any client could then set its own address), and so is `--no-rate-limit`
+    uvicorn runs with `limit_concurrency` (`ApiConfig.limit_concurrency`, default 256: behind the proxy
+    these are its pooled upstream connections) and `timeout_keep_alive` (`keep_alive_seconds`, default 5),
+    so an idle connection doesn't hold a slot. A trusted proxy wider than /8 (IPv4) or /32 (IPv6) is refused
+    (every client inside it could then set its own address), and so is `--no-rate-limit`
     with a non-loopback `--host`; `op serve` must sit behind the reverse proxy (spec 08 §Deploy: uvicorn has
     no header timeout of its own).
-  - The OpenAPI document and Swagger UI are served under `/api/v1` (`openapi.json`, `docs`).
+  - The OpenAPI document is served at `/api/v1/openapi.json`. Swagger UI (`/api/v1/docs`) loads its script
+    and styles from a CDN, so it is off unless `ApiConfig.serve_docs` is set: `op serve` sets it for a
+    loopback `--host` only (a local instance), `--docs`/`--no-docs` override. A production instance serves no
+    third-party script.
+  - Pinned opens: `IndexState.pinned` resolves the name (a stat or two) before it takes the one open slot, so
+    a version this instance doesn't hold is `absent` at once, never queued behind another version's re-hash.
+    A failed load's `index_load_failed` line names the configured `index_name` (`current` or a version); a
+    directory named like a version whose manifest can't be read is left out of `/meta` with a DEBUG
+    `index_manifest_unreadable` line (`index_version`, `error`, `reason`: the errno name). A `request_failed`
+    line has `cause` only when there is one (never `cause: null`).
 - As built (task-040, `api/openapi.py`): the served document is committed as
   `backend/tests/contract/openapi.json` (`op openapi`: sorted keys, two-space indent, no server URL, no
   timestamp, built from `create_app` without loading an index), and `frontend/src/api/schema.ts` is
@@ -574,21 +626,22 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     record's stored ids on the record's index_version (the cited set, never a re-run; `stored_documents`
     reads them in id order a chunk at a time, and provenance carries the record's `canonical_hash`), after
     the pin (409 `API_INDEX_VERSION_UNAVAILABLE`) and the replay (`api.records.refuse_mismatch`, 409
-    `API_RECORD_MISMATCH`); passing `q`, `mode` or `index_version` as well is 422 `API_BAD_PARAM`, as is
-    neither `q` nor `record_id`. `mode` defaults to `native` (the default is in the schema; whether a client
-    sent `mode` with `record_id` is read from the query string, so an explicit `mode=native` is refused too). The body is the bytes `op export` writes for the same query,
+    `API_RECORD_MISMATCH`); passing `q`, `index_version` or `mode=scholar` as well is 422 `API_BAD_PARAM`, as
+    is neither `q` nor `record_id`. `mode` defaults to `native`, and `mode=native` with `record_id` is
+    accepted (a record replays its canonical string natively; a generated client may send every declared
+    default). The body is the bytes `op export` writes for the same query,
     index and UTC date: both run `export.header` and `export.entries` over `TantivyEngine.documents`, and a
     contract test compares them for every format. Records are sent in chunks of whole records, each at most
     `CHUNK` (64 Ki characters) plus one record (a contract test reads the ASGI messages).
   - Everything that can refuse happens before the first byte, in the one envelope. First the parameters
-    (422 `API_BAD_PARAM`: an unknown or repeated one, `record_id` with `q`/`mode`/`index_version`, or
-    neither). Then, **with `q`**: the length cap and the parse (422 with diagnostics), a position-verified
+    (422 `API_BAD_PARAM`: an unknown or repeated one, `record_id` with `q`, `index_version` or
+    `mode=scholar`, or neither). Then, **with `q`**: the length cap and the parse (422 with diagnostics), a position-verified
     query's extra weight (429), the pin (409 `API_INDEX_VERSION_UNAVAILABLE`), every wildcard's expansion
     (422 `WILDCARD_TOO_MANY_EXPANSIONS`, each over-cap wildcard located in `q` by `search.expanded`, as
     `/search` does), then the one collection of the match set that gives `X-Total`. **With `record_id`**:
     the record's lookup (404 `API_RECORD_NOT_FOUND`), the pin of its own index (409
     `API_INDEX_VERSION_UNAVAILABLE`), its replay (409 `API_RECORD_MISMATCH` on a `mismatch`), and the stored
-    ids hashing to its `ids_hash` (409 `API_RECORD_MISMATCH`); `X-Total` is that list's length, the record's `total`. Then a sync generator
+    ids hashing to its `ids_hash` and numbering its `total` (409 `API_RECORD_MISMATCH`); `X-Total` is that list's length, the record's `total`. Then a sync generator
     streams from the engine the request took, so an export started before a hot swap finishes on its index
     (contract test). A failure after the first byte is logged by the last catch and marks the access line
     `aborted: true`. A stream whose record count is below or above `X-Total` fails the same way after its

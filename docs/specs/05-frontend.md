@@ -161,8 +161,18 @@ clauses to an existing top-level AND instead of re-wrapping.
 - API errors are shown from the envelope's `code` and `message` (04 §Error handling), never as a raw
   status or a generic "something went wrong". A parse `422` draws its diagnostics as squiggles at their
   spans, and the search view keeps the last good result set, marked as stale.
-- `429 API_RATE_LIMITED` shows the wait from `Retry-After`. `503 API_INDEX_NOT_LOADED` shows a
-  "search index is loading" state with a retry.
+- `429 API_RATE_LIMITED` shows the wait from `Retry-After`. `503 API_BUSY` is shown the same way: "the
+  server is busy with slow phrase checks; try again in N s", the wait from `Retry-After`. `503
+  API_INDEX_NOT_LOADED` shows a "search index is loading" state with a retry. `503 API_RECORDS_STORE_FULL`
+  turns saving off ("saving search records is paused on this instance"); searching, reading records and
+  exporting work as before. `413 API_BODY_TOO_LARGE` says the query is far too long to send (a valid one
+  always fits). A `422 API_TOO_MANY_VERIFIED_CLAUSES` draws its diagnostics as squiggles on each
+  slow clause, like a parse error.
+- A `422 API_BAD_PARAM` on `/paper/[id]` or `/record/[id]` (a malformed id in the URL) renders as that
+  page's not-found state, the same as a 404.
+- A 5xx whose body isn't JSON comes from in front of the app (uvicorn's `limit_concurrency` 503, or the
+  reverse proxy; 04 §Error handling): it means "busy, retry", shown as a retry state, never as an error in
+  the user's query.
 - A `mismatch` replay is the blocking "do not cite" state of `/record/[id]` (§Pages), not a toast.
 - Nothing is retried silently in a way that could change the displayed set without the user seeing it.
 

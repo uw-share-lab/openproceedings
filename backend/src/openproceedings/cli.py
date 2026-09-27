@@ -164,6 +164,12 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--export-weight", type=float, default=10.0, help="tokens one export costs")
     serve.add_argument("--no-rate-limit", action="store_true", help="turn the rate limit off (local use)")
     serve.add_argument(
+        "--docs",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="serve Swagger UI at /api/v1/docs (it loads from a CDN); default on for a loopback --host only",
+    )
+    serve.add_argument(
         "--log-query-text",
         action="store_true",
         help="let the log formatter keep query-text fields (a local dev instance only); no log line passes one today",
@@ -421,20 +427,19 @@ def _report(
 
 
 def _snapshot_of(ns: argparse.Namespace, index: Path) -> dict[str, Any] | None:
-    """The manifest of the snapshot an index was built from, if it's in <data-dir>/snapshots and is that
-    snapshot (same hash); None otherwise (the header then says the crawl date is unknown)."""
+    """The manifest of the snapshot an index was built from, by the one rule (`indexed_snapshot`: a plain
+    directory name under <data-dir>/snapshots whose manifest names the index's snapshot_hash); None otherwise
+    (the header then says the crawl date is unknown)."""
+    from openproceedings.ingest.snapshot import SnapshotError, indexed_snapshot
+
     try:
         manifest = json.loads((index / "manifest.json").read_text(encoding="utf-8"))
-        snap = json.loads(
-            (ns.data_dir / "snapshots" / manifest["snapshot"] / "manifest.json").read_text(encoding="utf-8")
-        )
-    except (OSError, ValueError, KeyError, TypeError):
+        if not isinstance(manifest, dict):
+            return None
+        _path, snap = indexed_snapshot(ns.data_dir, manifest)
+    except (OSError, ValueError, SnapshotError):
         return None
-    return (
-        snap
-        if isinstance(snap, dict) and snap.get("snapshot_hash") == manifest.get("snapshot_hash")
-        else None
-    )
+    return snap
 
 
 def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:
@@ -529,6 +534,7 @@ def _serve(ns: argparse.Namespace) -> int:
             cors_origins=tuple(ns.cors_origin),
             trusted_proxies=tuple(ns.trusted_proxy),
             log_query_text=ns.log_query_text,
+            serve_docs=loopback if ns.docs is None else ns.docs,
         )
     except ValidationError as e:  # the operator's own flags: say which, as usage
         bad = sorted(

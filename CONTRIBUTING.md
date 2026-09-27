@@ -10,7 +10,7 @@ npm test --workspace frontend # frontend tests (Vitest); `npm run dev --workspac
 npm i -g backlog.md           # task tracking — https://github.com/MrLesk/Backlog.md
 brew install shellcheck       # or apt-get install shellcheck — used by make lint
 ```
-`make help` lists the entry points: `sync` runs `uv sync` and `npm ci`, `fmt` fixes the whole repo, `lint`
+`make help` lists the entry points: `sync` runs `uv sync` and `npm ci --ignore-scripts`, `fmt` fixes the whole repo, `lint`
 is exactly what CI checks (frontend included: prettier, eslint, `next typegen` + `tsc --noEmit`; it fails if
 `node_modules/` is missing), `tooling` runs the roster, backlog and hook checks, and `openapi` regenerates
 the API contract (below).
@@ -23,7 +23,8 @@ and the snapshot diff is what a reviewer reads to classify the change (`.claude/
 When branches that each change the API merge, rerun `make openapi` on the merge result rather than resolving
 conflicts in the generated files by hand.
 **Backend-only contributors need Node too:** the pre-push hook runs `make lint`, which checks `frontend/`,
-so install Node 22 and run `npm ci` once even if you never touch the UI.
+so install Node 22 and run `npm ci --ignore-scripts` once even if you never touch the UI (no dependency's
+install script runs; nothing here needs one).
 Put OpenReview credentials in `.env` (gitignored). The anonymous API rate-limits almost immediately.
 
 ## Flow: `feature → PR → dev → PR → main`

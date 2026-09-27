@@ -31,7 +31,7 @@ from openproceedings.api.deps import EngineDep, annotate, searchable
 from openproceedings.api.errors import ApiError
 from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import MODE_DOC, Q_DOC
-from openproceedings.api.openapi import response_header
+from openproceedings.api.openapi import BUSY, response_header
 from openproceedings.api.records import refuse_mismatch, stored_record
 from openproceedings.api.state import IndexState
 from openproceedings.diagnostics import DiagnosticCode
@@ -91,17 +91,21 @@ def _bad(message: str) -> ApiError:
             "headers": {
                 "X-Total": response_header(
                     "How many records the body holds: `/search`'s `total` for the same query and index (for "
-                    "a search record, its stored `total`)",
+                    "a search record, the number of its stored ids, which its `total` must equal: 409 "
+                    "`API_RECORD_MISMATCH` otherwise)",
                     {"type": "integer", "minimum": 0},
                 ),
                 "X-Index-Version": response_header("The index the records were read from"),
                 "X-Tokenizer-Version": response_header("This code's tokenizer_version"),
-                "X-Query-Version": response_header("This code's query_version"),
+                "X-Query-Version": response_header(
+                    "This code's query_version (on a `record_id` export too, whatever the record's own)"
+                ),
                 "Content-Disposition": response_header(
                     'attachment; filename="openproceedings-<index_version>-<first 12 of canonical_hash>.<ext>"'
                 ),
             },
-        }
+        },
+        **BUSY,
     },
 )
 def export(
@@ -109,7 +113,13 @@ def export(
     served: EngineDep,
     fmt: Annotated[ExportFormat, Query(alias="format", description="The file format.")],
     q: Annotated[str | None, Query(description=Q_DOC + " Required unless `record_id` is given.")] = None,
-    mode: Annotated[Mode, Query(description=MODE_DOC + " Only with `q`.")] = "native",
+    mode: Annotated[
+        Mode,
+        Query(
+            description=MODE_DOC + " With `record_id`, only `native` (a record's canonical string is native "
+            "syntax); `scholar` there is 422 `API_BAD_PARAM`."
+        ),
+    ] = "native",
     index_version: Annotated[
         str | None,
         Query(
@@ -122,8 +132,8 @@ def export(
         str | None,
         Query(
             pattern=RECORD_PARAM,
-            description="Export exactly this search record's stored ids, from the index it names. Alone: not "
-            "with `q`, `mode` or `index_version`.",
+            description="Export exactly this search record's stored ids, from the index it names. Not with "
+            "`q` or `index_version`; `mode`, if sent, must be `native`.",
         ),
     ] = None,
 ) -> StreamingResponse:
@@ -132,14 +142,17 @@ def export(
     index it names. Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and
     index (for a record, its stored `total`)."""
     if record_id is not None:
-        # `mode` has a default, so whether the client sent one is read from the query string itself
-        if q is not None or "mode" in request.query_params or index_version is not None:
-            raise _bad("Pass either q (with mode and index_version) or record_id alone, not both.")
+        # `mode=native` (the declared default) is accepted: a record replays its canonical string natively
+        if q is not None or mode != "native" or index_version is not None:
+            raise _bad(
+                "Pass either q (with mode and index_version) or record_id (mode native at most), not both."
+            )
         record = stored_record(request, record_id)  # 422, 404
         engine = pinned_engine(request, served, record.index_version)  # 409 unless its own index is here
         refuse_mismatch(request, record, served)  # 409 on a mismatch replay (it runs on that same index)
         ids = record.ids
-        if ids is None or ids_hash(ids) != record.ids_hash:  # the replay refuses this too; never stream it
+        # the replay refuses these too; never stream them (X-Total is the list's length, its `total`)
+        if ids is None or ids_hash(ids) != record.ids_hash or record.total != len(ids):
             raise ApiError(
                 DiagnosticCode.API_RECORD_MISMATCH, "This search record's stored ids don't match it."
             )

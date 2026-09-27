@@ -403,11 +403,22 @@ def test_a_v2_body_without_its_bootstrap_fields_is_refused(store: RecordStore, m
         store.get("v2v2v2v2v2v2")
 
 
-def test_a_v2_body_whose_citability_contradicts_its_sources_is_refused(store: RecordStore) -> None:
-    body = {**fields(sources=["ris"], identification_citable=True), "record_id": "liarliarliar"}
-    insert_raw(store, "liarliarliar", json.dumps(body), IDS)
-    with pytest.raises(InternalError):
-        store.get("liarliarliar")
+def test_a_record_whose_citability_contradicts_its_sources_is_never_written(store: RecordStore) -> None:
+    with pytest.raises(InternalError, match="contradicts"):
+        store.insert(fields(sources=["ris"], identification_citable=True), IDS)
+
+
+def test_a_stored_record_reads_after_the_bootstrap_sources_change(
+    store: RecordStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Citability is checked on write only (M3a round 2): a stored body outlives the code, so a later change
+    to which sources are bootstrap ones must never make an earlier record unreadable (guarantee 4)."""
+    import openproceedings.vocab as vocab
+
+    saved = store.insert(fields(sources=["ris"], identification_citable=False), IDS)
+    monkeypatch.setattr(vocab, "BOOTSTRAP_SOURCES", frozenset())  # `ris` is no longer a bootstrap source
+    got = store.get(saved.record_id)
+    assert got is not None and got.identification_citable is False  # as written, never recomputed
 
 
 def test_a_body_from_a_newer_writer_is_refused(store: RecordStore) -> None:
@@ -558,6 +569,32 @@ def test_snapshot_facts_refuse_a_snapshot_that_is_not_the_indexs(
     inputs = {**index_inputs(data_dir, the_version(data_dir)), **inputs_change}
     with pytest.raises(InternalError):
         snapshot_facts(data_dir, inputs)
+
+
+def test_snapshot_facts_refuse_a_manifest_that_names_no_sources(data_dir: Path) -> None:
+    """No `sources` key is not evidence of a crawl (it would read as citable with a crawl window): a 500."""
+    path = data_dir / "snapshots" / "snap" / "manifest.json"
+    doc = json.loads(path.read_text())
+    del doc["sources"]
+    os.chmod(path, 0o644)
+    path.write_text(json.dumps(doc))
+    with pytest.raises(InternalError):
+        snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+
+
+def test_a_v2_body_whose_window_kinds_name_other_keys_is_refused(store: RecordStore) -> None:
+    body = {**fields(), "record_id": "kindkindkind", "crawl_dates_kind": {"other": "crawl"}}
+    insert_raw(store, "kindkindkind", json.dumps(body), IDS)
+    with pytest.raises(InternalError):
+        store.get("kindkindkind")
+
+
+def test_a_drawn_record_id_starting_with_a_formula_character_is_drawn_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    draws = iter(["-abcdefghijk", "_abcdefghijk", "Zabcdefghijk"])
+    monkeypatch.setattr(records.secrets, "token_urlsafe", lambda n: next(draws))
+    assert records.new_record_id() == "Zabcdefghijk"
 
 
 def test_snapshot_facts_refuse_a_manifest_without_merge_counts(data_dir: Path) -> None:

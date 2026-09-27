@@ -39,6 +39,9 @@ appear within v1; clients must handle one they don't know): error codes (`ErrorC
   new enum is classified in the PR that adds it; moving an enum from open to closed is breaking.
 - The frontend must render an unknown venue, track, status or code (show it raw), never assume the union is
   exhaustive. That is a frontend obligation (spec 05), not enforced by the types.
+- An open enum is still emitted as an `enum` list in the schema (the values known today), so a client that
+  validates responses against the schema must be configured leniently for open enums (accept a string not in
+  the list), or it will reject a value added within v1. The "Open set" note is what tells it which ones.
 - Nothing about `index_version`, `canonical_hash` or stored search records changes: this is a statement about
   the wire contract only. Revisit if a closed enum needs a value (that is `/api/v2`, or a new decision).
 
