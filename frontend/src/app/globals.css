@@ -1,6 +1,8 @@
 /* Design tokens (ui-design-system skill): shadcn/ui naming on :root (light) and .dark, plus the project's
    semantic tokens. Text pairs must reach 4.5:1 and borders/icons 3:1 in both themes; src/app/tokens.test.ts
-   checks every pair listed there. The theme is a class on <html>, set by next-themes before paint. */
+   checks every pair listed there, and that every token is inside the sRGB gamut. The theme is a class on
+   <html>, set by next-themes before paint. The focus ring is drawn at full opacity (never at 50% alpha,
+   shadcn's default), so its contrast is the token's contrast. */
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -61,17 +63,17 @@
   --muted-foreground: oklch(0.5 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.52 0.22 27);
+  --destructive: oklch(0.52 0.21 27);
   --border: oklch(0.6 0 0);
   --input: oklch(0.6 0 0);
-  --ring: oklch(0.45 0.15 255);
+  --ring: oklch(0.45 0.145 255);
 
-  --hl-bg: oklch(0.93 0.12 95);
+  --hl-bg: oklch(0.93 0.11 95);
   --hl-fg: oklch(0.2 0 0);
-  --warn-bg: oklch(0.97 0.04 85);
-  --warn-fg: oklch(0.42 0.1 60);
+  --warn-bg: oklch(0.97 0.03 85);
+  --warn-fg: oklch(0.42 0.095 60);
   --warn-border: oklch(0.62 0.13 70);
-  --excluded-bg: oklch(0.96 0.02 250);
+  --excluded-bg: oklch(0.96 0.018 250);
   --excluded-fg: oklch(0.38 0.08 255);
   --excluded-border: oklch(0.6 0.08 250);
   --default-clause: oklch(0.5 0 0);
@@ -93,12 +95,12 @@
   --muted-foreground: oklch(0.72 0 0);
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.5 0 0);
-  --input: oklch(0.5 0 0);
+  --destructive: oklch(0.704 0.185 22.216);
+  --border: oklch(0.56 0 0);
+  --input: oklch(0.56 0 0);
   --ring: oklch(0.7 0.12 255);
 
-  --hl-bg: oklch(0.45 0.1 95);
+  --hl-bg: oklch(0.45 0.09 95);
   --hl-fg: oklch(0.985 0 0);
   --warn-bg: oklch(0.25 0.04 70);
   --warn-fg: oklch(0.86 0.1 85);
@@ -112,7 +114,11 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
   body {
     @apply bg-background font-sans text-foreground;

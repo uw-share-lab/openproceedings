@@ -12,8 +12,11 @@ export default function HomePage() {
       </p>
       <p className="text-sm">
         The search workspace is not built yet.{" "}
-        <Link className="underline" href={searchHref({ ...INITIAL_STATE, q: "trust AND benchmark*" })}>
-          Open /search
+        <Link
+          className="underline underline-offset-4"
+          href={searchHref({ ...INITIAL_STATE, q: "trust AND benchmark*" })}
+        >
+          Open an example search
         </Link>
       </p>
     </section>

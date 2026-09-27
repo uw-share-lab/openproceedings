@@ -27,6 +27,12 @@ export const PAGE_SIZE = 50;
 /** Highest page the URL may name: offsets stay under 500,000, several times the whole corpus. */
 export const MAX_PAGE = 10_000;
 
+/**
+ * Longest `q` in code points. Mirrors the API parser's `MAX_QUERY_LENGTH` (spec 02 §Error handling; a longer
+ * `q` is `PARSE_TOO_LONG`, a 422). `/meta` does not serve it yet, so keep the two equal by hand.
+ */
+export const MAX_QUERY_LENGTH = 2000;
+
 export interface SearchState {
   readonly q: string;
   readonly mode: Mode;
@@ -36,9 +42,33 @@ export interface SearchState {
 
 export const INITIAL_STATE: SearchState = { q: "", mode: "native", sort: "relevance", page: 1 };
 
-/** Thrown for an action that cannot be applied. Never swallowed into a silent no-op (guarantee 6). */
+/** Why an action cannot be applied. Controls branch on the code; the message is for the reader. */
+export type SearchStateErrorCode =
+  | "STALE_CLAUSE"
+  | "WRONG_FIELD"
+  | "NEGATED_CLAUSE"
+  | "BAD_VALUE"
+  | "LAST_VALUE"
+  | "BAD_SPAN"
+  | "TRAILING_ESCAPE"
+  | "ALREADY_INCLUDED"
+  | "NO_EDITABLE_CLAUSE"
+  | "EMPTY_QUERY"
+  | "TOO_LONG"
+  | "BAD_PAGE";
+
+/**
+ * Thrown for an action that cannot be applied. Never swallowed into a silent no-op (guarantee 6).
+ * Messages follow the ux-writing pattern: what happened — why. How to fix.
+ */
 export class SearchStateError extends Error {
   override name = "SearchStateError";
+  constructor(
+    readonly code: SearchStateErrorCode,
+    message: string,
+  ) {
+    super(message);
+  }
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -67,6 +97,9 @@ function isMode(value: string): value is Mode {
 function isSort(value: string): value is Sort {
   return (SORTS as readonly string[]).includes(value);
 }
+
+/** "a whole number from 1 to 10,000": the valid `page` values, in words, from `MAX_PAGE`. */
+export const PAGE_RANGE_TEXT = `a whole number from 1 to ${MAX_PAGE.toLocaleString("en-US")}`;
 
 function isPage(page: number): boolean {
   return Number.isInteger(page) && page >= 1 && page <= MAX_PAGE;
@@ -115,7 +148,80 @@ export function fromURL(params: URLSearchParams): { state: SearchState; notices:
     else notices.push({ param: "page", value: rawPage, reason: "invalid_value", used: String(page) });
   }
 
+  // q and mode say what was searched, so their notices come first; the sort is stable within a param.
+  const rank = (n: UrlNotice) => (n.param === "q" ? 0 : n.param === "mode" ? 1 : 2);
+  notices.sort((a, b) => rank(a) - rank(b));
   return { state: { q, mode, sort, page }, notices };
+}
+
+/** A notice as text runs; `code` runs are URL values, shown in monospace and quoted in plain text. */
+export type NoticeRun = { readonly text: string } | { readonly code: string };
+
+const codeList = (values: readonly string[]): NoticeRun[] =>
+  values.flatMap((v, i) => [...(i === 0 ? [] : [{ text: ", " }]), { code: v }]);
+
+/**
+ * The reader-facing sentence for a URL notice (ux-writing: what happened — why. What was used instead).
+ * An empty value is written `""`, so it cannot be mistaken for a missing one. Valid values come from the
+ * same constants the reducer checks against.
+ */
+export function describeNotice(n: UrlNotice): NoticeRun[] {
+  const shown = (v: string) => (v === "" ? '""' : v);
+  switch (n.reason) {
+    case "unknown_param":
+      return [
+        { code: `${n.param}=${n.value}` },
+        { text: " was ignored — " },
+        { code: n.param },
+        { text: " is not a search parameter. Search parameters are " },
+        ...codeList(KNOWN_PARAMS),
+        { text: "." },
+      ];
+    case "repeated_param":
+      return [
+        { code: n.param },
+        { text: " appears more than once; using the first value " },
+        { code: shown(n.used ?? "") },
+        { text: " and ignoring " },
+        { code: shown(n.value) },
+        { text: "." },
+      ];
+    case "invalid_value": {
+      const head: NoticeRun[] = [{ code: `${n.param}=${n.value}` }];
+      const used = n.used ?? "";
+      if (n.param === "mode") {
+        return [
+          ...head,
+          { text: " is not a mode — modes are " },
+          ...codeList(MODES),
+          { text: ". " },
+          { code: "q" },
+          { text: ` was read as ${used} syntax.` },
+        ];
+      }
+      if (n.param === "sort") {
+        return [
+          ...head,
+          { text: " is not a sort order — sort orders are " },
+          ...codeList(SORTS),
+          { text: ". Sorted by " },
+          { code: used },
+          { text: " instead." },
+        ];
+      }
+      return [
+        ...head,
+        { text: ` is not a page number — a page is ${PAGE_RANGE_TEXT}. Showing page ${used} instead.` },
+      ];
+    }
+  }
+}
+
+/** `describeNotice` as plain text, code runs in backticks (logs, copied text, tests). */
+export function noticeText(n: UrlNotice): string {
+  return describeNotice(n)
+    .map((r) => ("code" in r ? `\`${r.code}\`` : r.text))
+    .join("");
 }
 
 /** Canonical URL parameters: `q` and `mode` always (they define the set); `sort`/`page` when not default. */
@@ -161,6 +267,11 @@ export type FilterField = "venue" | "track" | "status";
 
 /**
  * A field's single top-level filter clause, as the server's `/parse` reported it for `(source, mode)`.
+ * "Top-level" is judged on the flattened canonical tree: parenthesised AND groups are flattened, so in
+ * `track:workshop llm AND (venue:NeurIPS track:workshop)` both `track:` clauses are top-level. A field
+ * with more than one such clause (or one only inside an OR or NOT) has no editable clause: `/parse` says
+ * so and the action carries `clause: null`, which the reducer refuses (`NO_EDITABLE_CLAUSE`). Splicing
+ * over one of two clauses would leave the other ANDed in, so the edit would silently change nothing.
  * - `field` and `negated: false`: the clause's field and polarity. A clause for another field, or a
  *   negated one (`-track:workshop`: adding `main` inside it would flip its meaning), is refused.
  * - `source` and `mode`: the query it was parsed from, keyed like `resultSetKey`; a stale clause is refused.
@@ -188,13 +299,15 @@ export type SearchAction =
       readonly type: "facetToggle";
       readonly field: FilterField;
       readonly value: string;
-      readonly clause: FilterClause;
+      /** `null`: `/parse` reported no single editable clause for the field. */
+      readonly clause: FilterClause | null;
     }
   | {
       readonly type: "includeExcluded";
       readonly field: "track" | "status";
       readonly value: string;
-      readonly clause: FilterClause;
+      /** `null`: `/parse` reported no single editable clause for the field. */
+      readonly clause: FilterClause | null;
     }
   | { readonly type: "sort"; readonly sort: Sort }
   | { readonly type: "page"; readonly page: number };
@@ -213,7 +326,35 @@ function endsInEscape(q: string): boolean {
   return run % 2 === 1;
 }
 
+/** The clause, or NO_EDITABLE_CLAUSE when `/parse` reported none that can be edited. */
+function editable(field: FilterField, clause: FilterClause | null): FilterClause {
+  if (clause !== null) return clause;
+  throw new SearchStateError(
+    "NO_EDITABLE_CLAUSE",
+    `The ${field} filter cannot be changed here — the query has more than one top-level \`${field}:\` clause, ` +
+      "or one inside an OR or NOT. Edit it in the query text.",
+  );
+}
+
 function rewriteClause(
+  state: SearchState,
+  field: FilterField,
+  clause: FilterClause,
+  values: readonly string[],
+): string {
+  const next = spliceClause(state, field, clause, values);
+  const length = codePointLength(next);
+  if (length > MAX_QUERY_LENGTH) {
+    throw new SearchStateError(
+      "TOO_LONG",
+      `The changed query would be ${length.toLocaleString("en-US")} characters long — the limit is ` +
+        `${MAX_QUERY_LENGTH.toLocaleString("en-US")}. Shorten the query text first.`,
+    );
+  }
+  return next;
+}
+
+function spliceClause(
   state: SearchState,
   field: FilterField,
   clause: FilterClause,
@@ -222,29 +363,68 @@ function rewriteClause(
   const { q } = state;
   const [stateQ, stateMode] = resultSetKey(state);
   if (clause.source !== stateQ || clause.mode !== stateMode) {
-    throw new SearchStateError("the filter clause was parsed from a different query or mode; re-parse first");
+    throw new SearchStateError(
+      "STALE_CLAUSE",
+      `The ${field} filter was read from an earlier query — the query or mode changed after it was parsed. ` +
+        "Wait for the current query to be parsed, then try again.",
+    );
   }
   if (clause.field !== field) {
-    throw new SearchStateError(`a ${clause.field} clause cannot be edited as ${field}`);
+    throw new SearchStateError(
+      "WRONG_FIELD",
+      `This is a \`${clause.field}:\` clause, not \`${field}:\` — a clause is only edited as its own field. ` +
+        `Use the \`${field}:\` clause from the parse result.`,
+    );
   }
   // Checked at runtime too: a caller holding untyped /parse data could pass `negated: true`.
   if ((clause.negated as boolean) !== false) {
-    throw new SearchStateError(`the ${field} clause is negated; editing its values would flip its meaning`);
+    throw new SearchStateError(
+      "NEGATED_CLAUSE",
+      `The \`${field}:\` clause is negated — changing its values would flip which papers it removes. ` +
+        "Edit it in the query text instead.",
+    );
   }
   for (const v of [...clause.values, ...values]) {
-    if (!FILTER_VALUE.test(v)) throw new SearchStateError(`not a ${field} value: ${JSON.stringify(v)}`);
+    if (!FILTER_VALUE.test(v)) {
+      throw new SearchStateError(
+        "BAD_VALUE",
+        `\`${v}\` is not a ${field} value — ${field} values are single words of letters, digits and \`_\`. ` +
+          "Use a value listed by /meta.",
+      );
+    }
   }
   if (values.length === 0) {
-    throw new SearchStateError(`removing the last ${field} value would exclude every record`);
+    throw new SearchStateError(
+      "LAST_VALUE",
+      `Removing the last ${field} value would exclude every record — the \`${field}:\` clause would admit nothing. ` +
+        "Select another value first.",
+    );
   }
   const text = formatClause(field, values);
   const [start, end] = clause.span;
   const qLength = codePointLength(q);
   if (start === end) {
-    if (end !== qLength) throw new SearchStateError("a zero-width clause span must be at the end of q");
-    if (q.trim() === "") return text;
+    if (end !== qLength) {
+      throw new SearchStateError(
+        "BAD_SPAN",
+        `The ${field} filter's span [${start}, ${end}) is empty but not at the end of q — only an applied ` +
+          "default has an empty span, at the end. Parse the query again.",
+      );
+    }
+    // Unreachable through /parse (an empty query is a parse error, so no clause is reported), but an
+    // empty q would otherwise be wrapped into the empty group `()`.
+    if (q.trim() === "") {
+      throw new SearchStateError(
+        "EMPTY_QUERY",
+        "The query is empty — there is nothing to add the filter to. Type a query first.",
+      );
+    }
     if (endsInEscape(q)) {
-      throw new SearchStateError("q ends in an escaping backslash, which would swallow the closing ')'");
+      throw new SearchStateError(
+        "TRAILING_ESCAPE",
+        "The query ends in an escaping backslash — it would escape the `)` added after it. " +
+          "Remove the backslash, or write it as `\\\\`.",
+      );
     }
     return `(${q}) AND ${text}`;
   }
@@ -252,7 +432,11 @@ function rewriteClause(
   try {
     utf16 = codePointSpanToUtf16(q, clause.span);
   } catch (e) {
-    throw new SearchStateError(e instanceof Error ? e.message : String(e));
+    throw new SearchStateError(
+      "BAD_SPAN",
+      `The ${field} filter's span does not fit the query — ${e instanceof Error ? e.message : String(e)}. ` +
+        "Parse the query again.",
+    );
   }
   return q.slice(0, utf16[0]) + text + q.slice(utf16[1]);
 }
@@ -266,26 +450,51 @@ export function reduce(state: SearchState, action: SearchAction): SearchState {
     case "setMode":
       return { ...state, mode: action.mode, page: 1 };
     case "facetToggle": {
-      const { values } = action.clause;
+      const clause = editable(action.field, action.clause);
+      const { values } = clause;
       const next = values.includes(action.value)
         ? values.filter((v) => v !== action.value)
         : [...values, action.value];
-      return { ...state, q: rewriteClause(state, action.field, action.clause, next), page: 1 };
+      return { ...state, q: rewriteClause(state, action.field, clause, next), page: 1 };
     }
     case "includeExcluded": {
-      const { values } = action.clause;
+      const clause = editable(action.field, action.clause);
+      const { values } = clause;
       if (values.includes(action.value)) {
-        throw new SearchStateError(`${action.field}:${action.value} is already included`);
+        throw new SearchStateError(
+          "ALREADY_INCLUDED",
+          `\`${action.field}:${action.value}\` is already included — the \`${action.field}:\` clause admits it. ` +
+            "Nothing needs to change.",
+        );
       }
       const next = [...values, action.value];
-      return { ...state, q: rewriteClause(state, action.field, action.clause, next), page: 1 };
+      return { ...state, q: rewriteClause(state, action.field, clause, next), page: 1 };
     }
     case "sort":
       return { ...state, sort: action.sort, page: 1 };
     case "page":
       if (!isPage(action.page)) {
-        throw new SearchStateError(`not a page number: ${action.page}`);
+        throw new SearchStateError(
+          "BAD_PAGE",
+          `${action.page} is not a page number — a page is ${PAGE_RANGE_TEXT}. Choose a page in that range.`,
+        );
       }
       return { ...state, page: action.page };
+  }
+}
+
+/**
+ * Why `action` cannot be applied to `state`, or `null` if it can. Controls that dispatch a clause rewrite
+ * (facet toggles, include buttons) call this while rendering and are disabled with the message as their
+ * description, instead of being refused after the click (spec 05 §URL is state). `STALE_CLAUSE` is the
+ * usual case: the query changed and `/parse` has not answered for it yet.
+ */
+export function whyBlocked(state: SearchState, action: SearchAction): SearchStateError | null {
+  try {
+    reduce(state, action);
+    return null;
+  } catch (e) {
+    if (e instanceof SearchStateError) return e;
+    throw e;
   }
 }

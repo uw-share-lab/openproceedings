@@ -2,23 +2,46 @@ import { describe, expect, it } from "vitest";
 import {
   INITIAL_STATE,
   MAX_PAGE,
+  MAX_QUERY_LENGTH,
   PAGE_SIZE,
   SearchStateError,
+  describeNotice,
   fromURL,
+  noticeText,
   reduce,
   resultSetKey,
   searchHref,
   toSearchRequest,
   toURL,
+  whyBlocked,
   type FilterClause,
   type FilterField,
   type Mode,
   type SearchAction,
   type SearchState,
+  type SearchStateErrorCode,
 } from "./search-state";
+import { codePointLength } from "@/api/spans";
 import golden from "./wrap-golden.json";
 
 const DEFAULT_TRACKS = ["main", "datasets_benchmarks", "position"];
+
+/**
+ * Asserts that `fn` throws a SearchStateError with `code`, and returns it. The message follows the
+ * ux-writing pattern: "<what happened> — <why>. <How to fix>."
+ */
+function refused(fn: () => unknown, code: SearchStateErrorCode): SearchStateError {
+  try {
+    fn();
+  } catch (e) {
+    expect(e).toBeInstanceOf(SearchStateError);
+    const err = e as SearchStateError;
+    expect(err.code).toBe(code);
+    expect(err.message).toMatch(/^\S.* — .+\. [A-Z].*\.$/);
+    return err;
+  }
+  throw new Error(`expected a ${code} SearchStateError`);
+}
 
 const at = (q: string, overrides: Partial<SearchState> = {}): SearchState => ({
   ...INITIAL_STATE,
@@ -107,31 +130,38 @@ describe("writing a default out explicitly (wrap-golden.json, shared with the ba
       });
     } else {
       it(`refuses ${JSON.stringify(c.q)}: a trailing escape would swallow the ')'`, () => {
-        expect(() => reduce(at(c.q), action)).toThrow(/backslash/);
+        refused(() => reduce(at(c.q), action), "TRAILING_ESCAPE");
       });
     }
   }
 });
 
 describe("facetToggle rewrites q exactly", () => {
-  it("on an empty query writes just the clause", () => {
-    const next = reduce(at(""), {
-      type: "facetToggle",
-      field: "track",
-      value: "workshop",
-      clause: atEnd("track", "", DEFAULT_TRACKS),
-    });
-    expect(next.q).toBe("track:(main OR datasets_benchmarks OR position OR workshop)");
-  });
+  it.each(["", "   "])(
+    "refuses an empty query %j (never an empty group; /parse reports no clause for it)",
+    (q) => {
+      refused(
+        () =>
+          reduce(at(q), {
+            type: "facetToggle",
+            field: "track",
+            value: "workshop",
+            clause: atEnd("track", q, DEFAULT_TRACKS),
+          }),
+        "EMPTY_QUERY",
+      );
+    },
+  );
 
-  it("on a whitespace-only query writes just the clause (never an empty group)", () => {
-    const next = reduce(at("   "), {
+  it("writes one value as field:v and several as field:(…)", () => {
+    const q = "trust track:(main OR workshop)";
+    const one = reduce(at(q), {
       type: "facetToggle",
       field: "track",
       value: "workshop",
-      clause: atEnd("track", "   ", DEFAULT_TRACKS),
+      clause: clause("track", q, [6, 30], ["main", "workshop"]),
     });
-    expect(next.q).toBe("track:(main OR datasets_benchmarks OR position OR workshop)");
+    expect(one.q).toBe("trust track:main");
   });
 
   it("replaces a typed clause in place, removing a value", () => {
@@ -208,117 +238,191 @@ describe("includeExcluded rewrites q exactly", () => {
   });
 
   it("refuses a value that is already included", () => {
-    expect(() =>
-      reduce(at("trust"), {
-        type: "includeExcluded",
-        field: "track",
-        value: "main",
-        clause: atEnd("track", "trust", DEFAULT_TRACKS),
-      }),
-    ).toThrow(SearchStateError);
+    refused(
+      () =>
+        reduce(at("trust"), {
+          type: "includeExcluded",
+          field: "track",
+          value: "main",
+          clause: atEnd("track", "trust", DEFAULT_TRACKS),
+        }),
+      "ALREADY_INCLUDED",
+    );
   });
 });
 
 describe("filter rewrites refuse what they cannot do exactly", () => {
+  it("refuses a field with no single editable clause (two top-level track: clauses on the flattened tree)", () => {
+    // `track:workshop "large language model" AND (venue:NeurIPS track:workshop)`: splicing over the first
+    // clause would leave the grouped one ANDed in, so adding `main` would change nothing. /parse reports none.
+    const q = 'track:workshop "large language model" AND (venue:NeurIPS track:workshop)';
+    for (const action of [
+      { type: "facetToggle", field: "track", value: "main", clause: null },
+      { type: "includeExcluded", field: "track", value: "main", clause: null },
+    ] as const) {
+      refused(() => reduce(at(q), action), "NO_EDITABLE_CLAUSE");
+      expect(whyBlocked(at(q), action)?.code).toBe("NO_EDITABLE_CLAUSE");
+    }
+  });
+
+  // `<pad> track:main` → `<pad> track:(main OR workshop)` adds 14 code points. The pad is astral, so a
+  // UTF-16 length check would count it double and get this wrong.
+  const addWorkshop = (length: number): SearchAction => {
+    const pad = "𝒜".repeat(length - " track:main".length);
+    const q = `${pad} track:main`;
+    expect(codePointLength(q)).toBe(length);
+    return {
+      type: "facetToggle",
+      field: "track",
+      value: "workshop",
+      clause: clause("track", q, [codePointLength(pad) + 1, length], ["main"]),
+    };
+  };
+  const sourceOf = (a: SearchAction) => (a.type === "facetToggle" && a.clause ? a.clause.source : "");
+
+  it("refuses a rewrite that would take q past MAX_QUERY_LENGTH code points (1,994 + 14)", () => {
+    const action = addWorkshop(1994);
+    const e = refused(() => reduce(at(sourceOf(action)), action), "TOO_LONG");
+    expect(e.message).toBe(
+      "The changed query would be 2,008 characters long — the limit is 2,000. Shorten the query text first.",
+    );
+  });
+
+  it("allows a rewrite that lands exactly on MAX_QUERY_LENGTH (1,986 + 14)", () => {
+    const action = addWorkshop(1986);
+    expect(codePointLength(reduce(at(sourceOf(action)), action).q)).toBe(MAX_QUERY_LENGTH);
+  });
+
+  it("refuses a wrap that would take q past MAX_QUERY_LENGTH", () => {
+    const q = "a".repeat(MAX_QUERY_LENGTH - 20);
+    refused(
+      () =>
+        reduce(at(q), {
+          type: "facetToggle",
+          field: "track",
+          value: "workshop",
+          clause: atEnd("track", q, DEFAULT_TRACKS),
+        }),
+      "TOO_LONG",
+    );
+  });
+
   it("refuses a clause parsed from a different q", () => {
-    expect(() =>
-      reduce(at("trust AND llm"), {
-        type: "facetToggle",
-        field: "track",
-        value: "workshop",
-        clause: atEnd("track", "trust", DEFAULT_TRACKS),
-      }),
-    ).toThrow(/different query/);
+    refused(
+      () =>
+        reduce(at("trust AND llm"), {
+          type: "facetToggle",
+          field: "track",
+          value: "workshop",
+          clause: atEnd("track", "trust", DEFAULT_TRACKS),
+        }),
+      "STALE_CLAUSE",
+    );
   });
 
   it("refuses a clause parsed in the other mode (setMode after the clause was fetched)", () => {
     const fetched = atEnd("track", "trust", DEFAULT_TRACKS, "native");
     const s = reduce(at("trust"), { type: "setMode", mode: "scholar" });
-    expect(() =>
-      reduce(s, { type: "facetToggle", field: "track", value: "workshop", clause: fetched }),
-    ).toThrow(/different query/);
+    refused(
+      () => reduce(s, { type: "facetToggle", field: "track", value: "workshop", clause: fetched }),
+      "STALE_CLAUSE",
+    );
   });
 
   it("refuses a clause for another field (a status clause passed as track)", () => {
     const q = "trust status:accepted";
-    expect(() =>
-      reduce(at(q), {
-        type: "facetToggle",
-        field: "track",
-        value: "workshop",
-        clause: clause("status", q, [6, 21], ["accepted"]),
-      }),
-    ).toThrow(/status clause/);
+    refused(
+      () =>
+        reduce(at(q), {
+          type: "facetToggle",
+          field: "track",
+          value: "workshop",
+          clause: clause("status", q, [6, 21], ["accepted"]),
+        }),
+      "WRONG_FIELD",
+    );
   });
 
   it("refuses a negated clause: adding to -track:workshop would flip its meaning", () => {
     const q = "trust -track:workshop";
     const negated = { ...clause("track", q, [6, 21], ["workshop"]), negated: true };
-    expect(() =>
-      reduce(at(q), {
-        type: "facetToggle",
-        field: "track",
-        value: "main",
-        // @ts-expect-error a negated clause is not a FilterClause; the runtime check catches untyped callers
-        clause: negated,
-      }),
-    ).toThrow(/negated/);
+    refused(
+      () =>
+        reduce(at(q), {
+          type: "facetToggle",
+          field: "track",
+          value: "main",
+          // @ts-expect-error a negated clause is not a FilterClause; the runtime check catches untyped callers
+          clause: negated,
+        }),
+      "NEGATED_CLAUSE",
+    );
   });
 
   it("refuses to remove the last value", () => {
     const q = "trust track:main";
-    expect(() =>
-      reduce(at(q), {
-        type: "facetToggle",
-        field: "track",
-        value: "main",
-        clause: clause("track", q, [6, 16], ["main"]),
-      }),
-    ).toThrow(/every record/);
+    refused(
+      () =>
+        reduce(at(q), {
+          type: "facetToggle",
+          field: "track",
+          value: "main",
+          clause: clause("track", q, [6, 16], ["main"]),
+        }),
+      "LAST_VALUE",
+    );
   });
 
   it("refuses a value that is not a bare identifier", () => {
-    expect(() =>
-      reduce(at("trust"), {
-        type: "facetToggle",
-        field: "venue",
-        value: "ICLR) OR (x",
-        clause: atEnd("venue", "trust", ["ICML"]),
-      }),
-    ).toThrow(/not a venue value/);
+    refused(
+      () =>
+        reduce(at("trust"), {
+          type: "facetToggle",
+          field: "venue",
+          value: "ICLR) OR (x",
+          clause: atEnd("venue", "trust", ["ICML"]),
+        }),
+      "BAD_VALUE",
+    );
   });
 
   it("refuses a bad value already in the clause's values", () => {
-    expect(() =>
-      reduce(at("trust"), {
-        type: "facetToggle",
-        field: "venue",
-        value: "ICML",
-        clause: atEnd("venue", "trust", ["ICLR OR x"]),
-      }),
-    ).toThrow(/not a venue value/);
+    refused(
+      () =>
+        reduce(at("trust"), {
+          type: "facetToggle",
+          field: "venue",
+          value: "ICML",
+          clause: atEnd("venue", "trust", ["ICLR OR x"]),
+        }),
+      "BAD_VALUE",
+    );
   });
 
   it("refuses a zero-width span that is not at the end", () => {
-    expect(() =>
-      reduce(at("trust"), {
-        type: "facetToggle",
-        field: "track",
-        value: "workshop",
-        clause: clause("track", "trust", [2, 2], DEFAULT_TRACKS),
-      }),
-    ).toThrow(/end of q/);
+    refused(
+      () =>
+        reduce(at("trust"), {
+          type: "facetToggle",
+          field: "track",
+          value: "workshop",
+          clause: clause("track", "trust", [2, 2], DEFAULT_TRACKS),
+        }),
+      "BAD_SPAN",
+    );
   });
 
   it("refuses a span outside q", () => {
-    expect(() =>
-      reduce(at("trust"), {
-        type: "facetToggle",
-        field: "track",
-        value: "workshop",
-        clause: clause("track", "trust", [3, 40], ["main"]),
-      }),
-    ).toThrow(SearchStateError);
+    refused(
+      () =>
+        reduce(at("trust"), {
+          type: "facetToggle",
+          field: "track",
+          value: "workshop",
+          clause: clause("track", "trust", [3, 40], ["main"]),
+        }),
+      "BAD_SPAN",
+    );
   });
 });
 
@@ -347,9 +451,12 @@ describe("view and query actions", () => {
   });
 
   it("refuses a page that is not a positive integer up to MAX_PAGE", () => {
-    expect(() => reduce(at("a"), { type: "page", page: 0 })).toThrow(SearchStateError);
-    expect(() => reduce(at("a"), { type: "page", page: 1.5 })).toThrow(SearchStateError);
-    expect(() => reduce(at("a"), { type: "page", page: MAX_PAGE + 1 })).toThrow(SearchStateError);
+    for (const page of [0, 1.5, MAX_PAGE + 1]) {
+      const e = refused(() => reduce(at("a"), { type: "page", page }), "BAD_PAGE");
+      expect(e.message).toBe(
+        `${page} is not a page number — a page is a whole number from 1 to 10,000. Choose a page in that range.`,
+      );
+    }
     expect(reduce(at("a"), { type: "page", page: MAX_PAGE }).page).toBe(MAX_PAGE);
   });
 });
@@ -427,6 +534,77 @@ describe("URL ↔ state", () => {
     at("  spaced  ", { sort: "title" }),
   ])("round-trips %j", (s) => {
     expect(fromURL(new URLSearchParams(toURL(s).toString()))).toEqual({ state: s, notices: [] });
+  });
+});
+
+describe("URL notices", () => {
+  it("lists q and mode notices first, since they say what was searched", () => {
+    const { notices } = fromURL(new URLSearchParams("track=x&sort=bad&mode=bing&q=&q=trust"));
+    expect(notices.map((n) => n.param)).toEqual(["q", "mode", "track", "sort"]);
+  });
+
+  it("names the repeated param, the value used and the one ignored, marking an empty value", () => {
+    const [n] = fromURL(new URLSearchParams("q=&q=trust")).notices;
+    expect(n && noticeText(n)).toBe(
+      '`q` appears more than once; using the first value `""` and ignoring `trust`.',
+    );
+  });
+
+  it("lists the valid values from the reducer's constants", () => {
+    const texts = fromURL(new URLSearchParams("q=a&mode=bing&sort=random&page=0")).notices.map(noticeText);
+    expect(texts).toEqual([
+      "`mode=bing` is not a mode — modes are `native`, `scholar`. `q` was read as native syntax.",
+      "`sort=random` is not a sort order — sort orders are `relevance`, `year_desc`, `year_asc`, `title`. " +
+        "Sorted by `relevance` instead.",
+      "`page=0` is not a page number — a page is a whole number from 1 to 10,000. Showing page 1 instead.",
+    ]);
+  });
+
+  it("says an unknown param was ignored and lists the search parameters", () => {
+    const [n] = fromURL(new URLSearchParams("q=a&track=workshop")).notices;
+    expect(n && noticeText(n)).toBe(
+      "`track=workshop` was ignored — `track` is not a search parameter. " +
+        "Search parameters are `q`, `mode`, `sort`, `page`.",
+    );
+  });
+
+  it("marks values as code runs so the page can set them in monospace", () => {
+    const [n] = fromURL(new URLSearchParams("q=a&q=b")).notices;
+    expect(n && describeNotice(n)).toEqual([
+      { code: "q" },
+      { text: " appears more than once; using the first value " },
+      { code: "a" },
+      { text: " and ignoring " },
+      { code: "b" },
+      { text: "." },
+    ]);
+  });
+});
+
+describe("whyBlocked (controls are disabled with the reason, not refused after the click)", () => {
+  const action: SearchAction = {
+    type: "facetToggle",
+    field: "track",
+    value: "workshop",
+    clause: atEnd("track", "trust", DEFAULT_TRACKS),
+  };
+
+  it("is null when the action applies", () => {
+    expect(whyBlocked(at("trust"), action)).toBeNull();
+  });
+
+  it("returns STALE_CLAUSE while the clause is from an earlier query", () => {
+    expect(whyBlocked(at("trust AND llm"), action)?.code).toBe("STALE_CLAUSE");
+  });
+
+  it("returns ALREADY_INCLUDED for an include of an admitted value", () => {
+    const include: SearchAction = {
+      type: "includeExcluded",
+      field: "track",
+      value: "main",
+      clause: atEnd("track", "trust", DEFAULT_TRACKS),
+    };
+    expect(whyBlocked(at("trust"), include)?.code).toBe("ALREADY_INCLUDED");
   });
 });
 

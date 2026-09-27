@@ -26,7 +26,7 @@ jobs:
         with: { node-version-file: .nvmrc, cache: npm, cache-dependency-path: package-lock.json }
       - name: Install the npm workspace (root package-lock.json)
         if: hashFiles('frontend/package.json') != ''
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: OpenAPI snapshot and TS types are fresh (make openapi)
         # Unconditional: regenerate backend/tests/contract/openapi.json and frontend/src/api/schema.ts from
         # the app, and fail if either differs from the committed file (api-contract skill; TASK-040).

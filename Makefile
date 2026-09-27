@@ -21,9 +21,11 @@ frontend-deps:
 	@if [ -f frontend/package.json ] && [ ! -d node_modules ]; then \
 	  echo "frontend/ exists but node_modules/ does not: run make sync (npm ci)"; exit 1; fi
 
+# --ignore-scripts: no dependency install script runs (only unrs-resolver and the optional fsevents have one,
+# and lint, tests and the build pass without them); CI installs the same way.
 sync:
 	uv sync --locked
-	@if [ -f package-lock.json ]; then npm ci; fi
+	@if [ -f package-lock.json ]; then npm ci --ignore-scripts; fi
 
 fmt: frontend-deps
 	uv run --locked ruff format $(PY_TARGETS)

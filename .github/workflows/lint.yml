@@ -30,7 +30,7 @@ jobs:
       - name: Sync workspaces (uv for ruff and mypy, npm for prettier, eslint and tsc)
         run: |
           uv sync --locked
-          if [ -f package-lock.json ]; then npm ci; fi
+          if [ -f package-lock.json ]; then npm ci --ignore-scripts; fi
       - name: make lint (same target as the pre-push hook)
         run: make lint
       - name: actionlint

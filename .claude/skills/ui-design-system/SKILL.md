@@ -22,7 +22,16 @@ text, ≥3:1 for borders/icons):
 | `--default-clause` | default filters shown grey in the tree ("made explicit") |
 | `--track-workshop` | the workshop badge, visibly distinct from main |
 Theme via class on `<html>` (`next-themes` or equivalent); no flash on load; both themes are
-first-class and both are in visual regression.
+first-class and both are in visual regression. The header's theme control is a System / Light / Dark radio
+group (`src/components/theme-picker.tsx`); the chosen option is a solid `--primary` fill, not a tint.
+
+**Focus ring: full opacity, always.** `globals.css` draws `:focus-visible` as `outline: 2px solid
+var(--ring); outline-offset: 2px`. shadcn's generated components default to `focus-visible:ring-ring/50`
+(and its base layer to `outline-ring/50`), which halves the ring's contrast to about 2.5:1: override
+them when adding a component (use `focus-visible:ring-ring` or rely on the global outline).
+`src/app/tokens.test.ts` fails on any `ring-ring/NN` or `outline-ring/NN` in `src/`, checks `--ring`,
+`--border` and `--input` at 3:1 on every surface (background, card, popover, muted, warn-bg,
+excluded-bg), and checks every token is inside the sRGB gamut, so the computed contrast is what is drawn.
 
 ## `/search` layout (spec 05)
 Top to bottom, left to right: `[Text | Builder]` toggle, `mode` select, `Search` → editor → diagnostics

@@ -10,6 +10,9 @@ const eslintConfig = defineConfig([
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/ban-ts-comment": ["error", { "ts-expect-error": "allow-with-description" }],
+      // The CSP allows inline scripts (src/lib/security-headers.ts), so HTML is never built from strings:
+      // highlights are text nodes cut at the API's spans.
+      "react/no-danger": "error",
     },
   },
   globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "src/api/schema.ts"]),
