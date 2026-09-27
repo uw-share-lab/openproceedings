@@ -27,9 +27,8 @@ class RateLimit(BaseModel):
     """A per-client token bucket: `capacity` tokens, refilled at `refill_per_second`. A request costs one
     token; an export or a record route costs `export_weight` (it touches the whole matched set), and a query
     with position-verified clauses (spec 03: a phrase with a wildcard, a NEAR the index can't answer) costs
-    `verified_weight` (None: `export_weight`) per such clause, capped at the smaller bucket's capacity (so a
-    query within `ApiConfig.max_verified_clauses` can always run), the rest charged once the route has parsed
-    it. `/healthz` is free. Every request is also charged to its client's network (IPv4 /24, IPv6 /48), a
+    `verified_weight` per such clause (None: `ApiConfig.verified_cost`, the most that lets a query at
+    `max_verified_clauses` be paid), the rest charged once the route has parsed it. `/healthz` is free. Every request is also charged to its client's network (IPv4 /24, IPv6 /48), a
     bucket of `network_capacity` (None: 4 × `capacity`) refilled at `network_refill_per_second` (None:
     4 × `refill_per_second`), so one host holding many addresses is bounded too."""
 
@@ -45,14 +44,9 @@ class RateLimit(BaseModel):
     max_clients: int = Field(default=100_000, ge=1)  # buckets held in memory; the least recent is dropped
 
     @property
-    def verified_cost(self) -> float:
-        """What one position-verified clause costs."""
-        return self.export_weight if self.verified_weight is None else self.verified_weight
-
-    def verified_charge(self, clauses: int) -> float:
-        """What a query with `clauses` position-verified clauses costs in all: `verified_cost` each, at most
-        the smaller bucket's capacity (a larger charge could never be paid)."""
-        return min(clauses * self.verified_cost, self.capacity, self.network_bucket[0])
+    def smallest_capacity(self) -> float:
+        """The smaller bucket's capacity: the most one request can ever be charged."""
+        return min(self.capacity, self.network_bucket[0])
 
     @property
     def network_bucket(self) -> tuple[float, float]:
@@ -68,7 +62,7 @@ class RateLimit(BaseModel):
     def _export_fits(self) -> RateLimit:
         if self.export_weight > self.capacity:
             raise ValueError("export_weight must not exceed capacity, or no export could ever run")
-        if max(self.export_weight, self.verified_cost) > min(self.capacity, self.network_bucket[0]):
+        if max(self.export_weight, self.verified_weight or 0) > self.smallest_capacity:
             raise ValueError(
                 "export_weight and verified_weight must fit in capacity and network_capacity, or no such "
                 "request could ever run"
@@ -110,9 +104,17 @@ class ApiConfig(BaseModel):
     # time; a query that would need another slot is 503 API_BUSY with `Retry-After: busy_retry_seconds`
     verification_slots: int = Field(default=1, ge=1)
     busy_retry_seconds: int = Field(default=5, ge=1)
-    # a query with more position-verified clauses than this is 422 API_TOO_MANY_VERIFIED_CLAUSES (each clause
-    # is one cold verification, holding a slot for seconds on a large index), before anything compiles it
-    max_verified_clauses: int = Field(default=8, ge=1)
+    # a query with more position-verified clauses than this is 422 API_TOO_MANY_VERIFIED_CLAUSES, before anything
+    # compiles it: a coarse backstop (16 admits every Trust-Evals string; main-2-pop has 10), the cost being
+    # bounded by `max_verification_candidates` (decision-010)
+    max_verified_clauses: int = Field(default=16, ge=1)
+    # a query whose position-verified clauses would read more candidate documents than this, summed over each
+    # clause's fields, is 422 API_QUERY_TOO_COSTLY before any is verified (decision-010): a cold verification
+    # costs ~40 µs per candidate, so the default bounds one query's slot hold near 12 s (measured at 80k), above
+    # the heaviest real review query (Trust-Evals main-2-pop, Scholar mode: 247,793 candidates, 10.2 s)
+    max_verification_candidates: int = Field(default=300_000, ge=1)
+    # a request holding a verification slot longer than this logs `verification_slow` (WARNING)
+    slow_verification_seconds: float = Field(default=5.0, gt=0)
     # one client network (IPv4 /24, IPv6 /48) at most `record_saves_network_burst` saves at once, refilled at
     # `record_saves_network_per_hour`, so one network can't spend the instance-wide ceiling for everyone
     record_saves_network_burst: int = Field(default=10, ge=1)
@@ -126,6 +128,31 @@ class ApiConfig(BaseModel):
     # Swagger UI at /api/v1/docs (it loads its script and styles from a CDN). Off unless asked for: `op serve`
     # turns it on for a loopback --host only (a local instance), or with --docs. openapi.json is always served
     serve_docs: bool = False
+
+    @property
+    def verified_cost(self) -> float:
+        """What one position-verified clause costs: `rate_limit.verified_weight`, or by default the export
+        weight, lowered so that a query at `max_verified_clauses` costs at most the smaller bucket (then every
+        clause up to the cap costs something: none rides free past a capped charge)."""
+        limit = self.rate_limit
+        if limit.verified_weight is not None:
+            return limit.verified_weight
+        return min(limit.export_weight, limit.smallest_capacity / self.max_verified_clauses)
+
+    def verified_charge(self, clauses: int) -> float:
+        """What a query with `clauses` (at most `max_verified_clauses`) position-verified clauses costs."""
+        return clauses * self.verified_cost
+
+    @model_validator(mode="after")
+    def _verified_fits(self) -> ApiConfig:
+        limit = self.rate_limit
+        if limit.enabled and self.max_verified_clauses * self.verified_cost > limit.smallest_capacity:
+            raise ValueError(
+                f"max_verified_clauses ({self.max_verified_clauses}) × verified_weight ({self.verified_cost:g}) "
+                f"is more than the smaller rate-limit bucket ({limit.smallest_capacity:g}), so a query at the cap "
+                "could never be paid; lower one of them or raise the capacity"
+            )
+        return self
 
     @field_validator("index")
     @classmethod

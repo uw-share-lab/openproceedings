@@ -13,7 +13,8 @@ import dataclasses
 import heapq
 import json
 from collections.abc import Callable, Iterator
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import AbstractContextManager, contextmanager, nullcontext
+from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -21,7 +22,7 @@ from typing import Any
 import tantivy
 
 from openproceedings.diagnostics import DiagnosticCode, clip
-from openproceedings.engine.compile import FIELDS, Compiled, Compiler, Expansions, wildcards
+from openproceedings.engine.compile import FIELDS, Compiled, Compiler, Expansions, verified_clauses, wildcards
 from openproceedings.engine.index import IDS, SCHEMA_VERSION, open_index, record_of, verify_index
 from openproceedings.engine.protocol import (
     FACET_FIELDS,
@@ -31,13 +32,15 @@ from openproceedings.engine.protocol import (
     EngineInternalError,
     SearchResult,
 )
-from openproceedings.query.ast import And, Filter, Node, Not, TextField, Wildcard, YearRange
+from openproceedings.query.ast import And, Filter, Near, Node, Not, Phrase, TextField, Wildcard, YearRange
 from openproceedings.query.normalize import TOKENIZER_VERSION
 
 SORTS = ("relevance", "year_desc", "year_asc", "title")
 # a document's facet values, in this order: what every filter and facet depends on (task-086)
 COMBO: tuple[str, ...] = ("venue", "year", "track", "status")
 type Combo = tuple[str, int, str, str]
+# (field, clause) → the ids that clause verified: the engine's memo, or one request's own (`Overlay`)
+type Verified = dict[tuple[str, str], list[str]]
 # the Tantivy TANTIVY_BM25 was confirmed on; test_rank.py fails if the installed one drifts
 TANTIVY_PINNED = "0.26.2"
 TANTIVY_BM25 = {"b": 0.75, "k1": 1.2}  # Tantivy's fixed constants: an index can't claim others
@@ -76,6 +79,47 @@ def unservable(manifest: dict[str, Any]) -> tuple[str, str] | None:
     return None
 
 
+@dataclass(frozen=True, slots=True)
+class Scope:
+    """One request's verified clauses (`ids`), shared by every compile it runs (the class docstring of
+    `TantivyEngine`). `may_verify` False is a view that never verifies: a clause it doesn't find (in `ids` or
+    the memo) is an internal error, never a cold verification, so a thread given it (`search.run`'s facet
+    worker) can never take a verification slot."""
+
+    ids: Verified = dataclasses.field(default_factory=dict)
+    may_verify: bool = True
+
+    def reader(self) -> Scope:
+        """This scope's ids, read-only as to verification (the same dict: what the caller verifies is seen)."""
+        return Scope(self.ids, may_verify=False)
+
+
+@contextmanager
+def _never_verify() -> Iterator[None]:
+    raise EngineInternalError(
+        DiagnosticCode.API_INTERNAL,
+        "a request's facet worker met a clause its compile hadn't verified: it never verifies (task-088)",
+    )
+    yield  # pragma: no cover — unreachable: a generator, so the gate is entered as a context manager
+
+
+class Overlay:
+    """One request's view of the verified clauses: what this request verified itself (`local`), then the
+    engine's memo. A request holds its own ids to its end, so a memo trimmed under it (by its own compile, by its
+    facet worker's, or by another request's) never makes it verify a clause twice: its worker and its page read
+    them here and never enter the verification gate for them (M3a review gate round 3). Each lookup is one
+    `.get` per dict (task-080), never `in` then `[key]` (so not a `ChainMap`, whose `get` is exactly that)."""
+
+    __slots__ = ("local", "shared")
+
+    def __init__(self, local: Verified, shared: Verified) -> None:
+        self.local, self.shared = local, shared
+
+    def get(self, key: tuple[str, str], /) -> list[str] | None:
+        ids = self.local.get(key)
+        return ids if ids is not None else self.shared.get(key)
+
+
 class TantivyEngine:
     """One engine serves every request of the API, from FastAPI's thread pool (task-080). Its only mutable
     state is four memos (`compiled`, `verified`, `expanded`, `faceted`), each a pure function of its key and
@@ -85,7 +129,15 @@ class TantivyEngine:
     gives the same value, so concurrent searches never see each other's partial work (guarantee 4).
     The design relies only on each single dict operation being atomic, which holds under the GIL and on
     free-threaded builds (3.13t) alike; never iterate a memo, or check-then-act across two operations.
-    Each memo's size budget is kept by an append-only ledger (`charges`), lock-free as well: see `_trim`."""
+    Each memo's size budget is kept by an append-only ledger (`charges`), lock-free as well: see `_trim`.
+
+    A request that may compile its tree more than once, on more than one thread (`search.run`: the caller's
+    compile and page, the facet worker's base, exclusion accounting) passes its own `scope` dict to `compile`,
+    `page`, `facets` and `combos` (a `Scope`): each clause it verifies is kept there as well as in the memo, and
+    read back first (`Overlay`), so a memo trimmed mid-request costs a recompile from ids it holds, never a
+    second verification; a thread handed `scope.reader()` never verifies at all. A scope is the request's,
+    dropped with it, so it isn't charged to a budget: it holds at most the ids its own compiled queries already
+    hold (`max_verified_clauses` × 2 fields in the API)."""
 
     # Each memo is bounded by what it holds, not by its entry count (a verified entry can hold every id in the
     # index, ~5 MB on 80k): it is cleared once the weights charged to it since its last clear pass its budget.
@@ -113,7 +165,7 @@ class TantivyEngine:
         self.searcher = self.index.searcher()
         self.ids = (path / IDS).read_text(encoding="utf-8").splitlines()
         self.compiled: dict[str, Compiled] = {}  # per tree (bounded), see compile()
-        self.verified: dict[tuple[str, str], list[str]] = {}  # position-verified clauses, per engine
+        self.verified: Verified = {}  # position-verified clauses, per engine
         # each wildcard's terms, or just the count of an over-cap one
         self.expanded: dict[tuple[str, str], tuple[str, ...] | int] = {}
         # each memo's ledger: the weight of every entry stored since its last clear (see `_trim`)
@@ -167,11 +219,18 @@ class TantivyEngine:
         return SearchResult(total=total, ids=tuple(i for i, _score in page))
 
     def page(
-        self, ast: Node, *, sort: str = "relevance", offset: int = 0, limit: int = 50
+        self,
+        ast: Node,
+        *,
+        sort: str = "relevance",
+        offset: int = 0,
+        limit: int = 50,
+        scope: Scope | None = None,
     ) -> tuple[int, list[tuple[str, float]]]:
-        """`search`'s page with each hit's exact score, from one collection of the match set."""
+        """`search`'s page with each hit's exact score, from one collection of the match set (`scope`: the
+        request's verified clauses, see the class docstring)."""
         self.check_page(sort, offset, limit)
-        keyed = self.keyed(ast, sort)
+        keyed = self.keyed(ast, sort, scope=scope)
         # top offset+limit of the full order: keys end in the unique id, so ties at a page boundary are exact
         top = heapq.nsmallest(offset + limit, keyed)
         return len(keyed), [(i, score) for _key, i, score in top[offset:]]
@@ -194,12 +253,12 @@ class TantivyEngine:
         only orders: the set is the same for every sort."""
         return [(i, score) for _key, i, score in sorted(self.keyed(ast, sort))]
 
-    def keyed(self, ast: Node, sort: str) -> list[tuple[float, str, float]]:
+    def keyed(self, ast: Node, sort: str, *, scope: Scope | None = None) -> list[tuple[float, str, float]]:
         """Every match as (sort key, id, score): ordering by the tuple orders by the key, then the id (unique,
         so the score after it never decides anything).
         For relevance the key is -score; year sorts ∓year; title the build-time title rank."""
         self.check_page(sort)
-        hits = self.searcher.search(self.compile(ast).query, max(1, self.searcher.num_docs)).hits
+        hits = self.searcher.search(self.compile(ast, scope).query, max(1, self.searcher.num_docs)).hits
         if not hits:
             return []
         addresses = [address for _score, address in hits]
@@ -238,7 +297,9 @@ class TantivyEngine:
             **record_of(doc["record"][0]),
         }
 
-    def facets(self, ast: Node, fields: tuple[str, ...] = FACET_FIELDS) -> dict[str, dict[str, int]]:
+    def facets(
+        self, ast: Node, fields: tuple[str, ...] = FACET_FIELDS, *, scope: Scope | None = None
+    ) -> dict[str, dict[str, int]]:
         """Disjunctive facets (spec 04, decision-001 rule 6): field F is counted over the matches of the
         query without F's own top-level conjuncts (a filter on F, or NOT of one; nested ones stay).
 
@@ -257,7 +318,7 @@ class TantivyEngine:
         conjuncts = _conjuncts(ast)
         filters = [c for c in conjuncts if _filter_field(c) in FACET_FIELDS]
         base = [c for c in conjuncts if _filter_field(c) not in FACET_FIELDS]
-        combos = self.combos(base)
+        combos = self.combos(base, scope)
         # per field, whether each value that occurs passes every set-aside filter on that field
         ok = [
             {
@@ -278,7 +339,7 @@ class TantivyEngine:
             out[f] = dict(sorted(counts.items()))
         return out
 
-    def combos(self, base: list[Node]) -> tuple[tuple[Combo, int], ...]:
+    def combos(self, base: list[Node], scope: Scope | None = None) -> tuple[tuple[Combo, int], ...]:
         """How many matches of `base`'s conjunction (every document when empty) have each (venue, year,
         track, status), from one collection; memoised per base under task-080's rules."""
         key = "\x00".join(sorted(_spanless(c) for c in base))
@@ -286,7 +347,7 @@ class TantivyEngine:
         if hit is not None:
             return hit
         node = base[0] if len(base) == 1 else And(span=(0, 0), children=tuple(base)) if base else None
-        query = tantivy.Query.all_query() if node is None else self.compile(node).query
+        query = tantivy.Query.all_query() if node is None else self.compile(node, scope).query
         aggs: dict[str, Any] = {}
         for f in reversed(COMBO):  # venue → year → track → status, innermost last
             aggs = {f: {"terms": {"field": f, "size": 100_000}, **({"aggs": aggs} if aggs else {})}}
@@ -299,6 +360,26 @@ class TantivyEngine:
         return combos
 
     # --- compilation and explain ---------------------------------------------------------------------
+    def candidates(self, ast: Node) -> list[tuple[Phrase | Near, TextField, int]]:
+        """Each position-verified clause of `ast` (`verified_clauses`, in query order) with, per field it is
+        verified in, how many documents its position check would read: those holding every one of its
+        distinct items there (`Compiler.candidates`). Counted from the inverted index (no document is read,
+        nothing is verified or memoised), so the API can bound a query's cold verification work before
+        running it (decision-010): that work is proportional to these counts, not to the clause count.
+        Counts every clause, cached or not, so whether a query is refused never depends on the memos.
+        Wildcards are expanded first (the 200 cap applies)."""
+        compiler = Compiler(self.index.schema, self.expansions(ast), self.read)
+        return [
+            (n, f, self._count(compiler.candidates(n, f)))
+            for n in verified_clauses(ast)
+            for f in ((n.field,) if n.field else FIELDS)
+        ]
+
+    def _count(self, query: tantivy.Query) -> int:
+        """How many documents match `query`: Tantivy's count collector, beside a top-1 (no document read)."""
+        # `SearchResult.count` is set when `count=True`; the package's stub doesn't declare it
+        return int(self.searcher.search(query, 1, count=True).count)  # type: ignore[attr-defined]
+
     def expansions(self, ast: Node) -> Expansions:
         """Every wildcard in the query, expanded once, before anything is compiled."""
         out: Expansions = {}
@@ -307,23 +388,35 @@ class TantivyEngine:
                 out[(w.stem, w.op)] = tuple(self.expand(w))
         return out
 
-    def compile(self, ast: Node) -> Compiled:
+    def compile(self, ast: Node, scope: Scope | None = None) -> Compiled:
         """The compiled query, memoised per tree: the index is immutable, so a tree compiles the same way every
-        time, and a search, its pages and its facets needn't build the Boolean again (task-076 headroom)."""
+        time, and a search, its pages and its facets needn't build the Boolean again (task-076 headroom).
+        `scope`: the request's own verified clauses, read first and added to (the class docstring)."""
         # spans included: ` trust` and `trust` compile apart (a miss, never wrong)
         key = ast.model_dump_json()
         hit = self.compiled.get(key)  # one read: the memo may be cleared by another thread at any time
         if hit is not None:
             return self._copy(hit)
         self._trim("compiled", self.compiled, self.MAX_COMPILED_UNITS)
+        store = self._store_verified
+        gate = self.verification_gate
+        if scope is not None:
+            request = scope.ids
+            if not scope.may_verify:
+                gate = _never_verify
+
+            def store(key: tuple[str, str], ids: list[str]) -> None:
+                request[key] = ids  # the request's first: the memo's store may clear the memo
+                self._store_verified(key, ids)
+
         compiled = Compiler(
             self.index.schema,
             self.expansions(ast),
             self.read,
-            self.verified,
+            self.verified if scope is None else Overlay(scope.ids, self.verified),
             self.ranking["field_weights"],
-            gate=self.verification_gate,
-            store=self._store_verified,
+            gate=gate,
+            store=store,
         ).compile(ast)
         self.compiled[key] = compiled
         self.charges["compiled"].append(compiled.held + 1)

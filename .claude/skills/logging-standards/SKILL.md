@@ -69,8 +69,13 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 ## API access line (INFO, exactly one per request)
 `request` event with: `request_id`, `method`, `route` (the template, e.g. `/api/v1/papers/{id}`, not the
 concrete path), `status`, `ms`, `index_version`, `canonical_hash` (search/export), `total`, and `code` (the
-error envelope's code, on every refusal and every 500; `api.errors.note_code`). Health checks
-log at DEBUG. An unexpected failure is one `request_failed` ERROR line beside it: `code`, `error`, `frames`,
+error envelope's code, on every refusal and every 500; `api.errors.note_code`), and for a route that runs a
+query `verified_clauses` (its position-verified clauses), `verification_candidates` (what their checks
+would read, summed; absent with none) and `verify_ms` (the time it held a verification slot; absent when it
+held none; added by `IndexState.verification_slot` through the `errors.current_access` context variable,
+the request having no handle there). A request whose slot holds pass `slow_verification_seconds` logs one
+`verification_slow` WARNING (`verify_ms`, `threshold_ms`): every other cold verification was refused
+meanwhile. Health checks log at DEBUG. An unexpected failure is one `request_failed` ERROR line beside it: `code`, `error`, `frames`,
 and for a wrapped one (only then: never `cause: null`) `cause`, `cause_frames` (where it really failed: Starlette wraps an error its handler
 catches after a stream started in a RuntimeError whose frames stop at the handler) and `cause_reason`. `status` is what the client was sent. If a handler fails after the response started (a
 stream cut short), the line adds `aborted: true`, beside that failure's one `request_failed` ERROR line;

@@ -179,9 +179,12 @@ class ReplayInfo(Model):
     ids_hash: str | None
     ids_match: bool | None  # null when `refused`: nothing was compared
     excluded_match: bool | None  # null when `refused`
-    # why the canonical string no longer runs (it doesn't parse, or the engine refuses it); the status stays
-    # `drifted`, or `mismatch` under the record's own versions, and no membership comparison happened
+    # why the canonical string wasn't run: it doesn't parse or the engine refuses it (the status stays
+    # `drifted`, or `mismatch` under the record's own versions), or this instance withholds it
+    # (`API_TOO_MANY_VERIFIED_CLAUSES`, `API_QUERY_TOO_COSTLY`: its limits are below what the query needs; then
+    # `drifted` on its own index too, unless a check that needs no run fails). No membership comparison happened
     refused: DiagnosticCode | None
+    verified_clauses: int | None  # the canonical's position-verified clauses; null when it doesn't parse
     changed: list[ChangedInput]  # empty unless drifted
     added_total: int | None  # ids the replay matched that the record doesn't hold; null when `refused`
     removed_total: int | None  # ids the record holds that the replay didn't match; null when `refused`
@@ -203,6 +206,7 @@ class RecordDiff(Versioned):
     status: Literal["reproduced", "drifted", "mismatch"]
     recorded_index_version: str
     refused: DiagnosticCode | None  # as in ReplayInfo: then both lists are empty and the totals null
+    verified_clauses: int | None  # as in ReplayInfo
     changed: list[ChangedInput]
     offset: int
     limit: int  # each list is the page [offset, offset + limit) of its full, id-sorted list

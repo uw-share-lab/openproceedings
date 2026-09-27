@@ -307,6 +307,15 @@ def test_insert_refuses_fields_whose_ids_hash_is_not_the_ids(store: RecordStore)
     assert not store.path.exists()  # refused before anything was created
 
 
+def test_insert_refuses_fields_whose_total_is_not_the_number_of_ids(store: RecordStore) -> None:
+    """Nor one whose `total` isn't its stored list's length (an export sends that length as `X-Total`, so
+    such a record, too, could only replay as a mismatch: M3a review gate round 3)."""
+    with pytest.raises(InternalError, match="total"):
+        store.insert(fields(total=len(IDS) + 1), IDS)
+    assert not store.path.exists()
+    store.insert(fields(total=len(IDS)), IDS)
+
+
 def test_the_stored_excluded_shape_is_the_live_one() -> None:
     """Replay compares the live `excluded` with the stored one whole, so a key added to `Excluded.to_json`
     would make every record a mismatch: a shape change must come with a `query_version` bump (search-records

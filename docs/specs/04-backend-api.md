@@ -67,7 +67,8 @@ reviews without the UI.
   - **`ErrorBody.code` is its own schema, `ErrorCode`**: exactly the registry's codes that have an HTTP status
     (`PARSE_*`, `FIELD_*`, `WILDCARD_*`, the `API_*` ones but the log-only `API_REPLAY_MISMATCH`), derived from
     the registry and tested against it. `diagnostics` is present on the `PARSE_*`, `FIELD_*` and `WILDCARD_*`
-    refusals and on `API_TOO_MANY_VERIFIED_CLAUSES` (decision-010), the one `API_*` code that points into `q`.
+    refusals and on `API_TOO_MANY_VERIFIED_CLAUSES` and `API_QUERY_TOO_COSTLY` (decision-010), the two
+    `API_*` codes that point into `q`.
   - **Headers are in the contract**: an export's 200 declares `X-Total`, `X-Index-Version`,
     `X-Tokenizer-Version`, `X-Query-Version` (this code's, on a `record_id` export too) and
     `Content-Disposition`; every route's 405 declares `Allow` and its 429 `Retry-After` (not `/healthz`'s,
@@ -304,10 +305,13 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   `API_RATE_LIMITED` with `Retry-After` (the message says whether the instance or the client's network is
   at its ceiling), checked after the parse (a query that doesn't parse costs no save) and before the query
   runs; a save whose query then fails to run, or whose store is full, is refunded to both. A ceiling's first
-  refusal logs `record_saves_throttled` (WARNING, `scope` `instance` or `network`, `burst`, `per_hour`;
-  never the network itself) and its next allowed save `record_saves_recovered` (INFO). The store is
-  append-only, so its growth is bounded in time as well as in bytes, and one network can't spend the whole
-  instance's ceiling.
+  refusal logs `record_saves_throttled` (`scope` `instance` or `network`, `burst`, `per_hour`; never the
+  network itself) and its next allowed save `record_saves_recovered`: WARNING and INFO for the instance
+  ceiling (everyone's), DEBUG for a network's (one network throttling itself is not the operator's
+  concern). The store is append-only, so its growth is bounded in time as well as in bytes, and one network
+  can't spend the whole instance's ceiling. **Residual (accepted):** the instance ceiling is a backstop, so
+  about ten /24 networks, each saving at its own ceiling (10 × 60 an hour is the instance's 600), can keep
+  it empty for everyone; the network ceiling bounds one network, not a client spread over many.
 - **The record** holds every field of the table, plus `record_id`, `body_version` (2), `schema_version` and
   `ranking_params` (the index's two other inputs, so a drifted replay can name a method change after the
   pinned index is gone). `crawl_dates` is keyed by source: `*` is the snapshot manifest's corpus-wide
@@ -368,10 +372,23 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   differing input (`snapshot_hash` kind `corpus`; `tokenizer_version`, `schema_version`, `ranking_params`,
   `query_version` kind `method`) with its recorded and current value. `replay` also has `total`,
   `excluded`, `ids_hash`, `ids_match`, `excluded_match`, `added_total`, `removed_total` (counts, named as
-  in the diff) and `membership_identical` (true on `+0/−0`).
+  in the diff), `membership_identical` (true on `+0/−0`) and `verified_clauses` (the canonical's
+  position-verified clauses; null when it doesn't parse).
 - **A refused replay** (the canonical string no longer parses, or a wildcard now expands past the cap) has
   `refused` set to that code and compares nothing: `total`, `excluded`, `ids_hash`, `ids_match`,
   `excluded_match`, `added_total`, `removed_total` and `membership_identical` are null. Its status stays `drifted`, or `mismatch` under the record's own versions.
+- **A withheld replay** is one this instance won't run: its canonical has more position-verified clauses
+  than `ApiConfig.max_verified_clauses`, or its position checks would read more than
+  `max_verification_candidates` documents on the index it runs on (§Rate limit; decision-010). It is
+  still a 200, never a 422, so the record itself stays readable: nothing is compiled or charged for its
+  clauses, `refused` is `API_TOO_MANY_VERIFIED_CLAUSES` or `API_QUERY_TOO_COSTLY` ("not re-run on this
+  instance: its limit is below what the record's query needs"), and every count is null as for a refused
+  replay. It is never `reproduced` and never `membership_identical`. On the record's own index under its own
+  query version its status is `drifted` with `changed: []` (the status enum is closed; `refused` says why),
+  unless a check that needs no run fails (the canonical re-parse, the index's inputs, the stored list),
+  which is a `mismatch`, logged as any other; elsewhere it is `drifted` with its changed inputs. The
+  withholding is not a mismatch and logs no `replay_mismatch`, and `/export?record_id=` still streams the
+  stored ids (it never re-runs the query; only a `mismatch` blocks it). Raising the limit replays it.
 - **Pinned indexes** load on demand, read-only, by the served index's rules (`state.index_path`: an
   index_version resolving to itself directly under `<data_dir>/indexes/`; never `resolve_snapshot`), and
   are opened (verified) by the same engine class, so "available" means loadable by this code: an index built
@@ -410,7 +427,8 @@ once released: changing one is a breaking change under `/api/v1`.
 | Rate limit exceeded: the client's or its network's bucket, a position-verified query's extra weight, or the record-save ceiling (its network's or the instance-wide one) | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
 | A search record can't be saved: the record store is over its size cap or its disk under the free-space floor (task-037) | 503 | `API_RECORDS_STORE_FULL` |
 | A query needs a cold position verification and every verification slot is taken (refused, never queued) | 503 | `API_BUSY` (with `Retry-After`) |
-| A query (or a replayed record's canonical) has more position-verified clauses than `ApiConfig.max_verified_clauses` (default 8), refused before it compiles (decision-010) | 422 | `API_TOO_MANY_VERIFIED_CLAUSES` (diagnostics: one per clause, spanning it in `q`; a replay's one diagnostic has `span: null`) |
+| A query has more position-verified clauses than `ApiConfig.max_verified_clauses` (default 16, a backstop), refused before it compiles (decision-010; a replay over it is withheld, 200, §Search records) | 422 | `API_TOO_MANY_VERIFIED_CLAUSES` (diagnostics: one per clause, spanning it in `q`) |
+| A query's position checks would read more than `ApiConfig.max_verification_candidates` (default 300,000) candidate documents, summed over its verified clauses and their fields, refused before any is verified (decision-010; a replay over it is withheld, 200) | 422 | `API_QUERY_TOO_COSTLY` (diagnostics: one per verified clause, spanning it in `q`, with its count per field) |
 | No index loaded yet (startup, or the first load failed; a failed swap keeps serving the old index) | 503 | `API_INDEX_NOT_LOADED` |
 | Anything unexpected | 500 | `API_INTERNAL` (logged at ERROR with the request id; message never echoes input) |
 | No such endpoint (task-034) | 404 | `API_NOT_FOUND` |
@@ -466,15 +484,31 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     unique) costs nothing; `/export` and every record route (`POST /records`, `GET /records/{id}`, `/diff`)
     cost `export_weight`, charged before routing. A
     query's **position-verified clauses** (spec 03: a phrase with a wildcard, a NEAR the index can't answer)
-    are counted from the AST (`deps.verified_clauses`, by `engine.compile.verifies`'s rule; a test holds the
-    count equal to the compiler's own): more than `ApiConfig.max_verified_clauses` (default 8) is 422
+    are counted from the AST (`engine.compile.verified_clauses`, by `verifies`'s rule; a test holds the
+    count equal to the compiler's own): more than `ApiConfig.max_verified_clauses` (default 16: a backstop, admitting every Trust-Evals string) is 422
     `API_TOO_MANY_VERIFIED_CLAUSES` (decision-010), one diagnostic per clause, before anything compiles;
-    otherwise the query costs `verified_weight` (default `export_weight`) **per clause**, at most the smaller
-    bucket's capacity (`RateLimit.verified_charge`, so a query within the cap can always run): the rest is
-    charged after the parse and before compiling (`deps.charge_verified` from `deps.searchable`,
-    `middleware.charge`). A replay (`GET /records/{id}`, `/diff`, `/export?record_id=`) is counted, capped
-    and charged the same way on its re-parsed canonical string, its one diagnostic without a span (the
-    canonical is not the client's `q`). Cold verification (a cache miss: seconds of pure Python per clause) runs in at most
+    otherwise the query costs `ApiConfig.verified_cost` **per clause**: `verified_weight` when set, else
+    `export_weight` lowered to the smaller bucket's capacity over the cap (default min(10, 60 / 16) = 3.75), and
+    `max_verified_clauses` × a set `verified_weight` must fit the smaller bucket (the config refuses it
+    otherwise), so every clause up to the cap costs its share and a query at the cap can always be paid. The
+    rest is charged after the parse and before compiling (`deps.charge_verified` from `deps.searchable`,
+    `middleware.charge`). The clause count doesn't measure the work, though: a clause's cold verification
+    reads every **candidate** (each document holding all its items in the field, ~40 µs each), and a word
+    NEAR itself makes every document holding it one (M3a round 3: 8 such clauses held the slot 63 s on 80k).
+    So once the route has its engine, and after the wildcard cap, `deps.check_candidates` counts each
+    verified clause's candidates per field from the inverted index (`TantivyEngine.candidates`; no document
+    is read, and every clause counts, cached or not, so a refusal never depends on the memos): more than
+    `ApiConfig.max_verification_candidates` (default 300,000, ~12 s of verification, above the heaviest real review query:
+    Trust-Evals `main-2-pop`, 247,793 on the synthetic 80k index) is 422
+    `API_QUERY_TOO_COSTLY`, one diagnostic per clause with its counts, before any is verified (`/search`,
+    `/export`, `POST /records`). A refusal after the charge, `API_QUERY_TOO_COSTLY` or `API_BUSY`, gives the
+    verified charge back (`middleware.refund_charged`; the route's own weight is kept). A replay
+    (`GET /records/{id}`, `/diff`, `/export?record_id=`) is counted, capped and charged the same way on its
+    re-parsed canonical string (parsed once, `deps.admit_replay`, on the engine it runs on), but over a limit
+    it is withheld, not refused (§Search records). Within a request, every compile (the page, the facet
+    worker's base, exclusion accounting) shares the ids it verified (`tantivy_engine.Scope`), so a memo
+    trimmed meanwhile never makes it verify a clause twice, and the facet worker never verifies at all
+    (`Scope.reader`): only the calling thread holds a slot. Cold verification (a cache miss: seconds of pure Python per clause) runs in at most
     `ApiConfig.verification_slots` (default 1) at a time, on every engine the state opens
     (`TantivyEngine.verification_gate`); a query that needs another slot is refused at once with 503
     `API_BUSY` and `Retry-After: busy_retry_seconds` (default 5), never queued, so it can't hold a worker
@@ -483,7 +517,9 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
   - Access line: one `request` line per request (INFO; `/healthz` at DEBUG) with `request_id`, `method`,
     `route` (the template; null when nothing matched, a 429 included), `status`, `ms`, `index_version`, and
     what a route adds with `deps.annotate`/`annotate_parse`: `canonical_hash`, `total`, `token_count`,
-    `n_errors`, `error_codes`, `warning_codes` (at most 10 distinct codes, then `+N`), and `code`, the error
+    `n_errors`, `error_codes`, `warning_codes` (at most 10 distinct codes, then `+N`), `verified_clauses`
+    (the query's, a replay's too), `verification_candidates` (their candidates, summed; absent with none),
+    `verify_ms` (the time the request held a verification slot; absent when it held none), and `code`, the error
     envelope's code, on every refusal (the body cap's 413, the rate limit's 429, a routing 404, `API_BUSY`, …)
     and every 500 (`errors.note_code`). Never `q`, the
     canonical or identification strings, messages or spans. `ms` is milliseconds to one decimal, the one form
@@ -504,8 +540,13 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     `diagnostics`: `/search` locates each over-cap wildcard by its span in `q`
     (`search.run` sets `EngineInputError.diagnostics`; the exception type is unchanged, so `op search`
     still logs `EngineInputError`), and a refusal it can't locate has one diagnostic with `span: null`.
+  - A request whose slot holds pass `ApiConfig.slow_verification_seconds` (default 5) logs one
+    `verification_slow` WARNING (`verify_ms`, `threshold_ms`, and the request id from the log context): while
+    it held the slot every other cold verification was 503 `API_BUSY`.
   - `op serve [--host] [--port] [--index] [--cors-origin …] [--trusted-proxy …] [--rate-capacity]
-    [--rate-refill] [--export-weight] [--no-rate-limit] [--log-query-text]` runs one uvicorn process with
+    [--rate-refill] [--export-weight] [--no-rate-limit] [--max-verified-clauses]
+    [--max-verification-candidates] [--log-query-text]` refuses an invalid combination as usage, naming each
+    option and the validator's reason (never the value pydantic would quote), and runs one uvicorn process with
     its own access log off, `proxy_headers` off, and a 64 KiB request-head limit (uvicorn's 16 KiB would
     refuse a valid 2,000-code-point query in the URL). **Deploy note:** `GET /search?q=…` carries the query
     in the URL, so the reverse proxy in front (Caddy, task-065) must not log query strings. Log the path

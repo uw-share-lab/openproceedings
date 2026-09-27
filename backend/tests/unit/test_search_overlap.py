@@ -6,7 +6,11 @@ first; the request's log context carried into the worker; the pool restartable a
 from __future__ import annotations
 
 import threading
+import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -14,8 +18,8 @@ from hypothesis import HealthCheck, given, settings
 from openproceedings import logs, search
 from openproceedings.engine.exclusions import excluded
 from openproceedings.engine.highlight import Highlighter
-from openproceedings.engine.protocol import EngineInputError
-from openproceedings.engine.tantivy_engine import SORTS, TantivyEngine
+from openproceedings.engine.protocol import EngineInputError, EngineInternalError
+from openproceedings.engine.tantivy_engine import SORTS, Scope, TantivyEngine
 from openproceedings.query.parser import ParseResult, parse
 from openproceedings.search import Hit, Search, Shown
 
@@ -107,7 +111,7 @@ def test_an_error_in_the_worker_is_re_raised_as_it_was(
     engine, _ = pair
     raised = Boom("facets failed")
 
-    def facets(ast: Any) -> Any:
+    def facets(ast: Any, *_a: Any, **_kw: Any) -> Any:
         assert threading.current_thread() is not threading.main_thread()  # it ran on the worker
         raise raised
 
@@ -124,7 +128,7 @@ def test_the_callers_error_comes_first(
     engine, _ = pair
     started = threading.Event()
 
-    def facets(ast: Any) -> Any:
+    def facets(ast: Any, *_a: Any, **_kw: Any) -> Any:
         started.set()
         raise Boom("the worker's")
 
@@ -144,7 +148,7 @@ def test_a_bad_argument_is_refused_before_the_worker_starts(
 ) -> None:
     engine, reference = pair
     calls: list[object] = []
-    monkeypatch.setattr(engine, "facets", lambda ast: calls.append(ast))
+    monkeypatch.setattr(engine, "facets", lambda ast, *_a, **_kw: calls.append(ast))
     parsed = parse("trust")
     got = outcome(search.run, engine, parsed, facets=True, **kw)
     assert got == outcome(sequential, reference, parsed, facets=True, **kw) and what in got[2]
@@ -158,9 +162,9 @@ def test_the_worker_sees_the_requests_log_fields(
     seen: list[tuple[str, object]] = []
     facets, caller = engine.facets, threading.current_thread().name
 
-    def spy(*a: Any) -> Any:
+    def spy(*a: Any, **kw: Any) -> Any:
         seen.append((threading.current_thread().name, dict(logs._context.get())))
-        return facets(*a)
+        return facets(*a, **kw)
 
     monkeypatch.setattr(engine, "facets", spy)
     with logs.bind(request_id="r-1"):
@@ -207,3 +211,132 @@ def test_a_forked_child_forgets_the_parents_pool(monkeypatch: pytest.MonkeyPatch
         assert search._POOL is None and search._POOL_LOCK is not parent_lock
     finally:
         monkeypatch.setattr(search, "_POOL_LOCK", parent_lock)
+
+
+# --- a query at the verified-clause cap over the memo budgets (M3a review gate round 3) -------------------------
+AT_CAP = " OR ".join(f"model NEAR/{k} model*" for k in range(1, 9))  # 8 verified clauses, each on 2 fields
+
+
+class Busy(Exception):
+    """A verification slot refused (the API's 503 `API_BUSY`)."""
+
+
+@pytest.fixture(scope="module")
+def built(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    root = tmp_path_factory.mktemp("at-cap")
+    tantivy_of(list(records()), root)
+    (path,) = (p for p in (root / "indexes").iterdir() if p.is_dir() and not p.is_symlink())
+    return path
+
+
+@pytest.mark.parametrize("budget", [1, 3000])
+@pytest.mark.parametrize("late_page", [False, True])
+def test_a_request_verifies_each_clause_once_whatever_its_memos_forget(
+    built: Path, budget: int, late_page: bool
+) -> None:
+    """Memo budgets below one at-cap query (8 `model NEAR/k model*` clauses), one non-blocking slot: its own
+    compile clears `verified` mid-way, and the facet worker's base compile (defaults apply, so its tree
+    differs) trims `compiled`. The request still verifies each clause once, in the caller's thread: the worker,
+    and a page whose compiled entry was trimmed, read what this request verified and never verify it again, so
+    the worker never enters the gate and the caller never meets its own slot (a 503 against itself)."""
+    engine = TantivyEngine(built)
+    engine.MAX_VERIFIED_IDS = engine.MAX_COMPILED_UNITS = budget  # type: ignore[misc]
+    slot = threading.BoundedSemaphore(1)
+    entered: list[str] = []
+    read = engine.read
+
+    def slow(*args: Any) -> Any:
+        time.sleep(0.02)  # a verification takes a while, so the worker's compile overlaps the caller's page
+        return read(*args)
+
+    @contextmanager
+    def gate() -> Iterator[None]:
+        entered.append(threading.current_thread().name)
+        if not slot.acquire(blocking=False):
+            raise Busy(threading.current_thread().name)
+        try:
+            yield
+        finally:
+            slot.release()
+
+    engine.read = slow  # type: ignore[method-assign]
+    engine.verification_gate = gate
+    if late_page:
+        page = engine.page
+
+        def delayed(*args: Any, **kw: Any) -> Any:
+            time.sleep(0.05)  # the worker's base compile trims `compiled` before the page reads it
+            return page(*args, **kw)
+
+        engine.page = delayed  # type: ignore[method-assign]
+    parsed = parse(AT_CAP)
+    got = search.run(engine, parsed, facets=True)  # served: no Busy
+    assert not [name for name in entered if name.startswith("op-facets")]
+    assert len(entered) == 16  # 8 clauses × title and abstract, each verified once
+    assert got == sequential(TantivyEngine(built), parsed, facets=True)
+
+
+def test_a_read_only_scope_never_verifies(built: Path) -> None:
+    """The facet worker's view (`Scope.reader`): a clause neither it nor the memo holds is an internal error,
+    never a cold verification, so the worker can never enter the gate (and hold a slot)."""
+    engine = TantivyEngine(built)
+    entered: list[str] = []
+
+    @contextmanager
+    def gate() -> Iterator[None]:
+        entered.append(threading.current_thread().name)
+        yield
+
+    engine.verification_gate = gate
+    ast = parse("model NEAR/3 model*").effective_ast
+    assert ast is not None
+    with pytest.raises(EngineInternalError, match="never verifies"):
+        engine.facets(ast, scope=Scope().reader())
+    assert entered == []
+    scope = Scope()
+    engine.compile(ast, scope)  # the request verifies it; its reader then finds every clause
+    engine.verified.clear()
+    engine.compiled.clear()
+    engine.faceted.clear()
+    assert engine.facets(ast, scope=scope.reader()) == TantivyEngine(built).facets(ast)
+    assert len(entered) == 2  # title and abstract, once each, by the compile
+
+
+def test_a_caller_failing_while_the_worker_runs_leaves_no_slot_held(
+    built: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The page raises while the worker is still collecting: the worker, which never verifies, holds no slot."""
+    engine = TantivyEngine(built)
+    slot = threading.BoundedSemaphore(1)
+    entered: list[str] = []
+
+    @contextmanager
+    def gate() -> Iterator[None]:
+        entered.append(threading.current_thread().name)
+        if not slot.acquire(blocking=False):
+            raise Busy(threading.current_thread().name)
+        try:
+            yield
+        finally:
+            slot.release()
+
+    engine.verification_gate = gate
+    facets = engine.facets
+    started = threading.Event()
+
+    def slow_facets(*a: Any, **kw: Any) -> Any:
+        started.set()
+        time.sleep(0.05)
+        return facets(*a, **kw)
+
+    def page(*_a: Any, **_kw: Any) -> Any:
+        assert started.wait(10)
+        raise Boom("the caller's")
+
+    monkeypatch.setattr(engine, "facets", slow_facets)
+    monkeypatch.setattr(engine, "page", page)
+    with pytest.raises(Boom):
+        search.run(engine, parse(AT_CAP), facets=True)
+    search.shutdown()  # waits for the worker: whatever it did is done
+    assert not [n for n in entered if n.startswith("op-facets")]
+    assert slot.acquire(blocking=False)  # free

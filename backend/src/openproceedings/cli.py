@@ -32,6 +32,8 @@ FORMATS = ("ris", "csv", "bibtex", "jsonl")  # export formats (export.FORMATS; i
 SORTS = ("relevance", "year_desc", "year_asc", "title")  # tantivy_engine.SORTS
 
 if TYPE_CHECKING:
+    from pydantic import ValidationError
+
     from openproceedings.engine.exclusions import Excluded
     from openproceedings.engine.reference import ReferenceEngine
     from openproceedings.engine.tantivy_engine import TantivyEngine
@@ -163,6 +165,18 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--rate-refill", type=float, default=1.0, help="tokens per second per client")
     serve.add_argument("--export-weight", type=float, default=10.0, help="tokens one export costs")
     serve.add_argument("--no-rate-limit", action="store_true", help="turn the rate limit off (local use)")
+    serve.add_argument(
+        "--max-verified-clauses",
+        type=int,
+        default=16,
+        help="position-verified clauses one query may have (default 16, a backstop; decision-010); with the rate limit on, times each clause's cost it must fit the smaller bucket",
+    )
+    serve.add_argument(
+        "--max-verification-candidates",
+        type=int,
+        default=300_000,
+        help="documents one query's position checks may read (default 300000, the cost bound; decision-010)",
+    )
     serve.add_argument(
         "--docs",
         action=argparse.BooleanOptionalAction,
@@ -534,15 +548,23 @@ def _serve(ns: argparse.Namespace) -> int:
             cors_origins=tuple(ns.cors_origin),
             trusted_proxies=tuple(ns.trusted_proxy),
             log_query_text=ns.log_query_text,
+            max_verified_clauses=ns.max_verified_clauses,
+            max_verification_candidates=ns.max_verification_candidates,
             serve_docs=loopback if ns.docs is None else ns.docs,
         )
-    except ValidationError as e:  # the operator's own flags: say which, as usage
-        bad = sorted(
-            {".".join(str(p) for p in err["loc"]) or "options" for err in e.errors(include_input=False)}
-        )
-        raise _usage(f"invalid serve options: {', '.join(bad)}") from None
+    except ValidationError as e:  # the operator's own flags: say which and why, as usage
+        raise _usage(f"invalid serve options: {serve_errors(e)}") from None
     serve(config, ns.host, ns.port, ns.log_level, ns.log_format)
     return 0
+
+
+def serve_errors(e: ValidationError) -> str:
+    """Each of the operator's bad serve options with the validator's own explanation (never the input, which
+    pydantic would quote): `trusted_proxies.0: Value error, trusted proxy 0.0.0.0/0 is wider than /8 …`."""
+    return "; ".join(
+        f"{'.'.join(str(p) for p in err['loc']) or 'options'}: {err['msg']}"
+        for err in e.errors(include_input=False, include_url=False)
+    )
 
 
 def _openapi(ns: argparse.Namespace) -> int:

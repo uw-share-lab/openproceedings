@@ -474,7 +474,8 @@ class RecordStore:
     def insert(self, fields: Mapping[str, Any], ids: Sequence[str]) -> SearchRecord:
         """Store a new record under a fresh random id (redrawn only when that id is taken), with its id set
         added unless an identical one is already stored. One transaction. `fields["ids_hash"]` must be the
-        hash of `ids`: a record that names another set could only ever replay as a mismatch."""
+        hash of `ids` and `fields["total"]` their number: a record that names another set, or counts it
+        otherwise, could only ever replay as a mismatch."""
         if any(b <= a for a, b in pairwise(ids)) or any("\n" in i for i in ids):
             raise InternalError(
                 DiagnosticCode.API_INTERNAL, "a record's ids must be strictly increasing, one line each"
@@ -484,6 +485,8 @@ class RecordStore:
             raise InternalError(
                 DiagnosticCode.API_INTERNAL, "a record's ids_hash must be the hash of its ids"
             )
+        if fields.get("total") != len(ids):
+            raise InternalError(DiagnosticCode.API_INTERNAL, "a record's total must be the number of its ids")
         sources, citable = fields.get("sources"), fields.get("identification_citable")
         if isinstance(sources, list) and citable == bootstrap_only(sources):  # on write only (`_v2_fields`)
             raise InternalError(
@@ -610,6 +613,8 @@ class Replay:
 
 
 type PinnedLoader = Callable[[str], TantivyEngine | None]
+# a serving policy's say on running a replay on an engine: a code withholds it (`replay`), None runs it
+type Admit = Callable[[TantivyEngine, ParseResult], DiagnosticCode | None]
 MAX_MISMATCHES_REMEMBERED = 10_000
 _mismatched: set[str] = set()  # record ids already logged at ERROR by this process
 _mismatched_lock = threading.Lock()
@@ -626,15 +631,18 @@ def _first_mismatch(record_id: str) -> bool:
 
 
 def _run(
-    engine: TantivyEngine, canonical: str
-) -> tuple[ParseResult, Identified | None, DiagnosticCode | None]:
-    parsed = parse(canonical, "native")  # the canonical string is native syntax, translations applied
+    engine: TantivyEngine, parsed: ParseResult, admit: Admit | None
+) -> tuple[Identified | None, DiagnosticCode | None, bool]:
+    """The replay's run: what it identified, or why it was refused, and whether it was withheld (`admit`)."""
     if parsed.effective_ast is None:
-        return parsed, None, parsed.errors[0].code
+        return None, parsed.errors[0].code, False
+    withheld = admit(engine, parsed) if admit is not None else None
+    if withheld is not None:  # this instance won't run it (a serving policy): nothing is compiled
+        return None, withheld, True
     try:
-        return parsed, identify(engine, parsed), None
+        return identify(engine, parsed), None, False
     except EngineInputError as e:
-        return parsed, None, e.code
+        return None, e.code, False
 
 
 def changed_inputs(
@@ -651,7 +659,15 @@ def changed_inputs(
     return tuple(out)
 
 
-def replay(record: SearchRecord, served: TantivyEngine, pinned: PinnedLoader, data_dir: Path) -> Replay:
+def replay(
+    record: SearchRecord,
+    served: TantivyEngine,
+    pinned: PinnedLoader,
+    data_dir: Path,
+    *,
+    parsed: ParseResult | None = None,
+    admit: Admit | None = None,
+) -> Replay:
     """Re-run `record` (spec 04 §Search records):
 
     - on the record's own index if this instance has it (the served one, or `pinned`'s engine, which must
@@ -663,6 +679,14 @@ def replay(record: SearchRecord, served: TantivyEngine, pinned: PinnedLoader, da
       once per record per process, then DEBUG);
     - otherwise `drifted`, naming each changed input (only the query version, when its own index is here).
     A canonical that no longer runs (`refused`) compares nothing: `added` and `removed` are None.
+
+    `parsed` is `parse(record.canonical, "native")` when the caller already has it (the API, which counted its
+    verified clauses on it). `admit(engine, parsed)`, called with the engine the replay runs on, is a serving
+    policy (the API's verified-clause cap and candidate ceiling, `deps.admit_replay`): a code it returns
+    withholds the run. Nothing is compiled, `refused` is that code, and on its own index under its own query
+    version the status is `drifted` with no changed input, never `reproduced` and never `mismatch` for the
+    refusal itself; the checks that need no run (the canonical re-parse, the index's inputs, the stored list)
+    still apply, and one failing is a `mismatch`, logged as any other.
     """
     engine = served if served.index_version == record.index_version else pinned(record.index_version)
     if engine is not None and engine.index_version != record.index_version:
@@ -673,7 +697,9 @@ def replay(record: SearchRecord, served: TantivyEngine, pinned: PinnedLoader, da
         engine = None
     on_own_index = engine is not None
     ran_on = engine if engine is not None else served
-    parsed, found, refused = _run(ran_on, record.canonical)
+    if parsed is None:  # the canonical string is native syntax, translations applied
+        parsed = parse(record.canonical, "native")
+    found, refused, not_run = _run(ran_on, parsed, admit)
     # a refused replay compares nothing: both null, never a false that reads as "compared and differed"
     ids_match = found.ids_hash == record.ids_hash if found is not None else None
     excluded_match = found.excluded == record.excluded.model_dump() if found is not None else None
@@ -695,16 +721,14 @@ def replay(record: SearchRecord, served: TantivyEngine, pinned: PinnedLoader, da
             and ids_hash(record.ids) == record.ids_hash
             and record.total == len(record.ids)
         )
-        matched = (
-            canonical_match
-            and identification_match
-            and bool(expansions_match)
-            and inputs_match
-            and bool(ids_match)
-            and bool(excluded_match)
-            and stored_match
-        )
-        status = "reproduced" if matched else "mismatch"
+        run_free = canonical_match and identification_match and inputs_match and stored_match
+        matched = run_free and bool(expansions_match) and bool(ids_match) and bool(excluded_match)
+        if not_run:
+            # withheld: nothing ran, so nothing that needs a run is compared; it didn't reproduce here, and only
+            # a check that needs no run can make it a mismatch
+            status = "drifted" if run_free else "mismatch"
+        else:
+            status = "reproduced" if matched else "mismatch"
         if status == "mismatch":
             fields = {
                 "code": str(DiagnosticCode.API_REPLAY_MISMATCH),

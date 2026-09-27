@@ -14,7 +14,14 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from openproceedings.api.app import EXPOSED_HEADERS
-from openproceedings.api.openapi import OPEN_NOTE, openapi_document, unclassified_enums
+from openproceedings.api.openapi import (
+    OPEN_NOTE,
+    REF,
+    open_response_objects,
+    openapi_document,
+    request_schemas,
+    unclassified_enums,
+)
 from openproceedings.diagnostics import DiagnosticCode, http_status
 
 from tests.contract.conftest import Store, make_app
@@ -260,6 +267,42 @@ def test_response_objects_are_open_to_new_keys_and_request_bodies_are_closed() -
     assert [name for name in SCHEMAS if name not in REQUESTS and closed(SCHEMAS[name])] == []
     for name in REQUESTS:
         assert SCHEMAS[name]["additionalProperties"] is False, name
+
+
+def test_a_model_nested_in_a_request_body_stays_closed() -> None:
+    """`open_response_objects` walks a request body's `$ref`s: a model nested in one (at any depth) is
+    refused whole by the server, so it stays closed; a response model beside it is opened (M3a round 3)."""
+    closed: dict[str, Any] = {"type": "object", "additionalProperties": False}
+    doc: dict[str, Any] = {
+        "paths": {
+            "/x": {
+                "post": {
+                    "requestBody": {"content": {"application/json": {"schema": {"$ref": f"{REF}Body"}}}},
+                    "responses": {
+                        "200": {"content": {"application/json": {"schema": {"$ref": f"{REF}Out"}}}}
+                    },
+                },
+                "parameters": [],  # a path item's non-operation key is skipped
+            }
+        },
+        "components": {
+            "schemas": {
+                "Body": {
+                    **closed,
+                    "properties": {"inner": {"anyOf": [{"$ref": f"{REF}Inner"}, {"type": "null"}]}},
+                },
+                "Inner": {**closed, "properties": {"deep": {"items": {"$ref": f"{REF}Deep"}}}},
+                "Deep": dict(closed),
+                "Out": {**closed, "properties": {"part": {"$ref": f"{REF}Part"}}},
+                "Part": dict(closed),
+            }
+        },
+    }
+    assert request_schemas(doc) == {"Body", "Inner", "Deep"}
+    open_response_objects(doc)
+    schemas = doc["components"]["schemas"]
+    assert [n for n in ("Body", "Inner", "Deep") if schemas[n].get("additionalProperties") is not False] == []
+    assert [n for n in ("Out", "Part") if "additionalProperties" in schemas[n]] == []
 
 
 def test_integer_bounds_are_integers() -> None:

@@ -54,7 +54,7 @@ into one `.venv` from one `uv.lock`. New Python packages join by adding their di
 | `op search "<q>" [--mode scholar] [--explain \| --ids] [--engine tantivy\|reference] [--sort <s>] [--limit <n>] [--index <dir\|version>]` | ranked hits under a PRISMA header (default): searched time, index, crawl window (first to last fetch), tokenizer and query versions; a bootstrap-corpus caution when the index holds only RIS, or a caution that the sources are unknown when its snapshot isn't in the data dir or its hash differs; identified, removed by default filters (ineligible and unclassified), screened; the canonical and identification strings; every wildcard's expansion (its count and first 10 terms; every term with `--explain`); the sorted id set (`--ids`; `--engine reference` runs the oracle over the index's snapshot, `--ids` only); or the compiled query (`--explain`). Diagnostics go to stderr as user output; one `search_run` INFO line per run (task-030) |
 | `op export "<q>" --format ris\|csv\|bibtex\|jsonl [--mode scholar] [--index <dir\|version>] [--out <file>]` | export the full matched set in id order (spec 04 §Exports), streamed to stdout or written whole to `--out` (never a partial file); the count is checked against the query's total |
 | `op record save "<q>" [--mode scholar]` · `op record replay <id>` (planned, task-083) | freeze a search as a search record (the same function as `POST /records`); replay one and print its status, `reproduced` / `drifted` / `mismatch` (the same function as `GET /records/{id}`) |
-| `op serve [--host] [--port] [--index current\|<index_version>] [--cors-origin …] [--trusted-proxy …] [--rate-capacity] [--rate-refill] [--export-weight] [--no-rate-limit] [--log-query-text]` | run the API (04 §Implementation notes, as built): one uvicorn process over `<data-dir>/indexes/<index>`; SIGHUP reloads it. Refused as usage: a trusted proxy of `0.0.0.0/0` or `::/0`, and `--no-rate-limit` with a non-loopback `--host` (§Deploy) |
+| `op serve [--host] [--port] [--index current\|<index_version>] [--cors-origin …] [--trusted-proxy …] [--rate-capacity] [--rate-refill] [--export-weight] [--no-rate-limit] [--max-verified-clauses] [--max-verification-candidates] [--log-query-text]` | run the API (04 §Implementation notes, as built): one uvicorn process over `<data-dir>/indexes/<index>`; SIGHUP reloads it. Refused as usage, each option named with the validator's reason: a trusted proxy wider than /8 or /32, `--no-rate-limit` with a non-loopback `--host` (§Deploy), and limits that could never be paid (decision-010) |
 | `op embed build` (planned, task-058) | build embeddings for the current index (06) |
 | `op eval scholar [--query <name>]` · `op eval coverage` · `op eval audit` · `op eval near-miss` (planned, task-054) | the 07 reports; `near-miss` is 06's recall@25 |
 | `op openapi [--out <file>]` | print the OpenAPI document, sorted and stable, without loading an index (task-040); `make openapi` writes it to `backend/tests/contract/openapi.json` and regenerates `frontend/src/api/schema.ts` from it |
@@ -144,6 +144,12 @@ and `timeout_keep_alive` (`keep_alive_seconds`, default 5) closes an idle one. T
 
 ```caddy
 {
+	log default {  # the runtime logger, which carries `http.log.error` (see below)
+		format filter {
+			request>uri delete
+			request>headers>Referer delete
+		}
+	}
 	servers {
 		timeouts {
 			read_header 5s   # a client's request line and headers (default: no timeout)
@@ -170,9 +176,18 @@ openproceedings.example {
 }
 ```
 
+The site's `log` directive filters only the access log (`http.log.access`). A request that fails at the
+proxy (a 502 while the API restarts, an upstream that resets mid-stream) is logged by `http.log.error`,
+whose entry carries the same `request` object, `uri` and headers included, through Caddy's default runtime
+logger, which the site directive never reaches; so the global `log default` above filters those fields
+too (M3a review round 3; Caddy v2's error logger adds the loggable request to every error entry). Without it a restart would write every in-flight `q` to the proxy's log.
+
 `read_header` and `read_body` bound a slow client at the proxy, so only whole requests reach uvicorn;
 `request_buffers` makes the proxy read the body before it takes an upstream connection, so a client that
-trickles its body holds a proxy goroutine, not one of the API's `limit_concurrency` slots. The proxy is also
+trickles its body holds a proxy goroutine, not one of the API's `limit_concurrency` slots. A connection
+beyond `limit_concurrency` gets uvicorn's own plain 503, and uvicorn logs `Exceeded concurrency limit.`
+(WARNING, through the JSON handler) once per refusal, not once per episode: a burst of refusals is a burst
+of lines, so alert on their rate rather than on one. The proxy is also
 the one trusted proxy (`--trusted-proxy <its address>`); a trusted network wider than /8 (IPv4) or /32 (IPv6)
 is refused, as is `--no-rate-limit` with a non-loopback `--host`. Swagger UI (`/api/v1/docs`, scripts from a
 CDN) is off on a non-loopback `--host` unless `--docs` is passed; leave it off in production. The data volume is read-only in `api`, except the `records/` directory
