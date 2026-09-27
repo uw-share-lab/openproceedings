@@ -1,10 +1,12 @@
 """Pure-ASGI middleware: the access line and the per-client rate limit (fastapi-conventions, logging-standards).
 
 `AccessLog` is the outermost layer. It gives each request an id (bound into every log line of the
-request), writes exactly one `request` line when the response is done (streams included), and is the last
-catch for an unexpected exception: one ERROR line with the type and frames (never the message), and a 500
-`API_INTERNAL` envelope if nothing was sent yet. Nothing is re-raised, so the server never logs a
-traceback of its own (its last line would be the message, which can quote the query).
+request) and writes exactly one `request` line when the response is done (streams and CORS preflights
+included). `LastCatch`, just inside CORS, catches an unexpected exception: one ERROR line with the type and
+frames (never the message), and a 500 `API_INTERNAL` envelope if nothing was sent yet (which CORS then
+decorates like any response), or `aborted: true` on the access line if the response had started. Nothing
+is re-raised, so the server never logs a traceback of its own (its last line would be the message, which
+can quote the query).
 
 `RateLimit` is a token bucket per client. The client is the TCP peer, unless the peer is a configured
 trusted proxy: then it is the right-most `X-Forwarded-For` address that is not itself a trusted proxy.
@@ -69,11 +71,7 @@ class AccessLog:
 
         with bind(request_id=rid):
             try:
-                await self.app(scope, receive, tracked)
-            except Exception as exc:  # the last catch: logged once here, never re-raised
-                response = internal_error(scope, exc)
-                if not sent:
-                    await response(scope, receive, tracked)
+                await LastCatch.run(self.app, scope, receive, tracked, lambda: sent)
             finally:
                 route = scope.get("route")
                 template = getattr(route, "path", None)  # the route template, never the concrete path
@@ -81,19 +79,66 @@ class AccessLog:
                     "request_id": rid,
                     "method": scope.get("method"),
                     "route": template,
-                    "status": status,
+                    "status": status,  # what the client was sent
                     "ms": round((time.perf_counter() - started) * 1000, 1),
                     "index_version": fields.get("index_version"),
                 }
                 line.update({k: fields[k] for k in ANNOTATIONS if k in fields and k != "index_version"})
+                if fields.get("aborted"):
+                    line["aborted"] = True  # failed after the response started: the body is cut short
                 log.log(logging.DEBUG if template == HEALTH_PATH else logging.INFO, "request", extra=line)
 
 
+class LastCatch:
+    """The catch for an unexpected exception, just inside CORS (so a 500 carries the CORS headers too):
+    one `request_failed` ERROR line (type and frames, never the message), then a 500 `API_INTERNAL`
+    envelope, or, if the response had already started, `aborted: true` on the access line. Never re-raised,
+    so the server never logs a traceback of its own. `AccessLog` runs the same catch around everything
+    outside it (CORS itself), as a backstop."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        sent = False
+
+        async def tracked(message: Message) -> None:
+            nonlocal sent
+            if message["type"] == "http.response.start":
+                sent = True
+            await send(message)
+
+        await self.run(self.app, scope, receive, tracked, lambda: sent)
+
+    @staticmethod
+    async def run(
+        app: ASGIApp, scope: Scope, receive: Receive, send: Send, started: Callable[[], bool]
+    ) -> None:
+        try:
+            await app(scope, receive, send)
+        except Exception as exc:  # the last catch: logged once here, never re-raised
+            response = internal_error(scope, exc)
+            if started():
+                fields = scope.get(ACCESS)
+                if isinstance(fields, dict):
+                    fields["aborted"] = True
+            else:
+                await response(scope, receive, send)
+
+
 def _address(text: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """The address in `text`, an IPv4-mapped IPv6 one (`::ffff:a.b.c.d`, how a dual-stack bind reports an
+    IPv4 peer) as the IPv4 address it is, so it keys and matches trusted proxies as IPv4."""
     try:
-        return ipaddress.ip_address(text.strip())
+        address = ipaddress.ip_address(text.strip())
     except ValueError:
         return None
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        return address.ipv4_mapped
+    return address
 
 
 def client_key(scope: Scope, trusted: Sequence[Network]) -> str:

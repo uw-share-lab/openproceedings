@@ -8,7 +8,7 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 ## Endpoints (`/api/v1`)
 | Method | Path | In → out |
 |---|---|---|
-| POST | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations). Debounced, called as the user types. |
+| POST | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations). Debounced, called as the user types. A query with errors is a 200 whose `errors` say why (only `PARSE_TOO_LONG` and a malformed body are 422s). |
 | GET | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | GET | `/papers/{id}` | full record with provenance |
 | GET | `/export` | `q, mode, format=ris\|csv\|bibtex\|jsonl`, optional `record_id` **or** `index_version` → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; a `mismatch` record's `record_id` → 409 `API_RECORD_MISMATCH` |

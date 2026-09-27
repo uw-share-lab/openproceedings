@@ -20,7 +20,7 @@ from pydantic import ValidationError
 
 from tests.contract.conftest import Store, make_app
 
-SEARCH = "/api/v1/_probe/search"
+SEARCH = "/api/v1/search"
 
 
 def limited(store: Store, **rate: Any) -> TestClient:
@@ -94,6 +94,11 @@ TRUSTED = [ipaddress.ip_network("10.0.0.0/8"), ipaddress.ip_network("fd00::/8")]
         ("2001:db8::1", (), "2001:db8::/64"),  # IPv6 by /64
         ("fd00::1", ("2001:db8:0:0:ffff::2",), "2001:db8::/64"),
         ("testclient", ("203.0.113.1",), "testclient"),  # not an address: never trusted
+        # a dual-stack bind reports IPv4 peers IPv4-mapped: each is its own IPv4 client, not all `::/64`
+        ("::ffff:198.51.100.7", (), "198.51.100.7"),
+        ("::ffff:198.51.100.8", (), "198.51.100.8"),
+        ("::ffff:10.0.0.5", ("203.0.113.1",), "203.0.113.1"),  # a trusted proxy seen IPv4-mapped
+        ("10.0.0.5", ("::ffff:10.0.0.9, ::ffff:203.0.113.1",), "203.0.113.1"),  # mapped hops too
     ],
 )
 def test_client_key(peer: str, xff: tuple[str, ...], key: str) -> None:

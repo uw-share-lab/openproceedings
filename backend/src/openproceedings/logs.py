@@ -172,6 +172,7 @@ SERVER_LOGGERS = ("uvicorn",)
 SERVER_CHILDREN = ("uvicorn.error",)  # no handler of their own: they reach ours through `uvicorn`
 SILENCED_LOGGERS = ("uvicorn.access",)
 QUIET_LOGGERS = ("httpx", "httpcore", "httpx2", "httpcore2")
+OURS = "_openproceedings_handler"  # marks the root handler configure_logging installed
 
 
 def configure_logging(
@@ -184,7 +185,8 @@ def configure_logging(
 ) -> None:
     """Configure the `openproceedings` logger. Idempotent: closes and replaces any handler a previous call
     installed. `route_server_loggers` (the API's startup, `op serve`) also sends uvicorn's loggers through the
-    same handler, silences `uvicorn.access` and pins httpx/httpcore to WARNING (QUIET_LOGGERS above)."""
+    same handler, silences `uvicorn.access`, pins httpx/httpcore to WARNING (QUIET_LOGGERS above), and gives
+    the root logger a JSON handler at WARNING, so any other library's warning (asyncio, fastapi) is JSON too."""
     if level.upper() not in LEVELS:
         raise ValueError(f"unknown log level {level!r}; use one of {', '.join(LEVELS)}")
     formatters: dict[str, type[_Formatter]] = {"json": _JsonFormatter, "text": _TextFormatter}
@@ -219,6 +221,18 @@ def configure_logging(
                 silenced.removeHandler(h)
             silenced.propagate = False
             silenced.disabled = True
+        # everything else that propagates to the root (asyncio, fastapi, starlette, …): WARNING and up, as JSON
+        root = logging.getLogger()
+        for h in list(root.handlers):
+            if getattr(h, OURS, False):  # a previous call's; other handlers (pytest's capture) are left alone
+                root.removeHandler(h)
+        rooted = logging.StreamHandler(stream if stream is not None else sys.stderr)
+        rooted.setFormatter(formatters[fmt](log_query_text))
+        rooted.setLevel(logging.WARNING)
+        setattr(rooted, OURS, True)
+        root.addHandler(rooted)
+        if root.level == logging.NOTSET or root.level > logging.WARNING:
+            root.setLevel(logging.WARNING)
         for name in QUIET_LOGGERS:
             quiet = logging.getLogger(name)
             for h in list(quiet.handlers):

@@ -51,7 +51,7 @@ def test_the_index_is_loaded_once_at_startup(data_dir: Path) -> None:
 
     with TestClient(make_app(data_dir, opener=opener)) as c:
         for _ in range(5):
-            assert c.get("/api/v1/_probe/search", params={"q": "trust"}).status_code == 200
+            assert c.get("/api/v1/search", params={"q": "trust"}).status_code == 200
     assert len(opened) == 1
 
 
@@ -65,14 +65,14 @@ def test_healthz_answers_while_loading_and_search_is_503_until_loaded(data_dir: 
     app = make_app(data_dir, opener=slow, load_in_background=True)
     with TestClient(app) as c:
         assert c.get("/api/v1/healthz").json()["index_loaded"] is False
-        r = c.get("/api/v1/_probe/search", params={"q": "trust"})
+        r = c.get("/api/v1/search", params={"q": "trust"})
         assert r.status_code == 503
         assert r.json() == {
             "error": {"code": "API_INDEX_NOT_LOADED", "message": r.json()["error"]["message"]}
         }
         release.set()
         wait_for(lambda: c.get("/api/v1/healthz").json()["index_loaded"])
-        assert c.get("/api/v1/_probe/search", params={"q": "trust"}).json()["index_version"] == store.big
+        assert c.get("/api/v1/search", params={"q": "trust"}).json()["index_version"] == store.big
 
 
 def test_a_failed_startup_load_serves_503_and_logs_one_error(
@@ -81,10 +81,7 @@ def test_a_failed_startup_load_serves_503_and_logs_one_error(
     (tmp_path / "indexes").mkdir()  # no `current`
     with TestClient(make_app(tmp_path)) as c:
         assert c.get("/api/v1/healthz").json()["index_loaded"] is False
-        assert (
-            c.get("/api/v1/_probe/search", params={"q": "x"}).json()["error"]["code"]
-            == "API_INDEX_NOT_LOADED"
-        )
+        assert c.get("/api/v1/search", params={"q": "x"}).json()["error"]["code"] == "API_INDEX_NOT_LOADED"
     failed = [line for line in logs() if line["event"] == "index_load_failed"]
     assert len(failed) == 1 and failed[0]["level"] == "ERROR"
     assert failed[0]["error"] == "IndexSelectionError" and failed[0]["index_version_kept"] is None
@@ -109,15 +106,44 @@ def test_sighup_swaps_atomically_and_a_request_in_flight_keeps_its_engine(
             after = state.engine
             assert after is not None and after.index_version == store.small
             assert c.get("/api/v1/healthz").json()["index_version"] == store.small
-            assert (
-                c.get("/api/v1/_probe/search", params={"q": "trust"}).json()["index_version"] == store.small
-            )
+            assert c.get("/api/v1/search", params={"q": "trust"}).json()["index_version"] == store.small
             hold.set()
             finished = in_flight.result(10).json()
             assert finished == {"index_version": store.big, "total": 5_000}  # its whole answer from one index
             assert before.index_version == store.big  # the old engine was replaced, never mutated
     finally:
         restore()
+
+
+def test_the_production_lifespan_installs_the_sighup_reload_and_restores_it(
+    data_dir: Path, store: Store
+) -> None:
+    """`handle_sighup=True` (what `op serve` runs): the lifespan, entered on the main thread, installs the
+    handler, a SIGHUP then swaps the index, and leaving the lifespan puts the previous handler back."""
+    import asyncio
+
+    assert threading.current_thread() is threading.main_thread()
+    app = make_app(data_dir, handle_sighup=True)
+    state: IndexState = app.state.index
+    previous = signal.getsignal(signal.SIGHUP)
+    seen: dict[str, Any] = {}
+
+    async def run() -> None:
+        async with app.router.lifespan_context(app):
+            seen["inside"] = signal.getsignal(signal.SIGHUP)
+            before = state.engine
+            assert before is not None and before.index_version == store.big
+            point_current(data_dir, store.small)
+            os.kill(os.getpid(), signal.SIGHUP)
+            deadline = time.monotonic() + 20
+            while state.engine is before and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            seen["swapped"] = state.engine.index_version if state.engine is not None else None
+
+    asyncio.run(run())
+    assert seen["inside"] is not previous and callable(seen["inside"])
+    assert seen["swapped"] == store.small
+    assert signal.getsignal(signal.SIGHUP) is previous
 
 
 def test_a_stream_started_before_a_swap_finishes_on_its_index(data_dir: Path, store: Store) -> None:

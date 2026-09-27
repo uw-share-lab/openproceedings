@@ -68,7 +68,7 @@ def test_op_serve_refuses_bad_flags_as_usage(
 @pytest.fixture
 def running(store: Store) -> Iterator[tuple[int, io.StringIO]]:
     """uvicorn serving the app on an ephemeral loopback port, configured as `serve` configures it."""
-    names = ("uvicorn", "uvicorn.error", "uvicorn.access", *QUIET_LOGGERS)
+    names = ("", "uvicorn", "uvicorn.error", "uvicorn.access", *QUIET_LOGGERS)  # "": the root
     saved = {n: (logging.getLogger(n).handlers[:], logging.getLogger(n).level, logging.getLogger(n).propagate,
                  logging.getLogger(n).disabled) for n in names}  # fmt: skip
     stream = io.StringIO()
@@ -112,19 +112,24 @@ def test_the_real_server_logs_one_access_line_per_request_and_nothing_else_of_uv
     port, stream = running
     q = urllib.parse.quote
     assert get(port, "/api/v1/healthz")[1]["index_loaded"] is True
-    status, body = get(port, f"/api/v1/_probe/search?q={q('trust ' + SECRET)}")
+    status, body = get(port, f"/api/v1/search?q={q('trust ' + SECRET)}")
     assert status == 200 and body["index_version"] == store.big
-    status, body = get(
-        port, f"/api/v1/_probe/search?q={q('信' * 2_000)}"
-    )  # 18 KB of URL: over uvicorn's default
+    status, body = get(port, f"/api/v1/search?q={q('信' * 2_000)}")  # 18 KB of URL: over uvicorn's default
     assert status == 200
-    status, body = get(port, f"/api/v1/_probe/search?q={q(SECRET * 2_000)}")  # 40k characters
+    status, body = get(port, f"/api/v1/search?q={q(SECRET * 2_000)}")  # 40k characters
     assert status == 422 and body["error"]["code"] == "PARSE_TOO_LONG"
     status, body = get(port, "/api/v1/nope")
     assert status == 404 and body["error"]["code"] == "API_NOT_FOUND"
-    time.sleep(0.1)  # the last access line is written after the response is sent
+
+    def requests_logged() -> list[dict[str, Any]]:
+        lines = [json.loads(line) for line in stream.getvalue().splitlines()]
+        return [line for line in lines if line["event"] == "request"]
+
+    deadline = time.monotonic() + 10  # the last access line is written after the response is sent
+    while len(requests_logged()) < 5 and time.monotonic() < deadline:
+        time.sleep(0.01)
     lines = [json.loads(line) for line in stream.getvalue().splitlines()]
-    requests = [line for line in lines if line["event"] == "request"]
+    requests = requests_logged()
     assert [r["status"] for r in requests] == [200, 200, 200, 422, 404]
     assert not [line for line in lines if line["logger"] == "uvicorn.access"]
     assert any(line["logger"].startswith("uvicorn") for line in lines)  # uvicorn's own lines, as JSON

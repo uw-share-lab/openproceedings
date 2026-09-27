@@ -164,7 +164,9 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--export-weight", type=float, default=10.0, help="tokens one export costs")
     serve.add_argument("--no-rate-limit", action="store_true", help="turn the rate limit off (local use)")
     serve.add_argument(
-        "--log-query-text", action="store_true", help="keep query text in logs (a local dev instance only)"
+        "--log-query-text",
+        action="store_true",
+        help="let the log formatter keep query-text fields (a local dev instance only); no log line passes one today",
     )
     serve.set_defaults(run=_serve)
 
@@ -302,8 +304,8 @@ def _search_run(
 
 
 def _search(ns: argparse.Namespace) -> int:
-    from openproceedings.engine.exclusions import excluded
     from openproceedings.engine.tantivy_engine import TantivyEngine
+    from openproceedings.search import run
 
     started = time.perf_counter()
     with contextlib.suppress(AttributeError, ValueError):  # UTF-8 whatever the locale, as `op export` writes
@@ -335,15 +337,15 @@ def _search(ns: argparse.Namespace) -> int:
         print("\n".join([*lines, engine.explain(ast)]))
         _search_run(ns, started, engine.index_version, result, engine.page(ast, limit=0)[0])
         return 0
-    total, page = engine.page(ast, sort=ns.sort, limit=ns.limit)  # one collection: ids and scores
-    gone = excluded(engine, result, total)
-    for line in _report(engine, result, total, gone, _snapshot_of(ns, path)):
+    found = run(engine, result, sort=ns.sort, limit=ns.limit)  # what GET /api/v1/search runs (search.py)
+    for line in _report(engine, result, found.total, found.excluded, _snapshot_of(ns, path)):
         print(line)
-    shown = engine.display([i for i, _score in page])
-    for rank, (i, score) in enumerate(page, 1):
-        r = shown[i]
-        print(f"{rank:>4}. {score:9.4f}  {i}  {r['venue']} {r['year']}  {' '.join(r['title'].split())}")
-    _search_run(ns, started, engine.index_version, result, total)
+    for rank, hit in enumerate(found.hits, 1):
+        r = hit.record
+        print(
+            f"{rank:>4}. {hit.score:9.4f}  {hit.id}  {r['venue']} {r['year']}  {' '.join(r['title'].split())}"
+        )
+    _search_run(ns, started, engine.index_version, result, found.total)
     return 0
 
 

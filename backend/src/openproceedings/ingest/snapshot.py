@@ -325,6 +325,53 @@ def load_records(snapshot: Path) -> dict[str, PaperRecord]:
     return {r.id: r for r in iter_records(snapshot)}
 
 
+class RecordFile:
+    """Random access by id to a snapshot's records, holding only each line's byte range in memory (the API's
+    `GET /papers/{id}`: the full record, provenance included, which the index doesn't store).
+
+    Opening makes one pass over `records.jsonl`: ids strictly ascending, and the bytes hashing to the
+    manifest's `snapshot_hash` (so the file indexed is the snapshot named). A lookup reads its one line and
+    validates it as a `PaperRecord`, which re-checks its `content_hash`. Snapshots are sealed read-only, so
+    the bytes can't change underneath. Thread-safe: every lookup opens the file itself."""
+
+    def __init__(self, snapshot: Path) -> None:
+        self.path = snapshot / "records.jsonl"
+        try:
+            manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+            self.snapshot_hash: str = manifest["snapshot_hash"]
+            digest = hashlib.sha256()
+            self._at: dict[str, tuple[int, int]] = {}
+            previous, offset = "", 0
+            with self.path.open("rb") as fh:
+                for n, raw in enumerate(fh, start=1):
+                    digest.update(raw)
+                    rid = json.loads(raw)["id"]
+                    if not isinstance(rid, str) or rid <= previous:
+                        raise SnapshotError(f"{snapshot.name} line {n}: ids are not unique and ascending")
+                    self._at[rid] = (offset, len(raw))
+                    previous, offset = rid, offset + len(raw)
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            raise SnapshotError(f"{snapshot.name} is not a snapshot ({type(e).__name__})") from None
+        if digest.hexdigest() != self.snapshot_hash:
+            raise SnapshotError(f"{snapshot.name}: records.jsonl doesn't match its manifest's snapshot_hash")
+
+    def __len__(self) -> int:
+        return len(self._at)
+
+    def get(self, rid: str) -> PaperRecord | None:
+        """The record with id `rid`, or None if the snapshot has none."""
+        at = self._at.get(rid)
+        if at is None:
+            return None
+        with self.path.open("rb") as fh:
+            fh.seek(at[0])
+            raw = fh.read(at[1])
+        try:
+            return PaperRecord.model_validate_json(raw)
+        except ValidationError:
+            raise SnapshotError(f"{self.path.parent.name}: the record at byte {at[0]} is invalid") from None
+
+
 def diff(a: Path, b: Path) -> dict[str, Any]:
     """From snapshot `a` to `b` (snapshots skill §CLI): ids added and removed; `rekeyed` ids (the same
     paper, its venue or year corrected so its id changed), with the fields that differ; `changed` ids

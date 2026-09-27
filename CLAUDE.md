@@ -16,11 +16,13 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 ## Layout (monorepo)
 - Root: `pyproject.toml` is the **uv workspace** root, with repo-wide ruff config and one `uv.lock`.
   `Makefile` has `sync`, `fmt`, `lint`, `tooling`, `test` and `hooks`.
-- `backend/`: the uv workspace member, Python package `openproceedings` (`cli.py` → `op`, `export.py`, `logs.py`,
+- `backend/`: the uv workspace member, Python package `openproceedings` (`cli.py` → `op`, `search.py` (one
+  ranked search, which `op search` and the API search route both run), `export.py`, `logs.py`,
   `diagnostics.py`, `vocab.py`, `storage.py`, `query/` (`normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`,
   `ast.py`, `canonical.py`, `defaults.py`, `compat.py`), `engine/` (`protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py`, `exclusions.py`, `highlight.py`, `parity.py`), `ingest/`
   (`record.py`, `classify.py`, `urls.py`, `volumes.py`, `ris.py`, `dedup.py`, `snapshot.py`), `api/` (`app.py`
-  `create_app`, `config.py`, `state.py`, `deps.py`, `errors.py`, `middleware.py`, `health.py`, `server.py` → `op serve`);
+  `create_app`, `config.py`, `state.py`, `deps.py`, `errors.py`, `middleware.py`, `models.py` (the response
+  contract), routers `search.py` (parse and search), `papers.py`, `meta.py`, `health.py`, `server.py` → `op serve`);
   `semantic/ eval/` arrive with their tasks). Tests in `backend/tests/`; `uv run pytest` from the root.
 - Root `package.json` is the **npm workspace** root (`workspaces: ["frontend"]`, one `package-lock.json`,
   dependencies hoisted to `./node_modules`; Node from `.nvmrc`).

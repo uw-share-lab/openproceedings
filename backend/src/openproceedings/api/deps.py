@@ -1,12 +1,12 @@
-"""What every route shares (task-035 plugs in here): the one engine of a request, the query-length cap,
-and the privacy-safe fields a route adds to its access line.
+"""What every route shares: the one engine of a request, the query-length cap, the parse, and the
+privacy-safe fields a route adds to its access line.
 
-    @v1.get("/search")
+    @router.get("/search")
     def search(request: Request, engine: EngineDep, q: str, ...) -> SearchResponse:
-        result = parse(checked_query(q), mode)   # PARSE_TOO_LONG before any parsing
-        annotate_parse(request, result)          # canonical_hash, token count, codes; never q
-        ...
-        annotate(request, total=total)
+        result = searchable(request, q, mode)    # PARSE_TOO_LONG before parsing; 422 if it doesn't parse;
+                                                 # canonical_hash, token count, codes on the line, never q
+        found = run(engine, result, ...)         # openproceedings.search, as `op search` runs it
+        annotate(request, total=found.total)
 
 `current_engine` reads `IndexState.engine` once; FastAPI caches a dependency per request, so every use of
 `EngineDep` in one request is the same object (hits, total, facets and excluded from one index_version).
@@ -23,11 +23,10 @@ from openproceedings.api.errors import ACCESS, ApiError
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.query.ast import And, Near, Node, Not, Or, Phrase, Term, Wildcard
-from openproceedings.query.parser import too_long
+from openproceedings.query.parser import Mode, ParseResult, parse, too_long
 
 if TYPE_CHECKING:
     from openproceedings.api.state import IndexState
-    from openproceedings.query.parser import ParseResult
 
 MAX_LOGGED_CODES = 10  # distinct diagnostic codes on one access line; more are counted, not listed
 
@@ -107,6 +106,23 @@ def checked_query(q: str) -> str:
     if over is not None:
         raise ApiError(over.code, over.message, diagnostics=[over])
     return q
+
+
+def parsed(request: Request, q: str, mode: Mode) -> ParseResult:
+    """`parse(q, mode)`, annotated on the access line, after the length cap (`checked_query`)."""
+    result = parse(checked_query(q), mode)
+    annotate_parse(request, result)
+    return result
+
+
+def searchable(request: Request, q: str, mode: Mode) -> ParseResult:
+    """`parsed`, refusing a query that doesn't parse: 422 with the first error's code and every error as a
+    diagnostic, spans into `q` (spec 04 §Error handling). The engine never sees it (spec 03)."""
+    result = parsed(request, q, mode)
+    if result.effective_ast is None:
+        first = result.errors[0]
+        raise ApiError(first.code, first.message, diagnostics=result.errors)
+    return result
 
 
 def current_engine(request: Request) -> TantivyEngine:

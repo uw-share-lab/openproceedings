@@ -35,13 +35,13 @@ def test_one_access_line_per_request_whatever_the_outcome(store: Store, logs: Lo
         store.indexes.parent, rate_limit=RateLimit(capacity=5, refill_per_second=0.001, export_weight=1)
     )
     requests = [
-        ("GET", "/api/v1/_probe/search?q=trust", 200),
-        ("GET", "/api/v1/_probe/search?q=(trust", 422),
+        ("GET", "/api/v1/search?q=trust", 200),
+        ("GET", "/api/v1/search?q=(trust", 422),
         ("GET", "/api/v1/nope", 404),
         ("POST", "/api/v1/healthz", 405),  # /healthz costs no token, whatever the method
         ("GET", "/api/v1/_probe/boom/x", 500),
-        ("GET", "/api/v1/_probe/search", 422),
-        ("GET", "/api/v1/_probe/search?q=trust", 429),  # the 6th paid request: the bucket held 5
+        ("GET", "/api/v1/search", 422),
+        ("GET", "/api/v1/search?q=trust", 429),  # the 6th paid request: the bucket held 5
         ("GET", "/api/v1/healthz", 200),  # free, and logged at DEBUG
     ]
     with TestClient(app) as c:
@@ -58,16 +58,45 @@ def test_one_access_line_per_request_whatever_the_outcome(store: Store, logs: Lo
 
 def test_the_access_line_names_the_route_template_not_the_path(client: TestClient, logs: Logs) -> None:
     client.get(f"/api/v1/_probe/boom/{SECRET}")
-    client.get("/api/v1/_probe/search", params={"q": "trust"})
+    client.get("/api/v1/search", params={"q": "trust"})
     lines = access(logs)
-    assert [line["route"] for line in lines] == ["/api/v1/_probe/boom/{item}", "/api/v1/_probe/search"]
+    assert [line["route"] for line in lines] == ["/api/v1/_probe/boom/{item}", "/api/v1/search"]
+
+
+def test_the_routers_templates_are_full_paths_and_health_checks_log_at_debug(
+    client: TestClient, logs: Logs
+) -> None:
+    """The real routers, not probes: a nested router's template dropped `/api/v1` (task-035)."""
+    client.get("/api/v1/healthz")
+    client.head("/api/v1/healthz")
+    client.post("/api/v1/healthz")  # 405: routed to the template, then refused
+    client.get("/api/v1/papers/nope")
+    lines = access(logs)
+    assert [(line["route"], line["status"], line["level"]) for line in lines] == [
+        ("/api/v1/healthz", 200, "DEBUG"),
+        ("/api/v1/healthz", 200, "DEBUG"),
+        ("/api/v1/healthz", 405, "DEBUG"),
+        ("/api/v1/papers/{id}", 404, "INFO"),
+    ]
+
+
+def test_a_failure_after_the_response_started_is_logged_as_aborted(client: TestClient, logs: Logs) -> None:
+    r = client.get("/api/v1/_probe/stream-fail", params={"q": SECRET})
+    assert r.status_code == 200  # the response had started when the stream failed
+    (line,) = access(logs)
+    assert line["status"] == 200 and line["aborted"] is True
+    failed = [entry for entry in logs() if entry["event"] == "request_failed"]
+    assert len(failed) == 1 and failed[0]["level"] == "ERROR"
+    assert SECRET not in logs.raw.getvalue()  # type: ignore[attr-defined]
+    client.get("/api/v1/search", params={"q": "trust"})
+    assert "aborted" not in access(logs)[-1]  # only an aborted response carries it
 
 
 def test_a_search_line_has_the_hash_count_and_total_and_no_query_text(
     client: TestClient, store: Store, logs: Logs
 ) -> None:
     q = f"trust AND ({SECRET} OR reliance*)"
-    r = client.get("/api/v1/_probe/search", params={"q": q})
+    r = client.get("/api/v1/search", params={"q": q})
     assert r.status_code == 200
     (line,) = access(logs)
     result = parse(q)
@@ -81,7 +110,7 @@ def test_a_search_line_has_the_hash_count_and_total_and_no_query_text(
 
 
 def test_a_parse_failure_logs_codes_only_and_nothing_above_info(client: TestClient, logs: Logs) -> None:
-    client.get("/api/v1/_probe/search", params={"q": f'"{SECRET} (trust'})
+    client.get("/api/v1/search", params={"q": f'"{SECRET} (trust'})
     (line,) = access(logs)
     assert line["status"] == 422 and line["n_errors"] >= 1
     assert "PARSE_UNTERMINATED_PHRASE" in line["error_codes"]
@@ -93,13 +122,13 @@ def test_no_query_text_reaches_any_log_line(store: Store, logs: Logs) -> None:
     """The query word appears in a good query, a parse error, a path segment, a 500's exception message, a
     bad parameter value and an over-long query: no captured line holds it, in any field."""
     with TestClient(make_app(store.indexes.parent)) as c:
-        c.get("/api/v1/_probe/search", params={"q": f"trust {SECRET}"})
-        c.get("/api/v1/_probe/search", params={"q": f"({SECRET}"})
-        c.get("/api/v1/_probe/search", params={"q": "trust", "limit": SECRET})
+        c.get("/api/v1/search", params={"q": f"trust {SECRET}"})
+        c.get("/api/v1/search", params={"q": f"({SECRET}"})
+        c.get("/api/v1/search", params={"q": "trust", "limit": SECRET})
         c.get(f"/api/v1/_probe/boom/{SECRET}", params={"q": SECRET})
         c.get("/api/v1/_probe/internal", params={"q": SECRET})
         c.get("/api/v1/_probe/too-many", params={"q": SECRET})
-        c.get("/api/v1/_probe/search", params={"q": SECRET * 2_000})
+        c.get("/api/v1/search", params={"q": SECRET * 2_000})
     raw = logs.raw.getvalue()  # type: ignore[attr-defined]
     assert len(access(logs)) == 7
     assert SECRET not in raw
@@ -127,7 +156,7 @@ def test_token_count_counts_search_terms(q: str, n: int) -> None:
 @pytest.fixture
 def routed() -> Iterator[io.StringIO]:
     """Our JSON handler with the server loggers routed (what `op serve` sets up); undone afterwards."""
-    names = ("uvicorn", "uvicorn.error", "uvicorn.access", *QUIET_LOGGERS)
+    names = ("", "uvicorn", "uvicorn.error", "uvicorn.access", *QUIET_LOGGERS)  # "": the root
     saved = {n: (logging.getLogger(n).handlers[:], logging.getLogger(n).level, logging.getLogger(n).propagate,
                  logging.getLogger(n).disabled) for n in names}  # fmt: skip
     stream = io.StringIO()
@@ -138,6 +167,21 @@ def routed() -> Iterator[io.StringIO]:
         lg.handlers[:] = handlers
         lg.setLevel(level)
         lg.propagate, lg.disabled = propagate, disabled
+
+
+def test_other_libraries_warnings_are_json_too(routed: io.StringIO) -> None:
+    logging.getLogger("asyncio").warning("Executing %s took %.3f seconds", "<Task>", 0.2)
+    logging.getLogger("fastapi").warning("fastapi_warned")
+    logging.getLogger("asyncio").info("asyncio_info")  # below WARNING: not routed
+    lines = [json.loads(line) for line in routed.getvalue().splitlines()]
+    assert [(line["logger"], line["level"]) for line in lines] == [
+        ("asyncio", "WARNING"),
+        ("fastapi", "WARNING"),
+    ]
+    configure_logging(
+        "INFO", "json", stream=routed, route_server_loggers=True
+    )  # idempotent: one root handler
+    assert sum(1 for h in logging.getLogger().handlers if getattr(h, "_openproceedings_handler", False)) == 1
 
 
 def test_server_loggers_go_through_the_json_handler(routed: io.StringIO) -> None:
@@ -161,7 +205,7 @@ def test_real_requests_through_the_routed_loggers_give_one_line_each(
 ) -> None:
     with TestClient(make_app(store.indexes.parent)) as c:
         for _ in range(3):
-            c.get("/api/v1/_probe/search", params={"q": SECRET})
+            c.get("/api/v1/search", params={"q": SECRET})
     lines = [json.loads(line) for line in routed.getvalue().splitlines()]
     assert [line["event"] for line in lines if line["event"] == "request"] == ["request"] * 3
     assert not [line for line in lines if line["logger"].startswith(("uvicorn.access", "httpx"))]

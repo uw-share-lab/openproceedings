@@ -9,7 +9,10 @@ description: How the openproceedings FastAPI service is built — /api/v1 base p
 - One app factory, `create_app(config) -> FastAPI`, in `backend/src/openproceedings/api/`. Routers per
   resource (`search`, `parse`, `papers`, `export`, `records`, `coverage`, `meta`, `health`, and
   `near_misses` at M5), all mounted under **`/api/v1`**, `/healthz` included (spec 04 §Endpoints: liveness and whether the
-  index is loaded). Nothing is served outside `/api/v1`.
+  index is loaded). Nothing is served outside `/api/v1`. Declare each router with
+  `APIRouter(prefix=API_PREFIX)` and include it directly. Don't nest routers: FastAPI 0.141 keeps
+  `scope["route"].path` relative to the declaring router, so the access line would log `/search` instead
+  of `/api/v1/search` (task-035). `/parse` and `/search` share `api/search.py`.
 - The CLI (`op search`, `op export`, `op serve`) and the routers call **the same functions**. A router
   parses the request, calls the shared function, and shapes the response. No search logic lives in a router.
 - Pydantic v2 models are the contract (`.claude/skills/api-contract/SKILL.md`). Every response model

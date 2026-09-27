@@ -32,4 +32,6 @@ Found in TASK-039. The URL↔state reducer (frontend/src/lib/search-state.ts) re
 
 <!-- SECTION:NOTES:BEGIN -->
 TASK-039 review: writing an applied default out as (q) AND field:(…) adds one nesting level and about 10+ characters to q, so a q near the limits can fail after a facet click. Add golden cases at PARSE_TOO_DEEP (depth 64) and PARSE_TOO_LONG (2,000 code points) for the wrapped form, and decide whether /parse should report that a field cannot be toggled for such a q.
+
+TASK-035 (2026-09-27) left this open: /parse now returns 02's ParseResult (ast with spans, effective_ast, defaults), but the per-field clause summary is a new public shape spec 02/04 don't define yet. It needs a spec decision first: (a) the name and placement (e.g. ParseResult.filters: {venue|year|track|status: {span, values, toggleable, reason?}}), (b) how year is represented (ranges, not a value list), (c) what 'cannot be toggled' carries (nested under OR, negated, OR of mixed fields), (d) the values for an unrestricted field (all /meta values, or empty + a flag). The server-side derivation belongs in query/ (e.g. defaults.py beside the top-level conjunct logic), not in the router. AC3 also waits on TASK-040's codegen.
 <!-- SECTION:NOTES:END -->

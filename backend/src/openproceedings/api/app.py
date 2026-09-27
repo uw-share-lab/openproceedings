@@ -1,16 +1,19 @@
 """The app factory (fastapi-conventions §App shape): `create_app(config) -> FastAPI`.
 
-Layers, outermost first: `AccessLog` (request id, the one access line, the last catch for a failure) →
-CORS (exact allowlist, no credentials) → `RateLimit` (per-client token bucket) → FastAPI (the error
-envelope handlers, then the `/api/v1` routers). Nothing is served outside `/api/v1`, the OpenAPI document
-included.
+Layers, outermost first: `AccessLog` (request id, the one access line, preflights included) → CORS
+(exact allowlist, no credentials; a disallowed preflight is Starlette's plain-text 400) → `LastCatch`
+(an unexpected exception becomes a logged 500, which CORS then decorates) → `RateLimit` (per-client token
+bucket) → FastAPI (the error envelope handlers, then the `/api/v1` routers). Nothing is served outside
+`/api/v1`, the OpenAPI document included.
 
 The lifespan loads the index (in the background by default, so `/healthz` answers meanwhile) and, on the
 main thread, installs the SIGHUP reload. Logging is configured by the entry point (`op serve`,
 `api/server.py`), never here.
 
-A new resource (task-035 on) adds its `APIRouter` to `ROUTERS`; its handlers are `def` and take the engine
-through `deps.EngineDep`.
+A new resource adds its `APIRouter(prefix=API_PREFIX)` to `ROUTERS`; its handlers are `def` and take the
+engine through `deps.EngineDep`. Each router carries the prefix itself and is included directly: FastAPI
+0.141 leaves `scope["route"].path` relative to the router that declared it, so a prefix added by nesting
+routers would drop out of the access line's route template (task-035).
 """
 
 from __future__ import annotations
@@ -24,13 +27,13 @@ from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from openproceedings import __version__
-from openproceedings.api import health
+from openproceedings.api import health, meta, papers, search
 from openproceedings.api.config import ApiConfig
 from openproceedings.api.errors import install_error_handlers
-from openproceedings.api.middleware import API_PREFIX, AccessLog, RateLimit
+from openproceedings.api.middleware import API_PREFIX, AccessLog, LastCatch, RateLimit
 from openproceedings.api.state import IndexState, Opener, install_sighup
 
-ROUTERS: tuple[APIRouter, ...] = (health.router,)
+ROUTERS: tuple[APIRouter, ...] = (search.router, papers.router, meta.router, health.router)
 EXPOSED_HEADERS = ("X-Total", "X-Index-Version", "Retry-After")  # spec 04 §Exports, §Error handling
 
 
@@ -69,13 +72,15 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
     )
     app.state.index = state
     app.state.config = config
+    app.state.papers = papers.Papers(config.data_dir)
     install_error_handlers(app)
-    v1 = APIRouter(prefix=API_PREFIX)
     for router in ROUTERS:
-        v1.include_router(router)
-    app.include_router(v1)
+        if router.prefix != API_PREFIX:
+            raise ValueError(f"a router must be declared with prefix={API_PREFIX!r}")
+        app.include_router(router)
     # added innermost first: the last one added wraps everything
     app.add_middleware(RateLimit, config=config.rate_limit, trusted=config.trusted_proxies)
+    app.add_middleware(LastCatch)  # inside CORS: a 500 gets the CORS headers like any response
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(config.cors_origins),

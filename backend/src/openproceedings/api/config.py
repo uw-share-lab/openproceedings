@@ -46,7 +46,9 @@ class ApiConfig(BaseModel):
     rate_limit: RateLimit = RateLimit()
     cors_origins: tuple[str, ...] = ()  # exact origins; empty means no cross-origin access
     trusted_proxies: tuple[IPvAnyNetwork, ...] = ()  # peers whose X-Forwarded-For is believed
-    log_query_text: bool = False  # local dev only: lets the log formatter keep query text (spec 04)
+    # local dev only: lets the log formatter keep query-text fields (spec 04). No log call passes one today
+    # (the access line never carries q), so it changes nothing until one does.
+    log_query_text: bool = False
     load_in_background: bool = True  # /healthz answers (index_loaded false) while the index loads
     handle_sighup: bool = True  # SIGHUP reloads `index` and swaps it in (main thread only)
 

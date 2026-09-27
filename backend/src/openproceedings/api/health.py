@@ -7,13 +7,14 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict
 
+from openproceedings.api.middleware import API_PREFIX
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.normalize import TOKENIZER_VERSION
 
 if TYPE_CHECKING:
     from openproceedings.api.state import IndexState
 
-router = APIRouter()
+router = APIRouter(prefix=API_PREFIX)
 
 
 class Health(BaseModel):
@@ -25,7 +26,7 @@ class Health(BaseModel):
     query_version: str
 
 
-@router.get("/healthz", response_model=Health)
+@router.api_route("/healthz", methods=["GET", "HEAD"], response_model=Health)
 def healthz(request: Request) -> Health:
     """Always 200 while the process serves requests; `index_loaded` is false until the first load succeeds
     (search routes answer 503 `API_INDEX_NOT_LOADED` meanwhile)."""

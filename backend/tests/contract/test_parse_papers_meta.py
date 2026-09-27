@@ -1,0 +1,205 @@
+"""`POST /api/v1/parse`, `GET /api/v1/papers/{id}` and `GET /api/v1/meta` (task-035; spec 04 §Endpoints)."""
+
+from __future__ import annotations
+
+import json
+import shutil
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+from openproceedings.ingest.snapshot import load_records
+from openproceedings.query import QUERY_VERSION
+from openproceedings.query.ast import FILTER_FIELDS
+from openproceedings.query.normalize import TOKENIZER_VERSION
+from openproceedings.query.parser import MAX_QUERY_LENGTH, parse
+from openproceedings.vocab import STATUSES, TRACKS, VENUES
+
+from tests.contract.conftest import SECRET, Store, make_app
+
+Logs = Callable[[], list[dict[str, Any]]]
+VERSIONS = {"index_version", "tokenizer_version", "query_version"}
+
+
+def versions_of(body: dict[str, Any], store: Store) -> None:
+    assert (body["index_version"], body["tokenizer_version"], body["query_version"]) == (
+        store.big,
+        TOKENIZER_VERSION,
+        QUERY_VERSION,
+    )
+
+
+def error(r: Any, status: int, code: str) -> dict[str, Any]:
+    assert r.status_code == status, r.text
+    assert set(r.json()) == {"error"} and r.json()["error"]["code"] == code
+    return r.json()["error"]  # type: ignore[no-any-return]
+
+
+# --- /parse -----------------------------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    ("q", "mode"),
+    [
+        ("trust AND calibrat*", "native"),
+        ("(trust AND track:workshop) OR calibration", "native"),  # WARN_NESTED_FILTER
+        ("𝔸I trust or model", "native"),  # an astral character before a warning's span
+        ("trust source:PMLR", "scholar"),  # translations
+        ("(trust", "native"),  # errors: still a 200
+        ("", "native"),
+    ],
+)
+def test_parse_is_02s_parse_result_without_identification_ast(
+    client: TestClient, store: Store, q: str, mode: str
+) -> None:
+    r = client.post("/api/v1/parse", json={"q": q, "mode": mode})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    versions_of(body, store)
+    expected = parse(q, mode).model_dump(mode="json", exclude={"identification_ast"})  # type: ignore[arg-type]
+    assert {k: v for k, v in body.items() if k not in VERSIONS} == expected
+
+
+def test_parse_errors_are_values_with_code_point_spans(client: TestClient) -> None:
+    body = client.post("/api/v1/parse", json={"q": "𝔸I (trust"}).json()
+    assert [(e["code"], e["span"]) for e in body["errors"]] == [("PARSE_UNBALANCED_PAREN", [3, 4])]
+    assert body["canonical"] is None and body["effective_ast"] is None and body["mode"] == "native"
+
+
+def test_parse_refuses_an_over_long_query_before_parsing(client: TestClient) -> None:
+    e = error(client.post("/api/v1/parse", json={"q": "a " * MAX_QUERY_LENGTH}), 422, "PARSE_TOO_LONG")
+    assert e["diagnostics"][0]["code"] == "PARSE_TOO_LONG"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{}, {"q": 3}, {"q": "trust", "mode": "wos"}, {"q": "trust", "extra": 1}],
+)
+def test_parse_refuses_a_malformed_body_as_api_bad_param(client: TestClient, body: dict[str, Any]) -> None:
+    error(client.post("/api/v1/parse", json=body), 422, "API_BAD_PARAM")
+
+
+def test_parse_is_post_only(client: TestClient) -> None:
+    r = client.get("/api/v1/parse", params={"q": "trust"})
+    error(r, 405, "API_METHOD_NOT_ALLOWED")
+    assert r.headers["allow"] == "POST"
+
+
+# --- /papers/{id} -------------------------------------------------------------------------------------------
+def test_a_paper_is_its_full_snapshot_record(client: TestClient, store: Store) -> None:
+    hit = client.get("/api/v1/search", params={"q": "trust", "limit": 1}).json()["hits"][0]
+    r = client.get(f"/api/v1/papers/{hit['id']}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert set(body) == VERSIONS | {"paper"}
+    versions_of(body, store)
+    snapshot = load_records(store.indexes.parent / "snapshots" / "big")
+    assert body["paper"] == snapshot[hit["id"]].model_dump(mode="json")
+    assert body["paper"]["provenance"] and body["paper"]["content_hash"]
+    assert body["paper"]["title"] == hit["title"]  # the record the search showed
+
+
+def test_every_paper_of_an_index_is_served(store: Store, data_dir: Path) -> None:
+    from tests.contract.conftest import point_current
+
+    point_current(data_dir, store.small)
+    manifest = json.loads((data_dir / "indexes" / store.small / "manifest.json").read_text())
+    records = load_records(data_dir / "snapshots" / manifest["snapshot"])
+    assert len(records) == 300
+    with TestClient(make_app(data_dir)) as c:
+        for rid, record in records.items():
+            body = c.get(f"/api/v1/papers/{rid}").json()
+            assert body["index_version"] == store.small
+            assert body["paper"] == record.model_dump(mode="json")
+
+
+@pytest.mark.parametrize("rid", ["op:iclr:2024:nope", SECRET, "op:iclr:2024:Fx0001 x", "x" * 5000])
+def test_an_unknown_paper_is_404_api_paper_not_found(client: TestClient, rid: str) -> None:
+    e = error(client.get(f"/api/v1/papers/{rid}"), 404, "API_PAPER_NOT_FOUND")
+    assert rid not in e["message"]
+
+
+def test_a_missing_snapshot_is_a_500_never_a_partial_record(store: Store, tmp_path: Path, logs: Logs) -> None:
+    data = tmp_path / "data"
+    shutil.copytree(store.indexes, data / "indexes", symlinks=True)  # indexes only
+    with TestClient(make_app(data)) as c:
+        rid = c.get("/api/v1/search", params={"q": "trust", "limit": 1}).json()["hits"][0]["id"]
+        e = error(c.get(f"/api/v1/papers/{rid}"), 500, "API_INTERNAL")
+    assert "snapshot" not in e["message"]  # the client learns only the request id
+    (failed,) = [line for line in logs() if line["event"] == "request_failed"]
+    assert failed["cause"] == "SnapshotError"
+
+
+def test_a_different_snapshot_under_the_name_is_a_500(store: Store, tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    shutil.copytree(store.indexes, data / "indexes", symlinks=True)
+    shutil.copytree(store.indexes.parent / "snapshots" / "small", data / "snapshots" / "big")
+    with TestClient(make_app(data)) as c:
+        rid = c.get("/api/v1/search", params={"q": "trust", "limit": 1}).json()["hits"][0]["id"]
+        error(c.get(f"/api/v1/papers/{rid}"), 500, "API_INTERNAL")
+
+
+def test_the_paper_line_logs_the_template_not_the_id(client: TestClient, logs: Logs) -> None:
+    client.get(f"/api/v1/papers/{SECRET}")
+    (line,) = [entry for entry in logs() if entry["event"] == "request"]
+    assert line["route"] == "/api/v1/papers/{id}" and line["status"] == 404
+    raw = logs.raw.getvalue()  # type: ignore[attr-defined]
+    assert SECRET not in raw
+
+
+def test_the_parse_line_holds_no_query_text(client: TestClient, logs: Logs) -> None:
+    client.post("/api/v1/parse", json={"q": f"trust {SECRET}"})
+    client.post("/api/v1/parse", json={"q": f"({SECRET}"})
+    lines = [entry for entry in logs() if entry["event"] == "request"]
+    assert [(line["route"], line["status"]) for line in lines] == [("/api/v1/parse", 200)] * 2
+    assert lines[0]["canonical_hash"] == parse(f"trust {SECRET}").canonical_hash
+    assert lines[1]["error_codes"] == ["PARSE_UNBALANCED_PAREN"]
+    assert SECRET not in logs.raw.getvalue()  # type: ignore[attr-defined]
+
+
+# --- /meta ------------------------------------------------------------------------------------------------
+def test_meta_lists_the_versions_and_vocabularies(client: TestClient, store: Store) -> None:
+    r = client.get("/api/v1/meta")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    versions_of(body, store)
+    assert body["index_versions"] == sorted([store.big, store.small])
+    assert body["text_fields"] == ["title", "abstract"]
+    assert body["filter_fields"] == list(FILTER_FIELDS)
+    assert body["values"] == {"venue": list(VENUES.values()), "track": list(TRACKS), "status": list(STATUSES)}
+
+
+def test_every_meta_value_parses_as_a_filter(client: TestClient) -> None:
+    values = client.get("/api/v1/meta").json()["values"]
+    for field, vs in values.items():
+        for v in vs:
+            assert not parse(f"trust {field}:{v}").errors, (field, v)
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("POST", "/api/v1/parse", {"q": "trust"}),
+        ("GET", "/api/v1/meta", None),
+        ("GET", "/api/v1/papers/x", None),
+    ],
+)
+def test_every_route_answers_503_before_an_index_loads(
+    tmp_path: Path, method: str, path: str, body: dict[str, str] | None
+) -> None:
+    (tmp_path / "indexes").mkdir()
+    with TestClient(make_app(tmp_path)) as c:
+        error(c.request(method, path, json=body), 503, "API_INDEX_NOT_LOADED")
+
+
+def test_the_openapi_document_describes_the_routes_and_their_models(client: TestClient) -> None:
+    """(The committed snapshot and the TypeScript codegen are task-040.)"""
+    doc = client.get("/api/v1/openapi.json").json()
+    paths = {"/api/v1/parse", "/api/v1/search", "/api/v1/papers/{id}", "/api/v1/meta", "/api/v1/healthz"}
+    assert paths <= set(doc["paths"])
+    schemas = doc["components"]["schemas"]
+    for name in ("SearchResponse", "ParseResponse", "PaperResponse", "MetaResponse"):
+        assert set(schemas[name]["required"]) >= VERSIONS
+    assert "Diagnostic" in schemas
+    limit = next(p for p in doc["paths"]["/api/v1/search"]["get"]["parameters"] if p["name"] == "limit")
+    assert limit["schema"]["maximum"] == 200
