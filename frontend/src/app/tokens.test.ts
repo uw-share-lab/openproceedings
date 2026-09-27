@@ -69,6 +69,14 @@ const TEXT: [string, string][] = [
   ["excluded-fg", "excluded-bg"],
   ["default-clause", "background"],
   ["track-workshop", "background"],
+  // the query editor (on the page background) and the diagnostics row's glyphs
+  ...["syn-operator", "syn-field", "syn-phrase", "syn-wildcard", "syn-number"].map((fg): [string, string] => [
+    fg,
+    "background",
+  ]),
+  ...["diag-error", "diag-warning", "diag-info"].flatMap((fg) =>
+    ["background", "popover"].map((bg): [string, string] => [fg, bg]),
+  ),
 ];
 
 /** Every surface a control (and so its border and focus ring) can sit on. */

@@ -17,7 +17,9 @@ Tests: Vitest + Testing Library (units), Playwright (e2e against the fixture API
 As built (TASK-039): Next 16.3.6, React 19.2, Tailwind 4.3 (CSS-first `@theme`, no `tailwind.config`),
 shadcn/ui via `components.json` (`radix-nova`, CSS variables; components are added with `npx shadcn add`
 as pages need them), `next-themes` for the class-based theme, Vitest 5 with Testing Library
-(`@testing-library/react`). Node 22. TanStack Query and CodeMirror join with the tasks that use them.
+(`@testing-library/react`). Node 22. TASK-041 added CodeMirror 6 (`@codemirror/*`, `@lezer/*`) and TanStack
+Query 5; the editor's Lezer grammar is token-only, fed by a mirror of the server lexer whose character tables
+and golden cases are generated from `lexer.py` (codemirror-lezer skill).
 
 ## URL is state (guarantee 3)
 
