@@ -3,7 +3,7 @@ id: TASK-087
 title: >-
   Paper page highlights: a q param on GET /papers/{id}, or client-side from
   /search
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 11:33'
 updated_date: '2026-09-27 18:02'
