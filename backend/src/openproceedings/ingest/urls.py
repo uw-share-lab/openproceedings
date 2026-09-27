@@ -1,4 +1,5 @@
-"""Proceedings URLs → native ids (record-schema skill §Native ids), shared by the RIS importer and dedup.
+"""Proceedings URLs → native ids (record-schema skill §Native ids), shared by the RIS importer and dedup, and
+OpenReview forum URLs → forum ids (dedup's forum link, TASK-105).
 
 The grammar follows scholarmend 0.1.3's miners: any host case, `papers.nips.cc`, `http`, a query string
 or fragment (one real URL carries `?utm_source=chatgpt.com`), PMLR's two hosts and its raw GitHub assets.
@@ -7,8 +8,9 @@ or fragment (one real URL carries `?utm_source=chatgpt.com`), PMLR's two hosts a
 from __future__ import annotations
 
 import re
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
+from openproceedings.ingest.record import FORUM_ID
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 
 _PROCEEDINGS_HOSTS = {
@@ -65,3 +67,16 @@ def native(url: str) -> str | None:
     if (q := pmlr(url)) is not None and q[0] in ICML_PMLR_VOLUMES:
         return f"pmlr-v{q[0]}-{q[1]}"
     return None
+
+
+def forum_id(url: str) -> str | None:
+    """The forum id an OpenReview forum URL names (`https://openreview.net/forum?id=<id>`, any host case, one
+    `id` only, a valid forum id), or None. PMLR's index links (v235), OpenReview notes and the RIS importer all
+    write `urls.forum` in this form."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or parsed.netloc.lower() != "openreview.net":
+        return None
+    if parsed.path != "/forum":
+        return None
+    ids = parse_qs(parsed.query).get("id", [])
+    return ids[0] if len(ids) == 1 and FORUM_ID.fullmatch(ids[0]) else None

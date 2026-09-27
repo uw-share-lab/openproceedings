@@ -38,7 +38,9 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | RIS import | a venueid plus its forum id → the forum id; else the proceedings or PMLR form above, from scholarmend's `proceedings_url` / `pmlr_url` claim (`ingest/urls.py`). A record with neither is skipped and counted (`unresolved` / `no_id`), never given a minted id. |
 
 When records merge (`.claude/skills/dedup-rules/SKILL.md`), the surviving id uses the OpenReview forum id
-if either side has one.
+if either side has one. A proceedings record's `urls.forum` claim (PMLR v235's link) is identity evidence
+too: dedup joins it to the note with that forum id (the forum link), so the claim must name exactly the
+forum the page links.
 
 ## Provenance claims
 One `Claim` per (field, source): `field`, `value`, `source` (`openreview_v2`, `openreview_v1`,
