@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-27 21:34'
+updated_date: '2026-09-27 23:11'
 labels:
   - ingest
   - testing
@@ -24,3 +25,9 @@ TASK-052/053's golden cases for these are derived from existing fixtures rather 
 <!-- AC:BEGIN -->
 - [ ] #1 Fixtures recorded and scrubbed,Tests read them in place of the derived cases
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+From TASK-105: also record the v202 and v267 index pages to confirm which PMLR volumes carry the OpenReview forum link (only v235 is recorded).
+<!-- SECTION:NOTES:END -->

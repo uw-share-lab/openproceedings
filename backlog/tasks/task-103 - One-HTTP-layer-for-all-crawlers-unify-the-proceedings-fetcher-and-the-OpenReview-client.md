@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-27 21:34'
+updated_date: '2026-09-27 23:11'
 labels:
   - ingest
 milestone: m-4
@@ -23,3 +24,9 @@ TASK-050 and TASK-052/053 were built in parallel and each has its own fetcher an
 <!-- AC:BEGIN -->
 - [ ] #1 One Transport/Response/Clock abstraction and one retry/backoff implementation used by all three sources,One crawl-marker/replay mechanism and one report type feeding the manifest crawl_window,One error hierarchy handled once in cli.main and snapshot,Existing fixture tests pass unchanged (behaviour-preserving); snapshot build output byte-identical on the fixtures
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+From TASK-105: make pmlr._forum call urls.forum_id so there is one forum-id parser.
+<!-- SECTION:NOTES:END -->
