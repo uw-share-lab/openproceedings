@@ -142,6 +142,24 @@ A record must go (a legal request, personal data in `input`). With the API stopp
   replay also requires the stored list to hash to `ids_hash`. Spec 04 §Search records "As built" has the
   full response shapes.
 
+## The CLI: `op record save` / `op record replay` (task-083; spec 08 §CLI)
+- The same functions: `save` is `records.freeze` + `RecordStore.insert` (the record equals `POST /records`'s
+  for the same query and index in every field but `record_id` and `searched_at`; tested), `replay` is
+  `records.replay` with its `--json` block built by `api.records.replay_info`, the function behind
+  `GET /records/{id}`'s `replay`.
+- Index selection is the API's (`api.state.index_path`): `--index current|<index_version>` under
+  `<data-dir>/indexes`, never a directory path and never `resolve_snapshot`. A replay opens the record's own
+  version first (`cli._open_pinned`, `IndexState.pinned`'s rule without the cache, refusals logged at the same
+  levels) and only falls back to `--index`/`current` when it is gone.
+- Serving policy is left out: no rate limit or save ceilings, and no `admit`, so a CLI replay is never
+  withheld (the API may report `refused: API_TOO_MANY_VERIFIED_CLAUSES` for a record the CLI reproduces). The
+  store's size cap and free-space floor apply, with `ApiConfig`'s defaults.
+- Exit status: 0 `reproduced` or `drifted`, 3 `mismatch` (`cli.EXIT_MISMATCH`; ERROR `API_REPLAY_MISMATCH`),
+  1 for an unknown or malformed id or no index to replay on. Log lines `record_saved` / `record_replayed`
+  carry the id, versions, `canonical_hash` and counts, never the query.
+- Tests: `backend/tests/contract/test_record_cli.py` (the API-equality check, the replay matrix through the
+  CLI, the exit codes across a real process, the store floor, no query text in logs).
+
 ## What a methods section cites
 The record page (05) shows, and a methods section quotes: the `identification_query` and the default
 clauses, the **full** `index_version` (never a prefix), the search date and the crawl window

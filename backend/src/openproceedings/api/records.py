@@ -1,10 +1,10 @@
 """`POST /api/v1/records`, `GET /api/v1/records/{id}` and `GET /api/v1/records/{id}/diff` (spec 04 §Search
 records; search-records skill).
 
-Transport only: freezing, the store and the replay are `openproceedings.records`, which a future `op record`
-(spec 08) calls too. A record is saved from the query re-run here (never the client's counts), on the one
-engine this request read; a replay loads the record's pinned index read-only on demand (`IndexState.pinned`,
-the one loader).
+Transport only: freezing, the store and the replay are `openproceedings.records`, which `op record save` and
+`op record replay` (spec 08; task-083) call too, the replay printed through this module's `replay_info`. A
+record is saved from the query re-run here (never the client's counts), on the one engine this request read;
+a replay loads the record's pinned index read-only on demand (`IndexState.pinned`, the one loader).
 
 Every replay is a 200 whose `replay.status` is `reproduced`, `drifted` or `mismatch`. A malformed record id
 is 422 `API_BAD_PARAM`; an unknown one 404 `API_RECORD_NOT_FOUND` (the message never repeats it). A save
@@ -289,26 +289,10 @@ def get_record(
     `include=ids`; `/export?record_id=` streams the papers themselves."""
     record = stored_record(request, id)
     result, clauses = _replayed(request, engine, record)
-    found = result.identified
     return RecordResponse(
         **versions(result.engine.index_version),
         record=record if include == "ids" else record.model_copy(update={"ids": None}),
-        replay=ReplayInfo(
-            status=result.status,
-            index_version=result.engine.index_version,
-            query_version=result.query_version,
-            total=len(found.ids) if found is not None else None,
-            excluded=Excluded.model_validate(found.excluded) if found is not None else None,
-            ids_hash=found.ids_hash if found is not None else None,
-            ids_match=result.ids_match,
-            excluded_match=result.excluded_match,
-            refused=result.refused,
-            verified_clauses=clauses,
-            changed=_changed(result),
-            added_total=len(result.added) if result.added is not None else None,
-            removed_total=len(result.removed) if result.removed is not None else None,
-            membership_identical=result.membership_identical,
-        ),
+        replay=replay_info(result, clauses),
     )
 
 
@@ -344,6 +328,28 @@ def get_record_diff(
         removed_total=len(result.removed) if result.removed is not None else None,
         added=[DiffEntry(id=i, title=titles.get(i)) for i in added],
         removed=[DiffEntry(id=i, title=titles.get(i)) for i in removed],
+        membership_identical=result.membership_identical,
+    )
+
+
+def replay_info(result: Replay, verified_clauses: int | None) -> ReplayInfo:
+    """`GET /records/{id}`'s `replay` block from a `records.replay` result; `op record replay --json`
+    prints the same block (task-083), so the two can't drift apart."""
+    found = result.identified
+    return ReplayInfo(
+        status=result.status,
+        index_version=result.engine.index_version,
+        query_version=result.query_version,
+        total=len(found.ids) if found is not None else None,
+        excluded=Excluded.model_validate(found.excluded) if found is not None else None,
+        ids_hash=found.ids_hash if found is not None else None,
+        ids_match=result.ids_match,
+        excluded_match=result.excluded_match,
+        refused=result.refused,
+        verified_clauses=verified_clauses,
+        changed=_changed(result),
+        added_total=len(result.added) if result.added is not None else None,
+        removed_total=len(result.removed) if result.removed is not None else None,
         membership_identical=result.membership_identical,
     )
 
