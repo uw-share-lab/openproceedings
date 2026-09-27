@@ -1,10 +1,10 @@
 ---
 id: TASK-109
 title: Warn when a venue-year holds a status its sources cannot supply
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 22:46'
-updated_date: '2026-09-27 23:36'
+updated_date: '2026-09-27 23:56'
 labels:
   - ingest
 milestone: m-4

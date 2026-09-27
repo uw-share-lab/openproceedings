@@ -1,10 +1,10 @@
 ---
 id: TASK-102
 title: Expiry for the OpenReview raw-response cache
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 21:19'
-updated_date: '2026-09-27 23:36'
+updated_date: '2026-09-27 23:56'
 labels:
   - ingest
 milestone: m-4
