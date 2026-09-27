@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from openproceedings.ingest.sources.openreview_client import Request, Response
+from openproceedings.ingest.sources.http import Request, Response
 
 FIXTURES = Path(__file__).parents[2] / "fixtures" / "http" / "openreview" / "v2"
 USERNAME = "someone@example.org"
@@ -117,7 +117,7 @@ class FakeOpenReview:
     def logins(self) -> int:
         return sum(c.method == "POST" for c in self.calls)
 
-    def __call__(self, request: Request) -> Response:
+    def __call__(self, request: Request, timeout: float = 60.0) -> Response:
         self.calls.append(request)
         parts = urlsplit(request.url)
         assert parts.hostname == "api2.openreview.net"
@@ -211,7 +211,7 @@ class FakeOpenReviewV1:
     def logins(self) -> int:
         return sum(c.method == "POST" for c in self.calls)
 
-    def __call__(self, request: Request) -> Response:
+    def __call__(self, request: Request, timeout: float = 60.0) -> Response:
         self.calls.append(request)
         parts = urlsplit(request.url)
         if request.method == "POST":

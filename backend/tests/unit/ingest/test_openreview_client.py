@@ -12,19 +12,16 @@ from email.utils import format_datetime
 from pathlib import Path
 
 import pytest
+from openproceedings.ingest.sources.http import CacheMiss as OpenReviewCacheMiss
+from openproceedings.ingest.sources.http import HTTPRefused as OpenReviewHTTPError
+from openproceedings.ingest.sources.http import Request, Response, TransportError, urllib_transport
+from openproceedings.ingest.sources.http import RetriesExhausted as OpenReviewRetriesExhausted
 from openproceedings.ingest.sources.openreview_client import (
     Credentials,
     OpenReviewAuthError,
-    OpenReviewCacheMiss,
     OpenReviewClient,
-    OpenReviewHTTPError,
-    OpenReviewRetriesExhausted,
-    Request,
-    Response,
-    TransportError,
     credentials,
     read_dotenv,
-    urllib_transport,
 )
 
 from tests.unit.ingest.openreview_fakes import (

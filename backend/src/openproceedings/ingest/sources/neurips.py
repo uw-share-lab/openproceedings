@@ -226,7 +226,7 @@ def _mine_listing(
         cls, rule = classify_neurips_listing(host, year, token)
         if plan_only:
             report.tracks[cls.track] += 1
-            report.to_fetch = (report.to_fetch or 0) + (not fetcher.cached(entry.url))
+            report.to_fetch = (report.to_fetch or 0) + (not fetcher.is_cached(entry.url))
             continue
         page = fetcher.get(entry.url, keep_absent=True)
         report.fetched.append(page.fetched_at)

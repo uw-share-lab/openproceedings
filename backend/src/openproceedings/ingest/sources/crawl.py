@@ -1,10 +1,12 @@
-"""`op ingest neurips|pmlr` and the offline re-mine `op snapshot build` runs (spec 01 §CLI, §Pipeline).
+"""`op ingest neurips|pmlr`, and the one offline replay of every crawler that `op snapshot build` runs (spec 01
+§CLI, §Pipeline).
 
 `ingest_*` crawls each listing into `<cache>/<source>/pages/` (one run at a time per source: an exclusive
 lock on `<cache>/<source>/.lock`) and, when the whole listing is cached, writes its crawl marker. A dry
 run reads only the index pages (through the cache) and reports what a crawl would fetch; it writes no
-marker. `--offline` crawls from the cache alone. `load_crawls` re-mines every marked listing from the cache
-with no transport at all, so a snapshot never fetches.
+marker. `--offline` crawls from the cache alone. `replay_all` re-runs every marked crawl of every source
+(OpenReview API v2, then v1, then NeurIPS, then PMLR; `common.Crawls`) with no transport at all, so a snapshot
+never fetches.
 """
 
 from __future__ import annotations
@@ -16,15 +18,16 @@ from typing import Any
 
 from openproceedings import storage
 from openproceedings.ingest.record import PaperRecord
-from openproceedings.ingest.sources import neurips, pmlr
+from openproceedings.ingest.sources import neurips, openreview_v1, openreview_v2, pmlr
 from openproceedings.ingest.sources.common import (
+    Crawls,
     ListingReport,
     MinerError,
-    markers,
-    source_manifest,
+    Report,
+    sources_manifest,
     write_marker,
 )
-from openproceedings.ingest.sources.http import Fetcher, FetchError, PageCache, Transport, urllib_transport
+from openproceedings.ingest.sources.http import Fetcher, PageCache, Transport, urllib_transport
 from openproceedings.ingest.volumes import icml_volume
 
 log = logging.getLogger(__name__)
@@ -38,6 +41,10 @@ def fetcher(
 ) -> Fetcher:  # fmt: skip
     live = None if offline else (transport or urllib_transport)
     return Fetcher(PageCache(cache / source_dir), live, hosts=hosts, min_interval=min_interval)
+
+
+def crawls_dir(cache: Path, source_dir: str) -> Path:
+    return cache / source_dir / "crawls"
 
 
 def _output(reports: Iterable[ListingReport], f: Fetcher, dry_run: bool) -> dict[str, Any]:
@@ -54,21 +61,17 @@ def ingest_neurips(
     transport: Transport | None = None, min_interval: float = DEFAULT_INTERVAL,
 ) -> dict[str, Any]:  # fmt: skip
     """Crawl NeurIPS years (each year's listings, then every paper page) into the cache."""
-    f = fetcher(
-        cache,
-        neurips.CACHE_DIR,
-        neurips.HOSTS,
-        offline=offline,
-        transport=transport,
-        min_interval=min_interval,
-    )
+    f = fetcher(cache, neurips.CACHE_DIR, neurips.HOSTS, offline=offline, transport=transport,
+                min_interval=min_interval)  # fmt: skip
     reports: list[ListingReport] = []
     with storage.exclusive(cache / neurips.CACHE_DIR):
         for year in sorted(set(years)):
             result = neurips.mine_year(year, f, refresh_index=refresh, plan_only=dry_run)
             reports += result.reports
             if not dry_run:
-                write_marker(cache, neurips.CACHE_DIR, str(year), {"source": neurips.SOURCE, "year": year})
+                write_marker(
+                    crawls_dir(cache, neurips.CACHE_DIR), str(year), {"source": neurips.SOURCE, "year": year}
+                )
     log.info(
         "neurips_ingested", extra={"years": len(reports), "requests": f.stats.network, "dry_run": dry_run}
     )
@@ -98,44 +101,44 @@ def ingest_pmlr(
             result = pmlr.mine_volume(number, f, refresh_index=refresh, plan_only=dry_run)
             reports.append(result.report)
             if not dry_run:
-                write_marker(cache, pmlr.CACHE_DIR, f"v{number}", {"source": pmlr.SOURCE, "volume": number})
+                write_marker(
+                    crawls_dir(cache, pmlr.CACHE_DIR), f"v{number}", {"source": pmlr.SOURCE, "volume": number}
+                )
     log.info(
         "pmlr_ingested", extra={"volumes": len(reports), "requests": f.stats.network, "dry_run": dry_run}
     )
     return _output(reports, f, dry_run)
 
 
-def load_crawls(cache: Path) -> tuple[list[PaperRecord], dict[str, Any]]:
-    """Every finished crawl, re-mined from the cache alone (no transport), and each source's manifest entry.
-    A marked listing whose pages are no longer cached is an error, never a silently smaller snapshot."""
+# --- the one replay ----------------------------------------------------------------------------------------
+
+NEURIPS: Crawls[neurips.YearResult] = Crawls(
+    lambda cache: crawls_dir(cache, neurips.CACHE_DIR), lambda m: (int(m["year"]),),
+    lambda k: f"NeurIPS {k[0]}", "op ingest neurips",
+    lambda cache, k: neurips.mine_year(k[0], fetcher(cache, neurips.CACHE_DIR, neurips.HOSTS, offline=True)),
+)  # fmt: skip
+PMLR: Crawls[pmlr.VolumeResult] = Crawls(
+    lambda cache: crawls_dir(cache, pmlr.CACHE_DIR), lambda m: (int(m["volume"]),),
+    lambda k: f"PMLR v{k[0]}", "op ingest pmlr",
+    lambda cache, k: pmlr.mine_volume(k[0], fetcher(cache, pmlr.CACHE_DIR, pmlr.HOSTS, offline=True)),
+)  # fmt: skip
+SOURCES: tuple[Crawls[Any], ...] = (openreview_v2.CRAWLS, openreview_v1.CRAWLS, NEURIPS, PMLR)
+
+
+def replay_all(cache: Path) -> tuple[list[PaperRecord], list[Report]]:
+    """Every finished crawl of every source, re-run from the cache alone (no transport, no credentials):
+    their records and reports, source by source in `SOURCES` order. A marked crawl whose responses are no
+    longer cached is a `CrawlError`, never a silently smaller snapshot."""
     records: list[PaperRecord] = []
-    sources: dict[str, Any] = {}
-    nf = fetcher(cache, neurips.CACHE_DIR, neurips.HOSTS, offline=True)
-    years = sorted({int(m["year"]) for m in markers(cache, neurips.CACHE_DIR)})
-    reports: list[ListingReport] = []
-    for year in years:
-        try:
-            result = neurips.mine_year(year, nf)
-        except FetchError as e:
-            raise MinerError(
-                f"NeurIPS {year} is marked crawled but {e}; re-run op ingest neurips", reason=e.reason
-            ) from e
-        records += result.records
-        reports += result.reports
-    if reports:
-        sources[neurips.SOURCE] = source_manifest(reports)
-    pf = fetcher(cache, pmlr.CACHE_DIR, pmlr.HOSTS, offline=True)
-    numbers = sorted({int(m["volume"]) for m in markers(cache, pmlr.CACHE_DIR)})
-    reports = []
-    for number in numbers:
-        try:
-            got = pmlr.mine_volume(number, pf)
-        except FetchError as e:
-            raise MinerError(
-                f"PMLR v{number} is marked crawled but {e}; re-run op ingest pmlr", reason=e.reason
-            ) from e
-        records += got.records
-        reports.append(got.report)
-    if reports:
-        sources[pmlr.SOURCE] = source_manifest(reports)
-    return records, sources
+    reports: list[Report] = []
+    for source in SOURCES:
+        for mined in source.replay(cache):
+            records += mined.records
+            reports += mined.reports
+    return records, reports
+
+
+def load_crawls(cache: Path) -> tuple[list[PaperRecord], dict[str, Any]]:
+    """`replay_all`'s records, and each source's manifest entry (`common.sources_manifest`)."""
+    records, reports = replay_all(cache)
+    return records, sources_manifest(reports)

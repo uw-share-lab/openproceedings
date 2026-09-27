@@ -36,7 +36,6 @@ forum page for a decision note) and that page's `fetched_at` from the cache. A f
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 import time
@@ -53,20 +52,16 @@ from openproceedings import storage
 from openproceedings.ingest.classify import Classification, classify_v1_venue, classify_venueid
 from openproceedings.ingest.dedup import Conflict
 from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Source, Urls
-from openproceedings.ingest.sources.openreview_client import (
-    API_V1,
-    API_V2,
-    OpenReviewCacheMiss,
-    OpenReviewClient,
-)
+from openproceedings.ingest.sources.common import CrawlError, Crawls, Report, write_marker
+from openproceedings.ingest.sources.http import CacheMiss
+from openproceedings.ingest.sources.openreview_client import API_V1, API_V2, OpenReviewClient
 from openproceedings.ingest.sources.openreview_v2 import (
     FIRST_V2_YEAR,
     SKIP_REASONS,
-    CrawlError,
     _pages,
     _strings,
     _text,
-    _write_json,
+    marker_key,
 )
 from openproceedings.logs import elapsed_ms
 
@@ -275,9 +270,10 @@ def make_client(cache: Path, **kw: Any) -> OpenReviewClient:
 
 
 @dataclass
-class CrawlReport:
+class CrawlReport(Report):
     """What one v1 venue-year gave; `to_manifest()` goes into the crawl file and the snapshot manifest."""
 
+    source: str = field(default=SOURCE, init=False)
     venue: str
     year: int
     page_size: int = PAGE_SIZE
@@ -299,14 +295,10 @@ class CrawlReport:
     track_status: dict[str, Counter[str]] = field(default_factory=dict)
     gaps: tuple[str, ...] = ()
     conflicts: list[Conflict] = field(default_factory=list)
-    fetched: list[str] = field(default_factory=list)
     would_fetch: list[str] = field(default_factory=list)
     forums_uncached: int = 0  # dry run: forum listings a real run would fetch
 
     api = "v1"
-
-    def crawl_window(self) -> dict[str, str] | None:
-        return {"from": min(self.fetched), "to": max(self.fetched)} if self.fetched else None
 
     def to_manifest(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -340,6 +332,10 @@ class CrawlReport:
 class Crawl:
     records: tuple[PaperRecord, ...]
     report: CrawlReport
+
+    @property
+    def reports(self) -> tuple[CrawlReport]:
+        return (self.report,)
 
 
 # --- status evidence ------------------------------------------------------------------------------------------
@@ -597,10 +593,10 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
         first: Page | None = None
         try:
             for entry, items in _pages(client, "/notes", {"forum": fid}, "notes", page_size):
-                report.fetched.append(entry["fetched_at"])
+                report.fetched.append(datetime.fromisoformat(entry["fetched_at"]))
                 first = first or Page(entry["url"], datetime.fromisoformat(entry["fetched_at"]))
                 notes += [n for n in items if isinstance(n, Mapping)]
-        except OpenReviewCacheMiss as e:
+        except CacheMiss as e:
             if not dry_run:
                 raise
             report.forums_uncached += 1
@@ -615,7 +611,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     for listing in ad.listings:
         try:
             _listing(client, ad, listing, report, records, read_forum, page_size)
-        except OpenReviewCacheMiss as e:
+        except CacheMiss as e:
             if not dry_run:
                 raise
             report.complete = False
@@ -657,7 +653,7 @@ def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: Cr
     rows = 0
     counts: set[int] = set()
     for entry, notes in _pages(client, "/notes", {"invitation": listing.invitation}, "notes", page_size):
-        report.fetched.append(entry["fetched_at"])
+        report.fetched.append(datetime.fromisoformat(entry["fetched_at"]))
         if isinstance(count := entry["json"].get("count"), int):
             counts.add(count)
         seen |= {i for n in notes if isinstance(n, Mapping) and isinstance(i := n.get("id"), str)}
@@ -707,26 +703,19 @@ def ingest(client: OpenReviewClient, cache: Path, venue: str, years: Sequence[in
             result = crawl(client, venue, year, dry_run=dry_run, page_size=page_size)
             reports.append(result.report)
             if not dry_run and result.report.complete:
-                _write_json(crawl_file(cache, venue, year), result.report.to_manifest())
+                write_marker(crawls_dir(cache), f"{venue}-{year}", result.report.to_manifest())
     return reports
 
 
-def cached_crawls(cache: Path) -> list[tuple[str, int, int]]:
-    """The v1 venue-years (and page size) with a finished crawl in the cache, in file-name order."""
-    out = []
-    for path in sorted(crawls_dir(cache).glob("*.json")):
-        if path.name.startswith("."):
-            continue
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            out.append((str(data["venue"]), int(data["year"]), int(data["page_size"])))
-        except (OSError, ValueError, KeyError, TypeError):
-            raise CrawlError(f"crawl file {path.name} is unreadable; crawl that venue-year again",
-                             reason="crawl_file_invalid") from None  # fmt: skip
-    return out
+def _replay_one(cache: Path, key: tuple[Any, ...]) -> Crawl:
+    venue, year, page_size = key
+    return crawl(make_client(cache, credentials=None, offline=True), venue, year, page_size=page_size)
+
+
+CRAWLS: Crawls[Crawl] = Crawls(crawls_dir, marker_key, lambda k: f"{k[0]} {k[1]} (OpenReview API v1)",
+                               "op ingest openreview", _replay_one)  # fmt: skip
 
 
 def replay(cache: Path) -> list[Crawl]:
     """Every finished v1 crawl, rebuilt from the cache alone (no credentials, no network)."""
-    client = make_client(cache, credentials=None, offline=True)
-    return [crawl(client, venue, year, page_size=size) for venue, year, size in cached_crawls(cache)]
+    return CRAWLS.replay(cache)

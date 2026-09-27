@@ -55,9 +55,10 @@ number of conflicts, track × status and the year's `coverage_gaps`); and the pr
 (task-052/053) add `neurips_proceedings` and `pmlr`: each `{crawl_window, listings}`, one report per listing
 (venue, year, volume, listing URL, role, `stated` vs `listed` and `count_ok`, records, skipped by reason,
 tracks, abstract_missing with `abstract_title_mismatch` and `page_missing`, unknown_track, `see_also`, its own
-crawl window); `coverage.crawl_dates` picks up each `crawl_window`. `build` (`load_sources`) replays each
-finished OpenReview crawl (v2 and v1) offline from the cached responses, re-mines each finished NeurIPS/PMLR
-crawl from the cached pages (`sources/crawl.py`), and adds the conflicts a v1 crawl found inside one source to
+crawl window); `coverage.crawl_dates` picks up each `crawl_window`. `build` (`load_sources`) replays every
+finished crawl offline through one mechanism (`sources/crawl.replay_all` over each source's `common.Crawls`:
+OpenReview v2, v1, NeurIPS, PMLR, in that order; every source's reports share `common.Report`, whose fetch
+times make each `crawl_window`), and adds the conflicts a v1 crawl found inside one source to
 `conflicts.csv` (`with_crawl_conflicts`). The manifest may hold build times; `records.jsonl` may not. `/coverage`
 (spec 04) and `coverage-auditor` read these counts directly.
 

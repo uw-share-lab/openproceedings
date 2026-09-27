@@ -44,12 +44,9 @@ from openproceedings import __version__, storage
 from openproceedings.ingest.dedup import Conflict, DedupResult, Merge, dedup
 from openproceedings.ingest.record import RECORD_SCHEMA_VERSION, PaperRecord
 from openproceedings.ingest.ris import ImportReport, import_ris
-from openproceedings.ingest.sources import openreview_v1, openreview_v2
-from openproceedings.ingest.sources.openreview_client import OpenReviewError
+from openproceedings.ingest.sources.common import Report, sources_manifest
 from openproceedings.logs import elapsed_ms
 from openproceedings.query.normalize import TOKENIZER_VERSION
-
-type CrawlReport = openreview_v2.CrawlReport | openreview_v1.CrawlReport
 
 log = logging.getLogger(__name__)
 
@@ -200,39 +197,26 @@ def load_cache(cache: Path) -> tuple[list[PaperRecord], list[ImportReport]]:
     return records, reports
 
 
-def load_sources(
-    cache: Path,
-) -> tuple[list[PaperRecord], list[ImportReport], list[CrawlReport], dict[str, Any]]:
-    """Every cached source, with no network: the RIS imports; each finished OpenReview crawl (v2, then v1)
-    replayed from its cached responses (`openreview_v2.replay`, `openreview_v1.replay`); then every NeurIPS/PMLR
-    proceedings crawl with a finished marker, re-mined from the page cache (`sources/crawl.py`). Returns the
-    records, the RIS reports, the OpenReview crawl reports, and the proceedings miners' manifest entries. Refuses
-    an empty cache."""
-    from openproceedings.ingest.sources.common import MinerError
-    from openproceedings.ingest.sources.crawl import load_crawls
-    from openproceedings.ingest.sources.http import CacheError
+def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], list[Report]]:
+    """Every cached source, with no network: the RIS imports, then every finished crawl of every crawler
+    (OpenReview API v2 and v1, NeurIPS, PMLR) re-run from its cache (`sources/crawl.replay_all`). Returns the
+    records, the RIS reports and the crawl reports. Refuses an empty cache, and a crawl that can't be replayed
+    (a `SourceError`: a marked crawl whose responses are gone, an unreadable cache entry or marker)."""
+    from openproceedings.ingest.sources.crawl import replay_all
+    from openproceedings.ingest.sources.http import SourceError
 
     records, reports = _load_ris(cache)
     try:
-        crawls: list[openreview_v2.Crawl | openreview_v1.Crawl] = [
-            *openreview_v2.replay(cache),
-            *openreview_v1.replay(cache),
-        ]
-    except OpenReviewError as e:
-        raise SnapshotError(f"the OpenReview cache can't be replayed: {e}", reason=e.reason) from None
-    for c in crawls:
-        records += c.records
-    try:
-        mined, proceedings = load_crawls(cache)
-    except (MinerError, CacheError) as e:
-        raise SnapshotError(str(e), reason=getattr(e, "reason", "cache_invalid")) from e
+        mined, crawls = replay_all(cache)
+    except SourceError as e:
+        raise SnapshotError(f"the crawl cache can't be replayed: {e}", reason=e.reason) from e
     records += mined
-    if not reports and not crawls and not proceedings:
+    if not reports and not crawls:
         raise SnapshotError(
             f"nothing cached under {cache.name}; run `op ingest ris <mended.ris>...`, "
             "`op ingest openreview --venue <V> --years <Y>` or `op ingest neurips|pmlr ...` first"
         )
-    return records, reports, [c.report for c in crawls], proceedings
+    return records, reports, crawls
 
 
 def record_line(record: PaperRecord) -> str:
@@ -264,34 +248,19 @@ def _nested(
     return plain
 
 
-def _sources(
-    reports: Sequence[ImportReport],
-    crawls: Sequence[CrawlReport],
-    proceedings: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """manifest.json's `sources`: `ris` (the import reports; always present when no other source is);
-    `openreview_v2` / `openreview_v1`, each with its own `crawl_window` (records.py and coverage.py read it;
-    absent when its crawls fetched nothing, e.g. only ICLR 2015's coverage gap) and each crawl's report; and the
-    proceedings miners' entries (`neurips_proceedings`, `pmlr`), each with its own `crawl_window`."""
+def _sources(reports: Sequence[ImportReport], crawls: Sequence[Report]) -> dict[str, Any]:
+    """manifest.json's `sources`: `ris` (the import reports; always present when no crawl is), then one entry
+    per crawler source (`openreview_v2`, `openreview_v1`, `neurips_proceedings`, `pmlr`), each with its reports
+    and its own `crawl_window` (records.py and coverage.py read it; absent when its crawls fetched nothing, e.g.
+    only ICLR 2015's coverage gap; `common.sources_manifest`)."""
     sources: dict[str, Any] = {}
-    if reports or not (crawls or proceedings):
+    if reports or not crawls:
         sources["ris"] = [r.to_manifest() for r in reports]
-    for source in (openreview_v2.SOURCE, openreview_v1.SOURCE):
-        mine = [c for c in crawls if f"openreview_{c.api}" == source]
-        if not mine:
-            continue
-        entry: dict[str, Any] = {"crawls": [c.to_manifest() for c in mine]}
-        if windows := [w for c in mine if (w := c.crawl_window())]:
-            entry["crawl_window"] = {
-                "from": min(w["from"] for w in windows),
-                "to": max(w["to"] for w in windows),
-            }
-        sources[source] = entry
-    sources.update(proceedings or {})
+    sources.update(sources_manifest(crawls))
     return sources
 
 
-def with_crawl_conflicts(result: DedupResult, crawls: Sequence[CrawlReport]) -> DedupResult:
+def with_crawl_conflicts(result: DedupResult, crawls: Sequence[Report]) -> DedupResult:
     """`result` plus the disagreements a crawl found inside one source (a v1 note whose withdrawn invitation and
     `content.venue` disagree: `unresolved:openreview_v1`), each pointed at the output record its paper ended
     in (following `merges.csv`), so conflicts.csv holds every conflict, not only dedup's."""
@@ -315,12 +284,10 @@ def render(
     result: DedupResult,
     reports: Sequence[ImportReport],
     built_at: datetime,
-    crawls: Sequence[CrawlReport] = (),
-    proceedings: Mapping[str, Any] | None = None,
+    crawls: Sequence[Report] = (),
 ) -> dict[str, bytes]:
     """The snapshot's files. Everything but manifest.json's `built_at` is a function of the inputs.
-    `crawls` are the OpenReview (v2 and v1) crawl reports; `proceedings` holds the proceedings miners' `sources`
-    entries (`neurips_proceedings`, `pmlr`)."""
+    `crawls` are the crawlers' reports (OpenReview v2 and v1, NeurIPS, PMLR)."""
     records = sorted(result.records, key=lambda r: r.id)
     if not records:
         raise SnapshotError("no records to snapshot")
@@ -346,7 +313,7 @@ def render(
         "merges": {"total": len(result.merges), **Counter(m.rule for m in result.merges)},
         "conflicts": {"total": len(result.conflicts), **Counter(c.resolution.split(":")[0] for c in result.conflicts)},
         "files": {"merges.csv": _sha256(merges), "conflicts.csv": _sha256(conflicts)},
-        "sources": _sources(reports, crawls, proceedings),
+        "sources": _sources(reports, crawls),
     }  # fmt: skip
     return {
         "records.jsonl": lines,
@@ -392,9 +359,9 @@ def _holds(snapshot: Path, snapshot_hash: str, fresh: dict[str, Any] | None = No
 def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> BuildResult:
     """Import, dedup and write a new immutable snapshot (or report the one that already has this hash)."""
     began = time.monotonic()
-    records, reports, crawls, proceedings = load_sources(cache)
+    records, reports, crawls = load_sources(cache)
     result = with_crawl_conflicts(dedup(records), crawls)
-    files = render(result, reports, built_at or datetime.now(UTC), crawls, proceedings)
+    files = render(result, reports, built_at or datetime.now(UTC), crawls)
     manifest = json.loads(files["manifest.json"])
     snapshot_hash = manifest["snapshot_hash"]
     target = snapshots / f"{manifest['crawl_date']}-{snapshot_hash[:SHORT]}"

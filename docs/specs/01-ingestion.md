@@ -92,9 +92,10 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
 
 ## Pipeline
 
-1. **Fetch.** One crawler per source. Every HTTP call goes through a cache (a scholarmend-style disk
-   cache keyed by URL and parameters, with a TTL). Rate limits and retries honour `Retry-After`. A crawl
-   can resume.
+1. **Fetch.** One crawler per source, all on one HTTP layer (`ingest/sources/http.py`, TASK-103): every call
+   goes through a disk cache keyed by the canonical URL (and, for an API, its sorted parameters), written
+   atomically; only the source's hosts are called and no redirect is followed; one pacing and retry rule set
+   honours `Retry-After` and `ratelimit-reset`; the sources differ only in their `Policy`. A crawl can resume.
 2. **Normalize.** Map each source's shape to `PaperRecord`. Strip HTML. Keep LaTeX verbatim (03 decides
    how it is tokenized).
 3. **Classify.** Derive `track`, `status` and `presentation` using the rules above. Every classification
@@ -147,11 +148,12 @@ can't answer for a year is listed in the report's `coverage_gaps`, never raised.
 disagrees (the withdrawn ICLR 2021 note `xGZG2kS5bFk` says `ICLR 2021 Poster`; two decision notes that disagree;
 a venueid naming another track) gets `unknown` for that field and an `unresolved:openreview_v1` row in
 `conflicts.csv`. Responses are cached under
-`<data-dir>/cache/openreview/{v2,v1}/http/` (scholarmend's `Cache`, keyed by the canonical URL; a v1 client logs
-in on api2, whose token api1 accepts) and a finished venue-year writes `…/{v2,v1}/crawls/<Venue>-<Year>.json`,
-which `snapshot build` replays offline. Code: `ingest/sources/openreview_client.py` (auth, pacing, retries,
-cache), `ingest/sources/openreview_v2.py` (enumeration, records) and `ingest/sources/openreview_v1.py` (the
-per-year adapters). `op --data-dir <dir> <command>` (a global option; default `$OP_DATA_DIR`, else the repository's
+`<data-dir>/cache/openreview/{v2,v1}/http/` (the shared cache in the `{key, payload}` layout scholarmend's `Cache`
+wrote, keyed by the canonical URL; a v1 client logs in on api2, whose token api1 accepts) and a finished
+venue-year writes `…/{v2,v1}/crawls/<Venue>-<Year>.json`, which `snapshot build` replays offline. Code:
+`ingest/sources/openreview_client.py` (OpenReview's policy and login on the shared HTTP layer),
+`ingest/sources/openreview_v2.py` (enumeration, records) and `ingest/sources/openreview_v1.py` (the per-year
+adapters). `op --data-dir <dir> <command>` (a global option; default `$OP_DATA_DIR`, else the repository's
 `data/`, gitignored); results go to stdout as JSON, a refusal exits 1 with a one-line reason that never
 quotes record text.
 

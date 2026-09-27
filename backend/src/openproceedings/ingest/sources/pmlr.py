@@ -145,6 +145,10 @@ class VolumeResult:
     records: list[PaperRecord]
     report: ListingReport
 
+    @property
+    def reports(self) -> tuple[ListingReport]:
+        return (self.report,)
+
 
 def mine_volume(
     number: int, fetcher: Fetcher, *, refresh_index: bool = False, plan_only: bool = False
@@ -193,7 +197,7 @@ def mine_volume(
             continue
         if plan_only:
             report.tracks[volume.track] += 1
-            report.to_fetch = (report.to_fetch or 0) + (not fetcher.cached(entry.url))
+            report.to_fetch = (report.to_fetch or 0) + (not fetcher.is_cached(entry.url))
             continue
         page = fetcher.get(entry.url, keep_absent=True)
         report.fetched.append(page.fetched_at)

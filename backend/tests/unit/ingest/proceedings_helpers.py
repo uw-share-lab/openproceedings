@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from openproceedings.ingest.sources.http import Fetcher, Page, PageCache, Response, canonical
+from openproceedings.ingest.sources.http import Fetcher, Page, PageCache, Request, Response, canonical
 
 HTTP = Path(__file__).parents[2] / "fixtures" / "http"
 T0 = datetime(2026, 9, 27, 12, 0, tzinfo=UTC)
@@ -51,7 +51,7 @@ def neurips_abs(year: int, sha: str, token: str | None = None, host: str = MAIN)
 
 def response(text: str = "<html></html>", status: int = 200, headers: Mapping[str, str] | None = None,
              url: str = "") -> Response:  # fmt: skip
-    return Response(url, status, dict(headers or {"content-type": "text/html; charset=utf-8"}), text.encode())
+    return Response(status, dict(headers or {"content-type": "text/html; charset=utf-8"}), text.encode(), url)
 
 
 class FakeTransport:
@@ -62,22 +62,26 @@ class FakeTransport:
         self.script = {canonical(k): v if isinstance(v, list) else [v] for k, v in script.items()}
         self.calls: list[str] = []
 
-    def __call__(self, url: str, timeout: float) -> Response:
-        self.calls.append(url)
-        queue = self.script[url]
+    def __call__(self, request: Request, timeout: float) -> Response:
+        self.calls.append(request.url)
+        queue = self.script[request.url]
         r = queue.pop(0) if len(queue) > 1 else queue[0]
-        return Response(r.url or url, r.status, r.headers, r.body)
+        return Response(r.status, r.headers, r.body, r.url or request.url)
 
 
 class Clock:
-    """A fake monotonic clock whose sleeps advance it (and are recorded)."""
+    """A fake clock (`http.Clock`): monotonic time moves only when something sleeps (each sleep is recorded),
+    and the wall clock always says T1."""
 
     def __init__(self) -> None:
         self.t = 100.0
         self.sleeps: list[float] = []
 
-    def __call__(self) -> float:
+    def monotonic(self) -> float:
         return self.t
+
+    def now(self) -> datetime:
+        return T1
 
     def sleep(self, seconds: float) -> None:
         self.sleeps.append(seconds)
@@ -88,7 +92,5 @@ def fetcher(
     cache: Path, transport: FakeTransport | None, hosts: frozenset[str], **kw: Any
 ) -> tuple[Fetcher, Clock]:
     clock = Clock()
-    f = Fetcher(
-        PageCache(cache), transport, hosts=hosts, sleep=clock.sleep, clock=clock, now=lambda: T1, **kw
-    )
+    f = Fetcher(PageCache(cache), transport, hosts=hosts, clock=clock, **kw)
     return f, clock
