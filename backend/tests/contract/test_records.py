@@ -284,14 +284,15 @@ def mismatched(client: TestClient, data_dir: Path, good: str, what: str) -> str:
     return tampered(data_dir, good, **change)
 
 
+@pytest.mark.parametrize("old_query", [{}, {"query_version": "0"}], ids=["same-query-version", "old-query-version"])
 @pytest.mark.parametrize("claimed", ["000000000000", "notaversion"])
 def test_a_record_naming_another_index_with_the_served_ones_inputs_is_a_mismatch_not_a_500(
-    client: TestClient, data_dir: Path, logs: Logs, claimed: str
+    client: TestClient, data_dir: Path, logs: Logs, claimed: str, old_query: dict[str, str]
 ) -> None:
     """A different index_version always has different inputs, so a row naming a version this instance
     doesn't hold, whose inputs are the served index's own, was forged: a logged mismatch, never a 500."""
     good = save(client, f"trust OR {SECRET}")
-    bad = tampered(data_dir, good, index_version=claimed)
+    bad = tampered(data_dir, good, index_version=claimed, **old_query)
     before = len(mismatch_lines(logs))
     body = replayed(client, bad)
     assert body["replay"]["status"] == "mismatch"

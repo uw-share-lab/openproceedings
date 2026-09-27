@@ -750,12 +750,14 @@ def replay(
                 log.debug("replay_mismatch", extra=fields)
     else:
         changed = changed_inputs(record, index_inputs(data_dir, ran_on.index_version), QUERY_VERSION)
-        if changed:
+        # on its own index only the query version can differ (a real drift); on another index at least one
+        # index input must, since a different index_version always has different index inputs
+        if on_own_index or any(c.input != "query_version" for c in changed):
             status = "drifted"
         else:
-            # a different index_version always has different inputs, so a record naming another version whose
-            # inputs are the served index's own was forged or corrupted (e.g. a hand-written row): a mismatch,
-            # "do not cite", never a 500
+            # a different index_version always has different index inputs, so a record naming another version
+            # whose index inputs are the served index's own (a query_version change aside) was forged or
+            # corrupted (e.g. a hand-written row): a mismatch, "do not cite", never a 500 or a drift
             status = "mismatch"
             fields = {
                 "code": str(DiagnosticCode.API_REPLAY_MISMATCH),
