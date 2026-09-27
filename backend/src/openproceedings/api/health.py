@@ -7,13 +7,14 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict
 
+from openproceedings.api.middleware import API_PREFIX
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.normalize import TOKENIZER_VERSION
 
 if TYPE_CHECKING:
     from openproceedings.api.state import IndexState
 
-router = APIRouter()
+router = APIRouter(prefix=API_PREFIX)
 
 
 class Health(BaseModel):

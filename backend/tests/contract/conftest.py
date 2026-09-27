@@ -4,8 +4,8 @@ Two indexes are built once per session into a read-only store: the 5k corpus (`b
 records (`small`), so a hot swap has a different index_version to move to. A test that repoints `current`
 gets its own data directory holding copies of both (the store's `current` is never touched).
 
-Probe routes stand in for the task-035 endpoints: they use exactly the shared pieces those endpoints will
-(`EngineDep`, `checked_query`, `annotate_parse`, `annotate`).
+The real routes (task-035) are exercised as they are. Probe routes remain only for what no real route can
+be made to do on demand: hold a request or a stream across a swap, and fail in each way a handler can.
 """
 
 from __future__ import annotations
@@ -20,48 +20,59 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from fastapi.testclient import TestClient
 from openproceedings.api import ApiConfig, RateLimit, create_app
-from openproceedings.api.deps import EngineDep, annotate, annotate_parse, checked_query
+from openproceedings.api.deps import EngineDep
 from openproceedings.api.state import Opener
 from openproceedings.diagnostics import DiagnosticCode, InternalError
+from openproceedings.engine.index import build_index
 from openproceedings.engine.protocol import EngineInputError
+from openproceedings.ingest.dedup import DedupResult
+from openproceedings.ingest.snapshot import render
 from openproceedings.logs import configure_logging
-from openproceedings.query.parser import parse
 
+from tests.corpus import Rec
 from tests.fixtures.corpus.synthetic_5k import records
-from tests.unit.engine.test_exclusions import tantivy_of
+from tests.golden.test_tantivy_200 import as_paper
+from tests.unit.engine.test_exclusions import BUILT
 
 SECRET = "zzsecretreviewdesign"  # a query word no log line may ever hold
 
 
 @dataclass(frozen=True)
 class Store:
-    indexes: Path  # <store>/indexes, holding both built indexes
+    indexes: Path  # <store>/indexes, holding both built indexes (<store>/snapshots holds their snapshots)
     big: str  # the 5k index's version
     small: str
+
+
+def build(corpus: list[Rec], snapshots: Path, name: str, indexes: Path) -> str:
+    """A snapshot `<snapshots>/<name>` of `corpus` and its index under `indexes`; the index_version."""
+    snap = snapshots / name
+    snap.mkdir(parents=True)
+    papers = tuple(sorted((as_paper(r) for r in corpus), key=lambda p: p.id))
+    for file, data in render(DedupResult(papers, (), ()), [], BUILT).items():
+        (snap / file).write_bytes(data)
+    return build_index(snap, indexes, BUILT).index_version
 
 
 @pytest.fixture(scope="session")
 def store(tmp_path_factory: pytest.TempPathFactory) -> Store:
     root = tmp_path_factory.mktemp("api-store")
     corpus = list(records())
-    big = tantivy_of(corpus, root / "big").index_version
-    small = tantivy_of(corpus[:300], root / "small").index_version
-    indexes = root / "indexes"
-    indexes.mkdir()
-    for name, version in (("big", big), ("small", small)):
-        shutil.copytree(root / name / "indexes" / version, indexes / version)
-    (indexes / "current").symlink_to(big)
-    return Store(indexes, big, small)
+    big = build(corpus, root / "snapshots", "big", root / "indexes")
+    small = build(corpus[:300], root / "snapshots", "small", root / "indexes")
+    (root / "indexes" / "current").symlink_to(big)
+    return Store(root / "indexes", big, small)
 
 
 @pytest.fixture
 def data_dir(store: Store, tmp_path: Path) -> Path:
-    """A private data directory: copies of both indexes, `current` → the 5k one."""
-    shutil.copytree(store.indexes, tmp_path / "data" / "indexes", symlinks=True)
+    """A private data directory: copies of both indexes and snapshots, `current` → the 5k one."""
+    for part in ("indexes", "snapshots"):
+        shutil.copytree(store.indexes.parent / part, tmp_path / "data" / part, symlinks=True)
     return tmp_path / "data"
 
 
@@ -76,19 +87,6 @@ def add_probes(
     app: FastAPI, hold: threading.Event | None = None, entered: threading.Event | None = None
 ) -> None:
     """Stand-ins for the task-035 routes, built from the shared request helpers."""
-
-    @app.get("/api/v1/_probe/search")
-    def probe_search(request: Request, engine: EngineDep, q: str, limit: int = 10) -> dict[str, Any]:
-        result = parse(checked_query(q))
-        annotate_parse(request, result)
-        if result.effective_ast is None:
-            from openproceedings.api.errors import ApiError
-
-            first = result.errors[0]
-            raise ApiError(first.code, first.message, diagnostics=result.errors)
-        total = len(engine.match_ids(result.effective_ast))
-        annotate(request, total=total)
-        return {"index_version": engine.index_version, "total": total, "limit": limit}
 
     @app.get("/api/v1/_probe/hold")
     def probe_hold(engine: EngineDep) -> dict[str, Any]:

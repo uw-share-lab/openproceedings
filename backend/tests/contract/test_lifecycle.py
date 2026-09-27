@@ -51,7 +51,7 @@ def test_the_index_is_loaded_once_at_startup(data_dir: Path) -> None:
 
     with TestClient(make_app(data_dir, opener=opener)) as c:
         for _ in range(5):
-            assert c.get("/api/v1/_probe/search", params={"q": "trust"}).status_code == 200
+            assert c.get("/api/v1/search", params={"q": "trust"}).status_code == 200
     assert len(opened) == 1
 
 
@@ -65,14 +65,14 @@ def test_healthz_answers_while_loading_and_search_is_503_until_loaded(data_dir: 
     app = make_app(data_dir, opener=slow, load_in_background=True)
     with TestClient(app) as c:
         assert c.get("/api/v1/healthz").json()["index_loaded"] is False
-        r = c.get("/api/v1/_probe/search", params={"q": "trust"})
+        r = c.get("/api/v1/search", params={"q": "trust"})
         assert r.status_code == 503
         assert r.json() == {
             "error": {"code": "API_INDEX_NOT_LOADED", "message": r.json()["error"]["message"]}
         }
         release.set()
         wait_for(lambda: c.get("/api/v1/healthz").json()["index_loaded"])
-        assert c.get("/api/v1/_probe/search", params={"q": "trust"}).json()["index_version"] == store.big
+        assert c.get("/api/v1/search", params={"q": "trust"}).json()["index_version"] == store.big
 
 
 def test_a_failed_startup_load_serves_503_and_logs_one_error(
@@ -81,10 +81,7 @@ def test_a_failed_startup_load_serves_503_and_logs_one_error(
     (tmp_path / "indexes").mkdir()  # no `current`
     with TestClient(make_app(tmp_path)) as c:
         assert c.get("/api/v1/healthz").json()["index_loaded"] is False
-        assert (
-            c.get("/api/v1/_probe/search", params={"q": "x"}).json()["error"]["code"]
-            == "API_INDEX_NOT_LOADED"
-        )
+        assert c.get("/api/v1/search", params={"q": "x"}).json()["error"]["code"] == "API_INDEX_NOT_LOADED"
     failed = [line for line in logs() if line["event"] == "index_load_failed"]
     assert len(failed) == 1 and failed[0]["level"] == "ERROR"
     assert failed[0]["error"] == "IndexSelectionError" and failed[0]["index_version_kept"] is None
@@ -109,9 +106,7 @@ def test_sighup_swaps_atomically_and_a_request_in_flight_keeps_its_engine(
             after = state.engine
             assert after is not None and after.index_version == store.small
             assert c.get("/api/v1/healthz").json()["index_version"] == store.small
-            assert (
-                c.get("/api/v1/_probe/search", params={"q": "trust"}).json()["index_version"] == store.small
-            )
+            assert c.get("/api/v1/search", params={"q": "trust"}).json()["index_version"] == store.small
             hold.set()
             finished = in_flight.result(10).json()
             assert finished == {"index_version": store.big, "total": 5_000}  # its whole answer from one index

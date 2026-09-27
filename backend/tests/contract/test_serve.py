@@ -112,13 +112,11 @@ def test_the_real_server_logs_one_access_line_per_request_and_nothing_else_of_uv
     port, stream = running
     q = urllib.parse.quote
     assert get(port, "/api/v1/healthz")[1]["index_loaded"] is True
-    status, body = get(port, f"/api/v1/_probe/search?q={q('trust ' + SECRET)}")
+    status, body = get(port, f"/api/v1/search?q={q('trust ' + SECRET)}")
     assert status == 200 and body["index_version"] == store.big
-    status, body = get(
-        port, f"/api/v1/_probe/search?q={q('信' * 2_000)}"
-    )  # 18 KB of URL: over uvicorn's default
+    status, body = get(port, f"/api/v1/search?q={q('信' * 2_000)}")  # 18 KB of URL: over uvicorn's default
     assert status == 200
-    status, body = get(port, f"/api/v1/_probe/search?q={q(SECRET * 2_000)}")  # 40k characters
+    status, body = get(port, f"/api/v1/search?q={q(SECRET * 2_000)}")  # 40k characters
     assert status == 422 and body["error"]["code"] == "PARSE_TOO_LONG"
     status, body = get(port, "/api/v1/nope")
     assert status == 404 and body["error"]["code"] == "API_NOT_FOUND"

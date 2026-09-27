@@ -48,18 +48,18 @@ def test_405_wrong_method_names_the_allowed_one(client: TestClient) -> None:
     ],
 )
 def test_422_bad_parameter_is_api_bad_param_not_detail(client: TestClient, params: dict[str, str]) -> None:
-    error = envelope(client.get("/api/v1/_probe/search", params=params), "API_BAD_PARAM")
+    error = envelope(client.get("/api/v1/search", params=params), "API_BAD_PARAM")
     assert "diagnostics" not in error
     assert "query." in error["message"]  # names the location
 
 
 def test_422_bad_parameter_message_does_not_echo_the_value(client: TestClient) -> None:
-    error = envelope(client.get("/api/v1/_probe/search", params={"q": "x", "limit": SECRET}), "API_BAD_PARAM")
+    error = envelope(client.get("/api/v1/search", params={"q": "x", "limit": SECRET}), "API_BAD_PARAM")
     assert SECRET not in error["message"]
 
 
 def test_422_parse_error_carries_diagnostics_with_spans(client: TestClient) -> None:
-    error = envelope(client.get("/api/v1/_probe/search", params={"q": "(trust"}), "PARSE_UNBALANCED_PAREN")
+    error = envelope(client.get("/api/v1/search", params={"q": "(trust"}), "PARSE_UNBALANCED_PAREN")
     assert error["diagnostics"][0]["code"] == "PARSE_UNBALANCED_PAREN"
     assert error["diagnostics"][0]["span"] == [0, 1]
 
@@ -73,8 +73,8 @@ def test_429_rate_limited_with_retry_after(store: Store) -> None:
         store.indexes.parent, rate_limit=RateLimit(capacity=1, refill_per_second=0.1, export_weight=1)
     )
     with TestClient(app) as c:
-        assert c.get("/api/v1/_probe/search", params={"q": "trust"}).status_code == 200
-        r = c.get("/api/v1/_probe/search", params={"q": "trust"})
+        assert c.get("/api/v1/search", params={"q": "trust"}).status_code == 200
+        r = c.get("/api/v1/search", params={"q": "trust"})
         envelope(r, "API_RATE_LIMITED")
         assert r.headers["retry-after"] == "10"
 
@@ -82,7 +82,7 @@ def test_429_rate_limited_with_retry_after(store: Store) -> None:
 def test_503_no_index_loaded(tmp_path: Path) -> None:
     (tmp_path / "indexes").mkdir()
     with TestClient(make_app(tmp_path)) as c:
-        envelope(c.get("/api/v1/_probe/search", params={"q": "trust"}), "API_INDEX_NOT_LOADED")
+        envelope(c.get("/api/v1/search", params={"q": "trust"}), "API_INDEX_NOT_LOADED")
 
 
 @pytest.mark.parametrize("path", ["/api/v1/_probe/boom/item-1", "/api/v1/_probe/internal"])

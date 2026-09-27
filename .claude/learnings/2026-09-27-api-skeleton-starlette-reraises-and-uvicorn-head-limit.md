@@ -55,3 +55,21 @@ request with no query text, per-client rate limit, CORS allowlist, and the query
 - Skill / agent / CLAUDE.md updated? — `docs/specs/04-backend-api.md` (as built, error table),
   `.claude/skills/fastapi-conventions/SKILL.md`, `.claude/skills/error-diagnostics/SKILL.md`, `CLAUDE.md` layout
 - Test or hook added? — `backend/tests/contract/test_errors.py`, `test_serve.py`, `test_access_log.py`
+
+## Addendum 2026-09-27 (task-035: the real routes)
+- **Correction: the route template is *not* the full path for nested routers.** In FastAPI 0.141,
+  `scope["route"].path` is relative to the `APIRouter` that declared the route. With the skeleton's
+  `v1 = APIRouter(prefix="/api/v1"); v1.include_router(health.router)`, `/healthz` logged `route:
+  "/healthz"`, so the DEBUG rule (`template == "/api/v1/healthz"`) never fired and health checks logged at
+  INFO. The task-034 tests passed only because the probe routes were added straight to the app (full paths),
+  and the level check compared against the same wrong template. Fix: every router is declared with
+  `prefix=API_PREFIX` and included directly (`create_app` refuses one that isn't). Evidence: the first
+  run of `test_the_access_line_names_the_route_template_not_the_path` against the real `/search` logged
+  `/search`.
+- **Replace test probes with real routes as soon as they exist.** A probe that bypasses the production
+  wiring (here, router nesting) tests the probe.
+- **`/papers/{id}` needs the snapshot at serve time.** The index stores only the display record, and
+  provenance lives in the snapshot, so the API reads it through `ingest.snapshot.RecordFile`: one
+  verifying pass, then byte ranges by id. A deploy must ship the snapshot beside the index (spec 04, as
+  built for task-035).
+- Propagated to: `.claude/skills/fastapi-conventions/SKILL.md` (App shape), spec 04 as built (task-035).

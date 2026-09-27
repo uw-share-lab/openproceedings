@@ -35,13 +35,13 @@ def test_one_access_line_per_request_whatever_the_outcome(store: Store, logs: Lo
         store.indexes.parent, rate_limit=RateLimit(capacity=5, refill_per_second=0.001, export_weight=1)
     )
     requests = [
-        ("GET", "/api/v1/_probe/search?q=trust", 200),
-        ("GET", "/api/v1/_probe/search?q=(trust", 422),
+        ("GET", "/api/v1/search?q=trust", 200),
+        ("GET", "/api/v1/search?q=(trust", 422),
         ("GET", "/api/v1/nope", 404),
         ("POST", "/api/v1/healthz", 405),  # /healthz costs no token, whatever the method
         ("GET", "/api/v1/_probe/boom/x", 500),
-        ("GET", "/api/v1/_probe/search", 422),
-        ("GET", "/api/v1/_probe/search?q=trust", 429),  # the 6th paid request: the bucket held 5
+        ("GET", "/api/v1/search", 422),
+        ("GET", "/api/v1/search?q=trust", 429),  # the 6th paid request: the bucket held 5
         ("GET", "/api/v1/healthz", 200),  # free, and logged at DEBUG
     ]
     with TestClient(app) as c:
@@ -58,16 +58,16 @@ def test_one_access_line_per_request_whatever_the_outcome(store: Store, logs: Lo
 
 def test_the_access_line_names_the_route_template_not_the_path(client: TestClient, logs: Logs) -> None:
     client.get(f"/api/v1/_probe/boom/{SECRET}")
-    client.get("/api/v1/_probe/search", params={"q": "trust"})
+    client.get("/api/v1/search", params={"q": "trust"})
     lines = access(logs)
-    assert [line["route"] for line in lines] == ["/api/v1/_probe/boom/{item}", "/api/v1/_probe/search"]
+    assert [line["route"] for line in lines] == ["/api/v1/_probe/boom/{item}", "/api/v1/search"]
 
 
 def test_a_search_line_has_the_hash_count_and_total_and_no_query_text(
     client: TestClient, store: Store, logs: Logs
 ) -> None:
     q = f"trust AND ({SECRET} OR reliance*)"
-    r = client.get("/api/v1/_probe/search", params={"q": q})
+    r = client.get("/api/v1/search", params={"q": q})
     assert r.status_code == 200
     (line,) = access(logs)
     result = parse(q)
@@ -81,7 +81,7 @@ def test_a_search_line_has_the_hash_count_and_total_and_no_query_text(
 
 
 def test_a_parse_failure_logs_codes_only_and_nothing_above_info(client: TestClient, logs: Logs) -> None:
-    client.get("/api/v1/_probe/search", params={"q": f'"{SECRET} (trust'})
+    client.get("/api/v1/search", params={"q": f'"{SECRET} (trust'})
     (line,) = access(logs)
     assert line["status"] == 422 and line["n_errors"] >= 1
     assert "PARSE_UNTERMINATED_PHRASE" in line["error_codes"]
@@ -93,13 +93,13 @@ def test_no_query_text_reaches_any_log_line(store: Store, logs: Logs) -> None:
     """The query word appears in a good query, a parse error, a path segment, a 500's exception message, a
     bad parameter value and an over-long query: no captured line holds it, in any field."""
     with TestClient(make_app(store.indexes.parent)) as c:
-        c.get("/api/v1/_probe/search", params={"q": f"trust {SECRET}"})
-        c.get("/api/v1/_probe/search", params={"q": f"({SECRET}"})
-        c.get("/api/v1/_probe/search", params={"q": "trust", "limit": SECRET})
+        c.get("/api/v1/search", params={"q": f"trust {SECRET}"})
+        c.get("/api/v1/search", params={"q": f"({SECRET}"})
+        c.get("/api/v1/search", params={"q": "trust", "limit": SECRET})
         c.get(f"/api/v1/_probe/boom/{SECRET}", params={"q": SECRET})
         c.get("/api/v1/_probe/internal", params={"q": SECRET})
         c.get("/api/v1/_probe/too-many", params={"q": SECRET})
-        c.get("/api/v1/_probe/search", params={"q": SECRET * 2_000})
+        c.get("/api/v1/search", params={"q": SECRET * 2_000})
     raw = logs.raw.getvalue()  # type: ignore[attr-defined]
     assert len(access(logs)) == 7
     assert SECRET not in raw
@@ -161,7 +161,7 @@ def test_real_requests_through_the_routed_loggers_give_one_line_each(
 ) -> None:
     with TestClient(make_app(store.indexes.parent)) as c:
         for _ in range(3):
-            c.get("/api/v1/_probe/search", params={"q": SECRET})
+            c.get("/api/v1/search", params={"q": SECRET})
     lines = [json.loads(line) for line in routed.getvalue().splitlines()]
     assert [line["event"] for line in lines if line["event"] == "request"] == ["request"] * 3
     assert not [line for line in lines if line["logger"].startswith(("uvicorn.access", "httpx"))]

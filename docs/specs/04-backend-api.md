@@ -206,6 +206,45 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     httpx/httpcore are pinned to WARNING.
   - The OpenAPI document and Swagger UI are served under `/api/v1` (`openapi.json`, `docs`); the snapshot
     and codegen are task-040.
+- As built (task-035, `api/search.py`, `api/papers.py`, `api/meta.py`, `api/models.py`; the models are the
+  contract):
+  - Each router is declared with `prefix="/api/v1"` and included directly, because FastAPI 0.141 leaves
+    `scope["route"].path` relative to the router that declared a route, and a prefix added by nesting
+    routers drops out of the access line's `route`.
+  - `GET /search` calls `openproceedings.search.run`, the function `op search` calls, on the one engine
+    the request read. It expands every wildcard first, then collects the match set once for `total` and the
+    page, then does exclusion accounting with that `total`, then reads the page's display records. The API
+    also asks for the facets (`TantivyEngine.facets`) and each hit's highlights (`engine/highlight.py`), so
+    its ids, order, `total` and `excluded` equal `op search`'s for the same query and index (a contract
+    test compares them). Parameters: `q` (required), `mode` (`native` | `scholar`, default `native`),
+    `sort` (`relevance` | `year_desc` | `year_asc` | `title`, default `relevance`), `offset` (≥ 0,
+    default 0; past the end gives an empty page), and `limit` (0 to 200, default 50). A value outside these
+    ranges is a 422 `API_BAD_PARAM`. It is never clamped. A query that doesn't parse is a 422 whose `code`
+    is its first error's and whose `diagnostics` are every error. `query.expansions` is keyed
+    `<stem><op>` (`calibrat*`), each with its full sorted term list. `facets` has all four filter fields
+    (`venue`, `year`, `track`, `status`), and only values that occur. Years are strings, and values are sorted by name. A hit
+    carries exactly the fields in the `SearchResponse` example. Its `urls` has `forum`, `pdf`,
+    `proceedings` and `doi`, and a missing one is null.
+  - `POST /parse` takes `{q, mode}` (no other keys) and answers **200 even when the query has errors**:
+    that is the ParseResult as spec 02 defines it (`errors` non-empty, every Optional null), which the
+    editor draws as squiggles. Only an over-long query (422 `PARSE_TOO_LONG`, before parsing) and a
+    malformed body (422 `API_BAD_PARAM`) are refused. The 422-on-parse-error rule applies to `/search`
+    (and later `/export`), which cannot run a query that doesn't parse.
+  - `GET /papers/{id}` answers `{index_version, tokenizer_version, query_version, paper}`, where `paper` is
+    the spec 01 `PaperRecord` (provenance and `content_hash` included). The served index decides whether the
+    id exists (else 404 `API_PAPER_NOT_FOUND`, whose message never repeats the id). The index stores only
+    the display record, so the full one comes from the snapshot it was built from:
+    `<data_dir>/snapshots/<the index manifest's snapshot>`, which must hash to the manifest's
+    `snapshot_hash`. `ingest.snapshot.RecordFile` makes one verifying pass and holds each record's byte
+    range, for the served index and the one before it. **A deployment must ship that snapshot beside the
+    index.** If it is missing or different, the answer is 500 `API_INTERNAL`, never a record without its
+    provenance.
+  - `GET /meta` answers the three versions, plus `index_versions` (every index directory on the instance,
+    sorted, with the served one included), `text_fields` (`title`, `abstract`), `filter_fields` (`venue`,
+    `year`, `track`, `status`), and `values` (`venue`, `track` and `status`: the vocabularies the parser checks
+    filter values against, so autocomplete never offers a value it refuses).
+  - Every route that reports `index_version` needs a loaded engine, `/parse` and `/meta` included (503
+    `API_INDEX_NOT_LOADED` before the first load).
 
 ## Testing
 

@@ -109,6 +109,24 @@ class IndexState:
         )
         return True
 
+    def available(self) -> list[str]:
+        """Every index_version on this instance (`GET /meta`), sorted: each directory directly under
+        `<data_dir>/indexes/` named like one and holding a manifest (the `current` symlink and `.tmp-`
+        leftovers are not versions), plus the one being served."""
+        indexes = self._data_dir / "indexes"
+        try:
+            found = {
+                d.name
+                for d in indexes.iterdir()
+                if VERSION_DIR.fullmatch(d.name) and not d.is_symlink() and (d / "manifest.json").is_file()
+            }
+        except OSError:
+            found = set()
+        engine = self._engine
+        if engine is not None:
+            found.add(engine.index_version)
+        return sorted(found)
+
     def load_in_background(self) -> threading.Thread:
         thread = threading.Thread(target=self.load, name="op-index-load", daemon=True)
         thread.start()

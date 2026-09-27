@@ -20,7 +20,7 @@ from pydantic import ValidationError
 
 from tests.contract.conftest import Store, make_app
 
-SEARCH = "/api/v1/_probe/search"
+SEARCH = "/api/v1/search"
 
 
 def limited(store: Store, **rate: Any) -> TestClient:

@@ -4,6 +4,7 @@ title: /parse reports each filter field's top-level clause span and values
 status: To Do
 assignee: []
 created_date: '2026-09-27 07:21'
+updated_date: '2026-09-27 07:45'
 labels:
   - api
   - frontend
@@ -25,3 +26,9 @@ Found in TASK-039. The URL↔state reducer (frontend/src/lib/search-state.ts) re
 - [ ] #2 Golden cases pin the spans for typed, default, canonical-pasted and astral-character queries
 - [ ] #3 frontend FilterClause is derived from the generated schema (no local type)
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+TASK-035 (2026-09-27) left this open: /parse now returns 02's ParseResult (ast with spans, effective_ast, defaults), but the per-field clause summary is a new public shape spec 02/04 don't define yet. It needs a spec decision first: (a) the name and placement (e.g. ParseResult.filters: {venue|year|track|status: {span, values, toggleable, reason?}}), (b) how year is represented (ranges, not a value list), (c) what 'cannot be toggled' carries (nested under OR, negated, OR of mixed fields), (d) the values for an unrestricted field (all /meta values, or empty + a flag). The server-side derivation belongs in query/ (e.g. defaults.py beside the top-level conjunct logic), not in the router. AC3 also waits on TASK-040's codegen.
+<!-- SECTION:NOTES:END -->
