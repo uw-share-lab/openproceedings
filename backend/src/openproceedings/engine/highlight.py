@@ -14,6 +14,11 @@ ReferenceEngine's on every record):
 Overlapping spans are merged; touching ones stay apart (an operator token touches its neighbours: `5×3`).
 A LaTeX math command's span is its name without the backslash (`$\\alpha$` lights `alpha`), and accent
 markup that opens a word is in the word's span (`\\"{O}del` lights all of it), as tokenize's offsets give.
+
+Cost (task-073): a page builds one `Highlighter` for its query, which works out once what tokens each leaf
+can match, and calls it on each hit. Per hit, each field is tokenized once, and only if some leaf reads it,
+and a leaf's occurrences come from a map of where each token stands, not a scan of the field per leaf.
+Nothing here changes a span: a differential test holds every span to task-027's highlighter.
 """
 
 from __future__ import annotations
@@ -48,23 +53,62 @@ def highlights(
 ) -> dict[TextField, list[tuple[int, int]]]:
     """Each text field's highlight spans for `record`, one of the engine's hits: sorted, every field present,
     possibly empty. `expansions` are the engine's (`Engine.expansions(ast)`). A hit this evaluation doesn't
-    match means the engine and the AST disagree: an internal error, never silently empty highlights."""
-    tokens = {f: tokenize(_text(record, f)) for f in TEXT_FIELDS}
-    matched, spans = _Highlighter(record, tokens, expansions).node(ast)
-    if not matched:
-        raise EngineInternalError(
-            DiagnosticCode.API_INTERNAL, "a hit the query doesn't match: engine disagreement"
-        )
-    return {f: _merged(spans.get(f, set())) for f in TEXT_FIELDS}
+    match means the engine and the AST disagree: an internal error, never silently empty highlights. For
+    a page of hits, build one `Highlighter` and call it on each."""
+    return Highlighter(ast, expansions)(record)
+
+
+class Highlighter:
+    """`highlights` for one query over many records: what each leaf can match (its terms, its wildcards'
+    expansions) is worked out here, once, not per hit. Built per request and never shared, so it holds no
+    lock; it is never written to after construction."""
+
+    def __init__(self, ast: Node, expansions: Expansions) -> None:
+        self.ast = ast
+        self.allowed: _Allowed = {}
+        for leaf in _leaves(ast):
+            _allowed(leaf, expansions, self.allowed)
+        self.expansions = expansions
+
+    def __call__(self, record: Searchable) -> dict[TextField, list[tuple[int, int]]]:
+        matched, spans = _Highlighter(record, _Tokens(record), self.expansions, self.allowed).node(self.ast)
+        if not matched:
+            raise EngineInternalError(
+                DiagnosticCode.API_INTERNAL, "a hit the query doesn't match: engine disagreement"
+            )
+        return {f: _merged(spans.get(f, set())) for f in TEXT_FIELDS}
+
+
+# A leaf (by identity: the tree that holds it outlives the map) → the tokens each of its items may be.
+_Allowed = dict[int, tuple[frozenset[str], ...]]
+
+
+class _Tokens(dict[TextField, list[Token]]):
+    """A record's tokens per field, each field tokenized on first use: a query that never reads a field
+    doesn't pay for it (its spans are empty either way)."""
+
+    def __init__(self, record: Searchable) -> None:
+        super().__init__()
+        self.record = record
+
+    def __missing__(self, f: TextField) -> list[Token]:
+        tokens = self[f] = tokenize(_text(self.record, f))
+        return tokens
 
 
 class _Highlighter:
     def __init__(
-        self, record: Searchable, tokens: dict[TextField, list[Token]], expansions: Expansions
+        self,
+        record: Searchable,
+        tokens: dict[TextField, list[Token]],
+        expansions: Expansions,
+        allowed: _Allowed | None = None,
     ) -> None:
         self.record = record
         self.tokens = tokens
         self.expansions = expansions
+        self.allowed: _Allowed = {} if allowed is None else allowed  # filled on use when not given
+        self.where: dict[TextField, tuple[list[str], dict[str, list[int]]]] = {}
 
     def node(self, n: Node) -> tuple[bool, Spans]:
         """Whether `n` matches the record, and the spans that make it match. A node that doesn't match has no
@@ -92,14 +136,30 @@ class _Highlighter:
         return bool(spans), spans
 
     def occurrences(self, f: TextField, leaf: Leaf) -> list[tuple[int, int]]:
-        """Half-open token-index ranges in field `f` where `leaf` occurs."""
-        items: tuple[Term | Wildcard, ...] = leaf.items if isinstance(leaf, Phrase) else (leaf,)
-        allowed = [{i.token} if isinstance(i, Term) else set(self.expansions[(i.stem, i.op)]) for i in items]
-        texts = [t.text for t in self.tokens[f]]
-        k = len(items)
+        """Half-open token-index ranges in field `f` where `leaf` occurs, in order. Candidates are where the
+        leaf's first item stands (from the field's token map), each then checked item by item."""
+        allowed = self.allowed.get(id(leaf)) or _allowed(leaf, self.expansions, self.allowed)
+        texts, where = self.positions(f)
+        first, k, n = allowed[0], len(allowed), len(texts)
+        if len(first) <= len(where):  # look up each allowed token, or scan the field's distinct ones
+            starts = [s for t in first for s in where.get(t, ())]
+        else:
+            starts = [s for t, found in where.items() if t in first for s in found]
+        starts.sort()
         return [
-            (s, s + k) for s in range(len(texts) - k + 1) if all(texts[s + j] in allowed[j] for j in range(k))
+            (s, s + k) for s in starts if s + k <= n and all(texts[s + j] in allowed[j] for j in range(1, k))
         ]
+
+    def positions(self, f: TextField) -> tuple[list[str], dict[str, list[int]]]:
+        """Field `f`'s token texts, and where each distinct token stands (built once per record and field)."""
+        found = self.where.get(f)
+        if found is None:
+            texts = [t.text for t in self.tokens[f]]
+            where: dict[str, list[int]] = {}
+            for i, t in enumerate(texts):
+                where.setdefault(t, []).append(i)
+            found = self.where[f] = (texts, where)
+        return found
 
     def near(self, n: Near) -> tuple[bool, Spans]:
         spans: Spans = {}
@@ -133,6 +193,29 @@ def _paired(xs: list[tuple[int, int]], ys: list[tuple[int, int]], distance: int)
 
     # y after x: y starts in [x.end, x.end + d]; y before x: y ends in [x.start - d, x.start]
     return [x for x in xs if some(starts, x[1], x[1] + distance) or some(ends, x[0] - distance, x[0])]
+
+
+def _allowed(leaf: Leaf, expansions: Expansions, into: _Allowed) -> tuple[frozenset[str], ...]:
+    """The tokens each item of `leaf` may be: a term's own token, a wildcard's expansion. Stored in `into`."""
+    items: tuple[Term | Wildcard, ...] = leaf.items if isinstance(leaf, Phrase) else (leaf,)
+    found = into[id(leaf)] = tuple(
+        frozenset((i.token,)) if isinstance(i, Term) else frozenset(expansions[(i.stem, i.op)]) for i in items
+    )
+    return found
+
+
+def _leaves(n: Node) -> Iterable[Leaf]:
+    """Every leaf of `n` the evaluation reads, NEAR operands and leaves under NOT included."""
+    if isinstance(n, And | Or):
+        for c in n.children:
+            yield from _leaves(c)
+    elif isinstance(n, Not):
+        yield from _leaves(n.child)
+    elif isinstance(n, Near):
+        yield n.left
+        yield n.right
+    elif isinstance(n, Term | Wildcard | Phrase):
+        yield n
 
 
 def _text(record: Searchable, f: TextField) -> str:

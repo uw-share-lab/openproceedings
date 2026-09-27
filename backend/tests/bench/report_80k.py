@@ -1,12 +1,13 @@
 """The ~80k-corpus benchmark report (spec 03 §Performance budgets; spec 07 §E; task-031). Run from
 `backend/`, on a quiet machine (other load inflates the timings):
 
-    uv run python -m tests.bench.report_80k
+    uv run python -m tests.bench.report_80k [OUT]
 
 It generates the synthetic corpus at 80,000 records with abstracts of realistic length (120-250 words; the
 same generator as the 5k differential corpus, so anyone can reproduce it), builds the index, and writes
-`docs/results/<date>-bench.md`: build time, size and peak memory; p95 of a 50-hit search and of `match_ids`
-with exclusion accounting for every Trust-Evals protocol string; the widest expansion under the cap and one
+`docs/results/<date>-bench.md` (or OUT): build time, size and peak memory; p95 of a 50-hit search, of the
+50-hit search with its highlights, and of `match_ids` with exclusion accounting for every Trust-Evals protocol
+string; the widest expansion under the cap and one
 past it; and the position-verified cases spec 03 exempts (stopword NEAR, wildcard phrases), timed cold.
 A report, not a gate: regenerate it with this command, never edit it by hand.
 """
@@ -94,7 +95,7 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
     from openproceedings.query.ast import Wildcard
     from openproceedings.query.parser import parse
 
-    from tests.bench.test_bench import widest_stem
+    from tests.bench.test_bench import search_with_highlights, widest_stem
     from tests.golden.test_trust_evals import STRINGS
     from tests.unit.engine.test_exclusions import BUILT, DedupResult, as_paper, render
 
@@ -134,9 +135,10 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
         engine.expanded.clear()
         cold = timed(lambda ast=ast: engine.search(ast, limit=50), rounds=1)[0]  # type: ignore[misc]
         warm = p95(timed(lambda ast=ast: engine.search(ast, limit=50), WARM_ROUNDS))  # type: ignore[misc]
+        page = p95(timed(lambda ast=ast: search_with_highlights(engine, ast), WARM_ROUNDS))  # type: ignore[misc]
         exclusions = p95(timed(exclusion_run))
         total = engine.search(ast, limit=0).total
-        rows.append(f"| {name} | {total:,} | {ms(cold)} | {ms(warm)} | {ms(exclusions)} |")
+        rows.append(f"| {name} | {total:,} | {ms(cold)} | {ms(warm)} | {ms(page)} | {ms(exclusions)} |")
 
     stem, n = widest_stem(engine)
     wide = Wildcard(span=(0, 0), stem=stem, op="*")
@@ -188,12 +190,14 @@ when cold (spec 03), so they are reported, not gated.
 ## Trust-Evals protocol strings, Scholar mode (budgets: 100 ms, 300 ms)
 
 Cold is the first run after every cache is cleared (verified clauses, expansions, compiled queries); warm is the
-p95 of the {WARM_ROUNDS} runs after it, with the caches an engine keeps; the exclusions column is the p95 of
+p95 of the {WARM_ROUNDS} runs after it, with the caches an engine keeps; "with highlights" is the p95 of
+{WARM_ROUNDS} warm runs of the same search with its display records and every hit's highlights, as
+`search.run` assembles them (`test_bench.search_with_highlights`; no cache holds them; task-073); the exclusions column is the p95 of
 {ROUNDS} runs, each clearing every cache first. `main-2-pop` holds wildcard phrases (`model$`), which take the position-verified path spec 03 exempts, so
 its cold numbers are the exception's, not a budget miss (its warm headroom is task-076).
 
-| String | Matches | Search, first 50 hits: cold | Search: p95 warm | `match_ids` + exclusions: p95 cold |
-|---|---|---|---|---|
+| String | Matches | Search, first 50 hits: cold | Search: p95 warm | Search with highlights: p95 warm | `match_ids` + exclusions: p95 cold |
+|---|---|---|---|---|---|
 {chr(10).join(rows)}
 
 ## Wildcard expansion (budget: 50 ms for up to 200 terms)
@@ -209,7 +213,7 @@ its cold numbers are the exception's, not a budget miss (its warm headroom is ta
 |---|---|---|
 {chr(10).join(verified)}
 """
-    out = REPO / "docs" / "results" / f"{today}-bench.md"
+    out = Path(sys.argv[1]) if len(sys.argv) > 1 else REPO / "docs" / "results" / f"{today}-bench.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(report)
     print(out)

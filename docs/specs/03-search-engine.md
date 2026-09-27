@@ -105,10 +105,21 @@ math command's span is its name without the backslash (`$\alpha$` lights `alpha`
 (an accent macro, `\-`, or a math `^`/`_`) is part of the word (`\"{O}del` and `$^2x$` light all of it; task-074). Two tokens' spans overlap only on exactly one code point that folds
 to several pieces (`½`), never on a combining slash's marks (task-075). The highlighter's verdict
 is checked against ReferenceEngine on every fixture record for all 44 golden queries.
-Measured (task-027 review): a 50-hit page of ~400-word abstracts takes ~174 ms to highlight, almost all
-of it `tokenize`, over the 100 ms page budget; task-073 moves it inside (precomputed offsets or a cache,
-decided with the API's page assembly). A NEAR over a long field is a binary search per occurrence, never
-a check of every pair. A hit the highlighter doesn't match raises `EngineInternalError`.
+A NEAR over a long field is a binary search per occurrence, never a check of every pair. A hit the
+highlighter doesn't match raises `EngineInternalError`.
+
+Cost, as built (task-073): the task-027 review measured ~174 ms to highlight a 50-hit page of ~400-word
+abstracts, almost all of it `tokenize`, over the 100 ms page budget. A page now builds one `Highlighter` for
+its query (`search.run`), which works out each leaf's allowed tokens once; per hit, each field is tokenized
+once and only if some leaf reads it, and a leaf's occurrences come from a map of where each token stands.
+`tokenize` got two exact fast paths (a whole text that is ASCII with no `\` or `$`; an ASCII character with
+no mark after it), with no `TOKENIZER_VERSION` bump: both are pinned to a frozen copy of the old loop, and
+the highlighter to a frozen copy of the old one, span for span (`tests/unit/engine/test_highlight_speed.py`).
+Nothing is precomputed at build and nothing is cached across requests. Measured in
+`docs/results/2026-09-27-highlights.md`: highlighting a 50-hit page costs about 5–7× less (real local corpus,
+5k fixture, synthetic 80k), and a 50-hit search with its display records and highlights is inside the 100 ms
+budget at 80k (exclusion accounting keeps its own 300 ms budget). It is a row of the `bench` workflow
+(`test_search_first_50_hits_with_highlights`) and a column of the 80k report.
 
 ## Exclusion accounting (guarantee 6, PRISMA)
 

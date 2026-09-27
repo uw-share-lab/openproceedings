@@ -18,7 +18,7 @@ from typing import Any
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.engine.compile import wildcards
 from openproceedings.engine.exclusions import Excluded, excluded
-from openproceedings.engine.highlight import highlights
+from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import EngineInputError, Expansions
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.query.ast import Node, TextField
@@ -81,12 +81,13 @@ def run(
     total, page = engine.page(ast, sort=sort, offset=offset, limit=limit)  # one collection: ids and scores
     gone = excluded(engine, parsed, total)
     shown = engine.display([i for i, _score in page])
+    lit = Highlighter(ast, expansions) if highlight else None  # one per page: the query's work done once
     hits = tuple(
         Hit(
             id=i,
             score=score,
             record=shown[i],
-            highlights=highlights(ast, Shown.of(shown[i]), expansions) if highlight else None,
+            highlights=lit(Shown.of(shown[i])) if lit else None,
         )
         for i, score in page
     )
