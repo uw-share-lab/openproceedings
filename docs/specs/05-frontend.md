@@ -14,10 +14,17 @@ Next.js (App Router) + TypeScript (strict). Tailwind + shadcn/ui for components.
 editor. TanStack Query for API state. Types are generated from 04's OpenAPI schema, not written by hand.
 Tests: Vitest + Testing Library (units), Playwright (e2e against the fixture API).
 
+As built (TASK-039): Next 16.3.6, React 19.2, Tailwind 4.3 (CSS-first `@theme`, no `tailwind.config`),
+shadcn/ui via `components.json` (`radix-nova`, CSS variables; components are added with `npx shadcn add`
+as pages need them), `next-themes` for the class-based theme, Vitest 5. Node 22. Testing Library,
+TanStack Query and CodeMirror join with the tasks that use them.
+
 ## URL is state (guarantee 3)
 
 `/search?q=<input>&mode=native|scholar&sort=relevance&page=2`. Nothing that affects the result set lives
 outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copying the URL copies the search.
+`mode` is part of the search too (it says how `q` is read), so the result set is keyed on `(q, mode)`; `sort`
+and `page` only order and window it. The reducer is `frontend/src/lib/search-state.ts`.
 
 ## Pages
 

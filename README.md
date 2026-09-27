@@ -8,6 +8,6 @@ Exact, reproducible Boolean search over **NeurIPS, ICLR and ICML** titles and ab
 - **Reproducible.** Every result carries an index version. Saved search records can be replayed.
 - **Review-ready exports.** RIS (for Covidence), CSV and BibTeX, with full abstracts.
 
-Status: **M2 built** (RIS ingestion, snapshots, the Tantivy index, `op search` / `op export`); the API and UI come next (M3). Start with [`docs/specs/00-overview.md`](docs/specs/00-overview.md).
+Status: **M2 built** (RIS ingestion, snapshots, the Tantivy index, `op search` / `op export`); M3 (the API and UI) is under way: the Next.js skeleton is in `frontend/`, its pages still placeholders. Start with [`docs/specs/00-overview.md`](docs/specs/00-overview.md); setup is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 MIT © SHARE Lab, University of Waterloo

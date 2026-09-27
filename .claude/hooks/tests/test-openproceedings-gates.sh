@@ -374,7 +374,7 @@ g switch -q mut
 printf -- '- [nit] a.py:1 name → rejected: too noisy\n' > "$TMP/d13.md"
 check_cmd err "two-word rejection reason refused"     python3 "$RECORD" APPROVE "$TMP/d13.md"
 # autofix: eslint never runs while its config is new/untracked (a fake npx records calls)
-mkdir -p "$TMP/bin" "$REPO/frontend/node_modules"
+mkdir -p "$TMP/bin" "$REPO/frontend" "$REPO/node_modules"
 printf '#!/bin/sh\necho "$@" >> "%s/npx.log"\n' "$TMP" > "$TMP/bin/npx"; chmod +x "$TMP/bin/npx"
 printf 'x\n' > "$REPO/frontend/a.ts"; : > "$TMP/npx.log"
 payload_file Edit "$REPO/frontend/a.ts" | PATH="$TMP/bin:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
@@ -382,7 +382,7 @@ if grep -q eslint "$TMP/npx.log"; then pass=$((pass+1)); echo "  ok   eslint run
 printf 'export default []\n' > "$REPO/frontend/eslint.config.js"; : > "$TMP/npx.log"
 payload_file Edit "$REPO/frontend/a.ts" | PATH="$TMP/bin:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
 if grep -q eslint "$TMP/npx.log"; then fail=$((fail+1)); echo "  FAIL eslint ran with a new untracked config"; else pass=$((pass+1)); echo "  ok   eslint skipped while its config is untracked"; fi
-rm -rf "$REPO/frontend/node_modules" "$REPO/frontend/eslint.config.js" "$REPO/frontend/a.ts"
+rm -rf "$REPO/node_modules" "$REPO/frontend/eslint.config.js" "$REPO/frontend/a.ts"
 
 echo "== round-4 rows (git clean precision, arithmetic, heredoc edges)"
 g switch -q mut

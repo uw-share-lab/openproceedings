@@ -23,15 +23,22 @@ jobs:
           uv run --locked pytest -q --hypothesis-profile=ci
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: hashFiles('frontend/package.json') != ''
-        with: { node-version: 22 }
+        with: { node-version-file: .nvmrc, cache: npm, cache-dependency-path: package-lock.json }
+      - name: Install the npm workspace (root package-lock.json)
+        if: hashFiles('frontend/package.json') != ''
+        run: npm ci
       - name: OpenAPI → TS types are fresh
-        if: hashFiles('backend/pyproject.toml') != '' && hashFiles('frontend/package.json') != ''
+        # Arms itself once TASK-040 commits the generated schema.ts and the gen:api script.
+        if: hashFiles('backend/pyproject.toml') != '' && hashFiles('frontend/src/api/schema.ts') != ''
         run: |
           uv run --locked op openapi > frontend/openapi.json
-          (cd frontend && npm ci && npm run gen:api && git diff --exit-code src/api/schema.ts)
+          (cd frontend && npm run gen:api && git diff --exit-code src/api/schema.ts)
       - name: Frontend — vitest
         if: hashFiles('frontend/package.json') != ''
-        working-directory: frontend
+        run: npm test --workspace frontend
+      - name: Frontend — production build (output standalone)
+        if: hashFiles('frontend/package.json') != ''
+        env: { NEXT_TELEMETRY_DISABLED: "1" }
         run: |
-          npm ci
-          npm test -- --run
+          npm run build --workspace frontend
+          test -f frontend/.next/standalone/frontend/server.js

@@ -1,0 +1,5 @@
+.next/
+next-env.d.ts
+# generated from the backend OpenAPI schema (TASK-040); never formatted by hand
+src/api/schema.ts
+openapi.json

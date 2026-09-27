@@ -20,7 +20,7 @@ description: The openproceedings Next.js standard — App Router layout, output 
    second tokenizer in TypeScript is a guarantee-1 bug (`token-contract`). Highlights are slices of the
    string at the API's `highlights` spans, nothing more.
 
-## Layout (proposed; keep it once built)
+## Layout (skeleton built in TASK-039: app routes, `src/lib/search-state.ts`, `src/api/spans.ts`; the rest arrives with its task)
 | Path | Kind |
 |---|---|
 | `src/app/page.tsx` (`/`), `search/page.tsx` | server shell; the `/search` workspace is a client component |
@@ -43,6 +43,15 @@ description: The openproceedings Next.js standard — App Router layout, output 
   implementation time that `/parse` returns clause spans; if not, get them added server-side — do not
   re-parse filters on the client.
 - Tests pin exact strings: `facetToggle(track=workshop)` on input X yields exactly string Y.
+- **As built (TASK-039, `src/lib/search-state.ts`):** `SearchState = {q, mode, sort, page}` and nothing
+  else; `resultSetKey` is `[q, mode]`; `toSearchRequest` derives the API's `offset`/`limit` from `page`
+  (`PAGE_SIZE` 50). `fromURL` returns `{state, notices}`: unknown, repeated and invalid params are reported,
+  never silently used. Actions: `submit`, `builderEdit`, `setMode`, `facetToggle`, `includeExcluded`,
+  `sort`, `page`. Filter actions take a `FilterClause {source, span, values}` from `/parse` (code-point
+  span into `source`; zero-width at the end = applied default, written out as `(q) AND field:(…)`), refuse a
+  clause parsed from another `q`, and throw `SearchStateError` rather than no-op (last value removed,
+  non-identifier value, bad span). Until `/parse` reports per-field clause spans, `FilterClause` is a local
+  type (TASK-078 adds the spans to `/parse`; then it is derived from the schema).
 - The editor draft is not state until submitted; submitting `router.push`es. Paging uses `replace`.
 
 ## TanStack Query
@@ -57,4 +66,12 @@ flash. A 422 is data, not an exception: render its `diagnostics` (spec 04 error 
   emoji) shift every later highlight.
 - Export links carry the same `q`/`mode`; compare `X-Total` and `index_version` with the shown search and
   warn on mismatch (index swapped between the two).
-- Next 15+ passes `searchParams` as a Promise to pages — check the pinned version.
+- Next 16 (pinned 16.3.6) passes `params`/`searchParams` as Promises; type pages with the generated
+  `PageProps<"/route">` / `LayoutProps<"/">` globals, which `next typegen` writes (`make lint` runs it
+  before `tsc`).
+- Dependencies are hoisted to the repo-root `node_modules`, so `next.config.ts` sets
+  `outputFileTracingRoot` and `turbopack.root` to the workspace root; the standalone server is
+  `.next/standalone/frontend/server.js` and needs `.next/static` copied beside it (`npm start` does this;
+  the Docker image in TASK-065 must too).
+- No `next/font/google`: it fetches at build time, and the image must build offline. System font stacks
+  are set in `globals.css`.
