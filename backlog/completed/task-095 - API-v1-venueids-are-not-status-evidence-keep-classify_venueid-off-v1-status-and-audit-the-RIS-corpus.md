@@ -3,10 +3,10 @@ id: TASK-095
 title: >-
   API v1 venueids are not status evidence: keep classify_venueid off v1 status
   and audit the RIS corpus
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-27 20:49'
-updated_date: '2026-09-27 21:04'
+updated_date: '2026-09-27 21:10'
 labels:
   - ingest
   - classify

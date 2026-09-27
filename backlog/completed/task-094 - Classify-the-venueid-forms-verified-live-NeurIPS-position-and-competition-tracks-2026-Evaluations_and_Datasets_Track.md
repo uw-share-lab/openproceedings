@@ -3,10 +3,10 @@ id: TASK-094
 title: >-
   Classify the venueid forms verified live: NeurIPS position and competition
   tracks, 2026 Evaluations_and_Datasets_Track
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-27 20:49'
-updated_date: '2026-09-27 21:04'
+updated_date: '2026-09-27 21:10'
 labels:
   - ingest
   - classify
@@ -25,7 +25,7 @@ TASK-002's live check (docs/research/2026-09-27-openreview-and-proceedings-facts
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 NeurIPS Position_Paper_Track → position and Competition_Track → competition, with table-test rows citing the checked venueids (spec 01 §Track taxonomy)
-- [ ] #2 A decision records whether Evaluations_and_Datasets_Track maps to datasets_benchmarks; spec 01, 02 and the openreview-venueids skill follow it
+- [x] #2 A decision records whether Evaluations_and_Datasets_Track maps to datasets_benchmarks; spec 01, 02 and the openreview-venueids skill follow it
 - [x] #3 index_version / content_hash consequences stated (a reclassified record changes its hash)
 <!-- AC:END -->
 
