@@ -898,6 +898,33 @@
         "type": "object"
       },
       "JsonValue": {},
+      "Limits": {
+        "description": "This instance's limits on a query (TASK-089), so a client need not hard-code them: the parser's length\ncap, and the served config's verification limits (`op serve` flags; another instance may differ).",
+        "properties": {
+          "max_query_length": {
+            "description": "the longest `q` in Unicode code points; a longer one, or one whose canonical form is longer, is 422 `PARSE_TOO_LONG` (from `/parse`, a 200 whose `errors` hold it)",
+            "title": "Max Query Length",
+            "type": "integer"
+          },
+          "max_verification_candidates": {
+            "description": "the most candidate documents a query's position-verified clauses may read, summed over each clause's fields; more is 422 `API_QUERY_TOO_COSTLY`",
+            "title": "Max Verification Candidates",
+            "type": "integer"
+          },
+          "max_verified_clauses": {
+            "description": "the most position-verified clauses a query may have; more is 422 `API_TOO_MANY_VERIFIED_CLAUSES`",
+            "title": "Max Verified Clauses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_query_length",
+          "max_verified_clauses",
+          "max_verification_candidates"
+        ],
+        "title": "Limits",
+        "type": "object"
+      },
       "MetaResponse": {
         "properties": {
           "filter_fields": {
@@ -925,6 +952,9 @@
             },
             "title": "Index Versions",
             "type": "array"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/Limits"
           },
           "query_version": {
             "title": "Query Version",
@@ -957,7 +987,8 @@
           "index_versions",
           "text_fields",
           "filter_fields",
-          "values"
+          "values",
+          "limits"
         ],
         "title": "MetaResponse",
         "type": "object"

@@ -62,10 +62,12 @@ description: The openproceedings Next.js standard — App Router layout, output 
   `backend/tests/contract/test_frontend_wrap_golden.py`). Every refusal throws `SearchStateError` rather than
   no-op, with a `code` (`STALE_CLAUSE`, `WRONG_FIELD`, `NEGATED_CLAUSE`, `NO_EDITABLE_CLAUSE` for
   `clause: null`, `BAD_VALUE`, `LAST_VALUE`, `BAD_SPAN`, `EMPTY_QUERY`, `TRAILING_ESCAPE`, `TOO_LONG` past
-  `MAX_QUERY_LENGTH` = 2,000 code points or for `/parse`'s `too_long`, `TOO_DEEP` for its `too_deep`,
+  the instance's `max_query_length` (`/meta`'s `limits`, passed as `reduce`/`whyBlocked`'s `limits`; `DEFAULT_LIMITS`
+  = 2,000 code points from `src/lib/default-limits.json` until `/meta` is fetched, checked against `/meta` by
+  `test_meta_limits.py`) or for `/parse`'s `too_long`, `TOO_DEEP` for its `too_deep`,
   `ALREADY_INCLUDED`, `BAD_PAGE`) and a what — why. fix message. `src/lib/filter-clause-golden.json` pins
   `/parse`'s report and the reducer's result together (backend: `test_clauses.py`, `test_parse_filters.py`).
-  Controls call `whyBlocked(state, action)` and render disabled with the reason instead of failing on
+  Controls call `whyBlocked(state, action, limits)` and render disabled with the reason instead of failing on
   click. "Top-level" clause means top-level on the flattened canonical tree (spec 05 §URL is state).
   `describeNotice`/`noticeText` word the URL notices from the same constants the reducer checks.
 - The editor draft is not state until submitted; submitting `router.push`es. Paging uses `replace`.

@@ -57,8 +57,11 @@ the ux-writing pattern (what happened — why. How to fix): `STALE_CLAUSE` (pars
 field has no single editable clause: `multiple_clauses`, `nested`, `mixed_fields`, `unparsable_edit`, or a
 reason this code doesn't know, each worded in the message), `BAD_VALUE` (not a bare identifier), `LAST_VALUE`
 (removing it would exclude every record), `BAD_SPAN`, `EMPTY_QUERY`, `TRAILING_ESCAPE`, `TOO_LONG` (the new
-`q` would pass `MAX_QUERY_LENGTH`, 2,000 code points, which mirrors the API parser's cap until `/meta` serves
-it; or `/parse` reported `too_long`: the widest edit's canonical form would be over the cap, decision-008),
+`q` would pass the instance's `max_query_length`, which `/meta` serves in `limits` (TASK-089) and `reduce` and
+`whyBlocked` take as an argument; until `/meta` is fetched (TASK-041/042) they use `DEFAULT_LIMITS`, 2,000 code
+points, from `frontend/src/lib/default-limits.json`, which the backend's `test_meta_limits.py` checks equals the
+cap `/meta` serves; or `/parse` reported `too_long`: the widest edit's canonical form would be over the cap,
+decision-008),
 `TOO_DEEP` (`/parse` reported `too_deep`: the wrap would nest `q` past `MAX_QUERY_DEPTH`, 64),
 `ALREADY_INCLUDED` and `BAD_PAGE`. The golden cases in `frontend/src/lib/filter-clause-golden.json` pin
 `/parse`'s report and the reducer's result together. **Controls

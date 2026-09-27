@@ -14,6 +14,7 @@
  */
 import type { components } from "@/api/schema";
 import { codePointLength, codePointSpanToUtf16 } from "@/api/spans";
+import defaultLimits from "./default-limits.json";
 
 export const MODES = ["native", "scholar"] as const;
 export type Mode = (typeof MODES)[number];
@@ -29,11 +30,18 @@ export const PAGE_SIZE = 50;
 export const MAX_PAGE = 10_000;
 
 /**
- * Longest `q` in code points. Mirrors the API parser's `MAX_QUERY_LENGTH` (spec 02 §Error handling; a longer
- * `q` is `PARSE_TOO_LONG`, a 422, and so is one whose canonical form is longer (decision-008), which only the
- * server can judge). `/meta` does not serve it yet, so keep the two equal by hand.
+ * The limits the reducer checks: `max_query_length`, the longest `q` in code points (spec 02 §Error handling;
+ * a longer `q` is `PARSE_TOO_LONG`, a 422, and so is one whose canonical form is longer (decision-008), which
+ * only the server can judge). The type is `/meta`'s `limits` (TASK-089), so it follows the contract.
  */
-export const MAX_QUERY_LENGTH = 2000;
+export type QueryLimits = Pick<components["schemas"]["Limits"], "max_query_length">;
+
+/**
+ * The limits to use until `/meta` is fetched (TASK-041/042 wire the fetch; then pass its `limits` to `reduce`
+ * and `whyBlocked`). The value is `default-limits.json`, which the backend's contract test
+ * (`test_meta_limits.py`) checks against the cap `/meta` serves, so it can't drift from the parser.
+ */
+export const DEFAULT_LIMITS: QueryLimits = { max_query_length: defaultLimits.max_query_length };
 
 /** Deepest nesting of groups and `NOT`s the API parser accepts (spec 02 §Error handling, `PARSE_TOO_DEEP`). */
 export const MAX_QUERY_DEPTH = 64;
@@ -391,7 +399,11 @@ function negatedClause(field: FilterField): SearchStateError {
 }
 
 /** The refusal for a field `/parse` reported no editable clause for, worded from its reason. */
-function noEditableClause(field: FilterField, reason: ClauseReason | null | undefined): SearchStateError {
+function noEditableClause(
+  field: FilterField,
+  reason: ClauseReason | null | undefined,
+  limits: QueryLimits,
+): SearchStateError {
   const head = `The ${field} filter cannot be changed here — `;
   const refuse = (why: string) =>
     new SearchStateError("NO_EDITABLE_CLAUSE", `${head}${why} Edit it in the query text.`);
@@ -402,7 +414,7 @@ function noEditableClause(field: FilterField, reason: ClauseReason | null | unde
       return new SearchStateError(
         "TOO_LONG",
         `${head}written out in full, the changed query would be over the ` +
-          `${MAX_QUERY_LENGTH.toLocaleString("en-US")}-character limit. Shorten the query text first.`,
+          `${limits.max_query_length.toLocaleString("en-US")}-character limit. Shorten the query text first.`,
       );
     case "too_deep":
       return new SearchStateError(
@@ -430,9 +442,10 @@ function editable(
   field: FilterField,
   clause: FilterClause | null,
   reason: ClauseReason | null | undefined,
+  limits: QueryLimits,
 ): FilterClause {
   if (clause !== null) return clause;
-  throw noEditableClause(field, reason);
+  throw noEditableClause(field, reason, limits);
 }
 
 function rewriteClause(
@@ -440,14 +453,15 @@ function rewriteClause(
   field: FilterField,
   clause: FilterClause,
   values: readonly string[],
+  limits: QueryLimits,
 ): string {
   const next = spliceClause(state, field, clause, values);
   const length = codePointLength(next);
-  if (length > MAX_QUERY_LENGTH) {
+  if (length > limits.max_query_length) {
     throw new SearchStateError(
       "TOO_LONG",
       `The changed query would be ${length.toLocaleString("en-US")} characters long — the limit is ` +
-        `${MAX_QUERY_LENGTH.toLocaleString("en-US")}. Shorten the query text first.`,
+        `${limits.max_query_length.toLocaleString("en-US")}. Shorten the query text first.`,
     );
   }
   return next;
@@ -534,7 +548,15 @@ function spliceClause(
   return q.slice(0, utf16[0]) + text + q.slice(utf16[1]);
 }
 
-export function reduce(state: SearchState, action: SearchAction): SearchState {
+/**
+ * The next state after `action`, or a `SearchStateError` saying why it can't be applied. `limits` are the
+ * instance's (`/meta`'s `limits`); `DEFAULT_LIMITS` until it is fetched.
+ */
+export function reduce(
+  state: SearchState,
+  action: SearchAction,
+  limits: QueryLimits = DEFAULT_LIMITS,
+): SearchState {
   switch (action.type) {
     case "submit":
       return { ...state, q: action.q, mode: action.mode ?? state.mode, page: 1 };
@@ -543,15 +565,15 @@ export function reduce(state: SearchState, action: SearchAction): SearchState {
     case "setMode":
       return { ...state, mode: action.mode, page: 1 };
     case "facetToggle": {
-      const clause = editable(action.field, action.clause, action.reason);
+      const clause = editable(action.field, action.clause, action.reason, limits);
       const { values } = clause;
       const next = values.includes(action.value)
         ? values.filter((v) => v !== action.value)
         : [...values, action.value];
-      return { ...state, q: rewriteClause(state, action.field, clause, next), page: 1 };
+      return { ...state, q: rewriteClause(state, action.field, clause, next, limits), page: 1 };
     }
     case "includeExcluded": {
-      const clause = editable(action.field, action.clause, action.reason);
+      const clause = editable(action.field, action.clause, action.reason, limits);
       const { values } = clause;
       if (values.includes(action.value)) {
         throw new SearchStateError(
@@ -561,7 +583,7 @@ export function reduce(state: SearchState, action: SearchAction): SearchState {
         );
       }
       const next = [...values, action.value];
-      return { ...state, q: rewriteClause(state, action.field, clause, next), page: 1 };
+      return { ...state, q: rewriteClause(state, action.field, clause, next, limits), page: 1 };
     }
     case "sort":
       return { ...state, sort: action.sort, page: 1 };
@@ -582,9 +604,13 @@ export function reduce(state: SearchState, action: SearchAction): SearchState {
  * description, instead of being refused after the click (spec 05 §URL is state). `STALE_CLAUSE` is the
  * usual case: the query changed and `/parse` has not answered for it yet.
  */
-export function whyBlocked(state: SearchState, action: SearchAction): SearchStateError | null {
+export function whyBlocked(
+  state: SearchState,
+  action: SearchAction,
+  limits: QueryLimits = DEFAULT_LIMITS,
+): SearchStateError | null {
   try {
-    reduce(state, action);
+    reduce(state, action, limits);
     return null;
   } catch (e) {
     if (e instanceof SearchStateError) return e;

@@ -520,6 +520,28 @@ export interface components {
             year: number;
         };
         JsonValue: unknown;
+        /**
+         * Limits
+         * @description This instance's limits on a query (TASK-089), so a client need not hard-code them: the parser's length
+         *     cap, and the served config's verification limits (`op serve` flags; another instance may differ).
+         */
+        Limits: {
+            /**
+             * Max Query Length
+             * @description the longest `q` in Unicode code points; a longer one, or one whose canonical form is longer, is 422 `PARSE_TOO_LONG` (from `/parse`, a 200 whose `errors` hold it)
+             */
+            max_query_length: number;
+            /**
+             * Max Verification Candidates
+             * @description the most candidate documents a query's position-verified clauses may read, summed over each clause's fields; more is 422 `API_QUERY_TOO_COSTLY`
+             */
+            max_verification_candidates: number;
+            /**
+             * Max Verified Clauses
+             * @description the most position-verified clauses a query may have; more is 422 `API_TOO_MANY_VERIFIED_CLAUSES`
+             */
+            max_verified_clauses: number;
+        };
         /** MetaResponse */
         MetaResponse: {
             /** Filter Fields */
@@ -531,6 +553,7 @@ export interface components {
              * @description every index this instance can serve, sorted, the served one included: an index this code can't open (another tokenizer, schema or Tantivy version) or one currently refused is left out
              */
             index_versions: string[];
+            limits: components["schemas"]["Limits"];
             /** Query Version */
             query_version: string;
             /** Text Fields */
