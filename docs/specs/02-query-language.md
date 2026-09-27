@@ -58,9 +58,8 @@ pieces before the first raw U+0345 end at it, even if a later mark belongs to th
 interleaved marks. Markup before a character that folds to several pieces belongs to its first piece only,
 in or out of a slash cluster (`\"⑴`: `1` spans `⑴` alone, (2,3), where it spanned the markup, (0,3), before
 task-075). No span decides what parses: the lexer's detached-wildcard test reads the stem's folded pieces
-(`tokenize_with_tail`, §Grammar; decision-008). Each token also has `reach`, the end of the whole characters
-it took a piece from (`end`, except that inside a slash cluster it covers the cluster); nothing that parses
-reads it any more. LaTeX markup that opens a word (an accent macro, `\-`, a math
+(`tokenize_with_tail`, §Grammar; decision-008). (Tokens no longer carry task-075's `reach`: after
+decision-008 nothing read it, so it was retired.) LaTeX markup that opens a word (an accent macro, `\-`, a math
 `^`/`_`) is part of that word's span (`\"{O}del` spans all eight characters); a math command's span is its
 name, and a word after an operator command starts after the operator's name. The full token case list is
 `backend/tests/golden/test_tokens.py`; the span cases are in `backend/tests/unit/test_normalize.py`.
@@ -161,7 +160,8 @@ Rules:
     `PARSE_WILDCARD_DETACHED`). That is judged on the stem's **folded pieces** (steps 1–4 of §Token
     semantics; decision-008), since look-alikes act as what they fold to: the last piece must be a letter
     or digit. Invisible characters, folded-away marks and LaTeX markup that joins a word (`bench\-*`) are
-    not pieces. So `abcd⒈*` (`⒈` is `1.`) is detached like `abcd1.*`, and so is `abcd⒈̸*` (the U+0338
+    not pieces, and marks that make no word (a lone vowel sign after a separator, `vision-ަ*`) leave the
+    separator as the last piece, so that is detached too. So `abcd⒈*` (`⒈` is `1.`) is detached like `abcd1.*`, and so is `abcd⒈̸*` (the U+0338
     on the `.` folds away); `abcd⑴*` (`⑴` is `(1)`) is detached after `)`; `abcd½*` (`½` is `1⁄2`, last
     piece `2`) is attached, `"abcd1 2*"`. The error names the piece and what it came from (`.` from
     `⒈`). A `*` or `$` elsewhere (`behavio$r`, `model$*`) is
@@ -312,7 +312,12 @@ checked before any other work). The canonical string is capped too: a query whos
 defaults explicit, ` AND ` for juxtaposition, a field prefix on every leaf, parentheses) is over 2,000 code
 points is `PARSE_TOO_LONG`, spanning the whole input and saying how much the canonical form adds
 (decision-008), since a search record keeps that string and replay re-parses it. So every accepted query's
-canonical string is itself accepted; long juxtaposed queries hit this from about 1,200 code points. Diagnostics are capped at 20 per code ("… and N more"), and user text
+canonical string is itself accepted. So there is no single effective input limit: it depends on how much
+the canonical form adds per term. The shortest refused inputs, measured with the parser (the defaults added;
+2- to 8-letter words): `abstract:(w w w …)` field groups are the worst case, from 373 (2-letter words) to
+802 (8-letter) code points, since every term gains `abstract:` and ` AND `; `-x` lists in Scholar mode 705–1,145;
+juxtaposed words 827 (2-letter), 967 (3), 1,163 (5), 1,340 (8); `title:(a OR b …)` groups 970–1,300; plain
+`OR` lists about 1,928. The error states how far the canonical form is over the cap and why. Diagnostics are capped at 20 per code ("… and N more"), and user text
 quoted in a message is clipped to 40 characters, so no diagnostic grows with the input. The codes are in
 `diagnostics.py`; the `PARSE_*`, `FIELD_*` and `WILDCARD_*` errors are 422s where a query is run (spec 04); `/parse`
 returns them as values.

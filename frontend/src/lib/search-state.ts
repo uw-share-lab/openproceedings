@@ -29,7 +29,8 @@ export const MAX_PAGE = 10_000;
 
 /**
  * Longest `q` in code points. Mirrors the API parser's `MAX_QUERY_LENGTH` (spec 02 §Error handling; a longer
- * `q` is `PARSE_TOO_LONG`, a 422). `/meta` does not serve it yet, so keep the two equal by hand.
+ * `q` is `PARSE_TOO_LONG`, a 422, and so is one whose canonical form is longer (decision-008), which only the
+ * server can judge). `/meta` does not serve it yet, so keep the two equal by hand.
  */
 export const MAX_QUERY_LENGTH = 2000;
 

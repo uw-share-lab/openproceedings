@@ -55,7 +55,9 @@ the ux-writing pattern (what happened — why. How to fix): `STALE_CLAUSE` (pars
 `mode`), `WRONG_FIELD`, `NEGATED_CLAUSE`, `NO_EDITABLE_CLAUSE` (the field has no single editable clause),
 `BAD_VALUE` (not a bare identifier), `LAST_VALUE` (removing it would exclude every record), `BAD_SPAN`,
 `EMPTY_QUERY`, `TRAILING_ESCAPE`, `TOO_LONG` (the new `q` would pass `MAX_QUERY_LENGTH`, 2,000 code points,
-which mirrors the API parser's cap until `/meta` serves it), `ALREADY_INCLUDED` and `BAD_PAGE`. **Controls
+which mirrors the API parser's cap until `/meta` serves it; a wrapped `q` that fits but whose canonical form
+is over the cap, decision-008, is refused only by the server: `/parse` reporting such a field as not
+toggleable is pending TASK-078), `ALREADY_INCLUDED` and `BAD_PAGE`. **Controls
 are disabled with the reason, not refused after the click:** a facet toggle or include button calls
 `whyBlocked(state, action)` while rendering and, when it returns an error, renders disabled with the
 message as its description. `STALE_CLAUSE` is the usual case, while `/parse` catches up with a new `q`.

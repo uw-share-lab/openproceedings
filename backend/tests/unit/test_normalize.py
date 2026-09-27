@@ -333,30 +333,6 @@ LATEX_PIECES = ["$", "\\(", "\\)", " ", "a", "O", "5", "{", "}", "^", "_", '\\"'
                 "\u00bd", "\u2474", "\u0338", "\u0345"]  # fmt: skip
 
 
-# `reach` is the end of the whole characters a token took a piece from: `end`, except that inside a slash
-# cluster it covers the cluster (task-075 review; since decision-008 nothing that parses reads it)
-@pytest.mark.parametrize(
-    ("text", "reaches"),
-    [
-        ("x½̸y", [3, 4]),  # x1 ends at 2 but reaches over the slash; 2y ends and reaches at 4
-        ("abcd⒈̸", [3 + 3]),  # abcd1 ends at 5, before the slash on `.`, and reaches 6
-        ("≠ͅx", [3, 4]),  # neq ends at 2 (iota starts there) and reaches the cluster's end
-        ("x½y", [2, 3]),  # no slash: reach is end
-        ("$\\le$ á", [4, 8]),
-    ],
-    ids=ascii,
-)
-def test_reach_covers_the_whole_cluster(text: str, reaches: list[int]) -> None:
-    assert [t.reach for t in tokenize(text)] == reaches
-
-
-@given(st.lists(st.sampled_from([*LATEX_PIECES, "⒈", "ͅ"]), max_size=12).map("".join))
-def test_reach_is_end_plus_only_combining_marks(text: str) -> None:
-    for t in tokenize(text):
-        assert t.end <= t.reach <= len(text), (text, t, t.reach)
-        assert all(unicodedata.combining(c) for c in text[t.end : t.reach]), (text, t, t.reach)
-
-
 @given(
     st.lists(st.sampled_from(LATEX_PIECES), max_size=12)
     .map("".join)
@@ -378,15 +354,9 @@ def test_token_spans_are_valid_and_never_overlap(text: str) -> None:
             assert len(shared) == 1 and len(unicodedata.normalize("NFKC", shared)) > 1, (text, a, b)
 
 
-def test_a_token_built_without_reach_reaches_its_end() -> None:
-    # task-075 review: an unset reach must not read as -1, as the frozen task-073 oracle compares it
-    assert Token("abc", 2, 5).reach == 5
-    assert Token("abc", 2, 5, reach=7).reach == 7
-
-
-def full(tokens: list[Token]) -> list[tuple[str, int, int, bool, int]]:
-    """Everything a token carries (`reach` is not part of Token equality)."""
-    return [(t.text, t.start, t.end, t.op, t.reach) for t in tokens]
+def full(tokens: list[Token]) -> list[tuple[str, int, int, bool]]:
+    """Everything a token carries."""
+    return [(t.text, t.start, t.end, t.op) for t in tokens]
 
 
 # --- the Tail: what a text ends with after its last word or operator piece (the lexer's detached-wildcard
@@ -438,6 +408,28 @@ def test_tail_says_whether_a_letter_after_the_text_joins_its_last_word(text: str
         assert after == [t.text for t in tokens] + ["x"], (text, tail)
     else:
         assert after == [t.text for t in tokens[:-1]] + [tokens[-1].text + "x"], (text, tail)
+
+
+_MARKS_AND_FORMATS = [
+    chr(c)
+    for c in range(0x80, 0x30000)
+    if unicodedata.category(chr(c)) in ("Mn", "Mc", "Me", "Cf", "Lm", "Sk")
+]
+
+
+@pytest.mark.parametrize("sep", ["-", ".", "/"])
+def test_a_mark_that_makes_no_word_keeps_the_separator_in_the_tail(sep: str) -> None:
+    """M3a gate round 2 (exactness-guardian): a vowel sign after a separator folds to a word piece, but a
+    marks-only word is dropped, so the separator is still what the text ends with. Every mark, format
+    character, modifier letter and modifier symbol after each separator: when no token starts after the
+    separator, the tail keeps it."""
+    wrong = []
+    for c in _MARKS_AND_FORMATS:
+        text = f"abcd{sep}{c}"
+        tokens, tail = tokenize_with_tail(text)
+        if all(t.start < 5 for t in tokens) and not tail.pieces.startswith(sep):
+            wrong.append((c, tail))
+    assert wrong == []
 
 
 # --- task-073's fast paths (the whole-text ASCII path in `tokenize`, the ASCII branch of the loop) rely on
