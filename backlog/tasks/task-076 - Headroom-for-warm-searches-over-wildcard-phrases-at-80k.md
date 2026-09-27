@@ -4,7 +4,7 @@ title: Headroom for warm searches over wildcard phrases at 80k
 status: To Do
 assignee: []
 created_date: '2026-09-26 23:03'
-updated_date: '2026-09-27 00:01'
+updated_date: '2026-09-27 00:19'
 labels:
   - engine
   - performance
@@ -32,4 +32,6 @@ task-031: on a quiet M-series Mac with the synthetic 80k corpus, main-2-pop (wil
 Numbers: the committed report (200 warm rounds) gives 68.7 ms p95; a separate 200-run probe (not in docs/results) gave p95 95 ms, p99 148 ms.
 
 From the M2 gate: TantivyEngine.compile is now memoised per tree (bounded), so a search's pages and facets don't rebuild the Boolean; the balanced combine trees cost ~5x Python compile time for wide wildcards (perf review). Re-measure main-2-pop warm with report_80k.py before other work.
+
+M2 gate: with the compiled-query memo, docs/results/2026-09-27-bench.md (200 warm rounds, quiet, 2700e19) gives main-2-pop warm p95 27.3 ms (was 68.7). AC#1's p95 < 50 ms is met in that report; its p99 < 100 ms isn't measured by the report yet (add a p99 column, or a probe) before closing.
 <!-- SECTION:NOTES:END -->

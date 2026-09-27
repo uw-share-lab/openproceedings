@@ -76,8 +76,8 @@ only.
 
 ## Budgets
 Build in < 2 min, and an index under 500 MB on disk (spec 03), on the ~80k M4 corpus. Measured by
-`backend/tests/bench/report_80k.py` into `docs/results/2026-09-26-bench.md` (synthetic 80k, abstracts of
-120-250 words): 33 s, a 99 MB index, 386 MB in the largest single process; nightly on the full index is
+`backend/tests/bench/report_80k.py` into `docs/results/2026-09-27-bench.md` (synthetic 80k, abstracts of
+120-250 words): 32 s, a 99 MB index, 396 MB in the largest single process; nightly on the full index is
 task-057. An earlier local, undated measurement from the real corpus's text replicated to 81k gave 38.8 s,
 140 MB and a 510 MB builder (129.9 s before normalizing in parallel; 2 GB before streaming). Tokenizer parity is read back from the built index
 (task-029, `engine/parity.py`, `op index parity`): stored fields through `exact_v1`, positions by a
