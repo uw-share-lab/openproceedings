@@ -45,8 +45,11 @@ on the flattened canonical tree**, where parenthesised AND groups are flattened:
 `track:workshop "large language model" AND (venue:NeurIPS track:workshop)` both `track:` clauses are
 top-level. A field with more than one such clause, or with its only clause inside an OR or NOT, has no
 editable clause: `/parse` says so (`multiple_clauses`, `nested`, `mixed_fields`), and splicing over one clause would leave the other ANDed in,
-so the edit would silently change nothing. The rewritten clause is `field:v` for one value and
-`field:(v1 OR v2 …)` for several. An applied default is written out as `(q) AND field:(…)`; a `q` ending in
+so the edit would silently change nothing. The rewritten clause is always grouped, `field:(v1 OR v2 …)`, and
+`field:(v)` for one value: a bare `field:v` spliced before a group would touch it (`trust
+track:workshop(x OR y)` is `PARSE_PAREN_TOUCHES_WORD`), while the group's `)` never touches what follows, so
+`/parse`'s check of the widest edit covers every edit a click makes. The canonical form, and so the search
+record's hash, is the same as the bare form's. An applied default is written out as `(q) AND field:(…)`; a `q` ending in
 an odd run of backslashes is refused, because the last backslash would escape the `)` (spec 02). The wrap
 goldens are `frontend/src/lib/wrap-golden.json`, checked against the server parser by
 `backend/tests/contract/test_frontend_wrap_golden.py`.
@@ -62,7 +65,8 @@ reason this code doesn't know, each worded in the message), `BAD_VALUE` (not a b
 points, from `frontend/src/lib/default-limits.json`, which the backend's `test_meta_limits.py` checks equals the
 cap `/meta` serves; or `/parse` reported `too_long`: the widest edit's canonical form would be over the cap,
 decision-008),
-`TOO_DEEP` (`/parse` reported `too_deep`: the wrap would nest `q` past `MAX_QUERY_DEPTH`, 64),
+`TOO_DEEP` (`/parse` reported `too_deep`: the wrap would nest `q` past the instance's `max_query_depth`, 64,
+also from `/meta`'s `limits` and `default-limits.json`),
 `ALREADY_INCLUDED` and `BAD_PAGE`. The golden cases in `frontend/src/lib/filter-clause-golden.json` pin
 `/parse`'s report and the reducer's result together. **Controls
 are disabled with the reason, not refused after the click:** a facet toggle or include button calls

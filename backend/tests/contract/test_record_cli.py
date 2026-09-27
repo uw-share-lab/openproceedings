@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -267,3 +268,199 @@ def test_the_exit_code_holds_across_a_real_process(capsys: Capsys, data_dir: Pat
 
     assert run(good).returncode == 0
     assert run(bad).returncode == 3
+
+
+# --- round-1 review (feat/m3-followups gate) --------------------------------------------------------------
+def pinned_refusals(err: str) -> list[dict[str, Any]]:
+    return [x for x in log_lines(err) if x["event"] == "pinned_index_unavailable"]
+
+
+def test_a_store_at_its_size_cap_refuses_the_save(
+    capsys: Capsys, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The store's size cap applies to the CLI too (the API's default, `records_max_bytes`)."""
+    import openproceedings.records as records
+    from openproceedings.api.config import ApiConfig
+
+    saved(capsys, data_dir, "trust")  # the store exists, well under its cap
+    cap = ApiConfig.model_fields["records_max_bytes"].default
+    monkeypatch.setattr(records.RecordStore, "_used_bytes", lambda _self: cap)
+    code, out, err = op(capsys, data_dir, "record", "save", "trust")
+    assert code == 1 and out == ""
+    assert "op record save: API_RECORDS_STORE_FULL" in err
+    (full,) = [x for x in log_lines(err) if x["event"] == "records_store_full"]
+    assert full["max_bytes"] == cap
+
+
+def test_save_refuses_an_index_directory_not_named_for_its_index(
+    capsys: Capsys, data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A record pins the engine's index_version, which a replay finds by directory name: an index whose
+    engine reports another version (a copied directory is caught earlier, by its manifest) is refused."""
+    import openproceedings.engine.tantivy_engine as tantivy_engine
+
+    monkeypatch.setattr(
+        tantivy_engine, "TantivyEngine", lambda _path: SimpleNamespace(index_version="ffff00")
+    )
+    code, out, err = op(capsys, data_dir, "record", "save", "trust", "--index", store.big)
+    assert code == 1 and out == ""
+    assert f"indexes/{store.big} holds index ffff00, not one named for it" in err
+    assert not (data_dir / RECORDS_DIR).exists()
+
+
+def test_replay_skips_an_alias_named_like_the_records_index(
+    capsys: Capsys, data_dir: Path, store: Store
+) -> None:
+    """A symlink named like the record's version is not that version (`open_pinned`'s rule, shared with
+    `IndexState.pinned`): absent, one DEBUG line, and the replay runs on `current` as drift."""
+    record_id = saved(capsys, data_dir, "trust")["record_id"]
+    point_current(data_dir, store.small)
+    shutil.rmtree(data_dir / "indexes" / store.big)
+    (data_dir / "indexes" / store.big).symlink_to(store.small)
+    code, out, err = op(capsys, data_dir, "--log-level", "debug", "record", "replay", record_id, "--json")
+    assert code == 0 and json.loads(out)["index_version"] == store.small
+    (line,) = pinned_refusals(err)
+    assert (line["level"], line["reason"], line["cause_reason"]) == ("DEBUG", "absent", "alias")
+    assert "error" not in line
+
+
+def test_replay_of_a_record_naming_no_index_version_is_absent(
+    capsys: Capsys, data_dir: Path, store: Store
+) -> None:
+    """`current` (or any name that isn't an index_version) is never opened as a record's own index."""
+    good = saved(capsys, data_dir, "trust")["record_id"]
+    odd = tampered(data_dir, good, index_version="current")
+    point_current(data_dir, store.small)
+    code, out, err = op(capsys, data_dir, "--log-level", "debug", "record", "replay", odd, "--json")
+    assert (code, json.loads(out)["status"], json.loads(out)["index_version"]) == (0, "drifted", store.small)
+    (line,) = pinned_refusals(err)
+    assert (line["level"], line["reason"], line["cause_reason"]) == ("DEBUG", "absent", "name_invalid")
+
+
+def test_replay_refuses_a_tampered_record_index_at_error(
+    capsys: Capsys, data_dir: Path, store: Store
+) -> None:
+    """The record's own index no longer verifies: one ERROR line (the load failure's reason, never its
+    message), and the replay runs on `current` as drift."""
+    record_id = saved(capsys, data_dir, "trust")["record_id"]
+    point_current(data_dir, store.small)
+    victim = data_dir / "indexes" / store.big / "ids.txt"  # as test_lifecycle tampers an index
+    victim.chmod(0o644)
+    victim.write_text("forged\n", encoding="utf-8")
+    code, out, err = op(capsys, data_dir, "record", "replay", record_id, "--json")
+    assert code == 0 and json.loads(out)["index_version"] == store.small
+    (line,) = pinned_refusals(err)
+    assert (line["level"], line["reason"], line["error"]) == ("ERROR", "tampered", "IndexBuildError")
+    assert line["cause_reason"] and str(data_dir) not in json.dumps(line)
+
+
+def test_replay_refuses_a_record_index_whose_engine_reports_another_version(
+    capsys: Capsys, data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import openproceedings.engine.tantivy_engine as tantivy_engine
+
+    record_id = saved(capsys, data_dir, "trust")["record_id"]
+    point_current(data_dir, store.small)
+    real = tantivy_engine.TantivyEngine
+
+    def opener(path: Path) -> Any:
+        return SimpleNamespace(index_version="ffff00") if path.name == store.big else real(path)
+
+    monkeypatch.setattr(tantivy_engine, "TantivyEngine", opener)
+    code, out, err = op(capsys, data_dir, "record", "replay", record_id, "--json")
+    assert code == 0 and json.loads(out)["index_version"] == store.small
+    (line,) = pinned_refusals(err)
+    assert (line["level"], line["reason"], line["cause_reason"]) == (
+        "ERROR",
+        "tampered",
+        "index_version_mismatch",
+    )
+
+
+def test_replay_with_its_own_index_here_never_needs_current(
+    capsys: Capsys, data_dir: Path, store: Store
+) -> None:
+    """The record's own index is opened first; `current` (removed here) and --index are never read."""
+    record_id = saved(capsys, data_dir, "trust")["record_id"]
+    (data_dir / "indexes" / "current").unlink()
+    code, body, _err = replay_json(capsys, data_dir, record_id)
+    assert (code, body["status"], body["index_version"]) == (0, "reproduced", store.big)
+
+
+def test_a_malformed_and_an_unknown_record_id_are_told_apart(capsys: Capsys, data_dir: Path) -> None:
+    saved(capsys, data_dir, "trust")
+    _code, _out, malformed = op(capsys, data_dir, "record", "replay", "short")
+    _code, _out, unknown = op(capsys, data_dir, "record", "replay", "AAAAAAAAAAAA")
+    assert "a record id is 12 characters from A–Z, a–z, 0–9, `-` and `_`" in malformed
+    assert "no search record with that id" in unknown and "12 characters" not in unknown
+
+
+def test_record_replayed_carries_the_hash_versions_and_counts(capsys: Capsys, data_dir: Path) -> None:
+    """The search-records skill (§The CLI): the id, versions, `canonical_hash` and counts, never the query."""
+    record_id = saved(capsys, data_dir, f"trust OR {SECRET}")["record_id"]
+    record = RecordStore(data_dir / RECORDS_DIR).get(record_id)
+    assert record is not None
+    code, _out, err = op(capsys, data_dir, "record", "replay", record_id)
+    assert code == 0
+    (line,) = [x for x in log_lines(err) if x["event"] == "record_replayed"]
+    assert line["canonical_hash"] == record.canonical_hash and line["query_version"] == QUERY_VERSION
+    assert (line["total"], line["added_total"], line["removed_total"]) == (record.total, 0, 0)
+    assert SECRET not in err
+
+
+def test_record_saved_is_logged_before_the_output(
+    capsys: Capsys, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The record is in the store once `insert` returns: a reader that went away (a broken pipe while
+    printing) still leaves its log line."""
+
+    def gone(_value: object) -> None:
+        raise BrokenPipeError
+
+    monkeypatch.setattr(cli, "_print", gone)
+    code, _out, err = op(capsys, data_dir, "record", "save", "trust", "--json")
+    assert code == 0
+    (line,) = [x for x in log_lines(err) if x["event"] == "record_saved"]
+    assert RecordStore(data_dir / RECORDS_DIR).get(line["record_id"]) is not None
+
+
+def test_a_parse_refusal_names_the_full_command(capsys: Capsys, data_dir: Path) -> None:
+    _code, _out, err = op(capsys, data_dir, "--log-level", "debug", "record", "save", "(trust")
+    (line,) = [x for x in log_lines(err) if x["event"] == "cli_refused"]
+    assert line["command"] == "record save"
+
+
+def test_save_notes_a_query_a_default_api_would_refuse_as_too_many_verified_clauses(
+    capsys: Capsys, data_dir: Path
+) -> None:
+    """The CLI saves it (its serving policy is left out), but says so: a default instance refuses it (422)
+    and withholds its replay."""
+    from openproceedings.api.config import ApiConfig
+
+    cap = ApiConfig.model_fields["max_verified_clauses"].default
+    q = " OR ".join(f'"trust* w{i}"' for i in range(cap + 1))
+    code, _out, err = op(capsys, data_dir, "record", "save", q)
+    assert code == 0
+    assert "note: a default-configured API instance refuses this query (API_TOO_MANY_VERIFIED_CLAUSES" in err
+    at_cap = " OR ".join(f'"trust* w{i}"' for i in range(cap))
+    code, _out, err = op(capsys, data_dir, "record", "save", at_cap)
+    assert code == 0 and "note:" not in err  # at the cap: a default instance runs it
+    with TestClient(make_app(data_dir)) as client:
+        r = client.post("/api/v1/records", json={"q": q, "mode": "native"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "API_TOO_MANY_VERIFIED_CLAUSES"
+
+
+def test_save_notes_a_query_a_default_api_would_refuse_as_too_costly(
+    capsys: Capsys, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings.api.config import ApiConfig
+
+    monkeypatch.setattr(ApiConfig.model_fields["max_verification_candidates"], "default", 10)
+    q = '"trust* model"'
+    code, _out, err = op(capsys, data_dir, "record", "save", q)
+    assert code == 0 and "(API_QUERY_TOO_COSTLY" in err
+    with TestClient(make_app(data_dir, max_verification_candidates=10)) as client:
+        r = client.post("/api/v1/records", json={"q": q, "mode": "native"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "API_QUERY_TOO_COSTLY"
+    code, _out, err = op(capsys, data_dir, "record", "save", "trust")
+    assert code == 0 and "note:" not in err  # no position check: nothing to say

@@ -193,7 +193,10 @@ the one trusted proxy (`--trusted-proxy <its address>`); a trusted network wider
 is refused, as is `--no-rate-limit` with a non-loopback `--host`. Swagger UI (`/api/v1/docs`, scripts from a
 CDN) is off on a non-loopback `--host` unless `--docs` is passed; leave it off in production. The data volume is read-only in `api`, except the `records/` directory
 (`records/records.sqlite` and the WAL files SQLite writes beside it; spec 04 §Search records), and it
-holds each served index's snapshot beside it (`/papers/{id}` reads provenance from it). Refreshing the index
+holds each served index's snapshot beside it (`/papers/{id}` reads provenance from it). Run `op record save`
+and `op record replay` against that data volume as the API's service user (`sudo -u <api user> op record …`
+or the `api` container's own user): the store's directory is 0700 and `records.sqlite` 0600, so a record
+saved as another user leaves a store (and WAL files) the API can't write, or can't read at all. Refreshing the index
 means building a new `index_version` offline, switching the `current` symlink, and sending SIGHUP. Hosting is
 still open (00, question 5).
 

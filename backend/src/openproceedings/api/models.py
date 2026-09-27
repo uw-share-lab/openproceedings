@@ -257,6 +257,10 @@ class Limits(Model):
         description="the longest `q` in Unicode code points; a longer one, or one whose canonical form is "
         "longer, is 422 `PARSE_TOO_LONG` (from `/parse`, a 200 whose `errors` hold it)"
     )
+    max_query_depth: int = Field(
+        description="the deepest nesting of groups and `NOT`s a `q` may have; deeper is 422 `PARSE_TOO_DEEP` "
+        "(from `/parse`, a 200 whose `errors` hold it)"
+    )
     max_verified_clauses: int = Field(
         description="the most position-verified clauses a query may have; more is 422 "
         "`API_TOO_MANY_VERIFIED_CLAUSES`"

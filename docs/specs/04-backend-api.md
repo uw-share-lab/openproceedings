@@ -698,8 +698,11 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
       declares the 503 `API_BUSY` as every query route does, but today never sends it: the paper's own text
       is evaluated (the highlighter's verdict, which a unit test holds to ReferenceEngine's on every
       fixture record), so no collection runs and nothing is position-verified, and no verification slot or
-      deadline applies. The access line carries the parse fields (`canonical_hash`, token count, codes,
-      `verified_clauses`), never `q`.
+      deadline applies. The per-verified-clause charge is still taken, deliberately: nothing is verified
+      today, but the charge is `/search`'s admission for the same `q`, so this route can't be used to
+      price a query below `/search`, and the charge stays right if highlighting ever runs a collection. The
+      paper's display record is read once, for the existence check, and highlighted as read. The access line
+      carries the parse fields (`canonical_hash`, token count, codes, `verified_clauses`), never `q`.
     - Chosen over carrying the hit's spans from the `/search` response the reader came from (the other option
       TASK-087 named): that way a direct or shared link to a paper page would show no highlights, the page
       would depend on client state the URL doesn't hold (guarantee 3 keeps `q` as the only result-set state),
@@ -709,9 +712,11 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     `year`, `track`, `status`), and `values` (`venue`, `track` and `status`: the vocabularies the parser checks
     filter values against, so autocomplete never offers a value it refuses), and `limits` (task-089):
     `max_query_length` (the parser's `MAX_QUERY_LENGTH`, 2,000 code points; not configurable),
+    `max_query_depth` (the parser's `MAX_DEPTH`, 64 nested groups and `NOT`s, deeper is `PARSE_TOO_DEEP`;
+    not configurable; additive),
     `max_verified_clauses` and `max_verification_candidates` (this instance's `op serve` values, defaults 16
     and 300,000), the limits behind `PARSE_TOO_LONG`, `API_TOO_MANY_VERIFIED_CLAUSES` and
-    `API_QUERY_TOO_COSTLY`, so a client need not hard-code them. The frontend reducer takes the cap from it
+    `API_QUERY_TOO_COSTLY`, so a client need not hard-code them. The frontend reducer takes both caps from it
     (spec 05 §URL is state).
   - Every route that reports `index_version` needs a loaded engine, `/parse` and `/meta` included (503
     `API_INDEX_NOT_LOADED` before the first load).

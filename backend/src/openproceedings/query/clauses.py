@@ -19,17 +19,24 @@ are flattened, `NOT NOT x` is `x`, an OR of one field's filters is one filter). 
   default's values (track, status) or every value the field can take (venue: the vocabulary; year: one
   range `1000..9999`). A click writes it out as `(q) AND field:(…)`.
 
-An editable clause is then checked by making the widest edit a click can make (every vocabulary value; for
-year, one `dddd..dddd` range) exactly as the reducer writes it, and parsing that with the parser itself, in
-the query's mode, so the answer is the server's own. The clause is not toggleable when the edited `q` would
+A click always writes the grouped form, `field:(v)` even for one value, so the clause's `)` ends every edit
+and no edit can touch a group that follows it (a bare `track:workshop(x)` is PARSE_PAREN_TOUCHES_WORD); the
+canonical form is the same either way. An editable clause is then checked by making the widest edit a click
+can make (every vocabulary value; for year, one `(dddd..dddd)` range) exactly as the reducer writes it, and
+parsing that with the parser itself, in the query's mode, so the answer is the server's own. The clause is not toggleable when the edited `q` would
 be `too_long` (over 2,000 code points raw or canonical, decision-008), `too_deep` (the wrap nests `q` one
 level deeper; PARSE_TOO_DEEP), an `unparsable_edit` for another reason (a `q` ending in an escaping
 backslash, which would escape the wrap's `)`), or would not end with exactly that one top-level clause of
 the field (`multiple_clauses`: a written copy the canonical form deduplicated, `track:main NOT NOT
 (track:main a)`, survives the splice).
 
-`filter_clauses` is not part of `parse`: it parses up to four edited strings, which `/search` and replay do
-not need, and `parse` calling it would recurse. `POST /parse` serves it as `filters`.
+Every field with no clause is checked by one parse that writes them all out at once, and only when that edit
+can't be made is each checked alone; a typed clause is checked by its own splice. So `filter_clauses` parses
+one edited string for a query with no typed clauses and at most one more per typed clause, and never more
+than five (`test_clauses.py` counts them).
+
+`filter_clauses` is not part of `parse`: the edited strings are work `/search` and replay do not need, and
+`parse` calling it would recurse. `POST /parse` serves it as `filters`.
 """
 
 from __future__ import annotations
@@ -54,7 +61,7 @@ from openproceedings.query.ast import (
 )
 from openproceedings.query.canonical import canonicalize
 from openproceedings.query.defaults import DEFAULT_CLAUSES
-from openproceedings.query.parser import ParseResult, parse
+from openproceedings.query.parser import Mode, ParseResult, parse
 from openproceedings.vocab import STATUSES, TRACKS, VENUES
 
 ClauseReason = Literal[
@@ -67,12 +74,15 @@ VOCABULARY: dict[FilterField, tuple[str, ...]] = {
     "status": tuple(sorted(STATUSES)),
 }
 EVERY_YEAR = YearRange(lo=MIN_YEAR, hi=MAX_YEAR)
-_WIDEST_YEAR = f"year:{MIN_YEAR}..{MAX_YEAR}"  # the longest single range a click writes (`dddd..dddd`)
+# the longest single range a click writes, grouped as every clause is
+_WIDEST_YEAR = f"year:({MIN_YEAR}..{MAX_YEAR})"
 
 
 class _Clause(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", json_schema_serialization_defaults_required=True)
-    field: FilterField
+    field: FilterField = Field(
+        description="The filter field: always equal to this clause's key in `filters`."
+    )
     negated: bool = Field(description="The clause is `NOT field:…`. A negated clause is never toggleable.")
     span: Span | None = Field(
         description="Half-open code-point range of the clause in `q`. Zero-width at the end, `[len(q), len(q)]`, "
@@ -138,10 +148,10 @@ def _written(n: Node) -> list[Node]:
     return [c for child in n.children for c in _written(child)] if isinstance(n, And) else [n]
 
 
-def _clause_of(n: Node) -> tuple[FilterField, bool] | None:
-    """(field, negated) if canonical node `n` is a filter clause (`field:…` or `NOT field:…`), else None."""
+def _clause_field(n: Node) -> FilterField | None:
+    """The field if canonical node `n` is a filter clause (`field:…` or `NOT field:…`), else None."""
     inner = n.child if isinstance(n, Not) else n
-    return (inner.field, isinstance(n, Not)) if isinstance(inner, Filter) else None
+    return inner.field if isinstance(inner, Filter) else None
 
 
 def _filters(n: Node, field: FilterField) -> bool:
@@ -155,54 +165,93 @@ def _filters(n: Node, field: FilterField) -> bool:
     return False
 
 
-def _mixed(n: Node, field: FilterField) -> bool:
-    """Whether `n` is an OR of filter clauses on several fields, `field` among them."""
+def _mixed(n: Node) -> bool:
+    """Whether `n` is an OR of filter clauses (`field:…` or `NOT field:…`) on several fields. The caller only
+    asks about a conjunct that holds a filter of its field, so that field is always among them."""
     if not isinstance(n, Or):
         return False
-    clauses = [_clause_of(c) for c in n.children]
-    fields = {c[0] for c in clauses if c is not None}
-    return None not in clauses and field in fields and len(fields) > 1
+    fields = [_clause_field(c) for c in n.children]
+    return None not in fields and len(set(fields)) > 1
 
 
 def _format(field: FilterField, values: tuple[str, ...]) -> str:
-    """A clause as the reducer writes it (`search-state.ts::formatClause`)."""
-    return f"{field}:{values[0]}" if len(values) == 1 else f"{field}:({' OR '.join(values)})"
+    """A clause as the reducer writes it (`search-state.ts::formatClause`): always grouped, `field:(v)` even for
+    one value, so a splice before a group never touches it (`track:workshop(x)` is PARSE_PAREN_TOUCHES_WORD).
+    The canonical form, and so the hash, is the same as the bare `field:v`'s."""
+    return f"{field}:({' OR '.join(values)})"
 
 
-def _widest(q: str, field: FilterField, span: Span) -> str:
-    """`q` after the longest edit a click can make to `field`'s clause at `span` (the reducer's own splice)."""
-    clause = _WIDEST_YEAR if field == "year" else _format(field, VOCABULARY[field])
-    start, end = span
-    if start == end == len(q):
-        return f"({q}) AND {clause}"
-    return q[:start] + clause + q[end:]
+def _widest_clause(field: FilterField) -> str:
+    """The longest clause a click can write for `field`: every vocabulary value, or one `(dddd..dddd)` range.
+    Its `)` ends every edit, so the one check covers every edit shape: none can touch what follows."""
+    return _WIDEST_YEAR if field == "year" else _format(field, VOCABULARY[field])
 
 
-def _check_edit(q: str, result: ParseResult, field: FilterField, span: Span) -> ClauseReason | None:
-    """Why the widest click on `field`'s clause at `span` can't be made, or None if it can: the edited `q`
-    parses (in the query's mode) and has exactly one top-level `field` clause, the one written."""
-    edited = parse(_widest(q, field, span), result.mode)
-    codes = {e.code for e in edited.errors}
+def _edit_reason(edited: str, mode: Mode, fields: tuple[FilterField, ...]) -> ClauseReason | None:
+    """Why `edited` (q after the widest click on each of `fields`) can't be written, or None if it can: it
+    parses in the query's mode and has exactly one top-level clause of each field, the widest one written."""
+    parsed = parse(edited, mode)
+    codes = {e.code for e in parsed.errors}
     if DiagnosticCode.PARSE_TOO_DEEP in codes:
         return "too_deep"
     if DiagnosticCode.PARSE_TOO_LONG in codes:
         return "too_long"
-    if edited.effective_ast is None:
+    if parsed.effective_ast is None:
         return "unparsable_edit"  # e.g. a q ending in an escaping backslash, which would escape the `)`
-    widest = (EVERY_YEAR,) if field == "year" else VOCABULARY[field]
-    top = [c for c in _conjuncts(edited.effective_ast) if (k := _clause_of(c)) is not None and k[0] == field]
-    if len(top) != 1 or not isinstance(top[0], Filter) or top[0].values != widest:
-        return "multiple_clauses"  # another written clause of the field survives the splice
+    conjuncts = _conjuncts(parsed.effective_ast)
+    for field in fields:
+        top = [c for c in conjuncts if _clause_field(c) == field]
+        widest = (EVERY_YEAR,) if field == "year" else VOCABULARY[field]
+        # Only `len(top) != 1` is reachable today: the canonical form never merges two clauses of a field, so
+        # the one left is the clause written. The rest is defence against a canonical rule that would.
+        if len(top) != 1 or not isinstance(top[0], Filter) or top[0].values != widest:
+            return "multiple_clauses"  # another written clause of the field survives the splice
     return None
 
 
+def _check_splice(q: str, mode: Mode, field: FilterField, span: Span) -> ClauseReason | None:
+    """Why the widest click on the typed clause of `field` at `span` can't be made, or None if it can."""
+    start, end = span
+    return _edit_reason(q[:start] + _widest_clause(field) + q[end:], mode, (field,))
+
+
+def _check_wrap(q: str, mode: Mode, fields: tuple[FilterField, ...]) -> ClauseReason | None:
+    """Why writing each of `fields` out as `(q) AND field:(…)`, all at once, can't be done, or None if it can."""
+    return _edit_reason(" AND ".join((f"({q})", *map(_widest_clause, fields))), mode, fields)
+
+
+def _check_wraps(
+    q: str, mode: Mode, fields: tuple[FilterField, ...]
+) -> dict[FilterField, ClauseReason | None]:
+    """The reason for each field with no clause (a zero-width span), from as few parses as the answer allows.
+
+    One parse writes every such field out at once (`/parse` pays one extra parse, not four, in the common
+    case). When that edit can be made, so can each field's own: each is the same wrap with a subset of its
+    conjuncts, so never longer, raw or canonical (a default the parser would add is a subset of the widest
+    clause written), and never deeper. When it is too deep, so is each: the wrap's `(…)` is the only nesting
+    it adds, the same in each. Otherwise each field is checked alone. The answer is exactly the per-field one
+    (`test_clauses.py` compares them over generated queries)."""
+    if not fields:
+        return {}
+    together = _check_wrap(q, mode, fields)
+    if together is None or together == "too_deep" or len(fields) == 1:
+        return dict.fromkeys(fields, together)
+    return {f: _check_wrap(q, mode, (f,)) for f in fields}
+
+
+_Report = tuple[bool, Span | None, tuple[str | YearRange, ...] | None, ClauseReason | None]
+
+
 def _report(
-    q: str, result: ParseResult, typed: list[tuple[Node, Node]], canon: list[Node], field: FilterField
-) -> tuple[bool, Span | None, tuple[str | YearRange, ...] | None, ClauseReason | None]:
-    """(negated, span, values, reason) for `field`; reason None = toggleable. `typed`: the written top-level
-    conjuncts, each with its canonical form; `canon`: the canonical tree's top-level conjuncts."""
-    own = [c for c in canon if (k := _clause_of(c)) is not None and k[0] == field]
-    written = [c for c, k in ((c, _clause_of(n)) for c, n in typed) if k is not None and k[0] == field]
+    q: str, mode: Mode, typed: list[tuple[Node, Node]], canon: list[Node], field: FilterField
+) -> _Report | None:
+    """(negated, span, values, reason) for `field`; reason None = toggleable. None when the field has no
+    clause at all, so its report is the wrap's (`_check_wraps`). `typed`: the written top-level conjuncts,
+    each with its canonical form; `canon`: the canonical tree's top-level conjuncts."""
+    own = [c for c in canon if _clause_field(c) == field]
+    written = [c for c, n in typed if _clause_field(n) == field]
+    # Two written copies the canonical form deduplicated are two clauses (spec 02 §Filter clauses), even when
+    # a splice over one would leave the other harmless (both already every value): the rule, not a shortcut.
     if len(own) > 1 or len(written) > 1:
         return False, None, None, "multiple_clauses"
     if own:
@@ -214,18 +263,18 @@ def _report(
         span = written[0].span
         if negated:
             return True, span, clause.values, "negated"
-        reason = _check_edit(q, result, field, span)
+        reason = _check_splice(q, mode, field, span)
         if reason == "multiple_clauses":  # another written copy survives the splice: no single clause
             return False, None, None, reason
         return False, span, clause.values, reason
-    holders = [c for c in canon if _filters(c, field)]
-    if holders:
-        return False, None, None, "mixed_fields" if any(_mixed(c, field) for c in holders) else "nested"
-    span = (len(q), len(q))
-    admitted: tuple[str | YearRange, ...] = (
-        (EVERY_YEAR,) if field == "year" else DEFAULT_CLAUSES.get(field, VOCABULARY[field])
-    )
-    return False, span, admitted, _check_edit(q, result, field, span)
+    if any(_filters(c, field) for c in canon):
+        return (
+            False,
+            None,
+            None,
+            "mixed_fields" if any(_mixed(c) for c in canon if _filters(c, field)) else "nested",
+        )
+    return None
 
 
 def filter_clauses(q: str, result: ParseResult) -> ParsedFilters | None:
@@ -234,9 +283,15 @@ def filter_clauses(q: str, result: ParseResult) -> ParsedFilters | None:
         return None
     canon = _conjuncts(canonicalize(result.ast))
     typed = [(c, canonicalize(c)) for c in _written(result.ast)]
+    found = {field: _report(q, result.mode, typed, canon, field) for field in FILTER_FIELDS}
+    wraps = _check_wraps(q, result.mode, tuple(f for f, r in found.items() if r is None))
+    end = (len(q), len(q))
     reports: dict[str, ParsedClause | ParsedYearClause] = {}
-    for field in FILTER_FIELDS:
-        negated, span, values, reason = _report(q, result, typed, canon, field)
+    for field, report in found.items():
+        # No clause at all: the zero-width span at the end, where a click writes it out as `(q) AND field:(…)`,
+        # admitting the default's values (track, status) or every value the field can take.
+        admitted = (EVERY_YEAR,) if field == "year" else DEFAULT_CLAUSES.get(field, VOCABULARY[field])
+        negated, span, values, reason = report or (False, end, admitted, wraps[field])
         common = {
             "field": field,
             "negated": negated,

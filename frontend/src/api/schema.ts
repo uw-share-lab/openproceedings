@@ -527,6 +527,11 @@ export interface components {
          */
         Limits: {
             /**
+             * Max Query Depth
+             * @description the deepest nesting of groups and `NOT`s a `q` may have; deeper is 422 `PARSE_TOO_DEEP` (from `/parse`, a 200 whose `errors` hold it)
+             */
+            max_query_depth: number;
+            /**
              * Max Query Length
              * @description the longest `q` in Unicode code points; a longer one, or one whose canonical form is longer, is 422 `PARSE_TOO_LONG` (from `/parse`, a 200 whose `errors` hold it)
              */
@@ -741,7 +746,7 @@ export interface components {
         ParsedClause: {
             /**
              * Field
-             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @description The filter field: always equal to this clause's key in `filters`. Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             field: "venue" | "year" | "track" | "status";
@@ -791,7 +796,7 @@ export interface components {
         ParsedYearClause: {
             /**
              * Field
-             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @description The filter field: always equal to this clause's key in `filters`. Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
             field: "venue" | "year" | "track" | "status";

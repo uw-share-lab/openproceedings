@@ -270,16 +270,26 @@ ClauseReason = "multiple_clauses" | "nested" | "mixed_fields" | "negated"
 A nested clause beside a single top-level one doesn't block it (`track:main (track:workshop OR x)` edits
 `track:main`); the nested one stays applied, as the disjunctive facet counts assume (decision-001).
 
-**The caps.** A toggleable clause is checked by making the widest edit a click can make and parsing it in
-the query's mode: every vocabulary value (for year, one `dddd..dddd` range), spliced over the span or
-wrapped around `q`, exactly as the reducer writes it. If that edited `q` is refused, the clause is not
+**The caps.** A click always writes the grouped form, `field:(v1 OR …)`, even for one value (`field:(v)`;
+the same canonical form and hash as `field:v`), so its `)` ends every edit and no edit can touch a group
+that follows the clause (`track:(main OR workshop)(x OR y)` → `track:(workshop)(x OR y)`, where a bare
+`track:workshop(x OR y)` would be `PARSE_PAREN_TOUCHES_WORD`). A toggleable clause is checked by making the
+widest edit a click can make and parsing it in the query's mode: every vocabulary value (for year, one
+`(dddd..dddd)` range), spliced over the span or wrapped around `q`, exactly as the reducer writes it. Every
+narrower edit is then sound too: a property test (`test_clauses.py`) applies every single-value toggle and
+include to every toggleable clause of generated queries and checks that the edited query parses and that
+nothing outside the clicked field's top-level clause changes. If that edited `q` is refused, the clause is not
 toggleable: `too_long` (over 2,000 code points, raw or canonical: decision-008), `too_deep` (the wrap nests
 `q` one level deeper, so a `q` already 64 deep is `PARSE_TOO_DEEP`) or `unparsable_edit` (any other
 error; for example a `q` ending in an escaping backslash, which would escape the wrap's `)`). It is also not
 toggleable if the edited `q` does not end with exactly that one top-level clause of the field
 (`multiple_clauses`, e.g. `track:main NOT NOT (track:main a)`). A splice inside `q` adds no nesting:
 `track:(…)` is not a group level. The check is conservative near the cap, since it tests the widest edit
-and not the value clicked. It costs up to four parses, about 30 ms for a 1,900-code-point query.
+and not the value clicked. Every field with no clause is checked by one parse that writes them all out at
+once, and each alone only when that edit can't be made (the answer is the per-field one; a property test
+compares them); a typed clause costs one parse of its own. So `/parse` adds one parse for a query with no
+typed clause, and at most five (`test_clauses.py` counts them): for a 1,700-code-point phrase about 5 ms
+(20 ms with a parse per field), and about 21 ms in the worst case, a wrap too long to write at once.
 Goldens: `frontend/src/lib/filter-clause-golden.json`, read by `backend/tests/unit/test_clauses.py`,
 `backend/tests/contract/test_parse_filters.py` and the reducer's test.
 

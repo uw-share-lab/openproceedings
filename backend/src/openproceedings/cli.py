@@ -321,6 +321,11 @@ def _usage(message: str) -> Exception:
     return UserInputError(DiagnosticCode.API_BAD_PARAM, message)
 
 
+def _command(ns: argparse.Namespace) -> str:
+    """The full command name a log line carries (`record save`, `index build`, `search`)."""
+    return " ".join(filter(None, (ns.command, getattr(ns, "source", None), getattr(ns, "action", None))))
+
+
 def _parsed(ns: argparse.Namespace) -> ParseResult | None:
     """The query's parse, its diagnostics printed to stderr as user output (never logged: they quote the
     query); None when it doesn't parse."""
@@ -330,7 +335,9 @@ def _parsed(ns: argparse.Namespace) -> ParseResult | None:
     for d in [*result.errors, *result.warnings, *result.translations]:
         print(f"{d.code}: {d.message}", file=sys.stderr)
     if result.effective_ast is None:
-        log.debug("cli_refused", extra={"command": ns.command, "error": "parse"})  # user input: DEBUG at most
+        log.debug(
+            "cli_refused", extra={"command": _command(ns), "error": "parse"}
+        )  # user input: DEBUG at most
         return None
     return result
 
@@ -655,73 +662,66 @@ def _record_save(ns: argparse.Namespace) -> int:
     fields, found = freeze(engine, result, ns.query, ns.data_dir)
     record = _record_store(ns.data_dir).insert(fields, found.ids)
     page = RECORD_PAGE.format(record_id=record.record_id)
-    if ns.json:
-        _print({**record.model_dump(mode="json", exclude={"ids"}), "page": page})
-    else:
-        print("\n".join([f"saved record {record.record_id} · page {page}", *_record_lines(record)]))
     log.info(
         "record_saved",
         extra={
             "record_id": record.record_id,
             "mode": ns.mode,
             "index_version": record.index_version,
+            "query_version": record.query_version,
             "canonical_hash": record.canonical_hash,
             "total": record.total,
             "ms": elapsed_ms(started),
         },
     )
+    if ns.json:
+        _print({**record.model_dump(mode="json", exclude={"ids"}), "page": page})
+    else:
+        print("\n".join([f"saved record {record.record_id} · page {page}", *_record_lines(record)]))
+    withheld = _withheld_by_default(engine, result)
+    if withheld is not None:
+        print(
+            f"note: a default-configured API instance refuses this query ({withheld}: over its limits on slow "
+            f"position checks). It would not have saved it, and it withholds this record's replay: `drifted`, "
+            f"`refused: {withheld}`, no counts. `op record replay` runs it.",
+            file=sys.stderr,
+        )
     return 0
 
 
-def _open_pinned(data_dir: Path, version: str) -> TantivyEngine | None:
-    """Index `version` read-only if this data directory holds it under its own name, else None: the rule of
-    `IndexState.pinned` (selected by `index_path`, resolving to itself, the engine reporting that version),
-    without the server's cache. Each refusal is one line at the API's level for it: absent DEBUG,
-    unloadable WARNING, tampered (its files don't verify, or it names another version) ERROR."""
-    from openproceedings.api.errors import reason_of
-    from openproceedings.api.state import IndexSelectionError, index_path
-    from openproceedings.diagnostics import OpenProceedingsError
-    from openproceedings.engine.index import VERSION_NAME, IndexBuildError
-    from openproceedings.engine.tantivy_engine import TantivyEngine
+def _withheld_by_default(engine: TantivyEngine, result: ParseResult) -> str | None:
+    """The code a default-configured API instance withholds this query's replay with (`api.deps.admit_replay`
+    under ApiConfig's default `max_verified_clauses` and `max_verification_candidates`), or None: the CLI
+    runs every replay, but a record saved here is meant to be replayed through the API too."""
+    from openproceedings.api.config import ApiConfig
+    from openproceedings.diagnostics import DiagnosticCode
+    from openproceedings.engine.compile import verified_clauses
+    from openproceedings.search import expanded
 
-    def refuse(level: int, reason: str, cause: str | None, error: BaseException | None = None) -> None:
-        fields: dict[str, object] = {"index_version": version, "reason": reason, "cause_reason": cause}
-        if error is not None:
-            fields["error"] = type(error).__name__
-        log.log(level, "pinned_index_unavailable", extra=fields)
-
-    if not VERSION_NAME.fullmatch(version):
-        refuse(logging.DEBUG, "absent", "name_invalid")
+    ast = result.effective_ast
+    clauses = verified_clauses(ast)
+    if ast is None or not clauses:
         return None
-    try:
-        path = index_path(data_dir, version)
-    except IndexSelectionError as e:
-        refuse(logging.DEBUG, "absent", e.reason)
-        return None
-    if path.name != version:
-        refuse(logging.DEBUG, "absent", "alias")
-        return None
-    try:
-        engine = TantivyEngine(path)  # verifies every file
-    except IndexBuildError as e:
-        refuse(logging.ERROR, "tampered", reason_of(e), e)
-        return None
-    except (OpenProceedingsError, OSError, ValueError, RuntimeError) as e:
-        refuse(logging.WARNING, "unloadable", reason_of(e), e)
-        return None
-    if engine.index_version != version:
-        refuse(logging.ERROR, "tampered", "index_version_mismatch")
-        return None
-    return engine
+    limits = ApiConfig.model_fields
+    if len(clauses) > limits["max_verified_clauses"].default:
+        return str(DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES)
+    expanded(engine, ast)  # as `api.deps.verification_candidates`: the search already ran, so within the cap
+    if sum(n for _c, _f, n in engine.candidates(ast)) > limits["max_verification_candidates"].default:
+        return str(DiagnosticCode.API_QUERY_TOO_COSTLY)
+    return None
 
 
 def _pinned_loader(data_dir: Path) -> Callable[[str], TantivyEngine | None]:
-    """`_open_pinned`, each version opened (and re-hashed) at most once per command."""
+    """`api.state.open_pinned` (the rule `IndexState.pinned` serves, without the server's cache, open slot and
+    verification gate), each version opened (and re-hashed) at most once per command."""
+    from openproceedings.api.state import open_pinned
+    from openproceedings.engine.tantivy_engine import TantivyEngine
+
     opened: dict[str, TantivyEngine | None] = {}
 
     def load(version: str) -> TantivyEngine | None:
         if version not in opened:
-            opened[version] = _open_pinned(data_dir, version)
+            opened[version] = open_pinned(data_dir, version, TantivyEngine).engine
         return opened[version]
 
     return load
@@ -773,6 +773,11 @@ def _record_replay(ns: argparse.Namespace) -> int:
             "status": info.status,
             "index_version": info.index_version,
             "recorded_index_version": record.index_version,
+            "canonical_hash": record.canonical_hash,
+            "query_version": info.query_version,
+            "total": info.total,
+            "added_total": info.added_total,
+            "removed_total": info.removed_total,
             "refused": str(info.refused) if info.refused is not None else None,
             "ms": elapsed_ms(started),
         },
@@ -926,7 +931,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"op {name}: not implemented yet — planned in {task} (backlog task view {task})", file=sys.stderr
         )
         return 2
-    name = " ".join(filter(None, (ns.command, getattr(ns, "source", None), getattr(ns, "action", None))))
+    name = _command(ns)
     try:
         code: int = ns.run(ns)
     except BrokenPipeError:  # the reader stopped (`op export … | head`): not a failure, and nothing to log
