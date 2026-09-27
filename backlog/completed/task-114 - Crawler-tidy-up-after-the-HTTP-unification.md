@@ -1,7 +1,7 @@
 ---
 id: TASK-114
 title: Crawler tidy-up after the HTTP unification
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 23:24'
 updated_date: '2026-09-27 23:35'
