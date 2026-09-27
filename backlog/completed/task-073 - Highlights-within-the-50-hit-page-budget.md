@@ -1,7 +1,7 @@
 ---
 id: TASK-073
 title: Highlights within the 50-hit page budget
-status: In Progress
+status: Done
 assignee:
   - '@performance-profiler'
 created_date: '2026-09-26 21:07'
