@@ -42,19 +42,36 @@ the piece and the raw text it came from (`follows `.` (from `⒈`)`). Both chang
 - Every accepted query's canonical string is itself an accepted, idempotent query (property
   `test_an_accepted_query_near_the_cap_replays_from_its_canonical_string`; contract
   `test_records_at_cap.py`: a record saved at the cap is `reproduced`).
-- The effective input limit is lower than 2,000 for long queries: with juxtaposition and the defaults,
-  inputs from about 1,170 code points up can be refused. A near-cap differential against `feat/m3a-api`
+- The effective input limit is lower than 2,000 and has no single value: it depends on how much the
+  canonical form adds per term. The shortest refused inputs, re-measured with the parser (M3a gate round 2;
+  defaults added; 2- to 8-letter words): `abstract:(w w w …)` field groups are the worst case, 373–802
+  code points (every term gains `abstract:` and ` AND `); `-x` lists in Scholar mode 705–1,145; juxtaposed
+  words 827 (2-letter), 967 (3), 1,163 (5), 1,340 (8); `title:(a OR b …)` groups 970–1,300; plain `OR`
+  lists about 1,928. Spec 02 §Error handling lists the same ranges. The real Trust-Evals canonical strings
+  are at most 441 code points (`tests/golden/trust_evals_canonical.json`), well inside every range.
+  **To confirm (project owner):** that option (a) still stands against these ranges, the field-group case
+  in particular; not yet confirmed. A near-cap differential against `feat/m3a-api`
   (5,000 valid queries of 1,000–2,000 code points) changed 2,026 from accepted to `PARSE_TOO_LONG`, all
   with an old canonical string of 2,001–3,394 code points, and none of any other kind. If reviewers hit
   this with real search strings, revisit option (b) above.
 - Detachment: `abcd⒈*`, `abcd⒈̸*`, `abcd⑴*`, `abcd⑴̸*` are now detached; `abcd½*` (`1⁄2`, last piece `2`)
-  and `abcd≠ͅ*` (last piece `ι`) stay attached. A 46,711-input fuzz differential (random queries,
-  every multi-piece NFKC character as a stem's final character with `*`, U+0338 and `$`) changed 5,097
-  native and 5,136 Scholar parses from accepted to `PARSE_WILDCARD_DETACHED`, each after a stem whose
-  final character folds to several pieces (184 distinct characters), none otherwise, and no canonical
-  string of a query accepted by both changed.
-- `Token.reach` no longer decides anything that parses; it is kept because the frozen task-073 oracle
-  (`tests/unit/tokenize_before.py`) compares it. No token changes, so `TOKENIZER_VERSION` stays `"2"`.
+  and `abcd≠ͅ*` (last piece `ι`) stay attached. As first implemented, a mark after a separator
+  (`vision-ަ*`, a Thaana vowel sign) cleared the tail although the marks-only "word" it began is dropped,
+  so the wildcard passed as attached (`vision*`): 5,004 of 11,212 probe inputs (every Mn/Mc/Me/Cf/Lm/Sk
+  character in `abcd.X*`, `abcd-X*`, `"x abcd.X*"`, `abcd/X$`) went from detached at `d6a5eee` to accepted.
+  M3a gate round 2 fixed it (the tail is cleared only when a word is emitted; exhaustive test
+  `test_a_mark_that_makes_no_word_keeps_the_separator_in_the_tail`), and all 11,212 now parse exactly as at
+  `d6a5eee`. Re-measured after that fix, against `d6a5eee`, on the 46,207-input fuzz set (random queries,
+  plus every multi-piece NFKC character as a stem's final character with `*`, U+0338 and `$`), each
+  mode: 40,332 parses identical; 3,705 accepted → only `PARSE_WILDCARD_DETACHED`, every one containing a
+  character whose NFKC form has several pieces; 2,157 native and 2,033 Scholar already refused and now
+  also detached; 124 Scholar where a detachment now reports instead of a later `FIELD_UNKNOWN_VALUE`; 13
+  canonical overflows (above); no canonical string of a query accepted by both changed, and no token
+  changed. (The count first recorded here, 5,097 native / 5,136 Scholar on 46,711 inputs, came from
+  another generated set and predates the fix; it is superseded by these.)
+- `Token.reach` no longer decided anything that parses, so it was retired (M3a gate round 2), and the frozen
+  task-073 oracle (`tests/unit/tokenize_before.py`) now compares text, span and `op` only. No token text,
+  span or `op` changes, so `TOKENIZER_VERSION` stays `"2"`.
 - `QUERY_VERSION` `"2"` changes every `canonical_hash` (decision-003). No search records exist yet (nothing
   has been released), so nothing replays as `drifted`; the Trust-Evals snapshot hashes were regenerated
   (their canonical strings are unchanged).

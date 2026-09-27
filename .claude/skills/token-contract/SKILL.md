@@ -40,8 +40,8 @@ is its name; markup that opens a word (an accent macro such as `\"{O}del` or `\v
 `^`/`_`: `$^2x$` spans `^2x`) starts the span at its first character,
 task-074; two spans overlap only on exactly one code point that folds to several pieces, `½` → `1`, `2`:
 inside a U+0338 cluster each piece spans the raw characters it came from, except that pieces before the first
-raw U+0345 end at it even if a later mark belongs to them, task-075; `Token.reach` is the end of the whole
-characters a token took a piece from; no span decides what parses: the lexer's detached-wildcard check reads
+raw U+0345 end at it even if a later mark belongs to them, task-075; a Token is text, span and `op` only,
+since task-075's `reach` was retired after decision-008; no span decides what parses: the lexer's detached-wildcard check reads
 the folded pieces after the last word, `tokenize_with_tail(text) -> (tokens, Tail)`, decision-008) and
 `normalize(text) -> list[str]`. It works character by character (with two exact shortcuts, task-073: a whole
 text that is ASCII with no `\` or `$` is its lower-cased `[A-Za-z0-9]+` runs, and in the loop an ASCII

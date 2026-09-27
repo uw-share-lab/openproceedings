@@ -462,7 +462,7 @@ class _Lexer:
                 start + s + 1,
             )
         elif wildcard:
-            self.check_stem(raw, stem, wildcard, start, end, before)
+            self.check_stem(raw, stem, wildcard, start, end, before, in_phrase=in_phrase)
         if not wildcard and any(_is_cjk(c) for c in stem):
             self.warn(
                 DiagnosticCode.WARN_CJK_RUN,
@@ -483,7 +483,9 @@ class _Lexer:
             self.check_dropped(raw, stem, start, end)
         return Lexeme(Kind.WORD, start, end, raw, stem=stem, wildcard=wildcard)
 
-    def check_stem(self, raw: str, stem: str, wildcard: str, start: int, end: int, before: int) -> None:
+    def check_stem(
+        self, raw: str, stem: str, wildcard: str, start: int, end: int, before: int, *, in_phrase: bool
+    ) -> None:
         toks, tail = tokenize_with_tail(stem)
         if not toks or before + len("".join(t.text for t in toks)) < MIN_STEM:
             self.error(
@@ -508,7 +510,7 @@ class _Lexer:
                 DiagnosticCode.PARSE_WILDCARD_DETACHED,
                 f"The `{wildcard}` in `{clip(raw)}` follows {self.tail_name(stem, tail)}, not a letter or digit, so "
                 f"it would match any word starting `{clip(toks[-1].text)}` — put it straight after the stem, e.g. "
-                f"`{clip(self.attached(stem, toks, tail, wildcard))}`.",
+                f"`{clip(self.attached(stem, toks, tail, wildcard, in_phrase=in_phrase))}`.",
                 start,
                 end,
             )
@@ -522,14 +524,17 @@ class _Lexer:
         return f"`{clip(shown)}`" + (f" (from `{clip(written)}`)" if written != shown else "")
 
     @staticmethod
-    def attached(stem: str, toks: list[Token], tail: Tail, wildcard: str) -> str:
+    def attached(stem: str, toks: list[Token], tail: Tail, wildcard: str, *, in_phrase: bool) -> str:
         """The fix hint: the wildcard on the stem without its tail, as written when the tail is whole
-        characters (`vision-*` → `vision*`), else from its tokens (`abcd⒈*` → `abcd1*`, `abcd⑴*` →
-        `"abcd 1*"`)."""
-        if tail.start >= toks[-1].end:
-            return stem[: tail.start] + wildcard
+        characters outside LaTeX math (`vision-*` → `vision*`), else from its tokens (`abcd⒈*` → `abcd1*`,
+        `abcd⑴*` → `"abcd 1*"`, `abcd$x$*` → `"abcd x*"`: cutting before the closing `$` would leave the
+        math open). Several tokens are quoted as a phrase, except inside a phrase already (`"x y⑴*"` →
+        `y 1*`), where the words simply replace the word."""
+        cut = tail.start
+        if cut >= toks[-1].end and not any(a < cut < b for a, b in math_regions(stem)):
+            return stem[:cut] + wildcard
         words = " ".join(t.text for t in toks) + wildcard
-        return words if len(toks) == 1 else f'"{words}"'
+        return words if len(toks) == 1 or in_phrase else f'"{words}"'
 
     def check_word(self, raw: str, stem: str, start: int, end: int) -> None:
         """Checks for a top-level WORD (not a phrase part, where these characters are plainly literal)."""

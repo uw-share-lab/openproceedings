@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from openproceedings.query.mathsyms import (
     GREEK,
@@ -76,16 +76,6 @@ class Token:
     start: int  # raw code-point offset, inclusive
     end: int  # raw code-point offset, exclusive
     op: bool = False  # an operator's name (`×` → `times`), not a word of the text: never a wildcard stem
-    # The end of the raw characters the token took a piece from, WHOLE: the same as `end` except inside a
-    # U+0338 cluster, where `end` stops at the piece's own characters (task-075) and `reach` covers the
-    # cluster. Nothing that decides what parses reads it any more: the lexer's detached-wildcard test reads
-    # the folded pieces (`Tail`, decision-008). Kept for the frozen task-073 oracle, which compares it. Not
-    # part of equality; set by `tokenize`, and a Token built without it reaches its `end`.
-    reach: int = field(default=-1, compare=False, repr=False)
-
-    def __post_init__(self) -> None:
-        if self.reach < 0:
-            object.__setattr__(self, "reach", self.end)
 
 
 def _is_word_char(ch: str) -> bool:
@@ -467,7 +457,8 @@ class Tail:
     """What `text` ends with after its last word or operator piece (`tokenize_with_tail`): the folded
     pieces, in order (`abcd⒈` → `.`, `vision-` → `-`, `x⑴` → `)`), and the raw offset of the character the
     first of them came from. Empty `pieces` means `text` ends on a letter, digit or operator piece (or has
-    no piece at all). Invisible characters, dropped marks and LaTeX markup that joins a word are not pieces."""
+    no piece at all). Invisible characters, dropped marks and LaTeX markup that joins a word are not pieces,
+    and a marks-only run that makes no token (`vision-` + a lone vowel sign) leaves the tail as it was (`-`)."""
 
     start: int
     pieces: str
@@ -497,19 +488,23 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
     latex = _latex_mask(text, subs=subs)
     out: list[Token] = []
     buf: list[str] = []
-    start = end = reach = 0
+    start = end = 0
     base: str | None = None
     lead: int | None = None  # where markup before a word began (`\\"{O}del`): the word's span starts there
-    rest: list[str] = []  # the separator pieces since the last word or operator piece (the Tail)
+    # The separator pieces since the last word or operator TOKEN (the Tail). A word clears it only when it
+    # is emitted: a marks-only word (`-` + a lone vowel sign) is dropped, so the `-` stays what the text ends
+    # with (M3a gate round 2: clearing it on the mark let `vision-ަ*` pass as `vision*`).
+    rest: list[str] = []
     rest_start = len(text)
 
     def close() -> None:
-        nonlocal buf
+        nonlocal buf, rest
         if buf:
             word = unicodedata.normalize("NFC", "".join(buf))
             # A run of marks with no letter (a lone vowel sign) is not a word.
             if not all(unicodedata.category(ch).startswith("M") for ch in word):
-                out.append(Token(word, start, end, reach=reach))
+                out.append(Token(word, start, end))
+                rest = []
             buf = []
 
     n = len(text)
@@ -521,14 +516,14 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
             if operator or split:
                 close()
             if operator:  # a token of its own
-                out.append(Token(spelling, i + 1, cmd_end, op=True, reach=cmd_end))
+                out.append(Token(spelling, i + 1, cmd_end, op=True))
                 base = None
             else:  # a Greek letter: part of the word, like the letter itself
                 folded, base = _fold(spelling, base)
                 if not buf:
                     start = i + 1 if lead is None else lead
                 buf.extend(p for p in folded if isinstance(p, str))
-                end = reach = cmd_end
+                end = cmd_end
             rest = []
             lead = None
             # an operator's name is its own token's: skip it, so no word after it starts inside it (`\\leq5`)
@@ -544,7 +539,7 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
             continue
         if latex[i] == JOIN:  # markup inside a word: keep the word open and cover the markup in its span
             if buf:
-                end = reach = i + 1
+                end = i + 1
             elif lead is None:  # markup before any letter: a word starting next starts here
                 lead = i
             i += 1
@@ -558,9 +553,7 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
                     start = i if first is None else first
                 base = c.lower()
                 buf.append(base)
-                end = reach = stop
-                if rest:
-                    rest = []
+                end = stop
             else:
                 close()
                 base = None
@@ -582,21 +575,19 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
         base = folded_base
         if not folded:  # combining mark or invisible format char: extends an open word, never starts one
             if buf:
-                end = reach = stop
+                end = stop
             i = stop
             continue
         for piece, (piece_start, piece_end) in zip(folded, spans, strict=True):
             if isinstance(piece, _Op):
                 close()
-                out.append(Token(piece.name, piece_start, piece_end, op=True, reach=stop))
+                out.append(Token(piece.name, piece_start, piece_end, op=True))
                 rest = []
             elif _is_word_char(piece):
                 if not buf:
                     start = piece_start if first is None else first
                 buf.append(piece)
-                end, reach = piece_end, stop
-                if rest:
-                    rest = []
+                end = piece_end
             else:
                 close()
                 if not rest:

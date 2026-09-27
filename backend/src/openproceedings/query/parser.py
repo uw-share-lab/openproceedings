@@ -798,17 +798,22 @@ def too_long(q: str) -> Diagnostic | None:
     )
 
 
-def canonical_too_long(q: str, canonical: str) -> Diagnostic | None:
+def canonical_too_long(q: str, canonical: str, defaults_added: int = 0) -> Diagnostic | None:
     """PARSE_TOO_LONG for an accepted query whose canonical string is over MAX_QUERY_LENGTH: the canonical
     string is what a search record keeps and replay re-parses, so it must itself be a valid query
-    (`parse(canonical)` accepted and idempotent). The span is the whole input: no one part is too long."""
+    (`parse(canonical)` accepted and idempotent). The span is the whole input: no one part is too long.
+    `defaults_added` is how many code points the inserted default filters contribute (0: none inserted)."""
     if len(canonical) <= MAX_QUERY_LENGTH:
         return None
+    causes = "each space between words becomes ` AND `; a `field:(…)` group repeats `field:` on every term"
+    if defaults_added:
+        causes += f"; the default filters add {defaults_added:,}"
     return Diagnostic(
         code=DiagnosticCode.PARSE_TOO_LONG,
-        message=f"Its canonical form (what a saved search keeps: the default filters explicit, every implicit "
-        f"AND, field and parenthesis written out) is {len(canonical)} characters, {len(canonical) - len(q)} more "
-        f"than typed, and the limit is {MAX_QUERY_LENGTH} — shorten it or split it into several searches.",
+        message=f"The query is {len(q):,} characters, but its canonical form (what a saved search keeps and "
+        f"replays) is {len(canonical):,} characters, {len(canonical) - MAX_QUERY_LENGTH:,} over the limit of "
+        f"{MAX_QUERY_LENGTH:,} — writing the query out in full adds length: {causes}. Use fewer terms, or "
+        "split it into several searches.",
         span=(0, len(q)),
     )
 
@@ -852,7 +857,9 @@ def parse(q: str, mode: Mode = "native") -> ParseResult:
         notes = sorted([*notes, *_stemming_notice(ast, len(q))], key=by_position)
     d = apply_defaults(ast, len(q))
     canonical = render(d.effective)
-    overflow = canonical_too_long(q, canonical)
+    top = d.effective.children if isinstance(d.effective, And) else (d.effective,)
+    inserted = [c for c in top if c.span == (len(q), len(q))]  # apply_defaults' zero-width span at the end
+    overflow = canonical_too_long(q, canonical, sum(len(" AND ") + len(render(c)) for c in inserted))
     if overflow is not None:  # it could be saved but never replayed or pasted back (decision-008)
         return ParseResult(mode=mode, ast=None, warnings=warnings, errors=[overflow], translations=notes)
     return ParseResult(

@@ -519,6 +519,16 @@ def test_a_year_is_at_most_four_digits_alone_or_in_a_range() -> None:
         ("abcd1.*", "`.`", "`abcd1*`"),  # the look-alike's NFKC spelling: the same verdict
         ("abc．*", "`.` (from `．`)", "`abc*`"),  # FULLWIDTH FULL STOP
         ("vision-*", "`-`", "`vision*`"),
+        # a whole-character tail on a multi-token stem: cut as written, not rebuilt from the tokens
+        ("trust-model-*", "`-`", "`trust-model*`"),
+        ('"x trust-model-*"', "`-`", "`trust-model*`"),
+        # inside a phrase the hint is the phrase's words, not a phrase nested in it (`"x "y 1*""`)
+        ('"x y⑴*"', "`)` (from `⑴`)", "`y 1*`"),
+        ('"x abcd⑴*"', "`)` (from `⑴`)", "`abcd 1*`"),
+        # cutting the stem as written would leave the math unclosed (`abcd$\alpha*`: PARSE_WILDCARD_NOT_SUFFIX)
+        (r"abcd$\alpha$*", "`$`", '`"abcd α*"`'),
+        ("abcd$x$*", "`$`", '`"abcd x*"`'),
+        ('"trust abcd$x$*"', "`$`", "`abcd x*`"),
     ],
     ids=ascii,
 )
@@ -526,6 +536,20 @@ def test_wildcard_after_a_non_word_piece_is_detached(q: str, piece: str, hint: s
     [error] = parse(q).errors
     assert error.code is DiagnosticCode.PARSE_WILDCARD_DETACHED
     assert f"follows {piece}, not a letter or digit" in error.message and f"e.g. {hint}." in error.message
+    # the hint is valid in place of the word: on its own, or as the last words of the phrase it sits in
+    fixed = hint.strip("`") if not q.startswith('"') else f'{q.rsplit(" ", 1)[0]} {hint.strip("`")}"'
+    assert parse(fixed).errors == [], fixed
+
+
+# M3a gate round 2 (exactness-guardian): a mark after the separator (a vowel sign, alone no word) must not
+# hide the separator the wildcard follows. Each was accepted as the bare stem (`vision*`) at 30756ce.
+@pytest.mark.parametrize(
+    "q",
+    ["vision-ަ*", "abcd-ि*", "abcd-ิ*", "abcd.ெ*", '"trust vision.ަ*"', "calibrat-ྜྷ*"],
+    ids=ascii,
+)
+def test_a_lone_mark_after_a_separator_leaves_the_wildcard_detached(q: str) -> None:
+    assert [e.code for e in parse(q).errors] == [DiagnosticCode.PARSE_WILDCARD_DETACHED]
 
 
 @pytest.mark.parametrize(
@@ -559,8 +583,18 @@ def test_a_query_whose_canonical_form_is_over_the_cap_is_too_long() -> None:
     assert len(q) == 1_799 and result.ast is None and result.canonical is None
     [error] = result.errors
     assert error.code is DiagnosticCode.PARSE_TOO_LONG and error.span == (0, len(q))
-    assert f"is {len(canonical)} characters, {len(canonical) - len(q)} more than typed" in error.message
-    assert "default filters" in error.message
+    over = f"{len(canonical) - MAX_QUERY_LENGTH:,} over the limit of {MAX_QUERY_LENGTH:,}"
+    assert f"is {len(canonical):,} characters, {over}" in error.message
+    assert "each space between words becomes ` AND `" in error.message
+    assert "a `field:(…)` group repeats `field:` on every term" in error.message
+    defaults = " AND track:(datasets_benchmarks OR main OR position) AND status:accepted"
+    assert f"the default filters add {len(defaults)}" in error.message
+
+
+def test_a_canonical_overflow_with_typed_filters_does_not_blame_the_defaults() -> None:
+    q = " ".join(f"w{i:04d}" for i in range(300)) + " track:main status:accepted"
+    [error] = parse(q).errors
+    assert error.code is DiagnosticCode.PARSE_TOO_LONG and "default filters add" not in error.message
 
 
 def test_a_canonical_string_exactly_at_the_cap_is_accepted() -> None:

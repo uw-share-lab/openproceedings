@@ -3,7 +3,7 @@
 Two differentials, each against a frozen copy of the code as it was before (`tests/unit/tokenize_before.py`,
 `tests/unit/engine/highlight_before.py`):
 - `tokenize` (its ASCII-text path and its per-character ASCII branch) gives exactly the old tokens, text,
-  span, `op` and `reach`, on arbitrary, adversarial and LaTeX-heavy text and on every fixture text;
+  span and `op`, on arbitrary, adversarial and LaTeX-heavy text and on every fixture text;
 - `Highlighter` (one per query, token maps per field) gives exactly the old spans, for every golden query on
   every record it matches, every Trust-Evals protocol string on the 5k corpus, and generated trees, and
   refuses a non-hit the same way.
@@ -44,9 +44,9 @@ GOLDEN = json.loads(
 )
 
 
-def full(tokens: list[Token]) -> list[tuple[str, int, int, bool, int]]:
-    """Everything a token carries (`reach` is not part of Token equality)."""
-    return [(t.text, t.start, t.end, t.op, t.reach) for t in tokens]
+def full(tokens: list[Token]) -> list[tuple[str, int, int, bool]]:
+    """Everything a token carries."""
+    return [(t.text, t.start, t.end, t.op) for t in tokens]
 
 
 # --- tokenize ----------------------------------------------------------------------------------------------
