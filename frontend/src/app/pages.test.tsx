@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { metadata as coverageMeta } from "./coverage/page";
 import SyntaxHelpPage, { metadata as syntaxMeta } from "./help/syntax/page";
-import NotFound from "./not-found";
+import NotFound, { metadata as notFoundMeta } from "./not-found";
 import HomePage from "./page";
 import { metadata as paperMeta } from "./paper/[id]/page";
 import { metadata as recordMeta } from "./record/[id]/page";
@@ -25,6 +25,7 @@ describe("page titles (layout template `%s · openproceedings`)", () => {
     [syntaxMeta, "Query syntax"],
     [paperMeta, "Paper"],
     [recordMeta, "Search record"],
+    [notFoundMeta, "Page not found"],
   ])("%j", (meta, title) => {
     expect(meta.title).toBe(title);
   });
