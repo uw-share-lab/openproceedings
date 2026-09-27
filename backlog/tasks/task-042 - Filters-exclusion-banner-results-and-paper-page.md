@@ -4,7 +4,7 @@ title: 'Filters, exclusion banner, results and paper page'
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-27 12:11'
+updated_date: '2026-09-27 17:57'
 labels:
   - frontend
 milestone: m-3
@@ -33,4 +33,6 @@ Spec 05 §Components 4–6.
 
 <!-- SECTION:NOTES:BEGIN -->
 Facet/include clicks go through reduce() in src/lib/search-state.ts (TASK-039); its FilterClause input needs per-field clause spans from /parse, which is TASK-078.
+
+TASK-087 done (dependency satisfied): /paper/[id] gets highlights from GET /papers/{id}?q=&mode= (fields matched + highlights, null without q; matched:false = the query incl. default filters doesn't match the paper, lists empty). Result list must link /paper/<id>?q=<q>&mode=<mode>; on a 422/429 for the q, refetch without q and show a one-line notice (spec 05 §Pages).
 <!-- SECTION:NOTES:END -->

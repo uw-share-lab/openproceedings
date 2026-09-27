@@ -71,11 +71,20 @@ class Highlighter:
         self.expansions = expansions
 
     def __call__(self, record: Searchable) -> dict[TextField, list[tuple[int, int]]]:
-        matched, spans = _Highlighter(record, _Tokens(record), self.expansions, self.allowed).node(self.ast)
-        if not matched:
+        found = self.match(record)
+        if found is None:
             raise EngineInternalError(
                 DiagnosticCode.API_INTERNAL, "a hit the query doesn't match: engine disagreement"
             )
+        return found
+
+    def match(self, record: Searchable) -> dict[TextField, list[tuple[int, int]]] | None:
+        """The spans `__call__` gives `record`, or None when the query doesn't match it: for one record that
+        need not be a hit (`GET /papers/{id}?q=`, task-087). A record the query matches gets exactly the
+        spans it gets as a hit of `/search`, from the same evaluation."""
+        matched, spans = _Highlighter(record, _Tokens(record), self.expansions, self.allowed).node(self.ast)
+        if not matched:
+            return None
         return {f: _merged(spans.get(f, set())) for f in TEXT_FIELDS}
 
 

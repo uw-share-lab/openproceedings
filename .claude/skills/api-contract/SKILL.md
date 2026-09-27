@@ -10,7 +10,7 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 |---|---|---|
 | POST | `/parse` | `{q, mode}` → 02's `ParseResult` (AST, canonical, warnings, translations). Debounced, called as the user types. Any well-formed body is a 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body is a 422 `API_BAD_PARAM`. |
 | GET | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
-| GET | `/papers/{id}` | full record with provenance |
+| GET | `/papers/{id}` | full record with provenance; optional `q` (+ `mode`) → `matched` and `highlights`, equal to `/search`'s for that paper (null without `q`; `matched: false` + empty lists when the query doesn't match it; `q` admitted exactly as `/search` admits it; task-087) |
 | GET | `/export` | `format=ris\|csv\|bibtex\|jsonl` plus either `q` (with `mode` and optional `index_version`) or `record_id` (with at most `mode=native`, the declared default some clients always send; `scholar` is 422 "with record_id, mode may only be native") → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; `record_id` → exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if gone, 409 `API_RECORD_MISMATCH` on a `mismatch`) |
 | POST | `/records` | freeze a search as an immutable search record → 201 `{record_id, page}` plus the three versions, + `Location: /api/v1/records/<id>` (`.claude/skills/search-records/SKILL.md`) |
 | GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`; a replay over this instance's verification limits is withheld: 200, `refused`, never a 422) |
@@ -43,7 +43,9 @@ has `id, title, abstract, authors, venue, year, track, status, presentation, sco
 - **`expansions`** always lists every wildcard's terms (guarantee 6). It is never omitted when non-empty.
 - **Highlights** are spans computed from the AST, never from a snippet generator. Built: `engine/highlight.py::highlights(ast,
   record, engine.expansions(ast))`, which returns both fields, each a sorted list (spec 03 §Highlights). Call it only on the
-  engine's hits: a record the query doesn't match raises `EngineInternalError` (a 500). Spans that touch
+  engine's hits: a record the query doesn't match raises `EngineInternalError` (a 500). For one record that
+  need not be a hit (`GET /papers/{id}?q=`), `search.highlight` calls `Highlighter.match`, which returns
+  None instead. Spans that touch
   (an operator token and its neighbour, `5×3`) stay separate; only overlaps merge. For a page, build one
   `Highlighter(ast, expansions)` and call it on each hit (`search.run` does; task-073): the query's work is
   done once, not per hit.
@@ -66,7 +68,7 @@ Checked by `backend/tests/contract/test_contract_v1.py`; keep to them in every n
 - **`ErrorBody.code` is `ErrorCode`**: the registry's codes with an HTTP status, derived, never hand-listed.
 - **Status-specific headers are declared** (`response_header`): an export's 200 (`X-Total`, the three
   versions, `Content-Disposition`), every 405 (`Allow`) and 429 (`Retry-After`), the 503 `API_BUSY` of every
-  route that runs a query (`Retry-After`, `openapi.BUSY`: `/search`, `/export`, the record routes), a 201
+  route that runs a query (`Retry-After`, `openapi.BUSY`: `/search`, `/export`, `/papers/{id}`, the record routes), a 201
   (`Location`); CORS exposes each (`app.EXPOSED_HEADERS`).
 - `info.version` is the API version (`v1`), not the package's.
 

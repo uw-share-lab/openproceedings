@@ -1325,9 +1325,32 @@
       },
       "PaperResponse": {
         "properties": {
+          "highlights": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Highlights"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With `q`: the spans `/search` gives this paper as a hit for that query, over `paper.title` and `paper.abstract` (code points over the raw text); both lists empty when `matched` is false. Null without `q`."
+          },
           "index_version": {
             "title": "Index Version",
             "type": "string"
+          },
+          "matched": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With `q`: whether the query (default filters included) matches this paper on this index, i.e. whether `/search` would count it in `total`. Null without `q`.",
+            "title": "Matched"
           },
           "paper": {
             "$ref": "#/components/schemas/PaperRecord"
@@ -1345,7 +1368,9 @@
           "index_version",
           "tokenizer_version",
           "query_version",
-          "paper"
+          "paper",
+          "matched",
+          "highlights"
         ],
         "title": "PaperResponse",
         "type": "object"
@@ -3142,7 +3167,7 @@
     },
     "/api/v1/papers/{id}": {
       "get": {
-        "description": "The paper with this id in the served index, as its snapshot holds it (the records loaded with that\nvery engine: one bundle, whatever swaps happen meanwhile).",
+        "description": "The paper with this id in the served index, as its snapshot holds it (the records loaded with that\nvery engine: one bundle, whatever swaps happen meanwhile); with `q`, whether that query matches it and\nits highlights, as `/search` gives them.",
         "operationId": "get_paper",
         "parameters": [
           {
@@ -3154,6 +3179,40 @@
               "description": "A paper id, `op:<venue>:<year>:<native>`. Any other shape is 422 `API_BAD_PARAM`.",
               "pattern": "^op:[a-z][a-z0-9]*:[0-9]{4}:[A-Za-z0-9_-]+$",
               "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional: a query (spec 02 grammar) whose highlights to return for this paper, admitted exactly as `/search` admits `q` (at most 2,000 code points, else 422 `PARSE_TOO_LONG`; one that doesn't parse is a 422 with its diagnostics). Without it, `matched` and `highlights` are null.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional: a query (spec 02 grammar) whose highlights to return for this paper, admitted exactly as `/search` admits `q` (at most 2,000 code points, else 422 `PARSE_TOO_LONG`; one that doesn't parse is a 422 with its diagnostics). Without it, `matched` and `highlights` are null.",
+              "title": "Q"
+            }
+          },
+          {
+            "description": "`native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). Only with `q`: `scholar` without `q` is 422 `API_BAD_PARAM`.",
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "native",
+              "description": "`native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). Only with `q`: `scholar` without `q` is 422 `API_BAD_PARAM`.",
+              "enum": [
+                "native",
+                "scholar"
+              ],
+              "title": "Mode",
               "type": "string"
             }
           }
@@ -3199,6 +3258,25 @@
             "headers": {
               "Retry-After": {
                 "description": "Whole seconds until the request would be allowed",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "headers": {
+              "Retry-After": {
+                "description": "Sent with API_BUSY: whole seconds to wait before retrying",
                 "schema": {
                   "minimum": 1,
                   "type": "integer"

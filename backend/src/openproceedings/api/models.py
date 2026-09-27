@@ -144,8 +144,25 @@ class SearchResponse(Versioned):
 
 
 # --- /papers/{id} ------------------------------------------------------------------------------------
+PAPER_Q_DOC = (
+    f"Optional: a query (spec 02 grammar) whose highlights to return for this paper, admitted exactly as "
+    f"`/search` admits `q` (at most {MAX_QUERY_LENGTH:,} code points, else 422 `PARSE_TOO_LONG`; one that "
+    "doesn't parse is a 422 with its diagnostics). Without it, `matched` and `highlights` are null."
+)
+PAPER_MODE_DOC = f"{MODE_DOC} Only with `q`: `scholar` without `q` is 422 `API_BAD_PARAM`."
+
+
 class PaperResponse(Versioned):
     paper: PaperRecord  # the snapshot record the index was built from (spec 01), provenance included
+    matched: bool | None = Field(
+        description="With `q`: whether the query (default filters included) matches this paper on this "
+        "index, i.e. whether `/search` would count it in `total`. Null without `q`."
+    )
+    highlights: Highlights | None = Field(
+        description="With `q`: the spans `/search` gives this paper as a hit for that query, over "
+        "`paper.title` and `paper.abstract` (code points over the raw text); both lists empty when "
+        "`matched` is false. Null without `q`."
+    )
 
 
 # --- /records (task-037; spec 04 §Search records) -----------------------------------------------------
