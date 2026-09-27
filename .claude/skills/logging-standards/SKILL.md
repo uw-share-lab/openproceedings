@@ -65,9 +65,10 @@ user output on stderr, not log lines, because they quote the query (task-030).
 
 A refusal is one `cli_refused` line (`command`, `error` type, `code` if it has one; never the message),
 at the level of its kind: DEBUG for the user's own input (`UserInputError`: a bad query, a bad argument),
-ERROR with the traceback for an `InternalError` or a broken guarantee (`ParityError`), WARNING for any
-other refusal (a snapshot, an index, a file). An exception nothing anticipated is one `cli_failed` ERROR line
-with the traceback. Long jobs say they're alive: `index_build_started`, `index_build_progress` every 10k
+ERROR with the traceback for an `InternalError`, ERROR without it for a broken guarantee (`ParityError`,
+whose message quotes corpus tokens), WARNING for any other refusal (a snapshot, an index, a file). An
+exception nothing anticipated is one `cli_failed` ERROR line with the traceback; a traceback's last line is
+the exception's message, which can quote input, so the API (task-034) logs frames and type, not the message. Long jobs say they're alive: `index_build_started`, `index_build_progress` every 10k
 documents, `index_built`; `index_parity_ok` when a parity check passes.
 
 ## Review checklist (`observability-reviewer`)

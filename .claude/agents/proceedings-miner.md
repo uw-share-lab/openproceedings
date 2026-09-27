@@ -27,8 +27,8 @@ means rejected, and it never contains a workshop paper. Your code has to keep bo
    index, plus one abstract page per track segment, including one double-escaped page and one with a
    leading `$…$` title.
 3. **Crawl from the index**, never from search. For NeurIPS, map the path's `<Track>` segment through the
-   closed vocabulary. Alias `Datasets_and_Benchmarks` to `_Track`. On an unknown segment, raise
-   `UnknownTrack`, then stop and extend the vocabulary with a spec-backed mapping.
+   closed vocabulary. Alias `Datasets_and_Benchmarks` to `_Track`. An unknown segment becomes
+   `unknown` (counted and flagged); then extend the vocabulary with a spec-backed mapping.
 4. **Extract carefully.** Match `citation_title` before taking an abstract. Turn block tags into spaces,
    drop inline tags, decode double escapes once more, collapse whitespace, keep LaTeX verbatim. Reject
    `…`. If it's missing, set `abstract=null` and count it.

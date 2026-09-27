@@ -51,8 +51,8 @@ The query side and the index side run the **same** normalization function (`norm
 (spec 04 §Conventions); `normalize(text)` is just the token strings. One raw character can yield two
 tokens that share its span (`½` → `1`, `2`). LaTeX markup that opens a word (an accent macro, `\-`, a math
 `^`/`_`) is part of that word's span (`\"{O}del` spans all eight characters); a math command's span is its
-name, and a word after an operator command starts after the operator's name. The full case list is
-`backend/tests/golden/test_tokens.py`.
+name, and a word after an operator command starts after the operator's name. The full token case list is
+`backend/tests/golden/test_tokens.py`; the span cases are in `backend/tests/unit/test_normalize.py`.
 
 ### Known limits (state these in a methods section when they matter)
 

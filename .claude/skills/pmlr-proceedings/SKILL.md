@@ -1,6 +1,6 @@
 ---
 name: pmlr-proceedings
-description: The PMLR (proceedings.mlr.press) source for ICML — the volume-to-venue/year/track table that lives in config and is checked in tests, the known ICML volumes, competition and workshop volumes, page structure and parsing gotchas, and why an unfamiliar volume is never coerced into ICML. Use when writing or reviewing the PMLR miner, editing the volume table, or adding an ICML year.
+description: The PMLR (proceedings.mlr.press) source for ICML — the volume-to-venue/year/track table (`ICML_PMLR_VOLUMES` in ingest/volumes.py, pinned by test_ris.py; a config file comes with task-053), the known ICML volumes, competition and workshop volumes, page structure and parsing gotchas, and why an unfamiliar volume is never coerced into ICML. Use when writing or reviewing the PMLR miner, editing the volume table, or adding an ICML year.
 ---
 
 # PMLR proceedings (spec 01 §Sources)

@@ -29,7 +29,7 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parents[3]
 SIZE = 80_000
-ROUNDS = 40  # cold rounds (match_ids + exclusions): each clears the verified-clause cache
+ROUNDS = 40  # cold rounds (match_ids + exclusions): each clears every cache
 WARM_ROUNDS = 200  # warm searches are cheap, and a p95 over fewer swings with one slow round
 VERIFIED = [
     "the NEAR/5 the",

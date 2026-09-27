@@ -4,7 +4,7 @@ title: 'FastAPI app skeleton: startup load, hot-swap, access log, limits'
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 03:40'
+updated_date: '2026-09-27 00:45'
 labels:
   - api
 milestone: m-3
@@ -28,3 +28,9 @@ Spec 04 §Conventions and §Implementation notes (fastapi-conventions, logging-s
 - [ ] #5 Access log for /parse and /search: canonical_hash, token count, error/warning codes (capped), n_errors, total; never q, canonical, messages or spans; a parse failure is DEBUG at most
 - [ ] #6 A query-length cap (spec 02) is enforced before parsing; a 40k-character q is rejected cheaply (test)
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+From the M2 gate (observability): the CLI's cli_failed logs the traceback, whose last line is the exception message and can quote input; the API must log frames and type, not the message. resolve_snapshot accepts any path; don't reuse it for API index/snapshot selection (limit names to [0-9a-f-] under the data dir).
+<!-- SECTION:NOTES:END -->

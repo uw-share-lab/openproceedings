@@ -1,5 +1,5 @@
-"""PMLR volume → ICML year and track (spec 01 §Sources, PMLR row: the table lives in config, checked in
-tests). Shared by the RIS importer and the PMLR adapter (task-053).
+"""PMLR volume → ICML year and track (spec 01 §Sources, PMLR row): `ICML_PMLR_VOLUMES`, pinned by `test_ris.py`;
+a config file with verification columns comes with the PMLR adapter (task-053). Shared by the RIS importer and the PMLR adapter (task-053).
 
 A volume that holds more than one track gives `unknown`: ICML added position papers in 2024, and they sit
 in the same volume as the main conference, so a PMLR URL alone can't say which track a paper is in.
