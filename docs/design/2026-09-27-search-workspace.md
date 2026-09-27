@@ -320,7 +320,8 @@ Component rules:
   field's clause is the default (`defaults` includes it). Track values display as the `/meta` vocabulary,
   with `datasets_benchmarks` shown `D&B` (accessible name "datasets and benchmarks"). A value with facet
   count 0 is listed (the vocabulary is complete) but dimmed, still operable.
-  - **Year** has no reducer action yet (decision-011: `year` gets a UI control later). M3b shows the year
+  - **Year** had no reducer action when this was designed (decision-011; TASK-092 has since added the year
+    actions, so a range control can be built on them: Open questions 2). M3b shows the year
     facet as a read-only list of counts, newest first, and "Edit `year:` in the query ▸". If the searched
     `q` has a `year:` clause with a span (`filters.year`), it selects that clause in the editor; otherwise it
     appends ` year:2020..2026` with the range selected, so the reader sees the syntax and types over it
@@ -351,7 +352,8 @@ Component rules:
 │ │ ~                                                                                 │   │
 │ └──────────────────────────────────────────────────────────────────────────────────┘   │
 │ ⟨The query wasn't searched: 1 error⟩                                                     │
-│ ✖ This `(` is never closed — add a `)`.  Help ▸                                          │
+│ ✖ `(trust OR reliance AND benchmark` has no closing parenthesis — add `)` where the     │
+│   group ends.  Help ▸                                                                    │
 ├───────────────┬──────────────────────────────────────────────────────────────────────────┤
 │ (sidebar of   │ ┌ Showing the last search that ran, not the query above ───────────────┐ │
 │  the last     │ │ `("foundation model" OR LLM) AND trust*` · 412 papers · [Restore it] │ │
@@ -600,7 +602,7 @@ messages (server registry, shown verbatim) and the ux-writer's review of each.
 | coverage line on `/` | `GET /coverage` `totals.records` | exists |
 | wait time on 429/503 | `Retry-After` | exists (declared in the contract) |
 | span of a non-toggleable, non-negated clause (for "Show the clauses") | `ParsedClause.span` is null for `multiple_clauses`/`nested`/`mixed_fields` | **gap, worked around** by walking `ast`; a per-clause span list would be additive (proposed in TASK-042's notes, not blocking) |
-| per-year edit | a reducer action for `year` | **gap** (decision-011 defers it); Open questions 2 |
+| per-year edit | a reducer action for `year` | exists (TASK-092: `yearSet`/`yearClear`/`yearAdd`/`yearRemove`); Open questions 2 |
 
 ## Evidence
 
@@ -626,10 +628,11 @@ severity 3–4 finding on this page is fixed in the wireframes above: the audito
    **keep as built for M3b** (the output is correct and the canonical form and hash don't change), and
    decide unwrap/append after TASK-047 shows whether readers are confused by the growing text. Owner: spec 05
    PR, not this doc.
-2. **Year control.** Decision-011 leaves year without a reducer action. M3b ships the read-only year list
-   plus "Edit `year:` in the query". A range control needs a reducer action and a golden set
-   (`frontend/src/lib/filter-clause-golden.json` has the `year` reports already). Proposed as a follow-up in
-   TASK-042's notes.
+2. **Year control.** Decision-011 left year without a reducer action; TASK-092 added them (`yearSet`,
+   `yearClear`, `yearAdd`, `yearRemove`, at most 4 ranges; spec 05 §URL is state; goldens
+   `frontend/src/lib/year-clause-golden.json`). The read-only year list plus "Edit `year:` in the query" stays
+   the design until a control is designed on them (a from–to range plus per-year add/remove fits the actions;
+   `whyBlocked` gives each its disabled reason).
 3. **V1 — ticking a value on an unrestricted venue.** With no `venue:` clause every venue is ticked (the
    clause admits all). Unticking ICML writes `(q) AND venue:(ICLR OR NeurIPS)`. That's the reducer's
    behaviour and the right one; the design says so in the Venue heading's hint ("All venues: untick one to

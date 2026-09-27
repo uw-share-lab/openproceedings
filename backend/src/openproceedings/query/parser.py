@@ -75,6 +75,13 @@ _EXAMPLES = {
     "track": "track:main",
     "status": "status:accepted",
 }
+# FIELD_FILTER_SYNTAX's example: real values of the field, never placeholders
+_OR_EXAMPLES = {
+    "venue": "ICLR OR ICML",
+    "year": "2020 OR 2024..2026",
+    "track": "main OR position",
+    "status": "accepted OR withdrawn",
+}
 _VALID: dict[str, tuple[str, ...]] = {"venue": tuple(VENUES.values()), "track": TRACKS, "status": STATUSES}
 
 
@@ -199,11 +206,23 @@ class _Parser:
         if self.depth > MAX_DEPTH:
             self.error(
                 DiagnosticCode.PARSE_TOO_DEEP,
-                f"The query nests groups or `NOT`s more than {MAX_DEPTH} deep here — simplify it.",
+                f"The query nests groups or `NOT`s more than {MAX_DEPTH} deep here — remove a level of parentheses "
+                "or a `NOT`.",
                 tok.start,
                 tok.end,
             )
             raise _TooDeep
+
+    def unclosed(self, lp: Lexeme, end: int) -> None:
+        """PARSE_UNBALANCED_PAREN for a `(` never closed. The message quotes the group (`end` is where its
+        text stops), so it stands alone in a screen reader or a copied log; the span stays on the `(`."""
+        group = self.q[lp.start : max(end, lp.end)].rstrip()
+        self.error(
+            DiagnosticCode.PARSE_UNBALANCED_PAREN,
+            f"`{clip(group)}` has no closing parenthesis — add `)` where the group ends.",
+            lp.start,
+            lp.end,
+        )
 
     # --- grammar ------------------------------------------------------------------------------------
     def run(self) -> Node | None:
@@ -238,7 +257,7 @@ class _Parser:
         if node is not None and not self.errors and not self.lex_errors and not _positive(node):
             self.error(
                 DiagnosticCode.PARSE_ALL_NEGATIVE,
-                "Every part of this query is excluded (`NOT …`), so it would match almost everything — add "
+                "Every part of this query is negated (`NOT …`), so it would match almost everything — add "
                 "something to search for, e.g. `trust NOT bias`.",
                 *node.span,
             )
@@ -453,13 +472,8 @@ class _Parser:
             if self.at(Kind.RPAREN):
                 end = self.advance().end
             else:
-                self.error(
-                    DiagnosticCode.PARSE_UNBALANCED_PAREN,
-                    "This `(` is never closed — add a `)`.",
-                    lp.start,
-                    lp.end,
-                )
                 end = node.span[1] if node is not None else lp.end
+                self.unclosed(lp, end)
         finally:
             self.depth -= 1
         return node.model_copy(update={"span": (lp.start, end)}) if node is not None else None
@@ -541,17 +555,14 @@ class _Parser:
                 rp.end,
             )
             return None
-        syntax = f"`{clip(tok.text)}(…)` takes values joined by OR, e.g. `{clip(tok.text)}(a OR b)`."
+        syntax = (
+            f"`{clip(tok.text)}(…)` takes values joined by OR, e.g. `{clip(tok.text)}({_OR_EXAMPLES[name]})`."
+        )
         values: list[str | YearRange] = []
         while True:
             v = self.peek()
             if v is None:
-                self.error(
-                    DiagnosticCode.PARSE_UNBALANCED_PAREN,
-                    "This `(` is never closed — add a `)`.",
-                    lp.start,
-                    lp.end,
-                )
+                self.unclosed(lp, len(self.q))
                 return None
             if v.kind not in (Kind.WORD, Kind.PHRASE, Kind.RANGE):
                 self.error(DiagnosticCode.FIELD_FILTER_SYNTAX, syntax, v.start, v.end)
@@ -562,12 +573,7 @@ class _Parser:
                 values.append(value)
             nxt = self.peek()
             if nxt is None:
-                self.error(
-                    DiagnosticCode.PARSE_UNBALANCED_PAREN,
-                    "This `(` is never closed — add a `)`.",
-                    lp.start,
-                    lp.end,
-                )
+                self.unclosed(lp, len(self.q))
                 return None
             if nxt.kind is Kind.RPAREN:
                 end = self.advance().end
@@ -795,8 +801,8 @@ def too_long(q: str) -> Diagnostic | None:
         return None
     return Diagnostic(
         code=DiagnosticCode.PARSE_TOO_LONG,
-        message=f"The query is {len(q):,} characters long; the limit is {MAX_QUERY_LENGTH:,} — split it into "
-        "several searches.",
+        message=f"The query is {len(q):,} characters long; the limit is {MAX_QUERY_LENGTH:,} — shorten it, "
+        "e.g. replace a list of word forms with one wildcard.",
         span=(MAX_QUERY_LENGTH, len(q)),
     )
 
@@ -827,7 +833,7 @@ def canonical_too_long(
         code=DiagnosticCode.PARSE_TOO_LONG,
         message=f"The query is {len(q):,} characters, but its canonical form (what a saved search keeps and "
         f"replays) is {len(canonical):,} characters, {len(canonical) - MAX_QUERY_LENGTH:,} over the limit of "
-        f"{MAX_QUERY_LENGTH:,}{why} Use fewer terms, or split it into several searches.",
+        f"{MAX_QUERY_LENGTH:,}{why} Shorten it, e.g. replace a list of word forms with one wildcard.",
         span=(0, len(q)),
     )
 

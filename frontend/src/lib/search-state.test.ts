@@ -15,6 +15,15 @@ import {
   toURL,
   whyBlocked,
   clauseFromParse,
+  yearClauseFromParse,
+  formatYearClause,
+  EVERY_YEAR,
+  MAX_YEAR,
+  MAX_YEAR_RANGES,
+  MIN_YEAR,
+  type ParsedYearClause,
+  type YearClause,
+  type YearRange,
   type ClauseReason,
   type FilterClause,
   type ParsedClause,
@@ -29,6 +38,7 @@ import { codePointLength } from "@/api/spans";
 import clauseGolden from "./filter-clause-golden.json";
 import defaultLimits from "./default-limits.json";
 import golden from "./wrap-golden.json";
+import yearGolden from "./year-clause-golden.json";
 
 const DEFAULT_TRACKS = ["main", "datasets_benchmarks", "position"];
 
@@ -831,6 +841,188 @@ describe("whyBlocked (controls are disabled with the reason, not refused after t
       },
     } as unknown as SearchAction;
     expect(() => whyBlocked(at("trust"), broken)).toThrow(TypeError);
+  });
+});
+
+/** A golden case of `year-clause-golden.json`: `/parse`'s year report for q, and what a year action does. */
+interface YearGolden {
+  readonly name: string;
+  readonly q?: string;
+  readonly q_parts?: readonly (readonly [string, number])[];
+  readonly mode: Mode;
+  readonly year: ParsedYearClause;
+  readonly action:
+    | { readonly type: "yearSet" | "yearAdd" | "yearRemove"; readonly range: YearRange }
+    | { readonly type: "yearClear" };
+  readonly expected?: string;
+  readonly expected_parts?: readonly (readonly [string, number])[];
+  readonly ranges_after?: readonly YearRange[];
+  readonly refused?: SearchStateErrorCode;
+}
+
+describe("year actions (year-clause-golden.json, shared with the backend's /parse tests)", () => {
+  // The JSON is test data typed by hand; `ParsedYearClause` is the generated schema type the server fills.
+  const cases = yearGolden.cases as unknown as readonly YearGolden[];
+
+  it("uses the server's year bounds and range limit (the backend test reads the same file)", () => {
+    expect([MIN_YEAR, MAX_YEAR, MAX_YEAR_RANGES]).toEqual([
+      yearGolden.min_year,
+      yearGolden.max_year,
+      yearGolden.max_year_ranges,
+    ]);
+    expect(EVERY_YEAR).toEqual({ lo: MIN_YEAR, hi: MAX_YEAR });
+  });
+
+  it("covers every action, every /parse reason and every year refusal", () => {
+    expect(new Set(cases.map((c) => c.action.type))).toEqual(
+      new Set(["yearSet", "yearClear", "yearAdd", "yearRemove"]),
+    );
+    expect(new Set(cases.map((c) => c.year.reason))).toEqual(new Set([null, ...Object.keys(REASON_WORDING)]));
+    expect(new Set(cases.flatMap((c) => (c.refused === undefined ? [] : [c.refused])))).toEqual(
+      new Set([
+        "TOO_MANY_RANGES",
+        "ALREADY_INCLUDED",
+        "NOT_INCLUDED",
+        "LAST_VALUE",
+        "BAD_VALUE",
+        "NEGATED_CLAUSE",
+        "NO_EDITABLE_CLAUSE",
+        "TOO_DEEP",
+        "TOO_LONG",
+      ]),
+    );
+  });
+
+  for (const c of cases) {
+    const q = spelled(c.q, c.q_parts);
+    const action = { ...c.action, ...yearClauseFromParse(c.year, q, c.mode) } as SearchAction;
+    const state = at(q, { mode: c.mode, sort: "year_desc", page: 3 });
+    if (c.refused === undefined) {
+      it(`${c.name}: writes the expected q, grouped and merged`, () => {
+        const expected = spelled(c.expected, c.expected_parts);
+        expect(reduce(state, action)).toEqual({ ...state, q: expected, page: 1 });
+        expect(whyBlocked(state, action)).toBeNull();
+        // The clause written is exactly the ranges the server then reports (checked there against `expected`).
+        expect(expected).toContain(formatYearClause(c.ranges_after ?? []));
+      });
+    } else {
+      const code = c.refused;
+      it(`${c.name}: refuses with ${code}, and whyBlocked says so before the click`, () => {
+        const err = refused(() => reduce(state, action), code);
+        expect(whyBlocked(state, action)?.code).toBe(code);
+        if (c.year.reason !== null) {
+          expect(err.message).toContain(REASON_WORDING[c.year.reason].replaceAll("FIELD", "year"));
+        }
+      });
+    }
+  }
+});
+
+describe("yearClauseFromParse and the year clause checks", () => {
+  const typed: ParsedYearClause = {
+    field: "year",
+    negated: false,
+    span: [6, 15],
+    toggleable: true,
+    reason: null,
+    ranges: [{ lo: 2020, hi: 2020 }],
+  };
+  const source = "trust year:2020";
+
+  it("keys a toggleable clause by the query it was parsed from", () => {
+    expect(yearClauseFromParse(typed, source, "scholar")).toEqual({
+      clause: {
+        field: "year",
+        negated: false,
+        source,
+        mode: "scholar",
+        span: [6, 15],
+        ranges: [{ lo: 2020, hi: 2020 }],
+      },
+      reason: null,
+    });
+  });
+
+  it("gives no clause, with the server's reason, for one that is not toggleable, and none for no report", () => {
+    const negated: ParsedYearClause = { ...typed, negated: true, toggleable: false, reason: "negated" };
+    expect(yearClauseFromParse(negated, source, "native")).toEqual({ clause: null, reason: "negated" });
+    expect(yearClauseFromParse(null, "(x", "native")).toEqual({ clause: null, reason: null });
+    expect(yearClauseFromParse(undefined, "(x", "native")).toEqual({ clause: null, reason: null });
+  });
+
+  const add = (s: SearchState, clause: ReturnType<typeof yearClauseFromParse>): SearchAction => ({
+    type: "yearAdd",
+    range: { lo: 2022, hi: 2022 },
+    ...clause,
+  });
+
+  it("refuses a clause parsed from another query or mode (STALE_CLAUSE)", () => {
+    const choice = yearClauseFromParse(typed, source, "native");
+    refused(() => reduce(at(`${source} x`), add(at(source), choice)), "STALE_CLAUSE");
+    refused(() => reduce(at(source, { mode: "scholar" }), add(at(source), choice)), "STALE_CLAUSE");
+    expect(whyBlocked(at(`${source} x`), add(at(source), choice))?.code).toBe("STALE_CLAUSE");
+  });
+
+  it("refuses another field's clause, and a negated one passed untyped", () => {
+    const clause = yearClauseFromParse(typed, source, "native").clause;
+    const wrong = { ...clause, field: "venue" } as unknown as YearClause;
+    refused(() => reduce(at(source), add(at(source), { clause: wrong, reason: null })), "WRONG_FIELD");
+    const negated = { ...clause, negated: true } as unknown as YearClause;
+    refused(() => reduce(at(source), add(at(source), { clause: negated, reason: null })), "NEGATED_CLAUSE");
+  });
+
+  it("refuses a non-integer year, and a report whose ranges are not years", () => {
+    const choice = yearClauseFromParse(typed, source, "native");
+    const half: SearchAction = { type: "yearSet", range: { lo: 2020.5, hi: 2021 }, ...choice };
+    refused(() => reduce(at(source), half), "BAD_VALUE");
+    const bad = { ...choice.clause, ranges: [{ lo: 20, hi: 20 }] } as unknown as YearClause;
+    refused(() => reduce(at(source), add(at(source), { clause: bad, reason: null })), "BAD_VALUE");
+  });
+
+  it("merges the server's ranges before editing them, and writes one year bare inside the group", () => {
+    const unsorted = {
+      ...typed,
+      ranges: [
+        { lo: 2024, hi: 2024 },
+        { lo: 2020, hi: 2023 },
+      ],
+    };
+    const action: SearchAction = {
+      type: "yearRemove",
+      range: { lo: 2021, hi: 2023 },
+      ...yearClauseFromParse(unsorted, source, "native"),
+    };
+    expect(reduce(at(source), action).q).toBe("trust year:(2020 OR 2024)");
+  });
+
+  it("refuses a query ending in an escaping backslash before wrapping it", () => {
+    const end: ParsedYearClause = { ...typed, span: [4, 4], ranges: [EVERY_YEAR] };
+    const action: SearchAction = {
+      type: "yearSet",
+      range: { lo: 2020, hi: 2026 },
+      ...yearClauseFromParse(end, "foo\\", "native"),
+    };
+    refused(() => reduce(at("foo\\"), action), "TRAILING_ESCAPE");
+  });
+
+  it("refuses an edit over the instance's length limit (TOO_LONG)", () => {
+    const action: SearchAction = {
+      type: "yearAdd",
+      range: { lo: 2022, hi: 2022 },
+      ...yearClauseFromParse(typed, source, "native"),
+    };
+    const limits: QueryLimits = { ...DEFAULT_LIMITS, max_query_length: 24 };
+    refused(() => reduce(at(source), action, limits), "TOO_LONG");
+    expect(reduce(at(source), action).q).toBe("trust year:(2020 OR 2022)");
+  });
+
+  it("formats ranges as the query writes them", () => {
+    expect(
+      formatYearClause([
+        { lo: 2020, hi: 2020 },
+        { lo: 2022, hi: 2026 },
+      ]),
+    ).toBe("year:(2020 OR 2022..2026)");
   });
 });
 

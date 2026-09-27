@@ -67,6 +67,8 @@ export type SearchStateErrorCode =
   | "BAD_SPAN"
   | "TRAILING_ESCAPE"
   | "ALREADY_INCLUDED"
+  | "NOT_INCLUDED"
+  | "TOO_MANY_RANGES"
   | "NO_EDITABLE_CLAUSE"
   | "EMPTY_QUERY"
   | "TOO_LONG"
@@ -353,6 +355,64 @@ export function clauseFromParse(
   return { clause: { field, negated, source, mode, span, values }, reason: null };
 }
 
+/** `/parse`'s `year` report: ranges, not a value list (spec 02 §Filter clauses; generated). */
+export type ParsedYearClause = components["schemas"]["ParsedYearClause"];
+export type YearRange = components["schemas"]["YearRange"];
+
+/** The years a query may name: `year:` takes four-digit years (spec 02; the parser's `MIN_YEAR`/`MAX_YEAR`). */
+export const MIN_YEAR = 1000;
+export const MAX_YEAR = 9999;
+
+/**
+ * The most ranges a year action writes. `/parse` checks the year clause's widest edit as this many
+ * full-width ranges (`query/clauses.py::MAX_YEAR_RANGES`), so every edit within it is one the server has
+ * already judged; a year clause with more is edited in the query text (`TOO_MANY_RANGES`). The two constants
+ * are tied by `year-clause-golden.json`, which both sides' tests read.
+ */
+export const MAX_YEAR_RANGES = 4;
+
+/** Every year: what an unrestricted `year` admits, and what clearing the year filter writes. */
+export const EVERY_YEAR: YearRange = { lo: MIN_YEAR, hi: MAX_YEAR };
+
+/**
+ * The year clause a year action may rewrite: the generated `ParsedYearClause` narrowed as `FilterClause` is
+ * (positive, toggleable, with a span), keyed by the `(source, mode)` it was parsed from. `ranges` are the
+ * years it admits, sorted and merged; `1000..9999` for no restriction (a zero-width span at the end, written
+ * out as `(q) AND year:(…)`).
+ */
+export type YearClause = Readonly<{
+  field: "year";
+  negated: false;
+  source: string;
+  mode: Mode;
+  span: Readonly<NonNullable<ParsedYearClause["span"]>>;
+  ranges: readonly Readonly<YearRange>[];
+}>;
+
+/** What a year action carries about the year clause: the clause, or none and `/parse`'s reason. */
+export interface YearClauseChoice {
+  readonly clause: YearClause | null;
+  /** Why there is no clause; `null` when `/parse` gave none (the query did not parse). */
+  readonly reason: ClauseReason | null;
+}
+
+/**
+ * The year clause a year action may rewrite, from `/parse`'s `filters.year` and the `(source, mode)` it was
+ * parsed from: `clauseFromParse` for ranges. Spread the result into a year action.
+ */
+export function yearClauseFromParse(
+  parsed: ParsedYearClause | null | undefined,
+  source: string,
+  mode: Mode,
+): YearClauseChoice {
+  if (parsed === null || parsed === undefined) return { clause: null, reason: null };
+  const { field, negated, span, ranges, toggleable, reason } = parsed;
+  if (!toggleable || negated || span === null || ranges === null || field !== "year") {
+    return { clause: null, reason };
+  }
+  return { clause: { field, negated, source, mode, span, ranges }, reason: null };
+}
+
 export type SearchAction =
   | { readonly type: "submit"; readonly q: string; readonly mode?: Mode }
   | { readonly type: "builderEdit"; readonly q: string }
@@ -375,8 +435,30 @@ export type SearchAction =
       /** `/parse`'s reason when `clause` is `null` (`clauseFromParse`); it words the refusal. */
       readonly reason?: ClauseReason | null;
     }
+  | YearAction
   | { readonly type: "sort"; readonly sort: Sort }
   | { readonly type: "page"; readonly page: number };
+
+/**
+ * An edit of the year filter. Each writes the whole year clause, grouped and merged as the canonical form
+ * keeps it (`year:(2020..2022 OR 2024)`), over `/parse`'s year clause (`yearClauseFromParse`):
+ * - `yearSet`: exactly `range`;
+ * - `yearClear`: every year, `year:(1000..9999)` (the clause is rewritten, never deleted: deleting it could
+ *   leave an operator with nothing after it);
+ * - `yearAdd`: the clause's years and `range`;
+ * - `yearRemove`: the clause's years without `range`.
+ */
+export type YearAction = (
+  | { readonly type: "yearSet"; readonly range: YearRange }
+  | { readonly type: "yearClear" }
+  | { readonly type: "yearAdd"; readonly range: YearRange }
+  | { readonly type: "yearRemove"; readonly range: YearRange }
+) & {
+  /** `null`: `/parse` reported no single editable year clause. */
+  readonly clause: YearClause | null;
+  /** `/parse`'s reason when `clause` is `null` (`yearClauseFromParse`); it words the refusal. */
+  readonly reason?: ClauseReason | null;
+};
 
 /** Taxonomy values (spec 01) are bare identifiers; anything else would need quoting the client can't judge. */
 const FILTER_VALUE = /^[A-Za-z0-9_]+$/;
@@ -397,7 +479,10 @@ function endsInEscape(q: string): boolean {
   return run % 2 === 1;
 }
 
-function negatedClause(field: FilterField): SearchStateError {
+/** A field a clause rewrite edits: a value-list field, or `year`. */
+type ClauseField = FilterField | "year";
+
+function negatedClause(field: ClauseField): SearchStateError {
   return new SearchStateError(
     "NEGATED_CLAUSE",
     `The \`${field}:\` clause is negated — changing its values would flip which papers it removes. ` +
@@ -407,7 +492,7 @@ function negatedClause(field: FilterField): SearchStateError {
 
 /** The refusal for a field `/parse` reported no editable clause for, worded from its reason. */
 function noEditableClause(
-  field: FilterField,
+  field: ClauseField,
   reason: ClauseReason | null | undefined,
   limits: QueryLimits,
 ): SearchStateError {
@@ -445,24 +530,18 @@ function noEditableClause(
 }
 
 /** The clause, or the refusal `/parse`'s reason calls for when it reported none that can be edited. */
-function editable(
-  field: FilterField,
-  clause: FilterClause | null,
+function editable<C>(
+  field: ClauseField,
+  clause: C | null,
   reason: ClauseReason | null | undefined,
   limits: QueryLimits,
-): FilterClause {
+): C {
   if (clause !== null) return clause;
   throw noEditableClause(field, reason, limits);
 }
 
-function rewriteClause(
-  state: SearchState,
-  field: FilterField,
-  clause: FilterClause,
-  values: readonly string[],
-  limits: QueryLimits,
-): string {
-  const next = spliceClause(state, field, clause, values);
+/** The new `q`, refused when it is over the instance's length limit. */
+function withinLength(next: string, limits: QueryLimits): string {
   const length = codePointLength(next);
   if (length > limits.max_query_length) {
     throw new SearchStateError(
@@ -474,13 +553,18 @@ function rewriteClause(
   return next;
 }
 
-function spliceClause(
+function rewriteClause(
   state: SearchState,
   field: FilterField,
   clause: FilterClause,
   values: readonly string[],
+  limits: QueryLimits,
 ): string {
-  const { q } = state;
+  return withinLength(spliceClause(state, field, clause, values), limits);
+}
+
+/** Refuses a clause parsed from another query or mode, of another field, or negated. */
+function checkClause(state: SearchState, field: ClauseField, clause: FilterClause | YearClause): void {
   const [stateQ, stateMode] = resultSetKey(state);
   if (clause.source !== stateQ || clause.mode !== stateMode) {
     throw new SearchStateError(
@@ -498,6 +582,15 @@ function spliceClause(
   }
   // Checked at runtime too: a caller holding untyped /parse data could pass `negated: true`.
   if ((clause.negated as boolean) !== false) throw negatedClause(field);
+}
+
+function spliceClause(
+  state: SearchState,
+  field: FilterField,
+  clause: FilterClause,
+  values: readonly string[],
+): string {
+  checkClause(state, field, clause);
   for (const v of [...clause.values, ...values]) {
     if (!FILTER_VALUE.test(v)) {
       throw new SearchStateError(
@@ -514,8 +607,15 @@ function spliceClause(
         "Select another value first.",
     );
   }
-  const text = formatClause(field, values);
-  const [start, end] = clause.span;
+  return placeClause(state.q, field, clause.span, formatClause(field, values));
+}
+
+/**
+ * `q` with `text` (a whole grouped clause) over the clause at code-point `span`, or, for the zero-width span
+ * at the end (an applied default or an unrestricted field), `q` wrapped: `(q) AND text`.
+ */
+function placeClause(q: string, field: ClauseField, span: readonly [number, number], text: string): string {
+  const [start, end] = span;
   const qLength = codePointLength(q);
   if (start === end) {
     if (end !== qLength) {
@@ -544,7 +644,7 @@ function spliceClause(
   }
   let utf16: readonly [number, number];
   try {
-    utf16 = codePointSpanToUtf16(q, clause.span);
+    utf16 = codePointSpanToUtf16(q, span);
   } catch (e) {
     throw new SearchStateError(
       "BAD_SPAN",
@@ -553,6 +653,138 @@ function spliceClause(
     );
   }
   return q.slice(0, utf16[0]) + text + q.slice(utf16[1]);
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Year ranges: arithmetic on the ranges /parse reported (never a parse of `q`)
+
+/** A range as the query writes it: `2024` for one year, `2020..2026` for more. */
+export function formatYearRange(r: YearRange): string {
+  return r.lo === r.hi ? String(r.lo) : `${r.lo}..${r.hi}`;
+}
+
+/**
+ * The year clause as a year action writes it: always grouped, like every clause (`year:(2024)`), with the
+ * ranges sorted and merged as the canonical form keeps them, so it is never longer than `/parse`'s widest
+ * year edit.
+ */
+export function formatYearClause(ranges: readonly YearRange[]): string {
+  return `year:(${ranges.map(formatYearRange).join(" OR ")})`;
+}
+
+function checkedRange(r: YearRange): YearRange {
+  const year = (y: number) => Number.isInteger(y) && y >= MIN_YEAR && y <= MAX_YEAR;
+  if (!year(r.lo) || !year(r.hi) || r.lo > r.hi) {
+    throw new SearchStateError(
+      "BAD_VALUE",
+      `\`${String(r.lo)}..${String(r.hi)}\` is not a year range — a range runs from a four-digit year to the ` +
+        `same or a later one, between ${MIN_YEAR} and ${MAX_YEAR}. Choose two years in that range, the earlier first.`,
+    );
+  }
+  return { lo: r.lo, hi: r.hi };
+}
+
+/** Sorted, with overlapping or adjacent ranges joined (`2020..2021` and `2022` are `2020..2022`). */
+function mergeRanges(ranges: readonly YearRange[]): YearRange[] {
+  const sorted = [...ranges].sort((a, b) => a.lo - b.lo || a.hi - b.hi);
+  const out: YearRange[] = [];
+  for (const r of sorted) {
+    const last = out.at(-1);
+    if (last !== undefined && r.lo <= last.hi + 1) {
+      out[out.length - 1] = { lo: last.lo, hi: Math.max(last.hi, r.hi) };
+    } else {
+      out.push({ lo: r.lo, hi: r.hi });
+    }
+  }
+  return out;
+}
+
+/** `ranges` (merged) without the years of `r`. */
+function subtractRange(ranges: readonly YearRange[], r: YearRange): YearRange[] {
+  return ranges.flatMap((m) => {
+    if (m.hi < r.lo || m.lo > r.hi) return [m];
+    return [
+      ...(m.lo < r.lo ? [{ lo: m.lo, hi: r.lo - 1 }] : []),
+      ...(r.hi < m.hi ? [{ lo: r.hi + 1, hi: m.hi }] : []),
+    ];
+  });
+}
+
+const sameRanges = (a: readonly YearRange[], b: readonly YearRange[]): boolean =>
+  a.length === b.length && a.every((r, i) => r.lo === b[i]?.lo && r.hi === b[i]?.hi);
+
+/** The ranges a year action leaves the clause admitting, or why it can't. */
+function nextYearRanges(current: readonly YearRange[], action: YearAction): YearRange[] {
+  const unchanged = (what: string, why: string) =>
+    new SearchStateError("ALREADY_INCLUDED", `${what} — ${why}. Nothing needs to change.`);
+  switch (action.type) {
+    case "yearClear":
+      if (sameRanges(current, [EVERY_YEAR])) {
+        throw unchanged(
+          "Every year is already included",
+          `the \`year:\` clause admits ${MIN_YEAR} to ${MAX_YEAR}`,
+        );
+      }
+      return [EVERY_YEAR];
+    case "yearSet": {
+      const r = checkedRange(action.range);
+      if (sameRanges(current, [r])) {
+        throw unchanged(
+          `\`${formatYearRange(r)}\` is already the year filter`,
+          "the `year:` clause admits exactly those years",
+        );
+      }
+      return [r];
+    }
+    case "yearAdd": {
+      const r = checkedRange(action.range);
+      if (current.some((m) => m.lo <= r.lo && r.hi <= m.hi)) {
+        throw unchanged(
+          `\`${formatYearRange(r)}\` is already included`,
+          "the `year:` clause admits every year in it",
+        );
+      }
+      return mergeRanges([...current, r]);
+    }
+    case "yearRemove": {
+      const r = checkedRange(action.range);
+      const next = subtractRange(current, r);
+      if (sameRanges(next, current)) {
+        throw new SearchStateError(
+          "NOT_INCLUDED",
+          `\`${formatYearRange(r)}\` is not included — the \`year:\` clause admits none of those years. ` +
+            "Nothing needs to change.",
+        );
+      }
+      if (next.length === 0) {
+        throw new SearchStateError(
+          "LAST_VALUE",
+          `Removing \`${formatYearRange(r)}\` would exclude every record — the \`year:\` clause would admit ` +
+            "no year. Add another range first.",
+        );
+      }
+      return next;
+    }
+  }
+}
+
+function rewriteYear(
+  state: SearchState,
+  clause: YearClause,
+  action: YearAction,
+  limits: QueryLimits,
+): string {
+  checkClause(state, "year", clause);
+  const current = mergeRanges(clause.ranges.map(checkedRange));
+  const next = nextYearRanges(current, action);
+  if (next.length > MAX_YEAR_RANGES) {
+    throw new SearchStateError(
+      "TOO_MANY_RANGES",
+      `The year filter would have ${next.length} separate ranges — a year control writes at most ` +
+        `${MAX_YEAR_RANGES}. Join two ranges first, or edit \`year:\` in the query text.`,
+    );
+  }
+  return withinLength(placeClause(state.q, "year", clause.span, formatYearClause(next)), limits);
 }
 
 /**
@@ -592,6 +824,13 @@ export function reduce(
       const next = [...values, action.value];
       return { ...state, q: rewriteClause(state, action.field, clause, next, limits), page: 1 };
     }
+    case "yearSet":
+    case "yearClear":
+    case "yearAdd":
+    case "yearRemove": {
+      const clause = editable("year", action.clause, action.reason, limits);
+      return { ...state, q: rewriteYear(state, clause, action, limits), page: 1 };
+    }
     case "sort":
       return { ...state, sort: action.sort, page: 1 };
     case "page":
@@ -607,7 +846,7 @@ export function reduce(
 
 /**
  * Why `action` cannot be applied to `state`, or `null` if it can. Controls that dispatch a clause rewrite
- * (facet toggles, include buttons) call this while rendering and are disabled with the message as their
+ * (facet toggles, include buttons, the year control) call this while rendering and are disabled with the message as their
  * description, instead of being refused after the click (spec 05 §URL is state). `STALE_CLAUSE` is the
  * usual case: the query changed and `/parse` has not answered for it yet.
  */

@@ -43,3 +43,18 @@ def test_every_clause_sends_every_key(client: TestClient) -> None:
     common = {"field", "negated", "span", "toggleable", "reason"}
     assert set(filters["track"]) == common | {"values"} and filters["track"]["span"] is None
     assert set(filters["year"]) == common | {"ranges"}
+
+
+YEAR_GOLDEN: list[dict[str, Any]] = json.loads(
+    (Path(__file__).resolve().parents[3] / "frontend" / "src" / "lib" / "year-clause-golden.json").read_text(
+        encoding="utf-8"
+    )
+)["cases"]
+
+
+@pytest.mark.parametrize("case", YEAR_GOLDEN, ids=[c["name"] for c in YEAR_GOLDEN])
+def test_parse_serves_the_golden_year_clause(client: TestClient, case: dict[str, Any]) -> None:
+    """The year report the reducer's year actions start from (TASK-092; `year-clause-golden.json`)."""
+    r = client.post("/api/v1/parse", json={"q": _q(case), "mode": case["mode"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["filters"]["year"] == case["year"]
