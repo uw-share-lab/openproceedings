@@ -4,11 +4,13 @@
 Transport only: the bytes are `openproceedings.export`'s `header` and `entries`, the writers `op export`
 runs, over `TantivyEngine.documents`, so the body equals `op export`'s output for the same query, index
 and UTC date. The export is of `q` (with `mode` and an optional `index_version`) or of a stored search
-record (`record_id` alone: its canonical query on its index_version, refused 409 `API_RECORD_MISMATCH` if
-its replay is a mismatch).
+record (`record_id` alone): exactly the record's stored ids, the set it cites, read from the index it names
+(never a re-run query, so a later query_version doesn't change what is handed to screening); refused 409
+`API_INDEX_VERSION_UNAVAILABLE` when that index isn't here and 409 `API_RECORD_MISMATCH` when the replay is
+a mismatch.
 
 Everything that can refuse happens before the first byte: the parameters, the parse (422 with
-diagnostics), the record's replay, the pin (409 `API_INDEX_VERSION_UNAVAILABLE`), every wildcard's
+diagnostics), the record's pin and replay, the pin (409 `API_INDEX_VERSION_UNAVAILABLE`), every wildcard's
 expansion (422, located) and the one collection of the match set that gives `X-Total`. Then a sync
 generator streams the records from the engine the request took, so an export started before a hot swap
 finishes on its index. A failure after the first byte is logged by `LastCatch` and marks the access line
@@ -27,7 +29,7 @@ from fastapi.responses import StreamingResponse
 from openproceedings.api.deps import EngineDep, annotate, searchable
 from openproceedings.api.errors import ApiError
 from openproceedings.api.middleware import API_PREFIX
-from openproceedings.api.records import require_citable
+from openproceedings.api.records import refuse_mismatch, stored_record
 from openproceedings.api.state import VERSION_DIR, IndexState
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.protocol import EngineInternalError
@@ -36,7 +38,7 @@ from openproceedings.export import Provenance, entries, header, utc_date
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import Mode
-from openproceedings.records import RECORD_ID
+from openproceedings.records import RECORD_ID, ids_hash
 from openproceedings.search import expanded
 
 router = APIRouter(prefix=API_PREFIX)
@@ -96,29 +98,41 @@ def export(
     record_id: Annotated[str | None, Query(pattern=RECORD_PARAM)] = None,
 ) -> StreamingResponse:
     """Every record the query matches, in `format`: of `q` (with `mode`, default `native`) on the pinned
-    `index_version` (else the served index), or of the stored search record `record_id` (alone: its query,
-    mode and index_version). Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same
-    query and index."""
+    `index_version` (else the served index), or the stored ids of search record `record_id` (alone) from the
+    index it names. Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and
+    index (for a record, its stored `total`)."""
     if record_id is not None:
         if q is not None or mode is not None or index_version is not None:
             raise _bad("Pass either q (with mode and index_version) or record_id alone, not both.")
-        record = require_citable(request, record_id, served)  # 404, or 409 on a mismatch replay
-        # the record's canonical string, native syntax (what its replay runs), on the index it names
-        result = searchable(request, record.canonical, "native")
-        engine = pinned_engine(request, served, record.index_version)
+        record = stored_record(request, record_id)  # 422, 404
+        engine = pinned_engine(request, served, record.index_version)  # 409 unless its own index is here
+        refuse_mismatch(request, record, served)  # 409 on a mismatch replay (it runs on that same index)
+        ids = record.ids
+        if ids is None or ids_hash(ids) != record.ids_hash:  # the replay refuses this too; never stream it
+            raise ApiError(
+                DiagnosticCode.API_RECORD_MISMATCH, "This search record's stored ids don't match it."
+            )
+        # the cited set exactly: the record's stored ids, from the index it names (never a re-run query)
+        canonical_hash = record.canonical_hash
+        total, documents = len(ids), stored_documents(engine, ids)
+        annotate(request, canonical_hash=canonical_hash)
     else:
         if q is None:
             raise _bad("Pass q (the query to export) or record_id (a saved search record).")
         result = searchable(request, q, mode or "native")
         engine = pinned_engine(request, served, index_version)
-    ast = result.effective_ast
-    assert ast is not None and result.canonical_hash is not None  # it parsed
-    expanded(engine, ast)  # an over-cap wildcard is a located 422 before anything is compiled
-    total, documents = engine.documents(ast)  # the one collection; records are read as they stream
+        ast = result.effective_ast
+        if ast is None or result.canonical_hash is None:  # searchable refuses a query that didn't parse
+            raise EngineInternalError(
+                DiagnosticCode.API_INTERNAL, "an export ran on a query that didn't parse"
+            )
+        canonical_hash = result.canonical_hash
+        expanded(engine, ast)  # an over-cap wildcard is a located 422 before anything is compiled
+        total, documents = engine.documents(ast)  # the one collection; records are read as they stream
     annotate(request, total=total)
-    provenance = Provenance(engine.index_version, result.canonical_hash, utc_date())
+    provenance = Provenance(engine.index_version, canonical_hash, utc_date())
     media, ext = MEDIA[fmt]
-    filename = f"openproceedings-{engine.index_version}-{result.canonical_hash[:12]}.{ext}"
+    filename = f"openproceedings-{engine.index_version}-{canonical_hash[:12]}.{ext}"
     return StreamingResponse(
         _body(fmt, documents, provenance, total),
         media_type=media,
@@ -130,6 +144,22 @@ def export(
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
+
+
+STORED_CHUNK = 1_000  # stored ids read per index lookup while a record's export streams
+
+
+def stored_documents(engine: TantivyEngine, ids: list[str]) -> Iterator[dict[str, Any]]:
+    """The display record of each of `ids` (sorted), in that order, read from `engine` a chunk at a time. An
+    id the index doesn't hold ends the stream short, which `_body`'s count against `X-Total` turns into a
+    logged failure (never a silently smaller file)."""
+    for start in range(0, len(ids), STORED_CHUNK):
+        chunk = ids[start : start + STORED_CHUNK]
+        shown = engine.display(chunk)
+        for i in chunk:
+            if i not in shown:
+                return
+            yield shown[i]
 
 
 def _body(

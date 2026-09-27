@@ -39,7 +39,7 @@ reviews without the UI.
 | `POST` | `/parse` | `{q, mode}` → 02's `ParseResult`: `mode`, `ast`, `effective_ast` (the UI tree shows the defaults), `canonical`, `canonical_hash`, `identification_query`, `defaults`, `warnings`, `errors`, `translations` (`identification_ast` stays server-side). Called as you type, debounced. |
 | `GET` | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | `GET` | `/papers/{id}` | The full record, provenance included |
-| `GET` | `/export` | `format=ris\|csv\|bibtex\|jsonl` and either `q` (with `mode` and an optional `index_version`) or `record_id` alone → a stream of the **entire** matched set, ordered by `id`, served from the pinned index. A `record_id` whose replay status is `mismatch` is refused (409 `API_RECORD_MISMATCH`) |
+| `GET` | `/export` | `format=ris\|csv\|bibtex\|jsonl` and either `q` (with `mode` and an optional `index_version`) or `record_id` alone → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; with `record_id`, exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if that index is gone, 409 `API_RECORD_MISMATCH` if its replay is a `mismatch`) |
 | `POST` | `/records` | Freezes a search as an immutable **search record** → `{record_id, url}` |
 | `GET` | `/records/{id}` | The stored record, plus a replay check (see below) |
 | `GET` | `/records/{id}/diff` | For a `drifted` record: added and removed ids (with titles), and which `index_version` inputs changed |
@@ -180,8 +180,12 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   `total`) and `X-Index-Version` say exactly which set was exported (with `X-Tokenizer-Version` and
   `X-Query-Version`). An export started during an index
   hot-swap finishes on the index it began on.
-- An export pinned by `record_id` to a record whose replay status is `mismatch` is refused with 409
-  `API_RECORD_MISMATCH` (§Error handling): a set that breaks guarantee 4 is never handed to screening.
+- An export pinned by `record_id` hands over exactly the cited set: the record's **stored** ids (sorted),
+  read from the index the record names. The query is never re-run, so a later `query_version` changes
+  nothing about what is exported (task-037 review). It is refused with 409 `API_INDEX_VERSION_UNAVAILABLE`
+  when that index isn't on this instance, and with 409 `API_RECORD_MISMATCH` (§Error handling) when the
+  record's replay status is `mismatch` or its stored list doesn't hash to its `ids_hash`: a set that breaks
+  guarantee 4 is never handed to screening. `X-Total` is the record's `total`.
 
 ## Search records (reproducibility, PRISMA)
 
@@ -208,63 +212,88 @@ It returns a short id. `GET /records/{id}` replays the query and returns HTTP 20
   guarantee 4, so it is logged at ERROR with code `API_REPLAY_MISMATCH` and treated as a bug. The record page
   shows it as "do not cite" (05).
 
-The record page (05) is what a methods section cites. Records are stored in `data/records.sqlite`
+The record page (05) is what a methods section cites. Records are stored in `data/records/records.sqlite`
 (append-only, backed up with the snapshots).
 
-As built (task-037; `backend/src/openproceedings/records.py` holds the record, `ids_hash`, the store and the
-replay, so a later `op record` calls the same functions; `api/records.py` is the transport, `IndexState.pinned`
-in `api/state.py` loads older indexes):
+As built (task-037 and its review fixes; `backend/src/openproceedings/records.py` holds the record,
+`ids_hash`, the store and the replay, so a later `op record` calls the same functions; `api/records.py` is the
+transport, `IndexState.pinned` in `api/state.py` loads older indexes):
 - **`POST /records`** takes `{q, mode}` (no other keys) and answers **201** `{record_id, url, index_version,
   tokenizer_version, query_version}`. `url` is the record page's path, `/record/<record_id>` (05 §Pages),
   relative to the site. The query is refused exactly as `/search` refuses it (422 with diagnostics,
   `PARSE_TOO_LONG` before parsing) and nothing is written. It is re-run on the request's one engine:
   `search.run` (so `total`, `excluded` and `expansions` equal `/search`'s) plus `match_ids` for the ids.
-- **The record** holds every field of the table, plus `record_id`, `schema_version` and `ranking_params`
-  (the index's two other inputs, so a drifted replay can name a method change after the pinned index is
-  gone). `crawl_dates` is `{"all": {"from", "to"}}`, the snapshot manifest's `crawl_window`: today's
-  manifest has one corpus-wide window, and a source entry that carries its own `crawl_window` (the M4
-  crawlers) adds a key of its own. `dedup` is `{merged: manifest merges.total, ambiguous_not_merged:
-  manifest conflicts.ambiguous_not_merged}`. `searched_at` is UTC to the second (`…Z`). `semantic_version`
-  is null until the near-miss panel exists (M5). `excluded` keeps the pinned bucket order.
+- **Cost and capacity.** `POST /records`, `GET /records/{id}` and `/diff` each run a whole query, so each
+  costs the rate limit's `export_weight`. A save is refused with 503 `API_RECORDS_STORE_FULL` (nothing
+  written) once the store holds `ApiConfig.records_max_bytes` (default 1 GiB; `None` for no cap) or its disk
+  has less than `records_min_free_bytes` free (default 256 MiB). An empty store always takes its first save.
+  Reads are never refused.
+- **The record** holds every field of the table, plus `record_id`, `body_version` (1), `schema_version` and
+  `ranking_params` (the index's two other inputs, so a drifted replay can name a method change after the
+  pinned index is gone). `crawl_dates` is keyed by source: `*` is the snapshot manifest's corpus-wide
+  `crawl_window` (today's manifests have only that), and a source entry that carries its own
+  `crawl_window` (the M4 crawlers) adds its own key. Every end is checked to be an ISO 8601 date-time.
+  `dedup` is `{merged: manifest merges.total, ambiguous_not_merged: manifest conflicts.ambiguous_not_merged}`.
+  `searched_at` is UTC to the second (`…Z`). `semantic_version` is null until the near-miss panel exists
+  (M5). `excluded` keeps the pinned bucket order.
+- **`ids` are left out of `GET /records/{id}`** (`record.ids` is null) unless `?include=ids`; to fetch the
+  papers themselves use `GET /export?record_id=` (§Exports).
 - **`ids_hash`** is `sha256("\n".join(sorted(ids)))`, code-point order, no trailing newline, with
   known-answer tests (the empty set is `sha256("")`).
 - **Record ids** are `secrets.token_urlsafe(9)`: 12 characters of `[A-Za-z0-9_-]`, 72 random bits, redrawn
-  on a collision. Anything else is 422 `API_BAD_PARAM`; an unknown id is 404 `API_RECORD_NOT_FOUND`, and
-  neither message repeats the id.
-- **The store** is `<data_dir>/records.sqlite` (`ApiConfig.data_dir`), created on the first save (a read
-  never creates it). Tables `schema_version` and `records (record_id, index_version, searched_at, body, ids)`,
-  `body` being the record's JSON without `ids` and `ids` the zlib-compressed id list. `BEFORE UPDATE` and
-  `BEFORE DELETE` triggers on both tables abort ("append-only"), and a `BEFORE INSERT` trigger refuses an
-  id that exists, so `INSERT OR REPLACE` can't delete-then-insert from any client (SQLite's REPLACE skips
-  DELETE triggers unless `recursive_triggers` is on, which the app's connections also set). WAL mode; one connection per
-  call, so the thread pool never shares one. `RecordStore.pinned(index_version)` counts the records that
-  pin a version (check it before retiring one).
+  only when the drawn id is taken. Anything else is 422 `API_BAD_PARAM`; an unknown id is 404
+  `API_RECORD_NOT_FOUND`, and neither message repeats the id.
+- **The store** is `<data_dir>/records/records.sqlite`: its own directory (mode 0700, file 0600), because
+  WAL mode writes `-wal` and `-shm` files beside the database, so the directory, not just the file, must be
+  writable. Created on the first save (a read never creates it; a removed file is re-created). Tables
+  `schema_version`, `id_sets (ids_hash, ids)` and `records (record_id, index_version, searched_at, id_set,
+  body)`. Id lists are content-addressed: `id_sets.ids` is the zlib-compressed `\n`-joined list under its
+  own `ids_hash` (checked on every read), so saving the same set again costs one body (~1 KB). `body` is the
+  record's JSON without `ids`. Every table has `BEFORE UPDATE` and `BEFORE DELETE` triggers that abort
+  ("append-only"), and `records` and `id_sets` a `BEFORE INSERT` trigger refusing an existing key (SQLite's
+  REPLACE deletes without firing DELETE triggers unless `recursive_triggers` is on). The triggers stop
+  mistakes; they are not a security boundary against someone with the file. A store with a newer
+  `schema_version` is refused. One connection per call. `RecordStore.pinned(index_version)` counts the
+  records that pin a version (check it before retiring one).
+- **Stored bodies are read with frozen, tolerant types** (a diagnostic's `code` is a plain string, unknown
+  keys are ignored), so a later change to the live enums never makes an old record unreadable; a body whose
+  `body_version` is newer than this code's is a 500. `backend/tests/fixtures/records/record-v1.json` is a
+  committed v1 body that must stay readable.
 - **Replay** (`GET /records/{id}`, 200 `{index_version, tokenizer_version, query_version, record, replay}`;
   the top-level versions are those the replay ran on) re-parses the stored `canonical` in native mode, never
-  `input`. If the record's `query_version` is this code's and its `index_version` is served or loadable here,
-  it runs there: `reproduced` if `ids_hash` and `excluded` both match (and the canonical re-parses to the
-  same `canonical_hash`), otherwise `mismatch`, with one ERROR line `replay_mismatch` (`code`
+  `input`. It runs on the record's own index when this instance has it (served, or loaded on demand; an
+  engine handed back for another version counts as unavailable), else on the served index. On its own index
+  and under its own `query_version`, it is `reproduced` if `ids_hash` and `excluded` both match and the
+  canonical re-parses to the same `canonical_hash`, otherwise `mismatch`: ERROR `replay_mismatch` (`code`
   `API_REPLAY_MISMATCH`, `record_id`, the versions, and which of `ids_match`, `excluded_match` and
-  `canonical_match` failed). Otherwise it is `drifted` and runs on the served index: `replay.changed` lists
-  each differing input (`snapshot_hash` kind `corpus`; `tokenizer_version`, `schema_version`,
-  `ranking_params`, `query_version` kind `method`) with its recorded and current value. `replay` also has
-  `total`, `excluded`, `ids_hash`, `ids_match`, `excluded_match`, `added`, `removed` (counts) and
-  `membership_identical` (true on `+0/−0`). A canonical string that no longer runs under a newer query
-  version (it no longer parses, or a wildcard now expands past the cap) is `drifted` with `refused` set to
-  the code and `total`, `excluded` and `ids_hash` null; every stored id is then `removed`.
+  `canonical_match` failed) the first time this process sees that record mismatch, DEBUG after that. Any
+  other case is `drifted`: when only the query version differs and the record's own index is here, the replay
+  runs on that index, so `changed` holds just `query_version`; otherwise `replay.changed` lists each
+  differing input (`snapshot_hash` kind `corpus`; `tokenizer_version`, `schema_version`, `ranking_params`,
+  `query_version` kind `method`) with its recorded and current value. `replay` also has `total`,
+  `excluded`, `ids_hash`, `ids_match`, `excluded_match`, `added`, `removed` (counts) and
+  `membership_identical` (true on `+0/−0`).
+- **A refused replay** (the canonical string no longer parses, or a wildcard now expands past the cap) has
+  `refused` set to that code and compares nothing: `total`, `excluded`, `ids_hash`, `added`, `removed` and
+  `membership_identical` are null. Its status stays `drifted`, or `mismatch` under the record's own versions.
 - **Pinned indexes** load on demand, read-only, by the served index's rules (`state.index_path`: an
   index_version resolving to itself directly under `<data_dir>/indexes/`; never `resolve_snapshot`), and
   are opened (verified) by the same engine class, so "available" means loadable by this code: an index built
   with another tokenizer or schema version is not, and its records replay as `drifted`. The loader is
   `IndexState.pinned` (§Implementation notes, pinned indexes: the LRU, the remembered refusals and the log
   level per reason).
-- **`GET /records/{id}/diff`** answers `{…versions, record_id, status, recorded_index_version, changed,
-  added: [{id, title}], removed: [{id, title}], membership_identical}` for any status. A title comes from the
-  index the replay ran on, else the record's pinned index; null when no index here holds the paper.
-- **For `/export?record_id=` (task-036)**: `api.records.require_citable(request, record_id, engine)`
-  returns the stored record, or raises 409 `API_RECORD_MISMATCH` when its replay is a `mismatch` (422 and
-  404 as above); `replay_status(request, record_id, engine)` returns just the status. Pass the route's
-  `EngineDep` engine so a request never reads the served index twice.
+- **`GET /records/{id}/diff?offset=&limit=`** answers `{…versions, record_id, status, recorded_index_version,
+  refused, changed, offset, limit, added_total, removed_total, added: [{id, title}], removed: [{id, title}],
+  membership_identical}` for any status. Each list is the page `[offset, offset + limit)` of its id-sorted
+  list (`limit` 0–200, default 50; out of range is 422 `API_BAD_PARAM`, never clamped); the totals are always
+  in full. A title comes from the index the replay ran on, null when it doesn't hold the paper. A refused
+  replay has empty lists and null totals.
+- **For `/export?record_id=` (task-036)**: `api.records.stored_record(request, record_id)` (422/404) and
+  `refuse_mismatch(request, record, engine)` (409 `API_RECORD_MISMATCH` on a `mismatch` replay), which
+  `/export` calls after pinning the record's index; `require_citable(request, record_id, engine)` is the two
+  together and `replay_status(request, record_id, engine)` returns just the status. Pass the route's
+  `EngineDep` engine so a request never reads the served index twice. A `reproduced` replay also requires
+  the stored id list to hash to the record's `ids_hash`, since that list is what `/export` hands over.
 - Access line: `canonical_hash`, `total` (the replay's) and `index_version` (the one the replay ran on).
   No log line carries the input, canonical or identification strings: the record stores them, the logs don't.
 
@@ -282,6 +311,7 @@ once released: changing one is a breaking change under `/api/v1`.
 | A pinned `index_version` is not available on this instance | 409 | `API_INDEX_VERSION_UNAVAILABLE` |
 | Export requested for a record whose replay status is `mismatch` | 409 | `API_RECORD_MISMATCH` |
 | Rate limit exceeded | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
+| A search record can't be saved: the record store is over its size cap or its disk under the free-space floor (task-037) | 503 | `API_RECORDS_STORE_FULL` |
 | No index loaded yet (startup, or the first load failed; a failed swap keeps serving the old index) | 503 | `API_INDEX_NOT_LOADED` |
 | Anything unexpected | 500 | `API_INTERNAL` (logged at ERROR with the request id; message never echoes input) |
 | No such endpoint (task-034) | 404 | `API_NOT_FOUND` |
@@ -434,16 +464,18 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
     dates per source; neither is in the manifest (task-082).
 - As built (task-036, `api/export.py`; review fixes 2026-09-27):
   - `GET /export` takes either `q` (with `mode` and an optional `index_version`) or `record_id` alone;
-    `format` (`ris` | `csv` | `bibtex` | `jsonl`) is always required. With `record_id`, the query, mode and
-    index_version are the stored record's (its `canonical`, parsed as native syntax, as its replay runs
-    it); passing `q`, `mode` or `index_version` as well is 422 `API_BAD_PARAM`, as is neither `q` nor
-    `record_id`. `mode` defaults to `native`. The body is the bytes `op export` writes for the same query,
+    `format` (`ris` | `csv` | `bibtex` | `jsonl`) is always required. With `record_id`, the export is the
+    record's stored ids on the record's index_version (the cited set, never a re-run; `stored_documents`
+    reads them in id order a chunk at a time, and provenance carries the record's `canonical_hash`), after
+    the pin (409 `API_INDEX_VERSION_UNAVAILABLE`) and the replay (`api.records.refuse_mismatch`, 409
+    `API_RECORD_MISMATCH`); passing `q`, `mode` or `index_version` as well is 422 `API_BAD_PARAM`, as is
+    neither `q` nor `record_id`. `mode` defaults to `native`. The body is the bytes `op export` writes for the same query,
     index and UTC date: both run `export.header` and `export.entries` over `TantivyEngine.documents`, and a
     contract test compares them for every format. Records are sent in chunks of whole records, each at most
     `CHUNK` (64 Ki characters) plus one record (a contract test reads the ASGI messages).
   - Everything that can refuse happens before the first byte, in the one envelope: the parameters, the
-    length cap and the parse (422 with diagnostics), a record's replay (`api.records.require_citable`: 404
-    `API_RECORD_NOT_FOUND`, 409 `API_RECORD_MISMATCH` for a `mismatch`), the pin, every wildcard's expansion
+    length cap and the parse (422 with diagnostics), a record's lookup (404 `API_RECORD_NOT_FOUND`), pin and
+    replay (409 `API_RECORD_MISMATCH` for a `mismatch`), the pin, every wildcard's expansion
     (422 `WILDCARD_TOO_MANY_EXPANSIONS`, each over-cap wildcard located in `q` by `search.expanded`, as
     `/search` does), then the one collection of the match set that gives `X-Total`. Then a sync generator
     streams from the engine the request took, so an export started before a hot swap finishes on its index
@@ -487,5 +519,5 @@ A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "misma
 - Search-record replay tests for the reproduced, drifted and mismatch paths. The mismatch path uses a
   fixture record inserted with a wrong `ids_hash` or `excluded` (the store stays append-only), and asserts a `200` with
   `status: "mismatch"` plus one `API_REPLAY_MISMATCH` ERROR log line.
-- An export with `record_id` of a `mismatch` record returns 409 `API_RECORD_MISMATCH` and streams nothing.
+- An export with `record_id` of a `mismatch` record returns 409 `API_RECORD_MISMATCH` and streams nothing; of a record whose index is gone, 409 `API_INDEX_VERSION_UNAVAILABLE`; of a record whose query version drifted, exactly its stored ids.
 - An OpenAPI snapshot test, so any contract change shows up in the PR diff.

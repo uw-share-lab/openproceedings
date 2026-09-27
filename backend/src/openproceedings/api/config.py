@@ -57,6 +57,10 @@ class ApiConfig(BaseModel):
     pinned_refusal_seconds: float = Field(default=300.0, gt=0)
     load_in_background: bool = True  # /healthz answers (index_loaded false) while the index loads
     handle_sighup: bool = True  # SIGHUP reloads `index` and swaps it in (main thread only)
+    # the search-record store (<data_dir>/records/): a save is refused (503 API_RECORDS_STORE_FULL) once the
+    # store holds `records_max_bytes` (None: no cap) or its disk has less than `records_min_free_bytes` free
+    records_max_bytes: int | None = Field(default=1 << 30, ge=1)
+    records_min_free_bytes: int = Field(default=256 << 20, ge=0)
 
     @field_validator("index")
     @classmethod

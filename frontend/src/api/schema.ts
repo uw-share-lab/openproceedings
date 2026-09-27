@@ -34,9 +34,9 @@ export interface paths {
         /**
          * Export
          * @description Every record the query matches, in `format`: of `q` (with `mode`, default `native`) on the pinned
-         *     `index_version` (else the served index), or of the stored search record `record_id` (alone: its query,
-         *     mode and index_version). Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same
-         *     query and index.
+         *     `index_version` (else the served index), or the stored ids of search record `record_id` (alone) from the
+         *     index it names. Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and
+         *     index (for a record, its stored `total`).
          */
         get: operations["export"];
         put?: never;
@@ -138,7 +138,7 @@ export interface paths {
         put?: never;
         /**
          * Create Record
-         * @description Freeze a search as an immutable record: re-run here on the served index, then one INSERT.
+         * @description Freeze a search as an immutable record: re-run here on the served index, then one transaction.
          */
         post: operations["create_record"];
         delete?: never;
@@ -156,7 +156,8 @@ export interface paths {
         };
         /**
          * Get Record
-         * @description The stored record and a replay of it now (HTTP 200 whatever the status).
+         * @description The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless
+         *     `include=ids`; `/export?record_id=` streams the papers themselves.
          */
         get: operations["get_record"];
         put?: never;
@@ -176,8 +177,10 @@ export interface paths {
         };
         /**
          * Diff Record
-         * @description The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. A
-         *     title comes from the index the replay ran on, else the record's pinned index; null if neither holds it.
+         * @description The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each
+         *     list is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A
+         *     title comes from the index the replay ran on, null if it doesn't hold the paper. A refused replay
+         *     compared nothing: empty lists, null totals.
          */
         get: operations["diff_record"];
         put?: never;
@@ -340,7 +343,7 @@ export interface components {
          * DiagnosticCode
          * @enum {string}
          */
-        DiagnosticCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "WARN_LOWERCASE_OPERATOR" | "WARN_MIXED_AND_OR" | "WARN_NESTED_FILTER" | "WARN_FILTER_SCOPE" | "WARN_LOOKALIKE_OPERATOR" | "WARN_SYMBOLS_DROPPED" | "WARN_SOURCE_PARTIAL" | "WARN_CJK_RUN" | "WARN_SPELLED_GREEK" | "COMPAT_SOURCE_ALIAS" | "COMPAT_POP_DOLLAR" | "COMPAT_POP_PHRASE" | "COMPAT_NO_STEMMING" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_REPLAY_MISMATCH";
+        DiagnosticCode: "PARSE_UNBALANCED_PAREN" | "PARSE_EMPTY_GROUP" | "PARSE_ALL_NEGATIVE" | "PARSE_UNTERMINATED_PHRASE" | "PARSE_BAD_NEAR" | "PARSE_WILDCARD_NOT_SUFFIX" | "PARSE_EXPECTED_TERM" | "PARSE_EMPTY_TERM" | "PARSE_NESTED_FIELD" | "PARSE_TOO_DEEP" | "PARSE_WILDCARD_DETACHED" | "PARSE_AMBIGUOUS_MINUS" | "PARSE_STRAY_COLON" | "PARSE_AMBIGUOUS_QUOTE" | "PARSE_PAREN_TOUCHES_WORD" | "PARSE_TOO_LONG" | "WILDCARD_STEM_TOO_SHORT" | "WILDCARD_TOO_MANY_EXPANSIONS" | "FIELD_UNKNOWN" | "FIELD_UNKNOWN_VALUE" | "FIELD_RANGE_INVERTED" | "FIELD_FILTER_SYNTAX" | "FIELD_COMPAT_ONLY" | "WARN_LOWERCASE_OPERATOR" | "WARN_MIXED_AND_OR" | "WARN_NESTED_FILTER" | "WARN_FILTER_SCOPE" | "WARN_LOOKALIKE_OPERATOR" | "WARN_SYMBOLS_DROPPED" | "WARN_SOURCE_PARTIAL" | "WARN_CJK_RUN" | "WARN_SPELLED_GREEK" | "COMPAT_SOURCE_ALIAS" | "COMPAT_POP_DOLLAR" | "COMPAT_POP_PHRASE" | "COMPAT_NO_STEMMING" | "API_BAD_PARAM" | "API_PAPER_NOT_FOUND" | "API_RECORD_NOT_FOUND" | "API_INDEX_VERSION_UNAVAILABLE" | "API_RECORD_MISMATCH" | "API_RATE_LIMITED" | "API_INDEX_NOT_LOADED" | "API_INTERNAL" | "API_NOT_FOUND" | "API_METHOD_NOT_ALLOWED" | "API_REPLAY_MISMATCH" | "API_RECORDS_STORE_FULL";
         /** DiffEntry */
         DiffEntry: {
             /** Id */
@@ -707,20 +710,29 @@ export interface components {
         RecordDiff: {
             /** Added */
             added: components["schemas"]["DiffEntry"][];
+            /** Added Total */
+            added_total: number | null;
             /** Changed */
             changed: components["schemas"]["ChangedInput"][];
             /** Index Version */
             index_version: string;
+            /** Limit */
+            limit: number;
             /** Membership Identical */
-            membership_identical: boolean;
+            membership_identical: boolean | null;
+            /** Offset */
+            offset: number;
             /** Query Version */
             query_version: string;
             /** Record Id */
             record_id: string;
             /** Recorded Index Version */
             recorded_index_version: string;
+            refused: components["schemas"]["DiagnosticCode"] | null;
             /** Removed */
             removed: components["schemas"]["DiffEntry"][];
+            /** Removed Total */
+            removed_total: number | null;
             /**
              * Status
              * @enum {string}
@@ -770,7 +782,7 @@ export interface components {
         /** ReplayInfo */
         ReplayInfo: {
             /** Added */
-            added: number;
+            added: number | null;
             /** Changed */
             changed: components["schemas"]["ChangedInput"][];
             excluded: components["schemas"]["Excluded"] | null;
@@ -783,12 +795,12 @@ export interface components {
             /** Index Version */
             index_version: string;
             /** Membership Identical */
-            membership_identical: boolean;
+            membership_identical: boolean | null;
             /** Query Version */
             query_version: string;
             refused: components["schemas"]["DiagnosticCode"] | null;
             /** Removed */
-            removed: number;
+            removed: number | null;
             /**
              * Status
              * @enum {string}
@@ -799,10 +811,13 @@ export interface components {
         };
         /**
          * SearchRecord
-         * @description Every field of spec 04 §Search records, plus `schema_version` and `ranking_params` (the index's other
-         *     two inputs), so a drifted replay can name a method change even after the pinned index is gone.
+         * @description Every field of spec 04 §Search records, plus `body_version`, `schema_version` and `ranking_params`
+         *     (the index's other two inputs, so a drifted replay can name a method change after the pinned index is
+         *     gone). `ids` is None when the caller didn't ask for them.
          */
         SearchRecord: {
+            /** Body Version */
+            body_version: number;
             /** Canonical */
             canonical: string;
             /** Canonical Hash */
@@ -822,18 +837,15 @@ export interface components {
             /** Identification Query */
             identification_query: string;
             /** Ids */
-            ids: string[];
+            ids?: string[] | null;
             /** Ids Hash */
             ids_hash: string;
             /** Index Version */
             index_version: string;
             /** Input */
             input: string;
-            /**
-             * Mode
-             * @enum {string}
-             */
-            mode: "native" | "scholar";
+            /** Mode */
+            mode: string;
             /** Query Version */
             query_version: string;
             /** Ranking Params */
@@ -855,9 +867,9 @@ export interface components {
             /** Total */
             total: number;
             /** Translations */
-            translations: components["schemas"]["Diagnostic"][];
+            translations: components["schemas"]["StoredDiagnostic"][];
             /** Warnings */
-            warnings: components["schemas"]["Diagnostic"][];
+            warnings: components["schemas"]["StoredDiagnostic"][];
         };
         /** SearchResponse */
         SearchResponse: {
@@ -899,6 +911,21 @@ export interface components {
             number,
             number
         ];
+        /**
+         * StoredDiagnostic
+         * @description A diagnostic as the record saved it: its code is a string, so a retired code stays readable.
+         */
+        StoredDiagnostic: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Span */
+            span?: [
+                number,
+                number
+            ] | null;
+        };
         /** Term */
         Term: {
             /** Field */
@@ -1225,7 +1252,9 @@ export interface operations {
     };
     get_record: {
         parameters: {
-            query?: never;
+            query?: {
+                include?: "ids" | null;
+            };
             header?: never;
             path: {
                 id: string;
@@ -1256,7 +1285,10 @@ export interface operations {
     };
     diff_record: {
         parameters: {
-            query?: never;
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
             header?: never;
             path: {
                 id: string;

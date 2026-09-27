@@ -35,7 +35,7 @@ data/indexes/current            symlink → the served version
 - Promotion: build offline → run the differential, parity and determinism suites → switch `current`
   atomically → SIGHUP the API. The API swaps its pointer atomically, and in-flight requests finish on the
   old version.
-- Keep every version referenced by a search record in `data/records.sqlite`. Check before deleting any.
+- Keep every version referenced by a search record in `data/records/records.sqlite`. Check before deleting any.
 - The API loads a **pinned** older version to replay a record (`.claude/skills/search-records/SKILL.md`).
   Replay returns HTTP 200 with one of three statuses (spec 04 §Search records):
   - **`reproduced`**: the same `index_version` **and** `query_version` are available, and both `ids_hash`

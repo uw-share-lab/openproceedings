@@ -496,7 +496,7 @@ def test_a_record_exports_its_own_query_on_its_own_index(
     recorded: TestClient, data_dir: Path, store: Store, tmp_path: Path
 ) -> None:
     record_id = save(recorded, "trust OR calibrat*")
-    stored = recorded.get(f"/api/v1/records/{record_id}").json()["record"]
+    stored = recorded.get(f"/api/v1/records/{record_id}", params={"include": "ids"}).json()["record"]
     r = recorded.get(EXPORT, params={"record_id": record_id, "format": "jsonl"})
     assert r.status_code == 200, r.text
     assert r.headers["x-index-version"] == store.big and int(r.headers["x-total"]) == stored["total"]
@@ -513,10 +513,38 @@ def test_exporting_a_mismatch_record_is_409_and_streams_nothing(recorded: TestCl
     from openproceedings.records import ids_hash
 
     good = save(recorded, "trust")
-    ids = recorded.get(f"/api/v1/records/{good}").json()["record"]["ids"]
+    ids = recorded.get(f"/api/v1/records/{good}", params={"include": "ids"}).json()["record"]["ids"]
     bad = tampered(data_dir, good, ids_hash=ids_hash([*ids, "op:iclr:2024:forged"]))
     e = error(recorded.get(EXPORT, params={"record_id": bad, "format": "ris"}), 409, "API_RECORD_MISMATCH")
     assert bad not in e["message"]
+
+
+def test_a_record_exports_its_stored_ids_even_after_the_query_version_changed(
+    recorded: TestClient, data_dir: Path, store: Store
+) -> None:
+    """The stored set is what the record cites, so the export never re-runs the query: here the copy's
+    query version drifted and its canonical now names another query, and the export is still the stored ids."""
+    good = save(recorded, "trust OR calibrat*")
+    stored = recorded.get(f"/api/v1/records/{good}", params={"include": "ids"}).json()["record"]
+    other = parse("benchmark").canonical
+    drifted = tampered(data_dir, good, query_version="0", canonical=other)
+    assert recorded.get(f"/api/v1/records/{drifted}").json()["replay"]["status"] == "drifted"
+    r = recorded.get(EXPORT, params={"record_id": drifted, "format": "jsonl"})
+    assert r.status_code == 200, r.text
+    assert ids_of("jsonl", r.content) == stored["ids"] and int(r.headers["x-total"]) == stored["total"]
+    assert r.headers["x-index-version"] == store.big
+    assert ids_of("jsonl", r.content) != match_ids(store, store.big, "benchmark")
+
+
+def test_a_record_whose_index_is_gone_is_409_unavailable(recorded: TestClient, data_dir: Path) -> None:
+    good = save(recorded, "trust")
+    gone = tampered(data_dir, good, index_version="ffffffffffff")  # an index this instance doesn't hold
+    e = error(
+        recorded.get(EXPORT, params={"record_id": gone, "format": "ris"}),
+        409,
+        "API_INDEX_VERSION_UNAVAILABLE",
+    )
+    assert gone not in e["message"]
 
 
 @pytest.mark.parametrize(

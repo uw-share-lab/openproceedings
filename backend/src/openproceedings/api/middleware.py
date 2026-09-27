@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 API_PREFIX = "/api/v1"
 HEALTH_PATH = f"{API_PREFIX}/healthz"
 EXPORT_PATH = f"{API_PREFIX}/export"
+RECORDS_PATH = f"{API_PREFIX}/records"  # POST /records, GET /records/{id}, /diff: each runs a whole query
 # fields a route may add to the access line (api/deps.py); anything else in the dict is not logged
 ANNOTATIONS = (
     "index_version",
@@ -207,7 +208,7 @@ class TokenBucket:
 
 class RateLimit:
     """429 `API_RATE_LIMITED` with `Retry-After` once a client's bucket is empty. `/healthz` is free; an
-    export costs `export_weight`. Runs on the event loop only, so the buckets need no lock."""
+    export and each record route cost `export_weight`. Runs on the event loop only, so the buckets need no lock."""
 
     def __init__(
         self,
@@ -226,7 +227,8 @@ class RateLimit:
         if scope["type"] != "http" or not self.config.enabled or path == HEALTH_PATH:
             await self.app(scope, receive, send)
             return
-        cost = self.config.export_weight if path == EXPORT_PATH else 1.0
+        heavy = path in (EXPORT_PATH, RECORDS_PATH) or path.startswith(RECORDS_PATH + "/")
+        cost = self.config.export_weight if heavy else 1.0
         wait = self.buckets.take(client_key(scope, self.trusted), cost)
         if wait > 0:
             log.debug("request_refused", extra={"code": str(DiagnosticCode.API_RATE_LIMITED)})

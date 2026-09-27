@@ -3,28 +3,34 @@ records; search-records skill).
 
 Transport only: freezing, the store and the replay are `openproceedings.records`, which a future `op record`
 (spec 08) calls too. A record is saved from the query re-run here (never the client's counts), on the one
-engine this request read; a replay loads the record's pinned index read-only on demand (`IndexState.pinned`).
+engine this request read; a replay loads the record's pinned index read-only on demand (`IndexState.pinned`,
+the one loader).
 
 Every replay is a 200 whose `replay.status` is `reproduced`, `drifted` or `mismatch`. A malformed record id
-is 422 `API_BAD_PARAM`; an unknown one 404 `API_RECORD_NOT_FOUND` (the message never repeats it).
+is 422 `API_BAD_PARAM`; an unknown one 404 `API_RECORD_NOT_FOUND` (the message never repeats it). A save
+into a full store is 503 `API_RECORDS_STORE_FULL`. All three routes cost the export weight in the rate
+limit (each runs a whole query).
 
-The hook for `GET /export?record_id=` (task-036): `require_citable(request, record_id)` returns the stored
-record, or raises 409 `API_RECORD_MISMATCH` when its replay is a `mismatch` (and the 422/404 above); it
-reads the served engine itself, so it can run before the export streams anything. `replay_status` answers
-just the status.
+The hook for `GET /export?record_id=` (task-036): `require_citable(request, record_id, engine)` returns the
+stored record, or raises 409 `API_RECORD_MISMATCH` when its replay is a `mismatch` (and the 422/404 above).
+`replay_status` answers just the status.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI, Query, Request
 
+from openproceedings.api.config import ApiConfig
 from openproceedings.api.deps import EngineDep, annotate, current_engine, searchable
 from openproceedings.api.errors import ApiError
 from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import (
+    DEFAULT_LIMIT,
+    MAX_LIMIT,
     ChangedInput,
     DiffEntry,
     Excluded,
@@ -39,7 +45,7 @@ from openproceedings.api.state import IndexState
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.records import (
-    RECORDS_FILE,
+    RECORDS_DIR,
     PinnedLoader,
     RecordStore,
     Replay,
@@ -63,12 +69,15 @@ class Records:
     pinned: PinnedLoader  # `IndexState.pinned(v).engine`
 
 
-def install(app: FastAPI, data_dir: Path, state: IndexState) -> None:
-    """Give `app` its record store (`<data_dir>/records.sqlite`, created on the first save) and the
-    on-demand loader of pinned indexes (`state.pinned`, the one loader)."""
-    app.state.records = Records(
-        data_dir, RecordStore(data_dir / RECORDS_FILE), lambda version: state.pinned(version).engine
+def install(app: FastAPI, config: ApiConfig, state: IndexState) -> None:
+    """Give `app` its record store (`<data_dir>/records/records.sqlite`, created on the first save, with the
+    configured size cap and free-space floor) and the on-demand loader of pinned indexes (`state.pinned`)."""
+    store = RecordStore(
+        config.data_dir / RECORDS_DIR,
+        max_bytes=config.records_max_bytes,
+        min_free_bytes=config.records_min_free_bytes,
     )
+    app.state.records = Records(config.data_dir, store, lambda version: state.pinned(version).engine)
 
 
 def _records(request: Request) -> Records:
@@ -109,23 +118,33 @@ def replay_status(request: Request, record_id: str, engine: TantivyEngine | None
 
 def require_citable(request: Request, record_id: str, engine: TantivyEngine | None = None) -> SearchRecord:
     """The stored record, if its replay isn't a `mismatch`; else 409 `API_RECORD_MISMATCH` (spec 04 §Error
-    handling: a set that breaks guarantee 4 is never handed to screening). The mismatch itself is logged
-    once, at ERROR, by the replay. Pass the request's engine as for `replay_status`."""
+    handling: a set that breaks guarantee 4 is never handed to screening). The mismatch itself is logged by
+    the replay. Pass the request's engine as for `replay_status`."""
     served = engine if engine is not None else current_engine(request)
-    record = _stored(request, record_id)
+    record = stored_record(request, record_id)
+    refuse_mismatch(request, record, served)
+    return record
+
+
+def stored_record(request: Request, record_id: str) -> SearchRecord:
+    """The stored record, ids included (422 on a malformed id, 404 on an unknown one); no replay."""
+    return _stored(request, record_id)
+
+
+def refuse_mismatch(request: Request, record: SearchRecord, served: TantivyEngine) -> None:
+    """409 `API_RECORD_MISMATCH` if `record`'s replay is a `mismatch` (logged by the replay)."""
     if _replayed(request, served, record).status == "mismatch":
         raise ApiError(
             DiagnosticCode.API_RECORD_MISMATCH,
             "This search record no longer reproduces on the index it names (replay mismatch), so it can't be "
             "exported. Do not cite it; the mismatch has been logged for the maintainers.",
         )
-    return record
 
 
 # --- routes -----------------------------------------------------------------------------------------------
 @router.post("/records", response_model=RecordCreated, status_code=201)
 def create_record(request: Request, engine: EngineDep, body: RecordRequest) -> RecordCreated:
-    """Freeze a search as an immutable record: re-run here on the served index, then one INSERT."""
+    """Freeze a search as an immutable record: re-run here on the served index, then one transaction."""
     parsed = searchable(request, body.q, body.mode)
     records = _records(request)
     fields, found = freeze(engine, parsed, body.q, records.data_dir)
@@ -139,14 +158,17 @@ def create_record(request: Request, engine: EngineDep, body: RecordRequest) -> R
 
 
 @router.get("/records/{id}", response_model=RecordResponse)
-def get_record(request: Request, engine: EngineDep, id: str) -> RecordResponse:
-    """The stored record and a replay of it now (HTTP 200 whatever the status)."""
+def get_record(
+    request: Request, engine: EngineDep, id: str, include: Literal["ids"] | None = None
+) -> RecordResponse:
+    """The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless
+    `include=ids`; `/export?record_id=` streams the papers themselves."""
     record = _stored(request, id)
     result = _replayed(request, engine, record)
     found = result.identified
     return RecordResponse(
         **versions(result.engine.index_version),
-        record=record,
+        record=record if include == "ids" else record.model_copy(update={"ids": None}),
         replay=ReplayInfo(
             status=result.status,
             index_version=result.engine.index_version,
@@ -158,28 +180,44 @@ def get_record(request: Request, engine: EngineDep, id: str) -> RecordResponse:
             excluded_match=result.excluded_match,
             refused=result.refused,
             changed=_changed(result),
-            added=len(result.added),
-            removed=len(result.removed),
+            added=len(result.added) if result.added is not None else None,
+            removed=len(result.removed) if result.removed is not None else None,
             membership_identical=result.membership_identical,
         ),
     )
 
 
 @router.get("/records/{id}/diff", response_model=RecordDiff)
-def diff_record(request: Request, engine: EngineDep, id: str) -> RecordDiff:
-    """The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. A
-    title comes from the index the replay ran on, else the record's pinned index; null if neither holds it."""
+def diff_record(
+    request: Request,
+    engine: EngineDep,
+    id: str,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=0, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+) -> RecordDiff:
+    """The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each
+    list is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A
+    title comes from the index the replay ran on, null if it doesn't hold the paper. A refused replay
+    compared nothing: empty lists, null totals."""
     record = _stored(request, id)
     result = _replayed(request, engine, record)
-    titles = _titles(request, result, record)
+    added = list(result.added[offset : offset + limit]) if result.added is not None else []
+    removed = list(result.removed[offset : offset + limit]) if result.removed is not None else []
+    wanted = [*added, *removed]
+    titles = {i: str(r["title"]) for i, r in result.engine.display(wanted).items()} if wanted else {}
     return RecordDiff(
         **versions(result.engine.index_version),
         record_id=record.record_id,
         status=result.status,
         recorded_index_version=record.index_version,
+        refused=result.refused,
         changed=_changed(result),
-        added=[DiffEntry(id=i, title=titles.get(i)) for i in result.added],
-        removed=[DiffEntry(id=i, title=titles.get(i)) for i in result.removed],
+        offset=offset,
+        limit=limit,
+        added_total=len(result.added) if result.added is not None else None,
+        removed_total=len(result.removed) if result.removed is not None else None,
+        added=[DiffEntry(id=i, title=titles.get(i)) for i in added],
+        removed=[DiffEntry(id=i, title=titles.get(i)) for i in removed],
         membership_identical=result.membership_identical,
     )
 
@@ -189,16 +227,3 @@ def _changed(result: Replay) -> list[ChangedInput]:
         ChangedInput(input=c.input, kind=c.kind, recorded=c.recorded, current=c.current)
         for c in result.changed
     ]
-
-
-def _titles(request: Request, result: Replay, record: SearchRecord) -> dict[str, str]:
-    wanted = [*result.added, *result.removed]
-    if not wanted:
-        return {}
-    titles = {i: str(r["title"]) for i, r in result.engine.display(wanted).items()}
-    missing = [i for i in result.removed if i not in titles]
-    if missing and record.index_version != result.engine.index_version:
-        old = _records(request).pinned(record.index_version)
-        if old is not None:
-            titles.update({i: str(r["title"]) for i, r in old.display(missing).items()})
-    return titles

@@ -45,7 +45,7 @@ publishers. Workflows: no `pull_request_target` with checkout of head, secrets n
 every workflow keeps `permissions: contents: read`, every action stays pinned to a full SHA with a version
 comment (Dependabot bumps them). `Makefile` and `.githooks/`: `make lint`/`make tooling` still run what CI
 runs; no target or hook fetches and executes remote code. `deploy/`: data volume read-only except
-`records.sqlite`.
+`records/` (`records.sqlite` and its WAL files).
 
 ## Hooks and gate scripts (`.claude/hooks/`, `.claude/scripts/`, `.githooks/`)
 A change must not widen evasion: parsing via `lib/cmdparse.py`, not substring matching; `bash -c`/`eval`

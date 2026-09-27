@@ -42,7 +42,7 @@ Statuses and codes are **exactly** spec 04 §Error handling; this skill keeps no
 422 `PARSE_*` (02 diagnostics, spans included) on endpoints that run the query (`POST /parse` reports them as a 200's `errors`), 422 `API_BAD_PARAM` (bad `sort`, `limit` > 200, unknown
 `format`, malformed `record_id`: reject it, never clamp silently), 404 `API_PAPER_NOT_FOUND` /
 `API_RECORD_NOT_FOUND`, 409 `API_INDEX_VERSION_UNAVAILABLE`, 409 `API_RECORD_MISMATCH` (export of a
-`mismatch` record), 429 `API_RATE_LIMITED` + `Retry-After`, 503 `API_INDEX_NOT_LOADED`, 500 `API_INTERNAL`
+`mismatch` record), 429 `API_RATE_LIMITED` + `Retry-After`, 503 `API_INDEX_NOT_LOADED`, 503 `API_RECORDS_STORE_FULL` (a record save into a full store), 500 `API_INTERNAL`
 (logged at ERROR with the request id; the message never echoes input), and for routing 404 `API_NOT_FOUND`
 / 405 `API_METHOD_NOT_ALLOWED` (task-034). A replay `mismatch` is a `200`, not an error. Codes come from the registry (`.claude/skills/error-diagnostics/SKILL.md`).
 
