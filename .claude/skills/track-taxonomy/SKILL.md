@@ -9,10 +9,10 @@ description: The track and status enums from spec 01 with the source signal that
 | Value | Accepted signals (any one, with its claim) | In default filter? |
 |---|---|---|
 | `main` | venueid `<Org>.cc/<Y>/Conference`; a PMLR volume listed as `main` in the volume table; NeurIPS path `-Conference` | **yes** |
-| `datasets_benchmarks` | venueid `NeurIPS.cc/<Y>/Track/Datasets_and_Benchmarks` or `…_Track`; NeurIPS path `Datasets_and_Benchmarks(_Track)` (≤2023 alias) | **yes** |
-| `position` | ICML position-paper track (venueid `ICML.cc/<Y>/Position_Paper_Track`, seen); the proceedings token `Position_Paper_Track` (seen); NeurIPS `NeurIPS.cc/<Y>/Position_Paper_Track` (verified live 2026-09-27) still classifies as `other` until TASK-094 | **yes** |
+| `datasets_benchmarks` | venueid `NeurIPS.cc/<Y>/Track/Datasets_and_Benchmarks` or `…_Track`, and NeurIPS 2026's rename `NeurIPS.cc/2026/Evaluations_and_Datasets_Track` (TASK-094); NeurIPS path `Datasets_and_Benchmarks(_Track)` (≤2023 alias) | **yes** |
+| `position` | ICML position-paper track (venueid `ICML.cc/<Y>/Position_Paper_Track`, seen); the proceedings token `Position_Paper_Track` (seen); NeurIPS `NeurIPS.cc/<Y>/Position_Paper_Track` (2025+, verified live 2026-09-27; TASK-094) | **yes** |
 | `workshop` | any venueid segment `Workshop` or `Workshop_<City>`; a PMLR workshop volume | no |
-| `competition` | NeurIPS `NeurIPS.cc/<Y>/Competition_Track` (2024+, verified; `other` until TASK-094); PMLR competition volumes (v123, v133, v176, v220) | no |
+| `competition` | NeurIPS `NeurIPS.cc/<Y>/Competition_Track` (2024+, verified; TASK-094) or `Track/Competition`; PMLR competition volumes (v123, v133, v176, v220) | no |
 | `tiny_papers` | ICLR Tiny Papers (2023–2024) | no |
 | `blogpost` | ICLR Blogpost track | no |
 | `other` | a form that parses but isn't listed above (e.g. `Creative_AI_Track`); `venue_id_raw` kept | no |
@@ -27,7 +27,9 @@ segments in `.claude/skills/neurips-proceedings/SKILL.md` and `.claude/skills/pm
 filter adds `status:accepted`.
 
 **RIS-imported records** (spec 01 §Sources, the RIS importer row): `status` comes from a claim only. An
-OpenReview venueid claim → its status; a proceedings-page claim → `accepted`; no claim → `unknown`. Never
+OpenReview venueid claim → its status, except that a venueid in an API v1 venue-year (ICLR ≤2023, NeurIPS
+2021–2022) gives `unknown`, because v1 puts the bare path on rejected papers too (TASK-095); a
+proceedings-page claim → `accepted`; no claim → `unknown`. Never
 infer `accepted` from a paper appearing in Scholar (rule 2: unknown stays unknown).
 
 ## The default filter (spec 02)

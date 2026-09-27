@@ -50,7 +50,8 @@ KEEP_GROUP_CONTENT = {
     "start_date",
     "website",
 }
-PERSON = re.compile(r"@|^~")
+# An email address or a profile id. Not a bare "@": venue strings like `Tiny Papers @ ICLR 2023` stay real.
+PERSON = re.compile(r"[^\s@]+@[^\s@]+|^~")
 
 
 class _Counter:

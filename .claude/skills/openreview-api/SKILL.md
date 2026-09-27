@@ -86,7 +86,11 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   case, also on workshop invitations), ICLR 2022 and 2023, NeurIPS 2021–2022, NeurIPS 2021 D&B
   (`…/Round1`), ICLR 2023 Tiny Papers and Blogposts. `classify_venueid("ICLR.cc/2022/Conference")` says
   `main`/`accepted`, so it must never set a v1 note's status (TASK-095). The venueid only confirms venue,
-  year and track.
+  year and track. **Enforced:** `classify_venueid` returns status `unknown` for any venueid in a v1
+  venue-year (`classify.is_v1`), and the RIS importer marks such a status claim `(API v1 venue-year: not
+  status evidence)`. A v1 adapter takes status from `classify_v1_venue(content.venue)` (exact strings from
+  the table below; an unlisted one is `unknown`), the decision note, or the withdrawn / desk-rejected
+  invitation (decision-012).
 - Status per v1 year (the submission invitation lists what was **submitted**, never what was accepted):
 
 | Year | Submissions | Status from |

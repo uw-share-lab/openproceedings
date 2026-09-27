@@ -96,9 +96,9 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
 - **v1: `content.venueid` is not status evidence.** ICLR 2017, 2022 and 2023, NeurIPS 2021–2022 and
   D&B 2021 put the bare venue path on rejected submissions too, and ICLR 2017 puts the conference
   venueid on workshop invitations. In v1 the status comes from `content.venue` (where the year has it)
-  or the decision note; the venueid only confirms venue and year. `classify_venueid` today reads
+  or the decision note; the venueid only confirms venue and year. `classify_venueid` read
   `ICLR.cc/2022/Conference` as `main`/`accepted`, so it must never be applied to a v1 note's venueid for
-  status (follow-up task in §Follow-ups).
+  status. TASK-095 made it return `unknown` status for every v1 venue-year.
 - v1 `venue` vocabulary seen: `ICLR 2017 {Oral,Poster,Invite to Workshop}`, `Submitted to ICLR 2017`;
   `ICLR 2021 {Oral,Spotlight,Poster}`; `ICLR 2022 {Oral,Spotlight,Poster,Submitted}`; `ICLR 2023
   {notable top 5%,notable top 25%,poster}`, `Submitted to ICLR 2023`; `NeurIPS 2021
@@ -125,14 +125,14 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
 | `<Org>.cc/<Y>/Conference/Submission` | declared by every v2 group (`submission_venue_id`); no live note | main / unknown |
 | `NeurIPS.cc/2023/Track/Datasets_and_Benchmarks` (+ `/Rejected_Submission`) | 322 accepted, 16 rejected | datasets_benchmarks |
 | `NeurIPS.cc/<Y>/Datasets_and_Benchmarks_Track` (2024, 2025; no `Track/`) | 2024: 459; 2025: 497 | datasets_benchmarks |
-| `NeurIPS.cc/2026/Evaluations_and_Datasets_Track` | group exists (NeurIPS renamed the D&B track for 2026); no notes yet | **not in the table** (see follow-ups) |
+| `NeurIPS.cc/2026/Evaluations_and_Datasets_Track` | group exists (NeurIPS renamed the D&B track for 2026); no notes yet | datasets_benchmarks (TASK-094; `other` before it) |
 | `NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round1`, `/Round2` | `iBLHqLgbRn` (rejected, bare Round1) | datasets_benchmarks / status from `venue` only |
-| `NeurIPS.cc/2025/Position_Paper_Track` (+ `/Rejected_Submission`) | 40 accepted, 55 rejected | position (classify.py says `other` today) |
+| `NeurIPS.cc/2025/Position_Paper_Track` (+ `/Rejected_Submission`) | 40 accepted, 55 rejected | position (TASK-094; `other` before it) |
 | `ICML.cc/<Y>/Position_Paper_Track` | 2025: 73; 2026: 213 | position |
 | ICML 2024 position papers | inside `ICML.cc/2024/Conference`, no marker | unknown (as `volumes.py` already does for v235) |
 | `ICLR.cc/2023/TinyPapers` (v1), `ICLR.cc/2024/TinyPapers` (v2) | 2023: 219 (all "Submitted to"); 2024: 192 | tiny_papers |
 | `ICLR.cc/2023/BlogPosts` (v1), `ICLR.cc/<Y>/BlogPosts` (v2, 2024–2026) | spelling `BlogPosts` confirmed | blogpost |
-| `NeurIPS.cc/2024/Competition_Track`, `NeurIPS.cc/2025/Competition_Track` | 2024: 16 | competition (classify.py says `other` today) |
+| `NeurIPS.cc/2024/Competition_Track`, `NeurIPS.cc/2025/Competition_Track` | 2024: 16 | competition (TASK-094; `other` before it) |
 | `NeurIPS.cc/<Y>/Creative_AI_Track` | 2025: 92; 2026: 95 | other |
 | `<Org>.cc/<Y>/Workshop/<name>/Rejected_Submission` | `ICLR.cc/2025/Workshop/ICBINB/Rejected_Submission` (12) | workshop / rejected |
 | `<Org>.cc/<Y>/Workshop_<City>/<name>` | `NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM` (105) | workshop / accepted |
@@ -208,7 +208,7 @@ Workshop names include hyphens and digits (`SCI-FM`, `CLRLC-LLMs`, `7HVU`).
 `scrub.py` (no network code) made them from the raw captures: titles, abstracts, authors, author ids,
 keywords, reviews and emails are synthetic; ids, venueids, venue strings, decisions, invitations, dates and
 rate-limit headers are real (decision-004). Long listings are trimmed (the `_recorded.trimmed` field says
-how). No test reads them yet; the crawler tasks do.
+how). `backend/tests/unit/ingest/test_venueid.py` reads every recorded OpenReview note (TASK-094/095); the crawler tasks read the rest. The v1 Tiny Papers note's `venue` was restored by hand after `scrub.py` mistook its `@` for an email (fixed there); the v2 Tiny Papers 2024 and `Workshop_Mexico_City` notes still carry a synthetic email as `venue` until re-recorded.
 
 ## Follow-ups
 - TASK-094: classify.py venueid table: NeurIPS `Position_Paper_Track` → position, `Competition_Track`

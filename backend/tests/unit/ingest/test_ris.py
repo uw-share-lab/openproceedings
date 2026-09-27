@@ -493,3 +493,30 @@ def test_a_pre_2022_url_without_a_track_token_imports(tmp_path: Path) -> None:
     assert report.skipped["conflict"] == base.skipped["conflict"]
     rec = next(r for i, r in by_id.items() if i.endswith("fedcba9876543210fedcba9876543210"))
     assert (rec.track, rec.status) == ("main", "accepted")
+
+
+def test_a_v1_venueid_is_not_status_evidence(tmp_path: Path) -> None:
+    """ICLR 2022 put `ICLR.cc/2022/Conference` on 1,523 rejected papers (TASK-095): venue, year and track
+    only; the status stays `unknown`, so the default `status:accepted` filter excludes and counts it."""
+    by_id, report = run(tmp_path, lambda e: set_venueid_of(e, 7, "ICLR.cc/2022/Conference"))
+    r = by_id["op:iclr:2022:Rej_ected-1"]
+    assert (r.venue, r.year, r.track, r.status) == ("ICLR", 2022, "main", "unknown")
+    [status] = r.claims("status")
+    assert status.evidence == (
+        "scholarmend:openreview_api venueid=ICLR.cc/2022/Conference (API v1 venue-year: not status evidence)"
+    )
+    [track] = r.claims("track")
+    assert track.evidence == "scholarmend:openreview_api venueid=ICLR.cc/2022/Conference"
+    assert report.track_status["main"]["unknown"] == 1 and report.status_overrides == 0
+
+
+def test_a_listing_decides_a_v1_venueids_acceptance(tmp_path: Path) -> None:
+    def v1_listed(e: Entries) -> None:
+        set_venueid_of(e, 7, "ICLR.cc/2022/Conference")
+        listed("2022", "Conference")(e)
+
+    by_id, report = run(tmp_path, v1_listed)
+    r = by_id["op:iclr:2022:Rej_ected-1"]
+    assert (r.track, r.status) == ("main", "accepted") and report.status_overrides == 1
+    [status] = r.claims("status")
+    assert status.evidence is not None and status.evidence.endswith(" (overrides venueid status unknown)")
