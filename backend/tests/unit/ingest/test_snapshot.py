@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import stat
 from collections.abc import Callable
@@ -20,6 +21,7 @@ from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import (
     DISPLAY,
     HASHED,
+    RecordFile,
     SnapshotError,
     build,
     diff,
@@ -489,6 +491,47 @@ def test_duplicate_ids_are_refused(cache: Path, tmp_path: Path) -> None:
     (copy / "manifest.json").write_text(json.dumps(manifest))
     with pytest.raises(SnapshotError, match="line 2: duplicate id"):
         load_records(copy)
+
+
+def _corrupt(copy: Path, change: Callable[[list[bytes]], list[bytes]]) -> None:
+    """Rewrite records.jsonl through `change` and re-seal the manifest's hash, so only the lines are wrong."""
+    lines = (copy / "records.jsonl").read_bytes().splitlines(keepends=True)
+    data = b"".join(change(lines))
+    (copy / "records.jsonl").write_bytes(data)
+    manifest = json.loads((copy / "manifest.json").read_text())
+    manifest["snapshot_hash"] = hashlib.sha256(data).hexdigest()
+    (copy / "manifest.json").write_text(json.dumps(manifest))
+
+
+def _drop_id(lines: list[bytes]) -> list[bytes]:
+    record = json.loads(lines[0])
+    del record["id"]
+    return [json.dumps(record).encode() + b"\n", *lines[1:]]
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda ls: [ls[0], *ls], "line 2: duplicate id"),
+        (lambda ls: [ls[1], ls[0], *ls[2:]], "line 2: records are not sorted by id"),
+        (lambda ls: [b"{not json\n", *ls[1:]], "line 1: invalid record (json_invalid)"),
+        (_drop_id, "line 1: invalid record (missing)"),
+    ],
+    ids=["duplicate", "unsorted", "not-json", "no-id"],
+)
+@pytest.mark.parametrize("loader", [load_records, RecordFile], ids=["load_records", "RecordFile"])
+def test_both_snapshot_readers_name_a_bad_line_the_same_way(
+    cache: Path,
+    tmp_path: Path,
+    loader: Callable[[Path], object],
+    change: Callable[[list[bytes]], list[bytes]],
+    message: str,
+) -> None:
+    # the API's RecordFile skips full validation for speed, but names a bad line exactly as iter_records does
+    copy = writable_copy(build(cache, tmp_path / "s", BUILT).path, tmp_path / "copy")
+    _corrupt(copy, change)
+    with pytest.raises(SnapshotError, match=re.escape(message)):
+        loader(copy)
 
 
 def test_the_field_lists_cover_the_record() -> None:

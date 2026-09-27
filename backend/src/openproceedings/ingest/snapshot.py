@@ -348,6 +348,11 @@ def _id_order(previous: str, rid: str) -> str | None:
     return None
 
 
+# RecordFile's cheap per-line check, named in pydantic's words as iter_records' full validation names them
+_LINE_KIND = {"JSONDecodeError": "json_invalid", "ValueError": "json_invalid", "KeyError": "missing",
+              "TypeError": "type_error"}
+
+
 def iter_records(snapshot: Path) -> Iterator[PaperRecord]:
     """A snapshot's records in file order, streamed in one pass. It must be a snapshot: every record valid
     (so a stale content_hash is caught), ids strictly ascending (so unique), and the bytes read hashing to
@@ -413,13 +418,24 @@ class RecordFile:
             self._at: dict[str, tuple[int, int]] = {}
             previous, offset = "", 0
             for n, raw in read.lines():
-                line = json.loads(raw)
-                rid = line["id"]
-                if not isinstance(rid, str) or _id_order(previous, rid):
-                    raise SnapshotError(f"{snapshot.name} line {n}: ids are not unique and ascending")
+                # no full PaperRecord validation here (a lookup validates its one line), but a bad line is
+                # named the way iter_records names it: "line N: invalid record (<kind>)" / its id-order reason
+                try:
+                    line = json.loads(raw)
+                    rid = line["id"]
+                    cell = (line["venue"], line["year"], line["track"], line["status"])
+                    no_abstract = line["abstract"] is None
+                    if not isinstance(rid, str):
+                        raise TypeError(rid)
+                except (ValueError, KeyError, TypeError) as e:
+                    raise SnapshotError(
+                        f"{snapshot.name} line {n}: invalid record ({_LINE_KIND[type(e).__name__]})"
+                    ) from None
+                if out_of_order := _id_order(previous, rid):
+                    raise SnapshotError(f"{snapshot.name} line {n}: {out_of_order}")
                 self._at[rid] = (offset, len(raw))
-                self.cells[(line["venue"], line["year"], line["track"], line["status"])] += 1
-                if line["abstract"] is None:
+                self.cells[cell] += 1
+                if no_abstract:
                     self.abstract_missing[(line["venue"], line["year"])] += 1
                 previous, offset = rid, offset + len(raw)
         except FileNotFoundError:
