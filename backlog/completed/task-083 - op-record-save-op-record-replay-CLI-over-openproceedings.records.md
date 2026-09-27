@@ -1,7 +1,7 @@
 ---
 id: TASK-083
 title: op record save / op record replay CLI over openproceedings.records
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 08:44'
 updated_date: '2026-09-27 18:13'
