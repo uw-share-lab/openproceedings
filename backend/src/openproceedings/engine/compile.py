@@ -70,6 +70,9 @@ class Compiled:
     # this compiled query keeps alive (ids in its verified term sets, terms in its expansions, one per
     # explain line). The verified memo is charged clause by clause, as each is stored (`Compiler.store`)
     held: int = 0
+    # (field, clause) -> the ids each verified clause matched: a compiled-memo hit hands them to the request's
+    # scope (`TantivyEngine.compile`), so its later compiles of other trees never verify them again
+    ids: dict[tuple[str, str], list[str]] = field(default_factory=dict)
 
 
 def wildcards(n: Node) -> Iterator[Wildcard]:
@@ -121,6 +124,7 @@ class Compiler:
         # run at once and refuses one more (503 API_BUSY) rather than queueing it
         self.gate = gate
         self.out = Compiled(tantivy.Query.empty_query())
+        self._allowed: dict[tuple[str, str], frozenset[str]] = {}  # per item: `allowed`
 
     def compile(self, n: Node) -> Compiled:
         self.out.query = self.node(n, 0)
@@ -232,9 +236,11 @@ class Compiler:
         ids = self.verified_cache.get(key)
         if ids is None:
             with self.gate():
-                ids = [doc_id for doc_id, tokens in self.read(candidates, f) if self.holds(n, tokens)]
+                holds = self.holder(n)  # the clause's sets, built once, not per candidate
+                ids = [doc_id for doc_id, tokens in self.read(candidates, f) if holds(tokens)]
             self.store(key, ids)  # stored complete, never changed after
         self.out.held += len(ids)
+        self.out.ids[key] = ids
         what = f"NEAR/{n.distance}" if isinstance(n, Near) else "phrase"
         self.line(depth, f"{f}: {what} verified by position ({len(ids)} documents)")
         self.out.verified.append(f"{f}: {what}")
@@ -256,35 +262,70 @@ class Compiler:
 
     # --- position checks (spec 02 semantics, written independently of ReferenceEngine) --------------
     def allowed(self, i: Term | Wildcard) -> frozenset[str]:
-        return frozenset((i.token,)) if isinstance(i, Term) else frozenset(self.expansions[(i.stem, i.op)])
+        """The tokens item `i` allows, built once per compile (a wildcard's up to 200 expansions): a phrase
+        of many wildcard items would otherwise rebuild them per item, per candidate (M3a round 4)."""
+        key = (i.token, "") if isinstance(i, Term) else (i.stem, i.op)
+        hit = self._allowed.get(key)
+        if hit is None:
+            hit = frozenset((i.token,)) if isinstance(i, Term) else frozenset(self.expansions[(i.stem, i.op)])
+            self._allowed[key] = hit
+        return hit
 
-    def starts(self, n: Node, tokens: list[str], positions: dict[str, list[int]]) -> list[int]:
-        """Sorted start positions where a term, wildcard or phrase occurs (its width is its item count).
-        Found from where its first item occurs, never by scanning every window."""
-        parts = [self.allowed(i) for i in self.items(n)]
-        first = sorted(p for t in parts[0] & positions.keys() for p in positions[t])
-        width = len(parts)
-        return [
-            at
-            for at in first
-            if at + width <= len(tokens) and all(tokens[at + k] in parts[k] for k in range(1, width))
-        ]
+    def parts(self, n: Node) -> Parts:
+        """Each item's allowed tokens, in order: what an operand (a term, wildcard or phrase) must match at
+        consecutive positions."""
+        return tuple(self.allowed(i) for i in self.items(n))
+
+    def holder(self, n: Phrase | Near) -> Callable[[list[str]], bool]:
+        """`holds` for clause `n` with everything that doesn't depend on the document computed once: each
+        operand's `parts`, their widths and the distance. The per-document work is then the token->positions
+        map and the checks from each first-item occurrence, so a clause's cost per candidate no longer grows
+        with its expansions (round 4: a 300-item `rel*` phrase took 84 s at 80k, rebuilding 186-term sets per
+        item per candidate)."""
+        if isinstance(n, Phrase):
+            parts = self.parts(n)
+            return lambda tokens: bool(_starts(parts, tokens, _positions(tokens)))
+        left, right = self.parts(n.left), self.parts(n.right)
+        wl, wr, distance = len(left), len(right), n.distance
+
+        def near(tokens: list[str]) -> bool:
+            positions = _positions(tokens)
+            lefts, rights = _starts(left, tokens, positions), _starts(right, tokens, positions)
+            for a in lefts:
+                # right after: b in [a + wl, a + wl + n]; right before: b + wr in [a - n, a], i.e. b in [a - n - wr, a - wr]
+                for lo, hi in ((a + wl, a + wl + distance), (a - distance - wr, a - wr)):
+                    k = bisect_left(rights, lo)
+                    if k < len(rights) and rights[k] <= hi:
+                        return True
+            return False
+
+        return near
 
     def holds(self, n: Phrase | Near, tokens: list[str]) -> bool:
-        positions: dict[str, list[int]] = {}
-        for at, token in enumerate(tokens):
-            positions.setdefault(token, []).append(at)
-        if isinstance(n, Phrase):
-            return bool(self.starts(n, tokens, positions))
-        left, right = self.starts(n.left, tokens, positions), self.starts(n.right, tokens, positions)
-        wl, wr = len(self.items(n.left)), len(self.items(n.right))
-        for a in left:
-            # right after: b in [a + wl, a + wl + n]; right before: b + wr in [a - n, a], i.e. b in [a - n - wr, a - wr]
-            for lo, hi in ((a + wl, a + wl + n.distance), (a - n.distance - wr, a - wr)):
-                k = bisect_left(right, lo)
-                if k < len(right) and right[k] <= hi:
-                    return True
-        return False
+        """Whether `tokens` hold clause `n` (one document; `holder` is the form a verification loops with)."""
+        return self.holder(n)(tokens)
+
+
+type Parts = tuple[frozenset[str], ...]
+
+
+def _positions(tokens: list[str]) -> dict[str, list[int]]:
+    positions: dict[str, list[int]] = {}
+    for at, token in enumerate(tokens):
+        positions.setdefault(token, []).append(at)
+    return positions
+
+
+def _starts(parts: Parts, tokens: list[str], positions: dict[str, list[int]]) -> list[int]:
+    """Sorted start positions where an operand of `parts` occurs (its width is its item count). Found from
+    where its first item occurs, never by scanning every window."""
+    first = sorted(p for t in parts[0] & positions.keys() for p in positions[t])
+    width = len(parts)
+    return [
+        at
+        for at in first
+        if at + width <= len(tokens) and all(tokens[at + k] in parts[k] for k in range(1, width))
+    ]
 
 
 def combine(occur: tantivy.Occur, queries: list[tantivy.Query]) -> tantivy.Query:

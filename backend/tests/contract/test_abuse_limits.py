@@ -108,7 +108,10 @@ def test_verifies_is_what_the_compiler_does(client: TestClient, q: str) -> None:
 
 
 def test_a_verified_query_costs_the_verified_weight(store: Store) -> None:
-    limit = RateLimit(capacity=12, refill_per_second=0.001, export_weight=10, verified_weight=10)
+    # the per-clause admission charge alone: slot time is all but free here (its debit: test_abuse_limits_r4)
+    limit = RateLimit(
+        capacity=12, refill_per_second=0.001, export_weight=10, verified_weight=10, verify_token_ms=1e9
+    )
     with TestClient(make_app(store.indexes.parent, rate_limit=limit, max_verified_clauses=1)) as c:
         assert c.get(SEARCH, params={"q": VERIFIED}).status_code == 200  # 10 of 12
         r = c.get(SEARCH, params={"q": '"calibrat* model"'})  # 1 taken on the way in, then 9 more: no

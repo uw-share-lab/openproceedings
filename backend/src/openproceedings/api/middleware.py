@@ -64,6 +64,7 @@ ANNOTATIONS = (
     "verified_clauses",  # the query's position-verified clauses (api/deps.py; replays too)
     "verification_candidates",  # the documents their position checks would read, summed (api/deps.py)
     "verify_ms",  # time this request held a verification slot (api/state.py::verification_slot)
+    "verify_tokens",  # what that time was debited after the fact (RateLimit.debit_verification)
     "code",  # the error envelope's code, on every refusal and every 500 (api/errors.py::note_code)
 )
 
@@ -115,8 +116,10 @@ class AccessLog:
                     # started, never finished, and nothing failed: the client went away mid-stream (the
                     # server cancelled the response), so the body it has is cut short
                     line["client_disconnected"] = True
-                log.log(logging.DEBUG if template == HEALTH_PATH else logging.INFO, "request", extra=line)
-                current_access.reset(token)
+                try:
+                    log.log(logging.DEBUG if template == HEALTH_PATH else logging.INFO, "request", extra=line)
+                finally:  # a failing log call must not leave this request's fields in the context
+                    current_access.reset(token)
 
 
 class LastCatch:
@@ -302,6 +305,18 @@ class TokenBucket:
         """Spend `cost` tokens for `key`: 0 if allowed, else the seconds until it would be."""
         return take_all([(self, key)], cost)
 
+    def debit(self, key: str, cost: float) -> None:
+        """Take `cost` tokens `key` has already used, after the fact: the bucket may go below zero, and then
+        `key` waits (429 with `Retry-After`) until the refill repays the debt. For a cost known only when the
+        work is done (the verification time a request used, `RateLimit`)."""
+        with self.lock:
+            now = self.clock()
+            tokens, last = self._buckets.pop(key, (self.capacity, now))
+            tokens = min(self.capacity, tokens + (now - last) * self.refill)
+            self._buckets[key] = (tokens - cost, now)
+            while len(self._buckets) > self.max_clients:
+                self._buckets.popitem(last=False)
+
     def refund(self, key: str, cost: float) -> None:
         """Give back `cost` tokens `key` spent on work that then didn't happen (never above `capacity`)."""
         with self.lock:
@@ -360,8 +375,11 @@ def charge(scope: Scope, total: float) -> None:
     scope[BUCKETS] = (buckets, total, base)
 
 
-# a refusal after `charge` took a query's verified cost, before any of it was verified to completion: that
-# cost is given back (the route's own weight is kept), as a refused save's is (`records.SaveCeiling.refund`)
+# a refusal after `charge` took a query's up-front verified charge (its admission cost, per clause): that
+# charge is given back and the route's own weight is kept, as a refused save's is (`records.SaveCeiling.
+# refund`). A 422 `API_QUERY_TOO_COSTLY` verified nothing (its candidates were counted from the index, 4-8 ms
+# of work the base token pays for); a 503 `API_BUSY` may have verified some clauses before it met a taken slot,
+# and that time is still debited like any request's (`RateLimit`: the charge for time used is separate)
 REFUNDED = frozenset({str(DiagnosticCode.API_BUSY), str(DiagnosticCode.API_QUERY_TOO_COSTLY)})
 
 
@@ -415,5 +433,22 @@ class RateLimit:
             await self.app(scope, receive, send)
         finally:
             fields = scope.get(ACCESS)
-            if isinstance(fields, dict) and fields.get("code") in REFUNDED:
-                refund_charged(scope)
+            if isinstance(fields, dict):
+                if fields.get("code") in REFUNDED:
+                    refund_charged(scope)
+                self.debit_verification(held, fields)
+
+    def debit_verification(self, held: Sequence[tuple[TokenBucket, str]], fields: dict[str, object]) -> None:
+        """Charge the cold verification time this request used, after the fact, to its client's and network's
+        buckets: one token per `verify_token_ms` of slot time (`verify_ms` on the access line). The buckets
+        may go below zero, so a client that keeps the one slot busy (cold queries back to back: vary a NEAR
+        distance and each is cold) then waits until its debt is repaid, and its share of the slot is at most
+        refill × `verify_token_ms` (10% a client, 40% a network at the defaults): the rest is everyone
+        else's (M3a review gate round 4, decision-010). The up-front per-clause charge stays, as the
+        admission cost."""
+        used = fields.get("verify_ms")
+        if isinstance(used, int | float) and used > 0:
+            tokens = used / self.config.verify_token_ms
+            for bucket, key in held:
+                bucket.debit(key, tokens)
+            fields["verify_tokens"] = round(tokens, 2)

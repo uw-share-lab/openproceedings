@@ -506,9 +506,20 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     (`GET /records/{id}`, `/diff`, `/export?record_id=`) is counted, capped and charged the same way on its
     re-parsed canonical string (parsed once, `deps.admit_replay`, on the engine it runs on), but over a limit
     it is withheld, not refused (§Search records). Within a request, every compile (the page, the facet
-    worker's base, exclusion accounting) shares the ids it verified (`tantivy_engine.Scope`), so a memo
-    trimmed meanwhile never makes it verify a clause twice, and the facet worker never verifies at all
-    (`Scope.reader`): only the calling thread holds a slot. Cold verification (a cache miss: seconds of pure Python per clause) runs in at most
+    worker's base, exclusion accounting) shares the ids of every verified clause it read, cold or from a memo
+    (`tantivy_engine.Scope`; a compiled-memo hit brings its tree's ids along, round 4), so a memo trimmed
+    meanwhile never makes it verify a clause twice, and the facet worker never verifies at all
+    (`Scope.reader`): only the calling thread holds a slot. Should the worker miss a clause anyway (a bug),
+    the caller recounts the facets itself and logs `facet_worker_recounted` (WARNING), never a 500. A clause's
+    cost per candidate doesn't depend on its width or expansions (its token sets are built once per clause,
+    round 4: a 300-item `rel*` phrase at 80k took 84 s before, 3.1 s after, like a 2-item one), so the
+    candidate count is the whole bound. **The slot time used is charged after the fact**: a request that
+    held a verification slot is debited one token per `RateLimit.verify_token_ms` (default 100 ms) of it,
+    to its client's and its network's buckets, when it finishes (`RateLimit.debit_verification`; the
+    access line's `verify_tokens`). A bucket may go below zero; the client then waits (429 with
+    `Retry-After`) until the refill repays the debt, so a client sending cold queries back to back (each
+    NEAR distance is a new, cold clause) holds the slot at most refill × `verify_token_ms` of the time: 10%
+    a client and 40% a network at the defaults. The up-front per-clause charge stays, as the admission cost. Cold verification (a cache miss: seconds of pure Python per clause) runs in at most
     `ApiConfig.verification_slots` (default 1) at a time, on every engine the state opens
     (`TantivyEngine.verification_gate`); a query that needs another slot is refused at once with 503
     `API_BUSY` and `Retry-After: busy_retry_seconds` (default 5), never queued, so it can't hold a worker
@@ -519,7 +530,8 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     what a route adds with `deps.annotate`/`annotate_parse`: `canonical_hash`, `total`, `token_count`,
     `n_errors`, `error_codes`, `warning_codes` (at most 10 distinct codes, then `+N`), `verified_clauses`
     (the query's, a replay's too), `verification_candidates` (their candidates, summed; absent with none),
-    `verify_ms` (the time the request held a verification slot; absent when it held none), and `code`, the error
+    `verify_ms` (the time the request held a verification slot; absent when it held none), `verify_tokens`
+    (what that time was debited; absent likewise), and `code`, the error
     envelope's code, on every refusal (the body cap's 413, the rate limit's 429, a routing 404, `API_BUSY`, …)
     and every 500 (`errors.note_code`). Never `q`, the
     canonical or identification strings, messages or spans. `ms` is milliseconds to one decimal, the one form

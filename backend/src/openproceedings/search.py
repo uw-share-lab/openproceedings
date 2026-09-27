@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import atexit
 import contextvars
+import logging
 import os
 import threading
 from collections.abc import Mapping
@@ -36,7 +37,7 @@ from openproceedings.engine.compile import wildcards
 from openproceedings.engine.exclusions import Excluded, excluded
 from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import EngineInputError, Expansions
-from openproceedings.engine.tantivy_engine import Scope, TantivyEngine
+from openproceedings.engine.tantivy_engine import Scope, TantivyEngine, WouldVerify
 from openproceedings.query.ast import Node, TextField
 from openproceedings.query.parser import ParseResult
 
@@ -128,7 +129,13 @@ def run(
         raise  # the caller's error first, as when facets ran after the page
     counted: dict[str, dict[str, int]] | None = None
     if faceting is not None:
-        counted = faceting.result()  # the worker's error, re-raised as it was raised
+        try:
+            counted = faceting.result()  # the worker's error, re-raised as it was raised
+        except WouldVerify:
+            # a clause the request should have held (a bug, never the client's): count here, where verifying
+            # is allowed, rather than answer 500 (round 4); logged so the bug is seen
+            log.warning("facet_worker_recounted", extra={"reason": "would_verify"})
+            counted = engine.facets(ast, scope=scope)
     elif facets:
         counted = engine.facets(
             ast, scope=scope
@@ -165,6 +172,7 @@ def _located(engine: TantivyEngine, ast: Node, error: EngineInputError) -> Engin
 # The facet workers (task-088): the aggregation is Tantivy's collection (the GIL released) plus a few ms of
 # Python, so more workers than CPUs only queue. Started on first use, forgotten in a forked child (its threads
 # don't survive the fork, and the lock may have been held when it happened), and shut down at interpreter exit.
+log = logging.getLogger(__name__)
 _POOL: ThreadPoolExecutor | None = None
 _POOL_LOCK = threading.Lock()
 

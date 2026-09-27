@@ -41,6 +41,9 @@ class RateLimit(BaseModel):
     verified_weight: float | None = Field(default=None, ge=0)  # per position-verified clause
     network_capacity: float | None = Field(default=None, gt=0)
     network_refill_per_second: float | None = Field(default=None, gt=0)
+    # one token per this many ms of cold verification a request used, debited when it finishes (the bucket may
+    # go below zero): a client's share of the verification slot is at most refill × this (round 4)
+    verify_token_ms: float = Field(default=100.0, gt=0)
     max_clients: int = Field(default=100_000, ge=1)  # buckets held in memory; the least recent is dropped
 
     @property

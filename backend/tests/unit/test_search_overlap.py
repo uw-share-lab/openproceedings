@@ -340,3 +340,62 @@ def test_a_caller_failing_while_the_worker_runs_leaves_no_slot_held(
     search.shutdown()  # waits for the worker: whatever it did is done
     assert not [n for n in entered if n.startswith("op-facets")]
     assert slot.acquire(blocking=False)  # free
+
+
+# --- a warm compile seeds the request's scope (M3a review gate round 4) --------------------------------------------
+def test_a_compiled_memo_hit_seeds_the_scope(built: Path) -> None:
+    """The caller's compile is a compiled-memo hit, and `verified` and `faceted` were trimmed by other
+    requests: the worker's base (another tree: defaults apply) must find the clauses in the request's scope,
+    not reach a verification it may not make (a 500 before round 4)."""
+    engine = TantivyEngine(built)
+    parsed = parse(AT_CAP)
+    assert parsed.effective_ast is not None
+    engine.compile(parsed.effective_ast)  # an earlier request compiled this very tree
+    engine.verified.clear()
+    engine.faceted.clear()
+    assert search.run(engine, parsed, facets=True) == sequential(TantivyEngine(built), parsed, facets=True)
+
+
+def test_a_verified_memo_hit_is_kept_by_the_scope(built: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The caller's compile reads every clause from the shared `verified` memo, which another thread then
+    clears before the worker compiles its base: the scope kept what the compile read."""
+    engine = TantivyEngine(built)
+    parsed = parse(AT_CAP)
+    search.run(engine, parsed, facets=True)  # warms `verified`
+    engine.compiled.clear()
+    engine.faceted.clear()
+    compile_ = engine.compile
+
+    def compile_then_trim(ast: Any, scope: Any = None) -> Any:
+        out = compile_(ast, scope)
+        if scope is not None and scope.may_verify:
+            engine.verified.clear()  # another request's store trims the memo right after
+        return out
+
+    monkeypatch.setattr(engine, "compile", compile_then_trim)
+    assert search.run(engine, parsed, facets=True) == sequential(TantivyEngine(built), parsed, facets=True)
+
+
+def test_a_worker_that_would_verify_is_recounted_in_the_caller(
+    built: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The safety net: should the worker's read-only scope miss a clause anyway (a bug), `run` counts the
+    facets in the caller, which may verify, and logs `facet_worker_recounted`; the client gets its answer."""
+    engine = TantivyEngine(built)
+    parsed = parse(AT_CAP)
+    monkeypatch.setattr(Scope, "reader", lambda self: Scope({}, may_verify=False))  # the bug: an empty view
+    facets = engine.facets
+
+    def cold_in_the_worker(*a: Any, **kw: Any) -> Any:
+        if threading.current_thread().name.startswith("op-facets"):
+            engine.verified.clear()
+            engine.compiled.clear()
+            engine.faceted.clear()
+        return facets(*a, **kw)
+
+    monkeypatch.setattr(engine, "facets", cold_in_the_worker)
+    got = search.run(engine, parsed, facets=True)
+    assert got == sequential(TantivyEngine(built), parsed, facets=True)
+    assert [r.message for r in caplog.records if r.message == "facet_worker_recounted"] == [
+        "facet_worker_recounted"
+    ]

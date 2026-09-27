@@ -77,10 +77,14 @@ the GIL and on free-threaded 3.13t), so never iterate a memo or check-then-act a
 after compiling the effective tree in the caller, so a cold verified clause takes its one verification slot
 there. The memo alone can't carry it to the worker (a query at the cap can clear `verified` and trim
 `compiled` within its own compile), so the request passes its own `tantivy_engine.Scope` to every compile it
-runs (`compile`, `page`, `facets`, `combos`, exclusion accounting): what it verifies is kept there and read
-first (`Overlay`: one `.get` per dict, never a `ChainMap`, whose `get` is `in` then `[key]`), so no clause is
-verified twice in a request; the worker gets `scope.reader()`, which never verifies (a miss is an internal
-error), so it never takes a slot. Start no engine work on another thread before the tree it shares clauses
+runs (`compile`, `page`, `facets`, `combos`, exclusion accounting): every verified clause a compile reads is
+kept there, whether it verified it or read it from the memo (`Overlay.get` records a shared hit) or from a
+compiled-memo hit (`Compiled.ids`, its tree's clause ids, seed the scope), and read first (`Overlay`: one
+`.get` per dict, never a `ChainMap`, whose `get` is `in` then `[key]`), so no clause is verified twice in a
+request; the worker gets `scope.reader()`, which never verifies (a miss is an internal
+error, `WouldVerify`, which `search.run` answers by recounting in the caller), so it never takes a slot.
+A position check builds each clause's token sets once (`Compiler.holder`, `allowed` cached per item), never
+per candidate: its cost per candidate must not grow with width or expansions (round 4). Start no engine work on another thread before the tree it shares clauses
 with is compiled, and never hand a thread other than the caller a verifying scope, or one request can be
 refused (API_BUSY) against itself. `TantivyEngine.candidates` counts what each verified clause's check would
 read (`Compiler.candidates`, per field, from the inverted index): the API bounds that sum per query

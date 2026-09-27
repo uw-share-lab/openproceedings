@@ -29,6 +29,8 @@ from tests.contract.test_export import ids_of
 from tests.contract.test_records import mismatch_lines, save, tampered
 
 SEARCH = "/api/v1/search"
+# these tests count the up-front per-clause charge alone: slot time all but free (its debit: test_abuse_limits_r4)
+SLOT_FREE = 1e9
 # two position-verified clauses with candidates in the 5k fixture (`many_verified`'s have none)
 TWO = ('"trust calibrat*"', '"calibrat* model"')
 Logs = Callable[[], list[dict[str, Any]]]
@@ -109,7 +111,9 @@ def test_the_default_candidate_ceiling() -> None:
 
 # --- refunds -----------------------------------------------------------------------------------------------------
 def test_a_too_costly_query_gets_its_verified_charge_back(store: Store) -> None:
-    limit = RateLimit(capacity=24, refill_per_second=0.001, export_weight=10)  # 10 per clause, cap 2
+    limit = RateLimit(
+        capacity=24, refill_per_second=0.001, export_weight=10, verify_token_ms=SLOT_FREE
+    )  # 10 per clause, cap 2
     app = make_app(
         store.indexes.parent, rate_limit=limit, max_verified_clauses=2, max_verification_candidates=1
     )
@@ -120,7 +124,9 @@ def test_a_too_costly_query_gets_its_verified_charge_back(store: Store) -> None:
 
 
 def test_a_busy_query_gets_its_verified_charge_back(store: Store) -> None:
-    limit = RateLimit(capacity=20, refill_per_second=0.001, export_weight=10, verified_weight=8)
+    limit = RateLimit(
+        capacity=20, refill_per_second=0.001, export_weight=10, verified_weight=8, verify_token_ms=SLOT_FREE
+    )
     with TestClient(make_app(store.indexes.parent, rate_limit=limit, max_verified_clauses=2)) as c:
         engine = c.app.state.index.engine  # type: ignore[attr-defined]
         read = engine.read
