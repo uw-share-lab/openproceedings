@@ -75,10 +75,15 @@ rewrites the query (guarantee 3). No hidden facet state exists.
 
 ## Exports (built to be imported into Covidence)
 
-- **RIS:** `TY  - CPAPER`, `TI`, `AB` (full), `AU` (one line each), `PY`, `T2` (the venue string below), `UR` (forum then pdf), `DO` if present, `ID` (the openproceedings paper id, so exports round-trip), `KW`
-  track, and `N1` = `openproceedings <index_version> · query <canonical_hash> · <UTC date>`. Checked against
-  the RIS parser venuetriage already uses, plus one fixture imported into Covidence by hand
-  (`docs/results/2026-09-27-covidence-check.md`, **pending**).
+- **RIS:** `TY  - CPAPER`, `TI`, `AB` (full), `AU` (one line each), `PY`, `T2` (the venue string below), `UR` (forum, then pdf, then proceedings; each only if present), `DO` if present, `ID` (the openproceedings paper id, so exports round-trip), two `KW`
+  lines (the track, then `status:<status>`), and `N1` = `openproceedings <index_version> · query <canonical_hash> · <UTC date>`. Checked against
+  the reference RIS parser, `scholarmend.parse.parse_ris` (the pinned `scholarmend` PyPI package), plus one
+  fixture imported into Covidence by hand (`docs/results/2026-09-27-covidence-check.md`, **pending**).
+- **Status in every format** (task-004 review). The venue string names the conference a paper was
+  *submitted to*, so a rejected or withdrawn paper still reads "ICLR 2024". A screener sees its status as
+  RIS `KW  - status:rejected` (Covidence shows keywords), CSV and JSONL have the `status` column, and BibTeX has
+  it in `keywords` and in the entry type below. RIS keeps `TY  - CPAPER` for every status, so one export
+  imports as one reference type.
 - **`TY` is `CPAPER`, not `JOUR`** (task-004). Every exported paper is a conference paper. Zotero's RIS
   translator (`RIS.js`, 2026-01-05) imports `CPAPER` as `conferencePaper` and puts `T2` in its
   `conferenceName`; a `JOUR` would become a `journalArticle` with the conference in `publicationTitle`.
@@ -95,8 +100,12 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   `PY` equals the year it names. It is the conference's name, not a proceedings title ("Advances in Neural
   Information Processing Systems 36", "Proceedings of the 40th International Conference on Machine
   Learning"): an export also holds workshop, rejected and withdrawn papers, and all of ICLR, which no
-  proceedings volume contains. The table is `CONFERENCES` in `export.py`; `venue_name()` refuses a year before
-  the venue was held, so an `op export --out` leaves no file.
+  proceedings volume contains. The table is `CONFERENCES` in `vocab.py`, read by `venue_name()` (both also
+  importable from `export.py`), and its eras are checked for year order at import. A record for a year before
+  its venue was held is refused when it is built (`PaperRecord`, spec 01 §Fields), so no index holds one and
+  an export never meets one. `venue_name()` still raises, as a backstop, and it happens mid-stream: `op export
+  --out` then leaves no file; `op export` to standard output has already written the records before it, and
+  exits 1 with the error on stderr, so check the exit status when piping.
 
   | Venue | Years | String |
   |---|---|---|
@@ -120,13 +129,23 @@ rewrites the query (guarantee 3). No hidden facet state exists.
 - **CSV:** one row per paper, the columns of the schema in 01 plus `index_version` and `canonical_hash`
   provenance columns, UTF-8 with a BOM (so Excel opens it
   correctly).
-- **BibTeX:** `@inproceedings`. Keys are `<firstauthorlast><year><firsttitleword>`, de-duplicated with a/b:
+- **BibTeX:** `@inproceedings` for an `accepted` paper, with `booktitle` = the venue string. Any other status
+  (`rejected`, `withdrawn`, `desk_rejected`, `unknown`) is `@unpublished`, BibTeX's type for a paper with an
+  author and title that was not formally published, and has **no `booktitle`**. Its `note` starts
+  `Submitted to <venue string>, status: <status>.` and then gives the provenance line, so the venue string is
+  still the same string for every paper of a venue and year. Standard styles print `note` for `@unpublished`
+  and require it. `@misc` with `howpublished` was the other option; `@unpublished` is the one that says "not
+  published". `unknown` counts as not accepted, since an export must never cite a paper into proceedings on
+  a guess. `keywords = {<track>, status:<status>}` on every entry. This is an export format, not stored
+  data, so it can change without a decision record: a later export from the same index simply follows the
+  new rule. Keys are `<firstauthorlast><year><firsttitleword>` for every entry type, de-duplicated with a/b:
   the first paper with a key keeps it bare, and each later one, in id order, takes the next suffix not yet
   issued in the file (decision-007: what Better BibTeX and JabRef do, and it streams). Keys are unique per file,
   not identifiers. A superset export keeps every earlier key when the added papers sort after them in id
   order; an added paper that sorts first takes the bare key and shifts the rest. Merge successive exports on
-  `openproceedings_id`, not on the key. `booktitle` is the venue string above.
-  Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC date>}`.
+  `openproceedings_id`, not on the key.
+  Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC date>}` (after
+  the `Submitted to …` sentence on an `@unpublished` entry).
   Every entry carries `openproceedings_id = {<id>}`, so a round-trip recovers the id of every record,
   proceedings-only (PMLR, NeurIPS) ones included. Output must pass `refaudit.bibtex.parse_string` (the pinned `refaudit` PyPI package).
 - As built (task-030, `export.py`, used by `op export`; the endpoints are task-036):

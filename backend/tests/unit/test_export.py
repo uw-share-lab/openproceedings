@@ -14,13 +14,14 @@ import re
 from pathlib import Path
 
 import pytest
-from openproceedings import export
+from openproceedings import export, vocab
 from openproceedings.cli import main
 from openproceedings.engine.index import build_index
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.export import Provenance, bibtex_key, write
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.query.parser import parse
+from pydantic import ValidationError
 from refaudit.bibtex import parse_string
 
 from tests.unit.engine.test_index import snapshot_of
@@ -173,6 +174,29 @@ def test_a_superset_keeps_keys_unless_an_added_paper_sorts_first() -> None:
     assert keys(["A1", "B2", "C3"])["B2"] == "smith2024deepa"  # prepended: shifts (keys are per file)
 
 
+def test_an_added_paper_whose_real_key_is_an_issued_suffix() -> None:
+    """decision-007 §Consequences: a paper titled "Deepa …" has the real key `smith2024deepa`. Added after the
+    paper that holds that suffix, it moves on itself (`…deepaa`) and nothing earlier shifts; added before it,
+    it takes `…deepa` and that paper shifts to `…deepb`."""
+
+    def keys(titles: dict[str, str]) -> dict[str, str]:
+        records = [{"authors": ["Jo Smith"], "year": 2024, "title": t, "venue": "ICLR", "id": f"op:iclr:2024:{n}"}
+                   for n, t in sorted(titles.items())]  # fmt: skip
+        return {
+            e.fields["openproceedings_id"][-2:]: e.key
+            for e in parse_string("".join(export._bibtex(records, PROVENANCE)))
+        }
+
+    before = {"B2": "Deep", "C3": "Deep"}
+    assert keys(before) == {"B2": "smith2024deep", "C3": "smith2024deepa"}
+    assert keys({**before, "D4": "Deepa trust"}) == {**keys(before), "D4": "smith2024deepaa"}
+    assert keys({**before, "B5": "Deepa trust"}) == {
+        "B2": "smith2024deep",
+        "B5": "smith2024deepa",
+        "C3": "smith2024deepb",
+    }
+
+
 # spec 04 §Exports, T2 / booktitle: the full conference name, then the acronym it went by that year. The
 # first year of each naming era, the rename and recent years are pinned by hand, apart from `CONFERENCES`.
 VENUE_NAMES = {
@@ -203,17 +227,78 @@ def test_every_crawlable_year_has_one_venue_name() -> None:
             assert name.endswith(f" ({acronym} {year})") and "\n" not in name and "{" not in name
 
 
-@pytest.mark.parametrize(
-    ("venue", "year"), [("NeurIPS", 1986), ("ICLR", 2012), ("ICML", 1987), ("AAAI", 2024)]
-)
+@pytest.mark.parametrize(("venue", "year"), [("NeurIPS", 1986), ("ICLR", 2012), ("ICML", 1987)])
 def test_a_year_the_venue_was_not_held_is_refused(venue: str, year: int) -> None:
     with pytest.raises(ValueError, match="no conference name"):
         export.venue_name(venue, year)
 
 
+def test_an_unknown_venue_has_its_own_message() -> None:
+    with pytest.raises(ValueError, match="no conference table for venue 'AAAI'"):
+        export.venue_name("AAAI", 2024)
+
+
+def test_conference_eras_must_be_sorted() -> None:
+    """`venue_name` takes the last era that has begun, so the eras must be in year order; the table is checked
+    when the module loads, and the check refuses an unsorted table."""
+    vocab.check_conferences(vocab.CONFERENCES)
+    with pytest.raises(ValueError, match="NeurIPS eras are not in year order"):
+        vocab.check_conferences({"NeurIPS": ("N", ((2018, "NeurIPS"), (1987, "NIPS")))})
+    with pytest.raises(ValueError, match="ICLR has no eras"):
+        vocab.check_conferences({"ICLR": ("I", ())})
+
+
+def test_a_record_for_a_year_its_venue_was_not_held_is_refused_at_ingest() -> None:
+    """Refused when the record is built, so an export never meets it mid-stream (`venue_name` still raises,
+    as a backstop)."""
+    with pytest.raises(ValidationError, match="no conference name for ICLR 2012"):
+        paper("AbCd0001", venue="ICLR", year=2012)
+    assert paper("AbCd0001", venue="ICLR", year=2013).year == 2013
+
+
+STATUSES = ("accepted", "rejected", "withdrawn", "desk_rejected", "unknown")
+
+
+def status_record(status: str) -> dict[str, object]:
+    return {"id": f"op:iclr:2024:{status[:4]}0001", "title": "Deep trust", "authors": ["Jo Smith"], "venue": "ICLR",
+            "year": 2024, "track": "main", "status": status}  # fmt: skip
+
+
+@pytest.mark.parametrize("status", STATUSES)
+def test_ris_carries_the_status_as_a_keyword(status: str) -> None:
+    ris = "".join(export._ris([status_record(status)], PROVENANCE))
+    assert [line for line in ris.splitlines() if line.startswith("KW  - ")] == [
+        "KW  - main",
+        f"KW  - status:{status}",
+    ]
+    assert (
+        "TY  - CPAPER\n" in ris
+        and "T2  - International Conference on Learning Representations (ICLR 2024)\n" in ris
+    )
+
+
+def test_bibtex_cites_only_accepted_papers_as_inproceedings() -> None:
+    """spec 04 §Exports: an accepted paper is `@inproceedings` in its conference; any other status is
+    `@unpublished`, with no `booktitle`: the venue string moves into `note`, after `Submitted to`."""
+    entries = parse_string("".join(export._bibtex([status_record(s) for s in STATUSES], PROVENANCE)))
+    by = {e.fields["openproceedings_id"].split(":")[-1][:4]: e for e in entries}
+    venue = "International Conference on Learning Representations (ICLR 2024)"
+    accepted = by["acce"]
+    assert accepted.entry_type == "inproceedings" and accepted.fields["booktitle"] == venue
+    assert (
+        accepted.fields["note"] == PROVENANCE.line()
+        and accepted.fields["keywords"] == "main, status:accepted"
+    )
+    for status in STATUSES[1:]:
+        e = by[status[:4]]
+        assert e.entry_type == "unpublished" and "booktitle" not in e.fields, status
+        assert e.fields["note"] == f"Submitted to {venue}, status: {status}. {PROVENANCE.line()}"
+        assert e.fields["keywords"] == f"main, status:{status}"
+
+
 def test_ris_t2_and_bibtex_booktitle_are_the_same_string() -> None:
     record = {"id": "op:neurips:2017:nips-ab", "title": "t", "authors": ["A B"], "venue": "NeurIPS", "year": 2017,
-              "track": "main"}  # fmt: skip
+              "track": "main", "status": "accepted"}  # fmt: skip
     ris = "".join(export._ris([record], PROVENANCE))
     (entry,) = parse_string("".join(export._bibtex([record], PROVENANCE)))
     assert f"T2  - {entry.fields['booktitle']}\n" in ris

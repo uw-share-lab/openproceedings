@@ -33,7 +33,7 @@ from pydantic import (
     model_validator,
 )
 
-from openproceedings.vocab import Status, Track, Venue
+from openproceedings.vocab import Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
 RECORD_SCHEMA_VERSION = "1"
@@ -232,6 +232,7 @@ class PaperRecord(BaseModel):
             raise ValueError(f"id {self.id!r} is not op:<venue>:<year>:<native>")
         if m.group(1) != self.venue.lower() or int(m.group(2)) != self.year:
             raise ValueError(f"id {self.id!r} disagrees with venue {self.venue} / year {self.year}")
+        venue_name(self.venue, self.year)  # a year the venue wasn't held: refused here, never mid-export
         native = m.group(3)
         form = _PROCEEDINGS_NATIVE.get(native.split("-", 1)[0])
         if form is not None:

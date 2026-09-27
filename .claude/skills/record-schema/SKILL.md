@@ -18,7 +18,7 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | `abstract` | Raw text or `null` (never an empty or whitespace-only string). Reject a value that starts or ends with `…`: that's a Scholar snippet. An ellipsis inside a real abstract (`x₁, …, x_n`) is allowed. HTML stripped, LaTeX kept verbatim. |
 | `authors` | Display order, as the source gives them. |
 | `venue` | `NeurIPS` \| `ICLR` \| `ICML` (enum; extensible later). |
-| `year` | Conference year. Never the arXiv or PDF year. Required: a record with no year is not a valid `PaperRecord`. |
+| `year` | Conference year. Never the arXiv or PDF year. Required: a record with no year is not a valid `PaperRecord`, nor is one for a year its venue was not held under its name (NeurIPS before 1987, ICLR before 2013, ICML before 1988; `vocab.CONFERENCES`, spec 04 §Exports). |
 | `track` | `.claude/skills/track-taxonomy/SKILL.md`. No default value in the model. |
 | `status` | `accepted` \| `rejected` \| `withdrawn` \| `desk_rejected` \| `unknown`. No default. |
 | `presentation` | `oral` \| `spotlight` \| `poster` \| `null`, only when a source states it. |

@@ -17,7 +17,7 @@ build.
 | `abstract` | str \| null | Raw. `null` if no source has it. Never a Scholar snippet (reject values that start or end with `…`; an ellipsis inside is allowed). Never an empty string. |
 | `authors` | list[str] | Display order. |
 | `venue` | enum | `NeurIPS` \| `ICLR` \| `ICML`. Extensible. |
-| `year` | int | Conference year, not the arXiv year. |
+| `year` | int | Conference year, not the arXiv year. A year before the venue was held under its name (NeurIPS 1987, ICLR 2013, ICML 1988; `vocab.CONFERENCES`) is refused. |
 | `track` | enum | See the taxonomy below. Never defaults to `main`. Unknown stays `unknown`. |
 | `status` | enum | `accepted` \| `rejected` \| `withdrawn` \| `desk_rejected` \| `unknown` |
 | `presentation` | str \| null | `oral` / `spotlight` / `poster`, when the source states it. |

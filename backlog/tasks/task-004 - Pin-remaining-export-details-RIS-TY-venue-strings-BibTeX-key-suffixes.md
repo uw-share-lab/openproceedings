@@ -4,7 +4,7 @@ title: 'Pin remaining export details (RIS TY, venue strings, BibTeX key suffixes
 status: In Progress
 assignee: []
 created_date: '2026-09-25 22:06'
-updated_date: '2026-09-27 07:52'
+updated_date: '2026-09-27 08:13'
 labels:
   - api
 milestone: m-3
@@ -42,4 +42,6 @@ AC#2: T2/booktitle = '<conference name> (<acronym that year> <year>)' via export
 AC#3: decision-007 (accepted): first use bare, then a, b in id order, per file (as task-030 built it; matches Better BibTeX and JabRef). Superset trade-off pinned by test.
 AC#4: spec 04 §Exports, ris-format and bibtex-format skills updated.
 Follow-up: TASK-081 (write VL if the Covidence probe shows an empty volume blocks dedup).
+
+Review fixes (fix-004-review): status in every export (RIS KW status:<s>; BibTeX @unpublished + no booktitle for non-accepted, status in keywords/note); venue-year validated at ingest (PaperRecord), table moved to vocab.py; Covidence fixture regenerated (7 records incl. a rejected one; sha256 a98583c81604e20156ead8b4cae807475c519e23aebd9db6bcefbf926ae024ee), probe now isolates VL; check doc records the imported sha and a test enforces it once AC#1 is ticked. AC#1 still pending the human import.
 <!-- SECTION:NOTES:END -->

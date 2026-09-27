@@ -53,9 +53,15 @@ file: a, b, … z, aa, ab, …. Keys are unique within one file and are not iden
   `backend/tests/unit/test_export.py`, which also parse the result with the pinned refaudit.
 - Superset stability, pinned by `test_a_superset_keeps_keys_unless_an_added_paper_sorts_first`: an
   export of a superset keeps every earlier key when the added colliding papers sort after the ones already
-  there. An added paper that sorts first takes the bare key and shifts the rest by one letter. So does an
-  added paper whose real key equals a suffix issued before it. Users who cite from successive exports should
-  merge on `openproceedings_id` (or DOI), not on the key. Spec 04 §Exports and the bibtex-format skill say so.
+  there. An added paper that sorts first takes the bare key and shifts the rest by one letter. An added
+  paper whose *real* key equals a suffix (a title starting "Deepa" gives `smith2024deepa`) depends on where it
+  sorts. After the paper holding that suffix, it moves on itself (`smith2024deepaa`) and nothing earlier
+  shifts. Before it, it takes `smith2024deepa` and that paper shifts to `smith2024deepb` (pinned by
+  `test_an_added_paper_whose_real_key_is_an_issued_suffix`; corrected in the task-004 review). Users who
+  cite from successive exports should merge on `openproceedings_id` (or DOI), not on the key. Spec 04
+  §Exports and the bibtex-format skill say so.
+- Entry type (task-004 review): the key rule applies to every entry. Only accepted papers are
+  `@inproceedings`; any other status is `@unpublished` (spec 04 §Exports).
 - No code change: task-030's `_bibtex` already implements this. Spec 04 §Exports and
   `.claude/skills/bibtex-format/SKILL.md` now state the rule as decided.
 - Revisit (option 4) if users ask for keys that survive re-exports, for example to keep a LaTeX manuscript's

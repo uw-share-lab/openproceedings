@@ -20,12 +20,12 @@ fixtures. The reference parser strips values, so it reads either ending.
 | `TI` | full title | One line. No trailing period added. |
 | `AU` | one author per line, `Last, First` | Full names from the record. Never initials only, never an `...` sentinel line. |
 | `PY` | year | The file known to import cleanly (Trust-Evals `mended.ris`) used `2025///`. Plain `2025` is also valid RIS. The writer writes plain `2025`; the Covidence check confirms it shows as the year. |
-| `T2` | venue string: `<conference name> (<acronym that year> <year>)` | `export.venue_name()`, table `CONFERENCES` (spec 04 §Exports cites the sources). `Conference on Neural Information Processing Systems (NIPS 2017)`, `… (NeurIPS 2018)` on; `International Conference on Learning Representations (ICLR 2025)`; `International Conference on Machine Learning (ICML 2023)`. One string per venue-year whatever the track or status. It is the conference's name, never a proceedings title, because workshop, rejected and ICLR papers are in no proceedings. A year before the venue was held is refused. |
+| `T2` | venue string: `<conference name> (<acronym that year> <year>)` | `vocab.venue_name()` (also importable from `export`), table `vocab.CONFERENCES` (spec 04 §Exports cites the sources). `Conference on Neural Information Processing Systems (NIPS 2017)`, `… (NeurIPS 2018)` on; `International Conference on Learning Representations (ICLR 2025)`; `International Conference on Machine Learning (ICML 2023)`. One string per venue-year whatever the track or status. It is the conference's name, never a proceedings title, because workshop, rejected and ICLR papers are in no proceedings. A record for a year before the venue was held is refused at ingest (`PaperRecord`). |
 | `AB` | the **full** abstract on **one line** | Replace internal newlines with a space. Never truncate, never use `…`. |
-| `UR` | forum URL, then PDF URL | Two `UR` lines in that order. Skip an absent URL, never write an empty one. |
+| `UR` | forum URL, then PDF URL, then proceedings URL | Up to three `UR` lines in that order. Skip an absent URL, never write an empty one. |
 | `DO` | DOI, only if present | |
 | `ID` | the openproceedings paper `id` | So exports round-trip (spec 04 §Exports). Exactly one line. |
-| `KW` | `track` value (`main`, `datasets_benchmarks`, …) | From `.claude/skills/track-taxonomy/SKILL.md`. |
+| `KW` | two lines: the `track` value (`main`, `datasets_benchmarks`, …), then `status:<status>` | Track from `.claude/skills/track-taxonomy/SKILL.md`. The status line is how a Covidence screener sees that a paper was rejected or withdrawn, since `T2` names the conference it was submitted to (spec 04 §Exports). |
 | `N1` | `openproceedings <index_version> · query <canonical_hash> · <UTC date>` | Exactly one provenance line. `·` is U+00B7. The date is `YYYY-MM-DD` UTC. |
 | `ER` | empty | |
 
