@@ -154,7 +154,10 @@ def lint_commands() -> None:
 def lint_refs(agents: set[str], skills: set[str], commands: set[str]) -> None:
     referenced: set[str] = set()
     agent_refs: set[str] = set()
-    sources = [*C.rglob("*.md"), ROOT / "CLAUDE.md", ROOT / "CONTRIBUTING.md"]
+    # .claude/worktrees/ holds gitignored agent checkouts, each a full copy of the repo; linting them
+    # reports every file again under a path whose parts no longer match COMMAND_CONTEXT's exemptions.
+    in_repo = [p for p in C.rglob("*.md") if not p.is_relative_to(C / "worktrees")]
+    sources = [*in_repo, ROOT / "CLAUDE.md", ROOT / "CONTRIBUTING.md"]
     for p in sources:
         if not p.exists() or p.is_relative_to(C / "learnings"):  # the journal, not the learnings skill
             continue
