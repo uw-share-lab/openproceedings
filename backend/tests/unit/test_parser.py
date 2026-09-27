@@ -8,7 +8,7 @@ from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.query.ast import And, Filter, Near, Node, Not, Or, Phrase, Term, Wildcard, YearRange
 from openproceedings.query.canonical import canonicalize, render
-from openproceedings.query.parser import MAX_DEPTH, parse
+from openproceedings.query.parser import MAX_DEPTH, MAX_QUERY_LENGTH, parse
 
 
 def show(n: Node) -> str:
@@ -503,3 +503,126 @@ def test_m1_gate_mutant_rows() -> None:
 def test_a_year_is_at_most_four_digits_alone_or_in_a_range() -> None:
     assert [e.code for e in parse("year:02024").errors] == [DiagnosticCode.FIELD_UNKNOWN_VALUE]
     assert [e.code for e in parse("year:00002020..2024").errors] == [DiagnosticCode.FIELD_UNKNOWN_VALUE]
+
+
+# A wildcard must directly follow a letter or digit, judged on the folded pieces (spec 02; decision-008
+# replaced task-075's raw-character `reach` rule): `abcd⒈*` is `abcd1.*`, so it is detached like `abcd1.*`,
+# and a U+0338 on the `.` changes nothing. The message names the piece, and the raw text it came from.
+@pytest.mark.parametrize(
+    ("q", "piece", "hint"),
+    [
+        ("abcd⒈*", "`.` (from `⒈`)", "`abcd1*`"),  # DIGIT ONE FULL STOP: `1.`, last piece `.`
+        ("abcd⒈̸*", "`.` (from `⒈̸`)", "`abcd1*`"),  # the slash on the `.` folds away
+        ("abcd⑴*", "`)` (from `⑴`)", '`"abcd 1*"`'),  # PARENTHESIZED DIGIT ONE: `(1)`, last piece `)`
+        ("abcd⑴̸*", "`)` (from `⑴̸`)", '`"abcd 1*"`'),
+        ('"trust abcd⒈̸*"', "`.` (from `⒈̸`)", "`abcd1*`"),
+        ("abcd1.*", "`.`", "`abcd1*`"),  # the look-alike's NFKC spelling: the same verdict
+        ("abc．*", "`.` (from `．`)", "`abc*`"),  # FULLWIDTH FULL STOP
+        ("vision-*", "`-`", "`vision*`"),
+        # a whole-character tail on a multi-token stem: cut as written, not rebuilt from the tokens
+        ("trust-model-*", "`-`", "`trust-model*`"),
+        ('"x trust-model-*"', "`-`", "`trust-model*`"),
+        # inside a phrase the hint is the phrase's words, not a phrase nested in it (`"x "y 1*""`)
+        ('"x y⑴*"', "`)` (from `⑴`)", "`y 1*`"),
+        ('"x abcd⑴*"', "`)` (from `⑴`)", "`abcd 1*`"),
+        # cutting the stem as written would leave the math unclosed (`abcd$\alpha*`: PARSE_WILDCARD_NOT_SUFFIX)
+        (r"abcd$\alpha$*", "`$`", '`"abcd α*"`'),
+        ("abcd$x$*", "`$`", '`"abcd x*"`'),
+        ('"trust abcd$x$*"', "`$`", "`abcd x*`"),
+    ],
+    ids=ascii,
+)
+def test_wildcard_after_a_non_word_piece_is_detached(q: str, piece: str, hint: str) -> None:
+    [error] = parse(q).errors
+    assert error.code is DiagnosticCode.PARSE_WILDCARD_DETACHED
+    assert f"follows {piece}, not a letter or digit" in error.message and f"e.g. {hint}." in error.message
+    # the hint is valid in place of the word: on its own, or as the last words of the phrase it sits in
+    fixed = hint.strip("`") if not q.startswith('"') else f'{q.rsplit(" ", 1)[0]} {hint.strip("`")}"'
+    assert parse(fixed).errors == [], fixed
+
+
+# M3a gate round 2 (exactness-guardian): a mark after the separator (a vowel sign, alone no word) must not
+# hide the separator the wildcard follows. Each was accepted as the bare stem (`vision*`) at 30756ce.
+@pytest.mark.parametrize(
+    "q",
+    ["vision-ަ*", "abcd-ि*", "abcd-ิ*", "abcd.ெ*", '"trust vision.ަ*"', "calibrat-ྜྷ*"],
+    ids=ascii,
+)
+def test_a_lone_mark_after_a_separator_leaves_the_wildcard_detached(q: str) -> None:
+    assert [e.code for e in parse(q).errors] == [DiagnosticCode.PARSE_WILDCARD_DETACHED]
+
+
+@pytest.mark.parametrize(
+    ("q", "tree"),
+    [
+        ("abcd½*", '"abcd1 2*"'),  # VULGAR FRACTION ONE HALF: `1⁄2`, last piece `2`
+        ("abcd½̸*", '"abcd1 2*"'),  # the slash on the `2` folds away (a digit's mark)
+        ("abcd≠ͅ*", '"abcd neq ι*"'),  # U+0345 after neq folds to `ι`, a letter, the last piece
+        ("abcde\u0301*", "abcde*"),  # a decomposed accent is no piece: it folds away
+        ("bench\\-*", "bench*"),  # `\-` is markup that joins the word, not a piece
+    ],
+    ids=ascii,
+)
+def test_wildcard_after_a_word_piece_is_attached(q: str, tree: str) -> None:
+    result = parse(q)
+    assert result.errors == []
+    assert result.ast is not None and render(canonicalize(result.ast)) == tree
+
+
+# decision-008: the canonical string is what a search record keeps and replay re-parses, so a query whose
+# canonical string is over the cap is refused, even though the input itself fits
+def test_a_query_whose_canonical_form_is_over_the_cap_is_too_long() -> None:
+    words = [f"w{i:04d}" for i in range(300)]
+    q = " ".join(words)  # 1,799 code points; juxtaposition prints as ` AND `, and the defaults are added
+    canonical = (
+        "("
+        + " AND ".join(words)
+        + " AND track:(datasets_benchmarks OR main OR position) AND status:accepted)"
+    )
+    result = parse(q)
+    assert len(q) == 1_799 and result.ast is None and result.canonical is None
+    [error] = result.errors
+    assert error.code is DiagnosticCode.PARSE_TOO_LONG and error.span == (0, len(q))
+    over = f"{len(canonical) - MAX_QUERY_LENGTH:,} over the limit of {MAX_QUERY_LENGTH:,}"
+    assert f"is {len(canonical):,} characters, {over}" in error.message
+    assert "each space between words becomes ` AND `" in error.message
+    assert "field:" not in error.message  # no field group: not blamed (M3a round 3)
+    defaults = " AND track:(datasets_benchmarks OR main OR position) AND status:accepted"
+    assert f"the default filters add {len(defaults)}" in error.message
+
+
+def test_a_canonical_overflow_names_only_the_causes_its_query_has() -> None:
+    """A plain OR list has no implicit AND and no field group: neither is named (the defaults still are);
+    a `field:(…)` group is named, and juxtaposition inside one counts as an implicit AND."""
+    ored = " OR ".join(f"w{i:04d}" for i in range(217))  # 1,949 code points
+    [error] = parse(ored).errors
+    assert error.code is DiagnosticCode.PARSE_TOO_LONG, parse(ored).canonical
+    assert "` AND `" not in error.message and "field:" not in error.message
+    assert "the default filters add" in error.message
+    grouped = "title:(" + " OR ".join(f"w{i:04d}" for i in range(200)) + ") track:main status:accepted"
+    [error] = parse(grouped).errors
+    assert error.code is DiagnosticCode.PARSE_TOO_LONG
+    assert "a `field:(…)` group repeats `field:` on every term" in error.message
+    assert "each space between words becomes ` AND `" in error.message  # `) track:main` side by side
+    assert "default filters add" not in error.message
+
+
+def test_the_length_cap_message_groups_thousands() -> None:
+    [error] = parse("x" * 2_966).errors
+    assert error.message.startswith("The query is 2,966 characters long; the limit is 2,000")
+
+
+def test_a_canonical_overflow_with_typed_filters_does_not_blame_the_defaults() -> None:
+    q = " ".join(f"w{i:04d}" for i in range(300)) + " track:main status:accepted"
+    [error] = parse(q).errors
+    assert error.code is DiagnosticCode.PARSE_TOO_LONG and "default filters add" not in error.message
+
+
+def test_a_canonical_string_exactly_at_the_cap_is_accepted() -> None:
+    clauses = " AND track:main AND status:accepted)"
+    at_cap = "(" + "x" * (MAX_QUERY_LENGTH - 1 - len(clauses)) + clauses
+    assert len(at_cap) == MAX_QUERY_LENGTH and parse(at_cap).canonical == at_cap
+    over = "trust " + at_cap[: -len(clauses)] + " AND status:accepted)"  # canonical: 2,001 code points
+    assert len(over) <= MAX_QUERY_LENGTH
+    result = parse(over)
+    assert [e.code for e in result.errors] == [DiagnosticCode.PARSE_TOO_LONG], len(result.canonical or "")

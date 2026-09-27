@@ -28,7 +28,9 @@ minutes; a missed one costs a wrong search result in someone's systematic review
 | `backend/src/openproceedings/query/**` | `exactness-guardian`, `query-semantics-reviewer` |
 | `backend/src/openproceedings/engine/**` | `exactness-guardian` (+ `performance-profiler` if compile/rank/index build changed) |
 | `backend/src/openproceedings/ingest/**` | `track-classifier-auditor`, `dedup-auditor`, `security-reviewer` (crawlers make network calls) |
-| `backend/src/openproceedings/api/**` | `api-contract-reviewer`, `security-reviewer`; exporters → `export-format-validator` |
+| `backend/src/openproceedings/api/**` | `api-contract-reviewer`, `security-reviewer`; `api/export.py` → `export-format-validator` |
+| `backend/src/openproceedings/{search,records,coverage,timestamps}.py` (what the API routes run) | `api-contract-reviewer`, `security-reviewer` |
+| `backend/src/openproceedings/export.py` (the exporters, shared by `op export` and `GET /export`) | `export-format-validator`, `api-contract-reviewer` |
 | `backend/src/openproceedings/semantic/**` | `near-miss-evaluator` (the membership invariant) |
 | `frontend/**` | `ux-reviewer`, `usability-auditor`, `accessibility-auditor` |
 | `docs/design/**`, `docs/usability/**`, `docs/research/**` | `ux-reviewer`, `usability-auditor`, `hci-researcher` (evidence and ethics) |

@@ -54,7 +54,44 @@ on a synthetic 80k index stopword cases take 2.3–3.3 s cold and the wildcard-p
 10.1 s (`docs/results/2026-09-27-bench.md`); its candidate
 query holds each distinct item once, so a repeated term isn't scored twice. `facets` compiles each distinct
 filter-free query once, and the engine memoises every verified clause (per field), so facets after a match
-cost 0.1–0.3 s on 80k. Candidates hold each distinct item once, and an item implied by a narrower one
+cost 0.1–0.3 s on 80k. `facets` collects the query once, without its top-level facet-field filters (`Filter` or
+`NOT` of one; the *base*), as counts per (venue, year, track, status) from one nested terms aggregation (text
+fast columns can't be read per document in tantivy-py), then counts every field in Python: a combo counts for
+F when it passes every set-aside filter not on F (task-086; equal to one collection per kept set and to the
+oracle, `test_facets_equal.py`). The combos are memoised per base (`faceted`, keyed by its span-less, sorted
+conjuncts), so exclusion accounting, later pages and queries differing only in filters never collect again.
+The memos (`compiled`, `verified`, `expanded`, `faceted`) are bounded by what they hold, not
+by entry count (one verified clause can hold every id): `TantivyEngine.MAX_VERIFIED_IDS`, `MAX_EXPANDED_TERMS`,
+`MAX_COMPILED_UNITS` and `MAX_FACET_COMBOS` budget the ids/terms charged to each, and a memo is cleared once its append-only ledger
+(`charges`, summed incrementally; `_trim`) passes its budget — every race over-counts, never under
+(`tests/unit/engine/test_memo_budget.py`). Every entry is checked, stored and charged on its own, `verified`
+clause by clause inside a compile (`Compiler(store=engine._store_verified)`), never once per compile: so one
+query of many verified clauses overshoots by at most one clause, and a compile refused partway (503
+`API_BUSY` on a later clause) has already charged every clause it stored. They are
+shared by the API's thread pool with no lock (task-080): read an entry with one `.get()`, never `in` then
+`[key]` (another thread may clear the memo between them), and store an entry only once it is complete. Every
+value is a pure function of its key and the immutable index, so a clear or a lost race only recomputes the
+same value (`tests/unit/engine/test_concurrency.py`). Only single dict operations are assumed atomic (true under
+the GIL and on free-threaded 3.13t), so never iterate a memo or check-then-act across two operations.
+`search.run` counts facets on a worker thread (`_pool()`, overlapping the page's collection: task-088) only
+after compiling the effective tree in the caller, so a cold verified clause takes its one verification slot
+there. The memo alone can't carry it to the worker (a query at the cap can clear `verified` and trim
+`compiled` within its own compile), so the request passes its own `tantivy_engine.Scope` to every compile it
+runs (`compile`, `page`, `facets`, `combos`, exclusion accounting): every verified clause a compile reads is
+kept there, whether it verified it or read it from the memo (`Overlay.get` records a shared hit) or from a
+compiled-memo hit (`Compiled.ids`, its tree's clause ids, seed the scope), and read first (`Overlay`: one
+`.get` per dict, never a `ChainMap`, whose `get` is `in` then `[key]`), so no clause is verified twice in a
+request; the worker gets `scope.reader()`, which never verifies (a miss is an internal
+error, `WouldVerify`, which `search.run` answers by recounting in the caller), so it never takes a slot.
+A position check builds each clause's token sets once (`Compiler.holder`, `allowed` cached per item), never
+per candidate: its cost per candidate must not grow with width or expansions (round 4). The verify loop
+(`Compiler.verify`) calls the gate's deadline check every `CHECK_EVERY` candidates and before each clause,
+keeps its partial list local until the clause is complete (an abort stores nothing), and takes no slot for
+a clause with no candidates (round 5). Start no engine work on another thread before the tree it shares clauses
+with is compiled, and never hand a thread other than the caller a verifying scope, or one request can be
+refused (API_BUSY) against itself. `TantivyEngine.candidates` counts what each verified clause's check would
+read (`Compiler.candidates`, per field, from the inverted index): the API bounds that sum per query
+(`max_verification_candidates`, decision-010). Candidates hold each distinct item once, and an item implied by a narrower one
 (`trust` implies `trust*`) is dropped, so no term is scored twice; that is how a verified clause scores
 (field-weighted-bm25 skill). Spec 03 records the budget exception for verified clauses. Checked: the 44 golden queries of the 200-record fixture, a row per table line against
 ReferenceEngine, and (locally) the ten Trust-Evals protocol strings on the real corpus, identical sets.

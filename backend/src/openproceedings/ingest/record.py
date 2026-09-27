@@ -33,7 +33,7 @@ from pydantic import (
     model_validator,
 )
 
-from openproceedings.vocab import Status, Track, Venue
+from openproceedings.vocab import Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
 RECORD_SCHEMA_VERSION = "1"
@@ -52,6 +52,14 @@ _PROCEEDINGS_NATIVE = {
     "nips": (re.compile(r"nips-[0-9a-f]{32}"), "NeurIPS"),
     "iclr": (re.compile(r"iclr-[0-9a-f]{32}"), "ICLR"),
 }
+
+
+def is_paper_id(text: str) -> bool:
+    """Whether `text` has the shape of a record id, `op:<venue>:<year>:<native>` (a cheap check before any
+    lookup; the record itself checks the rest)."""
+    return _ID.fullmatch(text) is not None
+
+
 FORUM_ID = re.compile(r"(?=.*[A-Za-z0-9])[A-Za-z0-9_-]{4,64}")
 _SNIPPET = (
     "…"  # a Scholar snippet starts or ends with an ellipsis; a real abstract may contain one (`x₁, …, x_n`)
@@ -79,7 +87,10 @@ class Claim(BaseModel):
     """One source's statement about one field. Frozen and scalar (tuples for lists), so claims are
     hashable and set-comparable. `fetched_at` comes from the cache entry, never from build time."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+    # every field is always sent, so the API schema marks every one required (spec 04 §Conventions)
+    model_config = ConfigDict(
+        frozen=True, extra="forbid", strict=True, json_schema_serialization_defaults_required=True
+    )
 
     field: ClaimField
     value: ClaimValue
@@ -148,7 +159,7 @@ Doi = Annotated[Text, AfterValidator(_doi)]
 
 
 class Urls(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", json_schema_serialization_defaults_required=True)
 
     forum: Url | None = None
     pdf: Url | None = None
@@ -172,7 +183,7 @@ def content_hash(*, title: str, abstract: str | None, venue: str, year: int, tra
 
 
 class PaperRecord(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", json_schema_serialization_defaults_required=True)
 
     id: str  # op:<venue lower-case>:<year>:<native>; never changes once a snapshot has shipped it
     title: StrictStr
@@ -232,6 +243,7 @@ class PaperRecord(BaseModel):
             raise ValueError(f"id {self.id!r} is not op:<venue>:<year>:<native>")
         if m.group(1) != self.venue.lower() or int(m.group(2)) != self.year:
             raise ValueError(f"id {self.id!r} disagrees with venue {self.venue} / year {self.year}")
+        venue_name(self.venue, self.year)  # a year the venue wasn't held: refused here, never mid-export
         native = m.group(3)
         form = _PROCEEDINGS_NATIVE.get(native.split("-", 1)[0])
         if form is not None:

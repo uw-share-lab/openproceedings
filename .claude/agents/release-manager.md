@@ -35,7 +35,7 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    records. Then atomically repoint `data/indexes/current` (`ln -sfn` to a temp link + `mv -T`), send
    SIGHUP to `api`, and check `/api/v1/meta` and `/healthz` report the new version. Rollback = repoint to
    the previous version and SIGHUP.
-5. **Retention.** Never delete an index or snapshot that any row in `data/records.sqlite` references;
+5. **Retention.** Never delete an index or snapshot that any row in `data/records/records.sqlite` references;
    list referenced versions before pruning. `protect-data-dir.sh` blocks edits; deletion is a decision
    record.
 6. **Record** a decision for anything that changes defaults, tokenizer or sources, and a learnings entry

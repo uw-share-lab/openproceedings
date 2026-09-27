@@ -102,12 +102,26 @@ lights one span per occurrence; NEAR lights the operand occurrences that form a 
 AND lights its children, OR only the children that matched; NOT and filters light nothing. A node that
 doesn't match has no spans, so a branch that didn't match lights nothing. Overlapping spans merge. A LaTeX
 math command's span is its name without the backslash (`$\alpha$` lights `alpha`); markup that opens a word
-(an accent macro, `\-`, or a math `^`/`_`) is part of the word (`\"{O}del` and `$^2x$` light all of it; task-074). The highlighter's verdict
+(an accent macro, `\-`, or a math `^`/`_`) is part of the word (`\"{O}del` and `$^2x$` light all of it; task-074). Two tokens' spans overlap only on exactly one code point that folds
+to several pieces (`½`), never on a combining slash's marks (task-075). The highlighter's verdict
 is checked against ReferenceEngine on every fixture record for all 44 golden queries.
-Measured (task-027 review): a 50-hit page of ~400-word abstracts takes ~174 ms to highlight, almost all
-of it `tokenize`, over the 100 ms page budget; task-073 moves it inside (precomputed offsets or a cache,
-decided with the API's page assembly). A NEAR over a long field is a binary search per occurrence, never
-a check of every pair. A hit the highlighter doesn't match raises `EngineInternalError`.
+A NEAR over a long field is a binary search per occurrence, never a check of every pair. A hit the
+highlighter doesn't match raises `EngineInternalError`.
+
+Cost, as built (task-073): the task-027 review measured ~174 ms to highlight a 50-hit page of ~400-word
+abstracts, almost all of it `tokenize`, over the 100 ms page budget. A page now builds one `Highlighter` for
+its query (`search.run`), which works out each leaf's allowed tokens once; per hit, each field is tokenized
+once and only if some leaf reads it, and a leaf's occurrences come from a map of where each token stands.
+`tokenize` got two exact fast paths (a whole text that is ASCII with no `\` or `$`; an ASCII character with
+no mark after it), with no `TOKENIZER_VERSION` bump: both are pinned to a frozen copy of the old loop, and
+the highlighter to a frozen copy of the old one, span for span (`tests/unit/engine/test_highlight_speed.py`).
+Nothing is precomputed at build and nothing is cached across requests. Measured in
+`docs/results/2026-09-27-highlights.md`: highlighting a 50-hit page costs about 5–7× less (real local corpus,
+5k fixture, synthetic 80k), and a 50-hit search with its display records and highlights is inside the 100 ms
+budget at 80k (exclusion accounting keeps its own 300 ms budget). The `/search` endpoint as a whole (with
+exclusion accounting and facets) is too, in wall time, since its facets overlap the page: see §Performance
+budgets. It is a row of the `bench` workflow
+(`test_search_first_50_hits_with_highlights`) and a column of the 80k report.
 
 ## Exclusion accounting (guarantee 6, PRISMA)
 
@@ -181,6 +195,27 @@ as "current" and can load a pinned older version to replay a search record.
   exclusions is within budget, except `main-2-pop` (wildcard phrases) when cold: 10.1 s to search and 10.5 s
   for `match_ids` + exclusions, the exception above. Warm (the engine's verified-clause cache and compiled-
   query memo), its search is 27 ms p95 over 200 runs.
+- Measured, the `/search` endpoint (M3a review gate; `search.run(limit=50, facets=True, highlight=True)`,
+  synthetic 80k). A first page collects the text query twice: the page, and once without its top-level
+  filters for every facet and both exclusion buckets (task-086: counts per (venue, year, track, status) from
+  one nested terms aggregation, the rest in Python; memoised per base in `TantivyEngine.faceted`). Two
+  collections are the floor of an exact design (the page needs the effective query's own scores), so the
+  second runs on a worker thread, overlapping the first (M3a review gate round 2): `search.run` compiles the
+  effective tree in the request's thread (a cold verified clause takes its one verification slot there, and
+  the request keeps the ids it verified in its own `Scope`, so no later compile of it, the worker's
+  included, verifies a clause again however the memos are trimmed; the worker never verifies: round 3),
+  then starts the facet aggregation on a worker and collects, reads and highlights the page meanwhile
+  (Tantivy releases the GIL while collecting). The result is the sequential one, field for field
+  (`tests/unit/test_search_overlap.py`). **First page, wall p95 over 200 runs: 57–85 ms for every non-empty
+  Trust-Evals string, within budget** (`main-1` 84.5 ms, `main-3-sources` 76.8 ms; sequentially 76–116 ms,
+  interleaved in the same run); a later page 54–77 ms. CPU per request is unchanged, 74–109 ms: the overlap
+  saves wait, not work, so throughput under load is as before (`docs/results/2026-09-27-search-overlap.md`,
+  load 6–14). Where `main-1`'s first page goes (median CPU, task-088's breakdown): the page's collection
+  34 ms, the facet collection 37 ms (now overlapped), highlighting 50 hits 33 ms (the tokenizer's slow path:
+  the synthetic text is about half non-ASCII, real abstracts about a quarter), counting 3 ms, display 1 ms.
+  The remaining headroom work (a non-ASCII tokenizer fast path, a re-measure on the real corpus) is
+  task-088, in M4. `report_80k` reports both pages as wall p95 over 200 runs, and the first page's CPU per
+  request.
 
 ## Testing
 

@@ -7,24 +7,32 @@ description: The frontend TypeScript standard for openproceedings — strict tsc
 
 ## Compiler and lint
 - `tsconfig.json`: `"strict": true` plus `noUncheckedIndexedAccess`, `noImplicitOverride`,
-  `exactOptionalPropertyTypes` (verify at implementation time that the Next.js/shadcn setup tolerates the
-  last one; if not, record why in the PR).
-- `frontend/` is an **npm workspace** (M3); `make sync` runs `npm ci` there. Use npm, not another client.
+  `exactOptionalPropertyTypes`, `noFallthroughCasesInSwitch`. As built (TASK-039) Next 16 and the shadcn
+  helpers compile under all of them; keep them on.
+- `frontend/` is the member of the **npm workspace** rooted at the repo root (`package.json`,
+  `package-lock.json`, deps hoisted to `./node_modules`); `make sync` runs `npm ci --ignore-scripts` at the root. Use npm,
+  not another client, and never install inside `frontend/`.
 - `autofix.sh` (PostToolUse) runs `prettier --write` and `eslint --fix` on each edited frontend file (once
-  `frontend/node_modules` exists) and reports what remains; `make fmt` does the whole repo
+  the root `node_modules/` exists) and reports what remains; `make fmt` does the whole repo
   (`.claude/skills/autolint/SKILL.md`).
-- CI `lint` runs `make lint`: `prettier --check`, `eslint`, `tsc --noEmit`. Run `make lint` before
-  committing; `.githooks/pre-push` runs it too.
+- CI `lint` runs `make lint`: `prettier --check`, `eslint`, then `next typegen` (writes the route types
+  `PageProps`/`LayoutProps` into `.next/types`) and `tsc --noEmit`. Run `make lint` before committing;
+  `.githooks/pre-push` runs it too. CI `test` runs vitest and `npm run build` (the standalone server must exist).
+- ESLint: `eslint-config-next` core-web-vitals + typescript, plus `no-explicit-any` and
+  `ban-ts-comment` (only `@ts-expect-error` with a description) as errors (`frontend/eslint.config.mjs`).
 - No `any`. `unknown` + a narrowing function at trust boundaries. No `as` casts on API data; no non-null
   `!` on values that can be absent in a response.
 - No `// @ts-ignore`; `// @ts-expect-error <reason>` only in tests.
 
 ## API types are generated — never hand-written
 - Source of truth: the pydantic v2 models in `backend/src/openproceedings/api/` → OpenAPI →
-  `frontend/src/api/schema.ts` via codegen (spec 04 §Conventions). Regenerate with the project script
-  (verify the exact command at implementation time, e.g. `npm run gen:api`) after any backend model change,
-  and commit the result in the same PR.
-- CI `test` fails if `schema.ts` is stale. Don't edit it by hand to make CI pass.
+  `frontend/src/api/schema.ts` via codegen (spec 04 §Conventions). Regenerate with **`make openapi`**
+  (the backend snapshot `backend/tests/contract/openapi.json`, then `npm run gen:api`, `openapi-typescript`)
+  after any backend model change, and commit both files in the same PR.
+- CI `test` fails if `schema.ts` is stale. Don't edit it by hand to make CI pass. It is excluded from
+  prettier and eslint, and checked by `tsc`.
+- Call the API through `src/api/client.ts` (`openapi-fetch` typed by `paths`): no hand-written `fetch`
+  plus `as` cast; derive names from `Schemas["SearchResponse"]` (`client.ts` re-exports `components["schemas"]`).
 - Derive component prop types from the generated ones (`Pick<components["schemas"]["SearchResponse"],
   "total" | "excluded">`), never parallel interfaces like `interface Hit { title: string }`. A hand-written
   API type is a Must in review — it is how the two sides drift.

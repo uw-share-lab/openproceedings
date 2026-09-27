@@ -1,6 +1,6 @@
 ---
 name: ris-format
-description: The openproceedings RIS export standard — the spec 04 field mapping, the Covidence-safe choices (one AU per line, full single-line AB, T2 venue string, N1 provenance line, UTF-8), what scholarmend's RIS parser (`scholarmend.parse.parse_ris`, pinned from PyPI) tolerates and silently drops, the known Covidence import behaviours, and the round-trip test. Use when writing or reviewing backend/src/openproceedings/api/exporters/ RIS code, `op export --format ris`, or an RIS fixture.
+description: The openproceedings RIS export standard — the spec 04 field mapping, the Covidence-safe choices (one AU per line, full single-line AB, T2 venue string, N1 provenance line, UTF-8), what scholarmend's RIS parser (`scholarmend.parse.parse_ris`, pinned from PyPI) tolerates and silently drops, the known Covidence import behaviours, and the round-trip test. Use when writing or reviewing backend/src/openproceedings/export.py RIS code, `op export --format ris`, or an RIS fixture.
 ---
 
 # RIS export (spec 04 §Exports)
@@ -16,17 +16,17 @@ fixtures. The reference parser strips values, so it reads either ending.
 ## Field mapping
 | Tag | Value | Notes |
 |---|---|---|
-| `TY` | `CPAPER` for proceedings papers | Spec allows `JOUR`/`CPAPER`. Confirm what Covidence shows for `CPAPER` in the hand-imported fixture. |
+| `TY` | `CPAPER` for every record | Chosen over `JOUR` (spec 04 §Exports, task-004): Zotero imports it as `conferencePaper` with `T2` as `conferenceName`, EndNote as *Conference Paper*. EndNote's default duplicate check stays within one reference type, so another database's `JOUR`/`CONF` copy of a paper is only caught with Reference Type unticked. The Covidence hand import is `docs/results/2026-09-27-covidence-check.md` (**pending**). |
 | `TI` | full title | One line. No trailing period added. |
 | `AU` | one author per line, `Last, First` | Full names from the record. Never initials only, never an `...` sentinel line. |
-| `PY` | year | The file known to import cleanly (Trust-Evals `mended.ris`) used `2025///`. Plain `2025` is also valid RIS. Pin one with the fixture. |
-| `T2` | venue string | e.g. `International Conference on Learning Representations (ICLR 2025)`. The NeurIPS and ICML strings are pinned from the venue table; verify the wording at implementation time. |
+| `PY` | year | The file known to import cleanly (Trust-Evals `mended.ris`) used `2025///`. Plain `2025` is also valid RIS. The writer writes plain `2025`; the Covidence check confirms it shows as the year. |
+| `T2` | venue string: `<conference name> (<acronym that year> <year>)` | `vocab.venue_name()` (also importable from `export`), table `vocab.CONFERENCES` (spec 04 §Exports cites the sources). `Conference on Neural Information Processing Systems (NIPS 2017)`, `… (NeurIPS 2018)` on; `International Conference on Learning Representations (ICLR 2025)`; `International Conference on Machine Learning (ICML 2023)`. One string per venue-year whatever the track or status. It is the conference's name, never a proceedings title, because workshop, rejected and ICLR papers are in no proceedings. A record for a year before the venue was held is refused at ingest (`PaperRecord`). |
 | `AB` | the **full** abstract on **one line** | Replace internal newlines with a space. Never truncate, never use `…`. |
-| `UR` | forum URL, then PDF URL | Two `UR` lines in that order. Skip an absent URL, never write an empty one. |
+| `UR` | forum URL, then PDF URL, then proceedings URL | Up to three `UR` lines in that order. Skip an absent URL, never write an empty one. |
 | `DO` | DOI, only if present | |
 | `ID` | the openproceedings paper `id` | So exports round-trip (spec 04 §Exports). Exactly one line. |
-| `KW` | `track` value (`main`, `datasets_benchmarks`, …) | From `.claude/skills/track-taxonomy/SKILL.md`. |
-| `N1` | `openproceedings <index_version> · query <canonical_hash> · <UTC date>` | Exactly one provenance line. `·` is U+00B7. The date is `YYYY-MM-DD` UTC. |
+| `KW` | two lines: the `track` value (`main`, `datasets_benchmarks`, …), then `status:<status>` | Track from `.claude/skills/track-taxonomy/SKILL.md`. The status line is meant to show a Covidence screener that a paper was rejected or withdrawn, since `T2` names the conference it was submitted to (spec 04 §Exports). Whether Covidence shows `KW` to screeners is **pending the hand check** (`docs/results/2026-09-27-covidence-check.md`); the first `N1` sentence carries the status too. |
+| `N1` | for a paper not `accepted`, first `Submitted to <venue string>; status: <status in words> (not in its proceedings).` (`unknown`: "not known to be in its proceedings"); then, on every record, `openproceedings <index_version> · query <canonical_hash> · exported <UTC date>`, plus ` · record <record_id> · searched <UTC date>` when the export is pinned by a search record | Exactly one provenance line, always the last `N1`. `·` is U+00B7. Dates are `YYYY-MM-DD` UTC. The status sentence is what a screener reads in Notes; `TY` stays `CPAPER` and `T2` the venue string whatever the status (spec 04 §Exports). |
 | `ER` | empty | |
 
 **Id carrier:** the round-trip test reads the openproceedings `id` back from the `ID` tag, for every
@@ -61,4 +61,7 @@ choice parses. Match the known-good file unless the Covidence fixture shows othe
 5. no value contains `\n`, `…` or `\r`.
 Freeze the clock so the `N1` date is fixed and the file can be byte-compared to a golden fixture.
 Cover records with no abstract, no DOI, no PDF URL, a non-ASCII author and a title with LaTeX. One
-fixture is also imported into Covidence by hand, and the result is recorded in `docs/results/`.
+fixture is also imported into Covidence by hand: `docs/results/2026-09-27-covidence-fixture.ris`, with the
+checklist and results in `docs/results/2026-09-27-covidence-check.md` (pending, task-004 AC#1).
+`backend/tests/unit/test_covidence_fixture.py` pins that file byte for byte to the writer, so a writer change
+fails it, and the hand import has to be redone before the fixture is regenerated.

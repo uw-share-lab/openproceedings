@@ -62,3 +62,54 @@ Implement the token contract with a raw↔normalized offset map for highlights, 
   As built, marks are folded only on Latin, Greek, Cyrillic, Hebrew and Arabic bases, so
   `normalize("विश्वास") == ["विश्वास"]` (spec 02 §Token semantics).
 - The artifacts line's "132 rows" is out of date: `test_tokens.py` has 176 golden rows.
+
+## Addendum 2026-09-27 (task-075, spans inside a combining-slash cluster)
+- **The span invariant is now stricter than "starts never go backwards":** two spans overlap only on
+  exactly one code point that NFKC folds to several pieces (`½` → `1`, `2`). The overlap property
+  (`test_token_spans_are_valid_and_never_overlap`) asserts exactly that, plus monotone starts.
+- **Root cause:** a U+0338 cluster is NFKC'd whole (so `∈` + slash is `∉`), and every piece got the whole
+  cluster's span, so `x½` + U+0338 + `y` gave `x1` (0,3) and `2y` (1,4). Now `_cluster_spans` gives pieces before the
+  last starter of the character's own NFKC form the character's span only.
+- **Differential against the previous tokenizer, not just the property, found two more cases.** A 300k-text
+  run (1,237 multi-piece code points × slash, U+0345 and other marks) found that U+0345 folds to the
+  letter `ι`: it is the only combining mark that folds to a non-mark (checked over every code point), and
+  the only one with class 240. After an operator it starts its own word, so it now starts at its own mark.
+  The run also found that accent markup before `∭` was given to the `ι` word after three `int`s, so a start
+  went backwards. Markup now belongs to a character's first piece only. Evidence: token texts and op flags
+  identical over 300k texts; 69,876 ends moved earlier (only off combining marks); 17,211 starts moved
+  later (16,397 iota, 814 markup); zero overlaps left.
+- **The property alone misses two of the three mutants.** Without `@example`s, the 2,000-example `ci`
+  profile catches only the pre-fix mutant. So each case is also an `@example` and a golden span row.
+
+## Correction 2026-09-27 (task-075 exactness review, REQUEST CHANGES)
+- **Offsets are not display-only.** The task-075 notes, final summary and commit 3271667 said token offsets
+  reach only highlights and diagnostic spans. That was wrong. The lexer's detached-wildcard check read
+  `toks[-1].end < len(stem)`, so shorter per-piece ends turned `abcd⒈` + U+0338 + `*` (accepted as
+  `abcd1*` at a408b03) and `abcd⑴` + U+0338 + `*` into PARSE_WILDCARD_DETACHED errors. That is a change to
+  which queries parse, and the "tokens unchanged" differential couldn't see it. The completed task-075
+  file can't be edited by the CLI, so it keeps the wrong claim; this entry is the correction.
+- **Fix:** `Token.reach` (not part of equality) is a408b03's `end` exactly: the end of the whole characters
+  a token took a piece from. The lexer reads `reach`, and `end` is for highlights only. Evidence: over 300k
+  texts `reach` equals a408b03's `end` for every token. A 60,000-query parse differential (multi-piece
+  NFKC/casefold code points, U+0338, U+0345, `*`/`?`/`$`, `$…$`, phrases, operators, fields; native and
+  Scholar, 120,000 parses) against a408b03 gave 0 differences in ok/error, canonical, canonical_hash,
+  error and warning codes, diagnostic spans and messages; before the fix it gave 1,489 acceptance
+  changes. Parse-tree node spans still differ (11,341 native trees, spans only), as intended: they are
+  token positions for the UI.
+- **Lesson:** when offsets change, a differential of token texts is not enough. Audit every consumer of
+  `.start`/`.end` (grep `tokenize(` and `.end` in `query/` and `engine/`), and run a parse differential
+  (ok, canonical, hash, codes) against the previous tree.
+- **The markup rule moves spans outside slash clusters too.** "Markup before a character belongs to its
+  first piece only" applies to every multi-piece character: `\"⑴` gave `1` (0,3) before and gives (2,3)
+  now, since `(` is a separator piece. Spans only.
+- **One documented exception:** in a slash cluster, the pieces before the first raw U+0345 end at it even if
+  a later mark belongs to them (`=` + U+0345 + U+0338: `neq` spans `=` only). Contiguous spans can't split
+  interleaved marks.
+
+## Addendum — 2026-09-27 (M3a gate; decision-008, QUERY_VERSION 2)
+- **"The lexer reads `reach`" above is no longer true.** decision-008 judges wildcard detachment on the
+  stem's **folded** pieces (`normalize.tokenize_with_tail`), not on any raw offset, so `abcd⒈*` (`1.`) and
+  `abcd⑴*` (`(1)`) are now `PARSE_WILDCARD_DETACHED` like `abcd1.*`: a deliberate change to which queries
+  parse, hence `QUERY_VERSION` "2". `Token.reach` was then retired (M3a gate round 2): nothing that
+  decides what parses reads it (`query/normalize.py` comment, spec 02, `query-grammar` and `token-contract`
+  skills). The lesson above still holds: audit every consumer of an offset before changing it.

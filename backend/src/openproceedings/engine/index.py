@@ -16,11 +16,13 @@ in it.) A version that already exists is verified and reported, never rebuilt.
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 import logging
 import multiprocessing
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -39,6 +41,7 @@ import tantivy
 from openproceedings import storage
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import DISPLAY, iter_records
+from openproceedings.logs import elapsed_ms
 from openproceedings.query.normalize import TOKENIZER_VERSION, normalize
 from openproceedings.vocab import TEXT_FIELDS
 
@@ -66,12 +69,21 @@ RANKING_PARAMS: dict[str, Any] = {
     },
 }
 MANIFEST = "manifest.json"
+# an index directory's name: its index_version (hex; `-` allowed for hand-named copies). The one pattern the
+# API's index selection, a pinned version, `/export?index_version=` and a record's replay all check
+VERSION_NAME = re.compile(r"[0-9a-f][0-9a-f-]{0,63}")
 IDS = "ids.txt"  # every record id in id order, one per line: `ord` indexes it
 _LOCKS = (".tantivy-meta.lock", ".tantivy-writer.lock")
 
 
 class IndexBuildError(Exception):
-    """An index build or check refused: the message says why (never record text)."""
+    """An index build or check refused: the message says why (never record text). `reason` is a constant a
+    log line can carry instead (the message names paths): `unreadable`, `manifest_changed`,
+    `files_mismatch`, `doc_count_mismatch` from `verify_index`; `invalid` otherwise."""
+
+    def __init__(self, message: str, *, reason: str = "invalid") -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -217,13 +229,23 @@ def verify_index(path: Path) -> dict[str, Any]:
             manifest["ranking_params"],
         )  # fmt: skip
     except (OSError, ValueError, KeyError, TypeError) as e:
-        raise IndexBuildError(f"{path.name} is not an index ({type(e).__name__})") from None
+        raise IndexBuildError(
+            f"{path.name} is not an index ({type(e).__name__})", reason="unreadable"
+        ) from None
     if not recomputed == manifest.get("index_version") == path.resolve().name:  # `current` is a symlink
-        raise IndexBuildError(f"{path.name}: its manifest's inputs don't give its index_version (changed)")
+        raise IndexBuildError(
+            f"{path.name}: its manifest's inputs don't give its index_version (changed)",
+            reason="manifest_changed",
+        )
     if _file_hashes(path) != manifest.get("files"):
-        raise IndexBuildError(f"{path.name}: its files don't match its manifest (changed or incomplete)")
+        raise IndexBuildError(
+            f"{path.name}: its files don't match its manifest (changed or incomplete)",
+            reason="files_mismatch",
+        )
     if open_index(path).searcher().num_docs != manifest.get("doc_count"):
-        raise IndexBuildError(f"{path.name}: the document count doesn't match its manifest")
+        raise IndexBuildError(
+            f"{path.name}: the document count doesn't match its manifest", reason="doc_count_mismatch"
+        )
     return manifest
 
 
@@ -322,9 +344,25 @@ def _add_all(
         if added % PROGRESS_EVERY == 0:  # a long build says it's alive (logging-standards: at most every 10k)
             log.info(
                 "index_build_progress",
-                extra={"docs": added, "ms": round((time.perf_counter() - started) * 1000)},
+                extra={"docs": added, "ms": elapsed_ms(started)},
             )
     return added
+
+
+def _release(writer: Any) -> None:
+    """Stop a failed build's writer before its directory is removed: roll back what it added, wait for its
+    merge threads, which drops Tantivy's writer and its directory lock. Left alive (the failing frame's
+    traceback holds it), Tantivy could write `.tantivy-meta.lock` again after `rmtree` had walked the
+    directory, and the `.tmp-*` would survive the build (M3a review gate round 2: 9 leaks in 320 failed
+    builds). Best effort: the build's own error is the one raised."""
+    if writer is None:
+        return
+    for step in (writer.rollback, writer.wait_merging_threads):
+        try:
+            step()
+        except Exception:  # already failing: the directory is removed either way
+            log.debug("index_build_release_failed", extra={"step": step.__name__})
+    gc.collect()  # anything else the failure left holding the index's files
 
 
 def build_index(
@@ -356,6 +394,8 @@ def build_index(
             return IndexBuildResult(target, version_id, created=False)
         log.info("index_build_started", extra={"index_version": version_id, "snapshot_hash": snapshot_hash})
         tmp = Path(tempfile.mkdtemp(dir=indexes, prefix=storage.TMP))
+        index: tantivy.Index | None = None
+        writer: Any = None
         try:
             index = tantivy.Index(schema(), path=str(tmp))
             exact = analyzer()
@@ -398,11 +438,15 @@ def build_index(
             except IndexBuildError as e:
                 raise IndexBuildError(f"{e}; the placed index is broken: retire it and build again") from None
         finally:
-            if tmp.exists():
+            if tmp.exists():  # the build failed before placing it
+                _release(writer)
+                index = writer = None
                 storage.writable(tmp)
                 shutil.rmtree(tmp, ignore_errors=True)
+                if tmp.exists():  # the next build's sweep removes it; say so rather than hide it
+                    log.warning("index_build_tmp_left", extra={"index_version": version_id, "path": tmp.name})
     log.info(
         "index_built",
-        extra={"index_version": version_id, "docs": manifest["doc_count"], "ms": manifest["build_ms"]},
+        extra={"index_version": version_id, "docs": manifest["doc_count"], "ms": float(manifest["build_ms"])},
     )
     return IndexBuildResult(target, version_id, created=True)

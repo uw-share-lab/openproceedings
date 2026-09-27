@@ -214,6 +214,24 @@ def short_hash(e: Entries) -> None:
 PROC = "https://proceedings.{}.cc/paper_files/paper/{}/hash/{}-Abstract-Conference.html"
 
 
+def listing_year(year: str, host: str | None = None) -> Callable[[Entries], None]:
+    """Entry 0's proceedings listing (NeurIPS 2025) moved to `year` (URL and claim agree), optionally to
+    another proceedings host (`proceedings.iclr.cc`, with the venue claims to match)."""
+
+    def edit(e: Entries) -> None:
+        for c in e[0]["claims"]:
+            if c["source"] in ("proceedings_url", "proceedings_page"):
+                c["evidence"] = c["evidence"].replace("/2025/", f"/{year}/")
+                if host is not None:
+                    c["evidence"] = c["evidence"].replace("proceedings.neurips.cc", host)
+                if c["field"] == "year":
+                    c["value"] = year
+                if c["field"] == "venue" and host is not None:
+                    c["value"] = "ICLR"
+
+    return edit
+
+
 @pytest.mark.parametrize(
     ("why", "edit", "reason"),
     [
@@ -244,6 +262,10 @@ PROC = "https://proceedings.{}.cc/paper_files/paper/{}/hash/{}-Abstract-Conferen
             "ambiguous",
         ),
         ("a short proceedings hash", short_hash, "unresolved"),
+        # the URL pattern takes any 4-digit year; one before the venue was held is skipped, not fatal
+        ("a NeurIPS listing year before 1987", listing_year("1986"), "unresolved"),
+        ("an ICLR listing year before 2013", listing_year("2012", "proceedings.iclr.cc"), "unresolved"),
+        ("a listing year past 2099", listing_year("9999"), "unresolved"),
         ("an unparseable PMLR URL", pmlr_urls("https://proceedings.mlr.press/v202/"), "unresolved"),
         ("a venueid of another conference", set_venueid("AAAI.org/2025/Workshop/X"), "out_of_scope"),
         ("a malformed in-scope venueid", set_venueid("ICML.cc/2026//X"), "unresolved"),

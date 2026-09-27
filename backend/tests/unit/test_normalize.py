@@ -5,10 +5,18 @@ import unicodedata
 from itertools import pairwise
 
 import pytest
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 from openproceedings.query.mathsyms import GREEK, LETTER_LOOKALIKES, OPERATOR_COMMANDS, OPERATORS
-from openproceedings.query.normalize import TOKENIZER_VERSION, Token, normalize, tokenize
+from openproceedings.query.normalize import (
+    TOKENIZER_VERSION,
+    Tail,
+    Token,
+    _tokenize_each_char,
+    normalize,
+    tokenize,
+    tokenize_with_tail,
+)
 
 # Text without LaTeX syntax: the whole-string reference below doesn't model LaTeX.
 PLAIN = st.text(alphabet=st.characters(blacklist_characters="\\$", blacklist_categories=("Cs",)), max_size=60)
@@ -284,8 +292,45 @@ def test_leading_accent_markup_is_in_the_word_span(text: str, spans: list[tuple[
     assert [(t.start, t.end) for t in tokenize(text)] == spans
 
 
+# A slash cluster (task-075): a character, then combining marks including U+0338 (SL below), folded whole.
+# Each piece spans the raw characters it came from, so two tokens share at most one multi-piece code point.
+@pytest.mark.parametrize(
+    ("text", "spans"),
+    [
+        ("x\u00bd\u0338y", [(0, 2), (1, 4)]),  # x 1/2 SL y -> x1, 2y: they share the 1/2 and only it
+        ("x\u00bdy", [(0, 2), (1, 3)]),  # no slash: unchanged
+        ("x\u00bd\u0338", [(0, 2), (1, 3)]),  # the last piece's token covers the slash
+        ("x\u2474\u0338y", [(0, 1), (1, 2), (3, 4)]),  # parenthesized 1 is `(1)`; SL is on `)`, not on 1
+        ("x\u222c\u0338y", [(0, 1), (1, 2), (1, 3), (3, 4)]),  # double integral SL -> int, int
+        ("\u01c6\u0338", [(0, 2)]),  # dz digraph SL -> dz: one word, the whole cluster
+        ("a \u2208\u0338 b", [(0, 1), (2, 4), (5, 6)]),  # element-of SL composes to notin: the whole cluster
+        # U+0345 (ypogegrammeni) folds to the letter iota: after a piece that isn't a letter it starts a word
+        # at its own mark, and the pieces before it end there
+        ("=\u0338\u0345x", [(0, 2), (2, 4)]),  # neq, iota x
+        ("\u2a76\u0338\u0345x", [(0, 2), (2, 4)]),  # `===` SL -> `==` neq iota: found by a 300k differential
+        # Trade-off: marks in the other order. The slash belongs to neq, but neq ends at the first U+0345
+        # and the slash falls in iota's span: contiguous spans can't split interleaved marks, so the one
+        # exception is "pieces before the first U+0345 end at it" (spec 02), and nothing overlaps
+        ("=\u0345\u0338", [(0, 1), (1, 3)]),
+        ("\u2208\u0338\u0345", [(0, 2), (2, 3)]),  # notin, iota
+        (
+            "\u03b1\u0338\u0345",
+            [(0, 3)],
+        ),  # after a letter, iota joins its word (alpha iota): the whole cluster
+        # accent markup before a character belongs to its first piece: a word after an operator or separator
+        # piece starts at its own piece, never back at the markup (starts would go backwards)
+        ('\\"\u222d\u0338\u0345', [(2, 3), (2, 3), (2, 4), (4, 5)]),  # triple integral SL iota: int x3, iota
+        ('\\"\u2474', [(2, 3)]),  # parenthesized 1: `(` is a separator piece, so 1 doesn't take the markup
+        ('\\"\u00bd', [(0, 3), (2, 3)]),  # 1/2: 1 is the first piece and takes it; 2 shares the 1/2
+    ],
+)
+def test_slash_cluster_pieces_span_what_they_came_from(text: str, spans: list[tuple[int, int]]) -> None:
+    assert [(t.start, t.end) for t in tokenize(text)] == spans
+
+
 LATEX_PIECES = ["$", "\\(", "\\)", " ", "a", "O", "5", "{", "}", "^", "_", '\\"', "\\'", "\\v", "\\H", "\\-",
-                "\\leq", "\\times", "\\alpha", "\\not", "=", "\\in", "\u0301", "\u200b", "中", "é", "-"]  # fmt: skip
+                "\\leq", "\\times", "\\alpha", "\\not", "=", "\\in", "\u0301", "\u200b", "中", "é", "-",
+                "\u00bd", "\u2474", "\u0338", "\u0345"]  # fmt: skip
 
 
 @given(
@@ -293,12 +338,112 @@ LATEX_PIECES = ["$", "\\(", "\\)", " ", "a", "O", "5", "{", "}", "^", "_", '\\"'
     .map("".join)
     .flatmap(lambda t: st.sampled_from([t, f"${t}$"]))
 )
+@example("a\u00bd\u0338a")  # task-075: `a1` and `2a` overlapped on the 1/2 and the slash
+@example("=\u0338\u0345")  # task-075: neq and the iota word both spanned the whole cluster
+@example('\\"\u222d\u0338\u0345')  # task-075: the iota word took the markup's start, before the ints'
 def test_token_spans_are_valid_and_never_overlap(text: str) -> None:
     tokens = tokenize(text)
     for t in tokens:
         assert 0 <= t.start < t.end <= len(text), (text, t)
     for a, b in pairwise(tokens):
-        # pieces of one non-ASCII code point that folds to several share its span; the alphabet has no such
-        # point or combining-slash cluster, so here nothing overlaps (a pre-existing cluster case is out of scope)
-        shared = b.start < a.end and a.end - b.start <= 1 and not text[b.start : a.end].isascii()
-        assert b.start >= a.end or shared, (text, a, b)
+        assert a.start <= b.start, (text, a, b)
+        # Two spans overlap only on one code point that NFKC folds to several pieces (`½` → 1, 2), each piece's
+        # token covering it; the marks of a slash cluster belong to the pieces they fold into (task-075)
+        if b.start < a.end:
+            shared = text[b.start : a.end]
+            assert len(shared) == 1 and len(unicodedata.normalize("NFKC", shared)) > 1, (text, a, b)
+
+
+def full(tokens: list[Token]) -> list[tuple[str, int, int, bool]]:
+    """Everything a token carries."""
+    return [(t.text, t.start, t.end, t.op) for t in tokens]
+
+
+# --- the Tail: what a text ends with after its last word or operator piece (the lexer's detached-wildcard
+# test, spec 02 "directly after a letter or digit", judged on the folded pieces; decision-008) ---------------
+@pytest.mark.parametrize(
+    ("text", "start", "pieces"),
+    [
+        ("abcd⒈", 4, "."),  # `1.`: the `1` joins the word, the `.` is the tail
+        ("abcd⒈̸", 4, "."),  # the slash on the `.` folds away
+        ("abcd⑴", 4, ")"),  # `(1)`
+        ("abcd½", 5, ""),  # `1⁄2`: ends on `2`
+        ("abcd≠ͅ", 6, ""),  # neq, then iota: a letter
+        ("abc×", 4, ""),  # ends on an operator piece (the lexer's own message covers it)
+        ("vision-", 6, "-"),
+        ("abc．", 3, "."),  # full-width full stop
+        ("abc\\%", 3, "\\%"),  # LaTeX separators are pieces
+        ("bench\\-", 7, ""),  # markup that joins the word is not
+        ("abcé", 5, ""),  # nor is a mark that folds away
+        ("abc⁡", 3, " "),  # an invisible math operator separates
+        ("", 0, ""),
+        ("...", 0, "..."),
+    ],
+    ids=ascii,
+)
+def test_tail_is_the_folded_pieces_after_the_last_word(text: str, start: int, pieces: str) -> None:
+    tokens, tail = tokenize_with_tail(text)
+    assert tail == Tail(start, pieces)
+    assert full(tokens) == full(tokenize(text))
+
+
+@given(
+    st.one_of(
+        PLAIN,
+        st.lists(st.sampled_from([*LATEX_PIECES, "⒈", "⑴", "½", "×", "."]), max_size=12).map("".join),
+    )
+)
+@example("abcd⒈̸")
+@example("abcd⑴")
+def test_tail_says_whether_a_letter_after_the_text_joins_its_last_word(text: str) -> None:
+    """Independent of how the tail is tracked: a letter written after a text with a tail is a word of its
+    own; after a text that ends on a word piece it extends that word."""
+    tokens, tail = tokenize_with_tail(text)
+    assert full(tokens) == full(tokenize(text))
+    assert 0 <= tail.start <= len(text) and (tail.pieces or tail.start == len(text))
+    if "$" in text or "\\" in text:
+        return  # an appended letter can change what LaTeX means (`\cmd` + x, a math closer before x)
+    after = normalize(text + "x")
+    if tail.pieces or not tokens or tokens[-1].op:
+        assert after == [t.text for t in tokens] + ["x"], (text, tail)
+    else:
+        assert after == [t.text for t in tokens[:-1]] + [tokens[-1].text + "x"], (text, tail)
+
+
+_MARKS_AND_FORMATS = [
+    chr(c)
+    for c in range(0x80, 0x30000)
+    if unicodedata.category(chr(c)) in ("Mn", "Mc", "Me", "Cf", "Lm", "Sk")
+]
+
+
+@pytest.mark.parametrize("sep", ["-", ".", "/"])
+def test_a_mark_that_makes_no_word_keeps_the_separator_in_the_tail(sep: str) -> None:
+    """M3a gate round 2 (exactness-guardian): a vowel sign after a separator folds to a word piece, but a
+    marks-only word is dropped, so the separator is still what the text ends with. Every mark, format
+    character, modifier letter and modifier symbol after each separator: when no token starts after the
+    separator, the tail keeps it."""
+    wrong = []
+    for c in _MARKS_AND_FORMATS:
+        text = f"abcd{sep}{c}"
+        tokens, tail = tokenize_with_tail(text)
+        if all(t.start < 5 for t in tokens) and not tail.pieces.startswith(sep):
+            wrong.append((c, tail))
+    assert wrong == []
+
+
+# --- task-073's fast paths (the whole-text ASCII path in `tokenize`, the ASCII branch of the loop) rely on
+# no ASCII character folding to an operator or a letter look-alike (exactness-guardian, M3a gate) -------------
+def test_no_operator_or_letter_lookalike_is_ascii() -> None:
+    assert [c for c in OPERATORS if any(ch.isascii() for ch in c)] == []
+    assert [c for c in LETTER_LOOKALIKES if any(ch.isascii() for ch in c)] == []
+
+
+@pytest.mark.parametrize(
+    "text", [chr(c) for c in range(128)] + [f"a{chr(c)}b" for c in range(128)], ids=ascii
+)
+def test_every_ascii_character_tokenizes_the_same_on_the_fast_paths(text: str) -> None:
+    assert full(tokenize(text)) == full(_tokenize_each_char(text))
+    slow: list[Tail] = []
+    _tokenize_each_char(text, slow)
+    assert [tokenize_with_tail(text)[1]] == slow

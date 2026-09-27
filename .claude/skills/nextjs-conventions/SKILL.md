@@ -13,14 +13,18 @@ description: The openproceedings Next.js standard — App Router layout, output 
 2. **Generated types only.** `frontend/src/api/schema.ts` is generated from the FastAPI OpenAPI schema
    (spec 04 §Conventions); CI fails if it is stale. Never hand-write a response type, never widen one with
    `as`, never add an optional field the schema lacks. Contract change → backend PR first
-   (`api-engineer`), then regenerate. The codegen tool and script are pinned in `frontend/package.json`
-   (verify at implementation time which one; do not add a second).
+   (`api-engineer`), then regenerate with `make openapi` (the backend snapshot, then `npm run gen:api`:
+   `openapi-typescript` 7.13.0, pinned in `frontend/package.json`; do not add a second codegen tool).
+   Fetch through `src/api/client.ts` only: `createApi()` is `openapi-fetch` typed by the generated
+   `paths`, `cache: "no-store"`, base URL `NEXT_PUBLIC_API_BASE_URL` (default "" = same origin); it returns
+   `{data, error}`, where `error` is the typed `ErrorEnvelope` for every non-2xx (a 422 included).
+   `hitHighlightsUtf16(hit)` converts a hit's highlight spans with `spans.ts`.
 3. **The server decides membership, counts, highlights and parsing.** The client never tokenizes, never
    re-matches terms to draw highlights, never filters/sorts/dedups `hits`, never computes a count. A
    second tokenizer in TypeScript is a guarantee-1 bug (`token-contract`). Highlights are slices of the
    string at the API's `highlights` spans, nothing more.
 
-## Layout (proposed; keep it once built)
+## Layout (skeleton built in TASK-039: app routes, `src/lib/search-state.ts`, `src/api/spans.ts`; `src/api/schema.ts` and `client.ts` in TASK-040; the rest arrives with its task)
 | Path | Kind |
 |---|---|
 | `src/app/page.tsx` (`/`), `search/page.tsx` | server shell; the `/search` workspace is a client component |
@@ -43,7 +47,35 @@ description: The openproceedings Next.js standard — App Router layout, output 
   implementation time that `/parse` returns clause spans; if not, get them added server-side — do not
   re-parse filters on the client.
 - Tests pin exact strings: `facetToggle(track=workshop)` on input X yields exactly string Y.
+- **As built (TASK-039, `src/lib/search-state.ts`):** `SearchState = {q, mode, sort, page}` and nothing
+  else; `resultSetKey` is `[q, mode]`; `toSearchRequest` derives the API's `offset`/`limit` from `page`
+  (`PAGE_SIZE` 50, `MAX_PAGE` 10,000). `fromURL` returns `{state, notices}`: unknown, repeated and invalid
+  params (including a page over `MAX_PAGE`) are reported, never silently used. Actions: `submit`,
+  `builderEdit`, `setMode`, `facetToggle`, `includeExcluded`, `sort`, `page`. Filter actions take a
+  `FilterClause {field, negated: false, source, mode, span, values}` from `/parse` (code-point span into
+  `source`; zero-width at the end = applied default, written out as `(q) AND field:(…)`). They refuse a clause
+  whose `(source, mode)` differs from `resultSetKey`, one for another field, a negated one (adding a value
+  inside `-track:x` would flip it), and a wrap of a `q` ending in an odd run of backslashes (the escape would
+  swallow the `)`; goldens in `src/lib/wrap-golden.json`, checked by the backend parser in
+  `backend/tests/contract/test_frontend_wrap_golden.py`). Every refusal throws `SearchStateError` rather than
+  no-op, with a `code` (`STALE_CLAUSE`, `WRONG_FIELD`, `NEGATED_CLAUSE`, `NO_EDITABLE_CLAUSE` for
+  `clause: null`, `BAD_VALUE`, `LAST_VALUE`, `BAD_SPAN`, `EMPTY_QUERY`, `TRAILING_ESCAPE`, `TOO_LONG` past
+  `MAX_QUERY_LENGTH` = 2,000 code points, `ALREADY_INCLUDED`, `BAD_PAGE`) and a what — why. fix message.
+  Controls call `whyBlocked(state, action)` and render disabled with the reason instead of failing on
+  click. "Top-level" clause means top-level on the flattened canonical tree (spec 05 §URL is state).
+  `describeNotice`/`noticeText` word the URL notices from the same constants the reducer checks. Until
+  `/parse` reports per-field clause spans, `FilterClause` is a local type (TASK-078 adds the spans to
+  `/parse`; then it is derived from the schema).
 - The editor draft is not state until submitted; submitting `router.push`es. Paging uses `replace`.
+
+## Security headers
+`next.config.ts` `headers()` sends `src/lib/security-headers.ts` on every route: a static CSP
+(`'self'` everywhere, `'unsafe-inline'` for scripts and styles because the App Router's payload and the
+theme script are inline, the API origin in `connect-src` when `NEXT_PUBLIC_API_BASE_URL` is set,
+`frame-ancestors 'none'`, `'unsafe-eval'` only in dev), `nosniff`, `X-Frame-Options: DENY` and
+`Referrer-Policy: no-referrer`. The set is in spec 05 §Non-functional requirements and pinned by
+`security-headers.test.ts`. Since inline scripts run, never build HTML from strings: `react/no-danger` is an
+eslint error.
 
 ## TanStack Query
 Keys: `["meta"]` (long `staleTime`), `["parse", q, mode]`, `["search", q, mode, sort, page]`,
@@ -57,4 +89,12 @@ flash. A 422 is data, not an exception: render its `diagnostics` (spec 04 error 
   emoji) shift every later highlight.
 - Export links carry the same `q`/`mode`; compare `X-Total` and `index_version` with the shown search and
   warn on mismatch (index swapped between the two).
-- Next 15+ passes `searchParams` as a Promise to pages — check the pinned version.
+- Next 16 (pinned 16.3.6) passes `params`/`searchParams` as Promises; type pages with the generated
+  `PageProps<"/route">` / `LayoutProps<"/">` globals, which `next typegen` writes (`make lint` runs it
+  before `tsc`).
+- Dependencies are hoisted to the repo-root `node_modules`, so `next.config.ts` sets
+  `outputFileTracingRoot` and `turbopack.root` to the workspace root; the standalone server is
+  `.next/standalone/frontend/server.js` and needs `.next/static` copied beside it (`npm start` does this;
+  the Docker image in TASK-065 must too).
+- No `next/font/google`: it fetches at build time, and the image must build offline. System font stacks
+  are set in `globals.css`.

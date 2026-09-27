@@ -45,6 +45,7 @@ from openproceedings.ingest.classify import Classification, classify_proceedings
 from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Urls, is_url
 from openproceedings.ingest.urls import PREFIX, pmlr, proceedings, proceedings_parts
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
+from openproceedings.vocab import venue_name
 
 log = logging.getLogger(__name__)
 
@@ -127,6 +128,12 @@ def _listing(
         if len(sha) != 32 or len(years) != 1 or len(tracks) != 1:
             return "unresolved"
         year, track = int(years.pop()), tracks.pop()
+        if year >= 2100:  # the same ceiling as an OpenReview venueid's year (classify._YEARS)
+            return "unresolved"
+        try:  # the URL takes any 4-digit year; one before the venue was held would fail PaperRecord.build
+            venue_name(venue, year)  # and abort the file, so it skips this entry instead
+        except ValueError:
+            return "unresolved"
         claimed = classify_proceedings(track).track
         for c, _p in proc:  # the claim must agree with the address it cites: the URL's year and track token
             parts = proceedings_parts(c["evidence"])

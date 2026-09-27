@@ -26,8 +26,9 @@ import json
 import logging
 import re
 import sys
+import time
 import types
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from typing import IO
 
 ROOT = "openproceedings"
@@ -73,6 +74,12 @@ _STANDARD = frozenset(vars(logging.LogRecord("", 0, "", 0, "", None, None))) | {
 _context: contextvars.ContextVar[Mapping[str, object]] = contextvars.ContextVar(
     "op_log_context", default=types.MappingProxyType({})
 )
+
+
+def elapsed_ms(started: float, clock: Callable[[], float] = time.perf_counter) -> float:
+    """Milliseconds since `clock()` read `started`, to one decimal: the one form of every log line's `ms`
+    field (logging-standards)."""
+    return round((clock() - started) * 1000, 1)
 
 
 @contextlib.contextmanager
@@ -164,11 +171,29 @@ class _TextFormatter(_Formatter):
         )
 
 
+# The server's loggers (task-034). `uvicorn` (and `uvicorn.error` under it) goes through our handler, so its
+# lines are JSON too. `uvicorn.access` is switched off: the API's own `request` line replaces it, and its
+# line holds the full path with the query string, i.e. `q`. httpx/httpcore (and their httpx2 forks, the
+# test client's) log every request URL at INFO, so they are pinned to WARNING (and routed like uvicorn).
+SERVER_LOGGERS = ("uvicorn",)
+SERVER_CHILDREN = ("uvicorn.error",)  # no handler of their own: they reach ours through `uvicorn`
+SILENCED_LOGGERS = ("uvicorn.access",)
+QUIET_LOGGERS = ("httpx", "httpcore", "httpx2", "httpcore2")
+OURS = "_openproceedings_handler"  # marks the root handler configure_logging installed
+
+
 def configure_logging(
-    level: str = "INFO", fmt: str = "json", *, stream: IO[str] | None = None, log_query_text: bool = False
+    level: str = "INFO",
+    fmt: str = "json",
+    *,
+    stream: IO[str] | None = None,
+    log_query_text: bool = False,
+    route_server_loggers: bool = False,
 ) -> None:
     """Configure the `openproceedings` logger. Idempotent: closes and replaces any handler a previous call
-    installed. Library loggers (uvicorn, httpx) are routed by the API startup (task-034), not here."""
+    installed. `route_server_loggers` (the API's startup, `op serve`) also sends uvicorn's loggers through the
+    same handler, silences `uvicorn.access`, pins httpx/httpcore to WARNING (QUIET_LOGGERS above), and gives
+    the root logger a JSON handler at WARNING, so any other library's warning (asyncio, fastapi) is JSON too."""
     if level.upper() not in LEVELS:
         raise ValueError(f"unknown log level {level!r}; use one of {', '.join(LEVELS)}")
     formatters: dict[str, type[_Formatter]] = {"json": _JsonFormatter, "text": _TextFormatter}
@@ -183,3 +208,42 @@ def configure_logging(
     logger.addHandler(handler)
     logger.setLevel(level.upper())
     logger.propagate = False
+    if route_server_loggers:
+        for name in SERVER_LOGGERS:
+            server = logging.getLogger(name)
+            for h in list(server.handlers):
+                server.removeHandler(h)
+            server.addHandler(handler)
+            server.setLevel(level.upper())
+            server.propagate = False
+        for name in SERVER_CHILDREN:
+            child = logging.getLogger(name)
+            for h in list(child.handlers):
+                child.removeHandler(h)
+            child.setLevel(logging.NOTSET)
+            child.propagate = True
+        for name in SILENCED_LOGGERS:
+            silenced = logging.getLogger(name)
+            for h in list(silenced.handlers):
+                silenced.removeHandler(h)
+            silenced.propagate = False
+            silenced.disabled = True
+        # everything else that propagates to the root (asyncio, fastapi, starlette, …): WARNING and up, as JSON
+        root = logging.getLogger()
+        for h in list(root.handlers):
+            if getattr(h, OURS, False):  # a previous call's; other handlers (pytest's capture) are left alone
+                root.removeHandler(h)
+        rooted = logging.StreamHandler(stream if stream is not None else sys.stderr)
+        rooted.setFormatter(formatters[fmt](log_query_text))
+        rooted.setLevel(logging.WARNING)
+        setattr(rooted, OURS, True)
+        root.addHandler(rooted)
+        if root.level == logging.NOTSET or root.level > logging.WARNING:
+            root.setLevel(logging.WARNING)
+        for name in QUIET_LOGGERS:
+            quiet = logging.getLogger(name)
+            for h in list(quiet.handlers):
+                quiet.removeHandler(h)
+            quiet.addHandler(handler)
+            quiet.setLevel(logging.WARNING)
+            quiet.propagate = False

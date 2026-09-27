@@ -9,7 +9,7 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-from openproceedings.diagnostics import InternalError, OpenProceedingsError, UserInputError
+from openproceedings.diagnostics import Diagnostic, InternalError, OpenProceedingsError, UserInputError
 from openproceedings.query.ast import FILTER_FIELDS, Node, Wildcard
 
 
@@ -37,7 +37,11 @@ class EngineError(OpenProceedingsError):
 
 
 class EngineInputError(EngineError, UserInputError):
-    """An engine rejected the query or its arguments (e.g. more than MAX_EXPANSIONS expansions): a 4xx."""
+    """An engine rejected the query or its arguments (e.g. more than MAX_EXPANSIONS expansions): a 4xx.
+    `diagnostics` locate what was refused in `q` when the caller can (`search.run` fills it for an over-cap
+    wildcard); empty otherwise."""
+
+    diagnostics: tuple[Diagnostic, ...] = ()
 
 
 class EngineInternalError(EngineError, InternalError):

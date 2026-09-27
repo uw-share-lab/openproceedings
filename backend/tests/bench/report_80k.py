@@ -1,12 +1,15 @@
 """The ~80k-corpus benchmark report (spec 03 §Performance budgets; spec 07 §E; task-031). Run from
 `backend/`, on a quiet machine (other load inflates the timings):
 
-    uv run python -m tests.bench.report_80k
+    uv run python -m tests.bench.report_80k [OUT]
 
 It generates the synthetic corpus at 80,000 records with abstracts of realistic length (120-250 words; the
 same generator as the 5k differential corpus, so anyone can reproduce it), builds the index, and writes
-`docs/results/<date>-bench.md`: build time, size and peak memory; p95 of a 50-hit search and of `match_ids`
-with exclusion accounting for every Trust-Evals protocol string; the widest expansion under the cap and one
+`docs/results/<date>-bench.md` (or OUT): build time, size and peak memory; p95 of a 50-hit search, of the
+50-hit search with its highlights, and of `match_ids` with exclusion accounting for every Trust-Evals protocol
+string; the `/search` endpoint's whole work (facets and exclusions too), first and later pages, as wall-time
+p95 (the facet aggregation overlaps the page on a worker thread, so wall time is what a client waits) and
+the first page's CPU time per request (what bounds throughput); the widest expansion under the cap and one
 past it; and the position-verified cases spec 03 exempts (stopword NEAR, wildcard phrases), timed cold.
 A report, not a gate: regenerate it with this command, never edit it by hand.
 """
@@ -31,6 +34,7 @@ REPO = Path(__file__).resolve().parents[3]
 SIZE = 80_000
 ROUNDS = 40  # cold rounds (match_ids + exclusions): each clears every cache
 WARM_ROUNDS = 200  # warm searches are cheap, and a p95 over fewer swings with one slow round
+ENDPOINT_ROUNDS = 200  # `/search` pages, wall time: at least 100, so the p95 isn't the slowest round
 VERIFIED = [
     "the NEAR/5 the",
     '"the*" NEAR/5 model',
@@ -53,6 +57,20 @@ def timed(f: object, rounds: int = ROUNDS) -> list[float]:
         f()  # type: ignore[operator]
         out.append(time.perf_counter() - t)
     return out
+
+
+def cpu_timed(f: object, rounds: int = ROUNDS) -> list[float]:
+    """CPU time (this process, every thread) rather than wall time: other load on the machine barely moves it."""
+    out = []
+    for _ in range(rounds):
+        t = time.process_time()
+        f()  # type: ignore[operator]
+        out.append(time.process_time() - t)
+    return out
+
+
+def load(avg: tuple[float, float, float]) -> str:
+    return " / ".join(f"{x:.1f}" for x in avg)
 
 
 def ms(seconds: float) -> str:
@@ -94,7 +112,7 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
     from openproceedings.query.ast import Wildcard
     from openproceedings.query.parser import parse
 
-    from tests.bench.test_bench import widest_stem
+    from tests.bench.test_bench import search_endpoint, search_with_highlights, widest_stem
     from tests.golden.test_trust_evals import STRINGS
     from tests.unit.engine.test_exclusions import BUILT, DedupResult, as_paper, render
 
@@ -116,6 +134,7 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
     peak = rss if sys.platform == "darwin" else rss * 1024  # bytes on macOS, KiB on Linux
     size = sum(f.stat().st_size for f in built.rglob("*") if f.is_file())
     engine = TantivyEngine(built)
+    started_load = os.getloadavg()
 
     rows = []
     for name in STRINGS:
@@ -134,9 +153,23 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
         engine.expanded.clear()
         cold = timed(lambda ast=ast: engine.search(ast, limit=50), rounds=1)[0]  # type: ignore[misc]
         warm = p95(timed(lambda ast=ast: engine.search(ast, limit=50), WARM_ROUNDS))  # type: ignore[misc]
+        page = p95(timed(lambda ast=ast: search_with_highlights(engine, ast), WARM_ROUNDS))  # type: ignore[misc]
         exclusions = p95(timed(exclusion_run))
+
+        def first_page(result: object = result) -> None:
+            search_endpoint(engine, result)  # type: ignore[arg-type]
+
+        def later_page(result: object = result) -> None:
+            search_endpoint(engine, result, 50, first=False)  # type: ignore[arg-type]
+
+        first = p95(timed(first_page, ENDPOINT_ROUNDS))
+        later = p95(timed(later_page, ENDPOINT_ROUNDS))
+        cpu = cpu_timed(first_page, ENDPOINT_ROUNDS)
         total = engine.search(ast, limit=0).total
-        rows.append(f"| {name} | {total:,} | {ms(cold)} | {ms(warm)} | {ms(exclusions)} |")
+        rows.append(
+            f"| {name} | {total:,} | {ms(cold)} | {ms(warm)} | {ms(page)} | {ms(first)} | {ms(later)} "
+            f"| {ms(sum(cpu) / len(cpu))} | {ms(exclusions)} |"
+        )
 
     stem, n = widest_stem(engine)
     wide = Wildcard(span=(0, 0), stem=stem, op="*")
@@ -174,7 +207,8 @@ inflates the timings); never edit by hand. Budgets are
 spec 03 §Performance budgets. Position-verified clauses are exempt from the search and `match_ids` budgets
 when cold (spec 03), so they are reported, not gated.
 
-- Machine: {platform.platform()}, {platform.machine()}, {os.cpu_count()} CPUs; Python {platform.python_version()},
+- Machine: {platform.platform()}, {platform.machine()}, {os.cpu_count()} CPUs, load average {load(started_load)} at
+  the start and {load(os.getloadavg())} at the end (1, 5, 15 min); Python {platform.python_version()},
   tantivy {version("tantivy")}; commit `{commit}`; index `{built.name}`.
 - Corpus: `tests/fixtures/corpus/synthetic_5k.records({SIZE}, (120, 250))`, {len(corpus):,} records (generated in
   {generated:.1f} s): the differential corpus's generator with abstracts of 120-250 words.
@@ -188,12 +222,19 @@ when cold (spec 03), so they are reported, not gated.
 ## Trust-Evals protocol strings, Scholar mode (budgets: 100 ms, 300 ms)
 
 Cold is the first run after every cache is cleared (verified clauses, expansions, compiled queries); warm is the
-p95 of the {WARM_ROUNDS} runs after it, with the caches an engine keeps; the exclusions column is the p95 of
+p95 of the {WARM_ROUNDS} runs after it, with the caches an engine keeps; "with highlights" is the p95 of
+{WARM_ROUNDS} warm runs of the same search with its display records and every hit's highlights, as
+`search.run` assembles them (`test_bench.search_with_highlights`; no cache holds them; task-073); the two
+`/search` columns are the endpoint's whole engine work (`test_bench.search_endpoint`: `search.run` with facets,
+highlights and exclusion accounting; its facet aggregation on a worker thread, overlapping the page), p95 of
+{ENDPOINT_ROUNDS} runs in wall time: the first page with the facet memo forgotten each run, and a later page
+(offset 50) that reads it; then the first page's mean CPU time per request over {ENDPOINT_ROUNDS} more runs (all
+threads: the overlap saves wall time, not CPU); the exclusions column is the p95 of
 {ROUNDS} runs, each clearing every cache first. `main-2-pop` holds wildcard phrases (`model$`), which take the position-verified path spec 03 exempts, so
 its cold numbers are the exception's, not a budget miss (its warm headroom is task-076).
 
-| String | Matches | Search, first 50 hits: cold | Search: p95 warm | `match_ids` + exclusions: p95 cold |
-|---|---|---|---|---|
+| String | Matches | Search, first 50 hits: cold | Search: p95 warm | Search with highlights: p95 warm | `/search`, first page: p95 wall | `/search`, a later page: p95 wall | `/search`, first page: CPU per request | `match_ids` + exclusions: p95 cold |
+|---|---|---|---|---|---|---|---|---|
 {chr(10).join(rows)}
 
 ## Wildcard expansion (budget: 50 ms for up to 200 terms)
@@ -209,7 +250,7 @@ its cold numbers are the exception's, not a budget miss (its warm headroom is ta
 |---|---|---|
 {chr(10).join(verified)}
 """
-    out = REPO / "docs" / "results" / f"{today}-bench.md"
+    out = Path(sys.argv[1]) if len(sys.argv) > 1 else REPO / "docs" / "results" / f"{today}-bench.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(report)
     print(out)

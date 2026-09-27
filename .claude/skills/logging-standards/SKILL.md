@@ -18,9 +18,22 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   renders the same fields as one readable line (values JSON-escaped) for local reading only; JSON is the
   default and the only format anything collects. A field named like a core key is emitted as
   `field_<key>`, so it can never overwrite the line's shape. `event` is a short
-  **snake_case constant** (`crawl_page_fetched`, `index_built`), not a sentence. Variable data goes in
+  **snake_case constant** (`crawl_page_fetched`, `index_built`), not a sentence, named `<noun>_<verb>`
+  (`pinned_index_opened`, `index_load_failed`, `records_store_full`). Variable data goes in
   fields: `log.info("index_built", extra={"index_version": v, "docs": n, "secs": t})`. Never build it
   into the message with an f-string.
+- **Durations are `ms`**, milliseconds to one decimal, from `logs.elapsed_ms(started)`: one form in every
+  line (a float), never a hand-rolled `round(...)`.
+- **Why, as a constant.** A failure line carries `error` (the type) and, when there is one, a `reason`
+  constant, never the message (messages name paths): an exception's own `reason` (`SnapshotError`,
+  `IndexBuildError`, `IndexSelectionError`, `IndexUnservable`) or an OSError's errno name (`ENOENT`),
+  through `api.errors.reason_of`. A failure that stands for another (`raise … from e`) logs the cause's
+  type, frames and reason too (`cause`, `cause_frames`, `cause_reason`).
+- **A state, not a stream.** A condition that persists (a full record store, an unreadable index
+  directory) logs once when it starts and once when it ends (`records_store_full` /
+  `records_store_recovered`, `index_list_failed` / `index_list_recovered`, `record_saves_throttled` /
+  `record_saves_recovered`), never once per request that meets it. The flip of the state and its line happen
+  under one lock, so two threads meeting the change log it once.
 
 ## Levels mean something
 | Level | Use for | Example |
@@ -55,8 +68,23 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 
 ## API access line (INFO, exactly one per request)
 `request` event with: `request_id`, `method`, `route` (the template, e.g. `/api/v1/papers/{id}`, not the
-concrete path), `status`, `ms`, `index_version`, `canonical_hash` (search/export), `total`. Health checks
-log at DEBUG.
+concrete path), `status`, `ms`, `index_version`, `canonical_hash` (search/export), `total`, and `code` (the
+error envelope's code, on every refusal and every 500; `api.errors.note_code`), and for a route that runs a
+query `verified_clauses` (its position-verified clauses), `verification_candidates` (what their checks
+would read, summed; absent with none) and `verify_ms` (the time it held a verification slot; absent when it
+held none; added by `IndexState.verification_slot` through the `errors.current_access` context variable,
+the request having no handle there). A request whose slot holds pass `slow_verification_seconds` logs one
+`verification_slow` WARNING (`verify_ms`, `threshold_ms`): every other cold verification was refused
+meanwhile. `verify_cpu_ms` is the verifying thread's CPU in those holds, and `verify_tokens` what that CPU
+time was debited after the fact (`RateLimit`; never wall time, which other requests' load inflates). A facet worker
+that would have had to verify (a bug) logs `facet_worker_recounted` (WARNING) and the caller recounts. Health checks log at DEBUG. An unexpected failure is one `request_failed` ERROR line beside it: `code`, `error`, `frames`,
+and for a wrapped one (only then: never `cause: null`) `cause`, `cause_frames` (where it really failed: Starlette wraps an error its handler
+catches after a stream started in a RuntimeError whose frames stop at the handler) and `cause_reason`. `status` is what the client was sent. If a handler fails after the response started (a
+stream cut short), the line adds `aborted: true`, beside that failure's one `request_failed` ERROR line;
+uvicorn then also logs `ASGI callable returned without completing response.` at ERROR (it closes the
+connection), which is expected there and carries no request data. If the response started and never sent
+its final body message with nothing having failed, the client hung up mid-stream: the line adds
+`client_disconnected: true` and nothing is logged above INFO. Each key is absent otherwise.
 
 ## CLI search line (INFO, at most one per `op search` / `op export`)
 `search_run` event with: `command`, `mode`, `engine`, `index_version`, `canonical_hash`, `total`, `ms`: the
@@ -70,7 +98,8 @@ whose message quotes corpus tokens), WARNING for any other refusal (a snapshot, 
 exception nothing anticipated is one `cli_failed` ERROR line with the traceback; a traceback's last line is
 the exception's message, which can quote input, so the API (task-034) logs frames and type, not the
 message. Long jobs say they're alive: `index_build_started`, `index_build_progress` every 10k documents,
-`index_built`; `index_parity_ok` when a parity check passes.
+`index_built`; `index_parity_ok` when a parity check passes. A failed build whose `.tmp-*` staging directory
+survives its removal logs `index_build_tmp_left` (WARNING, the directory's name only).
 
 ## Review checklist (`observability-reviewer`)
 1. Does every new failure path produce exactly one log at the right level?

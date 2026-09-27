@@ -15,7 +15,8 @@ pass=0; fail=0
 
 fresh() {  # a clean copy of the tooling tree at $TMP/r
   rm -rf "$TMP/r" && mkdir -p "$TMP/r/backlog/tasks" "$TMP/r/backlog/completed"
-  cp -R "$SRC/.claude" "$TMP/r/.claude"
+  # .claude/worktrees/ holds gitignored agent checkouts (GBs); copying it per case made the table take hours
+  rsync -a --exclude /worktrees "$SRC/.claude/" "$TMP/r/.claude/"
   cp "$SRC/CLAUDE.md" "$SRC/CONTRIBUTING.md" "$TMP/r/"
 }
 # expect <ok|err> <label> <script> [args...]   — runs the COPIED script inside $TMP/r
@@ -72,6 +73,8 @@ fresh; printf '\nSee `.claude/skills/no-such-skill/SKILL.md`.\n' >> "$C/agents/c
 expect err "path reference to a missing skill"                          lint_tooling.py
 fresh; printf '\nAlso ask `ghost-reviewer`.\n' >> "$C/skills/learnings/SKILL.md"
 expect err "the learnings SKILL is linted (not skipped as journal)"     lint_tooling.py
+fresh; mkdir -p "$C/worktrees/agent-x/.claude/agents" && printf '\nAlso ask `ghost-reviewer`.\n' > "$C/worktrees/agent-x/.claude/agents/code-reviewer.md"
+expect ok  "an agent worktree under .claude/worktrees/ is not linted"   lint_tooling.py
 fresh; sed -i.bak 's/^name: code-reviewer$/name: code-reviwer/' "$C/agents/code-reviewer.md"
 expect err "frontmatter name != filename"                               lint_tooling.py
 fresh; sed -i.bak 's/^tools: Read, Grep, Glob, Bash$/tools: Read, Grep, Glob, Bash, Edit/' "$C/agents/security-reviewer.md"

@@ -1,0 +1,3806 @@
+{
+  "components": {
+    "schemas": {
+      "And": {
+        "properties": {
+          "children": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "and": "#/components/schemas/And",
+                  "filter": "#/components/schemas/Filter",
+                  "near": "#/components/schemas/Near",
+                  "not": "#/components/schemas/Not",
+                  "or": "#/components/schemas/Or",
+                  "phrase": "#/components/schemas/Phrase",
+                  "term": "#/components/schemas/Term",
+                  "wildcard": "#/components/schemas/Wildcard"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/Term"
+                },
+                {
+                  "$ref": "#/components/schemas/Wildcard"
+                },
+                {
+                  "$ref": "#/components/schemas/Phrase"
+                },
+                {
+                  "$ref": "#/components/schemas/Near"
+                },
+                {
+                  "$ref": "#/components/schemas/Filter"
+                },
+                {
+                  "$ref": "#/components/schemas/Not"
+                },
+                {
+                  "$ref": "#/components/schemas/And"
+                },
+                {
+                  "$ref": "#/components/schemas/Or"
+                }
+              ]
+            },
+            "minItems": 2,
+            "title": "Children",
+            "type": "array"
+          },
+          "kind": {
+            "const": "and",
+            "default": "and",
+            "title": "Kind",
+            "type": "string"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          }
+        },
+        "required": [
+          "span",
+          "kind",
+          "children"
+        ],
+        "title": "And",
+        "type": "object"
+      },
+      "ChangedInput": {
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "input": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "snapshot_hash",
+              "tokenizer_version",
+              "schema_version",
+              "ranking_params",
+              "query_version"
+            ],
+            "title": "Input",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "corpus",
+              "method"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "recorded": {
+            "$ref": "#/components/schemas/JsonValue"
+          }
+        },
+        "required": [
+          "input",
+          "kind",
+          "recorded",
+          "current"
+        ],
+        "title": "ChangedInput",
+        "type": "object"
+      },
+      "Claim": {
+        "description": "One source's statement about one field. Frozen and scalar (tuples for lists), so claims are\nhashable and set-comparable. `fetched_at` comes from the cache entry, never from build time.",
+        "properties": {
+          "evidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "fetched_at": {
+            "format": "date-time",
+            "title": "Fetched At",
+            "type": "string"
+          },
+          "field": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "title",
+              "abstract",
+              "authors",
+              "venue",
+              "year",
+              "track",
+              "status",
+              "presentation",
+              "venue_id_raw",
+              "keywords",
+              "urls.forum",
+              "urls.pdf",
+              "urls.proceedings",
+              "urls.doi"
+            ],
+            "title": "Field",
+            "type": "string"
+          },
+          "source": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "openreview_v2",
+              "openreview_v1",
+              "neurips_proceedings",
+              "pmlr",
+              "ris"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "value": {
+            "$ref": "#/components/schemas/ClaimValue"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "source",
+          "url",
+          "fetched_at",
+          "evidence"
+        ],
+        "title": "Claim",
+        "type": "object"
+      },
+      "ClaimValue": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "CoverageCell": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "accepted",
+              "rejected",
+              "withdrawn",
+              "desk_rejected",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "track": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "main",
+              "datasets_benchmarks",
+              "position",
+              "workshop",
+              "competition",
+              "tiny_papers",
+              "blogpost",
+              "other",
+              "unknown"
+            ],
+            "title": "Track",
+            "type": "string"
+          }
+        },
+        "required": [
+          "track",
+          "status",
+          "count"
+        ],
+        "title": "CoverageCell",
+        "type": "object"
+      },
+      "CoverageResponse": {
+        "properties": {
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/SnapshotInfo"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/CoverageTotals"
+          },
+          "venue_years": {
+            "items": {
+              "$ref": "#/components/schemas/VenueYearCoverage"
+            },
+            "title": "Venue Years",
+            "type": "array"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "snapshot",
+          "totals",
+          "venue_years"
+        ],
+        "title": "CoverageResponse",
+        "type": "object"
+      },
+      "CoverageTotals": {
+        "properties": {
+          "abstract_missing": {
+            "title": "Abstract Missing",
+            "type": "integer"
+          },
+          "records": {
+            "title": "Records",
+            "type": "integer"
+          },
+          "unknown_status": {
+            "title": "Unknown Status",
+            "type": "integer"
+          },
+          "unknown_track": {
+            "title": "Unknown Track",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "records",
+          "abstract_missing",
+          "unknown_track",
+          "unknown_status"
+        ],
+        "title": "CoverageTotals",
+        "type": "object"
+      },
+      "CrawlWindow": {
+        "description": "When a source (or, under key `*`, the whole corpus) was fetched: the first and the last fetch. The\nshape of `crawl_dates` in a search record and in `GET /coverage`'s `snapshot`.",
+        "properties": {
+          "from": {
+            "format": "date-time",
+            "title": "From",
+            "type": "string"
+          },
+          "to": {
+            "format": "date-time",
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "title": "CrawlWindow",
+        "type": "object"
+      },
+      "Dedup": {
+        "description": "Corpus-wide ingest merges from the snapshot manifest (PRISMA-S item 16): a process statement, never a\nremoval count of this search. The not-merged counts are the manifest's conflicts by resolution: pairs\nthat looked alike but were kept apart (two candidates from one source; a track the proceedings never\nhost; two records of one venue-year). The last two are None on a v1 body, which didn't record them.",
+        "properties": {
+          "ambiguous_not_merged": {
+            "title": "Ambiguous Not Merged",
+            "type": "integer"
+          },
+          "merged": {
+            "title": "Merged",
+            "type": "integer"
+          },
+          "track_not_merged": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Not Merged"
+          },
+          "venue_year_not_merged": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue Year Not Merged"
+          }
+        },
+        "required": [
+          "merged",
+          "ambiguous_not_merged",
+          "track_not_merged",
+          "venue_year_not_merged"
+        ],
+        "title": "Dedup",
+        "type": "object"
+      },
+      "Diagnostic": {
+        "description": "A warning, error or translation notice about a query, with a half-open code-point span into `q`.",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/DiagnosticCode"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "span"
+        ],
+        "title": "Diagnostic",
+        "type": "object"
+      },
+      "DiagnosticCode": {
+        "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+        "enum": [
+          "PARSE_UNBALANCED_PAREN",
+          "PARSE_EMPTY_GROUP",
+          "PARSE_ALL_NEGATIVE",
+          "PARSE_UNTERMINATED_PHRASE",
+          "PARSE_BAD_NEAR",
+          "PARSE_WILDCARD_NOT_SUFFIX",
+          "PARSE_EXPECTED_TERM",
+          "PARSE_EMPTY_TERM",
+          "PARSE_NESTED_FIELD",
+          "PARSE_TOO_DEEP",
+          "PARSE_WILDCARD_DETACHED",
+          "PARSE_AMBIGUOUS_MINUS",
+          "PARSE_STRAY_COLON",
+          "PARSE_AMBIGUOUS_QUOTE",
+          "PARSE_PAREN_TOUCHES_WORD",
+          "PARSE_TOO_LONG",
+          "WILDCARD_STEM_TOO_SHORT",
+          "WILDCARD_TOO_MANY_EXPANSIONS",
+          "FIELD_UNKNOWN",
+          "FIELD_UNKNOWN_VALUE",
+          "FIELD_RANGE_INVERTED",
+          "FIELD_FILTER_SYNTAX",
+          "FIELD_COMPAT_ONLY",
+          "WARN_LOWERCASE_OPERATOR",
+          "WARN_MIXED_AND_OR",
+          "WARN_NESTED_FILTER",
+          "WARN_FILTER_SCOPE",
+          "WARN_LOOKALIKE_OPERATOR",
+          "WARN_SYMBOLS_DROPPED",
+          "WARN_SOURCE_PARTIAL",
+          "WARN_CJK_RUN",
+          "WARN_SPELLED_GREEK",
+          "COMPAT_SOURCE_ALIAS",
+          "COMPAT_POP_DOLLAR",
+          "COMPAT_POP_PHRASE",
+          "COMPAT_NO_STEMMING",
+          "API_BAD_PARAM",
+          "API_PAPER_NOT_FOUND",
+          "API_RECORD_NOT_FOUND",
+          "API_INDEX_VERSION_UNAVAILABLE",
+          "API_RECORD_MISMATCH",
+          "API_RATE_LIMITED",
+          "API_INDEX_NOT_LOADED",
+          "API_INTERNAL",
+          "API_NOT_FOUND",
+          "API_METHOD_NOT_ALLOWED",
+          "API_REPLAY_MISMATCH",
+          "API_RECORDS_STORE_FULL",
+          "API_BODY_TOO_LARGE",
+          "API_BUSY",
+          "API_TOO_MANY_VERIFIED_CLAUSES",
+          "API_QUERY_TOO_COSTLY"
+        ],
+        "title": "DiagnosticCode",
+        "type": "string"
+      },
+      "DiffEntry": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "DiffEntry",
+        "type": "object"
+      },
+      "ErrorBody": {
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorBody",
+        "type": "object"
+      },
+      "ErrorCode": {
+        "description": "An error envelope's code (spec 04 §Error handling). Open set: new values may be added within /api/v1; handle a value you don't know.",
+        "enum": [
+          "PARSE_UNBALANCED_PAREN",
+          "PARSE_EMPTY_GROUP",
+          "PARSE_ALL_NEGATIVE",
+          "PARSE_UNTERMINATED_PHRASE",
+          "PARSE_BAD_NEAR",
+          "PARSE_WILDCARD_NOT_SUFFIX",
+          "PARSE_EXPECTED_TERM",
+          "PARSE_EMPTY_TERM",
+          "PARSE_NESTED_FIELD",
+          "PARSE_TOO_DEEP",
+          "PARSE_WILDCARD_DETACHED",
+          "PARSE_AMBIGUOUS_MINUS",
+          "PARSE_STRAY_COLON",
+          "PARSE_AMBIGUOUS_QUOTE",
+          "PARSE_PAREN_TOUCHES_WORD",
+          "PARSE_TOO_LONG",
+          "WILDCARD_STEM_TOO_SHORT",
+          "WILDCARD_TOO_MANY_EXPANSIONS",
+          "FIELD_UNKNOWN",
+          "FIELD_UNKNOWN_VALUE",
+          "FIELD_RANGE_INVERTED",
+          "FIELD_FILTER_SYNTAX",
+          "FIELD_COMPAT_ONLY",
+          "API_BAD_PARAM",
+          "API_PAPER_NOT_FOUND",
+          "API_RECORD_NOT_FOUND",
+          "API_INDEX_VERSION_UNAVAILABLE",
+          "API_RECORD_MISMATCH",
+          "API_RATE_LIMITED",
+          "API_INDEX_NOT_LOADED",
+          "API_INTERNAL",
+          "API_NOT_FOUND",
+          "API_METHOD_NOT_ALLOWED",
+          "API_RECORDS_STORE_FULL",
+          "API_BODY_TOO_LARGE",
+          "API_BUSY",
+          "API_TOO_MANY_VERIFIED_CLAUSES",
+          "API_QUERY_TOO_COSTLY"
+        ],
+        "title": "ErrorCode",
+        "type": "string"
+      },
+      "ErrorEnvelope": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorEnvelope",
+        "type": "object"
+      },
+      "Excluded": {
+        "description": "03's exclusion accounting, verbatim: buckets by count (largest first, ties by name), `unknown` last.",
+        "properties": {
+          "status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Status",
+            "type": "object"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "track": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Track",
+            "type": "object"
+          }
+        },
+        "required": [
+          "total",
+          "track",
+          "status"
+        ],
+        "title": "Excluded",
+        "type": "object"
+      },
+      "Facets": {
+        "description": "Disjunctive (decision-001): each field counted without its own top-level conjuncts. Values that\noccur only; years as strings.",
+        "properties": {
+          "status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Status",
+            "type": "object"
+          },
+          "track": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Track",
+            "type": "object"
+          },
+          "venue": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Venue",
+            "type": "object"
+          },
+          "year": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Year",
+            "type": "object"
+          }
+        },
+        "required": [
+          "venue",
+          "year",
+          "track",
+          "status"
+        ],
+        "title": "Facets",
+        "type": "object"
+      },
+      "Filter": {
+        "description": "`field:` restricted to any of `values` (a single-field OR group): YearRanges for `year`, canonical\nstrings (`vocab.py`) for the others.",
+        "properties": {
+          "field": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "venue",
+              "year",
+              "track",
+              "status"
+            ],
+            "title": "Field",
+            "type": "string"
+          },
+          "kind": {
+            "const": "filter",
+            "default": "filter",
+            "title": "Kind",
+            "type": "string"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          },
+          "values": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/components/schemas/YearRange"
+                }
+              ]
+            },
+            "minItems": 1,
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "span",
+          "kind",
+          "field",
+          "values"
+        ],
+        "title": "Filter",
+        "type": "object"
+      },
+      "Health": {
+        "properties": {
+          "index_loaded": {
+            "title": "Index Loaded",
+            "type": "boolean"
+          },
+          "index_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Version"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index_loaded",
+          "index_version",
+          "tokenizer_version",
+          "query_version"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "Highlights": {
+        "properties": {
+          "abstract": {
+            "items": {
+              "$ref": "#/components/schemas/Span"
+            },
+            "title": "Abstract",
+            "type": "array"
+          },
+          "title": {
+            "items": {
+              "$ref": "#/components/schemas/Span"
+            },
+            "title": "Title",
+            "type": "array"
+          }
+        },
+        "required": [
+          "title",
+          "abstract"
+        ],
+        "title": "Highlights",
+        "type": "object"
+      },
+      "Hit": {
+        "properties": {
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
+          "highlights": {
+            "$ref": "#/components/schemas/Highlights"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "presentation": {
+            "anyOf": [
+              {
+                "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+                "enum": [
+                  "oral",
+                  "spotlight",
+                  "poster"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presentation"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "status": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "accepted",
+              "rejected",
+              "withdrawn",
+              "desk_rejected",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "track": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "main",
+              "datasets_benchmarks",
+              "position",
+              "workshop",
+              "competition",
+              "tiny_papers",
+              "blogpost",
+              "other",
+              "unknown"
+            ],
+            "title": "Track",
+            "type": "string"
+          },
+          "urls": {
+            "$ref": "#/components/schemas/Urls"
+          },
+          "venue": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "NeurIPS",
+              "ICLR",
+              "ICML"
+            ],
+            "title": "Venue",
+            "type": "string"
+          },
+          "year": {
+            "minimum": 1000,
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "abstract",
+          "authors",
+          "venue",
+          "year",
+          "track",
+          "status",
+          "presentation",
+          "score",
+          "highlights",
+          "urls"
+        ],
+        "title": "Hit",
+        "type": "object"
+      },
+      "JsonValue": {},
+      "MetaResponse": {
+        "properties": {
+          "filter_fields": {
+            "items": {
+              "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+              "enum": [
+                "venue",
+                "year",
+                "track",
+                "status"
+              ],
+              "type": "string"
+            },
+            "title": "Filter Fields",
+            "type": "array"
+          },
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "index_versions": {
+            "description": "every index this instance can serve, sorted, the served one included: an index this code can't open (another tokenizer, schema or Tantivy version) or one currently refused is left out",
+            "items": {
+              "type": "string"
+            },
+            "title": "Index Versions",
+            "type": "array"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "text_fields": {
+            "items": {
+              "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+              "enum": [
+                "title",
+                "abstract"
+              ],
+              "type": "string"
+            },
+            "title": "Text Fields",
+            "type": "array"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          },
+          "values": {
+            "$ref": "#/components/schemas/Vocabularies"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "index_versions",
+          "text_fields",
+          "filter_fields",
+          "values"
+        ],
+        "title": "MetaResponse",
+        "type": "object"
+      },
+      "Near": {
+        "description": "Both operands within `distance` words of each other, in either order, in one field.",
+        "properties": {
+          "distance": {
+            "maximum": 100,
+            "minimum": 0,
+            "title": "Distance",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "near",
+            "default": "near",
+            "title": "Kind",
+            "type": "string"
+          },
+          "left": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Term"
+              },
+              {
+                "$ref": "#/components/schemas/Wildcard"
+              },
+              {
+                "$ref": "#/components/schemas/Phrase"
+              }
+            ],
+            "title": "Left"
+          },
+          "right": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Term"
+              },
+              {
+                "$ref": "#/components/schemas/Wildcard"
+              },
+              {
+                "$ref": "#/components/schemas/Phrase"
+              }
+            ],
+            "title": "Right"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          }
+        },
+        "required": [
+          "span",
+          "kind",
+          "left",
+          "right",
+          "distance"
+        ],
+        "title": "Near",
+        "type": "object"
+      },
+      "Not": {
+        "properties": {
+          "child": {
+            "discriminator": {
+              "mapping": {
+                "and": "#/components/schemas/And",
+                "filter": "#/components/schemas/Filter",
+                "near": "#/components/schemas/Near",
+                "not": "#/components/schemas/Not",
+                "or": "#/components/schemas/Or",
+                "phrase": "#/components/schemas/Phrase",
+                "term": "#/components/schemas/Term",
+                "wildcard": "#/components/schemas/Wildcard"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Term"
+              },
+              {
+                "$ref": "#/components/schemas/Wildcard"
+              },
+              {
+                "$ref": "#/components/schemas/Phrase"
+              },
+              {
+                "$ref": "#/components/schemas/Near"
+              },
+              {
+                "$ref": "#/components/schemas/Filter"
+              },
+              {
+                "$ref": "#/components/schemas/Not"
+              },
+              {
+                "$ref": "#/components/schemas/And"
+              },
+              {
+                "$ref": "#/components/schemas/Or"
+              }
+            ],
+            "title": "Child"
+          },
+          "kind": {
+            "const": "not",
+            "default": "not",
+            "title": "Kind",
+            "type": "string"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          }
+        },
+        "required": [
+          "span",
+          "kind",
+          "child"
+        ],
+        "title": "Not",
+        "type": "object"
+      },
+      "Or": {
+        "properties": {
+          "children": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "and": "#/components/schemas/And",
+                  "filter": "#/components/schemas/Filter",
+                  "near": "#/components/schemas/Near",
+                  "not": "#/components/schemas/Not",
+                  "or": "#/components/schemas/Or",
+                  "phrase": "#/components/schemas/Phrase",
+                  "term": "#/components/schemas/Term",
+                  "wildcard": "#/components/schemas/Wildcard"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/Term"
+                },
+                {
+                  "$ref": "#/components/schemas/Wildcard"
+                },
+                {
+                  "$ref": "#/components/schemas/Phrase"
+                },
+                {
+                  "$ref": "#/components/schemas/Near"
+                },
+                {
+                  "$ref": "#/components/schemas/Filter"
+                },
+                {
+                  "$ref": "#/components/schemas/Not"
+                },
+                {
+                  "$ref": "#/components/schemas/And"
+                },
+                {
+                  "$ref": "#/components/schemas/Or"
+                }
+              ]
+            },
+            "minItems": 2,
+            "title": "Children",
+            "type": "array"
+          },
+          "kind": {
+            "const": "or",
+            "default": "or",
+            "title": "Kind",
+            "type": "string"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          }
+        },
+        "required": [
+          "span",
+          "kind",
+          "children"
+        ],
+        "title": "Or",
+        "type": "object"
+      },
+      "PaperRecord": {
+        "properties": {
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "keywords": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
+          "presentation": {
+            "anyOf": [
+              {
+                "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+                "enum": [
+                  "oral",
+                  "spotlight",
+                  "poster"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presentation"
+          },
+          "provenance": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            },
+            "title": "Provenance",
+            "type": "array"
+          },
+          "status": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "accepted",
+              "rejected",
+              "withdrawn",
+              "desk_rejected",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "track": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "main",
+              "datasets_benchmarks",
+              "position",
+              "workshop",
+              "competition",
+              "tiny_papers",
+              "blogpost",
+              "other",
+              "unknown"
+            ],
+            "title": "Track",
+            "type": "string"
+          },
+          "urls": {
+            "$ref": "#/components/schemas/Urls",
+            "default": {}
+          },
+          "venue": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "NeurIPS",
+              "ICLR",
+              "ICML"
+            ],
+            "title": "Venue",
+            "type": "string"
+          },
+          "venue_id_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue Id Raw"
+          },
+          "year": {
+            "minimum": 1000,
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "abstract",
+          "authors",
+          "venue",
+          "year",
+          "track",
+          "status",
+          "presentation",
+          "venue_id_raw",
+          "urls",
+          "keywords",
+          "provenance",
+          "content_hash"
+        ],
+        "title": "PaperRecord",
+        "type": "object"
+      },
+      "PaperResponse": {
+        "properties": {
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "paper": {
+            "$ref": "#/components/schemas/PaperRecord"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "paper"
+        ],
+        "title": "PaperResponse",
+        "type": "object"
+      },
+      "ParseRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "default": "native",
+            "description": "`native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated).",
+            "enum": [
+              "native",
+              "scholar"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "q": {
+            "description": "The query (spec 02 grammar). At most 2,000 Unicode code points: a longer one is 422 `PARSE_TOO_LONG`, refused before it is parsed; so is one whose canonical form (defaults written out) is longer, refused after canonicalising.",
+            "title": "Q",
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "title": "ParseRequest",
+        "type": "object"
+      },
+      "ParseResponse": {
+        "description": "02's `ParseResult` without `identification_ast` (it stays server-side; spec 04 §Endpoints). A query\nwith errors is still a 200 here: `errors` holds them, and every Optional is null.",
+        "properties": {
+          "ast": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "and": "#/components/schemas/And",
+                    "filter": "#/components/schemas/Filter",
+                    "near": "#/components/schemas/Near",
+                    "not": "#/components/schemas/Not",
+                    "or": "#/components/schemas/Or",
+                    "phrase": "#/components/schemas/Phrase",
+                    "term": "#/components/schemas/Term",
+                    "wildcard": "#/components/schemas/Wildcard"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Term"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Wildcard"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Phrase"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Near"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Filter"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Not"
+                  },
+                  {
+                    "$ref": "#/components/schemas/And"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Or"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ast"
+          },
+          "canonical": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical"
+          },
+          "canonical_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Hash"
+          },
+          "defaults": {
+            "items": {
+              "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+              "enum": [
+                "venue",
+                "year",
+                "track",
+                "status"
+              ],
+              "type": "string"
+            },
+            "title": "Defaults",
+            "type": "array"
+          },
+          "effective_ast": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "and": "#/components/schemas/And",
+                    "filter": "#/components/schemas/Filter",
+                    "near": "#/components/schemas/Near",
+                    "not": "#/components/schemas/Not",
+                    "or": "#/components/schemas/Or",
+                    "phrase": "#/components/schemas/Phrase",
+                    "term": "#/components/schemas/Term",
+                    "wildcard": "#/components/schemas/Wildcard"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Term"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Wildcard"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Phrase"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Near"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Filter"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Not"
+                  },
+                  {
+                    "$ref": "#/components/schemas/And"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Or"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Ast"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "identification_query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identification Query"
+          },
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "native",
+              "scholar"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          },
+          "translations": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "title": "Translations",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "mode",
+          "ast",
+          "effective_ast",
+          "canonical",
+          "canonical_hash",
+          "identification_query",
+          "defaults",
+          "warnings",
+          "errors",
+          "translations"
+        ],
+        "title": "ParseResponse",
+        "type": "object"
+      },
+      "Phrase": {
+        "description": "Consecutive positions in one field. A wildcard item is expanded at its position (decision-001).",
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+                "enum": [
+                  "title",
+                  "abstract"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "items": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Term"
+                },
+                {
+                  "$ref": "#/components/schemas/Wildcard"
+                }
+              ]
+            },
+            "minItems": 2,
+            "title": "Items",
+            "type": "array"
+          },
+          "kind": {
+            "const": "phrase",
+            "default": "phrase",
+            "title": "Kind",
+            "type": "string"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          }
+        },
+        "required": [
+          "span",
+          "kind",
+          "items",
+          "field"
+        ],
+        "title": "Phrase",
+        "type": "object"
+      },
+      "QueryInfo": {
+        "properties": {
+          "canonical": {
+            "title": "Canonical",
+            "type": "string"
+          },
+          "canonical_hash": {
+            "title": "Canonical Hash",
+            "type": "string"
+          },
+          "expansions": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Expansions",
+            "type": "object"
+          },
+          "identification_query": {
+            "title": "Identification Query",
+            "type": "string"
+          },
+          "input": {
+            "title": "Input",
+            "type": "string"
+          },
+          "translations": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "title": "Translations",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "input",
+          "canonical",
+          "canonical_hash",
+          "identification_query",
+          "warnings",
+          "translations",
+          "expansions"
+        ],
+        "title": "QueryInfo",
+        "type": "object"
+      },
+      "RecordCreated": {
+        "properties": {
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "page": {
+            "description": "The record page's path on the site (`/record/<record_id>`, spec 05), relative to the site's origin. The API resource is the `Location` header (`/api/v1/records/<record_id>`).",
+            "title": "Page",
+            "type": "string"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "string"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "record_id",
+          "page"
+        ],
+        "title": "RecordCreated",
+        "type": "object"
+      },
+      "RecordDiff": {
+        "properties": {
+          "added": {
+            "items": {
+              "$ref": "#/components/schemas/DiffEntry"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "added_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added Total"
+          },
+          "changed": {
+            "items": {
+              "$ref": "#/components/schemas/ChangedInput"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "membership_identical": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership Identical"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "string"
+          },
+          "recorded_index_version": {
+            "title": "Recorded Index Version",
+            "type": "string"
+          },
+          "refused": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosticCode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "removed": {
+            "items": {
+              "$ref": "#/components/schemas/DiffEntry"
+            },
+            "title": "Removed",
+            "type": "array"
+          },
+          "removed_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed Total"
+          },
+          "status": {
+            "enum": [
+              "reproduced",
+              "drifted",
+              "mismatch"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          },
+          "verified_clauses": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified Clauses"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "record_id",
+          "status",
+          "recorded_index_version",
+          "refused",
+          "verified_clauses",
+          "changed",
+          "offset",
+          "limit",
+          "added_total",
+          "removed_total",
+          "added",
+          "removed",
+          "membership_identical"
+        ],
+        "title": "RecordDiff",
+        "type": "object"
+      },
+      "RecordRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "default": "native",
+            "description": "`native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated).",
+            "enum": [
+              "native",
+              "scholar"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "q": {
+            "description": "The query (spec 02 grammar). At most 2,000 Unicode code points: a longer one is 422 `PARSE_TOO_LONG`, refused before it is parsed; so is one whose canonical form (defaults written out) is longer, refused after canonicalising.",
+            "title": "Q",
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "title": "RecordRequest",
+        "type": "object"
+      },
+      "RecordResponse": {
+        "properties": {
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/components/schemas/SearchRecord"
+          },
+          "replay": {
+            "$ref": "#/components/schemas/ReplayInfo"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "record",
+          "replay"
+        ],
+        "title": "RecordResponse",
+        "type": "object"
+      },
+      "ReplayInfo": {
+        "properties": {
+          "added_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added Total"
+          },
+          "changed": {
+            "items": {
+              "$ref": "#/components/schemas/ChangedInput"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "excluded": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Excluded"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "excluded_match": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Match"
+          },
+          "ids_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ids Hash"
+          },
+          "ids_match": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ids Match"
+          },
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "membership_identical": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership Identical"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "refused": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosticCode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "removed_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed Total"
+          },
+          "status": {
+            "enum": [
+              "reproduced",
+              "drifted",
+              "mismatch"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          },
+          "verified_clauses": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified Clauses"
+          }
+        },
+        "required": [
+          "status",
+          "index_version",
+          "query_version",
+          "total",
+          "excluded",
+          "ids_hash",
+          "ids_match",
+          "excluded_match",
+          "refused",
+          "verified_clauses",
+          "changed",
+          "added_total",
+          "removed_total",
+          "membership_identical"
+        ],
+        "title": "ReplayInfo",
+        "type": "object"
+      },
+      "SearchRecord": {
+        "description": "Every field of spec 04 §Search records, plus `body_version`, `schema_version` and `ranking_params`\n(the index's other two inputs, so a drifted replay can name a method change after the pinned index is\ngone). `ids` is None when the caller didn't ask for them.\n\nBody version 2 adds `sources` (the snapshot manifest's source names, sorted), `identification_citable`\n(false when every source is a bootstrap one, `vocab.bootstrap_only`: the corpus is an earlier search's\noutput, so `total` is not a PRISMA identification number) and `crawl_dates_kind` (per `crawl_dates` key:\n`crawl`, `scholar_query_dates` or `mixed`), and `dedup`'s two other not-merged counts. A v1 body has\nnone of them: they read as None (\"not recorded\"), never as a guess.",
+        "properties": {
+          "body_version": {
+            "title": "Body Version",
+            "type": "integer"
+          },
+          "canonical": {
+            "title": "Canonical",
+            "type": "string"
+          },
+          "canonical_hash": {
+            "title": "Canonical Hash",
+            "type": "string"
+          },
+          "crawl_dates": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CrawlWindow"
+            },
+            "title": "Crawl Dates",
+            "type": "object"
+          },
+          "crawl_dates_kind": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per `crawl_dates` key, what its window's ends are: `crawl`, `scholar_query_dates` or `mixed` today. Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "title": "Crawl Dates Kind"
+          },
+          "dedup": {
+            "$ref": "#/components/schemas/Dedup"
+          },
+          "excluded": {
+            "$ref": "#/components/schemas/Excluded"
+          },
+          "expansions": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Expansions",
+            "type": "object"
+          },
+          "identification_citable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identification Citable"
+          },
+          "identification_query": {
+            "title": "Identification Query",
+            "type": "string"
+          },
+          "ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ids"
+          },
+          "ids_hash": {
+            "title": "Ids Hash",
+            "type": "string"
+          },
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "input": {
+            "title": "Input",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "native",
+              "scholar"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "ranking_params": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Ranking Params",
+            "type": "object"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "searched_at": {
+            "format": "date-time",
+            "title": "Searched At",
+            "type": "string"
+          },
+          "semantic_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Version"
+          },
+          "snapshot_hash": {
+            "title": "Snapshot Hash",
+            "type": "string"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sources"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "translations": {
+            "items": {
+              "$ref": "#/components/schemas/StoredDiagnostic"
+            },
+            "title": "Translations",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/StoredDiagnostic"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "body_version",
+          "record_id",
+          "input",
+          "mode",
+          "canonical",
+          "canonical_hash",
+          "identification_query",
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "schema_version",
+          "ranking_params",
+          "snapshot_hash",
+          "crawl_dates",
+          "searched_at",
+          "total",
+          "excluded",
+          "expansions",
+          "translations",
+          "warnings",
+          "ids",
+          "ids_hash",
+          "dedup",
+          "semantic_version",
+          "sources",
+          "identification_citable",
+          "crawl_dates_kind"
+        ],
+        "title": "SearchRecord",
+        "type": "object"
+      },
+      "SearchResponse": {
+        "properties": {
+          "excluded": {
+            "$ref": "#/components/schemas/Excluded"
+          },
+          "facets": {
+            "$ref": "#/components/schemas/Facets"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/Hit"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "index_version": {
+            "title": "Index Version",
+            "type": "string"
+          },
+          "query": {
+            "$ref": "#/components/schemas/QueryInfo"
+          },
+          "query_version": {
+            "title": "Query Version",
+            "type": "string"
+          },
+          "tokenizer_version": {
+            "title": "Tokenizer Version",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index_version",
+          "tokenizer_version",
+          "query_version",
+          "query",
+          "total",
+          "excluded",
+          "facets",
+          "hits"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "SnapshotInfo": {
+        "description": "The snapshot the served index was built from, as its manifest records it.",
+        "properties": {
+          "built_at": {
+            "format": "date-time",
+            "title": "Built At",
+            "type": "string"
+          },
+          "crawl_date": {
+            "format": "date",
+            "title": "Crawl Date",
+            "type": "string"
+          },
+          "crawl_dates": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CrawlWindow"
+            },
+            "title": "Crawl Dates",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "snapshot_hash": {
+            "title": "Snapshot Hash",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "snapshot_hash",
+          "crawl_date",
+          "crawl_dates",
+          "built_at",
+          "sources"
+        ],
+        "title": "SnapshotInfo",
+        "type": "object"
+      },
+      "Span": {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "integer"
+          }
+        ],
+        "type": "array"
+      },
+      "StoredDiagnostic": {
+        "description": "A diagnostic as the record saved it: its code is a string, so a retired code stays readable.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "span"
+        ],
+        "title": "StoredDiagnostic",
+        "type": "object"
+      },
+      "Term": {
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+                "enum": [
+                  "title",
+                  "abstract"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "kind": {
+            "const": "term",
+            "default": "term",
+            "title": "Kind",
+            "type": "string"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          },
+          "token": {
+            "pattern": "^\\S+$",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "span",
+          "kind",
+          "token",
+          "field"
+        ],
+        "title": "Term",
+        "type": "object"
+      },
+      "Urls": {
+        "properties": {
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "forum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forum"
+          },
+          "pdf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf"
+          },
+          "proceedings": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proceedings"
+          }
+        },
+        "required": [
+          "forum",
+          "pdf",
+          "proceedings",
+          "doi"
+        ],
+        "title": "Urls",
+        "type": "object"
+      },
+      "VenueYearCoverage": {
+        "description": "One venue-year of the snapshot (`coverage.breakdown`): its cells in vocabulary order (`unknown`\nlast, never folded), and its unknown and missing-abstract counts, 0 included.",
+        "properties": {
+          "abstract_missing": {
+            "title": "Abstract Missing",
+            "type": "integer"
+          },
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageCell"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "records": {
+            "title": "Records",
+            "type": "integer"
+          },
+          "unknown_status": {
+            "title": "Unknown Status",
+            "type": "integer"
+          },
+          "unknown_track": {
+            "title": "Unknown Track",
+            "type": "integer"
+          },
+          "venue": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "NeurIPS",
+              "ICLR",
+              "ICML"
+            ],
+            "title": "Venue",
+            "type": "string"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "venue",
+          "year",
+          "records",
+          "abstract_missing",
+          "unknown_track",
+          "unknown_status",
+          "cells"
+        ],
+        "title": "VenueYearCoverage",
+        "type": "object"
+      },
+      "Vocabularies": {
+        "properties": {
+          "status": {
+            "items": {
+              "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+              "enum": [
+                "accepted",
+                "rejected",
+                "withdrawn",
+                "desk_rejected",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            "title": "Status",
+            "type": "array"
+          },
+          "track": {
+            "items": {
+              "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+              "enum": [
+                "main",
+                "datasets_benchmarks",
+                "position",
+                "workshop",
+                "competition",
+                "tiny_papers",
+                "blogpost",
+                "other",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            "title": "Track",
+            "type": "array"
+          },
+          "venue": {
+            "items": {
+              "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+              "enum": [
+                "NeurIPS",
+                "ICLR",
+                "ICML"
+              ],
+              "type": "string"
+            },
+            "title": "Venue",
+            "type": "array"
+          }
+        },
+        "required": [
+          "venue",
+          "track",
+          "status"
+        ],
+        "title": "Vocabularies",
+        "type": "object"
+      },
+      "Wildcard": {
+        "description": "A suffix wildcard on one normalised token: `*` is zero or more characters, `$` zero or one.",
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+                "enum": [
+                  "title",
+                  "abstract"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "kind": {
+            "const": "wildcard",
+            "default": "wildcard",
+            "title": "Kind",
+            "type": "string"
+          },
+          "op": {
+            "enum": [
+              "*",
+              "$"
+            ],
+            "title": "Op",
+            "type": "string"
+          },
+          "span": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Span",
+            "type": "array"
+          },
+          "stem": {
+            "pattern": "^\\S+$",
+            "title": "Stem",
+            "type": "string"
+          }
+        },
+        "required": [
+          "span",
+          "kind",
+          "stem",
+          "op",
+          "field"
+        ],
+        "title": "Wildcard",
+        "type": "object"
+      },
+      "YearRange": {
+        "properties": {
+          "hi": {
+            "maximum": 9999,
+            "minimum": 1000,
+            "title": "Hi",
+            "type": "integer"
+          },
+          "lo": {
+            "maximum": 9999,
+            "minimum": 1000,
+            "title": "Lo",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "lo",
+          "hi"
+        ],
+        "title": "YearRange",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "openproceedings",
+    "version": "v1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/coverage": {
+      "get": {
+        "description": "The served index's coverage, computed and checked when it was loaded (with the engine, one bundle).",
+        "operationId": "get_coverage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method",
+            "headers": {
+              "Allow": {
+                "description": "The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1)",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds until the request would be allowed",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Get Coverage"
+      }
+    },
+    "/api/v1/export": {
+      "get": {
+        "description": "Every record the query matches, in `format`: of `q` (with `mode`, default `native`) on the pinned\n`index_version` (else the served index), or the stored ids of search record `record_id` (alone) from the\nindex it names. Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and\nindex (for a record, its stored `total`).",
+        "operationId": "export",
+        "parameters": [
+          {
+            "description": "The file format.",
+            "in": "query",
+            "name": "format",
+            "required": true,
+            "schema": {
+              "description": "The file format.",
+              "enum": [
+                "ris",
+                "csv",
+                "bibtex",
+                "jsonl"
+              ],
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The query (spec 02 grammar). At most 2,000 Unicode code points: a longer one is 422 `PARSE_TOO_LONG`, refused before it is parsed; so is one whose canonical form (defaults written out) is longer, refused after canonicalising. Required unless `record_id` is given.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The query (spec 02 grammar). At most 2,000 Unicode code points: a longer one is 422 `PARSE_TOO_LONG`, refused before it is parsed; so is one whose canonical form (defaults written out) is longer, refused after canonicalising. Required unless `record_id` is given.",
+              "title": "Q"
+            }
+          },
+          {
+            "description": "`native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). With `record_id`, only `native` (a record's canonical string is native syntax); `scholar` there is 422 `API_BAD_PARAM`.",
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "native",
+              "description": "`native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated). With `record_id`, only `native` (a record's canonical string is native syntax); `scholar` there is 422 `API_BAD_PARAM`.",
+              "enum": [
+                "native",
+                "scholar"
+              ],
+              "title": "Mode",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Export from this index (409 `API_INDEX_VERSION_UNAVAILABLE` if this instance can't serve it); the served one if absent. Only with `q`.",
+            "in": "query",
+            "name": "index_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(?:[0-9a-f][0-9a-f-]{0,63})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Export from this index (409 `API_INDEX_VERSION_UNAVAILABLE` if this instance can't serve it); the served one if absent. Only with `q`.",
+              "title": "Index Version"
+            }
+          },
+          {
+            "description": "Export exactly this search record's stored ids, from the index it names. Not with `q` or `index_version`; `mode`, if sent, must be `native`.",
+            "in": "query",
+            "name": "record_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(?:[A-Za-z0-9_-]{12})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Export exactly this search record's stored ids, from the index it names. Not with `q` or `index_version`; `mode`, if sent, must be `native`.",
+              "title": "Record Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/x-bibtex": {},
+              "application/x-ndjson": {},
+              "application/x-research-info-systems": {},
+              "text/csv": {}
+            },
+            "description": "The entire matched set, ordered by id.",
+            "headers": {
+              "Content-Disposition": {
+                "description": "attachment; filename=\"openproceedings-<index_version>-<first 12 of canonical_hash>.<ext>\"",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Index-Version": {
+                "description": "The index the records were read from",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Query-Version": {
+                "description": "This code's query_version (on a `record_id` export too, whatever the record's own)",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Tokenizer-Version": {
+                "description": "This code's tokenizer_version",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Total": {
+                "description": "How many records the body holds: `/search`'s `total` for the same query and index (for a search record, the number of its stored ids, which its `total` must equal: 409 `API_RECORD_MISMATCH` otherwise)",
+                "schema": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method",
+            "headers": {
+              "Allow": {
+                "description": "The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1)",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds until the request would be allowed",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "headers": {
+              "Retry-After": {
+                "description": "Sent with API_BUSY: whole seconds to wait before retrying",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Export"
+      }
+    },
+    "/api/v1/healthz": {
+      "get": {
+        "description": "Always 200 while the process serves requests; `index_loaded` is false until the first load succeeds\n(search routes answer 503 `API_INDEX_NOT_LOADED` meanwhile).",
+        "operationId": "get_healthz",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method",
+            "headers": {
+              "Allow": {
+                "description": "The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1)",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Get Healthz"
+      }
+    },
+    "/api/v1/meta": {
+      "get": {
+        "operationId": "get_meta",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method",
+            "headers": {
+              "Allow": {
+                "description": "The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1)",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds until the request would be allowed",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Get Meta"
+      }
+    },
+    "/api/v1/papers/{id}": {
+      "get": {
+        "description": "The paper with this id in the served index, as its snapshot holds it (the records loaded with that\nvery engine: one bundle, whatever swaps happen meanwhile).",
+        "operationId": "get_paper",
+        "parameters": [
+          {
+            "description": "A paper id, `op:<venue>:<year>:<native>`. Any other shape is 422 `API_BAD_PARAM`.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "A paper id, `op:<venue>:<year>:<native>`. Any other shape is 422 `API_BAD_PARAM`.",
+              "pattern": "^op:[a-z][a-z0-9]*:[0-9]{4}:[A-Za-z0-9_-]+$",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method",
+            "headers": {
+              "Allow": {
+                "description": "The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1)",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds until the request would be allowed",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Get Paper"
+      }
+    },
+    "/api/v1/parse": {
+      "post": {
+        "description": "02's ParseResult for `q` (debounced as the user types). It reports a parse: any well-formed body is\na 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body\nis refused (422 `API_BAD_PARAM`).",
+        "operationId": "parse_query",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method",
+            "headers": {
+              "Allow": {
+                "description": "The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1)",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds until the request would be allowed",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Parse Query"
+      }
+    },
+    "/api/v1/records": {
+      "post": {
+        "description": "Freeze a search as an immutable record: re-run here on the served index, then one transaction.",
+        "operationId": "create_record",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordCreated"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Location": {
+                "description": "The new record's API resource, `/api/v1/records/<id>`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method",
+            "headers": {
+              "Allow": {
+                "description": "The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1)",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds until the request would be allowed",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "headers": {
+              "Retry-After": {
+                "description": "Sent with API_BUSY: whole seconds to wait before retrying",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Create Record"
+      }
+    },
+    "/api/v1/records/{id}": {
+      "get": {
+        "description": "The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless\n`include=ids`; `/export?record_id=` streams the papers themselves.",
+        "operationId": "get_record",
+        "parameters": [
+          {
+            "description": "A search record id: 12 characters of `A-Z a-z 0-9 - _`. Any other shape is 422 `API_BAD_PARAM`.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "A search record id: 12 characters of `A-Z a-z 0-9 - _`. Any other shape is 422 `API_BAD_PARAM`.",
+              "pattern": "^[A-Za-z0-9_-]{12}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`ids` to include the record's sorted id list.",
+            "in": "query",
+            "name": "include",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "ids",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`ids` to include the record's sorted id list.",
+              "title": "Include"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method",
+            "headers": {
+              "Allow": {
+                "description": "The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1)",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds until the request would be allowed",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "headers": {
+              "Retry-After": {
+                "description": "Sent with API_BUSY: whole seconds to wait before retrying",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Get Record"
+      }
+    },
+    "/api/v1/records/{id}/diff": {
+      "get": {
+        "description": "The ids a replay now adds and removes, with titles, and which `index_version` inputs changed. Each\nlist is paged by `offset`/`limit` (≤ 200, never clamped); `added_total`/`removed_total` are in full. A\ntitle comes from the index the replay ran on, null if it doesn't hold the paper. A refused replay\ncompared nothing: empty lists, null totals.",
+        "operationId": "get_record_diff",
+        "parameters": [
+          {
+            "description": "A search record id: 12 characters of `A-Z a-z 0-9 - _`. Any other shape is 422 `API_BAD_PARAM`.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "A search record id: 12 characters of `A-Z a-z 0-9 - _`. Any other shape is 422 `API_BAD_PARAM`.",
+              "pattern": "^[A-Za-z0-9_-]{12}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Entries of each list (`added`, `removed`) to skip. Past the end is an empty list.",
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Entries of each list (`added`, `removed`) to skip. Past the end is an empty list.",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Entries of each list per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "Entries of each list per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped.",
+              "maximum": 200,
+              "minimum": 0,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordDiff"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method",
+            "headers": {
+              "Allow": {
+                "description": "The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1)",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds until the request would be allowed",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "headers": {
+              "Retry-After": {
+                "description": "Sent with API_BUSY: whole seconds to wait before retrying",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Get Record Diff"
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "description": "One page of the ranked matched set, with its total, exclusion accounting, disjunctive facets and\nhighlights. `limit` over 200 is a 422 (never clamped); a query that doesn't parse is a 422 with its\ndiagnostics.",
+        "operationId": "search",
+        "parameters": [
+          {
+            "description": "The query (spec 02 grammar). At most 2,000 Unicode code points: a longer one is 422 `PARSE_TOO_LONG`, refused before it is parsed; so is one whose canonical form (defaults written out) is longer, refused after canonicalising.",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "The query (spec 02 grammar). At most 2,000 Unicode code points: a longer one is 422 `PARSE_TOO_LONG`, refused before it is parsed; so is one whose canonical form (defaults written out) is longer, refused after canonicalising.",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated).",
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "native",
+              "description": "`native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated).",
+              "enum": [
+                "native",
+                "scholar"
+              ],
+              "title": "Mode",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The order of `hits`. Never changes `total` or membership (guarantee 5).",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "relevance",
+              "description": "The order of `hits`. Never changes `total` or membership (guarantee 5).",
+              "enum": [
+                "relevance",
+                "year_desc",
+                "year_asc",
+                "title"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Hits to skip. Past the end is an empty page, not an error.",
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Hits to skip. Past the end is an empty page, not an error.",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Hits per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "Hits per page, 0 to 200. Over 200 is 422 `API_BAD_PARAM`, never clamped.",
+              "maximum": 200,
+              "minimum": 0,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_METHOD_NOT_ALLOWED: the endpoint exists, but not for this method",
+            "headers": {
+              "Allow": {
+                "description": "The methods this endpoint takes, comma-separated (RFC 9110 §10.2.1)",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_RATE_LIMITED: this client's token bucket or its network's (IPv4 /24, IPv6 /48) can't pay for the request, a query's position-verified clauses included; or, on POST /records, the save ceiling of this client's network or of the whole instance is reached",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds until the request would be allowed",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "headers": {
+              "Retry-After": {
+                "description": "Sent with API_BUSY: whole seconds to wait before retrying",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error (spec 04 §Error handling)"
+          }
+        },
+        "summary": "Search"
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 ---
 name: bibtex-format
-description: The openproceedings BibTeX export standard — @inproceedings entries, the <firstauthorlast><year><firsttitleword> key scheme with a/b de-duplication, field set, brace and special-character escaping, and the exact behaviour of refaudit's BibTeX parser that every export must satisfy. Use when writing or reviewing the BibTeX exporter under backend/src/openproceedings/api/exporters/, `op export --format bibtex`, or a .bib fixture.
+description: The openproceedings BibTeX export standard — @inproceedings entries for accepted papers and @unpublished for every other status, the <firstauthorlast><year><firsttitleword> key scheme with a/b de-duplication, field set, brace and special-character escaping, and the exact behaviour of refaudit's BibTeX parser that every export must satisfy. Use when writing or reviewing the BibTeX exporter in backend/src/openproceedings/export.py, `op export --format bibtex`, or a .bib fixture.
 ---
 
 # BibTeX export (spec 04 §Exports)
@@ -15,18 +15,27 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
   url       = {https://…},
   doi       = {…},
   abstract  = {…},
-  keywords  = {main},
+  keywords  = {main, status:accepted},
   openproceedings_id = {op:iclr:2024:iilhN2MycO},
-  note      = {openproceedings a1b2c3d4e5f6 · query 9f8e7d… · 2026-09-25}
+  note      = {openproceedings a1b2c3d4e5f6 · query 9f8e7d… · exported 2026-09-25}
 }
 ```
 - Every value is **brace-delimited**, even `year`. Never quote-delimited: quotes and braces have
   different escaping rules, and one convention keeps the escaping code small.
 - `title` gets an inner brace pair so that bibliography styles keep its capitalisation.
-- `booktitle` is the same venue string as RIS `T2` (`.claude/skills/ris-format/SKILL.md`). `keywords` is
-  the track. Provenance goes in `note = {openproceedings <index_version> · query <canonical_hash> · <UTC
-  date>}` (spec 04 §Exports), the same line as RIS `N1`: `·` is U+00B7, the date `YYYY-MM-DD` UTC. Omit `doi`, `url` and `abstract` when they
-  are absent. Never write an empty field.
+- **Only `status: accepted` is `@inproceedings`** (spec 04 §Exports, task-004 review). Any other status
+  (`rejected`, `withdrawn`, `desk_rejected`, `unknown`) is `@unpublished`, with **no `booktitle`**. Its
+  `note` is `Submitted to <venue string>, status: <status in words>. <provenance line>`: `desk rejected`,
+  never `desk_rejected`, since a bare `_` in a typeset `note` breaks LaTeX (`keywords` keep the machine form
+  `status:desk_rejected`). Any other `_` in `note` (a record id's) is written `\_`. A rejected paper must
+  never become a citation into a conference.
+- `booktitle` is the same venue string as RIS `T2` (`vocab.venue_name()`, also importable from `export`,
+  `.claude/skills/ris-format/SKILL.md`). It is the conference's name, not a proceedings title, since workshop
+  and rejected papers are in no proceedings. `keywords = {<track>, status:<status>}` on every entry. Provenance
+  goes in `note = {openproceedings <index_version> · query <canonical_hash> · exported <UTC date>}`, plus
+  ` · record <record_id> · searched <UTC date>` for an export pinned by a search record (spec 04 §Exports),
+  the same line as RIS `N1`: `·` is U+00B7, the dates `YYYY-MM-DD` UTC. Omit `doi`, `url` and
+  `abstract` when they are absent. Never write an empty field.
 - `openproceedings_id = {<id>}` is on **every** entry (spec 04 §Exports), so a round-trip recovers the id
   of every record, proceedings-only ones (PMLR, NeurIPS `nips-<hash>`) included, which have no forum `url`
   to parse. refaudit's field regex `(\w+)\s*=` accepts the underscore.
@@ -42,13 +51,16 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
    literal rule unless a spec PR changes it.
 4. Each part is NFKD-folded to ASCII, lower-cased and stripped to `[a-z0-9]`. refaudit's key regex
    rejects `,`, whitespace and braces. LaTeX handles non-ASCII keys badly.
-5. **De-duplication:** collisions are resolved by suffixing `a`, `b`, `c`, … in the export's stable
-   order. Decide once whether the first occurrence stays bare (streamable with a seen-dict) or also gets
-   `a` (needs a pre-pass over the set). Pin the choice with a fixture that has three colliding papers.
-   Past `z`, continue with `aa`.
+5. **De-duplication (decision-007):** the first paper with a key keeps it **bare**; each later one, in the
+   export's id order, takes the next suffix not yet issued in the file: `a`, `b`, … `z`, `aa`, `ab`, …. A
+   paper whose real key equals an issued suffix moves on (`smith2024deepa` → `smith2024deepaa`). This is
+   what Better BibTeX and JabRef do, and it streams with a set of issued keys (all-suffixed would need a
+   pre-pass). Pinned by `test_three_colliding_keys_the_first_bare_then_a_then_b`.
 
 Keys are unique **within one file** only. The same paper can get a different key in a different query's
-export. Never present a key as a stable identifier. The id lives in `openproceedings_id`.
+export: a superset keeps earlier keys only when the added colliding papers sort after them
+(`test_a_superset_keeps_keys_unless_an_added_paper_sorts_first`). Never present a key as a stable
+identifier. The id lives in `openproceedings_id`.
 
 ## Escaping
 Abstracts contain real LaTeX (`$\epsilon$-DP`, `\textbf{63.7\%}`). Keep it; escaping it would change the
@@ -60,6 +72,11 @@ text screeners see.
 - The `@type{key,` pattern must never appear inside a value. refaudit finds entries with a regex over
   the whole file, not only at line starts. Write `@` in values as `{@}`.
 - Collapse newlines inside values to spaces (refaudit normalises whitespace anyway).
+- `export._braced` runs once per field of every exported record, so each pass is skipped when its
+  character doesn't occur (no brace: no balance count; no `&%#`: no escaping; no `@`: no `{@}`), and `&%#`
+  are escaped in one pass that reads each backslash run whole (`(\\*)([&%#])`, escaped only after an even
+  run). A speed-up here must stay byte-identical: `tests/unit/test_export_braced.py` holds `_braced` to a
+  frozen copy of the pre-guard function under Hypothesis.
 
 ## refaudit's parser (`refaudit.bibtex`, from the pinned `refaudit` PyPI package)
 - Entries match `@(\w+)\s*[{(]\s*([^,\s{}]+)\s*,`. `@comment`, `@preamble` and `@string` are skipped.

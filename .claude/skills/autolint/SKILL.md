@@ -18,7 +18,7 @@ Four layers, each catching what the one before could not:
 | Files | Fix (autofix hook, `make fmt`) | Check (`make lint`, CI) |
 |---|---|---|
 | `*.py` (backend, `.claude/`) | `ruff format`, `ruff check --fix` | `ruff format --check`, `ruff check`, then `mypy --strict` for `backend/src` |
-| `frontend/**/*.{ts,tsx,js,jsx,json,css,md}` | `prettier --write`, `eslint --fix` (ts/tsx/js/jsx) | `prettier --check`, `eslint`, `tsc --noEmit` |
+| `frontend/**/*.{ts,tsx,js,jsx,json,css,md}` | `prettier --write`, `eslint --fix` (ts/tsx/js/jsx) | `prettier --check`, `eslint`, `next typegen` + `tsc --noEmit` |
 | `*.sh`, `.githooks/*` | none; shellcheck cannot fix | `shellcheck` |
 | `*.yml` workflows | none | `actionlint` if installed (CI installs it) |
 
@@ -34,8 +34,9 @@ record it as a decision.
   `additionalContext`, with the tool's output. Fix them before committing.
 - **Skips** `data/`, `backlog/` (CLI-owned), `.claude/learnings/INDEX.md` and `.claude/README.md`
   (generated), and anything outside the repo.
-- **Degrades gracefully.** If a tool isn't available yet (no `frontend/node_modules`, uv not synced), it
-  says so once and skips. It never fails an edit because the toolchain isn't set up.
+- **Degrades gracefully.** If a tool isn't available yet (no root `node_modules/` from `npm ci`, uv not
+  synced), it skips that tool (ruff says so). `make lint`/`fmt`/`test`, by contrast, fail when
+  `frontend/` exists without `node_modules/`, so a missing install can't pass as green. It never fails an edit because the toolchain isn't set up.
 - Formats **only the file that was edited**, so an edit never produces a sweeping diff across unrelated files.
 - **Runs tools straight from the workspace.** Ruff is `.venv/bin/ruff`, never `uv run`, which may sync and
   fetch or build packages an agent just added to `pyproject.toml`. Frontend tools run with

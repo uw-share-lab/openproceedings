@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import bisect
 import unicodedata
+from collections.abc import Sequence
+from itertools import pairwise
 from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict
@@ -66,6 +68,7 @@ MAX_QUERY_LENGTH = 2000  # code points (spec 02 §Error handling); longer is PAR
 MAX_PER_CODE = 20  # diagnostics of one code shown before "… and N more"
 MAX_DEPTH = 64  # nested groups and NOTs; deeper is PARSE_TOO_DEEP, so recursion can never overflow
 _STARTS = frozenset({Kind.WORD, Kind.PHRASE, Kind.LPAREN, Kind.FIELD, Kind.NOT, Kind.RANGE})
+_ENDS_A_TERM = frozenset({Kind.WORD, Kind.PHRASE, Kind.RPAREN, Kind.RANGE})  # what juxtaposition follows
 _EXAMPLES = {
     "venue": "venue:NeurIPS",
     "year": "year:2020..2026",
@@ -785,17 +788,66 @@ def _capped(diagnostics: list[Diagnostic]) -> list[Diagnostic]:
     return sorted(out, key=by_position)
 
 
+def too_long(q: str) -> Diagnostic | None:
+    """The PARSE_TOO_LONG error for a query over MAX_QUERY_LENGTH code points, else None. O(1): `parse` and
+    the API (`api/deps.py::checked_query`, before any parsing) both call it, so the two refuse alike."""
+    if len(q) <= MAX_QUERY_LENGTH:
+        return None
+    return Diagnostic(
+        code=DiagnosticCode.PARSE_TOO_LONG,
+        message=f"The query is {len(q):,} characters long; the limit is {MAX_QUERY_LENGTH:,} — split it into "
+        "several searches.",
+        span=(MAX_QUERY_LENGTH, len(q)),
+    )
+
+
+def canonical_too_long(
+    q: str,
+    canonical: str,
+    defaults_added: int = 0,
+    *,
+    juxtaposed: bool = False,
+    field_groups: bool = False,
+) -> Diagnostic | None:
+    """PARSE_TOO_LONG for an accepted query whose canonical string is over MAX_QUERY_LENGTH: the canonical
+    string is what a search record keeps and replay re-parses, so it must itself be a valid query
+    (`parse(canonical)` accepted and idempotent). The span is the whole input: no one part is too long.
+    `defaults_added` is how many code points the inserted default filters contribute (0: none inserted);
+    `juxtaposed` and `field_groups` say whether the query has an implicit AND (words side by side) or a
+    `field:(…)` group: the message names only the causes the query has."""
+    if len(canonical) <= MAX_QUERY_LENGTH:
+        return None
+    causes = [
+        *(["each space between words becomes ` AND `"] if juxtaposed else []),
+        *(["a `field:(…)` group repeats `field:` on every term"] if field_groups else []),
+        *([f"the default filters add {defaults_added:,}"] if defaults_added else []),
+    ]
+    why = f" — writing the query out in full adds length: {'; '.join(causes)}." if causes else "."
+    return Diagnostic(
+        code=DiagnosticCode.PARSE_TOO_LONG,
+        message=f"The query is {len(q):,} characters, but its canonical form (what a saved search keeps and "
+        f"replays) is {len(canonical):,} characters, {len(canonical) - MAX_QUERY_LENGTH:,} over the limit of "
+        f"{MAX_QUERY_LENGTH:,}{why} Use fewer terms, or split it into several searches.",
+        span=(0, len(q)),
+    )
+
+
+def _juxtaposed(lexemes: Sequence[Lexeme]) -> bool:
+    """Whether two terms stand side by side with no operator between them (an implicit AND)."""
+    return any(a.kind in _ENDS_A_TERM and b.kind in _STARTS for a, b in pairwise(lexemes))
+
+
+def _field_groups(lexemes: Sequence[Lexeme]) -> bool:
+    """Whether a `field:(…)` group is written (its field prefix is repeated on every term inside)."""
+    return any(a.kind is Kind.FIELD and b.kind is Kind.LPAREN for a, b in pairwise(lexemes))
+
+
 def parse(q: str, mode: Mode = "native") -> ParseResult:
     """Parse `q`. Never raises; `ast`, `canonical` and `canonical_hash` are None exactly when `errors` is
     non-empty. `mode="scholar"` accepts Scholar/PoP syntax and reports every rewrite in `translations`."""
-    if len(q) > MAX_QUERY_LENGTH:  # checked before any work, so an oversized query costs nothing
-        too_long = Diagnostic(
-            code=DiagnosticCode.PARSE_TOO_LONG,
-            message=f"The query is {len(q)} characters long; the limit is {MAX_QUERY_LENGTH} — split it into "
-            "several searches.",
-            span=(MAX_QUERY_LENGTH, len(q)),
-        )
-        return ParseResult(mode=mode, ast=None, warnings=[], errors=[too_long])
+    over = too_long(q)  # checked before any work, so an oversized query costs nothing
+    if over is not None:
+        return ParseResult(mode=mode, ast=None, warnings=[], errors=[over])
     lexed = lex(q)
     lexemes, lex_errors = lexed.lexemes, lexed.errors
     translations: list[Diagnostic] = []
@@ -829,6 +881,17 @@ def parse(q: str, mode: Mode = "native") -> ParseResult:
         notes = sorted([*notes, *_stemming_notice(ast, len(q))], key=by_position)
     d = apply_defaults(ast, len(q))
     canonical = render(d.effective)
+    top = d.effective.children if isinstance(d.effective, And) else (d.effective,)
+    inserted = [c for c in top if c.span == (len(q), len(q))]  # apply_defaults' zero-width span at the end
+    overflow = canonical_too_long(
+        q,
+        canonical,
+        sum(len(" AND ") + len(render(c)) for c in inserted),
+        juxtaposed=_juxtaposed(lexemes),
+        field_groups=_field_groups(lexemes),
+    )
+    if overflow is not None:  # it could be saved but never replayed or pasted back (decision-008)
+        return ParseResult(mode=mode, ast=None, warnings=warnings, errors=[overflow], translations=notes)
     return ParseResult(
         mode=mode,
         translations=notes,

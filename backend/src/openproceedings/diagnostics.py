@@ -65,7 +65,16 @@ class DiagnosticCode(StrEnum):
     API_RATE_LIMITED = "API_RATE_LIMITED"
     API_INDEX_NOT_LOADED = "API_INDEX_NOT_LOADED"
     API_INTERNAL = "API_INTERNAL"
+    API_NOT_FOUND = "API_NOT_FOUND"  # no such endpoint (task-034)
+    API_METHOD_NOT_ALLOWED = "API_METHOD_NOT_ALLOWED"  # an endpoint that exists, another method (task-034)
     API_REPLAY_MISMATCH = "API_REPLAY_MISMATCH"  # log code only — never an HTTP error
+    API_RECORDS_STORE_FULL = "API_RECORDS_STORE_FULL"  # a save refused: the record store is full (task-037)
+    API_BODY_TOO_LARGE = "API_BODY_TOO_LARGE"  # a request body over the cap (task-079)
+    API_BUSY = "API_BUSY"  # position verification's slots are all taken: retry shortly (M3a review)
+    # more position-verified clauses than the instance runs in one query (M3a review round 2, decision-010)
+    API_TOO_MANY_VERIFIED_CLAUSES = "API_TOO_MANY_VERIFIED_CLAUSES"
+    # position checks that would read more candidate documents than the instance allows one query
+    API_QUERY_TOO_COSTLY = "API_QUERY_TOO_COSTLY"  # (M3a review round 3, decision-010)
 
 
 _API_STATUS: dict[DiagnosticCode, int] = {
@@ -77,6 +86,13 @@ _API_STATUS: dict[DiagnosticCode, int] = {
     DiagnosticCode.API_RATE_LIMITED: 429,
     DiagnosticCode.API_INDEX_NOT_LOADED: 503,
     DiagnosticCode.API_INTERNAL: 500,
+    DiagnosticCode.API_NOT_FOUND: 404,
+    DiagnosticCode.API_METHOD_NOT_ALLOWED: 405,
+    DiagnosticCode.API_RECORDS_STORE_FULL: 503,
+    DiagnosticCode.API_BODY_TOO_LARGE: 413,
+    DiagnosticCode.API_BUSY: 503,
+    DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES: 422,
+    DiagnosticCode.API_QUERY_TOO_COSTLY: 422,
 }
 
 
@@ -102,7 +118,7 @@ def by_position(d: Diagnostic) -> tuple[int, int]:
 class Diagnostic(BaseModel):
     """A warning, error or translation notice about a query, with a half-open code-point span into `q`."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", json_schema_serialization_defaults_required=True)
 
     code: DiagnosticCode
     message: str

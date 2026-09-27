@@ -15,11 +15,16 @@ class Diagnostic(BaseModel):  # frozen, extra="forbid"
 - `ParseResult.warnings`, `.errors`, `.translations` are all `list[Diagnostic]`. Non-empty `errors` ⇒ no
   search runs.
 - API errors: `{ "error": { "code", "message", "diagnostics"?: [Diagnostic] } }`. Statuses and codes are
-  exactly spec 04 §Error handling, which is the only table: 422 `PARSE_*` (a query that does not parse,
-  carrying 02's diagnostics with spans), 422 `API_BAD_PARAM`, 404 `API_PAPER_NOT_FOUND` /
+  exactly spec 04 §Error handling, which is the only table: 422 `PARSE_*` (a query that does not parse, on an
+  endpoint that runs it, carrying 02's diagnostics with spans; `POST /parse` returns them as values in a 200), 422 `API_BAD_PARAM`, 404 `API_PAPER_NOT_FOUND` /
   `API_RECORD_NOT_FOUND`, 409 `API_INDEX_VERSION_UNAVAILABLE`, 409 `API_RECORD_MISMATCH` (export of a
-  `mismatch` record), 429 `API_RATE_LIMITED` (with `Retry-After`), 503 `API_INDEX_NOT_LOADED`, 500
-  `API_INTERNAL`. A new or changed pair is a spec 04 change first (and breaking once released).
+  `mismatch` record), 429 `API_RATE_LIMITED` (with `Retry-After`), 503 `API_INDEX_NOT_LOADED`, 503 `API_RECORDS_STORE_FULL`, 413
+  `API_BODY_TOO_LARGE` (a body over the cap), 503 `API_BUSY` (with `Retry-After`: verification slots taken), 422
+  `API_TOO_MANY_VERIFIED_CLAUSES` (more position-verified clauses than the instance runs; carries one located
+  diagnostic per clause, decision-010), 422 `API_QUERY_TOO_COSTLY` (the clauses' position checks would read
+  more candidate documents than the instance allows one query; one located diagnostic per clause with its
+  counts, decision-010), 500
+  `API_INTERNAL`, and 404 `API_NOT_FOUND` / 405 `API_METHOD_NOT_ALLOWED` for routing (task-034). A new or changed pair is a spec 04 change first (and breaking once released). An error envelope's `code` is typed by the `ErrorCode` schema: exactly the codes with an HTTP status, derived from the registry (`api/errors.py`); a spec 04 test reads the §Error handling table and compares it with the registry both ways, so a new `API_` code needs its table row.
 - The frontend uses the generated `Diagnostic` type and draws squiggles directly from `span`. It never
   recomputes positions (`typescript-standards`).
 

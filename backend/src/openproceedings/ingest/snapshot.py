@@ -28,7 +28,7 @@ import tempfile
 import time
 import unicodedata
 from collections import Counter
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import astuple, dataclass, fields
 from datetime import UTC, datetime
 from pathlib import Path
@@ -40,6 +40,7 @@ from openproceedings import __version__, storage
 from openproceedings.ingest.dedup import Conflict, DedupResult, Merge, dedup
 from openproceedings.ingest.record import RECORD_SCHEMA_VERSION, PaperRecord
 from openproceedings.ingest.ris import ImportReport, import_ris
+from openproceedings.logs import elapsed_ms
 from openproceedings.query.normalize import TOKENIZER_VERSION
 
 log = logging.getLogger(__name__)
@@ -51,7 +52,45 @@ SHORT = 12
 
 
 class SnapshotError(Exception):
-    """A snapshot or cache operation refused: the message says why and what to do (never record text)."""
+    """A snapshot or cache operation refused: the message says why and what to do (never record text).
+    `reason` is a short constant a log line may carry (never a path), e.g. `snapshot_missing`."""
+
+    def __init__(self, message: str, *, reason: str = "snapshot_invalid") -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
+def indexed_snapshot(data_dir: Path, index_manifest: Mapping[str, Any]) -> tuple[Path, dict[str, Any]]:
+    """The snapshot an index was built from, and that snapshot's manifest: `<data_dir>/snapshots/<name>`,
+    `name` being the index manifest's `snapshot` (a plain directory name), whose manifest names the index
+    manifest's `snapshot_hash`. The one rule for the API's load (`api/state.snapshot_records`, which then
+    re-hashes the records with `RecordFile`) and a search record's facts (`records.snapshot_facts`).
+    SnapshotError otherwise, reason `index_manifest_invalid`, `snapshot_missing`, `snapshot_unreadable` or
+    `snapshot_hash_mismatch`."""
+    name, expected = index_manifest.get("snapshot"), index_manifest.get("snapshot_hash")
+    plain = (
+        isinstance(name, str) and name and "/" not in name and "\\" not in name and not name.startswith(".")
+    )
+    if not plain or not isinstance(expected, str):
+        raise SnapshotError(
+            "the index manifest doesn't name its snapshot by a directory name and hash",
+            reason="index_manifest_invalid",
+        )
+    path = data_dir / "snapshots" / str(name)
+    try:
+        manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise SnapshotError(f"{name} is not on this instance", reason="snapshot_missing") from None
+    except (OSError, ValueError) as e:
+        raise SnapshotError(
+            f"{name}'s manifest is unreadable ({type(e).__name__})", reason="snapshot_unreadable"
+        ) from None
+    if not isinstance(manifest, dict) or manifest.get("snapshot_hash") != expected:
+        raise SnapshotError(
+            "the snapshot of that name is not the one the index was built from",
+            reason="snapshot_hash_mismatch",
+        )
+    return path, manifest
 
 
 @dataclass(frozen=True)
@@ -274,9 +313,48 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
         "snapshot_built" if created else "snapshot_exists",
         extra={"snapshot": target.name, "snapshot_hash": snapshot_hash, "records": manifest["record_count"],
                "merges": manifest["merges"]["total"], "conflicts": manifest["conflicts"]["total"],
-               "ms": round((time.monotonic() - began) * 1000)},
+               "ms": elapsed_ms(began, time.monotonic)},
     )  # fmt: skip
     return BuildResult(target, snapshot_hash, created=created)
+
+
+class _OnePass:
+    """One read of a snapshot, shared by `iter_records` and `RecordFile`: its parsed manifest, then
+    `records.jsonl` line by line (numbered from 1), each line hashed as it is read, so the file checked
+    against `snapshot_hash` is the file read. Errors (OSError, ValueError) are the caller's to word."""
+
+    def __init__(self, snapshot: Path) -> None:
+        self.manifest: Any = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+        self.path = snapshot / "records.jsonl"
+        self._digest = hashlib.sha256()
+
+    def lines(self) -> Iterator[tuple[int, bytes]]:
+        with self.path.open("rb") as fh:
+            for n, raw in enumerate(fh, start=1):
+                self._digest.update(raw)
+                yield n, raw
+
+    def hexdigest(self) -> str:
+        """The sha256 of the lines read so far (all of them, once `lines()` is exhausted)."""
+        return self._digest.hexdigest()
+
+
+def _id_order(previous: str, rid: str) -> str | None:
+    """Why `rid` can't follow `previous` in a snapshot (ids strictly ascending, so unique), or None."""
+    if rid == previous:
+        return "duplicate id"
+    if rid < previous:
+        return "records are not sorted by id"
+    return None
+
+
+# RecordFile's cheap per-line check, named in pydantic's words as iter_records' full validation names them
+_LINE_KIND = {
+    "JSONDecodeError": "json_invalid",
+    "ValueError": "json_invalid",
+    "KeyError": "missing",
+    "TypeError": "type_error",
+}
 
 
 def iter_records(snapshot: Path) -> Iterator[PaperRecord]:
@@ -286,31 +364,27 @@ def iter_records(snapshot: Path) -> Iterator[PaperRecord]:
     read). A caller must not act on the records until iteration finishes without raising: `load_records`
     and `build_index` (which commits only after the last record) don't. Errors name the line only."""
     try:
-        manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+        read = _OnePass(snapshot)
+        manifest = read.manifest
         expected = manifest["snapshot_hash"] if isinstance(manifest, dict) else None
-        digest = hashlib.sha256()
         previous = ""
-        with (snapshot / "records.jsonl").open("rb") as fh:
-            for n, raw in enumerate(fh, start=1):
-                digest.update(raw)
-                try:
-                    r = PaperRecord.model_validate_json(raw)
-                except ValidationError as e:
-                    kinds = sorted({str(err["type"]) for err in e.errors(include_input=False)})
-                    raise SnapshotError(
-                        f"{snapshot.name} line {n}: invalid record ({', '.join(kinds)})"
-                    ) from None
-                if r.id == previous:
-                    raise SnapshotError(f"{snapshot.name} line {n}: duplicate id")
-                if r.id < previous:
-                    raise SnapshotError(f"{snapshot.name} line {n}: records are not sorted by id")
-                previous = r.id
-                yield r
+        for n, raw in read.lines():
+            try:
+                r = PaperRecord.model_validate_json(raw)
+            except ValidationError as e:
+                kinds = sorted({str(err["type"]) for err in e.errors(include_input=False)})
+                raise SnapshotError(
+                    f"{snapshot.name} line {n}: invalid record ({', '.join(kinds)})"
+                ) from None
+            if out_of_order := _id_order(previous, r.id):
+                raise SnapshotError(f"{snapshot.name} line {n}: {out_of_order}")
+            previous = r.id
+            yield r
     except (OSError, ValueError, KeyError) as e:
         if isinstance(e, SnapshotError):
             raise
         raise SnapshotError(f"{snapshot.name} is not a snapshot ({type(e).__name__})") from None
-    if expected != digest.hexdigest():
+    if expected != read.hexdigest():
         raise SnapshotError(f"{snapshot.name}: records.jsonl doesn't match its manifest's snapshot_hash")
     try:  # the audit files, both of them, exactly as the manifest hashed them (the check _holds makes too)
         matches = manifest.get("files") == _audit(snapshot)
@@ -323,6 +397,80 @@ def iter_records(snapshot: Path) -> Iterator[PaperRecord]:
 def load_records(snapshot: Path) -> dict[str, PaperRecord]:
     """A snapshot's records by id (all in memory; `iter_records` streams them)."""
     return {r.id: r for r in iter_records(snapshot)}
+
+
+class RecordFile:
+    """Random access by id to a snapshot's records, holding only each line's byte range in memory (the API's
+    `GET /papers/{id}`: the full record, provenance included, which the index doesn't store).
+
+    Opening makes one pass over `records.jsonl`: ids strictly ascending, and the bytes hashing to the
+    manifest's `snapshot_hash` (so the file indexed is the snapshot named). The same pass counts the records
+    per (venue, year, track, status) and the missing abstracts per (venue, year), and keeps the manifest it
+    read, so `GET /coverage` checks the manifest's counts against the records. A lookup reads its one line and
+    validates it as a `PaperRecord`, which re-checks its `content_hash`. Snapshots are sealed read-only, so
+    the bytes can't change underneath. Thread-safe: every lookup opens the file itself."""
+
+    def __init__(self, snapshot: Path) -> None:
+        self.path = snapshot / "records.jsonl"
+        self.cells: Counter[tuple[str, int, str, str]] = Counter()  # (venue, year, track, status) → records
+        self.abstract_missing: Counter[tuple[str, int]] = Counter()  # (venue, year) → no abstract
+        try:
+            read = _OnePass(snapshot)
+            manifest = read.manifest
+            self.manifest: dict[str, Any] = manifest
+            self.snapshot_hash: str = manifest["snapshot_hash"]
+            self._at: dict[str, tuple[int, int]] = {}
+            previous, offset = "", 0
+            for n, raw in read.lines():
+                # no full PaperRecord validation here (a lookup validates its one line), but a bad line is
+                # named the way iter_records names it: "line N: invalid record (<kind>)" / its id-order reason
+                try:
+                    line = json.loads(raw)
+                    rid = line["id"]
+                    cell = (line["venue"], line["year"], line["track"], line["status"])
+                    no_abstract = line["abstract"] is None
+                    if not isinstance(rid, str):
+                        raise TypeError(rid)
+                except (ValueError, KeyError, TypeError) as e:
+                    raise SnapshotError(
+                        f"{snapshot.name} line {n}: invalid record ({_LINE_KIND[type(e).__name__]})"
+                    ) from None
+                if out_of_order := _id_order(previous, rid):
+                    raise SnapshotError(f"{snapshot.name} line {n}: {out_of_order}")
+                self._at[rid] = (offset, len(raw))
+                self.cells[cell] += 1
+                if no_abstract:
+                    self.abstract_missing[(line["venue"], line["year"])] += 1
+                previous, offset = rid, offset + len(raw)
+        except FileNotFoundError:
+            raise SnapshotError(
+                f"{snapshot.name} is not on this instance", reason="snapshot_missing"
+            ) from None
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            raise SnapshotError(
+                f"{snapshot.name} is not a snapshot ({type(e).__name__})", reason="snapshot_unreadable"
+            ) from None
+        if read.hexdigest() != self.snapshot_hash:
+            raise SnapshotError(
+                f"{snapshot.name}: records.jsonl doesn't match its manifest's snapshot_hash",
+                reason="snapshot_hash_mismatch",
+            )
+
+    def __len__(self) -> int:
+        return len(self._at)
+
+    def get(self, rid: str) -> PaperRecord | None:
+        """The record with id `rid`, or None if the snapshot has none."""
+        at = self._at.get(rid)
+        if at is None:
+            return None
+        with self.path.open("rb") as fh:
+            fh.seek(at[0])
+            raw = fh.read(at[1])
+        try:
+            return PaperRecord.model_validate_json(raw)
+        except ValidationError:
+            raise SnapshotError(f"{self.path.parent.name}: the record at byte {at[0]} is invalid") from None
 
 
 def diff(a: Path, b: Path) -> dict[str, Any]:

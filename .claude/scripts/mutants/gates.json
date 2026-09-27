@@ -494,6 +494,12 @@
   "new": "git -C \"$root\" diff HEAD -- 'frontend/eslint.config.*'"
  },
  {
+  "label": "autofix looks for node_modules in frontend/ (the npm workspace hoists it to the root)",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "if [ -d \"$root/node_modules\" ]; then",
+  "new": "if [ -d \"$root/frontend/node_modules\" ]; then"
+ },
+ {
   "label": "git clean -x allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "        if ignored and not dry and not excluded and not outside:",
@@ -696,5 +702,11 @@
   "file": "backend/tests/conftest.py",
   "old": "    if isinstance(sockaddr, tuple) and sockaddr[0] in _LOOPBACK:\n        return _real_getnameinfo(sockaddr, flags)",
   "new": "    if True:\n        return _real_getnameinfo(sockaddr, flags)"
+ },
+ {
+  "label": "lint_tooling lints agent worktrees",
+  "file": ".claude/scripts/lint_tooling.py",
+  "old": "dirs[:] = [d for d in dirs if d != \"worktrees\"]",
+  "new": "dirs[:] = list(dirs)"
  }
 ]

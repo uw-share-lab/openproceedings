@@ -27,6 +27,7 @@ dev = [
     "hypothesis>=6.112",
     "refaudit==0.4.9",
     "pytest-benchmark>=5.1",
+    "httpx2>=2.13.1",
 ]
 
 [tool.ruff]

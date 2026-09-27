@@ -29,11 +29,15 @@ normalization. Changing what ANY input tokenizes to requires bumping TOKENIZER_V
 
 `tokenize` works character by character so every token carries the half-open code-point span of the RAW
 text it came from (spec 04 §Conventions); highlights use those spans. A single raw character can produce
-more than one token (`½` → `1`, `2`), in which case they share its span.
+more than one token (`½` → `1`, `2`), in which case they share its span; two spans overlap only on exactly
+one such code point (a combining-slash cluster gives each piece the raw characters it came from:
+`_cluster_spans`). What a query parses to never depends on those spans: the lexer's detached-wildcard test
+reads the folded pieces after the last word (`tokenize_with_tail`), never a span.
 """
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from dataclasses import dataclass
 
@@ -134,6 +138,43 @@ def _fold(c: str, base: str | None) -> tuple[list[str | _Op], str | None]:
             out.append(ch)
             base = ch if _is_word_char(ch) else None
     return out, base
+
+
+def _cluster_spans(
+    text: str, i: int, j: int, folded: list[str | _Op], base: str | None
+) -> list[tuple[int, int]]:
+    """The raw span of each piece of `folded`, the `_fold` of the slash cluster `text[i:j]` (a character, then
+    combining marks, one of them U+0338), so pieces that land in different tokens don't claim the same marks
+    (task-075). Offsets only: the pieces are always the whole cluster's `_fold`, so tokens can't change.
+
+    NFKC attaches the marks to the last starter of the character's own NFKC form, so two kinds of piece can
+    end one token and start another inside a cluster, and each gets the raw characters it came from:
+    - pieces before that starter come from the character alone (`½` + slash is `1⁄2` + slash): `1` spans
+      `½`, not the slash, so `x½` + slash + `y` gives `x1` and `2y`, which share `½` and nothing else;
+    - U+0345 (ypogegrammeni) is the only mark that folds to a letter, `ι`, and its combining class (240, the
+      highest, and its alone) sorts it after every other mark, so its `ι`s are the fold's last pieces. After
+      a piece that isn't a letter (`⩶` + slash + U+0345 → `==`, `neq`, `ι`) they start a word of their own, which starts at
+      the first raw U+0345, and the pieces before it end there. The one exception to "each piece spans what
+      it came from": the pieces before the first raw U+0345 end at it, even if a later mark belongs to them
+      (`=` + U+0345 + slash: `neq` spans only `=`, and the slash is in the `ι` word's span). Contiguous spans
+      can't split interleaved marks, and this keeps them from overlapping.
+    Every other piece spans the whole cluster, as a combining mark extends the word it follows."""
+    spans = [(i, j)] * len(folded)
+    nfkc = unicodedata.normalize("NFKC", text[i])
+    last = max((k for k, ch in enumerate(nfkc) if not unicodedata.combining(ch)), default=0)
+    if last:
+        head, _ = _fold(nfkc[:last], base)
+        if folded[: len(head)] == head:
+            spans[: len(head)] = [(i, i + 1)] * len(head)
+    iotas = [m for m in range(i + 1, j) if text[m] == "\u0345"]
+    q = len(iotas)
+    if q and len(folded) > q and all(p == "\u03b9" for p in folded[-q:]):
+        before = folded[-q - 1]
+        if isinstance(before, _Op) or not _is_word_char(before):
+            m1 = iotas[0]
+            spans[:-q] = [(a, min(b, m1)) for a, b in spans[:-q]]
+            spans[-q:] = [(m1, j)] * q
+    return spans
 
 
 def _find_closing_dollar(text: str, i: int) -> int:
@@ -397,8 +438,52 @@ def math_regions(text: str) -> list[tuple[int, int]]:
     return regions
 
 
+# An ASCII text with no `\` and no `$` holds no LaTeX (every mask entry is KEEP: math and commands need one
+# of the two) and no character that NFKC, case-folding, marks or the operator table change beyond ASCII
+# lower-casing, so its tokens are exactly its runs of ASCII letters and digits, lower-cased, each spanning
+# itself (task-073). Most abstracts are such texts; a property pins this path to the loop below.
+_ASCII_WORD = re.compile(r"[A-Za-z0-9]+")
+
+
 def tokenize(text: str) -> list[Token]:
     """Tokens of `text` with their raw code-point spans."""
+    if _plain_ascii(text):
+        return [Token(m.group().lower(), m.start(), m.end()) for m in _ASCII_WORD.finditer(text)]
+    return _tokenize_each_char(text)
+
+
+@dataclass(frozen=True, slots=True)
+class Tail:
+    """What `text` ends with after its last word or operator piece (`tokenize_with_tail`): the folded
+    pieces, in order (`abcd⒈` → `.`, `vision-` → `-`, `x⑴` → `)`), and the raw offset of the character the
+    first of them came from. Empty `pieces` means `text` ends on a letter, digit or operator piece (or has
+    no piece at all). Invisible characters, dropped marks and LaTeX markup that joins a word are not pieces,
+    and a marks-only run that makes no token (`vision-` + a lone vowel sign) leaves the tail as it was (`-`)."""
+
+    start: int
+    pieces: str
+
+
+def tokenize_with_tail(text: str) -> tuple[list[Token], Tail]:
+    """`tokenize(text)` plus its `Tail`, from the same pass: the lexer's detached-wildcard test (spec 02:
+    a wildcard goes directly after a letter or digit, judged on the folded pieces)."""
+    if _plain_ascii(text):
+        tokens = tokenize(text)
+        end = tokens[-1].end if tokens else 0
+        return tokens, Tail(end, text[end:])
+    out: list[Tail] = []
+    tokens = _tokenize_each_char(text, out)
+    return tokens, out[0]
+
+
+def _plain_ascii(text: str) -> bool:
+    """ASCII with no LaTeX: every character is a word character or a separator, as it stands (task-073)."""
+    return text.isascii() and "\\" not in text and "$" not in text
+
+
+def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token]:
+    """`tokenize`'s definition for any text, one raw character at a time (steps 1-5 above). Given a `tail`
+    list, it appends the text's `Tail` to it."""
     subs: dict[int, tuple[str, bool, int, bool]] = {}
     latex = _latex_mask(text, subs=subs)
     out: list[Token] = []
@@ -406,14 +491,20 @@ def tokenize(text: str) -> list[Token]:
     start = end = 0
     base: str | None = None
     lead: int | None = None  # where markup before a word began (`\\"{O}del`): the word's span starts there
+    # The separator pieces since the last word or operator TOKEN (the Tail). A word clears it only when it
+    # is emitted: a marks-only word (`-` + a lone vowel sign) is dropped, so the `-` stays what the text ends
+    # with (M3a gate round 2: clearing it on the mark let `vision-ަ*` pass as `vision*`).
+    rest: list[str] = []
+    rest_start = len(text)
 
     def close() -> None:
-        nonlocal buf
+        nonlocal buf, rest
         if buf:
             word = unicodedata.normalize("NFC", "".join(buf))
             # A run of marks with no letter (a lone vowel sign) is not a word.
             if not all(unicodedata.category(ch).startswith("M") for ch in word):
                 out.append(Token(word, start, end))
+                rest = []
             buf = []
 
     n = len(text)
@@ -433,6 +524,7 @@ def tokenize(text: str) -> list[Token]:
                     start = i + 1 if lead is None else lead
                 buf.extend(p for p in folded if isinstance(p, str))
                 end = cmd_end
+            rest = []
             lead = None
             # an operator's name is its own token's: skip it, so no word after it starts inside it (`\\leq5`)
             i = cmd_end if operator else i + 1
@@ -440,6 +532,9 @@ def tokenize(text: str) -> list[Token]:
         if latex[i] == SEP:
             close()
             base = lead = None
+            if not rest:
+                rest_start = i
+            rest.append(c)
             i += 1
             continue
         if latex[i] == JOIN:  # markup inside a word: keep the word open and cover the markup in its span
@@ -450,33 +545,61 @@ def tokenize(text: str) -> list[Token]:
             i += 1
             continue
         first, lead = lead, None
+        if c < "\x80" and (stop == n or not unicodedata.combining(text[stop])):
+            # an ASCII character with no mark after it (most characters of most texts; task-073): `_fold`
+            # would give it back lower-cased, and it is a word character exactly when it is alphanumeric
+            if c.isalnum():
+                if not buf:
+                    start = i if first is None else first
+                base = c.lower()
+                buf.append(base)
+                end = stop
+            else:
+                close()
+                base = None
+                if not rest:
+                    rest_start = i
+                rest.append(c)
+            i = stop
+            continue
         j = i + 1
         while j < n and latex[j] == KEEP and unicodedata.combining(text[j]):
             j += 1
-        if "\u0338" in text[i + 1 : j]:
+        cluster = "\u0338" in text[i + 1 : j]
+        if cluster:
             # a slash among the marks after a character: NFKC the whole cluster, as the whole-string rule
             # would (`∈` + slash is `∉`, full-width `＝` + slash is `≠`, whatever the marks' order)
             c, stop = text[i:j], j
-        folded, base = _fold(c, base)
+        folded, folded_base = _fold(c, base)
+        spans = _cluster_spans(text, i, j, folded, base) if cluster else [(i, stop)] * len(folded)
+        base = folded_base
         if not folded:  # combining mark or invisible format char: extends an open word, never starts one
             if buf:
                 end = stop
             i = stop
             continue
-        for piece in folded:
+        for piece, (piece_start, piece_end) in zip(folded, spans, strict=True):
             if isinstance(piece, _Op):
                 close()
-                out.append(Token(piece.name, i, stop, op=True))
+                out.append(Token(piece.name, piece_start, piece_end, op=True))
+                rest = []
             elif _is_word_char(piece):
                 if not buf:
-                    start = i if first is None else first
-                first = None
+                    start = piece_start if first is None else first
                 buf.append(piece)
-                end = stop
+                end = piece_end
             else:
                 close()
+                if not rest:
+                    rest_start = i
+                rest.append(piece)
+            # markup before this character belongs to its first piece only: a word that starts after an
+            # operator or a separator piece (`\\"∭` + slash + U+0345 → int ×3, then ι) starts at its own piece (task-075)
+            first = None
         i = stop
     close()
+    if tail is not None:
+        tail.append(Tail(rest_start, "".join(rest)) if rest else Tail(len(text), ""))
     return out
 
 

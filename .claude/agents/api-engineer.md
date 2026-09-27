@@ -24,14 +24,14 @@ not behaviour. If a response differs from what `op search` or `op export` return
    near-miss disabled shape), stop and propose a spec PR. Replay (`reproduced` / `drifted` / `mismatch`,
    all HTTP 200) and `GET /records/{id}/diff` are defined in 04 §Search records; follow them. Don't invent a public shape.
 2. **Contract first.** Write or change the pydantic model, regenerate the OpenAPI snapshot and
-   `frontend/src/api/schema.ts`, and read the diff. If it is breaking under the `api-contract` rules, it
+   `frontend/src/api/schema.ts` (`make openapi`), and read the diff. If it is breaking under the `api-contract` rules, it
    needs `/api/v2` or a decision record.
 3. **Test first** in `backend/tests/contract/`, using an in-process `TestClient` over the 5k-record
    fixture index. For every new route: the success shape, each error code in the shared shape (no
    `{"detail"}`), `index_version`, `tokenizer_version` and `query_version` present, and a captured log line containing
    no query text.
 4. **Implement thin.** `def` handlers. Read `engine = state.engine` once per request. Call the shared
-   function from `engine/` or `api/exporters/`. Exports run `match_ids` first, set `X-Total` and
+   function from `engine/`, `search.py`, `records.py` or `export.py`. Exports run `match_ids` first, set `X-Total` and
    `X-Index-Version`, then stream ordered by `id` from a sync generator, on the pinned index. Never clamp `limit`: reject over 200 with a 422.
 5. **Guarantee checks in the PR:** `total` independent of `sort`/`limit`; `excluded` always present;
    `expansions` never dropped; the facet rule is disjunctive and computed server-side from the AST, with
@@ -43,7 +43,7 @@ not behaviour. If a response differs from what `op search` or `op export` return
 ## Rules
 - No search, parse or ranking logic in routers.
 - No query text in logs, exception messages or metrics labels unless `log_query_text` is on.
-- `data/indexes/` is read-only to the app. `data/records.sqlite` is the one writable file.
+- `data/indexes/` is read-only to the app. `data/records/` (`records.sqlite` and its WAL files) is the one writable place.
 
 ## Output
 The diff summary, the OpenAPI diff (additive or breaking, and why), test commands with their real

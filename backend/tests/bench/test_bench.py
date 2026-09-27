@@ -4,7 +4,9 @@ Benchmarks are off in ordinary runs (`--benchmark-disable` in pyproject's addopt
 once, as a test). The `bench` workflow runs `--benchmark-enable --benchmark-only` on a pull request's base
 and head, fails a regression of the minimum over 20% (the least noise-prone statistic), and these tests
 assert the budgets from the timings measured:
-- a search returning the first 50 hits: p95 < 100 ms (every Trust-Evals protocol string, Scholar mode);
+- a search returning the first 50 hits: p95 < 100 ms (every Trust-Evals protocol string, Scholar mode), with
+  and without its display records and highlights (task-073; exclusion accounting has its own budget), and
+  as the `/search` endpoint runs it, with exclusion accounting and facets too (first page, facet memo cold);
 - `match_ids` with exclusion accounting: p95 < 300 ms;
 - a wildcard expansion of up to 200 terms: p95 < 50 ms.
 The ~80k corpus and the position-verified cases are measured by `backend/tests/bench/report_80k.py` into
@@ -20,19 +22,23 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from openproceedings import search
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.compile import FIELDS
 from openproceedings.engine.exclusions import excluded
+from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import MAX_EXPANSIONS, EngineInputError
 from openproceedings.engine.tantivy_engine import TantivyEngine
-from openproceedings.query.ast import Wildcard
+from openproceedings.query.ast import Node, Wildcard
 from openproceedings.query.parser import ParseResult, parse
+from openproceedings.search import Shown
 
 from tests.fixtures.corpus.synthetic_5k import records
 from tests.golden.test_trust_evals import STRINGS
 from tests.unit.engine.test_exclusions import tantivy_of
 
 ROUNDS = 30
+ENDPOINT_ROUNDS = 100  # the `/search` rows: its p95 over fewer rounds is little more than the slowest one
 
 
 @pytest.fixture(scope="module")
@@ -49,7 +55,7 @@ def p95(benchmark: Any) -> float | None:
     return data[min(len(data) - 1, int(0.95 * len(data)))]
 
 
-def measure(benchmark: Any, f: Callable[[], object]) -> object:
+def measure(benchmark: Any, f: Callable[[], object], rounds: int = ROUNDS) -> object:
     """ROUNDS rounds of at least ~1 ms each: a sub-millisecond call is repeated within a round, so a 20% gate
     compares real work, not timer and scheduler noise."""
     f()  # the first call is cold (compile, expansion, verified clauses): size the rounds on a warm one
@@ -57,7 +63,7 @@ def measure(benchmark: Any, f: Callable[[], object]) -> object:
     f()
     once = time.perf_counter() - t
     iterations = max(1, min(1_000, round(0.001 / max(once, 1e-7))))
-    return benchmark.pedantic(f, rounds=ROUNDS, iterations=iterations, warmup_rounds=1)
+    return benchmark.pedantic(f, rounds=rounds, iterations=iterations, warmup_rounds=1)
 
 
 def trust_evals(name: str) -> ParseResult:
@@ -71,6 +77,46 @@ def test_search_first_50_hits(benchmark: Any, engine: TantivyEngine, name: str) 
     ast = trust_evals(name).effective_ast
     assert ast is not None
     measure(benchmark, lambda: engine.search(ast, limit=50))
+    time = p95(benchmark)
+    assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
+
+
+def search_with_highlights(engine: TantivyEngine, ast: Node, limit: int = 50) -> list[object]:
+    """A search's first `limit` hits as `search.run` assembles them for the API, less exclusion accounting
+    (budgeted on its own, 300 ms) and facets: the page, its display records and each hit's highlights, the
+    part no engine cache holds, so every call pays for it (task-073)."""
+    _total, page = engine.page(ast, limit=limit)
+    shown = engine.display([i for i, _score in page])
+    lit = Highlighter(ast, engine.expansions(ast))
+    return [lit(Shown.of(shown[i])) for i, _score in page]
+
+
+@pytest.mark.parametrize("name", list(STRINGS))
+def test_search_first_50_hits_with_highlights(benchmark: Any, engine: TantivyEngine, name: str) -> None:
+    ast = trust_evals(name).effective_ast
+    assert ast is not None
+    measure(benchmark, lambda: search_with_highlights(engine, ast))
+    time = p95(benchmark)
+    assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
+
+
+def search_endpoint(
+    engine: TantivyEngine, parsed: ParseResult, offset: int = 0, first: bool = True
+) -> object:
+    """The whole of `GET /api/v1/search`'s engine work: `search.run` with facets and highlights (page, display
+    records, highlights, exclusion accounting, disjunctive facets, the last on a worker thread overlapping the
+    page, so its wall time is below its CPU time). `first` forgets the facet memo, so the
+    call pays as a query's first page does (compiled queries and verified clauses stay warm); otherwise it
+    is a later page of the same query."""
+    if first:
+        engine.faceted.clear()
+    return search.run(engine, parsed, offset=offset, limit=50, facets=True, highlight=True)
+
+
+@pytest.mark.parametrize("name", list(STRINGS))
+def test_search_endpoint_first_page(benchmark: Any, engine: TantivyEngine, name: str) -> None:
+    parsed = trust_evals(name)
+    measure(benchmark, lambda: search_endpoint(engine, parsed), ENDPOINT_ROUNDS)  # wall time: facets overlap
     time = p95(benchmark)
     assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
 

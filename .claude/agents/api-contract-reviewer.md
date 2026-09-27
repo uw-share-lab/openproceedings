@@ -18,10 +18,11 @@ report, and the main session fixes.
 
 ## How you work
 1. `git diff origin/dev...HEAD -- backend/tests/contract/ frontend/src/api/schema.ts backend/src/openproceedings/api/`
-   Locate the committed OpenAPI snapshot and read its diff first. It is the contract as shipped.
-2. **Freshness.** Regenerate the schema from the app and `schema.ts` from the schema (the same commands
-   the CI `test` job runs) into a temp dir, and diff them against the committed files. Any difference is
-   a Must. Also flag a model change whose snapshot did not change, which means the snapshot test is not
+   Read the diff of the committed OpenAPI snapshot, `backend/tests/contract/openapi.json`, first. It is
+   the contract as shipped.
+2. **Freshness.** Run `uv run op openapi | diff - backend/tests/contract/openapi.json` and
+   `npx --no-install openapi-typescript backend/tests/contract/openapi.json | diff - frontend/src/api/schema.ts`
+   (what `make openapi` and the CI `test` job regenerate). Any difference is a Must. Also flag a model change whose snapshot did not change, which means the snapshot test is not
    covering it.
 3. **Classify each change** using the versioning rules. Removed or renamed fields, type or nullability
    changes, optional→required, tightened validation, changed defaults, changed error codes, and changed

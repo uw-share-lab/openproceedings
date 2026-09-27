@@ -33,22 +33,41 @@ Database name and version (the **full** `index_version`, `tokenizer_version`, `q
 review of non-English titles also states the tokenizer's known limits, spec 02 §Known limits: CJK runs
 are one token; Latin/Greek/Cyrillic accents and Hebrew/Arabic vowel points fold) · the
 **full search string**: the `identification_query` plus the default clauses · date searched (UTC,
-`searched_at`) and, separately, the crawl date (`crawl_dates`) · limits (years, venues, tracks, statuses) ·
+`searched_at`) and, separately, the crawl window (`crawl_dates["*"]`, cited from–to: "a crawl run
+2026-09-18 to 2026-09-20"; only `*` exists until M4's crawlers add per-source windows) · limits (years, venues, tracks, statuses) ·
 the number of records · expansions, translations and warnings · the deduplication process (item 16) ·
 whether the search was re-run (replay status) · a stable link to the search record.
 
 **Deduplication (PRISMA-S item 16) is a process statement, not a removal count.** The corpus-wide
 `dedup.merged` and `dedup.ambiguous_not_merged` counts from the manifest (stored in the search record's
 `dedup`, 04 §Search records) describe how the database was built: cross-source records merged at ingest,
-before indexing. Report them only in that statement. Never put them in the flow diagram's duplicates box or
-present them as removed by this search.
+before indexing. `dedup.track_not_merged` and `dedup.venue_year_not_merged` (body v2) count look-alike
+pairs deliberately kept apart (a track the proceedings never host; two records of one venue-year); the
+statement may mention them. Report them only in that statement. Never put them in the flow diagram's
+duplicates box or present them as removed by this search. **Duplicates Covidence finds** (between this export
+and other databases' records) **do** go in the flow diagram's duplicates box: they are the review's own
+deduplication, not openproceedings'.
+
+## Bootstrap corpora are not citable identification numbers
+An index built only from bootstrap sources (`vocab.BOOTSTRAP_SOURCES`: the RIS import of an earlier Scholar
+search, spec 01) holds that search's output, not a database. Its counts describe that corpus and are **not**
+PRISMA "records identified from databases". A search record says so: `sources` (the manifest's source
+names) and `identification_citable: false`, from the same `vocab.bootstrap_only` test `op search` uses for
+its "note: bootstrap corpus" line. Its window is not a crawl: `crawl_dates_kind["*"]` is
+`scholar_query_dates` (Publish or Perish's query dates, local time labelled UTC, so an end can be a day
+off), and must be worded "Scholar searches run <from> to <to>", never "a crawl"; a `mixed` window (real
+crawls plus a bootstrap source, from M4) reads "crawls and Scholar searches run <from> to <to> (Scholar dates
+in local time)" (spec 05 §Save search record). The record page shows the CLI's caution and **no methods
+text** when `identification_citable` is false; a v1 record (null: not recorded) shows the caution "not
+recorded whether this index is a bootstrap corpus: these counts may not be PRISMA identification numbers"
+and no methods text either.
 
 ## Search record fields (04 §Search records) — all required
 The full table is in `.claude/skills/search-records/SKILL.md`: `input`, `mode`, `canonical`,
 `canonical_hash`, `identification_query`, `index_version`, `tokenizer_version`, `query_version`,
-`snapshot_hash`, `crawl_dates`, `searched_at`, `total`, `excluded` (with `unknown` itemised), `expansions`,
-`translations`, `warnings`, `ids` and `ids_hash`, `dedup`, and `semantic_version` if the near-miss panel was
-open. Replay status (HTTP 200): `reproduced` (same `index_version` and `query_version`, `ids_hash` and
+`snapshot_hash`, `crawl_dates` (with `crawl_dates_kind`), `sources`, `identification_citable`, `searched_at`,
+`total`, `excluded` (with `unknown` itemised), `expansions`, `translations`, `warnings`, `ids` and `ids_hash`,
+`dedup`, and `semantic_version` if the near-miss panel was open. Replay status (HTTP 200): `reproduced` (same `index_version` and `query_version`, `ids_hash` and
 `excluded` match); `drifted` (only a different index or query version available, with the changed inputs
 named and `+added / −removed`; `+0 / −0` is "membership-identical"); `mismatch` (same versions, but
 `ids_hash` or `excluded` differ) is a bug that breaks guarantee 4. **Do not cite** a record in `mismatch`:
@@ -58,7 +77,8 @@ original.
 ## Methods-text template (spec 05 §Save search record)
 The text says **which string reproduces which number**, gives the **full** `index_version` (never a
 prefix), and keeps the search date separate from the crawl date:
-> We searched openproceedings on 2026-09-25 (index `a1b2c3d4e5f6`, built from a crawl of 2026-09-20) with
+> We searched openproceedings on 2026-09-25 (index `a1b2c3d4e5f6`, built from a crawl run 2026-09-18 to
+> 2026-09-20) with
 > the string `<identification_query>`, which identified 716 records within the limits it states
 > (`year:2020..2026`). Default filters `track:(main OR datasets_benchmarks OR position)` and
 > `status:accepted` removed 304 of them before screening (212 workshop, 4 competition, 88 rejected); that
@@ -84,12 +104,14 @@ of `|` items (unlike Google Scholar), `$` as the WoS zero-or-one wildcard, and t
 - A review may instead report the default filters as limits, citing the canonical string; the record
   stores both strings, so either framing can be cited.
 
-Not generated for a `mismatch` record.
+Not generated for a `mismatch` record, nor for one whose `identification_citable` is not true. The crawl
+clause is `crawl_dates["*"]` from–to, both dates (a crawl spans days; spec 04), never one date.
 
 ## Gotchas
 - Wildcard expansions are part of the method: report them (or cite the record, which stores them).
-- The export `N1` line (`openproceedings <index_version> · query <canonical_hash> · <UTC date>`) lets a
-  screener trace any record back to its search.
+- The export `N1` line (`openproceedings <index_version> · query <canonical_hash> · exported <UTC date>`,
+  plus ` · record <record_id> · searched <UTC date>` when exported from a search record) lets a screener
+  trace any record back to its search.
 - Semantic near-misses (06 §Features item 5): papers found by *revising `q`* from a near-miss chip are
   database records from the revised string. The revision belongs in the search-development narrative, not
   under "other methods". Only a paper added **outside** `q` counts as "records identified from other

@@ -10,7 +10,8 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # the suite is ~2.5 min locally plus the differential at 2,000 (~5 min)
+    timeout-minutes: 30  # the suite is ~3 min locally plus the differential at 2,000 (~5 min) and the highlight
+    # properties (~5 min under load: 2,000 on 200 records, 200 on the 5k corpus)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -23,15 +24,23 @@ jobs:
           uv run --locked pytest -q --hypothesis-profile=ci
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: hashFiles('frontend/package.json') != ''
-        with: { node-version: 22 }
-      - name: OpenAPI → TS types are fresh
-        if: hashFiles('backend/pyproject.toml') != '' && hashFiles('frontend/package.json') != ''
+        with: { node-version-file: .nvmrc, cache: npm, cache-dependency-path: package-lock.json }
+      - name: Install the npm workspace (root package-lock.json)
+        if: hashFiles('frontend/package.json') != ''
+        run: npm ci --ignore-scripts
+      - name: OpenAPI snapshot and TS types are fresh (make openapi)
+        # Unconditional: regenerate backend/tests/contract/openapi.json and frontend/src/api/schema.ts from
+        # the app, and fail if either differs from the committed file (api-contract skill; TASK-040).
         run: |
-          uv run --locked op openapi > frontend/openapi.json
-          (cd frontend && npm ci && npm run gen:api && git diff --exit-code src/api/schema.ts)
+          make openapi
+          git diff --exit-code -- backend/tests/contract/openapi.json frontend/src/api/schema.ts \
+            || { echo "::error::the API contract is stale: run 'make openapi' and commit both files"; exit 1; }
       - name: Frontend — vitest
         if: hashFiles('frontend/package.json') != ''
-        working-directory: frontend
+        run: npm test --workspace frontend
+      - name: Frontend — production build (output standalone)
+        if: hashFiles('frontend/package.json') != ''
+        env: { NEXT_TELEMETRY_DISABLED: "1" }
         run: |
-          npm ci
-          npm test -- --run
+          npm run build --workspace frontend
+          test -f frontend/.next/standalone/frontend/server.js

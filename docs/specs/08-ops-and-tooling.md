@@ -8,7 +8,8 @@ Status: **draft for review** · depends on: nothing · delivered in M0 (the rost
 openproceedings/
 ├── README.md  CLAUDE.md  AGENTS.md  CONTRIBUTING.md  LICENSE (MIT)
 ├── pyproject.toml  uv.lock      # uv WORKSPACE root: depends on the backend member; ruff, mypy-strict and pytest config; dev tools (ruff, mypy, pytest, hypothesis)
-├── Makefile                     # sync · fmt · lint · tooling · test · hooks · mutate · mutate-changed
+├── package.json  package-lock.json  .nvmrc   # npm WORKSPACE root (workspaces: ["frontend"]); deps hoisted to ./node_modules; Node 22
+├── Makefile                     # sync · fmt · lint · tooling · test · openapi · hooks · mutate · mutate-changed
 ├── .claude/                     # committed: agents, skills, commands, hooks, learnings (roster: .claude/README.md)
 ├── .githooks/                   # commit-msg (attribution), pre-push (make lint + make tooling)
 ├── .github/                     # workflows (below), dependabot.yml
@@ -19,20 +20,24 @@ openproceedings/
 │   │   ├── query/               # 02: normalize.py, mathsyms.py, lexer.py, parser.py, ast.py, canonical.py, defaults.py, compat.py
 │   │   ├── engine/              # 03: protocol.py, reference.py, index.py, compile.py, tantivy_engine.py, exclusions.py, highlight.py, parity.py
 │   │   ├── semantic/            # 06 (phase 2)
-│   │   ├── api/                 # 04: FastAPI app, routers, exporters/, records.py
+│   │   ├── api/                 # 04: app.py, config.py, state.py, deps.py, errors.py, middleware.py, models.py, openapi.py, server.py; routers search.py, papers.py, meta.py, coverage.py, records.py, export.py, health.py
 │   │   ├── eval/                # 07 report generators
 │   │   ├── diagnostics.py       # error-code registry (one Diagnostic shape; error-diagnostics skill)
 │   │   ├── vocab.py             # venue/track/status vocabularies (spec 01), shared by ingest and query
 │   │   ├── logs.py              # the only place logging is configured (logging-standards skill)
 │   │   ├── storage.py           # locks, staging, fsync and read-only sealing for snapshots and indexes
 │   │   ├── export.py            # 04 exports (RIS, CSV, BibTeX, JSONL), shared by `op export` and the API
+│   │   ├── search.py            # one ranked search, run by `op search` and `GET /search`
+│   │   ├── records.py           # search records: ids_hash, the append-only store, replay (04 §Search records)
+│   │   ├── coverage.py          # the snapshot manifest's venue × year × track × status breakdown (`GET /coverage`)
+│   │   ├── timestamps.py        # the API's one timestamp form (UTC, `Z`)
 │   │   └── cli.py               # `op` entry point
 │   └── tests/{unit,golden,differential,bench,contract,fixtures}/
-├── frontend/                    # (M3) Next.js app, npm workspace
+├── frontend/                    # npm workspace member: Next.js App Router, output standalone (spec 05; skeleton TASK-039)
 ├── docs/{specs,plans,results,design,usability,research}/   # created as needed
 ├── backlog/                     # Backlog.md: tasks, completed, docs, decisions — CLI only
 ├── deploy/                      # (M6, planned) Dockerfiles, compose.yml
-└── data/                        # gitignored: cache/, snapshots/, indexes/, embeddings/, research/, records.sqlite
+└── data/                        # gitignored: cache/, snapshots/, indexes/, embeddings/, research/, records/ (records.sqlite)
 ```
 
 **Environment:** uv for all Python. `uv sync` at the root installs every workspace member and the dev tools
@@ -48,11 +53,11 @@ into one `.venv` from one `uv.lock`. New Python packages join by adding their di
 | `op index build --snapshot <dir\|name\|hash prefix> [--out <dir>]` · `op index parity --index <v> [--snapshot <id>]` · `op index retire <index_version>` (planned, task-065) | build an immutable index; check it holds `normalize()`'s tokens for its snapshot (local, over the real corpus); retire an old one (refuses if any search record pins it) |
 | `op search "<q>" [--mode scholar] [--explain \| --ids] [--engine tantivy\|reference] [--sort <s>] [--limit <n>] [--index <dir\|version>]` | ranked hits under a PRISMA header (default): searched time, index, crawl window (first to last fetch), tokenizer and query versions; a bootstrap-corpus caution when the index holds only RIS, or a caution that the sources are unknown when its snapshot isn't in the data dir or its hash differs; identified, removed by default filters (ineligible and unclassified), screened; the canonical and identification strings; every wildcard's expansion (its count and first 10 terms; every term with `--explain`); the sorted id set (`--ids`; `--engine reference` runs the oracle over the index's snapshot, `--ids` only); or the compiled query (`--explain`). Diagnostics go to stderr as user output; one `search_run` INFO line per run (task-030) |
 | `op export "<q>" --format ris\|csv\|bibtex\|jsonl [--mode scholar] [--index <dir\|version>] [--out <file>]` | export the full matched set in id order (spec 04 §Exports), streamed to stdout or written whole to `--out` (never a partial file); the count is checked against the query's total |
-| `op record save "<q>" [--mode scholar]` · `op record replay <id>` | freeze a search as a search record (the same function as `POST /records`); replay one and print its status, `reproduced` / `drifted` / `mismatch` (the same function as `GET /records/{id}`) |
-| `op serve` | run the API |
-| `op embed build` | build embeddings for the current index (06) |
-| `op eval scholar [--query <name>]` · `op eval coverage` · `op eval audit` · `op eval near-miss` | the 07 reports; `near-miss` is 06's recall@25 |
-| `op openapi` | print the OpenAPI schema (feeds the frontend type codegen) |
+| `op record save "<q>" [--mode scholar]` · `op record replay <id>` (planned, task-083) | freeze a search as a search record (the same function as `POST /records`); replay one and print its status, `reproduced` / `drifted` / `mismatch` (the same function as `GET /records/{id}`) |
+| `op serve [--host] [--port] [--index current\|<index_version>] [--cors-origin …] [--trusted-proxy …] [--rate-capacity] [--rate-refill] [--export-weight] [--no-rate-limit] [--max-verified-clauses] [--max-verification-candidates] [--max-verification-seconds] [--log-query-text]` | run the API (04 §Implementation notes, as built): one uvicorn process over `<data-dir>/indexes/<index>`; SIGHUP reloads it. Refused as usage, each option named with the validator's reason: a trusted proxy wider than /8 or /32, `--no-rate-limit` with a non-loopback `--host` (§Deploy), and limits that could never be paid (decision-010) |
+| `op embed build` (planned, task-058) | build embeddings for the current index (06) |
+| `op eval scholar [--query <name>]` · `op eval coverage` · `op eval audit` · `op eval near-miss` (planned, task-054) | the 07 reports; `near-miss` is 06's recall@25 |
+| `op openapi [--out <file>]` | print the OpenAPI document, sorted and stable, without loading an index (task-040); `make openapi` writes it to `backend/tests/contract/openapi.json` and regenerates `frontend/src/api/schema.ts` from it |
 
 The CLI and the API call the same functions, so the CLI alone is enough to run a whole review.
 
@@ -98,7 +103,7 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 | Workflow → required check(s) | Runs |
 |---|---|
 | `lint` → `lint` | `make lint` (ruff format/check, mypy --strict once `backend/src` exists, shellcheck, frontend prettier/eslint/tsc), then actionlint |
-| `test` → `test` | pytest (unit, golden, differential@2k, contract); vitest; OpenAPI → TS types freshness |
+| `test` → `test` | pytest (unit, golden, differential@2k, contract); vitest; `next build` (the standalone server must exist); OpenAPI snapshot and TS types freshness (`make openapi`, then `git diff --exit-code` on `backend/tests/contract/openapi.json` and `frontend/src/api/schema.ts`; unconditional, TASK-040) |
 | `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`), every hook case table (`.claude/hooks/tests/`) and the tooling-script table (`.claude/scripts/tests/test-tooling-scripts.sh`) |
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha |
 | `nightly` (scheduled, not a PR check) | Three parallel jobs, each with its own time limit: the oracle-backed properties at 50,000 examples; the exhaustive tokenizer check (`OP_EXHAUSTIVE=1`) plus every other property at 50,000; and `make mutate` (every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent). Differential@50k gets its own job in task-057 (M4); full-corpus parity stays local (decision-004) |
@@ -129,7 +134,65 @@ checks the head repo, so a fork branch named `dev` cannot use it.
 ## Deploy (M6, planned)
 
 `deploy/compose.yml`: `api` (uvicorn, loads `data/indexes/current`) and `web` (Next.js standalone), with
-Caddy in front for TLS. The data volume is read-only in `api`, except `records.sqlite`. Refreshing the index
+Caddy in front for TLS. Caddy must not log query strings: `GET /api/v1/search?q=…` carries the query
+(spec 04 §Implementation notes). **`op serve` must sit behind that proxy**, never face clients directly:
+uvicorn (h11) has no request-header or slow-body timeout of its own, so the proxy's timeouts are what bound a
+client that sends its request slowly; the app caps a body at 64 KiB (413 `API_BODY_TOO_LARGE`), uvicorn's
+`limit_concurrency` (`ApiConfig.limit_concurrency`, default 256) bounds the connections one process holds,
+and `timeout_keep_alive` (`keep_alive_seconds`, default 5) closes an idle one. The Caddyfile **must** set
+(Caddy v2 directive names, checked against the Caddy docs 2026-09-27):
+
+```caddy
+{
+	log default {  # the runtime logger, which carries `http.log.error` (see below)
+		format filter {
+			request>uri delete
+			request>headers>Referer delete
+		}
+	}
+	servers {
+		timeouts {
+			read_header 5s   # a client's request line and headers (default: no timeout)
+			read_body   10s  # its body (default: no timeout)
+			idle        2m   # a keep-alive connection between requests
+			# no `write` timeout: an export of the whole matched set streams for as long as it takes
+		}
+		max_header_size 64KB  # the API's own request-head limit (a 2,000-code-point q fits)
+	}
+}
+openproceedings.example {
+	request_body {
+		max_size 64KB  # the API's own body cap: refuse larger before forwarding
+	}
+	reverse_proxy /api/* api:8000 {
+		request_buffers 64KB  # read the whole (capped) body before opening the upstream request
+	}
+	log {
+		format filter {  # never the query: GET /api/v1/search?q=… carries it, and so does a Referer
+			request>uri delete
+			request>headers>Referer delete
+		}
+	}
+}
+```
+
+The site's `log` directive filters only the access log (`http.log.access`). A request that fails at the
+proxy (a 502 while the API restarts, an upstream that resets mid-stream) is logged by `http.log.error`,
+whose entry carries the same `request` object, `uri` and headers included, through Caddy's default runtime
+logger, which the site directive never reaches; so the global `log default` above filters those fields
+too (M3a review round 3; Caddy v2's error logger adds the loggable request to every error entry). Without it a restart would write every in-flight `q` to the proxy's log.
+
+`read_header` and `read_body` bound a slow client at the proxy, so only whole requests reach uvicorn;
+`request_buffers` makes the proxy read the body before it takes an upstream connection, so a client that
+trickles its body holds a proxy goroutine, not one of the API's `limit_concurrency` slots. A connection
+beyond `limit_concurrency` gets uvicorn's own plain 503, and uvicorn logs `Exceeded concurrency limit.`
+(WARNING, through the JSON handler) once per refusal, not once per episode: a burst of refusals is a burst
+of lines, so alert on their rate rather than on one. The proxy is also
+the one trusted proxy (`--trusted-proxy <its address>`); a trusted network wider than /8 (IPv4) or /32 (IPv6)
+is refused, as is `--no-rate-limit` with a non-loopback `--host`. Swagger UI (`/api/v1/docs`, scripts from a
+CDN) is off on a non-loopback `--host` unless `--docs` is passed; leave it off in production. The data volume is read-only in `api`, except the `records/` directory
+(`records/records.sqlite` and the WAL files SQLite writes beside it; spec 04 §Search records), and it
+holds each served index's snapshot beside it (`/papers/{id}` reads provenance from it). Refreshing the index
 means building a new `index_version` offline, switching the `current` symlink, and sending SIGHUP. Hosting is
 still open (00, question 5).
 

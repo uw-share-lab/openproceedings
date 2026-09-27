@@ -1,12 +1,14 @@
 """The `op` CLI skeleton: every planned subcommand exists and says which task implements it."""
 
+import argparse
+import json
+from pathlib import Path
+
 import pytest
 from openproceedings import cli
 
 PLANNED = {
-    "serve": "task-034",
-    "record": "task-037",
-    "openapi": "task-040",
+    "record": "task-083",
     "embed": "task-058",
     "eval": "task-054",
 }
@@ -18,7 +20,7 @@ def test_help_lists_every_planned_subcommand(capsys: pytest.CaptureFixture[str])
     assert exc.value.code == 0
     out = capsys.readouterr().out
     listed = {line.split()[0] for line in out.splitlines() if line.startswith("    ") and line.split()}
-    assert set(PLANNED) | {"ingest", "snapshot", "index", "search"} <= listed
+    assert set(PLANNED) | {"ingest", "snapshot", "index", "search", "serve", "openapi"} <= listed
 
 
 @pytest.mark.parametrize(("name", "task"), sorted(PLANNED.items()))
@@ -28,6 +30,22 @@ def test_stub_exits_2_and_names_its_task(name: str, task: str, capsys: pytest.Ca
     assert f"op {name}" in err
     assert task in err
     assert "not implemented yet" in err
+
+
+@pytest.mark.parametrize(("name", "found"), [("snap", True), ("../outside", False), (".hidden", False)])
+def test_the_search_header_finds_its_snapshot_by_the_one_rule(tmp_path: Path, name: str, found: bool) -> None:
+    """`op search`'s header reads the index's snapshot through `indexed_snapshot` (M3a round 2): a plain
+    directory name under <data-dir>/snapshots, never a path that leaves it."""
+    data = tmp_path / "data"
+    for where in (data / "snapshots" / "snap", data / "outside", data / "snapshots" / ".hidden"):
+        where.mkdir(parents=True)
+        (where / "manifest.json").write_text(json.dumps({"snapshot_hash": "h"}), encoding="utf-8")
+    index = data / "indexes" / "abc"
+    index.mkdir(parents=True)
+    manifest = {"snapshot": name, "snapshot_hash": "h"}
+    (index / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    got = cli._snapshot_of(argparse.Namespace(data_dir=data), index)
+    assert got == ({"snapshot_hash": "h"} if found else None)
 
 
 @pytest.mark.parametrize(("source", "task"), [("openreview", "task-050"), ("proceedings", "task-052")])
@@ -64,24 +82,24 @@ def test_stub_list_matches_the_planned_table() -> None:
 
 def test_bad_log_level_is_a_usage_error_not_a_traceback(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exc:
-        cli.main(["--log-level", "verbose", "serve"])
+        cli.main(["--log-level", "verbose", "record"])
     assert exc.value.code == 2
     err = capsys.readouterr().err
     assert "Traceback" not in err and "--log-level" in err
 
 
 def test_log_level_is_case_insensitive() -> None:
-    assert cli.main(["--log-level", "debug", "serve"]) == 2  # the stub's exit code, not a usage error
+    assert cli.main(["--log-level", "debug", "record"]) == 2  # the stub's exit code, not a usage error
 
 
 def test_default_log_format_is_json() -> None:
-    assert cli.build_parser().parse_args(["serve"]).log_format == "json"
+    assert cli.build_parser().parse_args(["record"]).log_format == "json"
 
 
 @pytest.mark.parametrize(
     "argv",
     [
-        ["serve", "--port", "8000"],
+        ["embed", "build", "--index", "current"],
         ["--log-level", "debug", "--log-format", "json", "index", "retire", "old"],
         ["record", "replay", "abc123"],
     ],

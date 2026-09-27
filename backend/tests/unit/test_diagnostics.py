@@ -1,25 +1,45 @@
 """The one Diagnostic shape and the code registry (error-diagnostics skill, spec 04 §Error handling)."""
 
+import re
+from pathlib import Path
+
 import pytest
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode, OpenProceedingsError, http_status
 from pydantic import ValidationError
 
-# Spec 04 §Error handling — the only table of HTTP statuses and API codes.
-SPEC_04 = {
-    "API_BAD_PARAM": 422,
-    "API_PAPER_NOT_FOUND": 404,
-    "API_RECORD_NOT_FOUND": 404,
-    "API_INDEX_VERSION_UNAVAILABLE": 409,
-    "API_RECORD_MISMATCH": 409,
-    "API_RATE_LIMITED": 429,
-    "API_INDEX_NOT_LOADED": 503,
-    "API_INTERNAL": 500,
-}
+SPEC = Path(__file__).resolve().parents[3] / "docs" / "specs" / "04-backend-api.md"
+
+
+def spec_04_table() -> dict[str, int]:
+    """Spec 04 §Error handling, the only table of HTTP statuses and API codes, read from the spec itself (a
+    hand copy here could drift from both): each row's status and every `API_…` code it names."""
+    section = SPEC.read_text(encoding="utf-8").split("## Error handling", 1)[1].split("\n## ", 1)[0]
+    table: dict[str, int] = {}
+    for row in section.splitlines():
+        cells = [c.strip() for c in row.strip().strip("|").split("|")]
+        if len(cells) == 3 and cells[1].isdigit():
+            for code in re.findall(r"`(API_[A-Z_]+)`", cells[2]):
+                assert code not in table, f"{code} is in two rows of spec 04's table"
+                table[code] = int(cells[1])
+    return table
+
+
+SPEC_04 = spec_04_table()
+
+
+def test_the_spec_table_is_read() -> None:
+    assert SPEC_04["API_BAD_PARAM"] == 422 and SPEC_04["API_BODY_TOO_LARGE"] == 413 and len(SPEC_04) >= 13
 
 
 @pytest.mark.parametrize(("code", "status"), sorted(SPEC_04.items()))
 def test_api_codes_map_to_spec_04_statuses(code: str, status: int) -> None:
     assert http_status(DiagnosticCode(code)) == status
+
+
+def test_every_http_api_code_is_in_spec_04s_table() -> None:
+    """Both ways: a registry code with an HTTP status that the table doesn't name is undocumented."""
+    registry = {c.value: http_status(c) for c in DiagnosticCode if c.startswith("API_") and http_status(c)}
+    assert registry == SPEC_04
 
 
 def test_every_parse_code_is_422() -> None:

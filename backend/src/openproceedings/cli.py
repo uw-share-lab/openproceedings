@@ -3,7 +3,7 @@ implements it (spec 08 §CLI). The CLI and the API call the same functions.
 
 Implemented: `op ingest ris`, `op snapshot build`, `op snapshot diff` (task-022), `op index build`
 (task-023), `op index parity` (task-029), `op search` (ranked, `--ids`, `--explain`, `--engine reference`;
-task-024/030) and `op export` (task-030). Results go to stdout; logs go to stderr; a refused operation exits
+task-024/030), `op export` (task-030), `op serve` (task-034) and `op openapi` (task-040). Results go to stdout; logs go to stderr; a refused operation exits
 1 with its reason, a usage error or a stub exits 2.
 """
 
@@ -25,12 +25,15 @@ from typing import TYPE_CHECKING, Any
 
 from openproceedings import __version__
 from openproceedings.logs import FORMATS as LOG_FORMATS
-from openproceedings.logs import LEVELS, configure_logging
+from openproceedings.logs import LEVELS, configure_logging, elapsed_ms
+from openproceedings.vocab import bootstrap_only
 
 FORMATS = ("ris", "csv", "bibtex", "jsonl")  # export formats (export.FORMATS; imported lazily there)
 SORTS = ("relevance", "year_desc", "year_asc", "title")  # tantivy_engine.SORTS
 
 if TYPE_CHECKING:
+    from pydantic import ValidationError
+
     from openproceedings.engine.exclusions import Excluded
     from openproceedings.engine.reference import ReferenceEngine
     from openproceedings.engine.tantivy_engine import TantivyEngine
@@ -40,9 +43,7 @@ log = logging.getLogger(__name__)
 
 # subcommand -> (help text, the Backlog task that implements it)
 PLANNED: dict[str, tuple[str, str]] = {
-    "serve": ("run the HTTP API (spec 04)", "task-034"),
-    "record": ("save or replay a search record (spec 04)", "task-037"),
-    "openapi": ("print the OpenAPI schema for the frontend codegen (spec 04)", "task-040"),
+    "record": ("save or replay a search record (spec 04)", "task-083"),
     "embed": ("build SPECTER2 embeddings for the current index (spec 06)", "task-058"),
     "eval": ("evaluation reports: scholar | coverage | audit | near-miss (spec 07)", "task-054"),
 }
@@ -145,6 +146,62 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--format", choices=FORMATS, required=True)
     export.add_argument("--out", type=Path, help="write to this file (default standard output)")
     export.set_defaults(run=_export)
+
+    serve = sub.add_parser("serve", help="run the HTTP API (spec 04) over <data-dir>/indexes/<index>")
+    serve.add_argument("--host", default="127.0.0.1", help="default 127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000, help="default 8000")
+    serve.add_argument("--index", default="current", help="`current` (default) or an index_version")
+    serve.add_argument(
+        "--cors-origin", action="append", default=[], metavar="ORIGIN", help="an allowed origin (repeatable)"
+    )
+    serve.add_argument(
+        "--trusted-proxy",
+        action="append",
+        default=[],
+        metavar="ADDRESS",
+        help="an address or network whose X-Forwarded-For is believed (repeatable)",
+    )
+    serve.add_argument("--rate-capacity", type=float, default=60.0, help="token bucket size per client")
+    serve.add_argument("--rate-refill", type=float, default=1.0, help="tokens per second per client")
+    serve.add_argument("--export-weight", type=float, default=10.0, help="tokens one export costs")
+    serve.add_argument("--no-rate-limit", action="store_true", help="turn the rate limit off (local use)")
+    serve.add_argument(
+        "--max-verified-clauses",
+        type=int,
+        default=16,
+        help="position-verified clauses one query may have (default 16, a backstop; decision-010); with the rate limit on, times each clause's cost it must fit the smaller bucket",
+    )
+    serve.add_argument(
+        "--max-verification-seconds",
+        type=float,
+        default=30.0,
+        help="wall time one query's position checks may take before a 503 API_BUSY (default 30; decision-010)",
+    )
+    serve.add_argument(
+        "--max-verification-candidates",
+        type=int,
+        default=300_000,
+        help="documents one query's position checks may read (default 300000, the cost bound; decision-010)",
+    )
+    serve.add_argument(
+        "--docs",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="serve Swagger UI at /api/v1/docs (it loads from a CDN); default on for a loopback --host only",
+    )
+    serve.add_argument(
+        "--log-query-text",
+        action="store_true",
+        help="let the log formatter keep query-text fields (a local dev instance only); no log line passes one today",
+    )
+    serve.set_defaults(run=_serve)
+
+    openapi = sub.add_parser(
+        "openapi",
+        help="print the API's OpenAPI document, sorted and stable (`make openapi` commits it; spec 04)",
+    )
+    openapi.add_argument("--out", type=Path, help="write to this file (default standard output)")
+    openapi.set_defaults(run=_openapi)
 
     for name, (help_text, task) in PLANNED.items():
         _stub(sub.add_parser(name, help=help_text, description=help_text), name, task)
@@ -274,14 +331,14 @@ def _search_run(
             "index_version": index_version,
             "canonical_hash": result.canonical_hash,
             "total": total,
-            "ms": round((time.perf_counter() - started) * 1000),
+            "ms": elapsed_ms(started),
         },
     )
 
 
 def _search(ns: argparse.Namespace) -> int:
-    from openproceedings.engine.exclusions import excluded
     from openproceedings.engine.tantivy_engine import TantivyEngine
+    from openproceedings.search import run
 
     started = time.perf_counter()
     with contextlib.suppress(AttributeError, ValueError):  # UTF-8 whatever the locale, as `op export` writes
@@ -313,15 +370,15 @@ def _search(ns: argparse.Namespace) -> int:
         print("\n".join([*lines, engine.explain(ast)]))
         _search_run(ns, started, engine.index_version, result, engine.page(ast, limit=0)[0])
         return 0
-    total, page = engine.page(ast, sort=ns.sort, limit=ns.limit)  # one collection: ids and scores
-    gone = excluded(engine, result, total)
-    for line in _report(engine, result, total, gone, _snapshot_of(ns, path)):
+    found = run(engine, result, sort=ns.sort, limit=ns.limit)  # what GET /api/v1/search runs (search.py)
+    for line in _report(engine, result, found.total, found.excluded, _snapshot_of(ns, path)):
         print(line)
-    shown = engine.display([i for i, _score in page])
-    for rank, (i, score) in enumerate(page, 1):
-        r = shown[i]
-        print(f"{rank:>4}. {score:9.4f}  {i}  {r['venue']} {r['year']}  {' '.join(r['title'].split())}")
-    _search_run(ns, started, engine.index_version, result, total)
+    for rank, hit in enumerate(found.hits, 1):
+        r = hit.record
+        print(
+            f"{rank:>4}. {hit.score:9.4f}  {hit.id}  {r['venue']} {r['year']}  {' '.join(r['title'].split())}"
+        )
+    _search_run(ns, started, engine.index_version, result, found.total)
     return 0
 
 
@@ -369,7 +426,7 @@ def _report(
             "unknown, and so is "
             "whether these counts are PRISMA identification numbers (spec 01)"
         )
-    elif sources and set(sources) <= BOOTSTRAP_SOURCES:
+    elif bootstrap_only(sources):
         lines.append(
             f"note: bootstrap corpus (sources: {', '.join(sources)}): these counts describe that corpus, "
             "not a database; they are not PRISMA identification numbers (spec 01)"
@@ -389,24 +446,20 @@ def _report(
     return lines
 
 
-BOOTSTRAP_SOURCES = {"ris"}  # an index built only from these holds an earlier search's output, not a database
-
-
 def _snapshot_of(ns: argparse.Namespace, index: Path) -> dict[str, Any] | None:
-    """The manifest of the snapshot an index was built from, if it's in <data-dir>/snapshots and is that
-    snapshot (same hash); None otherwise (the header then says the crawl date is unknown)."""
+    """The manifest of the snapshot an index was built from, by the one rule (`indexed_snapshot`: a plain
+    directory name under <data-dir>/snapshots whose manifest names the index's snapshot_hash); None otherwise
+    (the header then says the crawl date is unknown)."""
+    from openproceedings.ingest.snapshot import SnapshotError, indexed_snapshot
+
     try:
         manifest = json.loads((index / "manifest.json").read_text(encoding="utf-8"))
-        snap = json.loads(
-            (ns.data_dir / "snapshots" / manifest["snapshot"] / "manifest.json").read_text(encoding="utf-8")
-        )
-    except (OSError, ValueError, KeyError, TypeError):
+        if not isinstance(manifest, dict):
+            return None
+        _path, snap = indexed_snapshot(ns.data_dir, manifest)
+    except (OSError, ValueError, SnapshotError):
         return None
-    return (
-        snap
-        if isinstance(snap, dict) and snap.get("snapshot_hash") == manifest.get("snapshot_hash")
-        else None
-    )
+    return snap
 
 
 def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:
@@ -429,12 +482,8 @@ def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:
 
 
 def _export(ns: argparse.Namespace) -> int:
-    from datetime import UTC, datetime
-
-    from openproceedings.diagnostics import DiagnosticCode
-    from openproceedings.engine.protocol import EngineInternalError
     from openproceedings.engine.tantivy_engine import TantivyEngine
-    from openproceedings.export import Provenance, write
+    from openproceedings.export import Provenance, check_count, utc_date, write
 
     started = time.perf_counter()
     result = _parsed(ns)
@@ -448,11 +497,7 @@ def _export(ns: argparse.Namespace) -> int:
         raise _usage(f"--out {ns.out}: no directory {ns.out.parent}")
     engine = TantivyEngine(_index_path(ns))
     total, documents = engine.documents(ast)
-    provenance = Provenance(engine.index_version, result.canonical_hash, datetime.now(UTC).date().isoformat())
-
-    def checked(n: int) -> None:
-        if n != total:
-            raise EngineInternalError(DiagnosticCode.API_INTERNAL, f"exported {n} records, but {total} match")
+    provenance = Provenance(engine.index_version, result.canonical_hash, utc_date())
 
     if ns.out is None:  # UTF-8 and untranslated newlines whatever the terminal's locale (spec 04)
         out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="", write_through=True)
@@ -460,7 +505,7 @@ def _export(ns: argparse.Namespace) -> int:
             n = write(ns.format, documents, provenance, out)
         finally:
             out.detach()  # leave sys.stdout usable
-        checked(n)
+        check_count(n, total)
     else:  # a temporary file beside the target, renamed once complete and counted: never a partial file
         partial = ns.out.with_name(f".{ns.out.name}.{secrets.token_hex(6)}.partial")
         # created 0666 so the kernel applies the umask, as `> file` would; an existing file keeps its mode
@@ -470,12 +515,74 @@ def _export(ns: argparse.Namespace) -> int:
                 os.fchmod(fd, ns.out.stat().st_mode & 0o777)
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as stream:
                 n = write(ns.format, documents, provenance, stream)
-            checked(n)
+            check_count(n, total)
             partial.replace(ns.out)
         finally:
             partial.unlink(missing_ok=True)
     print(f"exported {n} records ({ns.format}) · {provenance.line()}", file=sys.stderr)
     _search_run(ns, started, engine.index_version, result, total)
+    return 0
+
+
+def _serve(ns: argparse.Namespace) -> int:
+    import ipaddress
+
+    from pydantic import ValidationError
+
+    from openproceedings.api.config import ApiConfig, RateLimit
+    from openproceedings.api.server import serve
+
+    try:
+        loopback = ns.host == "localhost" or ipaddress.ip_address(ns.host).is_loopback
+    except ValueError:  # a host name
+        loopback = False
+    if ns.no_rate_limit and not loopback:
+        raise _usage(
+            "--no-rate-limit is for a local instance only: with a non-loopback --host, anyone who can reach "
+            "it could run unbounded exports"
+        )
+    try:
+        config = ApiConfig(
+            data_dir=ns.data_dir,
+            index=ns.index,
+            rate_limit=RateLimit(
+                enabled=not ns.no_rate_limit,
+                capacity=ns.rate_capacity,
+                refill_per_second=ns.rate_refill,
+                export_weight=ns.export_weight,
+            ),
+            cors_origins=tuple(ns.cors_origin),
+            trusted_proxies=tuple(ns.trusted_proxy),
+            log_query_text=ns.log_query_text,
+            max_verified_clauses=ns.max_verified_clauses,
+            max_verification_candidates=ns.max_verification_candidates,
+            max_verification_seconds=ns.max_verification_seconds,
+            serve_docs=loopback if ns.docs is None else ns.docs,
+        )
+    except ValidationError as e:  # the operator's own flags: say which and why, as usage
+        raise _usage(f"invalid serve options: {serve_errors(e)}") from None
+    serve(config, ns.host, ns.port, ns.log_level, ns.log_format)
+    return 0
+
+
+def serve_errors(e: ValidationError) -> str:
+    """Each of the operator's bad serve options with the validator's own explanation (never the input, which
+    pydantic would quote): `trusted_proxies.0: Value error, trusted proxy 0.0.0.0/0 is wider than /8 …`."""
+    return "; ".join(
+        f"{'.'.join(str(p) for p in err['loc']) or 'options'}: {err['msg']}"
+        for err in e.errors(include_input=False, include_url=False)
+    )
+
+
+def _openapi(ns: argparse.Namespace) -> int:
+    """No index and no data directory are needed: the document comes from the routes and models alone."""
+    from openproceedings.api.openapi import render
+
+    text = render()
+    if ns.out is None:
+        sys.stdout.write(text)
+    else:
+        ns.out.write_text(text, encoding="utf-8")
     return 0
 
 

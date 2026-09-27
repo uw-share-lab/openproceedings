@@ -14,10 +14,61 @@ Next.js (App Router) + TypeScript (strict). Tailwind + shadcn/ui for components.
 editor. TanStack Query for API state. Types are generated from 04's OpenAPI schema, not written by hand.
 Tests: Vitest + Testing Library (units), Playwright (e2e against the fixture API).
 
+As built (TASK-039): Next 16.3.6, React 19.2, Tailwind 4.3 (CSS-first `@theme`, no `tailwind.config`),
+shadcn/ui via `components.json` (`radix-nova`, CSS variables; components are added with `npx shadcn add`
+as pages need them), `next-themes` for the class-based theme, Vitest 5 with Testing Library
+(`@testing-library/react`). Node 22. TanStack Query and CodeMirror join with the tasks that use them.
+
 ## URL is state (guarantee 3)
 
 `/search?q=<input>&mode=native|scholar&sort=relevance&page=2`. Nothing that affects the result set lives
-outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copying the URL copies the search.
+outside `q` and `mode` (which says how `q` is read). Filters, facet clicks and builder edits all **rewrite
+`q`**. Copying the URL copies the search. The result set is keyed on `(q, mode)`; `sort` and `page` only order
+and window it. The reducer is `frontend/src/lib/search-state.ts`.
+
+Paging: `PAGE_SIZE = 50` results per page, so `page=n` requests `GET /search?offset=(n-1)×50&limit=50`
+(spec 04). `page` is an integer from 1 to 10,000 (`MAX_PAGE`); any other value, and any unknown or repeated
+parameter, is shown to the reader as a URL notice and replaced by the default, never used silently.
+Notices about `q` and `mode` come first (they say what was searched). Each names the value, why it was not
+used and what was used instead, listing the valid values from the reducer's own constants
+("`sort=random` is not a sort order — sort orders are `relevance`, `year_desc`, `year_asc`, `title`.
+Sorted by `relevance` instead."; a repeated param: "`q` appears more than once; using the first value `""`
+and ignoring `trust`.", with `""` marking an empty value). The notice box ends with a **Use corrected
+link** (the canonical URL of the state actually shown); the page never redirects on its own.
+
+Facet and include clicks rewrite `q` from the server's `/parse` report of that field's top-level clause
+(field, polarity, code-point span, values, and the `(q, mode)` it was parsed from). **Pending TASK-078:**
+`/parse` doesn't report these clauses yet, so the reducer takes a `FilterClause` it declares itself
+(`search-state.ts`) until the generated schema has one. **"Top-level" is judged
+on the flattened canonical tree**, where parenthesised AND groups are flattened: in
+`track:workshop "large language model" AND (venue:NeurIPS track:workshop)` both `track:` clauses are
+top-level. A field with more than one such clause, or with its only clause inside an OR or NOT, has no
+editable clause: `/parse` says so (TASK-078), and splicing over one clause would leave the other ANDed in,
+so the edit would silently change nothing. The rewritten clause is `field:v` for one value and
+`field:(v1 OR v2 …)` for several. An applied default is written out as `(q) AND field:(…)`; a `q` ending in
+an odd run of backslashes is refused, because the last backslash would escape the `)` (spec 02). The wrap
+goldens are `frontend/src/lib/wrap-golden.json`, checked against the server parser by
+`backend/tests/contract/test_frontend_wrap_golden.py`.
+
+The reducer refuses, with a `SearchStateError` whose `code` the UI branches on and whose message follows
+the ux-writing pattern (what happened — why. How to fix): `STALE_CLAUSE` (parsed from another `q` or
+`mode`), `WRONG_FIELD`, `NEGATED_CLAUSE`, `NO_EDITABLE_CLAUSE` (the field has no single editable clause),
+`BAD_VALUE` (not a bare identifier), `LAST_VALUE` (removing it would exclude every record), `BAD_SPAN`,
+`EMPTY_QUERY`, `TRAILING_ESCAPE`, `TOO_LONG` (the new `q` would pass `MAX_QUERY_LENGTH`, 2,000 code points,
+which mirrors the API parser's cap until `/meta` serves it; a wrapped `q` that fits but whose canonical form
+is over the cap, decision-008, is refused only by the server: `/parse` reporting such a field as not
+toggleable is pending TASK-078), `ALREADY_INCLUDED` and `BAD_PAGE`. **Controls
+are disabled with the reason, not refused after the click:** a facet toggle or include button calls
+`whyBlocked(state, action)` while rendering and, when it returns an error, renders disabled with the
+message as its description. `STALE_CLAUSE` is the usual case, while `/parse` catches up with a new `q`.
+
+*M3b design consideration (open).* A facet toggle on an applied default wraps `q` once:
+`(trust) AND track:(main OR datasets_benchmarks OR position OR workshop)`. Toggling the value off again
+leaves the wrapped form (the clause is now typed, so it is edited in place, not unwrapped), and toggles on
+several fields nest a field at a time (`((trust) AND track:(…)) AND status:(…)`) because each wrap
+parenthesises the whole `q`. Both are correct but grow `q` and drift from what the reader typed. Before the
+sidebar ships, decide whether to unwrap a clause that returns to the default and to append later fields'
+clauses to an existing top-level AND instead of re-wrapping.
 
 ## Pages
 
@@ -25,8 +76,8 @@ outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copyin
 |---|---|
 | `/` | Search home: the editor, example queries (the review's strings), a coverage summary line |
 | `/search` | The main workspace (below) |
-| `/paper/[id]` | Full record: abstract with the current query's highlights, all links, provenance table |
-| `/record/[id]` | Search-record page: the input string as typed, its `mode`, and every translation notice (Scholar mode), the identification string and the default clauses, full index version, search date and crawl date, total, exclusions (`unknown` on its own line), replay status (`reproduced` / `drifted` with its reason / `mismatch`), a "Copy methods text" button, and export buttons pinned to the record's index. On `mismatch` the page is a blocking **"do not cite — replay mismatch"** state with no methods text and no export |
+| `/paper/[id]` | Full record: abstract with the current query's highlights, all links, provenance table. `GET /papers/{id}` takes no `q` and returns no highlights, so the page needs TASK-087 first |
+| `/record/[id]` | Search-record page: the input string as typed, its `mode`, and every translation notice (Scholar mode), the identification string and the default clauses, full index version, search date and the crawl window (`crawl_dates["*"]`, "crawl run <from> to <to>"; only `*` exists until M4 adds per-source windows; when `crawl_dates_kind["*"]` is `scholar_query_dates` it reads "Scholar searches run <from> to <to> (local time)", never "crawl"), total, exclusions (`unknown` on its own line), replay status (`reproduced` / `drifted` with its reason and `+<added_total> / −<removed_total>`, or "membership-identical" on `+0 / −0` / `mismatch`; a replay whose canonical no longer runs reads "could not be re-run: `<refused code>`" with no counts; a replay this instance withholds (04 §Search records: `refused` `API_TOO_MANY_VERIFIED_CLAUSES` or `API_QUERY_TOO_COSTLY`, status `drifted`, `changed` empty) reads "could not be re-run: `API_TOO_MANY_VERIFIED_CLAUSES` — this instance's limit is below the record's <verified_clauses> position-verified clauses", or for `API_QUERY_TOO_COSTLY` "— its position checks would read more documents than this instance allows in one query", never as reproduced, as membership-identical or as a drift with no reason; its exports stay, the record's stored ids), a "Copy methods text" button, and export buttons that **must** call `/export?record_id=<id>` (the record's stored ids from its own index, never a re-run of `q`). When `identification_citable` is `false` the page shows the CLI's caution, "bootstrap corpus (sources: <sources>): these counts describe that corpus, not a database; they are not PRISMA identification numbers", and **no methods text** (exports stay); when it is null (a v1 record) the caution reads "not recorded whether this index is a bootstrap corpus: these counts may not be PRISMA identification numbers", also with no methods text. On `mismatch` the page is a blocking **"do not cite — replay mismatch"** state with no methods text and no export |
 | `/coverage` | Venue × year × track table with source and snapshot date, missing-abstract counts, `unknown` counts |
 | `/help/syntax` | Language reference generated from the 02 golden table (it cannot drift from the tests) |
 
@@ -81,13 +132,21 @@ outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copyin
 7. **Export menu.** RIS (Covidence), CSV, BibTeX, JSONL. Shows the count before downloading.
 8. **Save search record.** Creates `/records` and shows the permanent link plus generated methods text
    that says which string reproduces which number:
-   *"We searched openproceedings on 2026-09-25 (index `a1b2c3d4e5f6`, built from a crawl of 2026-09-20) with
-   the string `<identification_query>`, which identified 716 records within the limits it states
+   *"We searched openproceedings on 2026-09-25 (index `a1b2c3d4e5f6`, built from a crawl run 2026-09-18 to
+   2026-09-20) with the string `<identification_query>`, which identified 716 records within the limits it states
    (`year:2020..2026`). Default filters `track:(main OR datasets_benchmarks OR position)` and
    `status:accepted` removed 304 of them before screening (212 workshop, 4 competition, 88 rejected); that
    count includes 0 unclassified records (track or status unknown), itemised separately. Cross-source
-   duplicates were merged at ingest, before indexing (merge counts are in the search record). Database scope: coverage
+   duplicates were merged at ingest, before indexing (merge counts, and look-alike pairs kept apart by
+   track or venue-year, are in the search record). Database scope: coverage
    report for snapshot `<snapshot_hash>`. 412 records were screened. Search record: <url>."*
+   The crawl clause is always the window `crawl_dates["*"]` from–to (a crawl spans days), never one date,
+   and follows `crawl_dates_kind["*"]`: `crawl` → "built from a crawl run <from> to <to>";
+   `scholar_query_dates` → "built from Scholar searches run <from> to <to> (local time)"; `mixed` → "built
+   from crawls and Scholar searches run <from> to <to> (Scholar dates in local time)". It never calls
+   Scholar's own search dates a crawl (prisma-reporting skill §Bootstrap corpora).
+   No methods text is generated unless `identification_citable` is `true` (a bootstrap corpus's counts
+   are not identification numbers; prisma-reporting skill).
    If `identification_query` is `""` the text reads "all indexed records"; if it is all-negative, the text
    cites `canonical` instead (prisma-reporting skill). Counts always come from `identification_ast`. The
    text also cites the input string as typed when it differs from the identification string, and when
@@ -108,8 +167,19 @@ outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copyin
 - API errors are shown from the envelope's `code` and `message` (04 §Error handling), never as a raw
   status or a generic "something went wrong". A parse `422` draws its diagnostics as squiggles at their
   spans, and the search view keeps the last good result set, marked as stale.
-- `429 API_RATE_LIMITED` shows the wait from `Retry-After`. `503 API_INDEX_NOT_LOADED` shows a
-  "search index is loading" state with a retry.
+- `429 API_RATE_LIMITED` shows the wait from `Retry-After`. `503 API_BUSY` is shown the same way: "the
+  server is busy with slow phrase checks; try again in N s", the wait from `Retry-After`. `503
+  API_INDEX_NOT_LOADED` shows a "search index is loading" state with a retry. `503 API_RECORDS_STORE_FULL`
+  turns saving off ("saving search records is paused on this instance"); searching, reading records and
+  exporting work as before. `413 API_BODY_TOO_LARGE` says the query is far too long to send (a valid one
+  always fits). A `422 API_TOO_MANY_VERIFIED_CLAUSES` or `422 API_QUERY_TOO_COSTLY` draws its
+  diagnostics as squiggles on each slow clause, like a parse error (the latter's say how many documents
+  each clause's check would read).
+- A `422 API_BAD_PARAM` on `/paper/[id]` or `/record/[id]` (a malformed id in the URL) renders as that
+  page's not-found state, the same as a 404.
+- A 5xx whose body isn't JSON comes from in front of the app (uvicorn's `limit_concurrency` 503, or the
+  reverse proxy; 04 §Error handling): it means "busy, retry", shown as a retry state, never as an error in
+  the user's query.
 - A `mismatch` replay is the blocking "do not cite" state of `/record/[id]` (§Pages), not a toast.
 - Nothing is retried silently in a way that could change the displayed set without the user seeing it.
 
@@ -119,8 +189,18 @@ outside `q`. Filters, facet clicks and builder edits all **rewrite `q`**. Copyin
   on colour alone (they also use bold or underline).
 - Performance: search view interactive in under 1 s on the fixture API. Diagnostics feel instant (≤300 ms
   including the round trip).
-- Light and dark themes. Layout usable at 360 px wide (reading on a phone is allowed; writing queries on
-  a phone is not a goal).
+- Light and dark themes, chosen in the header as System / Light / Dark (a radio group; System follows the
+  OS). Layout usable at 360 px wide, and no sideways scroll at 320 px (reading on a phone is allowed;
+  writing queries on a phone is not a goal). The focus ring is a solid 2 px `--ring` outline, never
+  translucent. Every page has a skip link to `<main id="main">` and a title `<page> · openproceedings`.
+- Security headers on every route (`frontend/src/lib/security-headers.ts`, set by `next.config.ts`):
+  `Content-Security-Policy` (`default-src 'self'`; scripts and styles `'self' 'unsafe-inline'`, since the
+  App Router's streamed payload and the theme script are inline and a nonce would force dynamic rendering;
+  `connect-src` adds the API origin when `NEXT_PUBLIC_API_BASE_URL` is set; `object-src 'none'`,
+  `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`; `'unsafe-eval'` only under `next
+  dev`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Referrer-Policy: no-referrer`
+  (search URLs carry the query). Because inline scripts are allowed, HTML is never built from strings:
+  eslint's `react/no-danger` is an error, and highlights are text nodes cut at the API's spans.
 
 ## Testing
 

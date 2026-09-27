@@ -14,13 +14,14 @@ import re
 from pathlib import Path
 
 import pytest
-from openproceedings import export
+from openproceedings import export, vocab
 from openproceedings.cli import main
 from openproceedings.engine.index import build_index
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.export import Provenance, bibtex_key, write
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.query.parser import parse
+from pydantic import ValidationError
 from refaudit.bibtex import parse_string
 
 from tests.unit.engine.test_index import snapshot_of
@@ -141,6 +142,168 @@ def test_bibtex_keys() -> None:
                for i, t in enumerate(["Deep one", "Deep two", "Deepa trust"])]  # fmt: skip
     keys = [e.key for e in parse_string("".join(export._bibtex(records, PROVENANCE)))]
     assert keys == ["smith2024deep", "smith2024deepa", "smith2024deepaa"]  # the real `deepa` moves on
+
+
+def test_three_colliding_keys_the_first_bare_then_a_then_b() -> None:
+    """decision-007: the first use of a key stays bare, later ones take a, b, … in the export's id order."""
+    records = [{"authors": ["Jo Smith"], "year": 2024, "title": "Deep trust", "venue": "ICLR", "id": f"op:iclr:2024:{n}"}
+               for n in ("A1", "B2", "C3")]  # fmt: skip
+    entries = parse_string("".join(export._bibtex(records, PROVENANCE)))
+    assert [(e.key, e.fields["openproceedings_id"]) for e in entries] == [
+        ("smith2024deep", "op:iclr:2024:A1"),
+        ("smith2024deepa", "op:iclr:2024:B2"),
+        ("smith2024deepb", "op:iclr:2024:C3"),
+    ]
+
+
+def test_a_superset_keeps_keys_unless_an_added_paper_sorts_first() -> None:
+    """decision-007's trade-off, pinned: adding colliding papers that sort after the ones already exported
+    keeps every earlier key; one that sorts before them takes the bare key and shifts the rest."""
+
+    def keys(natives: list[str]) -> dict[str, str]:
+        records = [{"authors": ["Jo Smith"], "year": 2024, "title": "Deep", "venue": "ICLR", "id": f"op:iclr:2024:{n}"}
+                   for n in sorted(natives)]  # fmt: skip
+        return {
+            e.fields["openproceedings_id"][-2:]: e.key
+            for e in parse_string("".join(export._bibtex(records, PROVENANCE)))
+        }
+
+    small = keys(["B2", "C3"])
+    assert small == {"B2": "smith2024deep", "C3": "smith2024deepa"}
+    assert {k: v for k, v in keys(["B2", "C3", "D4"]).items() if k in small} == small  # appended: stable
+    assert keys(["A1", "B2", "C3"])["B2"] == "smith2024deepa"  # prepended: shifts (keys are per file)
+
+
+def test_an_added_paper_whose_real_key_is_an_issued_suffix() -> None:
+    """decision-007 §Consequences: a paper titled "Deepa …" has the real key `smith2024deepa`. Added after the
+    paper that holds that suffix, it moves on itself (`…deepaa`) and nothing earlier shifts; added before it,
+    it takes `…deepa` and that paper shifts to `…deepb`."""
+
+    def keys(titles: dict[str, str]) -> dict[str, str]:
+        records = [{"authors": ["Jo Smith"], "year": 2024, "title": t, "venue": "ICLR", "id": f"op:iclr:2024:{n}"}
+                   for n, t in sorted(titles.items())]  # fmt: skip
+        return {
+            e.fields["openproceedings_id"][-2:]: e.key
+            for e in parse_string("".join(export._bibtex(records, PROVENANCE)))
+        }
+
+    before = {"B2": "Deep", "C3": "Deep"}
+    assert keys(before) == {"B2": "smith2024deep", "C3": "smith2024deepa"}
+    assert keys({**before, "D4": "Deepa trust"}) == {**keys(before), "D4": "smith2024deepaa"}
+    assert keys({**before, "B5": "Deepa trust"}) == {
+        "B2": "smith2024deep",
+        "B5": "smith2024deepa",
+        "C3": "smith2024deepb",
+    }
+
+
+# spec 04 §Exports, T2 / booktitle: the full conference name, then the acronym it went by that year. The
+# first year of each naming era, the rename and recent years are pinned by hand, apart from `CONFERENCES`.
+VENUE_NAMES = {
+    ("NeurIPS", 1987): "Conference on Neural Information Processing Systems (NIPS 1987)",
+    ("NeurIPS", 2017): "Conference on Neural Information Processing Systems (NIPS 2017)",
+    ("NeurIPS", 2018): "Conference on Neural Information Processing Systems (NeurIPS 2018)",
+    ("NeurIPS", 2025): "Conference on Neural Information Processing Systems (NeurIPS 2025)",
+    ("ICLR", 2013): "International Conference on Learning Representations (ICLR 2013)",
+    ("ICLR", 2025): "International Conference on Learning Representations (ICLR 2025)",
+    ("ICML", 1988): "International Conference on Machine Learning (ICML 1988)",
+    ("ICML", 2023): "International Conference on Machine Learning (ICML 2023)",
+    ("ICML", 2026): "International Conference on Machine Learning (ICML 2026)",
+}
+
+
+@pytest.mark.parametrize(("venue", "year"), sorted(VENUE_NAMES))
+def test_venue_names_are_pinned(venue: str, year: int) -> None:
+    assert export.venue_name(venue, year) == VENUE_NAMES[venue, year]
+
+
+def test_every_crawlable_year_has_one_venue_name() -> None:
+    """2013–2026 for all three venues (the review's 2020–2026 and task-049's 2018 proposal inside it): one
+    string per venue and year, whatever the track or status, with the year it names equal to `PY`."""
+    for venue in ("NeurIPS", "ICLR", "ICML"):
+        for year in range(2013, 2027):
+            name = export.venue_name(venue, year)
+            acronym = "NIPS" if venue == "NeurIPS" and year < 2018 else venue
+            assert name.endswith(f" ({acronym} {year})") and "\n" not in name and "{" not in name
+
+
+@pytest.mark.parametrize(("venue", "year"), [("NeurIPS", 1986), ("ICLR", 2012), ("ICML", 1987)])
+def test_a_year_the_venue_was_not_held_is_refused(venue: str, year: int) -> None:
+    with pytest.raises(ValueError, match="no conference name"):
+        export.venue_name(venue, year)
+
+
+def test_an_unknown_venue_has_its_own_message() -> None:
+    with pytest.raises(ValueError, match="no conference table for venue 'AAAI'"):
+        export.venue_name("AAAI", 2024)
+
+
+def test_conference_eras_must_be_sorted() -> None:
+    """`venue_name` takes the last era that has begun, so the eras must be in year order; the table is checked
+    when the module loads, and the check refuses an unsorted table."""
+    vocab.check_conferences(vocab.CONFERENCES)
+    with pytest.raises(ValueError, match="NeurIPS eras are not in year order"):
+        vocab.check_conferences({"NeurIPS": ("N", ((2018, "NeurIPS"), (1987, "NIPS")))})
+    with pytest.raises(ValueError, match="ICLR has no eras"):
+        vocab.check_conferences({"ICLR": ("I", ())})
+
+
+def test_a_record_for_a_year_its_venue_was_not_held_is_refused_at_ingest() -> None:
+    """Refused when the record is built, so an export never meets it mid-stream (`venue_name` still raises,
+    as a backstop)."""
+    with pytest.raises(ValidationError, match="no conference name for ICLR 2012"):
+        paper("AbCd0001", venue="ICLR", year=2012)
+    assert paper("AbCd0001", venue="ICLR", year=2013).year == 2013
+
+
+STATUSES = ("accepted", "rejected", "withdrawn", "desk_rejected", "unknown")
+
+
+def status_record(status: str) -> dict[str, object]:
+    return {"id": f"op:iclr:2024:{status[:4]}0001", "title": "Deep trust", "authors": ["Jo Smith"], "venue": "ICLR",
+            "year": 2024, "track": "main", "status": status}  # fmt: skip
+
+
+@pytest.mark.parametrize("status", STATUSES)
+def test_ris_carries_the_status_as_a_keyword(status: str) -> None:
+    ris = "".join(export._ris([status_record(status)], PROVENANCE))
+    assert [line for line in ris.splitlines() if line.startswith("KW  - ")] == [
+        "KW  - main",
+        f"KW  - status:{status}",
+    ]
+    assert (
+        "TY  - CPAPER\n" in ris
+        and "T2  - International Conference on Learning Representations (ICLR 2024)\n" in ris
+    )
+
+
+def test_bibtex_cites_only_accepted_papers_as_inproceedings() -> None:
+    """spec 04 §Exports: an accepted paper is `@inproceedings` in its conference; any other status is
+    `@unpublished`, with no `booktitle`: the venue string moves into `note`, after `Submitted to`."""
+    entries = parse_string("".join(export._bibtex([status_record(s) for s in STATUSES], PROVENANCE)))
+    by = {e.fields["openproceedings_id"].split(":")[-1][:4]: e for e in entries}
+    venue = "International Conference on Learning Representations (ICLR 2024)"
+    accepted = by["acce"]
+    assert accepted.entry_type == "inproceedings" and accepted.fields["booktitle"] == venue
+    assert (
+        accepted.fields["note"] == PROVENANCE.line()
+        and accepted.fields["keywords"] == "main, status:accepted"
+    )
+    for status in STATUSES[1:]:
+        e = by[status[:4]]
+        assert e.entry_type == "unpublished" and "booktitle" not in e.fields, status
+        words = status.replace("_", " ")  # `desk_rejected` in a note would break LaTeX
+        assert e.fields["note"] == f"Submitted to {venue}, status: {words}. {PROVENANCE.line()}"
+        assert e.fields["keywords"] == f"main, status:{status}"
+
+
+def test_ris_t2_and_bibtex_booktitle_are_the_same_string() -> None:
+    record = {"id": "op:neurips:2017:nips-ab", "title": "t", "authors": ["A B"], "venue": "NeurIPS", "year": 2017,
+              "track": "main", "status": "accepted"}  # fmt: skip
+    ris = "".join(export._ris([record], PROVENANCE))
+    (entry,) = parse_string("".join(export._bibtex([record], PROVENANCE)))
+    assert f"T2  - {entry.fields['booktitle']}\n" in ris
+    assert entry.fields["booktitle"] == "Conference on Neural Information Processing Systems (NIPS 2017)"
 
 
 def run(data_dir: Path, *args: str) -> int:
@@ -620,3 +783,130 @@ def test_a_parity_failure_logs_at_error_without_its_tokens(
     )
     (entry,) = [e for e in logged(capsys.readouterr().err) if e.get("event") == "cli_refused"]
     assert (entry["level"], entry["error"]) == ("WARNING", "IndexBuildError")
+
+
+@pytest.mark.parametrize("fmt", ["xml", "RIS", ""])
+def test_an_unknown_format_is_refused_by_header_and_entries_alike(fmt: str) -> None:
+    with pytest.raises(ValueError, match="unknown export format"):
+        export.header(fmt)
+    with pytest.raises(ValueError, match="unknown export format"):
+        export.entries(fmt, [], PROVENANCE)
+
+
+# --- review-gate fixes (M3a) ------------------------------------------------------------------------------
+LEAKS = ("@article{leak,", "@jit(nopython,")  # an entry opener and a decorator, both read as entries if bare
+
+
+def adversarial() -> list[dict[str, object]]:
+    """Accepted and not: each with an `@` opener in its title, its abstract and an author."""
+    out: list[dict[str, object]] = []
+    for n, (status, leak) in enumerate(
+        [(s, leak) for s in ("accepted", "rejected", "unknown") for leak in LEAKS], start=1
+    ):
+        out.append({"id": f"op:iclr:2024:At{n:04d}", "title": f"Speed {leak} title}} here",
+                    "abstract": f"We use {leak}\n parallel=True) and \\@{leak}", "authors": [f"Smith, {leak}", "Jo Doe"],
+                    "venue": "ICLR", "year": 2024, "track": "main", "status": status})  # fmt: skip
+    return out
+
+
+def test_an_at_sign_in_any_value_never_opens_an_entry() -> None:
+    """refaudit (and BibTeX) start an entry at a bare `@` wherever it is; every `@` is written `{@}`."""
+    records = adversarial()
+    text = "".join(export._bibtex(records, PROVENANCE))
+    entries = parse_string(text)
+    assert len(entries) == len(records) == 6
+    assert [e.fields["openproceedings_id"] for e in entries] == [r["id"] for r in records]
+    assert [e.entry_type for e in entries] == ["inproceedings"] * 2 + ["unpublished"] * 4
+    assert not re.search(r"(?<!\{)@(?!\})", text.split("\n", 1)[1].replace("@inproceedings{", "")
+                         .replace("@unpublished{", ""))  # fmt: skip
+
+
+def test_a_bibtex_note_has_no_bare_underscore_and_reads_the_status_in_words() -> None:
+    pinned = Provenance(
+        "abcdef123456", "0" * 64, "2026-09-26", record_id="ab_cd-ef_gh1", searched_at="2026-09-25T10:00:00Z"
+    )
+    for status in STATUSES:
+        (e,) = parse_string("".join(export._bibtex([status_record(status)], pinned)))
+        assert not re.search(r"(?<!\\)_", e.fields["note"]), e.fields["note"]
+        assert e.fields["keywords"] == f"main, status:{status}"  # keywords keep the machine form
+    (desk,) = parse_string("".join(export._bibtex([status_record("desk_rejected")], PROVENANCE)))
+    assert "status: desk rejected." in desk.fields["note"]
+
+
+@pytest.mark.parametrize("status", STATUSES)
+def test_ris_says_a_paper_that_was_not_accepted_is_not_in_the_proceedings(status: str) -> None:
+    ris = "".join(export._ris([status_record(status)], PROVENANCE))
+    notes = [line[6:] for line in ris.splitlines() if line.startswith("N1  - ")]
+    venue = "International Conference on Learning Representations (ICLR 2024)"
+    words = status.replace("_", " ")
+    if status == "accepted":
+        assert notes == [PROVENANCE.line()]
+    elif status == "unknown":
+        assert notes == [f"Submitted to {venue}; status: unknown (not known to be in its proceedings).",
+                         PROVENANCE.line()]  # fmt: skip
+    else:
+        assert notes == [
+            f"Submitted to {venue}; status: {words} (not in its proceedings).",
+            PROVENANCE.line(),
+        ]
+    assert "TY  - CPAPER\n" in ris and f"T2  - {venue}\n" in ris  # one reference type, the venue kept
+
+
+def test_the_provenance_line_says_exported_and_names_a_pinning_record() -> None:
+    assert PROVENANCE.line() == f"openproceedings abcdef123456 · query {'0' * 64} · exported 2026-09-26"
+    pinned = Provenance("abcdef123456", "0" * 64, "2026-09-26", record_id="Rec0rd_Id-01",
+                        searched_at="2026-09-25T23:59:59Z")  # fmt: skip
+    line = f"openproceedings abcdef123456 · query {'0' * 64} · exported 2026-09-26 · record Rec0rd_Id-01 · searched 2026-09-25"
+    assert pinned.line() == line
+    with pytest.raises(ValueError, match="record_id and searched_at"):
+        Provenance("a", "b", "c", record_id="Rec0rd_Id-01")
+    record = status_record("accepted")
+    ris = "".join(export._ris([record], pinned))
+    assert f"N1  - {line}\n" in ris
+    (e,) = parse_string("".join(export._bibtex([record], pinned)))
+    assert e.fields["note"] == line.replace("_", "\\_")
+    row = next(csv.DictReader(io.StringIO(export.header("csv") + "".join(export._csv([record], pinned)))))
+    row = {k.lstrip("\ufeff"): v for k, v in row.items()}
+    assert (row["record_id"], row["searched_at"]) == ("Rec0rd_Id-01", "2026-09-25T23:59:59Z")
+    plain = next(
+        csv.DictReader(io.StringIO("".join(export._csv([record], PROVENANCE))), fieldnames=export.CSV_COLUMNS)
+    )
+    assert (plain["record_id"], plain["searched_at"]) == ("", "")
+    (obj,) = [json.loads(x) for x in export._jsonl([record], pinned)]
+    assert (obj["record_id"], obj["searched_at"]) == ("Rec0rd_Id-01", "2026-09-25T23:59:59Z")
+    (bare,) = [json.loads(x) for x in export._jsonl([record], PROVENANCE)]
+    assert (bare["record_id"], bare["searched_at"]) == (None, None)
+
+
+def test_the_conference_table_names_exactly_the_venues() -> None:
+    from typing import get_args
+
+    assert tuple(vocab.CONFERENCES) == get_args(vocab.Venue)
+    with pytest.raises(ValueError, match="the conference table must name exactly"):
+        vocab.check_conferences({k: v for k, v in vocab.CONFERENCES.items() if k != "ICML"})
+
+
+def _printable_before(text: str) -> str:
+    """`export._printable` as it was: a per-character generator (kept here as the reference)."""
+    import unicodedata
+
+    return "".join(ch for ch in text if ch.isspace() or unicodedata.category(ch) != "Cc")
+
+
+def test_printable_equals_the_per_character_definition_on_every_code_point() -> None:
+    """The regex drops exactly the control characters (Cc) that aren't whitespace, for every code point but
+    the surrogates (which no decoded UTF-8 text holds); ~1.1M code points, well under a second."""
+    every = "".join(chr(c) for c in range(0x110000) if not 0xD800 <= c <= 0xDFFF)
+    assert export._printable(every) == _printable_before(every)
+    assert export._printable("a\x00\t\n\x0b\x0c\r\x1c\x1f\x7f\x85\x9fb") == "a\t\n\x0b\x0c\r\x1c\x1f\x85b"
+
+
+def test_check_count_is_the_one_count_check_of_both_exports() -> None:
+    """`op export` and `GET /export` end with the same check (M3a review): short or long is an internal
+    error that names the counts, never the records."""
+    from openproceedings.engine.protocol import EngineInternalError
+
+    export.check_count(3, 3)
+    for written in (2, 4):
+        with pytest.raises(EngineInternalError, match=f"exported {written} records, but 3 match"):
+            export.check_count(written, 3)
