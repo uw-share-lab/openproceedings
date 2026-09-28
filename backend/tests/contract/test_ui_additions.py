@@ -6,8 +6,8 @@ under /api/v1:
   identification tree's own count;
 - `POST /records`'s optional `index_version` pin (409 `API_INDEX_VERSION_UNAVAILABLE`, nothing saved or
   charged for a save);
-- `GET /records/{id}?replay=false`: the stored record, `replay` null, one token, answered while every
-  verification slot is taken;
+- `GET /records/{id}?replay=false`: the stored record, `replay` null, one token without `include=ids`,
+  answered while every verification slot is taken; adding ids costs the full record-route weight;
 - `/coverage`'s `crawl_dates_kind` and `identification_citable` (their derivation is a record's:
   `tests/unit/test_records.py`); `/parse`'s `blocking_spans` (their rule: `tests/unit/test_clauses.py`).
 """

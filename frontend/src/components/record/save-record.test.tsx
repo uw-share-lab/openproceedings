@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { json, renderWithApi, type Handler } from "@/test/api-stub";
 import { copy, RECORDS } from "@/test/record-fixture";
@@ -127,8 +127,9 @@ describe("confirm (design S1; copy SV-2)", () => {
     ).toBeTruthy();
   });
 
-  it("does not abort an irreversible save when the component unmounts", async () => {
-    const pending = new Promise<Response>(() => {});
+  it("finishes an irreversible save after unmount without starting its replay read", async () => {
+    let answer: (response: Response) => void = () => {};
+    const pending = new Promise<Response>((resolve) => (answer = resolve));
     const { calls, unmount } = renderWithApi(<SaveRecord {...PROPS} />, (call) =>
       call.method === "POST" ? pending : api(created())(call),
     );
@@ -139,6 +140,11 @@ describe("confirm (design S1; copy SV-2)", () => {
     unmount();
 
     expect(calls[0]?.signal.aborted).toBe(false);
+    await act(async () => {
+      answer(created());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(calls).toHaveLength(1);
   });
 
   it("is disabled with the reason while the results aren't the searched query's", () => {
@@ -201,6 +207,38 @@ describe("saved (design S2; copy SV-3, SV-4, SV-5)", () => {
 });
 
 describe("refused (design S3)", () => {
+  it("retries the exact search the user confirmed even after the shown results change", async () => {
+    let answer: (response: Response) => void = () => {};
+    const pending = new Promise<Response>((resolve) => (answer = resolve));
+    let posts = 0;
+    const view = renderWithApi(<SaveRecord {...PROPS} />, (call) => {
+      if (call.method === "POST") {
+        posts += 1;
+        return posts === 1
+          ? pending
+          : json({ error: { code: "API_INTERNAL", message: "still unavailable" } }, 500);
+      }
+      return api(created())(call);
+    });
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(view.calls).toHaveLength(1));
+
+    view.rerender(
+      <SaveRecord
+        {...PROPS}
+        q="a different shown query"
+        mode="scholar"
+        indexVersion="0123456789ab"
+        total={7}
+      />,
+    );
+    await act(async () => answer(json({ error: { code: "API_INTERNAL", message: "unavailable" } }, 500)));
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(view.calls).toHaveLength(2));
+
+    expect(view.calls[1]?.body).toEqual({ q: C.q, mode: C.mode, index_version: R.index_version });
+  });
+
   it("saves nothing on a moved index (409) and says so", async () => {
     const { calls } = renderWithApi(
       <SaveRecord {...PROPS} />,

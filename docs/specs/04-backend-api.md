@@ -360,9 +360,9 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   alone: `replay` is null, nothing is parsed, compiled or verified, and the top-level versions are the served
   index's and this code's. So the record page can show the recorded fields and the methods text while a
   replay would be a 429 or 503 `API_BUSY` ("Replay: waiting"). It is the one read that costs one token of
-  the rate limit rather than `export_weight` (`middleware.stored_read`: a GET of `/records/{id}` whose
-  parameters are only `replay`, false by the route's own bool rule, and `include`, each once; anything else
-  pays the record route's weight). `replay` defaults to `true`, the old answer, and is never null without
+  the rate limit rather than `export_weight` (`middleware.stored_read`: a GET of `/records/{id}` whose only
+  parameter is `replay=false` by the route's own bool rule; `include=ids`, repeated parameters, or anything
+  else pays the record route's full weight). `replay` defaults to `true`, the old answer, and is never null without
   `replay=false` (decision-014: the one response field allowed to become nullable within v1, because only
   the new opt-in parameter produces the null). The access line carries `canonical_hash`, never `q`.
 - **`ids_hash`** is `sha256("\n".join(sorted(ids)))`, code-point order, no trailing newline, with
@@ -522,8 +522,8 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     both hold its cost, and a refusal by one spends nothing from the other. `/healthz` (GET or
     HEAD, for uptime monitors; HEAD is its own route, left out of the OpenAPI document so operation ids stay
     unique) costs nothing; `/export` and every record route (`POST /records`, `GET /records/{id}`, `/diff`)
-    cost `export_weight`, charged before routing (but `GET /records/{id}?replay=false`, which runs no query:
-    one token). A
+    cost `export_weight`, charged before routing (but `GET /records/{id}?replay=false` without `include=ids`,
+    which runs no query and returns no membership list: one token; adding `include=ids` costs the full weight). A
     query's **position-verified clauses** (spec 03: a phrase with a wildcard, a NEAR the index can't answer)
     are counted from the AST (`engine.compile.verified_clauses`, by `verifies`'s rule; a test holds the
     count equal to the compiler's own): more than `ApiConfig.max_verified_clauses` (default 16: a backstop, admitting every Trust-Evals string) is 422

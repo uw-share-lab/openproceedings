@@ -58,14 +58,25 @@ export interface SaveRecordProps {
 }
 
 type Created = { record_id: string; page: string; index_version: string };
+type SaveRequest = {
+  readonly q: string;
+  readonly mode: Mode;
+  readonly indexVersion: string;
+  readonly total: number;
+};
 
 type Phase =
   | { readonly kind: "idle" }
   | { readonly kind: "confirm" }
-  | { readonly kind: "saving"; readonly dialogOpen: boolean }
-  | { readonly kind: "saved"; readonly created: Created; readonly record: RecordOutcome | null }
-  | { readonly kind: "index_moved" }
-  | { readonly kind: "refused"; readonly failure: Failure };
+  | { readonly kind: "saving"; readonly dialogOpen: boolean; readonly request: SaveRequest }
+  | {
+      readonly kind: "saved";
+      readonly created: Created;
+      readonly record: RecordOutcome | null;
+      readonly request: SaveRequest;
+    }
+  | { readonly kind: "index_moved"; readonly request: SaveRequest }
+  | { readonly kind: "refused"; readonly failure: Failure; readonly request: SaveRequest };
 
 export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: SaveRecordProps) {
   const api = useApi();
@@ -75,8 +86,17 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
   const [fullNow, setStoreFull] = useState(false);
   const storeFull = fullBefore || fullNow;
   const trigger = useRef<HTMLButtonElement>(null);
+  const mounted = useRef(true);
   const reasonId = useId();
   const reason = storeFull ? STORE_FULL_MESSAGE : disabledReason;
+  const shownRequest: SaveRequest = { q, mode, indexVersion, total };
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (phase.kind === "index_moved" || phase.kind === "refused") trigger.current?.focus();
@@ -91,27 +111,30 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
     trigger.current?.focus();
   };
 
-  const save = async () => {
-    setPhase({ kind: "saving", dialogOpen: true });
+  const save = async (request: SaveRequest) => {
+    setPhase({ kind: "saving", dialogOpen: true, request });
     const posted = await outcomeOf(() =>
-      api.POST("/api/v1/records", { body: { q, mode, index_version: indexVersion } }),
+      api.POST("/api/v1/records", {
+        body: { q: request.q, mode: request.mode, index_version: request.indexVersion },
+      }),
     );
+    if (!mounted.current) return;
     if (posted.kind !== "ok") {
       if (posted.kind === "refused" && posted.error.code === "API_RECORDS_STORE_FULL") {
         rememberStoreFull();
         setStoreFull(true);
       }
       if (posted.kind === "refused" && posted.error.code === "API_INDEX_VERSION_UNAVAILABLE") {
-        setPhase({ kind: "index_moved" });
+        setPhase({ kind: "index_moved", request });
         return;
       }
-      setPhase({ kind: "refused", failure: posted });
+      setPhase({ kind: "refused", failure: posted, request });
       return;
     }
     const created = posted.data;
-    setPhase({ kind: "saved", created, record: null });
+    setPhase({ kind: "saved", created, record: null, request });
     const record = await getRecord(api, created.record_id, true);
-    setPhase({ kind: "saved", created, record });
+    if (mounted.current) setPhase({ kind: "saved", created, record, request });
   };
 
   return (
@@ -135,25 +158,30 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
       )}
       {(phase.kind === "confirm" || (phase.kind === "saving" && phase.dialogOpen)) && (
         <Confirm
-          q={q}
-          mode={mode}
-          indexVersion={indexVersion}
-          total={total}
+          q={phase.kind === "saving" ? phase.request.q : shownRequest.q}
+          mode={phase.kind === "saving" ? phase.request.mode : shownRequest.mode}
+          indexVersion={phase.kind === "saving" ? phase.request.indexVersion : shownRequest.indexVersion}
+          total={phase.kind === "saving" ? phase.request.total : shownRequest.total}
           onCancel={dismissConfirmation}
-          onSave={() => void save()}
+          onSave={() => void save(shownRequest)}
           saving={phase.kind === "saving"}
         />
       )}
       {phase.kind === "saved" && (
-        <Saved created={phase.created} record={phase.record} shownIndex={indexVersion} shownTotal={total} />
+        <Saved
+          created={phase.created}
+          record={phase.record}
+          shownIndex={phase.request.indexVersion}
+          shownTotal={phase.request.total}
+        />
       )}
       {phase.kind === "index_moved" && (
         <div role="alert" className={`${box} w-full`}>
           <p className="break-words">
             <span aria-hidden="true">✖ </span>Index{" "}
-            <code className="font-mono break-all">{indexVersion}</code> is no longer served here, so the
-            search wasn&apos;t saved: it would have been frozen on another index than the one whose counts you
-            saw. Search again to see the current results, then save.
+            <code className="font-mono break-all">{phase.request.indexVersion}</code> is no longer served
+            here, so the search wasn&apos;t saved: it would have been frozen on another index than the one
+            whose counts you saw. Search again to see the current results, then save.
           </p>
         </div>
       )}
@@ -179,7 +207,7 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
               </ul>
             </div>
           ) : (
-            <FailureNotice failure={phase.failure} onRetry={() => void save()} />
+            <FailureNotice failure={phase.failure} onRetry={() => void save(phase.request)} />
           )}
         </div>
       )}
