@@ -137,7 +137,10 @@ class FakeOpenReview:
         limit, offset = int(q.get("limit", 1000)), int(q.get("offset", 0))
         start = 0 if self.ignore_offset else offset
         if parts.path == "/groups" and "parent" in q:
-            rows = [{"id": g} for g in self.children.get(q["parent"], [])]
+            rows = [
+                copy.deepcopy(self.groups.get(g, {"id": g, "readers": ["everyone"], "content": {}}))
+                for g in self.children.get(q["parent"], [])
+            ]
             return json_response({"groups": rows[start : start + limit], "count": len(rows)})
         if parts.path == "/groups" and "id" in q:
             doc = self.groups.get(q["id"])

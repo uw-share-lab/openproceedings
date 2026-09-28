@@ -64,7 +64,9 @@ position papers aren't marked on OpenReview either (they carry `ICML.cc/2024/Con
 Paper entries in the recorded v202, v235 and v267 indexes link the OpenReview forum
 (`openreview.net/forum?id=…`): dedup's forum link joins PMLR and OpenReview on that id for 2023+, before
 and whatever the title (TASK-105, `dedup-rules`). The recorded v28 paper page has no forum link and pins
-the older per-paper shape.
+the older per-paper shape. Exactly one distinct forum id is required: repeated copies of the same id
+collapse, while an entry naming two different forum ids is skipped before title-based dedup can merge it
+with either paper.
 
 ## Page structure
 - Volume index: `https://proceedings.mlr.press/v<N>/`. Its heading reads `Volume N: <proceedings title>`.

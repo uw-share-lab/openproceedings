@@ -152,7 +152,7 @@ def _listing(
                 if url_venue == "NeurIPS"
                 else classify_proceedings(token or "")
             )
-            if url_year != year or (token is not None and by_url.track != claimed):
+            if url_year != year or by_url.track != claimed:
                 return "conflict"
         return (venue, year, f"{PREFIX[venue]}-{sha}", classify_proceedings(track),
                 ("proceedings_url", url), sorted({c["evidence"] for c, _ in proc}))  # fmt: skip

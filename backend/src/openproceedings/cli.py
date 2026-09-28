@@ -16,6 +16,7 @@ import contextlib
 import io
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -349,6 +350,8 @@ def _ingest_openreview(ns: argparse.Namespace) -> int:
 def _ingest_crawl(ns: argparse.Namespace) -> int:
     from openproceedings.ingest.sources.crawl import ingest_iclr, ingest_neurips, ingest_pmlr
 
+    if not math.isfinite(ns.delay):
+        raise _usage("--delay must be finite")
     if ns.delay < MIN_DELAY:
         raise _usage(f"--delay must be at least {MIN_DELAY} seconds (politeness)")
     if ns.dry_run and ns.offline:

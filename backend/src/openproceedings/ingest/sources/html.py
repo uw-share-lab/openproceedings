@@ -1,7 +1,6 @@
 """Text out of proceedings HTML (neurips-proceedings skill §Abstract extraction; pmlr-proceedings §Page structure).
 
-The pages are server-rendered and regular, so a few anchored patterns read them; nothing here executes or
-fetches anything. Rules:
+The standard-library HTML parser reads markup without executing or fetching anything. Rules:
 
 - Block tags (`p`, `br`, `div`, `li`, headings, …) become a space; inline tags (`<i>`, `<sub>`) vanish, so
   `<i>k</i>-means` stays `k-means`. `script` and `style` bodies are dropped.
@@ -14,17 +13,20 @@ from __future__ import annotations
 
 import html
 import re
+from dataclasses import dataclass, field
+from html.parser import HTMLParser
 
-_DROP = re.compile(r"<(script|style)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
-_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-_BLOCK_TAGS = (
-    "p|br|div|li|ul|ol|dl|dt|dd|h[1-6]|tr|td|th|table|section|article|header|footer|blockquote|hr|pre|center"
-)
-_BLOCK = re.compile(rf"</?(?:{_BLOCK_TAGS})\b[^>]*>", re.IGNORECASE)
-_TAG = re.compile(r"</?[A-Za-z][^>]*>")
+_BLOCK_TAGS = frozenset(
+    (
+        "p", "br", "div", "li", "ul", "ol", "dl", "dt", "dd", "h1", "h2", "h3", "h4", "h5", "h6",
+        "tr", "td", "th", "table", "section", "article", "header", "footer", "blockquote", "hr", "pre",
+        "center",
+    )
+)  # fmt: skip
 _ENTITY = re.compile(r"&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});")
-_META = re.compile(r"<meta\b[^>]*>", re.IGNORECASE)
-_ATTR = re.compile(r"""([A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)')""")
+_BARE_AMP = re.compile(r"&(?!#[0-9]{1,7};|#[xX][0-9a-fA-F]{1,6};|[A-Za-z][A-Za-z0-9]{1,31};)")
+MAX_DEPTH = 1024
+MAX_ELEMENTS = 250_000
 
 
 def unescape(text: str) -> str:
@@ -37,27 +39,213 @@ def collapse(text: str) -> str:
     return " ".join(text.split())
 
 
+@dataclass(slots=True)
+class Element:
+    """A minimal inert HTML element tree for the fixed proceedings-page grammars."""
+
+    tag: str
+    attributes: dict[str, str] = field(default_factory=dict)
+    children: list[Element | str] = field(default_factory=list)
+    parent: Element | None = field(default=None, repr=False)
+
+    def iter(self, tag: str | None = None) -> list[Element]:
+        found: list[Element] = []
+        stack = [child for child in reversed(self.children) if isinstance(child, Element)]
+        while stack:
+            child = stack.pop()
+            if tag is None or child.tag == tag:
+                found.append(child)
+            stack.extend(
+                grandchild for grandchild in reversed(child.children) if isinstance(grandchild, Element)
+            )
+        return found
+
+    def has_class(self, name: str) -> bool:
+        return name in self.attributes.get("class", "").split()
+
+    def contains(self, other: Element) -> bool:
+        return self is other or any(node is other for node in self.iter())
+
+
+class _TreeParser(HTMLParser):
+    VOID = frozenset({"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source"})
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.root = Element("document")
+        self.stack = [self.root]
+        self.elements = 0
+
+    def _append(self, tag: str, attrs: list[tuple[str, str | None]], *, push: bool) -> None:
+        if len(self.stack) > MAX_DEPTH:
+            raise ValueError(f"HTML nesting exceeds {MAX_DEPTH} elements")
+        if self.elements >= MAX_ELEMENTS:
+            raise ValueError(f"HTML contains more than {MAX_ELEMENTS} elements")
+        node = Element(
+            tag.casefold(), {k.casefold(): v for k, v in attrs if v is not None}, parent=self.stack[-1]
+        )
+        self.elements += 1
+        self.stack[-1].children.append(node)
+        if push and node.tag not in self.VOID:
+            self.stack.append(node)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._append(tag, attrs, push=True)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._append(tag, attrs, push=False)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.casefold()
+        for index in range(len(self.stack) - 1, 0, -1):
+            if self.stack[index].tag == tag:
+                del self.stack[index:]
+                return
+
+    def handle_data(self, data: str) -> None:
+        self.stack[-1].children.append(data)
+
+    def handle_entityref(self, name: str) -> None:
+        self.stack[-1].children.append(f"&{name}")
+
+    def handle_charref(self, name: str) -> None:
+        self.stack[-1].children.append(f"&#{name}")
+
+
+def parse(page: str) -> Element:
+    """Parse bounded, already-fetched HTML into a non-executing element tree."""
+    parser = _TreeParser()
+    parser.feed(_BARE_AMP.sub("&amp;", page))
+    parser.close()
+    return parser.root
+
+
+def node_text(node: Element) -> str:
+    """Visible text under `node`, with the same whitespace/entity rules as `text_of`."""
+    parts: list[str] = []
+    stack: list[tuple[Element | str, bool]] = [(node, False)]
+    while stack:
+        current, closing = stack.pop()
+        if isinstance(current, str):
+            parts.append(current)
+            continue
+        if closing:
+            if current.tag in _BLOCK_TAGS:
+                parts.append(" ")
+            continue
+        if current.tag in ("script", "style"):
+            continue
+        if current.tag in _BLOCK_TAGS:
+            parts.append(" ")
+        stack.append((current, True))
+        stack.extend((child, False) for child in reversed(current.children))
+    return collapse(unescape("".join(parts)))
+
+
+def text_after(container: Element, target: Element) -> str:
+    """Visible text in `container` after `target`'s closing tag."""
+    parts: list[str] = []
+    seen = False
+    stack: list[tuple[Element | str, bool]] = [(container, False)]
+    while stack:
+        current, closing = stack.pop()
+        if isinstance(current, str):
+            if seen:
+                parts.append(current)
+            continue
+        if closing:
+            if seen and current.tag in _BLOCK_TAGS:
+                parts.append(" ")
+            continue
+        if current is target:
+            seen = True
+            continue
+        if current.tag in ("script", "style"):
+            continue
+        if seen and current.tag in _BLOCK_TAGS:
+            parts.append(" ")
+        stack.append((current, True))
+        stack.extend((child, False) for child in reversed(current.children))
+    return collapse(unescape("".join(parts)))
+
+
+class _TextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.parts: list[str] = []
+        self.dropped = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.casefold()
+        if tag in ("script", "style"):
+            self.dropped += 1
+        elif not self.dropped and tag in _BLOCK_TAGS:
+            self.parts.append(" ")
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if not self.dropped and tag.casefold() in _BLOCK_TAGS:
+            self.parts.append(" ")
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.casefold()
+        if tag in ("script", "style"):
+            self.dropped = max(0, self.dropped - 1)
+        elif not self.dropped and tag in _BLOCK_TAGS:
+            self.parts.append(" ")
+
+    def handle_data(self, data: str) -> None:
+        if not self.dropped:
+            self.parts.append(data)
+
+    def handle_entityref(self, name: str) -> None:
+        if not self.dropped:
+            # HTMLParser also reports legacy/bare `&name` references here and does not say whether a
+            # semicolon was present. Keeping it absent lets html.unescape decode known names while leaving
+            # an unknown bare ampersand sequence such as `R&D` intact.
+            self.parts.append(f"&{name}")
+
+    def handle_charref(self, name: str) -> None:
+        if not self.dropped:
+            self.parts.append(f"&#{name}")
+
+
 def text_of(fragment: str) -> str:
     """Plain text of an HTML fragment (the rules in the module docstring)."""
-    fragment = _COMMENT.sub(" ", _DROP.sub(" ", fragment))
-    return collapse(unescape(_TAG.sub("", _BLOCK.sub(" ", fragment))))
+    parser = _TextParser()
+    # HTMLParser discards a bare ampersand in strings such as `R&D`; protect only non-entities first.
+    parser.feed(_BARE_AMP.sub("&amp;", fragment))
+    parser.close()
+    return collapse(unescape("".join(parser.parts)))
+
+
+class _TagParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.tags: list[tuple[str, dict[str, str]]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.tags.append((tag.casefold(), {k.casefold(): v for k, v in attrs if v is not None}))
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.handle_starttag(tag, attrs)
 
 
 def attrs(tag: str) -> dict[str, str]:
-    """A tag's attributes, names lower-cased, values raw (not yet unescaped)."""
-    return {
-        m.group(1).lower(): m.group(2) if m.group(2) is not None else m.group(3) for m in _ATTR.finditer(tag)
-    }
+    """A tag's structurally parsed attributes, names lower-cased and values decoded once."""
+    parser = _TagParser()
+    parser.feed(tag)
+    return parser.tags[0][1] if parser.tags else {}
 
 
 def metas(page: str, name: str) -> list[str]:
     """The `content` of every `<meta name=…>` with this name, in page order, decoded and collapsed."""
-    out = []
-    for m in _META.finditer(page):
-        a = attrs(m.group(0))
-        if a.get("name", "").lower() == name and "content" in a:
-            out.append(collapse(unescape(a["content"])))
-    return out
+    parser = _TagParser()
+    parser.feed(page)
+    return [
+        collapse(unescape(a["content"]))
+        for tag, a in parser.tags
+        if tag == "meta" and a.get("name", "").casefold() == name.casefold() and "content" in a
+    ]
 
 
 def meta(page: str, name: str) -> str | None:

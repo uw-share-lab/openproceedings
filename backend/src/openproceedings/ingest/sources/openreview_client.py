@@ -12,9 +12,12 @@ OpenReview's policy, its login and its JSON cache entries on top.
 - **Politeness** is `POLICY` (`http` module docstring): one request a second, a spent budget waits for
   `ratelimit-reset`, 429 → `Retry-After` → `ratelimit-reset` → `min(2^n, 60) s + jitter`, every wait capped at
   3,701 s, at most `max_attempts` tries; any other 4xx fails at once (`http.HTTPRefused`).
-- **Cache.** Every successful GET is stored under `<cache>/openreview/<api>/http/` as `{"key": url, "payload":
-  {url, fetched_at, headers, json}}` (the layout scholarmend's `Cache` wrote, so an older cache replays), keyed
-  by the canonical URL (parameters sorted). `offline=True` never touches the network (`http.CacheMiss`);
+- **Cache.** Before a successful GET is stored, it is reduced to world-readable notes/groups and the top-level
+  fields the crawlers use; restricted v2 content fields are dropped, public content fields remain available
+  to year-specific adapters, and a private row refuses the response. Entries
+  live under `<cache>/openreview/<api>/http/` as `{"key": url, "payload": {url, fetched_at, headers, json,
+  public_projection}}`, keyed by the canonical URL (parameters sorted). A pre-projection cache is rejected
+  offline and replaced by a live run. `offline=True` never touches the network (`http.CacheMiss`);
   `refresh=True` refetches and overwrites. A live client also refetches an entry past its TTL (`ttl`, TASK-102;
   spec 01 §Pipeline): a listing that can still change expires sooner than one that has settled, and API v1
   (every venue-year on it is over) never expires. Offline, nothing expires.
@@ -24,6 +27,7 @@ Nothing here logs or raises with a credential, the token, a request body or resp
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
@@ -38,6 +42,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 from openproceedings.ingest.sources.http import (
     USER_AGENT,
+    CacheError,
     Clock,
     FetchError,
     HttpClient,
@@ -59,6 +64,7 @@ API_V2 = "https://api2.openreview.net"
 API_V1 = "https://api.openreview.net"
 HOSTS = frozenset({"api2.openreview.net", "api.openreview.net"})
 KEPT_HEADERS = ("content-type", "ratelimit-policy", "ratelimit-remaining", "ratelimit-reset")
+PUBLIC_PROJECTION = 1
 
 # --- expiry (TASK-102; spec 01 §Pipeline, Cache expiry) ----------------------------------------------------
 
@@ -117,6 +123,12 @@ class OpenReviewAuthError(SourceError):
     reason = "auth_failed"
 
 
+class OpenReviewPublicDataError(SourceError):
+    """An authenticated response contained an object that an anonymous reader cannot retrieve."""
+
+    reason = "private_response"
+
+
 @dataclass(frozen=True)
 class Credentials:
     username: str = field(repr=False)
@@ -151,6 +163,90 @@ def credentials(environ: Mapping[str, str], dotenv: Path | None = None) -> Crede
     return Credentials(user, password) if user and password else None
 
 
+def _world_readable(value: Mapping[str, Any]) -> bool:
+    """Whether OpenReview's readers/nonreaders ACL makes an object available to `everyone`."""
+    readers, nonreaders = value.get("readers"), value.get("nonreaders", [])
+    if not isinstance(readers, list) or not all(isinstance(item, str) for item in readers):
+        return False
+    if not isinstance(nonreaders, list) or not all(isinstance(item, str) for item in nonreaders):
+        return False
+    return "everyone" in readers and "everyone" not in nonreaders
+
+
+def _public_content(value: Any) -> dict[str, Any]:
+    """A public object's content, excluding v2 fields with their own restricted readers."""
+    if not isinstance(value, Mapping):
+        return {}
+    out: dict[str, Any] = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            continue
+        if (
+            isinstance(item, Mapping)
+            and ({"readers", "nonreaders"} & item.keys())
+            and not _world_readable(item)
+        ):
+            continue
+        out[key] = copy.deepcopy(item)
+    return out
+
+
+def _public_projection(path: str, data: Mapping[str, Any]) -> dict[str, Any]:
+    """A public API projection with only crawler-used top-level fields; called before caching.
+
+    A private top-level object makes the response unusable because silently dropping a row would corrupt
+    offset/count pagination. Restricted v2 content fields can be dropped without changing that pagination.
+    """
+    key = "notes" if path == "/notes" else "groups" if path == "/groups" else None
+    if key is None:
+        raise OpenReviewPublicDataError(
+            "OpenReview response path has no public cache projection", reason="unexpected_shape"
+        )
+    out: dict[str, Any] = {}
+    if isinstance(data.get("count"), int):
+        out["count"] = data["count"]
+    rows = data.get(key)
+    if not isinstance(rows, list):
+        return out  # preserve the malformed shape so the source adapter reports it consistently
+    projected: list[Any] = []
+    allowed = (
+        {"id", "forum", "number", "invitation", "invitations", "replyto", "readers"}
+        if key == "notes"
+        else {"id", "domain", "parent", "readers"}
+    )
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise OpenReviewPublicDataError(
+                f"OpenReview {key[:-1]} response is not an object", reason="unexpected_shape"
+            )
+        if not _world_readable(row):
+            raise OpenReviewPublicDataError(
+                f"OpenReview {key[:-1]} response is not world-readable; use credentials without venue roles"
+            )
+        item = {name: copy.deepcopy(row[name]) for name in allowed if name in row}
+        item["content"] = _public_content(row.get("content"))
+        projected.append(item)
+    out[key] = projected
+    return out
+
+
+def _is_pre_projection_cache(path: Path, url: str) -> bool:
+    """Whether a cache file is the old, otherwise-valid raw-response layout (and only that layout)."""
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        payload = document["payload"]
+        fetched = datetime.fromisoformat(payload["fetched_at"])
+        return (
+            document["key"] == url
+            and payload["url"] == url
+            and isinstance(payload.get("json"), dict)
+            and "public_projection" not in payload
+            and fetched.tzinfo is not None
+        )
+    except (OSError, KeyError, TypeError, ValueError, AttributeError):
+        return False
+
+
 class EntryCodec:
     """`<cache>/openreview/<api>/http/<sha256[:2]>/<sha256>.json`: `{"key": url, "payload": entry}`."""
 
@@ -164,7 +260,11 @@ class EntryCodec:
 
     def decode(self, document: dict[str, Any]) -> tuple[str, Entry]:
         payload = document["payload"]
-        if not isinstance(payload.get("json"), dict) or payload.get("url") != document["key"]:
+        if (
+            payload.get("public_projection") != PUBLIC_PROJECTION
+            or not isinstance(payload.get("json"), dict)
+            or payload.get("url") != document["key"]
+        ):
             raise ValueError("not an OpenReview response entry")
         if datetime.fromisoformat(payload["fetched_at"]).tzinfo is None:
             raise ValueError("naive fetched_at")
@@ -232,11 +332,23 @@ class OpenReviewClient(HttpClient[Entry]):
                 "url": url,
                 "fetched_at": self.clock.now().astimezone(UTC).isoformat(),
                 "headers": {k: response.headers[k] for k in KEPT_HEADERS if k in response.headers},
-                "json": data,
+                "json": _public_projection(path, data),
+                "public_projection": PUBLIC_PROJECTION,
             }
             return entry, True
 
-        return self.through_cache(self.url(path, params), fetch, refresh=self.refresh or refresh)
+        url = self.url(path, params)
+        try:
+            return self.through_cache(url, fetch, refresh=self.refresh or refresh)
+        except CacheError:
+            cache_path = self.cache.path(url)
+            if self.offline or not _is_pre_projection_cache(cache_path, url):
+                raise
+            # Pre-projection caches may contain authenticated-only data. A live run removes the one exact
+            # sha256-keyed entry and fetches a public projection; offline replay refuses it above.
+            cache_path.unlink(missing_ok=True)
+            log.warning("openreview_cache_incompatible", extra={"url": url})
+            return self.through_cache(url, fetch, refresh=True)
 
     def _login(self) -> str:
         if self._credentials is None:

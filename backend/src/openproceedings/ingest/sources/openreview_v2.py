@@ -19,7 +19,7 @@ One venue-year at a time (ICLR 2024+, NeurIPS 2023+, ICML 2023+; earlier years a
    Every value is a claim with `source="openreview_v2"`, the page URL it came from and the page's
    `fetched_at` from the cache.
 
-The raw responses are cached (`openreview_client`); a finished crawl also writes
+The client's public projections of the responses are cached (`openreview_client`); a finished crawl also writes
 `<cache>/openreview/v2/crawls/<Venue>-<Year>.json`, which is how `op snapshot build` knows which
 venue-years to replay (offline, from the same cached responses).
 """
@@ -261,7 +261,9 @@ def _is_container(gid: str) -> bool:
 
 def _group_ids(client: OpenReviewClient, parent: str, report: CrawlReport, page_size: int) -> list[str]:
     ids: list[str] = []
-    for entry, groups in _pages(client, "/groups", {"parent": parent, "select": "id"}, "groups", page_size):
+    # Do not select only `id`: the cache's public projection must see each group's readers ACL before it
+    # persists even the id. The projected cache still retains only fields the crawler needs.
+    for entry, groups in _pages(client, "/groups", {"parent": parent}, "groups", page_size):
         report.fetched.append(datetime.fromisoformat(entry["fetched_at"]))
         ids += [g["id"] for g in groups if isinstance(g, Mapping) and isinstance(g.get("id"), str)]
     return sorted(set(ids))
@@ -381,8 +383,13 @@ def _listing(client: OpenReviewClient, vid: str, venue: str, year: int, report: 
     counts: set[int] = set()
     for entry, notes in _pages(client, "/notes", params, "notes", page_size):
         report.fetched.append(datetime.fromisoformat(entry["fetched_at"]))
-        if isinstance(count := entry["json"].get("count"), int):
-            counts.add(count)
+        count = entry["json"].get("count")
+        if type(count) is not int or count < 0:
+            raise CrawlError(
+                f"the listing of {vid} has a missing or invalid count; "
+                "re-run with --refresh to fetch it again"
+            )
+        counts.add(count)
         seen |= {i for n in notes if isinstance(n, Mapping) and isinstance(i := n.get("id"), str)}
         rows += len(notes)
         fetched_at = datetime.fromisoformat(entry["fetched_at"])
@@ -396,6 +403,12 @@ def _listing(client: OpenReviewClient, vid: str, venue: str, year: int, report: 
                 report.skipped[got] += 1
                 log.debug("openreview_note_skipped", extra={"forum": note.get("id"), "reason": got})
             elif got.id in records:
+                prior = records[got.id]
+                if got.model_dump(exclude={"provenance"}) != prior.model_dump(exclude={"provenance"}):
+                    raise CrawlError(
+                        f"note {note.get('id')} appears with conflicting data in two status listings; "
+                        "re-run with --refresh to fetch all listings together"
+                    )
                 report.skipped["duplicate"] += 1
             else:
                 records[got.id] = got

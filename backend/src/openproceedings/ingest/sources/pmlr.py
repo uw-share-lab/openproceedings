@@ -34,7 +34,7 @@ from openproceedings.ingest.sources.common import (
     record_from_claims,
     titles_match,
 )
-from openproceedings.ingest.sources.html import collapse, meta, metas, text_of
+from openproceedings.ingest.sources.html import collapse, meta, metas, node_text, parse
 from openproceedings.ingest.sources.http import Fetcher, Page
 from openproceedings.ingest.volumes import VOLUMES, Volume
 from openproceedings.logs import elapsed_ms
@@ -47,13 +47,7 @@ HOST = "proceedings.mlr.press"
 HOSTS = frozenset({HOST})
 PROGRESS_SECONDS = 30.0
 
-_HEADING = re.compile(r"<h([12])\b[^>]*>(.*?)</h\1\s*>", re.I | re.S)
 _VOLUME_PREFIX = re.compile(r"Volume\s+([0-9]+)\s*:\s*")
-_PAPER = re.compile(r"<div\s+class=\"paper\"\s*>(.*?)</div>", re.I | re.S)
-_TITLE = re.compile(r"<p\s+class=\"title\"\s*>(.*?)</p>", re.I | re.S)
-_AUTHORS = re.compile(r"<span\s+class=\"authors\"\s*>(.*?)</span>", re.I | re.S)
-_HREF = re.compile(r"""<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')""", re.I)
-_ABSTRACT = re.compile(r"<div\b[^>]*\bid=\"abstract\"[^>]*>(.*?)</div>", re.I | re.S)
 
 
 def ingestable(number: int) -> Volume:
@@ -81,8 +75,10 @@ class Entry:
 
 def heading(text: str) -> tuple[int, str] | None:
     """(volume number, the rest) from the page's first `<h1>`/`<h2>` reading `Volume N: …`."""
-    for m in _HEADING.finditer(text):
-        title = text_of(m.group(2))
+    for node in parse(text).iter():
+        if node.tag not in ("h1", "h2"):
+            continue
+        title = node_text(node)
         if prefix := _VOLUME_PREFIX.match(title):
             return int(prefix.group(1)), title[prefix.end() :]
     return None
@@ -92,21 +88,24 @@ def parse_volume_index(text: str, base: str) -> tuple[list[Entry], int]:
     """The entries on a volume index and the number of `<div class="paper">` blocks without an `abs` link."""
     entries: list[Entry] = []
     unlinked = 0
-    for block in _PAPER.finditer(text):
-        body = block.group(1)
-        hrefs = [urljoin(base, h.group(1) or h.group(2) or "") for h in _HREF.finditer(body)]
+    for block in (node for node in parse(text).iter("div") if node.has_class("paper")):
+        hrefs = [urljoin(base, node.attributes.get("href", "")) for node in block.iter("a")]
         abs_url = next((h for h in hrefs if urlparse(h).path.endswith(".html") and urls.pmlr(h)), None)
         if abs_url is None:
             unlinked += 1
             continue
         pdf = next((h for h in hrefs if h.endswith(".pdf") and "-supp" not in h and urls.pmlr(h)), None)
-        forum = next((f for h in hrefs if (f := urls.forum_id(h))), None)
-        title = _TITLE.search(body)
-        authors = _AUTHORS.search(body)
+        forum_ids = {f for h in hrefs if (f := urls.forum_id(h))}
+        if len(forum_ids) > 1:
+            unlinked += 1
+            continue
+        forum = next(iter(forum_ids)) if forum_ids else None
+        title = next((node for node in block.iter("p") if node.has_class("title")), None)
+        authors = next((node for node in block.iter("span") if node.has_class("authors")), None)
         entries.append(
             Entry(
-                url=abs_url, title=text_of(title.group(1)) if title else "",
-                authors=tuple(a for a in (collapse(p) for p in text_of(authors.group(1)).split(",")) if a)
+                url=abs_url, title=node_text(title) if title else "",
+                authors=tuple(a for a in (collapse(p) for p in node_text(authors).split(",")) if a)
                 if authors else (),
                 pdf=pdf, forum=forum,
             )
@@ -123,11 +122,13 @@ class PaperPage:
 
 
 def parse_paper_page(text: str) -> PaperPage:
-    abstract = _ABSTRACT.search(text)
+    abstract = next(
+        (node for node in parse(text).iter("div") if node.attributes.get("id") == "abstract"), None
+    )
     return PaperPage(
         title=meta(text, "citation_title"),
         authors=tuple(a for a in metas(text, "citation_author") if a),
-        abstract=text_of(abstract.group(1)) if abstract else None,
+        abstract=node_text(abstract) if abstract else None,
         pdf=meta(text, "citation_pdf_url"),
     )
 

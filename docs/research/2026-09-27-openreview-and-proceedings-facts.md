@@ -163,8 +163,10 @@ Workshop names include hyphens and digits (`SCI-FM`, `CLRLC-LLMs`, `7HVU`).
   `-Abstract-Creative_AI_Track.html` on the base page.
 - Counts per year page: 2013: 360, 2020: 1,898, 2021: 2,334 main, 2022: 2,671 + 163 D&B, 2023: 3,218 +
   322 D&B, 2024: 4,034 + 459 D&B. The 2025 base page lists 64 Creative AI papers and links its
-  `vol38-main-conference` companion, which states 5,823 papers across main, D&B and position. The crawler
-  follows this recorded pair; an unfamiliar “See also” page remains a warning rather than silently expanding scope.
+  `vol38-main-conference` companion, whose 5,823 entries are 5,286 main, 497 D&B and 40 position papers
+  (response SHA-256 `48c2de5e5acae991a8b88eaa00174387a7ce066efeb337e30593989bd5015c9a`).
+  The crawler follows this recorded pair; an unfamiliar “See also” page remains a warning rather than
+  silently expanding scope.
 - **NeurIPS 2021 D&B has a separate host:** `https://datasets-benchmarks-proceedings.neurips.cc/paper/2021`
   (the host's index lists only 2021) with 174 papers, `…/hash/<sha>-Abstract-round1.html` (66) and
   `-Abstract-round2.html` (108), `<li class="roundN">` entries and authors in `<i>`. These counts equal

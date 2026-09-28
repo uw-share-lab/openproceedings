@@ -161,7 +161,13 @@ def test_an_openreview_cache_written_by_scholarmends_cache_still_replays(tmp_pat
     """Before TASK-103 the OpenReview client stored entries with scholarmend's `Cache` (no trailing newline, its
     own temp names): the shared cache reads that layout unchanged."""
     url = "https://api2.openreview.net/notes?id=x"
-    entry = {"url": url, "fetched_at": "2026-09-27T12:00:01+00:00", "headers": {}, "json": {"notes": []}}
+    entry = {
+        "url": url,
+        "fetched_at": "2026-09-27T12:00:01+00:00",
+        "headers": {},
+        "json": {"notes": []},
+        "public_projection": 1,
+    }
     Cache(tmp_path).put(url, entry)
     client = OpenReviewClient(tmp_path, credentials=None, offline=True)
     assert client.get("/notes", {"id": "x"}) == entry and client.cached == 1

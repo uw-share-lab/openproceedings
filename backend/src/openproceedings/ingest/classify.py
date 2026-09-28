@@ -43,22 +43,23 @@ _STATUS_SUFFIX = {
 # Whole words only, so a workshop named `SafeSubmission` or `AlignDecision` keeps its status.
 _STATUS_LIKE = re.compile(r"(?:\w*_)?(?:Submissions?|Withdrawn|Rejected|Post_Decision)", re.IGNORECASE)
 # Exact track paths (segments after the year, status suffix removed), per organisation; None = any.
-# Rows follow the openreview-venueids skill's table; add one only for a form seen on a live note.
-_TRACKS: dict[tuple[str | None, tuple[str, ...]], str] = {
-    (None, ("Conference",)): "main",
-    ("NeurIPS", ("Track", "Datasets_and_Benchmarks")): "datasets_benchmarks",
-    ("NeurIPS", ("Track", "Datasets_and_Benchmarks_Track")): "datasets_benchmarks",
-    ("NeurIPS", ("Datasets_and_Benchmarks_Track",)): "datasets_benchmarks",
-    ("NeurIPS", ("Track", "Datasets_and_Benchmarks", "Round1")): "datasets_benchmarks",
-    ("NeurIPS", ("Track", "Datasets_and_Benchmarks", "Round2")): "datasets_benchmarks",
+# Each value is (track, valid years); a None range means the path is stable across held years. Rows follow
+# the openreview-venueids skill's table; add one only for a form and year range verified on live evidence.
+_TRACKS: dict[tuple[str | None, tuple[str, ...]], tuple[str, range | None]] = {
+    (None, ("Conference",)): ("main", None),
+    ("NeurIPS", ("Track", "Datasets_and_Benchmarks")): ("datasets_benchmarks", range(2022, 2025)),
+    ("NeurIPS", ("Track", "Datasets_and_Benchmarks_Track")): ("datasets_benchmarks", range(2022, 2025)),
+    ("NeurIPS", ("Datasets_and_Benchmarks_Track",)): ("datasets_benchmarks", range(2024, 2026)),
+    ("NeurIPS", ("Track", "Datasets_and_Benchmarks", "Round1")): ("datasets_benchmarks", range(2021, 2022)),
+    ("NeurIPS", ("Track", "Datasets_and_Benchmarks", "Round2")): ("datasets_benchmarks", range(2021, 2022)),
     # NeurIPS renamed D&B for 2026 (a live group, no public notes on 2026-09-27; TASK-094)
-    ("NeurIPS", ("Evaluations_and_Datasets_Track",)): "datasets_benchmarks",
-    ("NeurIPS", ("Track", "Competition")): "competition",
-    ("NeurIPS", ("Competition_Track",)): "competition",  # 2024+, live (2024: 16; `LYvWVFdGZN`)
-    ("ICML", ("Position_Paper_Track",)): "position",
-    ("NeurIPS", ("Position_Paper_Track",)): "position",  # 2025+, live (40 accepted; `VZnOKzQ5qW`)
-    ("ICLR", ("TinyPapers",)): "tiny_papers",
-    ("ICLR", ("BlogPosts",)): "blogpost",
+    ("NeurIPS", ("Evaluations_and_Datasets_Track",)): ("datasets_benchmarks", range(2026, 2100)),
+    ("NeurIPS", ("Track", "Competition")): ("competition", range(2022, 2100)),
+    ("NeurIPS", ("Competition_Track",)): ("competition", range(2024, 2100)),
+    ("ICML", ("Position_Paper_Track",)): ("position", range(2025, 2100)),
+    ("NeurIPS", ("Position_Paper_Track",)): ("position", range(2025, 2100)),
+    ("ICLR", ("TinyPapers",)): ("tiny_papers", range(2023, 2025)),
+    ("ICLR", ("BlogPosts",)): ("blogpost", range(2023, 2100)),
 }
 # Proceedings track tokens (scholarmend's `proceedings_url` claim values). All seen in the Trust-Evals
 # corpus except `Datasets_and_Benchmarks`, scholarmend's alias for NeurIPS 2023 and earlier. An unseen
@@ -92,13 +93,22 @@ def _unparsed(venueid: str) -> Classification:
     return Classification(track="unknown", status="unknown", venue_id_raw=venueid, parsed=False)
 
 
+def _track(venue: str, year: int, path: tuple[str, ...]) -> str:
+    """The exact track path when its evidence-backed year window includes `year`."""
+    for key in ((venue, path), (None, path)):
+        if (rule := _TRACKS.get(key)) is not None:
+            track, years = rule
+            return track if years is None or year in years else "other"
+    return "other"
+
+
 def classify_venueid(venueid: str) -> Classification:
     """Track, status, venue and year from an OpenReview venueid; `unknown` if it doesn't parse."""
     m = _VENUEID.fullmatch(venueid)
     segments = m.group(3).split("/") if m else []
     if m is None or not all(segments) or "-" in segments or int(m.group(2)) not in _YEARS:
         return _unparsed(venueid)
-    venue, suffix = m.group(1), None
+    venue, year, suffix = m.group(1), int(m.group(2)), None
     last = segments[-1]
     workshop_name = len(segments) >= 2 and _is_workshop(segments[-2])  # `Workshop/Rejected` is a name
     if not workshop_name and (last in _STATUS_SUFFIX or _STATUS_LIKE.fullmatch(last)):
@@ -106,12 +116,8 @@ def classify_venueid(venueid: str) -> Classification:
             return _unparsed(venueid)  # a status with no track in front of it
         suffix = last
         segments = segments[:-1]
-    if any(_is_workshop(s) for s in segments):
-        track = "workshop"  # rule 1: workshop wins, whatever follows
-    else:
-        path = tuple(segments)
-        track = _TRACKS.get((venue, path)) or _TRACKS.get((None, path)) or "other"
-    year = int(m.group(2))
+    # Rule 1: workshop wins, whatever follows.
+    track = "workshop" if any(_is_workshop(s) for s in segments) else _track(venue, year, tuple(segments))
     if is_v1(venue, year):
         status = "unknown"  # v1 puts the bare path on rejected papers too: status comes from elsewhere
     elif suffix is not None:

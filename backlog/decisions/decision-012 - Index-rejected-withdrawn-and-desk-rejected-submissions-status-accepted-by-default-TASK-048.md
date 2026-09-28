@@ -53,4 +53,3 @@ TASK-095), and the default `status:accepted` filter excludes them, each counted 
   filters say what each status covers.
 - Revisit if a venue asks that rejected submissions not be redistributed (bound up with spec 00 Q1,
   abstract redistribution, M6).
-

@@ -128,7 +128,7 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
    in the exclusion banner. ICLR publishes all of them; NeurIPS and ICML only those whose authors opt in.
 3. ~~**Earliest year (M4).**~~ **Closed 2026-09-27 (decision-013):** every venue is crawled from 2013
    (ICLR's first year, when it was already on OpenReview) wherever a spec 01 source holds the
-   venue-year; the query's `year:` filter narrows it. ICLR 2014's acceptance, 2015 and the 2016
-   conference track have no source yet (TASK-096).
+   venue-year; the query's `year:` filter narrows it. OpenReview cannot establish conference acceptance
+   for ICLR 2014–2016, so the public ICLR archive supplies those accepted main-track records (TASK-096).
 4. **Planning tool (M0).** Backlog.md CLI (as in Kreate) or GitHub Issues.
 5. **Hosting (M6).** A lab VM, a university server, or a PaaS.

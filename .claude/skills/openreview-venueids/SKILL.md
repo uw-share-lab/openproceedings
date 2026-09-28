@@ -70,9 +70,12 @@ Workshop names contain hyphens and digits (`SCI-FM`, `CLRLC-LLMs`, `7HVU`). A ne
    taxonomy. Neither is ever included by the default filter.
 6. **Never from an invitation** (see `.claude/skills/openreview-api/SKILL.md`, `zkNCWtw2fd`).
 
-The code (`classify.py` `_TRACKS`) matches each track path as an **exact tuple per organisation**: only
-the rows above reach a default-filter track, and any other path that parses (a different order, another
-organisation's track, an unseen spelling) is `other`. Aliases not in the table are not accepted.
+The code (`classify.py` `_TRACKS`) matches each track path as an **exact tuple per organisation and verified
+year range**: only the rows above reach a default-filter track in the years shown. In particular D&B's
+`Track/...` forms cover 2022–2024, its no-`Track` form 2024–2025, `Evaluations_and_Datasets_Track` 2026+,
+`Competition_Track` 2024+, and both position-paper forms 2025+. A different order, another organisation's
+track, an unseen spelling, or the right spelling in an adjacent unsupported year is `other`. Aliases and
+years not in the table are not accepted.
 
 ## Table test
 Code: `backend/src/openproceedings/ingest/classify.py` (`classify_venueid`, `classify_proceedings`).

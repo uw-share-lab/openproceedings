@@ -21,7 +21,7 @@ from urllib.parse import urljoin
 from openproceedings.ingest import urls
 from openproceedings.ingest.record import Claim, ClaimField, ClaimValue, PaperRecord, Source, Urls
 from openproceedings.ingest.sources.common import ListingReport, MinerError, record_from_claims
-from openproceedings.ingest.sources.html import collapse, text_of
+from openproceedings.ingest.sources.html import Element, collapse, node_text, parse, text_after
 from openproceedings.ingest.sources.http import Fetcher
 
 log = logging.getLogger(__name__)
@@ -36,15 +36,9 @@ LISTINGS = {
 }
 VERIFIED_ACCEPTED = {2014: 35, 2015: 31, 2016: 80}
 
-_SECTION = re.compile(r'<h3\b[^>]*\bid="([^"]+)"[^>]*>.*?</h3>(.*?)(?=<h3\b|$)', re.I | re.S)
-_ITEM = re.compile(r"<li\b[^>]*>(.*?)</li>", re.I | re.S)
-_ANCHOR = re.compile(r"<a\b([^>]*)>(.*?)</a>", re.I | re.S)
-_HREF = re.compile(r"""\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')""", re.I)
 _PAPER_TARGET = re.compile(
     r"https?://(?:www\.)?(?:arxiv\.org/abs/|(?:beta\.)?openreview\.net/forum\?id=)", re.I
 )
-_PARAGRAPH = re.compile(r"<p\b[^>]*>(.*?)</p>", re.I | re.S)
-_BR = re.compile(r"<br\s*/?>", re.I)
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,10 +50,9 @@ class Entry:
     forum: str | None
 
 
-def _paper_anchor(text: str, base: str) -> tuple[re.Match[str], str, str, str | None] | None:
-    for anchor in _ANCHOR.finditer(text):
-        href = _HREF.search(anchor.group(1))
-        target = urljoin(base, (href.group(1) or href.group(2) or "") if href else "")
+def _paper_anchor(node: Element, base: str) -> tuple[Element, str, str, str | None] | None:
+    for anchor in [node] if node.tag == "a" else node.iter("a"):
+        target = urljoin(base, anchor.attributes.get("href", ""))
         if not _PAPER_TARGET.match(target):
             continue
         identity = urls.iclr_archive_target(target)
@@ -72,45 +65,43 @@ def _paper_anchor(text: str, base: str) -> tuple[re.Match[str], str, str, str | 
 
 
 def _authors(text: str) -> tuple[str, ...]:
-    plain = text_of(text).lstrip(" ,;:-")
+    plain = collapse(text).lstrip(" ,;:-")
     plain = re.sub(r"\s+and\s+", ", ", plain)
     return tuple(name for name in (collapse(part) for part in re.split(r"\s*[;,]\s*", plain)) if name)
 
 
-def _list_entries(text: str, base: str) -> list[Entry]:
+def _list_entries(items: list[Element], base: str) -> list[Entry]:
     entries = []
-    for item in _ITEM.finditer(text):
-        body = item.group(1)
-        found = _paper_anchor(body, base)
+    for item in items:
+        found = _paper_anchor(item, base)
         if found is None:
             continue
         anchor, native, target, forum = found
-        after = body[anchor.end() :]
-        if br := _BR.search(after):
-            after = after[br.end() :]
-        else:
-            after = re.sub(r"<a\b[^>]*>.*?</a>", " ", after, flags=re.I | re.S)
-        entries.append(Entry(target, native, text_of(anchor.group(2)), _authors(after), forum))
+        entries.append(Entry(target, native, node_text(anchor), _authors(text_after(item, anchor)), forum))
     return entries
 
 
-def _google_sites_entries(text: str, base: str) -> list[Entry]:
+def _google_sites_entries(root: Element, base: str) -> list[Entry]:
     """The 2014 page: a title paragraph followed by an author paragraph, rather than `<li>` entries."""
     entries = []
-    anchors = [anchor for anchor in _ANCHOR.finditer(text) if _paper_anchor(anchor.group(0), base)]
-    for anchor in anchors:
-        found = _paper_anchor(anchor.group(0), base)
+    paragraphs = root.iter("p")
+    for anchor in root.iter("a"):
+        found = _paper_anchor(anchor, base)
+        paragraph = anchor.parent
+        while paragraph is not None and paragraph.tag != "p":
+            paragraph = paragraph.parent
+        if found is None or paragraph is None:
+            continue
         assert found is not None
         _same, native, target, forum = found
-        tail = text[anchor.end() :]
-        title_close = tail.find("</p>")
-        authors = _PARAGRAPH.search(tail, title_close + 4) if title_close >= 0 else None
+        index = paragraphs.index(paragraph)
+        authors = paragraphs[index + 1] if index + 1 < len(paragraphs) else None
         entries.append(
             Entry(
                 target,
                 native,
-                text_of(anchor.group(2)),
-                _authors(authors.group(1)) if authors else (),
+                node_text(anchor),
+                _authors(node_text(authors)) if authors else (),
                 forum,
             )
         )
@@ -119,13 +110,21 @@ def _google_sites_entries(text: str, base: str) -> list[Entry]:
 
 def parse_index(year: int, text: str, base: str) -> list[Entry]:
     """The accepted conference entries, unique by stable target and in page order."""
+    root = parse(text)
     if year == 2015:
-        parts = [body for section, body in _SECTION.findall(text) if section.startswith("main_conference")]
-        entries = [entry for part in parts for entry in _list_entries(part, base)]
+        ordered = root.iter()
+        items: list[Element] = []
+        in_main = False
+        for node in ordered:
+            if node.tag == "h3":
+                in_main = node.attributes.get("id", "").startswith("main_conference")
+            elif in_main and node.tag == "li":
+                items.append(node)
+        entries = _list_entries(items, base)
     elif year == 2016:
-        entries = _list_entries(text, base)
+        entries = _list_entries(root.iter("li"), base)
     elif year == 2014:
-        entries = _list_entries(text, base) or _google_sites_entries(text, base)
+        entries = _list_entries(root.iter("li"), base) or _google_sites_entries(root, base)
     else:
         raise MinerError(f"ICLR {year}: the archive source covers 2014-2016", reason="before_window")
     unique: dict[str, Entry] = {}

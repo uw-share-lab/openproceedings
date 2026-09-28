@@ -538,7 +538,32 @@ def test_a_malformed_forum_id_skips_its_entry_not_the_file(tmp_path: Path) -> No
 
 
 def test_a_pre_2022_url_without_a_track_token_imports(tmp_path: Path) -> None:
-    # `/paper/<y>/hash/<h>-Abstract.html` carries no track token: only its year is checked against the claim
+    # Only NeurIPS main-conference links through 2021 used the tokenless URL form.
+    def edit(e: Entries) -> None:
+        for c in e[2]["claims"]:
+            if c["source"] == "proceedings_url":
+                c["evidence"] = re.sub(
+                    r"-Abstract(?:-[A-Za-z_]+)?\.html$",
+                    "-Abstract.html",
+                    c["evidence"]
+                    .replace("proceedings.iclr.cc", "proceedings.neurips.cc")
+                    .replace("/2025/", "/2021/"),
+                )
+                if c["field"] == "venue":
+                    c["value"] = "NeurIPS"
+                elif c["field"] == "year":
+                    c["value"] = "2021"
+
+    (tmp_path / "base").mkdir()
+    (tmp_path / "edited").mkdir()
+    base = run(tmp_path / "base", lambda e: None)[1]
+    by_id, report = run(tmp_path / "edited", edit)
+    assert report.skipped["conflict"] == base.skipped["conflict"]
+    rec = next(r for i, r in by_id.items() if i.endswith("fedcba9876543210fedcba9876543210"))
+    assert (rec.venue, rec.year, rec.track, rec.status) == ("NeurIPS", 2021, "main", "accepted")
+
+
+def test_a_post_2021_url_without_a_track_token_is_a_conflict(tmp_path: Path) -> None:
     def edit(e: Entries) -> None:
         for c in e[2]["claims"]:
             if c["source"] == "proceedings_url":
@@ -548,9 +573,8 @@ def test_a_pre_2022_url_without_a_track_token_imports(tmp_path: Path) -> None:
     (tmp_path / "edited").mkdir()
     base = run(tmp_path / "base", lambda e: None)[1]
     by_id, report = run(tmp_path / "edited", edit)
-    assert report.skipped["conflict"] == base.skipped["conflict"]
-    rec = next(r for i, r in by_id.items() if i.endswith("fedcba9876543210fedcba9876543210"))
-    assert (rec.track, rec.status) == ("main", "accepted")
+    assert report.skipped["conflict"] == base.skipped["conflict"] + 1
+    assert not any(i.endswith("fedcba9876543210fedcba9876543210") for i in by_id)
 
 
 def test_a_v1_venueid_is_not_status_evidence(tmp_path: Path) -> None:

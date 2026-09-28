@@ -178,6 +178,20 @@ def test_the_recorded_openreview_era_indexes_carry_forum_links(rel: str) -> None
     assert all(entry.forum for entry in entries)
 
 
+def test_an_index_entry_with_two_forum_ids_is_skipped_before_dedup() -> None:
+    """An ambiguous external identity must not reach title-based dedup without its identity."""
+    page = """
+    <div class="paper">
+      <p class="title">One paper</p><span class="authors">One Author</span>
+      <a href="paper.html">abs</a>
+      <a href="https://openreview.net/forum?id=FirstForum1">OpenReview A</a>
+      <a href="https://openreview.net/forum?id=SecondForum2">OpenReview B</a>
+    </div>
+    """
+    entries, unlinked = pmlr.parse_volume_index(page, "https://proceedings.mlr.press/v235/")
+    assert entries == [] and unlinked == 1
+
+
 def test_v235_abstract_forum_link_and_unknown_track(tmp_path: Path) -> None:
     seed_v235(tmp_path)
     result = mine(tmp_path, 235)

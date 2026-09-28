@@ -62,7 +62,8 @@ of sources lives in `docs/results/coverage-sources.md`, each with a citation).
 NeurIPS 2013–2020 and ICML 2013–2022 come from proceedings only, so no rejected papers exist there to
 exclude; NeurIPS and ICML on OpenReview hold only the rejected papers whose authors opted in, while ICLR
 holds every rejected, withdrawn and desk-rejected submission (decision-012). The crawl window is 2013 on
-(decision-013); a venue-year with no source (ICLR 2015, TASK-096) is a reported gap, never a silent zero.
+(decision-013); any venue-year with no source is a reported gap, never a silent zero. ICLR 2014–2016 are
+not gaps: their public archive listings supply accepted main-track records (TASK-096).
 As built, the missing-abstract count is per venue-year, not per cell (the snapshot manifest's granularity),
 until task-082 adds per-track counts.
 The methods text cites the coverage report (with its snapshot hash) as the database-scope caveat.

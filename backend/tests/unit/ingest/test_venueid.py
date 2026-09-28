@@ -240,6 +240,19 @@ def test_forms_outside_the_table_are_other(venueid: str) -> None:
 @pytest.mark.parametrize(
     "venueid",
     [
+        "NeurIPS.cc/2024/Position_Paper_Track",  # first verified in 2025
+        "NeurIPS.cc/2025/Evaluations_and_Datasets_Track",  # the D&B rename starts in 2026
+        "ICML.cc/2024/Position_Paper_Track",  # 2024 position papers used Conference
+    ],
+)
+def test_track_forms_do_not_leak_into_adjacent_years(venueid: str) -> None:
+    c = classify_venueid(venueid)
+    assert (c.track, c.status) == ("other", "unknown")
+
+
+@pytest.mark.parametrize(
+    "venueid",
+    [
         "ICLR.cc/2025/Position_Paper_Track",  # each row belongs to one organisation
         "ICML.cc/2026/Evaluations_and_Datasets_Track",
         "ICML.cc/2024/Competition_Track",

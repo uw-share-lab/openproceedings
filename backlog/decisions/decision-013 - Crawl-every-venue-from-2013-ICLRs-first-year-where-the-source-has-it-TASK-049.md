@@ -45,4 +45,3 @@ OpenReview) and leave the year range to the query's `year:` filter.
   snapshot grows by the 2013–2017 years (PMLR v28–v70 alone hold 1,619 ICML papers; NeurIPS 2013 has
   360), well inside the 80k-record scale spec 03 benchmarks against.
 - Years before 2013 stay out; revisit only with a spec change and a reason from a review that needs them.
-

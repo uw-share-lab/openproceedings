@@ -653,8 +653,13 @@ def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: Cr
     counts: set[int] = set()
     for entry, notes in _pages(client, "/notes", {"invitation": listing.invitation}, "notes", page_size):
         report.fetched.append(datetime.fromisoformat(entry["fetched_at"]))
-        if isinstance(count := entry["json"].get("count"), int):
-            counts.add(count)
+        count = entry["json"].get("count")
+        if type(count) is not int or count < 0:
+            raise CrawlError(
+                f"the listing of {listing.invitation} has a missing or invalid count; "
+                "re-run with --refresh to fetch it again"
+            )
+        counts.add(count)
         seen |= {i for n in notes if isinstance(n, Mapping) and isinstance(i := n.get("id"), str)}
         rows += len(notes)
         page = Page(entry["url"], datetime.fromisoformat(entry["fetched_at"]))
@@ -668,6 +673,12 @@ def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: Cr
                 report.skipped[got] += 1
                 log.debug("openreview_note_skipped", extra={"forum": note.get("id"), "reason": got})
             elif got.id in records:
+                prior = records[got.id]
+                if got.model_dump(exclude={"provenance"}) != prior.model_dump(exclude={"provenance"}):
+                    raise CrawlError(
+                        f"note {note.get('id')} appears with conflicting data in two status listings; "
+                        "re-run with --refresh to fetch all listings together"
+                    )
                 report.skipped["duplicate"] += 1
                 log.warning(
                     "openreview_v1_duplicate",

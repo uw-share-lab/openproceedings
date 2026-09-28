@@ -4,9 +4,10 @@ This is the cited table behind spec 07 §C's coverage gate (TASK-108; `coverage-
 one row per main-track and D&B cell from 2013 (decision-013): ICLR, ICML and NeurIPS main 2013–2025, and
 NeurIPS D&B 2021–2025. That is 44 cells, and **all 44 are sourced**. Every number was read on 2026-09-27
 from a public page, on the conference's own site or in its proceedings, with no login.
-`official_counts.OFFICIAL_ACCEPTED` is the machine-readable copy of this table, and
-`tests/unit/test_official_counts.py` fails when the two differ. That test reads every line that starts with
-`|` as a table row, so this file holds exactly one table.
+The `official_counts.OFFICIAL_ACCEPTED` machine-readable copy and its equality test currently live on the
+parallel M3b branch (TASK-108 AC #2–3). When the branches integrate, that table must be updated from this
+document before the coverage gate can pass. This file deliberately holds exactly one Markdown table so the
+integration test can read every line starting with `|` as a data row.
 
 **Which number a row uses:**
 
@@ -19,6 +20,11 @@ from a public page, on the conference's own site or in its proceedings, with no 
 No row is an estimate, and no row comes from an aggregator. Where sources differ, the row keeps the number
 this rule picks, and the other values are listed under §Disagreements. To count a list, the page was
 fetched once and its distinct paper entries were counted (by paper id or title).
+
+The denominator is the final proceedings population where one exists. Until TASK-072 is built,
+OpenReview-accepted papers absent from proceedings are not yet demoted to `unknown`, so a newly crawled
+numerator can temporarily name a broader population; the coverage report must describe that limitation
+rather than interpreting every mismatch as a missing proceedings record.
 
 | venue | year | track | official_accepted | what it counts | source (URL or citation) | accessed |
 |---|---|---|---|---|---|---|
@@ -60,17 +66,17 @@ fetched once and its distinct paper entries were counted (by paper id or title).
 | NeurIPS | 2022 | main | 2,671 | main-track (Conference) papers in the NeurIPS 2022 proceedings index; D&B excluded | https://proceedings.neurips.cc/paper_files/paper/2022 | 2026-09-27 |
 | NeurIPS | 2023 | main | 3,218 | main-track (Conference) papers in the NeurIPS 2023 proceedings index (equals the fact sheet); D&B excluded | https://proceedings.neurips.cc/paper_files/paper/2023 | 2026-09-27 |
 | NeurIPS | 2024 | main | 4,034 | main-track (Conference) papers in the NeurIPS 2024 proceedings index (fact sheet announced 4,037); D&B excluded | https://proceedings.neurips.cc/paper_files/paper/2024 | 2026-09-27 |
-| NeurIPS | 2025 | main | 5,290 | main-track accepted papers in the fact sheet (the PC chairs' blog gives the same); D&B and position tracks excluded | https://media.neurips.cc/Conferences/NeurIPS2025/press/NeurIPS2025-Fact_Sheet.pdf | 2026-09-27 |
+| NeurIPS | 2025 | main | 5,286 | main-track (`conference`) papers in the published vol38 proceedings companion; D&B and position excluded | https://proceedings.neurips.cc/paper_files/paper/2025/vol38-main-conference | 2026-09-27 |
 | NeurIPS | 2021 | datasets_benchmarks | 174 | D&B papers in the 2021 D&B proceedings, round 1 (66) + round 2 (108); equals the fact sheet | https://datasets-benchmarks-proceedings.neurips.cc/paper/2021 | 2026-09-27 |
 | NeurIPS | 2022 | datasets_benchmarks | 163 | D&B papers in the NeurIPS 2022 proceedings index (equals the fact sheet) | https://proceedings.neurips.cc/paper_files/paper/2022 | 2026-09-27 |
 | NeurIPS | 2023 | datasets_benchmarks | 322 | D&B papers in the NeurIPS 2023 proceedings index (equals the fact sheet) | https://proceedings.neurips.cc/paper_files/paper/2023 | 2026-09-27 |
 | NeurIPS | 2024 | datasets_benchmarks | 459 | D&B papers in the NeurIPS 2024 proceedings index (fact sheet announced 460) | https://proceedings.neurips.cc/paper_files/paper/2024 | 2026-09-27 |
-| NeurIPS | 2025 | datasets_benchmarks | 487 | distinct papers on the conference site's D&B track listing; no announced count exists and the proceedings are not yet published | https://neurips.cc/virtual/2025/events/datasets-benchmarks-2025 | 2026-09-27 |
+| NeurIPS | 2025 | datasets_benchmarks | 497 | D&B (`datasets_and_benchmarks_track`) papers in the published vol38 proceedings companion | https://proceedings.neurips.cc/paper_files/paper/2025/vol38-main-conference | 2026-09-27 |
 
 ## Disagreements between sources
 
-Each row keeps the value the rule above picks. Only two disagreements are larger than 1%: ICLR 2013 (1
-paper out of 24) and ICLR 2023's virtual-site list.
+Each row keeps the value the rule above picks. Three disagreements are larger than 1%: ICLR 2013 (1 paper
+out of 24), ICLR 2023's virtual-site list, and NeurIPS 2025 D&B's former virtual-site count.
 
 - **ICLR 2013:** the iclr.cc list has 24 conference papers. OpenReview decisions give 23: 67 submissions,
   minus 32 workshop, minus 12 reject (`docs/research/2026-09-27-openreview-and-proceedings-facts.md`). The
@@ -107,14 +113,16 @@ paper out of 24) and ICLR 2023's virtual-site list.
 - **NeurIPS 2024:** the proceedings have 4,034 main and 459 D&B, and the fact sheet announced 4,037 and 460.
   OpenReview has 4,035 main (facts doc). The conference site's D&B listing has 460 ids, and 459 of them have
   a title. The rows use the proceedings.
-- **NeurIPS 2025:** the proceedings list only the Creative AI track so far (64 papers on 2026-09-27). The
-  main-track count comes from the fact sheet. The PC chairs' blog gives the same 5,290 (of 21,575
-  submissions):
+- **NeurIPS 2025:** the base proceedings page lists Creative AI (64 papers) and links the published vol38
+  companion, whose 5,823 paper entries split into 5,286 main, 497 D&B and 40 position. The fact sheet and
+  PC chairs' blog announced 5,290 main (of 21,575 submissions):
   https://blog.neurips.cc/2025/09/30/reflections-on-the-2025-review-process-from-the-program-committee-chairs/.
-  It was read through the Wayback Machine because the blog blocks scripted fetches. For D&B, the chairs'
-  blog gives 1,995 submissions but no accepted count, and the fact sheet gives none. The D&B row (487) is
-  therefore a count of the conference site's own D&B track listing (rule 3). When the proceedings are
-  published, replace it with their count if the two differ.
+  It was read through the Wayback Machine because the blog blocks scripted fetches. The former virtual-site
+  D&B listing had 487 distinct papers, 10 fewer than the proceedings (about 2.0%); rule 1 therefore selects
+  497. Reproduction: download the companion page, whose response SHA-256 was
+  `48c2de5e5acae991a8b88eaa00174387a7ce066efeb337e30593989bd5015c9a`, then count `<li>` elements by
+  `data-track`; the result is `conference=5286`, `datasets_and_benchmarks_track=497`,
+  `position_paper_track=40`.
 
 Cross-checks that agree:
 
@@ -126,17 +134,12 @@ Cross-checks that agree:
 - NeurIPS 2023: fact sheet = proceedings (3,218 main, 322 D&B), and the conference site's D&B listing also
   has 322.
 
-## Cells with a count the index cannot reach yet
+## Former ICLR acceptance gaps
 
-The gate compares each row with the index's `status:accepted` records in that cell, and it does not tell a
-missing source apart from a crawl bug. The three rows below have an official count, but spec 01 has no
-source for accepted status in that year. Each of these cells will show ✗, with the cause "crawl gap",
-until TASK-096 adds a source (decision-013). They stay in the table because a gap is reported, never
-hidden.
-
-- ICLR 2014 (35): the OpenReview notes carry no decision, so the records are indexed as `status:unknown`.
-- ICLR 2015 (31): OpenReview has no group for this year.
-- ICLR 2016 (80): the conference track is not on OpenReview; only the workshop track is.
+OpenReview alone cannot establish acceptance for ICLR 2014–2016: the 2014 notes carry no decision, 2015
+has no group, and the 2016 conference track is absent. TASK-096 resolved those cells with the public ICLR
+archive's accepted-conference listings (`ingest/sources/iclr.py`). Their 35, 31 and 80 unique targets match
+the official main-track counts above, so these cells are now ordinary ±1% gate cells rather than crawl gaps.
 
 ## Not covered here
 

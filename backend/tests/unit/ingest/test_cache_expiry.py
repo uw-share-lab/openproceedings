@@ -43,7 +43,7 @@ OPEN_SUBMISSIONS = "ICLR.cc/2026/Conference/Submission"
         (f"{V2}/notes?content.venueid=ICLR.cc/2024/Conference/Desk_Rejected_Submission", "status", 2024),
         (f"{V2}/notes?content.venueid=NeurIPS.cc/2025/Datasets_and_Benchmarks_Track", "accepted", 2025),
         (f"{V2}/notes?content.venueid=ICLR.cc/2024/Workshop/ICBINB/Rejected_Submission", "status", 2024),
-        (f"{V2}/groups?parent=ICML.cc/2026&select=id&limit=1000&offset=0", "groups", 2026),
+        (f"{V2}/groups?parent=ICML.cc/2026&limit=1000&offset=0", "groups", 2026),
         (f"{V2}/groups?id=ICML.cc/2026/Conference", "groups", 2026),
         (f"{V2}/groups?parent=ICML.cc/2026/Workshop_Mexico_City", "groups", 2026),
         (f"{V2}/notes?id=abc", "other", None),
@@ -90,8 +90,8 @@ def or_client(
                             min_interval=0.0, jitter=lambda: 0.0, offline=offline)  # fmt: skip
 
 
-def listing(n: int) -> list[dict[str, str]]:
-    return [{"id": f"note{i}"} for i in range(n)]
+def listing(n: int) -> list[dict[str, object]]:
+    return [{"id": f"note{i}", "readers": ["everyone"], "content": {}} for i in range(n)]
 
 
 def test_an_expired_entry_is_refetched_overwritten_and_logged(

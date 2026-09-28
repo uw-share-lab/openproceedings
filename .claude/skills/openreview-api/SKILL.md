@@ -17,14 +17,15 @@ Every fact here was checked live on 2026-09-27 (TASK-002). The evidence, counts 
 
 - Not on OpenReview: ICLR 2015 (no group), the ICLR 2016 conference track, NeurIPS before 2021, ICML
   before 2023 (`ICML.cc/2020/Conference` exists but has no public notes). Use
-  `.claude/skills/neurips-proceedings/SKILL.md` and `.claude/skills/pmlr-proceedings/SKILL.md`; ICLR's
-  gaps are TASK-096.
+  `.claude/skills/neurips-proceedings/SKILL.md` and `.claude/skills/pmlr-proceedings/SKILL.md`; the public
+  ICLR archive source in `ingest/sources/iclr.py` supplies accepted main papers for 2014–2016 (spec 01).
 - `GET /groups?id=<venue>` on api2 tells the version of any venue: a v2 group has `domain = <its id>` and
   a `content` block naming its venueids; a v1 group has `domain = null` and a `web` script. A note is only
   on its own host: the other one answers `404 NotFoundError` by id, and an empty list (not an error) to a
   venueid query. Pick the host from this table; never "try v2, fall back to v1".
-- `GET /groups?parent=<Org>.cc/<Y>&select=id` maps a year's groups (tracks, `Workshop`,
-  `Workshop_<City>`, proposal groups) in one request.
+- `GET /groups?parent=<Org>.cc/<Y>` maps a year's groups (tracks, `Workshop`, `Workshop_<City>`, proposal
+  groups). The crawler intentionally does not use `select=id`: it needs each group's `readers` ACL before
+  its public cache projection may retain the id.
 
 ## Authentication
 - **Anonymous access does not work.** api2 and api1 `/notes` answer an anonymous request with **HTTP 200
@@ -59,7 +60,8 @@ Every fact here was checked live on 2026-09-27 (TASK-002). The evidence, counts 
 - v2 returns `count` **only when the request has an `offset` parameter** (`offset=0` is enough); v1
   returns it on every `/notes` response. Page with `limit=1000&offset=…`, stop on a short page, and then
   check distinct ids == rows fetched == `count`.
-- Both hosts accept `select=` (`select=id,content.venueid`) to fetch ids only, e.g. for counting.
+- Both hosts accept `select=` (`select=id,content.venueid`) for manual counting. Do not use it in the crawler
+  when it would omit the `readers` ACL required by the cache boundary.
 - Sort explicitly (for example by `number`) so offsets are stable if notes are added mid-crawl.
 - Cache each page under its own key (URL + params), never one blob per venue-year.
 - v1 `invitation=` must be a **prefix** regex: `ICLR.cc/2020/Conference/Paper.*/-/Decision` is refused
@@ -124,10 +126,12 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   a 401 or a 200 HTML page logs in again once, then `OpenReviewAuthError`. Pacing `min_interval` (1 s),
   budget wait on `ratelimit-remaining: 0`, 429 → `Retry-After` (seconds or HTTP date) → `ratelimit-reset` →
   backoff, 5xx / network / truncated JSON → `min(2^n, 60) s + jitter`, `max_attempts` 6, every wait capped at
-  3,701 s. Cache: `http.ResponseCache` under `<data-dir>/cache/openreview/v2/http/` in the layout scholarmend's
-  `Cache` wrote (`{key, payload}`, so an older cache replays), keyed by the canonical URL (parameters sorted),
-  storing `{url, fetched_at, headers (content-type and ratelimit-* only), json}`; an unreadable entry, or one
-  naming another URL, is a `CacheError` (delete it), never a silent refetch. Errors are the shared
+  3,701 s. Cache: `http.ResponseCache` under `<data-dir>/cache/openreview/v2/http/`, keyed by the canonical URL
+  (parameters sorted). Before persistence, every top-level note/group must be readable by `everyone`,
+  only crawler-used top-level fields remain, and restricted v2 content fields are removed; all remaining
+  world-readable content keys are retained for the venue-year adapters. The payload carries a
+  `public_projection` version; older raw entries are rejected offline and purged/refetched by a live run.
+  Other malformed entries or entries naming another URL are `CacheError`s. Errors are the shared
   `http.SourceError` family (`CacheMiss`, `RetriesExhausted`, `HTTPRefused`; `OpenReviewAuthError` on top).
 - Cache expiry (TASK-102; spec 01 §Pipeline, Cache expiry): `openreview_client.ttl` is `POLICY.ttl`. A live
   client re-fetches an API v2 entry past its TTL (accepted listing 7 days while its venue-year is open, 365
@@ -139,6 +143,9 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   (what `op snapshot build` calls). The group-tree enumeration (`?parent=` listings, containers, the
   `proposal` skip) is built from the research run's description; no `?parent=` listing is recorded yet, so
   record one per venue before the first full crawl.
+- A record id repeated byte-for-byte across status listings is counted as a duplicate. If its parsed
+  non-provenance fields differ, the crawl refuses the mixed cache and asks for `--refresh`, rather than
+  silently keeping whichever status listing happened to run first. The v1 crawler applies the same rule.
 
 ## The v1 crawler as built (TASK-051)
 - `ingest/sources/openreview_v1.py`: `ADAPTERS`, one `Adapter` per venue-year (ICLR 2013–2023 including an

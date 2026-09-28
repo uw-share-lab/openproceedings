@@ -18,9 +18,12 @@ writes `backend/tests/fixtures/http/<same relative path>.json`.
 
 from __future__ import annotations
 
+import html
 import json
 import re
 import sys
+from collections.abc import Mapping
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
@@ -106,6 +109,8 @@ def _scrub_strings(value: Any, c: _Counter) -> Any:
         return _person(value, c) if PERSON.search(value) else value
     if isinstance(value, list):
         return [_scrub_strings(v, c) for v in value]
+    if isinstance(value, Mapping):
+        return {k: _scrub_strings(v, c) for k, v in value.items()}
     return value
 
 
@@ -219,6 +224,113 @@ def _keep_blocks(
     return head + "\n".join(kept) + tail, note
 
 
+class _PaperSanitizer(HTMLParser):
+    """Structurally rewrite every sensitive paper-page field without executing page content."""
+
+    VOID = frozenset({"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source"})
+
+    def __init__(self, c: _Counter) -> None:
+        super().__init__(convert_charrefs=False)
+        self.c = c
+        self.out: list[str] = []
+        self.real: list[tuple[str, str]] = []
+        self.suppress: tuple[str, str | None] | None = None
+        self.suppressed_tags: list[str] = []
+
+    @staticmethod
+    def _values(attrs: list[tuple[str, str | None]]) -> dict[str, str | None]:
+        return {key.casefold(): value for key, value in attrs}
+
+    @staticmethod
+    def _tag(tag: str, attrs: list[tuple[str, str | None]], *, closed: bool = False) -> str:
+        rendered = "".join(
+            f' {key}="{html.escape(value, quote=True)}"' if value is not None else f" {key}"
+            for key, value in attrs
+        )
+        return f"<{tag}{rendered}{' /' if closed else ''}>"
+
+    def _sensitive(self, tag: str, values: dict[str, str | None]) -> tuple[str, str | None] | None:
+        classes = set((values.get("class") or "").split())
+        if tag == "code" and "citecode" in classes:
+            return "citation", None
+        if tag == "div" and (values.get("id") == "abstract" or "abstract" in classes):
+            return "abstract", None
+        if tag == "p" and "paper-abstract" in classes:
+            return "abstract", "section"  # NeurIPS pages omit this paragraph's `</p>`
+        if (tag == "p" and "paper-authors" in classes) or (tag == "span" and "authors" in classes):
+            return "authors", None
+        return None
+
+    def _start(self, tag: str, attrs: list[tuple[str, str | None]], *, closed: bool = False) -> None:
+        tag = tag.casefold()
+        if self.suppress is not None:
+            if not closed and tag not in self.VOID:
+                self.suppressed_tags.append(tag)
+            return
+        values = self._values(attrs)
+        if tag == "meta":
+            key = (values.get("name") or values.get("property") or "").casefold()
+            content = values.get("content")
+            if content is not None and key in ("citation_title", "citation_author"):
+                label = "title" if key == "citation_title" else "Author"
+                self.real.append((content, label))
+                if label == "Author":
+                    parts = (
+                        [p.strip() for p in content.split(",")]
+                        if "," in content
+                        else content.rsplit(" ", 1)[::-1]
+                    )
+                    self.real.extend((p, label) for p in parts if len(p) > 2)
+                attrs = [(name, f"Synthetic {label} {self.c.next()}" if name.casefold() == "content" else value)
+                         for name, value in attrs]  # fmt: skip
+            elif content is not None and key in ("description", "og:description", "twitter:description"):
+                attrs = [(name, f"Synthetic description {self.c.next()}" if name.casefold() == "content" else value)
+                         for name, value in attrs]  # fmt: skip
+        self.out.append(self._tag(tag, attrs, closed=closed))
+        if not closed and tag not in self.VOID and (sensitive := self._sensitive(tag, values)) is not None:
+            label, fallback = sensitive
+            suffix = " &amp;quot;alias&amp;quot;" if label == "citation" else ""
+            self.out.append(f"Synthetic {label} {self.c.next()}{suffix}")
+            self.suppress = (tag, fallback)
+            self.suppressed_tags = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._start(tag, attrs)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._start(tag, attrs, closed=True)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.casefold()
+        if self.suppress is not None:
+            target, fallback = self.suppress
+            if tag in self.suppressed_tags:
+                index = len(self.suppressed_tags) - 1 - self.suppressed_tags[::-1].index(tag)
+                del self.suppressed_tags[index:]
+                return
+            if tag not in (target, fallback):
+                return
+            self.suppress = None
+            self.suppressed_tags = []
+        self.out.append(f"</{tag}>")
+
+    def handle_data(self, data: str) -> None:
+        if self.suppress is None:
+            self.out.append(data)
+
+    def handle_entityref(self, name: str) -> None:
+        if self.suppress is None:
+            self.out.append(f"&{name};")
+
+    def handle_charref(self, name: str) -> None:
+        if self.suppress is None:
+            self.out.append(f"&#{name};")
+
+    def handle_decl(self, decl: str) -> None:
+        if self.suppress is None:
+            self.out.append(f"<!{decl}>")
+
+
 def _paper_page(page: str, c: _Counter) -> str:
     """A paper page (NeurIPS abstract page, PMLR paper page): every copy of its free text goes.
 
@@ -226,28 +338,15 @@ def _paper_page(page: str, c: _Counter) -> str:
     real strings are collected first and then replaced wherever they occur; the citation boxes and the
     abstract block are replaced whole.
     """
-    real: list[tuple[str, str]] = []
-    for m in re.finditer(r'<meta name="citation_title" content="(.*?)"', page):
-        real.append((m.group(1), "title"))
-    for m in re.finditer(r'<meta name="citation_author" content="(.*?)"', page):
-        name = m.group(1)
-        real.append((name, "Author"))
-        parts = [p.strip() for p in name.split(",")] if "," in name else name.rsplit(" ", 1)[::-1]
-        real.extend((p, "Author") for p in parts if len(p) > 2)
-    page = _sub_text(r'(<code class="citecode" id="[a-z]+">)(.*?)(</code>)', page, "citation", c)
-    page = _sub_text(r'(<div id="abstract" class="abstract">)(.*?)(</div>)', page, "abstract", c)
-    page = _sub_text(r'(<p class="paper-abstract">)(.*?)(</section>)', page, "abstract", c)
-    page = _sub_text(r'(<p class="paper-authors">)(.*?)(</p>)', page, "authors", c)
-    page = _sub_text(r'(<span class="authors">)(.*?)(</span>)', page, "authors", c)
-    page = _sub_text(
-        r'(<meta (?:name|property)="(?:description|og:description|twitter:description)" content=")(.*?)(")',
-        page,
-        "description",
-        c,
-    )
-    for text, label in sorted(real, key=lambda t: -len(t[0])):
-        if text and text in page:
-            page = page.replace(text, f"Synthetic {label} {c.next()}")
+    parser = _PaperSanitizer(c)
+    parser.feed(page)
+    parser.close()
+    page = "".join(parser.out)
+    for text, label in sorted(parser.real, key=lambda t: -len(t[0])):
+        synthetic = f"Synthetic {label} {c.next()}"
+        for encoded in (html.escape(text, quote=True), html.escape(text, quote=False), text):
+            if encoded:
+                page = page.replace(encoded, synthetic)
     return page
 
 

@@ -46,7 +46,7 @@ PMLR before the crawlers are written.
 ## Follow-ups
 - [ ] TASK-094 classify NeurIPS position/competition tracks; decide the 2026 Evaluations_and_Datasets_Track.
 - [ ] TASK-095 keep `classify_venueid` off v1 status; audit the M2 RIS corpus.
-- [ ] TASK-096 ICLR 2014/2015/2016 acceptance sources.
+- [x] TASK-096 ICLR 2014/2015/2016 acceptance sources (public ICLR archive).
 - [ ] TASK-054: NeurIPS 2021 main 2,334 (proceedings) vs 2,630 (OpenReview v1 venues) unexplained.
 
 ## Propagated to

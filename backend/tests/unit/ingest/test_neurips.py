@@ -362,6 +362,24 @@ def test_the_recorded_2025_page_decodes_its_double_escaped_author() -> None:
     assert parsed.entries[0].authors == ('Synthetic authors 3 "alias"',)
 
 
+def test_listing_parser_is_attribute_order_independent_and_ignores_authors_before_the_paper_link() -> None:
+    page = """<span data-x='1' class='paper-count'>1 paper</span>
+    <ul data-x='1' class='extra paper-list'>
+      <li><span class='paper-authors'>Decoy Person</span>
+          <a data-x='1' href='hash-Abstract-Conference.html'>Actual Title</a>
+          <span data-x='1' class='extra paper-authors'>Actual One, Actual Two</span></li>
+    </ul>"""
+    parsed = neurips.parse_year_index(page, "https://proceedings.neurips.cc/paper_files/paper/2025/")
+    assert parsed.stated == 1 and parsed.unlinked == 0
+    assert parsed.entries == [
+        neurips.Entry(
+            "https://proceedings.neurips.cc/paper_files/paper/2025/hash-Abstract-Conference.html",
+            "Actual Title",
+            ("Actual One", "Actual Two"),
+        )
+    ]
+
+
 # --- crawl, resume, dry run, window, snapshot ----------------------------------------------------------------
 
 

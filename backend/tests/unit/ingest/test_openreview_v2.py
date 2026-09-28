@@ -242,6 +242,34 @@ def test_a_listing_whose_count_disagrees_is_refused(tmp_path: Path) -> None:
         orv.crawl(client(tmp_path, server), "ICLR", 2024)
 
 
+@pytest.mark.parametrize("count", [None, "1", True, -1])
+def test_a_listing_with_a_missing_or_invalid_count_is_refused(tmp_path: Path, count: object) -> None:
+    server = world()
+
+    def malformed(request: Request) -> Response | None:
+        if parse_qs(urlsplit(request.url).query).get("content.venueid") != [CONF]:
+            return None
+        body: dict[str, object] = {"notes": server.notes[CONF]}
+        if count is not None:
+            body["count"] = count
+        return json_response(body)
+
+    server.override = malformed
+    with pytest.raises(orv.CrawlError, match=r"missing or invalid count.*--refresh"):
+        orv.crawl(client(tmp_path, server), "ICLR", 2024)
+
+
+def test_a_note_in_two_status_listings_is_refused_as_a_stale_transition(tmp_path: Path) -> None:
+    server = world()
+    stale = clone(recorded_note("iclr-2024/notes-accepted.json"), "StatusChanged1", 42)
+    current = clone(stale, "StatusChanged1", 42)
+    current["content"]["venueid"]["value"] = f"{CONF}/Withdrawn_Submission"
+    server.notes[CONF].append(stale)
+    server.notes[f"{CONF}/Withdrawn_Submission"].append(current)
+    with pytest.raises(orv.CrawlError, match=r"two status listings.*--refresh"):
+        orv.crawl(client(tmp_path, server), "ICLR", 2024)
+
+
 def test_an_ignored_offset_is_refused_not_looped(tmp_path: Path) -> None:
     server = world(accepted=5)
     server.ignore_offset = True
@@ -354,7 +382,7 @@ def test_cli_offline_replays_and_dry_run_reports(tmp_path: Path, capsys: pytest.
                      "--year", "2023", "--dry-run"]) == 0  # fmt: skip
     [dry] = json.loads(capsys.readouterr().out)
     assert dry["complete"] is False and dry["would_fetch"] == [
-        "https://api2.openreview.net/groups?limit=1000&offset=0&parent=NeurIPS.cc/2023&select=id"
+        "https://api2.openreview.net/groups?limit=1000&offset=0&parent=NeurIPS.cc/2023"
     ]
 
 

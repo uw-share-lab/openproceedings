@@ -41,7 +41,7 @@ from openproceedings.ingest.sources.common import (
     record_from_claims,
     titles_match,
 )
-from openproceedings.ingest.sources.html import collapse, meta, metas, text_of
+from openproceedings.ingest.sources.html import collapse, meta, metas, node_text, parse
 from openproceedings.ingest.sources.http import Fetcher, Page
 from openproceedings.logs import elapsed_ms
 
@@ -55,14 +55,7 @@ FIRST_YEAR = 2013  # decision-013: every venue from ICLR's first year
 OPENREVIEW_FROM = 2021  # OpenReview hosts NeurIPS from 2021 (v1), so the proceedings confirm from then on
 PROGRESS_SECONDS = 30.0
 
-_PAPER_LIST = re.compile(r"<ul\b[^>]*\bclass=\"[^\"]*\bpaper-list\b[^\"]*\"[^>]*>(.*?)</ul>", re.I | re.S)
-_ITEM = re.compile(r"<li\b([^>]*)>(.*?)</li>", re.I | re.S)
-_LINK = re.compile(r"<a\b([^>]*)>(.*?)</a>", re.I | re.S)
-_HREF = re.compile(r"""\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')""", re.I)
-_AUTHORS = re.compile(r"<span\b[^>]*\bclass=\"paper-authors\"[^>]*>(.*?)</span>|<i>(.*?)</i>", re.I | re.S)
-_COUNT = re.compile(r"<span\b[^>]*\bclass=\"paper-count\"[^>]*>\s*([0-9][0-9,]*)\s+papers?\s*</span>", re.I)
-_ABSTRACT = re.compile(r"<p\b[^>]*\bclass=\"paper-abstract\"[^>]*>(.*?)</section>", re.I | re.S)
-_SEE_ALSO = re.compile(r"<p\b[^>]*\bclass=\"book-see-also\"[^>]*>(.*?)</p>", re.I | re.S)
+_COUNT = re.compile(r"^([0-9][0-9,]*)\s+papers?$", re.I)
 
 
 def listing_urls(year: int) -> list[str]:
@@ -98,32 +91,44 @@ class YearIndex:
 
 def parse_year_index(text: str, base: str) -> YearIndex:
     """The entries on a year page, with its stated count and the other volumes it points to."""
-    block = _PAPER_LIST.search(text)
+    root = parse(text)
+    block = next((node for node in root.iter("ul") if node.has_class("paper-list")), None)
     entries: list[Entry] = []
     unlinked = 0
-    stated = int(m.group(1).replace(",", "")) if (m := _COUNT.search(text)) else None
+    count_node = next((node for node in root.iter("span") if node.has_class("paper-count")), None)
+    count_match = _COUNT.match(node_text(count_node)) if count_node else None
+    stated = int(count_match.group(1).replace(",", "")) if count_match else None
     see_also = [
-        urljoin(base, h.group(1) or h.group(2) or "")
-        for p in _SEE_ALSO.finditer(text)
-        for h in _HREF.finditer(p.group(1))
+        urljoin(base, anchor.attributes.get("href", ""))
+        for paragraph in root.iter("p")
+        if paragraph.has_class("book-see-also")
+        for anchor in paragraph.iter("a")
     ]
-    for item in _ITEM.finditer(block.group(1) if block else ""):
-        body = item.group(2)
-        link: tuple[re.Match[str], str] | None = None
-        for a in _LINK.finditer(body):
-            m = _HREF.search(a.group(1))
-            target = (m.group(1) or m.group(2) or "") if m else ""
-            if "-Abstract" in target:
-                link = (a, target)
-                break
-        if link is None:
+    for item in block.iter("li") if block else []:
+        anchor = next(
+            (node for node in item.iter("a") if "-Abstract" in node.attributes.get("href", "")), None
+        )
+        if anchor is None:
             unlinked += 1
             continue
-        anchor, href = link
-        after = body[anchor.end() :]
-        authors = _AUTHORS.search(after)
-        author_text = text_of(authors.group(1) or authors.group(2) or "") if authors else ""
-        entries.append(Entry(urljoin(base, href), text_of(anchor.group(2)), split_authors(author_text)))
+        authors = None
+        after_anchor = False
+        for node in item.iter():
+            if node is anchor:
+                after_anchor = True
+            elif after_anchor and (
+                (node.tag == "span" and node.has_class("paper-authors")) or node.tag == "i"
+            ):
+                authors = node
+                break
+        author_text = node_text(authors) if authors else ""
+        entries.append(
+            Entry(
+                urljoin(base, anchor.attributes.get("href", "")),
+                node_text(anchor),
+                split_authors(author_text),
+            )
+        )
     return YearIndex(entries, stated, unlinked, see_also)
 
 
@@ -137,11 +142,11 @@ class AbstractPage:
 
 
 def parse_abstract_page(text: str) -> AbstractPage:
-    abstract = _ABSTRACT.search(text)
+    abstract = next((node for node in parse(text).iter("p") if node.has_class("paper-abstract")), None)
     return AbstractPage(
         title=meta(text, "citation_title"),
         authors=tuple(a for a in metas(text, "citation_author") if a),
-        abstract=text_of(abstract.group(1)) if abstract else None,
+        abstract=node_text(abstract) if abstract else None,
         pdf=meta(text, "citation_pdf_url"),
         doi=meta(text, "citation_doi"),
     )

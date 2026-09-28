@@ -445,6 +445,30 @@ def test_pagination_and_a_listing_whose_count_disagrees(tmp_path: Path) -> None:
         run(bad, tmp_path / "b", "ICLR", 2022)
 
 
+@pytest.mark.parametrize("count", [None, "1", True, -1])
+def test_a_listing_with_a_missing_or_invalid_count_is_refused(tmp_path: Path, count: object) -> None:
+    note = v1_note("iclr-2022/note-rejected-bare-venueid.json")
+
+    def malformed(request: Request) -> Response | None:
+        if "Blind_Submission" not in request.url:
+            return None
+        body: dict[str, object] = {"notes": [note]}
+        if count is not None:
+            body["count"] = count
+        return json_response(body, headers={"content-type": "application/json"})
+
+    server = FakeOpenReviewV1({BLIND.format(y=2022): [note]}, override=malformed)
+    with pytest.raises(orv2.CrawlError, match=r"missing or invalid count.*--refresh"):
+        run(server, tmp_path, "ICLR", 2022)
+
+
+def test_a_note_in_two_status_listings_is_refused_as_a_stale_transition(tmp_path: Path) -> None:
+    note = v1_note("iclr-2022/note-withdrawn-empty-venueid.json")
+    server = FakeOpenReviewV1({BLIND.format(y=2022): [note], WITHDRAWN.format(y=2022): [note]})
+    with pytest.raises(orv2.CrawlError, match=r"two status listings.*--refresh"):
+        run(server, tmp_path, "ICLR", 2022)
+
+
 def world_2021() -> FakeOpenReviewV1:
     forum = v1_notes("iclr-2021/forum-rejected-no-venueid.json")
     rejected = v1_note("iclr-2021/forum-rejected-no-venueid.json")

@@ -12,14 +12,22 @@ from email.utils import format_datetime
 from pathlib import Path
 
 import pytest
+from openproceedings.ingest.sources.http import (
+    CacheError,
+    Request,
+    Response,
+    TransportError,
+    urllib_transport,
+)
 from openproceedings.ingest.sources.http import CacheMiss as OpenReviewCacheMiss
 from openproceedings.ingest.sources.http import HTTPRefused as OpenReviewHTTPError
-from openproceedings.ingest.sources.http import Request, Response, TransportError, urllib_transport
 from openproceedings.ingest.sources.http import RetriesExhausted as OpenReviewRetriesExhausted
 from openproceedings.ingest.sources.openreview_client import (
+    API_V1,
     Credentials,
     OpenReviewAuthError,
     OpenReviewClient,
+    OpenReviewPublicDataError,
     credentials,
     read_dotenv,
 )
@@ -132,6 +140,135 @@ def test_a_cached_response_is_never_fetched_again_and_needs_no_credentials(tmp_p
     assert first["fetched_at"] == EPOCH.replace(second=1).isoformat()
     assert first["headers"] == {k: BUDGET[k] for k in ("content-type", "ratelimit-policy", "ratelimit-remaining",
                                                         "ratelimit-reset")}  # fmt: skip
+
+
+def test_private_v2_content_fields_are_removed_before_the_response_is_cached(tmp_path: Path) -> None:
+    public = {
+        "id": "PublicNote1",
+        "forum": "PublicNote1",
+        "readers": ["everyone"],
+        "content": {
+            "title": {"value": "Public title"},
+            "private_comment": {"value": "do-not-cache", "readers": ["ICLR.cc/2026/Program_Chairs"]},
+            "excluded_everyone": {"value": "also-do-not-cache", "nonreaders": ["everyone"]},
+        },
+    }
+    entry = client(tmp_path, answering(json_response({"notes": [public], "count": 1}))).get("/notes", PARAMS)
+    [note] = entry["json"]["notes"]
+    assert note["content"] == {"title": {"value": "Public title"}}
+    paths = list((tmp_path / "http").rglob("*.json"))
+    cached = " ".join(p.read_text() for p in paths)
+    assert "do-not-cache" not in cached and "also-do-not-cache" not in cached
+    assert any(json.loads(p.read_text())["payload"]["public_projection"] == 1 for p in paths)
+
+
+@pytest.mark.parametrize("bad_acl", ["everyone", {"everyone": True}, ["everyone", 7]])
+def test_a_malformed_top_level_acl_is_refused_and_a_malformed_field_acl_is_dropped(
+    tmp_path: Path, bad_acl: object
+) -> None:
+    note = {
+        "id": "PublicNote1",
+        "forum": "PublicNote1",
+        "readers": ["everyone"],
+        "content": {"private": {"value": "do-not-cache", "nonreaders": bad_acl}},
+    }
+    entry = client(tmp_path, answering(json_response({"notes": [note], "count": 1}))).get("/notes", PARAMS)
+    assert entry["json"]["notes"][0]["content"] == {}
+    assert "do-not-cache" not in " ".join(path.read_text() for path in (tmp_path / "http").rglob("*.json"))
+
+    note["content"] = {}
+    note["nonreaders"] = bad_acl
+    with pytest.raises(OpenReviewPublicDataError, match="not world-readable"):
+        client(tmp_path / "top", answering(json_response({"notes": [note], "count": 1}))).get(
+            "/notes", PARAMS
+        )
+    assert not list((tmp_path / "top").rglob("*.json"))
+
+
+def test_group_responses_are_projected_with_the_same_acl_rules(tmp_path: Path) -> None:
+    group = {
+        "id": "ICLR.cc/2026/Conference",
+        "domain": "ICLR.cc/2026/Conference",
+        "readers": ["everyone"],
+        "content": {
+            "submission_venue_id": {"value": "ICLR.cc/2026/Conference"},
+            "chairs_only": {"value": "do-not-cache", "readers": ["ICLR.cc/2026/Program_Chairs"]},
+        },
+    }
+    entry = client(tmp_path, answering(json_response({"groups": [group], "count": 1}))).get(
+        "/groups", {"parent": "ICLR.cc/2026", "limit": 1}
+    )
+    [projected] = entry["json"]["groups"]
+    assert projected["content"] == {"submission_venue_id": {"value": "ICLR.cc/2026/Conference"}}
+    assert "do-not-cache" not in " ".join(path.read_text() for path in (tmp_path / "http").rglob("*.json"))
+
+
+@pytest.mark.parametrize("base", ["https://api2.openreview.net", API_V1])
+def test_a_mixed_public_private_response_is_refused_and_never_cached(tmp_path: Path, base: str) -> None:
+    data = {
+        "notes": [
+            {"id": "PublicNote1", "readers": ["everyone"], "content": {}},
+            {"id": "PrivateNote1", "readers": ["Venue/Program_Chairs"], "content": {"secret": "x"}},
+        ],
+        "count": 2,
+    }
+
+    def transport(request: Request, timeout: float = 60.0) -> Response:
+        return (
+            json_response({"token": TOKEN}, headers=JSON) if request.method == "POST" else json_response(data)
+        )
+
+    c = OpenReviewClient(
+        tmp_path / "http",
+        credentials=CREDS,
+        base=base,
+        login_base="https://api2.openreview.net",
+        transport=transport,
+        clock=FakeClock(),
+        jitter=lambda: 0.0,
+    )
+    with pytest.raises(OpenReviewPublicDataError, match="not world-readable"):
+        c.get("/notes", PARAMS)
+    assert not list((tmp_path / "http").rglob("*.json"))
+
+
+def test_an_old_unprojected_cache_is_rejected_offline_and_purged_live(tmp_path: Path) -> None:
+    server = FakeOpenReview(notes={"ICLR.cc/2024/Conference": []})
+    live = client(tmp_path, server)
+    url = live.url("/notes", PARAMS)
+    path = live.cache.path(url)
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "key": url,
+                "payload": {
+                    "url": url,
+                    "fetched_at": EPOCH.isoformat(),
+                    "headers": {},
+                    "json": {"notes": []},
+                },
+            }
+        )
+    )
+    with pytest.raises(CacheError, match="malformed"):
+        OpenReviewClient(tmp_path / "http", credentials=None, offline=True).get("/notes", PARAMS)
+    got = live.get("/notes", PARAMS)
+    assert got["json"] == {"notes": []}
+    assert json.loads(path.read_text())["payload"]["public_projection"] == 1
+
+
+def test_a_malformed_projected_cache_is_not_silently_purged(tmp_path: Path) -> None:
+    server = FakeOpenReview(notes={"ICLR.cc/2024/Conference": []})
+    live = client(tmp_path, server)
+    live.get("/notes", PARAMS)
+    path = live.cache.path(live.url("/notes", PARAMS))
+    document = json.loads(path.read_text())
+    document["payload"]["json"] = []
+    path.write_text(json.dumps(document))
+    with pytest.raises(CacheError, match="malformed"):
+        live.get("/notes", PARAMS)
+    assert path.exists() and len(server.gets()) == 1
 
 
 def test_offline_refuses_a_miss_and_refresh_refetches(tmp_path: Path) -> None:

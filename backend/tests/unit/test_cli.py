@@ -64,6 +64,9 @@ def test_ingest_neurips_offline_from_a_seeded_cache(
     ("argv", "message"),
     [
         (["ingest", "neurips", "--year", "2013", "--delay", "0.1"], "--delay must be at least"),
+        (["ingest", "neurips", "--year", "2013", "--delay", "nan"], "--delay must be finite"),
+        (["ingest", "neurips", "--year", "2013", "--delay", "inf"], "--delay must be finite"),
+        (["ingest", "neurips", "--year", "2013", "--delay=-inf"], "--delay must be finite"),
         (["ingest", "pmlr", "--year", "2013", "--dry-run", "--offline"], "don't combine"),
         (["ingest", "pmlr", "--year", "2026", "--offline"], "no verified PMLR volume"),
         (["ingest", "neurips", "--year", "2012", "--offline"], "decision-013"),
