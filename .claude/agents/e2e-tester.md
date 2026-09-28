@@ -34,7 +34,12 @@ retry you add.
 5. **Visual regression:** `toHaveScreenshot` for `/search` with results, light and dark. Freeze the clock
    (`page.clock`) and mask dates/record ids. Update baselines only with `--update-snapshots` when the
    change is intended, and say so in the PR with before/after.
-6. **Flake discipline:** wait on responses or roles, never `waitForTimeout`. Run `npx playwright test
+6. **Portable browser contract:** pin `@playwright/test` to an exact version in the lockfile, install its
+   Chromium with `npx playwright install --with-deps chromium` in CI, and use a platform-neutral
+   `snapshotPathTemplate` (no `{platform}` token) so the committed baseline has the same path locally and
+   on Linux. Pin CI actions by full commit SHA as well; a floating runner, browser or action can turn a
+   visual diff into an environment diff.
+7. **Flake discipline:** wait on responses or roles, never `waitForTimeout`. Run `npx playwright test
    --repeat-each=5` on new specs before handing off.
 
 ## Output

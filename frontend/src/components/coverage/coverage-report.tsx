@@ -232,10 +232,15 @@ export function CoverageReport({ coverage }: { coverage: Coverage }) {
       return next;
     });
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <Header coverage={coverage} />
       {/* 1.4.10 allows two-dimensional scrolling for a data table: it scrolls in its own region, not the page */}
-      <div role="region" aria-label="Coverage table" tabIndex={0} className="max-w-full overflow-x-auto">
+      <div
+        role="region"
+        aria-label="Coverage table"
+        tabIndex={0}
+        className="max-w-full overflow-x-auto contain-layout"
+      >
         <table className="min-w-full text-sm tabular-nums">
           <caption className="pb-2 text-left text-muted-foreground">
             Records per venue and year in snapshot <code className="font-mono">{coverage.snapshot.name}</code>
@@ -296,7 +301,7 @@ export function CoverageReport({ coverage }: { coverage: Coverage }) {
                         aria-controls={id}
                         aria-label={`Details: track and status for ${vy.venue} ${vy.year}`}
                         onClick={() => toggle(key)}
-                        className="whitespace-nowrap underline-offset-4 hover:underline"
+                        className="inline-flex min-h-6 items-center whitespace-nowrap underline-offset-4 hover:underline"
                       >
                         Details {expanded ? "▾" : "▸"}
                       </button>

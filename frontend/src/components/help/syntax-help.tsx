@@ -232,62 +232,76 @@ export function SyntaxHelp({
           </a>
           ).
         </p>
-        <table className="text-sm">
-          <caption className="text-left font-medium">What a query word finds</caption>
-          <thead>
-            <tr>
-              <th scope="col" className="pr-4 text-left">
-                You type
-              </th>
-              <th scope="col" className="pr-4 text-left">
-                Matches
-              </th>
-              <th scope="col" className="text-left">
-                Does not match
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.consequences.map((row) => (
-              <tr key={row.query}>
-                <th scope="row" className="pr-4 text-left font-normal">
-                  <code className={CODE}>{row.query}</code>
+        <div
+          role="region"
+          aria-label="Query word matching table"
+          tabIndex={0}
+          className="overflow-x-auto contain-layout"
+        >
+          <table className="text-sm">
+            <caption className="text-left font-medium">What a query word finds</caption>
+            <thead>
+              <tr>
+                <th scope="col" className="pr-4 text-left">
+                  You type
                 </th>
-                <td className="pr-4">
-                  <Ticked text={row.matches} />
-                </td>
-                <td>
-                  <Ticked text={row.not} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <table className="text-sm">
-          <caption className="text-left font-medium">How text is split into indexed words</caption>
-          <thead>
-            <tr>
-              <th scope="col" className="pr-4 text-left">
-                Text
-              </th>
-              <th scope="col" className="text-left">
-                Indexed as
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.tokens.map((row) => (
-              <tr key={row.input}>
-                <th scope="row" className="pr-4 text-left font-normal">
-                  <code className={CODE}>{row.input}</code>
+                <th scope="col" className="pr-4 text-left">
+                  Matches
                 </th>
-                <td>
-                  <Values values={row.tokens} />
-                </td>
+                <th scope="col" className="text-left">
+                  Does not match
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.consequences.map((row) => (
+                <tr key={row.query}>
+                  <th scope="row" className="pr-4 text-left font-normal">
+                    <code className={CODE}>{row.query}</code>
+                  </th>
+                  <td className="pr-4">
+                    <Ticked text={row.matches} />
+                  </td>
+                  <td>
+                    <Ticked text={row.not} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div
+          role="region"
+          aria-label="Indexed word examples table"
+          tabIndex={0}
+          className="overflow-x-auto contain-layout"
+        >
+          <table className="text-sm">
+            <caption className="text-left font-medium">How text is split into indexed words</caption>
+            <thead>
+              <tr>
+                <th scope="col" className="pr-4 text-left">
+                  Text
+                </th>
+                <th scope="col" className="text-left">
+                  Indexed as
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.tokens.map((row) => (
+                <tr key={row.input}>
+                  <th scope="row" className="pr-4 text-left font-normal">
+                    <code className={CODE}>{row.input}</code>
+                  </th>
+                  <td>
+                    <Values values={row.tokens} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <p>
           Chinese, Japanese and Korean text is not split into words: a run of it is one word (see{" "}
           <a href={`#${anchorOf("WARN_CJK_RUN")}`} className="underline underline-offset-4">

@@ -1,5 +1,5 @@
 # openproceedings monorepo — common entry points. Standard: .claude/skills/autolint/SKILL.md
-.PHONY: help sync frontend-deps fmt lint tooling test openapi hooks mutate mutate-changed
+.PHONY: help sync frontend-deps fmt lint tooling test e2e openapi hooks mutate mutate-changed
 
 SHELL_FILES := $(wildcard .claude/hooks/*.sh .claude/hooks/tests/*.sh .claude/scripts/tests/*.sh scripts/*.sh .githooks/*)
 PY_TARGETS  := .claude $(wildcard backend)
@@ -10,6 +10,7 @@ help:
 	@echo "lint     - check-only: what CI's lint job runs (ruff, mypy, shellcheck, frontend)"
 	@echo "tooling  - roster lint, roster/learnings indexes, backlog hygiene, hook case tables"
 	@echo "test     - backend (pytest) and frontend (vitest) tests"
+	@echo "e2e      - Playwright spec-05 flow, WCAG 2.2 AA and visual regression"
 	@echo "openapi  - regenerate the OpenAPI snapshot and frontend/src/api/schema.ts (commit both; CI checks)"
 	@echo "hooks    - install git hooks (commit-msg, pre-push) via scripts/setup-dev.sh"
 	@echo "mutate   - mutation-test every gate check in parallel (nightly CI; after changing a gate)"
@@ -55,6 +56,9 @@ tooling:
 test: frontend-deps
 	@if [ -d backend ]; then uv run --locked pytest -q; fi
 	@if [ -f frontend/package.json ]; then npm test --workspace frontend; fi
+
+e2e: frontend-deps
+	@if [ -f frontend/package.json ]; then npm run e2e --workspace frontend; fi
 
 # The API contract (api-contract skill): the committed OpenAPI snapshot, then the TypeScript types generated
 # from it. Run after any change to a route or a response model; CI's test job runs it and fails on a diff.

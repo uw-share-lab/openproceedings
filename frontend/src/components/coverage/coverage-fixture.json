@@ -17,9 +17,7 @@
       }
     },
     "built_at": "2026-09-26T00:00:00Z",
-    "sources": [
-      "ris"
-    ],
+    "sources": ["ris"],
     "crawl_dates_kind": {
       "*": "scholar_query_dates",
       "ris": "scholar_query_dates"
@@ -52,22 +50,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "rejected",
-        "withdrawn",
-        "desk_rejected",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
       "tracks": [
         {
           "track": "workshop",
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -82,9 +72,7 @@
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -110,22 +98,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "rejected",
-        "withdrawn",
-        "desk_rejected",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
       "tracks": [
         {
           "track": "main",
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": 860,
           "official_counts": "posters in the fact sheet, one per accepted paper (orals and spotlights included); the virtual-site list also has 860",
           "official_citation": "https://iclr.cc/media/Press/ICLR_2021_Fact_Sheet.pdf",
@@ -161,22 +141,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "rejected",
-        "withdrawn",
-        "desk_rejected",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
       "tracks": [
         {
           "track": "tiny_papers",
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -191,9 +163,7 @@
           "records": 2,
           "indexed_accepted": 0,
           "abstract_missing": 1,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -224,22 +194,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "rejected",
-        "withdrawn",
-        "desk_rejected",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
       "tracks": [
         {
           "track": "tiny_papers",
           "records": 1,
           "indexed_accepted": 1,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -254,9 +216,7 @@
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -282,22 +242,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "rejected",
-        "withdrawn",
-        "desk_rejected",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
       "tracks": [
         {
           "track": "other",
           "records": 1,
           "indexed_accepted": 1,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -323,19 +275,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "withdrawn"
-      ],
+      "statuses_indexed": ["accepted", "withdrawn"],
       "tracks": [
         {
           "track": "main",
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": 773,
           "official_counts": "papers in PMLR volume 97 (every accepted paper)",
           "official_citation": "https://proceedings.mlr.press/v97/",
@@ -371,21 +318,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "rejected",
-        "withdrawn",
-        "desk_rejected"
-      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected"],
       "tracks": [
         {
           "track": "main",
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": 1084,
           "official_counts": "papers in PMLR volume 119 (every accepted paper)",
           "official_citation": "https://proceedings.mlr.press/v119/",
@@ -400,9 +340,7 @@
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -417,9 +355,7 @@
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -445,19 +381,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "unknown"],
       "tracks": [
         {
           "track": "position",
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -498,22 +429,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "rejected",
-        "withdrawn",
-        "desk_rejected",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
       "tracks": [
         {
           "track": "datasets_benchmarks",
           "records": 1,
           "indexed_accepted": 1,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -528,9 +451,7 @@
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -545,9 +466,7 @@
           "records": 2,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -583,22 +502,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "rejected",
-        "withdrawn",
-        "desk_rejected",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
       "tracks": [
         {
           "track": "datasets_benchmarks",
           "records": 2,
           "indexed_accepted": 2,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -613,9 +524,7 @@
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -630,9 +539,7 @@
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -663,22 +570,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "rejected",
-        "withdrawn",
-        "desk_rejected",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
       "tracks": [
         {
           "track": "position",
           "records": 1,
           "indexed_accepted": 1,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -693,9 +592,7 @@
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -726,22 +623,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "rejected",
-        "withdrawn",
-        "desk_rejected",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
       "tracks": [
         {
           "track": "position",
           "records": 2,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -767,18 +656,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted"
-      ],
+      "statuses_indexed": ["accepted"],
       "tracks": [
         {
           "track": "main",
           "records": 1,
           "indexed_accepted": 1,
           "abstract_missing": 1,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": 1428,
           "official_counts": "papers in the NeurIPS 2019 proceedings index (every accepted paper)",
           "official_citation": "https://proceedings.neurips.cc/paper_files/paper/2019",
@@ -804,19 +689,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "unknown"],
       "tracks": [
         {
           "track": "tiny_papers",
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -852,22 +732,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "rejected",
-        "withdrawn",
-        "desk_rejected",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
       "tracks": [
         {
           "track": "datasets_benchmarks",
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": 174,
           "official_counts": "D&B papers in the 2021 D&B proceedings, round 1 (66) + round 2 (108); equals the fact sheet",
           "official_citation": "https://datasets-benchmarks-proceedings.neurips.cc/paper/2021",
@@ -882,9 +754,7 @@
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -899,9 +769,7 @@
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -932,22 +800,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "rejected",
-        "withdrawn",
-        "desk_rejected",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
       "tracks": [
         {
           "track": "datasets_benchmarks",
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": 163,
           "official_counts": "D&B papers in the NeurIPS 2022 proceedings index (equals the fact sheet)",
           "official_citation": "https://proceedings.neurips.cc/paper_files/paper/2022",
@@ -962,9 +822,7 @@
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -1005,22 +863,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "rejected",
-        "withdrawn",
-        "desk_rejected",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
       "tracks": [
         {
           "track": "position",
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -1035,9 +885,7 @@
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -1052,9 +900,7 @@
           "records": 1,
           "indexed_accepted": 1,
           "abstract_missing": 1,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -1069,9 +915,7 @@
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -1102,22 +946,14 @@
           "count": 1
         }
       ],
-      "statuses_indexed": [
-        "accepted",
-        "rejected",
-        "withdrawn",
-        "desk_rejected",
-        "unknown"
-      ],
+      "statuses_indexed": ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"],
       "tracks": [
         {
           "track": "competition",
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
@@ -1132,9 +968,7 @@
           "records": 1,
           "indexed_accepted": 0,
           "abstract_missing": 0,
-          "sources": [
-            "ris"
-          ],
+          "sources": ["ris"],
           "official_accepted": null,
           "official_counts": null,
           "official_citation": null,
