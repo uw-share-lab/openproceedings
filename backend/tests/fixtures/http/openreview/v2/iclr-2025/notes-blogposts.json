@@ -1,0 +1,95 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICLR.cc/2025/BlogPosts&limit=1",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-ratelimit-limit": "500",
+   "x-ratelimit-remaining": "265",
+   "x-ratelimit-reset": "1790543172",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-limit": "500",
+   "ratelimit-remaining": "265",
+   "ratelimit-reset": "2249"
+  },
+  "json": {
+   "notes": [
+    {
+     "content": {
+      "title": {
+       "value": "Synthetic title text 1."
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 2"
+       ]
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person3"
+       ]
+      },
+      "blogpost_url": {
+       "value": "Synthetic blogpost url text 4."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 5."
+      },
+      "conflict_of_interest": {
+       "value": "Synthetic conflict of interest text 6."
+      },
+      "venue": {
+       "value": "ICLR 2025 Blogpost Track"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2025/BlogPosts"
+      },
+      "_bibtex": {
+       "value": "synthetic.person7@example.org"
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_8"
+      }
+     },
+     "id": "1SK8PYL02N",
+     "forum": "1SK8PYL02N",
+     "license": "CC BY 4.0",
+     "signatures": [
+      "ICLR.cc/2025/BlogPosts/Submission103/Authors"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "writers": [
+      "ICLR.cc/2025/BlogPosts",
+      "ICLR.cc/2025/BlogPosts/Submission103/Authors"
+     ],
+     "number": 103,
+     "invitations": [
+      "ICLR.cc/2025/BlogPosts/-/Submission",
+      "ICLR.cc/2025/BlogPosts/-/Post_Submission",
+      "ICLR.cc/2025/BlogPosts/-/Edit",
+      "ICLR.cc/2025/BlogPosts/Submission103/-/Revision"
+     ],
+     "domain": "ICLR.cc/2025/BlogPosts",
+     "tcdate": 1732448479579,
+     "cdate": 1732448479579,
+     "tmdate": 1743458541085,
+     "mdate": 1743458541085,
+     "pdate": 1737616006623,
+     "odate": 1740574152915,
+     "version": 2
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,20 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "4 of 80 paper entries kept (2 per section); surrounding archive page removed"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://iclr.cc/archive/www/doku.php%3Fid=iclr2016:accepted-main.html",
+  "authenticated": false
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "text/html"
+  },
+  "text": "<!doctype html><html><head><title>Accepted Papers (Conference Track)</title></head><body><h1>Accepted Papers (Conference Track)</h1><h3 class=\"sectionedit2\" id=\"oral_presentations\">Oral Presentations</h3><ol data-fixture-section=\"oral_presentations\"><li class=\"level1\"><div class=\"li\"> <a href=\"http://arxiv.org/abs/1511.06279\" class=\"urlextern\" target=\"_blank\" title=\"http://arxiv.org/abs/1511.06279\"  rel=\"nofollow\">Synthetic title 1</a><br/>\nSynthetic Author 2; Synthetic Author 3</div></li>\n<li class=\"level1\"><div class=\"li\"> <a href=\"http://arxiv.org/abs/1511.08400\" class=\"urlextern\" target=\"_blank\" title=\"http://arxiv.org/abs/1511.08400\"  rel=\"nofollow\">Synthetic title 4</a><br/>\nSynthetic Author 5; Synthetic Author 6</div></li></ol>\n<h3 class=\"sectionedit3\" id=\"poster_presentations\">Poster Presentations</h3><ol data-fixture-section=\"poster_presentations\"><li class=\"level1\"><div class=\"li\"> <a href=\"http://arxiv.org/abs/1511.07122\" class=\"urlextern\" target=\"_blank\" title=\"http://arxiv.org/abs/1511.07122\"  rel=\"nofollow\">Synthetic title 7</a><br/>\nSynthetic Author 8; Synthetic Author 9</div></li>\n<li class=\"level1\"><div class=\"li\"> <a href=\"http://arxiv.org/abs/1511.03677\" class=\"urlextern\" target=\"_blank\" title=\"http://arxiv.org/abs/1511.03677\"  rel=\"nofollow\">Synthetic title 10</a><br/>\nSynthetic Author 11; Synthetic Author 12</div></li></ol></body></html>\n"
+ }
+}

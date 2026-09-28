@@ -1,9 +1,14 @@
 """Snapshots (spec 01 §Pipeline 5; snapshots skill): the immutable corpus the index is built from.
 
 `ingest_ris` checks scholarmend outputs and copies them into the cache (`<cache>/ris/<name>/`, the
-`mended.ris` and the `resolved.json` beside it). `build` imports everything cached, dedups, and writes
+`mended.ris` and the `resolved.json` beside it); `op ingest openreview` caches its crawls under
+`<cache>/openreview/{v2,v1}/` (`sources/openreview_v2.py`, `sources/openreview_v1.py`); `op ingest iclr|neurips|pmlr`
+cache proceedings pages (`sources/crawl.py`). `build` imports everything cached (the RIS files, each finished
+OpenReview crawl replayed from its cached responses, and each finished ICLR/NeurIPS/PMLR crawl re-mined from its cached
+pages), dedups, adds the conflicts a crawl found inside one source (`with_crawl_conflicts`), and writes
 `<snapshots>/<crawl date>-<shorthash>/` with `records.jsonl`, `manifest.json`, `merges.csv` and
-`conflicts.csv`. It never fetches, so it works offline.
+`conflicts.csv`. It never fetches, so it works offline. It also reports (and logs) each venue-year status
+its records hold that their sources can't supply (`status_check`, TASK-109), without changing the snapshot.
 
 Determinism: records sorted by id, one canonical JSON line each; `snapshot_hash` is the sha256 of the
 `records.jsonl` bytes; the directory's date is the newest claim's fetch date (never the build clock); only
@@ -29,7 +34,7 @@ import time
 import unicodedata
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import astuple, dataclass, fields
+from dataclasses import astuple, dataclass, fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -40,6 +45,8 @@ from openproceedings import __version__, storage
 from openproceedings.ingest.dedup import Conflict, DedupResult, Merge, dedup
 from openproceedings.ingest.record import RECORD_SCHEMA_VERSION, PaperRecord
 from openproceedings.ingest.ris import ImportReport, import_ris
+from openproceedings.ingest.sources.common import Report, sources_manifest
+from openproceedings.ingest.status_check import UnexpectedStatus, unexpected_statuses
 from openproceedings.logs import elapsed_ms
 from openproceedings.query.normalize import TOKENIZER_VERSION
 
@@ -98,6 +105,9 @@ class BuildResult:
     path: Path
     snapshot_hash: str
     created: bool  # False when this snapshot already existed
+    # each (venue, year, status) its records hold that their sources can't supply (TASK-109): reported and
+    # logged, never written into the snapshot
+    unexpected_statuses: tuple[UnexpectedStatus, ...] = ()
 
 
 def _sha256(data: bytes) -> str:
@@ -169,9 +179,7 @@ def ingest_ris(mended: Sequence[Path], cache: Path) -> list[ImportReport]:
     return [report for *_, report in staged]
 
 
-def load_cache(cache: Path) -> tuple[list[PaperRecord], list[ImportReport]]:
-    """Every cached source, imported (M2: RIS only), in cached-name order. Hidden and `.tmp-` entries are
-    never sources."""
+def _load_ris(cache: Path) -> tuple[list[PaperRecord], list[ImportReport]]:
     records: list[PaperRecord] = []
     reports: list[ImportReport] = []
     for entry in sorted((cache / "ris").glob("*/mended.ris")):
@@ -180,11 +188,40 @@ def load_cache(cache: Path) -> tuple[list[PaperRecord], list[ImportReport]]:
         recs, report = import_ris(entry)
         records += recs
         reports.append(report)
+    return records, reports
+
+
+def load_cache(cache: Path) -> tuple[list[PaperRecord], list[ImportReport]]:
+    """Every cached RIS source, imported, in cached-name order. Hidden and `.tmp-` entries are never
+    sources."""
+    records, reports = _load_ris(cache)
     if not reports:
         raise SnapshotError(
             f"nothing cached under {cache.name}/ris; run `op ingest ris <mended.ris>...` first"
         )
     return records, reports
+
+
+def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], list[Report]]:
+    """Every cached source, with no network: the RIS imports, then every finished crawl of every crawler
+    (OpenReview API v2 and v1, ICLR, NeurIPS, PMLR) re-run from its cache (`sources/crawl.replay_all`). Returns the
+    records, the RIS reports and the crawl reports. Refuses an empty cache, and a crawl that can't be replayed
+    (a `SourceError`: a marked crawl whose responses are gone, an unreadable cache entry or marker)."""
+    from openproceedings.ingest.sources.crawl import replay_all
+    from openproceedings.ingest.sources.http import SourceError
+
+    records, reports = _load_ris(cache)
+    try:
+        mined, crawls = replay_all(cache)
+    except SourceError as e:
+        raise SnapshotError(f"the crawl cache can't be replayed: {e}", reason=e.reason) from e
+    records += mined
+    if not reports and not crawls:
+        raise SnapshotError(
+            f"nothing cached under {cache.name}; run `op ingest ris <mended.ris>...`, "
+            "`op ingest openreview --venue <V> --years <Y>` or `op ingest iclr|neurips|pmlr ...` first"
+        )
+    return records, reports, crawls
 
 
 def record_line(record: PaperRecord) -> str:
@@ -216,8 +253,46 @@ def _nested(
     return plain
 
 
-def render(result: DedupResult, reports: Sequence[ImportReport], built_at: datetime) -> dict[str, bytes]:
-    """The snapshot's files. Everything but manifest.json's `built_at` is a function of the inputs."""
+def _sources(reports: Sequence[ImportReport], crawls: Sequence[Report]) -> dict[str, Any]:
+    """manifest.json's `sources`: `ris` (the import reports; always present when no crawl is), then one entry
+    per crawler source (`openreview_v2`, `openreview_v1`, `iclr_archive`, `neurips_proceedings`, `pmlr`), each
+    with its reports and its own `crawl_window` (records.py and coverage.py read it; absent when its crawls
+    fetched nothing; `common.sources_manifest`)."""
+    sources: dict[str, Any] = {}
+    if reports or not crawls:
+        sources["ris"] = [r.to_manifest() for r in reports]
+    sources.update(sources_manifest(crawls))
+    return sources
+
+
+def with_crawl_conflicts(result: DedupResult, crawls: Sequence[Report]) -> DedupResult:
+    """`result` plus the disagreements a crawl found inside one source (a v1 note whose withdrawn invitation and
+    `content.venue` disagree: `unresolved:openreview_v1`), each pointed at the output record its paper ended
+    in (following `merges.csv`), so conflicts.csv holds every conflict, not only dedup's."""
+    found = [c for r in crawls for c in getattr(r, "conflicts", ())]
+    if not found:
+        return result
+    survivor = {m.merged_id: m.survivor_id for m in result.merges if m.merged_id != m.survivor_id}
+
+    def final(rid: str) -> str:
+        seen = {rid}
+        while (nxt := survivor.get(rid)) is not None and nxt not in seen:
+            rid = nxt
+            seen.add(rid)
+        return rid
+
+    moved = {replace(c, id=final(c.id)) for c in found}
+    return replace(result, conflicts=tuple(sorted({*result.conflicts, *moved})))
+
+
+def render(
+    result: DedupResult,
+    reports: Sequence[ImportReport],
+    built_at: datetime,
+    crawls: Sequence[Report] = (),
+) -> dict[str, bytes]:
+    """The snapshot's files. Everything but manifest.json's `built_at` is a function of the inputs.
+    `crawls` are the crawlers' reports (OpenReview v2 and v1, ICLR, NeurIPS, PMLR)."""
     records = sorted(result.records, key=lambda r: r.id)
     if not records:
         raise SnapshotError("no records to snapshot")
@@ -243,7 +318,7 @@ def render(result: DedupResult, reports: Sequence[ImportReport], built_at: datet
         "merges": {"total": len(result.merges), **Counter(m.rule for m in result.merges)},
         "conflicts": {"total": len(result.conflicts), **Counter(c.resolution.split(":")[0] for c in result.conflicts)},
         "files": {"merges.csv": _sha256(merges), "conflicts.csv": _sha256(conflicts)},
-        "sources": {"ris": [r.to_manifest() for r in reports]},
+        "sources": _sources(reports, crawls),
     }  # fmt: skip
     return {
         "records.jsonl": lines,
@@ -289,8 +364,10 @@ def _holds(snapshot: Path, snapshot_hash: str, fresh: dict[str, Any] | None = No
 def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> BuildResult:
     """Import, dedup and write a new immutable snapshot (or report the one that already has this hash)."""
     began = time.monotonic()
-    records, reports = load_cache(cache)
-    files = render(dedup(records), reports, built_at or datetime.now(UTC))
+    records, reports, crawls = load_sources(cache)
+    result = with_crawl_conflicts(dedup(records), crawls)
+    unexpected = tuple(unexpected_statuses(result.records))
+    files = render(result, reports, built_at or datetime.now(UTC), crawls)
     manifest = json.loads(files["manifest.json"])
     snapshot_hash = manifest["snapshot_hash"]
     target = snapshots / f"{manifest['crawl_date']}-{snapshot_hash[:SHORT]}"
@@ -304,7 +381,7 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
                 )
             storage.lock(target)  # a crash between placing and locking left it writable
             log.info("snapshot_exists", extra={"snapshot": target.name, "snapshot_hash": snapshot_hash})
-            return BuildResult(target, snapshot_hash, created=False)
+            return BuildResult(target, snapshot_hash, created=False, unexpected_statuses=unexpected)
         with storage.staging(snapshots) as tmp:
             for name, data in files.items():
                 (tmp / name).write_bytes(data)
@@ -313,9 +390,9 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
         "snapshot_built" if created else "snapshot_exists",
         extra={"snapshot": target.name, "snapshot_hash": snapshot_hash, "records": manifest["record_count"],
                "merges": manifest["merges"]["total"], "conflicts": manifest["conflicts"]["total"],
-               "ms": elapsed_ms(began, time.monotonic)},
+               "unexpected_statuses": len(unexpected), "ms": elapsed_ms(began, time.monotonic)},
     )  # fmt: skip
-    return BuildResult(target, snapshot_hash, created=created)
+    return BuildResult(target, snapshot_hash, created=created, unexpected_statuses=unexpected)
 
 
 class _OnePass:

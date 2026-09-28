@@ -1,0 +1,103 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICLR.cc/2024/TinyPapers&limit=1",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-ratelimit-limit": "500",
+   "x-ratelimit-remaining": "266",
+   "x-ratelimit-reset": "1790543172",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-limit": "500",
+   "ratelimit-remaining": "266",
+   "ratelimit-reset": "2251"
+  },
+  "json": {
+   "notes": [
+    {
+     "content": {
+      "title": {
+       "value": "Synthetic title text 1."
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 2"
+       ]
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person3"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 4.",
+        "Synthetic keywords text 5.",
+        "Synthetic keywords text 6.",
+        "Synthetic keywords text 7."
+       ]
+      },
+      "TLDR": {
+       "value": "Synthetic tldr text 8."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 9."
+      },
+      "pdf": {
+       "value": "/pdf/e818eac7df0626e0687b829112923472bf46584a.pdf"
+      },
+      "venue": {
+       "value": "synthetic.person10@example.org"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2024/TinyPapers"
+      },
+      "_bibtex": {
+       "value": "synthetic.person11@example.org"
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_12"
+      }
+     },
+     "id": "p8GJzu52XL",
+     "forum": "p8GJzu52XL",
+     "license": "CC BY 4.0",
+     "signatures": [
+      "ICLR.cc/2024/TinyPapers/Submission254/Authors"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "writers": [
+      "ICLR.cc/2024/TinyPapers",
+      "ICLR.cc/2024/TinyPapers/Submission254/Authors"
+     ],
+     "number": 254,
+     "invitations": [
+      "ICLR.cc/2024/TinyPapers/-/Submission",
+      "ICLR.cc/2024/TinyPapers/-/Post_Submission",
+      "ICLR.cc/2024/TinyPapers/-/Edit",
+      "ICLR.cc/2024/TinyPapers/Submission254/-/Camera_Ready"
+     ],
+     "domain": "ICLR.cc/2024/TinyPapers",
+     "tcdate": 1702123417626,
+     "cdate": 1702123417626,
+     "tmdate": 1717210985024,
+     "mdate": 1717210985024,
+     "pdate": 1710880180605,
+     "odate": 1710880180605,
+     "version": 2
+    }
+   ]
+  }
+ }
+}

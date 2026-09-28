@@ -25,7 +25,9 @@ conflicts in the generated files by hand.
 **Backend-only contributors need Node too:** the pre-push hook runs `make lint`, which checks `frontend/`,
 so install Node 22 and run `npm ci --ignore-scripts` once even if you never touch the UI (no dependency's
 install script runs; nothing here needs one).
-Put OpenReview credentials in `.env` (gitignored). The anonymous API rate-limits almost immediately.
+Put OpenReview credentials in `.env` (gitignored) as `OPENREVIEW_USERNAME` and `OPENREVIEW_PASSWORD` (the
+names `setup-dev.sh` writes; scholarmend's `SCHOLARMEND_OPENREVIEW_*` names are not read). Without them the
+API answers every request with an HTML browser-check page instead of JSON (checked 2026-09-27).
 
 ## Flow: `feature → PR → dev → PR → main`
 1. Pick or create a task: `backlog task list --plain`, `backlog task create "…" --ac "…"`.

@@ -1,0 +1,98 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICML.cc/2024/Conference&limit=1",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-ratelimit-limit": "500",
+   "x-ratelimit-remaining": "256",
+   "x-ratelimit-reset": "1790543172",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-limit": "500",
+   "ratelimit-remaining": "256",
+   "ratelimit-reset": "2227"
+  },
+  "json": {
+   "notes": [
+    {
+     "content": {
+      "title": {
+       "value": "Synthetic title text 1."
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 2",
+        "Synthetic Author 3",
+        "Synthetic Author 4",
+        "Synthetic Author 5"
+       ]
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person6",
+        "~Synthetic_Person7",
+        "~Synthetic_Person8",
+        "~Synthetic_Person9"
+       ]
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 10."
+      },
+      "pdf": {
+       "value": "/pdf/e92f71b36bf501a4596d0b0a2285f14e5d15d076.pdf"
+      },
+      "venue": {
+       "value": "ICML 2024 Poster"
+      },
+      "venueid": {
+       "value": "ICML.cc/2024/Conference"
+      },
+      "_bibtex": {
+       "value": "synthetic.person11@example.org"
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_12"
+      }
+     },
+     "id": "Fw4fBE2rqW",
+     "forum": "Fw4fBE2rqW",
+     "license": "CC BY 4.0",
+     "signatures": [
+      "ICML.cc/2024/Conference/Submission10207/Authors"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "writers": [
+      "ICML.cc/2024/Conference",
+      "ICML.cc/2024/Conference/Submission10207/Authors"
+     ],
+     "number": 10207,
+     "invitations": [
+      "ICML.cc/2024/Conference/-/Submission",
+      "ICML.cc/2024/Conference/-/Post_Submission",
+      "ICML.cc/2024/Conference/-/Edit",
+      "ICML.cc/2024/Conference/Submission10207/-/Camera_Ready_Revision"
+     ],
+     "domain": "ICML.cc/2024/Conference",
+     "tcdate": 1706876283950,
+     "cdate": 1706876283950,
+     "tmdate": 1719287297883,
+     "mdate": 1719287297883,
+     "pdate": 1714610512428,
+     "odate": 1717693106458,
+     "version": 2
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,84 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?id=GrB-y0SNkQ",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "GrB-y0SNkQ",
+     "original": "J9BFFC4SuAN",
+     "number": 1443,
+     "cdate": 1621630323033,
+     "mdate": null,
+     "ddate": null,
+     "tcdate": 1623678911290,
+     "tmdate": 1748260519256,
+     "tddate": null,
+     "forum": "GrB-y0SNkQ",
+     "replyto": null,
+     "invitation": "NeurIPS.cc/2021/Conference/-/Blind_Submission",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "authorids": [
+       "~Synthetic_Person2",
+       "~Synthetic_Person3",
+       "~Synthetic_Person4",
+       "~Synthetic_Person5"
+      ],
+      "authors": [
+       "Synthetic Author 6",
+       "Synthetic Author 7",
+       "Synthetic Author 8",
+       "Synthetic Author 9"
+      ],
+      "keywords": [
+       "Synthetic keywords text 10."
+      ],
+      "TL;DR": "Synthetic tl;dr text 11.",
+      "abstract": "Synthetic abstract text 12.",
+      "submission_history": "",
+      "submission_history_-_venue_and_year": "",
+      "submission_history_-_improvements_made": "",
+      "checklist": "",
+      "code_of_conduct": "Synthetic code of conduct text 13.",
+      "paperhash": "synthetic|synthetic_title_14",
+      "pdf": "/pdf/e3cb3f7fbc100c8570eb5fa0d3fc36cdc2e11658.pdf",
+      "supplementary_material": "/attachment/8fdab9b68c7c1c342c7d893b881260b1e4513671.zip",
+      "community_implementations": "Synthetic community implementations text 15.",
+      "thumbnail": "",
+      "_bibtex": "synthetic.person16@example.org",
+      "venue": "NeurIPS 2021 Submitted",
+      "venueid": "NeurIPS.cc/2021/Conference"
+     },
+     "signatures": [
+      "NeurIPS.cc/2021/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "NeurIPS.cc/2021/Conference"
+     ],
+     "odate": 1636494816901,
+     "details": {
+      "writable": false
+     }
+    }
+   ],
+   "count": 1
+  }
+ }
+}

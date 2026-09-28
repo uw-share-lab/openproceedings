@@ -9,6 +9,7 @@ it; the next run sweeps `.tmp-` leftovers under the lock. Used by `ingest/snapsh
 from __future__ import annotations
 
 import fcntl
+import json
 import logging
 import os
 import shutil
@@ -114,3 +115,21 @@ def place(tmp: Path, target: Path, same: Callable[[Path], bool]) -> bool:
         raise PlacementError(f"{target.name} was placed but doesn't hold what was written; retire it")
     lock(target)
     return True
+
+
+def write_json(path: Path, data: object) -> None:
+    """One JSON file written atomically: a `.tmp-` file in the same directory (sorted keys, one-space indent,
+    UTF-8, a trailing newline), fsynced, then renamed over `path`. A crash leaves the old file or none, never
+    half of one; a leftover temp file is hidden, so no reader takes it for an entry."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = (json.dumps(data, ensure_ascii=False, sort_keys=True, indent=1) + "\n").encode("utf-8")
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=TMP, suffix=".json")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(body)
+            fh.flush()
+            fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise

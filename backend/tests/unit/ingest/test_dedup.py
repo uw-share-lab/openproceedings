@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from openproceedings.ingest import urls
 from openproceedings.ingest.dedup import (
     CONFLICT_FIELDS,
     PRECEDENCE,
@@ -79,8 +80,15 @@ def test_title_key_is_the_token_contract() -> None:
 
 
 def test_the_precedence_table_is_decision_005() -> None:
-    text = ("openreview_v2", "openreview_v1", "neurips_proceedings", "pmlr", "ris")
-    assert PRECEDENCE["status"] == ("neurips_proceedings", "pmlr", "openreview_v2", "openreview_v1", "ris")
+    text = ("openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "ris")
+    assert PRECEDENCE["status"] == (
+        "iclr_archive",
+        "neurips_proceedings",
+        "pmlr",
+        "openreview_v2",
+        "openreview_v1",
+        "ris",
+    )
     assert all(PRECEDENCE[f] == text for f in PRECEDENCE if f != "status")
     assert CONFLICT_FIELDS == ("title", "track", "status")
 
@@ -382,6 +390,124 @@ def test_an_old_style_proceedings_url_names_its_paper() -> None:
     listing = paper(f"nips-{hexed}", source="neurips_proceedings", year=2021)
     same = paper("AbCd1234", year=2021, urls_pdf=upper)
     assert len(dedup([same, listing]).records) == 1  # upper-case hex names the same paper
+
+
+# --- the forum link (TASK-105): a proceedings listing that names its OpenReview forum ------------------
+
+
+def forum(fid: str) -> str:
+    return f"https://openreview.net/forum?id={fid}"
+
+
+def linked(key: str = "key1", fid: str = "AbCd1234", title: str = "Trust in AI", **kw: Any) -> PaperRecord:
+    """A PMLR v235 listing whose index links the OpenReview forum `fid` (track unknown: v235 mixes tracks)."""
+    kw.setdefault("track", "unknown")
+    return paper(
+        f"pmlr-v235-{key}", title, source="pmlr", venue="ICML", year=2024, urls_forum=forum(fid), **kw
+    )
+
+
+def icml(fid: str = "AbCd1234", title: str = "Trust in AI", **kw: Any) -> PaperRecord:
+    kw.setdefault("venue", "ICML")
+    return paper(fid, title, urls_forum=forum(fid), **kw)
+
+
+@pytest.mark.parametrize(
+    ("url", "fid"),
+    [
+        (forum("AbCd1234"), "AbCd1234"),
+        ("http://OpenReview.net/forum?id=AbCd1234", "AbCd1234"),  # any host case, http
+        ("https://openreview.net/forum?id=AbCd1234&noteId=XyZ9876", "AbCd1234"),  # a reply anchor
+        ("https://openreview.net/forum?id=false", "false"),  # the shape is all a URL can check
+        ("https://openreview.net/pdf?id=AbCd1234", None),  # the PDF, not the forum
+        ("https://openreview.net/forum?id=AbCd1234&id=EfGh5678", None),  # two ids: which one?
+        ("https://openreview.net/forum?id=a", None),  # too short for a forum id
+        ("https://openreview.net/forum", None),
+        ("https://api2.openreview.net/forum?id=AbCd1234", None),
+        ("https://example.org/forum?id=AbCd1234", None),
+        ("ftp://openreview.net/forum?id=AbCd1234", None),
+    ],
+)
+def test_forum_id_from_a_url(url: str, fid: str | None) -> None:
+    assert urls.forum_id(url) == fid
+
+
+def test_the_link_merges_whatever_the_titles_say() -> None:
+    orv, listing = icml(title="Trust in AI", status="rejected"), linked(title="Reliance on machines")
+    result = dedup([listing, orv])
+    [r] = result.records
+    assert r.id == orv.id  # the forum id survives
+    assert (r.title, r.track, r.status) == ("Trust in AI", "main", "accepted")  # decision-005 precedence
+    assert r.urls.proceedings == "https://proceedings.mlr.press/v235/key1.html"
+    assert result.merges == (Merge(orv.id, listing.id, "forum_link", "AbCd1234", "ICML", 2024, "pmlr"),)
+    assert set(resolutions(result)) == {"precedence:openreview_v2", "precedence:pmlr"}  # title, status
+    again = dedup(result.records)
+    assert again.records == result.records and not again.merges
+
+
+def test_the_link_comes_before_the_title_and_joins_every_copy() -> None:
+    """The OpenReview note, its RIS copy and the linked listing: one record, every step in merges.csv."""
+    orv = icml()
+    result = dedup(
+        [orv, paper("AbCd1234", "Trust in AI!", source="ris", venue="ICML"), linked(title="Other")]
+    )
+    assert [r.id for r in result.records] == [orv.id]
+    assert [(m.survivor_id, m.merged_id, m.rule) for m in result.merges] == [
+        (orv.id, orv.id, "forum_id"),  # the RIS copy of the same id
+        (orv.id, "op:icml:2024:pmlr-v235-key1", "forum_link"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("why", "records", "field", "resolution"),
+    [
+        (
+            "the link names another year",
+            [icml(year=2023), linked()],
+            "forum_id",
+            "venue_year_not_merged",
+        ),
+        (
+            "the link names another venue",
+            [icml(venue="ICLR"), linked()],
+            "forum_id",
+            "venue_year_not_merged",
+        ),
+        (
+            "the linked note is a workshop paper",
+            [icml(track="workshop"), linked(title="Reliance")],
+            "forum_id",
+            "track_not_merged",
+        ),
+        (
+            "two listings link one forum",
+            [icml(title="A"), linked("key1", title="B"), linked("key2", title="C")],
+            "forum_id",
+            "ambiguous_not_merged",
+        ),
+        (
+            "the title matches but the link names another forum",
+            [icml("AbCd1234"), linked(fid="EfGh5678")],
+            "title_key",
+            "ambiguous_not_merged",
+        ),
+    ],
+)
+def test_a_contradicted_link_never_merges(
+    why: str, records: list[PaperRecord], field: str, resolution: str
+) -> None:
+    result = dedup(records)
+    assert len(result.records) == len(records) and not result.merges
+    assert {(c.field, c.resolution) for c in result.conflicts} == {(field, resolution)}
+    assert dedup(result.records).conflicts == result.conflicts
+
+
+def test_a_link_to_a_forum_that_is_absent_changes_nothing() -> None:
+    listing = linked()
+    assert dedup([listing]).records == (listing,)
+    other = paper("EfGh5678", "Unrelated", venue="ICML")
+    result = dedup([listing, other])
+    assert len(result.records) == 2 and not result.merges and not result.conflicts
 
 
 def test_records_must_match_their_claims() -> None:

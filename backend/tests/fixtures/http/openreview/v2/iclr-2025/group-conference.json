@@ -1,0 +1,117 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "group trimmed to its venueid, visibility and decision keys (web, members, invitations dropped)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/groups?id=ICLR.cc/2025/Conference",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-ratelimit-limit": "700",
+   "x-ratelimit-remaining": "590",
+   "x-ratelimit-reset": "1790543189",
+   "ratelimit-policy": "700;w=3600",
+   "ratelimit-limit": "700",
+   "ratelimit-remaining": "590",
+   "ratelimit-reset": "2261"
+  },
+  "json": {
+   "groups": [
+    {
+     "content": {
+      "submission_id": {
+       "value": "ICLR.cc/2025/Conference/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "ICLR.cc/2025/Conference/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "ICLR.cc/2025/Conference/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "ICLR.cc/2025/Conference/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "ICLR.cc/2025/Conference/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": true
+      },
+      "public_withdrawn_submissions": {
+       "value": true
+      },
+      "public_desk_rejected_submissions": {
+       "value": true
+      },
+      "title": {
+       "value": "The Thirteenth International Conference on Learning Representations"
+      },
+      "subtitle": {
+       "value": "ICLR 2025"
+      },
+      "website": {
+       "value": "https://iclr.cc/Conferences/2025"
+      },
+      "start_date": {
+       "value": "Apr 24 2025"
+      },
+      "withdrawn_submission_id": {
+       "value": "ICLR.cc/2025/Conference/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "ICLR.cc/2025/Conference/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": [
+        "Accept (Oral)",
+        "Accept (Spotlight)",
+        "Accept (Poster)",
+        "Accept (conditional oral)",
+        "Accept (conditional spotlight)",
+        "Accept (conditional poster)"
+       ]
+      }
+     },
+     "id": "ICLR.cc/2025/Conference",
+     "signatures": [
+      "~Synthetic_Person1"
+     ],
+     "signatories": [
+      "ICLR.cc/2025/Conference"
+     ],
+     "nonreaders": [],
+     "readers": [
+      "everyone"
+     ],
+     "writers": [
+      "ICLR.cc/2025/Conference"
+     ],
+     "domain": "ICLR.cc/2025/Conference",
+     "parent": "ICLR.cc/2025",
+     "tcdate": 1720731165376,
+     "cdate": 1720731165376,
+     "tmdate": 1748894759251,
+     "mdate": 1748894759251,
+     "host": "ICLR.cc"
+    }
+   ],
+   "count": 1
+  }
+ }
+}
