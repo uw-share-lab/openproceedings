@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { json, renderWithApi, type Handler } from "@/test/api-stub";
 import { copy, RECORDS } from "@/test/record-fixture";
@@ -81,6 +81,40 @@ describe("confirm (design S1; copy SV-2)", () => {
     expect(
       await screen.findByRole("heading", { name: `Saved as search record ${R.record_id}` }),
     ).toBeTruthy();
+  });
+
+  it("lets Escape abort a pending save and returns focus to the trigger", async () => {
+    const pending = new Promise<Response>(() => {});
+    const { calls } = renderWithApi(<SaveRecord {...PROPS} />, (call) =>
+      call.method === "POST" ? pending : api(created())(call),
+    );
+    const dialog = openConfirm();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]?.signal.aborted).toBe(false);
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    expect(calls[0]?.signal.aborted).toBe(true);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Save search record" }));
+  });
+
+  it("keeps Cancel available while a save is pending", async () => {
+    const pending = new Promise<Response>(() => {});
+    const { calls } = renderWithApi(<SaveRecord {...PROPS} />, (call) =>
+      call.method === "POST" ? pending : api(created())(call),
+    );
+    const dialog = openConfirm();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+
+    expect(cancel.getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(cancel);
+
+    expect(calls[0]?.signal.aborted).toBe(true);
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("is disabled with the reason while the results aren't the searched query's", () => {

@@ -47,10 +47,10 @@ differently from its groups, with round-trip tests against the real parser and n
   parsed by the backend, which a JS-only property test couldn't do.
 
 ## Follow-ups
-- [ ] (for the main session to reserve an id) wildcard expansions under a builder group after Search (needs
-  TASK-042's `/search` response in the workspace).
-- [ ] (for the main session) dimmed "groups that did fit" under the read-only notice (design B2).
-- [ ] (for the main session) ux-writer review of copy deck BD-10 (the strings TASK-043 had to add).
+- [ ] TASK-111: show wildcard expansions under builder groups and dim the groups that fit under the
+  read-only notice.
+- [ ] Copy deck BD-10 review has no separate task; include the builder strings in TASK-047's first usability
+  round rather than creating another pre-study copy pass.
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/agents/query-builder-engineer.md` (fit rule as built, the

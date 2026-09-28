@@ -14,8 +14,9 @@ This is the first of six M3b design docs. The others:
 | [copy deck](2026-09-27-copy-deck.md) | every user-facing string, in ux-writer voice | all of the above |
 | [heuristic pre-pass](2026-09-27-heuristic-prepass.md) | usability-auditor findings and their dispositions, walkthroughs | — |
 
-TASK-046 tests all of them: every wireframe state below is an e2e or visual-regression case, and every
-"Keyboard and screen reader" block is a keyboard-only Playwright flow (accessibility skill).
+TASK-046 tests the critical cross-stack journey plus representative success, error, disclosure, builder,
+dialog, paper, record, coverage and syntax states. Its targeted Playwright flows cover the primary keyboard
+interactions; component tests cover the remaining state and keyboard matrices below.
 
 ## Problem and job
 

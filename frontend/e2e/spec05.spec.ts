@@ -43,6 +43,23 @@ test("the spec 05 review flow searches, includes workshops, exports RIS and save
     .poll(() => resultCount(page), { message: "the result count changes after workshops are included" })
     .not.toBe(before);
   const total = await resultCount(page);
+  const displayedIndex = await page
+    .locator("strong")
+    .filter({ hasText: /^\d+ papers?$/ })
+    .first()
+    .locator("..")
+    .locator("code")
+    .innerText();
+  const shown = new URL(page.url()).searchParams;
+  const apiQuery = new URLSearchParams({
+    q: shown.get("q") as string,
+    mode: shown.get("mode") ?? "native",
+  });
+  const searchResponse = await page.request.get(`http://127.0.0.1:8000/api/v1/search?${apiQuery}`);
+  expect(searchResponse.ok()).toBe(true);
+  const searched = (await searchResponse.json()) as { total: number; index_version: string };
+  expect(total).toBe(searched.total);
+  expect(displayedIndex).toBe(searched.index_version);
 
   const exportButton = page.getByRole("button", { name: `Export ${total} papers` });
   await exportButton.press("ArrowDown");
@@ -55,16 +72,13 @@ test("the spec 05 review flow searches, includes workshops, exports RIS and save
   const path = await saved.path();
   expect(path).not.toBeNull();
   const body = await readFile(path as string, "utf8");
-  const metaResponse = await page.request.get("http://127.0.0.1:8000/api/v1/meta");
-  expect(metaResponse.ok()).toBe(true);
-  const meta = (await metaResponse.json()) as { index_version: string };
   const records = body.split("ER  - \n").filter((record) => record.trim() !== "");
   expect(body.endsWith("ER  - \n\n")).toBe(true);
   expect(records).toHaveLength(total);
   for (const record of records) {
     const normalized = record.trimStart();
     expect(normalized.startsWith("TY  - ")).toBe(true);
-    expect(normalized).toContain(`N1  - openproceedings ${meta.index_version} · query `);
+    expect(normalized).toContain(`N1  - openproceedings ${displayedIndex} · query `);
   }
 
   await page.getByRole("button", { name: "Save search record" }).click();
@@ -95,10 +109,11 @@ test("the editor exposes completion, diagnostics and submission to the keyboard"
   await page.keyboard.press("Enter");
   await expect(editor).toContainText(/^track:\w+/);
 
-  await editor.focus();
+  await expect(editor).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(editor).not.toBeFocused();
-  await editor.focus();
+  await page.goto("/");
+  await expect(editor).toBeFocused();
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.type("trust");
   await page.keyboard.press("Enter");
@@ -108,7 +123,7 @@ test("the editor exposes completion, diagnostics and submission to the keyboard"
   await page.goto(`/search?${new URLSearchParams({ q: "(trust" })}`);
   await expect(page.getByRole("region", { name: "Diagnostics" })).toBeVisible();
   const errorEditor = page.getByRole("textbox", { name: "Query" });
-  await errorEditor.focus();
+  await tabTo(page, errorEditor);
   await page.keyboard.press("ControlOrMeta+Shift+KeyM");
   await expect(page.locator(".cm-panel-lint")).toBeVisible();
 });
@@ -133,7 +148,8 @@ test("the Text and Builder tabs and builder editing work by keyboard alone", asy
   await expect(scope).toHaveValue("title");
 
   const scopedTrust = page.getByRole("button", { name: "title:trust", exact: true });
-  await scopedTrust.focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect(scopedTrust).toBeFocused();
   await page.keyboard.press("Alt+ArrowDown");
   await expect(page.getByText("Group moved down: now group 2 of 2.")).toBeAttached();
   await page.keyboard.press("Delete");

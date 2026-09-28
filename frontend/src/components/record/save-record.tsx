@@ -75,6 +75,7 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
   const [fullNow, setStoreFull] = useState(false);
   const storeFull = fullBefore || fullNow;
   const trigger = useRef<HTMLButtonElement>(null);
+  const saveController = useRef<AbortController | null>(null);
   const reasonId = useId();
   const reason = storeFull ? STORE_FULL_MESSAGE : disabledReason;
 
@@ -82,11 +83,36 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
     if (phase.kind === "index_moved" || phase.kind === "refused") trigger.current?.focus();
   }, [phase.kind]);
 
+  useEffect(() => () => saveController.current?.abort(), []);
+
+  const cancelSave = () => {
+    const controller = saveController.current;
+    saveController.current = null;
+    controller?.abort();
+    setPhase({ kind: "idle" });
+    trigger.current?.focus();
+  };
+
   const save = async () => {
+    const controller = new AbortController();
+    saveController.current = controller;
     setPhase({ kind: "saving" });
-    const posted = await outcomeOf(() =>
-      api.POST("/api/v1/records", { body: { q, mode, index_version: indexVersion } }),
-    );
+    let posted;
+    try {
+      posted = await outcomeOf(
+        () =>
+          api.POST("/api/v1/records", {
+            body: { q, mode, index_version: indexVersion },
+            signal: controller.signal,
+          }),
+        controller.signal,
+      );
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      throw error;
+    }
+    if (saveController.current !== controller) return;
+    saveController.current = null;
     if (posted.kind !== "ok") {
       if (posted.kind === "refused" && posted.error.code === "API_RECORDS_STORE_FULL") {
         rememberStoreFull();
@@ -130,10 +156,7 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
           mode={mode}
           indexVersion={indexVersion}
           total={total}
-          onCancel={() => {
-            setPhase({ kind: "idle" });
-            trigger.current?.focus();
-          }}
+          onCancel={cancelSave}
           onSave={() => void save()}
           saving={phase.kind === "saving"}
         />
@@ -204,7 +227,7 @@ function Confirm({
   const cancelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => saveRef.current?.focus(), []);
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape" && !saving) {
+    if (e.key === "Escape") {
       e.preventDefault();
       onCancel();
     } else if (e.key === "Tab") {
@@ -236,13 +259,7 @@ function Confirm({
           deleted.
         </p>
         <div className="flex justify-end gap-2">
-          <button
-            ref={cancelRef}
-            type="button"
-            aria-disabled={saving || undefined}
-            onClick={() => !saving && onCancel()}
-            className={button}
-          >
+          <button ref={cancelRef} type="button" onClick={onCancel} className={button}>
             Cancel
           </button>
           <button

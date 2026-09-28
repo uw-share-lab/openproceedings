@@ -187,7 +187,7 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
 | [`query-builder-engineer`](agents/query-builder-engineer.md) | Builds the concept-group query builder |
 | [`ux-reviewer`](agents/ux-reviewer.md) | Read-only reviewer of the openproceedings frontend from a systematic reviewer's point of view |
 | [`accessibility-auditor`](agents/accessibility-auditor.md) | Read-only WCAG 2.2 AA auditor for the openproceedings frontend |
-| [`e2e-tester`](agents/e2e-tester.md) | Writes and runs the Playwright suite in frontend/e2e/ against op serve on the fixture index |
+| [`e2e-tester`](agents/e2e-tester.md) | Writes and runs the Playwright suite in frontend/e2e/ against the deterministic fixture API |
 
 
 | Skill | What it's for |

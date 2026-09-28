@@ -53,10 +53,10 @@ diagnostics as squiggles and an accessible list, and the draft/dirty behaviour o
   says so. A `linter()` source would be simpler only if nothing but squiggles used `/parse`.
 
 ## Follow-ups
-- [ ] (for the main session to reserve an id) a `reading` field on `WARN_MIXED_AND_OR` so "Load with
-  parentheses" needn't parse the message.
-- [ ] (for the main session) ux-writer review of the new "The query couldn't be checked: …" strings for
-  `/parse` refusals (429, 503, non-JSON, unreachable), which the copy deck doesn't word.
+- [ ] TASK-099: add a machine-readable `reading` field on `WARN_MIXED_AND_OR` so "Load with parentheses"
+  needn't parse the message.
+- [ ] TASK-100: ux-writer review of the new "The query couldn't be checked: …" strings for `/parse`
+  refusals (429, 503, non-JSON, unreachable), which the copy deck doesn't word.
 
 ## Propagated to
 - Skill updated? — `.claude/skills/codemirror-lezer/SKILL.md` (as-built layout, token-only grammar,

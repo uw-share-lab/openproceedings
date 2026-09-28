@@ -46,11 +46,10 @@ with every number from the API and none typed by hand.
   be skipped by a fast click.
 
 ## Follow-ups
-- [ ] (for the main session to reserve an id) ux-writer review of the strings listed in the design doc's
-  "As built (TASK-044)" section and the methods-text variants in spec 05 §Components 8 *As built*.
-- [ ] (for the main session) a citable fixture: the synthetic snapshot's manifest always names `ris`, so no
-  backend-generated record is citable; a non-bootstrap source in the test snapshot builder would let the
-  fixture carry a real citable record.
+- [ ] The TASK-044 strings have no separate copy task; include them in TASK-047's first usability round.
+- [x] Do not add a second citable E2E fixture now: unit and contract fixtures already cover citable methods
+  text, while changing the synthetic snapshot's provenance would expand TASK-046 without a new user-facing
+  behavior. Reopen this only if a production-source full-stack fixture is introduced.
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/nextjs-conventions/SKILL.md`, `.claude/skills/search-records/SKILL.md`, `CLAUDE.md`, spec 05, the export/records design doc

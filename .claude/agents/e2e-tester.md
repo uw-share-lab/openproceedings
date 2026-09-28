@@ -1,6 +1,6 @@
 ---
 name: e2e-tester
-description: Writes and runs the Playwright suite in frontend/e2e/ against op serve on the fixture index — the spec 05 §Testing flow (review string → tree → workshop toggle changes count and q → RIS export parses with total records → saved record shows reproduced), keyboard and axe checks, and visual regression of the search view in both themes. Use when a frontend flow is added or changed, when the e2e CI job fails, or when screenshots need an intentional update.
+description: Writes and runs the Playwright suite in frontend/e2e/ against the deterministic fixture API — the spec 05 §Testing flow (review string → tree → workshop toggle changes count and q → RIS export parses with total records → saved record shows reproduced), keyboard and axe checks, and visual regression of the search view in both themes. Use when a frontend flow is added or changed, when the e2e CI job fails, or when screenshots need an intentional update.
 tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
@@ -39,9 +39,10 @@ retry you add.
    change is intended, and say so in the PR with before/after.
 6. **Portable browser contract:** pin `@playwright/test` to an exact version in the lockfile, install its
    Chromium with `npx playwright install --with-deps chromium` in CI. Keep `{platform}` in
-   `snapshotPathTemplate`: macOS and the pinned Ubuntu runner have separate reviewed baselines rather than
-   pretending their font rasterizers are interchangeable. Pin CI actions by full commit SHA as well; a
-   floating runner, browser, OS image or action can turn a visual diff into an environment diff.
+   `snapshotPathTemplate`: macOS and the fixed Ubuntu version label have separate reviewed baselines rather
+   than pretending their font rasterizers are interchangeable. Pin the browser version and CI actions by
+   full commit SHA. GitHub can still revise its hosted `ubuntu-24.04` image, so treat an unexplained visual
+   diff as a possible renderer-image change before accepting it.
 7. **Flake discipline:** wait on responses or roles, never `waitForTimeout`. Run `npx playwright test
    --repeat-each=5` on new specs before handing off.
 

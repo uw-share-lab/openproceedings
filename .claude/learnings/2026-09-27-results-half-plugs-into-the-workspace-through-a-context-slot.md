@@ -45,8 +45,8 @@ Build `/search`'s results, exclusion banner, filter sidebar (year included), pag
   Reverse when the API sends a venue name.
 
 ## Follow-ups
-- [ ] (for the main session to reserve an id) `venue_name` on `PaperRecord` for the status line (PA-5).
-- [ ] (for the main session) ux-writer review of the new strings: "Type a four-digit year in both boxes, the
+- [ ] TASK-112: add `venue_name` to `PaperRecord` for the status line (PA-5).
+- [ ] No separate copy task: review the new strings in TASK-047: "Type a four-digit year in both boxes, the
   earlier first.", "Page N is past the last page…", "No papers on page N…", "Admits …"/"Every year.",
   "Loading the paper…", "No provenance recorded."
 

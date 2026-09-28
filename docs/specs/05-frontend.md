@@ -294,7 +294,8 @@ warnings, the save's index check), the design doc says so; its open questions li
 - e2e (`make e2e`, Playwright against `backend/tests/e2e/fixture_server.py`): type one of the review's
   strings → see the tree → toggle workshops → count and `q` change → export RIS → parse `total`
   complete records with the shown index provenance → save a record → the record page shows
-  `reproduced`; keyboard-only flows and axe cover success, error, expanded, dialog, builder, paper and
-  record states in both themes at desktop and 320 px.
+  `reproduced`; targeted keyboard flows cover the primary editor, builder, filter, paging, export and save
+  interactions, while axe samples success, error, expanded, dialog, builder, paper, record, coverage and
+  syntax states in both themes at desktop and 320 px.
 - Visual regression on the search view (both themes), with platform-specific baselines and Linux CI on a
-  pinned runner image.
+  fixed `ubuntu-24.04` runner label (whose hosted image revision can still change).
