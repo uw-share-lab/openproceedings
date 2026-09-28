@@ -1806,7 +1806,7 @@ export interface operations {
             query?: {
                 /** @description `ids` to include the record's sorted id list. */
                 include?: "ids" | null;
-                /** @description `false` to read the stored record without replaying it (TASK-091): `replay` is then null, nothing is run, so it is answered while verification is busy, and it costs one token, not the export weight. Default `true`: the record and a replay check. */
+                /** @description `false` to read the stored record without replaying it (TASK-091): `replay` is then null, nothing is run, so it is answered while verification is busy. Without `include=ids` it costs one token, not the export weight; returning the full membership list costs the export weight. Default `true`: the record and a replay check. */
                 replay?: boolean;
             };
             header?: never;

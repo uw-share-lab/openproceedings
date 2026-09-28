@@ -314,7 +314,8 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   instance still holds is refused the same way. The value must look like an index_version
   (`[0-9a-f][0-9a-f-]{0,63}`, the `/export` parameter's pattern), else 422 `API_BAD_PARAM`.
 - **Cost and capacity.** `POST /records`, `GET /records/{id}` and `/diff` each run a whole query, so each
-  costs the rate limit's `export_weight` (`GET /records/{id}?replay=false` runs none: one token). A save is refused with 503 `API_RECORDS_STORE_FULL` (nothing
+  costs the rate limit's `export_weight` (`GET /records/{id}?replay=false` without `include=ids` runs none and
+  returns no membership list: one token). A save is refused with 503 `API_RECORDS_STORE_FULL` (nothing
   written) once the store holds `ApiConfig.records_max_bytes` (default 1 GiB; `None` for no cap) or its disk
   has less than `records_min_free_bytes` free (default 256 MiB). An empty store always takes its first save.
   Reads are never refused. The store logs `records_store_full` (WARNING) when it fills and

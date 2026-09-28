@@ -10,8 +10,9 @@ Every replay is a 200 whose `replay.status` is `reproduced`, `drifted` or `misma
 is 422 `API_BAD_PARAM`; an unknown one 404 `API_RECORD_NOT_FOUND` (the message never repeats it). A save
 into a full store is 503 `API_RECORDS_STORE_FULL`, and a save pinned (`index_version`) to an index other than
 the served one 409 `API_INDEX_VERSION_UNAVAILABLE`. All three routes cost the export weight in the rate
-limit (each runs a whole query; `GET /records/{id}?replay=false` runs none and costs one token), and a replay's position-verified clauses are charged and capped as a
-search's are (`deps.charge_verified`, on the record's re-parsed canonical). Saves are held to two ceilings
+limit (each runs a whole query; `GET /records/{id}?replay=false` without `include=ids` runs none and costs
+one token), and a replay's position-verified clauses are charged and capped as a search's are
+(`deps.charge_verified`, on the record's re-parsed canonical). Saves are held to two ceilings
 (`SaveCeiling`): each client network (IPv4 /24, IPv6 /48) to `ApiConfig.record_saves_network_burst` at once,
 refilled at `record_saves_network_per_hour`, and every client together to `record_saves_burst`, refilled at
 `record_saves_per_hour` (429 `API_RATE_LIMITED` with `Retry-After` beyond either): the store is
@@ -92,8 +93,9 @@ RECORD_RESOURCE = API_PREFIX + "/records/{record_id}"  # the 201's `Location`
 RecordId = Annotated[str, PathParam(pattern=RECORD_ID, description=RECORD_ID_DOC)]
 REPLAY_DOC = (
     "`false` to read the stored record without replaying it (TASK-091): `replay` is then null, nothing is run, "
-    "so it is answered while verification is busy, and it costs one token, not the export weight. Default "
-    "`true`: the record and a replay check."
+    "so it is answered while verification is busy. Without `include=ids` it costs one token, not the export "
+    "weight; returning the full membership list costs the export weight. Default `true`: the record and a "
+    "replay check."
 )
 
 

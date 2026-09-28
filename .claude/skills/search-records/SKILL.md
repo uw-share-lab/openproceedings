@@ -99,7 +99,8 @@ translations that changed later cannot alter the replay.
   `identification_citable` contradicts its `sources`, is refused as unreadable.
 - **Capacity:** a save is refused (503 `API_RECORDS_STORE_FULL`) when the store is at
   `ApiConfig.records_max_bytes` or its disk below `records_min_free_bytes`. All three record routes cost the
-  rate limit's `export_weight` (but `GET /records/{id}?replay=false`, which runs nothing: one token).
+  rate limit's `export_weight` (but `GET /records/{id}?replay=false` without `include=ids`, which runs
+  nothing and returns no membership list: one token).
 - `POST /records` re-runs the query server-side to compute `total`, `excluded` and `ids_hash`. Never trust
   counts sent by the client.
 
@@ -146,8 +147,9 @@ A record must go (a legal request, personal data in `input`). With the API stopp
   (`records.DERIVED` is excluded from the body), so old bodies have them and none can disagree with its own
   counts; `replay.*` carries the replay's (null when refused). `POST /records {…, index_version}` refuses a
   save on any index but that one (409 `API_INDEX_VERSION_UNAVAILABLE`, checked before the parse and the save
-  ceilings). `GET /records/{id}?replay=false` is the stored record with `replay: null`, no run, one token,
-  answered during `API_BUSY` (decision-014: the only v1 field allowed to become nullable).
+  ceilings). `GET /records/{id}?replay=false` is the stored record with `replay: null`, no run, one token
+  without `include=ids` (full weight with ids), answered during `API_BUSY` (decision-014: the only v1 field
+  allowed to become nullable).
 
 ## The record page and the methods text (TASK-044; spec 05 §Components 8 *As built*)
 `frontend/src/components/record/record-view.tsx` reads `?replay=false` first and the replay second; the

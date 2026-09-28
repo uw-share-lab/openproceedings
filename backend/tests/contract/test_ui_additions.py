@@ -220,6 +220,16 @@ def test_replay_false_costs_one_token_not_the_export_weight(data_dir: Path) -> N
         )  # the route's bool rule
 
 
+def test_replay_false_with_ids_costs_the_export_weight(data_dir: Path) -> None:
+    with TestClient(make_app(data_dir)) as c:
+        record_id = c.post(RECORDS, json={"q": "trust"}).json()["record_id"]
+    limit = RateLimit(capacity=10, refill_per_second=0.001, export_weight=10)
+    with TestClient(make_app(data_dir, rate_limit=limit)) as c:
+        response = c.get(f"{RECORDS}/{record_id}", params={"replay": "false", "include": "ids"})
+        assert response.status_code == 200 and response.json()["record"]["ids"]
+        error(c.get("/api/v1/meta"), 429, "API_RATE_LIMITED")
+
+
 @pytest.mark.parametrize("query", ["replay=false&replay=false", "replay=nope", "replay=false&x=1"])
 def test_a_request_the_route_refuses_is_charged_in_full(data_dir: Path, query: str) -> None:
     """Only a read the route answers without a replay is cheap; anything else pays the record route's weight."""

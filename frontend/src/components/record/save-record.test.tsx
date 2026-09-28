@@ -83,8 +83,9 @@ describe("confirm (design S1; copy SV-2)", () => {
     ).toBeTruthy();
   });
 
-  it("lets Escape abort a pending save and returns focus to the trigger", async () => {
-    const pending = new Promise<Response>(() => {});
+  it("lets Escape dismiss a pending save, then shows its eventual outcome", async () => {
+    let answer: (response: Response) => void = () => {};
+    const pending = new Promise<Response>((resolve) => (answer = resolve));
     const { calls } = renderWithApi(<SaveRecord {...PROPS} />, (call) =>
       call.method === "POST" ? pending : api(created())(call),
     );
@@ -95,26 +96,49 @@ describe("confirm (design S1; copy SV-2)", () => {
 
     fireEvent.keyDown(dialog, { key: "Escape" });
 
-    expect(calls[0]?.signal.aborted).toBe(true);
+    expect(calls[0]?.signal.aborted).toBe(false);
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Save search record" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Saving…" }));
+    answer(created());
+    expect(
+      await screen.findByRole("heading", { name: `Saved as search record ${R.record_id}` }),
+    ).toBeTruthy();
   });
 
-  it("keeps Cancel available while a save is pending", async () => {
-    const pending = new Promise<Response>(() => {});
+  it("offers Close while a save is pending without aborting it", async () => {
+    let answer: (response: Response) => void = () => {};
+    const pending = new Promise<Response>((resolve) => (answer = resolve));
     const { calls } = renderWithApi(<SaveRecord {...PROPS} />, (call) =>
       call.method === "POST" ? pending : api(created())(call),
     );
     const dialog = openConfirm();
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(calls).toHaveLength(1));
-    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    const close = within(dialog).getByRole("button", { name: "Close" });
 
-    expect(cancel.getAttribute("aria-disabled")).toBeNull();
-    fireEvent.click(cancel);
+    expect(close.getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(close);
 
-    expect(calls[0]?.signal.aborted).toBe(true);
+    expect(calls[0]?.signal.aborted).toBe(false);
     expect(screen.queryByRole("dialog")).toBeNull();
+    answer(created());
+    expect(
+      await screen.findByRole("heading", { name: `Saved as search record ${R.record_id}` }),
+    ).toBeTruthy();
+  });
+
+  it("does not abort an irreversible save when the component unmounts", async () => {
+    const pending = new Promise<Response>(() => {});
+    const { calls, unmount } = renderWithApi(<SaveRecord {...PROPS} />, (call) =>
+      call.method === "POST" ? pending : api(created())(call),
+    );
+    const dialog = openConfirm();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+
+    unmount();
+
+    expect(calls[0]?.signal.aborted).toBe(false);
   });
 
   it("is disabled with the reason while the results aren't the searched query's", () => {

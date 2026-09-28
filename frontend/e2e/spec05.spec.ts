@@ -246,3 +246,40 @@ test("the primary search and save controls work by keyboard alone", async ({ pag
   await expect(dialog).toBeHidden();
   await expect(saveRecord).toBeFocused();
 });
+
+test("dismissing a pending save preserves its eventual server result", async ({ page }) => {
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let committed: () => void = () => {};
+  const serverCommitted = new Promise<void>((resolve) => (committed = resolve));
+  await page.route(
+    (url) => url.pathname === "/api/v1/records",
+    async (route) => {
+      const response = await route.fetch();
+      committed();
+      await held;
+      await route.fulfill({ response });
+    },
+  );
+
+  try {
+    await page.goto("/search?q=trust");
+    await expect(page.getByText(/\d+ papers/).first()).toBeVisible();
+    await page.getByRole("button", { name: "Save search record" }).click();
+    const dialog = page.getByRole("dialog", { name: "Save this search as a permanent record?" });
+    await dialog.getByRole("button", { name: "Save" }).click();
+    await serverCommitted;
+
+    await dialog.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole("button", { name: "Saving…" })).toBeFocused();
+
+    release();
+    const recordLink = page.getByRole("link", { name: /\/record\// }).last();
+    await expect(recordLink).toBeVisible();
+    await recordLink.click();
+    await expect(page.getByText(/Reproduced on .*same .* papers/i)).toBeVisible();
+  } finally {
+    release();
+  }
+});

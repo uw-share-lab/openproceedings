@@ -434,9 +434,10 @@ _BOOL = TypeAdapter(bool)
 
 def stored_read(scope: Scope) -> bool:
     """Whether the request is `GET /records/{id}?replay=false` (TASK-091): the stored record read alone, which
-    runs no query, so it costs one token, not the export weight. `replay` is read with the route's own bool
-    rule (pydantic's); every parameter must be one the route takes (`replay`, `include`), each given once.
-    Anything else (a repeat, an unknown parameter, a value the route refuses) is charged in full."""
+    runs no query and returns no membership ids, so it costs one token, not the export weight. `replay` is
+    read with the route's own bool rule (pydantic's); every parameter must be one the route takes (`replay`,
+    `include`), each given once. `include=ids` and anything else (a repeat, an unknown parameter, a value the
+    route refuses) are charged in full."""
     path = scope.get("path", "")
     rest = path[len(RECORDS_PATH) + 1 :] if path.startswith(RECORDS_PATH + "/") else ""
     if scope.get("method") != "GET" or not rest or "/" in rest:
@@ -445,6 +446,8 @@ def stored_read(scope: Scope) -> bool:
         params = parse_qs(scope.get("query_string", b"").decode("latin-1"), keep_blank_values=True)
         if not set(params) <= {"replay", "include"} or any(len(v) != 1 for v in params.values()):
             return False
+        if "include" in params:
+            return False
         return "replay" in params and _BOOL.validate_python(params["replay"][0]) is False
     except (ValidationError, UnicodeDecodeError, ValueError):
         return False
@@ -452,8 +455,8 @@ def stored_read(scope: Scope) -> bool:
 
 class RateLimit:
     """429 `API_RATE_LIMITED` with `Retry-After` once a client's bucket is empty. `/healthz` is free; an
-    export and each record route cost `export_weight` (a `GET /records/{id}?replay=false` read one, `stored_read`).
-    Runs on the event loop only, so the buckets need no lock."""
+    export and each record route cost `export_weight` (a `GET /records/{id}?replay=false` without ids reads
+    one, `stored_read`). Runs on the event loop only, so the buckets need no lock."""
 
     def __init__(
         self,

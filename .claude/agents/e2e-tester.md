@@ -30,6 +30,8 @@ retry you add.
    - export RIS → download, parse it, count `TY` records == `total`, every record has `ER`, and `N1`
      carries the `index_version` shown;
    - save record → follow its record link and see `reproduced`.
+   - after the fixture server commits a delayed save, dismiss its pending dialog → the eventual record link
+     still appears and opens as `reproduced`.
 3. **Transparency assertions:** unit tests cover wildcard expansion chips, mixed-AND/OR warnings and Scholar
    translations; browser axe coverage opens the query and exclusion disclosures.
 4. **Keyboard + axe:** `frontend/e2e/spec05.spec.ts` and `frontend/e2e/accessibility.spec.ts` per the

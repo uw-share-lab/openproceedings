@@ -62,7 +62,7 @@ type Created = { record_id: string; page: string; index_version: string };
 type Phase =
   | { readonly kind: "idle" }
   | { readonly kind: "confirm" }
-  | { readonly kind: "saving" }
+  | { readonly kind: "saving"; readonly dialogOpen: boolean }
   | { readonly kind: "saved"; readonly created: Created; readonly record: RecordOutcome | null }
   | { readonly kind: "index_moved" }
   | { readonly kind: "refused"; readonly failure: Failure };
@@ -75,7 +75,6 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
   const [fullNow, setStoreFull] = useState(false);
   const storeFull = fullBefore || fullNow;
   const trigger = useRef<HTMLButtonElement>(null);
-  const saveController = useRef<AbortController | null>(null);
   const reasonId = useId();
   const reason = storeFull ? STORE_FULL_MESSAGE : disabledReason;
 
@@ -83,36 +82,20 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
     if (phase.kind === "index_moved" || phase.kind === "refused") trigger.current?.focus();
   }, [phase.kind]);
 
-  useEffect(() => () => saveController.current?.abort(), []);
-
-  const cancelSave = () => {
-    const controller = saveController.current;
-    saveController.current = null;
-    controller?.abort();
-    setPhase({ kind: "idle" });
+  const dismissConfirmation = () => {
+    setPhase((current) => {
+      if (current.kind === "saving") return { ...current, dialogOpen: false };
+      if (current.kind === "confirm") return { kind: "idle" };
+      return current;
+    });
     trigger.current?.focus();
   };
 
   const save = async () => {
-    const controller = new AbortController();
-    saveController.current = controller;
-    setPhase({ kind: "saving" });
-    let posted;
-    try {
-      posted = await outcomeOf(
-        () =>
-          api.POST("/api/v1/records", {
-            body: { q, mode, index_version: indexVersion },
-            signal: controller.signal,
-          }),
-        controller.signal,
-      );
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      throw error;
-    }
-    if (saveController.current !== controller) return;
-    saveController.current = null;
+    setPhase({ kind: "saving", dialogOpen: true });
+    const posted = await outcomeOf(() =>
+      api.POST("/api/v1/records", { body: { q, mode, index_version: indexVersion } }),
+    );
     if (posted.kind !== "ok") {
       if (posted.kind === "refused" && posted.error.code === "API_RECORDS_STORE_FULL") {
         rememberStoreFull();
@@ -150,13 +133,13 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
           {reason}
         </span>
       )}
-      {(phase.kind === "confirm" || phase.kind === "saving") && (
+      {(phase.kind === "confirm" || (phase.kind === "saving" && phase.dialogOpen)) && (
         <Confirm
           q={q}
           mode={mode}
           indexVersion={indexVersion}
           total={total}
-          onCancel={cancelSave}
+          onCancel={dismissConfirmation}
           onSave={() => void save()}
           saving={phase.kind === "saving"}
         />
@@ -204,7 +187,7 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
   );
 }
 
-/** S1: a modal dialog; focus starts on Save and stays inside; Esc cancels. */
+/** S1: focus starts on Save and stays inside; Esc cancels before dispatch or closes while it finishes. */
 function Confirm({
   q,
   mode,
@@ -260,7 +243,7 @@ function Confirm({
         </p>
         <div className="flex justify-end gap-2">
           <button ref={cancelRef} type="button" onClick={onCancel} className={button}>
-            Cancel
+            {saving ? "Close" : "Cancel"}
           </button>
           <button
             ref={saveRef}

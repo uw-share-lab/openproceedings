@@ -157,7 +157,9 @@ PRISMA's "duplicates removed" box, never added to openproceedings' dedup stateme
                                   └─────────────────────────────────────────────────────┘
 ```
 - Saves the **searched** `(q, mode)`, never the draft (`POST /records {q, mode}`). Disabled with the reason
-  while dirty or stale, as Export. Focus starts on **Save**; Esc cancels and returns focus to the button.
+  while dirty or stale, as Export. Focus starts on **Save**; before dispatch, Esc cancels and returns focus
+  to the button. While the save is pending, Esc or **Close** dismisses the dialog but the irreversible
+  request continues and its eventual outcome appears beside the button.
 
 ### S2 Saved
 
@@ -401,7 +403,7 @@ may be mistyped, or the paper isn't in the index this instance serves." + a link
 | Export button | menu button (`aria-haspopup="menu"`); ↓ opens, arrows move, Enter chooses, Esc closes and returns focus | name "Export 412 papers"; items "RIS, for Covidence, Zotero, EndNote, 412 papers" |
 | Status warning | not a menu item (a menu holds only actions): it is the menu's description (`aria-describedby`), and a one-line static copy ("Includes 88 rejected, 3 withdrawn papers ▸") sits beside the Export button while the menu is closed, so it can be read without opening the menu | read once when the menu opens |
 | Export progress | the item is `aria-disabled`, text "Preparing…" | polite "Export started: 412 papers, RIS." then "Download ready." |
-| Save confirm | dialog (`role=dialog`, `aria-modal`), focus trapped, Esc cancels | title "Save this search as a permanent record?" |
+| Save confirm | dialog (`role=dialog`, `aria-modal`), focus trapped; Esc cancels before dispatch, or closes while an irreversible save finishes | title "Save this search as a permanent record?" |
 | Saved panel | focus moves to its heading; Copy buttons announce "Copied" | the status sentence is read with the heading |
 | Record status | the status block is the first heading's description; on mismatch it is `role=alert` | the glyph has text: "Reproduced", "Drifted", "Do not cite" |
 | Diff disclosure | button `aria-expanded`; lists with `h3` "Added (12)", "Removed (3)"; paging buttons | — |
@@ -421,7 +423,7 @@ Copy deck §Export, §Save, §Record, §Paper.
 | citability, crawl kind, sources, dedup | `SearchRecord.identification_citable`, `crawl_dates_kind`, `sources`, `dedup` | exists |
 | **identified total** and **unclassified total** for the methods text and the record's Records line | `record.identified_total`, `record.unclassified_total` (and the replay's, and `SearchResponse`'s top-level pair) | **exists** (TASK-090; pre-pass S1): derived server-side, equal to what `op search` prints, so the UI adds no numbers. Everywhere else the page itemises unclassified per map |
 | the default clauses and the user's limit clauses as text | `/parse(canonical)` `defaults` + `filters[*].span` sliced from `canonical` | **works only while `replay.query_version` equals the record's**; otherwise the page cites `canonical` and says the clauses couldn't be separated. Proposed: store `default_clauses` and `limit_clauses` in the record body (v3), or return them at read |
-| a record readable without a replay (when the replay is refused for load) | `GET /records/{id}?replay=false` (`replay: null`, one token, answered during `API_BUSY`) | **exists** (TASK-091; pre-pass S4; decision-014): the page renders the recorded fields and methods text with "Replay: waiting" during a 429 or `API_BUSY` |
+| a record readable without a replay (when the replay is refused for load) | `GET /records/{id}?replay=false` (`replay: null`, one token without `include=ids`, answered during `API_BUSY`) | **exists** (TASK-091; pre-pass S4; decision-014): the page renders the recorded fields and methods text with "Replay: waiting" during a 429 or `API_BUSY` |
 | the index the save ran on vs the one shown | 201 `index_version`; `RecordRequest.index_version` | exists; the save sends the shown index_version and a moved index is 409 `API_INDEX_VERSION_UNAVAILABLE` with nothing saved (TASK-091; pre-pass M3) |
 
 ## Heuristic pass
