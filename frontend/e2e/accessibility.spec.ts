@@ -113,7 +113,9 @@ const states: State[] = [
 
 for (const theme of ["light", "dark"] as const) {
   for (const width of [1280, 320]) {
-    test(`axe finds no WCAG 2.2 AA violations in every UI state (${theme}, ${width}px)`, async ({ page }) => {
+    test(`axe finds no WCAG 2.2 AA violations in selected UI states (${theme}, ${width}px)`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width, height: 900 });
       await chooseTheme(page, theme);
       for (const state of states) {

@@ -23,14 +23,15 @@ retry you add.
    frontend (`next build` then `frontend/.next/standalone/frontend/server.js`), not `next dev`. The temporary
    directory also holds `records/records.sqlite`; never touch `data/`.
 2. **Core flow** (`frontend/e2e/spec05.spec.ts`), one assertion per promise:
-   - type a Trust-Evals string (read from `backend/tests/fixtures/`) → tree visible, default clauses marked;
+   - type the rendered Trust-Evals example (a unit test pins its constant to `backend/tests/fixtures/`) →
+     query tree visible;
    - toggle workshop → editor `q` contains the explicit `track:` clause, URL `q` equals it, the count
-     equals the API's `total` for that `q` (fetch it in the test; don't hard-code);
+     and shown index equal `/search` for that exact `q` (fetch it in the test; don't hard-code);
    - export RIS → download, parse it, count `TY` records == `total`, every record has `ER`, and `N1`
      carries the `index_version` shown;
-   - save record → record page shows the canonical string, the `index_version` and `reproduced`.
-3. **Transparency assertions:** wildcard query shows its expansion chips; mixed AND/OR shows the warning;
-   scholar `source:PMLR` shows the translation.
+   - save record → follow its record link and see `reproduced`.
+3. **Transparency assertions:** unit tests cover wildcard expansion chips, mixed-AND/OR warnings and Scholar
+   translations; browser axe coverage opens the query and exclusion disclosures.
 4. **Keyboard + axe:** `frontend/e2e/spec05.spec.ts` and `frontend/e2e/accessibility.spec.ts` per the
    accessibility skill, both themes, 320 px and desktop, including error, expanded, builder, paper, record
    and dialog states.

@@ -8,7 +8,7 @@ export interface Example {
 /**
  * The Trust-Evals review's main search string, `main-7-most-updated` in
  * `backend/tests/fixtures/queries/trust-evals.txt`, verbatim, in Google Scholar syntax (design W1, pre-pass
- * S11). `examples.test.ts` checks it against that file, so it can't be retyped with a difference.
+ * S11). `transparency.test.tsx` checks it against that file, so it can't be retyped with a difference.
  */
 export const REVIEW_EXAMPLE: Example = {
   q:
