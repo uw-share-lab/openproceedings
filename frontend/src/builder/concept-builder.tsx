@@ -413,7 +413,11 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
         <p role="alert" className="rounded-md border border-warn-border bg-warn-bg p-2 text-warn-fg">
           The server reads the builder&apos;s query differently from these groups, so don&apos;t rely on them
           —{" "}
-          <button type="button" className="underline" onClick={() => props.onEditInText()}>
+          <button
+            type="button"
+            className="inline-flex min-h-6 min-w-6 items-center underline"
+            onClick={() => props.onEditInText()}
+          >
             check it in Text
           </button>
           .

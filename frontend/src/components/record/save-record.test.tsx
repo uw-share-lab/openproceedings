@@ -65,6 +65,24 @@ describe("confirm (design S1; copy SV-2)", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("keeps the focused dialog mounted and announces progress while the save is pending", async () => {
+    let answer: (response: Response) => void = () => {};
+    const pending = new Promise<Response>((resolve) => (answer = resolve));
+    renderWithApi(<SaveRecord {...PROPS} />, (call) =>
+      call.method === "POST" ? pending : api(created())(call),
+    );
+    const dialog = openConfirm();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    const saving = within(dialog).getByRole("button", { name: "Saving…" });
+    expect(screen.getByRole("dialog")).toBe(dialog);
+    expect(document.activeElement).toBe(saving);
+    expect(within(saving).getByRole("status").textContent).toBe("Saving…");
+    answer(created());
+    expect(
+      await screen.findByRole("heading", { name: `Saved as search record ${R.record_id}` }),
+    ).toBeTruthy();
+  });
+
   it("is disabled with the reason while the results aren't the searched query's", () => {
     renderWithApi(<SaveRecord {...PROPS} disabledReason="Search first." />, api(created()));
     const button = screen.getByRole("button", { name: "Save search record" });

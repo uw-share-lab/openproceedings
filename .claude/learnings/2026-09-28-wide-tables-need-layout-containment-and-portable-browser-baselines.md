@@ -1,6 +1,6 @@
 # Overflow scrolling does not contain a wide table unless layout and browser baselines are pinned
 
-**Key lesson:** At 320 px, put wide tables in named focusable overflow regions with layout containment, wait for populated client data before axe or screenshot assertions, and pin Playwright, Chromium and platform-neutral snapshot paths so local and CI exercise the same browser contract.
+**Key lesson:** At 320 px, put wide tables in named focusable overflow regions with layout containment, wait for populated client data before axe or screenshot assertions, and pin Playwright, Chromium, the CI OS and platform-specific snapshot paths so each renderer has an honest baseline.
 
 - **Date:** 2026-09-28 · **Task:** TASK-046 · **Area:** frontend
 - **Artifacts:** `frontend/src/components/coverage/coverage-report.tsx`, `frontend/src/components/help/syntax-help.tsx`, `frontend/e2e/accessibility.spec.ts`, `frontend/playwright.config.ts`, `.github/workflows/e2e.yml`
@@ -24,8 +24,9 @@ reflow and light/dark visual regression, then run it against the production fron
   `/coverage`—before invoking `AxeBuilder` (`frontend/e2e/accessibility.spec.ts`).
 - Visual snapshots are a browser-environment contract as well as a UI contract. TASK-046 pins
   `@playwright/test` 1.63.0 in `package-lock.json`, installs that package's Chromium in CI, pins every CI
-  action by commit SHA, and removes the platform token from `snapshotPathTemplate`; otherwise a baseline
-  generated locally can have a different filename or rendering environment on the Linux runner
+  action by commit SHA, pins the Ubuntu runner, and retains the platform token in `snapshotPathTemplate`;
+  otherwise a baseline generated on macOS is silently treated as Linux-authoritative despite different
+  font rasterization
   (`frontend/playwright.config.ts`, `.github/workflows/e2e.yml`).
 
 ## Dead ends — don't repeat these
@@ -34,13 +35,12 @@ reflow and light/dark visual regression, then run it against the production fron
   focusable region.
 - Do not start axe immediately after `page.goto()` or accept a visible static heading as readiness for a
   client-populated route. Wait for content that only exists after the relevant API request has rendered.
-- Do not accept Playwright's default platform-suffixed screenshot path when one committed baseline must
-  run on macOS and Linux, and do not let the test package float independently of the installed browser.
+- Do not reuse one screenshot baseline across macOS and Linux. Keep platform-suffixed baselines, pin the
+  Linux runner, and do not let the test package float independently of the installed browser.
 
 ## Decisions (and what would change them)
-- Commit one platform-neutral baseline per visual case and tolerate only the suite's bounded pixel ratio.
-  Split baselines by platform only if verified, unavoidable renderer differences exceed that bound and
-  each platform remains an intentional CI target.
+- Commit a reviewed baseline for each platform that intentionally runs the visual suite. CI's pinned Linux
+  baseline is authoritative for the merge gate; the macOS baseline keeps local development useful.
 - Allow a wide semantic data table to scroll inside its own accessible region while prohibiting root
   horizontal scrolling. Replace the table with a reflowed presentation only if its row/column
   relationships remain equally understandable.
@@ -51,7 +51,7 @@ reflow and light/dark visual regression, then run it against the production fron
 ## Propagated to
 - `.claude/skills/accessibility/SKILL.md` — table containment, named focusable scroll regions and
   data-bearing readiness before axe are now explicit requirements.
-- `.claude/agents/e2e-tester.md` — exact Playwright/browser pins and platform-neutral visual snapshot
-  paths are now part of the E2E workflow.
+- `.claude/agents/e2e-tester.md` — exact Playwright/browser/runner pins and platform-specific visual
+  snapshot paths are now part of the E2E workflow.
 - Test added — `frontend/e2e/accessibility.spec.ts` enforces root reflow and scans populated client states;
   `frontend/e2e/visual.spec.ts` plus `frontend/playwright.config.ts` enforce both-theme baselines.

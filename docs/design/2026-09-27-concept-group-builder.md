@@ -197,6 +197,5 @@ differs from or adds to the design above:
 ## Open questions
 1. Should the builder offer NEAR between two groups? Not in M3b (spec 05 defines rows as OR lists); revisit
    after TASK-047.
-2. A pasted Scholar-mode string with `source:` limits: the builder reads the Scholar `ast` (limits appear as
-   `venue:` chips) and, on write, keeps the original `source:` text. TASK-043 must test it with
-   `main-7-most-updated`.
+2. Resolved in TASK-043: the `main-7-most-updated` test proves that a pasted Scholar-mode string with
+   `source:` limits is read through the Scholar `ast` and retains the original `source:` text on write.

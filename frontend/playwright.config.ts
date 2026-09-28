@@ -6,11 +6,11 @@ export default defineConfig({
   testDir: "./e2e",
   outputDir: "./test-results",
   snapshotDir: "./e2e/__screenshots__",
-  snapshotPathTemplate: "{snapshotDir}/{testFileName}-snapshots/{arg}{ext}",
+  snapshotPathTemplate: "{snapshotDir}/{testFileName}-snapshots/{arg}-{platform}{ext}",
   fullyParallel: false,
   workers: 1,
   forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   reporter: process.env.CI ? [["line"], ["html", { open: "never" }]] : "list",
   expect: {
     timeout: 15_000,

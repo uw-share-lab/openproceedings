@@ -11,7 +11,7 @@
  *   together with the text they were reported for, and they are drawn only while the document is that text.
  * - Accessible name "Query" (ED-1), described by the diagnostics summary.
  */
-import { autocompletion } from "@codemirror/autocomplete";
+import { autocompletion, completionStatus } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, insertNewline } from "@codemirror/commands";
 import { bracketMatching } from "@codemirror/language";
 import {
@@ -121,7 +121,9 @@ export function QueryEditor(props: QueryEditorProps) {
 
   useEffect(() => {
     if (parent.current === null) return;
-    const submit = () => {
+    const submit = (editorView: EditorView) => {
+      // Let autocompletion's Enter binding accept the active option before our form-submit binding runs.
+      if (completionStatus(editorView.state) === "active") return false;
       latest.current.onSubmit();
       return true;
     };

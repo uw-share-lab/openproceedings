@@ -272,7 +272,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
 | Field | Why |
 |---|---|
 | `input`, `mode`, `canonical`, `canonical_hash`, `identification_query` | what was searched, and the string that reproduces "identified" |
-| `index_version`, `tokenizer_version`, `query_version`, `snapshot_hash`, `crawl_dates` (per source, from the manifest; only `*`, the corpus-wide from–to window, until M4) | the database version and when its contents were collected |
+| `index_version`, `tokenizer_version`, `query_version`, `snapshot_hash`, `crawl_dates` (the corpus-wide `*` from–to summary plus each claim source's own manifest window when available) | the database version and when its contents were collected |
 | `crawl_dates_kind` (per `crawl_dates` key: `crawl`, `scholar_query_dates` or `mixed`) | what those dates are: a bootstrap source's window is when its Scholar searches were run (Publish or Perish's local time, stored labelled UTC), not a crawl |
 | `sources` (the manifest's source names) and `identification_citable` | whether `total` can be cited as a PRISMA identification number: `false` when every source is a bootstrap one (`vocab.bootstrap_only`, the test `op search`'s "bootstrap corpus" note uses), since the corpus is then an earlier search's output, not a database |
 | `searched_at` (UTC) | the search date, which is separate from the crawl date |
@@ -337,9 +337,9 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
 - **The record** holds every field of the table, plus `record_id`, `body_version` (2), `schema_version` and
   `ranking_params` (the index's two other inputs, so a drifted replay can name a method change after the
   pinned index is gone). `crawl_dates` is keyed by source: `*` is the snapshot manifest's corpus-wide
-  `crawl_window` (today's manifests have only that; a manifest must name its `sources`, or the save is a
-  500: no sources named is not evidence of a crawl), and a source entry that carries its own
-  `crawl_window` (the M4 crawlers) adds its own key. Every end is checked to be an ISO 8601 date-time and is
+  `crawl_window` (a manifest must name its `sources`, or the save is a 500: no sources named is not evidence
+  of a crawl), and each format-2 claim source with a `crawl_windows` entry adds its own key. Every end is
+  checked to be an ISO 8601 date-time and is
   sent in the one timestamp form (§Conventions; a stored `…+00:00` reads back as `…Z`).
   `crawl_dates_kind` has the same keys: a source in `vocab.BOOTSTRAP_SOURCES` (`ris`) gives
   `scholar_query_dates`, any other `crawl`, and `*` is the one kind of all the manifest's sources, or `mixed`.

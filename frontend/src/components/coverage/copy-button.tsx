@@ -9,7 +9,7 @@ export function CopyButton({ value, label }: { value: string; label: string }) {
     <button
       type="button"
       aria-label={`Copy ${label}`}
-      className="rounded-sm border px-1.5 text-xs hover:bg-muted"
+      className="inline-flex min-h-6 min-w-6 items-center justify-center rounded-sm border px-1.5 text-xs hover:bg-muted"
       onClick={() => {
         void navigator.clipboard
           ?.writeText(value)

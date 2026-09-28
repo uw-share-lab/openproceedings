@@ -199,11 +199,12 @@ function StatusBlock({
   onRetry: () => void;
   statusId: string;
 }) {
+  let content: ReactNode;
   if (failure !== null) {
     const waiting =
       failure.kind === "refused" && (failure.status === 429 || failure.error.code === "API_BUSY");
-    return (
-      <div id={statusId} className={warnBox}>
+    content = (
+      <div className={warnBox}>
         <p>
           <span aria-hidden="true">⚠ </span>
           {waiting ? "Replay: waiting" : "Replay: not checked"} — re-running this record&apos;s search to
@@ -229,54 +230,63 @@ function StatusBlock({
         )}
       </div>
     );
-  }
-  if (view === null || replay === null) {
-    return (
-      <p id={statusId} role="status" className="text-sm text-muted-foreground">
+  } else if (view === null || replay === null) {
+    content = (
+      <p className="text-sm text-muted-foreground">
         Checking the record: re-running its search on this instance…
       </p>
     );
-  }
-  if (view.kind === "reproduced") {
-    return (
-      <p id={statusId} className={`${box} break-words`}>
+  } else if (view.kind === "reproduced") {
+    content = (
+      <p className={`${box} break-words`}>
         <span aria-hidden="true">✔ </span>
         {view.text}
       </p>
     );
-  }
-  if (view.kind === "mismatch") return null; // drawn by the page as the blocking state
-  if (view.kind === "refused" || view.kind === "withheld") {
-    return (
-      <p id={statusId} className={`${warnBox} break-words`}>
+  } else if (view.kind === "mismatch") {
+    content = null; // drawn by the page as the blocking alert
+  } else if (view.kind === "refused" || view.kind === "withheld") {
+    content = (
+      <p className={`${warnBox} break-words`}>
         <span aria-hidden="true">⚠ </span>
         <Coded text={view.text} />
       </p>
     );
+  } else {
+    content = (
+      <div className={warnBox}>
+        <p className="break-words">
+          <span aria-hidden="true">⚠ </span>
+          <Coded text={view.text} />
+        </p>
+        {view.membershipIdentical !== null && <p>{view.membershipIdentical}</p>}
+        {view.changes.length > 0 && (
+          <div>
+            <p className="font-semibold">What changed:</p>
+            <ul className="space-y-1">
+              {view.changes.map((c) => (
+                <li key={c.input} className="break-words">
+                  <Code>{c.input}</Code> <Code>{c.recorded}</Code> → <Code>{c.current}</Code>
+                  {c.meaning !== "" && ` — ${c.meaning}`}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {view.added + view.removed > 0 && <RecordDiff id={id} added={view.added} removed={view.removed} />}
+        <p className="break-words">{view.exclusions}</p>
+        <p>{view.cite}</p>
+      </div>
+    );
   }
   return (
-    <div id={statusId} className={warnBox}>
-      <p className="break-words">
-        <span aria-hidden="true">⚠ </span>
-        <Coded text={view.text} />
-      </p>
-      {view.membershipIdentical !== null && <p>{view.membershipIdentical}</p>}
-      {view.changes.length > 0 && (
-        <div>
-          <p className="font-semibold">What changed:</p>
-          <ul className="space-y-1">
-            {view.changes.map((c) => (
-              <li key={c.input} className="break-words">
-                <Code>{c.input}</Code> <Code>{c.recorded}</Code> → <Code>{c.current}</Code>
-                {c.meaning !== "" && ` — ${c.meaning}`}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {view.added + view.removed > 0 && <RecordDiff id={id} added={view.added} removed={view.removed} />}
-      <p className="break-words">{view.exclusions}</p>
-      <p>{view.cite}</p>
+    <div
+      id={statusId}
+      role={failure === null ? "status" : "alert"}
+      aria-live={failure === null ? "polite" : "assertive"}
+      aria-atomic="true"
+    >
+      {content}
     </div>
   );
 }

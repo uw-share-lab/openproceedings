@@ -13,7 +13,7 @@ A search record is the citable artifact of a review search: "we ran *this* canon
 |---|---|
 | `record_id` | a short, URL-safe, unguessable id (random, collision-checked on insert) |
 | `input`, `mode`, `canonical`, `canonical_hash`, `identification_query` | 02's `ParseResult`. `identification_query` is the canonical string with the default conjuncts removed: the string that reproduces "identified" |
-| `index_version`, `tokenizer_version`, `query_version`, `snapshot_hash`, `crawl_dates` (per source, from the manifest; only `*`, the corpus-wide from–to window, until M4) | the database version and when its contents were collected |
+| `index_version`, `tokenizer_version`, `query_version`, `snapshot_hash`, `crawl_dates` (the corpus-wide `*` from–to summary plus each claim source's own manifest window when available) | the database version and when its contents were collected |
 | `crawl_dates_kind` (body v2; per `crawl_dates` key) | what those dates are: `crawl` (fetch times, UTC), `scholar_query_dates` (a bootstrap source's Publish or Perish query dates: local time labelled UTC, so an end can be a day off; say "Scholar searches run …", never "a crawl"), or `mixed` (`*` over both kinds) |
 | `sources` (body v2) | the snapshot manifest's source names, sorted |
 | `identification_citable` (body v2) | `false` when every source is a bootstrap one (`vocab.bootstrap_only`, the same test as `op search`'s "note: bootstrap corpus"): the counts describe an earlier search's output, not a database, so they are not PRISMA identification numbers. The record page then shows that caution and no methods text |

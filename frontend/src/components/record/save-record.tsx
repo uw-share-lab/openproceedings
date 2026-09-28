@@ -78,6 +78,10 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
   const reasonId = useId();
   const reason = storeFull ? STORE_FULL_MESSAGE : disabledReason;
 
+  useEffect(() => {
+    if (phase.kind === "index_moved" || phase.kind === "refused") trigger.current?.focus();
+  }, [phase.kind]);
+
   const save = async () => {
     setPhase({ kind: "saving" });
     const posted = await outcomeOf(() =>
@@ -120,7 +124,7 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
           {reason}
         </span>
       )}
-      {phase.kind === "confirm" && (
+      {(phase.kind === "confirm" || phase.kind === "saving") && (
         <Confirm
           q={q}
           mode={mode}
@@ -131,6 +135,7 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
             trigger.current?.focus();
           }}
           onSave={() => void save()}
+          saving={phase.kind === "saving"}
         />
       )}
       {phase.kind === "saved" && (
@@ -184,6 +189,7 @@ function Confirm({
   total,
   onCancel,
   onSave,
+  saving,
 }: {
   q: string;
   mode: Mode;
@@ -191,13 +197,14 @@ function Confirm({
   total: number;
   onCancel: () => void;
   onSave: () => void;
+  saving: boolean;
 }) {
   const titleId = useId();
   const saveRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => saveRef.current?.focus(), []);
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") {
+    if (e.key === "Escape" && !saving) {
       e.preventDefault();
       onCancel();
     } else if (e.key === "Tab") {
@@ -229,16 +236,25 @@ function Confirm({
           deleted.
         </p>
         <div className="flex justify-end gap-2">
-          <button ref={cancelRef} type="button" onClick={onCancel} className={button}>
+          <button
+            ref={cancelRef}
+            type="button"
+            aria-disabled={saving || undefined}
+            onClick={() => !saving && onCancel()}
+            className={button}
+          >
             Cancel
           </button>
           <button
             ref={saveRef}
             type="button"
-            onClick={onSave}
+            aria-disabled={saving || undefined}
+            onClick={() => !saving && onSave()}
             className="min-h-8 rounded-md border bg-primary px-3 text-primary-foreground hover:opacity-90"
           >
-            Save
+            <span role={saving ? "status" : undefined} aria-live={saving ? "polite" : undefined}>
+              {saving ? "Saving…" : "Save"}
+            </span>
           </button>
         </div>
       </div>

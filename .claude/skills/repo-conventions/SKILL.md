@@ -29,8 +29,9 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `backend/src/openproceedings/coverage.py` | The snapshot manifest's venue × year × track × status breakdown | Never recounts |
 | `backend/src/openproceedings/timestamps.py` | The API's one timestamp form (UTC RFC 3339, `Z`) | |
 | `backend/src/openproceedings/cli.py` | `op` entry point | Thin: calls the same functions as the API |
-| `backend/tests/{unit,golden,differential,bench,contract,fixtures}/` | Tests by kind (`testing-standards`) | |
+| `backend/tests/{unit,golden,differential,bench,contract,e2e,fixtures}/` | Tests by kind (`testing-standards`); `e2e/fixture_server.py` serves the temporary 5k browser fixture | |
 | `frontend/` (M3) | 05: Next.js app, an npm workspace | `frontend/src/api/schema.ts` is generated |
+| `frontend/e2e/` | Playwright full-stack, accessibility and visual tests; platform-specific baselines in `__screenshots__/` | Run with `make e2e` |
 | `docs/specs/` | `NN-name.md`, changed only by PR (`spec-writing`) | |
 | `docs/{design,usability,research}/` | Created as needed | |
 | `docs/plans/` | Implementation plans, `YYYY-MM-DD-<slug>.md` | |

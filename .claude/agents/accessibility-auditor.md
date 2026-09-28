@@ -17,8 +17,8 @@ and the tests, read the code, and report.
 
 ## How you work
 1. Scope: `git diff --name-only origin/dev...HEAD -- frontend/`, or the route `/ux-review` names.
-2. Start `op serve` on the fixture index and the frontend; run the axe suite:
-   `npx playwright test e2e/a11y` (both themes, 320 px and desktop). Report the violation count per page;
+2. From `frontend/`, run the self-starting axe suite:
+   `npx playwright test e2e/accessibility.spec.ts` (both themes, 320 px and desktop). Report the violation count per state;
    a missing axe test for a new route or state is itself a Should.
 3. **Keyboard walk, no mouse:** every flow in `accessibility` §Keyboard flows. Note where focus goes after
    Text↔Builder toggle, row removal, facet toggle, include, export and save-record. Confirm Tab exits

@@ -22,7 +22,12 @@ test("the spec 05 review flow searches, includes workshops, exports RIS and save
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: /foundation model.*large language model/i }).click();
+  const reviewExample = page.getByRole("button", { name: /foundation model.*large language model/i });
+  const reviewString = (await reviewExample.innerText()).replace(/^▸\s*/u, "");
+  await page.getByRole("combobox", { name: "Syntax" }).selectOption("scholar");
+  const editor = page.getByRole("textbox", { name: "Query" });
+  await editor.focus();
+  await page.keyboard.insertText(reviewString);
   await page.getByRole("button", { name: "Search", exact: true }).click();
 
   await expect(page).toHaveURL(/\/search\?q=/);
@@ -50,7 +55,17 @@ test("the spec 05 review flow searches, includes workshops, exports RIS and save
   const path = await saved.path();
   expect(path).not.toBeNull();
   const body = await readFile(path as string, "utf8");
-  expect(body.match(/^TY  - /gm)).toHaveLength(total);
+  const metaResponse = await page.request.get("http://127.0.0.1:8000/api/v1/meta");
+  expect(metaResponse.ok()).toBe(true);
+  const meta = (await metaResponse.json()) as { index_version: string };
+  const records = body.split("ER  - \n").filter((record) => record.trim() !== "");
+  expect(body.endsWith("ER  - \n\n")).toBe(true);
+  expect(records).toHaveLength(total);
+  for (const record of records) {
+    const normalized = record.trimStart();
+    expect(normalized.startsWith("TY  - ")).toBe(true);
+    expect(normalized).toContain(`N1  - openproceedings ${meta.index_version} · query `);
+  }
 
   await page.getByRole("button", { name: "Save search record" }).click();
   const dialog = page.getByRole("dialog", { name: "Save this search as a permanent record?" });
@@ -60,8 +75,130 @@ test("the spec 05 review flow searches, includes workshops, exports RIS and save
   const recordLink = page.getByRole("link", { name: /\/record\// }).last();
   await expect(recordLink).toBeVisible();
   await recordLink.click();
-  await expect(page).toHaveURL(/\/record\/[A-Za-z0-9]{12}$/);
+  await expect(page).toHaveURL(/\/record\/[A-Za-z0-9_-]{12}$/);
   await expect(page.getByText(/Reproduced on .*same .* papers/i)).toBeVisible();
+});
+
+test("the editor exposes completion, diagnostics and submission to the keyboard", async ({ page }) => {
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Query" });
+  await expect(editor).toBeFocused();
+  await page.keyboard.type("track:");
+  await page.keyboard.press("Control+Space");
+  const completions = page.getByRole("listbox");
+  await expect(completions).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(completions).toBeHidden();
+  await page.keyboard.press("Control+Space");
+  await expect(completions).toBeVisible();
+  await page.keyboard.press("ArrowDown", { delay: 100 });
+  await page.keyboard.press("Enter");
+  await expect(editor).toContainText(/^track:\w+/);
+
+  await editor.focus();
+  await page.keyboard.press("Tab");
+  await expect(editor).not.toBeFocused();
+  await editor.focus();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.type("trust");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/search\?q=trust/);
+  await expect(page.getByRole("heading", { name: /Results, page 1 of/ })).toBeVisible();
+
+  await page.goto(`/search?${new URLSearchParams({ q: "(trust" })}`);
+  await expect(page.getByRole("region", { name: "Diagnostics" })).toBeVisible();
+  const errorEditor = page.getByRole("textbox", { name: "Query" });
+  await errorEditor.focus();
+  await page.keyboard.press("ControlOrMeta+Shift+KeyM");
+  await expect(page.locator(".cm-panel-lint")).toBeVisible();
+});
+
+test("the Text and Builder tabs and builder editing work by keyboard alone", async ({ page }) => {
+  await page.goto(`/search?${new URLSearchParams({ q: "(trust OR reliance) AND benchmark" })}`);
+  await expect(page.getByText(/\d+ papers/).first()).toBeVisible();
+  const textTab = page.getByRole("tab", { name: "Text" });
+  await tabTo(page, textTab);
+  await page.keyboard.press("ArrowRight");
+  const builderTab = page.getByRole("tab", { name: "Builder" });
+  await expect(builderTab).toBeFocused();
+  await expect(builderTab).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Enter");
+
+  const trust = page.getByRole("button", { name: "trust", exact: true });
+  await expect(trust).toBeFocused();
+  await page.keyboard.press("Tab");
+  const scope = page.getByLabel("Search in:").first();
+  await expect(scope).toBeFocused();
+  await page.keyboard.press("t");
+  await expect(scope).toHaveValue("title");
+
+  const scopedTrust = page.getByRole("button", { name: "title:trust", exact: true });
+  await scopedTrust.focus();
+  await page.keyboard.press("Alt+ArrowDown");
+  await expect(page.getByText("Group moved down: now group 2 of 2.")).toBeAttached();
+  await page.keyboard.press("Delete");
+  const addTerm = page
+    .getByRole("group", { name: /Group 2 of 2.*reliance/ })
+    .getByRole("button", { name: "+ term" });
+  await expect(addTerm).toBeFocused();
+  await page.keyboard.press("Enter");
+  const input = page.getByRole("textbox", { name: /Term in group/ });
+  await expect(input).toBeFocused();
+  await page.keyboard.type("governance");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: "governance", exact: true })).toBeVisible();
+
+  const group = page.getByRole("group", { name: /^Group 2 of 2/ });
+  const removeGroup = group.getByRole("button", { name: "Remove group" });
+  for (let i = 0; i < 12 && !(await removeGroup.evaluate((el) => el === document.activeElement)); i += 1) {
+    await page.keyboard.press("Shift+Tab");
+  }
+  await expect(removeGroup).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(/Group 2 removed\. 1 group\./)).toBeAttached();
+  await expect(page.locator("h3:focus")).toContainText("Group 1 of 1");
+
+  await page.goto(`/search?${new URLSearchParams({ q: "trust NEAR/5 calibrat*" })}`);
+  await expect(page.getByText(/\d+ papers/).first()).toBeVisible();
+  const readOnlyTextTab = page.getByRole("tab", { name: "Text" });
+  await tabTo(page, readOnlyTextTab);
+  await page.keyboard.press("ArrowRight");
+  const readOnlyTab = page.getByRole("tab", { name: "Builder" });
+  await expect(readOnlyTab).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("heading", { name: "This query is too complex for the builder" }),
+  ).toBeFocused();
+});
+
+test("filters, exclusions and paging work by keyboard and move focus to updated results", async ({
+  page,
+}) => {
+  await page.goto("/search?q=trust");
+  await expect(page.getByText(/\d+ papers/).first()).toBeVisible();
+
+  const main = page.getByRole("checkbox", { name: /main\s*,\s*.* papers/ });
+  await tabTo(page, main);
+  const initiallyChecked = await main.isChecked();
+  await page.keyboard.press("Space");
+  await expect(main).toBeChecked({ checked: !initiallyChecked });
+
+  await page.goto("/search?q=trust");
+  await expect(page.getByText(/\d+ papers/).first()).toBeVisible();
+  const workshop = page.getByRole("button", { name: /Include \d+ workshop papers/ });
+  await tabTo(page, workshop);
+  await page.keyboard.press("Enter");
+  await expect(
+    page
+      .locator("strong")
+      .filter({ hasText: /^\d+ papers?$/ })
+      .first(),
+  ).toBeFocused();
+
+  const next = page.getByRole("button", { name: /Next/ });
+  await tabTo(page, next, 120);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: /Results, page 2 of/ })).toBeFocused();
 });
 
 test("the primary search and save controls work by keyboard alone", async ({ page }) => {

@@ -56,8 +56,9 @@ Only titles and abstracts are indexed. A record without an abstract can be found
   `venue_years[].records`, from the API). A track × status pair with no cell shows `–` (none), never `0` made up.
 - Rows are ordered venue (A–Z), then year (newest first); the table has a caption naming the snapshot, `<th
   scope>` headers, and `tabular-nums`.
-- "Collected … to …" is neutral on purpose: `/coverage` doesn't say what kind the window is (a crawl or Scholar
-  query dates), and the page must never call Scholar search dates a crawl (prisma-reporting). See API fields.
+- The window follows `snapshot.crawl_dates_kind["*"]`: "Crawled", "Google Scholar searches run", or the
+  mixed wording. The `*` entry is the corpus-wide summary; per-source windows remain available in the API.
+  The page never calls Scholar search dates a crawl (prisma-reporting).
 - No chart in M3b: the table is what a methods section cites. A chart can come with the research-dataviz work.
 
 ### Keyboard and screen reader

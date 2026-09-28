@@ -159,11 +159,16 @@ describe("reproduced (design R1)", () => {
       <RecordView id={ID} />,
       api(c, () => pending as unknown as Response),
     );
-    await screen.findByText("Checking the record: re-running its search on this instance…");
+    const checking = await screen.findByText("Checking the record: re-running its search on this instance…");
+    const live = checking.parentElement;
+    if (live === null) throw new Error("the replay status has no live-region parent");
+    expect(live.getAttribute("role")).toBe("status");
     expect(screen.queryByRole("region", { name: "Methods text to cite" })).toBeNull();
     expect(screen.queryByRole("button", { name: /^RIS/ })).toBeNull();
     answer(json(c.replayed));
     await screen.findByRole("region", { name: "Methods text to cite" });
+    expect(screen.getByText(/^Reproduced on /).parentElement).toBe(live);
+    expect(live.textContent).toMatch(/^✔ Reproduced on /);
   });
 });
 

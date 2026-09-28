@@ -48,7 +48,8 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   page's Export menu and Save, the record page and the methods text are `src/components/export/`,
   `src/components/record/` and `src/lib/{export,methods-text,replay-status}.ts` (TASK-044; tested against
   `record-fixture.json`, real API answers kept current by `test_frontend_record_fixture.py`). Tests are Vitest + Testing Library
-  (`src/**/*.test.{ts,tsx}`); `npm test --workspace frontend`.
+  (`src/**/*.test.{ts,tsx}`); `npm test --workspace frontend`. Full-stack browser, accessibility and
+  visual tests live in `frontend/e2e/`, backed by `backend/tests/e2e/`; run them with `make e2e`.
 - `docs/specs` · `docs/{plans,results,design,usability,research}` (created as needed).
 - `backlog/`: Backlog.md, CLI only.
 - `.claude/`: agents, skills, commands, hooks and learnings, all committed. The roster is in

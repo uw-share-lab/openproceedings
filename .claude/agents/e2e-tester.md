@@ -18,10 +18,11 @@ retry you add.
 - Specs: `docs/specs/05-frontend.md` §Testing, `docs/specs/04-backend-api.md` §Exports and §Search records.
 
 ## How you work
-1. **Environment:** the Playwright `webServer` config starts `op serve` on the fixture index and the
-   built standalone frontend (`next build` then `node .next/standalone/server.js`), not `next dev`, so CI
-   tests what ships. Use a fresh temporary `records.sqlite`; never touch `data/`.
-2. **Core flow** (`e2e/search-flow.spec.ts`), one assertion per promise:
+1. **Environment:** `frontend/playwright.config.ts` starts `backend/tests/e2e/fixture_server.py`, which
+   builds the deterministic 5k fixture in a temporary directory and serves it, plus the built standalone
+   frontend (`next build` then `frontend/.next/standalone/frontend/server.js`), not `next dev`. The temporary
+   directory also holds `records/records.sqlite`; never touch `data/`.
+2. **Core flow** (`frontend/e2e/spec05.spec.ts`), one assertion per promise:
    - type a Trust-Evals string (read from `backend/tests/fixtures/`) → tree visible, default clauses marked;
    - toggle workshop → editor `q` contains the explicit `track:` clause, URL `q` equals it, the count
      equals the API's `total` for that `q` (fetch it in the test; don't hard-code);
@@ -30,15 +31,17 @@ retry you add.
    - save record → record page shows the canonical string, the `index_version` and `reproduced`.
 3. **Transparency assertions:** wildcard query shows its expansion chips; mixed AND/OR shows the warning;
    scholar `source:PMLR` shows the translation.
-4. **Keyboard + axe:** `e2e/a11y/*.spec.ts` per `accessibility`, both themes, 320 px and desktop.
+4. **Keyboard + axe:** `frontend/e2e/spec05.spec.ts` and `frontend/e2e/accessibility.spec.ts` per the
+   accessibility skill, both themes, 320 px and desktop, including error, expanded, builder, paper, record
+   and dialog states.
 5. **Visual regression:** `toHaveScreenshot` for `/search` with results, light and dark. Freeze the clock
    (`page.clock`) and mask dates/record ids. Update baselines only with `--update-snapshots` when the
    change is intended, and say so in the PR with before/after.
 6. **Portable browser contract:** pin `@playwright/test` to an exact version in the lockfile, install its
-   Chromium with `npx playwright install --with-deps chromium` in CI, and use a platform-neutral
-   `snapshotPathTemplate` (no `{platform}` token) so the committed baseline has the same path locally and
-   on Linux. Pin CI actions by full commit SHA as well; a floating runner, browser or action can turn a
-   visual diff into an environment diff.
+   Chromium with `npx playwright install --with-deps chromium` in CI. Keep `{platform}` in
+   `snapshotPathTemplate`: macOS and the pinned Ubuntu runner have separate reviewed baselines rather than
+   pretending their font rasterizers are interchangeable. Pin CI actions by full commit SHA as well; a
+   floating runner, browser, OS image or action can turn a visual diff into an environment diff.
 7. **Flake discipline:** wait on responses or roles, never `waitForTimeout`. Run `npx playwright test
    --repeat-each=5` on new specs before handing off.
 
