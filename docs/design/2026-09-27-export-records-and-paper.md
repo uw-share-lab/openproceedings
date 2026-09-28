@@ -159,7 +159,9 @@ PRISMA's "duplicates removed" box, never added to openproceedings' dedup stateme
 - Saves the **searched** `(q, mode)`, never the draft (`POST /records {q, mode}`). Disabled with the reason
   while dirty or stale, as Export. Focus starts on **Save**; before dispatch, Esc cancels and returns focus
   to the button. While the save is pending, Esc or **Close** dismisses the dialog but the irreversible
-  request continues and its eventual outcome appears beside the button.
+  request continues under a page-scoped owner and its eventual outcome appears beside the button even if
+  the results control unmounts and returns. After 30 seconds without an answer it shows SV-9 without aborting;
+  a later valid 201 still restores the saved link. The replay GET starts only while the saved panel is mounted.
 
 ### S2 Saved
 
@@ -185,13 +187,14 @@ PRISMA's "duplicates removed" box, never added to openproceedings' dedup stateme
 - The link is the site origin + `page` from the 201 (`/record/<record_id>`).
 - For a record that isn't citable, the methods box is replaced by the caution (R6).
 
-### S3 Save refused
+### S3 Save refused or outcome unknown
 
 | Response | Panel text | After |
 |---|---|---|
 | 429 `API_RATE_LIMITED` (save ceilings) | the server message (it says whether the instance or the network is at its ceiling) + countdown | Save re-enabled at 0 |
 | 503 `API_RECORDS_STORE_FULL` | "Saving search records is paused on this instance: its record store is full. Your search, exports and existing records still work." | Save disabled for the session with that reason |
 | 503 `API_BUSY` | the server message + countdown | Retry |
+| 503 `API_INDEX_NOT_LOADED` | the server message | Retry (the index dependency refuses before a record can commit) |
 | 422 (the query no longer runs, e.g. a hot swap made a wildcard over-cap) | the diagnostics, as W6 | — |
 | No usable response, or 500 `API_INTERNAL` | SV-9: the outcome is unknown and the server may already have created the permanent record | No Retry; the same `(q, mode, index_version)` stays disabled on this page |
 

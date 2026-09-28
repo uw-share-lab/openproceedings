@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * "Save search record" (spec 05 §Components 8; design S1–S3; copy SV-1–SV-8). A confirm dialog says the record
+ * "Save search record" (spec 05 §Components 8; design S1–S3; copy SV-1–SV-9). A confirm dialog says the record
  * is public and permanent and shows exactly what will be saved: the **searched** `(q, mode)`, never the draft.
  * The save is pinned to the shown index (`POST /records {q, mode, index_version}`, TASK-091): a hot swap is 409
  * `API_INDEX_VERSION_UNAVAILABLE` with nothing saved. After the 201 the panel reads the record back
@@ -10,7 +10,17 @@
  * session (searching, exports and existing records keep working).
  */
 import Link from "next/link";
-import { useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { outcomeOf, type Failure } from "@/api/outcome";
 import { useApi } from "@/components/providers";
 import { plural } from "@/editor/diagnostics";
@@ -32,6 +42,7 @@ export const STORE_FULL_MESSAGE =
 export const SAVE_OUTCOME_UNKNOWN_MESSAGE =
   "The save outcome is unknown. The server may already have created this permanent public-by-link record. " +
   "To avoid creating a duplicate, this page won't send the same save again.";
+export const SAVE_RESPONSE_DEADLINE_MS = 30_000;
 
 function storeFullBefore(): boolean {
   try {
@@ -70,10 +81,11 @@ type SaveRequest = {
 
 type Phase =
   | { readonly kind: "idle" }
-  | { readonly kind: "confirm" }
+  | { readonly kind: "confirm"; readonly request: SaveRequest }
   | { readonly kind: "saving"; readonly dialogOpen: boolean; readonly request: SaveRequest }
   | {
       readonly kind: "saved";
+      readonly attempt: number;
       readonly created: Created;
       readonly record: RecordOutcome | null;
       readonly request: SaveRequest;
@@ -86,30 +98,56 @@ function requestKey(request: SaveRequest): string {
   return JSON.stringify([request.q, request.mode, request.indexVersion]);
 }
 
-/** These refusals happen before a record is committed; transport failures and 5xx internals are ambiguous. */
-function safeToRetry(failure: Failure): boolean {
-  return failure.kind === "refused" && (failure.status === 429 || failure.error.code === "API_BUSY");
+function isCreated(value: unknown): value is Created {
+  if (value === null || typeof value !== "object") return false;
+  const candidate = value as Partial<Created>;
+  return (
+    typeof candidate.record_id === "string" &&
+    /^[A-Za-z0-9][A-Za-z0-9_-]{11}$/.test(candidate.record_id) &&
+    candidate.page === `/record/${candidate.record_id}` &&
+    typeof candidate.index_version === "string" &&
+    /^[0-9a-f]{12}$/.test(candidate.index_version)
+  );
 }
 
-export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: SaveRecordProps) {
+/** These refusals happen before a record is committed; transport failures and 5xx internals are ambiguous. */
+function safeToRetry(failure: Failure): boolean {
+  return (
+    failure.kind === "refused" &&
+    (failure.status === 429 ||
+      failure.error.code === "API_BUSY" ||
+      failure.error.code === "API_INDEX_NOT_LOADED")
+  );
+}
+
+interface SaveController {
+  readonly phase: Phase;
+  readonly unknownRequests: ReadonlyMap<string, Failure>;
+  readonly fullNow: boolean;
+  confirm(request: SaveRequest): void;
+  dismiss(): void;
+  save(request: SaveRequest): Promise<void>;
+  loadRecord(saved: Extract<Phase, { kind: "saved" }>): Promise<void>;
+}
+
+const SaveRecordContext = createContext<SaveController | null>(null);
+
+/** Page-scoped owner: survives conditional Results/SaveRecord remounts and reconciles late POST answers. */
+export function SaveRecordProvider({
+  children,
+  responseDeadlineMs = SAVE_RESPONSE_DEADLINE_MS,
+}: {
+  children: ReactNode;
+  responseDeadlineMs?: number;
+}) {
   const api = useApi();
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
-  // full earlier this session (sessionStorage), or on this page's last save
-  const fullBefore = useSyncExternalStore(noSubscription, storeFullBefore, () => false);
   const [fullNow, setStoreFull] = useState(false);
-  const storeFull = fullBefore || fullNow;
-  const trigger = useRef<HTMLButtonElement>(null);
-  const mounted = useRef(true);
   const activeAttempt = useRef(0);
-  const [unknownRequests, setUnknownRequests] = useState<ReadonlySet<string>>(() => new Set());
-  const reasonId = useId();
-  const shownRequest: SaveRequest = { q, mode, indexVersion, total };
-  const sameSaveIsUnknown = unknownRequests.has(requestKey(shownRequest));
-  const reason = storeFull
-    ? STORE_FULL_MESSAGE
-    : sameSaveIsUnknown
-      ? SAVE_OUTCOME_UNKNOWN_MESSAGE
-      : disabledReason;
+  const mounted = useRef(true);
+  const unknownRef = useRef<ReadonlyMap<string, Failure>>(new Map());
+  const [unknownRequests, setUnknownRequests] = useState<ReadonlyMap<string, Failure>>(() => new Map());
+  const loadingReplay = useRef(new Set<number>());
 
   useEffect(() => {
     mounted.current = true;
@@ -118,31 +156,55 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
     };
   }, []);
 
-  useEffect(() => {
-    if (phase.kind === "index_moved" || phase.kind === "refused" || phase.kind === "unknown") {
-      trigger.current?.focus();
-    }
-  }, [phase.kind]);
+  const rememberUnknown = (request: SaveRequest, failure: Failure) => {
+    const next = new Map(unknownRef.current).set(requestKey(request), failure);
+    unknownRef.current = next;
+    setUnknownRequests(next);
+  };
 
-  const dismissConfirmation = () => {
+  const forgetUnknown = (request: SaveRequest) => {
+    const next = new Map(unknownRef.current);
+    next.delete(requestKey(request));
+    unknownRef.current = next;
+    setUnknownRequests(next);
+  };
+
+  const confirm = (request: SaveRequest) => {
+    const blocked = unknownRef.current.get(requestKey(request));
+    setPhase(
+      blocked === undefined ? { kind: "confirm", request } : { kind: "unknown", failure: blocked, request },
+    );
+  };
+
+  const dismiss = () => {
     setPhase((current) => {
       if (current.kind === "saving") return { ...current, dialogOpen: false };
       if (current.kind === "confirm") return { kind: "idle" };
       return current;
     });
-    trigger.current?.focus();
   };
 
   const save = async (request: SaveRequest) => {
+    const blocked = unknownRef.current.get(requestKey(request));
+    if (blocked !== undefined) {
+      setPhase({ kind: "unknown", failure: blocked, request });
+      return;
+    }
     const attempt = ++activeAttempt.current;
     setPhase({ kind: "saving", dialogOpen: true, request });
+    const deadline = window.setTimeout(() => {
+      if (!mounted.current || activeAttempt.current !== attempt) return;
+      const failure: Failure = { kind: "unreachable" };
+      rememberUnknown(request, failure);
+      setPhase({ kind: "unknown", failure, request });
+    }, responseDeadlineMs);
     const posted = await outcomeOf(() =>
       api.POST("/api/v1/records", {
         body: { q: request.q, mode: request.mode, index_version: request.indexVersion },
       }),
     );
-    const isCurrent = () => mounted.current && activeAttempt.current === attempt;
-    if (!isCurrent()) return;
+    window.clearTimeout(deadline);
+    if (!mounted.current || activeAttempt.current !== attempt) return;
     if (posted.kind !== "ok") {
       if (posted.kind === "refused" && posted.error.code === "API_RECORDS_STORE_FULL") {
         rememberStoreFull();
@@ -159,17 +221,95 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
         return;
       }
       if (!safeToRetry(posted)) {
-        setUnknownRequests((current) => new Set(current).add(requestKey(request)));
+        rememberUnknown(request, posted);
         setPhase({ kind: "unknown", failure: posted, request });
         return;
       }
+      forgetUnknown(request);
       setPhase({ kind: "refused", failure: posted, request });
       return;
     }
-    const created = posted.data;
-    setPhase({ kind: "saved", created, record: null, request });
-    const record = await getRecord(api, created.record_id, true);
-    if (isCurrent()) setPhase({ kind: "saved", created, record, request });
+    if (!isCreated(posted.data)) {
+      const failure: Failure = { kind: "no_answer", status: 201 };
+      rememberUnknown(request, failure);
+      setPhase({ kind: "unknown", failure, request });
+      return;
+    }
+    forgetUnknown(request);
+    setPhase({ kind: "saved", attempt, created: posted.data, record: null, request });
+  };
+
+  const loadRecord = async (saved: Extract<Phase, { kind: "saved" }>) => {
+    if (
+      saved.record !== null ||
+      saved.attempt !== activeAttempt.current ||
+      loadingReplay.current.has(saved.attempt)
+    ) {
+      return;
+    }
+    loadingReplay.current.add(saved.attempt);
+    const record = await getRecord(api, saved.created.record_id, true);
+    loadingReplay.current.delete(saved.attempt);
+    if (mounted.current && activeAttempt.current === saved.attempt) setPhase({ ...saved, record });
+  };
+
+  return (
+    <SaveRecordContext.Provider
+      value={{ phase, unknownRequests, fullNow, confirm, dismiss, save, loadRecord }}
+    >
+      {children}
+    </SaveRecordContext.Provider>
+  );
+}
+
+/** Uses the page owner in production; a local owner keeps isolated component tests and reuse safe. */
+export function SaveRecord(props: SaveRecordProps) {
+  const controller = useContext(SaveRecordContext);
+  if (controller === null) {
+    return (
+      <SaveRecordProvider>
+        <SaveRecord {...props} />
+      </SaveRecordProvider>
+    );
+  }
+  return <SaveRecordInner {...props} controller={controller} />;
+}
+
+function SaveRecordInner({
+  q,
+  mode,
+  indexVersion,
+  total,
+  disabledReason,
+  controller,
+}: SaveRecordProps & { controller: SaveController }) {
+  const { phase } = controller;
+  // full earlier this session (sessionStorage), or on this page's last save
+  const fullBefore = useSyncExternalStore(noSubscription, storeFullBefore, () => false);
+  const storeFull = fullBefore || controller.fullNow;
+  const trigger = useRef<HTMLButtonElement>(null);
+  const reasonId = useId();
+  const shownRequest: SaveRequest = { q, mode, indexVersion, total };
+  const sameSaveIsUnknown = controller.unknownRequests.has(requestKey(shownRequest));
+  const reason = storeFull
+    ? STORE_FULL_MESSAGE
+    : sameSaveIsUnknown
+      ? SAVE_OUTCOME_UNKNOWN_MESSAGE
+      : disabledReason;
+
+  useEffect(() => {
+    if (phase.kind === "index_moved" || phase.kind === "refused" || phase.kind === "unknown") {
+      trigger.current?.focus();
+    }
+  }, [phase.kind]);
+
+  useEffect(() => {
+    if (phase.kind === "saved" && phase.record === null) void controller.loadRecord(phase);
+  }, [controller, phase]);
+
+  const dismissConfirmation = () => {
+    controller.dismiss();
+    trigger.current?.focus();
   };
 
   return (
@@ -180,7 +320,7 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
         aria-disabled={reason !== null || phase.kind === "saving" ? true : undefined}
         aria-describedby={reason !== null ? reasonId : undefined}
         onClick={() => {
-          if (reason === null && phase.kind !== "saving") setPhase({ kind: "confirm" });
+          if (reason === null && phase.kind !== "saving") controller.confirm(shownRequest);
         }}
         className={`${button} ${reason !== null ? "opacity-60" : ""}`}
       >
@@ -193,12 +333,12 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
       )}
       {(phase.kind === "confirm" || (phase.kind === "saving" && phase.dialogOpen)) && (
         <Confirm
-          q={phase.kind === "saving" ? phase.request.q : shownRequest.q}
-          mode={phase.kind === "saving" ? phase.request.mode : shownRequest.mode}
-          indexVersion={phase.kind === "saving" ? phase.request.indexVersion : shownRequest.indexVersion}
-          total={phase.kind === "saving" ? phase.request.total : shownRequest.total}
+          q={phase.request.q}
+          mode={phase.request.mode}
+          indexVersion={phase.request.indexVersion}
+          total={phase.request.total}
           onCancel={dismissConfirmation}
-          onSave={() => void save(shownRequest)}
+          onSave={() => void controller.save(phase.request)}
           saving={phase.kind === "saving"}
         />
       )}
@@ -242,7 +382,7 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
               </ul>
             </div>
           ) : (
-            <FailureNotice failure={phase.failure} onRetry={() => void save(phase.request)} />
+            <FailureNotice failure={phase.failure} onRetry={() => void controller.save(phase.request)} />
           )}
         </div>
       )}

@@ -33,7 +33,7 @@ import {
 import { fieldWarning, type FieldWarning } from "@/lib/export";
 import { CopyButton } from "../copy-button";
 import { ExportMenu } from "../export/export-menu";
-import { SaveRecord } from "../record/save-record";
+import { SaveRecord, SaveRecordProvider } from "../record/save-record";
 import { parseViewOf, useAfter, type Controls, type ParseView } from "./controls";
 import { ExclusionBanner } from "./exclusion-banner";
 import { limitsOf, type Limit } from "./exclusions";
@@ -94,24 +94,26 @@ export function SearchView({ state }: { state: SearchState }) {
   const zero = current?.kind === "ok" && current.data.total === 0;
 
   return (
-    <SearchWorkspace
-      state={state}
-      refusal={refusal}
-      openTree={zero}
-      results={
-        state.q.trim() === "" ? null : (
-          <Results
-            state={state}
-            current={current}
-            good={good}
-            fetching={search.fetching}
-            refetch={search.refetch}
-            swap={swap}
-            onDismissSwap={() => setSwap(null)}
-          />
-        )
-      }
-    />
+    <SaveRecordProvider>
+      <SearchWorkspace
+        state={state}
+        refusal={refusal}
+        openTree={zero}
+        results={
+          state.q.trim() === "" ? null : (
+            <Results
+              state={state}
+              current={current}
+              good={good}
+              fetching={search.fetching}
+              refetch={search.refetch}
+              swap={swap}
+              onDismissSwap={() => setSwap(null)}
+            />
+          )
+        }
+      />
+    </SaveRecordProvider>
   );
 }
 

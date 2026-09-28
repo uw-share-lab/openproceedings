@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { json, renderWithApi, type Handler } from "@/test/api-stub";
 import { copy, RECORDS } from "@/test/record-fixture";
-import { SaveRecord, STORE_FULL_KEY, STORE_FULL_MESSAGE } from "./save-record";
+import { SaveRecord, SaveRecordProvider, STORE_FULL_KEY, STORE_FULL_MESSAGE } from "./save-record";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }), usePathname: () => "/search" }));
 
@@ -13,6 +13,22 @@ afterEach(cleanup);
 const C = RECORDS.limits;
 const R = C.stored.record;
 const PROPS = { q: C.q, mode: C.mode, indexVersion: R.index_version, total: R.total, disabledReason: null };
+
+function SavePage({
+  show,
+  q = PROPS.q,
+  responseDeadlineMs = 1_000,
+}: {
+  show: boolean;
+  q?: string;
+  responseDeadlineMs?: number;
+}) {
+  return (
+    <SaveRecordProvider responseDeadlineMs={responseDeadlineMs}>
+      {show && <SaveRecord {...PROPS} q={q} />}
+    </SaveRecordProvider>
+  );
+}
 
 /** POST /records answers `post`; GET /records/{id} the fixture's replayed record (citable when asked). */
 function api(post: Response, citable = true, get?: Response): Handler {
@@ -145,6 +161,67 @@ describe("confirm (design S1; copy SV-2)", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(calls).toHaveLength(1);
+  });
+
+  it("keeps ownership across a control remount and exposes a late successful save", async () => {
+    let answer: (response: Response) => void = () => {};
+    const pending = new Promise<Response>((resolve) => (answer = resolve));
+    const view = renderWithApi(<SavePage show />, (call) =>
+      call.method === "POST" ? pending : api(created())(call),
+    );
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(view.calls).toHaveLength(1));
+
+    view.rerender(<SavePage show={false} />);
+    await act(async () => {
+      answer(created());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(view.calls).toHaveLength(1);
+
+    view.rerender(<SavePage show />);
+    expect(
+      await screen.findByRole("heading", { name: `Saved as search record ${R.record_id}` }),
+    ).toBeTruthy();
+    await waitFor(() => expect(view.calls).toHaveLength(2));
+    expect(view.calls[1]?.method).toBe("GET");
+  });
+
+  it("keeps an ambiguous save blocked across a control remount", async () => {
+    let fail: (reason: unknown) => void = () => {};
+    const pending = new Promise<Response>((_resolve, reject) => (fail = reject));
+    const view = renderWithApi(<SavePage show />, (call) =>
+      call.method === "POST" ? pending : api(created())(call),
+    );
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(view.calls).toHaveLength(1));
+
+    view.rerender(<SavePage show={false} />);
+    await act(async () => fail(new TypeError("response lost after commit")));
+    view.rerender(<SavePage show />);
+
+    expect((await screen.findByRole("alert")).textContent).toContain("The save outcome is unknown");
+    const saveAgain = screen.getByRole("button", { name: "Save search record" });
+    expect(saveAgain.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(saveAgain);
+    expect(view.calls).toHaveLength(1);
+  });
+
+  it("marks a hung save unknown without aborting it, then reconciles its late success", async () => {
+    let answer: (response: Response) => void = () => {};
+    const pending = new Promise<Response>((resolve) => (answer = resolve));
+    const view = renderWithApi(<SavePage show responseDeadlineMs={10} />, (call) =>
+      call.method === "POST" ? pending : api(created())(call),
+    );
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("The save outcome is unknown");
+    expect(view.calls[0]?.signal.aborted).toBe(false);
+    await act(async () => answer(created()));
+
+    expect(
+      await screen.findByRole("heading", { name: `Saved as search record ${R.record_id}` }),
+    ).toBeTruthy();
   });
 
   it("is disabled with the reason while the results aren't the searched query's", () => {
@@ -284,6 +361,9 @@ describe("refused (design S3)", () => {
   it.each([
     ["lost response", () => Promise.reject(new TypeError("connection dropped after commit"))],
     ["malformed 201", () => new Response("not JSON", { status: 201 })],
+    ["empty object", () => json({}, 201)],
+    ["null body", () => json(null, 201)],
+    ["missing record id", () => json({ page: C.created.page, index_version: R.index_version }, 201)],
     ["API_INTERNAL", () => json({ error: { code: "API_INTERNAL", message: "failed after commit" } }, 500)],
   ])("does not retry an ambiguous committed save (%s)", async (_case, answer) => {
     const committed: string[] = [];
@@ -306,6 +386,36 @@ describe("refused (design S3)", () => {
 
     expect(committed).toEqual(["A23456789012"]);
     expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
+  });
+
+  it("retries API_INDEX_NOT_LOADED because it is refused before a record can commit", async () => {
+    const { calls } = renderWithApi(
+      <SaveRecord {...PROPS} />,
+      api(json({ error: { code: "API_INDEX_NOT_LOADED", message: "index is loading" } }, 503)),
+    );
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(calls).toHaveLength(2));
+  });
+
+  it("keeps the confirmed request and rechecks a blocked key before dispatch", async () => {
+    const { calls, rerender } = renderWithApi(<SaveRecord {...PROPS} />, (call) => {
+      if (call.method === "POST") throw new TypeError("response lost after commit");
+      return api(created())(call);
+    });
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+    await screen.findByRole("alert");
+
+    rerender(<SaveRecord {...PROPS} q="a different safe request" />);
+    const dialog = openConfirm();
+    rerender(<SaveRecord {...PROPS} />);
+    expect(dialog.textContent).toContain("a different safe request");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls.filter((call) => call.method === "POST")).toHaveLength(2));
+
+    const bodies = calls.filter((call) => call.method === "POST").map((call) => call.body);
+    expect(bodies.filter((body) => (body as { q: string }).q === C.q)).toHaveLength(1);
+    expect((bodies[1] as { q: string }).q).toBe("a different safe request");
   });
 
   it("saves nothing on a moved index (409) and says so", async () => {

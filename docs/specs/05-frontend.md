@@ -242,10 +242,14 @@ warnings, the save's index check), the design doc says so; its open questions li
    status and track warnings list `facets[field][value]` for each value the searched clause admits beyond the
    default (`fieldWarning`; zeros left out, never summed), or name the reason with no numbers when the clause is
    negated, nested or written more than once; the formats wait until `/parse` has reported on the shown
-   query. Save posts `{q, mode, index_version}` (a moved index is 409 with nothing saved), then reads the record
-   back for its status and methods text only while that save is still the active attempt. Because a lost or
-   malformed response or a 500 may follow a committed POST, those ambiguous outcomes have no Retry and disable
-   the same save on that page; known pre-commit refusals (429 and `API_BUSY`) remain retryable.
+   query. A page-scoped controller owns Save's `{q, mode, index_version}` POST (a moved index is 409 with
+   nothing saved) across conditional result-control remounts. It snapshots the confirmed request and checks
+   the blocked-key registry again at dispatch. After 30 seconds without an answer it shows the conservative
+   unknown state without aborting; a later valid 201 restores the saved link. The replay read for status and
+   methods text starts only while that saved panel is mounted and only for the active attempt. Because a lost,
+   malformed or schema-invalid response or a 500 may follow a committed POST, those ambiguous outcomes have no
+   Retry and disable the same save on that page; known pre-commit refusals (429, `API_BUSY` and
+   `API_INDEX_NOT_LOADED`) remain retryable.
    `API_RECORDS_STORE_FULL` turns saving off for the session
    (`sessionStorage`). `/record/[id]` (`components/record/record-view.tsx`) reads the stored record first
    (`?replay=false`), then its replay; the methods text and the exports appear once the replay has answered (or
@@ -266,9 +270,10 @@ warnings, the save's index check), the design doc says so; its open questions li
   each clause's check would read).
 - A `422 API_BAD_PARAM` on `/paper/[id]` or `/record/[id]` (a malformed id in the URL) renders as that
   page's not-found state, the same as a 404.
-- A 5xx whose body isn't JSON comes from in front of the app (uvicorn's `limit_concurrency` 503, or the
-  reverse proxy; 04 §Error handling): it means "busy, retry", shown as a retry state, never as an error in
-  the user's query.
+- On idempotent/read requests, a 5xx whose body isn't JSON comes from in front of the app (uvicorn's
+  `limit_concurrency` 503, or the reverse proxy; 04 §Error handling): it means "busy, retry", shown as a
+  retry state, never as an error in the user's query. For the irreversible save POST, the same response is
+  ambiguous and uses SV-9 without Retry because the record may already have committed.
 - A `mismatch` replay is the blocking "do not cite" state of `/record/[id]` (§Pages), not a toast.
 - Nothing is retried silently in a way that could change the displayed set without the user seeing it.
 
