@@ -42,4 +42,3 @@ such field: null exactly when the request says `replay=false`, never otherwise.
 - A typed client (the frontend's `schema.ts`) now types `replay` as nullable and must check it; the record
   page does anyway, to show "Replay: waiting".
 - Any later widening needs its own record; this one is not a general licence.
-
