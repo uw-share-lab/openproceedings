@@ -1,0 +1,62 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2013/conference/-/submission&limit=1",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "replyto": null,
+     "ddate": null,
+     "legacy_migration": true,
+     "tmdate": 1358425800000,
+     "tcdate": 1358425800000,
+     "number": 67,
+     "id": "msGKsXQXNiCBk",
+     "invitation": "ICLR.cc/2013/conference/-/submission",
+     "forum": "msGKsXQXNiCBk",
+     "signatures": [
+      "synthetic.person1@example.org"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "title": "Synthetic title text 2.",
+      "decision": "conferencePoster-iclr2013-workshop",
+      "abstract": "Synthetic abstract text 3.",
+      "pdf": "https://arxiv.org/abs/1301.3618",
+      "paperhash": "synthetic|synthetic_title_4",
+      "keywords": [],
+      "conflicts": [],
+      "authors": [
+       "Synthetic Author 5",
+       "Synthetic Author 6",
+       "Synthetic Author 7",
+       "Synthetic Author 8"
+      ],
+      "authorids": [
+       "synthetic.person9@example.org",
+       "synthetic.person10@example.org",
+       "synthetic.person11@example.org",
+       "synthetic.person12@example.org"
+      ]
+     },
+     "writers": []
+    }
+   ],
+   "count": 67
+  }
+ }
+}

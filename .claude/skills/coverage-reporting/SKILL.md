@@ -47,7 +47,12 @@ One row per cell:
 
 ## Known disagreements (why a cell can be off without a bug)
 - Announced acceptance counts vs final proceedings (post-acceptance withdrawals, camera-ready no-shows).
-- PMLR volume counts vs OpenReview accepted counts for ICML (verify per year at implementation time).
+- PMLR volume counts vs OpenReview accepted counts for ICML: equal for 2023 (1,828), 2024 (2,610) and 2025
+  (3,330 = 3,257 main + 73 position) on 2026-09-27; re-check each crawl.
+- NeurIPS proceedings vs OpenReview: 2024 main 4,034 vs 4,035; 2021 main 2,334 vs 2,630 OpenReview v1
+  "accepted" venues (unexplained; TASK-054). `docs/research/2026-09-27-openreview-and-proceedings-facts.md`.
+- Rejected / withdrawn counts are complete only for ICLR; NeurIPS and ICML publish rejected papers only on
+  the authors' opt-in (decision-012), so their "statuses indexed" cell says so.
 - NeurIPS D&B track: separate count, and ≤2023 proceedings use `Datasets_and_Benchmarks` aliased to
   `_Track` — misclassification shows up as main-track surplus + D&B deficit.
 - ICML position papers counted inside or outside the main total.

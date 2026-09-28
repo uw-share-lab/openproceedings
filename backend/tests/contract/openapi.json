@@ -161,6 +161,7 @@
             "enum": [
               "openreview_v2",
               "openreview_v1",
+              "iclr_archive",
               "neurips_proceedings",
               "pmlr",
               "ris"
@@ -3013,6 +3014,7 @@
               "enum": [
                 "openreview_v2",
                 "openreview_v1",
+                "iclr_archive",
                 "neurips_proceedings",
                 "pmlr",
                 "ris"

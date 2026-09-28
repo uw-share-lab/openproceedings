@@ -10,8 +10,10 @@ never does:
   (`pmlr-v<N>-<key>`, `volumes.py`). The id is never minted: a record that points at an in-scope venue but
   yields no id is skipped as `unresolved` (or `no_id`), and one that points nowhere is `out_of_scope`.
 - **Track**: the venueid; else scholarmend's proceedings track; else the PMLR volume table.
-- **Status** comes from a claim only (spec 01): a venueid → its status; a proceedings listing →
-  `accepted`. When both exist they must name the same venue, year and track (else the record is skipped as
+- **Status** comes from a claim only (spec 01): a venueid → its status, except that an API v1 venue-year's
+  venueid (ICLR ≤2023, NeurIPS 2021–2022) is venue/year/track evidence only and gives `unknown`, since v1
+  puts the bare path on rejected papers too (TASK-095; scholarmend's claims carry no `content.venue`); a
+  proceedings listing → `accepted`. When both exist they must name the same venue, year and track (else the record is skipped as
   a `conflict`); the proceedings then decide acceptance (decision-005), counted in `status_overrides`.
 - **Abstract**: OpenReview's, else the proceedings page's, else `None`; never Scholar's or Semantic
   Scholar's (Scholar's is a snippet).
@@ -41,7 +43,13 @@ from urllib.parse import urlparse
 
 from scholarmend.parse import parse_file
 
-from openproceedings.ingest.classify import Classification, classify_proceedings, classify_venueid
+from openproceedings.ingest.classify import (
+    Classification,
+    classify_neurips_listing,
+    classify_proceedings,
+    classify_venueid,
+    is_v1,
+)
 from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Urls, is_url
 from openproceedings.ingest.urls import PREFIX, pmlr, proceedings, proceedings_parts
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
@@ -138,8 +146,13 @@ def _listing(
         for c, _p in proc:  # the claim must agree with the address it cites: the URL's year and track token
             parts = proceedings_parts(c["evidence"])
             assert parts is not None  # `proc` holds only URLs that parse
-            _v, url_year, _h, token = parts
-            if url_year != year or (token is not None and classify_proceedings(token).track != claimed):
+            url_venue, url_year, _h, token = parts
+            by_url = (  # the NeurIPS miner's host/year/token rules (the 2021 D&B host's round1/round2)
+                classify_neurips_listing(urlparse(c["evidence"]).netloc, url_year, token)[0]
+                if url_venue == "NeurIPS"
+                else classify_proceedings(token or "")
+            )
+            if url_year != year or by_url.track != claimed:
                 return "conflict"
         return (venue, year, f"{PREFIX[venue]}-{sha}", classify_proceedings(track),
                 ("proceedings_url", url), sorted({c["evidence"] for c, _ in proc}))  # fmt: skip
@@ -190,6 +203,8 @@ def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
         if not FORUM_ID.fullmatch(str(fid)):  # a malformed id skips this entry, not the whole file
             return "unresolved"
         evidence = dict.fromkeys(four, ("openreview_api", f"venueid={vid}"))
+        if is_v1(venue, year):  # rejected papers carry the bare path too: the venueid never gives status
+            evidence["status"] = ("openreview_api", f"venueid={vid} (API v1 venue-year: not status evidence)")
         url_claims: tuple[tuple[ClaimField, str, str], ...] = (
             ("urls.forum", f"https://openreview.net/forum?id={fid}", "openreview_url"),
         )

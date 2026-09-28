@@ -46,8 +46,24 @@ its records hold) and `crawl_windows` (per claim source, its first and last `fet
 resolution kind); `files` (the sha256 of `merges.csv` and `conflicts.csv`, which `snapshot_hash` doesn't
 cover); and `sources` — for RIS, one `ImportReport.to_manifest()` per cached file (both inputs' sha256,
 the installed scholarmend `parser_version`, read / imported / skipped by reason, abstract_missing,
-unknown_track, status_overrides, track × status). The crawlers add their own source entries (crawl window, API host
-and version, page counts) in M4. The manifest may hold build times; `records.jsonl` may not. `/coverage`
+unknown_track, status_overrides, track × status) under `ris` (present whenever no other source is); once
+`op ingest openreview` has finished a venue-year, `openreview_v2`: its own `crawl_window` (which search records'
+`crawl_dates` and `/coverage` read) and one `CrawlReport.to_manifest()` per venue-year (groups crawled and skipped
+with the reason, each group's `public_*` flags, notes per venueid, read / imported / skipped by reason,
+unknown_track, abstract_missing, track × status, page size); likewise `openreview_v1` for API v1 years
+(TASK-051: its `crawl_window`, absent when its crawls fetched nothing such as ICLR 2015 alone, and one v1
+`CrawlReport.to_manifest()` per venue-year: notes per invitation, forums read, read / imported / skipped by
+reason, `unmapped` status strings by evidence kind, unknown_track, unknown_status, `authors_unsplit`, the
+number of conflicts, track × status and the year's `coverage_gaps`); and the proceedings crawlers
+(task-052/053) add `neurips_proceedings` and `pmlr`: each `{crawl_window, listings}`, one report per listing
+(venue, year, volume, listing URL, role, `stated` vs `listed` and `count_ok`, records, skipped by reason,
+tracks, abstract_missing with `abstract_title_mismatch` and `page_missing`, unknown_track, `see_also`, its own
+crawl window); `coverage.crawl_dates` picks up each `crawl_window`. `build` (`load_sources`) replays every
+finished crawl offline through one mechanism (`sources/crawl.replay_all` over each source's `common.Crawls`:
+OpenReview v2, v1, NeurIPS, PMLR, in that order; every source's reports share `common.Report`, whose fetch
+times make each `crawl_window`; `op ingest` writes each source's markers through the same `Crawls.ingest`, so a
+marker lands where the replay reads it), and adds the conflicts a v1 crawl found inside one source to
+`conflicts.csv` (`with_crawl_conflicts`). The manifest may hold build times; `records.jsonl` may not. `/coverage`
 (spec 04) and `coverage-auditor` read these counts directly. A format-1 manifest (built before TASK-082)
 still loads: `/coverage` then takes the per-track facts from the records the load verified, and the statuses
 indexed from the source table. A rebuild of the same inputs finds the format-1 directory "not in the current
@@ -57,6 +73,13 @@ format" and is refused, as for any format change: keep serving it, or retire it 
 `op ingest ris <mended.ris>...` checks each scholarmend output imports cleanly, then copies it and the
 `resolved.json` beside it to `<data-dir>/cache/ris/<its directory name>/`. Re-ingesting identical files is
 a no-op; different files under a cached name are refused (a snapshot may already cite them).
+
+`op ingest neurips|pmlr` fills a page cache, `<data-dir>/cache/{neurips,pmlr}/pages/<sha256[:2]>/<sha256>.json`
+(one fixture-shaped entry per URL with its `fetched_at`, each written atomically; a 404 paper page is
+cached as a stable absence), and writes `<data-dir>/cache/<source>/crawls/<year|vN>.json` once a listing's
+pages are all cached. `op snapshot build` re-mines only marked listings, from the cache with no network; a
+marked listing whose pages have gone is a refusal, never a smaller snapshot. An empty cache (no RIS and no
+marked crawl) is refused.
 
 ## Immutability
 - A build or ingest holds an exclusive `flock` on `<dir>/.lock` in the directory it writes into, so
@@ -85,8 +108,12 @@ a no-op; different files under a cached name are refused (a snapshot may already
 
 ## CLI
 - `op [--data-dir data] snapshot build [--from <cache>] [--out <snapshots>]` imports all cached sources,
-  then dedup → write. It never fetches, so it works offline. It prints `{path, snapshot_hash, created}`;
-  `created: false` means a snapshot with that hash already existed and nothing was written.
+  then dedup → write. It never fetches, so it works offline, and an offline cache never expires (TASK-102),
+  so the same cache rebuilds the same bytes at any date. It prints `{path, snapshot_hash, created,
+  unexpected_statuses}`; `created: false` means a snapshot with that hash already existed and nothing was
+  written. `unexpected_statuses` (TASK-109, `ingest/status_check.py`) lists each (venue, year, status) whose
+  records hold a status none of the venue-year's claim sources can supply, with the record ids: a
+  classification error to chase, never written into the snapshot.
 - `op snapshot diff <a> <b>` prints (JSON) the ids **added**, **removed**, **rekeyed** (the same native
   id under a new venue or year, with the fields that differ) and **changed** (where `content_hash`
   differs, with the changed fields named), plus separate counts of **display-only** changes (`authors`,

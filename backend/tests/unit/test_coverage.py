@@ -70,7 +70,7 @@ def _track(track: str, records: int, accepted: int, missing: int, sources: list[
 
 
 def test_the_breakdown_of_a_hand_counted_manifest() -> None:
-    assert breakdown(MANIFEST, "2026-09-23-abababababab") == {
+    assert breakdown(MANIFEST, "2026-09-23-abababababab", official={}) == {
         "snapshot": {
             "name": "2026-09-23-abababababab",
             "snapshot_hash": "ab" * 32,

@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from openproceedings.official_counts import GATED_TRACKS, OFFICIAL_ACCEPTED, within_gate
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.timestamps import utc_z
@@ -379,7 +380,7 @@ def test_the_openapi_document_describes_coverage(client: TestClient) -> None:
 # --- TASK-082: tracks, statuses indexed, per-source windows ------------------------------------------------
 def test_tracks_equal_an_independent_count_of_the_snapshot_records(client: TestClient, store: Store) -> None:
     """Per venue × year × track (spec 07 §C's cell): records, indexed accepted, missing abstracts and the claim
-    sources, counted here from the raw lines; no official count is sourced yet, so nothing is gated."""
+    sources, counted here from the raw lines; every sourced official count carries the gate verdict."""
     body = client.get("/api/v1/coverage").json()
     records = raw_records(snapshot_of(store.indexes.parent, store.big))
     got = {(vy["venue"], vy["year"], t["track"]): t for vy in body["venue_years"] for t in vy["tracks"]}
@@ -392,8 +393,22 @@ def test_tracks_equal_an_independent_count_of_the_snapshot_records(client: TestC
         assert row["indexed_accepted"] == sum(x["status"] == "accepted" for x in mine)
         assert row["abstract_missing"] == sum(x["abstract"] is None for x in mine)
         assert row["sources"] == sorted({c["source"] for x in mine for c in x["provenance"]})
-        assert row["official_accepted"] is None and row["delta"] is None and row["delta_pct"] is None
-        assert (row["gated"], row["within_gate"], row["official_citation"]) == (False, None, None)
+        official = OFFICIAL_ACCEPTED.get(key)
+        if official is None:
+            assert row["official_accepted"] is None and row["delta"] is None and row["delta_pct"] is None
+            assert (row["gated"], row["within_gate"], row["official_citation"]) == (False, None, None)
+        else:
+            indexed = sum(x["status"] == "accepted" for x in mine)
+            assert (row["official_accepted"], row["delta"], row["official_citation"]) == (
+                official.accepted,
+                indexed - official.accepted,
+                official.citation,
+            )
+            gated = key[2] in GATED_TRACKS
+            assert (row["gated"], row["within_gate"]) == (
+                gated,
+                within_gate(indexed, official.accepted) if gated else None,
+            )
     for vy in body["venue_years"]:  # tracks in vocabulary order; they partition the venue-year
         held = {c["track"] for c in vy["cells"]}
         assert [t["track"] for t in vy["tracks"]] == [t for t in TRACKS if t in held]

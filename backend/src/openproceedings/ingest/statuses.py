@@ -9,11 +9,11 @@ table never rewrites what an existing snapshot says.
 
 - An OpenReview note's `content.venueid` can carry every status (`classify.classify_venueid`: the bare
   path is `accepted`, the `…Submission` suffixes `rejected`, `withdrawn`, `desk_rejected` or `unknown`).
-- A proceedings listing (NeurIPS or ICLR proceedings, a PMLR volume) holds accepted papers only
+- A proceedings listing (the ICLR archive, NeurIPS proceedings, or a PMLR volume) holds accepted papers only
   (`classify.classify_proceedings`).
 - The RIS bootstrap resolves each record through a venueid or a listing (spec 01 §Sources, RIS row), so a
   venue-year it covers can carry every status where OpenReview holds that venue-year, and only `accepted`
-  before it: pre-2021 NeurIPS, ICML before 2023 and ICLR before 2018 come from proceedings only.
+  outside it: pre-2021 NeurIPS, ICML before 2023 and ICLR 2015 come from proceedings only.
 """
 
 from __future__ import annotations
@@ -22,17 +22,17 @@ from collections.abc import Iterable
 from typing import get_args
 
 from openproceedings.ingest.record import Source
+from openproceedings.ingest.sources.openreview_v1 import ADAPTERS
+from openproceedings.ingest.sources.openreview_v2 import FIRST_V2_YEAR
 from openproceedings.vocab import STATUSES
 
 EVERY_STATUS: tuple[str, ...] = STATUSES
 ACCEPTED_ONLY: tuple[str, ...] = ("accepted",)
-# The first year OpenReview holds each venue (spec 01 §Sources: API v1 from ICLR 2018 and NeurIPS 2021, API v2
-# from ICML 2023); a pinned test reads the same years from spec 01's table
-OPENREVIEW_FROM: dict[str, int] = {"ICLR": 2018, "NeurIPS": 2021, "ICML": 2023}
 # per claim source: the statuses it can carry in a venue-year OpenReview holds, and in any other
 SOURCE_STATUSES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "openreview_v2": (EVERY_STATUS, EVERY_STATUS),
     "openreview_v1": (EVERY_STATUS, EVERY_STATUS),
+    "iclr_archive": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "neurips_proceedings": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "pmlr": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "ris": (EVERY_STATUS, ACCEPTED_ONLY),
@@ -42,9 +42,11 @@ if set(SOURCE_STATUSES) != set(get_args(Source)):  # a new claim source needs a 
 
 
 def on_openreview(venue: str, year: int) -> bool:
-    """Whether OpenReview holds `venue`'s `year` (spec 01 §Sources)."""
-    first = OPENREVIEW_FROM.get(venue)
-    return first is not None and year >= first
+    """Whether OpenReview holds `venue`'s `year` (spec 01 §Sources): a non-empty API v1 adapter or a year
+    at or after the venue's first API v2 year. ICLR 2015 deliberately has an empty adapter."""
+    adapter = ADAPTERS.get((venue, year))
+    first_v2 = FIRST_V2_YEAR.get(venue)
+    return (adapter is not None and bool(adapter.listings)) or (first_v2 is not None and year >= first_v2)
 
 
 def statuses_indexed(sources: Iterable[str], venue: str, year: int, present: Iterable[str] = ()) -> list[str]:

@@ -189,8 +189,8 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   | ICML | 1988 on | `International Conference on Machine Learning (ICML <year>)` |
 
   This covers every year the sources can yield, and every year each venue was held under its name (spec 01
-  §Sources: NeurIPS proceedings for all years, from 1987; ICLR from 2018 on OpenReview; ICML from 2020 on PMLR,
-  whose first ICML volume is 2013's v28; the crawl's earliest year is TASK-049, proposed 2018). Sources,
+  §Sources: NeurIPS proceedings for all years, from 1987; ICLR on OpenReview from 2013; ICML on PMLR from
+  2013's v28; the crawl starts in 2013, decision-013). Sources,
   checked 2026-09-27: [proceedings.neurips.cc](https://proceedings.neurips.cc/) labels 1987–2017 "NIPS" and
   2018 on "NeurIPS"; the board announced the new acronym on 16 November 2018, before that December's
   meeting ([Synced, 2018-11-19](https://syncedreview.com/2018/11/19/name-flip-flop-nips-is-now-neurips/));

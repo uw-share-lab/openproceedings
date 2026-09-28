@@ -265,7 +265,7 @@ def test_build_writes_the_layout(cache: Path, tmp_path: Path) -> None:
     }
     assert (manifest["format_version"], manifest["record_schema_version"], manifest["tokenizer_version"]) == (
         "2",
-        "1",
+        "2",
         "2",
     )
     assert manifest["openproceedings_version"]

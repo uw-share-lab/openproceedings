@@ -3,40 +3,34 @@ table (`ingest/statuses.py`), pinned to spec 01's source table and to what the c
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
 from typing import get_args
 
 import pytest
 from openproceedings.ingest.classify import classify_proceedings, classify_venueid
 from openproceedings.ingest.record import Source
+from openproceedings.ingest.sources.openreview_v1 import ADAPTERS
+from openproceedings.ingest.sources.openreview_v2 import FIRST_V2_YEAR
 from openproceedings.ingest.statuses import (
     ACCEPTED_ONLY,
     EVERY_STATUS,
-    OPENREVIEW_FROM,
     SOURCE_STATUSES,
     on_openreview,
     statuses_indexed,
 )
 from openproceedings.vocab import STATUSES
 
-SPEC_01 = Path(__file__).resolve().parents[4] / "docs" / "specs" / "01-ingestion.md"
 
-
-def test_openreview_first_years_are_spec_01s() -> None:
-    """The first year of each venue on OpenReview, read from spec 01 §Sources' two OpenReview rows (a hand
-    copy here could drift from both)."""
-    rows = [
-        line
-        for line in SPEC_01.read_text(encoding="utf-8").splitlines()
-        if line.startswith("| OpenReview API")
-    ]
-    assert len(rows) == 2
-    covers = " ".join(row.split("|")[2] for row in rows)
-    first: dict[str, int] = {}
-    for venue, year in re.findall(r"(ICLR|NeurIPS|ICML) (\d{4})", covers):
-        first[venue] = min(first.get(venue, 9999), int(year))
-    assert first == OPENREVIEW_FROM
+def test_openreview_years_come_from_the_crawler_adapters() -> None:
+    """TASK-115: the irregular ICLR v1 years cannot be represented by a single lower bound."""
+    assert {year: on_openreview("ICLR", year) for year in range(2013, 2018)} == {
+        2013: True,
+        2014: True,
+        2015: False,
+        2016: True,
+        2017: True,
+    }
+    assert all(on_openreview(venue, year) for (venue, year), adapter in ADAPTERS.items() if adapter.listings)
+    assert all(on_openreview(venue, year) for venue, year in FIRST_V2_YEAR.items())
 
 
 def test_every_claim_source_has_a_row() -> None:
@@ -63,8 +57,11 @@ def test_a_venueid_can_carry_every_status_and_a_listing_only_accepted() -> None:
         # where OpenReview holds the venue-year, a venueid can carry any status
         (["ris"], "NeurIPS", 2021, list(STATUSES)),
         (["ris"], "ICML", 2023, list(STATUSES)),
-        (["ris"], "ICLR", 2018, list(STATUSES)),
-        (["ris"], "ICLR", 2017, ["accepted"]),
+        (["ris"], "ICLR", 2013, list(STATUSES)),
+        (["ris"], "ICLR", 2014, list(STATUSES)),
+        (["ris"], "ICLR", 2015, ["accepted"]),
+        (["ris"], "ICLR", 2016, list(STATUSES)),
+        (["ris"], "ICLR", 2017, list(STATUSES)),
         (["openreview_v2"], "ICML", 2025, list(STATUSES)),
         (["pmlr", "openreview_v2"], "ICML", 2024, list(STATUSES)),  # a union, in vocabulary order
         (["pmlr"], "ICML", 2024, ["accepted"]),  # a listing alone, even where OpenReview has the year

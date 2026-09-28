@@ -1,0 +1,133 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICLR.cc/2024/Conference&limit=1",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "x-ratelimit-limit": "500",
+   "x-ratelimit-remaining": "271",
+   "x-ratelimit-reset": "1790543172",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-limit": "500",
+   "ratelimit-remaining": "271",
+   "ratelimit-reset": "2261"
+  },
+  "json": {
+   "notes": [
+    {
+     "content": {
+      "title": {
+       "value": "Synthetic title text 1."
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 2",
+        "Synthetic Author 3",
+        "Synthetic Author 4",
+        "Synthetic Author 5",
+        "Synthetic Author 6",
+        "Synthetic Author 7"
+       ]
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person8",
+        "~Synthetic_Person9",
+        "~Synthetic_Person10",
+        "~Synthetic_Person11",
+        "~Synthetic_Person12",
+        "~Synthetic_Person13"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 14.",
+        "Synthetic keywords text 15.",
+        "Synthetic keywords text 16.",
+        "Synthetic keywords text 17.",
+        "Synthetic keywords text 18."
+       ]
+      },
+      "TLDR": {
+       "value": "Synthetic tldr text 19."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 20."
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 21."
+      },
+      "code_of_ethics": {
+       "value": "Synthetic code of ethics text 22."
+      },
+      "submission_guidelines": {
+       "value": "Synthetic submission guidelines text 23."
+      },
+      "anonymous_url": {
+       "value": "Synthetic anonymous url text 24."
+      },
+      "no_acknowledgement_section": {
+       "value": "Synthetic no acknowledgement section text 25."
+      },
+      "venue": {
+       "value": "ICLR 2024 poster"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2024/Conference"
+      },
+      "pdf": {
+       "value": "/pdf/178e173a880d7872c0a79d88e005426c20501329.pdf"
+      },
+      "supplementary_material": {
+       "value": "/attachment/1d89c5d545a0f9d97e06087ffe6cecd202365a40.zip"
+      },
+      "_bibtex": {
+       "value": "synthetic.person26@example.org"
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_27"
+      }
+     },
+     "id": "rhgIgTSSxW",
+     "forum": "rhgIgTSSxW",
+     "signatures": [
+      "ICLR.cc/2024/Conference/Submission9502/Authors"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "writers": [
+      "ICLR.cc/2024/Conference",
+      "ICLR.cc/2024/Conference/Submission9502/Authors"
+     ],
+     "number": 9502,
+     "odate": 1697213872796,
+     "invitations": [
+      "ICLR.cc/2024/Conference/-/Submission",
+      "ICLR.cc/2024/Conference/-/Post_Submission",
+      "ICLR.cc/2024/Conference/Submission9502/-/Revision",
+      "ICLR.cc/2024/Conference/Submission9502/-/Rebuttal_Revision",
+      "ICLR.cc/2024/Conference/-/Edit",
+      "ICLR.cc/2024/Conference/Submission9502/-/Camera_Ready_Revision"
+     ],
+     "domain": "ICLR.cc/2024/Conference",
+     "tcdate": 1695558732991,
+     "cdate": 1695558732991,
+     "tmdate": 1713672174575,
+     "mdate": 1713672174575,
+     "pdate": 1705411064826,
+     "version": 2
+    }
+   ]
+  }
+ }
+}

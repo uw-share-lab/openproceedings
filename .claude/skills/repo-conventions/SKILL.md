@@ -13,7 +13,7 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `.githooks/` | `commit-msg` (attribution), `pre-push` (`make lint` + `make tooling`) | Installed by `scripts/setup-dev.sh` |
 | `.github/` | Workflows, `dependabot.yml` | Actions pinned by SHA |
 | `backend/` (M1) | The uv workspace member, package `openproceedings` (`backend/pyproject.toml`) | |
-| `backend/src/openproceedings/ingest/` | 01: `record.py`, `classify.py`, `urls.py`, `volumes.py`, `ris.py`, `dedup.py`, `snapshot.py`; `sources/` (M4 crawlers) | Only place that makes network calls |
+| `backend/src/openproceedings/ingest/` | 01: `record.py`, `classify.py`, `urls.py`, `volumes.py` (+ `pmlr_volumes.toml`, the PMLR volume table), `ris.py`, `dedup.py`, `snapshot.py`; `sources/` (M4 crawlers: `http.py` the one HTTP layer, `common.py`, `openreview_client.py`, `openreview_v2.py`, `openreview_v1.py`, `neurips.py`, `pmlr.py`, `crawl.py`) | Only place that makes network calls (`sources/http.py`, for every crawler) |
 | `backend/src/openproceedings/query/` | 02: `normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`, `ast.py`, `canonical.py`, `defaults.py`, `compat.py` | Pure; no I/O |
 | `backend/src/openproceedings/engine/` | 03: `protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py` (ranking included), `exclusions.py`, `highlight.py`, `parity.py` | Pure except index file reads |
 | `backend/src/openproceedings/api/` | 04: `app.py`, `config.py`, `state.py`, `deps.py`, `errors.py`, `middleware.py`, `models.py` (the contract), `openapi.py`, `server.py`; routers `search.py`, `papers.py`, `meta.py`, `coverage.py`, `records.py`, `export.py`, `health.py` | Transport only: routes call the package-level functions below |

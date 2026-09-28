@@ -202,7 +202,7 @@ Rules:
 | `title:` / `abstract:` | text | that field only |
 | `venue:` | filter | `NeurIPS`, `ICLR`, `ICML`. Case-insensitive, exact. |
 | `year:` | filter | `2024`, `2020..2026` (inclusive) |
-| `track:` | filter | 01 taxonomy (`main`, `datasets_benchmarks`, `workshop`, …) |
+| `track:` | filter | 01 taxonomy (`main`, `datasets_benchmarks`, `workshop`, …). `datasets_benchmarks` includes NeurIPS 2026's renamed `Evaluations_and_Datasets_Track`, and `position` includes the NeurIPS and ICML position-paper tracks (TASK-094) |
 | `status:` | filter | `accepted`, `rejected`, `withdrawn`, … |
 | `source:` | compat | Scholar-style. Mapped to `venue:` through an alias table ("neural information processing systems", "PMLR" → ICML *with a warning* because PMLR hosts other venues). Unknown values are errors, never silent substrings. |
 
@@ -212,6 +212,14 @@ When a query has no **top-level** `track:` clause, the parser adds
 `track:(main OR datasets_benchmarks OR position)`. When it has no top-level `status:` clause, it adds
 `status:accepted`. Defaults are **made explicit in the canonical string**, so the saved string shows them.
 The UI toggles edit these same clauses; they are not a separate state.
+
+- **What `status:accepted` removes** (decision-012). The index holds every public submission, so the
+  status default excludes `rejected`, `withdrawn`, `desk_rejected` and `unknown` records, each counted in
+  its own exclusion bucket (03 §Exclusion accounting). Those buckets are complete for ICLR, which
+  publishes every submission, and a floor for NeurIPS and ICML, which publish rejected papers only when
+  the authors opt in (01 §Status handling). `status:(accepted OR rejected)` or removing the default brings
+  them into the result set. The index covers every year from 2013 (decision-013); a year range is always
+  a `year:` clause the user writes, never a default.
 
 - **A default is recognised by its content, not by where it came from.** A top-level AND conjunct that
   exactly equals a default clause is treated as the automated default, whether the parser inserted it,

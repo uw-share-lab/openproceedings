@@ -36,7 +36,9 @@ fixes.
 ## What is a Must
 - Any merge across venue or year. A key that can be `(title, "")`, `(title, None)`, or have an empty
   title.
-- A title merge between two OpenReview records with different forum ids.
+- A title merge between two OpenReview records with different forum ids, or between a listing whose
+  `urls.forum` link names one forum and a note of another.
+- A `forum_link` merge across venue or year, or one that joins two proceedings ids.
 - A merge that picks field values by input order instead of precedence.
 - Dedup whose output depends on input order.
 - Records lost without a `merges.csv` row.

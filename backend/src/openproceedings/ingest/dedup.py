@@ -6,8 +6,13 @@ a review, a duplicate only shows in the hit count.
 1. Records with the same id merge, from any source: the same OpenReview forum id in the same venue and
    year, or the same proceedings id (one paper reached by both Trust-Evals searches). One forum id in two
    venue-years is a conflict, never a merge.
+   Then the **forum link** (TASK-105): clusters that name the same forum id, as their own id or in a kept
+   `urls.forum` claim (PMLR's index links the OpenReview forum from 2023; v235 is recorded), merge in the
+   same venue and year whatever their titles say, unless the result would hold two forum ids, two
+   proceedings ids, or a track the proceedings don't host. A refused link, and a link across venue-years,
+   is a `conflicts.csv` row.
 2. Clusters then merge on `(venue, year, title key)` only **across sources** (their provenance source
-   sets are disjoint), never two different forum ids or two different proceedings ids, and never a
+   sets are disjoint), never two different forum ids (own or linked) or two different proceedings ids, and never a
    paper whose track the proceedings don't host into a proceedings listing (a record with a proceedings
    id or a proceedings source). A key that would join clusters sharing a source is ambiguous: nothing
    merges, and `conflicts.csv` says so.
@@ -31,8 +36,12 @@ from openproceedings.ingest import urls
 from openproceedings.ingest.record import Claim, ClaimField, PaperRecord, Source, Urls
 from openproceedings.query.normalize import normalize
 
-_TEXT: tuple[Source, ...] = ("openreview_v2", "openreview_v1", "neurips_proceedings", "pmlr", "ris")
-_ACCEPTANCE: tuple[Source, ...] = ("neurips_proceedings", "pmlr", "openreview_v2", "openreview_v1", "ris")
+_TEXT: tuple[Source, ...] = (
+    "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "ris",
+)  # fmt: skip
+_ACCEPTANCE: tuple[Source, ...] = (
+    "iclr_archive", "neurips_proceedings", "pmlr", "openreview_v2", "openreview_v1", "ris",
+)  # fmt: skip
 # decision-005: OpenReview first for text and track; the official proceedings decide acceptance; RIS last.
 PRECEDENCE: dict[ClaimField, tuple[Source, ...]] = {
     **dict.fromkeys(
@@ -45,7 +54,7 @@ PRECEDENCE: dict[ClaimField, tuple[Source, ...]] = {
 # Cross-source disagreements written to conflicts.csv. A title counts only when its dedup key differs
 # (decision-005); venue and year can't differ inside a merge (they're part of every merge key).
 CONFLICT_FIELDS: tuple[ClaimField, ...] = ("title", "track", "status")
-_PROCEEDINGS_SOURCES = frozenset({"neurips_proceedings", "pmlr"})
+_PROCEEDINGS_SOURCES = frozenset({"iclr_archive", "neurips_proceedings", "pmlr"})
 _PROCEEDINGS_TRACKS = frozenset({"main", "datasets_benchmarks", "position"})  # proceedings never host others
 _URL_FIELDS = ("urls.proceedings", "urls.pdf")
 
@@ -54,8 +63,10 @@ _URL_FIELDS = ("urls.proceedings", "urls.pdf")
 class Merge:
     survivor_id: str
     merged_id: str
-    rule: str  # forum_id | native_id | title_venue_year
-    key: str  # the title key that joined the merged cluster to the group (in a chain, not always the survivor's)
+    rule: str  # forum_id | native_id | forum_link | title_venue_year
+    # forum_link: the shared forum id; title_venue_year: the title key that joined the merged cluster to the
+    # group (in a chain, not always the survivor's)
+    key: str
     venue: str
     year: int
     sources: str  # the merged record's sources, "+"-joined
@@ -188,8 +199,10 @@ class _Clusters:
 
 @dataclass(frozen=True)
 class _Cluster:
-    """A step-1 cluster (records sharing one id), judged as the record its claims resolve to."""
+    """A step-1 cluster (records sharing one id, or one forum id by the link), judged as the record its
+    claims resolve to under its id."""
 
+    id: str
     members: tuple[PaperRecord, ...]
     summary: PaperRecord
     sources: frozenset[str]
@@ -200,41 +213,57 @@ class _Cluster:
     # input), so a merged record still carries the ids of the listings it absorbed
     proceedings_ids: frozenset[str]
     listed: bool  # a proceedings listing: proceedings id or proceedings source
-
-    @property
-    def id(self) -> str:
-        return self.members[0].id
+    # its own forum id and every one a kept `urls.forum` claim names (a PMLR listing's link to OpenReview)
+    forum_ids: frozenset[str]
 
 
 def _url_natives(claims: Iterable[Claim]) -> set[str]:
-    return {
-        n
-        for c in claims
-        if c.field in _URL_FIELDS and isinstance(c.value, str) and (n := urls.native(c.value))
-    }
+    found: set[str] = set()
+    for claim in claims:
+        if claim.field not in _URL_FIELDS or not isinstance(claim.value, str):
+            continue
+        native = urls.native(claim.value)
+        if native is None and claim.source == "iclr_archive" and claim.field == "urls.proceedings":
+            target = urls.iclr_archive_target(claim.value)
+            native = target[0] if target is not None else None
+        if native is not None:
+            found.add(native)
+    return found
 
 
-def _cluster(members: Sequence[PaperRecord]) -> _Cluster:
-    summary, _ = resolve(
-        members[0].id, [c for r in members for c in r.provenance]
-    )  # rows come from the final resolve
+def _forum_ids(record: PaperRecord) -> frozenset[str]:
+    """The record's own forum id and every forum id its kept `urls.forum` claims name."""
+    linked = {
+        f for c in record.provenance
+        if c.field == "urls.forum" and isinstance(c.value, str) and (f := urls.forum_id(c.value))
+    }  # fmt: skip
+    if record.forum_id is not None:
+        linked.add(record.forum_id)
+    return frozenset(linked)
+
+
+def _cluster(members: Sequence[PaperRecord], rid: str | None = None) -> _Cluster:
+    rid = rid or members[0].id
+    summary, _ = resolve(rid, [c for r in members for c in r.provenance])  # rows come from the final resolve
     claims = summary.provenance  # kept claims only: the output record carries nothing else
     pids = _url_natives(claims)
     sources = _sources(members)
     return _Cluster(
-        members=tuple(members), summary=summary, sources=sources,
+        id=rid, members=tuple(members), summary=summary, sources=sources,
         keys=frozenset(k for c in summary.provenance if c.field == "title" and (k := title_key(_text(c.value)))),
         proceedings_ids=frozenset(pids), listed=bool(pids or sources & _PROCEEDINGS_SOURCES),
+        forum_ids=_forum_ids(summary),
     )  # fmt: skip
 
 
-def _mergeable(group: Sequence[_Cluster]) -> str | None:
-    """Why these step-1 clusters must not share a record, or None if they may."""
+def _mergeable(group: Sequence[_Cluster], *, linked: bool = False) -> str | None:
+    """Why these step-1 clusters must not share a record, or None if they may. `linked`: they share a forum
+    id (the forum link), so one source on two sides is no ambiguity: the id says which paper each is."""
     srcs = [c.sources for c in group]
-    if any(srcs[i] & srcs[j] for i in range(len(srcs)) for j in range(i + 1, len(srcs))):
+    if not linked and any(srcs[i] & srcs[j] for i in range(len(srcs)) for j in range(i + 1, len(srcs))):
         return "ambiguous_not_merged"  # two candidates from one source: which one is the paper?
-    if len({c.summary.forum_id for c in group} - {None}) > 1:
-        return "ambiguous_not_merged"  # two different OpenReview submissions
+    if len(frozenset[str]().union(*(c.forum_ids for c in group))) > 1:
+        return "ambiguous_not_merged"  # two different OpenReview submissions (own or linked forum ids)
     if len(frozenset().union(*(c.proceedings_ids for c in group))) > 1:
         return "ambiguous_not_merged"  # two different proceedings papers
     if any(c.listed for c in group) and any(
@@ -273,15 +302,18 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
     by_id: dict[str, list[PaperRecord]] = defaultdict(list)
     for r in xs:
         by_id[r.id].append(r)
-    clusters: list[_Cluster] = []
+    same_id: list[_Cluster] = []
     for rid in sorted(by_id):
         cluster = _cluster(by_id[rid])
-        clusters.append(cluster)
+        same_id.append(cluster)
         rule = "forum_id" if cluster.summary.forum_id is not None else "native_id"
         merges += [
             Merge(rid, rid, rule, cluster.summary.native, r.venue, r.year, "+".join(sorted(_sources([r]))))
             for r in by_id[rid][1:]
         ]  # the same id twice: one row per extra copy, survivor_id == merged_id
+    # The forum link: one forum id (own or in a urls.forum claim) in the same venue and year, any title.
+    clusters, linked = _link(same_id)
+    merges += linked
     # Step 2: (venue, year, title key) across sources.
     buckets: dict[tuple[str, int, str], set[int]] = defaultdict(set)
     for ci, c in enumerate(clusters):
@@ -322,18 +354,70 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
     )
 
 
+def _link(same_id: Sequence[_Cluster]) -> tuple[list[_Cluster], list[Merge]]:
+    """The forum link: step-1 clusters naming one forum id (own or in a kept `urls.forum` claim) in one venue
+    and year merge, whatever their titles, unless `_mergeable(linked=True)` refuses. One `forum_link` row per
+    merged cluster, from its id to the survivor's. Sorted by id, so the input order never matters."""
+    buckets: dict[tuple[str, int, str], set[int]] = defaultdict(set)
+    for ci, c in enumerate(same_id):
+        for fid in c.forum_ids:
+            buckets[(c.summary.venue, c.summary.year, fid)].add(ci)
+    joined = _Clusters(len(same_id))
+    linked_by: dict[int, str] = {}  # cluster → the forum id it linked on
+    for (_, _, fid), cis in sorted(buckets.items()):
+        ordered = sorted(cis)
+        if len(ordered) < 2 or _mergeable([same_id[ci] for ci in ordered], linked=True) is not None:
+            continue  # a refused link is reported by _refusals, against the output records
+        for ci in ordered:
+            joined.union(ordered[0], ci)
+            linked_by.setdefault(ci, fid)
+    clusters: list[_Cluster] = []
+    merges: list[Merge] = []
+    for group in joined.groups():
+        # a cluster naming two forum ids never links (_mergeable), so buckets can't chain; checked anyway
+        refused = len(group) > 1 and _mergeable([same_id[ci] for ci in group], linked=True) is not None
+        for part in [[ci] for ci in group] if refused else [group]:
+            members = [same_id[ci] for ci in part]
+            if len(members) == 1:
+                clusters.append(members[0])
+                continue
+            survivor = _survivor_id(members)
+            cluster = _cluster([r for m in members for r in m.members], survivor)
+            clusters.append(cluster)
+            merges += [
+                Merge(survivor, same_id[ci].id, "forum_link", linked_by[ci], cluster.summary.venue,
+                      cluster.summary.year, "+".join(sorted(same_id[ci].sources)))
+                for ci in part if same_id[ci].id != survivor
+            ]  # fmt: skip
+    return sorted(clusters, key=lambda c: c.id), merges
+
+
 def _refusals(out: Sequence[PaperRecord]) -> set[Conflict]:
     """The not-merged rows, judged on the output records, so a second run reports exactly the same rows:
-    one forum id in two venue-years, and every title key shared by records that stayed apart (a key
-    whose records could merge alone was refused as part of a chain)."""
+    one forum id (own or linked) in two venue-years, a forum link refused within one venue-year, and every
+    title key shared by records that stayed apart (a key or forum id whose records could merge alone was
+    refused as part of a chain)."""
     clusters = sorted((_cluster([r]) for r in out), key=lambda c: c.id)
     rows: set[Conflict] = set()
     by_forum: dict[str, list[_Cluster]] = defaultdict(list)
     for c in clusters:
-        if c.summary.forum_id is not None:
-            by_forum[c.summary.forum_id].append(c)
-    for same in by_forum.values():  # one forum id in two venue-years: a conflict, never a merge
-        rows.update(_pair(same[0], c, "venue_year_not_merged", "forum_id") for c in same[1:])
+        for fid in c.forum_ids:
+            by_forum[fid].append(c)
+    for same in by_forum.values():
+        first = same[0]  # one forum id in two venue-years: a conflict, never a merge
+        rows.update(
+            _pair(first, c, "venue_year_not_merged", "forum_id")
+            for c in same[1:]
+            if (c.summary.venue, c.summary.year) != (first.summary.venue, first.summary.year)
+        )
+        by_venue_year: dict[tuple[str, int], list[_Cluster]] = defaultdict(list)
+        for c in same:
+            by_venue_year[(c.summary.venue, c.summary.year)].append(c)
+        for group in by_venue_year.values():  # one forum id in one venue-year, still apart: the link refused
+            if len(group) > 1:
+                reason = _mergeable(group, linked=True)
+                fld = "forum_id" if reason else "forum_id_chain"
+                rows.update(_pair(group[0], c, reason or "ambiguous_not_merged", fld) for c in group[1:])
     buckets: dict[tuple[str, int, str], list[_Cluster]] = defaultdict(list)
     for c in clusters:
         for key in c.keys:

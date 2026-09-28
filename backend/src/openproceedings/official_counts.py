@@ -30,7 +30,272 @@ class OfficialCount:
 
 # (venue, year, track) → its official accepted count
 type OfficialTable = dict[tuple[str, int, str], OfficialCount]
-OFFICIAL_ACCEPTED: OfficialTable = {}
+OFFICIAL_ACCEPTED: OfficialTable = {
+    ("ICLR", 2013, "main"): OfficialCount(
+        24,
+        "conference-track papers on the ICLR 2013 accepted list (workshop track excluded)",
+        "https://iclr.cc/archive/2013/conference-proceedings.html",
+        date(2026, 9, 27),
+    ),
+    ("ICLR", 2014, "main"): OfficialCount(
+        35,
+        "conference-track papers on the ICLR 2014 accepted list (workshop track excluded)",
+        "https://iclr.cc/archive/2014/conference-proceedings",
+        date(2026, 9, 27),
+    ),
+    ("ICLR", 2015, "main"): OfficialCount(
+        31,
+        "distinct conference-track papers on the accepted list (11 orals also listed as posters, counted once; workshop papers excluded)",
+        "https://iclr.cc/archive/www/doku.php%3Fid=iclr2015:accepted-main.html",
+        date(2026, 9, 27),
+    ),
+    ("ICLR", 2016, "main"): OfficialCount(
+        80,
+        "conference-track papers on the accepted list: 15 orals + 65 posters (workshop track excluded)",
+        "https://iclr.cc/archive/www/doku.php%3Fid=iclr2016:accepted-main.html",
+        date(2026, 9, 27),
+    ),
+    ("ICLR", 2017, "main"): OfficialCount(
+        198,
+        "conference-track papers in the conference poster sessions C1-C198 (orals included; workshop invitations excluded)",
+        "https://iclr.cc/archive/www/doku.php%3Fid=iclr2017:conference_posters.html",
+        date(2026, 9, 27),
+    ),
+    ("ICLR", 2018, "main"): OfficialCount(
+        336,
+        "conference papers on the ICLR 2018 virtual-site paper list (orals + posters)",
+        "https://iclr.cc/virtual/2018/papers.html",
+        date(2026, 9, 27),
+    ),
+    ("ICLR", 2019, "main"): OfficialCount(
+        501,
+        "conference papers on the ICLR 2019 virtual-site paper list (orals + posters)",
+        "https://iclr.cc/virtual/2019/papers.html",
+        date(2026, 9, 27),
+    ),
+    ("ICLR", 2020, "main"): OfficialCount(
+        687,
+        "conference papers on the ICLR 2020 virtual-site paper list (orals + spotlights + posters)",
+        "https://iclr.cc/virtual/2020/papers.html",
+        date(2026, 9, 27),
+    ),
+    ("ICLR", 2021, "main"): OfficialCount(
+        860,
+        "posters in the fact sheet, one per accepted paper (orals and spotlights included); the virtual-site list also has 860",
+        "https://iclr.cc/media/Press/ICLR_2021_Fact_Sheet.pdf",
+        date(2026, 9, 27),
+    ),
+    ("ICLR", 2022, "main"): OfficialCount(
+        1095,
+        "total accepted papers in the fact sheet (orals + spotlights + posters)",
+        "https://iclr.cc/media/Press/ICLR_2022_Fact_Sheet.pdf",
+        date(2026, 9, 27),
+    ),
+    ("ICLR", 2023, "main"): OfficialCount(
+        1574,
+        "accepted papers in the fact sheet: 91 top-5% + 280 top-25% + 1,203 posters",
+        "https://media.iclr.cc/Conferences/ICLR2023/ICLR2023-Fact_Sheet.pdf",
+        date(2026, 9, 27),
+    ),
+    ("ICLR", 2024, "main"): OfficialCount(
+        2260,
+        "papers in the ICLR 2024 proceedings index (equals the fact sheet's accepted count); Tiny Papers and blog posts excluded",
+        "https://proceedings.iclr.cc/paper_files/paper/2024",
+        date(2026, 9, 27),
+    ),
+    ("ICLR", 2025, "main"): OfficialCount(
+        3703,
+        "papers in the ICLR 2025 proceedings index (fact sheet announced 3,704); blog posts excluded",
+        "https://proceedings.iclr.cc/paper_files/paper/2025",
+        date(2026, 9, 27),
+    ),
+    ("ICML", 2013, "main"): OfficialCount(
+        283,
+        "papers in PMLR volume 28 (every accepted paper; ICML 2013 had no separate tracks)",
+        "https://proceedings.mlr.press/v28/",
+        date(2026, 9, 27),
+    ),
+    ("ICML", 2014, "main"): OfficialCount(
+        310,
+        "papers in PMLR volume 32 (every accepted paper)",
+        "https://proceedings.mlr.press/v32/",
+        date(2026, 9, 27),
+    ),
+    ("ICML", 2015, "main"): OfficialCount(
+        270,
+        "papers in PMLR volume 37 (every accepted paper)",
+        "https://proceedings.mlr.press/v37/",
+        date(2026, 9, 27),
+    ),
+    ("ICML", 2016, "main"): OfficialCount(
+        322,
+        "papers in PMLR volume 48 (every accepted paper)",
+        "https://proceedings.mlr.press/v48/",
+        date(2026, 9, 27),
+    ),
+    ("ICML", 2017, "main"): OfficialCount(
+        434,
+        "papers in PMLR volume 70 (every accepted paper)",
+        "https://proceedings.mlr.press/v70/",
+        date(2026, 9, 27),
+    ),
+    ("ICML", 2018, "main"): OfficialCount(
+        621,
+        "papers in PMLR volume 80 (every accepted paper)",
+        "https://proceedings.mlr.press/v80/",
+        date(2026, 9, 27),
+    ),
+    ("ICML", 2019, "main"): OfficialCount(
+        773,
+        "papers in PMLR volume 97 (every accepted paper)",
+        "https://proceedings.mlr.press/v97/",
+        date(2026, 9, 27),
+    ),
+    ("ICML", 2020, "main"): OfficialCount(
+        1084,
+        "papers in PMLR volume 119 (every accepted paper)",
+        "https://proceedings.mlr.press/v119/",
+        date(2026, 9, 27),
+    ),
+    ("ICML", 2021, "main"): OfficialCount(
+        1183,
+        "papers in PMLR volume 139 (every accepted paper)",
+        "https://proceedings.mlr.press/v139/",
+        date(2026, 9, 27),
+    ),
+    ("ICML", 2022, "main"): OfficialCount(
+        1233,
+        "papers in PMLR volume 162 (every accepted paper)",
+        "https://proceedings.mlr.press/v162/",
+        date(2026, 9, 27),
+    ),
+    ("ICML", 2023, "main"): OfficialCount(
+        1828,
+        "papers in PMLR volume 202 (every accepted paper)",
+        "https://proceedings.mlr.press/v202/",
+        date(2026, 9, 27),
+    ),
+    ("ICML", 2024, "main"): OfficialCount(
+        2610,
+        "papers in PMLR volume 235, including the 75 position papers (fact sheet), which ICML 2024 did not publish as a separate track",
+        "https://proceedings.mlr.press/v235/",
+        date(2026, 9, 27),
+    ),
+    ("ICML", 2025, "main"): OfficialCount(
+        3260,
+        "main-track accepted papers in the fact sheet; the 73 position papers are counted separately",
+        "https://media.icml.cc/Conferences/ICML2025/ICML2025_Fact_Sheet.pdf",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2013, "main"): OfficialCount(
+        360,
+        "papers in the NeurIPS 2013 proceedings index (every accepted paper)",
+        "https://proceedings.neurips.cc/paper_files/paper/2013",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2014, "main"): OfficialCount(
+        411,
+        "papers in the NeurIPS 2014 proceedings index (every accepted paper)",
+        "https://proceedings.neurips.cc/paper_files/paper/2014",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2015, "main"): OfficialCount(
+        403,
+        "papers in the NeurIPS 2015 proceedings index (every accepted paper)",
+        "https://proceedings.neurips.cc/paper_files/paper/2015",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2016, "main"): OfficialCount(
+        569,
+        "papers in the NeurIPS 2016 proceedings index (every accepted paper)",
+        "https://proceedings.neurips.cc/paper_files/paper/2016",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2017, "main"): OfficialCount(
+        679,
+        "papers in the NeurIPS 2017 proceedings index (every accepted paper)",
+        "https://proceedings.neurips.cc/paper_files/paper/2017",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2018, "main"): OfficialCount(
+        1009,
+        "papers in the NeurIPS 2018 proceedings index (every accepted paper)",
+        "https://proceedings.neurips.cc/paper_files/paper/2018",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2019, "main"): OfficialCount(
+        1428,
+        "papers in the NeurIPS 2019 proceedings index (every accepted paper)",
+        "https://proceedings.neurips.cc/paper_files/paper/2019",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2020, "main"): OfficialCount(
+        1898,
+        "papers in the NeurIPS 2020 proceedings index (equals the 2020 fact sheet)",
+        "https://proceedings.neurips.cc/paper_files/paper/2020",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2021, "main"): OfficialCount(
+        2334,
+        "main-track papers in the NeurIPS 2021 proceedings index (equals the fact sheet); D&B is on its own site",
+        "https://proceedings.neurips.cc/paper_files/paper/2021",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2022, "main"): OfficialCount(
+        2671,
+        "main-track (Conference) papers in the NeurIPS 2022 proceedings index; D&B excluded",
+        "https://proceedings.neurips.cc/paper_files/paper/2022",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2023, "main"): OfficialCount(
+        3218,
+        "main-track (Conference) papers in the NeurIPS 2023 proceedings index (equals the fact sheet); D&B excluded",
+        "https://proceedings.neurips.cc/paper_files/paper/2023",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2024, "main"): OfficialCount(
+        4034,
+        "main-track (Conference) papers in the NeurIPS 2024 proceedings index (fact sheet announced 4,037); D&B excluded",
+        "https://proceedings.neurips.cc/paper_files/paper/2024",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2025, "main"): OfficialCount(
+        5286,
+        "main-track (`conference`) papers in the published vol38 proceedings companion; D&B and position excluded",
+        "https://proceedings.neurips.cc/paper_files/paper/2025/vol38-main-conference",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2021, "datasets_benchmarks"): OfficialCount(
+        174,
+        "D&B papers in the 2021 D&B proceedings, round 1 (66) + round 2 (108); equals the fact sheet",
+        "https://datasets-benchmarks-proceedings.neurips.cc/paper/2021",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2022, "datasets_benchmarks"): OfficialCount(
+        163,
+        "D&B papers in the NeurIPS 2022 proceedings index (equals the fact sheet)",
+        "https://proceedings.neurips.cc/paper_files/paper/2022",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2023, "datasets_benchmarks"): OfficialCount(
+        322,
+        "D&B papers in the NeurIPS 2023 proceedings index (equals the fact sheet)",
+        "https://proceedings.neurips.cc/paper_files/paper/2023",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2024, "datasets_benchmarks"): OfficialCount(
+        459,
+        "D&B papers in the NeurIPS 2024 proceedings index (fact sheet announced 460)",
+        "https://proceedings.neurips.cc/paper_files/paper/2024",
+        date(2026, 9, 27),
+    ),
+    ("NeurIPS", 2025, "datasets_benchmarks"): OfficialCount(
+        497,
+        "D&B (`datasets_and_benchmarks_track`) papers in the published vol38 proceedings companion",
+        "https://proceedings.neurips.cc/paper_files/paper/2025/vol38-main-conference",
+        date(2026, 9, 27),
+    ),
+}
 
 
 def check_table(table: OfficialTable) -> None:

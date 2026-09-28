@@ -1,0 +1,352 @@
+# PMLR volume table (spec 01 §Sources, PMLR row; pmlr-proceedings skill; task-053). Data, not code:
+# `ingest/volumes.py` loads and checks it, and no other module holds a volume number.
+#
+# Columns
+#   number       the PMLR volume (https://proceedings.mlr.press/v<number>/)
+#   venue        NeurIPS | ICLR | ICML
+#   year         the conference year (from this table, never a page footer or PDF date); may be absent
+#                only on an out_of_scope row whose year was not verified
+#   track        a spec 01 track; the table's value is the record's track, never inferred from the page
+#   role         primary       PMLR is the source of record for this venue-year (ICML 2013-2022)
+#                confirm       OpenReview is primary; PMLR confirms acceptance (ICML 2023+)
+#                out_of_scope  classified, never ingested (competition and workshop volumes)
+#   papers       the number of `<div class="paper">` entries on the volume index when verified
+#   heading      what the volume index's first <h1>/<h2> reads after `Volume N: ` (a prefix); the miner
+#                refuses a volume whose page says anything else
+#   index_title  the volume's title on the PMLR index (https://proceedings.mlr.press/)
+#   verified     the date the row was checked live
+#   source       where the check is recorded
+#
+# A volume missing from this table is out of scope: it never becomes ICML because its title looks similar.
+# Adding an ICML row changes what the RIS importer accepts (a `pmlr_url` in that volume becomes an ICML
+# record), so a new row is a snapshot-diff event (spec 01 §Sources, RIS importer row).
+
+# --- ICML, primary (not on OpenReview as full venues; decision-013 crawls from 2013) -------------------
+
+[[volume]]
+number = 28
+venue = "ICML"
+year = 2013
+track = "main"
+role = "primary"
+papers = 283
+heading = "International Conference on Machine Learning"
+index_title = "ICML 2013 Proceedings"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md; backend/tests/fixtures/http/pmlr/v28/volume-index.json"
+
+[[volume]]
+number = 32
+venue = "ICML"
+year = 2014
+track = "main"
+role = "primary"
+papers = 310
+heading = "International Conference on Machine Learning"
+index_title = "ICML 2014 Proceedings"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md"
+
+[[volume]]
+number = 37
+venue = "ICML"
+year = 2015
+track = "main"
+role = "primary"
+papers = 270
+heading = "International Conference on Machine Learning"
+index_title = "ICML 2015 Proceedings"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md"
+
+[[volume]]
+number = 48
+venue = "ICML"
+year = 2016
+track = "main"
+role = "primary"
+papers = 322
+heading = "International Conference on Machine Learning"
+index_title = "ICML 2016 Proceedings"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md"
+
+[[volume]]
+number = 70
+venue = "ICML"
+year = 2017
+track = "main"
+role = "primary"
+papers = 434
+heading = "International Conference on Machine Learning"
+index_title = "Proceedings of ICML 2017"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md"
+
+[[volume]]
+number = 80
+venue = "ICML"
+year = 2018
+track = "main"
+role = "primary"
+papers = 621
+heading = "International Conference on Machine Learning"
+index_title = "Proceedings of ICML 2018"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md"
+
+[[volume]]
+number = 97
+venue = "ICML"
+year = 2019
+track = "main"
+role = "primary"
+papers = 773
+heading = "International Conference on Machine Learning"
+index_title = "Proceedings of ICML 2019"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md"
+
+[[volume]]
+number = 119
+venue = "ICML"
+year = 2020
+track = "main"
+role = "primary"
+papers = 1084
+heading = "International Conference on Machine Learning"
+index_title = "Proceedings of ICML 2020"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md"
+
+[[volume]]
+number = 139
+venue = "ICML"
+year = 2021
+track = "main"
+role = "primary"
+papers = 1183
+heading = "International Conference on Machine Learning"
+index_title = "Proceedings of ICML 2021"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md"
+
+[[volume]]
+number = 162
+venue = "ICML"
+year = 2022
+track = "main"
+role = "primary"
+papers = 1233
+heading = "International Conference on Machine Learning"
+index_title = "Proceedings of ICML 2022"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md"
+
+# --- ICML, confirm (OpenReview v2 is primary; a volume holding main and position papers is `unknown`) ------
+
+[[volume]]
+number = 202
+venue = "ICML"
+year = 2023
+track = "main"
+role = "confirm"
+papers = 1828
+heading = "International Conference on Machine Learning"
+index_title = "Proceedings of ICML 2023"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (= OpenReview accepted 1,828)"
+
+[[volume]]
+number = 235
+venue = "ICML"
+year = 2024
+track = "unknown"
+role = "confirm"
+papers = 2610
+heading = "International Conference on Machine Learning"
+index_title = "Proceedings of ICML 2024"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (main + unmarked position papers); backend/tests/fixtures/http/pmlr/v235/volume-index.json"
+
+[[volume]]
+number = 267
+venue = "ICML"
+year = 2025
+track = "unknown"
+role = "confirm"
+papers = 3330
+heading = "International Conference on Machine Learning"
+index_title = "Proceedings of ICML 2025"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (= OpenReview 3,257 main + 73 position)"
+
+# --- NeurIPS competition volumes: classified, not ingested (spec 01 lists PMLR for ICML only, and a
+# --- `pmlr-` native id is ICML-only in the record schema) ------------------------------------------------
+
+[[volume]]
+number = 123
+venue = "NeurIPS"
+year = 2019
+track = "competition"
+role = "out_of_scope"
+papers = 23
+index_title = "NeurIPS 2019 Competition and Demonstration Track"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md; backend/tests/fixtures/http/pmlr/index.json"
+
+[[volume]]
+number = 133
+venue = "NeurIPS"
+year = 2020
+track = "competition"
+role = "out_of_scope"
+papers = 20
+index_title = "NeurIPS 2020 Competition and Demonstration Track"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md; backend/tests/fixtures/http/pmlr/index.json"
+
+[[volume]]
+number = 176
+venue = "NeurIPS"
+year = 2021
+track = "competition"
+role = "out_of_scope"
+papers = 36
+index_title = "Proceedings of the NeurIPS 2021 Competitions and Demonstrations Track"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md; backend/tests/fixtures/http/pmlr/index.json"
+
+[[volume]]
+number = 220
+venue = "NeurIPS"
+year = 2022
+track = "competition"
+role = "out_of_scope"
+papers = 20
+heading = "NeurIPS 2022 Competition Track"
+index_title = "Proceedings of the NeurIPS 2022 Competitions Track"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md; backend/tests/fixtures/http/pmlr/v220/volume-index.json"
+
+# --- Workshop volumes: never main, never ingested (spec 01 takes no workshops from PMLR) -------------------
+
+[[volume]]
+number = 27
+venue = "ICML"
+year = 2011
+track = "workshop"
+role = "out_of_scope"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (ICML 2011 workshop)"
+
+[[volume]]
+number = 184
+venue = "ICML"
+year = 2022
+track = "workshop"
+role = "out_of_scope"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (ICML 2022 Healthcare AI workshop)"
+
+[[volume]]
+number = 251
+venue = "ICML"
+year = 2024
+track = "workshop"
+role = "out_of_scope"
+index_title = "Proceedings of GRaM at ICML 2024"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md; backend/tests/fixtures/http/pmlr/index.json"
+
+[[volume]]
+number = 292
+venue = "ICML"
+year = 2025
+track = "workshop"
+role = "out_of_scope"
+index_title = "TerraBytes at ICML 2025"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md; backend/tests/fixtures/http/pmlr/index.json"
+
+# NeurIPS workshop volumes: the research run named them but did not record their years, so none is given.
+
+[[volume]]
+number = 116
+venue = "NeurIPS"
+track = "workshop"
+role = "out_of_scope"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (NeurIPS workshop volume)"
+
+[[volume]]
+number = 136
+venue = "NeurIPS"
+track = "workshop"
+role = "out_of_scope"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (NeurIPS workshop volume)"
+
+[[volume]]
+number = 137
+venue = "NeurIPS"
+track = "workshop"
+role = "out_of_scope"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (NeurIPS workshop volume)"
+
+[[volume]]
+number = 163
+venue = "NeurIPS"
+track = "workshop"
+role = "out_of_scope"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (NeurIPS workshop volume)"
+
+[[volume]]
+number = 181
+venue = "NeurIPS"
+track = "workshop"
+role = "out_of_scope"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (NeurIPS workshop volume)"
+
+[[volume]]
+number = 187
+venue = "NeurIPS"
+track = "workshop"
+role = "out_of_scope"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (NeurIPS workshop volume)"
+
+[[volume]]
+number = 210
+venue = "NeurIPS"
+track = "workshop"
+role = "out_of_scope"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (NeurIPS workshop volume)"
+
+[[volume]]
+number = 226
+venue = "NeurIPS"
+track = "workshop"
+role = "out_of_scope"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (NeurIPS workshop volume)"
+
+[[volume]]
+number = 239
+venue = "NeurIPS"
+track = "workshop"
+role = "out_of_scope"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (NeurIPS workshop volume)"
+
+[[volume]]
+number = 262
+venue = "NeurIPS"
+track = "workshop"
+role = "out_of_scope"
+verified = 2026-09-27
+source = "docs/research/2026-09-27-openreview-and-proceedings-facts.md (NeurIPS workshop volume)"

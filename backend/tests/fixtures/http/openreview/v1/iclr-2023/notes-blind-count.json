@@ -1,0 +1,80 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2023/Conference/-/Blind_Submission&limit=1&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "RUzSobdYy0V",
+     "original": "pmo4AKuE4-p",
+     "number": 6620,
+     "cdate": 1663850590815,
+     "mdate": null,
+     "ddate": null,
+     "tcdate": 1663850590815,
+     "tmdate": 1768378332878,
+     "tddate": null,
+     "forum": "RUzSobdYy0V",
+     "replyto": null,
+     "invitation": "ICLR.cc/2023/Conference/-/Blind_Submission",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "authorids": [
+       "~Synthetic_Person2",
+       "~Synthetic_Person3",
+       "~Synthetic_Person4",
+       "~Synthetic_Person5"
+      ],
+      "authors": [
+       "Synthetic Author 6",
+       "Synthetic Author 7",
+       "Synthetic Author 8",
+       "Synthetic Author 9"
+      ],
+      "keywords": [],
+      "abstract": "Synthetic abstract text 10.",
+      "anonymous_url": "Synthetic anonymous url text 11.",
+      "no_acknowledgement_section": "Synthetic no acknowledgement section text 12.",
+      "code_of_ethics": "Synthetic code of ethics text 13.",
+      "submission_guidelines": "Synthetic submission guidelines text 14.",
+      "resubmission": "",
+      "student_author": "",
+      "Please_choose_the_closest_area_that_your_submission_falls_into": "Synthetic please choose the closest area that your submission falls into text 15.",
+      "paperhash": "synthetic|synthetic_title_16",
+      "pdf": "/pdf/8fa4751c3b6bc13a0eefd3b9a9dd75dc9359f20f.pdf",
+      "supplementary_material": "/attachment/151652f4d981a49f9dfa81be992839a243893cd1.zip",
+      "_bibtex": "synthetic.person17@example.org",
+      "venue": "ICLR 2023 poster",
+      "venueid": "ICLR.cc/2023/Conference",
+      "community_implementations": "Synthetic community implementations text 18."
+     },
+     "signatures": [
+      "ICLR.cc/2023/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2023/Conference"
+     ],
+     "pdate": 1675279442023,
+     "odate": 1664468100000
+    }
+   ],
+   "count": 3792
+  }
+ }
+}

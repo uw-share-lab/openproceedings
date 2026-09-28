@@ -276,7 +276,7 @@ export interface components {
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
              */
-            source: "openreview_v2" | "openreview_v1" | "neurips_proceedings" | "pmlr" | "ris";
+            source: "openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "ris";
             /** Url */
             url: string | null;
             value: components["schemas"]["ClaimValue"];
@@ -1271,7 +1271,7 @@ export interface components {
              * Sources
              * @description The sources the track's records came from (claim sources).
              */
-            sources: ("openreview_v2" | "openreview_v1" | "neurips_proceedings" | "pmlr" | "ris")[];
+            sources: ("openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "ris")[];
             /**
              * Track
              * @description Open set: new values may be added within /api/v1; handle a value you don't know.

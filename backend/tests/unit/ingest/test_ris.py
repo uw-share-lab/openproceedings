@@ -176,6 +176,13 @@ def test_icml_volumes_with_position_papers_give_unknown_track(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     assert ICML_PMLR_VOLUMES == {
+        28: (2013, "main"),  # v28-v97 added with the PMLR miner (task-053)
+        32: (2014, "main"),
+        37: (2015, "main"),
+        48: (2016, "main"),
+        70: (2017, "main"),
+        80: (2018, "main"),
+        97: (2019, "main"),
         119: (2020, "main"),
         139: (2021, "main"),
         162: (2022, "main"),
@@ -193,6 +200,57 @@ def test_icml_volumes_with_position_papers_give_unknown_track(
 
 def drop_pmlr_index(e: Entries) -> None:
     e[6]["claims"] = [c for c in e[6]["claims"] if c["source"] != "pmlr_index"]
+
+
+def test_a_pmlr_url_in_the_added_icml_volumes_now_imports_as_icml(tmp_path: Path) -> None:
+    """task-053 added v28-v97 to the volume table: a RIS record whose only identifier is a PMLR URL in one
+    of them used to be skipped (`no_id` with scholarmend's pmlr_index venue claim, else `out_of_scope`) and
+    is now an ICML record with the table's year and track. A rebuilt snapshot shows it in its diff."""
+    by_id, report = run(tmp_path, pmlr_urls("https://proceedings.mlr.press/v97/smith19a.html"))
+    r = by_id["op:icml:2019:pmlr-v97-smith19a"]
+    assert (r.venue, r.year, r.track, r.status) == ("ICML", 2019, "main", "accepted")
+    assert r.urls.proceedings == "https://proceedings.mlr.press/v97/smith19a.html"
+    assert (report.imported, report.skipped["no_id"], report.skipped["out_of_scope"]) == (6, 1, 2)
+    by_id, report = run(
+        tmp_path,
+        lambda e: (pmlr_urls("https://proceedings.mlr.press/v28/smith13.html")(e), drop_pmlr_index(e)),
+    )
+    assert by_id["op:icml:2013:pmlr-v28-smith13"].track == "main"
+
+
+@pytest.mark.parametrize(
+    "volume", [184, 251, 292, 220, 123, 318]
+)  # ICML workshops, NeurIPS competition, v318
+def test_competition_workshop_and_unlisted_volumes_never_import_as_icml(tmp_path: Path, volume: int) -> None:
+    by_id, report = run(
+        tmp_path,
+        lambda e: (
+            pmlr_urls(f"https://proceedings.mlr.press/v{volume}/smith24a.html")(e),
+            drop_pmlr_index(e),
+        ),
+    )
+    assert not any(":pmlr-" in rid for rid in by_id)
+    assert report.skipped["out_of_scope"] == 3  # arXiv, a Scholar-only venue, and this one
+
+
+def dbhost(track: str) -> Callable[[Entries], None]:
+    """Row 0's proceedings claims moved to the NeurIPS 2021 D&B host (`-Abstract-round1.html`)."""
+    url = "https://datasets-benchmarks-proceedings.neurips.cc/paper_files/paper/2021/hash/0123456789abcdef0123456789abcdef-Abstract-round1.html"
+    values = {"venue": "NeurIPS", "year": "2021", "track": track, "version": "proceedings"}
+
+    def edit(e: Entries) -> None:
+        e[0]["claims"] = [c for c in e[0]["claims"] if c["source"] != "proceedings_url"]
+        e[0]["claims"] += [claim(f, v, "proceedings_url", url) for f, v in values.items()]
+
+    return edit
+
+
+def test_the_2021_db_host_is_a_neurips_listing_with_the_miners_track_rule(tmp_path: Path) -> None:
+    by_id, report = run(tmp_path, dbhost("Datasets_and_Benchmarks"))
+    r = by_id[f"op:neurips:2021:nips-{H1}"]
+    assert (r.track, r.status) == ("datasets_benchmarks", "accepted")
+    by_id, report = run(tmp_path, dbhost("Conference"))  # the claim disagrees with the address it cites
+    assert f"op:neurips:2021:nips-{H1}" not in by_id and report.skipped["conflict"] == 1
 
 
 def set_venueid_of(e: Entries, row: int, value: str) -> None:
@@ -480,7 +538,32 @@ def test_a_malformed_forum_id_skips_its_entry_not_the_file(tmp_path: Path) -> No
 
 
 def test_a_pre_2022_url_without_a_track_token_imports(tmp_path: Path) -> None:
-    # `/paper/<y>/hash/<h>-Abstract.html` carries no track token: only its year is checked against the claim
+    # Only NeurIPS main-conference links through 2021 used the tokenless URL form.
+    def edit(e: Entries) -> None:
+        for c in e[2]["claims"]:
+            if c["source"] == "proceedings_url":
+                c["evidence"] = re.sub(
+                    r"-Abstract(?:-[A-Za-z_]+)?\.html$",
+                    "-Abstract.html",
+                    c["evidence"]
+                    .replace("proceedings.iclr.cc", "proceedings.neurips.cc")
+                    .replace("/2025/", "/2021/"),
+                )
+                if c["field"] == "venue":
+                    c["value"] = "NeurIPS"
+                elif c["field"] == "year":
+                    c["value"] = "2021"
+
+    (tmp_path / "base").mkdir()
+    (tmp_path / "edited").mkdir()
+    base = run(tmp_path / "base", lambda e: None)[1]
+    by_id, report = run(tmp_path / "edited", edit)
+    assert report.skipped["conflict"] == base.skipped["conflict"]
+    rec = next(r for i, r in by_id.items() if i.endswith("fedcba9876543210fedcba9876543210"))
+    assert (rec.venue, rec.year, rec.track, rec.status) == ("NeurIPS", 2021, "main", "accepted")
+
+
+def test_a_post_2021_url_without_a_track_token_is_a_conflict(tmp_path: Path) -> None:
     def edit(e: Entries) -> None:
         for c in e[2]["claims"]:
             if c["source"] == "proceedings_url":
@@ -490,6 +573,32 @@ def test_a_pre_2022_url_without_a_track_token_imports(tmp_path: Path) -> None:
     (tmp_path / "edited").mkdir()
     base = run(tmp_path / "base", lambda e: None)[1]
     by_id, report = run(tmp_path / "edited", edit)
-    assert report.skipped["conflict"] == base.skipped["conflict"]
-    rec = next(r for i, r in by_id.items() if i.endswith("fedcba9876543210fedcba9876543210"))
-    assert (rec.track, rec.status) == ("main", "accepted")
+    assert report.skipped["conflict"] == base.skipped["conflict"] + 1
+    assert not any(i.endswith("fedcba9876543210fedcba9876543210") for i in by_id)
+
+
+def test_a_v1_venueid_is_not_status_evidence(tmp_path: Path) -> None:
+    """ICLR 2022 put `ICLR.cc/2022/Conference` on 1,523 rejected papers (TASK-095): venue, year and track
+    only; the status stays `unknown`, so the default `status:accepted` filter excludes and counts it."""
+    by_id, report = run(tmp_path, lambda e: set_venueid_of(e, 7, "ICLR.cc/2022/Conference"))
+    r = by_id["op:iclr:2022:Rej_ected-1"]
+    assert (r.venue, r.year, r.track, r.status) == ("ICLR", 2022, "main", "unknown")
+    [status] = r.claims("status")
+    assert status.evidence == (
+        "scholarmend:openreview_api venueid=ICLR.cc/2022/Conference (API v1 venue-year: not status evidence)"
+    )
+    [track] = r.claims("track")
+    assert track.evidence == "scholarmend:openreview_api venueid=ICLR.cc/2022/Conference"
+    assert report.track_status["main"]["unknown"] == 1 and report.status_overrides == 0
+
+
+def test_a_listing_decides_a_v1_venueids_acceptance(tmp_path: Path) -> None:
+    def v1_listed(e: Entries) -> None:
+        set_venueid_of(e, 7, "ICLR.cc/2022/Conference")
+        listed("2022", "Conference")(e)
+
+    by_id, report = run(tmp_path, v1_listed)
+    r = by_id["op:iclr:2022:Rej_ected-1"]
+    assert (r.track, r.status) == ("main", "accepted") and report.status_overrides == 1
+    [status] = r.claims("status")
+    assert status.evidence is not None and status.evidence.endswith(" (overrides venueid status unknown)")
