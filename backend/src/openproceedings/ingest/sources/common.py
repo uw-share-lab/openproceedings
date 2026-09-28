@@ -211,7 +211,7 @@ def record_from_claims(record_id: str, claims: list[Claim]) -> PaperRecord:
 class ListingReport(Report):
     """One proceedings listing's crawl, for the snapshot manifest's `sources` (and the ingest command's output)."""
 
-    source: str  # neurips_proceedings | pmlr
+    source: str  # iclr_archive | neurips_proceedings | pmlr
     venue: str
     year: int
     listing: str  # the index URL

@@ -1,0 +1,20 @@
+{
+ "_recorded": {
+  "date": "2026-09-27",
+  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "2 of 35 paper entries kept (2 per section); surrounding archive page removed"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://iclr.cc/archive/2014/conference-proceedings/",
+  "authenticated": false
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "text/html"
+  },
+  "text": "<!doctype html><html><head><title>Accepted Papers (Conference Track)</title></head><body><h1>Accepted Papers (Conference Track)</h1><h3 xmlns=\"http://www.w3.org/1999/xhtml\" id=\"sites-page-title-header\" style=\"\" align=\"left\">\n<span id=\"sites-page-title\" dir=\"ltr\" tabindex=\"-1\" style=\"outline: none\">Conference Proceedings</span>\n</h3><p dir=\"ltr\"><span style=\"font-weight:bold\"><a href=\"http://arxiv.org/abs/1312.6173\" rel=\"nofollow\">Synthetic title 1</a></span></p><p dir=\"ltr\"><span style=\"font-style:italic\">Synthetic Author 2; Synthetic Author 3</span></p>\n<p dir=\"ltr\"><span style=\"font-weight:bold\"><a href=\"http://arxiv.org/abs/1312.5650\" rel=\"nofollow\">Synthetic title 4</a></span></p><p dir=\"ltr\"><span style=\"font-style:italic\">Synthetic Author 5; Synthetic Author 6</span></p></body></html>\n"
+ }
+}

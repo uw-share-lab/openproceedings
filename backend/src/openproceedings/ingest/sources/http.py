@@ -1,5 +1,6 @@
 """The crawlers' one HTTP layer (spec 01 §Pipeline; TASK-103): every source (OpenReview API v2 and v1, the
-NeurIPS proceedings, PMLR) fetches through `HttpClient`, and only the source's own rules (`Policy`) differ.
+ICLR archive, NeurIPS proceedings and PMLR) fetches through `HttpClient`, and only the source's own rules
+(`Policy`) differ.
 
 - **Transport.** `transport(Request, timeout) -> Response`, swappable (tests script one; conftest blocks the
   network). The live one (`urllib_transport`) never follows a redirect (a 3xx is a response, never a hop to

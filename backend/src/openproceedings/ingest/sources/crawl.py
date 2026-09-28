@@ -1,11 +1,11 @@
-"""`op ingest neurips|pmlr`, and the one offline replay of every crawler that `op snapshot build` runs (spec 01
+"""`op ingest iclr|neurips|pmlr`, and the one offline replay of every crawler that `op snapshot build` runs (spec 01
 §CLI, §Pipeline).
 
 `ingest_*` crawls each listing into `<cache>/<source>/pages/` through `common.Crawls.ingest` (one run at a
 time per source: an exclusive lock on `<cache>/<source>/.lock`) and, when the whole listing is cached, writes
 its crawl marker. A dry run reads only the index pages (through the cache) and reports what a crawl would
 fetch; it writes no marker. `--offline` crawls from the cache alone. `replay_all` re-runs every marked crawl of every source
-(OpenReview API v2, then v1, then NeurIPS, then PMLR; `common.Crawls`) with no transport at all, so a snapshot
+(OpenReview API v2, then v1, then ICLR, NeurIPS and PMLR; `common.Crawls`) with no transport at all, so a snapshot
 never fetches.
 """
 
@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from openproceedings.ingest.record import PaperRecord
-from openproceedings.ingest.sources import neurips, openreview_v1, openreview_v2, pmlr
+from openproceedings.ingest.sources import iclr, neurips, openreview_v1, openreview_v2, pmlr
 from openproceedings.ingest.sources.common import (
     Crawls,
     ListingReport,
@@ -73,6 +73,24 @@ def ingest_neurips(
     return _output(reports, f, dry_run)
 
 
+def ingest_iclr(
+    years: Iterable[int], cache: Path, *, offline: bool = False, dry_run: bool = False, refresh: bool = False,
+    transport: Transport | None = None, min_interval: float = DEFAULT_INTERVAL,
+) -> dict[str, Any]:  # fmt: skip
+    """Crawl the official ICLR accepted-paper archive for the 2014-2016 conference tracks."""
+    f = fetcher(cache, iclr.CACHE_DIR, iclr.HOSTS, offline=offline, transport=transport,
+                min_interval=min_interval)  # fmt: skip
+    mined = ICLR.ingest(
+        cache, sorted(set(years)),
+        lambda year: iclr.mine_year(year, f, refresh_index=refresh, plan_only=dry_run),
+        lambda year, _: None if dry_run else (str(year), {"source": iclr.SOURCE, "year": year}),
+    )  # fmt: skip
+    reports = [report for result in mined for report in result.reports]
+    log.info("iclr_archive_ingested", extra={"years": len(reports), "requests": f.stats.network,
+                                             "dry_run": dry_run})  # fmt: skip
+    return _output(reports, f, dry_run)
+
+
 def ingest_pmlr(
     years: Iterable[int], cache: Path, *, offline: bool = False, dry_run: bool = False, refresh: bool = False,
     transport: Transport | None = None, min_interval: float = DEFAULT_INTERVAL,
@@ -103,6 +121,11 @@ def ingest_pmlr(
 
 # --- the one replay ----------------------------------------------------------------------------------------
 
+ICLR: Crawls[iclr.YearResult] = Crawls(
+    lambda cache: crawls_dir(cache, iclr.CACHE_DIR), lambda m: (int(m["year"]),),
+    lambda k: f"ICLR archive {k[0]}", "op ingest iclr",
+    lambda cache, k: iclr.mine_year(k[0], fetcher(cache, iclr.CACHE_DIR, iclr.HOSTS, offline=True)),
+)  # fmt: skip
 NEURIPS: Crawls[neurips.YearResult] = Crawls(
     lambda cache: crawls_dir(cache, neurips.CACHE_DIR), lambda m: (int(m["year"]),),
     lambda k: f"NeurIPS {k[0]}", "op ingest neurips",
@@ -113,7 +136,7 @@ PMLR: Crawls[pmlr.VolumeResult] = Crawls(
     lambda k: f"PMLR v{k[0]}", "op ingest pmlr",
     lambda cache, k: pmlr.mine_volume(k[0], fetcher(cache, pmlr.CACHE_DIR, pmlr.HOSTS, offline=True)),
 )  # fmt: skip
-SOURCES: tuple[Crawls[Any], ...] = (openreview_v2.CRAWLS, openreview_v1.CRAWLS, NEURIPS, PMLR)
+SOURCES: tuple[Crawls[Any], ...] = (openreview_v2.CRAWLS, openreview_v1.CRAWLS, ICLR, NEURIPS, PMLR)
 
 
 def replay_all(cache: Path) -> tuple[list[PaperRecord], list[Report]]:

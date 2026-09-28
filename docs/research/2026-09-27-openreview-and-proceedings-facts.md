@@ -1,7 +1,8 @@
-# OpenReview and proceedings facts, checked live (TASK-002, 2026-09-27)
+# OpenReview and proceedings facts, checked live (TASK-002/096/104/106, 2026-09-27)
 
-A manual research run before the M4 crawlers (TASK-050–054). It checked every fact the ingestion skills
-and spec 01 marked "verify" against the live services, for every venue-year from 2013 (decision-013).
+A manual research run before the M4 crawlers (TASK-050–054), extended while implementing the ICLR archive
+and later proceedings fixtures (TASK-096/104/106). It checked every fact the ingestion skills and spec 01
+marked "verify" against the live services, for every venue-year from 2013 (decision-013).
 Requests were read-only, about one every two seconds, with a descriptive `User-Agent`, and honoured
 `Retry-After`; about 400 OpenReview requests (within the 500/hour notes and 700/hour groups budgets) and about 35 proceedings pages.
 No bulk data was kept. Recorded, scrubbed fixtures of each response shape are under
@@ -12,9 +13,9 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
 | Venue | Years | Source | Status representation | Abstract | Auth |
 |---|---|---|---|---|---|
 | ICLR | 2013 | OpenReview v1, `ICLR.cc/2013/conference/-/submission` (67) | `content.decision` on the submission: `conferenceOral-iclr2013-conference`, `conferencePoster-iclr2013-conference`, `…-workshop` (32), `reject` (12). Track and status both come from that string. No venueid. | all 67 | login |
-| ICLR | 2014 | v1, `ICLR.cc/2014/conference/-/submission` (69) and `ICLR.cc/2014/workshop/-/submission` (19) | `content.decision` is `submitted, no decision` on all 88; no decision notes in the forum. **Status is not on OpenReview.** | all | login |
-| ICLR | 2015 | none | ICLR 2015 has no OpenReview group (`/groups?parent=ICLR.cc` lists 2013, 2014, 2016–2027). **No spec 01 source.** | – | – |
-| ICLR | 2016 | v1, `ICLR.cc/2016/workshop/-/submission` (125) only | The conference track is not on OpenReview (`ICLR.cc/2016/conference/-/submission` has 0 notes). Workshop notes carry no decision. | all | login |
+| ICLR | 2014 | v1 submissions plus the public ICLR conference-proceedings archive | `content.decision` is `submitted, no decision` on all 88 OpenReview submissions, but the archive lists 35 accepted conference targets. Archive membership supplies accepted/main; OpenReview supplies abstracts where identities later join. | archive: none | archive: none; OR: login |
+| ICLR | 2015 | public ICLR accepted-main archive | ICLR 2015 has no OpenReview group. The archive supplies 31 unique accepted conference targets; oral/poster duplicates collapse and its separate workshop section is excluded. | none | none |
+| ICLR | 2016 | v1 workshop submissions plus the public ICLR accepted-main archive | The conference track is not on OpenReview (`ICLR.cc/2016/conference/-/submission` has 0 notes); the archive supplies 80 accepted conference targets. | archive: none | archive: none; OR: login |
 | ICLR | 2017 | v1, `ICLR.cc/2017/conference/-/submission` (490), `ICLR.cc/2017/workshop/-/submission` (161) | Every conference note has `venueid = ICLR.cc/2017/conference` (lower-case `conference`), **including 245 rejected** (`venue = Submitted to ICLR 2017`) and 47 `ICLR 2017 Invite to Workshop`. 53 workshop-invitation notes also carry the conference venueid. Status and track come from `venue` only. | all | login |
 | ICLR | 2018 | v1, `ICLR.cc/2018/Conference/-/Blind_Submission` (935), `…/-/Withdrawn_Submission` (83) | No venue/venueid on submissions. Decision is a separate note, invitation `ICLR.cc/2018/Conference/-/Acceptance_Decision` (935), `content.decision` = `Accept (Oral)` (23) / `Accept (Poster)` (314) / `Invite to Workshop Track` (90) / `Reject` (508). | all | login |
 | ICLR | 2019 | v1, `…/2019/Conference/-/Blind_Submission` (1,419), `…/-/Withdrawn_Submission` (160) | No venue/venueid. Decision is the meta-review: `ICLR.cc/2019/Conference/-/Paper<N>/Meta_Review`, `content.recommendation` = `Accept (Oral)` / `Accept (Poster)` / `Reject`. | all | login |
@@ -26,7 +27,7 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
 | NeurIPS | 2013–2020 | proceedings.neurips.cc | Listed = accepted (2013: 360, 2020: 1,898). No track token in the URL (`<sha>-Abstract.html`). No rejected papers. | on the abstract page | none |
 | NeurIPS | 2021 | v1 `NeurIPS.cc/2021/Conference/-/Blind_Submission` (2,768); proceedings main (2,334); D&B on OpenReview v1 `…/Track/Datasets_and_Benchmarks/Round1` (144) and `/Round2` (108), D&B proceedings on `datasets-benchmarks-proceedings.neurips.cc` (174) | Main: `venueid = NeurIPS.cc/2021/Conference` on all but 2, `venue = NeurIPS 2021 {Oral,Spotlight,Poster}` or `NeurIPS 2021 Submitted` (136 opt-in public rejected). D&B: the bare Round venueid on **every** note, rejected included (Round 1: 66 accepted, 78 `Submitted to …`). | all | login (OR), none (proc.) |
 | NeurIPS | 2022 | v1 Blind (2,824), D&B `NeurIPS.cc/2022/Track/Datasets_and_Benchmarks/-/Submission` (163); proceedings | Main: `venueid = NeurIPS.cc/2022/Conference` on all; `venue = NeurIPS 2022 Accept` (2,671 = proceedings) or `NeurIPS 2022 Submitted` (153). D&B: only the 163 accepted are public. | all | login |
-| NeurIPS | 2023–2025 | v2; proceedings to 2024 | venueid suffix as for ICLR v2. Rejected only when the authors opted in (2024 main: 201); withdrawn/desk-rejected ≈ none public (`public_*` all false). | 100% of accepted | login |
+| NeurIPS | 2023–2025 | v2 plus proceedings | venueid suffix as for ICLR v2. Rejected only when the authors opted in (2024 main: 201); withdrawn/desk-rejected ≈ none public (`public_*` all false). The 2025 proceedings split Creative AI onto the year page and main/D&B/position onto `vol38-main-conference`. | 100% of accepted | OR: login; proceedings: none |
 | NeurIPS | 2026 | v2 groups exist (Conference, `Evaluations_and_Datasets_Track`, Position, Creative AI, Competition) | No main-track notes public yet (0 on 2026-09-27); Creative AI has 95. | – | login |
 | ICML | 2013–2022 | PMLR v28, v32, v37, v48, v70, v80, v97, v119, v139, v162 | Listed = accepted. `ICML.cc/2020/Conference` exists on OpenReview but has no public notes. | on the paper page | none |
 | ICML | 2023–2025 | v2 + PMLR v202, v235, v267 | venueid suffix; rejected only opt-in (2025: 162), none for 2023–2024. 2024 position papers sit inside `ICML.cc/2024/Conference` with no marker (2,610 = v235's 2,610). 2025 has `ICML.cc/2025/Position_Paper_Track` (73). | 100% of accepted | login |
@@ -141,6 +142,16 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
 
 Workshop names include hyphens and digits (`SCI-FM`, `CLRLC-LLMs`, `7HVU`).
 
+## ICLR accepted-paper archive (iclr.cc/archive)
+- The official archive fills exactly the conference-acceptance gaps OpenReview cannot: 2014 has
+  submissions but no decisions, 2015 is absent from OpenReview, and 2016 has only workshop submissions.
+- The recorded pages contain 35 (2014), 31 (2015), and 80 (2016) unique accepted conference targets.
+  The 2015 accepted-main page repeats some targets under oral/poster headings and also contains a workshop
+  section; identity-based deduplication and section scoping are therefore part of the adapter contract.
+- The archive lists title and authors but no abstract. Most entries target arXiv; a target is the stable
+  identity evidence. OpenReview forum targets retain the forum id, while other canonical targets use
+  `iclr-<sha256(target)[:32]>`. Fragment-only page changes cannot change an id.
+
 ## NeurIPS proceedings (proceedings.neurips.cc)
 - The site index `https://proceedings.neurips.cc/` links every year 1987–2025. Year pages are
   `/paper_files/paper/<YYYY>`; each entry is `<li class="<track>" data-track="<track>">` with
@@ -148,10 +159,12 @@ Workshop names include hyphens and digits (`SCI-FM`, `CLRLC-LLMs`, `7HVU`).
 - **URL grammar by year:** 1987–2021 main: `/paper_files/paper/<Y>/hash/<sha>-Abstract.html` (no track
   token; `data-track="none"`). 2022–2023: `-Abstract-Conference.html` and
   `-Abstract-Datasets_and_Benchmarks.html`. 2024+: `-Abstract-Datasets_and_Benchmarks_Track.html`.
-  2025: `-Abstract-Creative_AI_Track.html`.
+  2025 adds `-Abstract-Position_Paper_Track.html`; Creative AI uses
+  `-Abstract-Creative_AI_Track.html` on the base page.
 - Counts per year page: 2013: 360, 2020: 1,898, 2021: 2,334 main, 2022: 2,671 + 163 D&B, 2023: 3,218 +
-  322 D&B, 2024: 4,034 + 459 D&B. **2025 lists only 64 Creative AI papers** (OpenReview has 92) on 2026-09-27: the
-  NeurIPS 2025 main and D&B proceedings are not published yet, so OpenReview is the only 2025 source.
+  322 D&B, 2024: 4,034 + 459 D&B. The 2025 base page lists 64 Creative AI papers and links its
+  `vol38-main-conference` companion, which states 5,823 papers across main, D&B and position. The crawler
+  follows this recorded pair; an unfamiliar “See also” page remains a warning rather than silently expanding scope.
 - **NeurIPS 2021 D&B has a separate host:** `https://datasets-benchmarks-proceedings.neurips.cc/paper/2021`
   (the host's index lists only 2021) with 174 papers, `…/hash/<sha>-Abstract-round1.html` (66) and
   `-Abstract-round2.html` (108), `<li class="roundN">` entries and authors in `<i>`. These counts equal
@@ -195,15 +208,16 @@ Workshop names include hyphens and digits (`SCI-FM`, `CLRLC-LLMs`, `7HVU`).
 - ICML workshop volumes exist and must never be ICML main: v27 (2011 workshop), v184 (ICML 2022
   Healthcare AI workshop), v251 (GRaM at ICML 2024), v292 (TerraBytes at ICML 2025); many NeurIPS
   workshop volumes too (v116, v136, v137, v163, v181, v187, v210, v226, v239, v262).
-- Paper entries in v235 link the OpenReview forum (`openreview.net/forum?id=…`), which gives the
-  PMLR ↔ OpenReview join for 2023+ without title matching.
+- Recorded paper entries in v202, v235 and v267 link the OpenReview forum
+  (`openreview.net/forum?id=…`), which gives the PMLR ↔ OpenReview join for 2023+ without title matching;
+  the recorded v28 paper page confirms the pre-OpenReview shape has no such link.
 - Paper page (`/vN/<key>.html`): `citation_title`, `citation_author` metas, `<div id="abstract"
   class="abstract">`; the title and authors are repeated in twitter meta tags and the BibTeX, Endnote
   and APA boxes.
 
 ## Fixtures
 `backend/tests/fixtures/http/` holds one recorded, scrubbed response per shape above: 21 OpenReview v2,
-20 v1, 7 NeurIPS proceedings and 5 PMLR files. Each is
+20 v1, 3 ICLR archive, 8 NeurIPS proceedings and 8 PMLR files. Each is
 `{"_recorded", "request": {"method", "url", "authenticated"}, "response": {"status", "headers", "json" | "text"}}`.
 `scrub.py` (no network code) made them from the raw captures: titles, abstracts, authors, author ids,
 keywords, reviews and emails are synthetic; ids, venueids, venue strings, decisions, invitations, dates and
@@ -216,6 +230,4 @@ how). `backend/tests/unit/ingest/test_venueid.py` reads every recorded OpenRevie
 - TASK-095: v1 venueids are not status evidence: keep `classify_venueid` off v1 notes' status, and
   audit the M2 RIS corpus for ICLR 2017/2022/2023, NeurIPS 2021–2022 and D&B 2021 records whose
   `accepted` came from a bare v1 venueid.
-- TASK-096: acceptance sources for the ICLR years OpenReview can't answer (2014 status, 2015, 2016
-  conference track).
 - The NeurIPS 2021 and 2024 main-track count gaps go to TASK-054 (notes added there).

@@ -7,8 +7,9 @@ or fragment (one real URL carries `?utm_source=chatgpt.com`), PMLR's two hosts a
 
 from __future__ import annotations
 
+import hashlib
 import re
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from openproceedings.ingest.record import FORUM_ID
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
@@ -80,3 +81,26 @@ def forum_id(url: str) -> str | None:
         return None
     ids = parse_qs(parsed.query).get("id", [])
     return ids[0] if len(ids) == 1 and FORUM_ID.fullmatch(ids[0]) else None
+
+
+def iclr_archive_target(url: str) -> tuple[str, str] | None:
+    """The stable native id and canonical target of a paper link on an official ICLR archive page.
+
+    Old archive pages link accepted papers to arXiv or the former beta OpenReview host rather than an
+    ICLR proceedings path. An OpenReview link keeps its forum id; every other HTTP target gets an
+    `iclr-<32 hex>` id from the canonical URL. This is identity evidence only when the claim source is
+    `iclr_archive`; an arbitrary arXiv URL is not globally an ICLR paper.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return None
+    host = parsed.hostname.lower().removeprefix("www.")
+    if host in {"openreview.net", "beta.openreview.net"} and parsed.path == "/forum":
+        ids = parse_qs(parsed.query).get("id", [])
+        if len(ids) != 1 or not FORUM_ID.fullmatch(ids[0]):
+            return None
+        canonical = f"https://openreview.net/forum?{urlencode({'id': ids[0]})}"
+        return ids[0], canonical
+    canonical = urlunparse(("https", host, parsed.path or "/", "", parsed.query, ""))
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]
+    return f"iclr-{digest}", canonical

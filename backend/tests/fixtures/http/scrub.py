@@ -184,9 +184,18 @@ def scrub_json(url: str, body: Any) -> tuple[Any, str | None]:
 
 def _sub_text(pattern: str, page: str, label: str, c: _Counter) -> str:
     """Replace group 2 of every match (group 1 and 3 are kept) with synthetic text."""
-    return re.sub(
-        pattern, lambda m: f"{m.group(1)}Synthetic {label} {c.next()}{m.group(3)}", page, flags=re.S
-    )
+
+    def replacement(m: re.Match[str]) -> str:
+        synthetic = f"Synthetic {label} {c.next()}"
+        # Keep the publisher's double-escaping shape while replacing the person's real nickname. The
+        # HTML extractor's second unescape is otherwise impossible to exercise from a scrubbed fixture.
+        if "&amp;quot;" in m.group(2):
+            synthetic += " &amp;quot;alias&amp;quot;"
+        elif "&amp;amp;" in m.group(2):
+            synthetic += " &amp;amp; synthetic"
+        return f"{m.group(1)}{synthetic}{m.group(3)}"
+
+    return re.sub(pattern, replacement, page, flags=re.S)
 
 
 def _keep_blocks(
@@ -242,6 +251,72 @@ def _paper_page(page: str, c: _Counter) -> str:
     return page
 
 
+_ICLR_PAPER = re.compile(
+    r'(<a\b[^>]*\bhref="(?:https?://)?(?:www\.)?(?:arxiv\.org/abs/|(?:beta\.)?openreview\.net/forum\?id=)[^"]+"[^>]*>)'
+    r"(.*?)"
+    r"(</a>)",
+    re.I | re.S,
+)
+_ICLR_SECTION = re.compile(r'(<h3\b[^>]*\bid="([^"]+)"[^>]*>.*?</h3>)(.*?)(?=<h3\b|$)', re.I | re.S)
+
+
+def _iclr_entry(paper: re.Match[str], c: _Counter, *, list_item: bool) -> str:
+    title = f"{paper.group(1)}Synthetic title {c.next()}{paper.group(3)}"
+    authors = f"Synthetic Author {c.next()}; Synthetic Author {c.next()}"
+    if list_item:
+        return f'<li class="level1"><div class="li"> {title}<br/>\n{authors}</div></li>'
+    return (
+        '<p dir="ltr"><span style="font-weight:bold">'
+        f'{title}</span></p><p dir="ltr"><span style="font-style:italic">'
+        f"{authors}</span></p>"
+    )
+
+
+def _iclr_index(page: str, c: _Counter) -> tuple[str, str]:
+    """A minimal, still-structural excerpt of an accepted-paper archive page.
+
+    The 2014 Google Sites page and the 2015/2016 DokuWiki pages wrap entries differently. The adapter's
+    contract is their shared paper link plus adjacent author text, so retain those two real shapes and the
+    stable target URLs while replacing every title and person.
+    """
+    papers = list(_ICLR_PAPER.finditer(page))
+    google_sites = next(
+        (
+            section
+            for section in _ICLR_SECTION.finditer(page)
+            if section.group(2) == "sites-page-title-header"
+        ),
+        None,
+    )
+    sections = []
+    kept = 0
+    if google_sites is not None:
+        selected = list(_ICLR_PAPER.finditer(google_sites.group(3)))[:2]
+        kept = len(selected)
+        entries = "\n".join(_iclr_entry(paper, c, list_item=False) for paper in selected)
+        body = f"{google_sites.group(1)}{entries}"
+    else:
+        for section in _ICLR_SECTION.finditer(page):
+            section_papers = list(_ICLR_PAPER.finditer(section.group(3)))[:2]
+            if not section_papers:
+                continue
+            kept += len(section_papers)
+            entries = "\n".join(_iclr_entry(paper, c, list_item=True) for paper in section_papers)
+            sections.append(f'{section.group(1)}<ol data-fixture-section="{section.group(2)}">{entries}</ol>')
+    if google_sites is None and sections:
+        body = "\n".join(sections)
+    elif google_sites is None:
+        selected = papers[:3]
+        kept = len(selected)
+        body = "\n".join(_iclr_entry(paper, c, list_item=False) for paper in selected)
+    heading = "Accepted Papers (Conference Track)"
+    excerpt = f"<!doctype html><html><head><title>{heading}</title></head><body><h1>{heading}</h1>{body}</body></html>\n"
+    return (
+        excerpt,
+        f"{kept} of {len(papers)} paper entries kept (2 per section); surrounding archive page removed",
+    )
+
+
 def scrub_html(url: str, page: str) -> tuple[str, str | None]:
     c = _Counter()
     note = None
@@ -251,7 +326,9 @@ def scrub_html(url: str, page: str) -> tuple[str, str | None]:
             f"<!DOCTYPE html>\n<html><head>{title.group(0) if title else ''}</head><body>…</body></html>\n",
             ("challenge page reduced to its <title>; the real page loads a Turnstile widget"),
         )
-    if "proceedings.neurips.cc" in url or "datasets-benchmarks-proceedings" in url:
+    if "iclr.cc/archive/" in url:
+        page, note = _iclr_index(page, c)
+    elif "proceedings.neurips.cc" in url or "datasets-benchmarks-proceedings" in url:
         if "-Abstract" in url:
             page = _paper_page(page, c)
         else:

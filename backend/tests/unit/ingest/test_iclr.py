@@ -1,0 +1,112 @@
+"""ICLR 2014-2016 accepted-paper archive source (TASK-096), from recorded public pages."""
+
+from __future__ import annotations
+
+import importlib
+import logging
+from pathlib import Path
+from types import ModuleType
+
+import pytest
+from openproceedings.ingest.dedup import dedup
+from openproceedings.ingest.record import PaperRecord
+
+from tests.unit.ingest.proceedings_helpers import fetcher, fixture_text, fixture_url, seed_fixture
+
+FIXTURES = {
+    2014: "iclr/2014/conference-index.json",
+    2015: "iclr/2015/conference-index.json",
+    2016: "iclr/2016/conference-index.json",
+}
+
+
+def source() -> ModuleType:
+    return importlib.import_module("openproceedings.ingest.sources.iclr")
+
+
+def seed_year(cache: Path, year: int) -> None:
+    seed_fixture(cache, "iclr", FIXTURES[year])
+
+
+def mine(cache: Path, year: int):  # type: ignore[no-untyped-def]
+    iclr = source()
+    crawler, _ = fetcher(cache / "iclr", None, iclr.HOSTS)
+    return iclr.mine_year(year, crawler)
+
+
+def by_id(records: list[PaperRecord]) -> dict[str, PaperRecord]:
+    return {record.id: record for record in records}
+
+
+def test_the_three_recorded_pages_parse_only_conference_track_papers() -> None:
+    iclr = source()
+    parsed = {
+        year: iclr.parse_index(year, fixture_text(rel), fixture_url(rel)) for year, rel in FIXTURES.items()
+    }
+    assert {year: len(entries) for year, entries in parsed.items()} == {2014: 2, 2015: 4, 2016: 4}
+    assert [entry.title for entry in parsed[2015]] == [
+        "Synthetic title 1",
+        "Synthetic title 4",
+        "Synthetic title 7",
+        "Synthetic title 10",
+    ]  # the two recorded Workshop Papers entries are excluded
+    assert parsed[2014][0].authors == ("Synthetic Author 2", "Synthetic Author 3")
+    assert "<p " in fixture_text(FIXTURES[2014]) and "<li " not in fixture_text(FIXTURES[2014])
+
+
+def test_a_nonempty_trimmed_archive_page_reports_the_verified_count_mismatch(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    seed_year(tmp_path, 2014)
+    with caplog.at_level(logging.WARNING, logger="openproceedings.ingest.sources.iclr"):
+        [report] = mine(tmp_path, 2014).reports
+    assert (report.stated, report.listed, report.count_ok) == (35, 2, False)
+    assert [record.getMessage() for record in caplog.records] == ["listing_count_mismatch"]
+
+
+def test_archive_entries_are_accepted_main_records_with_stable_target_ids(tmp_path: Path) -> None:
+    expected = {
+        2014: "op:iclr:2014:iclr-beb53fd8b4fa307df929907eb35e1a7b",
+        2015: "op:iclr:2015:iclr-77b79d4a8d13c419bf89c1bf9c2a109d",
+        2016: "op:iclr:2016:iclr-960e1350bda0ad8be2b614ed7faf6ac4",
+    }
+    for year, wanted in expected.items():
+        seed_year(tmp_path, year)
+        result = mine(tmp_path, year)
+        records = by_id(result.records)
+        assert wanted in records
+        record = records[wanted]
+        assert (record.venue, record.year, record.track, record.status, record.abstract) == (
+            "ICLR",
+            year,
+            "main",
+            "accepted",
+            None,
+        )
+        assert record.urls.proceedings == record.claims("urls.proceedings")[0].value
+        assert {claim.source for claim in record.provenance} == {"iclr_archive"}
+        assert dedup([record]).records == (record,)  # the target URL is identity evidence for its native id
+        [report] = result.reports
+        assert (report.role, report.records, report.abstract_missing) == (
+            "primary",
+            len(result.records),
+            len(result.records),
+        )
+
+
+def test_the_archive_crawl_marks_each_year_and_replays_offline(tmp_path: Path) -> None:
+    crawl = importlib.import_module("openproceedings.ingest.sources.crawl")
+    for year in FIXTURES:
+        seed_year(tmp_path, year)
+    out = crawl.ingest_iclr(FIXTURES, tmp_path, offline=True)
+    assert out["requests"] == 0
+    assert [listing["year"] for listing in out["listings"]] == [2014, 2015, 2016]
+    assert sorted(path.name for path in (tmp_path / "iclr" / "crawls").glob("*.json")) == [
+        "2014.json",
+        "2015.json",
+        "2016.json",
+    ]
+    records, sources = crawl.load_crawls(tmp_path)
+    assert len(records) == 10
+    assert len(sources["iclr_archive"]["listings"]) == 3

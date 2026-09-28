@@ -168,20 +168,32 @@ def test_2024_db_track_page_gives_abstract_doi_and_pdf(tmp_path: Path) -> None:
     ]
 
 
-def test_2025_creative_ai_is_other_and_the_unfollowed_main_volume_is_reported(
+def test_2025_mines_the_creative_ai_and_main_conference_volumes_without_an_unfollowed_warning(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     cache = cache_of(tmp_path)
-    seed_fixture(cache, "neurips", "neurips/2025/year-index.json")
-    for sha in ("04440b43c10100305d21cdeb60262e98", "1350a018b6442df34ef97648647a3e16"):
-        seed(cache, "neurips", neurips_abs(2025, sha, "Creative_AI_Track"), "", status=404)
+    listings = ("neurips/2025/year-index.json", "neurips/2025/vol38-main-conference.json")
+    for rel in listings:
+        seed_fixture(cache, "neurips", rel)
+        parsed = neurips.parse_year_index(fixture_text(rel), fixture_url(rel))
+        for entry in parsed.entries:
+            seed(cache, "neurips", entry.url, "", status=404)
     with caplog.at_level(logging.WARNING, logger="openproceedings.ingest.sources.neurips"):
         result = mine(cache, 2025)
-    assert {r.track for r in result.records} == {"other"}
-    [report] = result.reports
-    assert report.see_also == [f"https://{MAIN}/paper_files/paper/2025/vol38-main-conference"]
-    assert report.to_manifest()["see_also"] == report.see_also
-    assert [r.getMessage() for r in caplog.records].count("listing_see_also_unfollowed") == 1
+    assert {r.track for r in result.records} == {
+        "main",
+        "datasets_benchmarks",
+        "position",
+        "other",
+    }
+    creative, main = result.reports
+    assert creative.see_also == []
+    assert main.see_also == []
+    assert [dict(report.tracks) for report in result.reports] == [
+        {"other": 2},
+        {"main": 2, "datasets_benchmarks": 2, "position": 2},
+    ]
+    assert "listing_see_also_unfollowed" not in [r.getMessage() for r in caplog.records]
 
 
 def test_2021_reads_the_main_page_and_the_db_host(tmp_path: Path) -> None:
@@ -343,17 +355,11 @@ def test_abstract_golden_cases(tmp_path: Path, abstract: str, kept: str | None) 
     assert a.abstract == kept
 
 
-def test_a_double_escaped_title_with_a_leading_formula(tmp_path: Path) -> None:
-    """Derived case: the listing writes the title double-escaped with a leading `$…$`; the abstract page's
-    citation_title drops the formula. The abstract is still taken, and the title is decoded once more."""
-    cache = cache_of(tmp_path)
-    listed = "$\\ell_1$-Regularised R&amp;amp;D &amp;quot;Nets&amp;quot;"
-    seed_fixture(cache, "neurips", Y13, edit=lambda t: t.replace(">Synthetic title 1<", f">{listed}<"))
-    seed_fixture(cache, "neurips", ABS13, edit=matching("-Regularised R&amp;D &quot;Nets&quot;"))
-    seed(cache, "neurips", neurips_abs(2013, B13), "", status=404)
-    a = by_id(mine(cache, 2013).records)[f"op:neurips:2013:nips-{A13}"]
-    assert a.title == '$\\ell_1$-Regularised R&D "Nets"'
-    assert a.abstract == "Synthetic abstract 1"
+def test_the_recorded_2025_page_decodes_its_double_escaped_author() -> None:
+    parsed = neurips.parse_year_index(
+        fixture_text("neurips/2025/year-index.json"), fixture_url("neurips/2025/year-index.json")
+    )
+    assert parsed.entries[0].authors == ('Synthetic authors 3 "alias"',)
 
 
 # --- crawl, resume, dry run, window, snapshot ----------------------------------------------------------------

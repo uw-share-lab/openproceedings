@@ -68,7 +68,11 @@ _SEE_ALSO = re.compile(r"<p\b[^>]*\bclass=\"book-see-also\"[^>]*>(.*?)</p>", re.
 def listing_urls(year: int) -> list[str]:
     """The index pages that list a year's papers."""
     main = f"https://{MAIN_HOST}/paper_files/paper/{year}"
-    return [main, f"https://{NEURIPS_DB_2021_HOST}/paper/2021"] if year == 2021 else [main]
+    if year == 2021:
+        return [main, f"https://{NEURIPS_DB_2021_HOST}/paper/2021"]
+    if year == 2025:
+        return [main, f"{main}/vol38-main-conference"]
+    return [main]
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,15 +194,17 @@ def _mine_listing(
     parsed = parse_year_index(index.text, listing)
     entries = parsed.entries
     role = "confirm" if year >= OPENREVIEW_FROM else "primary"
+    followed = set(listing_urls(year))
+    unfollowed = [url for url in parsed.see_also if url not in followed]
     report = ListingReport(
         SOURCE, "NeurIPS", year, listing, role, parsed.stated, listed=len(entries) + parsed.unlinked,
-        see_also=parsed.see_also,
+        see_also=unfollowed,
     )  # fmt: skip
     report.fetched.append(index.fetched_at)
     if parsed.unlinked:
         report.skipped["no_link"] = parsed.unlinked
-    if parsed.see_also:  # a volume this page points to is not crawled until its page structure is verified
-        log.warning("listing_see_also_unfollowed", extra={"year": year, "see_also": parsed.see_also})
+    if unfollowed:
+        log.warning("listing_see_also_unfollowed", extra={"year": year, "see_also": unfollowed})
     records: list[PaperRecord] = []
     started = last = time.monotonic()
     log.info("neurips_listing_started", extra={"year": year, "listing": listing, "entries": len(entries)})

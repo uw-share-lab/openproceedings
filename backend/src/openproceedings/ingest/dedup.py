@@ -36,8 +36,12 @@ from openproceedings.ingest import urls
 from openproceedings.ingest.record import Claim, ClaimField, PaperRecord, Source, Urls
 from openproceedings.query.normalize import normalize
 
-_TEXT: tuple[Source, ...] = ("openreview_v2", "openreview_v1", "neurips_proceedings", "pmlr", "ris")
-_ACCEPTANCE: tuple[Source, ...] = ("neurips_proceedings", "pmlr", "openreview_v2", "openreview_v1", "ris")
+_TEXT: tuple[Source, ...] = (
+    "openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "ris",
+)  # fmt: skip
+_ACCEPTANCE: tuple[Source, ...] = (
+    "iclr_archive", "neurips_proceedings", "pmlr", "openreview_v2", "openreview_v1", "ris",
+)  # fmt: skip
 # decision-005: OpenReview first for text and track; the official proceedings decide acceptance; RIS last.
 PRECEDENCE: dict[ClaimField, tuple[Source, ...]] = {
     **dict.fromkeys(
@@ -50,7 +54,7 @@ PRECEDENCE: dict[ClaimField, tuple[Source, ...]] = {
 # Cross-source disagreements written to conflicts.csv. A title counts only when its dedup key differs
 # (decision-005); venue and year can't differ inside a merge (they're part of every merge key).
 CONFLICT_FIELDS: tuple[ClaimField, ...] = ("title", "track", "status")
-_PROCEEDINGS_SOURCES = frozenset({"neurips_proceedings", "pmlr"})
+_PROCEEDINGS_SOURCES = frozenset({"iclr_archive", "neurips_proceedings", "pmlr"})
 _PROCEEDINGS_TRACKS = frozenset({"main", "datasets_benchmarks", "position"})  # proceedings never host others
 _URL_FIELDS = ("urls.proceedings", "urls.pdf")
 
@@ -214,11 +218,17 @@ class _Cluster:
 
 
 def _url_natives(claims: Iterable[Claim]) -> set[str]:
-    return {
-        n
-        for c in claims
-        if c.field in _URL_FIELDS and isinstance(c.value, str) and (n := urls.native(c.value))
-    }
+    found: set[str] = set()
+    for claim in claims:
+        if claim.field not in _URL_FIELDS or not isinstance(claim.value, str):
+            continue
+        native = urls.native(claim.value)
+        if native is None and claim.source == "iclr_archive" and claim.field == "urls.proceedings":
+            target = urls.iclr_archive_target(claim.value)
+            native = target[0] if target is not None else None
+        if native is not None:
+            found.add(native)
+    return found
 
 
 def _forum_ids(record: PaperRecord) -> frozenset[str]:

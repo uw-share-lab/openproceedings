@@ -80,8 +80,15 @@ def test_title_key_is_the_token_contract() -> None:
 
 
 def test_the_precedence_table_is_decision_005() -> None:
-    text = ("openreview_v2", "openreview_v1", "neurips_proceedings", "pmlr", "ris")
-    assert PRECEDENCE["status"] == ("neurips_proceedings", "pmlr", "openreview_v2", "openreview_v1", "ris")
+    text = ("openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "ris")
+    assert PRECEDENCE["status"] == (
+        "iclr_archive",
+        "neurips_proceedings",
+        "pmlr",
+        "openreview_v2",
+        "openreview_v1",
+        "ris",
+    )
     assert all(PRECEDENCE[f] == text for f in PRECEDENCE if f != "status")
     assert CONFLICT_FIELDS == ("title", "track", "status")
 

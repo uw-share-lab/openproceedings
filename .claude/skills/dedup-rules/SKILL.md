@@ -17,8 +17,8 @@ over-merge silently deletes a paper from someone's systematic review.
    (`venue_year_not_merged`), never a merge.
    **Then the forum link (TASK-105).** A cluster's forum ids are its own (an OpenReview native id) plus
    every forum id a kept `urls.forum` claim names (`urls.forum_id()`: `openreview.net/forum?id=<id>`, one
-   `id`). PMLR's index links each paper's forum from ICML 2023 (v202 per the research notes; only v235 is
-   recorded in `backend/tests/fixtures/http/pmlr/`, and v28 has no link). Clusters that share a forum id
+   `id`). PMLR's index links each paper's forum from ICML 2023 (recorded for v202, v235 and v267; v28 has
+   no link). Clusters that share a forum id
    in the same venue and year merge **whatever their titles say**, before any title match. The link is
    refused (a `conflicts.csv` row with `field = forum_id`, never a merge) when the forum id's records are
    in different venue-years (`venue_year_not_merged`), when the group would hold two forum ids or two
@@ -61,7 +61,9 @@ safe direction.
   refuses one that doesn't). Proceedings ids are read from those claims, so a merged record still carries
   the ids of the listings it absorbed, and a second run can't fold another listing in. URL forms,
   including NeurIPS up to 2021 (`/paper/<y>/hash/<h>-Abstract.html`, no track suffix) and upper-case hex,
-  are parsed by `ingest/urls.py`.
+  are parsed by `ingest/urls.py`. An `iclr_archive` proceedings claim is source-aware: its canonical target
+  recomputes the OpenReview forum id or `iclr-<sha256(target)[:32]>`, so an arbitrary arXiv URL from another
+  source cannot accidentally become ICLR identity evidence.
 
 ## Combining a merge
 - The survivor's id uses the OpenReview forum id if any side has one (`.claude/skills/record-schema/SKILL.md`).

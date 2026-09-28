@@ -29,6 +29,7 @@ PROCEEDINGS = {  # native id → its venue
 SOURCE_NATIVES = {
     "openreview_v2": FORUMS,
     "openreview_v1": FORUMS,
+    "iclr_archive": [n for n in PROCEEDINGS if n.startswith("iclr-")],
     "neurips_proceedings": [n for n in PROCEEDINGS if n.startswith(("nips-", "iclr-"))],
     "pmlr": [n for n in PROCEEDINGS if n.startswith("pmlr-")],
     "ris": [*FORUMS, *PROCEEDINGS],
@@ -70,7 +71,7 @@ def chains(draw: st.DrawFn) -> list[PaperRecord]:
     """One paper under two titles (two sources share its forum id), each title matching a different
     record from one proceedings source, plus noise: the shape that must never fold two papers."""
     venue, prefix, source = draw(
-        st.sampled_from([("NeurIPS", "nips", "neurips_proceedings"), ("ICLR", "iclr", "neurips_proceedings")])
+        st.sampled_from([("NeurIPS", "nips", "neurips_proceedings"), ("ICLR", "iclr", "iclr_archive")])
     )
     year = draw(st.sampled_from([2023, 2024]))
     a, b = draw(st.permutations(TITLES[:3]))[:2]

@@ -16,12 +16,18 @@ from tests.unit.ingest.proceedings_helpers import (
     FakeTransport,
     fetcher,
     fixture_text,
+    fixture_url,
     response,
     seed,
     seed_fixture,
 )
 
-V28, V235 = "pmlr/v28/volume-index.json", "pmlr/v235/volume-index.json"
+V28, V202, V235, V267 = (
+    "pmlr/v28/volume-index.json",
+    "pmlr/v202/volume-index.json",
+    "pmlr/v235/volume-index.json",
+    "pmlr/v267/volume-index.json",
+)
 V28_KEYS = ("sznitman13", "muandet13", "boots13")
 V235_KEYS = ("abad-rocamora24a", "abe24a", "abhyankar24a")
 
@@ -70,7 +76,10 @@ def test_the_table_agrees_with_the_recorded_pmlr_index() -> None:
     assert 318 in listed and 318 not in VOLUMES  # the Canadian Conference on AI: never ICML
 
 
-@pytest.mark.parametrize(("rel", "number"), [(V28, 28), (V235, 235), ("pmlr/v220/volume-index.json", 220)])
+@pytest.mark.parametrize(
+    ("rel", "number"),
+    [(V28, 28), (V202, 202), (V235, 235), (V267, 267), ("pmlr/v220/volume-index.json", 220)],
+)
 def test_the_table_agrees_with_the_recorded_volume_headings(rel: str, number: int) -> None:
     found = pmlr.heading(fixture_text(rel))
     heading = VOLUMES[number].heading
@@ -106,7 +115,8 @@ def test_a_malformed_table_is_refused(text: str, error: str) -> None:
 
 def seed_v28(cache: Path) -> None:
     seed_fixture(cache, "pmlr", V28)
-    for key in V28_KEYS:
+    seed_fixture(cache, "pmlr", "pmlr/v28/paper.json")
+    for key in ("sznitman13", "boots13"):
         seed(cache, "pmlr", f"https://proceedings.mlr.press/v28/{key}.html", "", status=404)
 
 
@@ -138,14 +148,34 @@ def test_v28_icml_2013_records_come_from_the_table(tmp_path: Path) -> None:
         "accepted",
         "Synthetic title 2",
     )
-    assert r.authors == ("Synthetic authors 5",) and r.abstract is None  # the page is missing (cached 404)
+    assert r.authors == ("Synthetic authors 5",) and r.abstract is None  # recorded page title mismatches
     assert r.urls.proceedings == "https://proceedings.mlr.press/v28/muandet13.html"
     assert r.urls.pdf == "http://proceedings.mlr.press/v28/muandet13.pdf"  # not the -supp.pdf beside it
     [year] = r.claims("year")
     assert year.source == "pmlr" and year.evidence == "volume table v28 (primary, verified 2026-09-27)"
     report = result.report
     assert (report.volume, report.stated, report.listed, report.count_ok) == (28, 283, 3, False)  # trimmed
-    assert (report.abstract_missing, report.page_missing, report.role) == (3, 3, "primary")
+    assert (report.abstract_missing, report.page_missing, report.abstract_title_mismatch, report.role) == (
+        3,
+        2,
+        1,
+        "primary",
+    )
+
+
+def test_the_recorded_pre_openreview_paper_page_exercises_its_real_shape() -> None:
+    page = pmlr.parse_paper_page(fixture_text("pmlr/v28/paper.json"))
+    assert page.title == "Synthetic title 10"
+    assert page.authors == ("Synthetic Author 12", "Synthetic Author 13", "Synthetic Author 11")
+    assert page.abstract == "Synthetic abstract 5"
+    assert page.pdf == "http://proceedings.mlr.press/v28/muandet13.pdf"
+
+
+@pytest.mark.parametrize("rel", [V202, V267])
+def test_the_recorded_openreview_era_indexes_carry_forum_links(rel: str) -> None:
+    entries, unlinked = pmlr.parse_volume_index(fixture_text(rel), fixture_url(rel))
+    assert unlinked == 0 and len(entries) == 3
+    assert all(entry.forum for entry in entries)
 
 
 def test_v235_abstract_forum_link_and_unknown_track(tmp_path: Path) -> None:

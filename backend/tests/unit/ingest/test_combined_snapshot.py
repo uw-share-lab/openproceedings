@@ -1,6 +1,6 @@
-"""One snapshot built from every crawler's recorded fixtures at once: OpenReview API v2 (ICLR 2024), API v1 (ICLR
-2021 and the 2015 coverage gap), the NeurIPS proceedings (2013) and PMLR (ICML 2013 and 2024), all crawled into
-one cache and replayed offline by `op snapshot build`.
+"""One snapshot built from every crawler's recorded fixtures at once: OpenReview API v2 (ICLR 2024), API v1
+(ICLR 2021 and the 2015 coverage gap), the ICLR accepted-paper archive (2015), the NeurIPS proceedings (2013)
+and PMLR (ICML 2013 and 2024), all crawled into one cache and replayed offline by `op snapshot build`.
 
 The expected hashes were recorded before TASK-103 unified the crawlers' HTTP layer: the snapshot is a function
 of the cache, so a refactor of the fetch, cache, retry or replay code must leave every byte of it unchanged.
@@ -15,9 +15,10 @@ from pathlib import Path
 from openproceedings.ingest import snapshot as snap
 from openproceedings.ingest.sources import openreview_v1 as v1
 from openproceedings.ingest.sources import openreview_v2 as orv
-from openproceedings.ingest.sources.crawl import ingest_neurips, ingest_pmlr
+from openproceedings.ingest.sources.crawl import ingest_iclr, ingest_neurips, ingest_pmlr
 
 from tests.unit.ingest.openreview_fakes import FakeOpenReviewV1
+from tests.unit.ingest.test_iclr import seed_year as seed_iclr
 from tests.unit.ingest.test_neurips import seed_2013
 from tests.unit.ingest.test_openreview_v1 import client as v1_client
 from tests.unit.ingest.test_openreview_v1 import world_2021
@@ -26,9 +27,9 @@ from tests.unit.ingest.test_openreview_v2 import world
 from tests.unit.ingest.test_pmlr import seed_v28, seed_v235
 
 BUILT = datetime(2026, 9, 28, tzinfo=UTC)
-# recorded on feat/m4-crawlers at b766727, before TASK-103 touched the HTTP layer
-SNAPSHOT_HASH = "ff71377d8f7d1e7cbbd3d0797e758588e3039886481c7aa58c1eb10cd4db9df4"
-FILES_HASH = "9c8e9f9cdbbfc3302e18aad12fbd10b185eceb1606774d24088153a13567a15f"
+# Re-recorded by TASK-096 when the ICLR archive became a crawler and record schema v2 added its source.
+SNAPSHOT_HASH = "f84dae5aa502508a627871ff16eb0e7503adce52c01e9aa11ee55552480e0857"
+FILES_HASH = "cfadf0d02ef7b35266c5be53c4cdc316abe101850f97993417f2b7320f5a4a18"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:
@@ -36,6 +37,8 @@ def combined(tmp_path: Path) -> snap.BuildResult:
     orv.ingest(v2_client(cache, world()), cache, "ICLR", [2024])
     v1.ingest(v1_client(cache, world_2021()), cache, "ICLR", [2021])
     v1.ingest(v1_client(cache, FakeOpenReviewV1()), cache, "ICLR", [2015])
+    seed_iclr(cache, 2015)
+    ingest_iclr([2015], cache, offline=True)
     seed_2013(cache)
     ingest_neurips([2013], cache, offline=True)
     seed_v28(cache)

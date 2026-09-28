@@ -48,6 +48,7 @@ def test_an_unexpected_status_is_reported_with_its_records(caplog: pytest.LogCap
         ("ICLR", 2017, "ris", "unknown"),
         ("ICLR", 2013, "ris", "rejected"),  # API v1 holds ICLR 2013–2023 (a v1 venueid gives `unknown`)
         ("NeurIPS", 2022, "openreview_v1", "withdrawn"),
+        ("ICLR", 2015, "iclr_archive", "accepted"),
         ("ICML", 2019, "pmlr", "accepted"),
         ("ICML", 2023, "ris", "desk_rejected"),
     ],
@@ -66,6 +67,7 @@ def test_a_status_its_sources_can_supply_is_not_reported(
     [
         ("NeurIPS", 2019, "neurips_proceedings", "unknown"),  # before OpenReview: proceedings only
         ("NeurIPS", 2024, "neurips_proceedings", "rejected"),  # a listing is accepted wherever it is
+        ("ICLR", 2015, "iclr_archive", "rejected"),
         ("ICLR", 2015, "ris", "rejected"),  # ICLR 2015 is not on OpenReview
     ],
 )

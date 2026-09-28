@@ -1,8 +1,8 @@
 """The `op` command line. Every planned subcommand exists from M1 on; each stub names the task that
 implements it (spec 08 §CLI). The CLI and the API call the same functions.
 
-Implemented: `op ingest ris`, `op ingest openreview` (API v2, task-050; API v1, task-051), `op ingest neurips` /
-`op ingest pmlr` (task-052/053), `op snapshot build`, `op snapshot diff` (task-022), `op index build`
+Implemented: `op ingest ris`, `op ingest openreview` (API v2, task-050; API v1, task-051),
+`op ingest iclr|neurips|pmlr` (TASK-096, task-052/053), `op snapshot build`, `op snapshot diff` (task-022), `op index build`
 (task-023), `op index parity` (task-029), `op search` (ranked, `--ids`, `--explain`, `--engine reference`;
 task-024/030), `op export` (task-030), `op serve` (task-034), `op openapi` (task-040) and `op record save` /
 `op record replay` (task-083). Results go to stdout; logs go to stderr; a refused operation exits 1 with its
@@ -90,7 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
     ingest = sub.add_parser(
-        "ingest", help="fetch sources into the cache: ris | neurips | pmlr | openreview (spec 01)"
+        "ingest", help="fetch sources into the cache: ris | iclr | neurips | pmlr | openreview (spec 01)"
     )
     sources = ingest.add_subparsers(dest="source", metavar="<source>", required=True)
     ris = sources.add_parser(
@@ -118,6 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     orv.set_defaults(run=_ingest_openreview)
     for name, about in (
+        ("iclr", "ICLR 2014-2016 accepted-paper archive pages (iclr.cc)"),
         ("neurips", "NeurIPS proceedings years (proceedings.neurips.cc; 2021 adds the D&B host)"),
         ("pmlr", "ICML years from PMLR (the volume in ingest/pmlr_volumes.toml)"),
     ):
@@ -346,13 +347,13 @@ def _ingest_openreview(ns: argparse.Namespace) -> int:
 
 
 def _ingest_crawl(ns: argparse.Namespace) -> int:
-    from openproceedings.ingest.sources.crawl import ingest_neurips, ingest_pmlr
+    from openproceedings.ingest.sources.crawl import ingest_iclr, ingest_neurips, ingest_pmlr
 
     if ns.delay < MIN_DELAY:
         raise _usage(f"--delay must be at least {MIN_DELAY} seconds (politeness)")
     if ns.dry_run and ns.offline:
         raise _usage("--dry-run and --offline don't combine: a dry run reads the live index pages")
-    run = ingest_neurips if ns.source == "neurips" else ingest_pmlr
+    run = {"iclr": ingest_iclr, "neurips": ingest_neurips, "pmlr": ingest_pmlr}[ns.source]
     years = sorted({y for chunk in ns.years for y in chunk})
     _print(
         run(years, ns.data_dir / "cache", offline=ns.offline, dry_run=ns.dry_run, refresh=ns.refresh,

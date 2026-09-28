@@ -2,9 +2,9 @@
 
 `ingest_ris` checks scholarmend outputs and copies them into the cache (`<cache>/ris/<name>/`, the
 `mended.ris` and the `resolved.json` beside it); `op ingest openreview` caches its crawls under
-`<cache>/openreview/{v2,v1}/` (`sources/openreview_v2.py`, `sources/openreview_v1.py`); `op ingest neurips|pmlr`
+`<cache>/openreview/{v2,v1}/` (`sources/openreview_v2.py`, `sources/openreview_v1.py`); `op ingest iclr|neurips|pmlr`
 cache proceedings pages (`sources/crawl.py`). `build` imports everything cached (the RIS files, each finished
-OpenReview crawl replayed from its cached responses, and each finished NeurIPS/PMLR crawl re-mined from its cached
+OpenReview crawl replayed from its cached responses, and each finished ICLR/NeurIPS/PMLR crawl re-mined from its cached
 pages), dedups, adds the conflicts a crawl found inside one source (`with_crawl_conflicts`), and writes
 `<snapshots>/<crawl date>-<shorthash>/` with `records.jsonl`, `manifest.json`, `merges.csv` and
 `conflicts.csv`. It never fetches, so it works offline. It also reports (and logs) each venue-year status
@@ -204,7 +204,7 @@ def load_cache(cache: Path) -> tuple[list[PaperRecord], list[ImportReport]]:
 
 def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], list[Report]]:
     """Every cached source, with no network: the RIS imports, then every finished crawl of every crawler
-    (OpenReview API v2 and v1, NeurIPS, PMLR) re-run from its cache (`sources/crawl.replay_all`). Returns the
+    (OpenReview API v2 and v1, ICLR, NeurIPS, PMLR) re-run from its cache (`sources/crawl.replay_all`). Returns the
     records, the RIS reports and the crawl reports. Refuses an empty cache, and a crawl that can't be replayed
     (a `SourceError`: a marked crawl whose responses are gone, an unreadable cache entry or marker)."""
     from openproceedings.ingest.sources.crawl import replay_all
@@ -219,7 +219,7 @@ def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], li
     if not reports and not crawls:
         raise SnapshotError(
             f"nothing cached under {cache.name}; run `op ingest ris <mended.ris>...`, "
-            "`op ingest openreview --venue <V> --years <Y>` or `op ingest neurips|pmlr ...` first"
+            "`op ingest openreview --venue <V> --years <Y>` or `op ingest iclr|neurips|pmlr ...` first"
         )
     return records, reports, crawls
 
@@ -255,9 +255,9 @@ def _nested(
 
 def _sources(reports: Sequence[ImportReport], crawls: Sequence[Report]) -> dict[str, Any]:
     """manifest.json's `sources`: `ris` (the import reports; always present when no crawl is), then one entry
-    per crawler source (`openreview_v2`, `openreview_v1`, `neurips_proceedings`, `pmlr`), each with its reports
-    and its own `crawl_window` (records.py and coverage.py read it; absent when its crawls fetched nothing, e.g.
-    only ICLR 2015's coverage gap; `common.sources_manifest`)."""
+    per crawler source (`openreview_v2`, `openreview_v1`, `iclr_archive`, `neurips_proceedings`, `pmlr`), each
+    with its reports and its own `crawl_window` (records.py and coverage.py read it; absent when its crawls
+    fetched nothing; `common.sources_manifest`)."""
     sources: dict[str, Any] = {}
     if reports or not crawls:
         sources["ris"] = [r.to_manifest() for r in reports]
@@ -292,7 +292,7 @@ def render(
     crawls: Sequence[Report] = (),
 ) -> dict[str, bytes]:
     """The snapshot's files. Everything but manifest.json's `built_at` is a function of the inputs.
-    `crawls` are the crawlers' reports (OpenReview v2 and v1, NeurIPS, PMLR)."""
+    `crawls` are the crawlers' reports (OpenReview v2 and v1, ICLR, NeurIPS, PMLR)."""
     records = sorted(result.records, key=lambda r: r.id)
     if not records:
         raise SnapshotError("no records to snapshot")

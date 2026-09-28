@@ -61,9 +61,10 @@ tracks.
 **Position papers:** no ICML volume marks them (v235 and v267 have no section headings), so the track
 comes from OpenReview (`ICML.cc/2025/Position_Paper_Track`), and PMLR only confirms acceptance. ICML 2024's
 position papers aren't marked on OpenReview either (they carry `ICML.cc/2024/Conference`).
-v235's paper entries link the OpenReview forum (`openreview.net/forum?id=…`): dedup's forum link joins
-PMLR and OpenReview on that id for 2023+, before and whatever the title (TASK-105, `dedup-rules`). Only
-v235 is recorded with the link; v28 has none.
+Paper entries in the recorded v202, v235 and v267 indexes link the OpenReview forum
+(`openreview.net/forum?id=…`): dedup's forum link joins PMLR and OpenReview on that id for 2023+, before
+and whatever the title (TASK-105, `dedup-rules`). The recorded v28 paper page has no forum link and pins
+the older per-paper shape.
 
 ## Page structure
 - Volume index: `https://proceedings.mlr.press/v<N>/`. Its heading reads `Volume N: <proceedings title>`.
@@ -96,7 +97,7 @@ v235 is recorded with the link; v28 has none.
 `backend/src/openproceedings/ingest/sources/pmlr.py`, run by `op ingest pmlr --year <Y>` (the year's
 ingested ICML volume from the table; `--dry-run`, `--offline`, `--refresh`, `--delay`), cache under
 `<data-dir>/cache/pmlr/`. Per entry (`<div class="paper">`): title (`<p class="title">`), authors, the
-`abs` page URL (the native key), the PDF (not `-supp.pdf`) and a v235-style OpenReview forum link
+`abs` page URL (the native key), the PDF (not `-supp.pdf`) and a v202/v235/v267-style OpenReview forum link
 (`urls.forum`). Per paper page: `citation_title` (the abstract is taken only when it is the listed title,
 tolerating a leading `$…$`), `citation_author`, `div#abstract`, `citation_pdf_url`. Claims (source `pmlr`):
 venue, year and track with the table row as evidence (`volume table v28 (primary, verified 2026-09-27)`),

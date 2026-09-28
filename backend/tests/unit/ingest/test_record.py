@@ -253,7 +253,9 @@ def test_claims_and_urls_forbid_extras_and_are_frozen() -> None:
         Urls().pdf = "x"  # type: ignore[misc]
 
 
-@pytest.mark.parametrize("source", ["openreview_v2", "openreview_v1", "neurips_proceedings", "pmlr", "ris"])
+@pytest.mark.parametrize(
+    "source", ["openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "ris"]
+)
 def test_every_source_can_claim(source: str) -> None:
     assert claim("title", "x", source).source == source
 

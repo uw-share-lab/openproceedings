@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from openproceedings.ingest.sources import neurips, pmlr
+from openproceedings.ingest.sources import iclr, neurips, pmlr
 from openproceedings.ingest.sources.common import CrawlError, MinerError
 from openproceedings.ingest.sources.http import (
     CacheError,
@@ -75,6 +75,7 @@ def openreview(tmp_path: Path, transport: Script, *, offline: bool = False, min_
 
 
 SOURCES = {
+    "iclr": (proceedings(iclr.HOSTS, iclr.LISTINGS[2014]), "text/html"),
     "neurips": (
         proceedings(neurips.HOSTS, "https://proceedings.neurips.cc/paper_files/paper/2013/"),
         "text/html",

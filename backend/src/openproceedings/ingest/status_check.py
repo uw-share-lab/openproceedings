@@ -5,7 +5,7 @@ records behind it, instead of letting the statuses a venue-year shows widen sile
 A source's statuses are a property of the source, not of the records (spec 01 §Status handling):
 
 - An OpenReview note (API v2 or v1) can carry every status.
-- A proceedings listing (NeurIPS proceedings, a PMLR volume) holds accepted papers only.
+- A proceedings listing (the ICLR archive, NeurIPS proceedings, a PMLR volume) holds accepted papers only.
 - The RIS bootstrap resolves each record through a venueid or a listing, so it can carry every status in a
   venue-year OpenReview holds (API v1: ICLR 2013, 2014 and 2016–2023, NeurIPS 2021–2022; API v2 from ICLR
   2024, NeurIPS 2023, ICML 2023), and only `accepted` in any other.
@@ -38,6 +38,7 @@ ACCEPTED_ONLY: tuple[str, ...] = ("accepted",)
 SOURCE_STATUSES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "openreview_v2": (EVERY_STATUS, EVERY_STATUS),
     "openreview_v1": (EVERY_STATUS, EVERY_STATUS),
+    "iclr_archive": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "neurips_proceedings": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "pmlr": (ACCEPTED_ONLY, ACCEPTED_ONLY),
     "ris": (EVERY_STATUS, ACCEPTED_ONLY),

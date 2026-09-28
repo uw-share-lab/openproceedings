@@ -6,7 +6,8 @@ status: accepted
 ---
 ## Context
 
-When the same paper comes from OpenReview and from the published proceedings (NeurIPS proceedings, PMLR),
+When the same paper comes from OpenReview and from the published proceedings (the ICLR archive, NeurIPS
+proceedings, PMLR),
 the sources can disagree on title casing, abstract text, author lists and status. Spec 01 keeps every
 claim and needs a per-field rule for which one a record shows; the record-schema skill proposed a table.
 The review lead first chose proceedings first, then (the same day, 2026-09-26) switched to OpenReview
@@ -22,8 +23,8 @@ unlisted source never answers it. All claims are kept, including the losing ones
 
 | Field | Precedence (best first) |
 |---|---|
-| `title`, `abstract`, `authors` | `openreview_v2`, `openreview_v1` (the venues' own platform, current first), then `neurips_proceedings`, `pmlr` (for papers or years not on OpenReview, e.g. ICML before its move), then `ris` |
-| `status` | Where the venue-year's official proceedings (`neurips_proceedings`, `pmlr`) are published and crawled, they decide acceptance: listed → `accepted`; OpenReview says accepted but not listed → `status=unknown` plus a `conflicts.csv` row (never silently accepted or rejected; `unknown` is itemised in exclusion counts). Otherwise `openreview_v2`, `openreview_v1` via `content.venueid` only (never an invitation); `ris` only through its claims (spec 01) |
+| `title`, `abstract`, `authors` | `openreview_v2`, `openreview_v1` (the venues' own platform, current first), then `iclr_archive`, `neurips_proceedings`, `pmlr` (for papers or years not on OpenReview, e.g. ICML before its move), then `ris` |
+| `status` | Where the venue-year's official proceedings (`iclr_archive`, `neurips_proceedings`, `pmlr`) are published and crawled, they decide acceptance: listed → `accepted`; OpenReview says accepted but not listed → `status=unknown` plus a `conflicts.csv` row (never silently accepted or rejected; `unknown` is itemised in exclusion counts). Otherwise `openreview_v2`, `openreview_v1` via `content.venueid` only (never an invitation); `ris` only through its claims (spec 01) |
 | `track` | `openreview_v2`, `openreview_v1` via `content.venueid`; proceedings only for venue-years not on OpenReview; `ris` last (its track comes from those same claims, via scholarmend; in M2 it is the only source) |
 | `venue`, `year` | the source whose crawl scope defined the record, and it must agree with the venueid; a disagreement is a `conflicts.csv` row, never silently resolved. As built, venue and year are part of every merge key, so they can't differ inside a merge; a forum id seen in two venue-years is a `venue_year_not_merged` row and the records stay apart |
 

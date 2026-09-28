@@ -8,8 +8,9 @@ description: The proceedings.neurips.cc source — the paper_files URL grammar, 
 ## Role
 - **The only source** for NeurIPS before 2021 (main track; D&B starts in 2021). The crawl covers 2013 on
   (decision-013); the site index `https://proceedings.neurips.cc/` links every year 1987–2025.
-- Published late: on 2026-09-27 the 2025 page listed only 64 Creative AI papers (no main or D&B yet), so
-  OpenReview is the only source for a year until its proceedings appear. Re-crawl; never infer absence.
+- Published in split volumes: on 2026-09-27 the 2025 base page listed 64 Creative AI papers and linked a
+  5,823-paper `vol38-main-conference` page containing main, D&B and position tracks. A year can therefore
+  require more than its base URL; follow only a recorded, known companion and never infer absence.
 - A **cross-check** for 2021+ (OpenReview v1/v2 is primary for track and status). An OpenReview-accepted
   paper missing from the proceedings, or the reverse, is a `conflicts.csv` row. It never silently flips
   status.
@@ -28,7 +29,7 @@ Checked on every year page from 2013 to 2025 (2026-09-27, `docs/research/2026-09
 | 1987–2021 | `<sha>-Abstract.html`: **no track token** (all main track) | `<li class="" data-track="none">` |
 | 2022–2023 | `-Abstract-Conference.html`, `-Abstract-Datasets_and_Benchmarks.html` | `<li class="conference">`, `"datasets_and_benchmarks"` |
 | 2024 | `-Abstract-Conference.html`, `-Abstract-Datasets_and_Benchmarks_Track.html` | `data-track="datasets_and_benchmarks_track"` |
-| 2025 (so far) | `-Abstract-Creative_AI_Track.html` | `data-track="creative_ai_track"` |
+| 2025 | base: `-Abstract-Creative_AI_Track.html`; vol38 companion: `-Abstract-{Conference,Datasets_and_Benchmarks_Track,Position_Paper_Track}.html` | `data-track="creative_ai_track"`, `"conference"`, `"datasets_and_benchmarks_track"`, `"position_paper_track"` |
 | 2021 D&B | `https://datasets-benchmarks-proceedings.neurips.cc/paper/2021` → `/paper_files/paper/2021/hash/<sha>-Abstract-round1.html` / `-round2.html` | `<li class="round1">`, authors in `<i>` |
 
 `classify_proceedings("")` returns track `unknown`, so the miner must give token-less 1987–2021
@@ -59,7 +60,7 @@ evidence rule with a fixture.
 | `Conference` | `main` |
 | `Datasets_and_Benchmarks_Track` | `datasets_benchmarks` |
 | `Datasets_and_Benchmarks` (≤2023 spelling) | alias → `Datasets_and_Benchmarks_Track` → `datasets_benchmarks` |
-| `Position_Paper_Track` | `position` (spec 01 lists NeurIPS's position track, `NeurIPS.cc/<Y>/Position_Paper_Track` on OpenReview from 2025; no proceedings page carries the token yet) |
+| `Position_Paper_Track` | `position` (OpenReview and the 2025 vol38 proceedings companion both carry it) |
 | `round1`, `round2` (2021 D&B host only) | `datasets_benchmarks` |
 | none (1987–2021 on `proceedings.neurips.cc`) | `main`, by host and year (see the grammar table) |
 | `Creative_AI_Track` | `other` (keep the raw segment for audit) |
@@ -93,11 +94,10 @@ status (`listed on <year index>`) and `urls.proceedings` at the year page's fetc
 page's. From 2021 the report's `role` is `confirm`: dedup's precedence lets the proceedings decide
 acceptance and OpenReview the track, and a disagreement is a `conflicts.csv` row. The year page's
 `<span class="paper-count">` is the report's `stated` count, compared with the entries parsed (`count_ok`).
-- **2025 splits its volumes.** On 2026-09-27 the 2025 year page (Creative AI only) says "See also:
-  Advances in Neural Information Processing Systems 38 Main Conference" →
-  `/paper_files/paper/2025/vol38-main-conference`. The miner reports such links (`see_also`, and a
-  `listing_see_also_unfollowed` warning) but does not crawl them until a person records that page and
-  its structure.
+- **2025 splits its volumes.** The miner treats the base page and its recorded
+  `/paper_files/paper/2025/vol38-main-conference` companion as one crawl. The report contains both listing
+  reports and all four tracks. A “See also” URL outside this explicit pair remains in `see_also` and emits
+  `listing_see_also_unfollowed`; discovering a link never silently broadens the crawl.
 
 ## Presentation
 Only set `presentation` (`oral` / `spotlight` / `poster`) when the page or OpenReview states it. Never
