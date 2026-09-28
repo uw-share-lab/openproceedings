@@ -477,11 +477,13 @@ once released: changing one is a breaking change under `/api/v1`.
 A replay `mismatch` is **not** an HTTP error. It is a `200` with `status: "mismatch"`, logged as
 `API_REPLAY_MISMATCH` (§Search records).
 
-**The only responses that are not the envelope** come from outside the app, before it runs: a CORS
-preflight from an origin that isn't allowed (Starlette's plain-text 400 `Disallowed CORS origin`), uvicorn's
-own plain-text 503 once `limit_concurrency` connections or tasks are held, and uvicorn's 400 for a request
-head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "busy, retry" (spec 05
-§Error states).
+**The only responses emitted directly by this deployment that are not the envelope** come from outside the
+app, before it runs: a CORS preflight from an origin that isn't allowed (Starlette's plain-text 400
+`Disallowed CORS origin`), uvicorn's own plain-text 503 once `limit_concurrency` connections or tasks are
+held, and uvicorn's 400 for a request head (request line and headers) over 64 KiB. An intermediary can still
+replace or lose a response after the app ran. A client treats a non-JSON 5xx as "busy, retry" only for
+idempotent reads. For the irreversible `POST /records`, it cannot know whether the record committed, so it
+shows SV-9 and never retries that request (spec 05 §Error states).
 
 ## Implementation notes
 

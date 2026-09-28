@@ -94,6 +94,8 @@ type Phase =
   | { readonly kind: "index_moved"; readonly request: SaveRequest }
   | { readonly kind: "unknown"; readonly failure: Failure; readonly request: SaveRequest }
   | { readonly kind: "refused"; readonly failure: Failure; readonly request: SaveRequest };
+type SavedPhase = Extract<Phase, { kind: "saved" }>;
+type TerminalPhase = Extract<Phase, { kind: "index_moved" } | { kind: "refused" }>;
 
 function requestKey(request: SaveRequest): string {
   return JSON.stringify([request.q, request.mode, request.indexVersion]);
@@ -126,12 +128,13 @@ function safeToRetry(failure: Failure): boolean {
 interface SaveController {
   readonly phase: Phase;
   readonly unknownRequests: ReadonlyMap<string, Failure>;
-  readonly savedRequests: ReadonlyMap<string, Extract<Phase, { kind: "saved" }>>;
+  readonly savedRequests: ReadonlyMap<string, SavedPhase>;
+  readonly terminalRequests: ReadonlyMap<string, TerminalPhase>;
   readonly fullNow: boolean;
   confirm(request: SaveRequest): void;
   dismiss(): void;
   save(request: SaveRequest): Promise<void>;
-  loadRecord(saved: Extract<Phase, { kind: "saved" }>): Promise<void>;
+  loadRecord(saved: SavedPhase): Promise<void>;
 }
 
 const SaveRecordContext = createContext<SaveController | null>(null);
@@ -152,8 +155,10 @@ export function SaveRecordProvider({
   const mounted = useRef(true);
   const unknownRef = useRef<ReadonlyMap<string, Failure>>(new Map());
   const [unknownRequests, setUnknownRequests] = useState<ReadonlyMap<string, Failure>>(() => new Map());
-  const savedRef = useRef<ReadonlyMap<string, Extract<Phase, { kind: "saved" }>>>(new Map());
-  const [savedRequests, setSavedRequests] = useState<ReadonlyMap<string, Extract<Phase, { kind: "saved" }>>>(
+  const savedRef = useRef<ReadonlyMap<string, SavedPhase>>(new Map());
+  const [savedRequests, setSavedRequests] = useState<ReadonlyMap<string, SavedPhase>>(() => new Map());
+  const terminalRef = useRef<ReadonlyMap<string, TerminalPhase>>(new Map());
+  const [terminalRequests, setTerminalRequests] = useState<ReadonlyMap<string, TerminalPhase>>(
     () => new Map(),
   );
   const loadingReplay = useRef(new Set<number>());
@@ -178,7 +183,7 @@ export function SaveRecordProvider({
     setUnknownRequests(next);
   };
 
-  const rememberSaved = (saved: Extract<Phase, { kind: "saved" }>) => {
+  const rememberSaved = (saved: SavedPhase) => {
     const next = new Map(savedRef.current).set(requestKey(saved.request), saved);
     savedRef.current = next;
     setSavedRequests(next);
@@ -189,6 +194,19 @@ export function SaveRecordProvider({
     next.delete(requestKey(request));
     savedRef.current = next;
     setSavedRequests(next);
+  };
+
+  const rememberTerminal = (terminal: TerminalPhase) => {
+    const next = new Map(terminalRef.current).set(requestKey(terminal.request), terminal);
+    terminalRef.current = next;
+    setTerminalRequests(next);
+  };
+
+  const forgetTerminal = (request: SaveRequest) => {
+    const next = new Map(terminalRef.current);
+    next.delete(requestKey(request));
+    terminalRef.current = next;
+    setTerminalRequests(next);
   };
 
   const confirm = (request: SaveRequest) => {
@@ -216,6 +234,7 @@ export function SaveRecordProvider({
     const attempt = ++activeAttempt.current;
     latestByRequest.current.set(key, attempt);
     forgetSaved(request);
+    forgetTerminal(request);
     setPhase({ kind: "saving", dialogOpen: true, request });
     const isLatestForRequest = () => mounted.current && latestByRequest.current.get(key) === attempt;
     const isForeground = () => activeAttempt.current === attempt;
@@ -237,17 +256,23 @@ export function SaveRecordProvider({
         forgetUnknown(request);
         rememberStoreFull();
         setStoreFull(true);
-        if (isForeground()) setPhase({ kind: "refused", failure: posted, request });
+        const terminal: TerminalPhase = { kind: "refused", failure: posted, request };
+        rememberTerminal(terminal);
+        if (isForeground()) setPhase(terminal);
         return;
       }
       if (posted.kind === "refused" && posted.error.code === "API_INDEX_VERSION_UNAVAILABLE") {
         forgetUnknown(request);
-        if (isForeground()) setPhase({ kind: "index_moved", request });
+        const terminal: TerminalPhase = { kind: "index_moved", request };
+        rememberTerminal(terminal);
+        if (isForeground()) setPhase(terminal);
         return;
       }
       if (posted.kind === "refused" && posted.status === 422) {
         forgetUnknown(request);
-        if (isForeground()) setPhase({ kind: "refused", failure: posted, request });
+        const terminal: TerminalPhase = { kind: "refused", failure: posted, request };
+        rememberTerminal(terminal);
+        if (isForeground()) setPhase(terminal);
         return;
       }
       if (!safeToRetry(posted)) {
@@ -256,7 +281,9 @@ export function SaveRecordProvider({
         return;
       }
       forgetUnknown(request);
-      if (isForeground()) setPhase({ kind: "refused", failure: posted, request });
+      const terminal: TerminalPhase = { kind: "refused", failure: posted, request };
+      rememberTerminal(terminal);
+      if (isForeground()) setPhase(terminal);
       return;
     }
     if (!isCreated(posted.data)) {
@@ -266,7 +293,7 @@ export function SaveRecordProvider({
       return;
     }
     forgetUnknown(request);
-    const saved: Extract<Phase, { kind: "saved" }> = {
+    const saved: SavedPhase = {
       kind: "saved",
       attempt,
       created: posted.data,
@@ -277,7 +304,7 @@ export function SaveRecordProvider({
     if (isForeground()) setPhase(saved);
   };
 
-  const loadRecord = async (saved: Extract<Phase, { kind: "saved" }>) => {
+  const loadRecord = async (saved: SavedPhase) => {
     const key = requestKey(saved.request);
     const current = savedRef.current.get(key);
     if (
@@ -300,7 +327,17 @@ export function SaveRecordProvider({
 
   return (
     <SaveRecordContext.Provider
-      value={{ phase, unknownRequests, savedRequests, fullNow, confirm, dismiss, save, loadRecord }}
+      value={{
+        phase,
+        unknownRequests,
+        savedRequests,
+        terminalRequests,
+        fullNow,
+        confirm,
+        dismiss,
+        save,
+        loadRecord,
+      }}
     >
       {children}
     </SaveRecordContext.Provider>
@@ -338,13 +375,9 @@ function SaveRecordInner({
   const shownKey = requestKey(shownRequest);
   const shownUnknown = controller.unknownRequests.get(shownKey);
   const shownSaved = controller.savedRequests.get(shownKey);
-  const visibleSaved =
-    shownSaved ?? (shownUnknown === undefined && phase.kind === "saved" ? phase : undefined);
-  const visibleUnknown =
-    shownSaved === undefined
-      ? (shownUnknown ?? (phase.kind === "unknown" ? phase.failure : undefined))
-      : undefined;
-  const showForegroundTerminal = shownSaved === undefined && shownUnknown === undefined;
+  const shownTerminal = controller.terminalRequests.get(shownKey);
+  const visibleUnknown = shownSaved === undefined ? shownUnknown : undefined;
+  const visibleTerminal = shownSaved === undefined && shownUnknown === undefined ? shownTerminal : undefined;
   const sameSaveIsUnknown = shownUnknown !== undefined;
   const reason = storeFull
     ? STORE_FULL_MESSAGE
@@ -353,14 +386,14 @@ function SaveRecordInner({
       : disabledReason;
 
   useEffect(() => {
-    if (phase.kind === "index_moved" || phase.kind === "refused" || phase.kind === "unknown") {
+    if (visibleTerminal !== undefined || visibleUnknown !== undefined) {
       trigger.current?.focus();
     }
-  }, [phase]);
+  }, [visibleTerminal, visibleUnknown]);
 
   useEffect(() => {
-    if (visibleSaved?.record === null) void controller.loadRecord(visibleSaved);
-  }, [controller, visibleSaved]);
+    if (shownSaved?.record === null) void controller.loadRecord(shownSaved);
+  }, [controller, shownSaved]);
 
   const dismissConfirmation = () => {
     controller.dismiss();
@@ -397,37 +430,41 @@ function SaveRecordInner({
           saving={phase.kind === "saving"}
         />
       )}
-      {visibleSaved !== undefined && (
+      {shownSaved !== undefined && (
         <Saved
-          created={visibleSaved.created}
-          record={visibleSaved.record}
-          shownIndex={visibleSaved.request.indexVersion}
-          shownTotal={visibleSaved.request.total}
+          created={shownSaved.created}
+          record={shownSaved.record}
+          shownIndex={shownSaved.request.indexVersion}
+          shownTotal={shownSaved.request.total}
         />
       )}
-      {showForegroundTerminal && phase.kind === "index_moved" && (
+      {visibleTerminal?.kind === "index_moved" && (
         <div role="alert" className={`${box} w-full`}>
           <p className="break-words">
             <span aria-hidden="true">✖ </span>Index{" "}
-            <code className="font-mono break-all">{phase.request.indexVersion}</code> is no longer served
-            here, so the search wasn&apos;t saved: it would have been frozen on another index than the one
-            whose counts you saw. Search again to see the current results, then save.
+            <code className="font-mono break-all">{visibleTerminal.request.indexVersion}</code> is no longer
+            served here, so the search wasn&apos;t saved: it would have been frozen on another index than the
+            one whose counts you saw. Search again to see the current results, then save.
           </p>
         </div>
       )}
-      {showForegroundTerminal && phase.kind === "refused" && (
+      {visibleTerminal?.kind === "refused" && (
         <div className="w-full">
-          {phase.failure.kind === "refused" && phase.failure.error.code === "API_RECORDS_STORE_FULL" ? (
+          {visibleTerminal.failure.kind === "refused" &&
+          visibleTerminal.failure.error.code === "API_RECORDS_STORE_FULL" ? (
             <p role="alert" className={box}>
               {STORE_FULL_MESSAGE}
             </p>
-          ) : phase.failure.kind === "refused" && phase.failure.status === 422 ? (
+          ) : visibleTerminal.failure.kind === "refused" && visibleTerminal.failure.status === 422 ? (
             <div role="alert" className={box}>
               <p>The search couldn&apos;t be saved: it no longer runs on this index.</p>
               <ul className="list-disc pl-5">
                 {(
-                  phase.failure.error.diagnostics ?? [
-                    { code: phase.failure.error.code, message: phase.failure.error.message },
+                  visibleTerminal.failure.error.diagnostics ?? [
+                    {
+                      code: visibleTerminal.failure.error.code,
+                      message: visibleTerminal.failure.error.message,
+                    },
                   ]
                 ).map((d, i) => (
                   <li key={i} className="break-words">
@@ -437,7 +474,10 @@ function SaveRecordInner({
               </ul>
             </div>
           ) : (
-            <FailureNotice failure={phase.failure} onRetry={() => void controller.save(phase.request)} />
+            <FailureNotice
+              failure={visibleTerminal.failure}
+              onRetry={() => void controller.save(visibleTerminal.request)}
+            />
           )}
         </div>
       )}

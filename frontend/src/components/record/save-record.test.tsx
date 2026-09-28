@@ -290,6 +290,18 @@ describe("saved (design S2; copy SV-3, SV-4, SV-5)", () => {
     ).toBeTruthy();
   });
 
+  it("shows a saved outcome only beside its own request", async () => {
+    const view = renderWithApi(<SavePage show q="request B" />, api(created()));
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+    await screen.findByRole("heading", { name: `Saved as search record ${R.record_id}` });
+
+    view.rerender(<SavePage show q="unrelated request C" />);
+    expect(screen.queryByRole("heading", { name: `Saved as search record ${R.record_id}` })).toBeNull();
+
+    view.rerender(<SavePage show q="request B" />);
+    expect(screen.getByRole("heading", { name: `Saved as search record ${R.record_id}` })).toBeTruthy();
+  });
+
   it("does not let an older replay completion replace a newer saved record", async () => {
     const first = {
       ...C.created,
@@ -386,6 +398,8 @@ describe("refused (design S3)", () => {
         json({ error: { code: "API_RATE_LIMITED", message: "unavailable" } }, 429, { "Retry-After": "0" }),
       ),
     );
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    view.rerender(<SaveRecord {...PROPS} />);
     fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
     await waitFor(() => expect(view.calls).toHaveLength(2));
 
@@ -458,6 +472,22 @@ describe("refused (design S3)", () => {
     await waitFor(() => expect(calls).toHaveLength(2));
   });
 
+  it("shows a refused outcome only beside its own request", async () => {
+    const view = renderWithApi(
+      <SavePage show q="request B" />,
+      api(json({ error: { code: "API_INDEX_NOT_LOADED", message: "index is loading" } }, 503)),
+    );
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+    await screen.findByRole("button", { name: "Retry" });
+
+    view.rerender(<SavePage show q="unrelated request C" />);
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    view.rerender(<SavePage show q="request B" />);
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+  });
+
   it("keeps the confirmed request when the shown search changes behind its dialog", async () => {
     const { calls, rerender } = renderWithApi(<SaveRecord {...PROPS} />, (call) => {
       if (call.method === "POST") throw new TypeError("response lost after commit");
@@ -499,20 +529,31 @@ describe("refused (design S3)", () => {
         ),
       "couldn't be saved",
     ],
-  ])("clears a deadline's unknown block after a late conclusive refusal (%s)", async (_case, reply, text) => {
-    let answer: (response: Response) => void = () => {};
-    const pending = new Promise<Response>((resolve) => (answer = resolve));
-    renderWithApi(<SavePage show responseDeadlineMs={10} />, (call) =>
-      call.method === "POST" ? pending : api(created())(call),
-    );
-    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
-    await screen.findByRole("alert");
+  ])(
+    "retains a late conclusive refusal for its request after save B starts (%s)",
+    async (_case, reply, text) => {
+      let answer: (response: Response) => void = () => {};
+      const pending = new Promise<Response>((resolve) => (answer = resolve));
+      const view = renderWithApi(<SavePage show responseDeadlineMs={10} />, (call) => {
+        if (call.method === "POST" && (call.body as { q: string }).q === C.q) return pending;
+        if (call.method === "POST") {
+          return json({ error: { code: "API_INDEX_NOT_LOADED", message: "loading" } }, 503);
+        }
+        return api(created())(call);
+      });
+      fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+      await screen.findByRole("alert");
 
-    await act(async () => answer(reply()));
+      view.rerender(<SavePage show q="request B" responseDeadlineMs={10} />);
+      fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+      await screen.findByRole("button", { name: "Retry" });
+      await act(async () => answer(reply()));
+      view.rerender(<SavePage show responseDeadlineMs={10} />);
 
-    expect(await screen.findByText(text, { exact: false })).toBeTruthy();
-    expect(screen.queryByText("The save outcome is unknown.", { exact: false })).toBeNull();
-  });
+      expect(await screen.findByText(text, { exact: false })).toBeTruthy();
+      expect(screen.queryByText("The save outcome is unknown.", { exact: false })).toBeNull();
+    },
+  );
 
   it("retains late success A after timed-out A is followed by save B", async () => {
     let finishA: (response: Response) => void = () => {};
