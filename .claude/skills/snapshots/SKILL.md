@@ -41,7 +41,7 @@ the directory) and `crawl_window` (the oldest and newest fetch times); `built_at
 value); `record_count`; `counts` nested venue → year → track → status; `abstract_missing` and
 `unknown_track` per venue → year; since format 2 (TASK-082), `abstract_missing_by_track` (venue → year →
 track, 0 included), `sources_by_track` (venue → year → track → the claim sources of its records),
-`statuses_indexed` (venue → year → the statuses its sources can contain, from `ingest/sources.py`, plus any
+`statuses_indexed` (venue → year → the statuses its sources can contain, from `ingest/statuses.py`, plus any
 its records hold) and `crawl_windows` (per claim source, its first and last `fetched_at`); `merges` and `conflicts` (a `total` plus a count per rule /
 resolution kind); `files` (the sha256 of `merges.csv` and `conflicts.csv`, which `snapshot_hash` doesn't
 cover); and `sources` — for RIS, one `ImportReport.to_manifest()` per cached file (both inputs' sha256,

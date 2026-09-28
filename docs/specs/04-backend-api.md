@@ -781,7 +781,7 @@ head (request line and headers) over 64 KiB. A client treats a non-JSON 5xx as "
     and every venue-year carries `unknown_track` and `unknown_status`, 0 included. Missing abstracts are per
     venue-year and, since manifest format 2, per track. A format-1 manifest (built before TASK-082) has no
     per-track keys: the load takes each track's missing abstracts and sources from its one pass over the
-    verified records, the statuses indexed from `ingest/sources.py`, and `crawl_dates` holds `*` alone.
+    verified records, the statuses indexed from `ingest/statuses.py`, and `crawl_dates` holds `*` alone.
   - Computed **when the index is loaded** (`IndexState._load` → `api/coverage.py::compute`, right after the
     snapshot is verified and before the swap; task-038 review). It is part of the served bundle, beside the
     snapshot's records (`IndexState.served`). The load's one pass over the records

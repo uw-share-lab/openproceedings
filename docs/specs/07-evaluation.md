@@ -61,7 +61,7 @@ machine-readable copy, which `GET /coverage` serves, and a test holds the two eq
 `coverage-reporting` skill. Also report, per cell: missing-abstract count, `unknown`-track count, and
 **statuses indexed**, meaning which statuses the sources for that venue-year can even contain. For example,
 pre-2021 NeurIPS and ICML 2020–22 come from proceedings only, so no rejected papers exist there to exclude.
-The source of statuses indexed is spec 01's source table as `ingest/sources.py` holds it (spec 01
+The source of statuses indexed is spec 01's source table as `ingest/statuses.py` holds it (spec 01
 §Pipeline 5); the snapshot manifest records them per venue-year, and the missing abstracts and sources per
 cell (manifest format 2, TASK-082).
 The methods text cites the coverage report (with its snapshot hash) as the database-scope caveat.

@@ -40,7 +40,7 @@ from openproceedings import __version__, storage
 from openproceedings.ingest.dedup import Conflict, DedupResult, Merge, dedup
 from openproceedings.ingest.record import RECORD_SCHEMA_VERSION, PaperRecord
 from openproceedings.ingest.ris import ImportReport, import_ris
-from openproceedings.ingest.sources import statuses_indexed
+from openproceedings.ingest.statuses import statuses_indexed
 from openproceedings.logs import elapsed_ms
 from openproceedings.query.normalize import TOKENIZER_VERSION
 
@@ -230,7 +230,7 @@ def _plain(value: dict[str, Any]) -> dict[str, Any]:
 def _per_track(records: Iterable[PaperRecord]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """venue → year → track → missing abstracts (0 included), → the claim sources of its records (sorted),
     and venue → year → the statuses those sources can contain, those its records hold included
-    (`sources.statuses_indexed`)."""
+    (`statuses.statuses_indexed`)."""
     missing: dict[str, Any] = {}
     sources: dict[str, Any] = {}
     present: dict[tuple[str, str], set[str]] = {}

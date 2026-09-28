@@ -9,7 +9,7 @@ estimates or folds. A track or status outside the vocabulary, a venue-year missi
 maps, or a sum that doesn't add up is a `SnapshotError`, never a best guess.
 
 Per venue-year also (TASK-082): `statuses_indexed` (the statuses its sources can contain, from the manifest,
-`ingest/sources.py`) and `tracks`, the spec 07 §C cells (venue × year × track): records, indexed accepted,
+`ingest/statuses.py`) and `tracks`, the spec 07 §C cells (venue × year × track): records, indexed accepted,
 missing abstracts and claim sources from the manifest's format-2 keys, beside the official accepted count
 (`official_counts.py`) with its delta and ±1% gate. A format-1 manifest lacks those keys; the load passes
 the records' own per-track facts (`TrackFacts`) instead, and compares them with a format-2 manifest's.
@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from openproceedings.ingest.snapshot import SnapshotError
-from openproceedings.ingest.sources import statuses_indexed
+from openproceedings.ingest.statuses import statuses_indexed
 from openproceedings.official_counts import GATED_TRACKS, OFFICIAL_ACCEPTED, OfficialTable, within_gate
 from openproceedings.vocab import STATUSES, TRACKS, VENUES, bootstrap_only, crawl_dates_kind
 

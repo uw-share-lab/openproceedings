@@ -1,5 +1,5 @@
 """Statuses indexed (spec 07 §C, TASK-082): which statuses a venue-year's sources can contain, from the source
-table (`ingest/sources.py`), pinned to spec 01's source table and to what the classifiers can produce."""
+table (`ingest/statuses.py`), pinned to spec 01's source table and to what the classifiers can produce."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import get_args
 import pytest
 from openproceedings.ingest.classify import classify_proceedings, classify_venueid
 from openproceedings.ingest.record import Source
-from openproceedings.ingest.sources import (
+from openproceedings.ingest.statuses import (
     ACCEPTED_ONLY,
     EVERY_STATUS,
     OPENREVIEW_FROM,

@@ -20,7 +20,7 @@ For every **venue × year × track** cell, from a pinned snapshot / `index_versi
 `op eval coverage` writes `docs/results/<YYYY-MM-DD>-coverage.md`. `GET /coverage` and the `/coverage` page
 render the **same data** (no second computation in the UI), with source and snapshot date shown per cell.
 As built (TASK-082): `GET /coverage` serves each venue-year's `statuses_indexed` (from
-`ingest/sources.py`, recorded in the snapshot manifest) and its `tracks`, one per cell, with `records`,
+`ingest/statuses.py`, recorded in the snapshot manifest) and its `tracks`, one per cell, with `records`,
 `indexed_accepted`, `abstract_missing`, `sources`, `official_accepted`/`official_counts`/
 `official_citation`/`official_accessed`, `delta`, `delta_pct` (unrounded percent), `gated` and
 `within_gate` (null unless gated); `snapshot.crawl_dates` has each source's own window.

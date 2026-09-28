@@ -402,10 +402,10 @@ def test_tracks_equal_an_independent_count_of_the_snapshot_records(client: TestC
 
 
 def test_statuses_indexed_follow_the_source_table(client: TestClient, store: Store) -> None:
-    """AC1: a venue-year's statuses indexed are what its sources can contain (`ingest/sources.py`, spec 01), in
+    """AC1: a venue-year's statuses indexed are what its sources can contain (`ingest/statuses.py`, spec 01), in
     vocabulary order, and include every status it holds; the manifest records them at build. (The synthetic
     fixture holds every status in every venue-year; the proceedings-only cases are unit tests.)"""
-    from openproceedings.ingest.sources import statuses_indexed
+    from openproceedings.ingest.statuses import statuses_indexed
 
     body = client.get("/api/v1/coverage").json()
     manifest = json.loads((snapshot_of(store.indexes.parent, store.big) / "manifest.json").read_text())

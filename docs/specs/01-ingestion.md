@@ -91,7 +91,7 @@ not a database; cite them only once the M4 crawl indexes the proceedings themsel
    indexed** (spec 07 §C).
 
 **Statuses indexed** are which statuses a venue-year's sources can contain at all, from the source table in
-`ingest/sources.py` (`SOURCE_STATUSES`, one row per claim source): an OpenReview venueid can carry every
+`ingest/statuses.py` (`SOURCE_STATUSES`, one row per claim source): an OpenReview venueid can carry every
 status (`classify_venueid`), a proceedings listing only `accepted` (`classify_proceedings`), and the RIS
 bootstrap, which resolves through either, every status where OpenReview holds the venue-year and only
 `accepted` before it. Where OpenReview begins per venue (`OPENREVIEW_FROM`) is read from the two OpenReview
