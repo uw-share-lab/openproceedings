@@ -282,9 +282,23 @@ describe("saved (design S2; copy SV-3, SV-4, SV-5)", () => {
     expect(warning.textContent).toContain(`Saved on index 9f8e7d6c5b4a, not ${R.index_version}`);
   });
 
+  it("accepts a valid hand-named index version in RecordCreated", async () => {
+    renderWithApi(<SaveRecord {...PROPS} />, api(created({ index_version: "a-b" })));
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+    expect(
+      await screen.findByRole("heading", { name: `Saved as search record ${R.record_id}` }),
+    ).toBeTruthy();
+  });
+
   it("does not let an older replay completion replace a newer saved record", async () => {
-    const first = { record_id: "A23456789012", page: "/record/A23456789012", index_version: R.index_version };
+    const first = {
+      ...C.created,
+      record_id: "A23456789012",
+      page: "/record/A23456789012",
+      index_version: R.index_version,
+    };
     const second = {
+      ...C.created,
       record_id: "B23456789012",
       page: "/record/B23456789012",
       index_version: R.index_version,
@@ -316,6 +330,26 @@ describe("saved (design S2; copy SV-3, SV-4, SV-5)", () => {
     expect(screen.getByRole("heading", { name: `Saved as search record ${second.record_id}` })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: `Saved as search record ${first.record_id}` })).toBeNull();
     expect(view.calls.filter((call) => call.method === "POST")).toHaveLength(2);
+  });
+
+  it("does not let replay A completion close confirmation B", async () => {
+    let finishReplay: (response: Response) => void = () => {};
+    const replay = new Promise<Response>((resolve) => (finishReplay = resolve));
+    const view = renderWithApi(<SaveRecord {...PROPS} />, (call) => {
+      if (call.method === "POST") return created();
+      if (call.path === `/api/v1/records/${R.record_id}`) return replay;
+      return api(created())(call);
+    });
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+    await screen.findByRole("heading", { name: `Saved as search record ${R.record_id}` });
+
+    view.rerender(<SaveRecord {...PROPS} q="confirmation B" />);
+    const dialog = openConfirm();
+    expect(dialog.textContent).toContain("confirmation B");
+    await act(async () => finishReplay(json(C.replayed)));
+
+    expect(screen.getByRole("dialog")).toBe(dialog);
+    expect(dialog.textContent).toContain("confirmation B");
   });
 });
 
@@ -364,6 +398,32 @@ describe("refused (design S3)", () => {
     ["empty object", () => json({}, 201)],
     ["null body", () => json(null, 201)],
     ["missing record id", () => json({ page: C.created.page, index_version: R.index_version }, 201)],
+    [
+      "missing tokenizer version",
+      () =>
+        json(
+          {
+            record_id: C.created.record_id,
+            page: C.created.page,
+            index_version: C.created.index_version,
+            query_version: C.created.query_version,
+          },
+          201,
+        ),
+    ],
+    [
+      "missing query version",
+      () =>
+        json(
+          {
+            record_id: C.created.record_id,
+            page: C.created.page,
+            index_version: C.created.index_version,
+            tokenizer_version: C.created.tokenizer_version,
+          },
+          201,
+        ),
+    ],
     ["API_INTERNAL", () => json({ error: { code: "API_INTERNAL", message: "failed after commit" } }, 500)],
   ])("does not retry an ambiguous committed save (%s)", async (_case, answer) => {
     const committed: string[] = [];
@@ -398,7 +458,7 @@ describe("refused (design S3)", () => {
     await waitFor(() => expect(calls).toHaveLength(2));
   });
 
-  it("keeps the confirmed request and rechecks a blocked key before dispatch", async () => {
+  it("keeps the confirmed request when the shown search changes behind its dialog", async () => {
     const { calls, rerender } = renderWithApi(<SaveRecord {...PROPS} />, (call) => {
       if (call.method === "POST") throw new TypeError("response lost after commit");
       return api(created())(call);
@@ -416,6 +476,67 @@ describe("refused (design S3)", () => {
     const bodies = calls.filter((call) => call.method === "POST").map((call) => call.body);
     expect(bodies.filter((body) => (body as { q: string }).q === C.q)).toHaveLength(1);
     expect((bodies[1] as { q: string }).q).toBe("a different safe request");
+  });
+
+  it.each([
+    [
+      "moved index",
+      () => json({ error: { code: "API_INDEX_VERSION_UNAVAILABLE", message: "moved" } }, 409),
+      "is no longer served here",
+    ],
+    [
+      "invalid query",
+      () =>
+        json(
+          {
+            error: {
+              code: "WILDCARD_TOO_MANY_EXPANSIONS",
+              message: "too many",
+              diagnostics: [{ code: "WILDCARD_TOO_MANY_EXPANSIONS", message: "too many", span: [0, 2] }],
+            },
+          },
+          422,
+        ),
+      "couldn't be saved",
+    ],
+  ])("clears a deadline's unknown block after a late conclusive refusal (%s)", async (_case, reply, text) => {
+    let answer: (response: Response) => void = () => {};
+    const pending = new Promise<Response>((resolve) => (answer = resolve));
+    renderWithApi(<SavePage show responseDeadlineMs={10} />, (call) =>
+      call.method === "POST" ? pending : api(created())(call),
+    );
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+    await screen.findByRole("alert");
+
+    await act(async () => answer(reply()));
+
+    expect(await screen.findByText(text, { exact: false })).toBeTruthy();
+    expect(screen.queryByText("The save outcome is unknown.", { exact: false })).toBeNull();
+  });
+
+  it("retains late success A after timed-out A is followed by save B", async () => {
+    let finishA: (response: Response) => void = () => {};
+    const pendingA = new Promise<Response>((resolve) => (finishA = resolve));
+    const view = renderWithApi(<SavePage show responseDeadlineMs={10} />, (call) => {
+      if (call.method === "POST" && (call.body as { q: string }).q === C.q) return pendingA;
+      if (call.method === "POST") {
+        return json({ error: { code: "API_INDEX_NOT_LOADED", message: "loading" } }, 503);
+      }
+      return api(created())(call);
+    });
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+    await screen.findByRole("alert");
+
+    view.rerender(<SavePage show q="request B" responseDeadlineMs={10} />);
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+    await screen.findByRole("button", { name: "Retry" });
+    await act(async () => finishA(created()));
+    view.rerender(<SavePage show responseDeadlineMs={10} />);
+
+    expect(
+      await screen.findByRole("heading", { name: `Saved as search record ${R.record_id}` }),
+    ).toBeTruthy();
+    expect(view.calls.filter((call) => call.method === "POST")).toHaveLength(2);
   });
 
   it("saves nothing on a moved index (409) and says so", async () => {

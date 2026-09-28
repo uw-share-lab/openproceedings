@@ -160,8 +160,10 @@ PRISMA's "duplicates removed" box, never added to openproceedings' dedup stateme
   while dirty or stale, as Export. Focus starts on **Save**; before dispatch, Esc cancels and returns focus
   to the button. While the save is pending, Esc or **Close** dismisses the dialog but the irreversible
   request continues under a page-scoped owner and its eventual outcome appears beside the button even if
-  the results control unmounts and returns. After 30 seconds without an answer it shows SV-9 without aborting;
-  a later valid 201 still restores the saved link. The replay GET starts only while the saved panel is mounted.
+  the results control unmounts and returns. The owner settles each `(q, mode, index_version)` independently,
+  so beginning another save cannot discard the first request's late answer. After 30 seconds without an answer
+  it shows SV-9 without aborting; a later valid 201 still restores the saved link. The replay GET starts only
+  while the saved panel is mounted.
 
 ### S2 Saved
 

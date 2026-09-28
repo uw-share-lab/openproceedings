@@ -243,10 +243,11 @@ warnings, the save's index check), the design doc says so; its open questions li
    default (`fieldWarning`; zeros left out, never summed), or name the reason with no numbers when the clause is
    negated, nested or written more than once; the formats wait until `/parse` has reported on the shown
    query. A page-scoped controller owns Save's `{q, mode, index_version}` POST (a moved index is 409 with
-   nothing saved) across conditional result-control remounts. It snapshots the confirmed request and checks
-   the blocked-key registry again at dispatch. After 30 seconds without an answer it shows the conservative
-   unknown state without aborting; a later valid 201 restores the saved link. The replay read for status and
-   methods text starts only while that saved panel is mounted and only for the active attempt. Because a lost,
+   nothing saved) across conditional result-control remounts. It snapshots the confirmed request, checks the
+   blocked-key registry again at dispatch, and settles each request key independently when saves overlap.
+   After 30 seconds without an answer it shows the conservative unknown state without aborting; a later valid
+   201 restores that request's saved link even if another save has begun. The replay read for status and
+   methods text starts only while that saved panel is mounted and only for that request's latest attempt. Because a lost,
    malformed or schema-invalid response or a 500 may follow a committed POST, those ambiguous outcomes have no
    Retry and disable the same save on that page; known pre-commit refusals (429, `API_BUSY` and
    `API_INDEX_NOT_LOADED`) remain retryable.
