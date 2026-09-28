@@ -29,6 +29,9 @@ export const STORE_FULL_KEY = "openproceedings:records-store-full";
 export const STORE_FULL_MESSAGE =
   "Saving search records is paused on this instance: its record store is full. Your search, exports and " +
   "existing records still work.";
+export const SAVE_OUTCOME_UNKNOWN_MESSAGE =
+  "The save outcome is unknown. The server may already have created this permanent public-by-link record. " +
+  "To avoid creating a duplicate, this page won't send the same save again.";
 
 function storeFullBefore(): boolean {
   try {
@@ -76,7 +79,17 @@ type Phase =
       readonly request: SaveRequest;
     }
   | { readonly kind: "index_moved"; readonly request: SaveRequest }
+  | { readonly kind: "unknown"; readonly failure: Failure; readonly request: SaveRequest }
   | { readonly kind: "refused"; readonly failure: Failure; readonly request: SaveRequest };
+
+function requestKey(request: SaveRequest): string {
+  return JSON.stringify([request.q, request.mode, request.indexVersion]);
+}
+
+/** These refusals happen before a record is committed; transport failures and 5xx internals are ambiguous. */
+function safeToRetry(failure: Failure): boolean {
+  return failure.kind === "refused" && (failure.status === 429 || failure.error.code === "API_BUSY");
+}
 
 export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: SaveRecordProps) {
   const api = useApi();
@@ -87,9 +100,16 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
   const storeFull = fullBefore || fullNow;
   const trigger = useRef<HTMLButtonElement>(null);
   const mounted = useRef(true);
+  const activeAttempt = useRef(0);
+  const [unknownRequests, setUnknownRequests] = useState<ReadonlySet<string>>(() => new Set());
   const reasonId = useId();
-  const reason = storeFull ? STORE_FULL_MESSAGE : disabledReason;
   const shownRequest: SaveRequest = { q, mode, indexVersion, total };
+  const sameSaveIsUnknown = unknownRequests.has(requestKey(shownRequest));
+  const reason = storeFull
+    ? STORE_FULL_MESSAGE
+    : sameSaveIsUnknown
+      ? SAVE_OUTCOME_UNKNOWN_MESSAGE
+      : disabledReason;
 
   useEffect(() => {
     mounted.current = true;
@@ -99,7 +119,9 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
   }, []);
 
   useEffect(() => {
-    if (phase.kind === "index_moved" || phase.kind === "refused") trigger.current?.focus();
+    if (phase.kind === "index_moved" || phase.kind === "refused" || phase.kind === "unknown") {
+      trigger.current?.focus();
+    }
   }, [phase.kind]);
 
   const dismissConfirmation = () => {
@@ -112,20 +134,33 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
   };
 
   const save = async (request: SaveRequest) => {
+    const attempt = ++activeAttempt.current;
     setPhase({ kind: "saving", dialogOpen: true, request });
     const posted = await outcomeOf(() =>
       api.POST("/api/v1/records", {
         body: { q: request.q, mode: request.mode, index_version: request.indexVersion },
       }),
     );
-    if (!mounted.current) return;
+    const isCurrent = () => mounted.current && activeAttempt.current === attempt;
+    if (!isCurrent()) return;
     if (posted.kind !== "ok") {
       if (posted.kind === "refused" && posted.error.code === "API_RECORDS_STORE_FULL") {
         rememberStoreFull();
         setStoreFull(true);
+        setPhase({ kind: "refused", failure: posted, request });
+        return;
       }
       if (posted.kind === "refused" && posted.error.code === "API_INDEX_VERSION_UNAVAILABLE") {
         setPhase({ kind: "index_moved", request });
+        return;
+      }
+      if (posted.kind === "refused" && posted.status === 422) {
+        setPhase({ kind: "refused", failure: posted, request });
+        return;
+      }
+      if (!safeToRetry(posted)) {
+        setUnknownRequests((current) => new Set(current).add(requestKey(request)));
+        setPhase({ kind: "unknown", failure: posted, request });
         return;
       }
       setPhase({ kind: "refused", failure: posted, request });
@@ -134,7 +169,7 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
     const created = posted.data;
     setPhase({ kind: "saved", created, record: null, request });
     const record = await getRecord(api, created.record_id, true);
-    if (mounted.current) setPhase({ kind: "saved", created, record, request });
+    if (isCurrent()) setPhase({ kind: "saved", created, record, request });
   };
 
   return (
@@ -210,6 +245,21 @@ export function SaveRecord({ q, mode, indexVersion, total, disabledReason }: Sav
             <FailureNotice failure={phase.failure} onRetry={() => void save(phase.request)} />
           )}
         </div>
+      )}
+      {phase.kind === "unknown" && <UnknownSave failure={phase.failure} />}
+    </div>
+  );
+}
+
+/** A POST without a trustworthy answer may already have committed; do not offer any path that resends it. */
+function UnknownSave({ failure }: { failure: Failure }) {
+  return (
+    <div role="alert" className={`${box} w-full`}>
+      <p>{SAVE_OUTCOME_UNKNOWN_MESSAGE}</p>
+      {failure.kind === "refused" && (
+        <p className="break-words">
+          <code className="font-mono">{failure.error.code}</code>: {failure.error.message}
+        </p>
       )}
     </div>
   );

@@ -193,6 +193,7 @@ PRISMA's "duplicates removed" box, never added to openproceedings' dedup stateme
 | 503 `API_RECORDS_STORE_FULL` | "Saving search records is paused on this instance: its record store is full. Your search, exports and existing records still work." | Save disabled for the session with that reason |
 | 503 `API_BUSY` | the server message + countdown | Retry |
 | 422 (the query no longer runs, e.g. a hot swap made a wildcard over-cap) | the diagnostics, as W6 | — |
+| No usable response, or 500 `API_INTERNAL` | SV-9: the outcome is unknown and the server may already have created the permanent record | No Retry; the same `(q, mode, index_version)` stays disabled on this page |
 
 ## Record page `/record/[id]` (TASK-044)
 

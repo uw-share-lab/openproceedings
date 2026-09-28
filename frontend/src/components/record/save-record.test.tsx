@@ -204,6 +204,42 @@ describe("saved (design S2; copy SV-3, SV-4, SV-5)", () => {
     const warning = await screen.findByText(/the index changed after your search/);
     expect(warning.textContent).toContain(`Saved on index 9f8e7d6c5b4a, not ${R.index_version}`);
   });
+
+  it("does not let an older replay completion replace a newer saved record", async () => {
+    const first = { record_id: "A23456789012", page: "/record/A23456789012", index_version: R.index_version };
+    const second = {
+      record_id: "B23456789012",
+      page: "/record/B23456789012",
+      index_version: R.index_version,
+    };
+    let finishFirstReplay: (response: Response) => void = () => {};
+    const firstReplay = new Promise<Response>((resolve) => (finishFirstReplay = resolve));
+    const replayed = copy(C.replayed);
+    const view = renderWithApi(<SaveRecord {...PROPS} />, (call) => {
+      if (call.method === "POST") {
+        const body = call.body as { q: string };
+        return json(body.q === C.q ? first : second, 201);
+      }
+      if (call.path === `/api/v1/records/${first.record_id}`) return firstReplay;
+      if (call.path === `/api/v1/records/${second.record_id}`) return json(replayed);
+      return api(created())(call);
+    });
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+    await screen.findByRole("heading", { name: `Saved as search record ${first.record_id}` });
+
+    view.rerender(<SaveRecord {...PROPS} q="a newer confirmed query" />);
+    fireEvent.click(screen.getByRole("button", { name: "Save search record" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Save" }));
+    await screen.findByRole("heading", { name: `Saved as search record ${second.record_id}` });
+    await act(async () => {
+      finishFirstReplay(json(replayed));
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+
+    expect(screen.getByRole("heading", { name: `Saved as search record ${second.record_id}` })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: `Saved as search record ${first.record_id}` })).toBeNull();
+    expect(view.calls.filter((call) => call.method === "POST")).toHaveLength(2);
+  });
 });
 
 describe("refused (design S3)", () => {
@@ -216,7 +252,9 @@ describe("refused (design S3)", () => {
         posts += 1;
         return posts === 1
           ? pending
-          : json({ error: { code: "API_INTERNAL", message: "still unavailable" } }, 500);
+          : json({ error: { code: "API_RATE_LIMITED", message: "still unavailable" } }, 429, {
+              "Retry-After": "0",
+            });
       }
       return api(created())(call);
     });
@@ -232,11 +270,42 @@ describe("refused (design S3)", () => {
         total={7}
       />,
     );
-    await act(async () => answer(json({ error: { code: "API_INTERNAL", message: "unavailable" } }, 500)));
+    await act(async () =>
+      answer(
+        json({ error: { code: "API_RATE_LIMITED", message: "unavailable" } }, 429, { "Retry-After": "0" }),
+      ),
+    );
     fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
     await waitFor(() => expect(view.calls).toHaveLength(2));
 
     expect(view.calls[1]?.body).toEqual({ q: C.q, mode: C.mode, index_version: R.index_version });
+  });
+
+  it.each([
+    ["lost response", () => Promise.reject(new TypeError("connection dropped after commit"))],
+    ["malformed 201", () => new Response("not JSON", { status: 201 })],
+    ["API_INTERNAL", () => json({ error: { code: "API_INTERNAL", message: "failed after commit" } }, 500)],
+  ])("does not retry an ambiguous committed save (%s)", async (_case, answer) => {
+    const committed: string[] = [];
+    const { calls } = renderWithApi(<SaveRecord {...PROPS} />, (call) => {
+      if (call.method === "POST") {
+        committed.push("A23456789012");
+        return answer();
+      }
+      return api(created())(call);
+    });
+    fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("The save outcome is unknown");
+    expect(alert.textContent).toContain("this page won't send the same save again");
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    const saveAgain = screen.getByRole("button", { name: "Save search record" });
+    expect(saveAgain.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(saveAgain);
+
+    expect(committed).toEqual(["A23456789012"]);
+    expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
   });
 
   it("saves nothing on a moved index (409) and says so", async () => {

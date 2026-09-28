@@ -243,7 +243,10 @@ warnings, the save's index check), the design doc says so; its open questions li
    default (`fieldWarning`; zeros left out, never summed), or name the reason with no numbers when the clause is
    negated, nested or written more than once; the formats wait until `/parse` has reported on the shown
    query. Save posts `{q, mode, index_version}` (a moved index is 409 with nothing saved), then reads the record
-   back for its status and methods text; `API_RECORDS_STORE_FULL` turns saving off for the session
+   back for its status and methods text only while that save is still the active attempt. Because a lost or
+   malformed response or a 500 may follow a committed POST, those ambiguous outcomes have no Retry and disable
+   the same save on that page; known pre-commit refusals (429 and `API_BUSY`) remain retryable.
+   `API_RECORDS_STORE_FULL` turns saving off for the session
    (`sessionStorage`). `/record/[id]` (`components/record/record-view.tsx`) reads the stored record first
    (`?replay=false`), then its replay; the methods text and the exports appear once the replay has answered (or
    couldn't run: "Replay: waiting" on a 429 or `API_BUSY`), so a `mismatch` never shows either.
