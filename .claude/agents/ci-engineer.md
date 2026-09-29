@@ -31,7 +31,7 @@ tempted to bypass it.
 2. **Python jobs:** `astral-sh/setup-uv` with its cache keyed on `uv.lock`; `uv sync --locked` at the root
    (the uv workspace); then `make lint` (ruff format/check, `mypy --strict backend/src` once it exists,
    shellcheck, frontend checks) followed by `actionlint`. `test` runs
-   `uv run --locked pytest -q -n auto --hypothesis-profile=dev` (pytest-xdist, 200 examples; TASK-127).
+   `uv run --locked pytest -q -n auto --hypothesis-profile=pr` (pytest-xdist, 200 examples, 2 s deadline; TASK-127).
    Nightly has four bounded jobs: the whole backend suite at the `ci` profile (2,000) under xdist,
    oracle-backed properties at 50k, exhaustive tokenizer plus the remaining properties at 50k, and
    `make mutate`.

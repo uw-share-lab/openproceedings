@@ -9,7 +9,8 @@ description: How openproceedings uses Hypothesis — strategies for tokens, quer
 Register in `backend/tests/conftest.py`:
 | Profile | `max_examples` | Deadline | Used by |
 |---|---|---|---|
-| `dev` | 200 | 500 ms | local loop (default); `test` workflow on every PR, under pytest-xdist (TASK-127) |
+| `dev` | 200 | 500 ms | local loop (default), `make test` under pytest-xdist |
+| `pr` | 200 | 2 s | `test` workflow on every PR, under pytest-xdist: the dev count with the ci deadline, so a slow example on a shared runner doesn't fail the required check (TASK-127) |
 | `ci` | **2,000** | 2 s | `nightly` workflow's `suite-ci` job: the whole backend suite, under pytest-xdist (differential@2k) |
 | `nightly` | **50,000** | `None` | `nightly` workflow's property jobs (differential@50k: task-057) |
 Also set `print_blob=True` (so a CI failure prints a `@reproduce_failure` blob) and

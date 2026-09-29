@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-29 22:32'
-updated_date: '2026-09-29 23:00'
+updated_date: '2026-09-29 23:04'
 labels:
   - ci
   - tests
@@ -38,5 +38,7 @@ PR CI's backend step takes ~25 min. Measured 2026-09-29 (--durations, ci profile
 - Local timings (8 CPUs, machine heavily loaded by other jobs, load avg 30-200): serial dev 9m26s; xdist dev 2m54s and 3m13s (5256 passed, 2 skipped both times); xdist ci 11m24s, bounded by the differential property (8 min at 2k). Slowest at dev under xdist: facets_equal 93 s, differential 79 s.
 - Docs: property-testing, testing-standards, pr-workflow skills; ci-engineer and differential-tester agents; spec 07 and 08; CLAUDE.md; README; conftest and test_differential docstrings.
 - AC#1 (CI time) and the CI half of AC#3 can only be verified on the PR's own run.
-- Noted, not changed: `test_export_braced.py` pins `@settings(max_examples=2_000)`, so it runs 2,000 examples under every profile.
+- Noted, not changed: `test_export_braced.py` pins `@settings(max_examples=3_000)` and `max_examples=2_000` on two properties, so they run that many under every profile; they cost little.
+
+Review round 1 (6fe6166): PR CI uses a `pr` profile (200 examples, 2 s deadline) rather than `dev` (500 ms), so a slow example on a shared runner under xdist can't fail the required check.
 <!-- SECTION:NOTES:END -->

@@ -21,6 +21,9 @@ import pytest
 from hypothesis import settings
 
 settings.register_profile("dev", max_examples=200, deadline=500, print_blob=True)
+# pr: the dev example count with the ci deadline, so a slow example on a shared runner under pytest-xdist
+# doesn't fail the required check (TASK-127)
+settings.register_profile("pr", max_examples=200, deadline=2_000, print_blob=True)
 settings.register_profile("ci", max_examples=2_000, deadline=2_000, print_blob=True)
 settings.register_profile("nightly", max_examples=50_000, deadline=None, print_blob=True)
 settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))

@@ -133,7 +133,7 @@ def test_generated_trees_light_the_same_spans_on_every_fixture_record(ast: Node)
 
 
 # the old highlighter tokenizes each hit with the old tokenizer: slow on thousands of hits, so the first 20;
-# and a tenth of the profile's examples, at most 500 (200 in CI, 500 nightly): each one runs the oracle over
+# and a tenth of the profile's examples, at most 500 (20 per PR, 200 in nightly suite-ci, 500 at 50k): each one runs the oracle over
 # 5k records, up to ~1 s an example
 @settings(
     deadline=None,
