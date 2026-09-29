@@ -80,6 +80,14 @@ failing cell, read from `docs/results/coverage-causes.toml` (`["<Venue> <year> <
 disagreed with its page's count; and every OpenReview crawl that is incomplete or has coverage gaps, conflicts,
 unmapped venues, non-routine skipped groups or non-routine skipped notes. `--check` exits 1 when the gate fails.
 
+**Owner-accepted exceptions.** A gated cell outside ±1% passes the gate only if the project owner accepted its
+gap in a decision record and `coverage-causes.toml` records it under the cell (`["<Venue> <year> <track>".accepted]`:
+`indexed`, `official`, `reason`, `papers`, `accepted_by` (a role), `accepted_on`, `decision`; every key required,
+no other allowed). It passes only while the cell's indexed and official counts are exactly the accepted ones: any
+other count fails the cell again (`drifted`), and a gap (no records) is never accepted. The report marks the cell
+`✓ accepted exception`, lists every exception in its own section and counts them in the verdict line, and reports
+an exception whose cell is within ±1% or not gated as stale. ICLR 2013 main is one (decision-016).
+
 ## D. Classification audit (report)
 
 Sample 50 records per `track` value (stratified by venue and year). Two reviewers label each one blind.

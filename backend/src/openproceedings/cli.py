@@ -518,9 +518,10 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
         Meta,
         failing_summary,
         gate,
-        load_causes,
+        load_cause_file,
         render,
         stale_causes,
+        stale_exceptions,
         write,
     )  # fmt: skip
 
@@ -541,7 +542,8 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
     records = snapshot_records(ns.data_dir, path, engine.index_version)  # verified, as the server loads it
     coverage = compute(engine, records).model_dump(mode="json")
     sources, causes_file = results / "coverage-sources.md", results / "coverage-causes.toml"
-    causes = load_causes(causes_file)  # a malformed file is a ValueError: refused before anything is written
+    # a malformed causes file is a ValueError: refused before anything is written
+    causes, exceptions = load_cause_file(causes_file)
     meta = Meta(
         date=day,
         index_version=engine.index_version,
@@ -549,21 +551,31 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
         causes_sha256=hashlib.sha256(causes_file.read_bytes()).hexdigest() if causes_file.is_file() else None,
         command=f"op eval coverage --index {engine.index_version} --date {day.isoformat()}",
     )
-    written, replaced = write(render(coverage, records.manifest, meta, causes=causes), out, day)
-    verdict = gate(coverage)
-    stale = stale_causes(causes, verdict)
+    text = render(coverage, records.manifest, meta, causes=causes, exceptions=exceptions)
+    written, replaced = write(text, out, day)
+    verdict = gate(coverage, exceptions=exceptions)
+    stale, stale_ex = stale_causes(causes, verdict), stale_exceptions(exceptions, verdict)
     log.info("coverage_report_written", extra={
         "index_version": engine.index_version, "gated": verdict.gated, "passing": verdict.passing,
         "gaps": verdict.gaps, "unclassified": sum(k not in causes for k, _ in verdict.failing),
-        "stale_causes": len(stale), "replaced": replaced, "ms": elapsed_ms(started),
+        "accepted_exceptions": len(verdict.accepted), "stale_causes": len(stale),
+        "stale_exceptions": len(stale_ex), "replaced": replaced, "ms": elapsed_ms(started),
     })  # fmt: skip
     print(f"wrote {written}", file=sys.stderr)
     state = "PASS" if verdict.passed else "FAIL"
-    print(f"M4 gate: {state}: {verdict.passing} of {verdict.gated} gated cells within ±1%", file=sys.stderr)
+    print(f"M4 gate: {state}: {verdict.passing} of {verdict.gated} gated cells within ±1%, "
+          f"{len(verdict.accepted)} owner-accepted exception(s)", file=sys.stderr)  # fmt: skip
     for line in failing_summary(verdict):
         print(f"  {line}", file=sys.stderr)
+    for v, y, t in verdict.accepted:  # never silent: each accepted exception is named on every run
+        print(f"  {v} {y} {t} (accepted exception, {exceptions[(v, y, t)].decision})", file=sys.stderr)
     for v, y, t in stale:
         print(f"coverage-causes.toml: [{v} {y} {t}] is not failing; remove its note", file=sys.stderr)
+    for v, y, t in stale_ex:
+        print(
+            f"coverage-causes.toml: [{v} {y} {t}.accepted] is not failing; remove the exception",
+            file=sys.stderr,
+        )
     return 1 if ns.check and not verdict.passed else 0
 
 

@@ -1,0 +1,20 @@
+# Cause notes for coverage cells that miss the M4 gate (spec 07 §C, coverage-reporting skill), read by
+# `op eval coverage`. One table per cell, keyed "<Venue> <year> <track>", with a `cause`: the classification
+# (source definition, classification, dedup or crawl gap). Never adjust an official number to fit.
+#
+# An owner-accepted exception is an optional `accepted` table under the cell. It passes the cell only while
+# the cell's indexed and official counts are exactly `indexed` and `official`; any other counts fail the cell
+# again. Every key is required and no other key is allowed: indexed, official, reason, papers, accepted_by (a
+# role), accepted_on (a date), decision (the decision record).
+
+["ICLR 2013 main"]
+cause = "source definition: ICLR's 2013 conference list has 24 papers, but OpenReview decides one of them (Factorized Topic Models) as a workshop poster, so 23 are indexed as main"
+
+["ICLR 2013 main".accepted]
+indexed = 23
+official = 24
+reason = "Factorized Topic Models is on ICLR's official 2013 conference list, but its OpenReview decision is conferencePoster-iclr2013-workshop; the record keeps OpenReview's decision (track:workshop)."
+papers = ["11y_SldoumvZl"]
+accepted_by = "project owner"
+accepted_on = 2026-09-29
+decision = "decision-016"

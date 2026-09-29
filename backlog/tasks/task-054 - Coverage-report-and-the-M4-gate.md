@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-29 07:36'
+updated_date: '2026-09-29 22:19'
 labels:
   - eval
 milestone: m-4
@@ -56,4 +56,6 @@ Evidence for the note above: docs/results/2026-09-29-proceedings-dry-runs.md (pe
 AC#3 (2026-09-29): op eval coverage built (eval/coverage_report.py): renders api.coverage.compute's data for the index, enumerates gated official cells so a missing venue-year is a gap, cause notes from docs/results/coverage-causes.toml, listings that skipped entries, --check. Smoke run on the M2 index: 0 of 44 within ±1%, 32 gaps (expected for the literature-review subset).
 
 Correction (2026-09-29): the smoke-run figures above (0 of 44, 32 gaps) came from an uncommitted run on the M2 index; the committed report and its figures arrive with AC#2.
+
+Part 2 (2026-09-29): owner-accepted exceptions in the gate. docs/results/coverage-causes.toml takes an optional ["<Venue> <year> <track>".accepted] table under a cell's cause: indexed, official (the exact counts accepted), reason, papers, accepted_by (a role), accepted_on (a TOML date), decision (decision-<n>); every key required, unknown keys refused (load_cause_file). gate() passes an outside-±1% cell as accepted only while both counts equal the exception's; any drift fails it as 'drifted' (the cause note shows accepted vs observed), and a gap is never accepted. The report marks the cell '✓ accepted exception', counts exceptions in the verdict line, lists each under 'Owner-accepted exceptions', and reports stale ones (cell within ±1% or not gated); op eval coverage names each on stderr, logs accepted_exceptions/stale_exceptions, and --check treats a matched exception as passing. ICLR 2013 main (23 vs 24; Factorized Topic Models, 11y_SldoumvZl, is on ICLR's 2013 conference list but OpenReview decides it a workshop poster) is the first, per decision-016. Spec 07 §C and the coverage-reporting skill state the rule. AC#2 still waits on the real-data report once dev has all crawler fixes.
 <!-- SECTION:NOTES:END -->
