@@ -50,6 +50,12 @@ safe direction.
   claims, `ingest/urls.py`). That's ambiguous: write a `conflicts.csv` row and keep them all separate.
   The same holds when two keys chain clusters that must not share a record: every cluster in the chain
   stays separate (`field = title_key_chain`).
+  Dedup never decides that two OpenReview notes are one paper. The one case where they are, API v1's
+  NeurIPS 2021 notes that repeat a paper under a second id and number with identical content (300 main-track
+  papers on the 2026-09-29 crawl), is collapsed by the crawler before records reach dedup
+  (`openreview_v1.collapse_duplicate_submissions`, TASK-125; openreview-api skill), so the survivor merges
+  with its proceedings record here. Anything short of identical (another pdf, status or title) still arrives
+  as two notes and stays ambiguous.
 - A paper whose track the proceedings don't host (anything but `main`, `datasets_benchmarks`,
   `position`) into a **proceedings listing**: a cluster with a proceedings source *or* a proceedings id,
   so a RIS record with a `nips-`/`iclr-`/`pmlr-` id counts. Proceedings never host workshop papers. A

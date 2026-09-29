@@ -683,6 +683,90 @@ def test_a_note_in_two_status_listings_is_refused_as_a_stale_transition(tmp_path
         run(server, tmp_path, "ICLR", 2022)
 
 
+NEURIPS_2021_MAIN = "NeurIPS.cc/2021/Conference/-/Blind_Submission"
+
+
+def neurips_2021_twins(**second: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    """TASK-125: the recorded NeurIPS 2021 accepted note and a second note of it as the live API holds 300 pairs
+    (e.g. -K4tIyQLaY #292 and BW2Z6B7S9KZ #8244): another id and number, and a `_bibtex` that embeds the id,
+    with everything else identical. `second` changes content values of the second note (`None` deletes)."""
+    note = v1_note("neurips-2021/notes-main-listing.json")
+    twin = v1_clone(
+        note, "BW2Z6B7S9KZ", note["number"] + 604, _bibtex="@inproceedings{BW2Z6B7S9KZ}", **second
+    )
+    return note, twin
+
+
+@pytest.mark.parametrize("listed_first", ["lower", "higher"])
+def test_two_notes_of_one_paper_collapse_to_the_lowest_number_and_are_counted(
+    tmp_path: Path, listed_first: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    note, twin = neurips_2021_twins()
+    notes = [note, twin] if listed_first == "lower" else [twin, note]
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        crawl = run(FakeOpenReviewV1({NEURIPS_2021_MAIN: notes}), tmp_path, "NeurIPS", 2021)
+    [record] = crawl.records
+    assert record.native == note["id"]  # the lower number, whatever the listing order
+    assert crawl.report.skipped["duplicate_submission"] == 1 and crawl.report.skipped["duplicate"] == 0
+    assert (crawl.report.notes_read, crawl.report.imported) == (2, 1)
+    assert crawl.report.to_manifest()["skipped"]["duplicate_submission"] == 1
+    assert crawl.report.track_status == {"main": {"accepted": 1}}
+    [line] = [r for r in caplog.records if r.getMessage() == "openreview_duplicate_submission"]
+    assert (line.levelno, line.__dict__["forum"], line.__dict__["kept"]) == (
+        logging.DEBUG,
+        twin["id"],
+        note["id"],
+    )
+    [attention] = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert attention.getMessage() == "openreview_crawl_attention"
+    assert attention.__dict__["duplicate_submission"] == 1
+
+
+@pytest.mark.parametrize(
+    "second",
+    [
+        {"pdf": "/pdf/0123456789abcdef0123456789abcdef01234567.pdf"},  # another pdf: another submission
+        {"title": "Synthetic title text 1, revised."},  # same pdf, another title: never guessed to be one
+        {"authors": ["Synthetic Author 6", "Synthetic Author 7"]},
+        {"abstract": "Another synthetic abstract."},
+        {"keywords": ["Another keyword."]},
+        {"venue": "NeurIPS 2021 Spotlight"},  # another presentation
+        {"venue": None},  # W6e384Lkjbw: same pdf, but no venue, so another status (unknown)
+    ],
+    ids=["pdf", "title", "authors", "abstract", "keywords", "presentation", "status"],
+)
+def test_notes_that_differ_in_any_compared_field_stay_two_records(
+    tmp_path: Path, second: dict[str, Any]
+) -> None:
+    note, twin = neurips_2021_twins(**second)
+    crawl = run(FakeOpenReviewV1({NEURIPS_2021_MAIN: [note, twin]}), tmp_path, "NeurIPS", 2021)
+    assert {r.native for r in crawl.records} == {note["id"], twin["id"]}
+    assert crawl.report.skipped["duplicate_submission"] == 0 and crawl.report.imported == 2
+
+
+def test_notes_without_a_pdf_or_a_number_are_never_collapsed(tmp_path: Path) -> None:
+    note, twin = neurips_2021_twins(pdf=None)
+    del note["content"]["pdf"]
+    crawl = run(FakeOpenReviewV1({NEURIPS_2021_MAIN: [note, twin]}), tmp_path / "pdf", "NeurIPS", 2021)
+    assert len(crawl.records) == 2 and crawl.report.skipped["duplicate_submission"] == 0
+
+    note, twin = neurips_2021_twins()
+    del twin["number"]  # no number: no deterministic choice of which note speaks for the paper
+    crawl = run(FakeOpenReviewV1({NEURIPS_2021_MAIN: [note, twin]}), tmp_path / "number", "NeurIPS", 2021)
+    assert len(crawl.records) == 2 and crawl.report.skipped["duplicate_submission"] == 0
+
+
+def test_a_same_paper_note_in_another_track_or_status_listing_is_not_collapsed(tmp_path: Path) -> None:
+    """ICLR 2018 lists 24 pdfs twice, a blind note and a withdrawn one (status, often authors, differ): two
+    submissions to reconcile downstream, never merged here."""
+    note, twin = neurips_2021_twins()
+    server = FakeOpenReviewV1({NEURIPS_2021_MAIN: [note],
+                               "NeurIPS.cc/2021/Conference/-/Withdrawn_Submission": [twin]})  # fmt: skip
+    crawl = run(server, tmp_path, "NeurIPS", 2021)
+    assert {outcome(r) for r in crawl.records} == {("main", "accepted", "poster"), ("main", "unknown", None)}
+    assert crawl.report.skipped["duplicate_submission"] == 0
+
+
 def world_2021() -> FakeOpenReviewV1:
     forum = v1_notes("iclr-2021/forum-rejected-no-venueid.json")
     rejected = v1_note("iclr-2021/forum-rejected-no-venueid.json")
