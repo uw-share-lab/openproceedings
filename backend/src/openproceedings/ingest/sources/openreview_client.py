@@ -336,6 +336,9 @@ class OpenReviewClient(HttpClient[Entry]):
         self.refresh = refresh
         self._credentials = credentials
         self._token: str | None = None
+        self.incompatible = (
+            0  # pre-projection cache entries purged and re-fetched (a crawl's lines report it)
+        )
 
     @property
     def requests(self) -> int:
@@ -377,7 +380,8 @@ class OpenReviewClient(HttpClient[Entry]):
             # Pre-projection caches may contain authenticated-only data. A live run removes the one exact
             # sha256-keyed entry and fetches a public projection; offline replay refuses it above.
             cache_path.unlink(missing_ok=True)
-            log.warning("openreview_cache_incompatible", extra={"url": url})
+            self.incompatible += 1  # a one-time migration can meet thousands: counted, reported by the crawl
+            log.debug("openreview_cache_incompatible", extra={"url": url})
             return self.through_cache(url, fetch, refresh=True)
 
     def _login(self) -> str:

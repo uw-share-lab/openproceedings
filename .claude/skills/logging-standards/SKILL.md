@@ -39,7 +39,7 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 | Level | Use for | Example |
 |---|---|---|
 | `ERROR` | Something failed and a person must act; the operation did not complete | a replay `mismatch` (guarantee 4 broken), a crawl aborted |
-| `WARNING` | Degraded but continuing; worth a look | a 429 back-off, a listing's records with `track=unknown` or no abstract (counted in one line, never one per record) |
+| `WARNING` | Degraded but continuing; worth a look | a 429 back-off, a listing's or crawl's records with `track=unknown` (counted in one line, never one per record) |
 | `INFO` | One line per **meaningful unit of work** | index built, snapshot written, crawl finished (with counts), one access line per request |
 | `DEBUG` | Detail for development; off by default, never required to diagnose production | per-page fetches, per-record classification, a record-level anomaly (counted at WARNING) |
 
@@ -67,14 +67,18 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   That is a backstop, not permission: still never pass credentials to a log call.
 
 ## Crawl lines (TASK-116)
-- **Start, heartbeats, end** at INFO: `openreview_crawl_started`, `openreview_crawl_progress`,
-  `openreview_crawl_finished` (API v1 and v2 alike: `api`, `venue`, `year`, the counts processed so far,
-  `requests`, `cached`); `neurips_listing_started` / `_progress` / `_mined`; `pmlr_volume_started` /
-  `_progress` / `_mined`. A heartbeat is due at most every 30 s of a monotonic clock (`common.Heartbeat` on the
-  HTTP client's clock, so a test's fake clock drives it), never per item.
+- **Start, heartbeats, end** at INFO. OpenReview (API v1 and v2 alike): `openreview_crawl_started`,
+  `openreview_crawl_progress`, `openreview_crawl_finished`, each with `api`, `venue`, `year`, the counts
+  processed so far, `requests` and `cached`; a heartbeat is due at most every 30 s (`common.Heartbeat` on the
+  HTTP client's monotonic clock, so a test's fake clock drives it). The proceedings miners:
+  `neurips_listing_started` / `_progress` / `_mined` and `pmlr_volume_started` / `_progress` / `_mined`, with the
+  year or volume and `done` / `of`; their heartbeat is due at most every `PROGRESS_SECONDS` (30 s) of
+  `time.monotonic`, checked after each record built. Never a line per item.
 - **Record-level anomalies are DEBUG** (`openreview_unknown_track`, `openreview_v1_unmapped`,
   `openreview_v1_conflict`, `openreview_v1_duplicate`, `openreview_note_skipped`, `neurips_record_invalid`,
-  `pmlr_record_invalid`). Each listing or crawl logs **at most one aggregate WARNING** with the counts
+  `pmlr_record_invalid`, and per cache entry `openreview_cache_incompatible`, a purged pre-projection entry,
+  which a crawl reports as `cache_incompatible`). Each listing or crawl logs **at most one aggregate WARNING**
+  with the counts
   (`listing_attention`, `openreview_crawl_attention`); listing-level conditions (`listing_count_mismatch`,
   `listing_see_also_unfollowed`) keep their own line.
 - **HTTP policy events are constants** (`http.PolicyEvents`: `crawl_retry_wait` / `openreview_retry_wait`

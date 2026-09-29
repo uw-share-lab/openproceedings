@@ -342,6 +342,34 @@ def test_a_crawl_logs_a_start_line_and_bounded_progress_heartbeats(
     assert lines(caplog, "openreview_crawl_started")[0].__dict__["offline"] is True
 
 
+def test_purged_pre_projection_cache_entries_are_debug_and_counted_by_the_crawl(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A one-time migration can meet thousands of old entries: one DEBUG line each, counted in the crawl's
+    finished line and its one attention WARNING (TASK-116 review)."""
+    server = world()
+    live = client(tmp_path, server)
+    orv.crawl(live, "ICLR", 2024)
+    old = [p for p in orv.http_dir(tmp_path).rglob("*.json")][:2]
+    for path in old:  # back to the raw, pre-projection layout
+        document = json.loads(path.read_text())
+        del document["payload"]["public_projection"]
+        path.write_text(json.dumps(document))
+    caplog.clear()
+    again = client(tmp_path, server)
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        orv.crawl(again, "ICLR", 2024)
+    purged = [r for r in caplog.records if r.getMessage() == "openreview_cache_incompatible"]
+    assert len(purged) == 2 and {r.levelno for r in purged} == {logging.DEBUG} and again.incompatible == 2
+    [finished] = lines(caplog, "openreview_crawl_finished")
+    assert finished.__dict__["cache_incompatible"] == 2
+    [attention] = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert (
+        attention.getMessage() == "openreview_crawl_attention"
+        and attention.__dict__["cache_incompatible"] == 2
+    )
+
+
 def test_pagination_stops_on_a_short_page(tmp_path: Path) -> None:
     server = world(accepted=5)
     result = orv.crawl(client(tmp_path, server), "ICLR", 2024, page_size=2)
@@ -384,7 +412,7 @@ def test_a_multi_page_listing_whose_count_changes_between_pages_is_refused(tmp_p
 
 @pytest.mark.parametrize("conflicting", [False, True])
 def test_a_note_in_two_listings_is_a_counted_duplicate_only_when_its_record_is_identical(
-    tmp_path: Path, conflicting: bool
+    tmp_path: Path, conflicting: bool, caplog: pytest.LogCaptureFixture
 ) -> None:
     server = world()
     again = clone(server.notes[CONF][0], server.notes[CONF][0]["id"], server.notes[CONF][0]["number"])
@@ -395,8 +423,11 @@ def test_a_note_in_two_listings_is_a_counted_duplicate_only_when_its_record_is_i
         with pytest.raises(orv.CrawlError, match=r"conflicting data in two status listings.*--refresh"):
             orv.crawl(client(tmp_path, server), "ICLR", 2024)
         return
-    result = orv.crawl(client(tmp_path, server), "ICLR", 2024)
+    with caplog.at_level(logging.WARNING, logger="openproceedings.ingest.sources"):
+        result = orv.crawl(client(tmp_path, server), "ICLR", 2024)
     assert result.report.skipped["duplicate"] == 1 and result.report.notes_read == 9
+    [attention] = [r for r in caplog.records if r.levelno >= logging.WARNING]  # counted, TASK-116 review
+    assert attention.getMessage() == "openreview_crawl_attention" and attention.__dict__["duplicate"] == 1
     assert result.report.imported == len(result.records) == 8
     assert result.report.venueids[f"{CONF}/Rejected_Submission"] == 2
     [kept] = [r for r in result.records if r.native == again["id"]]

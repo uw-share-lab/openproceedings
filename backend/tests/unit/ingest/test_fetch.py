@@ -156,14 +156,20 @@ def test_the_proceedings_policy_logs_fixed_event_names(
 LOG_METHODS = frozenset({"debug", "info", "warning", "error", "exception", "critical", "log"})
 
 
+def _is_logger(receiver: ast.expr) -> bool:
+    """`log`, `logger`, `self._log`, `x.log`: a receiver whose own name ends in `log` or `logger`."""
+    name = receiver.id if isinstance(receiver, ast.Name) else getattr(receiver, "attr", "")
+    return name.lower().endswith(("log", "logger"))
+
+
 def test_every_crawler_log_event_is_a_constant_never_built() -> None:
     """logging-standards: `event` is a constant. A crawler's first log argument is a string literal or a
     named constant (`self.policy.events.retry_wait`), never an f-string, a concatenation or a call."""
-    checked = 0
+    checked, receivers = 0, set()
     for path in sorted(Path(sources.__file__).parent.glob("*.py")):
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                    and node.func.attr in LOG_METHODS and ast.unparse(node.func.value).endswith("log")):  # fmt: skip
+                    and node.func.attr in LOG_METHODS and _is_logger(node.func.value)):  # fmt: skip
                 continue
             event = node.args[1 if node.func.attr == "log" else 0]
             assert isinstance(event, ast.Constant | ast.Name | ast.Attribute), f"{path.name}:{node.lineno}"
@@ -171,4 +177,6 @@ def test_every_crawler_log_event_is_a_constant_never_built() -> None:
                 f"{path.name}:{node.lineno}"
             )
             checked += 1
+            receivers.add(ast.unparse(node.func.value))
     assert checked >= 30  # the walk found the crawlers' log calls
+    assert {"log", "logger", "self._log"} <= receivers  # every receiver form the crawlers use was checked

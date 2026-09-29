@@ -23,7 +23,8 @@ One venue-year at a time (ICLR 2024+, NeurIPS 2023+, ICML 2023+; earlier years a
 **Logs** (logging-standards; TASK-116): `openreview_crawl_started`, then `openreview_crawl_progress` at most every
 30 s on the client's monotonic clock (`common.Heartbeat`), then `openreview_crawl_finished` (all INFO, with `api`,
 `venue`, `year`, the counts so far, `requests` and `cached`), and at most one `openreview_crawl_attention`
-WARNING with the anomaly counts. Per-note anomalies are DEBUG. API v1 (`openreview_v1`) logs the same lines.
+WARNING with the anomaly counts (including `cache_incompatible`: pre-projection cache entries purged and
+re-fetched, each a DEBUG `openreview_cache_incompatible` line). Per-note anomalies are DEBUG. API v1 (`openreview_v1`) logs the same lines.
 
 The client's public projections of the responses are cached (`openreview_client`); a finished crawl also writes
 `<cache>/openreview/v2/crawls/<Venue>-<Year>.json`, which is how `op snapshot build` knows which
@@ -360,7 +361,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     check_scope(venue, year)
     if dry_run and not client.offline:
         raise ValueError("a dry run needs an offline client")
-    began = time.monotonic()
+    began, purged = time.monotonic(), client.incompatible
     report = CrawlReport(venue, year, page_size=page_size)
     records: dict[str, PaperRecord] = {}
     progress = Progress(log, client, report.api, venue, year, page_size, lambda: {
@@ -390,15 +391,18 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     report.imported = len(records)
     report.unknown_track = sum(r.track == "unknown" for r in records.values())
     report.abstract_missing = sum(r.abstract is None for r in records.values())
+    incompatible = client.incompatible - purged  # this crawl's share of the client's count
     log.info("openreview_crawl_finished",
              extra={"api": report.api, "venue": venue, "year": year, "complete": report.complete, "groups": len(report.groups),
                     "notes_read": report.notes_read, "imported": report.imported,
                     "skipped": sum(report.skipped.values()), "unknown_track": report.unknown_track,
-                    "requests": client.requests, "cached": client.cached, "ms": elapsed_ms(began, time.monotonic)})  # fmt: skip
-    if report.unknown_track or report.skipped["out_of_scope"] or report.skipped["invalid"]:
+                    "requests": client.requests, "cached": client.cached, "cache_incompatible": incompatible,
+                    "ms": elapsed_ms(began, time.monotonic)})  # fmt: skip
+    anomalies = {k: report.skipped[k] for k in ("out_of_scope", "invalid", "duplicate")}
+    if report.unknown_track or incompatible or any(anomalies.values()):
         log.warning("openreview_crawl_attention",
                     extra={"api": report.api, "venue": venue, "year": year, "unknown_track": report.unknown_track,
-                           "out_of_scope": report.skipped["out_of_scope"], "invalid": report.skipped["invalid"]})  # fmt: skip
+                           **anomalies, "cache_incompatible": incompatible})  # fmt: skip
     return Crawl(tuple(sorted(records.values(), key=lambda r: r.id)), report)
 
 

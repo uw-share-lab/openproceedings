@@ -558,6 +558,17 @@ def test_per_note_anomalies_are_debug_and_the_crawl_has_one_attention_warning(
         "api": "v1", "venue": "ICLR", "year": 2013, "unmapped": 2, "duplicate": 0,
     }  # fmt: skip
 
+    # a note whose own evidence disagrees (xGZG2kS5bFk: withdrawn invitation, accepted venue): a DEBUG
+    # conflict line, counted in the crawl's one WARNING
+    caplog.clear()
+    withdrawn = v1_note("iclr-2021/note-withdrawn-with-accepted-venue.json")
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        run(FakeOpenReviewV1({WITHDRAWN.format(y=2021): [withdrawn]}), tmp_path / "2021", "ICLR", 2021)
+    [conflict] = [r for r in caplog.records if r.getMessage() == "openreview_v1_conflict"]
+    assert (conflict.levelno, conflict.__dict__["forum"]) == (logging.DEBUG, "xGZG2kS5bFk")
+    [attention] = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert attention.getMessage() == "openreview_crawl_attention" and attention.__dict__["conflicts"] == 1
+
 
 def test_a_duplicate_note_is_a_debug_line_counted_in_the_attention_warning(
     tmp_path: Path, caplog: pytest.LogCaptureFixture

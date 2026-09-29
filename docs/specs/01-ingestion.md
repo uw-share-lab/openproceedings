@@ -223,7 +223,8 @@ the public accepted-paper listing itself, so its records intentionally retain `a
 **Crawl logs** (TASK-116; logging-standards skill §Crawl lines). A crawl logs a start line, heartbeats and an
 end line at INFO: `openreview_crawl_started` / `openreview_crawl_progress` (at most every 30 s of the HTTP
 client's monotonic clock, with `api`, `venue`, `year`, the counts so far, `requests` and `cached`) /
-`openreview_crawl_finished`; `neurips_listing_started` / `neurips_listing_progress` / `neurips_listing_mined`
+`openreview_crawl_finished` (also `cache_incompatible`: pre-projection cache entries purged and re-fetched,
+each a DEBUG `openreview_cache_incompatible` line); `neurips_listing_started` / `neurips_listing_progress` / `neurips_listing_mined`
 and the `pmlr_volume_*` equivalents. A record-level anomaly (an unknown track, an unmapped status string, a
 duplicate, a record that won't build) is DEBUG; each listing or crawl logs at most one aggregate WARNING with
 the counts (`listing_attention`, `openreview_crawl_attention`), beside listing-level ones such as

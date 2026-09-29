@@ -588,7 +588,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     ad = adapter(venue, year)
     if dry_run and not client.offline:
         raise ValueError("a dry run needs an offline client")
-    began = time.monotonic()
+    began, purged = time.monotonic(), client.incompatible
     report = CrawlReport(venue, year, page_size=page_size, gaps=ad.gaps)
     records: dict[str, PaperRecord] = {}
     progress = Progress(log, client, report.api, venue, year, page_size, lambda: {
@@ -630,12 +630,14 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     report.unknown_status = sum(r.status == "unknown" for r in records.values())
     report.abstract_missing = sum(r.abstract is None for r in records.values())
     report.conflicts.sort()
+    incompatible = client.incompatible - purged  # this crawl's share of the client's count
     log.info("openreview_crawl_finished",
              extra={"api": "v1", "venue": venue, "year": year, "complete": report.complete,
                     "listings": len(report.listings), "forums": report.forums, "notes_read": report.notes_read,
                     "imported": report.imported, "skipped": sum(report.skipped.values()),
                     "unknown_track": report.unknown_track, "unknown_status": report.unknown_status,
                     "conflicts": len(report.conflicts), "requests": client.requests, "cached": client.cached,
+                    "cache_incompatible": incompatible,
                     "ms": elapsed_ms(began, time.monotonic)})  # fmt: skip
     if ad.gaps:
         log.info("openreview_coverage_gap", extra={"venue": venue, "year": year, "gaps": len(ad.gaps)})
@@ -646,12 +648,14 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
         or report.skipped["out_of_scope"]
         or report.skipped["duplicate"]
         or report.skipped["invalid"]
+        or incompatible
     ):
         log.warning("openreview_crawl_attention",
                     extra={"api": "v1", "venue": venue, "year": year, "unknown_track": report.unknown_track,
                            "unmapped": sum(report.unmapped.values()), "conflicts": len(report.conflicts),
                            "out_of_scope": report.skipped["out_of_scope"],
-                           "duplicate": report.skipped["duplicate"], "invalid": report.skipped["invalid"]})  # fmt: skip
+                           "duplicate": report.skipped["duplicate"], "invalid": report.skipped["invalid"],
+                           "cache_incompatible": incompatible})  # fmt: skip
     return Crawl(tuple(sorted(records.values(), key=lambda r: r.id)), report)
 
 

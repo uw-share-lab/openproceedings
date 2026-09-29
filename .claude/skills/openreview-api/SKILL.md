@@ -154,8 +154,10 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   (`api`, `venue`, `year`, `offline`, `page_size`), `openreview_crawl_progress` at most every 30 s of the
   client's monotonic clock (`common.Heartbeat`; notes read, `forums` on v1, imported, skipped, `requests`,
   `cached`), `openreview_crawl_finished`, and at most one `openreview_crawl_attention` WARNING with the
-  anomaly counts. Per-note anomalies (`openreview_unknown_track`, `openreview_v1_unmapped`,
-  `openreview_v1_conflict`, `openreview_v1_duplicate`, `openreview_note_skipped`) are DEBUG.
+  anomaly counts (v1 and v2 both count `duplicate`; both report `cache_incompatible`, the pre-projection
+  entries the client purged and re-fetched). Per-note anomalies (`openreview_unknown_track`,
+  `openreview_v1_unmapped`, `openreview_v1_conflict`, `openreview_v1_duplicate`, `openreview_note_skipped`) and
+  each `openreview_cache_incompatible` are DEBUG.
 - A record id repeated byte-for-byte across status listings is counted as a duplicate. If its parsed
   non-provenance fields differ, the crawl refuses the mixed cache and asks for `--refresh`, rather than
   silently keeping whichever status listing happened to run first. The v1 crawler applies the same rule.
