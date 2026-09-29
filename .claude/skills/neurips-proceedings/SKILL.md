@@ -82,7 +82,9 @@ The alias means one track never counts as two in the manifest. Mapping an unknow
 - Abstract: the `<p class="paper-abstract">` block. Block tags (`p`, `br`, `div`, `li`) become a space;
   inline tags (`<i>`, `<sub>`) vanish, so `<i>k</i>-means` stays `k-means`.
 - Some pages are **double-escaped** (`&amp;amp;`; the 2025 year page has an author `&amp;quot;…&amp;quot;`). Unescape once, then decode only complete leftover
-  entities. A bare `&` in `R&D` survives.
+  entities. A bare `&` in `R&D` survives. The parsers keep references raw for that one decode, so each is
+  re-emitted whole, `;` included: without it `&#x27;Catch` decoded to `⟊tch` and `&mdash;a` stayed `&mdasha`,
+  and a garbled title then failed the `citation_title` match and lost its abstract (TASK-128).
 - Collapse whitespace. Keep LaTeX verbatim. Reject a string that starts or ends with `…` (a snippet, not
   an abstract); an ellipsis inside a real abstract (`x₁, …, x_n`) is kept (spec 01, record-schema).
 - Missing abstract: `abstract=null` and count it in the manifest (the report splits out

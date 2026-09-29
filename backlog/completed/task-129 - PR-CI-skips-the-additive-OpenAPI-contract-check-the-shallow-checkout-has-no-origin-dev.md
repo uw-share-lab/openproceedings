@@ -3,11 +3,11 @@ id: TASK-129
 title: >-
   PR CI skips the additive OpenAPI contract check: the shallow checkout has no
   origin/dev
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-29 23:22'
-updated_date: '2026-09-29 23:23'
+updated_date: '2026-09-29 23:48'
 labels:
   - ci
   - api
@@ -23,13 +23,15 @@ test_openapi_additive compares the committed OpenAPI snapshot against origin/dev
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 CI fetches the PR's base branch so OPENAPI_BASELINE_REF resolves, comparing against the base the PR merges into
+- [x] #1 CI fetches the PR's base branch so OPENAPI_BASELINE_REF resolves, comparing against the base the PR merges into
 - [x] #2 In CI the test fails instead of skipping when the baseline can't be read; locally it still skips
-- [ ] #3 The PR's own CI run shows the test ran (not in the skip list)
+- [x] #3 The PR's own CI run shows the test ran (not in the skip list)
 <!-- AC:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 test.yml's backend step fetches the base branch (github.base_ref, or the pushed branch) at depth 1 into refs/remotes/origin/<base>, exports OPENAPI_BASELINE_REF, and sets OPENAPI_BASELINE_REQUIRED=1; test_openapi_additive fails instead of skipping when that is set and the baseline can't be read. Verified locally: default run passes (17), OPENAPI_BASELINE_REQUIRED=1 with a missing ref fails. The api-contract skill says so.
+
+Verified on PR #27's own CI run (2026-09-29): the skip list holds only the two opt-in tests (80k index, exhaustive), 5,300 passed; test_openapi_additive ran against the PR's base commit.
 <!-- SECTION:NOTES:END -->
