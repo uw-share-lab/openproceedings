@@ -143,6 +143,18 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    rival for it (TASK-126): the rest merge if they may, and that note stays its own record with a
    `conflicts.csv` row. A merged record's fields are re-resolved from the union of its claims by the decision-005 precedence table. Merges are written
    to `merges.csv`, and disagreements and refused merges to `conflicts.csv`, for audit (dedup-rules skill).
+
+   **Reconcile** (`ingest/reconcile.py`, TASK-072, decision-005). Where a venue-year's official proceedings
+   are crawled completely (every listing's stated count matched and every entry became a record), an
+   OpenReview-accepted record in a track those listings hold (`main`, `datasets_benchmarks`, `position`; a
+   listing's own track, or for a mixed PMLR volume the track of the record it merged into) that merged with no
+   listing and shares no title key or forum id with one gets `status=unknown`: an absence claim from the
+   proceedings source (`status=unknown`, the listing's URL, the crawl's last fetch, evidence `not listed: …`)
+   that outranks OpenReview, so the record still equals what its claims resolve to, and a
+   `precedence:<source>` `conflicts.csv` row. The OpenReview claim is kept. An absence claim never makes a
+   record a listing, so dedup run again changes nothing, and reconcile is idempotent. A venue-year with an
+   incomplete listing, a track no listing holds, and a record sharing a title or forum with a listing it
+   didn't merge with (ambiguous: it may be the listed paper) are left alone.
 5. **Snapshot.** Write `data/snapshots/<date>-<shorthash>/records.jsonl` (sorted by `id`) and
    `manifest.json`. The manifest holds counts per venue × year × track × status, source versions,
    the crawl date and the snapshot hash. Snapshots are immutable. `data/` is gitignored. Since manifest
@@ -256,8 +268,8 @@ refuses the crawl.
   it): keep both claims, set `status` from the higher-priority source, and write `conflicts.csv`. The
   per-field precedence table is decision-005: OpenReview first for title, abstract and authors (the
   proceedings only where OpenReview lacks the paper); the official proceedings decide acceptance where
-  they are published (OpenReview-accepted but unlisted → `unknown` + a conflict row; not yet built: task-072, M4); OpenReview's venueid
-  decides track, and status elsewhere. A title that differs between merged sources is a conflict row too.
+  they are published and crawled (OpenReview-accepted but unlisted → `unknown` + a conflict row; §Pipeline 4,
+  Reconcile); OpenReview's venueid decides track, and status elsewhere. A title that differs between merged sources is a conflict row too.
 
 ## Testing
 
@@ -268,6 +280,9 @@ refuses the crawl.
 - Dedup property tests. Never merge across venue or year. Merging is idempotent and order-independent,
   and never folds two forum ids (own or linked). The forum link has table tests from the recorded v235
   index and ICML 2024 note (`test_dedup_forum_link.py`).
+- Reconcile table and property tests (`test_reconcile.py`): only unlisted OpenReview acceptances in a covered
+  track of a completely crawled venue-year change, only to `unknown`; dedup and reconcile run again change
+  nothing.
 - Snapshot determinism: the same inputs give a byte-identical `records.jsonl` and hash.
 - Proceedings miners (`test_iclr.py`, `test_neurips.py`, `test_pmlr.py`, `test_fetch.py`): the recorded
   ICLR archive, NeurIPS year/volume, and PMLR year/paper pages seeded into a page cache, including the
