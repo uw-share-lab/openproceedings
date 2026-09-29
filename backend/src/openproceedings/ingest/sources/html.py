@@ -65,7 +65,9 @@ def _reference(name: str, *, numeric: bool) -> str:
     """A reference HTMLParser reported, written back exactly as the page had it. `_BARE_AMP` has already
     escaped every `&` that doesn't start a complete, `;`-terminated reference, so each one HTMLParser reports
     had its `;`; putting it back keeps `unescape` from reading the following text into the name or code
-    point (`&#x27;Catch`, `&rsquo;s`). An unknown name (`&foo;`) stays literal, as it was on the page."""
+    point (`&#x27;Catch`, `&rsquo;s`). An unknown name (`&foo;`) stays literal, as it was on the page.
+    The two rules change together: loosening `_BARE_AMP` (say, to keep `&copy` without `;`) would make this add
+    a `;` the page never had."""
     return f"&#{name};" if numeric else f"&{name};"
 
 

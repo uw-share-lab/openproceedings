@@ -82,6 +82,9 @@ def _both(fragment: str) -> tuple[str, str]:
         ("&#x27Catch", "&#x27Catch"),
         ("&#39 z", "&#39 z"),
         ("&copy", "&copy"),
+        # a digit run ended by a tag, not `;`: HTMLParser alone would report charref "39" here
+        ("&#39<", "&#39<"),
+        ("&#39;<i>x</i>", "'x"),
     ],
 )
 def test_both_parsers_re_emit_each_reference_whole(fragment: str, text: str) -> None:

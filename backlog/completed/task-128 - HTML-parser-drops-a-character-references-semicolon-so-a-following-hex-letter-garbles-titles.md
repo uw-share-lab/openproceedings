@@ -3,11 +3,11 @@ id: TASK-128
 title: >-
   HTML parser drops a character reference's semicolon, so a following hex letter
   garbles titles
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-29 23:17'
-updated_date: '2026-09-29 23:43'
+updated_date: '2026-09-29 23:48'
 labels:
   - ingest
   - bug
@@ -38,4 +38,6 @@ Tests: `test_html.py::test_both_parsers_re_emit_each_reference_whole` (25 rows t
 Real data (2026-09-29 cache, read-only; old vs new handlers, scratch `task128/diff_refs.py`): iclr_archive 146 records, 0 changed; pmlr 14,281, 0 changed; neurips_proceedings 26,019, 11 changed: 3 titles (`Replica-Exchange Nos\ɾ-Hoover` -> `Nos\'e-Hoover` (2020), `Errors-in-variables Fr\⟬het` -> `Fr\'echet` (2023), `Attention Sinks: A ⟊tch, Tag, Release'` -> `A 'Catch, Tag, Release'` (2025)); each of the three also gained its abstract and page authors, since its garbled listing title had failed the `citation_title` match; and 8 abstracts with `&mdash`/`&ndash` fixed (e.g. `Fisher information&mdasha` -> `Fisher information—a`, `Weisfeilern&ndashLeman` -> `Weisfeilern–Leman`). Every `&` left in new titles/abstracts (4 titles, 23 abstracts) is a real bare ampersand (`See&Trek`, `GNN&GBDT`, `SF&GPI`).
 
 Snapshot check (scratch, same HEAD, old handlers vs new): records 95,940 -> 95,938 (the 2023 and 2025 proceedings-only duplicates now merge into Sg3aCpWUQP and r8UWp9JeJi); NeurIPS 2023 main 3,219 -> 3,218 and 2025 main 5,287 -> 5,286 (both now exactly official); missing abstracts 574 -> 571; `op eval coverage` gate unchanged at 43/44 (the one failing cell is ICLR 2013 main, unrelated).
+
+Review round 1 (b5973d2): approved; added the '&#39<' and '&#39;<i>x</i>' rows and the docstring clause tying _reference to _BARE_AMP.
 <!-- SECTION:NOTES:END -->
