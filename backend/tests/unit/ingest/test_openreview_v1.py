@@ -570,6 +570,32 @@ def test_per_note_anomalies_are_debug_and_the_crawl_has_one_attention_warning(
     assert attention.getMessage() == "openreview_crawl_attention" and attention.__dict__["conflicts"] == 1
 
 
+def test_purged_pre_projection_cache_entries_are_debug_and_counted_by_the_v1_crawl(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The v1 counterpart of v2's test: each purged entry is one DEBUG line; the crawl reports the count in its
+    finished line and its one attention WARNING (TASK-116 review)."""
+    ws = v1_note("iclr-2013/notes-submission-decision-field.json")
+    server = FakeOpenReviewV1(
+        {"ICLR.cc/2013/conference/-/submission": [ws, v1_clone(ws, "MoreNote2013x1", 1)]}
+    )
+    run(server, tmp_path, "ICLR", 2013, page_size=1)  # three pages: two full, one empty
+    for path in sorted(v1.http_dir(tmp_path).rglob("*.json"))[:2]:  # back to the raw, pre-projection layout
+        document = json.loads(path.read_text())
+        del document["payload"]["public_projection"]
+        path.write_text(json.dumps(document))
+    again = client(tmp_path, server)
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        v1.crawl(again, "ICLR", 2013, page_size=1)
+    purged = [r for r in caplog.records if r.getMessage() == "openreview_cache_incompatible"]
+    assert len(purged) == 2 and {r.levelno for r in purged} == {logging.DEBUG} and again.incompatible == 2
+    [finished] = [r for r in caplog.records if r.getMessage() == "openreview_crawl_finished"]
+    assert finished.__dict__["cache_incompatible"] == 2
+    [attention] = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert attention.getMessage() == "openreview_crawl_attention"
+    assert (attention.__dict__["api"], attention.__dict__["cache_incompatible"]) == ("v1", 2)
+
+
 def test_a_duplicate_note_is_a_debug_line_counted_in_the_attention_warning(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
