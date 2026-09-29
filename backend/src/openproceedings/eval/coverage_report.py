@@ -34,6 +34,9 @@ type CellKey = tuple[str, int, str]
 TRACK_ORDER = {t: i for i, t in enumerate(TRACKS)}
 MINUS = "−"  # U+2212, as the other results reports write a negative delta
 ROUTINE_SKIPS = frozenset({"not_submission"})  # an OpenReview reply or decision note: never a paper
+# v2 groups skipped by structure on every crawl (openreview_v2.venue_groups): a workshop proposal, a container of
+# venues, a child group that is no venue (a committee). `no_submission_venue_id` is not routine: it can hide one.
+ROUTINE_GROUP_SKIPS = frozenset({"proposal", "container", "not_a_v2_venue"})
 
 
 @dataclass(frozen=True)
@@ -115,13 +118,14 @@ def _pct(p: float) -> str:
 def _row(
     key: CellKey, cell: Mapping[str, Any] | None, official: OfficialTable, statuses: str, unknown: str
 ) -> str:
-    """One cell's row; `unknown` is its venue-year's `unknown`-track and `unknown`-status counts."""
+    """One cell's row; `unknown` is its venue-year's `unknown`-track and `unknown`-status counts, and `statuses`
+    its statuses indexed (`none (no records)` when the venue-year holds no record at all)."""
     year, track = key[1], key[2]
     row = official.get(key)
     if cell is None:  # a gated official cell the snapshot holds nothing for
         assert row is not None
         return (f"| {year} | {track} | 0 | {row.accepted:,} | {_signed(-row.accepted)} | {_pct(-100.0)} "
-                f"| ✗ gap | 0 | {unknown} | none (no source) |")  # fmt: skip
+                f"| ✗ gap | 0 | {unknown} | {statuses} |")  # fmt: skip
     indexed = cell["indexed_accepted"]
     if cell["official_accepted"] is None:
         verdict, off, delta, pct = ("no source" if track in GATED_TRACKS else "not gated"), "—", "—", "—"
@@ -152,12 +156,26 @@ def _listing_rows(manifest: Mapping[str, Any]) -> tuple[list[str], list[str]]:
                 *([] if r.get("complete", True) else ["**incomplete**"]),
                 *([f"coverage gaps {len(r['coverage_gaps'])}"] if r.get("coverage_gaps") else []),
                 *([f"unmapped {sum(r['unmapped'].values()):,}"] if r.get("unmapped") else []),
-                *([f"skipped groups {len(r['skipped_groups'])}"] if r.get("skipped_groups") else []),
+                *([f"conflicts {r['conflicts']:,}"] if r.get("conflicts") else []),
+                *(
+                    [f"skipped groups: {_reasons(groups)}"]
+                    if (groups := _group_reasons(r.get("skipped_groups", {})))
+                    else []
+                ),
             ]
             if skipped or notes:
                 crawls.append(f"| {source} | {r['venue']} | {r['year']} | {r.get('notes_read', 0):,} | "
                               f"{r.get('imported', 0):,} | {_reasons(skipped)} | {'; '.join(notes) or '—'} |")  # fmt: skip
     return listings, crawls
+
+
+def _group_reasons(skipped_groups: Mapping[str, str]) -> dict[str, int]:
+    """Skipped v2 groups by reason, the routine ones left out."""
+    out: dict[str, int] = {}
+    for reason in skipped_groups.values():
+        if reason not in ROUTINE_GROUP_SKIPS:
+            out[reason] = out.get(reason, 0) + 1
+    return out
 
 
 def _reasons(skipped: Mapping[str, int]) -> str:
@@ -215,7 +233,11 @@ def render(
         mine = sorted((k for k in keys if k[0] == venue), key=lambda k: (k[1], TRACK_ORDER[k[2]]))
         lines += [
             _row(
-                k, cells.get(k), official, statuses.get((k[0], k[1]), "—"), unknown.get((k[0], k[1]), "— | —")
+                k,
+                cells.get(k),
+                official,
+                statuses.get((k[0], k[1]), "none (no records)"),
+                unknown.get((k[0], k[1]), "— | —"),
             )
             for k in mine
         ]

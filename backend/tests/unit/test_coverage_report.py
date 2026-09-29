@@ -95,7 +95,7 @@ def test_a_cell_within_one_percent_passes_and_one_outside_fails() -> None:
 def test_a_gated_official_cell_with_no_records_is_a_reported_gap_never_a_silent_zero() -> None:
     text = report()
     line = row(text, "ICLR", 2015, "main")
-    assert "| 0 | 31 | −31 | −100.0% |" in line and "✗ gap" in line and line.endswith("| none (no source) |")
+    assert "| 0 | 31 | −31 | −100.0% |" in line and "✗ gap" in line and line.endswith("| none (no records) |")
 
 
 def test_cells_outside_the_gate_are_reported_as_such() -> None:
@@ -166,7 +166,30 @@ def test_openreview_crawls_that_need_attention_are_listed_and_reply_notes_are_no
         "| openreview_v1 | ICLR | 2017 | 651 | 651 | no_title 2 | **incomplete**; coverage gaps 1; unmapped 3 |"
         in text
     )
-    assert "| openreview_v2 | ICLR | 2024 | 651 | 651 | — | skipped groups 1 |" in text
+    assert "| openreview_v2 | ICLR | 2024 | 651 | 651 | — | skipped groups: x 1 |" in text
+
+
+def test_routine_v2_group_skips_are_not_attention_but_a_venue_without_submissions_is() -> None:
+    routine = {"a": "proposal", "b": "container", "c": "not_a_v2_venue"}
+    quiet = report(sources={"openreview_v2": {"crawls": [crawl(api="v2", skipped_groups=routine)]}})
+    assert "None: every crawl is complete" in quiet
+    odd = report(sources={"openreview_v2": {"crawls": [crawl(api="v2", skipped_groups={**routine,
+                                                                                         "d": "no_submission_venue_id"})]}})  # fmt: skip
+    assert "skipped groups: no_submission_venue_id 1 |" in odd
+
+
+def test_a_crawl_with_conflicts_needs_attention() -> None:
+    assert "| conflicts 2 |" in report(sources={"openreview_v1": {"crawls": [crawl(conflicts=2)]}})
+
+
+def test_a_gap_in_a_venue_year_with_other_records_shows_its_statuses() -> None:
+    table = {**TABLE, ("ICLR", 2016, "main"): official(80)}  # ICLR 2016 has workshop records, no main
+    manifest = manifest_of(corpus())
+    text = render(breakdown(manifest, "x", official=table), manifest, META, official=table)
+    line = row(text, "ICLR", 2016, "main")
+    assert "✗ gap" in line and line.endswith(
+        "| 0 | 0 | accepted, rejected, withdrawn, desk_rejected, unknown |"
+    )
 
 
 def test_ris_import_reports_are_not_listings() -> None:
@@ -291,7 +314,21 @@ def test_a_malformed_causes_file_is_refused_before_anything_is_written(
     (root / "docs" / "results" / "coverage-causes.toml").write_text('["ICLR 2014"]\ncause = "x"\n')
     monkeypatch.setattr(cli, "_repo_root", lambda: root)
     assert main(eval_args(data_dir, tmp_path / "r")) == 1
-    assert "is not" in capsys.readouterr().err and not (tmp_path / "r").exists()
+    err = capsys.readouterr().err
+    assert "is not" in err and not (tmp_path / "r").exists()
+    [refused] = [e for e in map(json.loads, (ln for ln in err.splitlines() if ln.startswith("{")))
+                 if e.get("event") == "cli_refused"]  # fmt: skip
+    assert (refused["command"], refused["error"]) == ("eval", "ValueError")
+
+
+def test_a_missing_sources_table_is_refused_before_anything_is_written(
+    data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openproceedings import cli
+
+    (tmp_path / "checkout" / "docs" / "results").mkdir(parents=True)  # no coverage-sources.md
+    monkeypatch.setattr(cli, "_repo_root", lambda: tmp_path / "checkout")
+    assert main(eval_args(data_dir, tmp_path / "r")) == 1 and not (tmp_path / "r").exists()
 
 
 def test_unknown_track_records_are_counted_per_venue_year_and_never_folded_into_main() -> None:

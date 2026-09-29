@@ -69,11 +69,12 @@ line (`**M4 gate: PASS|FAIL** — n of m gated cells within ±1%; k gaps`). Then
 indexed accepted, official, Δ, `delta_pct` to one decimal, gate (✓, ✗, `✗ gap` for a gated official cell with
 no records, `not gated` for another track, `no source` for a main or D&B cell with no official count),
 missing abstracts, the venue-year's `unknown`-track and `unknown`-status counts, and **statuses indexed**
-(`none (no source)` on a gap). Δ% is rounded to one decimal; the gate compares exactly. Then a cause note for
+(`none (no records)` on a gap in a venue-year with no record at all). Δ% is rounded to one decimal; the gate compares exactly. Then a cause note for
 every failing cell, from `docs/results/coverage-causes.toml` (`["NeurIPS 2021 datasets_benchmarks"]`
 `cause = "…"`) or **unclassified**, and any note for a cell that no longer fails (remove it). Then every
 proceedings listing that skipped entries or whose count disagreed with its page, and every OpenReview crawl
-that is incomplete, has coverage gaps, unmapped venues or skipped groups, or skipped anything but
+that is incomplete, has coverage gaps, conflicts, unmapped venues or non-routine skipped groups (`proposal`,
+`container` and `not_a_v2_venue` are routine; `no_submission_venue_id` is not), or skipped anything but
 `not_submission` replies. Then totals of records, missing abstracts, `unknown` track and status. The report is
 written atomically; a same-day run replaces it. `--check` exits 1 when the gate fails. The methods text cites this report (with its
 snapshot hash) as the database-scope caveat.

@@ -77,8 +77,8 @@ As built (TASK-054): `op eval coverage` renders `docs/results/<date>-coverage.md
 official cell, with a cell the snapshot holds no record for as a gap (0 indexed, ✗); a cause note for every
 failing cell, read from `docs/results/coverage-causes.toml` (`["<Venue> <year> <track>"]` with a `cause`) or
 **unclassified**, with the file's sha256 in the header; every proceedings listing whose crawl skipped entries or
-disagreed with its page's count; and every OpenReview crawl that is incomplete or has gaps, unmapped venues,
-skipped groups or non-routine skips. `--check` exits 1 when the gate fails.
+disagreed with its page's count; and every OpenReview crawl that is incomplete or has coverage gaps, conflicts,
+unmapped venues, non-routine skipped groups or non-routine skipped notes. `--check` exits 1 when the gate fails.
 
 ## D. Classification audit (report)
 
