@@ -4,7 +4,7 @@
 
 - **Date:** 2026-09-27 · **Task:** TASK-002, TASK-048, TASK-049 · **Area:** ingest
 - **Artifacts:** `docs/research/2026-09-27-openreview-and-proceedings-facts.md`, decision-012,
-  decision-013, `backend/tests/fixtures/http/` (53 scrubbed fixtures, `scrub.py`)
+  decision-013, `backend/tests/fixtures/http/` (86 scrubbed fixtures, `scrub.py`)
 
 ## What we set out to do
 Record the owner's two M4 decisions (index rejected/withdrawn behind `status:accepted`; crawl from 2013)
@@ -55,3 +55,20 @@ PMLR before the crawlers are written.
   `.claude/skills/track-taxonomy/SKILL.md`, `.claude/skills/coverage-reporting/SKILL.md`,
   `.claude/agents/openreview-crawler.md`, `.claude/agents/proceedings-miner.md`, `docs/specs/01-ingestion.md`,
   `CONTRIBUTING.md`.
+
+## Addendum — 2026-09-29
+
+**Key lesson:** An authenticated OpenReview account can see a role-scoped row inside an otherwise public
+invitation listing, so a transport-layer recorder must retain a raw response only after the crawler's
+public-projection check succeeds; scrubbing personal text does not make a non-world-readable response a
+public fixture.
+
+- **Task:** TASK-107 · **Evidence:** the first
+  `ICLR.cc/2017/workshop/-/submission?limit=1&offset=0` response contained a note whose ACL was not
+  world-readable. `OpenReviewClient._public_projection` raised `OpenReviewPublicDataError`; the raw capture
+  was deleted and replaced by a public-by-id workshop-invitation note.
+- The same run recorded public zero-count NeurIPS withdrawn/desk-rejected listings and public accepted
+  ICLR 2020/2021 forums, showing why authentication, public ACL validation, and textual scrubbing are three
+  separate gates rather than interchangeable privacy controls.
+- **Propagated to:** `.claude/skills/openreview-api/SKILL.md` §Fixtures and
+  `docs/research/2026-09-27-openreview-and-proceedings-facts.md` §TASK-107 authenticated v1 follow-up.

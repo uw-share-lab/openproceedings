@@ -1,0 +1,80 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-107 authenticated OpenReview v1 fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2023/BlogPosts/-/Blind_Submission&limit=1&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "o6tY8PnnJ7",
+     "original": "4cVyROIw8Qm",
+     "number": 23,
+     "cdate": 1675541530768,
+     "pdate": 1683024958254,
+     "odate": 1675541526148,
+     "mdate": null,
+     "ddate": null,
+     "tcdate": 1675541530768,
+     "tmdate": 1683035711775,
+     "tddate": null,
+     "forum": "o6tY8PnnJ7",
+     "replyto": null,
+     "invitation": "ICLR.cc/2023/BlogPosts/-/Blind_Submission",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "authorids": [
+       "~Synthetic_Person2",
+       "~Synthetic_Person3"
+      ],
+      "authors": [
+       "Synthetic Author 4",
+       "Synthetic Author 5"
+      ],
+      "keywords": [
+       "Synthetic keywords text 6.",
+       "Synthetic keywords text 7.",
+       "Synthetic keywords text 8.",
+       "Synthetic keywords text 9.",
+       "Synthetic keywords text 10."
+      ],
+      "abstract": "Synthetic abstract text 11.",
+      "blogpost_url": "Synthetic blogpost url text 12.",
+      "ICLR_papers": [
+       "Synthetic iclr papers text 13."
+      ],
+      "ID_of_the_Authors_of_The_ICLR_paper": [
+       "~Synthetic_Person14"
+      ],
+      "Conflict_of_interest": "Synthetic conflict of interest text 15.",
+      "paperhash": "synthetic|synthetic_title_16",
+      "_bibtex": "Synthetic bibtex text 17.",
+      "venue": "Blogposts @ ICLR 2023",
+      "venueid": "ICLR.cc/2023/BlogPosts"
+     },
+     "signatures": [
+      "ICLR.cc/2023/BlogPosts"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2023/BlogPosts"
+     ]
+    }
+   ],
+   "count": 19
+  }
+ }
+}

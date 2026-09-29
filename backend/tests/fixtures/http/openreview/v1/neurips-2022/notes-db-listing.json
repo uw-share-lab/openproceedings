@@ -1,0 +1,92 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-107 authenticated OpenReview v1 fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=NeurIPS.cc/2022/Track/Datasets_and_Benchmarks/-/Submission&limit=1&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "MKDdTASg_1y",
+     "original": null,
+     "number": 460,
+     "cdate": 1654551195303,
+     "mdate": null,
+     "ddate": null,
+     "tcdate": 1654551195303,
+     "tmdate": 1770510519379,
+     "tddate": null,
+     "forum": "MKDdTASg_1y",
+     "replyto": null,
+     "invitation": "NeurIPS.cc/2022/Track/Datasets_and_Benchmarks/-/Submission",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "authorids": [
+       "~Synthetic_Person2",
+       "~Synthetic_Person3",
+       "~Synthetic_Person4",
+       "~Synthetic_Person5",
+       "~Synthetic_Person6"
+      ],
+      "authors": [
+       "Synthetic Author 7",
+       "Synthetic Author 8",
+       "Synthetic Author 9",
+       "Synthetic Author 10",
+       "Synthetic Author 11"
+      ],
+      "keywords": [
+       "Synthetic keywords text 12.",
+       "Synthetic keywords text 13.",
+       "Synthetic keywords text 14.",
+       "Synthetic keywords text 15."
+      ],
+      "TL;DR": "Synthetic tl;dr text 16.",
+      "abstract": "Synthetic abstract text 17.",
+      "pdf": "/pdf/04a21b1450c96c334d99917cf45bae22f770e21f.pdf",
+      "supplementary_material": "/attachment/edad719ede78d38c05cffe04aa10902be9104eac.pdf",
+      "author_statement": "Synthetic author statement text 18.",
+      "paperhash": "synthetic|synthetic_title_19",
+      "URL": "Synthetic url text 20.",
+      "dataset_url": "Synthetic dataset url text 21.",
+      "license": "Synthetic license text 22.",
+      "venue": "NeurIPS 2022 Datasets and Benchmarks ",
+      "venueid": "NeurIPS.cc/2022/Track/Datasets_and_Benchmarks",
+      "_bibtex": "Synthetic bibtex text 23.",
+      "contribution_process_agreement": "Synthetic contribution process agreement text 24.",
+      "in_person_attendance": "Synthetic in person attendance text 25.",
+      "community_implementations": "Synthetic community implementations text 26."
+     },
+     "signatures": [
+      "~Synthetic_Person27"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "NeurIPS.cc/2022/Track/Datasets_and_Benchmarks",
+      "~Synthetic_Person28",
+      "~Synthetic_Person29",
+      "~Synthetic_Person30",
+      "~Synthetic_Person31",
+      "~Synthetic_Person32"
+     ],
+     "pdate": 1663377764625,
+     "odate": 1656536248407
+    }
+   ],
+   "count": 163
+  }
+ }
+}

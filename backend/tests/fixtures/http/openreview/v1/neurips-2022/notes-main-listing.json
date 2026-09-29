@@ -1,0 +1,73 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-107 authenticated OpenReview v1 fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=NeurIPS.cc/2022/Conference/-/Blind_Submission&limit=1&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "09QFnDWPF8",
+     "original": "aOfJ7v_eSQ",
+     "number": 13051,
+     "cdate": 1652737878213,
+     "mdate": null,
+     "ddate": null,
+     "tcdate": 1652737878213,
+     "tmdate": 1683308368691,
+     "tddate": null,
+     "forum": "09QFnDWPF8",
+     "replyto": null,
+     "invitation": "NeurIPS.cc/2022/Conference/-/Blind_Submission",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "authorids": [
+       "~Synthetic_Person2",
+       "~Synthetic_Person3"
+      ],
+      "authors": [
+       "Synthetic Author 4",
+       "Synthetic Author 5"
+      ],
+      "keywords": [
+       "Synthetic keywords text 6.",
+       "Synthetic keywords text 7.",
+       "Synthetic keywords text 8."
+      ],
+      "TL;DR": "Synthetic tl;dr text 9.",
+      "abstract": "Synthetic abstract text 10.",
+      "paperhash": "synthetic|synthetic_title_11",
+      "pdf": "/pdf/3d17507f77d113bf831e8f163a55a9eb448a02fc.pdf",
+      "supplementary_material": "/attachment/dd39daf7aeb301b2e239948692ae20503a69149c.zip",
+      "venue": "NeurIPS 2022 Accept",
+      "venueid": "NeurIPS.cc/2022/Conference",
+      "_bibtex": "Synthetic bibtex text 12."
+     },
+     "signatures": [
+      "NeurIPS.cc/2022/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "NeurIPS.cc/2022/Conference"
+     ],
+     "pdate": 1667249474530,
+     "odate": 1667249391263
+    }
+   ],
+   "count": 2824
+  }
+ }
+}

@@ -333,14 +333,21 @@ V1_NOTES: list[tuple[str, str, str, str]] = [
     # status is always `unknown` in a v1 year, and the venue string decides
     ("v1/iclr-2017/note-rejected-bare-venueid.json", "other", "main", "rejected"),  # `Submitted to ICLR 2017`
     ("v1/iclr-2017/note-invite-to-workshop.json", "other", "workshop", "unknown"),
+    ("v1/iclr-2017/note-authors-string-live.json", "other", "main", "rejected"),
+    ("v1/iclr-2017/note-workshop-invitation-live.json", "other", "workshop", "unknown"),
+    ("v1/iclr-2017/notes-conference-listing.json", "other", "main", "accepted"),
     ("v1/iclr-2021/note-accepted.json", "main", "main", "accepted"),
+    ("v1/iclr-2021/forum-accepted.json", "main", "main", "accepted"),
     # the venue string alone says accepted; the withdrawn invitation disagrees: the v1 adapter makes it unknown + a conflict row
     ("v1/iclr-2021/note-withdrawn-with-accepted-venue.json", "main", "main", "accepted"),
     ("v1/iclr-2022/note-rejected-bare-venueid.json", "main", "main", "rejected"),  # `ICLR 2022 Submitted`
+    ("v1/iclr-2022/notes-blind-listing.json", "main", "main", "accepted"),
     ("v1/iclr-2023/note-rejected-bare-venueid.json", "main", "main", "rejected"),  # `Submitted to ICLR 2023`
     ("v1/iclr-2023/notes-blind-count.json", "main", "main", "accepted"),  # `ICLR 2023 poster`
     ("v1/iclr-2023/note-tinypapers.json", "tiny_papers", "tiny_papers", "unknown"),
+    ("v1/iclr-2023/notes-blogposts-blind-submission.json", "blogpost", "blogpost", "accepted"),
     ("v1/neurips-2021/note-rejected.json", "main", "main", "rejected"),  # `NeurIPS 2021 Submitted`
+    ("v1/neurips-2021/notes-main-listing.json", "main", "main", "accepted"),
     (
         "v1/neurips-2021/note-db-round1-rejected.json",
         "datasets_benchmarks",
@@ -354,6 +361,13 @@ V1_NOTES: list[tuple[str, str, str, str]] = [
         "accepted",
     ),
     ("v1/neurips-2022/note-accepted.json", "main", "main", "accepted"),  # `NeurIPS 2022 Accept`
+    ("v1/neurips-2022/notes-main-listing.json", "main", "main", "accepted"),
+    (
+        "v1/neurips-2022/notes-db-listing.json",
+        "datasets_benchmarks",
+        "datasets_benchmarks",
+        "accepted",
+    ),
 ]
 
 V1_NO_VENUE_EVIDENCE = {
@@ -363,10 +377,21 @@ V1_NO_VENUE_EVIDENCE = {
     "v1/iclr-2014/notes-submission-no-decision.json",
     "v1/iclr-2016/notes-workshop.json",
     "v1/iclr-2018/forum-rejected.json",
+    "v1/iclr-2018/notes-blind-listing.json",
+    "v1/iclr-2018/notes-withdrawn-listing.json",
     "v1/iclr-2019/forum-rejected-meta-review.json",
+    "v1/iclr-2019/notes-blind-listing.json",
+    "v1/iclr-2019/notes-withdrawn-listing.json",
+    "v1/iclr-2020/forum-accepted.json",
     "v1/iclr-2020/forum-rejected.json",
+    "v1/iclr-2020/notes-blind-listing.json",
+    "v1/iclr-2020/notes-desk-rejected-listing.json",
+    "v1/iclr-2020/notes-withdrawn-listing.json",
     "v1/iclr-2021/forum-rejected-no-venueid.json",
+    "v1/iclr-2021/notes-blind-listing.json",
+    "v1/iclr-2021/notes-desk-rejected-listing.json",
     "v1/iclr-2022/note-withdrawn-empty-venueid.json",  # `venue = venueid = ""`
+    "v1/iclr-2022/notes-desk-rejected-listing.json",
     "v1/iclr-2023/note-desk-rejected.json",
 }
 

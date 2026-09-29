@@ -59,12 +59,11 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
 - `POST https://api2.openreview.net/login` with `{"id", "password"}` returns `{"token": …}`; the same
   bearer token works on api1.
 - `.env` variable names: this project's `.env.example` names `OPENREVIEW_USERNAME` and
-  `OPENREVIEW_PASSWORD`; the maintainer's working `.env` (from scholarmend) uses
-  `SCHOLARMEND_OPENREVIEW_USER` / `SCHOLARMEND_OPENREVIEW_PASSWORD`, the names scholarmend's CLI reads.
-  The confirmed names are `OPENREVIEW_USERNAME` / `OPENREVIEW_PASSWORD`: `.env.example` and
-  `scripts/setup-dev.sh` write them and `CONTRIBUTING.md` documents them; the crawler (TASK-050) reads
-  them and passes them to scholarmend's `login(user, password)`. A maintainer whose `.env` has only the
-  scholarmend names must add these two before recording.
+  `OPENREVIEW_PASSWORD`. During the 2026-09-27 run, the maintainer's Scholarmend-era `.env` had only
+  `SCHOLARMEND_OPENREVIEW_USER` / `SCHOLARMEND_OPENREVIEW_PASSWORD`; the crawler intentionally ignores
+  those legacy names. The main checkout was corrected before the 2026-09-29 TASK-107 run, and
+  `env_credentials()` then reported configured without exposing either value. `.env.example`,
+  `scripts/setup-dev.sh` and `CONTRIBUTING.md` all use the crawler's two supported names.
 
 ### Rate limits
 - api2 sends per-resource budgets: notes `ratelimit-policy: 500;w=3600`, groups `700;w=3600`, plus
@@ -117,6 +116,27 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
   year with decisions on OpenReview: 2013 and 2017–2023 on v1; 2024+ with all three flags true). NeurIPS and ICML set all three flags false: rejected papers appear only when
   the authors opt in (NeurIPS 2023: 176, 2024: 201, 2025: 254; ICML 2025: 162, 2026: 214; ICML 2023–2024: 0),
   and withdrawn or desk-rejected ones almost never (NeurIPS 2023: 1). Workshops set their own flags.
+
+#### TASK-107 authenticated v1 follow-up (2026-09-29)
+
+- One `?invitation=…&limit=1&offset=0` response is now recorded for every v1 venue-year with a group.
+  The newly recorded main-listing totals are ICLR 2017–2022: 490, 935, 1,419, 2,213, 2,594 and 2,617;
+  NeurIPS 2021–2022: 2,768 and 2,824. ICLR 2015 still has no group.
+- ICLR withdrawn-listing totals are 83 (2018), 160 (2019) and 369 (2020). Desk-rejected totals are
+  12 (2020), 17 (2021) and 26 (2022). The exact invitations already named by the adapters are therefore
+  live-proven rather than inferred from adjacent years.
+- ICLR 2020 paper 2594 and ICLR 2021 paper 2910 both carry a public decision note whose exact decision is
+  `Accept (Poster)`. The v1 adapters now map that string to accepted/poster in both years.
+- `ICLR.cc/2023/BlogPosts/-/Blind_Submission` is the BlogPosts listing (19 notes); a recorded note says
+  `Blogposts @ ICLR 2023` and has venueid `ICLR.cc/2023/BlogPosts`.
+- NeurIPS 2021 and 2022 both accept the exact public main-track `Withdrawn_Submission` and
+  `Desk_Rejected_Submission` invitation queries, and all four return count 0. The crawler now records those
+  zeroes instead of reporting the invitations as unverified. The NeurIPS 2022 Datasets and Benchmarks
+  submission listing has 163 notes; its recorded example uses the already-known trailing-space venue label.
+- The ICLR 2017 public notes reconfirm both schema variants: `authors` can be one unsplit string, and
+  `ICLR 2017 Invite to Workshop` is carried by `content.venue`. A workshop listing viewed with a role-bearing
+  account returned a non-world-readable row and was deliberately discarded; only public-by-id evidence is
+  committed.
 
 ### venueid forms confirmed (each with a fixture or a checked id)
 
@@ -218,8 +238,8 @@ Workshop names include hyphens and digits (`SCI-FM`, `CLRLC-LLMs`, `7HVU`).
   and APA boxes.
 
 ## Fixtures
-`backend/tests/fixtures/http/` holds one recorded, scrubbed response per shape above: 21 OpenReview v2,
-20 v1, 3 ICLR archive, 8 NeurIPS proceedings and 8 PMLR files. Each is
+`backend/tests/fixtures/http/` holds the recorded, scrubbed responses above: 21 OpenReview v2,
+46 v1, 3 ICLR archive, 8 NeurIPS proceedings and 8 PMLR files. Each is
 `{"_recorded", "request": {"method", "url", "authenticated"}, "response": {"status", "headers", "json" | "text"}}`.
 `scrub.py` (no network code) made them from the raw captures: titles, abstracts, authors, author ids,
 keywords, reviews and emails are synthetic; ids, venueids, venue strings, decisions, invitations, dates and
