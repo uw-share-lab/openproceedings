@@ -1,11 +1,11 @@
 ---
 id: TASK-116
 title: Bound and contextualize crawler observability
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-28 01:59'
-updated_date: '2026-09-29 14:40'
+updated_date: '2026-09-29 14:41'
 labels:
   - ingest
   - observability
@@ -42,3 +42,9 @@ The M4 review found that the crawler reports durable aggregate outcomes well, bu
 <!-- SECTION:NOTES:BEGIN -->
 Built 2026-09-29. AC1: per-record WARNINGs demoted to DEBUG (openreview_unknown_track, openreview_v1_unmapped/_conflict/_duplicate, neurips_record_invalid, pmlr_record_invalid; the proceedings ones gain url); one aggregate WARNING per listing/crawl (listing_attention; openreview_crawl_attention, v1 now also counts duplicate and invalid, both carry api). AC2: openreview_v2.Progress logs openreview_crawl_started and openreview_crawl_progress (common.Heartbeat, at most every 30 s on the client's monotonic clock; api, venue, year, notes_read, forums (v1), imported, skipped, requests, cached) for v1 and v2. AC3: http.PolicyEvents constants (CRAWL_EVENTS, openreview_client.EVENTS) replace Policy.log_prefix; an AST test refuses a built crawler event name. AC4: _public_projection takes the canonical URL and every refusal names GET <url> (the cache key), never response data or credentials. AC5: html.HTMLBudgetError(SourceError, ValueError, reason html_budget) names the page URL, --refresh for an index page and the cache entry (http.cache_name) for a paper page; every miner passes the URL. Docs: logging-standards §Crawl lines, openreview-api skill, spec 01 (cache expiry, Crawl logs). Not changed: *_cache_expired stays INFO per entry and openreview_cache_incompatible stays WARNING per entry (not record-level anomalies).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Crawler logs bounded for full-corpus runs: per-record anomalies (openreview_unknown_track, openreview_v1_unmapped/conflict/duplicate, neurips/pmlr_record_invalid) are DEBUG, with one aggregate WARNING per listing or crawl (openreview_crawl_attention now also counts duplicate and invalid, and names api); OpenReview v1/v2 log openreview_crawl_started and openreview_crawl_progress at most every 30 s (common.Heartbeat on the client's monotonic clock) with venue, year, api, counts, requests and cache hits; HTTP policy event names are fixed constants (http.CRAWL_EVENTS, openreview_client.EVENTS), pinned by a test that checks every crawler log call; projection refusals name the canonical request; html.HTMLBudgetError names the page and the recovery (--refresh or the cache entry). Per-entry cache_expired/cache_incompatible lines left per page (decision in the learning).
+<!-- SECTION:FINAL_SUMMARY:END -->
