@@ -17,14 +17,37 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
 - Branch protection: both `dev` and `main` accept only PRs whose required checks are green.
 
 ## Closing order (CLAUDE.md §Closing workflow — approvals are per-commit)
-1. Tests and lint green locally (`make test`, `make lint`, `make tooling`). Paste the command and the
-   result, never a claim.
+1. Tests and lint green locally, **scaled by risk** (§Local test runs). Paste the command and the result,
+   never a claim.
 2. Backlog task updated via the CLI (criteria checked, notes, final summary); a finished task is moved with
    `backlog task complete <id>` (`.claude/skills/task-hygiene/SKILL.md`).
 3. Docs, specs and READMEs as-built in the same branch.
 4. `/record-learnings` → commit the entry and regenerated `INDEX.md`.
 5. `/review-gate` → routed reviewers, every finding dispositioned, `record-review.py APPROVE` for HEAD.
 6. `git push -u origin <branch>`, then `/open-pr` (writes the body, creates the PR, `--attest`s it).
+7. Once the PR merges: `git worktree remove <its worktree>` and `git branch -d <branch>` (GitHub deletes the
+   remote branch). A worktree left behind goes stale; one with uncommitted work is archived as a patch before
+   it is removed, never deleted blind.
+
+## Local test runs (by risk; owner's rule, 2026-09-29, TASK-121)
+CI's required `test` job runs the full backend and frontend suite on every PR, and nothing merges without it.
+The local run is there to catch a failure before the 30-minute CI round, so it is sized to what the diff can
+break. `make lint` and `make tooling` always run (the pre-push hook runs them too).
+
+| The diff touches | Run locally before pushing |
+|---|---|
+| `backend/src/**`, `**/pyproject.toml`, `uv.lock`, `**/package.json`, `package-lock.json` | `make test` (the full suite) |
+| `frontend/src/**`, frontend root config (`frontend/*.config.*` but `playwright.config.ts`, `frontend/tsconfig.json`), or the API contract `backend/tests/contract/openapi.json` | `npm test --workspace frontend`; and when it touches a file a backend test reads (any `frontend/src/**/*.json`, the goldens and fixtures, `src/api/schema.ts`, or `openapi.json`; the last two change only through `make openapi`), also `uv run pytest` (the whole backend suite); and for `next.config.ts` or `postcss.config.mjs`, which change the production build, also `npm run build --workspace frontend` (and `make e2e` when its `headers()` or `src/lib/security-headers.ts` change: a bad CSP builds but blocks scripts at runtime) |
+| `frontend/e2e/**`, `frontend/playwright.config.ts`, `backend/tests/e2e/**` | `make e2e` (CI's `e2e` job is advisory, so this is the only run that must pass) |
+| shared test code: any `conftest.py`, `backend/tests/{strategies,corpus}.py`, `backend/tests/fixtures/**`, or any `backend/tests` module another test imports (`grep -rn "<module name>" backend/tests --include='*.py'` finds both `from tests.x.<module> import …` and `from tests.x import <module>`) | `make test` (both suites: a frontend test reads `backend/tests/fixtures/queries/`) |
+| other tests only | the changed test files; for a changed data file (e.g. `backend/tests/differential/*.json`, `backend/tests/golden/*.json`), the tests that read it (`grep -rln "<file name>" backend/tests frontend/src`) |
+| `.claude/hooks/**`, `.claude/scripts/**`, `.githooks/**`, `.github/**`, `Makefile` | `make tooling` and `make mutate-changed` |
+| `docs/specs/**`, `docs/results/**`, `backlog/**` (tests on both sides read them: the syntax-help golden, diagnostics, official counts, the Covidence fixture, the backlog check, decision records, and the methods text reads spec 05) | `make test` (both suites) |
+| other docs: `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `docs/{design,research,plans,usability}/**`, `.claude/` markdown | nothing beyond `make lint` and `make tooling` |
+| anything the rows above don't name | `make test` (unlisted means full: the table fails safe) |
+
+A diff that spans rows runs the union. When in doubt, run `make test`. The PR's **Tests** section says exactly
+what ran locally, and that CI runs the full suite; never claim a full-suite pass that wasn't run.
 
 The learnings commit comes **before** the review because the review record is keyed to the exact HEAD
 sha. Any commit after an approval — a typo fix, a rebase, an amend — produces a new sha with no record, and

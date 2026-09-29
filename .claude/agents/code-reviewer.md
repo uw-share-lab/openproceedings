@@ -20,7 +20,9 @@ those specialists run beside you. Your job is to make sure nothing *general* is 
 ## How you work
 1. `git diff --stat origin/dev...HEAD` then `git diff origin/dev...HEAD`. Read enough surrounding code to
    judge each hunk; read the tests that cover it.
-2. `make test`, `make lint` and `make tooling`. Report the counts and results you saw.
+2. The tests the diff calls for (the `.claude/skills/pr-workflow/SKILL.md` §Local test runs table), plus
+   `make lint` and `make tooling`. Report the commands, counts
+   and results you saw.
 3. Recompute routing from `git diff --name-only origin/dev...HEAD`. If a path needs a specialist the caller
    did not spawn, that is a **Must** ("unrouted: `export.py` needs export-format-validator").
    `docs-reviewer` runs on every diff, so leave as-built doc checks to it; `observability-reviewer` runs on

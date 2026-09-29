@@ -37,7 +37,8 @@ API answers every request with an HTML browser-check page instead of JSON (check
 2. Branch off `dev`: `git switch dev && git pull && git switch -c <type>/<slug>` (e.g. `feat/wildcard-expansion`; types: feat, fix, chore, docs, test).
 3. Work test-first. Keep changes inside one spec's scope. If the spec is wrong, change the spec in the same PR.
 4. Close out, in this order (approvals are per-commit, so the order matters):
-   - `make test`, `make lint` and `make tooling` green → Backlog current (acceptance criteria ticked; finished
+   - the local tests the change calls for green (the `.claude/skills/pr-workflow/SKILL.md` §Local test runs
+     table; often the full `make test`), plus `make lint` and `make tooling` → Backlog current (acceptance criteria ticked; finished
      tasks moved with `backlog task complete <id>`) → docs, specs and READMEs as-built in the same branch
    - `/record-learnings` → commit the entry and `INDEX.md`
    - `/review-gate`. Every finding gets a disposition: `fixed <sha>`, `task-NNN`, or `rejected: <reason>`.

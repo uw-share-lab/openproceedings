@@ -11,7 +11,7 @@ Open a pull request for the current branch. Base: ${ARGUMENTS:-dev}.
    the base. If not, stop and say which step (`/record-learnings`, `/review-gate`) is missing.
 2. `git push -u origin <branch>` (the hook re-checks the record).
 3. Write the PR body from the Backlog task(s) and the commits: **Summary**, **Spec(s)** touched, **Tests**
-   (commands + results), **Review** (reviewers run, finding counts by severity, dispositions),
+   (what ran locally, commands + results, by `pr-workflow` §Local test runs; CI's `test` job runs the full suite), **Review** (reviewers run, finding counts by severity, dispositions),
    **Learnings** (the entry path + key lesson). **No AI attribution line** — `block-ai-attribution.sh`
    rejects it.
 4. `gh pr create --base <base> --title "<type>: <summary>" --body-file <file>`.
