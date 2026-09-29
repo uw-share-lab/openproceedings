@@ -3,7 +3,7 @@
 **Key lesson:** Before trusting a URL component as a native id, check it on the live listing for collisions between different titles. The NeurIPS path hash is md5 of a per-site paper number, so the 2021 D&B host reuses hashes across round 1, round 2 and the main track. A listing whose `count_ok` is true can still lose papers at the id dedup step, so read `skipped.duplicate` too.
 
 - **Date:** 2026-09-29 · **Task:** task-118 · **Area:** ingest
-- **Artifacts:** `backend/src/openproceedings/ingest/urls.py` (`proceedings_native`), `backend/src/openproceedings/ingest/sources/neurips.py`, `backend/src/openproceedings/ingest/ris.py`, `backend/tests/unit/ingest/test_urls.py`, `backend/tests/unit/ingest/test_neurips.py::test_2021_db_papers_sharing_a_hash_are_all_kept`
+- **Artifacts:** `docs/results/2026-09-29-proceedings-dry-runs.md` (the dry-run tables and the collision counts), `backend/src/openproceedings/ingest/urls.py` (`proceedings_native`), `backend/src/openproceedings/ingest/sources/neurips.py`, `backend/src/openproceedings/ingest/ris.py`, `backend/tests/unit/ingest/test_urls.py`, `backend/tests/unit/ingest/test_neurips.py::test_2021_db_papers_sharing_a_hash_are_all_kept`
 
 ## What we set out to do
 Run the first live dry-run crawls for the M4 coverage gate (TASK-054) and compare each listing with its official count.
@@ -11,7 +11,7 @@ Run the first live dry-run crawls for the M4 coverage gate (TASK-054) and compar
 ## What we learned
 - Every NeurIPS listing matched its official count except 2021 D&B. It listed 174 (official 174), but only 120 were planned: `skipped: {"duplicate": 54}` (evidence: `op ingest neurips --year 2013-2025 --dry-run`, 2026-09-29).
 - None of the 54 were real duplicates. 27 hashes appear in both round 1 and round 2 of the D&B page, and 27 are shared with 2021 main-track papers. 0 of 54 share a title (evidence: title comparison over the cached D&B and main 2021 index pages).
-- The hash is `md5(str(n))` for a paper number n. The first D&B entry's hash is md5 of `138`. The main proceedings site never reuses a number (no other year had a duplicate), but the D&B site numbers each round from 1 on its own.
+- The hash is `md5(str(n))` for a paper number n. The first D&B entry's hash is md5 of `138`. The main proceedings site never reuses a number (no other year had a duplicate), but the D&B site numbers round 1, round 2 and the main track in separate, overlapping sequences.
 - `count_ok` compares listed entries with the page's stated count before any id exists. So it passes while the id dedup step drops a third of the cell, and the loss shows only in `skipped.duplicate`.
 - The same bug was in `urls.native()`. A RIS row citing a D&B URL would have taken an unrelated main-track paper's id, and dedup would then have merged the two.
 

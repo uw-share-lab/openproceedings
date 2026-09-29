@@ -31,6 +31,9 @@ def nips(n: int) -> str:
 def self_url(native: str, year: int) -> str | None:
     """The proceedings URL a proceedings-id record names itself by (dedup requires one)."""
     prefix, _, rest = native.partition("-")
+    if prefix == "nips" and rest.endswith(("-round1", "-round2")):  # the 2021 D&B host (TASK-118)
+        sha, _, rnd = rest.partition("-")
+        return f"https://datasets-benchmarks-proceedings.neurips.cc/paper_files/paper/{year}/hash/{sha}-Abstract-{rnd}.html"
     if prefix in ("nips", "iclr"):
         host = "neurips" if prefix == "nips" else "iclr"
         return f"https://proceedings.{host}.cc/paper_files/paper/{year}/hash/{rest}-Abstract-Conference.html"
@@ -281,6 +284,36 @@ def test_never_merge(why: str, records: list[PaperRecord], resolution: str) -> N
     result = dedup(records)
     assert len(result.records) == len(records) and not result.merges
     assert set(resolutions(result)) == {resolution}
+
+
+def db21(native: str, title: str = "Trust in AI", **kw: Any) -> PaperRecord:
+    """A NeurIPS 2021 Datasets and Benchmarks record (TASK-118: its D&B-host ids carry the round)."""
+    kw.setdefault("source", "neurips_proceedings")
+    return paper(native, title, year=2021, track=kw.pop("track", "datasets_benchmarks"), **kw)
+
+
+def test_a_round_qualified_db_listing_merges_with_its_openreview_submission() -> None:
+    result = dedup([db21("AbCd1234", source="openreview_v1"), db21(f"nips-{H[1]}-round1")])
+    [r] = result.records
+    assert r.id == "op:neurips:2021:AbCd1234" and len(result.merges) == 1
+
+
+@pytest.mark.parametrize("title_b", ["Trust in AI", "Reliance on AI"])
+def test_one_hash_on_the_main_host_and_in_each_db_round_is_three_papers(title_b: str) -> None:
+    """md5 of a per-site paper number: the same hash names a main-track paper and one paper per D&B round."""
+    records = [
+        db21(f"nips-{H[1]}", track="main"), db21(f"nips-{H[1]}-round1", title_b), db21(f"nips-{H[1]}-round2", title_b)
+    ]  # fmt: skip
+    result = dedup(records)
+    assert sorted(r.id for r in result.records) == sorted(r.id for r in records) and not result.merges
+
+
+def test_an_openreview_record_naming_the_main_host_hash_is_not_merged_into_the_db_paper() -> None:
+    main_url = f"https://proceedings.neurips.cc/paper_files/paper/2021/hash/{H[1]}-Abstract.html"
+    result = dedup([db21("AbCd1234", source="openreview_v1", urls_proceedings=main_url),
+                    db21(f"nips-{H[1]}-round1")])  # fmt: skip
+    assert len(result.records) == 2 and not result.merges
+    assert set(resolutions(result)) == {"ambiguous_not_merged"}
 
 
 def test_three_way_with_two_proceedings_ids_is_refused() -> None:

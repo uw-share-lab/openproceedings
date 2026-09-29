@@ -194,7 +194,8 @@ NEURIPS_DB_2021_HOST = "datasets-benchmarks-proceedings.neurips.cc"
 _TOKENLESS_LAST_YEAR = 2021  # 1987-2021 abstract links carry no track token; the year page has one track
 _DB_ALIAS = "Datasets_and_Benchmarks"
 _DB_ALIAS_LAST_YEAR = 2023  # the <=2023 spelling of Datasets_and_Benchmarks_Track (scholarmend's alias)
-# The 2021 D&B host numbers each round separately, so a round is part of a paper's identity (urls.native).
+# The 2021 D&B host numbers each round separately, so a round is part of a paper's identity
+# (urls.proceedings_native; record.py's native-id pattern is built from this set).
 NEURIPS_DB_2021_ROUNDS = frozenset({"round1", "round2"})
 
 

@@ -65,15 +65,15 @@ def proceedings_native(url: str) -> str | None:
     """The native id a NeurIPS or ICLR proceedings URL names, or None: `nips-`/`iclr-<32 hex>`, and on the 2021
     D&B host `nips-<32 hex>-round1|round2`. The hash is md5 of the paper's number, and that host numbers each
     round (and the main track) separately, so there the hash alone names up to three papers (TASK-118). A D&B
-    link without a known round names none of them. The miners, the RIS importer and dedup all call this, so a
+    link without a known round, or dated other than 2021 (the host lists 2021 only), names none of them. The miners, the RIS importer and dedup all call this, so a
     URL and the record it came from always agree on the id."""
     parts = proceedings_parts(url)
     if parts is None or len(parts[2]) != 32:
         return None
-    venue, _year, sha, token = parts
+    venue, year, sha, token = parts
     base = f"{PREFIX[venue]}-{sha}"
-    if urlparse(url).netloc.lower() == NEURIPS_DB_2021_HOST:
-        return f"{base}-{token}" if token in NEURIPS_DB_2021_ROUNDS else None
+    if urlparse(url).netloc.lower() == NEURIPS_DB_2021_HOST:  # the same rule as classify_neurips_listing
+        return f"{base}-{token}" if year == 2021 and token in NEURIPS_DB_2021_ROUNDS else None
     return base
 
 

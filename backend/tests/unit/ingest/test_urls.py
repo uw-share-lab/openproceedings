@@ -24,6 +24,7 @@ MAIN = "https://proceedings.neurips.cc"
         (f"{DB.upper()}/paper_files/paper/2021/hash/{H.upper()}-Abstract-round1.html", f"nips-{H}-round1"),
         (f"{DB}/paper_files/paper/2021/hash/{H}-Abstract.html", None),  # no round: which paper is unknowable
         (f"{DB}/paper_files/paper/2021/hash/{H}-Abstract-round3.html", None),
+        (f"{DB}/paper_files/paper/2022/hash/{H}-Abstract-round1.html", None),  # the host lists 2021 only
         (f"{DB}/paper_files/paper/2021/hash/{H}-Abstract-Round1.html", None),  # the host writes it lowercase
         (
             f"{MAIN}/paper_files/paper/2021/hash/{H}-Abstract-round1.html",

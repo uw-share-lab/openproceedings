@@ -4,7 +4,7 @@ title: Coverage report and the M4 gate
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-29 05:34'
+updated_date: '2026-09-29 05:52'
 labels:
   - eval
 milestone: m-4
@@ -42,4 +42,6 @@ From TASK-052/053: the first live crawl (NeurIPS 2013-2024, ICML v28-v267) check
 From TASK-103: NeurIPS/PMLR fetches no longer follow redirects (3xx is a refusal). If the first live crawl hits one, add an on-host redirect rule to http.Policy.
 
 From TASK-118 (2026-09-29 live dry runs): every NeurIPS listing 2013-2025 and PMLR v28-v202 matched its official count on the listing; ICML 2024-25 PMLR is track 'unknown' until OpenReview joins it. count_ok passed on 2021 D&B while 54 of 174 were dropped at the id step, so the report must also check each listing's skipped.duplicate (fixed by TASK-118).
+
+Evidence for the note above: docs/results/2026-09-29-proceedings-dry-runs.md (per-listing listed/stated/planned/skipped vs coverage-sources.md, and the D&B collision counts).
 <!-- SECTION:NOTES:END -->

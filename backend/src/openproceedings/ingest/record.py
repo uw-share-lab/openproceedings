@@ -33,6 +33,7 @@ from pydantic import (
     model_validator,
 )
 
+from openproceedings.ingest.classify import NEURIPS_DB_2021_ROUNDS
 from openproceedings.vocab import Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
@@ -49,10 +50,11 @@ _ID = re.compile(r"op:(neurips|iclr|icml):([0-9]{4}):(\S+)")
 # Native ids (record-schema skill): an OpenReview forum id, or a proceedings form tied to its venue.
 _PROCEEDINGS_NATIVE = {
     "pmlr": (re.compile(r"pmlr-v[0-9]+-[A-Za-z0-9_-]+"), "ICML"),
+    # `-round1`/`-round2`: the 2021 D&B host, which numbers each round separately (urls.proceedings_native)
     "nips": (
-        re.compile(r"nips-[0-9a-f]{32}(?:-round[12])?"),
+        re.compile(rf"nips-[0-9a-f]{{32}}(?:-(?:{'|'.join(sorted(NEURIPS_DB_2021_ROUNDS))}))?"),
         "NeurIPS",
-    ),  # -roundN: the 2021 D&B host (TASK-118)
+    ),
     "iclr": (re.compile(r"iclr-[0-9a-f]{32}"), "ICLR"),
 }
 
