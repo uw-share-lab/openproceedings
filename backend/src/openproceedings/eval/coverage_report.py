@@ -9,9 +9,9 @@ What it adds to that data, and nothing else:
 - **Cause notes.** Every failing cell gets its cause from `causes` (a person's classification: source
   definition, classification, dedup or crawl gap), or `**unclassified**`: never adjust an official number to fit.
 - **Listings.** Each proceedings listing that skipped entries or whose count disagreed with its page, and each
-  OpenReview venue-year crawl that is incomplete, has coverage gaps, unmapped venues or skipped groups, or
-  skipped anything but reply notes (`not_submission`), from the snapshot manifest's `sources`: a passing
-  `count_ok` can hide a loss at the id step (TASK-118).
+  OpenReview venue-year crawl that is incomplete or has coverage gaps, conflicts, unmapped venues, non-routine
+  skipped groups or non-routine skipped notes, from the snapshot manifest's `sources`: a passing `count_ok` can
+  hide a loss at the id step (TASK-118). Routine: `not_submission` notes and `proposal`/`container` groups.
 
 `cov` and `manifest` are plain mappings in `coverage.breakdown`'s and the manifest's JSON shapes, as the rest of
 the coverage code passes them.
@@ -34,9 +34,10 @@ type CellKey = tuple[str, int, str]
 TRACK_ORDER = {t: i for i, t in enumerate(TRACKS)}
 MINUS = "−"  # U+2212, as the other results reports write a negative delta
 ROUTINE_SKIPS = frozenset({"not_submission"})  # an OpenReview reply or decision note: never a paper
-# v2 groups skipped by structure on every crawl (openreview_v2.venue_groups): a workshop proposal, a container of
-# venues, a child group that is no venue (a committee). `no_submission_venue_id` is not routine: it can hide one.
-ROUTINE_GROUP_SKIPS = frozenset({"proposal", "container", "not_a_v2_venue"})
+# v2 groups skipped by their id on every crawl (openreview_v2.venue_groups): a workshop proposal, a container of
+# venues. Not routine: `not_a_v2_venue` (a committee, but also an empty or unreadable group response, which can
+# hide a venue) and `no_submission_venue_id` (a venue group whose submissions can't be found).
+ROUTINE_GROUP_SKIPS = frozenset({"proposal", "container"})
 
 
 @dataclass(frozen=True)
@@ -266,11 +267,14 @@ def render(
         lines.append("None: every listing made a record of every entry, and every stated count matched.")
     lines += ["", "## OpenReview crawls that need attention", ""]
     if crawls:
-        lines += [f"Reply and decision notes (`{', '.join(sorted(ROUTINE_SKIPS))}`) are not counted as skips.", "",
+        lines += [f"Routine skips are not counted: reply and decision notes (`{', '.join(sorted(ROUTINE_SKIPS))}`) "
+                  f"and groups skipped by id (`{', '.join(sorted(ROUTINE_GROUP_SKIPS))}`).", "",
                   "| source | venue | year | notes read | imported | skipped | notes |",
                   "|---|---|---|---|---|---|---|", *crawls]  # fmt: skip
     else:
-        lines.append("None: every crawl is complete, with no gaps, unmapped venues or skipped groups.")
+        lines.append(
+            "None: every crawl is complete, with no coverage gaps, conflicts, unmapped venues or non-routine skips."
+        )
     t = cov["totals"]
     lines += [
         "",

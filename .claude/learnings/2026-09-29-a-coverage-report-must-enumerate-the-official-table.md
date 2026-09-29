@@ -19,7 +19,7 @@ Build `op eval coverage` (TASK-054 AC#3), which writes the dated spec 07 §C rep
 ## Decisions (and what would change them)
 - Cause notes live in `docs/results/coverage-causes.toml`, keyed `"<Venue> <year> <track>"`, so a regenerated report keeps a person's classification. An unclassified failing cell says **unclassified**, never a guessed cause.
 - `--check` turns the verdict into the exit status, for CI or a release gate. By default the command always writes the report.
-- OpenReview crawls are reported when they are incomplete or have coverage gaps, conflicts, unmapped venues, non-routine skipped groups or non-routine skipped notes. Routine means `not_submission` notes (replies and decisions) and `proposal`, `container` and `not_a_v2_venue` groups, which every crawl has. Otherwise every venue-year would be listed and the real problems lost among them.
+- OpenReview crawls are reported when they are incomplete or have coverage gaps, conflicts, unmapped venues, non-routine skipped groups or non-routine skipped notes. Routine means `not_submission` notes (replies and decisions) and `proposal` and `container` groups, which every crawl has. `not_a_v2_venue` is not routine: the crawler also uses it for an empty or unreadable group response, which could hide a venue. Otherwise every venue-year would be listed and the real problems lost among them.
 
 ## Follow-ups
 - [ ] task-054 — the first live crawl's report and the classification of every failing cell (AC#2).

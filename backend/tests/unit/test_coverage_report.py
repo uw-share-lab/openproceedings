@@ -170,12 +170,12 @@ def test_openreview_crawls_that_need_attention_are_listed_and_reply_notes_are_no
 
 
 def test_routine_v2_group_skips_are_not_attention_but_a_venue_without_submissions_is() -> None:
-    routine = {"a": "proposal", "b": "container", "c": "not_a_v2_venue"}
+    routine = {"a": "proposal", "b": "container"}
     quiet = report(sources={"openreview_v2": {"crawls": [crawl(api="v2", skipped_groups=routine)]}})
     assert "None: every crawl is complete" in quiet
     odd = report(sources={"openreview_v2": {"crawls": [crawl(api="v2", skipped_groups={**routine,
-                                                                                         "d": "no_submission_venue_id"})]}})  # fmt: skip
-    assert "skipped groups: no_submission_venue_id 1 |" in odd
+                                                                                         "c": "not_a_v2_venue", "d": "no_submission_venue_id"})]}})  # fmt: skip
+    assert "skipped groups: no_submission_venue_id 1, not_a_v2_venue 1 |" in odd
 
 
 def test_a_crawl_with_conflicts_needs_attention() -> None:
