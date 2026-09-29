@@ -6,9 +6,11 @@ published and crawled, they decide acceptance: an OpenReview-accepted paper they
 `status=unknown` and a `conflicts.csv` row, never silently accepted or rejected. Dedup can't decide that
 alone: it needs to know which listings were crawled, and whether completely. So this step runs after dedup.
 
-- **Crawled** (`crawled`): a (proceedings source, venue, year) whose every listing report says its stated
-  count matched and every entry became a record (duplicates of an entry aside). One incomplete listing and
-  the venue-year is left alone: an entry the crawl skipped may be the paper.
+- **Crawled** (`crawled`): a (proceedings source, venue, year) whose every listing report states a count, the
+  count matched, every entry became a record (duplicates of an entry aside) and the page names no other volume
+  left uncrawled (`see_also`). One incomplete listing and the venue-year is left alone: an entry the crawl
+  skipped, or a volume it didn't follow, may hold the paper; and with no stated count nothing says the page
+  showed every entry.
 - **Covered tracks**: only the tracks the crawled listings hold (`main`, `datasets_benchmarks`, `position`;
   the proceedings host no others). A listing's own track claim says which; a listing that can't say (a PMLR
   volume mixing main and position papers: `unknown`) covers the track of the record it merged into. A
@@ -19,7 +21,8 @@ alone: it needs to know which listings were crawled, and whether completely. So 
   listed paper: it keeps its status, and dedup's not-merged row already names it.
 
 An unlisted record gains one claim per crawled source: `status=unknown` from that source, its evidence starting
-`not listed:` (`dedup.is_absence`), its listing as the URL, the crawl's last fetch as `fetched_at`, and the evidence. `resolve` then gives the
+`not listed:` (`dedup.is_absence`; the prefix is reserved for it), its listing as the URL, that listing's
+index-page fetch as `fetched_at`, and the evidence. `resolve` then gives the
 record `unknown` (the proceedings outrank OpenReview for status) and the `precedence:<source>` conflicts.csv
 row; the OpenReview claim is kept. The record still equals what its claims resolve to, and an absence claim
 gives it no proceedings source, so dedup run again changes nothing; this step strips absence claims before
@@ -39,11 +42,13 @@ from openproceedings.ingest.dedup import (
     ABSENT,
     ABSENT_EVIDENCE,
     PRECEDENCE,
+    PROCEEDINGS_SOURCES,
+    PROCEEDINGS_TRACKS,
     Conflict,
     DedupResult,
     forum_ids,
     is_absence,
-    proceedings_ids,
+    is_listing,
     resolve,
     title_key,
 )
@@ -52,29 +57,39 @@ from openproceedings.ingest.sources.common import ListingReport, Report
 
 log = logging.getLogger(__name__)
 
-PROCEEDINGS_SOURCES: frozenset[str] = frozenset({"iclr_archive", "neurips_proceedings", "pmlr"})
-PROCEEDINGS_TRACKS: frozenset[str] = frozenset({"main", "datasets_benchmarks", "position"})
 OPENREVIEW_SOURCES: frozenset[str] = frozenset({"openreview_v2", "openreview_v1"})
 
 type Key = tuple[str, str, int]  # (proceedings source, venue, year)
 
 
 @dataclass(frozen=True)
+class Listing:
+    """One crawled listing: its index URL, the tracks its records claim, and when its index page was fetched."""
+
+    url: str
+    tracks: frozenset[str]
+    fetched_at: datetime
+
+
+@dataclass(frozen=True)
 class Crawl:
-    """A proceedings source's crawl of one venue-year: its listings (index URLs, in order) and the tracks each
-    claims, the last fetch, and whether every listing is complete."""
+    """A proceedings source's crawl of one venue-year: its listings, in order, and whether every one is
+    complete."""
 
     source: str
     venue: str
     year: int
-    listings: tuple[tuple[str, frozenset[str]], ...]  # (index URL, the tracks its records claim)
-    fetched_at: datetime
+    listings: tuple[Listing, ...]
     complete: bool
 
 
 def complete(report: ListingReport) -> bool:
-    """Every entry the listing states became a record, one per paper (a repeated entry is no missing paper)."""
-    return report.count_ok and report.records + report.skipped.get("duplicate", 0) == report.listed
+    """The listing states its count and it matched, every entry became a record, one per paper (a repeated
+    entry is no missing paper), and it points to no volume left uncrawled."""
+    return (
+        report.stated is not None and report.count_ok and not report.see_also
+        and report.records + report.skipped.get("duplicate", 0) == report.listed
+    )  # fmt: skip
 
 
 def crawled(reports: Iterable[Report]) -> dict[Key, Crawl]:
@@ -85,12 +100,13 @@ def crawled(reports: Iterable[Report]) -> dict[Key, Crawl]:
             grouped[(r.source, r.venue, r.year)].append(r)
     out = {}
     for key, group in sorted(grouped.items()):
-        fetched = [t for r in group for t in r.fetched]
-        if not fetched:
+        read = [r for r in group if r.fetched]  # a crawler's first fetch is always the listing's index page
+        if not read:
             continue  # nothing read, nothing to say
         out[key] = Crawl(
             group[0].source, group[0].venue, group[0].year,
-            tuple((r.listing, frozenset(r.tracks)) for r in group), max(fetched), all(complete(r) for r in group),
+            tuple(Listing(r.listing, frozenset(r.tracks), r.fetched[0]) for r in read),
+            len(read) == len(group) and all(complete(r) for r in group),
         )  # fmt: skip
     return out
 
@@ -102,21 +118,10 @@ def _without_absence(record: PaperRecord) -> PaperRecord:
     return bare
 
 
-def _listing_sources(record: PaperRecord) -> frozenset[str]:
-    return frozenset(
-        c.source for c in record.provenance if c.source in PROCEEDINGS_SOURCES and not is_absence(c)
-    )
-
-
 def _names(record: PaperRecord) -> set[tuple[str, str]]:
     """What could make the record a listing's paper: its kept title claims' keys and its forum ids."""
     keys = {("title", k) for c in record.provenance if c.field == "title" and (k := title_key(str(c.value)))}
     return keys | {("forum", f) for f in forum_ids(record)}
-
-
-def _is_listing(record: PaperRecord) -> bool:
-    """A listing, as dedup judges one: a proceedings claim, or a proceedings id in a URL claim."""
-    return bool(_listing_sources(record) or proceedings_ids(record.provenance))
 
 
 def _openreview_accepted(record: PaperRecord) -> bool:
@@ -144,11 +149,12 @@ def _covered(records: Iterable[PaperRecord], crawls: Mapping[Key, Crawl]) -> dic
 
 
 def _absence(crawl: Crawl, track: str) -> Claim:
-    holding = [url for url, tracks in crawl.listings if track in tracks or "unknown" in tracks]
-    names = ", ".join(url for url, _ in crawl.listings)
+    holding = [x for x in crawl.listings if track in x.tracks or "unknown" in x.tracks]
+    listing = (holding or [crawl.listings[0]])[0]
+    names = ", ".join(x.url for x in crawl.listings)
     return Claim(
-        field="status", value=ABSENT, source=cast(Source, crawl.source), url=(holding or [crawl.listings[0][0]])[0],
-        fetched_at=crawl.fetched_at,
+        field="status", value=ABSENT, source=cast(Source, crawl.source), url=listing.url,
+        fetched_at=listing.fetched_at,
         evidence=f"{ABSENT_EVIDENCE} OpenReview says accepted, but the crawled {crawl.venue} {crawl.year} {track} "
         f"listings ({names}) hold no record with its title or forum id (decision-005)",
     )  # fmt: skip
@@ -160,7 +166,8 @@ class Reconciled:
     unlisted: dict[tuple[str, int, str], int]  # (venue, year, track) → records made unknown
     # OpenReview-accepted and covered, but sharing a title key or forum id with a listing it didn't merge with
     shares_listing: int
-    incomplete: tuple[Key, ...]  # crawls left alone: a listing skipped an entry or miscounted
+    # crawls left alone: a listing skipped an entry, miscounted, states no count, or names a volume not crawled
+    incomplete: tuple[Key, ...]
 
 
 def reconcile(result: DedupResult, crawls: Mapping[Key, Crawl]) -> Reconciled:
@@ -170,7 +177,7 @@ def reconcile(result: DedupResult, crawls: Mapping[Key, Crawl]) -> Reconciled:
     covered = _covered(bare, crawls)
     listed: dict[tuple[str, int], set[tuple[str, str]]] = defaultdict(set)  # (venue, year) → listings' names
     for r in bare:
-        if _is_listing(r):
+        if is_listing(r):
             listed[(r.venue, r.year)] |= _names(r)
     out: list[PaperRecord] = []
     changed: dict[str, list[Conflict]] = {}  # id → its status rows, for every record this step changed
@@ -178,7 +185,7 @@ def reconcile(result: DedupResult, crawls: Mapping[Key, Crawl]) -> Reconciled:
     shares = 0
     for before, r in zip(result.records, bare, strict=True):
         sources = sorted(k for k in crawls if k[1:] == (r.venue, r.year) and r.track in covered.get(k, ()))
-        if sources and _openreview_accepted(r) and not _is_listing(r):
+        if sources and _openreview_accepted(r) and not is_listing(r):
             if _names(r) & listed[(r.venue, r.year)]:
                 shares += 1
             else:

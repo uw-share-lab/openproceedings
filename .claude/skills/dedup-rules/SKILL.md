@@ -117,9 +117,11 @@ safe direction.
 After dedup, `op snapshot build` reconciles OpenReview acceptance against the crawled proceedings. Dedup can't:
 it needs to know which listings were crawled, and whether completely.
 - **Crawled** (`reconcile.crawled`, from the listing reports): a (proceedings source, venue, year) whose every
-  listing is complete, its stated count matched (`count_ok`) and every entry became a record (a repeated entry,
-  `skipped.duplicate`, aside). One incomplete listing and the whole venue-year is left alone (logged as
-  `proceedings_reconcile_skipped`): a skipped entry may be the paper.
+  listing is complete: it states a count (`stated`) and matched it (`count_ok`), every entry became a record (a
+  repeated entry, `skipped.duplicate`, aside), and it names no volume left uncrawled (`see_also`). One incomplete
+  listing and the whole venue-year is left alone (logged as `proceedings_reconcile_skipped`): a skipped entry or
+  an unfollowed volume may hold the paper, and with no stated count nothing says the page showed every entry
+  (NeurIPS 2021's D&B page states none, so NeurIPS 2021 is not judged).
 - **Covered tracks**: `main`, `datasets_benchmarks` or `position` only, and only those the crawled listings'
   records hold: a listing's own track claim, or, for a listing that can't say (`unknown`: PMLR v235/v267 mix main
   and position papers), the track of the record it merged into. A track with no listing record (not published
@@ -129,13 +131,20 @@ it needs to know which listings were crawled, and whether completely.
   listing of the venue-year. A record that shares one but stayed apart may be the listed paper: it keeps its
   status, and dedup's not-merged row already names it (`shares_listing` in the log line).
 - An unlisted record gains an **absence claim** per crawled source: `status=unknown` from that proceedings
-  source, the listing as `url`, the crawl's last fetch as `fetched_at`, evidence starting `not listed:`
-  (`dedup.is_absence`). The proceedings outrank OpenReview for status, so `resolve` gives `unknown` and the
+  source, the listing that holds the track as `url`, that listing's index-page fetch as `fetched_at`
+  (`ListingReport.fetched[0]`), evidence starting `not listed:` (`dedup.is_absence`; the prefix is reserved, see
+  the record-schema skill). The proceedings outrank OpenReview for status, so `resolve` gives `unknown` and the
   `precedence:<source>` conflicts.csv row; the OpenReview claim stays. An absence claim is **not a listing**:
   dedup leaves it out of a cluster's sources (and merges.csv's `sources`), so the record never looks listed and
   a second dedup changes nothing. Reconcile strips absence claims before it judges, so it is idempotent, and a
   claim a later crawl no longer supports disappears.
 - Merges are never changed; conflicts only gain the reconciled records' status rows.
+- Reconcile reads dedup's own rules, never copies: `dedup.PROCEEDINGS_SOURCES`, `dedup.PROCEEDINGS_TRACKS` and
+  `dedup.is_listing`.
+- **Known limit: a paper moved between years.** Reconcile compares within one venue-year, like dedup. A paper
+  whose OpenReview note is in one year and whose listing is in another (a deferred camera-ready) is `unknown` in
+  its OpenReview year, and its listing stays a separate record in the other year. No rule links them; a
+  reviewer reading the `precedence:` row finds it by title.
 - **Not enforced** (decision-005's track row, "proceedings only for venue-years not on OpenReview"): see
   decision-005 §Track in an OpenReview venue-year.
 - Properties (`backend/tests/unit/ingest/test_reconcile.py`): every reconciled record is what its claims

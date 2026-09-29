@@ -145,16 +145,18 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    to `merges.csv`, and disagreements and refused merges to `conflicts.csv`, for audit (dedup-rules skill).
 
    **Reconcile** (`ingest/reconcile.py`, TASK-072, decision-005). Where a venue-year's official proceedings
-   are crawled completely (every listing's stated count matched and every entry became a record), an
+   are crawled completely (every listing states a count and matched it, every entry became a record, and no
+   volume it names was left uncrawled), an
    OpenReview-accepted record in a track those listings hold (`main`, `datasets_benchmarks`, `position`; a
    listing's own track, or for a mixed PMLR volume the track of the record it merged into) that merged with no
    listing and shares no title key or forum id with one gets `status=unknown`: an absence claim from the
-   proceedings source (`status=unknown`, the listing's URL, the crawl's last fetch, evidence `not listed: …`)
+   proceedings source (`status=unknown`, the listing's URL, its index-page fetch, evidence `not listed: …`)
    that outranks OpenReview, so the record still equals what its claims resolve to, and a
    `precedence:<source>` `conflicts.csv` row. The OpenReview claim is kept. An absence claim never makes a
    record a listing, so dedup run again changes nothing, and reconcile is idempotent. A venue-year with an
    incomplete listing, a track no listing holds, and a record sharing a title or forum with a listing it
-   didn't merge with (ambiguous: it may be the listed paper) are left alone.
+   didn't merge with (ambiguous: it may be the listed paper) are left alone. The check on the 2026-09-29 crawl
+   is `docs/results/2026-09-29-reconcile-real-data.md`.
 5. **Snapshot.** Write `data/snapshots/<date>-<shorthash>/records.jsonl` (sorted by `id`) and
    `manifest.json`. The manifest holds counts per venue × year × track × status, source versions,
    the crawl date and the snapshot hash. Snapshots are immutable. `data/` is gitignored. Since manifest

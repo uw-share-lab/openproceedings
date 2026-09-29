@@ -8,7 +8,7 @@ from collections import Counter
 from hypothesis import event, given
 from hypothesis import strategies as st
 from openproceedings.ingest.dedup import DedupResult, dedup, is_absence, resolve
-from openproceedings.ingest.reconcile import Crawl, Key, crawled, reconcile
+from openproceedings.ingest.reconcile import Crawl, Key, Listing, crawled, reconcile
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources.common import ListingReport
 
@@ -22,7 +22,11 @@ def crawl(
     source: str = "neurips_proceedings", venue: str = "NeurIPS", year: int = 2024,
     tracks: tuple[str, ...] = ("main", "datasets_benchmarks"), complete: bool = True,
 ) -> dict[Key, Crawl]:  # fmt: skip
-    return {(source, venue, year): Crawl(source, venue, year, ((LISTING, frozenset(tracks)),), T1, complete)}
+    return {
+        (source, venue, year): Crawl(
+            source, venue, year, (Listing(LISTING, frozenset(tracks), T1),), complete
+        )
+    }
 
 
 def run(xs: list[PaperRecord], crawls: dict[Key, Crawl]) -> DedupResult:
@@ -95,12 +99,49 @@ def test_a_note_sharing_a_title_or_forum_with_a_listing_it_did_not_merge_with_ke
     ]
     outcome = reconcile(dedup(xs), crawl())
     assert outcome.result == dedup(xs) and outcome.shares_listing == 2
-    linked = [  # a listing linking a forum across tracks (refused): the note may still be the listed paper
+    linked = [  # two listings (D&B and main) link the note's forum: the link is refused (two proceedings ids),
+        # so nothing merges, but the note may still be one of the listed papers
+        *LISTED,
         paper("AbCd1234", "One title"),
-        paper(f"nips-{H[1]}", "Other title", source="neurips_proceedings", track="main",
+        paper(f"nips-{H[3]}", "Other title", source="neurips_proceedings", track="datasets_benchmarks",
+              urls_forum="https://openreview.net/forum?id=AbCd1234"),
+        paper(f"nips-{H[4]}", "Third title", source="neurips_proceedings",
               urls_forum="https://openreview.net/forum?id=AbCd1234"),
     ]  # fmt: skip
-    assert by_id(run(linked, crawl()))[NOTE].status == "accepted"
+    assert len(dedup(linked).records) == len(linked) - 1  # only the listed paper and its note merged
+    assert any(
+        c.field == "forum_id" and c.resolution == "ambiguous_not_merged" for c in dedup(linked).conflicts
+    )
+    outcome = reconcile(dedup(linked), crawl())
+    assert outcome.result.records == dedup(linked).records and outcome.shares_listing == 1
+
+
+def test_a_note_titled_like_a_listing_of_another_track_keeps_its_status() -> None:
+    xs = [  # a main and a D&B note share the D&B listing's title: ambiguous, so none merge
+        *LISTED, paper("AbCd1234", "A D&B paper"), paper("IjKl9012", "A D&B paper", track="datasets_benchmarks"),
+    ]  # fmt: skip
+    assert len(dedup(xs).records) == len(xs) - 1  # only the listed paper and its note merged
+    outcome = reconcile(dedup(xs), crawl())  # the main note may still be the D&B listing's paper
+    assert outcome.result == dedup(xs) and outcome.shares_listing == 2
+
+
+def test_a_listing_merged_into_an_unknown_track_record_covers_nothing() -> None:
+    xs = [  # a mixed volume's lone listing (its record's track stays unknown) and an unknown-track note
+        paper("pmlr-v267-key1", "Main paper", source="pmlr", venue="ICML", year=2025, track="unknown"),
+        paper("AbCd1234", "Unlisted", venue="ICML", year=2025, track="unknown"),
+    ]
+    assert run(xs, crawl("pmlr", "ICML", 2025, tracks=("unknown",))) == dedup(xs)
+
+
+def test_the_absence_claim_carries_the_holding_listing_and_its_own_fetch_time() -> None:
+    dnb = LISTING + "/datasets"
+    crawls = {("neurips_proceedings", "NeurIPS", 2024): Crawl(
+        "neurips_proceedings", "NeurIPS", 2024,
+        (Listing(LISTING, frozenset({"main"}), T0), Listing(dnb, frozenset({"datasets_benchmarks"}), T2)), True,
+    )}  # fmt: skip
+    note = by_id(run([*LISTED, paper("AbCd1234", "Not listed", track="datasets_benchmarks")], crawls))[NOTE]
+    [absent] = [c for c in note.provenance if is_absence(c)]
+    assert (absent.url, absent.fetched_at) == (dnb, T2)
 
 
 def test_a_mixed_pmlr_volume_covers_the_tracks_its_listings_merged_into() -> None:
@@ -144,10 +185,13 @@ def test_crawled_reads_completeness_from_the_listing_reports() -> None:
 
     key = ("neurips_proceedings", "NeurIPS", 2025)
     [got] = crawled([report()]).values()
-    assert got.complete and got.fetched_at == T2 and got.listings == ((LISTING, frozenset({"main"})),)
+    assert got.complete and got.listings == (Listing(LISTING, frozenset({"main"}), T0),)  # the index page, T0
     assert crawled([report(records=2, skipped=Counter({"duplicate": 1}))])[key].complete  # a repeated entry
     assert not crawled([report(records=2, skipped=Counter({"invalid": 1}))])[key].complete
     assert not crawled([report(stated=4)])[key].complete  # the page states another count
+    assert not crawled([report(stated=None)])[key].complete  # no count: nothing says every entry was seen
+    assert not crawled([report(see_also=[LISTING + "/vol38"])])[key].complete  # a volume it didn't follow
+    assert not crawled([report(), report(listing=LISTING + "/vol38", fetched=[])])[key].complete  # one unread
     assert not crawled([report(), report(listing=LISTING + "/vol38", records=2)])[key].complete  # one of two
     assert crawled([report(fetched=[])]) == {}
 
@@ -166,7 +210,7 @@ def crawl_sets(draw: st.DrawFn) -> dict[Key, Crawl]:
                 tracks = frozenset(
                     draw(st.sets(st.sampled_from(["main", "datasets_benchmarks", "position", "unknown"])))
                 )
-                out[(source, venue, year)] = Crawl(source, venue, year, ((LISTING, tracks),), T1, draw(st.booleans()))  # fmt: skip
+                out[(source, venue, year)] = Crawl(source, venue, year, (Listing(LISTING, tracks, T1),), draw(st.booleans()))  # fmt: skip
     return out
 
 
@@ -194,7 +238,9 @@ def unlisted(draw: st.DrawFn) -> tuple[list[PaperRecord], dict[Key, Crawl]]:
     tracks = frozenset({track, *draw(st.sets(st.sampled_from(["main", "datasets_benchmarks", "unknown"])))})
     at = (VENUE_SOURCE[venue], venue, draw(st.sampled_from([year, year, year, 2023, 2024])))
     crawls = {
-        at: Crawl(at[0], venue, at[2], ((LISTING, tracks),), T1, draw(st.sampled_from([True, True, False])))
+        at: Crawl(
+            at[0], venue, at[2], (Listing(LISTING, tracks, T1),), draw(st.sampled_from([True, True, False]))
+        )
     }
     return xs + draw(st.lists(records(), max_size=3)), crawls
 

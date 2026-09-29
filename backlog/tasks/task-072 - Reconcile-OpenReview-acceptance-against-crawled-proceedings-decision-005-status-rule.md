@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-26 16:35'
-updated_date: '2026-09-29 23:12'
+updated_date: '2026-09-29 23:36'
 labels:
   - ingest
 milestone: m-4
@@ -51,4 +51,13 @@ Built ingest/reconcile.py, run by snapshot.build after dedup (before with_crawl_
 Track-precedence note NOT enforced (stop condition): 151 real records have a proceedings-won track in an OpenReview venue-year; setting them unknown would move ICLR 2016 main 80->0 and ICLR 2014 main 35->34 (-2.9%), outside the gate in the wrong direction. Recorded as open in decision-005.
 Real data (TASK-126 cache, snapshot 2026-09-29-eb72536c21d1, index b2a358e2f955): 6 records unknown, 1 shares_listing (NeurIPS 2021 main), 0 incomplete of 29 crawls. NeurIPS 2023 main 3219->3218, D&B 324->322, 2024 main 4035->4034, 2025 main 5287->5286, D&B 498->497: all now equal official. Gate still FAIL 43/44 (ICLR 2013 main, unchanged). snapshot diff: 6 changed (status only), merges.csv identical; dedup of the new records is a fixed point. 5 of 6 are listed under another title (3 renamed, 2 mangled by html.py dropping a charref's ';'); only NeurIPS 2024 ftqjwZQz10 (DEX) is truly absent.
 Docs: decision-005, dedup-rules skill §Reconcile, spec 01 Pipeline 4 + Error handling + Testing, CLAUDE.md layout.
+
+Review round 1 (REQUEST_CHANGES), all fixed in one commit:
+- complete() now also requires report.stated is not None and no see_also; a listing with no fetch makes the crawl incomplete. Real data: only NeurIPS 2021 D&B states no count (174 listed = 174 records = 174 official, genuinely complete), so NeurIPS 2021 is no longer judged; it made 0 records unknown before, so outcome unchanged (log: shares_listing 1->0, incomplete 0->1). Flagged to the lead for the final call.
+- dedup.PROCEEDINGS_SOURCES / PROCEEDINGS_TRACKS / is_listing are public; reconcile imports them (no copies).
+- Tests: main note titled like a D&B listing (ambiguous, unmerged) stays accepted; a forum link refused by two listings stays accepted (old 'linked' case actually merged via forum_link); a lone unknown-track listing covers nothing; stated=None, see_also, and an unread listing rows; absence claim carries the holding listing's own fetch time. Each killed its deliberate breakage, then reverted. Dedup merges main and D&B across proceedings tracks (track conflict row), so the 'tracks differ' case needs an ambiguous group; a listing can't merge into a workshop record (track_not_merged), so only the unknown case is testable.
+- Absence claim fetched_at = the listing's index-page fetch (ListingReport.fetched[0], every miner appends it first; documented on ListingReport). Crawl.listings is now Listing(url, tracks, fetched_at).
+- Docs: decision-005 and learnings link TASK-128 (charref) and TASK-130 (track row); results note docs/results/2026-09-29-reconcile-real-data.md (snapshot 2026-09-29-eb72536c21d1, commands, numbers; rebuild 2026-09-29-7fd4c937496e differs only in the 6 absence claims' fetched_at), linked from decision-005, learnings, spec 01. record-schema skill: 'not listed:' evidence prefix reserved. dedup-rules skill: papers moved between years as a known limit.
+- Not done (schema change): Reconciled counts (made unknown / left ambiguous / skipped incomplete) in the snapshot manifest. Adding a manifest key means bumping snapshot FORMAT_VERSION (its comment makes manifest keys part of the format) and snapshot verify requires format_version == FORMAT_VERSION; render() also takes DedupResult, not Reconciled. The counts are in the proceedings_reconciled / proceedings_reconcile_skipped log lines meanwhile.
+- Numbers get refreshed after rebasing onto TASK-128.
 <!-- SECTION:NOTES:END -->
