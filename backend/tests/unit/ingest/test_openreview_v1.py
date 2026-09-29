@@ -703,10 +703,15 @@ def test_two_notes_of_one_paper_collapse_to_the_lowest_number_and_are_counted(
 ) -> None:
     note, twin = neurips_2021_twins()
     notes = [note, twin] if listed_first == "lower" else [twin, note]
+    server = FakeOpenReviewV1({NEURIPS_2021_MAIN: notes})
+    # one note a page, as live (BW2Z6B7S9KZ is on offset 0): the twins' claims cite different pages, so the
+    # comparison must leave provenance out
     with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
-        crawl = run(FakeOpenReviewV1({NEURIPS_2021_MAIN: notes}), tmp_path, "NeurIPS", 2021)
+        crawl = run(server, tmp_path, "NeurIPS", 2021, page_size=1)
     [record] = crawl.records
     assert record.native == note["id"]  # the lower number, whatever the listing order
+    kept_page = [u for u in server.gets() if "invitation=" in u][notes.index(note)]
+    assert {c.url for c in record.provenance} == {kept_page}  # its own page, not its twin's
     assert crawl.report.skipped["duplicate_submission"] == 1 and crawl.report.skipped["duplicate"] == 0
     assert (crawl.report.notes_read, crawl.report.imported) == (2, 1)
     assert crawl.report.to_manifest()["skipped"]["duplicate_submission"] == 1
@@ -732,8 +737,9 @@ def test_two_notes_of_one_paper_collapse_to_the_lowest_number_and_are_counted(
         {"keywords": ["Another keyword."]},
         {"venue": "NeurIPS 2021 Spotlight"},  # another presentation
         {"venue": None},  # W6e384Lkjbw: same pdf, but no venue, so another status (unknown)
+        {"venueid": None},  # the same status and track, but another (here no) venueid
     ],
-    ids=["pdf", "title", "authors", "abstract", "keywords", "presentation", "status"],
+    ids=["pdf", "title", "authors", "abstract", "keywords", "presentation", "status", "venueid"],
 )
 def test_notes_that_differ_in_any_compared_field_stay_two_records(
     tmp_path: Path, second: dict[str, Any]
@@ -754,6 +760,19 @@ def test_notes_without_a_pdf_or_a_number_are_never_collapsed(tmp_path: Path) -> 
     del twin["number"]  # no number: no deterministic choice of which note speaks for the paper
     crawl = run(FakeOpenReviewV1({NEURIPS_2021_MAIN: [note, twin]}), tmp_path / "number", "NeurIPS", 2021)
     assert len(crawl.records) == 2 and crawl.report.skipped["duplicate_submission"] == 0
+
+
+def test_identical_notes_with_a_crawl_conflict_are_never_collapsed(tmp_path: Path) -> None:
+    """Both twins listed as withdrawn while `content.venue` says accepted (as ICLR 2021 xGZG2kS5bFk): each has
+    status `unknown` and a conflicts.csv row naming its own id, and a record with a conflict is not collapsed
+    (its row would otherwise point at a record the crawl dropped)."""
+    note, twin = neurips_2021_twins()
+    withdrawn = "NeurIPS.cc/2021/Conference/-/Withdrawn_Submission"
+    crawl = run(FakeOpenReviewV1({withdrawn: [note, twin]}), tmp_path, "NeurIPS", 2021)
+    assert {r.native for r in crawl.records} == {note["id"], twin["id"]}
+    assert {outcome(r) for r in crawl.records} == {("main", "unknown", None)}
+    assert {c.id for c in crawl.report.conflicts} == {r.id for r in crawl.records}
+    assert crawl.report.skipped["duplicate_submission"] == 0
 
 
 def test_a_same_paper_note_in_another_track_or_status_listing_is_not_collapsed(tmp_path: Path) -> None:

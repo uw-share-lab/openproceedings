@@ -171,6 +171,10 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
   collapses 0. A full offline `op snapshot build` from that cache then has NeurIPS 2021 main at 2,335
   accepted (2,333 merged with the proceedings, 1 OpenReview-only, 1 proceedings-only) against the official
   2,334, where the trial had 2,929 (2,036 merged, 595 OpenReview-only, 298 proceedings-only).
+- The kept note (lowest number) is a tie-break, not the one the proceedings name: the cached NeurIPS 2021
+  proceedings pages link the kept forum for 177 of the 297 accepted pairs and the dropped forum for 120 (never
+  both, never neither), e.g. `0hJ-U3aqUDf` #401 kept while the proceedings link `rvKD3iqtBdk` #3462. Harmless
+  while the NeurIPS importer doesn't claim that link as `urls.forum` (dedup-rules skill).
 - Same pdf but not the same paper by content, kept apart: NeurIPS 2021 `W6e384Lkjbw` (#5999, no `venue`,
   so status unknown) and `rDdb26AQ0SO` (accepted); ICLR 2018's 24 pdfs listed as a blind note and a
   withdrawn note (status differs, authors differ on 12).

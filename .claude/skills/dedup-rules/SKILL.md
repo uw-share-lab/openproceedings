@@ -55,7 +55,12 @@ safe direction.
   papers on the 2026-09-29 crawl), is collapsed by the crawler before records reach dedup
   (`openreview_v1.collapse_duplicate_submissions`, TASK-125; openreview-api skill), so the survivor merges
   with its proceedings record here. Anything short of identical (another pdf, status or title) still arrives
-  as two notes and stays ambiguous.
+  as two notes and stays ambiguous. The kept note is the lowest number, a tie-break, not the one the
+  proceedings name: NeurIPS 2021's proceedings pages link the kept forum for 177 of the 297 accepted pairs and
+  the dropped one for 120 (`0hJ-U3aqUDf` kept, `rvKD3iqtBdk` linked). No NeurIPS importer claims that link
+  as `urls.forum` today, so title matching merges all 297. If one ever does, the forum link would point the 120
+  at a note the crawl dropped: the survivor must then follow the proceedings' link (collapse to the linked
+  note, or re-point the link to the kept one), or those 120 go unmerged or ambiguous.
 - A paper whose track the proceedings don't host (anything but `main`, `datasets_benchmarks`,
   `position`) into a **proceedings listing**: a cluster with a proceedings source *or* a proceedings id,
   so a RIS record with a `nips-`/`iclr-`/`pmlr-` id counts. Proceedings never host workshop papers. A

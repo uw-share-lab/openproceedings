@@ -12,6 +12,7 @@ Explain NeurIPS 2021 main at 2,929 accepted against the official 2,334 (+25.5%) 
 - By source, the cell held 2,036 merged, 595 OpenReview-only and 298 proceedings-only records. All 298 proceedings-only records had an OpenReview-only twin with the same title key, and `conflicts.csv` had 403 `title_key ambiguous_not_merged` rows for them (evidence: the trial snapshot `f2ba9c975ae4`).
 - The ambiguity came from OpenReview itself. 297 accepted papers (and 3 rejected ones) appear as two Blind_Submission notes with different ids and numbers (e.g. `-K4tIyQLaY` #292 and `BW2Z6B7S9KZ` #8244) and identical content: title, authors, abstract, keywords, pdf and venue. Only the id in `_bibtex` differs. 2,334 + 297 ≈ 2,630.
 - Collapsing them at the crawl (lowest number kept, the rest counted as `duplicate_submission`) takes the cell to 2,335. No other venue-year has any, v1 or v2.
+- "Lowest number kept" is a tie-break, not "the original": the NeurIPS 2021 proceedings pages link the kept forum for 177 of the 297 accepted pairs and the dropped one for 120 (e.g. `0hJ-U3aqUDf` #401 kept, `rvKD3iqtBdk` #3462 linked).
 - Matching on track and status as well as content matters: ICLR 2018 lists 24 pdfs both as a blind and a withdrawn note, and a looser title/authors/abstract rule would have collapsed about 12 of them.
 
 ## Dead ends — don't repeat these

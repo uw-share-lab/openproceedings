@@ -199,7 +199,8 @@ the id embedded in `_bibtex` (e.g. `-K4tIyQLaY` #292 and `BW2Z6B7S9KZ` #8244), w
 submissions with one title. After a v1 venue-year's listings, records identical in everything but their id,
 forum URL and provenance (title, authors in order, abstract, keywords, pdf, track, status, presentation,
 venueid, all exact), each with a pdf and an integer note `number` and no crawl conflict, are collapsed to the
-lowest-numbered note (the original submission, whatever the listing order); every other note is counted in the
+lowest-numbered note (a deterministic tie-break whatever the listing order, not "the original": the NeurIPS
+2021 proceedings link the kept forum for 177 of the 297 accepted pairs and the dropped one for 120); every other note is counted in the
 report's `skipped.duplicate_submission`, a DEBUG `openreview_duplicate_submission` line and the crawl's
 `openreview_crawl_attention`. Notes differing in any compared field (another pdf; ICLR 2018's blind vs
 withdrawn copies of one pdf) stay separate, and a note without a pdf is never collapsed. API v2 has no such

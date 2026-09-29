@@ -604,6 +604,8 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     report = CrawlReport(venue, year, page_size=page_size, gaps=ad.gaps)
     records: dict[str, PaperRecord] = {}
     numbers: dict[str, object] = {}  # record id → its note's `number`, for rule 5
+    # heartbeats count `imported` before rule 5's collapse, which runs after the listings: NeurIPS 2021's last
+    # heartbeat can show up to 3,020 imported where the finished line says 2,720
     progress = Progress(log, client, report.api, venue, year, page_size, lambda: {
         "notes_read": report.notes_read, "forums": report.forums, "imported": len(records),
         "skipped": sum(report.skipped.values())})  # fmt: skip
@@ -753,9 +755,11 @@ def collapse_duplicate_submissions(
 ) -> list[tuple[str, str]]:
     """Remove from `records` every second note of one paper (module docstring rule 5) and return the (kept,
     removed) native ids, sorted. Only records with a pdf and an integer note `number`, and not in `exempt` (those
-    with a crawl conflict), are candidates. The lowest number is kept: numbers are assigned in submission
-    order and never reused, so the original note wins, and the choice doesn't depend on which listing or page
-    order the API returned (the same crawl always keeps the same id)."""
+    with a crawl conflict), are candidates. The lowest number (then the lowest id) is kept: a deterministic
+    tie-break, so the choice doesn't depend on which listing or page order the API returned and the same cache
+    always keeps the same id. It is not "the original": the NeurIPS 2021 proceedings link the kept forum for
+    177 of the 297 accepted pairs and the dropped one for 120 (e.g. `0hJ-U3aqUDf` #401 kept, `rvKD3iqtBdk`
+    #3462 linked; research facts note, TASK-125)."""
     groups: defaultdict[str, list[str]] = defaultdict(list)
     for rid, record in records.items():
         if record.urls.pdf is None or type(numbers.get(rid)) is not int or rid in exempt:
