@@ -127,6 +127,17 @@ def breaking_changes(old: dict[str, Any], new: dict[str, Any]) -> list[tuple[str
 
 def _baseline() -> dict[str, Any]:
     ref = os.environ.get("OPENAPI_BASELINE_REF", "origin/dev")
+    required = os.environ.get("OPENAPI_BASELINE_REQUIRED") == "1"  # CI (test.yml): a skip would hide a break
+    try:
+        subprocess.run(
+            ["git", "cat-file", "-e", f"{ref}^{{commit}}"], cwd=REPO, capture_output=True, check=True
+        )
+    except (OSError, subprocess.CalledProcessError) as e:
+        if required:
+            pytest.fail(
+                f"{ref} isn't available, so the contract can't be checked against the released one: {e}"
+            )
+        pytest.skip(f"{ref} isn't available here, so there is no released contract to compare against")
     try:
         text = subprocess.run(
             ["git", "show", f"{ref}:backend/tests/contract/openapi.json"],
@@ -135,10 +146,9 @@ def _baseline() -> dict[str, Any]:
             check=True,
             text=True,
         ).stdout
-    except (OSError, subprocess.CalledProcessError):
-        if os.environ.get("OPENAPI_BASELINE_REQUIRED") == "1":  # CI (test.yml): a skip would hide a break
-            pytest.fail(f"{ref} isn't available, so the contract can't be checked against the released one")
-        pytest.skip(f"{ref} isn't available here, so there is no released contract to compare against")
+    except subprocess.CalledProcessError:
+        # the ref exists but predates the snapshot (main held only the specs before its first promotion)
+        pytest.skip(f"{ref} has no OpenAPI snapshot yet, so there is no released contract to compare against")
     return json.loads(text)  # type: ignore[no-any-return]
 
 
