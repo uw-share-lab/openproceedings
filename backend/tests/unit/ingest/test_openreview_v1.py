@@ -503,6 +503,41 @@ def test_pagination_and_a_listing_whose_count_disagrees(tmp_path: Path) -> None:
         run(bad, tmp_path / "b", "ICLR", 2022)
 
 
+def test_a_multi_page_listing_whose_count_changes_between_pages_is_refused(tmp_path: Path) -> None:
+    base = v1_note("iclr-2022/note-rejected-bare-venueid.json")
+    notes = [v1_clone(base, f"Paged2022n{i}", i) for i in range(3)]
+
+    def grown_first_page(request: Request) -> Response | None:
+        q = parse_qs(urlsplit(request.url).query)
+        if q.get("invitation") != [BLIND.format(y=2022)] or q.get("offset") != ["0"]:
+            return None
+        return json_response({"notes": notes[:2], "count": 4}, headers={"content-type": "application/json"})
+
+    server = FakeOpenReviewV1({BLIND.format(y=2022): notes}, override=grown_first_page)  # page 2 says 3
+    with pytest.raises(orv2.CrawlError, match=r"changed between its cached pages.*--refresh"):
+        run(server, tmp_path, "ICLR", 2022, page_size=2)
+
+
+@pytest.mark.parametrize("conflicting", [False, True])
+def test_a_note_in_two_listings_is_a_counted_duplicate_only_when_its_record_is_identical(
+    tmp_path: Path, conflicting: bool
+) -> None:
+    note = v1_note("neurips-2021/note-db-round2-accepted.json")
+    again = v1_clone(note, note["id"], title="Changed Title") if conflicting else note
+    round1, round2 = (f"NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round{n}/-/Submission" for n in (1, 2))
+    server = FakeOpenReviewV1({round1: [note], round2: [again]})  # the same track and status evidence
+    if conflicting:
+        with pytest.raises(orv2.CrawlError, match=r"conflicting data in two status listings.*--refresh"):
+            run(server, tmp_path, "NeurIPS", 2021)
+        return
+    crawl = run(server, tmp_path, "NeurIPS", 2021)
+    assert crawl.report.skipped["duplicate"] == 1 and crawl.report.notes_read == 2
+    assert crawl.report.imported == 1 and crawl.report.listings[round1] == crawl.report.listings[round2] == 1
+    [record] = crawl.records
+    assert outcome(record) == ("datasets_benchmarks", "accepted", None)
+    assert {parse_qs(urlsplit(c.url).query)["invitation"][0] for c in record.provenance} == {round1}
+
+
 @pytest.mark.parametrize("count", [None, "1", True, -1])
 def test_a_listing_with_a_missing_or_invalid_count_is_refused(tmp_path: Path, count: object) -> None:
     note = v1_note("iclr-2022/note-rejected-bare-venueid.json")

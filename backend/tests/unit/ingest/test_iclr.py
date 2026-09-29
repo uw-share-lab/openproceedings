@@ -54,6 +54,35 @@ def test_the_three_recorded_pages_parse_only_conference_track_papers() -> None:
     assert "<p " in fixture_text(FIXTURES[2014]) and "<li " not in fixture_text(FIXTURES[2014])
 
 
+def test_list_parser_is_attribute_order_independent_and_ignores_decoy_links_and_other_sections() -> None:
+    page = """<h3 data-x='1' id='workshop_papers'>Workshop Papers</h3>
+    <ol><li><a href='http://arxiv.org/abs/1412.7272'>Workshop Title</a><br/>Workshop Person</li></ol>
+    <h3 class='sectionedit1' id='main_conference_-_oral_presentations'>Main Conference</h3>
+    <ol><li data-x='1' class='level1'><div class='li'>Decoy Person <a rel='nofollow' href='decoy.html'>Decoy Link</a>
+          <a title='t' class='urlextern' href='http://arxiv.org/abs/1412.6623'>Actual Title</a><br/>
+          Actual One; Actual Two and Actual Three</div></li>
+        <li class='level1'><a target='_blank' href='https://beta.openreview.net/forum?id=Forum00001'>Forum Title</a>,
+          Forum Author</li></ol>"""
+    iclr = source()
+    assert iclr.parse_index(2015, page, iclr.LISTINGS[2015]) == [
+        iclr.Entry("https://arxiv.org/abs/1412.6623", "iclr-77b79d4a8d13c419bf89c1bf9c2a109d", "Actual Title",
+                   ("Actual One", "Actual Two", "Actual Three"), None),
+        iclr.Entry("https://openreview.net/forum?id=Forum00001", "Forum00001", "Forum Title", ("Forum Author",),
+                   "https://openreview.net/forum?id=Forum00001"),
+    ]  # fmt: skip
+
+
+def test_paragraph_parser_ignores_a_decoy_link_paragraph_and_reads_single_quoted_attributes() -> None:
+    page = """<p dir='ltr'><a href='https://example.org/decoy.pdf'>Decoy Link</a></p><p>Decoy Person</p>
+    <p dir='ltr'><span style='font-weight:bold'><a rel='nofollow' href='http://arxiv.org/abs/1312.6173'>Actual Title</a></span></p>
+    <p dir='ltr'><span style='font-style:italic'>Actual One; Actual Two</span></p>"""
+    iclr = source()
+    assert iclr.parse_index(2014, page, iclr.LISTINGS[2014]) == [
+        iclr.Entry("https://arxiv.org/abs/1312.6173", "iclr-beb53fd8b4fa307df929907eb35e1a7b", "Actual Title",
+                   ("Actual One", "Actual Two"), None),
+    ]  # fmt: skip
+
+
 def test_a_nonempty_trimmed_archive_page_reports_the_verified_count_mismatch(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
