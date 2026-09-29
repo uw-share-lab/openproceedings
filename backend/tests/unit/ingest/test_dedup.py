@@ -304,7 +304,7 @@ def test_a_round_qualified_db_listing_merges_with_its_openreview_submission() ->
 @pytest.mark.parametrize(("title_b", "refused"), [("Trust in AI", 2), ("Reliance on AI", 1)])
 def test_one_hash_on_the_main_host_and_in_each_db_round_is_three_papers(title_b: str, refused: int) -> None:
     """md5 of a per-site paper number: the same hash names a main-track paper and one paper per D&B round.
-    The sources differ, so the title step does run, and refuses every pair (two proceedings ids)."""
+    The sources differ, so the title step does run; it refuses each title match (two proceedings ids)."""
     records = [
         db21(f"nips-{H[1]}", track="main", source="ris"),
         db21(f"nips-{H[1]}-round1", title_b),
