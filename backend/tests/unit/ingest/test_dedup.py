@@ -299,10 +299,12 @@ def test_a_round_qualified_db_listing_merges_with_its_openreview_submission() ->
     assert r.id == "op:neurips:2021:AbCd1234" and len(result.merges) == 1
 
 
-@pytest.mark.parametrize("title_b", ["Trust in AI", "Reliance on AI"])
-def test_one_hash_on_the_main_host_and_in_each_db_round_is_three_papers(title_b: str) -> None:
+# equal titles: main↔round1 and main↔round2 each refused; different titles: only the two rounds (whose
+# titles still match each other) are refused
+@pytest.mark.parametrize(("title_b", "refused"), [("Trust in AI", 2), ("Reliance on AI", 1)])
+def test_one_hash_on_the_main_host_and_in_each_db_round_is_three_papers(title_b: str, refused: int) -> None:
     """md5 of a per-site paper number: the same hash names a main-track paper and one paper per D&B round.
-    The sources differ, so with equal titles the title step does run, and refuses (two proceedings ids)."""
+    The sources differ, so the title step does run, and refuses every pair (two proceedings ids)."""
     records = [
         db21(f"nips-{H[1]}", track="main", source="ris"),
         db21(f"nips-{H[1]}-round1", title_b),
@@ -310,8 +312,9 @@ def test_one_hash_on_the_main_host_and_in_each_db_round_is_three_papers(title_b:
     ]
     result = dedup(records)
     assert sorted(r.id for r in result.records) == sorted(r.id for r in records) and not result.merges
-    if title_b == "Trust in AI":
-        assert set(resolutions(result)) == {"ambiguous_not_merged"}
+    assert [(c.field, c.resolution) for c in result.conflicts] == [
+        ("title_key", "ambiguous_not_merged")
+    ] * refused
 
 
 def test_an_openreview_record_naming_the_main_host_hash_is_not_merged_into_the_db_paper() -> None:

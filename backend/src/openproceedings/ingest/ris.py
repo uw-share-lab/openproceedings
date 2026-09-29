@@ -156,9 +156,8 @@ def _listing(
             )
             if url_year != year or by_url.track != claimed:
                 return "conflict"
-        if (
-            native := proceedings_native(url)
-        ) is None:  # a D&B-host URL without round1/round2, or not dated 2021
+        # a D&B-host URL without round1/round2, or not dated 2021, names no one paper
+        if (native := proceedings_native(url)) is None:
             return "unresolved"
         return (venue, year, native, classify_proceedings(track),
                 ("proceedings_url", url), sorted({c["evidence"] for c, _ in proc}))  # fmt: skip
