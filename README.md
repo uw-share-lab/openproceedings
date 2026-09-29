@@ -38,13 +38,17 @@ uv run op --help       # the CLI
 To crawl OpenReview, put `OPENREVIEW_USERNAME` and `OPENREVIEW_PASSWORD` in `.env` (gitignored).
 
 ### 3. Get papers into the cache
-Everything is written under `data/` (gitignored; `--data-dir` or `$OP_DATA_DIR` to move it). Crawls are polite
-(1 request/s per host, OpenReview within its hourly budget) and restartable: pages already cached are never
-fetched again. Try `--dry-run` first: it reads only the index pages and reports what a crawl would fetch.
+Everything is written under `data/` (gitignored; move it with `$OP_DATA_DIR` or the global flag, as in
+`uv run op --data-dir <dir> ingest …`). Crawls are polite (1 request/s per host, OpenReview within its hourly
+budget) and restartable: pages already cached are never fetched again. Try `--dry-run` first: for the
+proceedings it reads only the index pages and reports what a crawl would fetch; for OpenReview it reports what
+is cached, with no network. Page counts are from the 2026-09-29 dry runs
+([`docs/results/2026-09-29-proceedings-dry-runs.md`](docs/results/2026-09-29-proceedings-dry-runs.md)); times
+are estimates at about one page a second.
 ```bash
-uv run op ingest neurips --year 2013                       # one small year: 360 papers, about 8 minutes
-uv run op ingest neurips --year 2013-2025                  # the NeurIPS proceedings (~26k pages, ~10 h)
-uv run op ingest pmlr --year 2013-2025                     # ICML via PMLR (~14k pages, ~5 h)
+uv run op ingest neurips --year 2013                       # one small year: 360 papers, roughly 8 minutes
+uv run op ingest neurips --year 2013-2025                  # the NeurIPS proceedings (26,019 pages, roughly 10 h)
+uv run op ingest pmlr --year 2013-2025                     # ICML via PMLR (14,281 pages, roughly 5 h)
 uv run op ingest iclr --year 2014-2016                     # the ICLR archive years
 uv run op ingest openreview --venue ICLR --years 2013-2025 # also NeurIPS 2021-2025, ICML 2023-2025
 ```
@@ -52,12 +56,12 @@ A scholarmend RIS export can be imported too: `uv run op ingest ris path/to/mend
 beside it).
 
 ### 4. Build a snapshot and an index
-Both are immutable and named by their content. Each command prints JSON; the second step needs the first's
-`path`, and the third needs the second's `index_version`.
+Both are immutable and named by their content. Each command prints JSON: pass the snapshot's `path` (or its
+directory name) to the index build, and the index's `index_version` to the `current` link.
 ```bash
 uv run op snapshot build                            # replays the cache into data/snapshots/<name>
-uv run op index build --snapshot <snapshot name>    # builds data/indexes/<index_version>
-cd data/indexes && ln -s <index_version> current && cd -   # make it the served index
+uv run op index build --snapshot <snapshot path>    # builds data/indexes/<index_version>
+cd data/indexes && ln -sfn <index_version> current && cd -   # make it the served index (-fn replaces an old link)
 ```
 Check it from the command line: `uv run op search "trust AND calibration"` (add `--ids`, `--explain`, or
 `uv run op export "…" --format ris --out results.ris`).
@@ -78,8 +82,10 @@ NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000 npm run dev --workspace frontend 
 Production build (the API URL is compiled in at build time, so set it before building):
 ```bash
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000 npm run build --workspace frontend
-PORT=3000 HOSTNAME=127.0.0.1 npm run start --workspace frontend
+PORT=3000 HOSTNAME=127.0.0.1 npm run start --workspace frontend   # open http://localhost:3000
 ```
+Open the UI at the origin you allowed with `--cors-origin` (`http://localhost:3000`, not `http://127.0.0.1:3000`):
+the browser treats the two as different origins.
 With `NEXT_PUBLIC_API_BASE_URL` unset, the UI calls the API on its own origin (behind one reverse proxy).
 
 ### 7. Reports
