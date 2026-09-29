@@ -199,6 +199,7 @@ WINDOW = {"from": "2026-09-20T10:00:00+00:00", "to": "2026-09-21T09:00:00+00:00"
         _set(("statuses_indexed", "ICML"), {"2024": ["accepted"]}),
         _drop(("sources_by_track",)),  # a format-2 manifest holds all three
         _set(("crawl_windows", "*"), WINDOW),  # no source is named `*`
+        _set(("sources", "*"), {"crawl_window": WINDOW}),  # in either map (TASK-122)
         _set(("crawl_windows", "ris"), {"from": "x"}),
     ],
 )

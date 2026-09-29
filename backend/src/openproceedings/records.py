@@ -273,10 +273,10 @@ def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> SnapshotFacts:
     """`crawl_dates` (with each key's kind), `sources`, `identification_citable` and `dedup` from the manifest
     of the snapshot the index was built from (which must name the index's `snapshot_hash`). The manifest's
     corpus-wide window is key `*`; each claim source with a window of its own adds a key (a format-2 manifest's
-    `crawl_windows`, else a source entry that carries its own `crawl_window`; the claim window wins, TASK-122), as
-    `/coverage` does
-    (`coverage.crawl_dates`; a test compares the two). A bootstrap source's window (RIS: when the Scholar searches were run) is
-    `scholar_query_dates`, not a crawl; `*` over bootstrap sources alone is too, over both is `mixed`."""
+    `crawl_windows`, else a source entry that carries its own `crawl_window`; the claim window wins, TASK-122),
+    as `/coverage` does (`coverage.crawl_dates`; a test compares the two). A bootstrap source's window (RIS:
+    when the Scholar searches were run) is `scholar_query_dates`, not a crawl; `*` over bootstrap sources alone
+    is too, over both is `mixed`."""
     try:
         _path, manifest = indexed_snapshot(data_dir, inputs)  # the name and hash rule of the API's load
         sources = sorted(manifest["sources"])  # required: no sources named is not "a crawl, citable"

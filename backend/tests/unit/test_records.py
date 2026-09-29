@@ -556,6 +556,19 @@ def test_a_claim_window_narrower_than_the_fetch_window_saves_a_record_like_cover
     assert facts.crawl_dates == crawl_dates(manifest)
 
 
+@pytest.mark.parametrize("where", ["sources", "crawl_windows"])
+def test_a_source_named_star_is_refused_in_either_map(data_dir: Path, where: str) -> None:
+    """`*` is the corpus-wide key, so no source may take it, as `coverage.crawl_dates` refuses too."""
+    path = data_dir / "snapshots" / "snap" / "manifest.json"
+    window = {"from": "2026-03-01T00:00:00+00:00", "to": "2026-03-02T00:00:00+00:00"}
+    if where == "sources":
+        edit(path, sources={"ris": [], "*": {"crawl_window": window}})
+    else:
+        edit(path, crawl_windows={"*": window})
+    with pytest.raises(InternalError):
+        snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+
+
 OWN_WINDOW = {"from": "2026-03-01T00:00:00+00:00", "to": "2026-03-02T00:00:00+00:00"}
 
 
