@@ -438,6 +438,44 @@ def test_without_a_listing_nothing_is_set_aside() -> None:
     ]
 
 
+def test_a_rejected_note_chained_back_in_by_a_second_key_splits_the_chain() -> None:
+    """The rejected note is set aside on "Trust in AI" but shares "Trust in Machines" with the listing,
+    where it would merge alone (status is no bar to `_mergeable`). The chain re-check refuses the whole
+    chain on forum ids (every non-listing record has its own), so nothing merges: the safe direction."""
+    accepted = paper("AbCd1234", "Trust in AI")
+    listing = [paper(f"nips-{H[1]}", "Trust in AI", source="neurips_proceedings"),
+               paper(f"nips-{H[1]}", "Trust in Machines", source="ris")]  # fmt: skip
+    rejected = [paper("EfGh5678", "Trust in AI", source="openreview_v1", status="rejected"),
+                paper("EfGh5678", "Trust in Machines", status="rejected")]  # fmt: skip
+    result = dedup([*rejected, *listing, accepted])
+    lid, rid = listing[0].id, rejected[0].id
+    assert sorted(r.id for r in result.records) == sorted([accepted.id, lid, rid])
+    assert sorted(m.rule for m in result.merges) == ["forum_id", "native_id"]  # step 1 only
+    rows = {(c.field, c.value_a, c.value_b, c.resolution) for c in result.conflicts}
+    assert ("title_key", lid, rid, "ambiguous_not_merged") in rows  # the set-aside note keeps its row
+    assert dedup(result.records).records == result.records
+
+
+def test_a_workshop_note_set_aside_on_one_key_never_chains_in_on_another() -> None:
+    """The workshop note is set aside on "Trust in AI" and also shares "Trust in Machines" with the
+    listing; that key's group meets the same track rule, so it never chains in and the pair still merges."""
+    accepted = paper("AbCd1234", "Trust in AI")
+    listing = [paper(f"nips-{H[1]}", "Trust in AI", source="neurips_proceedings"),
+               paper(f"nips-{H[1]}", "Trust in Machines", source="ris")]  # fmt: skip
+    workshop = [paper("EfGh5678", "Trust in AI", source="openreview_v1", track="workshop"),
+                paper("EfGh5678", "Trust in Machines", track="workshop")]  # fmt: skip
+    result = dedup([*workshop, *listing, accepted])
+    wid = workshop[0].id
+    assert sorted(r.id for r in result.records) == sorted([accepted.id, wid])
+    assert (accepted.id, listing[0].id, "title_venue_year") in [
+        (m.survivor_id, m.merged_id, m.rule) for m in result.merges
+    ]
+    assert [
+        (c.field, c.value_a, c.value_b, c.resolution) for c in result.conflicts if c.field == "title_key"
+    ] == [("title_key", accepted.id, wid, "track_not_merged")]  # one row, though the two share both keys
+    assert dedup(result.records).records == result.records
+
+
 def test_keys_that_chain_forbidden_clusters_merge_nothing() -> None:
     # One paper known under two titles (OpenReview and RIS share its forum id); each title matches a
     # different proceedings record. Each pair is fine alone, but together two proceedings records would

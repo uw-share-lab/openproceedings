@@ -295,7 +295,7 @@ def test_a_set_aside_rival_is_never_merged_and_blocks_nothing(
     assert all(i in outputs and i not in {m.survivor_id for m in result.merges} for i in aside)
     assert (ends[listing] == ends[orv]) is not real  # the pair merges unless a real rival makes it ambiguous
     reported = {(c.value_a, c.value_b) for c in result.conflicts if c.field == "title_key"}
-    assert all((ends[listing], i) in reported for i in aside) or real  # each set-aside rival has its row
+    assert all((ends[listing], i) in reported for i in aside)  # each set-aside rival has its row, always
 
 
 @given(pools)

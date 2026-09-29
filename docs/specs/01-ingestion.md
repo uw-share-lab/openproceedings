@@ -138,8 +138,9 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    matching only links records *across* sources (OpenReview ↔ proceedings ↔ RIS), never joins two different
    proceedings papers, and never puts a paper whose track the proceedings don't host (workshop, other,
    `unknown`) into a proceedings listing. When a title group holds a listing, a note that can't be the
-   listed paper (a track the proceedings don't host, or rejected, withdrawn or desk-rejected: proceedings
-   list only accepted papers) is no rival for it (TASK-126): the rest merge if they may, and that note
+   listed paper (a workshop or other track the proceedings don't host, or rejected, withdrawn or
+   desk-rejected: proceedings list only accepted papers; an `unknown` track or status stays a rival) is no
+   rival for it (TASK-126): the rest merge if they may, and that note
    stays its own record with a `conflicts.csv` row. A merged record's fields
    are re-resolved from the union of its claims by the decision-005 precedence table. Merges are written
    to `merges.csv`, and disagreements and refused merges to `conflicts.csv`, for audit (dedup-rules skill).

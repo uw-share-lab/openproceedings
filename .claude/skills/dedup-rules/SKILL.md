@@ -64,18 +64,23 @@ safe direction.
 - **Except a rival that can't be the listed paper (TASK-126).** When a title group is refused but holds a
   listing, the clusters that can never be that listing's paper are set aside and the rest are judged again
   (`_merging`, `_not_the_listed_paper`): a non-listing cluster whose track the proceedings don't host
-  (anything but `main`, `datasets_benchmarks`, `position` and `unknown`: the track rule) or whose status is `rejected`, `withdrawn` or `desk_rejected`
-  (proceedings list only accepted papers). The rest merge if `_mergeable` lets them; the set-aside clusters
-  stay separate records, each with a `conflicts.csv` row against the first listing: `track_not_merged` for
-  the track, `ambiguous_not_merged` for the status. On the 2026-09-29 crawl this merged 201 listings whose
-  title an accepted workshop paper shares (NeurIPS 2023-2025 main, D&B and position, ICLR 2024/2025) and
-  the 11 NeurIPS 2021 D&B round-2 papers whose rejected round-1 note shares the title.
-  Its limits: a listing is never set aside, and a status or track of `unknown` stays a rival (it may be the
-  listed paper, so two such candidates are still ambiguous), as does every other accepted submission: two
-  accepted OpenReview notes with one listing still refuse. Status only breaks a rivalry: a lone rejected
-  note still merges with its listing (the proceedings then decide its status, decision-005). The chain
-  re-check judges the whole chained group with `_mergeable`, so a set-aside cluster that another key chains
-  in with a listing splits the chain (never a merge).
+  (anything but `main`, `datasets_benchmarks`, `position` and `unknown`: the track rule, minus `unknown`)
+  or whose status is `rejected`, `withdrawn` or `desk_rejected` (proceedings list only accepted papers).
+  The rest merge if `_mergeable` lets them; the set-aside clusters stay separate records, each with a
+  `conflicts.csv` row against the first listing: `track_not_merged` for the track, `ambiguous_not_merged`
+  for the status. On the 2026-09-29 crawl this merged 201 listings whose title an accepted workshop paper
+  shares (NeurIPS 2023-2025 main, D&B and position, ICLR 2024/2025) and the 11 NeurIPS 2021 D&B round-2
+  papers whose rejected round-1 note shares the title. Its limits: a listing is never set aside, and a
+  status or track of `unknown` stays a rival (it may be the listed paper, so two such candidates are still
+  ambiguous), as does every other accepted submission: two accepted OpenReview notes with one listing
+  still refuse. Status only breaks a rivalry: a lone rejected note still merges with its listing (the
+  proceedings then decide its status, decision-005). A set-aside cluster never merges through a second
+  key. A track one can't even chain in: every key's group puts it through the same track rule. A status
+  one can, since `_mergeable` ignores status and a lone rejected note merges with its listing on another
+  key; the chain re-check (the whole chained group, judged by `_mergeable`) then refuses it only because
+  every non-listing record carries its own forum id (a record without one must name itself in a
+  proceedings URL), which differs from the forum id of the note the listing merged with. The chain splits
+  into its step-1 clusters: the pair is not merged either (the safe direction, never a merge).
 - A paper whose track the proceedings don't host (anything but `main`, `datasets_benchmarks`,
   `position`) into a **proceedings listing**: a cluster with a proceedings source *or* a proceedings id,
   so a RIS record with a `nips-`/`iclr-`/`pmlr-` id counts. Proceedings never host workshop papers. A

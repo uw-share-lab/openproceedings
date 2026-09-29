@@ -302,8 +302,8 @@ def _merging(group: Sequence[_Cluster]) -> list[int] | None:
     if not any(c.listed for c in group):
         return None
     rest = [i for i, c in enumerate(group) if _not_the_listed_paper(c) is None]
-    if len(rest) in (1, len(group)) or _mergeable([group[i] for i in rest]) is not None:
-        return None
+    if len(rest) < 2 or _mergeable([group[i] for i in rest]) is not None:
+        return None  # rest == group is refused here as well: `_mergeable` has just refused the whole group
     return rest
 
 
@@ -368,9 +368,12 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
     out: list[PaperRecord] = []
     for group in step2.groups():
         chained = [clusters[ci] for ci in group]
-        # keys chained clusters that must not share a record: keep every cluster on its own. The whole group
-        # is judged by `_mergeable`, so a cluster set aside on one key (TASK-126) that another key chains in
-        # with a listing splits the chain: the safe direction, never a merge
+        # keys chained clusters that must not share a record: keep every cluster on its own. A cluster set
+        # aside on one key (TASK-126) never merges through another. A track one never chains in: every key
+        # applies the same track rule. A status one can (`_mergeable` ignores status; a lone rejected note
+        # merges with its listing), and this re-check refuses it only because every non-listing record has
+        # its own forum id (dedup refuses one naming neither a forum id nor its proceedings URL), unlike the
+        # note the listing merged with. The chain splits: the safe direction, never a merge
         refused = len(group) > 1 and _mergeable(chained) is not None
         parts = [[ci] for ci in group] if refused else [group]
         for part in parts:
