@@ -81,21 +81,52 @@ def _list_entries(items: list[Element], base: str) -> list[Entry]:
     return entries
 
 
+_INLINE = frozenset({"span", "b", "strong", "i", "em", "font"})
+
+
+def _bare_authors(anchor: Element) -> Element | None:
+    """The authors of a paper link outside any `<p>` (the live 2014 page sets one of its 35 papers as
+    `<span><b><a>…</a></b></span><div><i>authors</i>…</div>`, TASK-124): the first inline element of the block
+    right after the link's outermost inline wrapper. Only that inline element: on the live page the block
+    goes on to hold every later entry of the page."""
+    wrapper = anchor
+    while wrapper.parent is not None and wrapper.parent.tag in _INLINE:
+        wrapper = wrapper.parent
+    if wrapper.parent is None:
+        return None
+    siblings = [child for child in wrapper.parent.children if isinstance(child, Element)]
+    position = next(
+        i for i, child in enumerate(siblings) if child is wrapper
+    )  # identity: elements compare by value
+    after = siblings[position + 1 :]
+    if not after or after[0].tag not in ("div", "p"):
+        return None
+    for child in after[0].children:  # the block must open with that inline element, not with loose text
+        if isinstance(child, Element):
+            return child if child.tag in _INLINE else None
+        if child.strip():
+            return None
+    return None
+
+
 def _google_sites_entries(root: Element, base: str) -> list[Entry]:
-    """The 2014 page: a title paragraph followed by an author paragraph, rather than `<li>` entries."""
+    """The 2014 page: a title paragraph followed by an author paragraph, rather than `<li>` entries; or, for a
+    link outside any paragraph, the block right after it (`_bare_authors`)."""
     entries = []
     paragraphs = root.iter("p")
     for anchor in root.iter("a"):
         found = _paper_anchor(anchor, base)
+        if found is None:
+            continue
+        _same, native, target, forum = found
         paragraph = anchor.parent
         while paragraph is not None and paragraph.tag != "p":
             paragraph = paragraph.parent
-        if found is None or paragraph is None:
-            continue
-        assert found is not None
-        _same, native, target, forum = found
-        index = paragraphs.index(paragraph)
-        authors = paragraphs[index + 1] if index + 1 < len(paragraphs) else None
+        if paragraph is None:
+            authors = _bare_authors(anchor)
+        else:
+            index = next(i for i, p in enumerate(paragraphs) if p is paragraph)  # identity, not value
+            authors = paragraphs[index + 1] if index + 1 < len(paragraphs) else None
         entries.append(
             Entry(
                 target,

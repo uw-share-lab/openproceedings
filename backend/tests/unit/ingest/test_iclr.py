@@ -87,6 +87,38 @@ def test_paragraph_parser_ignores_a_decoy_link_paragraph_and_reads_single_quoted
     ]  # fmt: skip
 
 
+def test_an_entry_outside_any_paragraph_is_read_with_the_next_blocks_authors() -> None:
+    """The live 2014 page (2026-09-29) sets one of its 35 papers, arXiv 1312.6055, in a bare <span><b><a> with
+    its authors in the next <div><i>, not in <p> paragraphs; it was dropped and the listing counted 34 (TASK-124).
+    Compact case in that markup (the <div> goes on to hold later entries, as on the page), names synthetic."""
+    page = """<p dir="ltr"><span style="font-weight:bold"><a href="http://arxiv.org/abs/1301.3584" rel="nofollow">Paragraph Title</a></span></p>
+    <p dir="ltr"><span style="font-style:italic">Para One; Para Two</span></p>
+    <span style="color:rgb(34,34,34)"><div><br /></div></span>
+    <span style="font-size:12.7px"><b><a href="http://arxiv.org/abs/1312.6055" rel="nofollow">Bare Title</a></b></span>
+    <div><i style="font-size:1em"><span>Bare One; Bare Two</span></i>
+      <p dir="ltr"><span style="font-weight:bold"><a href="http://arxiv.org/abs/1312.6086">Next Title</a></span></p>
+      <p dir="ltr"><span style="font-style:italic">Next One</span></p></div>"""
+    iclr = source()
+    parsed = iclr.parse_index(2014, page, iclr.LISTINGS[2014])
+    assert [(e.title, e.authors) for e in parsed] == [
+        ("Paragraph Title", ("Para One", "Para Two")),
+        ("Bare Title", ("Bare One", "Bare Two")),
+        ("Next Title", ("Next One",)),
+    ]
+
+
+def test_bare_entries_side_by_side_and_a_block_opening_with_text() -> None:
+    """Two identical bare wrappers must not be confused (elements compare by value), and a block that opens
+    with loose text holds no author element: the entry gets no authors rather than a later title (TASK-124)."""
+    twin = '<span><b><a href="http://arxiv.org/abs/1312.6055">Twin Title</a></b></span>'
+    page = f"""<div>{twin}<div><i>Twin One</i></div>{twin}<div><i>Twin Two</i></div></div>
+    <span><b><a href="http://arxiv.org/abs/1312.6086">Loose Title</a></b></span>
+    <div>Plain One, Plain Two<i>Later Title</i></div>"""
+    iclr = source()
+    parsed = iclr.parse_index(2014, page, iclr.LISTINGS[2014])
+    assert [(e.title, e.authors) for e in parsed] == [("Twin Title", ("Twin One",)), ("Loose Title", ())]
+
+
 def test_a_nonempty_trimmed_archive_page_reports_the_verified_count_mismatch(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,

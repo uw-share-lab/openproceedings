@@ -200,6 +200,10 @@ Workshop names include hyphens and digits (`SCI-FM`, `CLRLC-LLMs`, `7HVU`).
 - The recorded pages contain 35 (2014), 31 (2015), and 80 (2016) unique accepted conference targets.
   The 2015 accepted-main page repeats some targets under oral/poster headings and also contains a workshop
   section; identity-based deduplication and section scoping are therefore part of the adapter contract.
+- The 2014 page is Google Sites markup: 34 entries are a title `<p>` followed by an author `<p>`, but one,
+  "Unit Tests for Stochastic Optimization" (arXiv 1312.6055), is a bare `<span><b><a>` whose authors are the
+  first `<i>` of the following `<div>`, a `<div>` that then holds every later entry. The first full crawl's
+  coverage trial (2026-09-29) counted 34 of 35 until the parser read it (TASK-124).
 - The archive lists title and authors but no abstract. Most entries target arXiv; a target is the stable
   identity evidence. OpenReview forum targets retain the forum id, while other canonical targets use
   `iclr-<sha256(target)[:32]>`. Fragment-only page changes cannot change an id.
