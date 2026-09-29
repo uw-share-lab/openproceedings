@@ -115,7 +115,9 @@ After editing any hook or tooling script, run `make tooling`. It runs every case
 testing).
 
 ## Closing workflow (required, in this order; approvals are per-commit)
-1. **Tests and lint green** locally (`make test`, `make lint`, `make tooling`). Never claim a pass you didn't run.
+1. **Tests and lint green** locally, scaled by risk: the runs the `pr-workflow` skill §Local test runs table gives
+   for what the diff touches (often the full `make test`), and always `make lint` and `make tooling`; CI's `test`
+   job runs the full suite on every PR. Never claim a pass you didn't run.
 2. **Backlog current**: acceptance criteria checked and a final summary written. For finished tasks, run
    `backlog task complete <id>`.
 3. **Docs as-built** in the same branch: specs, READMEs, skills and `.claude/README.md` (`docs-writer`).
@@ -124,6 +126,8 @@ testing).
    approval recorded for HEAD.
 6. **Push, then `/open-pr`** into `dev`. CI must pass: `lint`, `test`, `claude-tooling`, `attribution`,
    `learnings`, `review-attested`.
+7. **After it merges**, remove the PR's worktree (`git worktree remove`) and local branch. A worktree with
+   uncommitted work is archived as a patch first, never deleted blind.
 
 "Noted as non-blocking" is not a disposition. A finding you don't fix becomes a Backlog task or a written
 rejection.

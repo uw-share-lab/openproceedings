@@ -7,7 +7,8 @@ allowed-tools: Read, Grep, Glob, Bash, Task, Write
 Run the review gate for the current branch, following `.claude/skills/review-gates/SKILL.md` exactly.
 Extra reviewers requested: $ARGUMENTS
 
-1. **Preconditions.** Working tree clean (commit first). `make test`, `make lint` and `make tooling` green.
+1. **Preconditions.** Working tree clean (commit first). The local tests the diff calls for green
+   (the `.claude/skills/pr-workflow/SKILL.md` §Local test runs table), plus `make lint` and `make tooling`.
    Tasks, docs, specs and READMEs updated in the same branch, and Done tasks moved with
    `backlog task complete <id>` (`.claude/skills/task-hygiene/SKILL.md`). The branch has its learnings entry
    (new, or an existing entry extended with a dated addendum) committed (`/record-learnings`) unless it will

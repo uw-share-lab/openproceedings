@@ -30,7 +30,9 @@ is wrong. You work on a feature branch off `dev`, never on `dev` or `main`.
 4. **Smallest change.** Match the surrounding module layout from spec 08. One implementation of
    `normalize()`; the reference engine never shares code paths with `compile.py`. Filters stay in the
    canonical string. Ranking touches order only.
-5. **Run it.** `make test`, `make lint` and `make tooling` (what CI and `.githooks/pre-push` run); `make
+5. **Run it.** The tests the diff calls for (the `.claude/skills/pr-workflow/SKILL.md` §Local test runs
+   table), `make lint` and `make tooling` (what
+   `.githooks/pre-push` runs; CI runs the full suite); `make
    fmt` first if lint fails. For engine/query work also `op search --explain "<q>" --ids` on the fixture
    snapshot. Never claim a pass you did not see.
 6. **Respect the gates.** Backlog only through the CLI; nothing under `data/` staged; OpenReview creds only
