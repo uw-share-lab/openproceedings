@@ -195,7 +195,9 @@ a venueid naming another track) gets `unknown` for that field and an `unresolved
 `<data-dir>/cache/openreview/{v2,v1}/http/` (the shared `{key, payload}` cache contains only a versioned,
 world-readable projection; restricted fields are removed before persistence and older raw entries are
 invalid; a v1 client logs in on api2, whose token api1 accepts) and a finished
-venue-year writes `…/{v2,v1}/crawls/<Venue>-<Year>.json`, which `snapshot build` replays offline. Code:
+venue-year writes `…/{v2,v1}/crawls/<Venue>-<Year>.json`, which `snapshot build` replays offline. A note or group is world-readable when its
+`readers` are a list of strings naming `everyone` and its `nonreaders` are absent, `null` (API v1 writes it on
+public notes) or a list of strings not naming `everyone`; any other shape is refused. Code:
 `ingest/sources/openreview_client.py` (OpenReview's policy and login on the shared HTTP layer),
 `ingest/sources/openreview_v2.py` (enumeration, records) and `ingest/sources/openreview_v1.py` (the per-year
 adapters). `op --data-dir <dir> <command>` (a global option; default `$OP_DATA_DIR`, else the repository's

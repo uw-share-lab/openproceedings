@@ -164,13 +164,30 @@ def credentials(environ: Mapping[str, str], dotenv: Path | None = None) -> Crede
 
 
 def _world_readable(value: Mapping[str, Any]) -> bool:
-    """Whether OpenReview's readers/nonreaders ACL makes an object available to `everyone`."""
-    readers, nonreaders = value.get("readers"), value.get("nonreaders", [])
+    """Whether OpenReview's readers/nonreaders ACL makes an object available to `everyone`. A null `nonreaders`
+    excludes no one, like `[]` or no key: API v1 writes it on public notes (ICLR 2017 workshop, TASK-119)."""
+    readers = value.get("readers")
+    nonreaders = value.get("nonreaders")
+    if nonreaders is None:  # null or absent; any other non-list value (even "", {} or False) is refused below
+        nonreaders = []
     if not isinstance(readers, list) or not all(isinstance(item, str) for item in readers):
         return False
     if not isinstance(nonreaders, list) or not all(isinstance(item, str) for item in nonreaders):
         return False
     return "everyone" in readers and "everyone" not in nonreaders
+
+
+def _acl_shape(value: Mapping[str, Any], name: str) -> str:
+    """An ACL's shape for an error message: its type, a list's length and whether it names `everyone`. Never
+    its entries, which can be profile ids (personal data; logging-standards skill)."""
+    if name not in value:
+        return f"{name} absent"
+    acl = value[name]
+    if acl is None:
+        return f"{name} null"
+    if isinstance(acl, list):
+        return f"{name} list of {len(acl)}{' naming everyone' if 'everyone' in acl else ' without everyone'}"
+    return f"{name} {type(acl).__name__}"
 
 
 def _public_content(value: Any) -> dict[str, Any]:
@@ -221,7 +238,9 @@ def _public_projection(path: str, data: Mapping[str, Any]) -> dict[str, Any]:
             )
         if not _world_readable(row):
             raise OpenReviewPublicDataError(
-                f"OpenReview {key[:-1]} response is not world-readable; use credentials without venue roles"
+                f"OpenReview {key[:-1]} response is not world-readable ({_acl_shape(row, 'readers')}, "
+                f"{_acl_shape(row, 'nonreaders')}): a malformed ACL is refused like a private one; a private "
+                "one means the credentials see more than the public does (venue roles)"
             )
         item = {name: copy.deepcopy(row[name]) for name in allowed if name in row}
         item["content"] = _public_content(row.get("content"))

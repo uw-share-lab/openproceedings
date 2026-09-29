@@ -88,6 +88,15 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
 - A `?forum=<id>` listing is not ordered with the submission first (ICLR 2018 fixture): find the
   submission by `id == forum`.
 
+### Access lists (readers / nonreaders)
+- **API v1 writes `nonreaders: null` on public notes** (2026-09-29, TASK-119). One authenticated read of
+  `GET https://api.openreview.net/notes?invitation=ICLR.cc/2017/workshop/-/submission&limit=1000&offset=0`
+  returned `count` 161: every note had `readers: ["everyone"]`, 102 had `nonreaders: []` and 59 had
+  `nonreaders: null` (tallied with `Counter(repr(n.get("nonreaders", "<absent>")) for n in notes)`; only ids
+  and ACLs were printed). The same read of `ICLR.cc/2017/conference/-/submission` (490 notes) found no null
+  `nonreaders`. A null excludes no one; the client treats it as `[]` (`_world_readable`). Fixture
+  `openreview/v1/iclr-2017/note-workshop-null-nonreaders-live.json` (note `SJGfklStl`, fetched by id).
+
 ### How status is represented (the key finding)
 - **v2:** the submission note's `content.venueid` suffix is the status, and the group's content names
   the four venueids (`submission_venue_id`, `rejected_venue_id`, `withdrawn_venue_id`,

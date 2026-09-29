@@ -385,6 +385,7 @@ V1_NO_VENUE_EVIDENCE = {
     "v1/iclr-2013/notes-submission-decision-field.json",
     "v1/iclr-2014/notes-submission-no-decision.json",
     "v1/iclr-2016/notes-workshop.json",
+    "v1/iclr-2017/note-workshop-null-nonreaders-live.json",  # nonreaders null (TASK-119); no venue string
     "v1/iclr-2018/forum-rejected.json",
     "v1/iclr-2018/notes-blind-listing.json",
     "v1/iclr-2018/notes-withdrawn-listing.json",

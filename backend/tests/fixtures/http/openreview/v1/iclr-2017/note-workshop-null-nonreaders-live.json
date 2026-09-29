@@ -1,0 +1,83 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "authenticated OpenReview fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?id=SJGfklStl",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "tddate": null,
+     "replyto": null,
+     "nonreaders": null,
+     "ddate": null,
+     "tmdate": 1487408122097,
+     "tcdate": 1487367946228,
+     "number": 151,
+     "id": "SJGfklStl",
+     "invitation": "ICLR.cc/2017/workshop/-/submission",
+     "forum": "SJGfklStl",
+     "signatures": [
+      "~Synthetic_Person1"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "title": "Synthetic title text 2.",
+      "abstract": "Synthetic abstract text 3.",
+      "pdf": "/pdf/1b03bbfa8bb79fb3e5dd6dc9810d11acbf67b84e.pdf",
+      "TL;DR": "Synthetic tl;dr text 4.",
+      "paperhash": "synthetic|synthetic_title_5",
+      "keywords": [],
+      "conflicts": [
+       "Synthetic conflicts text 6.",
+       "Synthetic conflicts text 7.",
+       "Synthetic conflicts text 8.",
+       "Synthetic conflicts text 9."
+      ],
+      "authors": [
+       "Synthetic Author 10",
+       "Synthetic Author 11",
+       "Synthetic Author 12",
+       "Synthetic Author 13",
+       "Synthetic Author 14",
+       "Synthetic Author 15",
+       "Synthetic Author 16",
+       "Synthetic Author 17",
+       "Synthetic Author 18",
+       "Synthetic Author 19",
+       "Synthetic Author 20",
+       "Synthetic Author 21",
+       "Synthetic Author 22",
+       "Synthetic Author 23",
+       "Synthetic Author 24"
+      ],
+      "authorids": [
+       "synthetic.person25@example.org",
+       "synthetic.person26@example.org",
+       "synthetic.person27@example.org",
+       "synthetic.person28@example.org",
+       "synthetic.person29@example.org"
+      ]
+     },
+     "writers": [],
+     "details": {
+      "writable": false
+     }
+    }
+   ],
+   "count": 1
+  }
+ }
+}

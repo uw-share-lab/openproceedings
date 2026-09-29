@@ -128,8 +128,10 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   budget wait on `ratelimit-remaining: 0`, 429 → `Retry-After` (seconds or HTTP date) → `ratelimit-reset` →
   backoff, 5xx / network / truncated JSON → `min(2^n, 60) s + jitter`, `max_attempts` 6, every wait capped at
   3,701 s. Cache: `http.ResponseCache` under `<data-dir>/cache/openreview/v2/http/`, keyed by the canonical URL
-  (parameters sorted). Before persistence, every top-level note/group must be readable by `everyone`,
-  only crawler-used top-level fields remain, and restricted v2 content fields are removed; all remaining
+  (parameters sorted). Before persistence, every top-level note/group must be readable by `everyone`
+  (`readers` a list of strings naming `everyone`; `nonreaders` absent, `null` or a list of strings not naming
+  `everyone`; API v1 writes `null` on public notes, e.g. 59 of the 161 ICLR 2017 workshop submissions, TASK-119; any other
+  non-list ACL is refused), only crawler-used top-level fields remain, and restricted v2 content fields are removed; all remaining
   world-readable content keys are retained for the venue-year adapters. The payload carries a
   `public_projection` version; older raw entries are rejected offline and purged/refetched by a live run.
   Other malformed entries or entries naming another URL are `CacheError`s. Errors are the shared
@@ -179,7 +181,8 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
 `{"_recorded", "request": {"method", "url", "authenticated"}, "response": {"status", "headers", "json" |
 "text"}}`. They cover each v2 status suffix, D&B, position, competition, Creative AI, Tiny Papers,
 Blogposts, workshop and city-workshop forms, a group's venueid block, the `count`/`offset` shape, the
-`limit` error, the cross-host 404 and the anonymous challenge page; and each v1 year's status carrier
+`limit` error, the cross-host 404, the anonymous challenge page and a public v1 note with `nonreaders: null`
+(`v1/iclr-2017/note-workshop-null-nonreaders-live.json`, TASK-119); and each v1 year's status carrier
 above, including one invitation listing per v1 venue-year with a group. `backend/tests/fixtures/http/scrub.py` turns a raw capture into a fixture (titles, abstracts,
 authors, ids of people and free text become synthetic; decision-004). Recording is a manual run, never a
 test: add a capture for every new shape, scrub it, and read the diff before committing. A transport wrapper
