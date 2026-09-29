@@ -26,7 +26,8 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   other index_versions), `deps.py`, `errors.py`, `middleware.py`, `models.py` (the response
   contract), routers `search.py` (parse and search), `papers.py`, `records.py`, `meta.py`, `coverage.py`, `health.py`, `export.py`
   (streamed exports, `op export`'s writers), `server.py` → `op serve`, `openapi.py` → `op openapi`);
-  `semantic/ eval/` arrive with their tasks). Tests in `backend/tests/`; `uv run pytest` from the root.
+  `eval/` (`coverage_report.py` → `op eval coverage`, TASK-054; the other reports arrive with their tasks),
+  `semantic/` arrives with its task). Tests in `backend/tests/`; `uv run pytest` from the root.
 - **API contract:** after changing a route or a response model, run `make openapi` and commit both
   `backend/tests/contract/openapi.json` (the snapshot) and `frontend/src/api/schema.ts` (generated from it;
   never hand-edited). A contract test and CI's `test` job fail while either is stale (`api-contract` skill).

@@ -62,10 +62,16 @@ When a cell misses the gate, classify the cause in the report (source definition
 dedup, crawl gap) before changing anything. Never adjust the official number to fit.
 
 ## Report shape
-Header: date, snapshot hash, `index_version`, source file revision. Table per venue with all cells,
-`delta_pct` to one decimal, gate ✓/✗ (or "not gated" for a cell with no official count), the
-`missing_abstract`, `unknown`-track and **statuses indexed** columns, and cause notes for every ✗. Totals
-of `missing_abstract` and `unknown`. Command that produced it. The methods text cites this report (with its
+As built (`op eval coverage`, `backend/src/openproceedings/eval/coverage_report.py`, TASK-054). Header: date,
+snapshot name and hash, `index_version`, the sha256 of `coverage-sources.md`, the command. Then the verdict
+line (`**M4 gate: PASS|FAIL** — n of m gated cells within ±1%; k gaps`). Then a table per venue: every cell,
+indexed accepted, official, Δ, `delta_pct` to one decimal, gate (✓, ✗, `✗ gap` for a gated official cell with
+no records, `not gated` for another track, `no source` for a main or D&B cell with no official count),
+missing abstracts, the venue-year's `unknown`-track count, and **statuses indexed**. Then a cause note for
+every failing cell, from `docs/results/coverage-causes.toml` (`["NeurIPS 2021 datasets_benchmarks"]`
+`cause = "…"`) or **unclassified**. Then every listing that skipped entries (`skipped` reasons from the
+manifest's `sources`), and totals of records, missing abstracts, `unknown` track and status. `--check`
+exits 1 when the gate fails. The methods text cites this report (with its
 snapshot hash) as the database-scope caveat.
 
 ## Gotchas

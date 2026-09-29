@@ -52,8 +52,9 @@ log = logging.getLogger(__name__)
 # subcommand -> (help text, the Backlog task that implements it)
 PLANNED: dict[str, tuple[str, str]] = {
     "embed": ("build SPECTER2 embeddings for the current index (spec 06)", "task-058"),
-    "eval": ("evaluation reports: scholar | coverage | audit | near-miss (spec 07)", "task-054"),
 }
+# `op eval <report>` reports still to come -> the task that implements them (coverage: TASK-054)
+PLANNED_EVALS: dict[str, str] = {"scholar": "task-056", "audit": "task-055", "near-miss": "task-061"}
 # `op record replay`'s exit status on a `mismatch` (spec 08 §Error handling): a broken guarantee 4, which a
 # script must tell apart from a refusal (1), a usage error (2) and drift (0)
 EXIT_MISMATCH = 3
@@ -285,6 +286,23 @@ def build_parser() -> argparse.ArgumentParser:
     openapi.add_argument("--out", type=Path, help="write to this file (default standard output)")
     openapi.set_defaults(run=_openapi)
 
+    ev = sub.add_parser("eval", help="evaluation reports: coverage | scholar | audit | near-miss (spec 07)")
+    reports = ev.add_subparsers(dest="report", required=True, metavar="REPORT")
+    cov = reports.add_parser(
+        "coverage",
+        help="write docs/results/<date>-coverage.md: indexed vs official accepted counts and the M4 gate "
+        "(spec 07 §C)",
+    )
+    cov.add_argument("--index", help="`current` (default) or an index_version under <data-dir>/indexes")
+    cov.add_argument(
+        "--out", type=Path, help="the report's directory (default the repository's docs/results)"
+    )
+    cov.add_argument("--date", help="the report's date, YYYY-MM-DD (default today, UTC)")
+    cov.add_argument("--check", action="store_true", help="exit 1 when the M4 gate fails")
+    cov.set_defaults(run=_eval_coverage)
+    for name, task in PLANNED_EVALS.items():
+        _stub(reports.add_parser(name, help=f"planned in {task}"), f"eval {name}", task)
+
     for name, (help_text, task) in PLANNED.items():
         _stub(sub.add_parser(name, help=help_text, description=help_text), name, task)
     return parser
@@ -479,6 +497,60 @@ def _search_run(
             "ms": elapsed_ms(started),
         },
     )
+
+
+def _repo_root() -> Path | None:
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "backend").is_dir() and (parent / "pyproject.toml").is_file():
+            return parent
+    return None
+
+
+def _eval_coverage(ns: argparse.Namespace) -> int:
+    """`op eval coverage` (TASK-054): the dated coverage report, from what `GET /coverage` serves for the index."""
+    import hashlib
+    from datetime import UTC, date, datetime
+
+    from openproceedings.api.coverage import compute
+    from openproceedings.api.state import snapshot_records
+    from openproceedings.engine.tantivy_engine import TantivyEngine
+    from openproceedings.eval.coverage_report import Meta, failing_summary, gate, load_causes, render, write
+
+    started = time.perf_counter()
+    try:
+        day = date.fromisoformat(ns.date) if ns.date else datetime.now(UTC).date()
+    except ValueError:
+        raise _usage(f"--date must be YYYY-MM-DD, not {ns.date!r}") from None
+    root = _repo_root()
+    results = root / "docs" / "results" if root else None
+    out = ns.out or results
+    if out is None or results is None:
+        raise _usage("run from a checkout (the report cites docs/results/coverage-sources.md), or pass --out")
+    path = _index_path(ns)
+    engine = TantivyEngine(path)
+    records = snapshot_records(ns.data_dir, path, engine.index_version)  # verified, as the server loads it
+    coverage = compute(engine, records).model_dump(mode="json")
+    sources = results / "coverage-sources.md"
+    meta = Meta(
+        date=day,
+        index_version=engine.index_version,
+        sources_sha256=hashlib.sha256(sources.read_bytes()).hexdigest(),
+        command=f"op eval coverage --index {engine.index_version} --date {day.isoformat()}",
+    )
+    causes = load_causes(results / "coverage-causes.toml")
+    written = write(render(coverage, records.manifest, meta, causes=causes), out, day)
+    verdict = gate(coverage)
+    log.info("coverage_report_written", extra={
+        "index_version": engine.index_version, "gated": verdict.gated, "passing": verdict.passing,
+        "gaps": verdict.gaps, "unclassified": sum(k not in causes for k, _ in verdict.failing),
+        "ms": elapsed_ms(started),
+    })  # fmt: skip
+    print(f"wrote {written}", file=sys.stderr)
+    state = "PASS" if verdict.passed else "FAIL"
+    print(f"M4 gate: {state}: {verdict.passing} of {verdict.gated} gated cells within ±1%", file=sys.stderr)
+    for line in failing_summary(verdict):
+        print(f"  {line}", file=sys.stderr)
+    return 1 if ns.check and not verdict.passed else 0
 
 
 def _search(ns: argparse.Namespace) -> int:
