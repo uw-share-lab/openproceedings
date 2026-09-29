@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from openproceedings import cli
 from openproceedings.coverage import crawl_dates
 from openproceedings.ingest.classify import classify_neurips_listing
 from openproceedings.ingest.dedup import dedup
@@ -22,7 +23,8 @@ from openproceedings.ingest.snapshot import build
 from openproceedings.ingest.sources import neurips
 from openproceedings.ingest.sources.common import MinerError, titles_match
 from openproceedings.ingest.sources.crawl import ingest_neurips, load_crawls
-from openproceedings.ingest.sources.html import text_of, unescape
+from openproceedings.ingest.sources.html import MAX_DEPTH, HTMLBudgetError, text_of, unescape
+from openproceedings.ingest.sources.http import canonical
 
 from tests.unit.ingest.proceedings_helpers import (
     DB,
@@ -545,3 +547,53 @@ def test_proceedings_cross_check_openreview_through_dedup(tmp_path: Path) -> Non
     }
     assert records["op:neurips:2022:Forum00003"].track == "datasets_benchmarks"
     assert len(result.records) == 4 and len(result.merges) == 2
+
+
+# --- parser budgets and record-level logs (TASK-116) --------------------------------------------------------
+
+TOO_DEEP = "<html>" + "<div>" * (MAX_DEPTH + 1) + "</html>"
+
+
+def test_a_paper_page_past_the_html_budget_is_a_debug_line_counted_in_one_listing_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    cache = cache_of(tmp_path)
+    seed_fixture(cache, "neurips", Y13)
+    for sha in (A13, B13):
+        seed(cache, "neurips", neurips_abs(2013, sha), TOO_DEEP, at=T1)
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        result = mine(cache, 2013)
+    [report] = result.reports
+    assert report.skipped["invalid"] == 2 and result.records == []
+    invalid = [r for r in caplog.records if r.getMessage() == "neurips_record_invalid"]
+    assert {r.levelno for r in invalid} == {logging.DEBUG} and {r.__dict__["error"] for r in invalid} == {
+        "HTMLBudgetError"
+    }
+    assert {r.__dict__["url"] for r in invalid} == {canonical(neurips_abs(2013, s)) for s in (A13, B13)}
+    # the listing's own lines only (the recorded 2013 page is trimmed, so its count mismatches); no per-record one
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert [r.getMessage() for r in warnings] == ["listing_count_mismatch", "listing_attention"]
+    assert warnings[1].__dict__["skipped"] == {"invalid": 2}
+
+
+def test_a_listing_page_past_the_html_budget_names_its_url_and_how_to_recover(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data = tmp_path / "data"
+    listing = canonical(neurips.listing_urls(2013)[0])
+    seed(data / "cache", "neurips", listing, TOO_DEEP)
+    f, _ = fetcher(data / "cache" / "neurips", None, neurips.HOSTS)
+    with pytest.raises(HTMLBudgetError) as refused:
+        neurips.mine_year(2013, f)
+    entry = f.cache.path(listing).relative_to(f.cache.root)  # pages/<sha256[:2]>/<sha256>.json
+    message = str(refused.value)
+    assert message.startswith(f"{listing}: HTML nesting exceeds {MAX_DEPTH} elements")
+    assert "--refresh" in message and f"({entry} under the source's cache directory)" in message
+    assert (refused.value.url, refused.value.reason) == (listing, "html_budget")
+
+    code = cli.main(["--data-dir", str(data), "ingest", "neurips", "--year", "2013", "--offline"])
+    err = capsys.readouterr().err
+    assert code == 1 and f"op ingest neurips: {listing}: HTML nesting exceeds" in err
+    [line] = [e for e in map(json.loads, (x for x in err.splitlines() if x.startswith("{")))
+              if e.get("event") == "cli_refused"]  # fmt: skip
+    assert (line["level"], line["reason"], line["error"]) == ("WARNING", "html_budget", "HTMLBudgetError")

@@ -35,7 +35,7 @@ from openproceedings.ingest.sources.common import (
     titles_match,
 )
 from openproceedings.ingest.sources.html import collapse, meta, metas, node_text, parse
-from openproceedings.ingest.sources.http import Fetcher, Page
+from openproceedings.ingest.sources.http import Fetcher, Page, canonical
 from openproceedings.ingest.volumes import VOLUMES, Volume
 from openproceedings.logs import elapsed_ms
 
@@ -73,9 +73,9 @@ class Entry:
     forum: str | None  # an OpenReview forum id (v235 links one)
 
 
-def heading(text: str) -> tuple[int, str] | None:
+def heading(text: str, url: str | None = None) -> tuple[int, str] | None:
     """(volume number, the rest) from the page's first `<h1>`/`<h2>` reading `Volume N: …`."""
-    for node in parse(text).iter():
+    for node in parse(text, url).iter():
         if node.tag not in ("h1", "h2"):
             continue
         title = node_text(node)
@@ -88,7 +88,7 @@ def parse_volume_index(text: str, base: str) -> tuple[list[Entry], int]:
     """The entries on a volume index and the number of `<div class="paper">` blocks without an `abs` link."""
     entries: list[Entry] = []
     unlinked = 0
-    for block in (node for node in parse(text).iter("div") if node.has_class("paper")):
+    for block in (node for node in parse(text, canonical(base)).iter("div") if node.has_class("paper")):
         hrefs = [urljoin(base, node.attributes.get("href", "")) for node in block.iter("a")]
         abs_url = next((h for h in hrefs if urlparse(h).path.endswith(".html") and urls.pmlr(h)), None)
         if abs_url is None:
@@ -121,9 +121,9 @@ class PaperPage:
     pdf: str | None
 
 
-def parse_paper_page(text: str) -> PaperPage:
+def parse_paper_page(text: str, url: str | None = None) -> PaperPage:
     abstract = next(
-        (node for node in parse(text).iter("div") if node.attributes.get("id") == "abstract"), None
+        (node for node in parse(text, url).iter("div") if node.attributes.get("id") == "abstract"), None
     )
     return PaperPage(
         title=meta(text, "citation_title"),
@@ -154,7 +154,7 @@ def mine_volume(
         raise MinerError(
             f"PMLR v{number}: {volume.index_url} answered HTTP {index.status}", reason="no_listing"
         )
-    found = heading(index.text)
+    found = heading(index.text, index.url)
     if found is None or found[0] != number or not found[1].startswith(volume.heading):
         raise MinerError(
             f"PMLR v{number}: the page heading does not name {volume.heading!r}; check the volume table",
@@ -198,8 +198,9 @@ def mine_volume(
             record, missing = _record(volume, native, entry, index, page)
         except (ValidationError, ValueError) as e:
             report.skipped["invalid"] += 1
-            log.warning(
-                "pmlr_record_invalid", extra={"volume": number, "native": native, "error": type(e).__name__}
+            log.debug(  # counted in the volume's one `listing_attention` WARNING
+                "pmlr_record_invalid",
+                extra={"volume": number, "native": native, "url": page.url, "error": type(e).__name__},
             )
             continue
         records.append(record)
@@ -252,7 +253,7 @@ def _record(
     if entry.forum:
         claim("urls.forum", f"https://openreview.net/forum?id={entry.forum}", listed_on, index.fetched_at)
 
-    parsed = parse_paper_page(page.text) if page.ok else None
+    parsed = parse_paper_page(page.text, page.url) if page.ok else None
     matches = parsed is not None and titles_match(title, parsed.title)
     abstract = clean_abstract(parsed.abstract) if parsed is not None and matches else None
     missing = missing_reason(page.ok, matches, abstract)

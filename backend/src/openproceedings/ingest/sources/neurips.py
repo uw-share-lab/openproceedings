@@ -43,7 +43,7 @@ from openproceedings.ingest.sources.common import (
     titles_match,
 )
 from openproceedings.ingest.sources.html import collapse, meta, metas, node_text, parse
-from openproceedings.ingest.sources.http import Fetcher, Page
+from openproceedings.ingest.sources.http import Fetcher, Page, canonical
 from openproceedings.logs import elapsed_ms
 
 log = logging.getLogger(__name__)
@@ -92,7 +92,7 @@ class YearIndex:
 
 def parse_year_index(text: str, base: str) -> YearIndex:
     """The entries on a year page, with its stated count and the other volumes it points to."""
-    root = parse(text)
+    root = parse(text, canonical(base))
     block = next((node for node in root.iter("ul") if node.has_class("paper-list")), None)
     entries: list[Entry] = []
     unlinked = 0
@@ -142,8 +142,8 @@ class AbstractPage:
     doi: str | None
 
 
-def parse_abstract_page(text: str) -> AbstractPage:
-    abstract = next((node for node in parse(text).iter("p") if node.has_class("paper-abstract")), None)
+def parse_abstract_page(text: str, url: str | None = None) -> AbstractPage:
+    abstract = next((node for node in parse(text, url).iter("p") if node.has_class("paper-abstract")), None)
     return AbstractPage(
         title=meta(text, "citation_title"),
         authors=tuple(a for a in metas(text, "citation_author") if a),
@@ -249,8 +249,9 @@ def _mine_listing(
             record, missing = _record(year, native, entry, cls.track, rule, listing, index, page)
         except (ValidationError, ValueError) as e:
             report.skipped["invalid"] += 1
-            log.warning(
-                "neurips_record_invalid", extra={"year": year, "native": native, "error": type(e).__name__}
+            log.debug(  # counted in the listing's one `listing_attention` WARNING
+                "neurips_record_invalid",
+                extra={"year": year, "native": native, "url": page.url, "error": type(e).__name__},
             )
             continue
         records.append(record)
@@ -285,7 +286,7 @@ def _record(
     claim("track", track, rule, index.fetched_at)
     claim("status", "accepted", f"listed on {listing}", index.fetched_at)
 
-    parsed = parse_abstract_page(page.text) if page.ok else None
+    parsed = parse_abstract_page(page.text, page.url) if page.ok else None
     matches = parsed is not None and titles_match(title, parsed.title)
     abstract = clean_abstract(parsed.abstract) if parsed is not None and matches else None
     missing = missing_reason(page.ok, matches, abstract)

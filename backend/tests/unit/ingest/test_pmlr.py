@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date
 from pathlib import Path
@@ -10,6 +11,7 @@ import pytest
 from openproceedings.ingest.sources import pmlr
 from openproceedings.ingest.sources.common import MinerError
 from openproceedings.ingest.sources.crawl import ingest_pmlr, load_crawls
+from openproceedings.ingest.sources.html import MAX_DEPTH
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES, VOLUMES, icml_volume, load
 
 from tests.unit.ingest.proceedings_helpers import (
@@ -272,3 +274,31 @@ def test_a_marked_crawl_whose_pages_are_gone_is_an_error(tmp_path: Path) -> None
     next((tmp_path / "pmlr" / "pages").rglob("*.json")).unlink()
     with pytest.raises(MinerError, match="marked crawled"):
         load_crawls(tmp_path)
+
+
+def test_a_paper_page_past_the_html_budget_is_a_debug_line_counted_in_one_listing_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """TASK-116: a record-level anomaly is DEBUG (with the page's URL); the volume's one `listing_attention`
+    WARNING counts it (its `listing_count_mismatch` is a listing-level line: this fixture is trimmed)."""
+    seed_v28(tmp_path)
+    paper = "https://proceedings.mlr.press/v28/muandet13.html"
+    seed(tmp_path, "pmlr", paper, "<html>" + "<div>" * (MAX_DEPTH + 1) + "</html>")
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        result = mine(tmp_path, 28)
+    assert result.report.skipped["invalid"] == 1
+    [invalid] = [r for r in caplog.records if r.getMessage() == "pmlr_record_invalid"]
+    assert (invalid.levelno, invalid.__dict__["url"], invalid.__dict__["error"]) == (
+        logging.DEBUG, paper, "HTMLBudgetError",
+    )  # fmt: skip
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert [r.getMessage() for r in warnings] == ["listing_count_mismatch", "listing_attention"]
+    assert warnings[1].__dict__["skipped"] == {"invalid": 1}
+
+
+def test_a_volume_heading_past_the_html_budget_names_the_index_url() -> None:
+    from openproceedings.ingest.sources.html import HTMLBudgetError
+
+    url = "https://proceedings.mlr.press/v28/"
+    with pytest.raises(HTMLBudgetError, match=re.escape(f"{url}: HTML nesting exceeds")):
+        pmlr.heading("<div>" * (MAX_DEPTH + 1), url)

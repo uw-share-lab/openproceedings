@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +33,7 @@ from tests.unit.ingest.openreview_fakes import (
     USERNAME,
     FakeClock,
     FakeOpenReviewV1,
+    TickingClock,
     json_response,
     v1_clone,
     v1_note,
@@ -538,6 +540,70 @@ def test_a_note_in_two_listings_is_a_counted_duplicate_only_when_its_record_is_i
     [record] = crawl.records
     assert outcome(record) == ("datasets_benchmarks", "accepted", None)
     assert {parse_qs(urlsplit(c.url).query)["invitation"][0] for c in record.provenance} == {round1}
+
+
+def test_per_note_anomalies_are_debug_and_the_crawl_has_one_attention_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    ws = v1_note("iclr-2013/notes-submission-decision-field.json")
+    odd = [v1_clone(ws, f"OddNote2013x{n}", n, decision="conferenceSomething-new") for n in range(1, 3)]
+    server = FakeOpenReviewV1({"ICLR.cc/2013/conference/-/submission": [ws, *odd]})
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        run(server, tmp_path, "ICLR", 2013)
+    unmapped = [r for r in caplog.records if r.getMessage() == "openreview_v1_unmapped"]
+    assert len(unmapped) == 2 and {r.levelno for r in unmapped} == {logging.DEBUG}
+    [attention] = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert attention.getMessage() == "openreview_crawl_attention"
+    assert {k: attention.__dict__[k] for k in ("api", "venue", "year", "unmapped", "duplicate")} == {
+        "api": "v1", "venue": "ICLR", "year": 2013, "unmapped": 2, "duplicate": 0,
+    }  # fmt: skip
+
+
+def test_a_duplicate_note_is_a_debug_line_counted_in_the_attention_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    note = v1_note("neurips-2021/note-db-round2-accepted.json")
+    round1, round2 = (f"NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round{n}/-/Submission" for n in (1, 2))
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        run(FakeOpenReviewV1({round1: [note], round2: [note]}), tmp_path, "NeurIPS", 2021)
+    [duplicate] = [r for r in caplog.records if r.getMessage() == "openreview_v1_duplicate"]
+    assert duplicate.levelno == logging.DEBUG
+    [attention] = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert attention.getMessage() == "openreview_crawl_attention" and attention.__dict__["duplicate"] == 1
+
+
+def test_a_v1_crawl_logs_a_start_line_and_bounded_progress_heartbeats(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    ws = v1_note("iclr-2013/notes-submission-decision-field.json")
+    notes = [ws, *(v1_clone(ws, f"MoreNote2013x{n}", n) for n in range(1, 4))]
+    server = FakeOpenReviewV1({"ICLR.cc/2013/conference/-/submission": notes})
+    live = v1.make_client(tmp_path, credentials=Credentials(USERNAME, PASSWORD), transport=server,
+                          clock=TickingClock(31.0), jitter=lambda: 0.0)  # fmt: skip
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):
+        v1.crawl(live, "ICLR", 2013)
+    [started] = [r for r in caplog.records if r.getMessage() == "openreview_crawl_started"]
+    assert {k: started.__dict__[k] for k in ("api", "venue", "year", "offline")} == {
+        "api": "v1", "venue": "ICLR", "year": 2013, "offline": False,
+    }  # fmt: skip
+    beats = [r for r in caplog.records if r.getMessage() == "openreview_crawl_progress"]
+    assert [b.__dict__["notes_read"] for b in beats] == [0, 1, 2, 3]
+    assert set(beats[-1].__dict__) >= {
+        "api",
+        "venue",
+        "year",
+        "forums",
+        "imported",
+        "skipped",
+        "requests",
+        "cached",
+    }
+    assert beats[-1].__dict__["api"] == "v1" and beats[-1].__dict__["imported"] == 3
+
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):  # a stopped clock: none due
+        v1.crawl(v1.make_client(tmp_path, credentials=None, offline=True, clock=FakeClock()), "ICLR", 2013)
+    assert not [r for r in caplog.records if r.getMessage() == "openreview_crawl_progress"]
 
 
 @pytest.mark.parametrize("count", [None, "1", True, -1])

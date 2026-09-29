@@ -48,6 +48,7 @@ from openproceedings.ingest.sources.http import (
     HttpClient,
     HTTPRefused,
     Policy,
+    PolicyEvents,
     Request,
     Response,
     ResponseCache,
@@ -109,11 +110,16 @@ def ttl(url: str, now: datetime) -> float | None:
     return open_ttl if year is None or year >= now.year else settled_ttl
 
 
+EVENTS = PolicyEvents(
+    retry_wait="openreview_retry_wait",
+    budget_wait="openreview_budget_wait",
+    cache_expired="openreview_cache_expired",
+)
 # the widest window OpenReview advertises is an hour; a hostile header can't park a run longer
 POLICY = Policy(
     hosts=HOSTS, accept="application/json", expect="json", keep_query=True, attempts=6, backoff=(1.0, 60.0),
     jitter=random.random, hint_pad=1.0, max_wait=3700.0, cap_waits=True, wait_after_last=False,
-    max_body=64 * 1024 * 1024, timeout=60.0, log_prefix="openreview", ttl=ttl,
+    max_body=64 * 1024 * 1024, timeout=60.0, events=EVENTS, ttl=ttl,
 )  # fmt: skip
 
 Entry = dict[str, Any]  # {"url", "fetched_at", "headers", "json"}
@@ -208,16 +214,19 @@ def _public_content(value: Any) -> dict[str, Any]:
     return out
 
 
-def _public_projection(path: str, data: Mapping[str, Any]) -> dict[str, Any]:
-    """A public API projection with only crawler-used top-level fields; called before caching.
+def _public_projection(url: str, data: Mapping[str, Any]) -> dict[str, Any]:
+    """A public API projection with only crawler-used top-level fields; called before caching. `url` is the
+    canonical request (the cache key: host, path and sorted parameters), which a refusal names so the
+    listing can be found again; never the response's data, the token or a credential (TASK-116).
 
     A private top-level object makes the response unusable because silently dropping a row would corrupt
     offset/count pagination. Restricted v2 content fields can be dropped without changing that pagination.
     """
+    path = urlsplit(url).path
     key = "notes" if path == "/notes" else "groups" if path == "/groups" else None
     if key is None:
         raise OpenReviewPublicDataError(
-            "OpenReview response path has no public cache projection", reason="unexpected_shape"
+            f"OpenReview response to GET {url} has no public cache projection", reason="unexpected_shape"
         )
     out: dict[str, Any] = {}
     if isinstance(data.get("count"), int):
@@ -234,11 +243,13 @@ def _public_projection(path: str, data: Mapping[str, Any]) -> dict[str, Any]:
     for row in rows:
         if not isinstance(row, Mapping):
             raise OpenReviewPublicDataError(
-                f"OpenReview {key[:-1]} response is not an object", reason="unexpected_shape"
+                f"OpenReview {key[:-1]} in the response to GET {url} is not an object",
+                reason="unexpected_shape",
             )
         if not _world_readable(row):
             raise OpenReviewPublicDataError(
-                f"OpenReview {key[:-1]} response is not world-readable ({_acl_shape(row, 'readers')}, "
+                f"OpenReview {key[:-1]} in the response to GET {url} is not world-readable "
+                f"({_acl_shape(row, 'readers')}, "
                 f"{_acl_shape(row, 'nonreaders')}): a malformed ACL is refused like a private one; a private "
                 "one means the credentials see more than the public does (venue roles)"
             )
@@ -351,7 +362,7 @@ class OpenReviewClient(HttpClient[Entry]):
                 "url": url,
                 "fetched_at": self.clock.now().astimezone(UTC).isoformat(),
                 "headers": {k: response.headers[k] for k in KEPT_HEADERS if k in response.headers},
-                "json": _public_projection(path, data),
+                "json": _public_projection(url, data),
                 "public_projection": PUBLIC_PROJECTION,
             }
             return entry, True

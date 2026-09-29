@@ -39,9 +39,9 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 | Level | Use for | Example |
 |---|---|---|
 | `ERROR` | Something failed and a person must act; the operation did not complete | a replay `mismatch` (guarantee 4 broken), a crawl aborted |
-| `WARNING` | Degraded but continuing; worth a look | a 429 back-off, a record with `track=unknown`, a missing abstract (counted, not listed) |
+| `WARNING` | Degraded but continuing; worth a look | a 429 back-off, a listing's records with `track=unknown` or no abstract (counted in one line, never one per record) |
 | `INFO` | One line per **meaningful unit of work** | index built, snapshot written, crawl finished (with counts), one access line per request |
-| `DEBUG` | Detail for development; off by default, never required to diagnose production | per-page fetches, per-record classification |
+| `DEBUG` | Detail for development; off by default, never required to diagnose production | per-page fetches, per-record classification, a record-level anomaly (counted at WARNING) |
 
 ## Volume rules (what the reviewer checks first)
 - **No per-record INFO.** Crawls, dedup and index builds log a start line, periodic summaries (at most every
@@ -65,6 +65,24 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   `secret…`, `bearer…`, `…api_key`) case-insensitively at any depth, while ordinary fields like
   `tokenizer_version`, `token_count` and `author_count` stay visible.
   That is a backstop, not permission: still never pass credentials to a log call.
+
+## Crawl lines (TASK-116)
+- **Start, heartbeats, end** at INFO: `openreview_crawl_started`, `openreview_crawl_progress`,
+  `openreview_crawl_finished` (API v1 and v2 alike: `api`, `venue`, `year`, the counts processed so far,
+  `requests`, `cached`); `neurips_listing_started` / `_progress` / `_mined`; `pmlr_volume_started` /
+  `_progress` / `_mined`. A heartbeat is due at most every 30 s of a monotonic clock (`common.Heartbeat` on the
+  HTTP client's clock, so a test's fake clock drives it), never per item.
+- **Record-level anomalies are DEBUG** (`openreview_unknown_track`, `openreview_v1_unmapped`,
+  `openreview_v1_conflict`, `openreview_v1_duplicate`, `openreview_note_skipped`, `neurips_record_invalid`,
+  `pmlr_record_invalid`). Each listing or crawl logs **at most one aggregate WARNING** with the counts
+  (`listing_attention`, `openreview_crawl_attention`); listing-level conditions (`listing_count_mismatch`,
+  `listing_see_also_unfollowed`) keep their own line.
+- **HTTP policy events are constants** (`http.PolicyEvents`: `crawl_retry_wait` / `openreview_retry_wait`
+  WARNING, `*_budget_wait` INFO, `*_cache_expired` INFO), selected by the source's `Policy`, never built from
+  a prefix; a test walks every crawler log call and refuses an f-string or concatenated event.
+- **A refusal says where and what to do**, safely: an OpenReview projection refusal names the canonical
+  request (`GET <url>`, the cache key), never response data or credentials; a proceedings page past the HTML
+  parser's bounds (`html_budget`) names its URL, `--refresh` and its cache entry.
 
 ## API access line (INFO, exactly one per request)
 `request` event with: `request_id`, `method`, `route` (the template, e.g. `/api/v1/papers/{id}`, not the

@@ -24,7 +24,8 @@ The authority rules (never broken):
    re-yeared) and, where it names a known track, must agree with the track the status evidence gives
    (otherwise the track is `unknown` and the disagreement is a conflict row).
 3. Status and track strings are matched exactly against a table; an unlisted string is `unknown`, counted in
-   `unmapped` and logged with the forum id (never the string, which can be free text).
+   `unmapped` (the crawl's one `openreview_crawl_attention` WARNING) and logged at DEBUG with the forum id (never
+   the string, which can be free text).
 4. When a note's own evidence disagrees (a withdrawn-invitation note whose `content.venue` says accepted, such
    as ICLR 2021 `xGZG2kS5bFk`; two decision notes that disagree), the status is `unknown` and the disagreement
    is a `conflicts.csv` row (`unresolved:openreview_v1`), never resolved by picking one side.
@@ -57,6 +58,7 @@ from openproceedings.ingest.sources.openreview_client import API_V1, API_V2, Ope
 from openproceedings.ingest.sources.openreview_v2 import (
     FIRST_V2_YEAR,
     SKIP_REASONS,
+    Progress,
     _pages,
     _strings,
     _text,
@@ -568,10 +570,10 @@ def note_record(
             report.authors_unsplit += 1
         if verdict.unmapped is not None:
             report.unmapped[verdict.unmapped] += 1
-            log.warning("openreview_v1_unmapped", extra={"forum": nid, "evidence": verdict.unmapped})
+            log.debug("openreview_v1_unmapped", extra={"forum": nid, "evidence": verdict.unmapped})
         for fld, a, b in verdict.conflicts:
             report.conflicts.append(Conflict(rid, fld, a, SOURCE, b, SOURCE, CONFLICT))
-            log.warning("openreview_v1_conflict", extra={"forum": nid, "field": fld})
+            log.debug("openreview_v1_conflict", extra={"forum": nid, "field": fld})
     return record
 
 
@@ -589,6 +591,9 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     began = time.monotonic()
     report = CrawlReport(venue, year, page_size=page_size, gaps=ad.gaps)
     records: dict[str, PaperRecord] = {}
+    progress = Progress(log, client, report.api, venue, year, page_size, lambda: {
+        "notes_read": report.notes_read, "forums": report.forums, "imported": len(records),
+        "skipped": sum(report.skipped.values())})  # fmt: skip
 
     def read_forum(fid: str) -> tuple[Page, list[Mapping[str, Any]]] | None:
         notes: list[Mapping[str, Any]] = []
@@ -612,7 +617,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
 
     for listing in ad.listings:
         try:
-            _listing(client, ad, listing, report, records, read_forum, page_size)
+            _listing(client, ad, listing, report, records, read_forum, page_size, progress.tick)
         except CacheMiss as e:
             if not dry_run:
                 raise
@@ -639,18 +644,22 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
         or report.conflicts
         or sum(report.unmapped.values())
         or report.skipped["out_of_scope"]
+        or report.skipped["duplicate"]
+        or report.skipped["invalid"]
     ):
         log.warning("openreview_crawl_attention",
                     extra={"api": "v1", "venue": venue, "year": year, "unknown_track": report.unknown_track,
                            "unmapped": sum(report.unmapped.values()), "conflicts": len(report.conflicts),
-                           "out_of_scope": report.skipped["out_of_scope"]})  # fmt: skip
+                           "out_of_scope": report.skipped["out_of_scope"],
+                           "duplicate": report.skipped["duplicate"], "invalid": report.skipped["invalid"]})  # fmt: skip
     return Crawl(tuple(sorted(records.values(), key=lambda r: r.id)), report)
 
 
 def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: CrawlReport,
-             records: dict[str, PaperRecord], read_forum: ForumReader, page_size: int) -> None:  # fmt: skip
+             records: dict[str, PaperRecord], read_forum: ForumReader, page_size: int,
+             tick: Callable[[], None]) -> None:  # fmt: skip
     """Page through one invitation's notes into `records`, checking the listing is consistent (v1 sends
-    `count` on every page)."""
+    `count` on every page); `tick()` before each note (the crawl's heartbeat)."""
     seen: set[str] = set()
     rows = 0
     counts: set[int] = set()
@@ -667,6 +676,7 @@ def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: Cr
         rows += len(notes)
         page = Page(entry["url"], datetime.fromisoformat(entry["fetched_at"]))
         for note in notes:
+            tick()
             report.notes_read += 1
             if not isinstance(note, Mapping):
                 report.skipped["invalid"] += 1
@@ -683,7 +693,7 @@ def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: Cr
                         "re-run with --refresh to fetch all listings together"
                     )
                 report.skipped["duplicate"] += 1
-                log.warning(
+                log.debug(
                     "openreview_v1_duplicate",
                     extra={"forum": note.get("id"), "invitation": listing.invitation},
                 )

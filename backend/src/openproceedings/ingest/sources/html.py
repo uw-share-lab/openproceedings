@@ -7,6 +7,9 @@ The standard-library HTML parser reads markup without executing or fetching anyt
 - Entities are decoded once, then only *complete* leftover entities once more: some pages are
   double-escaped (`&amp;quot;`), while a bare `&` (`R&D`) survives.
 - Whitespace collapses to single spaces. LaTeX is kept verbatim (spec 03 decides its tokens).
+- The tree is bounded (`MAX_DEPTH`, `MAX_ELEMENTS`). A page past a bound is `HTMLBudgetError`, which names the
+  page's URL (when the miner passes it) and how to recover: a page that size is a corrupt or wrong cache entry,
+  not a proceedings page, so it is fetched again (TASK-116).
 """
 
 from __future__ import annotations
@@ -15,6 +18,8 @@ import html
 import re
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
+
+from openproceedings.ingest.sources.http import SourceError, cache_name
 
 _BLOCK_TAGS = frozenset(
     (
@@ -27,6 +32,24 @@ _ENTITY = re.compile(r"&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]
 _BARE_AMP = re.compile(r"&(?!#[0-9]{1,7};|#[xX][0-9a-fA-F]{1,6};|[A-Za-z][A-Za-z0-9]{1,31};)")
 MAX_DEPTH = 1024
 MAX_ELEMENTS = 250_000
+
+
+class HTMLBudgetError(SourceError, ValueError):
+    """A page past the parser's depth or element bound. A ValueError too, so a miner that counts a paper page it
+    can't read as `invalid` still does; a listing page's failure refuses the crawl with this message."""
+
+    reason = "html_budget"
+
+    def __init__(self, what: str, url: str | None) -> None:
+        if url is None:
+            super().__init__(f"HTML {what}")
+        else:
+            super().__init__(
+                f"{url}: HTML {what}; the cached page is corrupt or not the expected page. Re-fetch it: an index "
+                "page with `op ingest <source> --refresh`; a paper page by deleting its cache entry "
+                f"(pages/{cache_name(url)} under the source's cache directory) and re-running the ingest"
+            )
+        self.url = url
 
 
 def unescape(text: str) -> str:
@@ -70,17 +93,18 @@ class Element:
 class _TreeParser(HTMLParser):
     VOID = frozenset({"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source"})
 
-    def __init__(self) -> None:
+    def __init__(self, url: str | None = None) -> None:
         super().__init__(convert_charrefs=False)
+        self.url = url
         self.root = Element("document")
         self.stack = [self.root]
         self.elements = 0
 
     def _append(self, tag: str, attrs: list[tuple[str, str | None]], *, push: bool) -> None:
         if len(self.stack) > MAX_DEPTH:
-            raise ValueError(f"HTML nesting exceeds {MAX_DEPTH} elements")
+            raise HTMLBudgetError(f"nesting exceeds {MAX_DEPTH} elements", self.url)
         if self.elements >= MAX_ELEMENTS:
-            raise ValueError(f"HTML contains more than {MAX_ELEMENTS} elements")
+            raise HTMLBudgetError(f"contains more than {MAX_ELEMENTS} elements", self.url)
         node = Element(
             tag.casefold(), {k.casefold(): v for k, v in attrs if v is not None}, parent=self.stack[-1]
         )
@@ -112,9 +136,10 @@ class _TreeParser(HTMLParser):
         self.stack[-1].children.append(f"&#{name}")
 
 
-def parse(page: str) -> Element:
-    """Parse bounded, already-fetched HTML into a non-executing element tree."""
-    parser = _TreeParser()
+def parse(page: str, url: str | None = None) -> Element:
+    """Parse bounded, already-fetched HTML into a non-executing element tree. `url` (the page's canonical URL)
+    goes into an `HTMLBudgetError`; every miner passes it."""
+    parser = _TreeParser(url)
     parser.feed(_BARE_AMP.sub("&amp;", page))
     parser.close()
     return parser.root
