@@ -103,7 +103,7 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
 | ICLR 2017 | `ICLR.cc/2017/{conference,workshop}/-/submission` | `content.venue`: `ICLR 2017 {Oral,Poster}`, `ICLR 2017 Invite to Workshop`, `Submitted to ICLR 2017` |
 | ICLR 2018 | `ICLR.cc/2018/Conference/-/Blind_Submission` | decision note `ICLR.cc/2018/Conference/-/Acceptance_Decision`, `content.decision` (`Accept (Oral)`, `Accept (Poster)`, `Invite to Workshop Track`, `Reject`) |
 | ICLR 2019 | `…/2019/Conference/-/Blind_Submission` | meta-review `ICLR.cc/2019/Conference/-/Paper<N>/Meta_Review`, `content.recommendation` |
-| ICLR 2020–2021 | `…/-/Blind_Submission` | `ICLR.cc/<Y>/Conference/Paper<N>/-/Decision`, `content.decision` (`Accept (Poster)`, `Reject` verified); 2021 accepted notes also carry `venue`/`venueid` |
+| ICLR 2020–2021 | `…/-/Blind_Submission` | `ICLR.cc/<Y>/Conference/Paper<N>/-/Decision`, `content.decision`: 2020 has `Accept (Poster)`, `Accept (Spotlight)`, `Accept (Talk)` (an oral) and `Reject` (the full crawl's tally, TASK-123); 2021 decides from `venue`/`venueid` first and reads a decision note only for a forum `venue` leaves open, so the crawl's tally sees only those (`Reject`); `Accept (Poster)` is verified on paper 2910, and other 2021 accept forms are unseen |
 | ICLR 2022–2023, NeurIPS 2021–2022 | `…/-/Blind_Submission` | `content.venue` (`ICLR 2022 Submitted`, `Submitted to ICLR 2023`, `NeurIPS 2022 Accept`, …) or the decision note |
 | NeurIPS 2021 D&B | `NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round{1,2}/-/Submission` | `content.venue` (`Submitted to …` = rejected) |
 | NeurIPS 2022 D&B | `NeurIPS.cc/2022/Track/Datasets_and_Benchmarks/-/Submission` | only accepted papers are public |
@@ -177,8 +177,11 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   only if its invitation is the year's exact one (with `Paper<number>` of this submission), its `forum` is
   the submission and its `replyto` is the submission.
 - Status strings are exact-match tables (`classify_v1_venue` for `content.venue`, the adapter's tables for
-  `content.decision` and decision notes). Only strings seen live are listed: public ICLR 2020 and 2021
-  accepted forums recorded on 2026-09-29 both say `Accept (Poster)`, mapped to accepted/poster. The v1
+  `content.decision` and decision notes). Only strings seen live are listed, and "seen" must mean the tally
+  over a **whole** venue-year's crawl, not one recorded forum: ICLR 2020's table once held only `Accept
+  (Poster)` from a single forum, and its 108 `Accept (Spotlight)` and 48 `Accept (Talk)` papers went unknown
+  until the first full crawl's coverage report showed 156 missing (TASK-123). A crawl report's `unmapped`
+  count is where a missing string shows up. The v1
   venueid confirms venue and year and must agree with the decided track.
 - A note's own disagreement (withdrawn invitation vs an accepted `content.venue`, two decision notes, a
   venueid naming another track) makes that field `unknown` and adds an `unresolved:openreview_v1` row that

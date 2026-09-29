@@ -138,6 +138,12 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
   live-proven rather than inferred from adjacent years.
 - ICLR 2020 paper 2594 and ICLR 2021 paper 2910 both carry a public decision note whose exact decision is
   `Accept (Poster)`. The v1 adapters now map that string to accepted/poster in both years.
+- The full 2026-09-29 crawl's tally of ICLR decision notes (from the cached v1 responses): 2018
+  `Reject` 496, `Accept (Poster)` 314, `Invite to Workshop Track` 90, `Accept (Oral)` 23; 2019 meta-review
+  `recommendation` `Reject` 917, `Accept (Poster)` 478, `Accept (Oral)` 24; 2020 `Reject` 1,526, `Accept
+  (Poster)` 531, `Accept (Spotlight)` 108, `Accept (Talk)` 48; 2021 decision notes `Reject` 1,735 (the crawl
+  reads a 2021 decision note only when `content.venue` leaves the forum open, so its tally sees only those;
+  `Accept (Poster)` is verified on paper 2910). Every string seen is now mapped (TASK-123).
 - `ICLR.cc/2023/BlogPosts/-/Blind_Submission` is the BlogPosts listing (19 notes); a recorded note says
   `Blogposts @ ICLR 2023` and has venueid `ICLR.cc/2023/BlogPosts`.
 - NeurIPS 2021 and 2022 both accept the exact public main-track `Withdrawn_Submission` and
