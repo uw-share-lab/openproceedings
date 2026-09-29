@@ -103,7 +103,7 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
 | ICLR 2017 | `ICLR.cc/2017/{conference,workshop}/-/submission` | `content.venue`: `ICLR 2017 {Oral,Poster}`, `ICLR 2017 Invite to Workshop`, `Submitted to ICLR 2017` |
 | ICLR 2018 | `ICLR.cc/2018/Conference/-/Blind_Submission` | decision note `ICLR.cc/2018/Conference/-/Acceptance_Decision`, `content.decision` (`Accept (Oral)`, `Accept (Poster)`, `Invite to Workshop Track`, `Reject`) |
 | ICLR 2019 | `…/2019/Conference/-/Blind_Submission` | meta-review `ICLR.cc/2019/Conference/-/Paper<N>/Meta_Review`, `content.recommendation` |
-| ICLR 2020–2021 | `…/-/Blind_Submission` | `ICLR.cc/<Y>/Conference/Paper<N>/-/Decision`, `content.decision`; 2021 accepted notes also carry `venue`/`venueid` |
+| ICLR 2020–2021 | `…/-/Blind_Submission` | `ICLR.cc/<Y>/Conference/Paper<N>/-/Decision`, `content.decision` (`Accept (Poster)`, `Reject` verified); 2021 accepted notes also carry `venue`/`venueid` |
 | ICLR 2022–2023, NeurIPS 2021–2022 | `…/-/Blind_Submission` | `content.venue` (`ICLR 2022 Submitted`, `Submitted to ICLR 2023`, `NeurIPS 2022 Accept`, …) or the decision note |
 | NeurIPS 2021 D&B | `NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round{1,2}/-/Submission` | `content.venue` (`Submitted to …` = rejected) |
 | NeurIPS 2022 D&B | `NeurIPS.cc/2022/Track/Datasets_and_Benchmarks/-/Submission` | only accepted papers are public |
@@ -112,7 +112,8 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   (`…/-/Withdrawn_Submission`, `…/-/Desk_Rejected_Submission`); crawl them explicitly or they are silently
   missing from the counts. Their `venue`/`venueid` are empty or absent, and one ICLR 2021 withdrawn-invitation
   note (`xGZG2kS5bFk`) says `ICLR 2021 Poster`: that disagreement is a `conflicts.csv` row, never resolved
-  by the invitation.
+  by the invitation. The NeurIPS 2021 and 2022 main-track invitations are valid and public but all four
+  withdrawn/desk-rejected listings had count 0 on 2026-09-29; query and record those zeroes.
 - Record the decision note id (or the venue string) as the status claim's evidence, and a
   `presentation` claim when the decision states one.
 
@@ -162,15 +163,16 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   only if its invitation is the year's exact one (with `Paper<number>` of this submission), its `forum` is
   the submission and its `replyto` is the submission.
 - Status strings are exact-match tables (`classify_v1_venue` for `content.venue`, the adapter's tables for
-  `content.decision` and decision notes). Only strings seen live are listed: ICLR 2020's and 2021's accept
-  decision strings are not, so those notes are `unknown` and counted in the report's `unmapped` until a live
-  accepted forum is recorded. The v1 venueid confirms venue and year and must agree with the decided track.
+  `content.decision` and decision notes). Only strings seen live are listed: public ICLR 2020 and 2021
+  accepted forums recorded on 2026-09-29 both say `Accept (Poster)`, mapped to accepted/poster. The v1
+  venueid confirms venue and year and must agree with the decided track.
 - A note's own disagreement (withdrawn invitation vs an accepted `content.venue`, two decision notes, a
   venueid naming another track) makes that field `unknown` and adds an `unresolved:openreview_v1` row that
   `snapshot.with_crawl_conflicts` writes to `conflicts.csv` (following merges to the surviving record).
 - Early ICLR 2017 notes give `content.authors` as one string: kept out (`authors_unsplit` in the report), never
-  split by guess. Not crawled until verified live: ICLR 2023 Blogposts, NeurIPS 2021–2022 withdrawn and
-  desk-rejected invitations (each named in the year's `coverage_gaps`).
+  split by guess. ICLR 2023 BlogPosts uses the verified
+  `ICLR.cc/2023/BlogPosts/-/Blind_Submission` listing. NeurIPS 2021–2022 main-track withdrawn and
+  desk-rejected invitations are crawled even though their verified listings are empty.
 
 ## Fixtures
 `backend/tests/fixtures/http/openreview/{v1,v2}/<venue>-<year>/*.json`, one file per exchange:
@@ -178,6 +180,6 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
 "text"}}`. They cover each v2 status suffix, D&B, position, competition, Creative AI, Tiny Papers,
 Blogposts, workshop and city-workshop forms, a group's venueid block, the `count`/`offset` shape, the
 `limit` error, the cross-host 404 and the anonymous challenge page; and each v1 year's status carrier
-above. `backend/tests/fixtures/http/scrub.py` turns a raw capture into a fixture (titles, abstracts,
+above, including one invitation listing per v1 venue-year with a group. `backend/tests/fixtures/http/scrub.py` turns a raw capture into a fixture (titles, abstracts,
 authors, ids of people and free text become synthetic; decision-004). Recording is a manual run, never a
 test: add a capture for every new shape, scrub it, and read the diff before committing.

@@ -1,0 +1,82 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-107 authenticated OpenReview v1 fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2022/Conference/-/Blind_Submission&limit=1&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "g1SzIRLQXMM",
+     "original": "-iEEvvwzZ1k",
+     "number": 4724,
+     "cdate": 1632965333637,
+     "mdate": null,
+     "ddate": null,
+     "tcdate": 1633409729580,
+     "tmdate": 1676330441883,
+     "tddate": null,
+     "forum": "g1SzIRLQXMM",
+     "replyto": null,
+     "invitation": "ICLR.cc/2022/Conference/-/Blind_Submission",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "authorids": [
+       "~Synthetic_Person2",
+       "~Synthetic_Person3",
+       "~Synthetic_Person4",
+       "~Synthetic_Person5"
+      ],
+      "authors": [
+       "Synthetic Author 6",
+       "Synthetic Author 7",
+       "Synthetic Author 8",
+       "Synthetic Author 9"
+      ],
+      "keywords": [
+       "Synthetic keywords text 10.",
+       "Synthetic keywords text 11.",
+       "Synthetic keywords text 12.",
+       "Synthetic keywords text 13."
+      ],
+      "abstract": "Synthetic abstract text 14.",
+      "code_of_ethics": "",
+      "submission_guidelines": "",
+      "resubmission": "",
+      "student_author": "",
+      "serve_as_reviewer": "",
+      "paperhash": "synthetic|synthetic_title_15",
+      "pdf": "/pdf/52d6dfe1e693892f0382d80002c972022ced3a49.pdf",
+      "one-sentence_summary": "Synthetic one-sentence summary text 16.",
+      "_bibtex": "Synthetic bibtex text 17.",
+      "venue": "ICLR 2022 Spotlight",
+      "venueid": "ICLR.cc/2022/Conference"
+     },
+     "signatures": [
+      "ICLR.cc/2022/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2022/Conference"
+     ],
+     "pdate": 1643407560000,
+     "odate": 1633539600000
+    }
+   ],
+   "count": 2617
+  }
+ }
+}

@@ -126,10 +126,8 @@ def _conf(org: str, year: int, *, desk_rejected: bool = True, withdrawn: bool = 
 _ICLR_2014_GAP = (
     "ICLR 2014: no decisions on OpenReview (`submitted, no decision`), so every status is unknown (TASK-096)"
 )
-_ICLR_2020_GAP = ("ICLR 2020: only the `Reject` decision string is verified live; an accepted forum must be "
-                  "recorded before its accept strings are mapped (until then they are `unknown`, counted in unmapped)")  # fmt: skip
-
-# Every string below was seen live on 2026-09-27 (TASK-002; research doc and `backend/tests/fixtures/http/openreview/v1/`).
+# Every string below was seen live in TASK-002 (2026-09-27) or TASK-107 (2026-09-29); the scrubbed evidence
+# is under `backend/tests/fixtures/http/openreview/v1/`.
 # Add one only after seeing it on a live note, with a fixture or a checked forum id.
 ADAPTERS: dict[tuple[str, int], Adapter] = {
     ("ICLR", 2013): Adapter(
@@ -182,39 +180,44 @@ ADAPTERS: dict[tuple[str, int], Adapter] = {
     ("ICLR", 2020): Adapter(
         "ICLR", 2020, _conf("ICLR", 2020), "decision_note",
         decision_notes=DecisionNotes("ICLR.cc/2020/Conference/Paper{number}/-/Decision", "decision", {
+            "Accept (Poster)": (None, "accepted", "poster"),
             "Reject": (None, "rejected", None),
         }),
-        gaps=(_ICLR_2020_GAP,),
     ),
     ("ICLR", 2021): Adapter(
         "ICLR", 2021, _conf("ICLR", 2021), "venue_then_decision_note",
         decision_notes=DecisionNotes("ICLR.cc/2021/Conference/Paper{number}/-/Decision", "decision", {
+            "Accept (Poster)": (None, "accepted", "poster"),
             "Reject": (None, "rejected", None),
         }),
     ),
     ("ICLR", 2022): Adapter("ICLR", 2022, _conf("ICLR", 2022), "venue"),
     ("ICLR", 2023): Adapter(
-        "ICLR", 2023, (*_conf("ICLR", 2023), Listing("ICLR.cc/2023/TinyPapers/-/Blind_Submission", "tiny_papers")),
+        "ICLR", 2023,
+        (*_conf("ICLR", 2023), Listing("ICLR.cc/2023/TinyPapers/-/Blind_Submission", "tiny_papers"),
+         Listing("ICLR.cc/2023/BlogPosts/-/Blind_Submission", "blogpost")),
         "venue",
-        gaps=("ICLR 2023 Blogposts: not crawled until its submission invitation is recorded live",
-              "ICLR 2023 Tiny Papers: every note says `Submitted to Tiny Papers @ ICLR 2023`, so status is unknown"),
+        gaps=("ICLR 2023 Tiny Papers: every note says `Submitted to Tiny Papers @ ICLR 2023`, so status is unknown",),
     ),
     ("NeurIPS", 2021): Adapter(
         "NeurIPS", 2021,
         (Listing("NeurIPS.cc/2021/Conference/-/Blind_Submission", "main"),
+         Listing("NeurIPS.cc/2021/Conference/-/Withdrawn_Submission", "main", "withdrawn"),
+         Listing("NeurIPS.cc/2021/Conference/-/Desk_Rejected_Submission", "main", "desk_rejected"),
          Listing("NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round1/-/Submission", "datasets_benchmarks"),
          Listing("NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round2/-/Submission", "datasets_benchmarks")),
         "venue",
-        gaps=("NeurIPS 2021: rejected papers are public only when the authors opted in; withdrawn and desk-rejected "
-              "invitations are not crawled until one is verified live",),
+        gaps=("NeurIPS 2021: rejected papers are public only when the authors opted in",),
     ),
     ("NeurIPS", 2022): Adapter(
         "NeurIPS", 2022,
         (Listing("NeurIPS.cc/2022/Conference/-/Blind_Submission", "main"),
+         Listing("NeurIPS.cc/2022/Conference/-/Withdrawn_Submission", "main", "withdrawn"),
+         Listing("NeurIPS.cc/2022/Conference/-/Desk_Rejected_Submission", "main", "desk_rejected"),
          Listing("NeurIPS.cc/2022/Track/Datasets_and_Benchmarks/-/Submission", "datasets_benchmarks")),
         "venue",
         gaps=("NeurIPS 2022: rejected papers are public only when the authors opted in (D&B: only accepted papers "
-              "are public); withdrawn and desk-rejected invitations are not crawled until one is verified live",),
+              "are public)",),
     ),
 }  # fmt: skip
 

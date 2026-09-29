@@ -229,7 +229,7 @@ def test_iclr_2019_status_from_the_meta_review_of_this_paper_only(tmp_path: Path
     assert crawl.report.unmapped == {"decision_note": 1}
 
 
-def test_iclr_2020_decision_note_and_an_unverified_accept_string_stays_unknown(tmp_path: Path) -> None:
+def test_iclr_2020_decision_notes_map_reject_and_accept_poster(tmp_path: Path) -> None:
     forum = v1_notes("iclr-2020/forum-rejected.json")
     sub = v1_note("iclr-2020/forum-rejected.json")
     accepted = v1_clone(sub, "Accepted2020x", 2000)
@@ -244,9 +244,18 @@ def test_iclr_2020_decision_note_and_an_unverified_accept_string_stays_unknown(t
     crawl = run(server, tmp_path, "ICLR", 2020)
     got = by_forum(crawl)
     assert outcome(got[sub["id"]]) == ("main", "rejected", None)
-    assert outcome(got["Accepted2020x"]) == ("main", "unknown", None)  # not yet seen live: never guessed
-    assert crawl.report.unmapped == {"decision_note": 1}
-    assert any("Reject" in g for g in crawl.report.gaps)
+    assert outcome(got["Accepted2020x"]) == ("main", "accepted", "poster")
+    assert crawl.report.unmapped == {} and crawl.report.gaps == ()
+
+
+def test_iclr_2020_recorded_accept_decision_is_accepted_poster(tmp_path: Path) -> None:
+    forum = v1_notes("iclr-2020/forum-accepted.json")
+    sub = v1_note("iclr-2020/forum-accepted.json")
+    crawl = run(FakeOpenReviewV1({BLIND.format(y=2020): [sub]}, {sub["id"]: forum}), tmp_path, "ICLR", 2020)
+    [record] = crawl.records
+    assert outcome(record) == ("main", "accepted", "poster")
+    assert claim(record, "status").evidence == "decision note EE4Ml5hZtI (decision=Accept (Poster))"
+    assert crawl.report.unmapped == {} and crawl.report.gaps == ()
 
 
 def test_iclr_2021_venue_first_then_the_decision_note_and_the_withdrawn_conflict(tmp_path: Path) -> None:
@@ -275,6 +284,18 @@ def test_iclr_2021_venue_first_then_the_decision_note_and_the_withdrawn_conflict
     assert conflict.value_b == "accepted (content.venue=ICLR 2021 Poster)"
     assert (conflict.source_a, conflict.source_b) == ("openreview_v1", "openreview_v1")
     assert crawl.report.to_manifest()["conflicts"] == 1
+
+
+def test_iclr_2021_recorded_accept_decision_is_the_fallback_when_venue_is_absent(tmp_path: Path) -> None:
+    forum = v1_notes("iclr-2021/forum-accepted.json")
+    recorded = v1_note("iclr-2021/forum-accepted.json")
+    sub = v1_clone(recorded, recorded["id"], venue=None)
+    server = FakeOpenReviewV1({BLIND.format(y=2021): [sub]}, {sub["id"]: forum})
+    crawl = run(server, tmp_path, "ICLR", 2021)
+    [record] = crawl.records
+    assert outcome(record) == ("main", "accepted", "poster")
+    assert claim(record, "status").evidence == "decision note MWujQIPYpqt (decision=Accept (Poster))"
+    assert forum_gets(server) == [sub["id"]]
 
 
 def test_iclr_2022_submitted_is_rejected_and_the_withdrawn_invitation_decides(tmp_path: Path) -> None:
@@ -307,7 +328,18 @@ def test_iclr_2023_every_listing_and_tiny_papers(tmp_path: Path) -> None:
     assert crawl.report.to_manifest()["track_status"] == {
         "main": {"accepted": 1, "rejected": 1, "desk_rejected": 1}, "tiny_papers": {"unknown": 1}}  # fmt: skip
     assert crawl.report.listings == {BLIND.format(y=2023): 2, WITHDRAWN.format(y=2023): 0, DESK.format(y=2023): 1,
-                                     "ICLR.cc/2023/TinyPapers/-/Blind_Submission": 1}  # fmt: skip
+                                     "ICLR.cc/2023/TinyPapers/-/Blind_Submission": 1,
+                                     "ICLR.cc/2023/BlogPosts/-/Blind_Submission": 0}  # fmt: skip
+
+
+def test_iclr_2023_recorded_blogpost_listing_is_crawled(tmp_path: Path) -> None:
+    note = v1_note("iclr-2023/notes-blogposts-blind-submission.json")
+    invitation = "ICLR.cc/2023/BlogPosts/-/Blind_Submission"
+    crawl = run(FakeOpenReviewV1({invitation: [note]}), tmp_path, "ICLR", 2023)
+    [record] = crawl.records
+    assert outcome(record) == ("blogpost", "accepted", None)
+    assert crawl.report.listings[invitation] == 1
+    assert not any("Blogposts" in gap for gap in crawl.report.gaps)
 
 
 def test_neurips_2021_main_and_both_dnb_rounds(tmp_path: Path) -> None:
@@ -333,6 +365,18 @@ def test_neurips_2022_accept(tmp_path: Path) -> None:
     [record] = crawl.records
     assert outcome(record) == ("main", "accepted", None)
     assert any("only accepted papers" in g for g in crawl.report.gaps)
+
+
+@pytest.mark.parametrize("year", [2021, 2022])
+def test_neurips_verified_empty_status_listings_are_still_crawled(tmp_path: Path, year: int) -> None:
+    server = FakeOpenReviewV1()
+    crawl = run(server, tmp_path, "NeurIPS", year)
+    invitations = {parse_qs(urlsplit(url).query)["invitation"][0] for url in server.gets()}
+    withdrawn = f"NeurIPS.cc/{year}/Conference/-/Withdrawn_Submission"
+    desk = f"NeurIPS.cc/{year}/Conference/-/Desk_Rejected_Submission"
+    assert {withdrawn, desk} <= invitations
+    assert crawl.report.listings[withdrawn] == crawl.report.listings[desk] == 0
+    assert not any("not crawled until" in gap for gap in crawl.report.gaps)
 
 
 # --- the v1 authority rules ---------------------------------------------------------------------------------------

@@ -1,0 +1,73 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-107 authenticated OpenReview v1 fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2022/Conference/-/Desk_Rejected_Submission&limit=1&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "XNYOJD0QdBD",
+     "original": "MY16vYl7jBZ",
+     "number": 4713,
+     "cdate": 1632875771007,
+     "mdate": null,
+     "ddate": null,
+     "tcdate": 1632875771007,
+     "tmdate": 1676330694785,
+     "tddate": null,
+     "forum": "XNYOJD0QdBD",
+     "replyto": null,
+     "invitation": "ICLR.cc/2022/Conference/-/Desk_Rejected_Submission",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "authorids": [
+       "~Synthetic_Person2"
+      ],
+      "authors": [
+       "Synthetic Author 3"
+      ],
+      "keywords": [
+       "Synthetic keywords text 4.",
+       "Synthetic keywords text 5.",
+       "Synthetic keywords text 6.",
+       "Synthetic keywords text 7."
+      ],
+      "abstract": "Synthetic abstract text 8.",
+      "code_of_ethics": "",
+      "submission_guidelines": "",
+      "resubmission": "",
+      "student_author": "",
+      "serve_as_reviewer": "",
+      "paperhash": "synthetic|synthetic_title_9",
+      "pdf": "/pdf/d1276c3d991ff23b4df85bac1a29e988c2ca0914.pdf",
+      "one-sentence_summary": "Synthetic one-sentence summary text 10.",
+      "_bibtex": "Synthetic bibtex text 11."
+     },
+     "signatures": [
+      "ICLR.cc/2022/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2022/Conference"
+     ],
+     "odate": 1633539600000
+    }
+   ],
+   "count": 26
+  }
+ }
+}

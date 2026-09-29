@@ -1,0 +1,47 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-107 authenticated OpenReview v1 fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "group trimmed to its venueid, visibility and decision keys (web, members, invitations dropped)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/groups?id=ICLR.cc/2023/BlogPosts",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "groups": [
+    {
+     "id": "ICLR.cc/2023/BlogPosts",
+     "parent": "ICLR.cc/2023",
+     "cdate": 1672940778965,
+     "ddate": null,
+     "tcdate": 1672940778965,
+     "tmdate": 1683024960022,
+     "tddate": null,
+     "host": "ICLR.cc",
+     "signatures": [
+      "ICLR.cc/2023/BlogPosts"
+     ],
+     "signatories": [
+      "ICLR.cc/2023/BlogPosts"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2023/BlogPosts"
+     ]
+    }
+   ],
+   "count": 1
+  }
+ }
+}

@@ -1,0 +1,142 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-107 authenticated OpenReview v1 fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "forum listing trimmed from 10 to 3 notes (order kept)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?forum=ryxyCeHtPB&limit=1000&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "u4lGEyBWi5n",
+     "original": null,
+     "number": 2,
+     "cdate": 1684749831020,
+     "mdate": null,
+     "ddate": null,
+     "tcdate": 1684749831020,
+     "tmdate": 1685031935608,
+     "tddate": null,
+     "forum": "ryxyCeHtPB",
+     "replyto": "ryxyCeHtPB",
+     "invitation": "ICLR.cc/2020/Conference/Paper2594/-/Public_Comment",
+     "content": {
+      "title": "Synthetic title text 1.",
+      "comment": "Synthetic comment text 2."
+     },
+     "signatures": [
+      "~Synthetic_Person3"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2020/Conference",
+      "~Synthetic_Person4"
+     ]
+    },
+    {
+     "id": "EE4Ml5hZtI",
+     "original": null,
+     "number": 1,
+     "cdate": 1576798753000,
+     "ddate": null,
+     "tcdate": 1576798753000,
+     "tmdate": 1576800882379,
+     "tddate": null,
+     "forum": "ryxyCeHtPB",
+     "replyto": "ryxyCeHtPB",
+     "invitation": "ICLR.cc/2020/Conference/Paper2594/-/Decision",
+     "content": {
+      "decision": "Accept (Poster)",
+      "comment": "Synthetic comment text 5.",
+      "title": "Synthetic title text 6."
+     },
+     "signatures": [
+      "ICLR.cc/2020/Conference/Program_Chairs"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2020/Conference/Program_Chairs"
+     ]
+    },
+    {
+     "id": "ryxyCeHtPB",
+     "original": "SkltbEzFwS",
+     "number": 2594,
+     "cdate": 1569439942705,
+     "ddate": null,
+     "tcdate": 1569439942705,
+     "tmdate": 1683306602738,
+     "tddate": null,
+     "forum": "ryxyCeHtPB",
+     "replyto": null,
+     "invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
+     "content": {
+      "authorids": [
+       "synthetic.person7@example.org",
+       "synthetic.person8@example.org",
+       "synthetic.person9@example.org",
+       "synthetic.person10@example.org",
+       "synthetic.person11@example.org",
+       "synthetic.person12@example.org"
+      ],
+      "title": "Synthetic title text 13.",
+      "authors": [
+       "Synthetic Author 14",
+       "Synthetic Author 15",
+       "Synthetic Author 16",
+       "Synthetic Author 17",
+       "Synthetic Author 18",
+       "Synthetic Author 19"
+      ],
+      "pdf": "/pdf/6e6abb55b83a1b41eaa6f0c9d191b89c2bfeb7c4.pdf",
+      "TL;DR": "Synthetic tl;dr text 20.",
+      "abstract": "Synthetic abstract text 21.",
+      "keywords": [
+       "Synthetic keywords text 22.",
+       "Synthetic keywords text 23.",
+       "Synthetic keywords text 24."
+      ],
+      "paperhash": "synthetic|synthetic_title_25",
+      "data": "Synthetic data text 26.",
+      "_bibtex": "Synthetic bibtex text 27.",
+      "full_presentation_video": "",
+      "original_pdf": "Synthetic original pdf text 28.",
+      "appendix": "",
+      "poster": "",
+      "spotlight_video": "",
+      "slides": ""
+     },
+     "signatures": [
+      "ICLR.cc/2020/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2020/Conference"
+     ],
+     "pdate": 1576800882416,
+     "odate": 1569439942952
+    }
+   ],
+   "count": 10
+  }
+ }
+}

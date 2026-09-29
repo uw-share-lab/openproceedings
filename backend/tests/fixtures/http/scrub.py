@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 HERE = Path(__file__).parent
-RECORDED = "2026-09-27"
+RECORDED = "2026-09-29"
 KEEP_HEADERS = ("content-type", "ratelimit-", "x-ratelimit-", "retry-after")
 # Content keys whose values are controlled vocabulary or structure, kept verbatim.
 KEEP_CONTENT = {"venue", "venueid", "decision", "recommendation", "pdf", "supplementary_material"}
@@ -473,7 +473,7 @@ def fixture(capture: dict[str, Any]) -> dict[str, Any]:
         response["text"] = page
     recorded: dict[str, Any] = {
         "date": RECORDED,
-        "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+        "run": "TASK-107 authenticated OpenReview v1 fixture run",
         "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
     }
     if trimmed:
