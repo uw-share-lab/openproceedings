@@ -33,7 +33,7 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 |---|---|
 | OpenReview (v1 or v2) | forum id, as-is (case-sensitive) |
 | PMLR only | `pmlr-v<N>-<key>` (ICML volumes only, `ingest/volumes.py`) |
-| NeurIPS proceedings only | `nips-<hash>`, the 32-hex hash from the paper_files path |
+| NeurIPS proceedings only | `nips-<hash>`, the 32-hex hash from the paper_files path; on the 2021 D&B host `nips-<hash>-round1`/`-round2` (its hash is md5 of a per-round paper number, so rounds and the main track reuse hashes; a D&B link without a round gets no id). One function, `urls.proceedings_native`, makes it for the miner, the RIS importer and dedup |
 | ICLR proceedings / archive | `iclr-<hash>` from a proceedings path; for the official 2014–2016 archive, an OpenReview target keeps its forum id and any other target is `iclr-<sha256(canonical-target)[:32]>` |
 | RIS import | a venueid plus its forum id → the forum id; else the proceedings or PMLR form above, from scholarmend's `proceedings_url` / `pmlr_url` claim (`ingest/urls.py`). A record with neither is skipped and counted (`unresolved` / `no_id`), never given a minted id. |
 
@@ -73,7 +73,8 @@ in Scholar. The abstract is never Scholar's (`null` instead).
 
 ## Versions
 `RECORD_SCHEMA_VERSION` (`record.py`) names this shape: the fields, native-id forms and content_hash
-rule. It is `2` since TASK-096 added the `iclr_archive` provenance source. Change any of them and bump it;
+rule. It is `3` since TASK-118 added the round-qualified `nips-<hash>-round1`/`-round2` form (it was `2` from
+TASK-096, which added the `iclr_archive` provenance source). Change any of them and bump it;
 every snapshot manifest records it.
 
 ## content_hash

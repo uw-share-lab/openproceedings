@@ -194,7 +194,9 @@ NEURIPS_DB_2021_HOST = "datasets-benchmarks-proceedings.neurips.cc"
 _TOKENLESS_LAST_YEAR = 2021  # 1987-2021 abstract links carry no track token; the year page has one track
 _DB_ALIAS = "Datasets_and_Benchmarks"
 _DB_ALIAS_LAST_YEAR = 2023  # the <=2023 spelling of Datasets_and_Benchmarks_Track (scholarmend's alias)
-_DB_ROUNDS = frozenset({"round1", "round2"})
+# The 2021 D&B host numbers each round separately, so a round is part of a paper's identity
+# (urls.proceedings_native; record.py's native-id pattern is built from this set).
+NEURIPS_DB_2021_ROUNDS = frozenset({"round1", "round2"})
 
 
 def classify_neurips_listing(host: str, year: int, token: str | None) -> tuple[Classification, str]:
@@ -209,7 +211,7 @@ def classify_neurips_listing(host: str, year: int, token: str | None) -> tuple[C
 
     host = host.lower()
     if host == NEURIPS_DB_2021_HOST:
-        if year == 2021 and token in _DB_ROUNDS:
+        if year == 2021 and token in NEURIPS_DB_2021_ROUNDS:
             return listed("datasets_benchmarks", f"{host} {token}: NeurIPS 2021 Datasets and Benchmarks")
         return listed("unknown", f"{host} token {token} in {year}: no rule")
     if host not in NEURIPS_MAIN_HOSTS:

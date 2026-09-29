@@ -33,10 +33,11 @@ from pydantic import (
     model_validator,
 )
 
+from openproceedings.ingest.classify import NEURIPS_DB_2021_ROUNDS
 from openproceedings.vocab import Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
-RECORD_SCHEMA_VERSION = "2"
+RECORD_SCHEMA_VERSION = "3"
 
 Source = Literal["openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "ris"]
 Presentation = Literal["oral", "spotlight", "poster"]
@@ -49,7 +50,11 @@ _ID = re.compile(r"op:(neurips|iclr|icml):([0-9]{4}):(\S+)")
 # Native ids (record-schema skill): an OpenReview forum id, or a proceedings form tied to its venue.
 _PROCEEDINGS_NATIVE = {
     "pmlr": (re.compile(r"pmlr-v[0-9]+-[A-Za-z0-9_-]+"), "ICML"),
-    "nips": (re.compile(r"nips-[0-9a-f]{32}"), "NeurIPS"),
+    # `-round1`/`-round2`: the 2021 D&B host, which numbers each round separately (urls.proceedings_native)
+    "nips": (
+        re.compile(rf"nips-[0-9a-f]{{32}}(?:-(?:{'|'.join(sorted(NEURIPS_DB_2021_ROUNDS))}))?"),
+        "NeurIPS",
+    ),
     "iclr": (re.compile(r"iclr-[0-9a-f]{32}"), "ICLR"),
 }
 
@@ -251,6 +256,10 @@ class PaperRecord(BaseModel):
             if not pattern.fullmatch(native) or venue != self.venue:
                 raise ValueError(
                     f"native id {native!r} is not a valid {venue} proceedings id for {self.venue}"
+                )
+            if native.rsplit("-", 1)[-1] in NEURIPS_DB_2021_ROUNDS and self.year != 2021:
+                raise ValueError(
+                    f"native id {native!r} is not a valid id for {self.year}: D&B rounds are 2021 only"
                 )
         elif not FORUM_ID.fullmatch(native):
             raise ValueError(f"native id {native!r} is neither an OpenReview forum id nor a proceedings id")

@@ -212,13 +212,80 @@ def test_2021_reads_the_main_page_and_the_db_host(tmp_path: Path) -> None:
     for sha, token in rounds.items():
         seed(cache, "neurips", neurips_abs(2021, sha, token, host=DB), "", status=404)
     result = mine(cache, 2021)
-    tracks = {r.native.removeprefix("nips-"): r.track for r in result.records}
-    assert tracks == {A13: "main", B13: "main", **dict.fromkeys(rounds, "datasets_benchmarks")}
+    tracks = {r.native: r.track for r in result.records}
+    assert tracks == {
+        f"nips-{A13}": "main", f"nips-{B13}": "main",
+        **{f"nips-{sha}-{token}": "datasets_benchmarks" for sha, token in rounds.items()},
+    }  # fmt: skip
     main, db = result.reports
     assert (main.listed, db.listed, db.stated, db.count_ok) == (2, 4, None, True)
-    r = by_id(result.records)["op:neurips:2021:nips-0336dcbab05b9d5ad24f4333c7658a0e"]
+    r = by_id(result.records)["op:neurips:2021:nips-0336dcbab05b9d5ad24f4333c7658a0e-round2"]
     assert r.urls.proceedings == neurips_abs(2021, "0336dcbab05b9d5ad24f4333c7658a0e", "round2", host=DB)
     assert r.authors == ("Synthetic authors 6",)  # the D&B host lists authors in <i>
+
+
+def test_a_2021_db_link_without_a_round_is_skipped_not_given_a_bare_hash(tmp_path: Path) -> None:
+    """Derived case: one round-1 link on the recorded D&B page loses its round token. Its hash alone could be
+    any of three papers, so it gets no id: counted as `no_round`, never built as `nips-<hash>` (TASK-118)."""
+    cache = cache_of(tmp_path)
+    bare = "013d407166ec4fa56eb1e1f8cbe183b9"
+    seed_fixture(
+        cache, "neurips", "neurips/2021/db-host-year-index.json", url=f"https://{DB}/paper/2021",
+        edit=lambda t: t.replace(f"{bare}-Abstract-round1", f"{bare}-Abstract"),
+    )  # fmt: skip
+    seed_fixture(
+        cache, "neurips", Y13, url=f"https://{MAIN}/paper_files/paper/2021",
+        edit=lambda t: t.replace("/paper/2013/", "/paper/2021/"),
+    )  # fmt: skip
+    rest = {"0336dcbab05b9d5ad24f4333c7658a0e": "round2", "03c6b06952c750899bb03d998e631860": "round2",
+            "0777d5c17d4066b82ab86dff8a46af6f": "round1"}  # fmt: skip
+    for url in [neurips_abs(2021, A13), neurips_abs(2021, B13)] + [
+        neurips_abs(2021, sha, token, host=DB) for sha, token in rest.items()
+    ]:
+        seed(cache, "neurips", url, "", status=404)
+    result = mine(cache, 2021)
+    _main, db = result.reports
+    assert (db.listed, db.skipped["no_round"]) == (4, 1)
+    assert not any(bare in r.native for r in result.records)
+    assert sorted(r.native for r in result.records if r.track == "datasets_benchmarks") == sorted(
+        f"nips-{sha}-{token}" for sha, token in rest.items()
+    )
+
+
+def test_2021_db_papers_sharing_a_hash_are_all_kept(tmp_path: Path) -> None:
+    """The path hash is md5 of the paper's number, and the D&B host numbers round 1, round 2 and the main track
+    separately: the live 2021 page (2026-09-29) has 27 hashes in both rounds and 27 shared with the main track,
+    all different papers. Derived case: the recorded D&B page with round-1 entries re-pointed at a round-2
+    paper's hash and at a main-track paper's hash."""
+    cache = cache_of(tmp_path)
+    r2 = "0336dcbab05b9d5ad24f4333c7658a0e"
+    seed_fixture(
+        cache, "neurips", Y13, url=f"https://{MAIN}/paper_files/paper/2021",
+        edit=lambda t: t.replace("/paper/2013/", "/paper/2021/"),
+    )  # fmt: skip
+    seed_fixture(
+        cache, "neurips", "neurips/2021/db-host-year-index.json",
+        edit=lambda t: t.replace("013d407166ec4fa56eb1e1f8cbe183b9-Abstract-round1", f"{r2}-Abstract-round1")
+        .replace("0777d5c17d4066b82ab86dff8a46af6f-Abstract-round1", f"{A13}-Abstract-round1"),
+    )  # fmt: skip
+    pages = [neurips_abs(2021, A13), neurips_abs(2021, B13)] + [
+        neurips_abs(2021, sha, token, host=DB)
+        for sha, token in [(A13, "round1"), (r2, "round1"), (r2, "round2"),
+                           ("03c6b06952c750899bb03d998e631860", "round2")]
+    ]  # fmt: skip
+    for url in pages:
+        seed(cache, "neurips", url, "", status=404)
+    result = mine(cache, 2021)
+    ids = sorted(r.native for r in result.records)
+    assert ids == sorted([
+        f"nips-{A13}", f"nips-{B13}", f"nips-{A13}-round1", f"nips-{r2}-round1", f"nips-{r2}-round2",
+        "nips-03c6b06952c750899bb03d998e631860-round2",
+    ])  # fmt: skip
+    _main, db = result.reports
+    assert (db.listed, db.skipped.get("duplicate", 0)) == (4, 0)
+    assert {r.track for r in result.records if r.native.endswith(("-round1", "-round2"))} == {
+        "datasets_benchmarks"
+    }
 
 
 @pytest.mark.parametrize(

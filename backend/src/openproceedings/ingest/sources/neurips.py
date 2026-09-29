@@ -9,8 +9,9 @@ claim's evidence. Each paper's abstract page gives the abstract (only when its `
 listed title), the authors (`citation_author`), the PDF and the DOI.
 
 Claims (source `neurips_proceedings`) carry the paper page's URL and the fetch time of the page they came
-from: the year index for venue, year, title, track and status; the abstract page for the rest. The year's
-native id is `nips-<the 32-hex hash in the path>`.
+from: the year index for venue, year, title, track and status; the abstract page for the rest. The native
+id is `urls.proceedings_native`: `nips-<the 32-hex hash in the path>`, plus `-round1`/`-round2` on the 2021
+D&B host, which numbers each round and the main track separately (so one hash names up to three papers).
 
 The year page states its own count (`<span class="paper-count">N papers</span>`); the report compares it
 with the entries parsed (`count_ok`). OpenReview hosts NeurIPS from 2021, so from then on the proceedings
@@ -218,7 +219,7 @@ def _mine_listing(
         if parts is None or parts[0] != "NeurIPS" or len(parts[2]) != 32:
             report.skipped["unparsed_link"] += 1
             continue
-        _venue, url_year, sha, token = parts
+        _venue, url_year, _sha, token = parts
         if url_year != year:
             report.skipped["wrong_year"] += 1
             continue
@@ -226,7 +227,10 @@ def _mine_listing(
         if host not in HOSTS:  # a link to papers.nips.cc or elsewhere: never fetched, counted
             report.skipped["off_host"] += 1
             continue
-        native = f"nips-{sha}"
+        native = urls.proceedings_native(entry.url)
+        if native is None:  # a 2021 D&B link without round1/round2: its hash alone names no one paper
+            report.skipped["no_round"] += 1
+            continue
         if native in seen:
             report.skipped["duplicate"] += 1
             continue
