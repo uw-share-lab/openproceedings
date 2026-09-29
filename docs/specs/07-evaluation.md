@@ -78,7 +78,7 @@ official cell, with a cell the snapshot holds no record for as a gap (0 indexed,
 failing cell, read from `docs/results/coverage-causes.toml` (`["<Venue> <year> <track>"]` with a `cause`) or
 **unclassified**, with the file's sha256 in the header; every proceedings listing whose crawl skipped entries or
 disagreed with its page's count; and every OpenReview crawl that is incomplete or has coverage gaps, conflicts,
-unmapped venues, non-routine skipped groups or non-routine skipped notes. `--check` exits 1 when the gate fails.
+unmapped venues, non-routine skipped groups or non-routine skipped notes. `--check` exits 1 when the gate fails or an accepted exception is stale.
 
 **Owner-accepted exceptions.** A gated cell outside ±1% passes the gate only if the project owner accepted its
 gap in a decision record and `coverage-causes.toml` records it under the cell (`["<Venue> <year> <track>".accepted]`:
@@ -86,7 +86,9 @@ gap in a decision record and `coverage-causes.toml` records it under the cell (`
 `decision`; every key required, no other allowed, no control characters, and the decision record must exist in
 `backlog/decisions/`). It passes only while the cell's indexed and official counts are exactly the accepted ones
 **and** its papers are the gap: exactly |official − indexed| of them, each a record of the index's snapshot, and
-outside the cell for an under-count (inside it for an over-count). Anything else fails the cell again
+for an under-count a record of the cell's venue-year outside the cell (another track or status), for an
+over-count a record counted in the cell. The over-count check can't prove the named records are the extras,
+only that they are counted: the owner's decision record is what names them as the extras. Anything else fails the cell again
 (`drifted`, the failed check in its cause note); a gap (no records) is never accepted and stays `✗ gap`. The
 report marks the cell `✓ accepted exception`, lists every exception in its own section and counts them in the
 verdict line, and reports an exception whose cell is within ±1% or not gated as stale; `--check` exits 1 on a

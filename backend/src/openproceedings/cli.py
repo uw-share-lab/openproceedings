@@ -300,7 +300,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--out", type=Path, help="the report's directory (default the repository's docs/results)"
     )
     cov.add_argument("--date", help="the report's date, YYYY-MM-DD (default today, UTC)")
-    cov.add_argument("--check", action="store_true", help="exit 1 when the M4 gate fails")
+    cov.add_argument(
+        "--check", action="store_true", help="exit 1 when the M4 gate fails or an accepted exception is stale"
+    )
     cov.set_defaults(run=_eval_coverage)
     for name, task in PLANNED_EVALS.items():
         _stub(reports.add_parser(name, help=f"planned in {task}"), f"eval {name}", task)
@@ -557,9 +559,8 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
     if missing := missing_decisions(exceptions, root / "backlog" / "decisions"):
         raise ValueError(f"{causes_file}: no decision record for {', '.join(missing)} in backlog/decisions")
 
-    def locate(
-        rid: str,
-    ) -> RecordCell | None:  # an exception's paper in the snapshot the index was built from
+    # an exception's paper in the snapshot the index was built from
+    def locate(rid: str) -> RecordCell | None:
         r = records.get(rid)
         return None if r is None else (r.venue, r.year, r.track, r.status)
 

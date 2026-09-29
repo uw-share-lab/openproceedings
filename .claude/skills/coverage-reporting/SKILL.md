@@ -52,8 +52,10 @@ to keep the record as its source classifies it, the gap is accepted, never paper
    `op eval coverage` stops before writing anything.
 3. The cell passes (`✓ accepted exception`, counted apart from "within ±1%" in the verdict line, listed under
    "Owner-accepted exceptions" and on stderr) **only while both counts are exactly the accepted ones and the
-   papers are the gap**: |official − indexed| of them, each in the index's snapshot, and outside the cell for
-   an under-count (inside it for an over-count). Anything else fails the cell as `drifted`, with the failed
+   papers are the gap**: |official − indexed| of them, each in the index's snapshot, and for an under-count a
+   record of the cell's venue-year outside the cell (another track or status), for an over-count a record
+   counted in the cell. The over-count check can't prove those records are the extras, only that they are
+   counted: the owner's decision record is what names them as the extras. Anything else fails the cell as `drifted`, with the failed
    check (or the accepted and observed counts) in its cause note: re-classify it before touching the
    exception. A gap cell stays `✗ gap`. An exception whose cell is within ±1% or not gated is reported as
    stale, and `--check` exits 1 until it is removed.

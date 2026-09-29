@@ -106,8 +106,10 @@ def _cells(cov: Mapping[str, Any]) -> dict[CellKey, dict[str, Any]]:
 
 def _paper_problem(key: CellKey, ex: AcceptedException, locate: Locate | None) -> str | None:
     """Why `ex`'s papers are not the cell's gap, or None: as many papers as the gap, each in the snapshot, and
-    each outside the cell for an under-count (the missing papers are elsewhere) or inside it for an over-count
-    (the extra papers are counted in it)."""
+    each, for an under-count, a record of the cell's venue-year outside the cell (another track or status: the
+    missing papers are held elsewhere), or, for an over-count, a record counted in the cell. The over-count
+    check can't prove the named records are the extras, only that they are counted: the owner's decision record
+    is what names them as the extras."""
     gap = ex.official - ex.indexed
     if len(ex.papers) != abs(gap):
         return f"it names {len(ex.papers)} paper(s) for a gap of {abs(gap)}"
@@ -118,6 +120,8 @@ def _paper_problem(key: CellKey, ex: AcceptedException, locate: Locate | None) -
         if where is None:
             return f"paper {pid} is not in the snapshot"
         inside = where == (*key, "accepted")
+        if gap > 0 and where[:2] != key[:2]:
+            return f"paper {pid} is from {where[0]} {where[1]}, not this cell's venue-year"
         if gap > 0 and inside:
             return f"paper {pid} is counted in the cell, so it is not one of the missing papers"
         if gap < 0 and not inside:
@@ -391,7 +395,8 @@ def render(
         f"within ±1%; {verdict.gaps} gap{'' if verdict.gaps == 1 else 's'}; {len(verdict.accepted)} owner-accepted "
         f"exception{'' if len(verdict.accepted) == 1 else 's'}. The gate (spec 07 §C) covers every "
         "main-track and D&B cell with an official count; other cells are reported, not gated. An owner-accepted "
-        "exception passes its cell only while the cell's counts are exactly the accepted ones. Δ% is rounded to "
+        "exception passes its cell only while the cell's counts are exactly the accepted ones and its papers are "
+        "the gap. Δ% is rounded to "
         "one decimal; the gate compares exactly (100 × |Δ| ≤ official), so a cell shown at 1.0% can still fail.",
         "",
     ]
@@ -437,7 +442,7 @@ def render(
     lines += ["", "## Owner-accepted exceptions", ""]
     if verdict.accepted:
         lines += [
-            "Each passes its cell only while the indexed and official counts are exactly these.",
+            "Each passes its cell only while the indexed and official counts are exactly these and its papers are the gap.",
             "",
             *(_exception_line(k, exceptions[k], causes.get(k)) for k in verdict.accepted),
         ]

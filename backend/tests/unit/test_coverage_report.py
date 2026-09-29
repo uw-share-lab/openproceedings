@@ -55,6 +55,10 @@ def corpus() -> list[PaperRecord]:
     return (
         many("ICLR", 2013, 24)
         + many("ICLR", 2014, 30)
+        + [
+            paper(f"IC2014w{i:04d}", f"Poster {i}", venue="ICLR", year=2014, track="workshop")
+            for i in range(6)
+        ]
         + many("ICLR", 2016, 3, "workshop")
         + many("ICML", 2020, 2)
     )
@@ -238,7 +242,7 @@ def test_the_header_names_the_causes_file_hash() -> None:
 
 
 def test_totals() -> None:
-    assert "| 59 | 4 | 0 | 0 |" in report()  # records, missing abstracts, unknown track, unknown status
+    assert "| 65 | 10 | 0 | 0 |" in report()  # records, missing abstracts, unknown track, unknown status
 
 
 # --- the command -----------------------------------------------------------------------------------------
@@ -373,8 +377,9 @@ def test_causes_load_from_toml_and_an_empty_cause_is_refused(tmp_path: Path) -> 
 # --- owner-accepted exceptions ------------------------------------------------------------------------------
 
 
-def ids(n: int, prefix: str = "op:iclr:2013:IC2013x") -> tuple[str, ...]:
-    """`n` corpus record ids; by default ICLR 2013 main records, outside the ICLR 2014 main cell."""
+def ids(n: int, prefix: str = "op:iclr:2014:IC2014w") -> tuple[str, ...]:
+    """`n` corpus record ids; by default ICLR 2014 workshop records: the ICLR 2014 main cell's venue-year,
+    outside the cell."""
     return tuple(f"{prefix}{i:04d}" for i in range(n))
 
 
@@ -430,7 +435,11 @@ def test_an_exception_matching_the_counts_exactly_passes_its_cell() -> None:
 @pytest.mark.parametrize(
     ("papers", "problem"),
     [
-        ((*ids(4), "op:iclr:2013:nosuchpaper"), "paper op:iclr:2013:nosuchpaper is not in the snapshot"),
+        ((*ids(4), "op:iclr:2014:nosuchpaper"), "paper op:iclr:2014:nosuchpaper is not in the snapshot"),
+        ((*ids(4), "op:iclr:2013:IC2013x0000"),
+         "paper op:iclr:2013:IC2013x0000 is from ICLR 2013, not this cell's venue-year"),
+        ((*ids(4), "op:icml:2020:IC2020x0000"),
+         "paper op:icml:2020:IC2020x0000 is from ICML 2020, not this cell's venue-year"),
         ((*ids(4), "op:iclr:2014:IC2014x0007"),
          "paper op:iclr:2014:IC2014x0007 is counted in the cell, so it is not one of the missing papers"),
         (ids(4), "it names 4 paper(s) for a gap of 5"),
@@ -456,7 +465,7 @@ def test_an_over_count_exception_names_papers_inside_the_cell() -> None:
     cov = breakdown(manifest_of(corpus()), "x", official=table)
     inside = ids(2, "op:iclr:2014:IC2014x")
     assert gate(cov, table, {ICLR14: accepted(30, 28, papers=inside)}, LOCATE).accepted == (ICLR14,)
-    v = gate(cov, table, {ICLR14: accepted(30, 28)}, LOCATE)  # two ICLR 2013 records: not the extra papers
+    v = gate(cov, table, {ICLR14: accepted(30, 28)}, LOCATE)  # two ICLR 2014 workshop records: not the extras
     assert v.failing == ((ICLR14, "drifted"),) and "is not counted in the cell" in dict(v.notes)[ICLR14]
 
 
@@ -508,12 +517,12 @@ def test_the_report_lists_every_accepted_exception_and_marks_its_cell() -> None:
     assert "; 1 gap; 1 owner-accepted exception." in text
     section = text.split("## Owner-accepted exceptions\n", 1)[1].split("\n## ", 1)[0]
     assert ("- ICLR 2014 main: 30 indexed vs 35 official (Δ −5), accepted by the project owner on 2026-09-29 "
-            "(decision-016). The list and OpenReview disagree. Papers: op:iclr:2013:IC2013x0000, "
-            "op:iclr:2013:IC2013x0001, op:iclr:2013:IC2013x0002, op:iclr:2013:IC2013x0003, "
-            "op:iclr:2013:IC2013x0004. Cause: source definition: one paper is a workshop poster") in section  # fmt: skip
+            "(decision-016). The list and OpenReview disagree. Papers: op:iclr:2014:IC2014w0000, "
+            "op:iclr:2014:IC2014w0001, op:iclr:2014:IC2014w0002, op:iclr:2014:IC2014w0003, "
+            "op:iclr:2014:IC2014w0004. Cause: source definition: one paper is a workshop poster") in section  # fmt: skip
     # a reason without a closing period still ends its sentence before "Papers:"
     unended = report_with({ICLR14: accepted(reason="The list and OpenReview disagree")})
-    assert "The list and OpenReview disagree. Papers: op:iclr:2013:IC2013x0000" in unended
+    assert "The list and OpenReview disagree. Papers: op:iclr:2014:IC2014w0000" in unended
     assert "- ICLR 2014 main" not in text.split("## Causes of every failing cell")[1].split("## Owner")[0]
     assert "not failing" not in text  # its cause note is in use, not stale
     none = report_with({})
