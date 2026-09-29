@@ -91,6 +91,18 @@ class FakeClock:
         return EPOCH + timedelta(seconds=self.t)
 
 
+class TickingClock(FakeClock):
+    """A fake clock (for heartbeats, TASK-116) whose monotonic time also moves `step` seconds every time it is read."""
+
+    def __init__(self, step: float) -> None:
+        super().__init__()
+        self.step = step
+
+    def monotonic(self) -> float:
+        self.t += self.step
+        return self.t
+
+
 class FakeOpenReview:
     """A fake api2: `/login`, `/groups?parent=` and `/groups?id=`, and `/notes?content.venueid=` with
     `limit`/`offset` paging and `count` only when `offset` is sent (as the live API does). `override(url)`

@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import importlib
+import json
 import logging
 from pathlib import Path
 from types import ModuleType
 
 import pytest
+from openproceedings import cli
 from openproceedings.ingest.dedup import dedup
 from openproceedings.ingest.record import PaperRecord
+from openproceedings.ingest.sources.html import MAX_DEPTH, HTMLBudgetError
+from openproceedings.ingest.sources.http import canonical
 
-from tests.unit.ingest.proceedings_helpers import fetcher, fixture_text, fixture_url, seed_fixture
+from tests.unit.ingest.proceedings_helpers import fetcher, fixture_text, fixture_url, seed, seed_fixture
 
 FIXTURES = {
     2014: "iclr/2014/conference-index.json",
@@ -139,3 +143,28 @@ def test_the_archive_crawl_marks_each_year_and_replays_offline(tmp_path: Path) -
     records, sources = crawl.load_crawls(tmp_path)
     assert len(records) == 10
     assert len(sources["iclr_archive"]["listings"]) == 3
+
+
+def test_an_index_page_past_the_html_budget_names_its_url_and_how_to_recover(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """TASK-116: the listing's URL, `--refresh` and its cache entry; the CLI refuses with that line."""
+    iclr = source()
+    data = tmp_path / "data"
+    listing = canonical(iclr.LISTINGS[2016])
+    seed(data / "cache", "iclr", listing, "<html>" + "<div>" * (MAX_DEPTH + 1) + "</html>")
+    crawler, _ = fetcher(data / "cache" / "iclr", None, iclr.HOSTS)
+    with pytest.raises(HTMLBudgetError) as refused:
+        iclr.mine_year(2016, crawler)
+    entry = crawler.cache.path(listing).relative_to(crawler.cache.root)
+    message = str(refused.value)
+    assert message.startswith(f"{listing}: HTML nesting exceeds {MAX_DEPTH} elements")
+    assert "--refresh" in message and f"({entry} under the source's cache directory)" in message
+    assert (refused.value.url, refused.value.reason) == (listing, "html_budget")
+
+    code = cli.main(["--data-dir", str(data), "ingest", "iclr", "--year", "2016", "--offline"])
+    err = capsys.readouterr().err
+    assert code == 1 and f"op ingest iclr: {listing}: HTML nesting exceeds" in err
+    [line] = [e for e in map(json.loads, (x for x in err.splitlines() if x.startswith("{")))
+              if e.get("event") == "cli_refused"]  # fmt: skip
+    assert (line["level"], line["reason"], line["error"]) == ("WARNING", "html_budget", "HTMLBudgetError")

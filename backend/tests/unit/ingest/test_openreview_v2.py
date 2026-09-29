@@ -18,6 +18,7 @@ from openproceedings.ingest import snapshot as snap
 from openproceedings.ingest.classify import classify_venueid
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources import openreview_v2 as orv
+from openproceedings.ingest.sources.common import PROGRESS_SECONDS, Heartbeat
 from openproceedings.ingest.sources.http import CacheMiss as OpenReviewCacheMiss
 from openproceedings.ingest.sources.http import Request, Response
 from openproceedings.ingest.sources.http import RetriesExhausted as OpenReviewRetriesExhausted
@@ -28,6 +29,7 @@ from tests.unit.ingest.openreview_fakes import (
     USERNAME,
     FakeClock,
     FakeOpenReview,
+    TickingClock,
     clone,
     group_doc,
     json_response,
@@ -165,14 +167,15 @@ def test_only_the_submission_note_becomes_a_record() -> None:
     assert build(reply) == "not_submission"
 
 
-def test_a_note_without_a_venueid_is_unknown_and_logged(caplog: pytest.LogCaptureFixture) -> None:
+def test_a_note_without_a_venueid_is_unknown_and_logged_at_debug(caplog: pytest.LogCaptureFixture) -> None:
     note = recorded_note("iclr-2024/notes-accepted.json")
     del note["content"]["venueid"]
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.DEBUG):
         record = build(note)
     assert isinstance(record, PaperRecord) and (record.track, record.status) == ("unknown", "unknown")
     [line] = [r for r in caplog.records if r.getMessage() == "openreview_unknown_track"]
-    assert line.__dict__["forum"] == note["id"]
+    # a per-note line is DEBUG; the crawl counts them in its one attention WARNING (TASK-116)
+    assert line.__dict__["forum"] == note["id"] and line.levelno == logging.DEBUG
 
 
 def test_an_unparseable_venueid_is_unknown_never_guessed() -> None:
@@ -279,6 +282,94 @@ def test_a_crawl_finds_every_venue_group_and_lists_every_status_venueid(tmp_path
     assert report.to_manifest()["crawl_window"]["from"] <= report.to_manifest()["crawl_window"]["to"]
 
 
+def test_per_note_anomalies_are_debug_and_the_crawl_has_one_attention_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    server = world()
+    for note in server.notes[CONF]:
+        del note["content"]["venueid"]  # three accepted notes without their own venueid: unknown track
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        orv.crawl(client(tmp_path, server), "ICLR", 2024)
+    unknown = [r for r in caplog.records if r.getMessage() == "openreview_unknown_track"]
+    assert len(unknown) == 3 and {r.levelno for r in unknown} == {logging.DEBUG}
+    [attention] = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert attention.getMessage() == "openreview_crawl_attention"
+    assert {k: attention.__dict__[k] for k in ("api", "venue", "year", "unknown_track")} == {
+        "api": "v2", "venue": "ICLR", "year": 2024, "unknown_track": 3,
+    }  # fmt: skip
+
+
+def lines(caplog: pytest.LogCaptureFixture, event: str) -> list[logging.LogRecord]:
+    return [r for r in caplog.records if r.getMessage() == event]
+
+
+def test_the_heartbeat_is_due_at_most_every_30_seconds_of_monotonic_time() -> None:
+    times = iter([100.0, 110.0, 129.9, 130.0, 145.0, 159.9, 160.1, 500.0])
+    beat = Heartbeat(lambda: next(times))  # read once at the start (100.0)
+    assert [beat.due() for _ in range(7)] == [False, False, True, False, False, True, True]
+    assert PROGRESS_SECONDS == 30.0
+
+
+def test_a_crawl_logs_a_start_line_and_bounded_progress_heartbeats(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    server = world()
+    live = OpenReviewClient(orv.http_dir(tmp_path), credentials=Credentials(USERNAME, PASSWORD), transport=server,
+                            clock=TickingClock(31.0), jitter=lambda: 0.0)  # fmt: skip
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):
+        orv.crawl(live, "ICLR", 2024)
+    [started] = lines(caplog, "openreview_crawl_started")
+    assert {k: started.__dict__[k] for k in ("api", "venue", "year", "offline", "page_size")} == {
+        "api": "v2", "venue": "ICLR", "year": 2024, "offline": False, "page_size": orv.PAGE_SIZE,
+    }  # fmt: skip
+    # every read of this clock is 31 s on, so each note's tick is due: one line per note, counts so far
+    beats = lines(caplog, "openreview_crawl_progress")
+    assert [b.__dict__["notes_read"] for b in beats] == list(range(8))
+    assert {(b.__dict__["api"], b.__dict__["venue"], b.__dict__["year"]) for b in beats} == {
+        ("v2", "ICLR", 2024)
+    }
+    last = beats[-1].__dict__
+    assert (last["imported"], last["skipped"]) == (7, 0) and 0 < last["requests"] <= live.requests
+    assert last["cached"] == 0 and all(b.levelno == logging.INFO for b in [started, *beats])
+    [finished] = lines(caplog, "openreview_crawl_finished")
+    assert finished.__dict__["api"] == "v2"
+
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources"):  # a stopped clock: none due
+        replayed = OpenReviewClient(orv.http_dir(tmp_path), credentials=None, offline=True, clock=FakeClock())
+        orv.crawl(replayed, "ICLR", 2024)
+    assert lines(caplog, "openreview_crawl_progress") == []
+    assert lines(caplog, "openreview_crawl_started")[0].__dict__["offline"] is True
+
+
+def test_purged_pre_projection_cache_entries_are_debug_and_counted_by_the_crawl(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A one-time migration can meet thousands of old entries: one DEBUG line each, counted in the crawl's
+    finished line and its one attention WARNING (TASK-116 review)."""
+    server = world()
+    live = client(tmp_path, server)
+    orv.crawl(live, "ICLR", 2024)
+    old = [p for p in orv.http_dir(tmp_path).rglob("*.json")][:2]
+    for path in old:  # back to the raw, pre-projection layout
+        document = json.loads(path.read_text())
+        del document["payload"]["public_projection"]
+        path.write_text(json.dumps(document))
+    caplog.clear()
+    again = client(tmp_path, server)
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        orv.crawl(again, "ICLR", 2024)
+    purged = [r for r in caplog.records if r.getMessage() == "openreview_cache_incompatible"]
+    assert len(purged) == 2 and {r.levelno for r in purged} == {logging.DEBUG} and again.incompatible == 2
+    [finished] = lines(caplog, "openreview_crawl_finished")
+    assert finished.__dict__["cache_incompatible"] == 2
+    [attention] = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert (
+        attention.getMessage() == "openreview_crawl_attention"
+        and attention.__dict__["cache_incompatible"] == 2
+    )
+
+
 def test_pagination_stops_on_a_short_page(tmp_path: Path) -> None:
     server = world(accepted=5)
     result = orv.crawl(client(tmp_path, server), "ICLR", 2024, page_size=2)
@@ -321,7 +412,7 @@ def test_a_multi_page_listing_whose_count_changes_between_pages_is_refused(tmp_p
 
 @pytest.mark.parametrize("conflicting", [False, True])
 def test_a_note_in_two_listings_is_a_counted_duplicate_only_when_its_record_is_identical(
-    tmp_path: Path, conflicting: bool
+    tmp_path: Path, conflicting: bool, caplog: pytest.LogCaptureFixture
 ) -> None:
     server = world()
     again = clone(server.notes[CONF][0], server.notes[CONF][0]["id"], server.notes[CONF][0]["number"])
@@ -332,8 +423,11 @@ def test_a_note_in_two_listings_is_a_counted_duplicate_only_when_its_record_is_i
         with pytest.raises(orv.CrawlError, match=r"conflicting data in two status listings.*--refresh"):
             orv.crawl(client(tmp_path, server), "ICLR", 2024)
         return
-    result = orv.crawl(client(tmp_path, server), "ICLR", 2024)
+    with caplog.at_level(logging.WARNING, logger="openproceedings.ingest.sources"):
+        result = orv.crawl(client(tmp_path, server), "ICLR", 2024)
     assert result.report.skipped["duplicate"] == 1 and result.report.notes_read == 9
+    [attention] = [r for r in caplog.records if r.levelno >= logging.WARNING]  # counted, TASK-116 review
+    assert attention.getMessage() == "openreview_crawl_attention" and attention.__dict__["duplicate"] == 1
     assert result.report.imported == len(result.records) == 8
     assert result.report.venueids[f"{CONF}/Rejected_Submission"] == 2
     [kept] = [r for r in result.records if r.native == again["id"]]
