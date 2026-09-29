@@ -247,10 +247,24 @@ def dbhost(track: str) -> Callable[[Entries], None]:
 
 def test_the_2021_db_host_is_a_neurips_listing_with_the_miners_track_rule(tmp_path: Path) -> None:
     by_id, report = run(tmp_path, dbhost("Datasets_and_Benchmarks"))
-    r = by_id[f"op:neurips:2021:nips-{H1}"]
+    r = by_id[f"op:neurips:2021:nips-{H1}-round1"]  # the D&B host's hashes repeat per round (TASK-118)
     assert (r.track, r.status) == ("datasets_benchmarks", "accepted")
+    assert f"op:neurips:2021:nips-{H1}" not in by_id
     by_id, report = run(tmp_path, dbhost("Conference"))  # the claim disagrees with the address it cites
-    assert f"op:neurips:2021:nips-{H1}" not in by_id and report.skipped["conflict"] == 1
+    assert f"op:neurips:2021:nips-{H1}-round1" not in by_id and report.skipped["conflict"] == 1
+
+
+def test_one_hash_on_the_main_and_db_hosts_is_two_papers_so_ambiguous(tmp_path: Path) -> None:
+    """The same 2021 hash on proceedings.neurips.cc and the D&B host names two different papers (TASK-118)."""
+    main = f"https://proceedings.neurips.cc/paper_files/paper/2021/hash/{H1}-Abstract.html"
+
+    def edit(e: Entries) -> None:
+        dbhost("Datasets_and_Benchmarks")(e)
+        e[0]["claims"].append(claim("year", "2021", "proceedings_url", main))
+
+    by_id, report = run(tmp_path, edit)
+    assert not any(H1 in rid and ":2021:" in rid for rid in by_id)
+    assert report.skipped["ambiguous"] == 1
 
 
 def set_venueid_of(e: Entries, row: int, value: str) -> None:

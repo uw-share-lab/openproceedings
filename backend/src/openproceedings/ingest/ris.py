@@ -6,7 +6,7 @@ same order, same title). Only scholarmend's identifying claims decide anything; 
 never does:
 
 - **Identity** (venue, year, native id): an OpenReview venueid claim plus its forum id; a NeurIPS or
-  ICLR `proceedings_url` claim (`nips-`/`iclr-<hash>`); or a `pmlr_url` claim in an ICML volume
+  ICLR `proceedings_url` claim (`nips-`/`iclr-<hash>`, `urls.proceedings_native`); or a `pmlr_url` claim in an ICML volume
   (`pmlr-v<N>-<key>`, `volumes.py`). The id is never minted: a record that points at an in-scope venue but
   yields no id is skipped as `unresolved` (or `no_id`), and one that points nowhere is `out_of_scope`.
 - **Track**: the venueid; else scholarmend's proceedings track; else the PMLR volume table.
@@ -51,7 +51,7 @@ from openproceedings.ingest.classify import (
     is_v1,
 )
 from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Urls, is_url
-from openproceedings.ingest.urls import PREFIX, pmlr, proceedings, proceedings_parts
+from openproceedings.ingest.urls import pmlr, proceedings, proceedings_native, proceedings_parts
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 from openproceedings.vocab import venue_name
 
@@ -128,7 +128,8 @@ def _listing(
         if (p := proceedings(c["evidence"]))
     ]
     if proc:
-        if len({p for _, p in proc}) > 1:
+        # one paper per native id: the same hash on the main and 2021 D&B hosts is two papers (TASK-118)
+        if len({proceedings_native(c["evidence"]) or p for c, p in proc}) > 1:
             return "ambiguous"
         (venue, sha), url = proc[0][1], proc[0][0]["evidence"]
         years = {c["value"] for c, _ in proc if c["field"] == "year"}
@@ -154,7 +155,9 @@ def _listing(
             )
             if url_year != year or by_url.track != claimed:
                 return "conflict"
-        return (venue, year, f"{PREFIX[venue]}-{sha}", classify_proceedings(track),
+        if (native := proceedings_native(url)) is None:  # a 2021 D&B URL without round1/round2
+            return "unresolved"
+        return (venue, year, native, classify_proceedings(track),
                 ("proceedings_url", url), sorted({c["evidence"] for c, _ in proc}))  # fmt: skip
     parsed = [(c, pmlr(c["evidence"])) for c in _claims(entry, "pmlr_volume", "pmlr_url")]
     # an ICML volume, by the URL or (when the URL doesn't parse) by scholarmend's volume claim

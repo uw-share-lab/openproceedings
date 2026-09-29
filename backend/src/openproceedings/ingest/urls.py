@@ -11,6 +11,7 @@ import hashlib
 import re
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
+from openproceedings.ingest.classify import NEURIPS_DB_2021_HOST, NEURIPS_DB_2021_ROUNDS
 from openproceedings.ingest.record import FORUM_ID
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 
@@ -60,11 +61,27 @@ def pmlr(url: str) -> tuple[int, str] | None:
     return (int(m.group(1)), m.group(2)) if m else None
 
 
+def proceedings_native(url: str) -> str | None:
+    """The native id a NeurIPS or ICLR proceedings URL names, or None: `nips-`/`iclr-<32 hex>`, and on the 2021
+    D&B host `nips-<32 hex>-round1|round2`. The hash is md5 of the paper's number, and that host numbers each
+    round (and the main track) separately, so there the hash alone names up to three papers (TASK-118). A D&B
+    link without a known round names none of them. The miners, the RIS importer and dedup all call this, so a
+    URL and the record it came from always agree on the id."""
+    parts = proceedings_parts(url)
+    if parts is None or len(parts[2]) != 32:
+        return None
+    venue, _year, sha, token = parts
+    base = f"{PREFIX[venue]}-{sha}"
+    if urlparse(url).netloc.lower() == NEURIPS_DB_2021_HOST:
+        return f"{base}-{token}" if token in NEURIPS_DB_2021_ROUNDS else None
+    return base
+
+
 def native(url: str) -> str | None:
-    """The proceedings native id a URL names (`nips-`/`iclr-<32 hex>`, `pmlr-v<N>-<key>` for an ICML
+    """The proceedings native id a URL names (`proceedings_native`, or `pmlr-v<N>-<key>` for an ICML
     volume), or None."""
-    if (p := proceedings(url)) is not None:
-        return f"{PREFIX[p[0]]}-{p[1]}" if len(p[1]) == 32 else None
+    if proceedings(url) is not None:
+        return proceedings_native(url)
     if (q := pmlr(url)) is not None and q[0] in ICML_PMLR_VOLUMES:
         return f"pmlr-v{q[0]}-{q[1]}"
     return None
