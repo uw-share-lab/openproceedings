@@ -15,7 +15,9 @@ a review, a duplicate only shows in the hit count.
    sets are disjoint), never two different forum ids (own or linked) or two different proceedings ids, and never a
    paper whose track the proceedings don't host into a proceedings listing (a record with a proceedings
    id or a proceedings source). A key that would join clusters sharing a source is ambiguous: nothing
-   merges, and `conflicts.csv` says so.
+   merges, and `conflicts.csv` says so. When such a key holds a listing, the clusters that can't be the
+   listed paper (TASK-126: a track the proceedings don't host, or a status other than accepted/unknown)
+   are set aside as rivals and the rest merge if they may; the set-aside clusters stay separate records.
 
 A merged record's fields are re-resolved from the union of its claims by `PRECEDENCE` (held as data),
 never "whichever came first". So every input must already equal what its own claims resolve to; dedup
@@ -57,6 +59,8 @@ CONFLICT_FIELDS: tuple[ClaimField, ...] = ("title", "track", "status")
 _PROCEEDINGS_SOURCES = frozenset({"iclr_archive", "neurips_proceedings", "pmlr"})
 _PROCEEDINGS_TRACKS = frozenset({"main", "datasets_benchmarks", "position"})  # proceedings never host others
 _URL_FIELDS = ("urls.proceedings", "urls.pdf")
+# A listing names only accepted papers; `unknown` may still be one (unresolved v1 evidence), so it stays a rival.
+_LISTABLE_STATUSES = frozenset({"accepted", "unknown"})
 
 
 @dataclass(frozen=True, order=True)
@@ -274,6 +278,35 @@ def _mergeable(group: Sequence[_Cluster], *, linked: bool = False) -> str | None
     return None
 
 
+def _not_the_listed_paper(c: _Cluster) -> str | None:
+    """Why a cluster can never be a proceedings listing's paper, as its not-merged resolution, or None if it
+    may be one (TASK-126). A listing is always a candidate. A track the proceedings don't host is the track
+    rule of `_mergeable`; an `unknown` track only waits for evidence, so like an `unknown` status it stays a
+    candidate (and a rival). Proceedings list only accepted papers: a rejected, withdrawn or desk-rejected note
+    is not the listed one, though it may merge alone (decision-005: the proceedings then decide its status)."""
+    if c.listed:
+        return None
+    if c.summary.track not in _PROCEEDINGS_TRACKS and c.summary.track != "unknown":
+        return "track_not_merged"
+    if c.summary.status not in _LISTABLE_STATUSES:
+        return "ambiguous_not_merged"  # another candidate for the listing took it
+    return None
+
+
+def _merging(group: Sequence[_Cluster]) -> list[int] | None:
+    """Positions in a title-key group that merge, or None. The whole group if it may share a record; else,
+    when it holds a listing, the clusters that may be the listed paper, if they may share one (TASK-126): a
+    same-title workshop paper or a rejected earlier submission is no rival for the listing."""
+    if _mergeable(group) is None:
+        return list(range(len(group)))
+    if not any(c.listed for c in group):
+        return None
+    rest = [i for i, c in enumerate(group) if _not_the_listed_paper(c) is None]
+    if len(rest) < 2 or _mergeable([group[i] for i in rest]) is not None:
+        return None  # rest == group is refused here as well: `_mergeable` has just refused the whole group
+    return rest
+
+
 def _pair(a: _Cluster, b: _Cluster, resolution: str, fld: str = "title_key") -> Conflict:
     return Conflict(
         a.id, fld, a.id, "+".join(sorted(a.sources)), b.id, "+".join(sorted(b.sources)), resolution
@@ -325,16 +358,22 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
         if len(cis) < 2:
             continue
         ordered = sorted(cis)
-        if _mergeable([clusters[ci] for ci in ordered]) is not None:
+        merging = _merging([clusters[ci] for ci in ordered])
+        if merging is None:
             continue  # reported by _refusals, against the output records
-        for ci in ordered:
-            step2.union(ordered[0], ci)
+        for ci in (ordered[i] for i in merging):
+            step2.union(ordered[merging[0]], ci)
             joined_by.setdefault(ci, key)
 
     out: list[PaperRecord] = []
     for group in step2.groups():
         chained = [clusters[ci] for ci in group]
-        # keys chained clusters that must not share a record: keep every cluster on its own
+        # keys chained clusters that must not share a record: keep every cluster on its own. A cluster set
+        # aside on one key (TASK-126) never merges through another. A track one never merges: a key's group with a
+        # listing sets it aside again, one without refuses it on forum ids. A status one can (`_mergeable` ignores status; a lone rejected note
+        # merges with its listing), and this re-check refuses it only because every non-listing record has
+        # its own forum id (dedup refuses one naming neither a forum id nor its proceedings URL), unlike the
+        # note the listing merged with. The chain splits: the safe direction, never a merge
         refused = len(group) > 1 and _mergeable(chained) is not None
         parts = [[ci] for ci in group] if refused else [group]
         for part in parts:
@@ -423,8 +462,19 @@ def _refusals(out: Sequence[PaperRecord]) -> set[Conflict]:
         for key in c.keys:
             buckets[(c.summary.venue, c.summary.year, key)].append(c)
     for bucket in buckets.values():
-        if len(bucket) > 1:
-            reason = _mergeable(bucket)
+        if len(bucket) < 2:
+            continue
+        # a cluster that can't be a listing's paper (TASK-126) is reported against the first listing, with
+        # its own reason; the rest as before (a key whose records could merge alone was refused in a chain)
+        aside: dict[str, str] = {}
+        if _mergeable(bucket) is not None and any(c.listed for c in bucket):
+            aside = {c.id: why for c in bucket if (why := _not_the_listed_paper(c))}
+        if aside:
+            listing = next(c for c in bucket if c.listed)
+            rows.update(_pair(listing, c, aside[c.id]) for c in bucket if c.id in aside)
+        rest = [c for c in bucket if c.id not in aside]
+        if len(rest) > 1:
+            reason = _mergeable(rest)
             fld = "title_key" if reason else "title_key_chain"
-            rows.update(_pair(bucket[0], c, reason or "ambiguous_not_merged", fld) for c in bucket[1:])
+            rows.update(_pair(rest[0], c, reason or "ambiguous_not_merged", fld) for c in rest[1:])
     return rows

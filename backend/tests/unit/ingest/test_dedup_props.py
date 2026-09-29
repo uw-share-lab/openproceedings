@@ -112,7 +112,47 @@ def links(draw: st.DrawFn) -> list[PaperRecord]:
     return base + draw(st.lists(records(), max_size=3))
 
 
-pools = st.one_of(st.lists(records(), max_size=10), chains(), links(), links())  # links() twice: weighted
+# a rival that can never be the listed paper (TASK-126): a track the proceedings don't host, or not accepted
+SET_ASIDE = [("workshop", "accepted"), ("workshop", "rejected"), ("main", "rejected"), ("main", "withdrawn"),
+             ("datasets_benchmarks", "desk_rejected")]  # fmt: skip
+# … and one that may be: another accepted submission, or a status or track nobody knows yet
+REAL_RIVALS = [
+    ("main", "accepted"),
+    ("datasets_benchmarks", "accepted"),
+    ("main", "unknown"),
+    ("unknown", "accepted"),
+]
+
+
+@st.composite
+def rivals(draw: st.DrawFn) -> tuple[list[PaperRecord], list[str], bool, int]:
+    """A listing, its OpenReview note and same-title rivals (NeurIPS 2023/2024's workshop papers, 2021 D&B's
+    rejected round-1 notes), sometimes one that may be the listed paper, plus noise from other venue-years:
+    (records, the set-aside rivals' ids, whether a real rival is present, the year)."""
+    year, track = draw(st.sampled_from([2023, 2024])), draw(st.sampled_from(["main", "datasets_benchmarks"]))
+    title = lambda: draw(st.sampled_from(TITLES[:2]))  # noqa: E731  (one key, two spellings)
+    note = lambda: draw(st.sampled_from(["openreview_v2", "openreview_v1", "ris"]))  # noqa: E731
+    base = [
+        paper("AbCd1234", title(), year=year, track=track, source=draw(st.sampled_from(["openreview_v2", "openreview_v1"]))),
+        paper(f"nips-{H[1]}", title(), year=year, track=track, source=draw(st.sampled_from(["neurips_proceedings", "ris"]))),
+    ]  # fmt: skip
+    aside = [
+        paper(fid, title(), year=year, track=t, status=s, source=note())
+        for fid, (t, s) in zip(
+            FORUMS[1:], draw(st.lists(st.sampled_from(SET_ASIDE), min_size=1, max_size=2)), strict=False
+        )
+    ]
+    real = draw(st.booleans())
+    if real:
+        t, s = draw(st.sampled_from(REAL_RIVALS))
+        base.append(paper("MnOp3456", title(), year=year, track=t, status=s, source=note()))
+    noise = draw(st.lists(records().filter(lambda r: (r.venue, r.year) != ("NeurIPS", year)), max_size=3))
+    return base + aside + noise, [r.id for r in aside], real, year
+
+
+pools = st.one_of(
+    st.lists(records(), max_size=10), chains(), links(), links(), rivals().map(lambda t: t[0])
+)  # links() twice: weighted
 
 # the reviewer's two over-merges, pinned
 TWO_PROCEEDINGS_IDS = [
@@ -236,6 +276,26 @@ def test_conservation_and_no_cross_venue_year_merges(xs: list[PaperRecord]) -> N
     for x in xs:  # each input against the record it ended in: never merged across a venue or a year
         final = by_id[ends.get(x.id, x.id)]
         assert (x.venue, x.year) == (final.venue, final.year)
+
+
+@given(rivals(), st.randoms(use_true_random=False))
+def test_a_set_aside_rival_is_never_merged_and_blocks_nothing(
+    shape: tuple[list[PaperRecord], list[str], bool, int], rnd: random.Random
+) -> None:
+    xs, aside, real, year = shape
+    rnd.shuffle(xs)
+    result = dedup(xs)
+    note(result)
+    outputs = Counter(r.id for r in result.records)
+    assert all(n == 1 for n in outputs.values())
+    assert Counter(r.id for r in xs) == outputs + Counter(m.merged_id for m in result.merges)
+    ends = final_ids(result)
+    orv, listing = f"op:neurips:{year}:AbCd1234", f"op:neurips:{year}:nips-{H[1]}"
+    assert all(ends[i] == i for i in aside)  # never merged into anything, nor anything into them
+    assert all(i in outputs and i not in {m.survivor_id for m in result.merges} for i in aside)
+    assert (ends[listing] == ends[orv]) is not real  # the pair merges unless a real rival makes it ambiguous
+    reported = {(c.value_a, c.value_b) for c in result.conflicts if c.field == "title_key"}
+    assert all((ends[listing], i) in reported for i in aside)  # each set-aside rival has its row, always
 
 
 @given(pools)
