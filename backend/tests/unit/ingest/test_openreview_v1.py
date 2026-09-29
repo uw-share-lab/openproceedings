@@ -511,6 +511,8 @@ def test_a_multi_page_listing_whose_count_changes_between_pages_is_refused(tmp_p
         q = parse_qs(urlsplit(request.url).query)
         if q.get("invitation") != [BLIND.format(y=2022)] or q.get("offset") != ["0"]:
             return None
+        # 4 on page 1, 3 on page 2: {3, 4} pops 3, which the 3 rows match, so only the count-change guard refuses
+        # (a first-page count below the rows would be caught by the row check instead, testing nothing here)
         return json_response({"notes": notes[:2], "count": 4}, headers={"content-type": "application/json"})
 
     server = FakeOpenReviewV1({BLIND.format(y=2022): notes}, override=grown_first_page)  # page 2 says 3
