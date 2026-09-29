@@ -149,7 +149,7 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
   (1,828), ICLR 2026 Conference (5,351), NeurIPS 2026 Creative AI (95), and ICML 2026 Conference (6,341).
   The one retained note per listing is scrubbed; the real counts, venueids and venue labels remain evidence.
 - NeurIPS 2026's Conference group has no `venue_id` yet and its bare group-id listing is empty. The first
-  nonempty public accepted listing is `Creative_AI_Track`; the conservative classifier keeps that form at
+  nonempty public bare group-id listing is `Creative_AI_Track`; the conservative classifier keeps that form at
   `other` / `unknown`, as it already did for 2025, rather than deriving acceptance from `content.venue`.
 - Every response passed `OpenReviewClient`'s world-readable public projection before capture. Tests feed
   the scrubbed exchange back through the real cache codec and then replay it with an offline client that

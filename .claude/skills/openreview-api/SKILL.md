@@ -187,8 +187,8 @@ sees a raw response before `OpenReviewClient` applies its public projection; if 
 `OpenReviewPublicDataError`, delete that raw capture immediately. Scrubbing text does not make a
 non-world-readable note safe to commit.
 
-TASK-050's v2 inventory test requires at least one note fixture for every supported venue-year through the
-current year. The authenticated 2026-09-29 follow-up fills ICML 2023 and ICLR/NeurIPS/ICML 2026, and records
+TASK-050's v2 inventory test requires at least one note fixture for every supported venue-year through
+2026. The authenticated 2026-09-29 follow-up fills ICML 2023 and ICLR/NeurIPS/ICML 2026, and records
 the root `?parent=` response for each of those four venue-years. Each new exchange is run once through the
 real cache codec and then requested again by an offline client with no credentials or transport call. A root
 group fixture retains the returned public group documents (not merely `select=id`) so tests cover the ACL
