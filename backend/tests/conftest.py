@@ -5,8 +5,9 @@ than a Unix socket or loopback, and every non-loopback name lookup, fails with N
 whole test session (limits: `pytest_configure`). Crawler tests use recorded HTTP fixtures (01 §Testing); there is no opt-out marker.
 
 
-Select with HYPOTHESIS_PROFILE or `--hypothesis-profile`: `dev` (local default), `ci` (2,000 examples, the
-`test` workflow) and `nightly` (50,000, the `nightly` workflow). `print_blob=True` so a CI failure prints a
+Select with HYPOTHESIS_PROFILE or `--hypothesis-profile`: `dev` (200 examples: the local default, and the
+`test` workflow under pytest-xdist), `ci` (2,000, the `nightly` workflow's whole-suite job) and `nightly` (50,000,
+the `nightly` workflow's property jobs). `print_blob=True` so a CI failure prints a
 `@reproduce_failure` blob; the example database (`.hypothesis/`) is gitignored.
 """
 

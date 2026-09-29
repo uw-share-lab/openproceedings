@@ -31,8 +31,10 @@ tempted to bypass it.
 2. **Python jobs:** `astral-sh/setup-uv` with its cache keyed on `uv.lock`; `uv sync --locked` at the root
    (the uv workspace); then `make lint` (ruff format/check, `mypy --strict backend/src` once it exists,
    shellcheck, frontend checks) followed by `actionlint`. `test` runs
-   `uv run --locked pytest -q --hypothesis-profile=ci`. Nightly has three bounded jobs: oracle-backed
-   properties at 50k, exhaustive tokenizer plus the remaining properties at 50k, and `make mutate`.
+   `uv run --locked pytest -q -n auto --hypothesis-profile=dev` (pytest-xdist, 200 examples; TASK-127).
+   Nightly has four bounded jobs: the whole backend suite at the `ci` profile (2,000) under xdist,
+   oracle-backed properties at 50k, exhaustive tokenizer plus the remaining properties at 50k, and
+   `make mutate`.
 3. **Frontend jobs:** `actions/setup-node` with npm cache on `package-lock.json`; `npm ci --ignore-scripts`; eslint, `tsc
    --noEmit`, prettier, vitest; `make openapi` and `git diff --exit-code` the snapshot and `frontend/src/api/schema.ts`.
 4. **Fixture index:** the E2E fixture server builds the deterministic 5k index in a temporary directory for

@@ -96,10 +96,12 @@ exit status).
 
 ## Tests and checks
 ```bash
-make test    # backend (pytest) and frontend (Vitest)
+make test    # backend (pytest, in parallel) and frontend (Vitest)
 make lint    # exactly what CI's lint job runs
 make e2e     # full-stack browser, accessibility and visual tests
 make help    # every entry point
 ```
+CI's `test` job runs the backend suite in parallel with Hypothesis properties at 200 examples; the nightly
+workflow reruns it at 2,000 and every property at 50,000.
 
 MIT © SHARE Lab, University of Waterloo

@@ -1,6 +1,6 @@
 ---
 name: property-testing
-description: How openproceedings uses Hypothesis — strategies for tokens, query strings and ASTs, the properties that must hold (canonical idempotence, AST round-trip, parser totality, TantivyEngine == ReferenceEngine, dedup invariants), settings profiles (CI 2,000 examples vs nightly 50,000), deadlines, shrinking, and turning every counterexample into a permanent golden case. Use when writing or reviewing a property test or strategy, triaging a Hypothesis failure, or tuning the differential suite.
+description: How openproceedings uses Hypothesis — strategies for tokens, query strings and ASTs, the properties that must hold (canonical idempotence, AST round-trip, parser totality, TantivyEngine == ReferenceEngine, dedup invariants), settings profiles (PR CI 200 examples in parallel, nightly 2,000 and 50,000), deadlines, shrinking, and turning every counterexample into a permanent golden case. Use when writing or reviewing a property test or strategy, triaging a Hypothesis failure, or tuning the differential suite.
 ---
 
 # Property testing (Hypothesis)
@@ -9,9 +9,9 @@ description: How openproceedings uses Hypothesis — strategies for tokens, quer
 Register in `backend/tests/conftest.py`:
 | Profile | `max_examples` | Deadline | Used by |
 |---|---|---|---|
-| `dev` | 200 | 500 ms | local loop (default) |
-| `ci` | **2,000** | 2 s | `test` workflow (differential@2k) |
-| `nightly` | **50,000** | `None` | `nightly` workflow (differential@50k) |
+| `dev` | 200 | 500 ms | local loop (default); `test` workflow on every PR, under pytest-xdist (TASK-127) |
+| `ci` | **2,000** | 2 s | `nightly` workflow's `suite-ci` job: the whole backend suite, under pytest-xdist (differential@2k) |
+| `nightly` | **50,000** | `None` | `nightly` workflow's property jobs (differential@50k: task-057) |
 Also set `print_blob=True` (so a CI failure prints a `@reproduce_failure` blob) and
 `suppress_health_check=[HealthCheck.too_slow]` only for the differential suite, with a comment. The
 Hypothesis example database (`.hypothesis/`) is gitignored; CI failures are reproduced from the blob.
@@ -38,8 +38,9 @@ each tree strategy takes a `Vocab`, default the 200-record fixture's, `synthetic
 200-record fixture's real term dictionary plus awkward extras (operator words, filter values as text,
 digits, Thai, kana, CJK). Import it as `from tests.strategies import …`. Properties over them live in
 `tests/unit/test_properties.py` (round-trip without printing-caused warnings, match-set preservation by
-the oracle, all-negative rejection, Scholar mode reads canonical strings identically). CI runs the `ci`
-profile (2,000); the nightly workflow runs every property at `nightly` (50,000), split into an
+the oracle, all-negative rejection, Scholar mode reads canonical strings identically). PR CI runs the `dev`
+profile (200) in parallel; the nightly workflow runs the whole suite at `ci` (2,000) and every property at
+`nightly` (50,000), the latter split into an
 oracle-backed job and the rest (about 35 and 20 minutes locally). Counterexamples found so
 far are golden rows (`("0", "0")` in test_canonical.py; `trust (trust OR track:main)` in test_defaults.py).
 Not yet: stems near the 200-expansion cap (needs the 5k fixture, task-057).

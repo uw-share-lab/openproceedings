@@ -9,7 +9,7 @@ help:
 	@echo "fmt      - auto-format and auto-fix everything (ruff, prettier, eslint)"
 	@echo "lint     - check-only: what CI's lint job runs (ruff, mypy, shellcheck, frontend)"
 	@echo "tooling  - roster lint, roster/learnings indexes, backlog hygiene, hook case tables"
-	@echo "test     - backend (pytest) and frontend (vitest) tests"
+	@echo "test     - backend (pytest, parallel via xdist) and frontend (vitest) tests"
 	@echo "e2e      - Playwright spec-05 flow, WCAG 2.2 AA and visual regression"
 	@echo "openapi  - regenerate the OpenAPI snapshot and frontend/src/api/schema.ts (commit both; CI checks)"
 	@echo "hooks    - install git hooks (commit-msg, pre-push) via scripts/setup-dev.sh"
@@ -54,7 +54,7 @@ tooling:
 	  if [ "$$(cat "$$f")" != 0 ]; then cat "$$d/$$n.out"; rc=1; else echo "$$n: $$(tail -1 "$$d/$$n.out")"; fi; done; rm -rf "$$d"; exit $$rc
 
 test: frontend-deps
-	@if [ -d backend ]; then uv run --locked pytest -q; fi
+	@if [ -d backend ]; then uv run --locked pytest -q -n auto; fi
 	@if [ -f frontend/package.json ]; then npm test --workspace frontend; fi
 
 e2e: frontend-deps

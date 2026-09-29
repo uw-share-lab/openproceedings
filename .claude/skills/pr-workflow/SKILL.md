@@ -30,8 +30,9 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
    it is removed, never deleted blind.
 
 ## Local test runs (by risk; owner's rule, 2026-09-29, TASK-121)
-CI's required `test` job runs the full backend and frontend suite on every PR, and nothing merges without it.
-The local run is there to catch a failure before the 30-minute CI round, so it is sized to what the diff can
+CI's required `test` job runs the full backend and frontend suite on every PR (backend under pytest-xdist, properties
+at 200 examples; nightly reruns it at 2,000), and nothing merges without it. `make test` runs the backend in parallel
+too (`-n auto`). The local run is there to catch a failure before the CI round, so it is sized to what the diff can
 break. `make lint` and `make tooling` always run (the pre-push hook runs them too).
 
 | The diff touches | Run locally before pushing |
@@ -72,14 +73,15 @@ sha. Any commit after an approval — a typo fix, a rebase, an amend — produce
 | Check (workflow) | Covers |
 |---|---|
 | `lint` (`lint.yml`) | `make lint`: ruff format/check, mypy --strict (once `backend/src` exists), shellcheck; prettier, eslint, tsc; then actionlint |
-| `test` (`test.yml`) | pytest unit/golden/differential@2k/contract; vitest; OpenAPI→TS freshness |
+| `test` (`test.yml`) | pytest unit/golden/differential/contract under pytest-xdist, properties at the `dev` profile (200 examples); vitest; OpenAPI→TS freshness |
 | `claude-tooling` (`claude-tooling.yml`) | `make tooling`: roster lint, `.claude/README.md` + learnings index freshness, backlog hygiene, every hook case table |
 | `attribution` (`pr-gates.yml`) | no AI attribution in any commit message or the PR title/body |
 | `learnings` (`pr-gates.yml`) | the branch adds or extends a learnings entry, or is labelled `no-learning` |
 | `review-attested` (`pr-gates.yml`) | the PR body attests APPROVE for the head sha |
 
 The advisory `e2e` and `bench` checks should also be green before merge; `nightly` is scheduled rather
-than a PR check (spec 08 §CI).
+than a PR check (spec 08 §CI); its `suite-ci` job reruns the whole backend suite at the `ci` profile (2,000
+examples), so a property failure that needs more than 200 examples surfaces within a day (TASK-127).
 
 **Learnings rule.** Only a file named `YYYY-MM-DD-<slug>.md` directly in `.claude/learnings/` counts, added
 *or* modified: extending an existing entry with a dated addendum satisfies the gate. `README.md`,
