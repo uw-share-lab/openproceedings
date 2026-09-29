@@ -183,6 +183,9 @@ ADAPTERS: dict[tuple[str, int], Adapter] = {
         "ICLR", 2020, _conf("ICLR", 2020), "decision_note",
         decision_notes=DecisionNotes("ICLR.cc/2020/Conference/Paper{number}/-/Decision", "decision", {
             "Accept (Poster)": (None, "accepted", "poster"),
+            # 108 spotlights and 48 talks on the live forums (2026-09-29, TASK-123); a talk is an oral
+            "Accept (Spotlight)": (None, "accepted", "spotlight"),
+            "Accept (Talk)": (None, "accepted", "oral"),
             "Reject": (None, "rejected", None),
         }),
     ),

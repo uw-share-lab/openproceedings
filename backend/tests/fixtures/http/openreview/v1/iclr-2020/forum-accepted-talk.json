@@ -1,0 +1,132 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "authenticated OpenReview fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "forum listing trimmed from 10 to 3 notes (order kept)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?forum=BkgzMCVtPB&limit=1000&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "id": "sH9vCYg_1",
+     "original": null,
+     "number": 1,
+     "cdate": 1576798711716,
+     "ddate": null,
+     "tcdate": 1576798711716,
+     "tmdate": 1576800924666,
+     "tddate": null,
+     "forum": "BkgzMCVtPB",
+     "replyto": "BkgzMCVtPB",
+     "invitation": "ICLR.cc/2020/Conference/Paper995/-/Decision",
+     "content": {
+      "decision": "Accept (Talk)",
+      "comment": "Synthetic comment text 1.",
+      "title": "Synthetic title text 2."
+     },
+     "signatures": [
+      "ICLR.cc/2020/Conference/Program_Chairs"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2020/Conference/Program_Chairs"
+     ]
+    },
+    {
+     "id": "BkeCz02Lsr",
+     "original": null,
+     "number": 4,
+     "cdate": 1573469718036,
+     "ddate": null,
+     "tcdate": 1573469718036,
+     "tmdate": 1573469718036,
+     "tddate": null,
+     "forum": "BkgzMCVtPB",
+     "replyto": "rJliBd199H",
+     "invitation": "ICLR.cc/2020/Conference/Paper995/-/Official_Comment",
+     "content": {
+      "title": "Synthetic title text 3.",
+      "comment": "Synthetic comment text 4."
+     },
+     "signatures": [
+      "ICLR.cc/2020/Conference/Paper995/Authors"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2020/Conference/Paper995/Authors",
+      "ICLR.cc/2020/Conference"
+     ]
+    },
+    {
+     "id": "BkgzMCVtPB",
+     "original": "Bkgr5o4OPr",
+     "number": 995,
+     "cdate": 1569439242282,
+     "ddate": null,
+     "tcdate": 1569439242282,
+     "tmdate": 1683306478996,
+     "tddate": null,
+     "forum": "BkgzMCVtPB",
+     "replyto": null,
+     "invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
+     "content": {
+      "title": "Synthetic title text 5.",
+      "authors": [
+       "Synthetic Author 6",
+       "Synthetic Author 7",
+       "Synthetic Author 8",
+       "Synthetic Author 9"
+      ],
+      "authorids": [
+       "synthetic.person10@example.org",
+       "synthetic.person11@example.org",
+       "synthetic.person12@example.org",
+       "synthetic.person13@example.org"
+      ],
+      "keywords": [],
+      "abstract": "Synthetic abstract text 14.",
+      "pdf": "/pdf/b1e4d05cc1d50ea1b844e9acb434fb509e067e2f.pdf",
+      "code": "Synthetic code text 15.",
+      "paperhash": "synthetic|synthetic_title_16",
+      "_bibtex": "Synthetic bibtex text 17.",
+      "full_presentation_video": "",
+      "original_pdf": "Synthetic original pdf text 18.",
+      "appendix": "",
+      "poster": "",
+      "spotlight_video": "",
+      "slides": ""
+     },
+     "signatures": [
+      "ICLR.cc/2020/Conference"
+     ],
+     "readers": [
+      "everyone"
+     ],
+     "nonreaders": [],
+     "writers": [
+      "ICLR.cc/2020/Conference"
+     ],
+     "pdate": 1576800924690,
+     "odate": 1569439242535
+    }
+   ],
+   "count": 10
+  }
+ }
+}

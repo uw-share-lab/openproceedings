@@ -393,6 +393,8 @@ V1_NO_VENUE_EVIDENCE = {
     "v1/iclr-2019/notes-blind-listing.json",
     "v1/iclr-2019/notes-withdrawn-listing.json",
     "v1/iclr-2020/forum-accepted.json",
+    "v1/iclr-2020/forum-accepted-spotlight.json",  # Accept (Spotlight), TASK-123
+    "v1/iclr-2020/forum-accepted-talk.json",  # Accept (Talk), TASK-123
     "v1/iclr-2020/forum-rejected.json",
     "v1/iclr-2020/notes-blind-listing.json",
     "v1/iclr-2020/notes-desk-rejected-listing.json",

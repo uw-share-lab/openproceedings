@@ -274,6 +274,22 @@ def test_iclr_2020_recorded_accept_decision_is_accepted_poster(tmp_path: Path) -
     assert crawl.report.unmapped == {} and crawl.report.gaps == ()
 
 
+@pytest.mark.parametrize(
+    ("fixture", "presentation"), [("forum-accepted-spotlight", "spotlight"), ("forum-accepted-talk", "oral")]
+)
+def test_iclr_2020_spotlight_and_talk_decisions_are_accepted(
+    tmp_path: Path, fixture: str, presentation: str
+) -> None:
+    """Recorded ICLR 2020 forums (TASK-123): the decision table mapped only Accept (Poster), so the 108 Spotlight
+    and 48 Talk papers (156, exactly the coverage shortfall) were status unknown. A talk is an oral."""
+    forum = v1_notes(f"iclr-2020/{fixture}.json")
+    sub = v1_note(f"iclr-2020/{fixture}.json")
+    crawl = run(FakeOpenReviewV1({BLIND.format(y=2020): [sub]}, {sub["id"]: forum}), tmp_path, "ICLR", 2020)
+    [record] = crawl.records
+    assert outcome(record) == ("main", "accepted", presentation)
+    assert crawl.report.unmapped == {}
+
+
 def test_iclr_2021_venue_first_then_the_decision_note_and_the_withdrawn_conflict(tmp_path: Path) -> None:
     accepted = v1_note("iclr-2021/note-accepted.json")  # venue ICLR 2021 Poster
     forum = v1_notes("iclr-2021/forum-rejected-no-venueid.json")
