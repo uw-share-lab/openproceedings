@@ -72,6 +72,13 @@ The methods text cites the coverage report (with its snapshot hash) as the datab
 `GET /coverage` serves every column per cell (`venue_years[].tracks`: sources, indexed accepted,
 `official_accepted` with its citation, `delta`, `delta_pct`, `gated`, `within_gate`, missing abstracts) and
 the statuses indexed per venue-year; `/coverage` in the UI renders the same data.
+As built (TASK-054): `op eval coverage` renders `docs/results/<date>-coverage.md` from that same computation
+(`api.coverage.compute` on the index, `eval/coverage_report.py`). It adds the gate verdict over every gated
+official cell, with a cell the snapshot holds no record for as a gap (0 indexed, ✗); a cause note for every
+failing cell, read from `docs/results/coverage-causes.toml` (`["<Venue> <year> <track>"]` with a `cause`) or
+**unclassified**, with the file's sha256 in the header; every proceedings listing whose crawl skipped entries or
+disagreed with its page's count; and every OpenReview crawl that is incomplete or has coverage gaps, conflicts,
+unmapped venues, non-routine skipped groups or non-routine skipped notes. `--check` exits 1 when the gate fails.
 
 ## D. Classification audit (report)
 

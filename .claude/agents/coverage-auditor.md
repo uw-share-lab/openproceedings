@@ -22,8 +22,8 @@ are read-only: you report, and the main session fixes.
 2. **Official counts** come only from `docs/results/coverage-sources.md`, and each needs a citation. A
    cell with no cited count is reported as "no reference" and never estimated.
 3. **Compare** each venue × year × track cell of accepted papers: indexed, official, delta, and delta %.
-   Run `op eval coverage` if it exists, and check its numbers against your own `jq` count over
-   `records.jsonl`.
+   Run `uv run op eval coverage --index <index_version> --out <a scratch dir>` and check its numbers against
+   your own `jq` count over `records.jsonl`.
 4. **Diagnose every cell outside ±1%:**
    - under-count: missing pagination pages, an unverified venueid form in `unknown`, the D&B alias
      counted twice or not at all, or a volume missing from the table

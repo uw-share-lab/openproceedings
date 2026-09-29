@@ -62,10 +62,22 @@ When a cell misses the gate, classify the cause in the report (source definition
 dedup, crawl gap) before changing anything. Never adjust the official number to fit.
 
 ## Report shape
-Header: date, snapshot hash, `index_version`, source file revision. Table per venue with all cells,
-`delta_pct` to one decimal, gate ✓/✗ (or "not gated" for a cell with no official count), the
-`missing_abstract`, `unknown`-track and **statuses indexed** columns, and cause notes for every ✗. Totals
-of `missing_abstract` and `unknown`. Command that produced it. The methods text cites this report (with its
+As built (`op eval coverage`, `backend/src/openproceedings/eval/coverage_report.py`, TASK-054). Header: date,
+snapshot name and hash, `index_version`, the sha256 of `coverage-sources.md` and of `coverage-causes.toml` (or
+"none"), the command. Then the verdict
+line (`**M4 gate: PASS|FAIL** — n of m gated cells within ±1%; k gaps`). Then a table per venue: every cell,
+indexed accepted, official, Δ, `delta_pct` to one decimal, gate (✓, ✗, `✗ gap` for a gated official cell with
+no records, `not gated` for another track, `no source` for a main or D&B cell with no official count),
+missing abstracts, the venue-year's `unknown`-track and `unknown`-status counts, and **statuses indexed**
+(`none (no records)` on a gap in a venue-year with no record at all). Δ% is rounded to one decimal; the gate compares exactly. Then a cause note for
+every failing cell, from `docs/results/coverage-causes.toml` (`["NeurIPS 2021 datasets_benchmarks"]`
+`cause = "…"`) or **unclassified**, and any note for a cell that no longer fails (remove it). Then every
+proceedings listing that skipped entries or whose count disagreed with its page, and every OpenReview crawl
+that is incomplete, has coverage gaps, conflicts, unmapped venues or non-routine skipped groups (`proposal`
+and `container` are routine; `not_a_v2_venue`, which can be an unreadable group, and `no_submission_venue_id`
+are not), or skipped anything but
+`not_submission` replies. Then totals of records, missing abstracts, `unknown` track and status. The report is
+written atomically; a same-day run replaces it. `--check` exits 1 when the gate fails. The methods text cites this report (with its
 snapshot hash) as the database-scope caveat.
 
 ## Gotchas
