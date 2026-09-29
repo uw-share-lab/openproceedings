@@ -12,6 +12,8 @@ labels:
 milestone: m-4
 dependencies: []
 modified_files:
+  - .claude/learnings/2026-09-27-openreview-v1-venueid-is-not-status-and-anonymous-gets-html.md
+  - .claude/skills/openreview-api/SKILL.md
   - backend/tests/fixtures/http/openreview/v2/iclr-2024/notes-tinypapers.json
   - >-
     backend/tests/fixtures/http/openreview/v2/neurips-2025/notes-workshop-city.json
@@ -28,7 +30,7 @@ scrub.py treated the @ in venue strings such as 'Tiny Papers @ ICLR 2023' as an 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [x] #1 Both fixtures re-recorded with their real venue strings,Classifier table tests read the re-recorded venues
+- [x] #1 Both fixtures re-recorded with their real venue strings; classifier table tests read the re-recorded venues
 <!-- AC:END -->
 
 ## Implementation Plan
