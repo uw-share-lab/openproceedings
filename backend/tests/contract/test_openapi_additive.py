@@ -134,8 +134,9 @@ def _baseline() -> dict[str, Any]:
         )
     except (OSError, subprocess.CalledProcessError) as e:
         if required:
+            detail = e.stderr.decode().strip() if isinstance(e, subprocess.CalledProcessError) else str(e)
             pytest.fail(
-                f"{ref} isn't available, so the contract can't be checked against the released one: {e}"
+                f"{ref} isn't available, so the contract can't be checked against the released one: {detail}"
             )
         pytest.skip(f"{ref} isn't available here, so there is no released contract to compare against")
     try:
@@ -147,7 +148,13 @@ def _baseline() -> dict[str, Any]:
             text=True,
         ).stdout
     except subprocess.CalledProcessError:
-        # the ref exists but predates the snapshot (main held only the specs before its first promotion)
+        # main held only the specs before its first promotion: no backend, so no released contract. A base that
+        # has a backend but no snapshot at this path (a moved snapshot) must not skip a required check
+        predates = subprocess.run(
+            ["git", "cat-file", "-e", f"{ref}:backend/pyproject.toml"], cwd=REPO, check=False
+        )
+        if required and predates.returncode == 0:
+            pytest.fail(f"{ref} has a backend but no snapshot at backend/tests/contract/openapi.json")
         pytest.skip(f"{ref} has no OpenAPI snapshot yet, so there is no released contract to compare against")
     return json.loads(text)  # type: ignore[no-any-return]
 
