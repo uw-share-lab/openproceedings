@@ -44,11 +44,12 @@ budget) and restartable: pages already cached are never fetched again. Try `--dr
 proceedings it reads only the index pages and reports what a crawl would fetch; for OpenReview it reports what
 is cached, with no network. Page counts are from the 2026-09-29 dry runs
 ([`docs/results/2026-09-29-proceedings-dry-runs.md`](docs/results/2026-09-29-proceedings-dry-runs.md)); times
-are estimates at about one page a second.
+are lower bounds at the default `--delay` of 1 s: a crawler waits at least that long between requests to a
+host, plus each response's own time.
 ```bash
-uv run op ingest neurips --year 2013                       # one small year: 360 papers, roughly 8 minutes
-uv run op ingest neurips --year 2013-2025                  # the NeurIPS proceedings (26,019 pages, roughly 10 h)
-uv run op ingest pmlr --year 2013-2025                     # ICML via PMLR (14,281 pages, roughly 5 h)
+uv run op ingest neurips --year 2013                       # one small year: 360 papers, at least 6 minutes
+uv run op ingest neurips --year 2013-2025                  # the NeurIPS proceedings (26,019 pages, over 7 h)
+uv run op ingest pmlr --year 2013-2025                     # ICML via PMLR (14,281 pages, at least 3.9 h)
 uv run op ingest iclr --year 2014-2016                     # the ICLR archive years
 uv run op ingest openreview --venue ICLR --years 2013-2025 # also NeurIPS 2021-2025, ICML 2023-2025
 ```
