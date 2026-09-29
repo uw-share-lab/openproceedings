@@ -42,7 +42,9 @@ value); `record_count`; `counts` nested venue → year → track → status; `ab
 `unknown_track` per venue → year; since format 2 (TASK-082), `abstract_missing_by_track` (venue → year →
 track, 0 included), `sources_by_track` (venue → year → track → the claim sources of its records),
 `statuses_indexed` (venue → year → the statuses its sources can contain, from `ingest/statuses.py`, plus any
-its records hold) and `crawl_windows` (per claim source, its first and last `fetched_at`); `merges` and `conflicts` (a `total` plus a count per rule /
+its records hold) and `crawl_windows` (per claim source, its first and last `fetched_at`: the window
+`crawl_dates` uses, and narrower than the source's own `crawl_window`, which spans every response fetched,
+records or not; TASK-122); `merges` and `conflicts` (a `total` plus a count per rule /
 resolution kind); `files` (the sha256 of `merges.csv` and `conflicts.csv`, which `snapshot_hash` doesn't
 cover); and `sources` — for RIS, one `ImportReport.to_manifest()` per cached file (both inputs' sha256,
 the installed scholarmend `parser_version`, read / imported / skipped by reason, abstract_missing,

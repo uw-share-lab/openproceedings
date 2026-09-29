@@ -273,7 +273,8 @@ def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> SnapshotFacts:
     """`crawl_dates` (with each key's kind), `sources`, `identification_citable` and `dedup` from the manifest
     of the snapshot the index was built from (which must name the index's `snapshot_hash`). The manifest's
     corpus-wide window is key `*`; each claim source with a window of its own adds a key (a format-2 manifest's
-    `crawl_windows`, or a source entry that carries its own `crawl_window`), as `/coverage` does
+    `crawl_windows`, else a source entry that carries its own `crawl_window`; the claim window wins, TASK-122), as
+    `/coverage` does
     (`coverage.crawl_dates`; a test compares the two). A bootstrap source's window (RIS: when the Scholar searches were run) is
     `scholar_query_dates`, not a crawl; `*` over bootstrap sources alone is too, over both is `mixed`."""
     try:
@@ -286,8 +287,9 @@ def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> SnapshotFacts:
             if isinstance(entry, dict) and "crawl_window" in entry:
                 crawl[source] = _window(entry["crawl_window"])
         for source, window in sorted(manifest.get("crawl_windows", {}).items()):  # format 2 (TASK-082)
-            if source == ALL_SOURCES or crawl.setdefault(source, _window(window)) != _window(window):
-                raise ValueError("a source has two crawl windows, or is named `*`")
+            if source == ALL_SOURCES:
+                raise ValueError("a source can't be named `*`")
+            crawl[source] = _window(window)  # the claim window wins over the fetch window (TASK-122)
         kinds = crawl_dates_kind(crawl, sources, ALL_SOURCES)
         conflicts = manifest["conflicts"]
         dedup = Dedup(

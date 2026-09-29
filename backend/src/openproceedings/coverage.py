@@ -64,16 +64,18 @@ def _window(value: object) -> dict[str, str]:
 
 def crawl_dates(manifest: Mapping[str, Any]) -> dict[str, dict[str, str]]:
     """The manifest's crawl windows in a search record's `crawl_dates` shape: `*` is the corpus-wide
-    `crawl_window`, and each source with a window of its own adds its key: format 2's `crawl_windows` (per
-    claim source, TASK-082), or a `sources` entry that carries a `crawl_window`."""
+    `crawl_window`, and each source with a window of its own adds its key. A source's window is its claim window,
+    format 2's `crawl_windows` (the first and last `fetched_at` of the claims on records, TASK-082; spec 04),
+    else its `sources` entry's `crawl_window` (every response its crawls fetched, format 1). The two differ by
+    design (an OpenReview crawl fetches /groups before any note), so the claim window wins (TASK-122)."""
+    claims = _map(manifest.get("crawl_windows", {}), "crawl_windows")
+    if ALL_SOURCES in claims or ALL_SOURCES in _map(manifest["sources"], "sources"):
+        raise SnapshotError("the snapshot manifest names a source `*`")
     dates = {ALL_SOURCES: _window(manifest["crawl_window"])}
     for source, entry in sorted(_map(manifest["sources"], "sources").items()):
-        if isinstance(entry, Mapping) and "crawl_window" in entry and source != ALL_SOURCES:
+        if isinstance(entry, Mapping) and "crawl_window" in entry:
             dates[source] = _window(entry["crawl_window"])
-    for source, window in sorted(_map(manifest.get("crawl_windows", {}), "crawl_windows").items()):
-        own = _window(window)
-        if source == ALL_SOURCES or dates.setdefault(source, own) != own:
-            raise SnapshotError("the snapshot manifest gives a source two crawl windows, or names one `*`")
+    dates.update({source: _window(window) for source, window in sorted(claims.items())})
     return dates
 
 
