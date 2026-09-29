@@ -59,12 +59,11 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
 - `POST https://api2.openreview.net/login` with `{"id", "password"}` returns `{"token": …}`; the same
   bearer token works on api1.
 - `.env` variable names: this project's `.env.example` names `OPENREVIEW_USERNAME` and
-  `OPENREVIEW_PASSWORD`; the maintainer's working `.env` (from scholarmend) uses
-  `SCHOLARMEND_OPENREVIEW_USER` / `SCHOLARMEND_OPENREVIEW_PASSWORD`, the names scholarmend's CLI reads.
-  The confirmed names are `OPENREVIEW_USERNAME` / `OPENREVIEW_PASSWORD`: `.env.example` and
-  `scripts/setup-dev.sh` write them and `CONTRIBUTING.md` documents them; the crawler (TASK-050) reads
-  them and passes them to scholarmend's `login(user, password)`. A maintainer whose `.env` has only the
-  scholarmend names must add these two before recording.
+  `OPENREVIEW_PASSWORD`. During the 2026-09-27 run, the maintainer's Scholarmend-era `.env` had only
+  `SCHOLARMEND_OPENREVIEW_USER` / `SCHOLARMEND_OPENREVIEW_PASSWORD`; the crawler intentionally ignores
+  those legacy names. The main checkout was corrected before the 2026-09-29 TASK-107 run, and
+  `env_credentials()` then reported configured without exposing either value. `.env.example`,
+  `scripts/setup-dev.sh` and `CONTRIBUTING.md` all use the crawler's two supported names.
 
 ### Rate limits
 - api2 sends per-resource budgets: notes `ratelimit-policy: 500;w=3600`, groups `700;w=3600`, plus
