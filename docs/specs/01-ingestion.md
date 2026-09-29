@@ -134,7 +134,7 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    host, or shared by two listings is a `conflicts.csv` row, never a merge. Then (b) a normalized title (the token contract) with the same venue and year. Two
    records are merged **only** when venue and year agree. That lesson comes from venuetriage: records
    with no year must never merge on `(title, "")`. **Two OpenReview records with different forum IDs are
-   never merged**, nor a listing linking one forum with a note of another: a main-track paper and its same-year workshop version can share a title. Title
+   never merged** (the API v1 crawl has already collapsed two notes of one identical paper, TASK-125), nor a listing linking one forum with a note of another: a main-track paper and its same-year workshop version can share a title. Title
    matching only links records *across* sources (OpenReview ↔ proceedings ↔ RIS), never joins two different
    proceedings papers, and never puts a paper whose track the proceedings don't host (workshop, other,
    `unknown`) into a proceedings listing. A merged record's fields
@@ -193,7 +193,18 @@ venueid; ICLR 2014 and 2016 have no decisions (`unknown`), and ICLR 2015 has not
 can't answer for a year is listed in the report's `coverage_gaps`, never raised. A note whose own evidence
 disagrees (the withdrawn ICLR 2021 note `xGZG2kS5bFk` says `ICLR 2021 Poster`; two decision notes that disagree;
 a venueid naming another track) gets `unknown` for that field and an `unresolved:openreview_v1` row in
-`conflicts.csv`. Responses are cached under
+`conflicts.csv`. **Two notes of one paper are one record** (TASK-125): API v1 holds 300 NeurIPS 2021 main-track
+papers twice, as two Blind_Submission notes with different ids and numbers whose content is identical but for
+the id embedded in `_bibtex` (e.g. `-K4tIyQLaY` #292 and `BW2Z6B7S9KZ` #8244), which dedup would refuse as two
+submissions with one title. After a v1 venue-year's listings, records identical in everything but their id,
+forum URL and provenance (title, authors in order, abstract, keywords, pdf, track, status, presentation,
+venueid, all exact), each with a pdf and an integer note `number` and no crawl conflict, are collapsed to the
+lowest-numbered note (a deterministic tie-break whatever the listing order, not "the original": the NeurIPS
+2021 proceedings link the kept forum for 177 of the 297 accepted pairs and the dropped one for 120); every other note is counted in the
+report's `skipped.duplicate_submission`, a DEBUG `openreview_duplicate_submission` line and the crawl's
+`openreview_crawl_attention`. Notes differing in any compared field (another pdf; ICLR 2018's blind vs
+withdrawn copies of one pdf) stay separate, and a note without a pdf is never collapsed. API v2 has no such
+notes (the 2026-09-29 crawl) and doesn't run this rule. Responses are cached under
 `<data-dir>/cache/openreview/{v2,v1}/http/` (the shared `{key, payload}` cache contains only a versioned,
 world-readable projection; restricted fields are removed before persistence and older raw entries are
 invalid; a v1 client logs in on api2, whose token api1 accepts) and a finished

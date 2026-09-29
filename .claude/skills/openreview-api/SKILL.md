@@ -154,9 +154,9 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   (`api`, `venue`, `year`, `offline`, `page_size`), `openreview_crawl_progress` at most every 30 s of the
   client's monotonic clock (`common.Heartbeat`; notes read, `forums` on v1, imported, skipped, `requests`,
   `cached`), `openreview_crawl_finished`, and at most one `openreview_crawl_attention` WARNING with the
-  anomaly counts (v1 and v2 both count `duplicate`; both report `cache_incompatible`, the pre-projection
+  anomaly counts (v1 and v2 both count `duplicate`, v1 also `duplicate_submission`; both report `cache_incompatible`, the pre-projection
   entries the client purged and re-fetched). Per-note anomalies (`openreview_unknown_track`,
-  `openreview_v1_unmapped`, `openreview_v1_conflict`, `openreview_v1_duplicate`, `openreview_note_skipped`) and
+  `openreview_v1_unmapped`, `openreview_v1_conflict`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`) and
   each `openreview_cache_incompatible` are DEBUG.
 - A record id repeated byte-for-byte across status listings is counted as a duplicate. If its parsed
   non-provenance fields differ, the crawl refuses the mixed cache and asks for `--refresh`, rather than
@@ -186,6 +186,17 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
 - A note's own disagreement (withdrawn invitation vs an accepted `content.venue`, two decision notes, a
   venueid naming another track) makes that field `unknown` and adds an `unresolved:openreview_v1` row that
   `snapshot.with_crawl_conflicts` writes to `conflicts.csv` (following merges to the surviving record).
+- **Two notes of one paper collapse** (TASK-125). NeurIPS 2021 lists 300 main-track papers twice: two
+  Blind_Submission notes with different ids and numbers (e.g. `-K4tIyQLaY` #292 and `BW2Z6B7S9KZ` #8244) whose
+  content is identical but for `_bibtex`, which embeds the id. After the listings, `collapse_duplicate_submissions`
+  keeps the lowest-numbered note of records identical in everything but id, forum URL and provenance (exact
+  title, authors, abstract, keywords, pdf, track, status, presentation, venueid), when each has a pdf, an
+  integer `number` and no crawl conflict; the others are `skipped.duplicate_submission` (non-routine in `op eval
+  coverage`), a DEBUG `openreview_duplicate_submission` line (`forum`, `kept`) and a count in
+  `openreview_crawl_attention`. Differing notes stay apart: NeurIPS 2021 `W6e384Lkjbw`/`rDdb26AQ0SO` share a pdf
+  but one has no venue; ICLR 2018 lists 24 pdfs as a blind and a withdrawn note; the 11 NeurIPS 2021 D&B title
+  pairs are Round 1 rejections resubmitted to Round 2 with another pdf. v2 has no identical-pdf notes and
+  doesn't run the rule.
 - Early ICLR 2017 notes give `content.authors` as one string: kept out (`authors_unsplit` in the report), never
   split by guess. ICLR 2023 BlogPosts uses the verified
   `ICLR.cc/2023/BlogPosts/-/Blind_Submission` listing. NeurIPS 2021–2022 main-track withdrawn and

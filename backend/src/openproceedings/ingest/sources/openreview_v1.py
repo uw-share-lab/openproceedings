@@ -29,6 +29,12 @@ The authority rules (never broken):
 4. When a note's own evidence disagrees (a withdrawn-invitation note whose `content.venue` says accepted, such
    as ICLR 2021 `xGZG2kS5bFk`; two decision notes that disagree), the status is `unknown` and the disagreement
    is a `conflicts.csv` row (`unresolved:openreview_v1`), never resolved by picking one side.
+5. **Two notes of one paper are one record** (TASK-125): OpenReview v1 holds 300 NeurIPS 2021 main-track papers as
+   two Blind_Submission notes (different id and number, identical content but for the id in `_bibtex`), which
+   dedup would otherwise refuse as two submissions with one title. After the listings, records that are
+   identical in everything but their id, forum URL and provenance, with a pdf and a note number, are
+   collapsed to the lowest-numbered note; each other note is counted in `skipped["duplicate_submission"]`
+   (`collapse_duplicate_submissions`). A record with a crawl conflict is never collapsed.
 
 Every value is a claim with `source="openreview_v1"`, the page URL it came from (the listing page, or the
 forum page for a decision note) and that page's `fetched_at` from the cache. A finished crawl writes
@@ -37,11 +43,12 @@ forum page for a decision note) and that page's `fetched_at` from the cache. A f
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
-from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections import Counter, defaultdict
+from collections.abc import Callable, Mapping, Sequence, Set
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -72,6 +79,8 @@ SOURCE: Source = "openreview_v1"
 PAGE_SIZE = 1000  # the API's maximum (`limit=1001` is a 400 on v1 too)
 CONFLICT = "unresolved:openreview_v1"  # conflicts.csv resolution: the record's value is `unknown`
 _FORUM_URL = "https://openreview.net/forum?id={}"
+DUPLICATE_SUBMISSION = "duplicate_submission"  # a second note of one paper (rule 5), counted, never a record
+V1_SKIP_REASONS = (*SKIP_REASONS, DUPLICATE_SUBMISSION)
 
 Role = Literal["submission", "withdrawn", "desk_rejected"]
 StatusFrom = Literal["decision_field", "none", "venue", "decision_note", "venue_then_decision_note"]
@@ -289,7 +298,7 @@ class CrawlReport(Report):
     forums: int = 0  # forum listings read for a decision note
     notes_read: int = 0
     imported: int = 0
-    skipped: Counter[str] = field(default_factory=lambda: Counter(dict.fromkeys(SKIP_REASONS, 0)))
+    skipped: Counter[str] = field(default_factory=lambda: Counter(dict.fromkeys(V1_SKIP_REASONS, 0)))
     unmapped: Counter[str] = field(
         default_factory=Counter
     )  # evidence kind → notes whose string isn't in a table
@@ -510,7 +519,7 @@ def note_record(
     ad: Adapter, listing: Listing, note: Mapping[str, Any], listing_page: Page, read_forum: ForumReader,
     report: CrawlReport | None = None,
 ) -> PaperRecord | str:  # fmt: skip
-    """The record for one listed note, or the reason it is skipped (one of SKIP_REASONS)."""
+    """The record for one listed note, or the reason it is skipped (one of V1_SKIP_REASONS)."""
     nid = note.get("id")
     if not isinstance(nid, str) or nid != note.get("forum"):
         return "not_submission"
@@ -594,6 +603,9 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     began, purged = time.monotonic(), client.incompatible
     report = CrawlReport(venue, year, page_size=page_size, gaps=ad.gaps)
     records: dict[str, PaperRecord] = {}
+    numbers: dict[str, object] = {}  # record id → its note's `number`, for rule 5
+    # heartbeats count `imported` before rule 5's collapse, which runs after the listings: NeurIPS 2021's last
+    # heartbeat can show up to 3,020 imported where the finished line says 2,720
     progress = Progress(log, client, report.api, venue, year, page_size, lambda: {
         "notes_read": report.notes_read, "forums": report.forums, "imported": len(records),
         "skipped": sum(report.skipped.values())})  # fmt: skip
@@ -620,12 +632,16 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
 
     for listing in ad.listings:
         try:
-            _listing(client, ad, listing, report, records, read_forum, page_size, progress.tick)
+            _listing(client, ad, listing, report, records, numbers, read_forum, page_size, progress.tick)
         except CacheMiss as e:
             if not dry_run:
                 raise
             report.complete = False
             report.would_fetch.append(e.url)
+    conflicted = {c.id for c in report.conflicts}
+    for kept, dropped in collapse_duplicate_submissions(records, numbers, conflicted):
+        report.skipped[DUPLICATE_SUBMISSION] += 1
+        log.debug("openreview_duplicate_submission", extra={"forum": dropped, "kept": kept})
     for r in records.values():
         report.track_status.setdefault(r.track, Counter())[r.status] += 1
     report.imported = len(records)
@@ -650,6 +666,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
         or sum(report.unmapped.values())
         or report.skipped["out_of_scope"]
         or report.skipped["duplicate"]
+        or report.skipped[DUPLICATE_SUBMISSION]
         or report.skipped["invalid"]
         or incompatible
     ):
@@ -657,14 +674,16 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
                     extra={"api": "v1", "venue": venue, "year": year, "unknown_track": report.unknown_track,
                            "unmapped": sum(report.unmapped.values()), "conflicts": len(report.conflicts),
                            "out_of_scope": report.skipped["out_of_scope"],
-                           "duplicate": report.skipped["duplicate"], "invalid": report.skipped["invalid"],
+                           "duplicate": report.skipped["duplicate"],
+                           "duplicate_submission": report.skipped[DUPLICATE_SUBMISSION],
+                           "invalid": report.skipped["invalid"],
                            "cache_incompatible": incompatible})  # fmt: skip
     return Crawl(tuple(sorted(records.values(), key=lambda r: r.id)), report)
 
 
 def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: CrawlReport,
-             records: dict[str, PaperRecord], read_forum: ForumReader, page_size: int,
-             tick: Callable[[], None]) -> None:  # fmt: skip
+             records: dict[str, PaperRecord], numbers: dict[str, object], read_forum: ForumReader,
+             page_size: int, tick: Callable[[], None]) -> None:  # fmt: skip
     """Page through one invitation's notes into `records`, checking the listing is consistent (v1 sends
     `count` on every page); `tick()` before each note (the crawl's heartbeat)."""
     seen: set[str] = set()
@@ -706,12 +725,52 @@ def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: Cr
                 )
             else:
                 records[got.id] = got
+                numbers[got.id] = note.get("number")
     if rows != len(seen) or len(counts) > 1 or (counts and counts.pop() != rows):
         raise CrawlError(
             f"the listing of {listing.invitation} changed between its cached pages (rows, distinct ids and count "
             "disagree); re-run with --refresh to fetch it again"
         )
     report.listings[listing.invitation] = rows
+
+
+# --- two notes of one paper (rule 5) -------------------------------------------------------------------------
+
+
+def _same_paper(record: PaperRecord) -> str:
+    """What must be equal for two notes to be one paper: everything the record carries except its id, its forum
+    URL (both from the note id) and its provenance (the page each claim came from). So title (whitespace
+    collapsed, case kept), authors in order, abstract, keywords, pdf, track, status, presentation and venueid
+    all match exactly; `_bibtex`, which embeds the note id, never reaches a record. Status and track are
+    compared too: ICLR 2018's 24 pdfs listed as both a blind and a withdrawn note are two claims to reconcile,
+    not one note repeated."""
+    return json.dumps(
+        record.model_dump(mode="json", exclude={"id": True, "provenance": True, "urls": {"forum"}}),
+        sort_keys=True,
+    )
+
+
+def collapse_duplicate_submissions(
+    records: dict[str, PaperRecord], numbers: Mapping[str, object], exempt: Set[str] = frozenset()
+) -> list[tuple[str, str]]:
+    """Remove from `records` every second note of one paper (module docstring rule 5) and return the (kept,
+    removed) native ids, sorted. Only records with a pdf and an integer note `number`, and not in `exempt` (those
+    with a crawl conflict), are candidates. The lowest number (then the lowest id) is kept: a deterministic
+    tie-break, so the choice doesn't depend on which listing or page order the API returned and the same cache
+    always keeps the same id. It is not "the original": the NeurIPS 2021 proceedings link the kept forum for
+    177 of the 297 accepted pairs and the dropped one for 120 (e.g. `0hJ-U3aqUDf` #401 kept, `rvKD3iqtBdk`
+    #3462 linked; research facts note, TASK-125)."""
+    groups: defaultdict[str, list[str]] = defaultdict(list)
+    for rid, record in records.items():
+        if record.urls.pdf is None or type(numbers.get(rid)) is not int or rid in exempt:
+            continue
+        groups[_same_paper(record)].append(rid)
+    out = []
+    for rids in groups.values():
+        kept, *rest = sorted(rids, key=lambda rid: (numbers[rid], rid))
+        for rid in rest:
+            out.append((records[kept].native, records.pop(rid).native))
+    return sorted(out)
 
 
 # --- the crawl files ------------------------------------------------------------------------------------------

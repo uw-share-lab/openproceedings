@@ -30,9 +30,10 @@ BUILT = datetime(2026, 9, 28, tzinfo=UTC)
 # Re-recorded by TASK-096 when the ICLR archive became a crawler and record schema v2 added its source;
 # the files hash was updated by TASK-115 when manifest format 2 added per-track coverage metadata, and by
 # TASK-118 when record schema v3 (round-qualified 2021 D&B ids) changed the manifest's record_schema_version;
-# no fixture here is on the D&B host, so the records, and SNAPSHOT_HASH, are unchanged.
+# no fixture here is on the D&B host, so the records, and SNAPSHOT_HASH, are unchanged. TASK-125 changed it again:
+# every API v1 crawl report's `skipped` gained `duplicate_submission` (0 for both v1 crawls here; records unchanged).
 SNAPSHOT_HASH = "f84dae5aa502508a627871ff16eb0e7503adce52c01e9aa11ee55552480e0857"
-FILES_HASH = "73504f19102db4cfcc73b140160e6a0b9561f247d05291f116b9fa315197be2b"
+FILES_HASH = "3aacf1e82f77604c824cd7326d7cc0350f70aaef0475f30afc1d1c31114a93d6"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:

@@ -155,6 +155,34 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
   account returned a non-world-readable row and was deliberately discarded; only public-by-id evidence is
   committed.
 
+#### TASK-125: NeurIPS 2021 notes that repeat a paper (2026-09-29 crawl cache)
+
+- NeurIPS 2021's main Blind_Submission listing holds **300 papers twice**: two notes with different ids and
+  numbers (e.g. `-K4tIyQLaY` #292 and `BW2Z6B7S9KZ` #8244) whose content is identical (title, authors,
+  authorids, abstract, keywords, TL;DR, pdf path, venue, venueid) apart from `_bibtex`, which embeds the id.
+  By status: 297 accepted (267 poster, 25 spotlight, 5 oral) and 3 opt-in rejected. The 297 are the gap
+  between the 2,630 OpenReview-accepted main papers (TASK-054's note) and the official 2,334: 2,333 remain
+  accepted after the collapse. Dedup refused each such title group as two submissions, so neither note merged
+  with its proceedings record.
+- The v1 crawler now collapses them (`openreview_v1.collapse_duplicate_submissions`; spec 01 §Sources): an
+  offline replay of the real cache imports 2,720 NeurIPS 2021 records from 3,020 notes, with 300
+  `duplicate_submission`, keeping the lower number (`-K4tIyQLaY`). Every other v1 venue-year (ICLR
+  2013–2023, NeurIPS 2022) and every v2 venue-year (ICLR 2024–2025, ICML 2023–2025, NeurIPS 2023–2025)
+  collapses 0. A full offline `op snapshot build` from that cache then has NeurIPS 2021 main at 2,335
+  accepted (2,333 merged with the proceedings, 1 OpenReview-only, 1 proceedings-only) against the official
+  2,334, where the trial had 2,929 (2,036 merged, 595 OpenReview-only, 298 proceedings-only).
+- The kept note (lowest number) is a tie-break, not the one the proceedings name: the cached NeurIPS 2021
+  proceedings pages link the kept forum for 177 of the 297 accepted pairs and the dropped forum for 120 (never
+  both, never neither), e.g. `0hJ-U3aqUDf` #401 kept while the proceedings link `rvKD3iqtBdk` #3462. Harmless
+  while the NeurIPS importer doesn't claim that link as `urls.forum` (dedup-rules skill).
+- Same pdf but not the same paper by content, kept apart: NeurIPS 2021 `W6e384Lkjbw` (#5999, no `venue`,
+  so status unknown) and `rDdb26AQ0SO` (accepted); ICLR 2018's 24 pdfs listed as a blind note and a
+  withdrawn note (status differs, authors differ on 12).
+- The NeurIPS 2021 D&B surplus (185 accepted vs 174 official in the trial) is **not** this: OpenReview's D&B
+  rounds hold exactly 174 accepted notes, and its 11 same-title pairs are a Round 1 rejection and a Round 2
+  acceptance with different pdfs (resubmissions). The crawl keeps both notes, and dedup still refuses to guess
+  which one a proceedings record is, so those 11 stay unmerged.
+
 #### TASK-050 authenticated v2 fixture follow-up (2026-09-29)
 
 - Root `?parent=` responses are now recorded without `select=id` for ICML 2023 and all three 2026 venues.
