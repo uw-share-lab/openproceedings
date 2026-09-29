@@ -1,7 +1,7 @@
 {
  "_recorded": {
-  "date": "2026-09-27",
-  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "date": "2026-09-29",
+  "run": "authenticated OpenReview fixture run",
   "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
  },
  "request": {
@@ -13,17 +13,25 @@
   "status": 200,
   "headers": {
    "content-type": "application/json; charset=utf-8",
-   "x-ratelimit-limit": "500",
-   "x-ratelimit-remaining": "257",
-   "x-ratelimit-reset": "1790543172",
    "ratelimit-policy": "500;w=3600",
-   "ratelimit-limit": "500",
-   "ratelimit-remaining": "257",
-   "ratelimit-reset": "2230"
+   "ratelimit-remaining": "491",
+   "ratelimit-reset": "1044"
   },
   "json": {
    "notes": [
     {
+     "number": 145,
+     "invitations": [
+      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM/-/Submission",
+      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM/-/Post_Submission",
+      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM/-/Edit",
+      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM/Submission145/-/Camera_Ready_Revision"
+     ],
+     "id": "8fG56eJTnG",
+     "readers": [
+      "everyone"
+     ],
+     "forum": "8fG56eJTnG",
      "content": {
       "title": {
        "value": "Synthetic title text 1."
@@ -59,46 +67,18 @@
        "value": "/pdf/36b399ac567840ae596c3ca0e058835e4c5a8448.pdf"
       },
       "venue": {
-       "value": "synthetic.person15@example.org"
+       "value": "ResponsibleFM @ NeurIPS 2025"
       },
       "venueid": {
        "value": "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM"
       },
       "_bibtex": {
-       "value": "synthetic.person16@example.org"
+       "value": "Synthetic bibtex text 15."
       },
       "paperhash": {
-       "value": "synthetic|synthetic_title_17"
+       "value": "synthetic|synthetic_title_16"
       }
-     },
-     "id": "8fG56eJTnG",
-     "forum": "8fG56eJTnG",
-     "license": "CC BY 4.0",
-     "signatures": [
-      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM/Submission145/Authors"
-     ],
-     "readers": [
-      "everyone"
-     ],
-     "writers": [
-      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM",
-      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM/Submission145/Authors"
-     ],
-     "number": 145,
-     "invitations": [
-      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM/-/Submission",
-      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM/-/Post_Submission",
-      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM/-/Edit",
-      "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM/Submission145/-/Camera_Ready_Revision"
-     ],
-     "domain": "NeurIPS.cc/2025/Workshop_Mexico_City/ResponsibleFM",
-     "tcdate": 1762257654600,
-     "cdate": 1762257654600,
-     "tmdate": 1763746935451,
-     "mdate": 1763746935451,
-     "pdate": 1762583259559,
-     "odate": 1762584236650,
-     "version": 2
+     }
     }
    ]
   }

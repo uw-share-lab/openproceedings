@@ -255,13 +255,15 @@ Workshop names include hyphens and digits (`SCI-FM`, `CLRLC-LLMs`, `7HVU`).
   and APA boxes.
 
 ## Fixtures
-`backend/tests/fixtures/http/` holds the recorded, scrubbed responses above: 21 OpenReview v2,
+`backend/tests/fixtures/http/` holds the recorded, scrubbed responses above: 29 OpenReview v2,
 46 v1, 3 ICLR archive, 8 NeurIPS proceedings and 8 PMLR files. Each is
 `{"_recorded", "request": {"method", "url", "authenticated"}, "response": {"status", "headers", "json" | "text"}}`.
 `scrub.py` (no network code) made them from the raw captures: titles, abstracts, authors, author ids,
 keywords, reviews and emails are synthetic; ids, venueids, venue strings, decisions, invitations, dates and
 rate-limit headers are real (decision-004). Long listings are trimmed (the `_recorded.trimmed` field says
-how). `backend/tests/unit/ingest/test_venueid.py` reads every recorded OpenReview note (TASK-094/095); the crawler tasks read the rest. The v1 Tiny Papers note's `venue` was restored by hand after `scrub.py` mistook its `@` for an email (fixed there); the v2 Tiny Papers 2024 and `Workshop_Mexico_City` notes still carry a synthetic email as `venue` until re-recorded.
+how). `backend/tests/unit/ingest/test_venueid.py` reads every recorded OpenReview note (TASK-094/095/097);
+the crawler tasks read the rest. TASK-097 re-recorded the v2 Tiny Papers 2024 and
+`Workshop_Mexico_City` notes after the scrubber fix; their real venue labels are retained and table-tested.
 
 ## Follow-ups
 - TASK-094: classify.py venueid table: NeurIPS `Position_Paper_Track` → position, `Competition_Track`

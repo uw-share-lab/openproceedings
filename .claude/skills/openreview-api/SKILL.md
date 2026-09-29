@@ -187,6 +187,11 @@ sees a raw response before `OpenReviewClient` applies its public projection; if 
 `OpenReviewPublicDataError`, delete that raw capture immediately. Scrubbing text does not make a
 non-world-readable note safe to commit.
 
+`content.venue` is controlled source evidence even when it contains a spaced `@` (for example,
+`Tiny Papers @ ICLR 2024 Archive`), not an email. After scrubbing, table-test the exact retained venue
+label as well as the authoritative `content.venueid`; TASK-097's two regression rows prevent the Tiny
+Papers and Mexico City workshop labels from silently becoming synthetic email addresses again.
+
 TASK-050's v2 inventory test requires at least one note fixture for every supported venue-year through
 2026. The authenticated 2026-09-29 follow-up fills ICML 2023 and ICLR/NeurIPS/ICML 2026, and records
 the root `?parent=` response for each of those four venue-years. Each new exchange is run once through the

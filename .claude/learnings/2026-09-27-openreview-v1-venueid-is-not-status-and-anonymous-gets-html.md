@@ -72,3 +72,19 @@ public fixture.
   separate gates rather than interchangeable privacy controls.
 - **Propagated to:** `.claude/skills/openreview-api/SKILL.md` §Fixtures and
   `docs/research/2026-09-27-openreview-and-proceedings-facts.md` §TASK-107 authenticated v1 follow-up.
+
+### TASK-097 venue-label correction
+
+**Key lesson:** A spaced `@` inside an OpenReview venue label is controlled conference evidence, not an
+email address; re-record through the client's public projection, preserve the exact label during
+scrubbing, and table-test both the label and the authoritative `content.venueid`.
+
+- The old ICLR 2024 Tiny Papers and NeurIPS 2025 Mexico City workshop fixtures contained synthetic email
+  addresses because the earlier scrubber treated any `@` as personal data. Re-recording after TASK-095's
+  regex fix retained `Tiny Papers @ ICLR 2024 Archive` and `ResponsibleFM @ NeurIPS 2025`.
+- Both live notes were world-readable. Passing them through `OpenReviewClient` before capture also removed
+  unused top-level response fields, so the fixture now carries less data as well as the correct label.
+- **Evidence:** `test_recorded_v2_venue_labels_survive_scrubbing` failed on both old fixtures and passes on
+  the re-recorded pair; exact credential and privacy scans found no retained auth or personal data.
+- **Propagated to:** `.claude/skills/openreview-api/SKILL.md` §Fixtures and
+  `docs/research/2026-09-27-openreview-and-proceedings-facts.md` §Fixtures.

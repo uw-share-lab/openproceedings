@@ -332,6 +332,11 @@ V2_NOTES: list[tuple[str, str, str]] = [
     ("v2/neurips-2026/notes-accepted.json", "other", "unknown"),
 ]
 
+V2_VENUE_LABELS = [
+    ("v2/iclr-2024/notes-tinypapers.json", "Tiny Papers @ ICLR 2024 Archive"),
+    ("v2/neurips-2025/notes-workshop-city.json", "ResponsibleFM @ NeurIPS 2025"),
+]
+
 V1_NOTES: list[tuple[str, str, str, str]] = [
     # fixture, the venueid's track, then track and status from `content.venue` (TASK-095): the venueid's
     # status is always `unknown` in a v1 year, and the venue string decides
@@ -417,6 +422,11 @@ def test_recorded_v2_notes(fixture: str, track: str, status: str) -> None:
     c = classify_venueid(_submission(fixture)["venueid"])
     assert (c.track, c.status, c.parsed) == (track, status, True)
     assert c.year is not None and c.venue is not None and not is_v1(c.venue, c.year)
+
+
+@pytest.mark.parametrize(("fixture", "expected"), V2_VENUE_LABELS, ids=[r[0] for r in V2_VENUE_LABELS])
+def test_recorded_v2_venue_labels_survive_scrubbing(fixture: str, expected: str) -> None:
+    assert _submission(fixture)["venue"] == expected
 
 
 @pytest.mark.parametrize(

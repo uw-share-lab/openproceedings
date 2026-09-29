@@ -1,7 +1,7 @@
 {
  "_recorded": {
-  "date": "2026-09-27",
-  "run": "TASK-002 manual research run (docs/research/2026-09-27-openreview-and-proceedings-facts.md)",
+  "date": "2026-09-29",
+  "run": "authenticated OpenReview fixture run",
   "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
  },
  "request": {
@@ -13,17 +13,25 @@
   "status": 200,
   "headers": {
    "content-type": "application/json; charset=utf-8",
-   "x-ratelimit-limit": "500",
-   "x-ratelimit-remaining": "266",
-   "x-ratelimit-reset": "1790543172",
    "ratelimit-policy": "500;w=3600",
-   "ratelimit-limit": "500",
-   "ratelimit-remaining": "266",
-   "ratelimit-reset": "2251"
+   "ratelimit-remaining": "492",
+   "ratelimit-reset": "1045"
   },
   "json": {
    "notes": [
     {
+     "number": 254,
+     "invitations": [
+      "ICLR.cc/2024/TinyPapers/-/Submission",
+      "ICLR.cc/2024/TinyPapers/-/Post_Submission",
+      "ICLR.cc/2024/TinyPapers/-/Edit",
+      "ICLR.cc/2024/TinyPapers/Submission254/-/Camera_Ready"
+     ],
+     "id": "p8GJzu52XL",
+     "readers": [
+      "everyone"
+     ],
+     "forum": "p8GJzu52XL",
      "content": {
       "title": {
        "value": "Synthetic title text 1."
@@ -56,46 +64,18 @@
        "value": "/pdf/e818eac7df0626e0687b829112923472bf46584a.pdf"
       },
       "venue": {
-       "value": "synthetic.person10@example.org"
+       "value": "Tiny Papers @ ICLR 2024 Archive"
       },
       "venueid": {
        "value": "ICLR.cc/2024/TinyPapers"
       },
       "_bibtex": {
-       "value": "synthetic.person11@example.org"
+       "value": "Synthetic bibtex text 10."
       },
       "paperhash": {
-       "value": "synthetic|synthetic_title_12"
+       "value": "synthetic|synthetic_title_11"
       }
-     },
-     "id": "p8GJzu52XL",
-     "forum": "p8GJzu52XL",
-     "license": "CC BY 4.0",
-     "signatures": [
-      "ICLR.cc/2024/TinyPapers/Submission254/Authors"
-     ],
-     "readers": [
-      "everyone"
-     ],
-     "writers": [
-      "ICLR.cc/2024/TinyPapers",
-      "ICLR.cc/2024/TinyPapers/Submission254/Authors"
-     ],
-     "number": 254,
-     "invitations": [
-      "ICLR.cc/2024/TinyPapers/-/Submission",
-      "ICLR.cc/2024/TinyPapers/-/Post_Submission",
-      "ICLR.cc/2024/TinyPapers/-/Edit",
-      "ICLR.cc/2024/TinyPapers/Submission254/-/Camera_Ready"
-     ],
-     "domain": "ICLR.cc/2024/TinyPapers",
-     "tcdate": 1702123417626,
-     "cdate": 1702123417626,
-     "tmdate": 1717210985024,
-     "mdate": 1717210985024,
-     "pdate": 1710880180605,
-     "odate": 1710880180605,
-     "version": 2
+     }
     }
    ]
   }
