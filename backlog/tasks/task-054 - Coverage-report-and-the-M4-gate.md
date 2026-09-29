@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-29 22:19'
+updated_date: '2026-09-29 22:42'
 labels:
   - eval
 milestone: m-4
@@ -58,4 +58,6 @@ AC#3 (2026-09-29): op eval coverage built (eval/coverage_report.py): renders api
 Correction (2026-09-29): the smoke-run figures above (0 of 44, 32 gaps) came from an uncommitted run on the M2 index; the committed report and its figures arrive with AC#2.
 
 Part 2 (2026-09-29): owner-accepted exceptions in the gate. docs/results/coverage-causes.toml takes an optional ["<Venue> <year> <track>".accepted] table under a cell's cause: indexed, official (the exact counts accepted), reason, papers, accepted_by (a role), accepted_on (a TOML date), decision (decision-<n>); every key required, unknown keys refused (load_cause_file). gate() passes an outside-±1% cell as accepted only while both counts equal the exception's; any drift fails it as 'drifted' (the cause note shows accepted vs observed), and a gap is never accepted. The report marks the cell '✓ accepted exception', counts exceptions in the verdict line, lists each under 'Owner-accepted exceptions', and reports stale ones (cell within ±1% or not gated); op eval coverage names each on stderr, logs accepted_exceptions/stale_exceptions, and --check treats a matched exception as passing. ICLR 2013 main (23 vs 24; Factorized Topic Models, 11y_SldoumvZl, is on ICLR's 2013 conference list but OpenReview decides it a workshop poster) is the first, per decision-016. Spec 07 §C and the coverage-reporting skill state the rule. AC#2 still waits on the real-data report once dev has all crawler fixes.
+
+Part 2 review (2026-09-29): an exception now passes only if its papers are the gap as well as its counts matching: len(papers) == |official - indexed|, each a record id in the index's snapshot (op eval coverage looks them up in the RecordFile), outside the cell for an under-count (inside it for an over-count); otherwise the cell fails as drifted with the failed check in its note. A gap cell with an exception stays 'gap' (note says why). A stale exception fails --check. Loading refuses control characters, non-record-id or repeated papers, accepted_by outside {project owner}, and (at runtime) a decision with no backlog/decisions record. load_causes removed; the CLI's official table is injected via cli._official_table. Spec 00 M4 row, spec 07 §C (API reports raw ±1%; the exception is applied only by op eval coverage), the skill, coverage-auditor, /coverage, coverage-sources.md and decision-016 updated.
 <!-- SECTION:NOTES:END -->

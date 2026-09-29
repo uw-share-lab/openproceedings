@@ -9,7 +9,9 @@ What it adds to that data, and nothing else:
 - **Cause notes.** Every failing cell gets its cause from `causes` (a person's classification: source
   definition, classification, dedup or crawl gap), or `**unclassified**`: never adjust an official number to fit.
 - **Owner-accepted exceptions.** A cell outside ±1% whose gap the project owner accepted (a decision record) passes
-  the gate only while its indexed and official counts are exactly the accepted ones; a drifted count fails again.
+  the gate only while its indexed and official counts are exactly the accepted ones and its papers are the gap:
+  as many as the gap, each in the snapshot, and outside the cell for an under-count (inside it for an over-count).
+  Anything else fails the cell as `drifted`, with the failed check in its cause note; a gap cell stays a `gap`.
   Every accepted exception is listed in the report, and one whose cell no longer fails is reported as stale.
 - **Listings.** Each proceedings listing that skipped entries or whose count disagreed with its page, and each
   OpenReview venue-year crawl that is incomplete or has coverage gaps, conflicts, unmapped venues, non-routine
@@ -24,17 +26,26 @@ from __future__ import annotations
 
 import re
 import tomllib
-from collections.abc import Mapping, Sequence
+import unicodedata
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 from openproceedings import storage
+from openproceedings.ingest.record import is_paper_id
 from openproceedings.official_counts import GATED_TRACKS, OFFICIAL_ACCEPTED, OfficialTable, within_gate
 from openproceedings.vocab import TRACKS, VENUES
 
 type CellKey = tuple[str, int, str]
+type RecordCell = tuple[str, int, str, str]  # a record's (venue, year, track, status)
+type Locate = Callable[
+    [str], RecordCell | None
+]  # a record id's cell in the snapshot; None when it has no such id
+ACCEPTED_BY = frozenset(
+    {"project owner"}
+)  # the roles that may accept an exception (coverage-reporting skill)
 TRACK_ORDER = {t: i for i, t in enumerate(TRACKS)}
 MINUS = "−"  # U+2212, as the other results reports write a negative delta
 ROUTINE_SKIPS = frozenset({"not_submission"})  # an OpenReview reply or decision note: never a paper
@@ -63,8 +74,8 @@ class AcceptedException:
     indexed: int
     official: int
     reason: str
-    papers: tuple[str, ...]  # the record ids (or titles) the gap is made of
-    accepted_by: str  # a role, never a name
+    papers: tuple[str, ...]  # the record ids the gap is made of, one per paper of the gap
+    accepted_by: str  # a role from ACCEPTED_BY, never a name
     accepted_on: date
     decision: str  # the decision record, `decision-<n>`
 
@@ -77,9 +88,12 @@ class Verdict:
     gated: int  # gated official cells, gaps included
     passing: int  # within ±1%
     failing: tuple[tuple[CellKey, str], ...]  # (cell, "gap" | "outside" | "drifted"), drifted: an exception's
-    # counts no longer match the cell's
+    # counts no longer match the cell's, or its papers are not the gap
     gaps: int
-    accepted: tuple[CellKey, ...] = ()  # outside ±1% by exactly an owner-accepted exception's counts
+    accepted: tuple[
+        CellKey, ...
+    ] = ()  # outside ±1% by exactly an owner-accepted exception's counts and papers
+    notes: tuple[tuple[CellKey, str], ...] = ()  # why a failing cell's exception does not pass it
 
     @property
     def passed(self) -> bool:
@@ -90,18 +104,43 @@ def _cells(cov: Mapping[str, Any]) -> dict[CellKey, dict[str, Any]]:
     return {(vy["venue"], vy["year"], t["track"]): t for vy in cov["venue_years"] for t in vy["tracks"]}
 
 
+def _paper_problem(key: CellKey, ex: AcceptedException, locate: Locate | None) -> str | None:
+    """Why `ex`'s papers are not the cell's gap, or None: as many papers as the gap, each in the snapshot, and
+    each outside the cell for an under-count (the missing papers are elsewhere) or inside it for an over-count
+    (the extra papers are counted in it)."""
+    gap = ex.official - ex.indexed
+    if len(ex.papers) != abs(gap):
+        return f"it names {len(ex.papers)} paper(s) for a gap of {abs(gap)}"
+    if locate is None:
+        return "its papers were not checked against the snapshot"
+    for pid in ex.papers:
+        where = locate(pid)
+        if where is None:
+            return f"paper {pid} is not in the snapshot"
+        inside = where == (*key, "accepted")
+        if gap > 0 and inside:
+            return f"paper {pid} is counted in the cell, so it is not one of the missing papers"
+        if gap < 0 and not inside:
+            return f"paper {pid} is not counted in the cell, so it is not one of the extra papers"
+    return None
+
+
 def gate(
     cov: Mapping[str, Any],
     official: OfficialTable = OFFICIAL_ACCEPTED,
     exceptions: Mapping[CellKey, AcceptedException] | None = None,
+    locate: Locate | None = None,
 ) -> Verdict:
     """The M4 gate over every gated official cell: the snapshot's own verdict per cell, and a gap for a cell it
     holds no record for. A cell outside ±1% passes as accepted only when an exception's indexed and official
-    counts equal the cell's exactly; with any other counts it fails as `drifted`."""
+    counts equal the cell's exactly and its papers are the gap (`_paper_problem`, looked up with `locate`; with
+    no `locate` nothing is verified, so nothing passes); otherwise it fails as `drifted`, with a note saying
+    which check failed. A gap stays a `gap`, and a note says the exception can't cover it."""
     exceptions = exceptions or {}
     cells = _cells(cov)
     failing: list[tuple[CellKey, str]] = []
     accepted: list[CellKey] = []
+    notes: list[tuple[CellKey, str]] = []
     gated = passing = gaps = 0
     for key in sorted(k for k in official if k[2] in GATED_TRACKS):
         gated += 1
@@ -111,20 +150,38 @@ def gate(
             passing += 1
             continue
         gaps += cell is None
-        exception = exceptions.get(key)
-        if exception is None:
+        ex = exceptions.get(key)
+        if ex is None:
             failing.append((key, "gap" if cell is None else "outside"))
-        elif exception.matches(indexed, official[key].accepted):
-            accepted.append(key)
-        else:
+            continue
+        head = f"**The accepted exception ({ex.decision})"
+        if cell is None:
+            failing.append((key, "gap"))
+            notes.append(
+                (key, f"{head} does not apply:** the cell holds no records, and a gap is never accepted.")
+            )
+        elif not ex.matches(indexed, official[key].accepted):
             failing.append((key, "drifted"))
-    return Verdict(gated, passing, tuple(failing), gaps, tuple(accepted))
+            notes.append((key, f"{head} no longer matches:** accepted {ex.indexed:,} indexed vs {ex.official:,} "
+                               f"official, now {indexed:,} vs {official[key].accepted:,}."))  # fmt: skip
+        elif problem := _paper_problem(key, ex, locate):
+            failing.append((key, "drifted"))
+            notes.append((key, f"{head} does not hold:** {problem}."))
+        else:
+            accepted.append(key)
+    return Verdict(gated, passing, tuple(failing), gaps, tuple(accepted), tuple(notes))
 
 
 _CELL_KEYS = frozenset({"cause", "accepted"})
 _EXCEPTION_KEYS = {"indexed": int, "official": int, "reason": str, "papers": list, "accepted_by": str,
                    "accepted_on": date, "decision": str}  # fmt: skip
 _KIND = {int: "an integer", str: "a string", list: "a list", date: "a date (YYYY-MM-DD, unquoted)"}
+
+
+def _has_control(text: str) -> bool:
+    """A control character (a newline or tab included): refused in every string of the file, which the report
+    renders inline."""
+    return any(unicodedata.category(c) == "Cc" for c in text)
 
 
 def _cell_key(path: Path, name: str) -> CellKey:
@@ -149,21 +206,29 @@ def _exception(path: Path, name: str, body: object) -> AcceptedException:
             raise ValueError(f"{where}: {k} must be {_KIND[kind]}")
         if isinstance(v, str) and not v.strip():
             raise ValueError(f"{where}: {k} must not be empty")
+        if isinstance(v, str) and _has_control(v):
+            raise ValueError(f"{where}: {k} must not contain control characters (newlines included)")
     # a cell with no records is a reported gap, never accepted
     if body["indexed"] < 1 or body["official"] < 1:
         raise ValueError(f"{where}: indexed and official must be at least 1")
     if within_gate(body["indexed"], body["official"]):
         raise ValueError(f"{where}: {body['indexed']} of {body['official']} is within ±1%; nothing to accept")
     papers = body["papers"]
-    if not papers or not all(isinstance(p, str) and p.strip() for p in papers):
-        raise ValueError(f"{where}: papers must be a non-empty list of non-empty strings")
+    if not papers or not all(isinstance(p, str) and is_paper_id(p) and not _has_control(p) for p in papers):
+        raise ValueError(
+            f"{where}: papers must be a non-empty list of record ids (op:<venue>:<year>:<native>)"
+        )
+    if len(set(papers)) != len(papers):
+        raise ValueError(f"{where}: papers lists a record twice")
+    if body["accepted_by"].strip() not in ACCEPTED_BY:
+        raise ValueError(f"{where}: accepted_by must be a role: {', '.join(sorted(ACCEPTED_BY))}")
     if not re.fullmatch(r"decision-[0-9]+", body["decision"]):
         raise ValueError(f"{where}: decision must be a decision record id (decision-<n>)")
     return AcceptedException(
         indexed=body["indexed"],
         official=body["official"],
         reason=body["reason"].strip(),
-        papers=tuple(p.strip() for p in papers),
+        papers=tuple(papers),
         accepted_by=body["accepted_by"].strip(),
         accepted_on=body["accepted_on"],
         decision=body["decision"],
@@ -185,15 +250,21 @@ def load_cause_file(path: Path) -> tuple[dict[CellKey, str], dict[CellKey, Accep
             raise ValueError(f"{path}: [{name}] needs a non-empty cause string")
         if unknown := sorted(set(body) - _CELL_KEYS):
             raise ValueError(f"{path}: [{name}] has unknown keys: {', '.join(unknown)}")
+        if _has_control(body["cause"]):
+            raise ValueError(
+                f"{path}: [{name}] cause must not contain control characters (newlines included)"
+            )
         causes[key] = body["cause"].strip()
         if "accepted" in body:
             exceptions[key] = _exception(path, name, body["accepted"])
     return causes, exceptions
 
 
-def load_causes(path: Path) -> dict[CellKey, str]:
-    """The cause notes of `load_cause_file`."""
-    return load_cause_file(path)[0]
+def missing_decisions(exceptions: Mapping[CellKey, AcceptedException], decisions: Path) -> list[str]:
+    """The exceptions' decision ids with no record in `decisions` (`backlog/decisions/<id> - <title>.md`)."""
+    return sorted(
+        {ex.decision for ex in exceptions.values() if not any(decisions.glob(f"{ex.decision} - *.md"))}
+    )
 
 
 def _signed(n: int) -> str:
@@ -287,12 +358,14 @@ def render(
     official: OfficialTable = OFFICIAL_ACCEPTED,
     causes: Mapping[CellKey, str] | None = None,
     exceptions: Mapping[CellKey, AcceptedException] | None = None,
+    locate: Locate | None = None,
 ) -> str:
     """The report's Markdown. `cov` is the coverage the API serves (`coverage.breakdown`'s shape); `manifest` is
-    the same snapshot's manifest (for the listings)."""
+    the same snapshot's manifest (for the listings); `locate` finds an exception's papers in it (`gate`)."""
     causes = causes or {}
     exceptions = exceptions or {}
-    verdict = gate(cov, official, exceptions)
+    verdict = gate(cov, official, exceptions, locate)
+    notes = dict(verdict.notes)
     cells = _cells(cov)
     statuses = {(vy["venue"], vy["year"]): ", ".join(vy["statuses_indexed"]) for vy in cov["venue_years"]}
     unknown = {
@@ -348,8 +421,8 @@ def render(
     if verdict.failing:
         lines += [
             f"- {v} {y} {t}: {causes.get((v, y, t), '**unclassified**')}"
-            + (_drift((v, y, t), exceptions[(v, y, t)], cells, official) if why == "drifted" else "")
-            for (v, y, t), why in verdict.failing
+            + (f" {notes[(v, y, t)]}" if (v, y, t) in notes else "")
+            for (v, y, t), _ in verdict.failing
         ]
     else:
         lines.append("None: every gated cell is within ±1% or an owner-accepted exception.")
@@ -375,7 +448,8 @@ def render(
     if stale_ex:
         lines += [
             "",
-            "Accepted exceptions for cells that are within ±1% or not gated (remove them from coverage-causes.toml):",
+            "Accepted exceptions for cells that are within ±1% or not gated (remove them from coverage-causes.toml; "
+            "`op eval coverage --check` fails until they are removed):",
             "",
         ]
         lines += [_exception_line(k, exceptions[k], None) for k in stale_ex]
@@ -421,17 +495,13 @@ def _exception_line(key: CellKey, ex: AcceptedException, cause: str | None) -> s
     v, y, t = key
     return (f"- {v} {y} {t}: {ex.indexed:,} indexed vs {ex.official:,} official "
             f"(Δ {_signed(ex.indexed - ex.official)}), accepted by the {ex.accepted_by} on "
-            f"{ex.accepted_on.isoformat()} ({ex.decision}). {ex.reason} Papers: {', '.join(ex.papers)}."
+            f"{ex.accepted_on.isoformat()} ({ex.decision}). {_sentence(ex.reason)} Papers: {', '.join(ex.papers)}."
             + (f" Cause: {cause}" if cause else ""))  # fmt: skip
 
 
-def _drift(
-    key: CellKey, ex: AcceptedException, cells: Mapping[CellKey, Mapping[str, Any]], official: OfficialTable
-) -> str:
-    cell = cells.get(key)
-    now = 0 if cell is None else cell["indexed_accepted"]
-    return (f" **The accepted exception ({ex.decision}) no longer matches:** accepted {ex.indexed:,} indexed vs "
-            f"{ex.official:,} official, now {now:,} vs {official[key].accepted:,}.")  # fmt: skip
+def _sentence(text: str) -> str:
+    """`text` ending as a sentence does, so the next one doesn't run on."""
+    return text if text.endswith((".", "!", "?")) else f"{text}."
 
 
 def stale_causes(causes: Mapping[CellKey, str], verdict: Verdict) -> list[CellKey]:
@@ -441,11 +511,11 @@ def stale_causes(causes: Mapping[CellKey, str], verdict: Verdict) -> list[CellKe
 
 def stale_exceptions(exceptions: Mapping[CellKey, AcceptedException], verdict: Verdict) -> list[CellKey]:
     """Exceptions whose cell neither passes as accepted nor fails: within ±1%, or not a gated official cell. (A
-    drifted exception's cell is failing, and says so in the causes.)"""
+    drifted exception's cell is failing, and says so in the causes.) `op eval coverage --check` fails on any."""
     kept = {k for k, _ in verdict.failing} | set(verdict.accepted)
     return sorted(k for k in exceptions if k not in kept)
 
 
 def failing_summary(verdict: Verdict) -> Sequence[str]:
-    """One line per failing cell; `drifted` is an accepted exception whose counts no longer match."""
+    """One line per failing cell; `drifted` is an accepted exception whose counts or papers no longer match."""
     return [f"{v} {y} {t} ({why})" for (v, y, t), why in verdict.failing]

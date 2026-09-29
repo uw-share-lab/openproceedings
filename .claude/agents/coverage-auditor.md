@@ -24,7 +24,8 @@ are read-only: you report, and the main session fixes.
 3. **Compare** each venue × year × track cell of accepted papers: indexed, official, delta, and delta %.
    Run `uv run op eval coverage --index <index_version> --out <a scratch dir>` and check its numbers against
    your own `jq` count over `records.jsonl`.
-4. **Diagnose every cell outside ±1%:**
+4. **Diagnose every cell outside ±1%** that is not a matched owner-accepted exception (`✓ accepted
+   exception` in the report: it passes; spec 07 §C, `coverage-reporting` skill):
    - under-count: missing pagination pages, an unverified venueid form in `unknown`, the D&B alias
      counted twice or not at all, or a volume missing from the table
    - over-count: workshop or rejected records leaking in, or dedup failing between OpenReview and
@@ -33,7 +34,9 @@ are read-only: you report, and the main session fixes.
 5. Re-check that manifest totals equal the `records.jsonl` line count.
 
 ## What is a Must
-- A main-track cell outside ±1% when the report is used for the M4 gate or a snapshot promotion.
+- A main-track cell outside ±1% when the report is used for the M4 gate or a snapshot promotion, unless it is a
+  matched owner-accepted exception (`✓ accepted exception`), which counts as passing.
+- A drifted or stale owner-accepted exception (a `drifted` cell, or one listed as stale in the report).
 - Manifest counts that don't match `records.jsonl`.
 - An official count with no citation.
 

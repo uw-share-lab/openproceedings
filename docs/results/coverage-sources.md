@@ -80,7 +80,10 @@ out of 24), ICLR 2023's virtual-site list, and NeurIPS 2025 D&B's former virtual
 - **ICLR 2013:** the iclr.cc list has 24 conference papers. OpenReview decisions give 23: 67 submissions,
   minus 32 workshop, minus 12 reject (`docs/research/2026-09-27-openreview-and-proceedings-facts.md`). The
   row uses 24, the conference's own list. One paper is 4% of this cell, so the gate will flag any mismatch
-  here. Resolve it by title when the ICLR v1 crawl runs.
+  here. Resolved: the paper is "Factorized Topic Models" (`op:iclr:2013:11y_SldoumvZl`), on the conference list
+  but a workshop poster on OpenReview. The record keeps OpenReview's decision, and the cell is an owner-accepted
+  exception at exactly 23 vs 24 ([decision-016](../../backlog/decisions/decision-016%20-%20ICLR-2013-main-is-an-owner-accepted-coverage-exception-keep-OpenReviews-workshop-decision-for-Factorized-Topic-Models-TASK-054.md),
+  `coverage-causes.toml`).
 - **ICLR 2018:** the virtual-site list has 336. The OpenReview decision notes give 337 (23 oral + 314 poster,
   facts doc). The row uses 336. One paper may have been withdrawn after acceptance; this is not verified.
 - **ICLR 2019:** the virtual-site list has 501. No count announced on iclr.cc was found (the 2019 press page

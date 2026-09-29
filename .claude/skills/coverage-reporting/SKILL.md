@@ -27,7 +27,7 @@ As built (TASK-082): `GET /coverage` serves each venue-year's `statuses_indexed`
 
 ## The gate (M4)
 Exactly spec 07 §C: **every main-track and D&B cell for which an official accepted count exists is within
-±1%** (`|delta_pct| ≤ 1%`). Cells with no official count are reported (as `no source`) but not gated;
+±1%** (`|delta_pct| ≤ 1%`), **or an owner-accepted exception** (below). Cells with no official count are reported (as `no source`) but not gated;
 other tracks are reported, not gated. The same definition appears in spec 00. The gate is soft until M4
 and then blocks the M4 milestone, not individual PRs.
 
@@ -40,19 +40,25 @@ to keep the record as its source classifies it, the gap is accepted, never paper
    indexed = 23            # the exact counts accepted, not a tolerance
    official = 24
    reason = "…"
-   papers = ["11y_SldoumvZl"]
-   accepted_by = "project owner"   # a role
+   papers = ["op:iclr:2013:11y_SldoumvZl"]   # record ids, one per paper of the gap
+   accepted_by = "project owner"   # a role; the only one allowed
    accepted_on = 2026-09-29        # a TOML date, unquoted
    decision = "decision-016"
    ```
    Every key is required; unknown keys, `indexed`/`official` below 1 (a gap is never accepted), counts
-   already within ±1%, an empty `papers` or a `decision` that isn't `decision-<n>` are refused, and
+   already within ±1%, `papers` that are empty, repeated or not record ids, an `accepted_by` other than
+   `project owner` (a role, never a name), control characters (newlines included) in any string, a
+   `decision` that isn't `decision-<n>`, or one with no `backlog/decisions/<id> - *.md` are refused, and
    `op eval coverage` stops before writing anything.
 3. The cell passes (`✓ accepted exception`, counted apart from "within ±1%" in the verdict line, listed under
-   "Owner-accepted exceptions" and on stderr) **only while both counts are exactly the accepted ones**. Any
-   drift fails the cell as `drifted`, with the accepted and observed counts in its cause note: re-classify it
-   before touching the exception. An exception whose cell is within ±1% or not gated is reported as stale:
-   remove it.
+   "Owner-accepted exceptions" and on stderr) **only while both counts are exactly the accepted ones and the
+   papers are the gap**: |official − indexed| of them, each in the index's snapshot, and outside the cell for
+   an under-count (inside it for an over-count). Anything else fails the cell as `drifted`, with the failed
+   check (or the accepted and observed counts) in its cause note: re-classify it before touching the
+   exception. A gap cell stays `✗ gap`. An exception whose cell is within ±1% or not gated is reported as
+   stale, and `--check` exits 1 until it is removed.
+4. Only the gate report applies exceptions. `GET /coverage` and the `/coverage` page report the raw ±1% per
+   cell, so an accepted cell is served with `within_gate: false` (spec 07 §C).
 
 ## `docs/results/coverage-sources.md` — rules
 One row per cell:
@@ -105,7 +111,7 @@ that is incomplete, has coverage gaps, conflicts, unmapped venues or non-routine
 and `container` are routine; `not_a_v2_venue`, which can be an unreadable group, and `no_submission_venue_id`
 are not), or skipped anything but
 `not_submission` replies. Then totals of records, missing abstracts, `unknown` track and status. The report is
-written atomically; a same-day run replaces it. `--check` exits 1 when the gate fails (a matched accepted exception passes). The methods text cites this report (with its
+written atomically; a same-day run replaces it. `--check` exits 1 when the gate fails (a matched accepted exception passes) or an exception is stale. The methods text cites this report (with its
 snapshot hash) as the database-scope caveat.
 
 ## Gotchas
