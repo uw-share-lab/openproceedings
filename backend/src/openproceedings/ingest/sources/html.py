@@ -6,6 +6,9 @@ The standard-library HTML parser reads markup without executing or fetching anyt
   `<i>k</i>-means` stays `k-means`. `script` and `style` bodies are dropped.
 - Entities are decoded once, then only *complete* leftover entities once more: some pages are
   double-escaped (`&amp;quot;`), while a bare `&` (`R&D`) survives.
+- The tree and text parsers keep references raw (`convert_charrefs=False`) and decode them in that one step, so
+  each re-emits a reference whole, with its `;` (`_reference`). Without it the decode reads on into the next
+  text: `&#x27;Catch` became `⟊tch`, `&rsquo;s` stayed `&rsquos` (TASK-128).
 - Whitespace collapses to single spaces. LaTeX is kept verbatim (spec 03 decides its tokens).
 - The tree is bounded (`MAX_DEPTH`, `MAX_ELEMENTS`). A page past a bound is `HTMLBudgetError`, which names the
   page's URL (when the miner passes it) and how to recover: a page that size is a corrupt or wrong cache entry,
@@ -56,6 +59,14 @@ def unescape(text: str) -> str:
     """Decode entities once, then complete leftover entities once more (a double-escaped page)."""
     once = html.unescape(text)
     return _ENTITY.sub(lambda m: html.unescape(m.group(0)), once)
+
+
+def _reference(name: str, *, numeric: bool) -> str:
+    """A reference HTMLParser reported, written back exactly as the page had it. `_BARE_AMP` has already
+    escaped every `&` that doesn't start a complete, `;`-terminated reference, so each one HTMLParser reports
+    had its `;`; putting it back keeps `unescape` from reading the following text into the name or code
+    point (`&#x27;Catch`, `&rsquo;s`). An unknown name (`&foo;`) stays literal, as it was on the page."""
+    return f"&#{name};" if numeric else f"&{name};"
 
 
 def collapse(text: str) -> str:
@@ -130,10 +141,10 @@ class _TreeParser(HTMLParser):
         self.stack[-1].children.append(data)
 
     def handle_entityref(self, name: str) -> None:
-        self.stack[-1].children.append(f"&{name}")
+        self.stack[-1].children.append(_reference(name, numeric=False))
 
     def handle_charref(self, name: str) -> None:
-        self.stack[-1].children.append(f"&#{name}")
+        self.stack[-1].children.append(_reference(name, numeric=True))
 
 
 def parse(page: str, url: str | None = None) -> Element:
@@ -224,14 +235,11 @@ class _TextParser(HTMLParser):
 
     def handle_entityref(self, name: str) -> None:
         if not self.dropped:
-            # HTMLParser also reports legacy/bare `&name` references here and does not say whether a
-            # semicolon was present. Keeping it absent lets html.unescape decode known names while leaving
-            # an unknown bare ampersand sequence such as `R&D` intact.
-            self.parts.append(f"&{name}")
+            self.parts.append(_reference(name, numeric=False))
 
     def handle_charref(self, name: str) -> None:
         if not self.dropped:
-            self.parts.append(f"&#{name}")
+            self.parts.append(_reference(name, numeric=True))
 
 
 def text_of(fragment: str) -> str:
