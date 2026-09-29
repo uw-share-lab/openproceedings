@@ -37,8 +37,8 @@ break. `make lint` and `make tooling` always run (the pre-push hook runs them to
 | The diff touches | Run locally before pushing |
 |---|---|
 | `backend/src/**`, `**/pyproject.toml`, `uv.lock`, `**/package.json`, `package-lock.json` | `make test` (the full suite) |
-| `frontend/src/**`, frontend root config (`frontend/*.config.*`, `frontend/tsconfig.json`), or the API contract `backend/tests/contract/openapi.json` | `npm test --workspace frontend`; and when it touches a file a backend test reads (any `frontend/src/**/*.json`, the goldens and fixtures, `src/api/schema.ts`, or `openapi.json`; the last two change only through `make openapi`), also `uv run pytest` (the whole backend suite) |
-| `frontend/e2e/**`, `backend/tests/e2e/**` | `make e2e` (CI's `e2e` job is advisory, so this is the only run that must pass) |
+| `frontend/src/**`, frontend root config (`frontend/*.config.*` but `playwright.config.ts`, `frontend/tsconfig.json`), or the API contract `backend/tests/contract/openapi.json` | `npm test --workspace frontend`; and when it touches a file a backend test reads (any `frontend/src/**/*.json`, the goldens and fixtures, `src/api/schema.ts`, or `openapi.json`; the last two change only through `make openapi`), also `uv run pytest` (the whole backend suite) |
+| `frontend/e2e/**`, `frontend/playwright.config.ts`, `backend/tests/e2e/**` | `make e2e` (CI's `e2e` job is advisory, so this is the only run that must pass) |
 | shared test code: any `conftest.py`, `backend/tests/{strategies,corpus}.py`, `backend/tests/fixtures/**`, or any `backend/tests` module another test imports (`grep -rn "<module name>" backend/tests --include='*.py'` finds both `from tests.x.<module> import …` and `from tests.x import <module>`) | `make test` (both suites: a frontend test reads `backend/tests/fixtures/queries/`) |
 | other tests only | the changed test files; for a changed data file (e.g. `backend/tests/differential/*.json`, `backend/tests/golden/*.json`), the tests that read it (`grep -rln "<file name>" backend/tests frontend/src`) |
 | `.claude/hooks/**`, `.claude/scripts/**`, `.githooks/**`, `.github/**`, `Makefile` | `make tooling` and `make mutate-changed` |
@@ -46,7 +46,7 @@ break. `make lint` and `make tooling` always run (the pre-push hook runs them to
 | other docs: `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `docs/{design,research,plans,usability}/**`, `.claude/` markdown | nothing beyond `make lint` and `make tooling` |
 | anything the rows above don't name | `make test` (unlisted means full: the table fails safe) |
 
-A diff that spans rows runs the union. When in doubt, or when the diff touches something no row names, run `make test`. The PR's **Tests** section says exactly
+A diff that spans rows runs the union. When in doubt, run `make test`. The PR's **Tests** section says exactly
 what ran locally, and that CI runs the full suite; never claim a full-suite pass that wasn't run.
 
 The learnings commit comes **before** the review because the review record is keyed to the exact HEAD
