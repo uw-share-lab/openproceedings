@@ -350,6 +350,94 @@ def test_three_sources_merge_into_one_and_merges_csv_shows_each_rule() -> None:
     ]
 
 
+# --- TASK-126: a cluster that cannot be the listed paper is no rival -----------------------------------
+
+
+def test_a_same_title_workshop_paper_does_not_block_the_main_track_merge() -> None:
+    """NeurIPS 2023/2024: a proceedings listing, its main-track note and an accepted workshop note of the
+    same title. The workshop note can never be the listed paper (the track rule), so the pair merges."""
+    orv, proc = paper("AbCd1234"), paper(f"nips-{H[1]}", source="neurips_proceedings")
+    workshop = paper("EfGh5678", track="workshop")
+    result = dedup([workshop, proc, orv])
+    assert sorted(r.id for r in result.records) == sorted([orv.id, workshop.id])
+    assert result.merges == (
+        Merge(orv.id, proc.id, "title_venue_year", "trust in ai", "NeurIPS", 2024, "neurips_proceedings"),
+    )
+    assert [(c.field, c.value_a, c.value_b, c.resolution) for c in result.conflicts] == [
+        ("title_key", orv.id, workshop.id, "track_not_merged")
+    ]
+    again = dedup(result.records)
+    assert (again.records, again.conflicts, again.merges) == (result.records, result.conflicts, ())
+
+
+def test_a_rejected_round_one_note_does_not_block_its_accepted_resubmission() -> None:
+    """NeurIPS 2021 D&B: a round-1 rejection resubmitted (another forum, another pdf) and accepted in round
+    2. Proceedings list only accepted papers, so the rejected note is no rival for the listing."""
+    accepted = db21("AbCd1234", source="openreview_v1")
+    rejected = db21("EfGh5678", source="openreview_v1", status="rejected")
+    listing = db21(f"nips-{H[1]}-round2")
+    result = dedup([rejected, listing, accepted])
+    assert sorted(r.id for r in result.records) == sorted([accepted.id, rejected.id])
+    assert [(m.survivor_id, m.merged_id) for m in result.merges] == [(accepted.id, listing.id)]
+    assert [(c.field, c.value_a, c.value_b, c.resolution) for c in result.conflicts] == [
+        ("title_key", accepted.id, rejected.id, "ambiguous_not_merged")
+    ]
+    assert dedup(result.records).records == result.records
+
+
+@pytest.mark.parametrize("status", ["rejected", "withdrawn", "desk_rejected"])
+def test_every_not_accepted_status_is_no_rival(status: str) -> None:
+    result = dedup([paper("AbCd1234"), paper("EfGh5678", status=status),
+                    paper(f"nips-{H[1]}", source="neurips_proceedings")])  # fmt: skip
+    assert [(m.survivor_id, m.rule) for m in result.merges] == [
+        ("op:neurips:2024:AbCd1234", "title_venue_year")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("why", "rival"),
+    [
+        ("two accepted main-track submissions", paper("EfGh5678")),
+        (
+            "an accepted D&B submission",
+            paper("EfGh5678", source="openreview_v1", track="datasets_benchmarks"),
+        ),
+        ("a status nobody knows yet: it may be the listed paper", paper("EfGh5678", status="unknown")),
+        ("a track nobody knows yet: it may be the listed paper", paper("EfGh5678", track="unknown")),
+        ("a rejected note that is itself a listing", paper(f"nips-{H[2]}", source="ris", status="rejected")),
+    ],
+)
+def test_a_rival_that_may_be_the_listed_paper_still_refuses(why: str, rival: PaperRecord) -> None:
+    records = [paper("AbCd1234"), paper(f"nips-{H[1]}", source="neurips_proceedings"), rival]
+    result = dedup(records)
+    assert len(result.records) == 3 and not result.merges
+    assert result.conflicts and all(c.resolution.endswith("_not_merged") for c in result.conflicts)
+
+
+def test_a_rejected_note_alone_still_merges_with_its_listing() -> None:
+    """Only a rival is set aside: a lone OpenReview note the proceedings list merges, and the proceedings
+    decide its status (decision-005)."""
+    result = dedup(
+        [paper("EfGh5678", status="rejected"), paper(f"nips-{H[1]}", source="neurips_proceedings")]
+    )
+    [r] = result.records
+    assert r.status == "accepted"
+
+
+def test_without_a_listing_nothing_is_set_aside() -> None:
+    main, workshop, rejected = (
+        paper("AbCd1234"),
+        paper("EfGh5678", track="workshop"),
+        paper("IjKl9012", status="rejected", source="ris"),
+    )
+    result = dedup([main, workshop, rejected])
+    assert len(result.records) == 3 and not result.merges
+    assert [(c.value_a, c.value_b, c.resolution) for c in result.conflicts] == [
+        (main.id, workshop.id, "ambiguous_not_merged"),
+        (main.id, rejected.id, "ambiguous_not_merged"),
+    ]
+
+
 def test_keys_that_chain_forbidden_clusters_merge_nothing() -> None:
     # One paper known under two titles (OpenReview and RIS share its forum id); each title matches a
     # different proceedings record. Each pair is fine alone, but together two proceedings records would

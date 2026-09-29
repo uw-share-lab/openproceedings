@@ -61,6 +61,21 @@ safe direction.
   as `urls.forum` today, so title matching merges all 297. If one ever does, the forum link would point the 120
   at a note the crawl dropped: the survivor must then follow the proceedings' link (collapse to the linked
   note, or re-point the link to the kept one), or those 120 go unmerged or ambiguous.
+- **Except a rival that can't be the listed paper (TASK-126).** When a title group is refused but holds a
+  listing, the clusters that can never be that listing's paper are set aside and the rest are judged again
+  (`_merging`, `_not_the_listed_paper`): a non-listing cluster whose track the proceedings don't host
+  (anything but `main`, `datasets_benchmarks`, `position` and `unknown`: the track rule) or whose status is `rejected`, `withdrawn` or `desk_rejected`
+  (proceedings list only accepted papers). The rest merge if `_mergeable` lets them; the set-aside clusters
+  stay separate records, each with a `conflicts.csv` row against the first listing: `track_not_merged` for
+  the track, `ambiguous_not_merged` for the status. On the 2026-09-29 crawl this merged 201 listings whose
+  title an accepted workshop paper shares (NeurIPS 2023-2025 main, D&B and position, ICLR 2024/2025) and
+  the 11 NeurIPS 2021 D&B round-2 papers whose rejected round-1 note shares the title.
+  Its limits: a listing is never set aside, and a status or track of `unknown` stays a rival (it may be the
+  listed paper, so two such candidates are still ambiguous), as does every other accepted submission: two
+  accepted OpenReview notes with one listing still refuse. Status only breaks a rivalry: a lone rejected
+  note still merges with its listing (the proceedings then decide its status, decision-005). The chain
+  re-check judges the whole chained group with `_mergeable`, so a set-aside cluster that another key chains
+  in with a listing splits the chain (never a merge).
 - A paper whose track the proceedings don't host (anything but `main`, `datasets_benchmarks`,
   `position`) into a **proceedings listing**: a cluster with a proceedings source *or* a proceedings id,
   so a RIS record with a `nips-`/`iclr-`/`pmlr-` id counts. Proceedings never host workshop papers. A
@@ -109,7 +124,8 @@ values; the kept one is `value_a`), `ambiguous_not_merged`, `track_not_merged`,
 disagreeing, such as a withdrawn invitation and an accepted `content.venue`; the record holds `unknown` for that
 field, and `value_a`/`value_b` name each value with its evidence; `snapshot.with_crawl_conflicts` adds it). For the not-merged resolutions, `field` is `title_key`, `title_key_chain`,
 `forum_id` (one forum id, own or linked, on records that stayed apart) or `forum_id_chain`, and the values
-are the two record ids, with their sources. Every row names an output record:
+are the two record ids, with their sources (a set-aside rival's row is paired with the first listing of its
+title group, TASK-126). Every row names an output record:
 the not-merged rows are judged on the output records (every shared title key and forum id among records
 that stayed apart), so a second run reports exactly the same rows; only `newest:`/`tie:` rows disappear,
 because the merged record no longer holds the superseded claims.
@@ -129,5 +145,8 @@ fixtures: `test_dedup_forum_link.py`.
   `newest:`/`tie:`.
 - Order-independent: `dedup(shuffle(xs)) == dedup(xs)`.
 - Conservation: every input id is an output id or a `merged_id`, once per copy.
+- A set-aside rival (TASK-126; the `rivals` strategy: a listing, its note, same-title workshop or
+  not-accepted notes, sometimes a real rival) is never merged, has its `conflicts.csv` row, and blocks
+  nothing: the listing and its note merge unless a real rival is present.
 - Never folds two papers: distinct forum ids (own, or linked by a `urls.forum` claim), or distinct
   proceedings ids, never share a record, and a merge into a proceedings listing keeps a proceedings track.
