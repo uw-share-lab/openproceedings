@@ -4,20 +4,32 @@ gate verdict, rendered from exactly what `GET /coverage` serves."""
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 from openproceedings.cli import main
 from openproceedings.coverage import breakdown
 from openproceedings.engine.index import build_index
-from openproceedings.eval.coverage_report import Meta, gate, render
+from openproceedings.eval.coverage_report import (
+    AcceptedException,
+    Meta,
+    Verdict,
+    gate,
+    load_cause_file,
+    missing_decisions,
+    render,
+    stale_exceptions,
+)
 from openproceedings.ingest.dedup import DedupResult
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import render as render_snapshot
 from openproceedings.ingest.sources.common import ListingReport
-from openproceedings.official_counts import OfficialCount
+from openproceedings.official_counts import OfficialCount, within_gate
 
 from tests.unit.ingest.test_dedup import paper
 
@@ -30,7 +42,7 @@ def official(n: int) -> OfficialCount:
 
 
 # ICLR 2013 main: 24 of 24 (✓); ICLR 2014 main: 30 of 35 (✗, −14.3%); ICLR 2015 main: no records (a gap);
-# ICLR 2016 workshop: not gated; ICML 2020 main: records but no official count (no source)
+# ICLR 2014 workshop and ICLR 2016 workshop: not gated; ICML 2020 main: records but no official count (no source)
 TABLE = {("ICLR", 2013, "main"): official(24), ("ICLR", 2014, "main"): official(35),
          ("ICLR", 2015, "main"): official(31)}  # fmt: skip
 
@@ -43,6 +55,10 @@ def corpus() -> list[PaperRecord]:
     return (
         many("ICLR", 2013, 24)
         + many("ICLR", 2014, 30)
+        + [
+            paper(f"IC2014w{i:04d}", f"Poster {i}", venue="ICLR", year=2014, track="workshop")
+            for i in range(6)
+        ]
         + many("ICLR", 2016, 3, "workshop")
         + many("ICML", 2020, 2)
     )
@@ -226,7 +242,7 @@ def test_the_header_names_the_causes_file_hash() -> None:
 
 
 def test_totals() -> None:
-    assert "| 59 | 4 | 0 | 0 |" in report()  # records, missing abstracts, unknown track, unknown status
+    assert "| 65 | 10 | 0 | 0 |" in report()  # records, missing abstracts, unknown track, unknown status
 
 
 # --- the command -----------------------------------------------------------------------------------------
@@ -341,16 +357,341 @@ def test_unknown_track_records_are_counted_per_venue_year_and_never_folded_into_
 
 
 def test_causes_load_from_toml_and_an_empty_cause_is_refused(tmp_path: Path) -> None:
-    from openproceedings.eval.coverage_report import load_causes
-
     path = tmp_path / "coverage-causes.toml"
-    assert load_causes(path) == {}  # no file: no causes, so every failing cell reads unclassified
+    assert load_cause_file(path) == ({}, {})  # no file: no causes, so every failing cell reads unclassified
     path.write_text('["NeurIPS 2021 datasets_benchmarks"]\ncause = "dedup: ids collided (TASK-118)"\n')
-    assert load_causes(path) == {("NeurIPS", 2021, "datasets_benchmarks"): "dedup: ids collided (TASK-118)"}
+    assert load_cause_file(path) == (
+        {("NeurIPS", 2021, "datasets_benchmarks"): "dedup: ids collided (TASK-118)"}, {})  # fmt: skip
     path.write_text('["ICLR 2014 main"]\ncause = "  "\n')
     with pytest.raises(ValueError, match="needs a non-empty cause"):
-        load_causes(path)
+        load_cause_file(path)
+    path.write_text('["ICLR 2014 main"]\ncause = "crawl gap\\nmore"\n')  # a TOML \n escape: a real newline
+    with pytest.raises(ValueError, match="control characters"):
+        load_cause_file(path)
     for heading in ("ICLR 2014", "ICLR twenty main", "Iclr 2014 main", "ICLR 2014 mainn"):
         path.write_text(f'["{heading}"]\ncause = "x"\n')
         with pytest.raises(ValueError, match="is not"):
-            load_causes(path)
+            load_cause_file(path)
+
+
+# --- owner-accepted exceptions ------------------------------------------------------------------------------
+
+
+def ids(n: int, prefix: str = "op:iclr:2014:IC2014w") -> tuple[str, ...]:
+    """`n` corpus record ids; by default ICLR 2014 workshop records: the ICLR 2014 main cell's venue-year,
+    outside the cell."""
+    return tuple(f"{prefix}{i:04d}" for i in range(n))
+
+
+def accepted(
+    indexed: int = 30,
+    official: int = 35,
+    decision: str = "decision-016",
+    papers: tuple[str, ...] | None = None,
+    reason: str = "The list and OpenReview disagree.",
+) -> AcceptedException:
+    return AcceptedException(indexed, official, reason, ids(abs(official - indexed)) if papers is None else papers,
+                             "project owner", date(2026, 9, 29), decision)  # fmt: skip
+
+
+ICLR14 = ("ICLR", 2014, "main")  # 30 indexed of 35 official in the test corpus: outside ±1%
+
+
+def locate_in(records: list[PaperRecord]) -> Any:
+    cells = {r.id: (r.venue, r.year, r.track, r.status) for r in records}
+    return cells.get
+
+
+LOCATE = locate_in(corpus())
+
+
+def verdict_with(exceptions: dict[tuple[str, int, str], AcceptedException]) -> Verdict:
+    return gate(breakdown(manifest_of(corpus()), "x", official=TABLE), TABLE, exceptions, LOCATE)
+
+
+def report_with(
+    exceptions: dict[tuple[str, int, str], AcceptedException],
+    causes: dict[tuple[str, int, str], str] | None = None,
+) -> str:
+    manifest = manifest_of(corpus())
+    cov = breakdown(manifest, "x", official=TABLE)
+    return render(
+        cov, manifest, META, official=TABLE, causes=causes or {}, exceptions=exceptions, locate=LOCATE
+    )
+
+
+def test_an_exception_matching_the_counts_exactly_passes_its_cell() -> None:
+    v = verdict_with({ICLR14: accepted()})
+    assert v.accepted == (ICLR14,) and ICLR14 not in {k for k, _ in v.failing}
+    assert v.passing == 1  # still one cell *within ±1%*: an accepted cell is counted apart
+    only = {k: TABLE[k] for k in (("ICLR", 2013, "main"), ICLR14)}  # no gap: the gate passes outright
+    assert gate(
+        breakdown(manifest_of(corpus()), "x", official=only), only, {ICLR14: accepted()}, LOCATE
+    ).passed
+    # unverified (no `locate`): never passes
+    assert not gate(breakdown(manifest_of(corpus()), "x", official=only), only, {ICLR14: accepted()}).passed
+
+
+@pytest.mark.parametrize(
+    ("papers", "problem"),
+    [
+        ((*ids(4), "op:iclr:2014:nosuchpaper"), "paper op:iclr:2014:nosuchpaper is not in the snapshot"),
+        ((*ids(4), "op:iclr:2013:IC2013x0000"),
+         "paper op:iclr:2013:IC2013x0000 is from ICLR 2013, not this cell's venue-year"),
+        ((*ids(4), "op:icml:2020:IC2020x0000"),
+         "paper op:icml:2020:IC2020x0000 is from ICML 2020, not this cell's venue-year"),
+        ((*ids(4), "op:iclr:2014:IC2014x0007"),
+         "paper op:iclr:2014:IC2014x0007 is counted in the cell, so it is not one of the missing papers"),
+        (ids(4), "it names 4 paper(s) for a gap of 5"),
+        (ids(6), "it names 6 paper(s) for a gap of 5"),
+    ],
+)  # fmt: skip
+def test_counts_that_match_with_papers_that_are_not_the_gap_fail_the_cell(
+    papers: tuple[str, ...], problem: str
+) -> None:
+    ex = {ICLR14: accepted(papers=papers)}
+    v = verdict_with(ex)
+    assert (ICLR14, "drifted") in v.failing and not v.accepted
+    text = report_with(ex, causes={ICLR14: "crawl gap"})
+    assert (
+        f"- ICLR 2014 main: crawl gap **The accepted exception (decision-016) does not hold:** {problem}."
+        in text
+    )
+    assert "✗" in row(text, "ICLR", 2014, "main")
+
+
+def test_an_over_count_exception_names_papers_inside_the_cell() -> None:
+    table = {ICLR14: official(28)}  # 30 indexed: two extra papers
+    cov = breakdown(manifest_of(corpus()), "x", official=table)
+    inside = ids(2, "op:iclr:2014:IC2014x")
+    assert gate(cov, table, {ICLR14: accepted(30, 28, papers=inside)}, LOCATE).accepted == (ICLR14,)
+    v = gate(cov, table, {ICLR14: accepted(30, 28)}, LOCATE)  # two ICLR 2014 workshop records: not the extras
+    assert v.failing == ((ICLR14, "drifted"),) and "is not counted in the cell" in dict(v.notes)[ICLR14]
+
+
+@pytest.mark.parametrize(("indexed", "official"), [(29, 35), (31, 35), (30, 36), (30, 34)])
+def test_an_exception_whose_counts_drifted_fails_the_cell_again(indexed: int, official: int) -> None:
+    v = verdict_with({ICLR14: accepted(indexed, official)})
+    assert (ICLR14, "drifted") in v.failing and not v.accepted and not v.passed
+    text = report_with({ICLR14: accepted(indexed, official)}, causes={ICLR14: "crawl gap"})
+    assert (f"- ICLR 2014 main: crawl gap **The accepted exception (decision-016) no longer matches:** accepted "
+            f"{indexed} indexed vs {official} official, now 30 vs 35.") in text  # fmt: skip
+    assert "✗" in row(text, "ICLR", 2014, "main") and "accepted exception" not in row(
+        text, "ICLR", 2014, "main"
+    )
+
+
+def test_an_exception_never_covers_a_gap() -> None:
+    ex = {("ICLR", 2015, "main"): accepted(30, 31)}  # the cell holds no records
+    v = verdict_with(ex)
+    assert (("ICLR", 2015, "main"), "gap") in v.failing and v.gaps == 1 and not v.accepted
+    text = report_with(ex, causes={("ICLR", 2015, "main"): "crawl gap"})
+    assert ("- ICLR 2015 main: crawl gap **The accepted exception (decision-016) does not apply:** the cell holds "
+            "no records, and a gap is never accepted.") in text  # fmt: skip
+    assert "✗ gap" in row(text, "ICLR", 2015, "main")
+
+
+@given(st.integers(min_value=0, max_value=200))
+def test_an_exception_passes_its_cell_exactly_when_the_observed_count_is_the_accepted_one(
+    observed: int,
+) -> None:
+    table = {ICLR14: official(35)}
+    records = [paper(f"IC2014x{i:04d}", f"Paper {i}", venue="ICLR", year=2014) for i in range(observed)]
+    # the five accepted papers: ICLR 2014 workshop records (so a snapshot is never empty, either)
+    records += [
+        paper(f"IC2014w{i:04d}", f"Poster {i}", venue="ICLR", year=2014, track="workshop") for i in range(5)
+    ]
+    ex = accepted(30, 35, papers=ids(5, "op:iclr:2014:IC2014w"))
+    v = gate(breakdown(manifest_of(records), "x", official=table), table, {ICLR14: ex}, locate_in(records))
+    within = observed > 0 and within_gate(observed, 35)
+    assert v.passed == (within or observed == 30)
+    assert v.accepted == ((ICLR14,) if observed == 30 else ())
+    assert stale_exceptions({ICLR14: ex}, v) == ([ICLR14] if within else [])
+
+
+def test_the_report_lists_every_accepted_exception_and_marks_its_cell() -> None:
+    text = report_with(
+        {ICLR14: accepted()}, causes={ICLR14: "source definition: one paper is a workshop poster"}
+    )
+    assert "✓ accepted exception" in row(text, "ICLR", 2014, "main")
+    assert "; 1 gap; 1 owner-accepted exception." in text
+    section = text.split("## Owner-accepted exceptions\n", 1)[1].split("\n## ", 1)[0]
+    assert ("- ICLR 2014 main: 30 indexed vs 35 official (Δ −5), accepted by the project owner on 2026-09-29 "
+            "(decision-016). The list and OpenReview disagree. Papers: op:iclr:2014:IC2014w0000, "
+            "op:iclr:2014:IC2014w0001, op:iclr:2014:IC2014w0002, op:iclr:2014:IC2014w0003, "
+            "op:iclr:2014:IC2014w0004. Cause: source definition: one paper is a workshop poster") in section  # fmt: skip
+    # a reason without a closing period still ends its sentence before "Papers:"
+    unended = report_with({ICLR14: accepted(reason="The list and OpenReview disagree")})
+    assert "The list and OpenReview disagree. Papers: op:iclr:2014:IC2014w0000" in unended
+    assert "- ICLR 2014 main" not in text.split("## Causes of every failing cell")[1].split("## Owner")[0]
+    assert "not failing" not in text  # its cause note is in use, not stale
+    none = report_with({})
+    assert (
+        "; 0 owner-accepted exceptions." in none
+        and "None: no failing cell passes as an owner-accepted" in none
+    )
+
+
+def test_a_stale_exception_is_reported_not_dropped() -> None:
+    exceptions = {("ICLR", 2013, "main"): accepted(23, 24), ("NeurIPS", 2020, "main"): accepted(9, 10)}
+    v = verdict_with(exceptions)  # ICLR 2013 main is 24 of 24; NeurIPS 2020 main is not a gated official cell
+    assert stale_exceptions(exceptions, v) == [("ICLR", 2013, "main"), ("NeurIPS", 2020, "main")]
+    assert not v.accepted
+    text = report_with(exceptions)
+    stale = text.split("Accepted exceptions for cells that are within ±1% or not gated", 1)[1]
+    assert stale.startswith(" (remove them from coverage-causes.toml; `op eval coverage --check` fails until")
+    assert (
+        "- ICLR 2013 main: 23 indexed vs 24 official" in stale and "- NeurIPS 2020 main: 9 indexed" in stale
+    )
+
+
+EXCEPTION_TOML = """["ICLR 2013 main"]
+cause = "source definition: one paper is a workshop poster on OpenReview"
+
+["ICLR 2013 main".accepted]
+indexed = 23
+official = 24
+reason = "On the official list; OpenReview decides it a workshop poster."
+papers = ["op:iclr:2013:11y_SldoumvZl"]
+accepted_by = "project owner"
+accepted_on = 2026-09-29
+decision = "decision-016"
+"""
+
+
+def test_an_exception_loads_from_toml(tmp_path: Path) -> None:
+    path = tmp_path / "coverage-causes.toml"
+    path.write_text(EXCEPTION_TOML)
+    causes, exceptions = load_cause_file(path)
+    assert causes == {
+        ("ICLR", 2013, "main"): "source definition: one paper is a workshop poster on OpenReview"
+    }
+    assert exceptions == {("ICLR", 2013, "main"): AcceptedException(
+        23, 24, "On the official list; OpenReview decides it a workshop poster.", ("op:iclr:2013:11y_SldoumvZl",),
+        "project owner", date(2026, 9, 29), "decision-016")}  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "error"),
+    [
+        ('decision = "decision-016"\n', 'decision = "decision-016"\nnote = "x"\n', "unknown keys: note"),
+        ('decision = "decision-016"\n', "", "missing: decision"),
+        ('papers = ["op:iclr:2013:11y_SldoumvZl"]\n', "", "missing: papers"),
+        ("indexed = 23", 'indexed = "23"', "indexed must be an integer"),
+        ("indexed = 23", "indexed = true", "indexed must be an integer"),
+        ("indexed = 23", "indexed = 0", "at least 1"),
+        ("official = 24", "official = 0", "at least 1"),
+        ("indexed = 23", "indexed = 24", "within ±1%"),
+        ("accepted_on = 2026-09-29", 'accepted_on = "2026-09-29"', "accepted_on must be a date"),
+        ("accepted_on = 2026-09-29", "accepted_on = 2026-09-29T10:00:00Z", "accepted_on must be a date"),
+        ('papers = ["op:iclr:2013:11y_SldoumvZl"]', "papers = []", "papers must be a non-empty list"),
+        ('papers = ["op:iclr:2013:11y_SldoumvZl"]', 'papers = [" "]', "papers must be a non-empty list"),
+        ('papers = ["op:iclr:2013:11y_SldoumvZl"]', 'papers = ["11y_SldoumvZl"]', "list of record ids"),
+        ('papers = ["op:iclr:2013:11y_SldoumvZl"]', 'papers = ["op:iclr:2013:a", "op:iclr:2013:a"]',
+         "lists a record twice"),
+        ('accepted_by = "project owner"', 'accepted_by = "Jane Doe"', "accepted_by must be a role: project owner"),
+        ('reason = "On the', 'reason = "Two lines\\nOn the', "reason must not contain control characters"),
+        ('reason = "On the', 'reason = "A tab\\tOn the', "reason must not contain control characters"),
+        ('accepted_by = "project owner"', 'accepted_by = "project owner\\n"', "control characters"),
+        ('reason = "On the official list; OpenReview decides it a workshop poster."', 'reason = " "', "reason must not be empty"),
+        ('decision = "decision-016"', 'decision = "the owner said so"', "decision record id"),
+        ('cause = "source definition: one paper is a workshop poster on OpenReview"\n', "",
+         "needs a non-empty cause"),
+        ('cause = "source', 'extra = 1\ncause = "source', "unknown keys: extra"),
+        ('["ICLR 2013 main".accepted]', '["ICLR 2013 main".exception]', "unknown keys: exception"),
+    ],
+)  # fmt: skip
+def test_a_malformed_exception_is_refused(tmp_path: Path, old: str, new: str, error: str) -> None:
+    path = tmp_path / "coverage-causes.toml"
+    assert old in EXCEPTION_TOML
+    path.write_text(EXCEPTION_TOML.replace(old, new, 1))
+    with pytest.raises(ValueError, match=re.escape(error)):
+        load_cause_file(path)
+
+
+def test_the_committed_causes_file_loads_and_each_exception_has_its_decision_record() -> None:
+    root = Path(__file__).resolve().parents[3]
+    _, exceptions = load_cause_file(root / "docs" / "results" / "coverage-causes.toml")
+    assert exceptions[("ICLR", 2013, "main")].matches(23, 24)  # decision-016
+    assert missing_decisions(exceptions, root / "backlog" / "decisions") == []
+    assert missing_decisions(exceptions, root / "docs") == ["decision-016"]
+
+
+def checkout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, table: dict[Any, OfficialCount]) -> Path:
+    """A checkout with a sources table and decision-016's record, gating on `table` (the real table's other
+    gated cells are gaps in this corpus)."""
+    from openproceedings import cli
+
+    root = tmp_path / "checkout"
+    (root / "docs" / "results").mkdir(parents=True)
+    (root / "docs" / "results" / "coverage-sources.md").write_text("| venue |\n")
+    (root / "backlog" / "decisions").mkdir(parents=True)
+    (root / "backlog" / "decisions" / "decision-016 - An exception.md").write_text(
+        "---\nid: decision-016\n---\n"
+    )
+    monkeypatch.setattr(cli, "_repo_root", lambda: root)
+    monkeypatch.setattr(cli, "_official_table", lambda: table)
+    return root
+
+
+def exception_toml(cell: str, indexed: int, official: int, papers: tuple[str, ...]) -> str:
+    return (EXCEPTION_TOML.replace("ICLR 2013", cell).replace("= 23", f"= {indexed}")
+            .replace("= 24", f"= {official}")
+            .replace('["op:iclr:2013:11y_SldoumvZl"]', json.dumps(list(papers))))  # fmt: skip
+
+
+def test_op_eval_coverage_check_passes_on_a_matched_exception_and_names_it(
+    data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = checkout(tmp_path, monkeypatch, {("ICLR", 2013, "main"): official(24), ICLR14: official(35)})
+    causes = root / "docs" / "results" / "coverage-causes.toml"
+    causes.write_text(exception_toml("ICLR 2014", 30, 35, ids(5)))
+    capsys.readouterr()
+    assert main(eval_args(data_dir, tmp_path / "r", "--check")) == 0
+    [report_file] = list((tmp_path / "r").iterdir())
+    assert "**M4 gate: PASS** — 1 of 2 gated cells within ±1%; 0 gaps; 1 owner-accepted exception." in (
+        report_file.read_text(encoding="utf-8"))  # fmt: skip
+    err = capsys.readouterr().err
+    assert (
+        "ICLR 2014 main (accepted exception, decision-016)" in err and "1 owner-accepted exception(s)" in err
+    )
+    [written] = [json.loads(ln) for ln in err.splitlines() if '"coverage_report_written"' in ln]
+    assert (written["accepted_exceptions"], written["stale_exceptions"]) == (1, 0)
+    causes.write_text(causes.read_text().replace("indexed = 30", "indexed = 29"))  # the count drifted
+    assert main(eval_args(data_dir, tmp_path / "r", "--check")) == 1
+    assert "ICLR 2014 main (drifted)" in capsys.readouterr().err
+    # the counts match, but one paper is not in the snapshot: checked against the index's own records
+    causes.write_text(exception_toml("ICLR 2014", 30, 35, (*ids(4), "op:iclr:2013:nosuchpaper")))
+    assert main(eval_args(data_dir, tmp_path / "r", "--check")) == 1
+    assert "ICLR 2014 main (drifted)" in capsys.readouterr().err
+    assert "paper op:iclr:2013:nosuchpaper is not in the snapshot" in report_file.read_text(encoding="utf-8")
+
+
+def test_a_stale_exception_fails_check(
+    data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = checkout(tmp_path, monkeypatch, {("ICLR", 2013, "main"): official(24)})  # 24 of 24: passes
+    causes = root / "docs" / "results" / "coverage-causes.toml"
+    causes.write_text(exception_toml("ICLR 2013", 23, 24, ("op:iclr:2016:IC2016x0000",)))
+    capsys.readouterr()
+    assert main(eval_args(data_dir, tmp_path / "r")) == 0  # without --check: reported, exit 0
+    assert main(eval_args(data_dir, tmp_path / "r", "--check")) == 1
+    err = capsys.readouterr().err
+    assert "M4 gate: PASS" in err and "--check: 1 stale accepted exception(s)" in err
+    assert "coverage-causes.toml: [ICLR 2013 main.accepted] is not failing; remove the exception" in err
+    [report_file] = list((tmp_path / "r").iterdir())
+    assert "`op eval coverage --check` fails until they are removed" in report_file.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_an_exception_without_its_decision_record_is_refused_before_anything_is_written(
+    data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = checkout(tmp_path, monkeypatch, {ICLR14: official(35)})
+    (root / "docs" / "results" / "coverage-causes.toml").write_text(
+        exception_toml("ICLR 2014", 30, 35, ids(5)).replace("decision-016", "decision-999")
+    )
+    assert main(eval_args(data_dir, tmp_path / "r", "--check")) == 1
+    assert "no decision record for decision-999" in capsys.readouterr().err
+    assert not (tmp_path / "r").exists()

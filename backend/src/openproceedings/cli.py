@@ -44,6 +44,8 @@ if TYPE_CHECKING:
     from openproceedings.engine.exclusions import Excluded
     from openproceedings.engine.reference import ReferenceEngine
     from openproceedings.engine.tantivy_engine import TantivyEngine
+    from openproceedings.eval.coverage_report import RecordCell
+    from openproceedings.official_counts import OfficialTable
     from openproceedings.query.parser import ParseResult
     from openproceedings.records import RecordStore, SearchRecord
 
@@ -298,7 +300,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--out", type=Path, help="the report's directory (default the repository's docs/results)"
     )
     cov.add_argument("--date", help="the report's date, YYYY-MM-DD (default today, UTC)")
-    cov.add_argument("--check", action="store_true", help="exit 1 when the M4 gate fails")
+    cov.add_argument(
+        "--check", action="store_true", help="exit 1 when the M4 gate fails or an accepted exception is stale"
+    )
     cov.set_defaults(run=_eval_coverage)
     for name, task in PLANNED_EVALS.items():
         _stub(reports.add_parser(name, help=f"planned in {task}"), f"eval {name}", task)
@@ -506,6 +510,13 @@ def _repo_root() -> Path | None:
     return None
 
 
+def _official_table() -> OfficialTable:
+    """The official counts `op eval coverage` gates on (a seam: tests gate on a small table)."""
+    from openproceedings.official_counts import OFFICIAL_ACCEPTED
+
+    return OFFICIAL_ACCEPTED
+
+
 def _eval_coverage(ns: argparse.Namespace) -> int:
     """`op eval coverage` (TASK-054): the dated coverage report, from what `GET /coverage` serves for the index."""
     import hashlib
@@ -518,9 +529,11 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
         Meta,
         failing_summary,
         gate,
-        load_causes,
+        load_cause_file,
+        missing_decisions,
         render,
         stale_causes,
+        stale_exceptions,
         write,
     )  # fmt: skip
 
@@ -541,7 +554,17 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
     records = snapshot_records(ns.data_dir, path, engine.index_version)  # verified, as the server loads it
     coverage = compute(engine, records).model_dump(mode="json")
     sources, causes_file = results / "coverage-sources.md", results / "coverage-causes.toml"
-    causes = load_causes(causes_file)  # a malformed file is a ValueError: refused before anything is written
+    # a malformed causes file is a ValueError: refused before anything is written
+    causes, exceptions = load_cause_file(causes_file)
+    if missing := missing_decisions(exceptions, root / "backlog" / "decisions"):
+        raise ValueError(f"{causes_file}: no decision record for {', '.join(missing)} in backlog/decisions")
+
+    # an exception's paper in the snapshot the index was built from
+    def locate(rid: str) -> RecordCell | None:
+        r = records.get(rid)
+        return None if r is None else (r.venue, r.year, r.track, r.status)
+
+    official = _official_table()
     meta = Meta(
         date=day,
         index_version=engine.index_version,
@@ -549,22 +572,42 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
         causes_sha256=hashlib.sha256(causes_file.read_bytes()).hexdigest() if causes_file.is_file() else None,
         command=f"op eval coverage --index {engine.index_version} --date {day.isoformat()}",
     )
-    written, replaced = write(render(coverage, records.manifest, meta, causes=causes), out, day)
-    verdict = gate(coverage)
-    stale = stale_causes(causes, verdict)
+    text = render(
+        coverage,
+        records.manifest,
+        meta,
+        official=official,
+        causes=causes,
+        exceptions=exceptions,
+        locate=locate,
+    )
+    written, replaced = write(text, out, day)
+    verdict = gate(coverage, official, exceptions, locate)
+    stale, stale_ex = stale_causes(causes, verdict), stale_exceptions(exceptions, verdict)
     log.info("coverage_report_written", extra={
         "index_version": engine.index_version, "gated": verdict.gated, "passing": verdict.passing,
         "gaps": verdict.gaps, "unclassified": sum(k not in causes for k, _ in verdict.failing),
-        "stale_causes": len(stale), "replaced": replaced, "ms": elapsed_ms(started),
+        "accepted_exceptions": len(verdict.accepted), "stale_causes": len(stale),
+        "stale_exceptions": len(stale_ex), "replaced": replaced, "ms": elapsed_ms(started),
     })  # fmt: skip
     print(f"wrote {written}", file=sys.stderr)
     state = "PASS" if verdict.passed else "FAIL"
-    print(f"M4 gate: {state}: {verdict.passing} of {verdict.gated} gated cells within ±1%", file=sys.stderr)
+    print(f"M4 gate: {state}: {verdict.passing} of {verdict.gated} gated cells within ±1%, "
+          f"{len(verdict.accepted)} owner-accepted exception(s)", file=sys.stderr)  # fmt: skip
     for line in failing_summary(verdict):
         print(f"  {line}", file=sys.stderr)
+    for v, y, t in verdict.accepted:  # never silent: each accepted exception is named on every run
+        print(f"  {v} {y} {t} (accepted exception, {exceptions[(v, y, t)].decision})", file=sys.stderr)
     for v, y, t in stale:
         print(f"coverage-causes.toml: [{v} {y} {t}] is not failing; remove its note", file=sys.stderr)
-    return 1 if ns.check and not verdict.passed else 0
+    for v, y, t in stale_ex:
+        print(
+            f"coverage-causes.toml: [{v} {y} {t}.accepted] is not failing; remove the exception",
+            file=sys.stderr,
+        )
+    if ns.check and stale_ex:  # a stale exception fails --check, as a gate failure does
+        print(f"--check: {len(stale_ex)} stale accepted exception(s)", file=sys.stderr)
+    return 1 if ns.check and (not verdict.passed or stale_ex) else 0
 
 
 def _search(ns: argparse.Namespace) -> int:

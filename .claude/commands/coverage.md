@@ -12,7 +12,8 @@ It must:
 2. Take official accepted counts only from `docs/results/coverage-sources.md`, each with its citation.
    Cells without one are reported as "no reference", never estimated.
 3. Produce the table `venue | year | track | indexed | official | Δ | Δ% | unknown | abstract_missing |
-   source`, and flag every main-track cell outside ±1% (the M4 gate, spec 07 §C).
+   source`, and flag every main-track cell outside ±1% (the M4 gate, spec 07 §C). A matched owner-accepted
+   exception (`✓ accepted exception`) counts as passing; a drifted or stale exception is a Must.
 4. Diagnose each flagged cell (pagination, an unverified venueid form, the D&B alias, a missing PMLR
    volume, a workshop leak, a dedup miss). Use `.claude/skills/coverage-reporting/SKILL.md` for the report
    shape.
