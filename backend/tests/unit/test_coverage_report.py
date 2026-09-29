@@ -42,7 +42,7 @@ def official(n: int) -> OfficialCount:
 
 
 # ICLR 2013 main: 24 of 24 (✓); ICLR 2014 main: 30 of 35 (✗, −14.3%); ICLR 2015 main: no records (a gap);
-# ICLR 2016 workshop: not gated; ICML 2020 main: records but no official count (no source)
+# ICLR 2014 workshop and ICLR 2016 workshop: not gated; ICML 2020 main: records but no official count (no source)
 TABLE = {("ICLR", 2013, "main"): official(24), ("ICLR", 2014, "main"): official(35),
          ("ICLR", 2015, "main"): official(31)}  # fmt: skip
 
