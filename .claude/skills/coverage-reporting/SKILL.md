@@ -63,15 +63,19 @@ dedup, crawl gap) before changing anything. Never adjust the official number to 
 
 ## Report shape
 As built (`op eval coverage`, `backend/src/openproceedings/eval/coverage_report.py`, TASK-054). Header: date,
-snapshot name and hash, `index_version`, the sha256 of `coverage-sources.md`, the command. Then the verdict
+snapshot name and hash, `index_version`, the sha256 of `coverage-sources.md` and of `coverage-causes.toml` (or
+"none"), the command. Then the verdict
 line (`**M4 gate: PASS|FAIL** — n of m gated cells within ±1%; k gaps`). Then a table per venue: every cell,
 indexed accepted, official, Δ, `delta_pct` to one decimal, gate (✓, ✗, `✗ gap` for a gated official cell with
 no records, `not gated` for another track, `no source` for a main or D&B cell with no official count),
-missing abstracts, the venue-year's `unknown`-track count, and **statuses indexed**. Then a cause note for
+missing abstracts, the venue-year's `unknown`-track and `unknown`-status counts, and **statuses indexed**
+(`none (no source)` on a gap). Δ% is rounded to one decimal; the gate compares exactly. Then a cause note for
 every failing cell, from `docs/results/coverage-causes.toml` (`["NeurIPS 2021 datasets_benchmarks"]`
-`cause = "…"`) or **unclassified**. Then every listing that skipped entries (`skipped` reasons from the
-manifest's `sources`), and totals of records, missing abstracts, `unknown` track and status. `--check`
-exits 1 when the gate fails. The methods text cites this report (with its
+`cause = "…"`) or **unclassified**, and any note for a cell that no longer fails (remove it). Then every
+proceedings listing that skipped entries or whose count disagreed with its page, and every OpenReview crawl
+that is incomplete, has coverage gaps, unmapped venues or skipped groups, or skipped anything but
+`not_submission` replies. Then totals of records, missing abstracts, `unknown` track and status. The report is
+written atomically; a same-day run replaces it. `--check` exits 1 when the gate fails. The methods text cites this report (with its
 snapshot hash) as the database-scope caveat.
 
 ## Gotchas

@@ -514,7 +514,15 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
     from openproceedings.api.coverage import compute
     from openproceedings.api.state import snapshot_records
     from openproceedings.engine.tantivy_engine import TantivyEngine
-    from openproceedings.eval.coverage_report import Meta, failing_summary, gate, load_causes, render, write
+    from openproceedings.eval.coverage_report import (
+        Meta,
+        failing_summary,
+        gate,
+        load_causes,
+        render,
+        stale_causes,
+        write,
+    )  # fmt: skip
 
     started = time.perf_counter()
     try:
@@ -522,34 +530,40 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
     except ValueError:
         raise _usage(f"--date must be YYYY-MM-DD, not {ns.date!r}") from None
     root = _repo_root()
-    results = root / "docs" / "results" if root else None
+    if root is None:  # --out moves only the report: the official counts and causes are read from the checkout
+        raise _usage(
+            "run from a checkout: the report reads docs/results/coverage-sources.md and coverage-causes.toml"
+        )
+    results = root / "docs" / "results"
     out = ns.out or results
-    if out is None or results is None:
-        raise _usage("run from a checkout (the report cites docs/results/coverage-sources.md), or pass --out")
     path = _index_path(ns)
     engine = TantivyEngine(path)
     records = snapshot_records(ns.data_dir, path, engine.index_version)  # verified, as the server loads it
     coverage = compute(engine, records).model_dump(mode="json")
-    sources = results / "coverage-sources.md"
+    sources, causes_file = results / "coverage-sources.md", results / "coverage-causes.toml"
+    causes = load_causes(causes_file)  # a malformed file is a ValueError: refused before anything is written
     meta = Meta(
         date=day,
         index_version=engine.index_version,
         sources_sha256=hashlib.sha256(sources.read_bytes()).hexdigest(),
+        causes_sha256=hashlib.sha256(causes_file.read_bytes()).hexdigest() if causes_file.is_file() else None,
         command=f"op eval coverage --index {engine.index_version} --date {day.isoformat()}",
     )
-    causes = load_causes(results / "coverage-causes.toml")
-    written = write(render(coverage, records.manifest, meta, causes=causes), out, day)
+    written, replaced = write(render(coverage, records.manifest, meta, causes=causes), out, day)
     verdict = gate(coverage)
+    stale = stale_causes(causes, verdict)
     log.info("coverage_report_written", extra={
         "index_version": engine.index_version, "gated": verdict.gated, "passing": verdict.passing,
         "gaps": verdict.gaps, "unclassified": sum(k not in causes for k, _ in verdict.failing),
-        "ms": elapsed_ms(started),
+        "stale_causes": len(stale), "replaced": replaced, "ms": elapsed_ms(started),
     })  # fmt: skip
     print(f"wrote {written}", file=sys.stderr)
     state = "PASS" if verdict.passed else "FAIL"
     print(f"M4 gate: {state}: {verdict.passing} of {verdict.gated} gated cells within ±1%", file=sys.stderr)
     for line in failing_summary(verdict):
         print(f"  {line}", file=sys.stderr)
+    for v, y, t in stale:
+        print(f"coverage-causes.toml: [{v} {y} {t}] is not failing; remove its note", file=sys.stderr)
     return 1 if ns.check and not verdict.passed else 0
 
 

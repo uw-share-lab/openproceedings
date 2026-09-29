@@ -11,7 +11,6 @@ Build `op eval coverage` (TASK-054 AC#3), which writes the dated spec 07 §C rep
 ## What we learned
 - `coverage.breakdown` builds `venue_years[].tracks` only from the manifest's `counts`, so a venue-year the crawl never reached has no row and no `within_gate`. A verdict of "every row passes" would call that a PASS (evidence: `breakdown` iterates `counts`; the test above fails if `gate` iterates the snapshot's cells).
 - Spec 07 §C already says it: "any venue-year with no source is a reported gap, never a silent zero". The report enumerates `OFFICIAL_ACCEPTED`'s gated keys and renders a missing one as `✗ gap` (0 indexed).
-- On the M2 corpus (`2026-09-23-d5ab3d6d444a`, 1,805 records) the report shows 32 of the 44 gated cells as gaps, and 0 of 44 within ±1%, as expected for a literature-review subset (a smoke run, 2026-09-29).
 - Reusing `api.coverage.compute` on the index, not recounting, keeps the report equal to `/coverage` by construction. The snapshot is verified exactly as the server verifies it (`api.state.snapshot_records`).
 
 ## Dead ends — don't repeat these
@@ -20,6 +19,7 @@ Build `op eval coverage` (TASK-054 AC#3), which writes the dated spec 07 §C rep
 ## Decisions (and what would change them)
 - Cause notes live in `docs/results/coverage-causes.toml`, keyed `"<Venue> <year> <track>"`, so a regenerated report keeps a person's classification. An unclassified failing cell says **unclassified**, never a guessed cause.
 - `--check` turns the verdict into the exit status, for CI or a release gate. By default the command always writes the report.
+- OpenReview crawls are reported when they are incomplete, have coverage gaps, unmapped venues or skipped groups, or skipped anything but `not_submission` (reply and decision notes, routine on every crawl). Otherwise every venue-year would be listed and the real problems lost among them.
 
 ## Follow-ups
 - [ ] task-054 — the first live crawl's report and the classification of every failing cell (AC#2).

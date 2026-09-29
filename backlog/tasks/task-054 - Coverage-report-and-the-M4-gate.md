@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-29 07:30'
+updated_date: '2026-09-29 07:36'
 labels:
   - eval
 milestone: m-4
@@ -54,4 +54,6 @@ From TASK-118 (2026-09-29 live dry runs): every NeurIPS listing 2013-2025 and PM
 Evidence for the note above: docs/results/2026-09-29-proceedings-dry-runs.md (per-listing listed/stated/planned/skipped vs coverage-sources.md, and the D&B collision counts).
 
 AC#3 (2026-09-29): op eval coverage built (eval/coverage_report.py): renders api.coverage.compute's data for the index, enumerates gated official cells so a missing venue-year is a gap, cause notes from docs/results/coverage-causes.toml, listings that skipped entries, --check. Smoke run on the M2 index: 0 of 44 within ±1%, 32 gaps (expected for the literature-review subset).
+
+Correction (2026-09-29): the smoke-run figures above (0 of 44, 32 gaps) came from an uncommitted run on the M2 index; the committed report and its figures arrive with AC#2.
 <!-- SECTION:NOTES:END -->

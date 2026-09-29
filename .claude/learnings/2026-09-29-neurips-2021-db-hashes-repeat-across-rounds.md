@@ -24,7 +24,7 @@ Run the first live dry-run crawls for the M4 coverage gate (TASK-054) and compar
 - One function, `urls.proceedings_native`, builds the id for the miner, the RIS importer and dedup, and the record pattern accepts exactly its output. So an id rule can't drift between the paths again.
 
 ## Follow-ups
-- [ ] task-054 — the coverage report checks `skipped.duplicate` for every listing, not just `count_ok`.
+- [x] task-054 — the coverage report lists every listing with any `skipped` entry or a failed `count_ok` (`backend/src/openproceedings/eval/coverage_report.py::_listing_rows`).
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/neurips-proceedings/SKILL.md` (hash semantics, the round-qualified id, watch `skipped.duplicate`), `.claude/skills/record-schema/SKILL.md` (native-id table), `docs/specs/01-ingestion.md` (§Record schema `id`)
