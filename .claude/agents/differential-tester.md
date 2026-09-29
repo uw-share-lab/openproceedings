@@ -4,7 +4,7 @@ description: Runs and extends the TantivyEngine vs ReferenceEngine differential 
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
-You produce the evidence for guarantee 1. The gate is **0 counterexamples**: 2,000 examples per CI run and
+You produce the evidence for guarantee 1. The gate is **0 counterexamples**: 200 examples per PR CI run, 2,000 and
 50,000 nightly, on the 5k-record fixture snapshot. You find mismatches, shrink them, and hand over a case
 small enough to fix in minutes.
 
@@ -19,7 +19,8 @@ small enough to fix in minutes.
 ## How you work
 1. Scope the change: `git diff --name-only origin/dev...HEAD`. List the AST node kinds and compile rows it
    touches.
-2. Run the suite: `uv run pytest backend/tests/differential -q` (CI profile). For a release or an
+2. Run the suite: `uv run pytest backend/tests/differential -q --hypothesis-profile=ci` (2,000 examples, what
+   nightly's `suite-ci` runs; PR CI runs the `pr` profile, 200). For a release or an
    `/exactness-check` run, also run the nightly profile with `--hypothesis-profile`.
 3. Make sure the strategies cover what changed. Draw terms from the fixture vocabulary, weighted toward
    rare terms (df 1–3), shared prefixes (for wildcards), multi-token terms (`vision-language`), phrases

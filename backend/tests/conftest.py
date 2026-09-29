@@ -5,8 +5,9 @@ than a Unix socket or loopback, and every non-loopback name lookup, fails with N
 whole test session (limits: `pytest_configure`). Crawler tests use recorded HTTP fixtures (01 §Testing); there is no opt-out marker.
 
 
-Select with HYPOTHESIS_PROFILE or `--hypothesis-profile`: `dev` (local default), `ci` (2,000 examples, the
-`test` workflow) and `nightly` (50,000, the `nightly` workflow). `print_blob=True` so a CI failure prints a
+Select with HYPOTHESIS_PROFILE or `--hypothesis-profile`: `dev` (200 examples, 500 ms deadline: the local
+default), `pr` (200 examples, 2 s deadline: the `test` workflow under pytest-xdist), `ci` (2,000, the `nightly` workflow's whole-suite job) and `nightly` (50,000,
+the `nightly` workflow's property jobs). `print_blob=True` so a CI failure prints a
 `@reproduce_failure` blob; the example database (`.hypothesis/`) is gitignored.
 """
 
@@ -20,6 +21,9 @@ import pytest
 from hypothesis import settings
 
 settings.register_profile("dev", max_examples=200, deadline=500, print_blob=True)
+# pr: the dev example count with the ci deadline, so a slow example on a shared runner under pytest-xdist
+# doesn't fail the required check (TASK-127)
+settings.register_profile("pr", max_examples=200, deadline=2_000, print_blob=True)
 settings.register_profile("ci", max_examples=2_000, deadline=2_000, print_blob=True)
 settings.register_profile("nightly", max_examples=50_000, deadline=None, print_blob=True)
 settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))

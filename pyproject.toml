@@ -28,6 +28,7 @@ dev = [
     "refaudit==0.4.9",
     "pytest-benchmark>=5.1",
     "httpx2>=2.13.1",
+    "pytest-xdist>=3.8",
 ]
 
 [tool.ruff]

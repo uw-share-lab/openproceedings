@@ -3,7 +3,7 @@ task-028). The oracle is the definition of correct, so every generated tree must
 the same wildcard expansions (or the same refusal), the same disjunctive facets, the same `total` for every
 sort (and, for `year_asc`, the (year, id) order), and, for trees that parse, the same exclusion counts as a
 brute-force count. Trees draw on the corpus's own term dictionary (`synthetic_5k.vocab()`), rare terms
-weighted up. 2,000 examples under the `ci` profile; 50,000 nightly with task-057.
+weighted up. 200 examples per PR (`pr` profile), 2,000 nightly (`ci`); 50,000 nightly with task-057.
 
 Saving a counterexample: every failure message ends with `regression: <the shrunk AST as JSON>`. Add
 `{"ast": <that JSON>, "note": "<what broke>"}` to `differential-regressions.json`, which

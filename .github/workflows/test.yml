@@ -10,19 +10,19 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # CPU-sensitive differential and highlight properties have exceeded 30 minutes on shared runners;
-    # leave enough headroom for those required backend checks and the frontend build that follows them.
-    timeout-minutes: 60
+    # Properties run at the pr profile (200 examples, 2 s deadline) across the runner's CPUs, so the backend step takes a
+    # few minutes; the ci profile (2,000) runs nightly (TASK-127). The limit leaves room for the frontend build.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         if: hashFiles('backend/pyproject.toml') != ''
-      - name: Backend — unit, golden, differential (2k), contract
+      - name: Backend — unit, golden, differential, contract (properties at 200 examples, parallel)
         if: hashFiles('backend/pyproject.toml') != ''
         run: |
           uv sync --locked
-          uv run --locked pytest -q --hypothesis-profile=ci
+          uv run --locked pytest -q -n auto --hypothesis-profile=pr
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: hashFiles('frontend/package.json') != ''
         with: { node-version-file: .nvmrc, cache: npm, cache-dependency-path: package-lock.json }

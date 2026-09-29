@@ -1,8 +1,9 @@
 name: nightly
-# Every property test at 50,000 examples, the exhaustive tokenizer check, and the full mutation run of every
-# gate and tooling check (make mutate). Reviews run only `make mutate-changed`; this catches anything that
-# slipped. The differential suite (backend/tests/differential, ~1 h at 50k locally) gets its own job in
-# task-057; until then it runs at 2,000 examples in the test workflow and is excluded here.
+# The whole backend suite at the ci profile (2,000 examples; PRs run it at 200, TASK-127), every property test
+# at 50,000 examples, the exhaustive tokenizer check, and the full mutation run of every gate and tooling check
+# (make mutate). Reviews run only `make mutate-changed`; this catches anything that slipped. The differential
+# suite (backend/tests/differential, ~1 h at 50k locally) gets its own 50k job in task-057; until then it runs
+# at 2,000 examples in suite-ci and is excluded from the 50k jobs.
 on:
   schedule:
     - cron: "17 7 * * *"
@@ -11,6 +12,20 @@ permissions:
   contents: read
 
 jobs:
+  # The whole backend suite at 2,000 examples across the runner's CPUs: the depth PR CI gave up for speed.
+  # Locally ~11 min on 8 CPUs, bounded by the slowest single property (the differential, ~8 min at 2k); expect
+  # ~15-25 min on a 4-CPU runner, so 60 leaves room.
+  suite-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Sync workspace
+        run: uv sync --locked
+      - name: Backend suite with properties at 2,000 examples (parallel)
+        run: uv run --locked pytest -q -n auto --hypothesis-profile=ci
   # Three parallel jobs, each with its own limit (M1 gate: one 120-minute job was too tight on CI runners).
   # Locally the oracle-backed properties take ~35 min at 50k examples and the rest ~20; CI is ~1.5-2x slower.
   properties-oracle:

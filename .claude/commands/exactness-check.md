@@ -14,7 +14,7 @@ Check guarantee 1 (exactness) for the current branch. Focus (if given): $ARGUMEN
      `origin/dev...HEAD` against `docs/specs/02-query-language.md` and `docs/specs/03-search-engine.md`,
      with a counterexample query for every Must.
    - `differential-tester` (`.claude/agents/differential-tester.md`): run `uv run pytest
-     backend/tests/differential -q` at the CI profile, plus the nightly profile if the diff touches
+     backend/tests/differential -q --hypothesis-profile=ci` (2,000 examples), plus the nightly profile if the diff touches
      compile, tokenizer or oracle code. Extend the strategies to the node kinds the diff touches, and shrink
      every mismatch.
    Pass both the focus text above, if any.

@@ -50,8 +50,8 @@ Every node keeps its source span (groups include their parentheses and field pre
 the UI parse tree point at the input. Text leaves carry `field` (`title`/`abstract`/None); there is no
 field node. `Term.token` and `Wildcard.stem` are single normalised tokens; a multi-token word is a
 `Phrase`. `Filter.values` holds canonical strings, or `YearRange`s for `year`. `parse()` (`query/parser.py`)
-returns `ast=None` exactly when `errors` is non-empty, never raises (property-tested: 2k examples in CI,
-50k nightly), and reports one error per mistake, sorted by position. `Phrase` and `Near` carry the field;
+returns `ast=None` exactly when `errors` is non-empty, never raises (property-tested: 200 examples per PR,
+2,000 and 50k nightly), and reports one error per mistake, sorted by position. `Phrase` and `Near` carry the field;
 `structure(node)` compares meaning without spans; validators enforce every invariant (`test_ast.py`).
 
 ## Canonical form
