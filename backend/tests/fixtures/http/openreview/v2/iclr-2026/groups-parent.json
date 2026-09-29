@@ -1,0 +1,235 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "authenticated OpenReview fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "group trimmed to its venueid, visibility and decision keys (web, members, invitations dropped)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/groups?limit=1000&offset=0&parent=ICLR.cc/2026",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "700;w=3600",
+   "ratelimit-remaining": "698",
+   "ratelimit-reset": "3598"
+  },
+  "json": {
+   "count": 4,
+   "groups": [
+    {
+     "domain": "ICLR.cc/2026/Conference",
+     "id": "ICLR.cc/2026/Conference",
+     "parent": "ICLR.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "ICLR.cc/2026/Conference/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "ICLR.cc/2026/Conference/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "ICLR.cc/2026/Conference/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "ICLR.cc/2026/Conference/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "ICLR.cc/2026/Conference/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": true
+      },
+      "public_withdrawn_submissions": {
+       "value": true
+      },
+      "public_desk_rejected_submissions": {
+       "value": true
+      },
+      "title": {
+       "value": "The Fourteenth International Conference on Learning Representations"
+      },
+      "subtitle": {
+       "value": "ICLR 2026"
+      },
+      "website": {
+       "value": "https://iclr.cc/Conferences/2026"
+      },
+      "start_date": {
+       "value": "Apr 23 2026"
+      },
+      "withdrawn_submission_id": {
+       "value": "ICLR.cc/2026/Conference/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "ICLR.cc/2026/Conference/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": [
+        "Accept (Oral)",
+        "Accept (Poster)",
+        "Conditional Accept (Oral)",
+        "Conditional Accept (Poster)"
+       ]
+      }
+     }
+    },
+    {
+     "domain": "ICLR.cc/2026/Workshop_Proposals",
+     "id": "ICLR.cc/2026/Workshop_Proposals",
+     "parent": "ICLR.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "ICLR.cc/2026/Workshop_Proposals/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "ICLR.cc/2026/Workshop_Proposals/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "ICLR.cc/2026/Workshop_Proposals/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "ICLR.cc/2026/Workshop_Proposals/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "ICLR.cc/2026/Workshop_Proposals/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "ICLR 2026 Workshop Proposals"
+      },
+      "subtitle": {
+       "value": "ICLR 2026 Workshop Proposals"
+      },
+      "website": {
+       "value": "https://iclr.cc/Conferences/2026/CallForWorkshops"
+      },
+      "start_date": {
+       "value": "Apr 26 2026"
+      },
+      "withdrawn_submission_id": {
+       "value": "ICLR.cc/2026/Workshop_Proposals/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "ICLR.cc/2026/Workshop_Proposals/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": [
+        "Accept"
+       ]
+      }
+     }
+    },
+    {
+     "domain": "ICLR.cc/2026/BlogPosts",
+     "id": "ICLR.cc/2026/BlogPosts",
+     "parent": "ICLR.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "ICLR.cc/2026/BlogPosts/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "ICLR.cc/2026/BlogPosts/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "ICLR.cc/2026/BlogPosts/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "ICLR.cc/2026/BlogPosts/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "ICLR.cc/2026/BlogPosts/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "The Blogpost Track at ICLR 2026"
+      },
+      "subtitle": {
+       "value": "ICLR 2026 Blogpost Track"
+      },
+      "website": {
+       "value": "https://iclr-blogposts.github.io/"
+      },
+      "start_date": {
+       "value": "Apr 22 2026"
+      },
+      "withdrawn_submission_id": {
+       "value": "ICLR.cc/2026/BlogPosts/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "ICLR.cc/2026/BlogPosts/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": ""
+      }
+     }
+    },
+    {
+     "domain": "OpenReview.net",
+     "id": "ICLR.cc/2026/Workshop",
+     "parent": "ICLR.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {}
+    }
+   ]
+  }
+ }
+}

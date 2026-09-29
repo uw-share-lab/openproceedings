@@ -1,0 +1,102 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "authenticated OpenReview fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICLR.cc/2026/Conference&limit=1&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "498",
+   "ratelimit-reset": "3598"
+  },
+  "json": {
+   "count": 5351,
+   "notes": [
+    {
+     "forum": "WffiETiSeU",
+     "number": 3,
+     "id": "WffiETiSeU",
+     "readers": [
+      "everyone"
+     ],
+     "invitations": [
+      "ICLR.cc/2026/Conference/-/Submission",
+      "ICLR.cc/2026/Conference/-/Post_Submission",
+      "ICLR.cc/2026/Conference/Submission3/-/Full_Submission",
+      "ICLR.cc/2026/Conference/Submission3/-/Rebuttal_Revision",
+      "ICLR.cc/2026/Conference/-/Edit",
+      "ICLR.cc/2026/Conference/Submission3/-/Camera_Ready_Revision"
+     ],
+     "content": {
+      "title": {
+       "value": "Synthetic title text 1."
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 2",
+        "Synthetic Author 3",
+        "Synthetic Author 4",
+        "Synthetic Author 5",
+        "Synthetic Author 6",
+        "Synthetic Author 7",
+        "Synthetic Author 8",
+        "Synthetic Author 9",
+        "Synthetic Author 10"
+       ]
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person11",
+        "~Synthetic_Person12",
+        "~Synthetic_Person13",
+        "~Synthetic_Person14",
+        "~Synthetic_Person15",
+        "~Synthetic_Person16",
+        "~Synthetic_Person17",
+        "~Synthetic_Person18",
+        "~Synthetic_Person19"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 20.",
+        "Synthetic keywords text 21.",
+        "Synthetic keywords text 22.",
+        "Synthetic keywords text 23."
+       ]
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 24."
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 25."
+      },
+      "venue": {
+       "value": "ICLR 2026 Poster"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2026/Conference"
+      },
+      "pdf": {
+       "value": "/pdf/958faf5da822f0ed6941eb0364c7f7d5328be824.pdf"
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 26."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_27"
+      }
+     }
+    }
+   ]
+  }
+ }
+}

@@ -317,8 +317,11 @@ V2_NOTES: list[tuple[str, str, str]] = [
     ("v2/iclr-2024/notes-tinypapers.json", "tiny_papers", "accepted"),
     ("v2/iclr-2025/notes-blogposts.json", "blogpost", "accepted"),
     ("v2/iclr-2025/notes-workshop-rejected.json", "workshop", "rejected"),
+    ("v2/iclr-2026/notes-accepted.json", "main", "accepted"),
+    ("v2/icml-2023/notes-accepted.json", "main", "accepted"),
     ("v2/icml-2024/notes-accepted.json", "main", "accepted"),
     ("v2/icml-2025/notes-position.json", "position", "accepted"),
+    ("v2/icml-2026/notes-accepted.json", "main", "accepted"),
     ("v2/neurips-2023/notes-db-track-path.json", "datasets_benchmarks", "accepted"),
     ("v2/neurips-2024/notes-competition.json", "competition", "accepted"),  # TASK-094 (was `other`)
     ("v2/neurips-2024/notes-db.json", "datasets_benchmarks", "accepted"),
@@ -326,6 +329,7 @@ V2_NOTES: list[tuple[str, str, str]] = [
     ("v2/neurips-2025/notes-creative-ai.json", "other", "unknown"),
     ("v2/neurips-2025/notes-position.json", "position", "accepted"),  # TASK-094 (was `other`)
     ("v2/neurips-2025/notes-workshop-city.json", "workshop", "accepted"),
+    ("v2/neurips-2026/notes-accepted.json", "other", "unknown"),
 ]
 
 V1_NOTES: list[tuple[str, str, str, str]] = [
