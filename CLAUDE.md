@@ -15,7 +15,8 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 
 ## Layout (monorepo)
 - Root: `pyproject.toml` is the **uv workspace** root, with repo-wide ruff config and one `uv.lock`.
-  `Makefile` has `sync`, `fmt`, `lint`, `tooling`, `test`, `openapi` and `hooks`.
+  `Makefile` has `sync`, `fmt`, `lint`, `tooling`, `test`, `e2e`, `openapi`, `hooks`, `mutate` and
+  `mutate-changed` (`make help`).
 - `backend/`: the uv workspace member, Python package `openproceedings` (`cli.py` → `op`, `search.py` (one
   ranked search, which `op search` and the API search route both run), `export.py`, `logs.py`,
   `diagnostics.py`, `vocab.py`, `storage.py`, `records.py` (search records: `ids_hash`, the append-only store, replay), `coverage.py` (the snapshot manifest's venue × year × track × status breakdown), `official_counts.py` (official accepted counts and the M4 gate), `timestamps.py` (the API's one UTC `Z` timestamp form), `query/` (`normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`,

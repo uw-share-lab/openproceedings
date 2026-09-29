@@ -1,6 +1,8 @@
 # Contributing to openproceedings
 
 ## Setup
+To run the app (get data, build an index, start the API and UI), follow the README's
+[Quickstart](README.md#quickstart). What follows is the contributor setup on top of it.
 ```bash
 scripts/setup-dev.sh          # git hooks (.githooks: commit-msg, pre-push), executable tooling, .env skeleton
 uv sync                       # the root uv workspace: backend package + dev tools (Python 3.12, pinned by .python-version)

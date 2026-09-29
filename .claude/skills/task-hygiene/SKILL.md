@@ -35,7 +35,11 @@ Write `--final-summary` before `backlog task complete`: 1.53 can't edit a task o
 | A convention or gate | `CLAUDE.md`, `CONTRIBUTING.md`, the owning skill, and the hook's comment and case table |
 | An agent, skill or command | Its frontmatter, then `python3 .claude/scripts/roster_index.py` (regenerates `.claude/README.md`) |
 | Anything a new contributor would trip on | `README.md` / `CONTRIBUTING.md` |
+| A milestone's feature, or an `op` command, flag, default, port, env var, `make` target or setup step | `README.md` §Status and §Quickstart (every step there was run when written; re-run the ones you changed) |
 | A lesson | `.claude/learnings/` via `/record-learnings` |
+
+README.md is the doc most likely to drift, because no diff touches it by accident: `docs-reviewer` checks
+its Status and Quickstart on **every** diff (TASK-120).
 
 "As-built" means grep-verifiable: every path, command, flag and name a doc mentions exists and behaves as
 described. `docs-reviewer` is routed on **every** diff (`.claude/skills/review-gates/SKILL.md`) to check

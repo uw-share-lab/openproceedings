@@ -8,6 +8,91 @@ Exact, reproducible Boolean search over **NeurIPS, ICLR and ICML** titles and ab
 - **Reproducible.** Every result carries an index version. Saved search records can be replayed.
 - **Review-ready exports.** RIS (for Covidence), CSV, BibTeX and JSONL, with full abstracts.
 
-Status: **M2 built** (RIS ingestion, snapshots, the Tantivy index, `op search` / `op export`). M3: the `/api/v1` HTTP API is built (`op serve`; search, parse, papers, exports, search records, coverage, meta; interactive docs at `/api/v1/docs`), and search records are saved and replayed from the command line too (`op record save` / `op record replay`); the UI is under way: the Next.js skeleton is in `frontend/`, its pages still placeholders. Start with [`docs/specs/00-overview.md`](docs/specs/00-overview.md); setup is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+## Status
+
+| Milestone | What is built |
+|---|---|
+| M1 | The query language: tokenizer, parser, canonical form, defaults ([spec 02](docs/specs/02-query-language.md)) |
+| M2 | RIS ingestion, snapshots, the Tantivy index, `op search` / `op export` ([spec 01](docs/specs/01-ingestion.md), [spec 03](docs/specs/03-search-engine.md)) |
+| M3 | The `/api/v1` HTTP API (`op serve`; interactive docs at `/api/v1/docs`), search records (`op record save` / `replay`), and the web UI: query editor and builder, results, paper pages, exports, the coverage page and syntax help ([spec 04](docs/specs/04-backend-api.md), [spec 05](docs/specs/05-frontend.md)) |
+| M4 | Crawlers for OpenReview (API v1 and v2), the NeurIPS proceedings, PMLR and the ICLR archive (`op ingest …`), and the coverage report with the M4 gate (`op eval coverage`, [spec 07](docs/specs/07-evaluation.md) §C). The first full crawl's report is in progress (TASK-054). |
+| Later | Semantic "near-miss" suggestions (M5), and production deployment with Docker compose (`deploy/`, M6, TASK-065) |
+
+Start with [`docs/specs/00-overview.md`](docs/specs/00-overview.md). Contributor workflow (branches, reviews, the
+gates the tooling enforces) is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Quickstart
+
+### 1. Prerequisites
+- [uv](https://docs.astral.sh/uv/) (Python 3.12, pinned by `.python-version`)
+- Node 22 (pinned by `.nvmrc`) and npm
+- `shellcheck` if you will run `make lint` (`brew install shellcheck`)
+- An [OpenReview](https://openreview.net) account, only to crawl OpenReview
+
+### 2. Set up
+```bash
+scripts/setup-dev.sh   # git hooks and a .env skeleton
+make sync              # uv sync (backend) + npm ci --ignore-scripts (frontend)
+uv run op --help       # the CLI
+```
+To crawl OpenReview, put `OPENREVIEW_USERNAME` and `OPENREVIEW_PASSWORD` in `.env` (gitignored).
+
+### 3. Get papers into the cache
+Everything is written under `data/` (gitignored; `--data-dir` or `$OP_DATA_DIR` to move it). Crawls are polite
+(1 request/s per host, OpenReview within its hourly budget) and restartable: pages already cached are never
+fetched again. Try `--dry-run` first: it reads only the index pages and reports what a crawl would fetch.
+```bash
+uv run op ingest neurips --year 2013                       # one small year: 360 papers, about 8 minutes
+uv run op ingest neurips --year 2013-2025                  # the NeurIPS proceedings (~26k pages, ~10 h)
+uv run op ingest pmlr --year 2013-2025                     # ICML via PMLR (~14k pages, ~5 h)
+uv run op ingest iclr --year 2014-2016                     # the ICLR archive years
+uv run op ingest openreview --venue ICLR --years 2013-2025 # also NeurIPS 2021-2025, ICML 2023-2025
+```
+A scholarmend RIS export can be imported too: `uv run op ingest ris path/to/mended.ris` (with its `resolved.json`
+beside it).
+
+### 4. Build a snapshot and an index
+Both are immutable and named by their content. Each command prints JSON; the second step needs the first's
+`path`, and the third needs the second's `index_version`.
+```bash
+uv run op snapshot build                            # replays the cache into data/snapshots/<name>
+uv run op index build --snapshot <snapshot name>    # builds data/indexes/<index_version>
+cd data/indexes && ln -s <index_version> current && cd -   # make it the served index
+```
+Check it from the command line: `uv run op search "trust AND calibration"` (add `--ids`, `--explain`, or
+`uv run op export "…" --format ris --out results.ris`).
+
+### 5. Run the API
+```bash
+uv run op serve --cors-origin http://localhost:3000   # http://127.0.0.1:8000, serves data/indexes/current
+```
+`curl http://127.0.0.1:8000/api/v1/healthz` should report `"index_loaded": true`. The interactive API docs are
+at <http://127.0.0.1:8000/api/v1/docs>. `--index <index_version>` serves another index; `--cors-origin` lets
+the development UI (another origin) call the API.
+
+### 6. Run the UI
+Development (hot reload), in a second terminal:
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000 npm run dev --workspace frontend   # http://localhost:3000
+```
+Production build (the API URL is compiled in at build time, so set it before building):
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000 npm run build --workspace frontend
+PORT=3000 HOSTNAME=127.0.0.1 npm run start --workspace frontend
+```
+With `NEXT_PUBLIC_API_BASE_URL` unset, the UI calls the API on its own origin (behind one reverse proxy).
+
+### 7. Reports
+`uv run op eval coverage --index <index_version>` writes `docs/results/<date>-coverage.md`: indexed against
+official accepted counts per venue, year and track, and the M4 gate verdict (`--check` makes a failing gate the
+exit status).
+
+## Tests and checks
+```bash
+make test    # backend (pytest) and frontend (Vitest)
+make lint    # exactly what CI's lint job runs
+make e2e     # full-stack browser, accessibility and visual tests
+make help    # every entry point
+```
 
 MIT © SHARE Lab, University of Waterloo
