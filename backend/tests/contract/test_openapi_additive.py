@@ -136,6 +136,8 @@ def _baseline() -> dict[str, Any]:
             text=True,
         ).stdout
     except (OSError, subprocess.CalledProcessError):
+        if os.environ.get("OPENAPI_BASELINE_REQUIRED") == "1":  # CI (test.yml): a skip would hide a break
+            pytest.fail(f"{ref} isn't available, so the contract can't be checked against the released one")
         pytest.skip(f"{ref} isn't available here, so there is no released contract to compare against")
     return json.loads(text)  # type: ignore[no-any-return]
 

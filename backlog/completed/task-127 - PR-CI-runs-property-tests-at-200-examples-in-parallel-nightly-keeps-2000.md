@@ -1,11 +1,11 @@
 ---
 id: TASK-127
 title: 'PR CI runs property tests at 200 examples in parallel; nightly keeps 2,000'
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-29 22:32'
-updated_date: '2026-09-29 23:04'
+updated_date: '2026-09-29 23:23'
 labels:
   - ci
   - tests
@@ -21,9 +21,9 @@ PR CI's backend step takes ~25 min. Measured 2026-09-29 (--durations, ci profile
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 PR CI's backend step runs the suite with pytest-xdist at the dev Hypothesis profile and finishes in well under 10 minutes on the shared runner (measured on the PR's own run)
+- [x] #1 PR CI's backend step runs the suite with pytest-xdist at the dev Hypothesis profile and finishes in well under 10 minutes on the shared runner (measured on the PR's own run)
 - [x] #2 The nightly workflow runs the whole backend suite at the ci profile (2,000 examples), besides its existing 50k and exhaustive jobs
-- [ ] #3 The suite passes under xdist locally and in CI (no test depends on order or shared state); make test uses xdist too
+- [x] #3 The suite passes under xdist locally and in CI (no test depends on order or shared state); make test uses xdist too
 - [x] #4 pr-workflow, ci docs, CLAUDE.md and the README describe the new split; step names and the test.yml timeout/comment are accurate
 <!-- AC:END -->
 
@@ -41,4 +41,6 @@ PR CI's backend step takes ~25 min. Measured 2026-09-29 (--durations, ci profile
 - Noted, not changed: `test_export_braced.py` pins `@settings(max_examples=3_000)` and `max_examples=2_000` on two properties, so they run that many under every profile; they cost little.
 
 Review round 1 (6fe6166): PR CI uses a `pr` profile (200 examples, 2 s deadline) rather than `dev` (500 ms), so a slow example on a shared runner under xdist can't fail the required check.
+
+Measured on PR #26's own CI run (2026-09-29): backend step 3m15s (5,255 passed, 192 s of pytest), whole test job 4m06s, against 25-35 min before. The suite passed under xdist in CI.
 <!-- SECTION:NOTES:END -->
