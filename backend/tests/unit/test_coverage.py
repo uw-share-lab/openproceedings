@@ -199,8 +199,8 @@ WINDOW = {"from": "2026-09-20T10:00:00+00:00", "to": "2026-09-21T09:00:00+00:00"
         _set(("statuses_indexed", "ICML"), {"2024": ["accepted"]}),
         _drop(("sources_by_track",)),  # a format-2 manifest holds all three
         _set(("crawl_windows", "*"), WINDOW),  # no source is named `*`
+        _set(("sources", "*"), {"crawl_window": WINDOW}),  # in either map (TASK-122)
         _set(("crawl_windows", "ris"), {"from": "x"}),
-        _set(("sources",), {"ris": {"crawl_window": MANIFEST["crawl_window"]}}),  # two windows for `ris`
     ],
 )
 def test_an_inconsistent_manifest_is_refused_never_guessed(edit: Callable[[dict[str, Any]], None]) -> None:
@@ -223,6 +223,23 @@ def test_crawl_dates_take_a_search_records_shape_with_per_source_windows() -> No
     assert crawl_dates(manifest) == {"*": MANIFEST["crawl_window"], "openreview": window, "ris": WINDOW}
     with pytest.raises(SnapshotError):
         crawl_dates({**manifest, "crawl_window": {"from": "x"}})
+
+
+def test_a_claim_window_narrower_than_the_fetch_window_is_served_and_wins() -> None:
+    """TASK-122: `sources[].crawl_window` spans every response a crawl fetched (OpenReview's /groups calls come
+    first); format 2's `crawl_windows` spans the claims on records. The live 2026-09-29 crawl's openreview_v2
+    had 06:09:01Z against 06:10:05Z. They differ by design; the claim window is `crawl_dates`' (spec 04), and
+    a source with no claim window keeps its fetch window."""
+    from openproceedings.coverage import crawl_dates
+
+    fetched = {"from": "2026-09-20T09:00:00+00:00", "to": "2026-09-21T12:00:00+00:00"}  # wider than WINDOW
+    only_fetched = {"from": "2026-09-22T00:00:00+00:00", "to": "2026-09-22T01:00:00+00:00"}
+    manifest = {
+        **MANIFEST,
+        "sources": {"ris": {"crawl_window": fetched}, "pmlr": {"crawl_window": only_fetched}},
+    }
+    assert crawl_dates(manifest) == {"*": MANIFEST["crawl_window"], "ris": WINDOW, "pmlr": only_fetched}
+    breakdown(manifest, "s")  # the API's load: no refusal
 
 
 def _tracks(

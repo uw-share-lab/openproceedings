@@ -339,7 +339,9 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   `ranking_params` (the index's two other inputs, so a drifted replay can name a method change after the
   pinned index is gone). `crawl_dates` is keyed by source: `*` is the snapshot manifest's corpus-wide
   `crawl_window` (a manifest must name its `sources`, or the save is a 500: no sources named is not evidence
-  of a crawl), and each format-2 claim source with a `crawl_windows` entry adds its own key. Every end is
+  of a crawl), and each format-2 claim source with a `crawl_windows` entry adds its own key (a source with none
+  keeps its `sources` entry's `crawl_window`; the claim window, the first and last fetch of claims on records,
+  wins over that fetch window, which also spans responses that made no record, TASK-122). Every end is
   checked to be an ISO 8601 date-time and is
   sent in the one timestamp form (§Conventions; a stored `…+00:00` reads back as `…Z`).
   `crawl_dates_kind` has the same keys: a source in `vocab.BOOTSTRAP_SOURCES` (`ris`) gives
