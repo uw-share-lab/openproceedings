@@ -1,7 +1,7 @@
-# OpenReview and proceedings facts, checked live (TASK-002/096/104/106, 2026-09-27)
+# OpenReview and proceedings facts, checked live (TASK-002/050/096/104/106, 2026-09-27)
 
-A manual research run before the M4 crawlers (TASK-050–054), extended while implementing the ICLR archive
-and later proceedings fixtures (TASK-096/104/106). It checked every fact the ingestion skills and spec 01
+A manual research run before the M4 crawlers (TASK-050–054), extended while implementing the v2 crawler,
+the ICLR archive and later proceedings fixtures (TASK-050/096/104/106). It checked every fact the ingestion skills and spec 01
 marked "verify" against the live services, for every venue-year from 2013 (decision-013).
 Requests were read-only, about one every two seconds, with a descriptive `User-Agent`, and honoured
 `Retry-After`; about 400 OpenReview requests (within the 500/hour notes and 700/hour groups budgets) and about 35 proceedings pages.
@@ -48,8 +48,10 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
   (fixture `openreview/v2/errors/v1-note-not-found.json`). A venueid query on the wrong host returns
   an empty list, not an error, so a crawler must pick the host from the table above, never by falling
   back.
-- Group tree (`GET /groups?parent=<Org>.cc/<Y>&select=id`) is the cheapest map of a year: it lists
-  `Conference`, `Workshop`, `Workshop_<City>`, the tracks and the proposal groups.
+- Group tree (`GET /groups?parent=<Org>.cc/<Y>&select=id`) is the cheapest manual map of a year: it lists
+  `Conference`, `Workshop`, `Workshop_<City>`, the tracks and the proposal groups. The crawler deliberately
+  omits `select=id`, because its cache boundary must inspect each returned group's `readers` ACL before
+  retaining even the id.
 
 ### Authentication
 - **Unauthenticated access does not suffice.** Anonymous `GET` on api2 `/notes` and api1 `/notes`
@@ -137,6 +139,21 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
   `ICLR 2017 Invite to Workshop` is carried by `content.venue`. A workshop listing viewed with a role-bearing
   account returned a non-world-readable row and was deliberately discarded; only public-by-id evidence is
   committed.
+
+#### TASK-050 authenticated v2 fixture follow-up (2026-09-29)
+
+- Root `?parent=` responses are now recorded without `select=id` for ICML 2023 and all three 2026 venues.
+  They contain 2, 4, 10 and 4 public groups respectively (ICML 2023, ICLR 2026, NeurIPS 2026, ICML 2026),
+  including the complete public group documents needed to enforce the cache ACL boundary.
+- One nonempty note listing is recorded for each previously missing venue-year: ICML 2023 Conference
+  (1,828), ICLR 2026 Conference (5,351), NeurIPS 2026 Creative AI (95), and ICML 2026 Conference (6,341).
+  The one retained note per listing is scrubbed; the real counts, venueids and venue labels remain evidence.
+- NeurIPS 2026's Conference group has no `venue_id` yet and its bare group-id listing is empty. The first
+  nonempty public accepted listing is `Creative_AI_Track`; the conservative classifier keeps that form at
+  `other` / `unknown`, as it already did for 2025, rather than deriving acceptance from `content.venue`.
+- Every response passed `OpenReviewClient`'s world-readable public projection before capture. Tests feed
+  the scrubbed exchange back through the real cache codec and then replay it with an offline client that
+  has neither credentials nor a transport call; the full-crawl offline replay test remains alongside it.
 
 ### venueid forms confirmed (each with a fixture or a checked id)
 

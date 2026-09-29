@@ -1,0 +1,644 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "authenticated OpenReview fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "group trimmed to its venueid, visibility and decision keys (web, members, invitations dropped)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/groups?limit=1000&offset=0&parent=NeurIPS.cc/2026",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "700;w=3600",
+   "ratelimit-remaining": "697",
+   "ratelimit-reset": "3596"
+  },
+  "json": {
+   "count": 10,
+   "groups": [
+    {
+     "domain": "NeurIPS.cc/2026/Conference",
+     "id": "NeurIPS.cc/2026/Conference",
+     "parent": "NeurIPS.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "NeurIPS.cc/2026/Conference/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "NeurIPS.cc/2026/Conference/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "NeurIPS.cc/2026/Conference/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Conference/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Conference/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "The Fortieth Annual Conference on Neural Information Processing Systems"
+      },
+      "subtitle": {
+       "value": "NeurIPS 2026"
+      },
+      "website": {
+       "value": "https://neurips.cc/"
+      },
+      "start_date": {
+       "value": "Dec 06 2026"
+      },
+      "withdrawn_submission_id": {
+       "value": "NeurIPS.cc/2026/Conference/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "NeurIPS.cc/2026/Conference/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": [
+        "Accept (oral)",
+        "Accept (spotlight)",
+        "Accept (poster)"
+       ]
+      }
+     }
+    },
+    {
+     "domain": "NeurIPS.cc/2026/Evaluations_and_Datasets_Track",
+     "id": "NeurIPS.cc/2026/Evaluations_and_Datasets_Track",
+     "parent": "NeurIPS.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "NeurIPS.cc/2026/Evaluations_and_Datasets_Track/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "NeurIPS.cc/2026/Evaluations_and_Datasets_Track/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "NeurIPS.cc/2026/Evaluations_and_Datasets_Track/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Evaluations_and_Datasets_Track/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Evaluations_and_Datasets_Track/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "The Fortieth Annual Conference on Neural Information Processing Systems Evaluations and Datasets Track"
+      },
+      "subtitle": {
+       "value": "NeurIPS 2026 Evaluations and Datasets Track"
+      },
+      "website": {
+       "value": "https://neurips.cc"
+      },
+      "start_date": {
+       "value": "Dec 06 2026"
+      },
+      "withdrawn_submission_id": {
+       "value": "NeurIPS.cc/2026/Evaluations_and_Datasets_Track/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "NeurIPS.cc/2026/Evaluations_and_Datasets_Track/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": [
+        "Accept (oral)",
+        "Accept (spotlight)",
+        "Accept (poster)"
+       ]
+      }
+     }
+    },
+    {
+     "domain": "NeurIPS.cc/2026/Position_Paper_Track",
+     "id": "NeurIPS.cc/2026/Position_Paper_Track",
+     "parent": "NeurIPS.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "NeurIPS.cc/2026/Position_Paper_Track/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "NeurIPS.cc/2026/Position_Paper_Track/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "NeurIPS.cc/2026/Position_Paper_Track/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Position_Paper_Track/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Position_Paper_Track/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "The Fortieth Annual Conference on Neural Information Processing Systems Position Paper Track"
+      },
+      "subtitle": {
+       "value": "NeurIPS 2026 Position Paper Track"
+      },
+      "website": {
+       "value": "https://neurips.cc/"
+      },
+      "start_date": {
+       "value": "Dec 06 2026"
+      },
+      "withdrawn_submission_id": {
+       "value": "NeurIPS.cc/2026/Position_Paper_Track/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "NeurIPS.cc/2026/Position_Paper_Track/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": [
+        "Accept (Oral)",
+        "Accept (Spotlight)",
+        "Accept"
+       ]
+      }
+     }
+    },
+    {
+     "domain": "NeurIPS.cc/2026/Competition_Track",
+     "id": "NeurIPS.cc/2026/Competition_Track",
+     "parent": "NeurIPS.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "NeurIPS.cc/2026/Competition_Track/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "NeurIPS.cc/2026/Competition_Track/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "NeurIPS.cc/2026/Competition_Track/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Competition_Track/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Competition_Track/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "The Fortieth Annual Conference on Neural Information Processing Systems Competition Track"
+      },
+      "subtitle": {
+       "value": "NeurIPS 2026 Competition Track"
+      },
+      "website": {
+       "value": "https://neurips.cc"
+      },
+      "start_date": {
+       "value": "Dec 06 2026"
+      },
+      "withdrawn_submission_id": {
+       "value": "NeurIPS.cc/2026/Competition_Track/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "NeurIPS.cc/2026/Competition_Track/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": [
+        "Accept"
+       ]
+      }
+     }
+    },
+    {
+     "domain": "NeurIPS.cc/2026/Workshop_Proposals",
+     "id": "NeurIPS.cc/2026/Workshop_Proposals",
+     "parent": "NeurIPS.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "NeurIPS.cc/2026/Workshop_Proposals/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "NeurIPS.cc/2026/Workshop_Proposals/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "NeurIPS.cc/2026/Workshop_Proposals/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Workshop_Proposals/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Workshop_Proposals/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "40th Conference on Neural Information Processing Systems Workshop Proposals"
+      },
+      "subtitle": {
+       "value": "NeurIPS 2026"
+      },
+      "website": {
+       "value": "neurips.cc"
+      },
+      "start_date": {
+       "value": "Dec 11 2026"
+      },
+      "withdrawn_submission_id": {
+       "value": "NeurIPS.cc/2026/Workshop_Proposals/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "NeurIPS.cc/2026/Workshop_Proposals/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": [
+        "Accept (Sydney)",
+        "Accept (Paris)",
+        "Accept (Atlanta)"
+       ]
+      }
+     }
+    },
+    {
+     "domain": "NeurIPS.cc/2026/Tutorials",
+     "id": "NeurIPS.cc/2026/Tutorials",
+     "parent": "NeurIPS.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "NeurIPS.cc/2026/Tutorials/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "NeurIPS.cc/2026/Tutorials/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "NeurIPS.cc/2026/Tutorials/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Tutorials/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Tutorials/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "NeurIPS 2026 Tutorial Proposals"
+      },
+      "subtitle": {
+       "value": "NeurIPS 2026 Tutorials"
+      },
+      "website": {
+       "value": "https://neurips.cc"
+      },
+      "start_date": {
+       "value": "Jun 01 2026"
+      },
+      "withdrawn_submission_id": {
+       "value": "NeurIPS.cc/2026/Tutorials/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "NeurIPS.cc/2026/Tutorials/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": [
+        "Accept (Sydney)",
+        "Accept (Paris)",
+        "Accept (Atlanta)",
+        "Conditional Accept (Sydney)",
+        "Conditional Accept (Paris)",
+        "Conditional Accept (Atlanta)"
+       ]
+      }
+     }
+    },
+    {
+     "domain": "OpenReview.net",
+     "id": "NeurIPS.cc/2026/Workshop",
+     "parent": "NeurIPS.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {}
+    },
+    {
+     "domain": "NeurIPS.cc/2026/Creative_AI_Track",
+     "id": "NeurIPS.cc/2026/Creative_AI_Track",
+     "parent": "NeurIPS.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "NeurIPS.cc/2026/Creative_AI_Track/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "NeurIPS.cc/2026/Creative_AI_Track/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "NeurIPS.cc/2026/Creative_AI_Track/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Creative_AI_Track/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Creative_AI_Track/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "The Fortieth Annual Conference on Neural Information Processing Systems Creative AI Track: Agency"
+      },
+      "subtitle": {
+       "value": "NeurIPS Creative AI Track 2026"
+      },
+      "website": {
+       "value": "https://neurips.cc/Conferences/2026/CallForCreativeAI"
+      },
+      "start_date": {
+       "value": "Dec 08 2026"
+      },
+      "withdrawn_submission_id": {
+       "value": "NeurIPS.cc/2026/Creative_AI_Track/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "NeurIPS.cc/2026/Creative_AI_Track/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": [
+        "Accept"
+       ]
+      }
+     }
+    },
+    {
+     "domain": "NeurIPS.cc/2026/Education_Track",
+     "id": "NeurIPS.cc/2026/Education_Track",
+     "parent": "NeurIPS.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "NeurIPS.cc/2026/Education_Track/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "NeurIPS.cc/2026/Education_Track/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "NeurIPS.cc/2026/Education_Track/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Education_Track/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Education_Track/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "NeurIPS 2026 Education Track"
+      },
+      "subtitle": {
+       "value": "NeurIPS 2026 Education Track"
+      },
+      "website": {
+       "value": "https://neurips.cc/Conferences/2026"
+      },
+      "start_date": {
+       "value": 1796511600000
+      },
+      "withdrawn_submission_id": {
+       "value": "NeurIPS.cc/2026/Education_Track/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "NeurIPS.cc/2026/Education_Track/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": [
+        "Accept"
+       ]
+      }
+     }
+    },
+    {
+     "domain": "NeurIPS.cc/2026/Affinity_Support_Pilot_Program",
+     "id": "NeurIPS.cc/2026/Affinity_Support_Pilot_Program",
+     "parent": "NeurIPS.cc/2026",
+     "readers": [
+      "everyone"
+     ],
+     "content": {
+      "submission_id": {
+       "value": "NeurIPS.cc/2026/Affinity_Support_Pilot_Program/-/Submission"
+      },
+      "submission_name": {
+       "value": "Submission"
+      },
+      "submission_venue_id": {
+       "value": "NeurIPS.cc/2026/Affinity_Support_Pilot_Program/Submission"
+      },
+      "withdrawn_venue_id": {
+       "value": "NeurIPS.cc/2026/Affinity_Support_Pilot_Program/Withdrawn_Submission"
+      },
+      "desk_rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Affinity_Support_Pilot_Program/Desk_Rejected_Submission"
+      },
+      "rejected_venue_id": {
+       "value": "NeurIPS.cc/2026/Affinity_Support_Pilot_Program/Rejected_Submission"
+      },
+      "public_submissions": {
+       "value": false
+      },
+      "public_withdrawn_submissions": {
+       "value": false
+      },
+      "public_desk_rejected_submissions": {
+       "value": false
+      },
+      "title": {
+       "value": "Affinity Support Pilot Program at the Fortieth Annual Conference on Neural Information Processing Systems"
+      },
+      "subtitle": {
+       "value": "NeurIPS 2026 Affinity Support Pilot Program"
+      },
+      "website": {
+       "value": "https://neurips.cc/"
+      },
+      "start_date": {
+       "value": "Dec 06 2026"
+      },
+      "withdrawn_submission_id": {
+       "value": "NeurIPS.cc/2026/Affinity_Support_Pilot_Program/-/Withdrawn_Submission"
+      },
+      "desk_rejected_submission_id": {
+       "value": "NeurIPS.cc/2026/Affinity_Support_Pilot_Program/-/Desk_Rejected_Submission"
+      },
+      "decision_name": {
+       "value": "Decision"
+      },
+      "decision_field_name": {
+       "value": "decision"
+      },
+      "accept_decision_options": {
+       "value": [
+        "Accept (Oral)",
+        "Accept (Poster)"
+       ]
+      }
+     }
+    }
+   ]
+  }
+ }
+}

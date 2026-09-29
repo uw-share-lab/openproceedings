@@ -1,0 +1,101 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "authenticated OpenReview fixture run",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=NeurIPS.cc/2026/Creative_AI_Track&limit=1&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "494",
+   "ratelimit-reset": "3593"
+  },
+  "json": {
+   "count": 95,
+   "notes": [
+    {
+     "forum": "FpWkUAkOGU",
+     "number": 8,
+     "id": "FpWkUAkOGU",
+     "readers": [
+      "everyone"
+     ],
+     "invitations": [
+      "NeurIPS.cc/2026/Creative_AI_Track/-/Submission",
+      "NeurIPS.cc/2026/Creative_AI_Track/-/Post_Submission",
+      "NeurIPS.cc/2026/Creative_AI_Track/-/Edit"
+     ],
+     "content": {
+      "title": {
+       "value": "Synthetic title text 1."
+      },
+      "track": {
+       "value": "Synthetic track text 2."
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 3"
+       ]
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person4"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 5.",
+        "Synthetic keywords text 6.",
+        "Synthetic keywords text 7.",
+        "Synthetic keywords text 8.",
+        "Synthetic keywords text 9.",
+        "Synthetic keywords text 10.",
+        "Synthetic keywords text 11.",
+        "Synthetic keywords text 12.",
+        "Synthetic keywords text 13.",
+        "Synthetic keywords text 14."
+       ]
+      },
+      "TLDR": {
+       "value": "Synthetic tldr text 15."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 16."
+      },
+      "pdf": {
+       "value": "/pdf/b90d2b460c3ef07beeeae10b2321351fefcb513d.pdf"
+      },
+      "thumbnail_image_for_artwork": {
+       "value": "Synthetic thumbnail image for artwork text 17."
+      },
+      "video_preview_for_artwork": {
+       "value": "Synthetic video preview for artwork text 18."
+      },
+      "reviewer_self_nomination": {
+       "value": "Synthetic reviewer self nomination text 19."
+      },
+      "venue": {
+       "value": "NeurIPS Creative AI Track 2026"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2026/Creative_AI_Track"
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 20."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_21"
+      }
+     }
+    }
+   ]
+  }
+ }
+}

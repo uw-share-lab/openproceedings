@@ -473,7 +473,7 @@ def fixture(capture: dict[str, Any]) -> dict[str, Any]:
         response["text"] = page
     recorded: dict[str, Any] = {
         "date": RECORDED,
-        "run": "TASK-107 authenticated OpenReview v1 fixture run",
+        "run": "authenticated OpenReview fixture run",
         "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
     }
     if trimmed:

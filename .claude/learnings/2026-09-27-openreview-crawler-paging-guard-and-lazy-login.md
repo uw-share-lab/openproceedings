@@ -38,12 +38,36 @@ openreview`) and test it only against the TASK-002 recorded fixtures.
   venue-year and need a table (research doc) → a per-venue-year presentation table.
 
 ## Follow-ups
-- [ ] (proposed, no task yet) record a `?parent=` group listing per venue before the first full crawl.
+- [x] TASK-050: recorded root `?parent=` group listings for ICLR, NeurIPS and ICML and replayed them
+  through the offline cache.
 - [ ] (proposed, no task yet) presentation claims from `content.venue` via a per-venue-year table.
-- [ ] (proposed, no task yet) a cache TTL (spec 01 §Pipeline 1 says "with a TTL"); today `--refresh` is manual.
+- [x] TASK-102: source-aware cache TTLs now refresh live crawls while offline replay never expires entries.
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/openreview-api/SKILL.md` §The v2 crawler as built;
   `.claude/skills/snapshots/SKILL.md` (manifest `sources.openreview_v2`); `CLAUDE.md` layout; spec 01 §CLI.
 - Test or hook added? — `test_an_ignored_offset_is_refused_not_looped`,
   `test_a_finished_crawl_replays_offline_with_no_credentials_and_no_request`.
+
+## Addendum — 2026-09-29
+
+**Key lesson:** Record the full public `?parent=` group documents, not only selected ids, and do not assume
+that a current-year v2 group already has `content.venue_id` or a nonempty bare group-id listing; use the
+group-id fallback the crawler defines, keep unfamiliar tracks conservative, and prove every recorded
+exchange replays through the real cache without credentials.
+
+- The live NeurIPS 2026 root returned ten public groups. Its Conference group had a
+  `submission_venue_id` but no `venue_id`, and the bare Conference listing was empty; Creative AI was the
+  first nonempty public group-id listing (95 notes). Treating `content.venue` as status evidence would have
+  made a current-cycle taxonomy change silently alter classification, so the fixture remains
+  `other` / `unknown` under `classify_venueid`.
+- The parent-listing recorder went through `OpenReviewClient` before writing a capture. That made the
+  public-projection boundary executable evidence: all returned groups had world-readable ACLs, and
+  restricted content fields were removed before the scrubber saw them.
+- A file inventory alone would only prove that names exist. The new fixture test sends each scrubbed
+  response back through `EntryCodec`, then asks an offline client with no credentials to fetch the same
+  canonical URL and asserts that its transport is never called.
+- Evidence: ICML 2023 plus ICLR/NeurIPS/ICML 2026 each have a root group fixture and a nonempty note
+  fixture; 261 focused tests, 893 ingest/scrubber tests, 5,117 backend tests and 2,582 frontend tests passed.
+- Propagated to `.claude/skills/openreview-api/SKILL.md` §Fixtures and
+  `docs/research/2026-09-27-openreview-and-proceedings-facts.md` §TASK-050 authenticated v2 fixture follow-up.

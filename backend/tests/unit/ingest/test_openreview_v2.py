@@ -31,7 +31,9 @@ from tests.unit.ingest.openreview_fakes import (
     clone,
     group_doc,
     json_response,
+    recorded,
     recorded_note,
+    response,
 )
 
 PAGE_URL = "https://api2.openreview.net/notes?content.venueid=X&limit=1000&offset=0&sort=number:asc"
@@ -47,13 +49,17 @@ FORMS = [
     ("iclr-2024/notes-tinypapers.json", "ICLR", 2024, "tiny_papers", "accepted"),
     ("iclr-2025/notes-blogposts.json", "ICLR", 2025, "blogpost", "accepted"),
     ("iclr-2025/notes-workshop-rejected.json", "ICLR", 2025, "workshop", "rejected"),
+    ("iclr-2026/notes-accepted.json", "ICLR", 2026, "main", "accepted"),
     ("neurips-2023/notes-db-track-path.json", "NeurIPS", 2023, "datasets_benchmarks", "accepted"),
     ("neurips-2024/notes-db.json", "NeurIPS", 2024, "datasets_benchmarks", "accepted"),
     ("neurips-2024/notes-db-rejected.json", "NeurIPS", 2024, "datasets_benchmarks", "rejected"),
     ("neurips-2025/notes-workshop-city.json", "NeurIPS", 2025, "workshop", "accepted"),
     ("neurips-2025/notes-creative-ai.json", "NeurIPS", 2025, "other", "unknown"),
+    ("neurips-2026/notes-accepted.json", "NeurIPS", 2026, "other", "unknown"),
+    ("icml-2023/notes-accepted.json", "ICML", 2023, "main", "accepted"),
     ("icml-2024/notes-accepted.json", "ICML", 2024, "main", "accepted"),
     ("icml-2025/notes-position.json", "ICML", 2025, "position", "accepted"),
+    ("icml-2026/notes-accepted.json", "ICML", 2026, "main", "accepted"),
 ]
 # classify.py's mapping of these is TASK-094's (position / competition); the crawler must just follow it
 DELEGATED = [
@@ -61,9 +67,64 @@ DELEGATED = [
     ("neurips-2024/notes-competition.json", "NeurIPS", 2024),
 ]
 
+RECORDED_V2_YEARS = {
+    "iclr": range(2024, 2027),
+    "neurips": range(2023, 2027),
+    "icml": range(2023, 2027),
+}
+LIVE_COVERAGE_FIXTURES = {
+    "icml-2023/groups-parent.json": "ICML.cc/2023",
+    "icml-2023/notes-accepted.json": None,
+    "iclr-2026/groups-parent.json": "ICLR.cc/2026",
+    "iclr-2026/notes-accepted.json": None,
+    "neurips-2026/groups-parent.json": "NeurIPS.cc/2026",
+    "neurips-2026/notes-accepted.json": None,
+    "icml-2026/groups-parent.json": "ICML.cc/2026",
+    "icml-2026/notes-accepted.json": None,
+}
+
 
 def build(note: dict[str, Any], venue: str = "ICLR", year: int = 2024) -> PaperRecord | str:
     return orv.note_record(note, venue=venue, year=year, page_url=PAGE_URL, fetched_at=FETCHED)
+
+
+def test_recorded_fixture_inventory_covers_every_v2_venue_year() -> None:
+    actual = {
+        (venue, int(year))
+        for path in (Path(__file__).parents[2] / "fixtures" / "http" / "openreview" / "v2").glob(
+            "*-????/notes-*.json"
+        )
+        for venue, year in [path.parent.name.rsplit("-", 1)]
+    }
+    expected = {(venue, year) for venue, years in RECORDED_V2_YEARS.items() for year in years}
+    assert expected <= actual
+
+
+@pytest.mark.parametrize(("fixture", "parent"), LIVE_COVERAGE_FIXTURES.items())
+def test_new_live_fixture_is_authenticated_and_replays_from_the_cache_offline(
+    fixture: str, parent: str | None, tmp_path: Path
+) -> None:
+    exchange = recorded(fixture)
+    request_url = exchange["request"]["url"]
+    parts = urlsplit(request_url)
+    params = {key: values[0] for key, values in parse_qs(parts.query).items()}
+    assert exchange["request"] == {"method": "GET", "url": request_url, "authenticated": True}
+    assert exchange["response"]["status"] == 200
+    if parent is not None:
+        assert parts.path == "/groups" and params["parent"] == parent
+        assert exchange["response"]["json"]["groups"]
+    else:
+        assert parts.path == "/notes"
+        assert exchange["response"]["json"]["notes"]
+
+    def recorded_exchange(request: Request) -> Response | None:
+        return response(fixture) if request.method == "GET" and request.url == request_url else None
+
+    server = FakeOpenReview(override=recorded_exchange)
+    fetched = client(tmp_path, server).get(parts.path, params)
+    silent = FakeOpenReview()
+    replayed = client(tmp_path, silent, credentials=None, offline=True).get(parts.path, params)
+    assert silent.calls == [] and replayed == fetched
 
 
 # --- notes → records -------------------------------------------------------------------------------------
