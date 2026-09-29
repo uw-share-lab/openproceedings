@@ -1,0 +1,1066 @@
+{
+  "_comment": "Golden cases for the reducer's year actions (TASK-092; spec 02 §Filter clauses, spec 05 §URL is state, decision-011). Read by backend/tests/unit/test_clauses.py (query.clauses reports exactly `year` for q; every expected string parses, its top-level year clause admits exactly `ranges_after`, and every other effective conjunct is unchanged; MAX_YEAR_RANGES and the year bounds are the server's), backend/tests/contract/test_parse_filters.py (POST /parse serves the same `year`) and frontend/src/lib/search-state.test.ts (given that report, the reducer writes exactly the expected string or refuses with the `refused` code). `q_parts` and `expected_parts` spell a long string as [text, times] runs, concatenated. Spans are code points into q.",
+  "max_year_ranges": 4,
+  "min_year": 1000,
+  "max_year": 9999,
+  "cases": [
+    {
+      "name": "set a typed range",
+      "q": "trust year:2020..2022",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 21],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2020,
+            "hi": 2022
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearSet",
+        "range": {
+          "lo": 2018,
+          "hi": 2024
+        }
+      },
+      "expected": "trust year:(2018..2024)",
+      "ranges_after": [
+        {
+          "lo": 2018,
+          "hi": 2024
+        }
+      ]
+    },
+    {
+      "name": "set with no year clause: written out",
+      "q": "trust",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [5, 5],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 1000,
+            "hi": 9999
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearSet",
+        "range": {
+          "lo": 2020,
+          "hi": 2026
+        }
+      },
+      "expected": "(trust) AND year:(2020..2026)",
+      "ranges_after": [
+        {
+          "lo": 2020,
+          "hi": 2026
+        }
+      ]
+    },
+    {
+      "name": "set one year: grouped, written as the year",
+      "q": "trust year:2020..2022",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 21],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2020,
+            "hi": 2022
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearSet",
+        "range": {
+          "lo": 2024,
+          "hi": 2024
+        }
+      },
+      "expected": "trust year:(2024)",
+      "ranges_after": [
+        {
+          "lo": 2024,
+          "hi": 2024
+        }
+      ]
+    },
+    {
+      "name": "add a separate range",
+      "q": "trust year:(2020..2022)",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 23],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2020,
+            "hi": 2022
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearAdd",
+        "range": {
+          "lo": 2024,
+          "hi": 2024
+        }
+      },
+      "expected": "trust year:(2020..2022 OR 2024)",
+      "ranges_after": [
+        {
+          "lo": 2020,
+          "hi": 2022
+        },
+        {
+          "lo": 2024,
+          "hi": 2024
+        }
+      ]
+    },
+    {
+      "name": "add an adjacent range: merged as the canonical form merges",
+      "q": "trust year:2020..2022",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 21],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2020,
+            "hi": 2022
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearAdd",
+        "range": {
+          "lo": 2023,
+          "hi": 2024
+        }
+      },
+      "expected": "trust year:(2020..2024)",
+      "ranges_after": [
+        {
+          "lo": 2020,
+          "hi": 2024
+        }
+      ]
+    },
+    {
+      "name": "add a range that joins two",
+      "q": "trust year:(2018 OR 2022)",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 25],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2018,
+            "hi": 2018
+          },
+          {
+            "lo": 2022,
+            "hi": 2022
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearAdd",
+        "range": {
+          "lo": 2019,
+          "hi": 2021
+        }
+      },
+      "expected": "trust year:(2018..2022)",
+      "ranges_after": [
+        {
+          "lo": 2018,
+          "hi": 2022
+        }
+      ]
+    },
+    {
+      "name": "remove a year from the middle: split in two",
+      "q": "trust year:2018..2024",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 21],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2018,
+            "hi": 2024
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearRemove",
+        "range": {
+          "lo": 2021,
+          "hi": 2021
+        }
+      },
+      "expected": "trust year:(2018..2020 OR 2022..2024)",
+      "ranges_after": [
+        {
+          "lo": 2018,
+          "hi": 2020
+        },
+        {
+          "lo": 2022,
+          "hi": 2024
+        }
+      ]
+    },
+    {
+      "name": "remove from an unrestricted year: written out",
+      "q": "trust",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [5, 5],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 1000,
+            "hi": 9999
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearRemove",
+        "range": {
+          "lo": 1000,
+          "hi": 2014
+        }
+      },
+      "expected": "(trust) AND year:(2015..9999)",
+      "ranges_after": [
+        {
+          "lo": 2015,
+          "hi": 9999
+        }
+      ]
+    },
+    {
+      "name": "remove the end of a range",
+      "q": "trust year:2018..2024",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 21],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2018,
+            "hi": 2024
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearRemove",
+        "range": {
+          "lo": 2023,
+          "hi": 2030
+        }
+      },
+      "expected": "trust year:(2018..2022)",
+      "ranges_after": [
+        {
+          "lo": 2018,
+          "hi": 2022
+        }
+      ]
+    },
+    {
+      "name": "clear a typed clause: every year, in place",
+      "q": "trust year:2020 venue:ICLR",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 15],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2020,
+            "hi": 2020
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearClear"
+      },
+      "expected": "trust year:(1000..9999) venue:ICLR",
+      "ranges_after": [
+        {
+          "lo": 1000,
+          "hi": 9999
+        }
+      ]
+    },
+    {
+      "name": "an OR of year filters is one clause, spliced whole",
+      "q": "x (year:2020 OR year:2022)",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [2, 26],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2020,
+            "hi": 2020
+          },
+          {
+            "lo": 2022,
+            "hi": 2022
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearRemove",
+        "range": {
+          "lo": 2020,
+          "hi": 2020
+        }
+      },
+      "expected": "x year:(2022)",
+      "ranges_after": [
+        {
+          "lo": 2022,
+          "hi": 2022
+        }
+      ]
+    },
+    {
+      "name": "a year clause followed by a group stays grouped",
+      "q": "year:(2020 OR 2022)(x)",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [0, 19],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2020,
+            "hi": 2020
+          },
+          {
+            "lo": 2022,
+            "hi": 2022
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearAdd",
+        "range": {
+          "lo": 2021,
+          "hi": 2021
+        }
+      },
+      "expected": "year:(2020..2022)(x)",
+      "ranges_after": [
+        {
+          "lo": 2020,
+          "hi": 2022
+        }
+      ]
+    },
+    {
+      "name": "canonical string pasted back",
+      "q": "(trust AND year:2020..2022 AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [11, 26],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2020,
+            "hi": 2022
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearRemove",
+        "range": {
+          "lo": 2022,
+          "hi": 2022
+        }
+      },
+      "expected": "(trust AND year:(2020..2021) AND track:(datasets_benchmarks OR main OR position) AND status:accepted)",
+      "ranges_after": [
+        {
+          "lo": 2020,
+          "hi": 2021
+        }
+      ]
+    },
+    {
+      "name": "astral characters before and after the clause",
+      "q": "𝐀 year:2020 𝐁",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [2, 11],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2020,
+            "hi": 2020
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearAdd",
+        "range": {
+          "lo": 2022,
+          "hi": 2022
+        }
+      },
+      "expected": "𝐀 year:(2020 OR 2022) 𝐁",
+      "ranges_after": [
+        {
+          "lo": 2020,
+          "hi": 2020
+        },
+        {
+          "lo": 2022,
+          "hi": 2022
+        }
+      ]
+    },
+    {
+      "name": "Scholar mode",
+      "q": "source:ICLR year:2021 trust",
+      "mode": "scholar",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [12, 21],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2021,
+            "hi": 2021
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearSet",
+        "range": {
+          "lo": 2022,
+          "hi": 2023
+        }
+      },
+      "expected": "source:ICLR year:(2022..2023) trust",
+      "ranges_after": [
+        {
+          "lo": 2022,
+          "hi": 2023
+        }
+      ]
+    },
+    {
+      "name": "the most ranges a year action writes",
+      "q": "trust year:(2010 OR 2012 OR 2014)",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 33],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2010,
+            "hi": 2010
+          },
+          {
+            "lo": 2012,
+            "hi": 2012
+          },
+          {
+            "lo": 2014,
+            "hi": 2014
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearAdd",
+        "range": {
+          "lo": 2016,
+          "hi": 2016
+        }
+      },
+      "expected": "trust year:(2010 OR 2012 OR 2014 OR 2016)",
+      "ranges_after": [
+        {
+          "lo": 2010,
+          "hi": 2010
+        },
+        {
+          "lo": 2012,
+          "hi": 2012
+        },
+        {
+          "lo": 2014,
+          "hi": 2014
+        },
+        {
+          "lo": 2016,
+          "hi": 2016
+        }
+      ]
+    },
+    {
+      "name": "1,862 code points ending in a typed year clause: its widest splice fits the canonical cap",
+      "q_parts": [
+        ["a", 1862],
+        [" year:2020", 1]
+      ],
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [1863, 1872],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2020,
+            "hi": 2020
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearAdd",
+        "range": {
+          "lo": 2022,
+          "hi": 2022
+        }
+      },
+      "expected_parts": [
+        ["a", 1862],
+        [" year:(2020 OR 2022)", 1]
+      ],
+      "ranges_after": [
+        {
+          "lo": 2020,
+          "hi": 2020
+        },
+        {
+          "lo": 2022,
+          "hi": 2022
+        }
+      ]
+    },
+    {
+      "name": "one range too many",
+      "q": "trust year:(2010 OR 2012 OR 2014 OR 2016)",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 41],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2010,
+            "hi": 2010
+          },
+          {
+            "lo": 2012,
+            "hi": 2012
+          },
+          {
+            "lo": 2014,
+            "hi": 2014
+          },
+          {
+            "lo": 2016,
+            "hi": 2016
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearAdd",
+        "range": {
+          "lo": 2018,
+          "hi": 2018
+        }
+      },
+      "refused": "TOO_MANY_RANGES"
+    },
+    {
+      "name": "removing a year from the middle can be one range too many",
+      "q": "trust year:(2008 OR 2010 OR 2012 OR 2014..2016)",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 47],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2008,
+            "hi": 2008
+          },
+          {
+            "lo": 2010,
+            "hi": 2010
+          },
+          {
+            "lo": 2012,
+            "hi": 2012
+          },
+          {
+            "lo": 2014,
+            "hi": 2016
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearRemove",
+        "range": {
+          "lo": 2015,
+          "hi": 2015
+        }
+      },
+      "refused": "TOO_MANY_RANGES"
+    },
+    {
+      "name": "add years already included",
+      "q": "trust year:2018..2024",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 21],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2018,
+            "hi": 2024
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearAdd",
+        "range": {
+          "lo": 2020,
+          "hi": 2021
+        }
+      },
+      "refused": "ALREADY_INCLUDED"
+    },
+    {
+      "name": "set the range the clause already is",
+      "q": "trust year:2018..2024",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 21],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2018,
+            "hi": 2024
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearSet",
+        "range": {
+          "lo": 2018,
+          "hi": 2024
+        }
+      },
+      "refused": "ALREADY_INCLUDED"
+    },
+    {
+      "name": "clear with no year clause",
+      "q": "trust",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [5, 5],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 1000,
+            "hi": 9999
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearClear"
+      },
+      "refused": "ALREADY_INCLUDED"
+    },
+    {
+      "name": "remove years not included",
+      "q": "trust year:2018..2020",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 21],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2018,
+            "hi": 2020
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearRemove",
+        "range": {
+          "lo": 2022,
+          "hi": 2022
+        }
+      },
+      "refused": "NOT_INCLUDED"
+    },
+    {
+      "name": "remove every year",
+      "q": "trust year:2018..2020",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 21],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2018,
+            "hi": 2020
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearRemove",
+        "range": {
+          "lo": 2010,
+          "hi": 2030
+        }
+      },
+      "refused": "LAST_VALUE"
+    },
+    {
+      "name": "a backwards range",
+      "q": "trust year:2018..2020",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [6, 21],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 2018,
+            "hi": 2020
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearSet",
+        "range": {
+          "lo": 2026,
+          "hi": 2020
+        }
+      },
+      "refused": "BAD_VALUE"
+    },
+    {
+      "name": "a year outside 1000 to 9999",
+      "q": "trust",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [5, 5],
+        "toggleable": true,
+        "reason": null,
+        "ranges": [
+          {
+            "lo": 1000,
+            "hi": 9999
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearSet",
+        "range": {
+          "lo": 999,
+          "hi": 2020
+        }
+      },
+      "refused": "BAD_VALUE"
+    },
+    {
+      "name": "negated clause",
+      "q": "-year:2020 llm",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": true,
+        "span": [0, 10],
+        "toggleable": false,
+        "reason": "negated",
+        "ranges": [
+          {
+            "lo": 2020,
+            "hi": 2020
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearSet",
+        "range": {
+          "lo": 2022,
+          "hi": 2022
+        }
+      },
+      "refused": "NEGATED_CLAUSE"
+    },
+    {
+      "name": "two top-level year clauses",
+      "q": "year:2020 x year:2021",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": null,
+        "toggleable": false,
+        "reason": "multiple_clauses",
+        "ranges": null,
+        "blocking_spans": [
+          [0, 9],
+          [12, 21]
+        ]
+      },
+      "action": {
+        "type": "yearAdd",
+        "range": {
+          "lo": 2022,
+          "hi": 2022
+        }
+      },
+      "refused": "NO_EDITABLE_CLAUSE"
+    },
+    {
+      "name": "nested under OR",
+      "q": "(year:2020 AND x) OR y",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": null,
+        "toggleable": false,
+        "reason": "nested",
+        "ranges": null,
+        "blocking_spans": [[0, 22]]
+      },
+      "action": {
+        "type": "yearSet",
+        "range": {
+          "lo": 2022,
+          "hi": 2022
+        }
+      },
+      "refused": "NO_EDITABLE_CLAUSE"
+    },
+    {
+      "name": "OR of mixed fields",
+      "q": "year:2020 OR venue:ICLR",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": null,
+        "toggleable": false,
+        "reason": "mixed_fields",
+        "ranges": null,
+        "blocking_spans": [[0, 23]]
+      },
+      "action": {
+        "type": "yearSet",
+        "range": {
+          "lo": 2022,
+          "hi": 2022
+        }
+      },
+      "refused": "NO_EDITABLE_CLAUSE"
+    },
+    {
+      "name": "a trailing escape: the wrap would not parse",
+      "q": "foo\\",
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [4, 4],
+        "toggleable": false,
+        "reason": "unparsable_edit",
+        "ranges": [
+          {
+            "lo": 1000,
+            "hi": 9999
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearSet",
+        "range": {
+          "lo": 2022,
+          "hi": 2022
+        }
+      },
+      "refused": "NO_EDITABLE_CLAUSE"
+    },
+    {
+      "name": "depth 64: the wrap would be PARSE_TOO_DEEP",
+      "q_parts": [
+        ["(", 64],
+        ["a", 1],
+        [")", 64]
+      ],
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [129, 129],
+        "toggleable": false,
+        "reason": "too_deep",
+        "ranges": [
+          {
+            "lo": 1000,
+            "hi": 9999
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearSet",
+        "range": {
+          "lo": 2022,
+          "hi": 2022
+        }
+      },
+      "refused": "TOO_DEEP"
+    },
+    {
+      "name": "1,863 code points ending in a typed year clause: its widest splice's canonical form is over 2,000",
+      "q_parts": [
+        ["a", 1863],
+        [" year:2020", 1]
+      ],
+      "mode": "native",
+      "year": {
+        "field": "year",
+        "negated": false,
+        "span": [1864, 1873],
+        "toggleable": false,
+        "reason": "too_long",
+        "ranges": [
+          {
+            "lo": 2020,
+            "hi": 2020
+          }
+        ],
+        "blocking_spans": []
+      },
+      "action": {
+        "type": "yearAdd",
+        "range": {
+          "lo": 2022,
+          "hi": 2022
+        }
+      },
+      "refused": "TOO_LONG"
+    }
+  ]
+}

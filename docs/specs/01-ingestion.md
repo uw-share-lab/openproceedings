@@ -140,9 +140,22 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    to `merges.csv`, and disagreements and refused merges to `conflicts.csv`, for audit (dedup-rules skill).
 5. **Snapshot.** Write `data/snapshots/<date>-<shorthash>/records.jsonl` (sorted by `id`) and
    `manifest.json`. The manifest holds counts per venue × year × track × status, source versions,
-   the crawl date and the snapshot hash. Snapshots are immutable. `data/` is gitignored.
+   the crawl date and the snapshot hash. Snapshots are immutable. `data/` is gitignored. Since manifest
+   format 2 (TASK-082) it also holds, per venue × year × track, the missing abstracts and the claim
+   sources of its records; per claim source, its crawl window; and per venue-year, the **statuses
+   indexed** (spec 07 §C).
+
+**Statuses indexed** are which statuses a venue-year's sources can contain at all, from the source table in
+`ingest/statuses.py` (`SOURCE_STATUSES`, one row per claim source): an OpenReview venueid can carry every
+status (`classify_venueid`), a proceedings listing only `accepted` (`classify_proceedings`), and the RIS
+bootstrap, which resolves through either, every status where OpenReview holds the venue-year and only
+`accepted` elsewhere. Whether OpenReview holds a venue-year comes from the API v1 adapters (excluding empty
+ICLR 2015) and the API v2 first-year table, and a test pins those definitions together. The snapshot build records them per venue-year,
+the table's statuses plus any status the venue-year's records hold, so a later change to the table never
+rewrites an existing snapshot.
+
    The build also checks each venue-year's statuses against what its claim sources can supply
-   (`ingest/status_check.py`, TASK-109: OpenReview every status; a proceedings listing `accepted` only; RIS
+   (`ingest/status_check.py`, TASK-109, using the same `ingest/statuses.py` table: OpenReview every status; a proceedings listing `accepted` only; RIS
    every status where OpenReview holds the venue-year, else `accepted`). Each (venue, year, status) its
    records hold that none of its sources can supply is logged (`snapshot_unexpected_status`) and listed with
    its record ids in `op snapshot build`'s output (`unexpected_statuses`). It points at a classification

@@ -14,9 +14,9 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 | Differential | `backend/tests/differential/` | **5k fixture snapshot** | `TantivyEngine == ReferenceEngine`, 0 counterexamples in 2,000 (CI) / 50k (nightly, its own job: task-057) |
 | Contract | `backend/tests/contract/` | 5k fixture index via `TestClient` | every endpoint, OpenAPI snapshot, export round-trips, record replay (reproduced + drifted + mismatch) |
 | Frontend unit | `frontend/**/*.test.ts(x)` (Vitest) | mocked API from generated types | builder↔AST, URL reducer |
-| e2e | Playwright | `op serve` over the fixture index | the 05 §Testing flow end to end |
+| e2e | Playwright | `backend/tests/e2e/fixture_server.py` builds/serves the temporary 5k index; production frontend build | the 05 §Testing flow end to end |
 | Bench | pytest-benchmark | fixture index (`bench` workflow, advisory), 80k report (`report_80k.py`) | >20% regression of the minimum fails the `bench` check |
-| Nightly | — | full corpus | differential@50k, tokenizer parity (0 diffs), semantic invariant, determinism |
+| Nightly | property/golden fixtures and exhaustive Unicode inputs | no full corpus | oracle-backed and remaining properties at 50k, exhaustive tokenizer check, full gate/tooling mutation run; differential@50k is deferred to TASK-057 |
 
 ## Fixtures (`backend/tests/fixtures/`)
 - **Golden 200:** hand-built records whose text is written to be tricky (benchmark/benchmarking,

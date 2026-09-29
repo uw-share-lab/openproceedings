@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Providers } from "@/components/providers";
 import { SiteNav } from "@/components/site-nav";
 import { ThemePicker } from "@/components/theme-picker";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -34,7 +35,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           </header>
           {/* tabIndex -1: the skip link moves focus here; the region itself is not a control, so no ring. */}
           <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 focus:outline-none">
-            {children}
+            <Providers>{children}</Providers>
           </main>
         </ThemeProvider>
       </body>

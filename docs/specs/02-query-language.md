@@ -258,7 +258,8 @@ field, because it parses the edited string, which `/search` and replay don't nee
 ```python
 ParsedFilters = {venue: ParsedClause, year: ParsedYearClause, track: ParsedClause, status: ParsedClause}
 ParsedClause  = {field, negated: bool, span: [start, end] | None, toggleable: bool,
-                 reason: ClauseReason | None, values: [str] | None}          # sorted
+                 reason: ClauseReason | None, blocking_spans: [[start, end]],
+                 values: [str] | None}                                       # sorted
 ParsedYearClause = {…the same…, ranges: [YearRange] | None}                  # sorted, merged
 ClauseReason = "multiple_clauses" | "nested" | "mixed_fields" | "negated"
              | "too_long" | "too_deep" | "unparsable_edit"                    # an open set
@@ -275,6 +276,14 @@ ClauseReason = "multiple_clauses" | "nested" | "mixed_fields" | "negated"
 | none top-level, but nested under an `OR` or `NOT` group | null | false, `mixed_fields` if a top-level `OR` joins filters of several fields (`track:workshop OR venue:ICLR`), else `nested` |
 | none at all | zero-width `(len(q), len(q))`, the default's spot; the default's values (track, status), every vocabulary value (venue), or `1000..9999` (year) | true: a click writes it out as `(q) AND field:(…)` |
 
+**`blocking_spans`** (TASK-091, additive): for `multiple_clauses`, `nested` and `mixed_fields`, the clauses
+behind the reason, so the UI can point at them ("Show the clauses", spec 05) without walking the AST: the
+code-point span in `q` of each written top-level conjunct (`AND` groups flattened, nothing else rewritten)
+that holds a filter of the field anywhere, sorted. `track:workshop llm AND (venue:NeurIPS track:workshop)`
+gives both `track:workshop`; `llm (a OR track:workshop)` gives `(a OR track:workshop)`; `track:main NOT NOT
+(track:main a)` gives `track:main` and `NOT NOT (track:main a)`. Empty for every other clause, toggleable or
+not (the other reasons are about the edit, not about clauses in `q`).
+
 A nested clause beside a single top-level one doesn't block it (`track:main (track:workshop OR x)` edits
 `track:main`); the nested one stays applied, as the disjunctive facet counts assume (decision-001).
 
@@ -282,11 +291,12 @@ A nested clause beside a single top-level one doesn't block it (`track:main (tra
 the same canonical form and hash as `field:v`), so its `)` ends every edit and no edit can touch a group
 that follows the clause (`track:(main OR workshop)(x OR y)` → `track:(workshop)(x OR y)`, where a bare
 `track:workshop(x OR y)` would be `PARSE_PAREN_TOUCHES_WORD`). A toggleable clause is checked by making the
-widest edit a click can make and parsing it in the query's mode: every vocabulary value (for year, one
-`(dddd..dddd)` range), spliced over the span or wrapped around `q`, exactly as the reducer writes it. Every
-narrower edit is then sound too: a property test (`test_clauses.py`) applies every single-value toggle and
-include to every toggleable clause of generated queries and checks that the edited query parses and that
-nothing outside the clicked field's top-level clause changes. If that edited `q` is refused, the clause is not
+widest edit a click can make and parsing it in the query's mode: every vocabulary value (for year,
+`MAX_YEAR_RANGES` = 4 disjoint `dddd..dddd` ranges, the most a year action writes; see below), spliced over
+the span or wrapped around `q`, exactly as the reducer writes it. Every narrower edit is then sound too: a
+property test (`test_clauses.py`) applies every single-value toggle and include, and year clauses of up to
+four generated ranges, to every toggleable clause of generated queries and checks that the edited query
+parses and that nothing outside the clicked field's top-level clause changes. If that edited `q` is refused, the clause is not
 toggleable: `too_long` (over 2,000 code points, raw or canonical: decision-008), `too_deep` (the wrap nests
 `q` one level deeper, so a `q` already 64 deep is `PARSE_TOO_DEEP`) or `unparsable_edit` (any other
 error; for example a `q` ending in an escaping backslash, which would escape the wrap's `)`). It is also not
@@ -299,7 +309,16 @@ compares them); a typed clause costs one parse of its own. So `/parse` adds one 
 typed clause, and at most five (`test_clauses.py` counts them), so the worst case, short words near the
 cap where the combined wrap is too long to write at once and each field is checked alone, is about six
 parses of `q`.
-Goldens: `frontend/src/lib/filter-clause-golden.json`, read by `backend/tests/unit/test_clauses.py`,
+
+**Year edits** (TASK-092). The year control's actions (set a range, clear, add a range, remove a range) write
+the whole year clause from the reported `ranges`: sorted, with overlapping or adjacent ranges joined as the
+canonical form joins them, one year written bare (`year:(2018..2020 OR 2022..2024)`, `year:(2024)`), grouped
+like every clause. Clearing writes every year, `year:(1000..9999)`, in place: the clause is rewritten, never
+deleted, since deleting it could leave an operator with nothing after it. A year clause of more than
+`MAX_YEAR_RANGES` ranges (4) is edited in the query text instead: the reducer refuses it
+(`TOO_MANY_RANGES`), so every year edit is at most the widest one `/parse` checked, raw and canonical.
+Goldens: `frontend/src/lib/filter-clause-golden.json` (clicks) and `frontend/src/lib/year-clause-golden.json`
+(year actions, with `MAX_YEAR_RANGES` and the year bounds), read by `backend/tests/unit/test_clauses.py`,
 `backend/tests/contract/test_parse_filters.py` and the reducer's test.
 
 ## Compatibility input modes

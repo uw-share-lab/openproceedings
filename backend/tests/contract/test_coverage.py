@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from openproceedings.official_counts import GATED_TRACKS, OFFICIAL_ACCEPTED, within_gate
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.timestamps import utc_z
@@ -105,14 +106,22 @@ def test_numbers_match_the_snapshot_manifest_exactly(client: TestClient, store: 
             (venue, year): n for venue, years in manifest[key].items() for year, n in years.items()
         }
     assert body["totals"]["records"] == manifest["record_count"]
+    assert sorted(manifest["sources"]) == ["ris"]
     assert body["snapshot"] == {
         "name": snapshot.name,
         "snapshot_hash": manifest["snapshot_hash"],
         "crawl_date": manifest["crawl_date"],
-        # a search record's `crawl_dates` shape; every timestamp in the one UTC `…Z` form (spec 04)
-        "crawl_dates": {"*": {k: utc_z(v) for k, v in manifest["crawl_window"].items()}},
+        # a search record's `crawl_dates` shape; every timestamp in the one UTC `…Z` form (spec 04). Format 2
+        # records each claim source's own window too (TASK-082): here one source, so the same window
+        "crawl_dates": {
+            "*": {k: utc_z(v) for k, v in manifest["crawl_window"].items()},
+            "ris": {k: utc_z(v) for k, v in manifest["crawl_windows"]["ris"].items()},
+        },
         "built_at": utc_z(manifest["built_at"]),
         "sources": sorted(manifest["sources"]),
+        # derived as a search record's (TASK-091): the fixture's one source is RIS, a bootstrap source
+        "crawl_dates_kind": {"*": "scholar_query_dates", "ris": "scholar_query_dates"},
+        "identification_citable": False,
     }
     assert manifest["built_at"].endswith("+00:00") and body["snapshot"]["built_at"].endswith("Z")
 
@@ -121,6 +130,15 @@ def test_crawl_dates_are_a_search_records(recorded_coverage: tuple[dict[str, Any
     """One shape for the crawl window everywhere (M3a review): `/coverage` and a record of the same index."""
     coverage, record = recorded_coverage
     assert coverage["snapshot"]["crawl_dates"] == record["crawl_dates"]
+
+
+def test_crawl_kind_and_citability_are_a_search_records(
+    recorded_coverage: tuple[dict[str, Any], dict[str, Any]],
+) -> None:
+    """TASK-091: `/coverage` says what kind its window is and whether counts are citable, as a record does."""
+    coverage, record = recorded_coverage
+    for key in ("sources", "crawl_dates_kind", "identification_citable"):
+        assert coverage["snapshot"][key] == record[key]
 
 
 @pytest.fixture
@@ -234,10 +252,27 @@ def _move_a_cell(manifest: dict[str, Any]) -> None:
 
 
 def _no_missing_abstracts(manifest: dict[str, Any]) -> None:
+    """Zero one venue-year's missing abstracts, per track too, so the manifest still agrees with itself."""
     venue, year = next(
         (v, y) for v, ys in manifest["abstract_missing"].items() for y, n in ys.items() if n > 0
     )
     manifest["abstract_missing"][venue][year] = 0
+    tracks = manifest["abstract_missing_by_track"][venue][year]
+    manifest["abstract_missing_by_track"][venue][year] = dict.fromkeys(tracks, 0)
+
+
+def _move_a_missing_abstract(manifest: dict[str, Any]) -> None:
+    """One missing abstract moved to another track of the same venue-year: every sum still agrees."""
+    for venue, years in manifest["abstract_missing_by_track"].items():
+        for year, tracks in years.items():
+            size = {t: sum(ss.values()) for t, ss in manifest["counts"][venue][year].items()}
+            source = next((t for t, n in tracks.items() if n > 0), None)
+            target = next((t for t in tracks if t != source and tracks[t] < size[t]), None)
+            if source is not None and target is not None:
+                tracks[source] -= 1
+                tracks[target] += 1
+                return
+    raise AssertionError("no venue-year to move a missing abstract within")
 
 
 @pytest.mark.parametrize(
@@ -245,6 +280,9 @@ def _no_missing_abstracts(manifest: dict[str, Any]) -> None:
     [
         ("move_a_cell", "counts_mismatch"),  # consistent with itself, not with the records
         ("abstract_missing_zero", "abstract_missing_mismatch"),
+        ("move_a_missing_abstract", "track_facts_mismatch"),  # TASK-082: per track, consistent but wrong
+        ("track_sources", "track_facts_mismatch"),  # a source no record of the track has a claim from
+        ("statuses_too_few", "manifest_invalid"),  # a venue-year holding a status it says it can't
         ("fold_unknown", "manifest_invalid"),  # the unknown_track map disagrees with the cells
         ("record_count", "manifest_invalid"),
         ("track_outside_vocabulary", "manifest_invalid"),
@@ -264,6 +302,17 @@ def test_a_manifest_that_doesnt_describe_the_index_fails_the_load(
         _move_a_cell(manifest)
     elif tamper == "abstract_missing_zero":
         _no_missing_abstracts(manifest)
+    elif tamper == "move_a_missing_abstract":
+        _move_a_missing_abstract(manifest)
+    elif tamper == "track_sources":
+        track = next(iter(manifest["sources_by_track"][venue][year]))
+        manifest["sources_by_track"][venue][year][track] = ["openreview_v2", "ris"]
+    elif tamper == "statuses_too_few":
+        venue, year = next(
+            (v, y) for v, ys in manifest["counts"].items() for y, ts in ys.items()
+            if any(st != "accepted" for ss in ts.values() for st in ss)
+        )  # fmt: skip
+        manifest["statuses_indexed"][venue][year] = ["accepted"]
     elif tamper == "fold_unknown":
         venue, year = next(
             (v, y) for v, ys in manifest["counts"].items() for y, ts in ys.items() if "unknown" in ts
@@ -326,3 +375,77 @@ def test_the_openapi_document_describes_coverage(client: TestClient) -> None:
         "totals",
         "venue_years",
     } <= set(schema["required"])
+
+
+# --- TASK-082: tracks, statuses indexed, per-source windows ------------------------------------------------
+def test_tracks_equal_an_independent_count_of_the_snapshot_records(client: TestClient, store: Store) -> None:
+    """Per venue × year × track (spec 07 §C's cell): records, indexed accepted, missing abstracts and the claim
+    sources, counted here from the raw lines; every sourced official count carries the gate verdict."""
+    body = client.get("/api/v1/coverage").json()
+    records = raw_records(snapshot_of(store.indexes.parent, store.big))
+    got = {(vy["venue"], vy["year"], t["track"]): t for vy in body["venue_years"] for t in vy["tracks"]}
+    keys = {(x["venue"], x["year"], x["track"]) for x in records}
+    assert set(got) == keys
+    for key in keys:
+        mine = [x for x in records if (x["venue"], x["year"], x["track"]) == key]
+        row = got[key]
+        assert row["records"] == len(mine)
+        assert row["indexed_accepted"] == sum(x["status"] == "accepted" for x in mine)
+        assert row["abstract_missing"] == sum(x["abstract"] is None for x in mine)
+        assert row["sources"] == sorted({c["source"] for x in mine for c in x["provenance"]})
+        official = OFFICIAL_ACCEPTED.get(key)
+        if official is None:
+            assert row["official_accepted"] is None and row["delta"] is None and row["delta_pct"] is None
+            assert (row["gated"], row["within_gate"], row["official_citation"]) == (False, None, None)
+        else:
+            indexed = sum(x["status"] == "accepted" for x in mine)
+            assert (row["official_accepted"], row["delta"], row["official_citation"]) == (
+                official.accepted,
+                indexed - official.accepted,
+                official.citation,
+            )
+            gated = key[2] in GATED_TRACKS
+            assert (row["gated"], row["within_gate"]) == (
+                gated,
+                within_gate(indexed, official.accepted) if gated else None,
+            )
+    for vy in body["venue_years"]:  # tracks in vocabulary order; they partition the venue-year
+        held = {c["track"] for c in vy["cells"]}
+        assert [t["track"] for t in vy["tracks"]] == [t for t in TRACKS if t in held]
+        assert sum(t["records"] for t in vy["tracks"]) == vy["records"]
+        assert sum(t["abstract_missing"] for t in vy["tracks"]) == vy["abstract_missing"]
+
+
+def test_statuses_indexed_follow_the_source_table(client: TestClient, store: Store) -> None:
+    """AC1: a venue-year's statuses indexed are what its sources can contain (`ingest/statuses.py`, spec 01), in
+    vocabulary order, and include every status it holds; the manifest records them at build. (The synthetic
+    fixture holds every status in every venue-year; the proceedings-only cases are unit tests.)"""
+    from openproceedings.ingest.statuses import statuses_indexed
+
+    body = client.get("/api/v1/coverage").json()
+    manifest = json.loads((snapshot_of(store.indexes.parent, store.big) / "manifest.json").read_text())
+    for vy in body["venue_years"]:
+        held = vy["statuses_indexed"]
+        present = {c["status"] for c in vy["cells"]}
+        sources = {s for t in vy["tracks"] for s in t["sources"]}
+        assert held == [st for st in STATUSES if st in held] and present <= set(held)
+        assert held == statuses_indexed(sources, vy["venue"], vy["year"], present)
+        assert held == manifest["statuses_indexed"][vy["venue"]][str(vy["year"])]
+
+
+def test_a_format_1_snapshot_still_serves_its_tracks_from_the_records(store: Store, tmp_path: Path) -> None:
+    """A snapshot built before TASK-082 has no per-track keys: the load takes them from its verified records,
+    the statuses indexed from the source table, and `crawl_dates` has only `*`."""
+    data = _writable_copy(store, tmp_path)
+    path = data / "snapshots" / "big" / "manifest.json"
+    manifest = json.loads(path.read_text())
+    with TestClient(make_app(store.indexes.parent)) as c:
+        current = c.get("/api/v1/coverage").json()
+    for key in ("abstract_missing_by_track", "sources_by_track", "statuses_indexed", "crawl_windows"):
+        del manifest[key]
+    manifest["format_version"] = "1"
+    path.write_text(json.dumps(manifest))
+    with TestClient(make_app(data)) as c:
+        old = c.get("/api/v1/coverage").json()
+    assert old["venue_years"] == current["venue_years"]
+    assert set(old["snapshot"]["crawl_dates"]) == {"*"}

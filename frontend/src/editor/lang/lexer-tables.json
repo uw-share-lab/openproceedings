@@ -1,0 +1,43 @@
+{
+ "_generated": "by (cd backend && uv run python -m tests.contract.test_frontend_lexer_golden --write); do not edit",
+ "quotes": "\"«»“”„‟″「」『』〝〞〟＂",
+ "closers": {
+  "\"": "\"“”„‟＂",
+  "«": "»",
+  "»": "«»",
+  "“": "\"“”„‟＂",
+  "”": "\"“”„‟＂",
+  "„": "\"“”„‟＂",
+  "‟": "\"“”„‟＂",
+  "″": "″",
+  "「": "」",
+  "」": "」",
+  "『": "』",
+  "』": "』",
+  "〝": "〞〟",
+  "〞": "〞〟",
+  "〟": "〟",
+  "＂": "\"“”„‟＂"
+ },
+ "lparens": "(︵﹙（",
+ "rparens": ")︶﹚）",
+ "pipes": "|｜",
+ "colons": ":︓﹕：",
+ "minuses": "-﹣－",
+ "stars": "*﹡＊",
+ "dollars": "$﹩＄",
+ "fields": [
+  "title",
+  "abstract",
+  "venue",
+  "year",
+  "track",
+  "status",
+  "source"
+ ],
+ "max_near": 100,
+ "accent_symbols": "\"'.=^`~",
+ "accent_letters": "Hbcdkruv",
+ "space": "\t\n\u000b\f\r\u001c\u001d\u001e\u001f                  　",
+ "digit_not_nd": "²³¹፩፪፫፬፭፮፯፰፱᧚⁰⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉①②③④⑤⑥⑦⑧⑨⑴⑵⑶⑷⑸⑹⑺⑻⑼⒈⒉⒊⒋⒌⒍⒎⒏⒐⓪⓵⓶⓷⓸⓹⓺⓻⓼⓽⓿❶❷❸❹❺❻❼❽❾➀➁➂➃➄➅➆➇➈➊➋➌➍➎➏➐➑➒𐩀𐩁𐩂𐩃𐹠𐹡𐹢𐹣𐹤𐹥𐹦𐹧𐹨𑁒𑁓𑁔𑁕𑁖𑁗𑁘𑁙𑁚🄀🄁🄂🄃🄄🄅🄆🄇🄈🄉🄊"
+}

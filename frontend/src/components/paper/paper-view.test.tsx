@@ -1,0 +1,242 @@
+// @vitest-environment jsdom
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import type { Schemas } from "@/api/client";
+import PaperPage from "@/app/paper/[id]/page";
+import { json, META, renderWithApi, type Call, type Handler } from "@/test/api-stub";
+import { fetchedText, PaperView } from "./paper-view";
+
+afterEach(cleanup);
+
+type Paper = Schemas["PaperResponse"];
+
+const PAPER: Paper["paper"] = {
+  id: "op:iclr:2024:abc",
+  title: "𝔘 Trustworthy models",
+  abstract: "We study trust.",
+  authors: ["Ada Lovelace", "Alan Turing"],
+  venue: "ICLR",
+  year: 2024,
+  track: "main",
+  status: "accepted",
+  presentation: "oral",
+  venue_id_raw: "ICLR.cc/2024/Conference",
+  urls: {
+    forum: "https://openreview.net/forum?id=abc",
+    pdf: "https://openreview.net/pdf?id=abc",
+    proceedings: null,
+    doi: null,
+  },
+  keywords: [],
+  provenance: [
+    {
+      field: "title",
+      value: "𝔘 Trustworthy models",
+      source: "openreview_v2",
+      url: "https://openreview.net/forum?id=abc",
+      fetched_at: "2026-09-18T10:02:33Z",
+      evidence: "note.content.title",
+    },
+  ],
+  content_hash: "c0ffee",
+};
+
+function answer(over: Partial<Paper> = {}): Paper {
+  return {
+    index_version: "a1b2c3d4e5f6",
+    tokenizer_version: "t1",
+    query_version: "q1",
+    paper: PAPER,
+    matched: null,
+    highlights: null,
+    ...over,
+  };
+}
+
+const papers = (calls: Call[]) => calls.filter((c) => c.path.startsWith("/api/v1/papers/"));
+
+function api(paper: (call: Call) => Response): Handler {
+  return (call) => {
+    if (call.path === "/api/v1/meta") return json(META);
+    if (call.path.startsWith("/api/v1/papers/")) return paper(call);
+    return json({ error: { code: "API_NOT_FOUND", message: "no" } }, 404);
+  };
+}
+
+const draw = (q: string | null, handler: Handler, mode: "native" | "scholar" = "native") =>
+  renderWithApi(<PaperView id="op:iclr:2024:abc" q={q} mode={mode} />, handler);
+
+describe("P1 matched (reached from a hit)", () => {
+  it("asks with q and mode, and draws the API's highlights as <mark> over the raw text", async () => {
+    const { calls } = draw(
+      "trust*",
+      api(() => json(answer({ matched: true, highlights: { title: [[2, 13]], abstract: [[9, 14]] } }))),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    const call = papers(calls)[0];
+    expect(decodeURIComponent(call?.path ?? "")).toBe("/api/v1/papers/op:iclr:2024:abc");
+    expect(Object.fromEntries(call?.query ?? [])).toEqual({ q: "trust*", mode: "native" });
+    expect([...document.querySelectorAll("mark")].map((m) => m.textContent)).toEqual([
+      "Trustworthy",
+      "trust",
+    ]);
+    expect(document.body.textContent).toContain(
+      "Matches trust* (native syntax): matched terms are highlighted.",
+    );
+    expect(screen.getByText("Ada Lovelace, Alan Turing")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Back to results/ }).getAttribute("href")).toBe(
+      "/search?q=trust*&mode=native",
+    );
+  });
+
+  it("has the record's links, identifiers and a provenance table with header cells", async () => {
+    draw(
+      null,
+      api(() => json(answer())),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    const links = within(screen.getByRole("list", { name: "Links" })).getAllByRole("link");
+    expect(links.map((l) => l.textContent)).toEqual(["OpenReview", "PDF"]);
+    expect(screen.getByRole("button", { name: "Copy paper id" })).toBeTruthy();
+    expect(screen.getByText("ICLR.cc/2024/Conference")).toBeTruthy();
+    const table = screen.getByRole("table");
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Field", "Value", "Source", "Fetched", "Evidence"]);
+    expect(within(table).getByRole("rowheader").textContent).toBe("title");
+    expect(within(table).getByText("2026-09-18 10:02 UTC")).toBeTruthy();
+    expect(document.body.textContent).toContain("Index a1b2c3d4e5f6 · tokenizer t1 · query version q1");
+  });
+
+  it("says a paper that isn't accepted is not in the proceedings", async () => {
+    draw(
+      null,
+      api(() => json(answer({ paper: { ...PAPER, status: "rejected" } }))),
+    );
+    expect(
+      await screen.findByText("Status: rejected — submitted to ICLR 2024, not in its proceedings."),
+    ).toBeTruthy();
+  });
+});
+
+describe("P2 not matched", () => {
+  it("says the query doesn't match and lights nothing", async () => {
+    draw(
+      "trust",
+      api(() => json(answer({ matched: false, highlights: { title: [], abstract: [] } }))),
+      "scholar",
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(document.body.textContent).toContain(
+      "Doesn't match trust (Google Scholar syntax). Nothing is highlighted. A filter may remove it (for example the default track or status filter), or it lacks a term the query requires.",
+    );
+    expect(document.querySelectorAll("mark")).toHaveLength(0);
+  });
+});
+
+describe("P3 direct link", () => {
+  it("asks without q or mode and says nothing about a query", async () => {
+    const { calls } = draw(
+      null,
+      api(() => json(answer())),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect([...(papers(calls)[0]?.query ?? [])]).toEqual([]);
+    expect(document.body.textContent).not.toMatch(/Matches|Doesn't match|couldn't be run/);
+  });
+});
+
+describe("P4 query refused", () => {
+  it.each([
+    [
+      422,
+      "WILDCARD_TOO_MANY_EXPANSIONS",
+      "The query in this link couldn't be run (WILDCARD_TOO_MANY_EXPANSIONS), so the paper is shown without highlights.",
+    ],
+    [
+      503,
+      "API_BUSY",
+      "The query in this link couldn't be run (API_BUSY), so the paper is shown without highlights.",
+    ],
+    [
+      429,
+      "API_RATE_LIMITED",
+      "The query in this link couldn't be run just now (too many requests), so the paper is shown without highlights.",
+    ],
+  ])("a %i %s fetches the paper without q and says so in one line", async (status, code, line) => {
+    const { calls } = draw(
+      "tr*",
+      api((call) => (call.query.has("q") ? json({ error: { code, message: "m" } }, status) : json(answer()))),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.getAllByRole("status").map((el) => el.textContent)).toContain(`ⓘ ${line}`);
+    expect(papers(calls).map((c) => c.query.has("q"))).toEqual([true, false]);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(PAPER.title);
+  });
+});
+
+describe("P5 not found", () => {
+  it.each([
+    [404, "API_PAPER_NOT_FOUND"],
+    [422, "API_BAD_PARAM"],
+  ])("%i %s is the not-found state, naming the served index", async (status, code) => {
+    draw(
+      "trust",
+      api(() => json({ error: { code, message: "m" } }, status)),
+    );
+    expect(await screen.findByRole("heading", { name: "Paper not found" })).toBeTruthy();
+    await waitFor(() =>
+      expect(document.body.textContent).toContain(
+        "No paper with that id in index a1b2c3d4e5f6. The link may be mistyped, or the paper isn't in the index this instance serves.",
+      ),
+    );
+  });
+
+  it("any other failure is a retry state, not not-found", async () => {
+    draw(
+      null,
+      api(() => json({ error: { code: "API_INDEX_NOT_LOADED", message: "No index is loaded yet." } }, 503)),
+    );
+    expect(await screen.findByRole("heading", { name: "Search index loading" })).toBeTruthy();
+  });
+});
+
+describe("the page reads the link", () => {
+  it("passes q and mode through, reads an unknown mode as native, and treats a blank q as a direct link", async () => {
+    const seen: Call[] = [];
+    const handler = api((call) => {
+      seen.push(call);
+      return json(answer());
+    });
+    renderWithApi(
+      await PaperPage({
+        params: Promise.resolve({ id: "op%3Aiclr%3A2024%3Aabc" }),
+        searchParams: Promise.resolve({ q: "trust", mode: "bing" }),
+      }),
+      handler,
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(decodeURIComponent(seen[0]?.path ?? "")).toBe("/api/v1/papers/op:iclr:2024:abc");
+    expect(Object.fromEntries(seen[0]?.query ?? [])).toEqual({ q: "trust", mode: "native" });
+    cleanup();
+    seen.length = 0;
+    renderWithApi(
+      await PaperPage({
+        params: Promise.resolve({ id: "op:iclr:2024:abc" }),
+        searchParams: Promise.resolve({ q: "  " }),
+      }),
+      handler,
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect([...(seen[0]?.query ?? [])]).toEqual([]);
+  });
+});
+
+describe("fetchedText", () => {
+  it("writes an ISO time as date, minutes and UTC", () => {
+    expect(fetchedText("2026-09-18T10:02:33Z")).toBe("2026-09-18 10:02 UTC");
+    expect(fetchedText("not a date")).toBe("not a date");
+  });
+});

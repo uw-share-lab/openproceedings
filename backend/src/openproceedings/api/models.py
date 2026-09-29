@@ -13,7 +13,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
-from openproceedings.ingest.record import PaperRecord, Presentation, Urls
+from openproceedings.engine.index import VERSION_NAME
+from openproceedings.ingest.record import PaperRecord, Presentation, Source, Urls
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import MIN_YEAR, FilterField, Node, TextField
 from openproceedings.query.clauses import ParsedFilters
@@ -45,6 +46,7 @@ DIFF_LIMIT_DOC = "Entries of each list per page, 0 to 200. Over 200 is 422 `API_
 # any venue-shaped name: a venue this code doesn't know is a 404 (`is_paper_id` refuses it), never a 422
 PAPER_ID = r"^op:[a-z][a-z0-9]*:[0-9]{4}:[A-Za-z0-9_-]+$"
 RECORD_ID = r"^[A-Za-z0-9_-]{12}$"  # records.RECORD_ID (a test pins them equal)
+VERSION_PARAM = f"^(?:{VERSION_NAME.pattern})$"  # an index_version as a client may name one (never `current`)
 PAPER_ID_DOC = "A paper id, `op:<venue>:<year>:<native>`. Any other shape is 422 `API_BAD_PARAM`."
 RECORD_ID_DOC = (
     "A search record id: 12 characters of `A-Z a-z 0-9 - _`. Any other shape is 422 `API_BAD_PARAM`."
@@ -143,10 +145,22 @@ class Hit(Model):
     urls: Urls
 
 
+IDENTIFIED_DOC = (
+    "Records identified within the query's own limits (PRISMA): the count of `identification_query`, i.e. "
+    "`total` + `excluded.total`. The number `op search` prints as `identified`."
+)
+UNCLASSIFIED_DOC = (
+    "Of `excluded.total`, the records removed as unclassified rather than ineligible: `excluded.track.unknown` "
+    "+ `excluded.status.unknown`. The number `op search` prints as `unclassified`."
+)
+
+
 class SearchResponse(Versioned):
     query: QueryInfo
     total: int  # the whole matched set: independent of sort, offset and limit
     excluded: Excluded
+    identified_total: int = Field(description=IDENTIFIED_DOC)  # TASK-090: additive
+    unclassified_total: int = Field(description=UNCLASSIFIED_DOC)
     facets: Facets
     hits: list[Hit]
 
@@ -178,6 +192,13 @@ class PaperResponse(Versioned):
 class RecordRequest(Model):
     q: str = Field(description=Q_DOC)
     mode: Mode = Field(default="native", description=MODE_DOC)
+    index_version: str | None = Field(
+        default=None,
+        pattern=VERSION_PARAM,
+        description="Optional (TASK-091): the index the search was shown on. The record is saved only if the "
+        "served index is still that one; otherwise 409 `API_INDEX_VERSION_UNAVAILABLE` and nothing is saved "
+        "(a hot swap never freezes the query on another index than the one shown). Absent: the served index.",
+    )
 
 
 class RecordCreated(Versioned):
@@ -214,11 +235,24 @@ class ReplayInfo(Model):
     added_total: int | None  # ids the replay matched that the record doesn't hold; null when `refused`
     removed_total: int | None  # ids the record holds that the replay didn't match; null when `refused`
     membership_identical: bool | None  # added == removed == 0 (+0/−0 is reported); null when `refused`
+    identified_total: int | None = Field(  # TASK-090: additive
+        description="The replay's `total` + `excluded.total` (records identified within the query's own "
+        "limits). Null when `refused`."
+    )
+    unclassified_total: int | None = Field(
+        description="The replay's `excluded.track.unknown` + `excluded.status.unknown`. Null when `refused`."
+    )
 
 
 class RecordResponse(Versioned):
+    """The stored record and a replay of it. With `replay=false` (TASK-091) nothing is replayed: `replay` is
+    null and the top-level versions are the served index's and this code's."""
+
     record: SearchRecord
-    replay: ReplayInfo
+    replay: ReplayInfo | None = Field(
+        description="The replay check (HTTP 200 whatever its status). Null exactly when the request asked "
+        "`replay=false`; never null otherwise (decision-014)."
+    )
 
 
 class DiffEntry(Model):
@@ -290,6 +324,37 @@ class CoverageCell(Model):
     count: int
 
 
+class TrackCoverage(Model):
+    """One spec 07 §C cell, venue × year × track (TASK-082): what the snapshot indexed for the track, beside
+    the official accepted count where one is sourced (`official_counts.py`, each with its citation)."""
+
+    track: Track
+    records: int = Field(description="Records of this track, every status.")
+    indexed_accepted: int = Field(description="Of `records`, those with status `accepted`.")
+    abstract_missing: int = Field(description="Of `records`, those without an abstract (title-only).")
+    sources: list[Source] = Field(description="The sources the track's records came from (claim sources).")
+    official_accepted: int | None = Field(
+        description="The official accepted count for this venue, year and track; null where none is sourced."
+    )
+    official_counts: str | None = Field(
+        description="What `official_accepted` counts (e.g. orals, spotlights and posters, after withdrawals)."
+    )
+    official_citation: str | None = Field(
+        description="Where `official_accepted` comes from: a URL or citation."
+    )
+    official_accessed: date | None = Field(description="When `official_citation` was read.")
+    delta: int | None = Field(description="`indexed_accepted` − `official_accepted`; null without one.")
+    delta_pct: float | None = Field(
+        description="`delta` as a percentage of `official_accepted` (unrounded); null without one."
+    )
+    gated: bool = Field(
+        description="Whether the M4 coverage gate applies: a main-track or D&B cell with an official count."
+    )
+    within_gate: bool | None = Field(
+        description="For a gated cell, whether |`delta`| is at most 1% of `official_accepted`; null otherwise."
+    )
+
+
 class VenueYearCoverage(Model):
     """One venue-year of the snapshot (`coverage.breakdown`): its cells in vocabulary order (`unknown`
     last, never folded), and its unknown and missing-abstract counts, 0 included."""
@@ -301,6 +366,14 @@ class VenueYearCoverage(Model):
     unknown_track: int
     unknown_status: int
     cells: list[CoverageCell]
+    statuses_indexed: list[Status] = Field(  # TASK-082: additive
+        description="The statuses this venue-year's sources can contain at all, in vocabulary order (spec 07 "
+        "§C): a proceedings-only venue-year lists `accepted` alone, since no rejected paper exists there to "
+        "exclude. A status can be listed with no record in `cells`."
+    )
+    tracks: list[TrackCoverage] = Field(  # TASK-082: additive
+        description="One entry per track with records here, in vocabulary order (`unknown` last)."
+    )
 
 
 class CoverageTotals(Model):
@@ -319,6 +392,17 @@ class SnapshotInfo(Model):
     crawl_dates: dict[str, CrawlWindow]  # as a search record's: `*` is the corpus-wide window
     built_at: Timestamp
     sources: list[str]
+    crawl_dates_kind: dict[str, str] = Field(  # TASK-091: additive, a search record's derivation
+        description="Per `crawl_dates` key, what its window's ends are, derived as a search record's: `crawl` "
+        "(fetch times, UTC), `scholar_query_dates` (a bootstrap source's window: when its Scholar searches "
+        "were run) or `mixed` (`*` over both). Open set: new values may be added within /api/v1; handle a "
+        "value you don't know."
+    )
+    identification_citable: bool = Field(
+        description="Whether a search's counts on this snapshot can be cited as PRISMA identification numbers, "
+        "derived as a search record's: false when every source is a bootstrap one (the corpus is then an "
+        "earlier search's output, not a database)."
+    )
 
 
 class CoverageResponse(Versioned):

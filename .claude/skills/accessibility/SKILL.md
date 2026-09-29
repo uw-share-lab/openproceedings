@@ -29,7 +29,7 @@ description: The WCAG 2.2 AA checklist tailored to openproceedings — keyboard-
 |---|---|
 | 1.4.1 Use of Color | highlights = `<mark>` + bold (or underline); operators bold; workshop badge has text |
 | 1.4.3 / 1.4.11 Contrast | text ≥4.5:1, UI borders/focus/icons ≥3:1, **both themes**, incl. highlight + squiggles |
-| 1.4.10 Reflow | no 2-D scroll at **320 CSS px** (WCAG) — spec 05 says 360; test both. Long canonical strings wrap (`break-all` in mono blocks) |
+| 1.4.10 Reflow | no root 2-D scroll at **320 CSS px** (WCAG) — spec 05 says 360; test both. Long canonical strings wrap (`break-all` in mono blocks). A wide data table may scroll inside its own `overflow-x-auto contain-layout` region, but that region must have `role="region"`, an `aria-label` and `tabIndex={0}`; assert `documentElement.scrollWidth <= clientWidth`, because `overflow-x-auto` alone can still let the table's intrinsic width widen the root. |
 | 1.4.13 Content on Hover | PRISMA tooltip dismissible (Esc), hoverable, persistent; prefer a disclosure button |
 | 2.4.3 / 2.4.7 Focus | logical order: toggle → mode → editor → Search → diagnostics → sidebar → results; visible ring |
 | 2.4.11 Focus Not Obscured | sticky header/toolbar must not cover the focused hit |
@@ -44,3 +44,7 @@ on `/`, `/search` (with results, with a parse error, builder open, read-only bui
 `/record/[id]`, `/coverage`, `/help/syntax`, in **both themes** and at 320 px. Zero violations; any
 `exclude()` needs a written reason in the test. axe misses most keyboard and live-region issues, so the
 keyboard flows above are separate Playwright tests using `page.keyboard` only.
+
+Before calling axe, wait for the page's data-bearing client state (for example the search count or the
+named coverage-table region), not merely navigation, a heading or `networkidle`. Otherwise axe can scan a
+transient loading state and report a false pass while never seeing the controls populated from the API.

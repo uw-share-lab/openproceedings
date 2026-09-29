@@ -4,6 +4,7 @@ title: Classification audit with two blind reviewers
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
+updated_date: '2026-09-27 20:04'
 labels:
   - eval
 milestone: m-4
@@ -23,3 +24,9 @@ Spec 07 §D.
 - [ ] #1 50 records per track, stratified; Cohen's κ reported
 - [ ] #2 ≥99% accuracy on workshop vs non-workshop
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-09-27 re-scope (owner): deferred until the full system (M3b UI + M4 crawlers) is built.
+<!-- SECTION:NOTES:END -->

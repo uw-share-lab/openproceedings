@@ -15,6 +15,9 @@ are flattened, `NOT NOT x` is `x`, an OR of one field's filters is one filter). 
   one would leave the other ANDed in, so the edit would silently change nothing;
 - **none at the top level but some nested** under an OR or NOT: not toggleable, `mixed_fields` when a
   top-level OR joins filters of several fields (`track:workshop OR venue:ICLR`), else `nested`;
+- for these three reasons, `blocking_spans` (TASK-091) are the clauses behind the reason, so the UI can point
+  at them: the span in `q` of each written top-level conjunct (AND groups flattened, as `_written`) that holds
+  a filter of the field anywhere, in order. Empty for every other clause;
 - **none at all**: the zero-width span `(len(q), len(q))`, the spot a default is inserted at, with the
   default's values (track, status) or every value the field can take (venue: the vocabulary; year: one
   range `1000..9999`). A click writes it out as `(q) AND field:(…)`.
@@ -22,7 +25,8 @@ are flattened, `NOT NOT x` is `x`, an OR of one field's filters is one filter). 
 A click always writes the grouped form, `field:(v)` even for one value, so the clause's `)` ends every edit
 and no edit can touch a group that follows it (a bare `track:workshop(x)` is PARSE_PAREN_TOUCHES_WORD); the
 canonical form is the same either way. An editable clause is then checked by making the widest edit a click
-can make (every vocabulary value; for year, one `(dddd..dddd)` range) exactly as the reducer writes it, and
+can make (every vocabulary value; for year, `MAX_YEAR_RANGES` disjoint `dddd..dddd` ranges, the most a year
+action writes) exactly as the reducer writes it, and
 parsing that with the parser itself, in the query's mode, so the answer is the server's own. The clause is not toggleable when the edited `q` would
 be `too_long` (over 2,000 code points raw or canonical, decision-008), `too_deep` (the wrap nests `q` one
 level deeper; PARSE_TOO_DEEP), an `unparsable_edit` for another reason (a `q` ending in an escaping
@@ -68,14 +72,27 @@ ClauseReason = Literal[
     "multiple_clauses", "nested", "mixed_fields", "negated", "too_long", "too_deep", "unparsable_edit"
 ]
 CLAUSE_REASONS: tuple[ClauseReason, ...] = get_args(ClauseReason)
+# the reasons that name clauses in `q` a click can't rewrite (`blocking_spans`); the others are about the edit
+BLOCKING: frozenset[ClauseReason] = frozenset({"multiple_clauses", "nested", "mixed_fields"})
 VOCABULARY: dict[FilterField, tuple[str, ...]] = {
     "venue": tuple(sorted(VENUES.values())),
     "track": tuple(sorted(TRACKS)),
     "status": tuple(sorted(STATUSES)),
 }
 EVERY_YEAR = YearRange(lo=MIN_YEAR, hi=MAX_YEAR)
-# the longest single range a click writes, grouped as every clause is
-_WIDEST_YEAR = f"year:({MIN_YEAR}..{MAX_YEAR})"
+# The most ranges a year action writes (the reducer refuses more: TOO_MANY_RANGES). Shared with the reducer
+# through `frontend/src/lib/year-clause-golden.json`, which both sides' tests read.
+MAX_YEAR_RANGES = 4
+_STEP = (MAX_YEAR - MIN_YEAR + 1) // MAX_YEAR_RANGES
+# The widest year edit: MAX_YEAR_RANGES disjoint, non-adjacent `dddd..dddd` ranges (the canonical form keeps
+# them apart), so no year clause the reducer writes is longer, raw or canonical.
+WIDEST_YEAR: tuple[YearRange, ...] = tuple(
+    YearRange(
+        lo=MIN_YEAR + i * _STEP, hi=MAX_YEAR if i == MAX_YEAR_RANGES - 1 else MIN_YEAR + (i + 1) * _STEP - 2
+    )
+    for i in range(MAX_YEAR_RANGES)
+)
+_WIDEST_YEAR = "year:(" + " OR ".join(f"{r.lo}..{r.hi}" for r in WIDEST_YEAR) + ")"
 
 
 class _Clause(BaseModel):
@@ -91,8 +108,15 @@ class _Clause(BaseModel):
     )
     toggleable: bool = Field(description="A facet or include click may rewrite this clause.")
     reason: ClauseReason | None = Field(description="Why it can't be, exactly when `toggleable` is false.")
+    blocking_spans: list[Span] = Field(
+        description="For `reason` `multiple_clauses`, `nested` or `mixed_fields`: the clauses behind it, as "
+        "half-open code-point ranges in `q`, in order: each top-level conjunct (AND groups flattened) that "
+        "holds a filter of this field, so the UI can point at them. Empty for any other clause (TASK-091)."
+    )
 
     def _check(self, admitted: object) -> None:
+        if self.blocking_spans and self.reason not in BLOCKING:
+            raise ValueError("only a multiple_clauses, nested or mixed_fields clause has blocking spans")
         if (self.span is None) != (admitted is None):
             raise ValueError("a clause has both a span and its values, or neither")
         if self.toggleable == (self.reason is not None):
@@ -182,7 +206,7 @@ def _format(field: FilterField, values: tuple[str, ...]) -> str:
 
 
 def _widest_clause(field: FilterField) -> str:
-    """The longest clause a click can write for `field`: every vocabulary value, or one `(dddd..dddd)` range.
+    """The longest clause a click can write for `field`: every vocabulary value, or `MAX_YEAR_RANGES` ranges.
     Its `)` ends every edit, so the one check covers every edit shape: none can touch what follows."""
     return _WIDEST_YEAR if field == "year" else _format(field, VOCABULARY[field])
 
@@ -201,7 +225,7 @@ def _edit_reason(edited: str, mode: Mode, fields: tuple[FilterField, ...]) -> Cl
     conjuncts = _conjuncts(parsed.effective_ast)
     for field in fields:
         top = [c for c in conjuncts if _clause_field(c) == field]
-        widest = (EVERY_YEAR,) if field == "year" else VOCABULARY[field]
+        widest = WIDEST_YEAR if field == "year" else VOCABULARY[field]
         # Only `len(top) != 1` is reachable today: the canonical form never merges two clauses of a field, so
         # the one left is the clause written. The rest is defence against a canonical rule that would.
         if len(top) != 1 or not isinstance(top[0], Filter) or top[0].values != widest:
@@ -277,6 +301,11 @@ def _report(
     return None
 
 
+def _blocking(written: list[Node], field: FilterField) -> list[Span]:
+    """The spans in `q` of the written top-level conjuncts holding a filter of `field` (module docstring)."""
+    return sorted({c.span for c in written if _filters(c, field)})
+
+
 def filter_clauses(q: str, result: ParseResult) -> ParsedFilters | None:
     """Each filter field's clause in `q`, as `parse(q, mode)` read it (`result`); None when it has errors."""
     if result.ast is None:
@@ -286,6 +315,7 @@ def filter_clauses(q: str, result: ParseResult) -> ParsedFilters | None:
     found = {field: _report(q, result.mode, typed, canon, field) for field in FILTER_FIELDS}
     wraps = _check_wraps(q, result.mode, tuple(f for f, r in found.items() if r is None))
     end = (len(q), len(q))
+    written = _written(result.ast)
     reports: dict[str, ParsedClause | ParsedYearClause] = {}
     for field, report in found.items():
         # No clause at all: the zero-width span at the end, where a click writes it out as `(q) AND field:(…)`,
@@ -298,6 +328,7 @@ def filter_clauses(q: str, result: ParseResult) -> ParsedFilters | None:
             "span": span,
             "toggleable": reason is None,
             "reason": reason,
+            "blocking_spans": _blocking(written, field) if reason in BLOCKING else [],
         }
         if field == "year":
             ranges = None if values is None else [v for v in values if isinstance(v, YearRange)]

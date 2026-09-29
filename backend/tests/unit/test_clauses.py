@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,17 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from openproceedings.query import clauses
-from openproceedings.query.ast import FILTER_FIELDS, And, Filter, Node, Not, YearRange, structure
+from openproceedings.query.ast import (
+    FILTER_FIELDS,
+    MAX_YEAR,
+    MIN_YEAR,
+    And,
+    Filter,
+    Node,
+    Not,
+    YearRange,
+    structure,
+)
 from openproceedings.query.clauses import (
     CLAUSE_REASONS,
     EVERY_YEAR,
@@ -133,7 +144,7 @@ def test_negated_or_group() -> None:
 
 
 def test_a_year_clause_followed_by_a_group_is_editable() -> None:
-    """The widest year edit, `year:(1000..9999)`, is grouped like every clause; a year clause followed directly
+    """The widest year edit (`MAX_YEAR_RANGES` ranges) is grouped like every clause; a year clause followed directly
     by a group (which only a range or a group can be, `year:2020(x)` not parsing) stays editable."""
     got = report("year:(2020 OR 2022)(x)")["year"]
     assert (got["span"], got["toggleable"]) == ([0, 19], True)
@@ -314,10 +325,12 @@ def test_models_refuse_inconsistent_reports() -> None:
         "span": (0, 1),
         "toggleable": True,
         "reason": None,
+        "blocking_spans": [],
     }
     ParsedClause(**ok, values=["ICLR"])
     for bad in (
         {**ok, "span": None},  # values without a span
+        {**ok, "blocking_spans": [(0, 1)]},  # blocking spans on a toggleable clause
         {**ok, "reason": "nested"},  # toggleable with a reason
         {**ok, "toggleable": False},  # not toggleable without one
         {**ok, "negated": True},  # a negated clause is never toggleable
@@ -327,3 +340,151 @@ def test_models_refuse_inconsistent_reports() -> None:
     with pytest.raises(ValidationError):
         ParsedYearClause(**ok, ranges=None)
     ParsedYearClause(**ok, ranges=[YearRange(lo=2020, hi=2021)])
+    negated = {**ok, "toggleable": False, "negated": True, "reason": "negated"}
+    with pytest.raises(ValidationError):  # only multiple_clauses, nested and mixed_fields name clauses
+        ParsedClause(**{**negated, "blocking_spans": [(0, 1)]}, values=["ICLR"])
+    nested = {**ok, "span": None, "toggleable": False, "reason": "nested", "blocking_spans": [(0, 1)]}
+    ParsedClause(**nested, values=None)
+
+
+BLOCKING_CASES = [  # (q, field, reason, the clauses behind it, as text)
+    ("track:workshop llm AND (venue:NeurIPS track:workshop)", "track", "multiple_clauses",
+     ["track:workshop", "track:workshop"]),
+    ("track:main NOT NOT (track:main a)", "track", "multiple_clauses", ["track:main", "NOT NOT (track:main a)"]),
+    ("llm (a OR track:workshop)", "track", "nested", ["(a OR track:workshop)"]),
+    ("NOT NOT (a track:workshop) b", "track", "nested", ["NOT NOT (a track:workshop)"]),
+    ("x (track:workshop OR venue:ICLR)", "venue", "mixed_fields", ["(track:workshop OR venue:ICLR)"]),
+    ("x (track:workshop OR venue:ICLR)", "track", "mixed_fields", ["(track:workshop OR venue:ICLR)"]),
+    ("𝔘ber trust year:2020 (year:2021 y)", "year", "multiple_clauses", ["year:2020", "year:2021"]),
+]  # fmt: skip
+
+
+@pytest.mark.parametrize(("q", "field", "reason", "texts"), BLOCKING_CASES)
+def test_blocking_spans_are_the_clauses_behind_the_reason(
+    q: str, field: str, reason: str, texts: list[str]
+) -> None:
+    """TASK-091: code-point spans into `q` (an astral character before them counts one) of each written
+    top-level conjunct holding a filter of the field, in order."""
+    filters = filter_clauses(q, parse(q))
+    assert filters is not None
+    clause = getattr(filters, field)
+    assert (clause.reason, clause.span, clause.toggleable) == (reason, None, False)
+    assert [q[a:b] for a, b in clause.blocking_spans] == texts
+    assert clause.blocking_spans == sorted(clause.blocking_spans)
+
+
+@pytest.mark.parametrize("q", ["trust venue:ICLR", "trust", "NOT track:main x", "a" * 1950 + " track:main"])
+def test_no_blocking_spans_for_any_other_clause(q: str) -> None:
+    filters = filter_clauses(q, parse(q))
+    assert filters is not None
+    for field in ("venue", "year", "track", "status"):
+        clause = getattr(filters, field)
+        assert clause.reason not in ("multiple_clauses", "nested", "mixed_fields")
+        assert clause.blocking_spans == []
+
+
+# --- year actions (TASK-092) ---------------------------------------------------------------------------------
+# `year-clause-golden.json` is shared with the reducer's test: here the server reports exactly each case's `year`,
+# every expected string parses with its year clause admitting exactly `ranges_after`, and nothing else changes.
+
+YEAR_GOLDEN: dict[str, Any] = json.loads(
+    (ROOT / "frontend" / "src" / "lib" / "year-clause-golden.json").read_text(encoding="utf-8")
+)
+YEAR_CASES: list[dict[str, Any]] = YEAR_GOLDEN["cases"]
+
+
+def test_year_golden_shares_the_servers_bounds() -> None:
+    """The reducer's MAX_YEAR_RANGES and year bounds are checked against the same file (search-state.test.ts)."""
+    assert YEAR_GOLDEN["max_year_ranges"] == clauses.MAX_YEAR_RANGES
+    assert (YEAR_GOLDEN["min_year"], YEAR_GOLDEN["max_year"]) == (MIN_YEAR, MAX_YEAR)
+
+
+def test_the_widest_year_edit_is_max_year_ranges_disjoint_full_width_ranges() -> None:
+    """Every year clause a year action writes is at most this long, raw and canonical: at most
+    MAX_YEAR_RANGES ranges, each at most `dddd..dddd`, kept apart by the canonical form."""
+    widest = clauses.WIDEST_YEAR
+    assert len(widest) == clauses.MAX_YEAR_RANGES
+    assert all(len(f"{r.lo}..{r.hi}") == 10 for r in widest)
+    assert all(a.hi + 1 < b.lo for a, b in pairwise(widest))
+    clause = "year:(" + " OR ".join(f"{r.lo}..{r.hi}" for r in widest) + ")"
+    assert clauses._widest_clause("year") == clause
+    assert clause in (parse(f"x {clause}").canonical or "")
+
+
+@pytest.mark.parametrize("case", YEAR_CASES, ids=[c["name"] for c in YEAR_CASES])
+def test_year_golden_report(case: dict[str, Any]) -> None:
+    assert report(text(case, "q"), case["mode"])["year"] == case["year"]
+
+
+@pytest.mark.parametrize("case", [c for c in YEAR_CASES if "refused" not in c], ids=lambda c: c["name"])
+def test_year_golden_edit_parses_and_changes_only_the_year_clause(case: dict[str, Any]) -> None:
+    q, edited, mode = text(case, "q"), text(case, "expected"), case["mode"]
+    before, after = parse(q, mode), parse(edited, mode)
+    assert after.errors == [], [e.message for e in after.errors]
+    assert len(edited) <= MAX_QUERY_LENGTH
+    was, got = report(q, mode), report(edited, mode)
+    assert got["year"]["toggleable"], got["year"]
+    assert got["year"]["ranges"] == case["ranges_after"]
+    assert _rest(after.effective_ast, "year") == _rest(before.effective_ast, "year")
+    for field in ("venue", "track", "status"):  # the other clauses are reported alike (their spans may move)
+        assert {k: v for k, v in got[field].items() if k != "span"} == {
+            k: v for k, v in was[field].items() if k != "span"
+        }
+
+
+def test_year_golden_covers_every_action_and_reason() -> None:
+    assert {c["action"]["type"] for c in YEAR_CASES} == {"yearSet", "yearClear", "yearAdd", "yearRemove"}
+    assert {c["year"]["reason"] for c in YEAR_CASES} == {None, *CLAUSE_REASONS}
+
+
+def _year_clause(ranges: list[YearRange]) -> str:
+    """The reducer's year clause (`search-state.ts::formatYearClause`): grouped, sorted, merged."""
+    return "year:(" + " OR ".join(str(r.lo) if r.lo == r.hi else f"{r.lo}..{r.hi}" for r in ranges) + ")"
+
+
+def _merged(ranges: list[YearRange]) -> list[YearRange]:
+    """Sorted, overlapping or adjacent ranges joined (`search-state.ts::mergeRanges`)."""
+    out: list[YearRange] = []
+    for r in sorted(ranges, key=lambda r: (r.lo, r.hi)):
+        if out and r.lo <= out[-1].hi + 1:
+            out[-1] = YearRange(lo=out[-1].lo, hi=max(out[-1].hi, r.hi))
+        else:
+            out.append(r)
+    return out
+
+
+_YEARS = st.integers(MIN_YEAR, MAX_YEAR)
+_RANGES = st.lists(
+    st.tuples(_YEARS, _YEARS).map(lambda t: YearRange(lo=min(t), hi=max(t))), min_size=1, max_size=6
+).map(_merged)
+
+
+@given(
+    q=st.one_of(clause_queries(), near_cap_queries(1_800, 2_000)),
+    mode=st.sampled_from(["native", "scholar"]),
+    ranges=_RANGES,
+)
+@settings(deadline=None)
+def test_every_year_edit_on_a_toggleable_clause_parses_and_edits_only_that_clause(
+    q: str, mode: Mode, ranges: list[YearRange]
+) -> None:
+    """Guarantee 3 for the year control: any year clause a year action writes (at most MAX_YEAR_RANGES merged
+    ranges) over a toggleable year clause gives a query that parses, within the cap, whose top-level year clause
+    admits exactly those ranges, and whose every other effective conjunct is unchanged."""
+    assume(len(ranges) <= clauses.MAX_YEAR_RANGES)
+    before = parse(q, mode)
+    assume(before.ast is not None)
+    filters = filter_clauses(q, before)
+    assert filters is not None
+    year = filters.year
+    assume(year.toggleable and year.span is not None)
+    assert year.span is not None
+    start, end = year.span
+    clause = _year_clause(ranges)
+    edited = f"({q}) AND {clause}" if start == end == len(q) else q[:start] + clause + q[end:]
+    assert len(edited) <= MAX_QUERY_LENGTH, edited
+    after = parse(edited, mode)
+    assert after.errors == [], (edited, [e.code for e in after.errors])
+    assert _rest(after.effective_ast, "year") == _rest(before.effective_ast, "year"), edited
+    own = [c for c in _top(after.effective_ast) if _field_of(c) == "year"]
+    assert len(own) == 1 and isinstance(own[0], Filter) and list(own[0].values) == ranges, edited

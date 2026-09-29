@@ -8,9 +8,11 @@ a replay loads the record's pinned index read-only on demand (`IndexState.pinned
 
 Every replay is a 200 whose `replay.status` is `reproduced`, `drifted` or `mismatch`. A malformed record id
 is 422 `API_BAD_PARAM`; an unknown one 404 `API_RECORD_NOT_FOUND` (the message never repeats it). A save
-into a full store is 503 `API_RECORDS_STORE_FULL`. All three routes cost the export weight in the rate
-limit (each runs a whole query), and a replay's position-verified clauses are charged and capped as a
-search's are (`deps.charge_verified`, on the record's re-parsed canonical). Saves are held to two ceilings
+into a full store is 503 `API_RECORDS_STORE_FULL`, and a save pinned (`index_version`) to an index other than
+the served one 409 `API_INDEX_VERSION_UNAVAILABLE`. All three routes cost the export weight in the rate
+limit (each runs a whole query; `GET /records/{id}?replay=false` without `include=ids` runs none and costs
+one token), and a replay's position-verified clauses are charged and capped as a search's are
+(`deps.charge_verified`, on the record's re-parsed canonical). Saves are held to two ceilings
 (`SaveCeiling`): each client network (IPv4 /24, IPv6 /48) to `ApiConfig.record_saves_network_burst` at once,
 refilled at `record_saves_network_per_hour`, and every client together to `record_saves_burst`, refilled at
 `record_saves_per_hour` (429 `API_RATE_LIMITED` with `Retry-After` beyond either): the store is
@@ -70,6 +72,7 @@ from openproceedings.api.openapi import BUSY, response_header
 from openproceedings.api.state import IndexState
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.compile import verified_clauses
+from openproceedings.engine.exclusions import identified_total, unclassified_total
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.query.parser import parse
 from openproceedings.records import (
@@ -88,6 +91,12 @@ router = APIRouter(prefix=API_PREFIX)
 RECORD_PAGE = "/record/{record_id}"  # the frontend's record page (spec 05 §Pages)
 RECORD_RESOURCE = API_PREFIX + "/records/{record_id}"  # the 201's `Location`
 RecordId = Annotated[str, PathParam(pattern=RECORD_ID, description=RECORD_ID_DOC)]
+REPLAY_DOC = (
+    "`false` to read the stored record without replaying it (TASK-091): `replay` is then null, nothing is run, "
+    "so it is answered while verification is busy. Without `include=ids` it costs one token, not the export "
+    "weight; returning the full membership list costs the export weight. Default `true`: the record and a "
+    "replay check."
+)
 
 
 INSTANCE = "*"  # the instance bucket's one key
@@ -255,7 +264,15 @@ def refuse_mismatch(request: Request, record: SearchRecord, served: TantivyEngin
 def create_record(
     request: Request, response: Response, engine: EngineDep, body: RecordRequest
 ) -> RecordCreated:
-    """Freeze a search as an immutable record: re-run here on the served index, then one transaction."""
+    """Freeze a search as an immutable record: re-run here on the served index, then one transaction. With
+    `index_version`, only if the served index is that one (409 `API_INDEX_VERSION_UNAVAILABLE` otherwise)."""
+    if body.index_version is not None and body.index_version != engine.index_version:
+        # checked first: nothing is parsed, charged or saved for a search shown on another index (TASK-091)
+        raise ApiError(
+            DiagnosticCode.API_INDEX_VERSION_UNAVAILABLE,
+            "The index changed after this search: this instance now serves another index_version, so the "
+            "record wasn't saved. Search again, then save.",
+        )
     parsed = searchable(request, body.q, body.mode)
     assert parsed.effective_ast is not None  # searchable refuses a query that doesn't parse
     check_candidates(request, engine, parsed.effective_ast)  # 422 API_QUERY_TOO_COSTLY before a save is taken
@@ -284,15 +301,19 @@ def get_record(
     include: Annotated[
         Literal["ids"] | None, Query(description="`ids` to include the record's sorted id list.")
     ] = None,
+    replay: Annotated[bool, Query(description=REPLAY_DOC)] = True,
 ) -> RecordResponse:
     """The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless
-    `include=ids`; `/export?record_id=` streams the papers themselves."""
+    `include=ids`; `/export?record_id=` streams the papers themselves. With `replay=false`, the stored record
+    alone (`replay` null; the top-level versions are the served index's)."""
     record = stored_record(request, id)
+    shown = record if include == "ids" else record.model_copy(update={"ids": None})
+    if not replay:
+        annotate(request, canonical_hash=record.canonical_hash)
+        return RecordResponse(**versions(engine.index_version), record=shown, replay=None)
     result, clauses = _replayed(request, engine, record)
     return RecordResponse(
-        **versions(result.engine.index_version),
-        record=record if include == "ids" else record.model_copy(update={"ids": None}),
-        replay=replay_info(result, clauses),
+        **versions(result.engine.index_version), record=shown, replay=replay_info(result, clauses)
     )
 
 
@@ -351,6 +372,14 @@ def replay_info(result: Replay, verified_clauses: int | None) -> ReplayInfo:
         added_total=len(result.added) if result.added is not None else None,
         removed_total=len(result.removed) if result.removed is not None else None,
         membership_identical=result.membership_identical,
+        identified_total=(
+            identified_total(len(found.ids), found.excluded["total"]) if found is not None else None
+        ),
+        unclassified_total=(
+            unclassified_total(found.excluded["track"], found.excluded["status"])
+            if found is not None
+            else None
+        ),
     )
 
 

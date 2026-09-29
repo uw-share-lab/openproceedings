@@ -4,10 +4,9 @@ This is the cited table behind spec 07 §C's coverage gate (TASK-108; `coverage-
 one row per main-track and D&B cell from 2013 (decision-013): ICLR, ICML and NeurIPS main 2013–2025, and
 NeurIPS D&B 2021–2025. That is 44 cells, and **all 44 are sourced**. Every number was read on 2026-09-27
 from a public page, on the conference's own site or in its proceedings, with no login.
-The `official_counts.OFFICIAL_ACCEPTED` machine-readable copy and its equality test currently live on the
-parallel M3b branch (TASK-108 AC #2–3). When the branches integrate, that table must be updated from this
-document before the coverage gate can pass. This file deliberately holds exactly one Markdown table so the
-integration test can read every line starting with `|` as a data row.
+The `official_counts.OFFICIAL_ACCEPTED` machine-readable copy is kept equal to this table by a test, and
+`GET /coverage` joins it to each matching cell to compute the gate verdict. This file deliberately holds
+exactly one Markdown table so the equality test can read every line starting with `|` as a data row.
 
 **Which number a row uses:**
 

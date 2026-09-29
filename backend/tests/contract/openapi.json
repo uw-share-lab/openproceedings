@@ -1661,6 +1661,24 @@
       "ParsedClause": {
         "description": "A `venue`, `track` or `status` clause.",
         "properties": {
+          "blocking_spans": {
+            "description": "For `reason` `multiple_clauses`, `nested` or `mixed_fields`: the clauses behind it, as half-open code-point ranges in `q`, in order: each top-level conjunct (AND groups flattened) that holds a filter of this field, so the UI can point at them. Empty for any other clause (TASK-091).",
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Blocking Spans",
+            "type": "array"
+          },
           "field": {
             "description": "The filter field: always equal to this clause's key in `filters`. Open set: new values may be added within /api/v1; handle a value you don't know.",
             "enum": [
@@ -1748,6 +1766,7 @@
           "span",
           "toggleable",
           "reason",
+          "blocking_spans",
           "values"
         ],
         "title": "ParsedClause",
@@ -1781,6 +1800,24 @@
       "ParsedYearClause": {
         "description": "The `year` clause. Years are ranges, not a value list.",
         "properties": {
+          "blocking_spans": {
+            "description": "For `reason` `multiple_clauses`, `nested` or `mixed_fields`: the clauses behind it, as half-open code-point ranges in `q`, in order: each top-level conjunct (AND groups flattened) that holds a filter of this field, so the UI can point at them. Empty for any other clause (TASK-091).",
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Blocking Spans",
+            "type": "array"
+          },
           "field": {
             "description": "The filter field: always equal to this clause's key in `filters`. Open set: new values may be added within /api/v1; handle a value you don't know.",
             "enum": [
@@ -1868,6 +1905,7 @@
           "span",
           "toggleable",
           "reason",
+          "blocking_spans",
           "ranges"
         ],
         "title": "ParsedYearClause",
@@ -2165,6 +2203,19 @@
       "RecordRequest": {
         "additionalProperties": false,
         "properties": {
+          "index_version": {
+            "anyOf": [
+              {
+                "pattern": "^(?:[0-9a-f][0-9a-f-]{0,63})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional (TASK-091): the index the search was shown on. The record is saved only if the served index is still that one; otherwise 409 `API_INDEX_VERSION_UNAVAILABLE` and nothing is saved (a hot swap never freezes the query on another index than the one shown). Absent: the served index.",
+            "title": "Index Version"
+          },
           "mode": {
             "default": "native",
             "description": "`native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated).",
@@ -2188,6 +2239,7 @@
         "type": "object"
       },
       "RecordResponse": {
+        "description": "The stored record and a replay of it. With `replay=false` (TASK-091) nothing is replayed: `replay` is\nnull and the top-level versions are the served index's and this code's.",
         "properties": {
           "index_version": {
             "title": "Index Version",
@@ -2201,7 +2253,15 @@
             "$ref": "#/components/schemas/SearchRecord"
           },
           "replay": {
-            "$ref": "#/components/schemas/ReplayInfo"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReplayInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The replay check (HTTP 200 whatever its status). Null exactly when the request asked `replay=false`; never null otherwise (decision-014)."
           },
           "tokenizer_version": {
             "title": "Tokenizer Version",
@@ -2258,6 +2318,18 @@
               }
             ],
             "title": "Excluded Match"
+          },
+          "identified_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The replay's `total` + `excluded.total` (records identified within the query's own limits). Null when `refused`.",
+            "title": "Identified Total"
           },
           "ids_hash": {
             "anyOf": [
@@ -2341,6 +2413,18 @@
             ],
             "title": "Total"
           },
+          "unclassified_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The replay's `excluded.track.unknown` + `excluded.status.unknown`. Null when `refused`.",
+            "title": "Unclassified Total"
+          },
           "verified_clauses": {
             "anyOf": [
               {
@@ -2367,7 +2451,9 @@
           "changed",
           "added_total",
           "removed_total",
-          "membership_identical"
+          "membership_identical",
+          "identified_total",
+          "unclassified_total"
         ],
         "title": "ReplayInfo",
         "type": "object"
@@ -2439,6 +2525,12 @@
           "identification_query": {
             "title": "Identification Query",
             "type": "string"
+          },
+          "identified_total": {
+            "description": "Records identified within the query's own limits (PRISMA): `total` + `excluded.total`, the count of `identification_query` when the record was saved. The number `op record show` prints as `identified`.",
+            "readOnly": true,
+            "title": "Identified Total",
+            "type": "integer"
           },
           "ids": {
             "anyOf": [
@@ -2542,6 +2634,12 @@
             "title": "Translations",
             "type": "array"
           },
+          "unclassified_total": {
+            "description": "Of `excluded.total`, the records removed as unclassified rather than ineligible: `excluded.track.unknown` + `excluded.status.unknown`.",
+            "readOnly": true,
+            "title": "Unclassified Total",
+            "type": "integer"
+          },
           "warnings": {
             "items": {
               "$ref": "#/components/schemas/StoredDiagnostic"
@@ -2577,7 +2675,9 @@
           "semantic_version",
           "sources",
           "identification_citable",
-          "crawl_dates_kind"
+          "crawl_dates_kind",
+          "identified_total",
+          "unclassified_total"
         ],
         "title": "SearchRecord",
         "type": "object"
@@ -2597,6 +2697,11 @@
             "title": "Hits",
             "type": "array"
           },
+          "identified_total": {
+            "description": "Records identified within the query's own limits (PRISMA): the count of `identification_query`, i.e. `total` + `excluded.total`. The number `op search` prints as `identified`.",
+            "title": "Identified Total",
+            "type": "integer"
+          },
           "index_version": {
             "title": "Index Version",
             "type": "string"
@@ -2615,6 +2720,11 @@
           "total": {
             "title": "Total",
             "type": "integer"
+          },
+          "unclassified_total": {
+            "description": "Of `excluded.total`, the records removed as unclassified rather than ineligible: `excluded.track.unknown` + `excluded.status.unknown`. The number `op search` prints as `unclassified`.",
+            "title": "Unclassified Total",
+            "type": "integer"
           }
         },
         "required": [
@@ -2624,6 +2734,8 @@
           "query",
           "total",
           "excluded",
+          "identified_total",
+          "unclassified_total",
           "facets",
           "hits"
         ],
@@ -2650,6 +2762,19 @@
             "title": "Crawl Dates",
             "type": "object"
           },
+          "crawl_dates_kind": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Per `crawl_dates` key, what its window's ends are, derived as a search record's: `crawl` (fetch times, UTC), `scholar_query_dates` (a bootstrap source's window: when its Scholar searches were run) or `mixed` (`*` over both). Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "title": "Crawl Dates Kind",
+            "type": "object"
+          },
+          "identification_citable": {
+            "description": "Whether a search's counts on this snapshot can be cited as PRISMA identification numbers, derived as a search record's: false when every source is a bootstrap one (the corpus is then an earlier search's output, not a database).",
+            "title": "Identification Citable",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -2672,7 +2797,9 @@
           "crawl_date",
           "crawl_dates",
           "built_at",
-          "sources"
+          "sources",
+          "crawl_dates_kind",
+          "identification_citable"
         ],
         "title": "SnapshotInfo",
         "type": "object"
@@ -2784,6 +2911,166 @@
         "title": "Term",
         "type": "object"
       },
+      "TrackCoverage": {
+        "description": "One spec 07 §C cell, venue × year × track (TASK-082): what the snapshot indexed for the track, beside\nthe official accepted count where one is sourced (`official_counts.py`, each with its citation).",
+        "properties": {
+          "abstract_missing": {
+            "description": "Of `records`, those without an abstract (title-only).",
+            "title": "Abstract Missing",
+            "type": "integer"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`indexed_accepted` − `official_accepted`; null without one.",
+            "title": "Delta"
+          },
+          "delta_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`delta` as a percentage of `official_accepted` (unrounded); null without one.",
+            "title": "Delta Pct"
+          },
+          "gated": {
+            "description": "Whether the M4 coverage gate applies: a main-track or D&B cell with an official count.",
+            "title": "Gated",
+            "type": "boolean"
+          },
+          "indexed_accepted": {
+            "description": "Of `records`, those with status `accepted`.",
+            "title": "Indexed Accepted",
+            "type": "integer"
+          },
+          "official_accepted": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The official accepted count for this venue, year and track; null where none is sourced.",
+            "title": "Official Accepted"
+          },
+          "official_accessed": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When `official_citation` was read.",
+            "title": "Official Accessed"
+          },
+          "official_citation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where `official_accepted` comes from: a URL or citation.",
+            "title": "Official Citation"
+          },
+          "official_counts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What `official_accepted` counts (e.g. orals, spotlights and posters, after withdrawals).",
+            "title": "Official Counts"
+          },
+          "records": {
+            "description": "Records of this track, every status.",
+            "title": "Records",
+            "type": "integer"
+          },
+          "sources": {
+            "description": "The sources the track's records came from (claim sources).",
+            "items": {
+              "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+              "enum": [
+                "openreview_v2",
+                "openreview_v1",
+                "iclr_archive",
+                "neurips_proceedings",
+                "pmlr",
+                "ris"
+              ],
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "track": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "main",
+              "datasets_benchmarks",
+              "position",
+              "workshop",
+              "competition",
+              "tiny_papers",
+              "blogpost",
+              "other",
+              "unknown"
+            ],
+            "title": "Track",
+            "type": "string"
+          },
+          "within_gate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a gated cell, whether |`delta`| is at most 1% of `official_accepted`; null otherwise.",
+            "title": "Within Gate"
+          }
+        },
+        "required": [
+          "track",
+          "records",
+          "indexed_accepted",
+          "abstract_missing",
+          "sources",
+          "official_accepted",
+          "official_counts",
+          "official_citation",
+          "official_accessed",
+          "delta",
+          "delta_pct",
+          "gated",
+          "within_gate"
+        ],
+        "title": "TrackCoverage",
+        "type": "object"
+      },
       "Urls": {
         "properties": {
           "doi": {
@@ -2858,6 +3145,30 @@
             "title": "Records",
             "type": "integer"
           },
+          "statuses_indexed": {
+            "description": "The statuses this venue-year's sources can contain at all, in vocabulary order (spec 07 §C): a proceedings-only venue-year lists `accepted` alone, since no rejected paper exists there to exclude. A status can be listed with no record in `cells`.",
+            "items": {
+              "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+              "enum": [
+                "accepted",
+                "rejected",
+                "withdrawn",
+                "desk_rejected",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            "title": "Statuses Indexed",
+            "type": "array"
+          },
+          "tracks": {
+            "description": "One entry per track with records here, in vocabulary order (`unknown` last).",
+            "items": {
+              "$ref": "#/components/schemas/TrackCoverage"
+            },
+            "title": "Tracks",
+            "type": "array"
+          },
           "unknown_status": {
             "title": "Unknown Status",
             "type": "integer"
@@ -2888,7 +3199,9 @@
           "abstract_missing",
           "unknown_track",
           "unknown_status",
-          "cells"
+          "cells",
+          "statuses_indexed",
+          "tracks"
         ],
         "title": "VenueYearCoverage",
         "type": "object"
@@ -3641,7 +3954,7 @@
     },
     "/api/v1/records": {
       "post": {
-        "description": "Freeze a search as an immutable record: re-run here on the served index, then one transaction.",
+        "description": "Freeze a search as an immutable record: re-run here on the served index, then one transaction. With\n`index_version`, only if the served index is that one (409 `API_INDEX_VERSION_UNAVAILABLE` otherwise).",
         "operationId": "create_record",
         "requestBody": {
           "content": {
@@ -3744,7 +4057,7 @@
     },
     "/api/v1/records/{id}": {
       "get": {
-        "description": "The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless\n`include=ids`; `/export?record_id=` streams the papers themselves.",
+        "description": "The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless\n`include=ids`; `/export?record_id=` streams the papers themselves. With `replay=false`, the stored record\nalone (`replay` null; the top-level versions are the served index's).",
         "operationId": "get_record",
         "parameters": [
           {
@@ -3776,6 +4089,18 @@
               ],
               "description": "`ids` to include the record's sorted id list.",
               "title": "Include"
+            }
+          },
+          {
+            "description": "`false` to read the stored record without replaying it (TASK-091): `replay` is then null, nothing is run, so it is answered while verification is busy. Without `include=ids` it costs one token, not the export weight; returning the full membership list costs the export weight. Default `true`: the record and a replay check.",
+            "in": "query",
+            "name": "replay",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "`false` to read the stored record without replaying it (TASK-091): `replay` is then null, nothing is run, so it is answered while verification is busy. Without `include=ids` it costs one token, not the export weight; returning the full membership list costs the export weight. Default `true`: the record and a replay check.",
+              "title": "Replay",
+              "type": "boolean"
             }
           }
         ],

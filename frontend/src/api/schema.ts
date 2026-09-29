@@ -140,7 +140,8 @@ export interface paths {
         put?: never;
         /**
          * Create Record
-         * @description Freeze a search as an immutable record: re-run here on the served index, then one transaction.
+         * @description Freeze a search as an immutable record: re-run here on the served index, then one transaction. With
+         *     `index_version`, only if the served index is that one (409 `API_INDEX_VERSION_UNAVAILABLE` otherwise).
          */
         post: operations["create_record"];
         delete?: never;
@@ -159,7 +160,8 @@ export interface paths {
         /**
          * Get Record
          * @description The stored record and a replay of it now (HTTP 200 whatever the status). `ids` is null unless
-         *     `include=ids`; `/export?record_id=` streams the papers themselves.
+         *     `include=ids`; `/export?record_id=` streams the papers themselves. With `replay=false`, the stored record
+         *     alone (`replay` null; the top-level versions are the served index's).
          */
         get: operations["get_record"];
         put?: never;
@@ -746,6 +748,14 @@ export interface components {
          */
         ParsedClause: {
             /**
+             * Blocking Spans
+             * @description For `reason` `multiple_clauses`, `nested` or `mixed_fields`: the clauses behind it, as half-open code-point ranges in `q`, in order: each top-level conjunct (AND groups flattened) that holds a filter of this field, so the UI can point at them. Empty for any other clause (TASK-091).
+             */
+            blocking_spans: [
+                number,
+                number
+            ][];
+            /**
              * Field
              * @description The filter field: always equal to this clause's key in `filters`. Open set: new values may be added within /api/v1; handle a value you don't know.
              * @enum {string}
@@ -795,6 +805,14 @@ export interface components {
          * @description The `year` clause. Years are ranges, not a value list.
          */
         ParsedYearClause: {
+            /**
+             * Blocking Spans
+             * @description For `reason` `multiple_clauses`, `nested` or `mixed_fields`: the clauses behind it, as half-open code-point ranges in `q`, in order: each top-level conjunct (AND groups flattened) that holds a filter of this field, so the UI can point at them. Empty for any other clause (TASK-091).
+             */
+            blocking_spans: [
+                number,
+                number
+            ][];
             /**
              * Field
              * @description The filter field: always equal to this clause's key in `filters`. Open set: new values may be added within /api/v1; handle a value you don't know.
@@ -925,6 +943,11 @@ export interface components {
         /** RecordRequest */
         RecordRequest: {
             /**
+             * Index Version
+             * @description Optional (TASK-091): the index the search was shown on. The record is saved only if the served index is still that one; otherwise 409 `API_INDEX_VERSION_UNAVAILABLE` and nothing is saved (a hot swap never freezes the query on another index than the one shown). Absent: the served index.
+             */
+            index_version?: string | null;
+            /**
              * Mode
              * @description `native` (this grammar) or `scholar` (Google Scholar / Publish or Perish syntax, translated).
              * @default native
@@ -937,14 +960,19 @@ export interface components {
              */
             q: string;
         };
-        /** RecordResponse */
+        /**
+         * RecordResponse
+         * @description The stored record and a replay of it. With `replay=false` (TASK-091) nothing is replayed: `replay` is
+         *     null and the top-level versions are the served index's and this code's.
+         */
         RecordResponse: {
             /** Index Version */
             index_version: string;
             /** Query Version */
             query_version: string;
             record: components["schemas"]["SearchRecord"];
-            replay: components["schemas"]["ReplayInfo"];
+            /** @description The replay check (HTTP 200 whatever its status). Null exactly when the request asked `replay=false`; never null otherwise (decision-014). */
+            replay: components["schemas"]["ReplayInfo"] | null;
             /** Tokenizer Version */
             tokenizer_version: string;
         };
@@ -957,6 +985,11 @@ export interface components {
             excluded: components["schemas"]["Excluded"] | null;
             /** Excluded Match */
             excluded_match: boolean | null;
+            /**
+             * Identified Total
+             * @description The replay's `total` + `excluded.total` (records identified within the query's own limits). Null when `refused`.
+             */
+            identified_total: number | null;
             /** Ids Hash */
             ids_hash: string | null;
             /** Ids Match */
@@ -977,6 +1010,11 @@ export interface components {
             status: "reproduced" | "drifted" | "mismatch";
             /** Total */
             total: number | null;
+            /**
+             * Unclassified Total
+             * @description The replay's `excluded.track.unknown` + `excluded.status.unknown`. Null when `refused`.
+             */
+            unclassified_total: number | null;
             /** Verified Clauses */
             verified_clauses: number | null;
         };
@@ -1020,6 +1058,11 @@ export interface components {
             identification_citable: boolean | null;
             /** Identification Query */
             identification_query: string;
+            /**
+             * Identified Total
+             * @description Records identified within the query's own limits (PRISMA): `total` + `excluded.total`, the count of `identification_query` when the record was saved. The number `op record show` prints as `identified`.
+             */
+            readonly identified_total: number;
             /** Ids */
             ids: string[] | null;
             /** Ids Hash */
@@ -1060,6 +1103,11 @@ export interface components {
             total: number;
             /** Translations */
             translations: components["schemas"]["StoredDiagnostic"][];
+            /**
+             * Unclassified Total
+             * @description Of `excluded.total`, the records removed as unclassified rather than ineligible: `excluded.track.unknown` + `excluded.status.unknown`.
+             */
+            readonly unclassified_total: number;
             /** Warnings */
             warnings: components["schemas"]["StoredDiagnostic"][];
         };
@@ -1069,6 +1117,11 @@ export interface components {
             facets: components["schemas"]["Facets"];
             /** Hits */
             hits: components["schemas"]["Hit"][];
+            /**
+             * Identified Total
+             * @description Records identified within the query's own limits (PRISMA): the count of `identification_query`, i.e. `total` + `excluded.total`. The number `op search` prints as `identified`.
+             */
+            identified_total: number;
             /** Index Version */
             index_version: string;
             query: components["schemas"]["QueryInfo"];
@@ -1078,6 +1131,11 @@ export interface components {
             tokenizer_version: string;
             /** Total */
             total: number;
+            /**
+             * Unclassified Total
+             * @description Of `excluded.total`, the records removed as unclassified rather than ineligible: `excluded.track.unknown` + `excluded.status.unknown`. The number `op search` prints as `unclassified`.
+             */
+            unclassified_total: number;
         };
         /**
          * SnapshotInfo
@@ -1098,6 +1156,18 @@ export interface components {
             crawl_dates: {
                 [key: string]: components["schemas"]["CrawlWindow"];
             };
+            /**
+             * Crawl Dates Kind
+             * @description Per `crawl_dates` key, what its window's ends are, derived as a search record's: `crawl` (fetch times, UTC), `scholar_query_dates` (a bootstrap source's window: when its Scholar searches were run) or `mixed` (`*` over both). Open set: new values may be added within /api/v1; handle a value you don't know.
+             */
+            crawl_dates_kind: {
+                [key: string]: string;
+            };
+            /**
+             * Identification Citable
+             * @description Whether a search's counts on this snapshot can be cited as PRISMA identification numbers, derived as a search record's: false when every source is a bootstrap one (the corpus is then an earlier search's output, not a database).
+             */
+            identification_citable: boolean;
             /** Name */
             name: string;
             /** Snapshot Hash */
@@ -1141,6 +1211,79 @@ export interface components {
             /** Token */
             token: string;
         };
+        /**
+         * TrackCoverage
+         * @description One spec 07 §C cell, venue × year × track (TASK-082): what the snapshot indexed for the track, beside
+         *     the official accepted count where one is sourced (`official_counts.py`, each with its citation).
+         */
+        TrackCoverage: {
+            /**
+             * Abstract Missing
+             * @description Of `records`, those without an abstract (title-only).
+             */
+            abstract_missing: number;
+            /**
+             * Delta
+             * @description `indexed_accepted` − `official_accepted`; null without one.
+             */
+            delta: number | null;
+            /**
+             * Delta Pct
+             * @description `delta` as a percentage of `official_accepted` (unrounded); null without one.
+             */
+            delta_pct: number | null;
+            /**
+             * Gated
+             * @description Whether the M4 coverage gate applies: a main-track or D&B cell with an official count.
+             */
+            gated: boolean;
+            /**
+             * Indexed Accepted
+             * @description Of `records`, those with status `accepted`.
+             */
+            indexed_accepted: number;
+            /**
+             * Official Accepted
+             * @description The official accepted count for this venue, year and track; null where none is sourced.
+             */
+            official_accepted: number | null;
+            /**
+             * Official Accessed
+             * @description When `official_citation` was read.
+             */
+            official_accessed: string | null;
+            /**
+             * Official Citation
+             * @description Where `official_accepted` comes from: a URL or citation.
+             */
+            official_citation: string | null;
+            /**
+             * Official Counts
+             * @description What `official_accepted` counts (e.g. orals, spotlights and posters, after withdrawals).
+             */
+            official_counts: string | null;
+            /**
+             * Records
+             * @description Records of this track, every status.
+             */
+            records: number;
+            /**
+             * Sources
+             * @description The sources the track's records came from (claim sources).
+             */
+            sources: ("openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "ris")[];
+            /**
+             * Track
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @enum {string}
+             */
+            track: "main" | "datasets_benchmarks" | "position" | "workshop" | "competition" | "tiny_papers" | "blogpost" | "other" | "unknown";
+            /**
+             * Within Gate
+             * @description For a gated cell, whether |`delta`| is at most 1% of `official_accepted`; null otherwise.
+             */
+            within_gate: boolean | null;
+        };
         /** Urls */
         Urls: {
             /** Doi */
@@ -1164,6 +1307,16 @@ export interface components {
             cells: components["schemas"]["CoverageCell"][];
             /** Records */
             records: number;
+            /**
+             * Statuses Indexed
+             * @description The statuses this venue-year's sources can contain at all, in vocabulary order (spec 07 §C): a proceedings-only venue-year lists `accepted` alone, since no rejected paper exists there to exclude. A status can be listed with no record in `cells`.
+             */
+            statuses_indexed: ("accepted" | "rejected" | "withdrawn" | "desk_rejected" | "unknown")[];
+            /**
+             * Tracks
+             * @description One entry per track with records here, in vocabulary order (`unknown` last).
+             */
+            tracks: components["schemas"]["TrackCoverage"][];
             /** Unknown Status */
             unknown_status: number;
             /** Unknown Track */
@@ -1653,6 +1806,8 @@ export interface operations {
             query?: {
                 /** @description `ids` to include the record's sorted id list. */
                 include?: "ids" | null;
+                /** @description `false` to read the stored record without replaying it (TASK-091): `replay` is then null, nothing is run, so it is answered while verification is busy. Without `include=ids` it costs one token, not the export weight; returning the full membership list costs the export weight. Default `true`: the record and a replay check. */
+                replay?: boolean;
             };
             header?: never;
             path: {

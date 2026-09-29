@@ -84,6 +84,7 @@ def test_the_response_has_every_field_of_spec_04(client: TestClient, store: Stor
     body = ok(client, "trust AND calibrat*")
     assert set(body) == {
         "query", "index_version", "tokenizer_version", "query_version", "total", "excluded", "facets", "hits",
+        "identified_total", "unclassified_total",
     }  # fmt: skip
     assert (body["index_version"], body["tokenizer_version"], body["query_version"]) == (
         store.big,
@@ -142,7 +143,7 @@ def cli_report(out: str) -> dict[str, Any]:
     }
     removed = re.fullmatch(
         r"removed by default filters (\d+): ineligible \d+ \(track: (.*); status: (.*)\), "
-        r"unclassified \d+ \(track unknown (\d+), status unknown (\d+)\)",
+        r"unclassified (\d+) \(track unknown (\d+), status unknown (\d+)\)",
         one["removed by "],
     )
     assert removed is not None, one["removed by "]
@@ -155,9 +156,10 @@ def cli_report(out: str) -> dict[str, Any]:
         "identified": int(one["identified "].split()[1]),
         "excluded": {
             "total": int(removed.group(1)),
-            "track": buckets(removed.group(2), removed.group(4)),
-            "status": buckets(removed.group(3), removed.group(5)),
+            "track": buckets(removed.group(2), removed.group(5)),
+            "status": buckets(removed.group(3), removed.group(6)),
         },
+        "unclassified": int(removed.group(4)),
         "total": int(one["screened "].split()[2]),
         "hits": [
             (line.split()[2], float(line.split()[1]))
@@ -182,6 +184,9 @@ def test_the_counts_and_the_ranked_page_equal_op_search(
     assert body["excluded"] == report["excluded"]
     assert list(body["excluded"]["track"]) == list(report["excluded"]["track"])  # the same bucket order
     assert report["identified"] == body["total"] + body["excluded"]["total"]
+    # TASK-090: the API sends the CLI's two derived counts, so no client adds numbers
+    assert body["identified_total"] == report["identified"]
+    assert body["unclassified_total"] == report["unclassified"]
     assert [h["id"] for h in body["hits"]] == [i for i, _s in report["hits"]]
     assert [round(h["score"], 4) for h in body["hits"]] == [s for _i, s in report["hits"]]
 

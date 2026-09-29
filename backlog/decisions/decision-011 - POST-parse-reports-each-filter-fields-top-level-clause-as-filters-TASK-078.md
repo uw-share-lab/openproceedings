@@ -76,4 +76,12 @@ top-level one editable, and the nested one stays applied (decision-001's facet r
   applies despite a nested clause, which would be additive (a `nested` report becoming toggleable).
 - Revisit when a filter field is added (it gets a key in `ParsedFilters`, which is additive) or when year
   gets a UI control (its widest edit would then need to match what that control writes).
+- **Revisited for the year control (TASK-092, 2026-09-27).** The reducer's year actions write up to
+  `MAX_YEAR_RANGES` (4) merged ranges, so the widest year edit became four disjoint full-width `dddd..dddd`
+  ranges (`year:(1000..3248 OR 3250..5498 OR 5500..7748 OR 7750..9999)`, 59 code points instead of 17), and
+  the reducer refuses a fifth (`TOO_MANY_RANGES`). The response shape, the reasons and every canonical string
+  are unchanged; only `too_long` for `year` comes about 40 code points sooner near the cap, the cost
+  this decision already accepts for the other fields. The alternative, checking one range and letting the
+  reducer judge the rest by raw length, would allow edits whose canonical form is over the cap (the client
+  can't judge that), so a year click could end in a 422 that `/parse` had allowed.
 

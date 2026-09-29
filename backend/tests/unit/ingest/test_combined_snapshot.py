@@ -27,9 +27,10 @@ from tests.unit.ingest.test_openreview_v2 import world
 from tests.unit.ingest.test_pmlr import seed_v28, seed_v235
 
 BUILT = datetime(2026, 9, 28, tzinfo=UTC)
-# Re-recorded by TASK-096 when the ICLR archive became a crawler and record schema v2 added its source.
+# Re-recorded by TASK-096 when the ICLR archive became a crawler and record schema v2 added its source;
+# the files hash was updated by TASK-115 when manifest format 2 added per-track coverage metadata.
 SNAPSHOT_HASH = "f84dae5aa502508a627871ff16eb0e7503adce52c01e9aa11ee55552480e0857"
-FILES_HASH = "cfadf0d02ef7b35266c5be53c4cdc316abe101850f97993417f2b7320f5a4a18"
+FILES_HASH = "d141e3041058a40fde636659fd5e83481d5d135a38a7ebaf3e7a8576393a7dea"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:

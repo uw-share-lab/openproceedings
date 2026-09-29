@@ -12,6 +12,7 @@ from openproceedings import cli
 from openproceedings.ingest import snapshot as snap
 from openproceedings.ingest import status_check as sc
 from openproceedings.ingest.record import PaperRecord
+from openproceedings.ingest.statuses import EVERY_STATUS, SOURCE_STATUSES
 
 from tests.unit.ingest.test_dedup import paper
 
@@ -86,7 +87,7 @@ def test_the_venue_years_sources_together_decide() -> None:
 
 def test_the_table_is_an_input() -> None:
     """The seam the coverage table (`statuses_indexed`, TASK-082) plugs into when the branches merge."""
-    assert sc.unexpected_statuses(icml_2019(), table=lambda sources, venue, year: sc.EVERY_STATUS) == []
+    assert sc.unexpected_statuses(icml_2019(), table=lambda sources, venue, year: EVERY_STATUS) == []
     cells = sc.unexpected_statuses(icml_2019(), table=lambda sources, venue, year: ())
     assert [(c.status, len(c.records)) for c in cells] == [("accepted", 2), ("withdrawn", 1)]
 
@@ -102,8 +103,8 @@ def test_cells_come_in_venue_year_status_order() -> None:
 
 
 def test_every_claim_source_has_a_row() -> None:
-    for source in sc.SOURCE_STATUSES:
-        assert sc.expected([source], "ICML", 2019)
+    for source in SOURCE_STATUSES:
+        assert sc.unexpected_statuses([paper("SyntheticA1", source=source)]) == []
 
 
 # --- the build ----------------------------------------------------------------------------------------------

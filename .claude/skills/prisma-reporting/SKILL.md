@@ -33,8 +33,8 @@ Database name and version (the **full** `index_version`, `tokenizer_version`, `q
 review of non-English titles also states the tokenizer's known limits, spec 02 §Known limits: CJK runs
 are one token; Latin/Greek/Cyrillic accents and Hebrew/Arabic vowel points fold) · the
 **full search string**: the `identification_query` plus the default clauses · date searched (UTC,
-`searched_at`) and, separately, the crawl window (`crawl_dates["*"]`, cited from–to: "a crawl run
-2026-09-18 to 2026-09-20"; only `*` exists until M4's crawlers add per-source windows) · limits (years, venues, tracks, statuses) ·
+`searched_at`) and, separately, the corpus-wide summary window (`crawl_dates["*"]`, cited from–to: "a
+crawl run 2026-09-18 to 2026-09-20"; per-source windows remain in the record for audit) · limits (years, venues, tracks, statuses) ·
 the number of records · expansions, translations and warnings · the deduplication process (item 16) ·
 whether the search was re-run (replay status) · a stable link to the search record.
 

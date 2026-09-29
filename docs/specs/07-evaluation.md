@@ -53,7 +53,8 @@ added, and check the track). The rest goes to `review.csv` for a person to decid
 ## C. Coverage (report plus a soft gate at M4)
 
 For each venue × year × track: indexed accepted count compared with the official accepted count (the table
-of sources lives in `docs/results/coverage-sources.md`, each with a citation).
+of sources lives in `docs/results/coverage-sources.md`, each with a citation; `official_counts.py` is its
+machine-readable copy, which `GET /coverage` serves, and a test holds the two equal).
 
 **The M4 gate:** every **main-track and D&B cell for which an official accepted count exists** is within
 ±1%. Cells with no official count are reported but not gated. The same definition appears in 00 and in the
@@ -64,10 +65,13 @@ exclude; NeurIPS and ICML on OpenReview hold only the rejected papers whose auth
 holds every rejected, withdrawn and desk-rejected submission (decision-012). The crawl window is 2013 on
 (decision-013); any venue-year with no source is a reported gap, never a silent zero. ICLR 2014–2016 are
 not gaps: their public archive listings supply accepted main-track records (TASK-096).
-As built, the missing-abstract count is per venue-year, not per cell (the snapshot manifest's granularity),
-until task-082 adds per-track counts.
+The source of statuses indexed is spec 01's source table as `ingest/statuses.py` holds it (spec 01
+§Pipeline 5); the snapshot manifest records them per venue-year, and the missing abstracts and sources per
+cell (manifest format 2, TASK-082).
 The methods text cites the coverage report (with its snapshot hash) as the database-scope caveat.
-`/coverage` in the UI renders the same data.
+`GET /coverage` serves every column per cell (`venue_years[].tracks`: sources, indexed accepted,
+`official_accepted` with its citation, `delta`, `delta_pct`, `gated`, `within_gate`, missing abstracts) and
+the statuses indexed per venue-year; `/coverage` in the UI renders the same data.
 
 ## D. Classification audit (report)
 

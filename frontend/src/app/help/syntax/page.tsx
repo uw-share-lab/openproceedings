@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
-import { Placeholder } from "@/components/placeholder";
+import { SyntaxHelp } from "@/components/help/syntax-help";
 
-// Not built yet: the reference generated from the spec 02 golden table arrives in TASK-045.
+// Spec 05 §Pages: the language reference, generated from the spec 02 goldens (src/help/syntax-golden.json,
+// which a backend test keeps equal to what the parser says), so it can't drift from the parser.
 export const metadata: Metadata = { title: "Query syntax" };
 
 export default function SyntaxHelpPage() {
-  return <Placeholder title="Query syntax" />;
+  return (
+    <article className="mx-auto max-w-4xl space-y-4">
+      <h1 className="text-lg font-semibold">Query syntax</h1>
+      <SyntaxHelp />
+    </article>
+  );
 }

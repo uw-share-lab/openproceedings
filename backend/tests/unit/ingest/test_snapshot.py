@@ -248,8 +248,23 @@ def test_build_writes_the_layout(cache: Path, tmp_path: Path) -> None:
         "from": "2026-09-18T10:03:05+00:00",
         "to": "2026-09-20T08:00:00+00:00",
     }
+    assert manifest["crawl_windows"] == {"ris": manifest["crawl_window"]}  # one source: the same window
+    # TASK-082 (format 2): per track, the missing abstracts (0 included) and claim sources; per venue-year, the
+    # statuses its sources can contain (every one: each venue-year here is one OpenReview holds)
+    assert manifest["abstract_missing_by_track"] == {
+        "ICLR": {"2024": {"main": 0}, "2025": {"main": 1}},
+        "ICML": {"2023": {"main": 1}, "2026": {"workshop": 0}},
+        "NeurIPS": {"2024": {"datasets_benchmarks": 0}, "2025": {"main": 0}},
+    }
+    assert {t: s for ys in manifest["sources_by_track"].values() for y in ys.values() for t, s in y.items()} == {
+        "main": ["ris"], "workshop": ["ris"], "datasets_benchmarks": ["ris"],
+    }  # fmt: skip
+    every = ["accepted", "rejected", "withdrawn", "desk_rejected", "unknown"]
+    assert manifest["statuses_indexed"] == {
+        v: dict.fromkeys(ys, every) for v, ys in manifest["counts"].items()
+    }
     assert (manifest["format_version"], manifest["record_schema_version"], manifest["tokenizer_version"]) == (
-        "1",
+        "2",
         "2",
         "2",
     )

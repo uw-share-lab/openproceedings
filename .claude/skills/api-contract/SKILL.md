@@ -12,10 +12,10 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 | GET | `/search` | `q, mode, sort, offset, limit(≤200)` → `SearchResponse` |
 | GET | `/papers/{id}` | full record with provenance; optional `q` (+ `mode`) → `matched` and `highlights`, equal to `/search`'s for that paper (null without `q`; `matched: false` + empty lists when the query doesn't match it; `q` admitted exactly as `/search` admits it; task-087) |
 | GET | `/export` | `format=ris\|csv\|bibtex\|jsonl` plus either `q` (with `mode` and optional `index_version`) or `record_id` (with at most `mode=native`, the declared default some clients always send; `scholar` is 422 "with record_id, mode may only be native") → a stream of the **entire** matched set, ordered by `id`, served from the pinned index; `record_id` → exactly the record's stored ids from its index (409 `API_INDEX_VERSION_UNAVAILABLE` if gone, 409 `API_RECORD_MISMATCH` on a `mismatch`) |
-| POST | `/records` | freeze a search as an immutable search record → 201 `{record_id, page}` plus the three versions, + `Location: /api/v1/records/<id>` (`.claude/skills/search-records/SKILL.md`) |
-| GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`; a replay over this instance's verification limits is withheld: 200, `refused`, never a 422) |
+| POST | `/records` | freeze a search as an immutable search record → 201 `{record_id, page}` plus the three versions, + `Location: /api/v1/records/<id>` (`.claude/skills/search-records/SKILL.md`); optional `index_version` pin: 409 `API_INDEX_VERSION_UNAVAILABLE` unless it is the served index (TASK-091) |
+| GET | `/records/{id}` | stored record + replay check (HTTP 200, status `reproduced` / `drifted` / `mismatch`; a replay over this instance's verification limits is withheld: 200, `refused`, never a 422); `replay=false`: the stored record, `replay: null`, no run, one token without `include=ids` (full weight with ids; TASK-091, decision-014) |
 | GET | `/records/{id}/diff` | for a record of any status: added and removed ids (with titles, paged), and which `index_version` inputs changed |
-| GET | `/coverage` | counts per venue × year × track × status, abstract-missing counts, snapshot date |
+| GET | `/coverage` | counts per venue × year × track × status, abstract-missing counts, snapshot date; `snapshot.crawl_dates_kind` and `identification_citable`, a record's derivation (TASK-091) |
 | GET | `/meta` | current and servable `index_version`s, field names, venue, track and status vocabularies, and `limits` (`max_query_length`, the parser's; `max_verified_clauses` and `max_verification_candidates`, the served config's; task-089) |
 | GET | `/healthz` | liveness, index loaded |
 | GET | `/near-misses` | M5 only, a separate resource (`.claude/skills/specter2-embeddings/SKILL.md`) |
@@ -23,7 +23,8 @@ description: The openproceedings HTTP contract — the spec 04 endpoint table, t
 ## `SearchResponse`
 `query {input, canonical, canonical_hash, identification_query, warnings[], translations[],
 expansions{pattern: [terms]}}`,
-`index_version`, `tokenizer_version`, `query_version`, `total`, `excluded`, `facets`, `hits[]`. Each hit
+`index_version`, `tokenizer_version`, `query_version`, `total`, `excluded`, `identified_total`,
+`unclassified_total`, `facets`, `hits[]`. Each hit
 has `id, title, abstract, authors, venue, year, track, status, presentation, score, highlights{field:
 [[start,end]]}, urls`.
 
@@ -39,7 +40,9 @@ has `id, title, abstract, authors, venue, year, track, status, presentation, sco
   unclassified records are itemised. It is always present, even when empty, because it is PRISMA's
   "records removed before screening".
 - **`identification_query`** is the canonical string minus the default conjuncts (02 §Default filters);
-  its count is `total + excluded.total`.
+  its count is `total + excluded.total`, sent as **`identified_total`**; **`unclassified_total`** is the two
+  `unknown` buckets (TASK-090). Both are `engine/exclusions.py`'s helpers, which `op search` prints too: a
+  client never adds counts. A search record and its replay carry both.
 - **`expansions`** always lists every wildcard's terms (guarantee 6). It is never omitted when non-empty.
 - **Highlights** are spans computed from the AST, never from a snippet generator. Built: `engine/highlight.py::highlights(ast,
   record, engine.expansions(ast))`, which returns both fields, each a sorted list (spec 03 §Highlights). Call it only on the
@@ -105,6 +108,10 @@ Allowed within `v1` (additive): a new endpoint, a new response field (always sen
 schema; an old client ignores it: response schemas carry no `additionalProperties: false`,
 `openapi.open_response_objects`), a new value in an enum listed **open** (`OPEN_ENUMS`, decision-009), a new
 optional parameter with the old behaviour as its default.
+
+One recorded exception: `RecordResponse.replay` is nullable, null only for the opt-in `replay=false`
+(decision-014). `backend/tests/contract/test_openapi_additive.py` diffs the snapshot against the released one
+on `origin/dev` by these rules (`ALLOWED` lists that exception); run it before any contract change lands.
 
 **Breaking**, which needs `/api/v2` or a decision record (`.claude/skills/decision-records/SKILL.md`):
 removing or renaming a field, changing a field's type or nullability, making an optional field required,

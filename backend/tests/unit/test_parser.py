@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
@@ -626,3 +628,108 @@ def test_a_canonical_string_exactly_at_the_cap_is_accepted() -> None:
     assert len(over) <= MAX_QUERY_LENGTH
     result = parse(over)
     assert [e.code for e in result.errors] == [DiagnosticCode.PARSE_TOO_LONG], len(result.canonical or "")
+
+
+# The seven registry rewrites from docs/design/2026-09-27-copy-deck.md §2 (TASK-093), pinned verbatim with
+# their codes and spans: wording may change, codes and spans may not (error-diagnostics).
+_NEGATED = (
+    "Every part of this query is negated (`NOT …`), so it would match almost everything — add something to "
+)
+_COLON = " starts with a colon, so no field is named — a field name must touch its colon, e.g. `title:trust`."
+_UNCLOSED = " has no closing parenthesis — add `)` where the group ends."
+COPY_DECK_REWRITES: list[tuple[str, str, DiagnosticCode, tuple[int, int], str]] = [
+    (
+        "(trust OR reliance",
+        "native",
+        DiagnosticCode.PARSE_UNBALANCED_PAREN,
+        (0, 1),
+        "`(trust OR reliance`" + _UNCLOSED,
+    ),
+    ("a (b", "native", DiagnosticCode.PARSE_UNBALANCED_PAREN, (2, 3), "`(b`" + _UNCLOSED),
+    ("venue:(ICLR OR", "native", DiagnosticCode.PARSE_UNBALANCED_PAREN, (6, 7), "`(ICLR OR`" + _UNCLOSED),
+    (
+        "NOT workshop",
+        "native",
+        DiagnosticCode.PARSE_ALL_NEGATIVE,
+        (0, 12),
+        _NEGATED + "search for, e.g. `trust NOT bias`.",
+    ),
+    (
+        "(" * 70 + "x",
+        "native",
+        DiagnosticCode.PARSE_TOO_DEEP,
+        (MAX_DEPTH, MAX_DEPTH + 1),
+        f"The query nests groups or `NOT`s more than {MAX_DEPTH} deep here — remove a level of parentheses or a "
+        "`NOT`.",
+    ),
+    ("trust : model", "native", DiagnosticCode.PARSE_STRAY_COLON, (6, 7), "`: model`" + _COLON),
+    ("trust :model", "native", DiagnosticCode.PARSE_STRAY_COLON, (6, 12), "`:model`" + _COLON),
+    ("trust :", "native", DiagnosticCode.PARSE_STRAY_COLON, (6, 7), "`:`" + _COLON),
+    (
+        "x" * 2_001,
+        "native",
+        DiagnosticCode.PARSE_TOO_LONG,
+        (2_000, 2_001),
+        "The query is 2,001 characters long; the limit is 2,000 — shorten it, e.g. replace a list of word forms "
+        "with one wildcard.",
+    ),
+    (
+        "venue:(ICLR AND ICML)",
+        "native",
+        DiagnosticCode.FIELD_FILTER_SYNTAX,
+        (12, 15),
+        "`venue:(…)` takes values joined by OR, e.g. `venue:(ICLR OR ICML)`.",
+    ),
+    (
+        "year:(2020 AND 2021)",
+        "native",
+        DiagnosticCode.FIELD_FILTER_SYNTAX,
+        (11, 14),
+        "`year:(…)` takes values joined by OR, e.g. `year:(2020 OR 2024..2026)`.",
+    ),
+    (
+        "track:(main x)",
+        "native",
+        DiagnosticCode.FIELD_FILTER_SYNTAX,
+        (12, 13),
+        "`track:(…)` takes values joined by OR, e.g. `track:(main OR position)`.",
+    ),
+    (
+        "status:(accepted x)",
+        "native",
+        DiagnosticCode.FIELD_FILTER_SYNTAX,
+        (17, 18),
+        "`status:(…)` takes values joined by OR, e.g. `status:(accepted OR withdrawn)`.",
+    ),
+    (
+        "source:(ICLR AND PMLR)",
+        "scholar",
+        DiagnosticCode.FIELD_FILTER_SYNTAX,
+        (13, 16),
+        "`source:(…)` takes values joined by OR, e.g. `source:(ICLR OR ICML)`.",
+    ),
+    (
+        "大语言模型",
+        "native",
+        DiagnosticCode.WARN_CJK_RUN,
+        (0, 5),
+        "`大语言模型`: Chinese, Japanese and Korean text is not split into words, so this matches only the exact "
+        "run — `大语言模型*` also finds longer runs that start with it.",
+    ),
+]
+
+
+@pytest.mark.parametrize(("q", "mode", "code", "span", "message"), COPY_DECK_REWRITES)
+def test_the_copy_deck_rewrites_are_the_registry_text(
+    q: str, mode: Literal["native", "scholar"], code: DiagnosticCode, span: tuple[int, int], message: str
+) -> None:
+    result = parse(q, mode=mode)
+    found = [(d.code, d.span, d.message) for d in (*result.errors, *result.warnings) if d.code is code]
+    assert found == [(code, span, message)]
+
+
+def test_a_canonical_overflow_suggests_shortening_not_splitting() -> None:
+    [error] = parse(" ".join(f"w{i:04d}" for i in range(300))).errors
+    assert error.code is DiagnosticCode.PARSE_TOO_LONG
+    assert error.message.endswith(" Shorten it, e.g. replace a list of word forms with one wildcard.")
+    assert "several searches" not in error.message

@@ -19,26 +19,30 @@ UI can have.
   `.claude/skills/testing-standards/SKILL.md`, `.claude/skills/property-testing/SKILL.md`.
 - Specs: `docs/specs/05-frontend.md` §Components 3, `docs/specs/02-query-language.md` §Outputs.
 
-## The fit rule (implement as a pure `fitsBuilder(ast)` in `frontend/src/builder/`)
-The AST fits iff, after setting aside `Filter` nodes (`track:`/`status:`/`venue:`/`year:`, kept verbatim
-and shown in the sidebar), it is an `And` of groups where each group is a `Term`, `Phrase` or `Wildcard`,
-or an `Or` of only those, each optionally scoped `title:`/`abstract:`. Anything else — `Not`, `Near`,
-nested `And` inside `Or`, a scoped group `title:(a OR b)` if it cannot be flattened without changing
-meaning — does **not** fit. Then the builder is read-only and says "this query is too complex for the
-builder", naming the construct that blocked it.
+## The fit rule (as built: `readAst(ast)` in `frontend/src/builder/read.ts`)
+The design is authoritative (`docs/design/2026-09-27-concept-group-builder.md` §The shape and §As built).
+The AST fits when its top node is an `And` (nested `And`s flatten into more groups) or a single group, and
+each conjunct is a group (a `Term`, `Phrase` or `Wildcard`, each with its own `title:`/`abstract:` scope,
+or an `Or` of only those; nested `Or`s flatten), a limit (a `Filter`, an `Or` of only filters, or a `Not`
+of one; kept as written), or at most one `Not` of a group (the Exclude row). Anything else — `Near`, an
+`And`, a filter or a `Not` inside a group, a `Not` of an `And`/`Not`, a second `Not` — makes the builder
+read-only, naming the first such construct in source order with its kind and span.
+`backend/tests/contract/test_frontend_builder_golden.py` holds an independent Python reading of the same
+rule; `read.test.ts` requires the two to agree on every case of `builder-read-golden.json`.
 
 ## How you work
 1. **Pin the task** via the Backlog CLI.
-2. **Round-trip tests first** (vitest): for every fixture string that fits, `text → /parse AST → builder →
-   serialized text → /parse` gives the **same `canonical`**. Serialized text is always fully parenthesised
-   (no mixed-precedence warning). For every string that does not fit, `fitsBuilder` is false and the
-   reason is stable. Add fast-check properties over random builder states (verify the library choice
-   against `property-testing`).
+2. **Round-trip tests first.** The frontend can't run the parser, so the proof is two goldens: the backend
+   writes each query's `ast` and its reading (`builder-read-golden.json`); the frontend writes what the
+   builder makes of them, unedited and after seeded random edits (`builder-write-golden.json`,
+   `UPDATE_BUILDER_GOLDEN=1`); the backend test parses every written string (unedited → same `canonical`;
+   edited → exactly the chips' leaves, no new warning). Add a golden row for every bug.
 3. **Serialize, never canonicalize, on the client.** The builder emits a query string; the server returns
    the canonical form. Do not reimplement canonicalization or default insertion.
 4. **Edits dispatch `builderEdit`** in `src/lib/search-state.ts`; the URL changes only on submit.
-5. **Toggle:** Text → Builder only when `fitsBuilder`; Builder → Text always. Focus moves per
-   `accessibility`. The query is never lost across toggles.
+5. **Toggle:** Builder is always selectable; a query that doesn't fit shows the read-only notice there.
+   Focus moves per `accessibility`. The query is never lost across toggles, and an untouched query is
+   never rewritten (Text → Builder → Text is byte for byte).
 6. **Verify:** `npm test`, `npx tsc --noEmit`, the builder Playwright spec, keyboard-only row add/remove.
 
 ## Output

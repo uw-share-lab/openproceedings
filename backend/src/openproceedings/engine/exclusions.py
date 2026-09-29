@@ -40,6 +40,20 @@ class Excluded:
         return {"total": self.total, "track": dict(self.track), "status": dict(self.status)}
 
 
+def identified_total(total: int, removed: int) -> int:
+    """PRISMA's "records identified" within the query's own limits: the `identification_ast` count, which is
+    the search's `total` plus the records the default filters removed (`excluded.total`, 03 §Exclusion
+    accounting). The number `op search` and `op record show` print as `identified`, and the API sends as
+    `identified_total` (TASK-090), so neither the UI nor a script adds numbers."""
+    return total + removed
+
+
+def unclassified_total(track: Mapping[str, int], status: Mapping[str, int]) -> int:
+    """The removed records that are unclassified, not ineligible: the two `unknown` buckets (always present in
+    the pinned shape; a stored body without one counts 0). `op search` prints it as `unclassified`."""
+    return track.get("unknown", 0) + status.get("unknown", 0)
+
+
 def excluded(
     engine: Engine,
     parsed: ParseResult,

@@ -109,7 +109,10 @@ def test_post_freezes_every_field_of_spec_04s_table(client: TestClient, data_dir
     )  # fmt: skip
 
     record = replayed(client, created["record_id"], ids=True)["record"]
-    assert set(record) == SPEC_FIELDS | {"record_id", "body_version", "schema_version", "ranking_params"}
+    assert set(record) == SPEC_FIELDS | {"record_id", "body_version", "schema_version", "ranking_params"} | {
+        "identified_total",  # derived on read, never stored (TASK-090)
+        "unclassified_total",
+    }
     assert record["body_version"] == 2
     search = client.get("/api/v1/search", params={"q": q, "limit": 200}).json()
     parsed = parse(q)
@@ -131,8 +134,12 @@ def test_post_freezes_every_field_of_spec_04s_table(client: TestClient, data_dir
     assert (record["tokenizer_version"], record["query_version"]) == (TOKENIZER_VERSION, QUERY_VERSION)
     for f in ("snapshot_hash", "schema_version", "ranking_params"):
         assert record[f] == manifest[f]
-    # the manifest's window, in the API's one timestamp form (UTC, `Z`; spec 04 §Conventions)
-    assert record["crawl_dates"] == {"*": {k: utc_z(v) for k, v in snapshot["crawl_window"].items()}}
+    # the manifest's windows, in the API's one timestamp form (UTC, `Z`; spec 04 §Conventions): the corpus-wide
+    # one, and (format 2, TASK-082) each claim source's own
+    assert record["crawl_dates"] == {
+        "*": {k: utc_z(v) for k, v in snapshot["crawl_window"].items()},
+        "ris": {k: utc_z(v) for k, v in snapshot["crawl_windows"]["ris"].items()},
+    }
     assert all(v.endswith("Z") for v in record["crawl_dates"]["*"].values())
     assert record["dedup"] == {
         "merged": 0, "ambiguous_not_merged": 0, "track_not_merged": 0, "venue_year_not_merged": 0,
@@ -140,7 +147,7 @@ def test_post_freezes_every_field_of_spec_04s_table(client: TestClient, data_dir
     # the fixture snapshot is RIS-only (a bootstrap corpus): its counts are not identification numbers
     assert record["sources"] == sorted(snapshot["sources"]) == ["ris"]
     assert record["identification_citable"] is False
-    assert record["crawl_dates_kind"] == {"*": "scholar_query_dates"}
+    assert record["crawl_dates_kind"] == {"*": "scholar_query_dates", "ris": "scholar_query_dates"}
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", record["searched_at"])
     assert record["semantic_version"] is None
     assert (data_dir / RECORDS_DIR / "records.sqlite").is_file()  # its own writable directory

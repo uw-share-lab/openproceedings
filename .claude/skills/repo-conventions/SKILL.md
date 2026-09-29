@@ -9,7 +9,7 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | Path | Holds | Notes |
 |---|---|---|
 | `pyproject.toml`, `uv.lock` (root) | The **uv workspace** root: repo-wide ruff config, dev group (ruff, mypy), one lock | `uv sync` at the root; members join via `[tool.uv.workspace] members` |
-| `Makefile` | `sync`, `fmt`, `lint`, `tooling`, `test`, `openapi`, `hooks`, `mutate`, `mutate-changed` | `make lint` is exactly CI's `lint` job; pre-push runs `make lint` + `make tooling` |
+| `Makefile` | `sync`, `fmt`, `lint`, `tooling`, `test`, `e2e`, `openapi`, `hooks`, `mutate`, `mutate-changed` | `make lint` is exactly CI's `lint` job; pre-push runs `make lint` + `make tooling` |
 | `.githooks/` | `commit-msg` (attribution), `pre-push` (`make lint` + `make tooling`) | Installed by `scripts/setup-dev.sh` |
 | `.github/` | Workflows, `dependabot.yml` | Actions pinned by SHA |
 | `backend/` (M1) | The uv workspace member, package `openproceedings` (`backend/pyproject.toml`) | |
@@ -29,8 +29,9 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `backend/src/openproceedings/coverage.py` | The snapshot manifest's venue × year × track × status breakdown | Never recounts |
 | `backend/src/openproceedings/timestamps.py` | The API's one timestamp form (UTC RFC 3339, `Z`) | |
 | `backend/src/openproceedings/cli.py` | `op` entry point | Thin: calls the same functions as the API |
-| `backend/tests/{unit,golden,differential,bench,contract,fixtures}/` | Tests by kind (`testing-standards`) | |
+| `backend/tests/{unit,golden,differential,bench,contract,e2e,fixtures}/` | Tests by kind (`testing-standards`); `e2e/fixture_server.py` serves the temporary 5k browser fixture | |
 | `frontend/` (M3) | 05: Next.js app, an npm workspace | `frontend/src/api/schema.ts` is generated |
+| `frontend/e2e/` | Playwright full-stack, accessibility and visual tests; platform-specific baselines in `__screenshots__/` | Run with `make e2e` |
 | `docs/specs/` | `NN-name.md`, changed only by PR (`spec-writing`) | |
 | `docs/{design,usability,research}/` | Created as needed | |
 | `docs/plans/` | Implementation plans, `YYYY-MM-DD-<slug>.md` | |

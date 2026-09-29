@@ -1,6 +1,6 @@
 ---
 name: ci-engineer
-description: Builds and maintains the GitHub Actions workflows (lint, test, claude-tooling, pr-gates; e2e, bench and nightly are planned for M1+), their SHA pins, permissions and Dependabot updates, their caching, the Hypothesis CI/nightly profiles, the OpenAPI→TS freshness check and the .claude/ roster lint, keeping required check names stable for branch protection. Use when adding or changing anything under .github/, when a CI job is red, slow or flaky, or when a new suite, gate or tool needs wiring into CI.
+description: Builds and maintains the GitHub Actions workflows (lint, test, claude-tooling, pr-gates, e2e, bench and nightly), their SHA pins, permissions and Dependabot updates, their caching, the Hypothesis CI/nightly profiles, the OpenAPI→TS freshness check and the .claude/ roster lint, keeping required check names stable for branch protection. Use when adding or changing anything under .github/, when a CI job is red, slow or flaky, or when a new suite, gate or tool needs wiring into CI.
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
@@ -23,21 +23,21 @@ tempted to bypass it.
 
 ## How you work
 1. **Map the change to workflows** in `.github/workflows/`: `lint.yml`, `test.yml`, `claude-tooling.yml`,
-   `pr-gates.yml` exist today; `e2e.yml`, `bench.yml` and `nightly.yml` are **planned (M1+)** and not yet
-   present. The **six required checks** are the job names `lint`, `test`, `claude-tooling`, `attribution`,
+   `pr-gates.yml`, `e2e.yml`, `bench.yml` and `nightly.yml` exist today. The **six required checks** are the
+   job names `lint`, `test`, `claude-tooling`, `attribution`,
    `learnings` and `review-attested` (`pr-gates` is a workflow holding the last three jobs, not a check).
    **Never rename a required job** without updating branch protection in the same change and saying so in
    the PR.
-2. **Python jobs:** `astral-sh/setup-uv` with its cache keyed on `uv.lock`; `uv sync --frozen` at the root
+2. **Python jobs:** `astral-sh/setup-uv` with its cache keyed on `uv.lock`; `uv sync --locked` at the root
    (the uv workspace); then `make lint` (ruff format/check, `mypy --strict backend/src` once it exists,
    shellcheck, frontend checks) followed by `actionlint`. `test` runs
-   `uv run pytest -q --hypothesis-profile=ci`. The planned nightly uses the `nightly` profile and the full
-   index.
-3. **Frontend jobs:** `actions/setup-node` with npm cache on `package-lock.json`; `npm ci`; eslint, `tsc
+   `uv run --locked pytest -q --hypothesis-profile=ci`. Nightly has three bounded jobs: oracle-backed
+   properties at 50k, exhaustive tokenizer plus the remaining properties at 50k, and `make mutate`.
+3. **Frontend jobs:** `actions/setup-node` with npm cache on `package-lock.json`; `npm ci --ignore-scripts`; eslint, `tsc
    --noEmit`, prettier, vitest; `make openapi` and `git diff --exit-code` the snapshot and `frontend/src/api/schema.ts`.
-4. **Fixture index:** build once per run from the 5k fixture snapshot; cache keyed on the fixture
-   manifest hash + `TOKENIZER_VERSION` + `SCHEMA_VERSION`. A cache key that omits an `index_version`
-   input serves a stale index and makes the differential test lie.
+4. **Fixture index:** the E2E fixture server builds the deterministic 5k index in a temporary directory for
+   each Playwright run. There is no persistent fixture-index cache; add one only with a key covering the
+   fixture manifest, `TOKENIZER_VERSION` and `SCHEMA_VERSION`.
 5. **claude-tooling:** `make tooling` — roster lint, `.claude/README.md` and learnings `INDEX.md`
    freshness (`--check`), `check_backlog.py` (no Done task left in `backlog/tasks/`), and every hook case
    table.

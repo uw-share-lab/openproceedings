@@ -45,9 +45,18 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    ValidationError,
+    computed_field,
+    model_validator,
+)
 
 from openproceedings.diagnostics import DiagnosticCode, InternalError, OpenProceedingsError
+from openproceedings.engine.exclusions import identified_total, unclassified_total
 from openproceedings.engine.index import VERSION_NAME
 from openproceedings.engine.index import index_version as index_version_of
 from openproceedings.engine.protocol import EngineInputError
@@ -58,7 +67,10 @@ from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import Mode, ParseResult, parse
 from openproceedings.search import expansions_json, run
 from openproceedings.timestamps import CrawlWindow, Timestamp
-from openproceedings.vocab import BOOTSTRAP_SOURCES, bootstrap_only
+from openproceedings.vocab import CRAWL as CRAWL  # the window kinds, re-exported where records use them
+from openproceedings.vocab import MIXED as MIXED
+from openproceedings.vocab import SCHOLAR_QUERY_DATES as SCHOLAR_QUERY_DATES
+from openproceedings.vocab import bootstrap_only, crawl_dates_kind
 
 log = logging.getLogger(__name__)
 
@@ -175,6 +187,25 @@ class SearchRecord(_Stored):
         "`mixed` today. Open set: new values may be added within /api/v1; handle a value you don't know.",
     )
 
+    # Derived at read time from `total` and `excluded` (TASK-090), never stored (`DERIVED`), so every body
+    # version has them and a stored body can't contradict its own counts.
+    @computed_field(  # type: ignore[prop-decorator]
+        description="Records identified within the query's own limits (PRISMA): `total` + `excluded.total`, "
+        "the count of `identification_query` when the record was saved. The number `op record show` prints as "
+        "`identified`."
+    )
+    @property
+    def identified_total(self) -> int:
+        return identified_total(self.total, self.excluded.total)
+
+    @computed_field(  # type: ignore[prop-decorator]
+        description="Of `excluded.total`, the records removed as unclassified rather than ineligible: "
+        "`excluded.track.unknown` + `excluded.status.unknown`."
+    )
+    @property
+    def unclassified_total(self) -> int:
+        return unclassified_total(self.excluded.track, self.excluded.status)
+
     @model_validator(mode="after")
     def _v2_fields(self) -> SearchRecord:
         """A v2 body has every v2 field. Its citability is checked against its sources on write only
@@ -186,6 +217,9 @@ class SearchRecord(_Stored):
             if set(self.crawl_dates_kind) != set(self.crawl_dates):
                 raise ValueError("a record's crawl_dates_kind has other keys than its crawl_dates")
         return self
+
+
+DERIVED = frozenset({"identified_total", "unclassified_total"})  # sent, never stored: computed from the body
 
 
 # --- the index and snapshot a record pins -----------------------------------------------------------------
@@ -222,14 +256,6 @@ NOT_MERGED = (
     "track_not_merged",
     "venue_year_not_merged",
 )  # conflicts.csv resolutions
-CRAWL = "crawl"  # a window of fetch times (UTC)
-SCHOLAR_QUERY_DATES = "scholar_query_dates"  # Publish or Perish's query dates: local time labelled UTC
-MIXED = "mixed"  # the corpus-wide window over both kinds
-
-
-def _kind(sources: Iterable[str]) -> str:
-    kinds = {SCHOLAR_QUERY_DATES if s in BOOTSTRAP_SOURCES else CRAWL for s in sources}
-    return kinds.pop() if len(kinds) == 1 else MIXED if kinds else CRAWL
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,20 +272,23 @@ class SnapshotFacts:
 def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> SnapshotFacts:
     """`crawl_dates` (with each key's kind), `sources`, `identification_citable` and `dedup` from the manifest
     of the snapshot the index was built from (which must name the index's `snapshot_hash`). The manifest's
-    corpus-wide window is key `*`; a source entry that carries its own `crawl_window` (the M4 crawlers) adds
-    a key of its own. A bootstrap source's window (RIS: when the Scholar searches were run) is
+    corpus-wide window is key `*`; each claim source with a window of its own adds a key (a format-2 manifest's
+    `crawl_windows`, or a source entry that carries its own `crawl_window`), as `/coverage` does
+    (`coverage.crawl_dates`; a test compares the two). A bootstrap source's window (RIS: when the Scholar searches were run) is
     `scholar_query_dates`, not a crawl; `*` over bootstrap sources alone is too, over both is `mixed`."""
     try:
         _path, manifest = indexed_snapshot(data_dir, inputs)  # the name and hash rule of the API's load
         sources = sorted(manifest["sources"])  # required: no sources named is not "a crawl, citable"
         crawl = {ALL_SOURCES: _window(manifest["crawl_window"])}
-        kinds = {ALL_SOURCES: _kind(sources)}
         for source, entry in sorted(manifest["sources"].items()):
             if source == ALL_SOURCES:
                 raise ValueError("a source can't be named `*`")
             if isinstance(entry, dict) and "crawl_window" in entry:
                 crawl[source] = _window(entry["crawl_window"])
-                kinds[source] = _kind([source])
+        for source, window in sorted(manifest.get("crawl_windows", {}).items()):  # format 2 (TASK-082)
+            if source == ALL_SOURCES or crawl.setdefault(source, _window(window)) != _window(window):
+                raise ValueError("a source has two crawl windows, or is named `*`")
+        kinds = crawl_dates_kind(crawl, sources, ALL_SOURCES)
         conflicts = manifest["conflicts"]
         dedup = Dedup(
             merged=int(manifest["merges"]["total"]),
@@ -497,7 +526,7 @@ class RecordStore:
         blob = zlib.compress("\n".join(ids).encode("utf-8"))
         for _ in range(_INSERT_TRIES):
             record = SearchRecord.model_validate({**fields, "record_id": new_record_id(), "ids": list(ids)})
-            body = record.model_dump_json(exclude={"ids"})
+            body = record.model_dump_json(exclude={"ids", *DERIVED})
             conn = self._connect()
             try:
                 conn.execute("BEGIN IMMEDIATE")

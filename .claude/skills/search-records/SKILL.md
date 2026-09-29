@@ -13,7 +13,7 @@ A search record is the citable artifact of a review search: "we ran *this* canon
 |---|---|
 | `record_id` | a short, URL-safe, unguessable id (random, collision-checked on insert) |
 | `input`, `mode`, `canonical`, `canonical_hash`, `identification_query` | 02's `ParseResult`. `identification_query` is the canonical string with the default conjuncts removed: the string that reproduces "identified" |
-| `index_version`, `tokenizer_version`, `query_version`, `snapshot_hash`, `crawl_dates` (per source, from the manifest; only `*`, the corpus-wide from–to window, until M4) | the database version and when its contents were collected |
+| `index_version`, `tokenizer_version`, `query_version`, `snapshot_hash`, `crawl_dates` (the corpus-wide `*` from–to summary plus each claim source's own manifest window when available) | the database version and when its contents were collected |
 | `crawl_dates_kind` (body v2; per `crawl_dates` key) | what those dates are: `crawl` (fetch times, UTC), `scholar_query_dates` (a bootstrap source's Publish or Perish query dates: local time labelled UTC, so an end can be a day off; say "Scholar searches run …", never "a crawl"), or `mixed` (`*` over both kinds) |
 | `sources` (body v2) | the snapshot manifest's source names, sorted |
 | `identification_citable` (body v2) | `false` when every source is a bootstrap one (`vocab.bootstrap_only`, the same test as `op search`'s "note: bootstrap corpus"): the counts describe an earlier search's output, not a database, so they are not PRISMA identification numbers. The record page then shows that caution and no methods text |
@@ -99,7 +99,8 @@ translations that changed later cannot alter the replay.
   `identification_citable` contradicts its `sources`, is refused as unreadable.
 - **Capacity:** a save is refused (503 `API_RECORDS_STORE_FULL`) when the store is at
   `ApiConfig.records_max_bytes` or its disk below `records_min_free_bytes`. All three record routes cost the
-  rate limit's `export_weight`.
+  rate limit's `export_weight` (but `GET /records/{id}?replay=false` without `include=ids`, which runs
+  nothing and returns no membership list: one token).
 - `POST /records` re-runs the query server-side to compute `total`, `excluded` and `ids_hash`. Never trust
   counts sent by the client.
 
@@ -141,6 +142,20 @@ A record must go (a legal request, personal data in `input`). With the API stopp
   `mismatch` (`api.records.stored_record`, then `refuse_mismatch` on the pinned index). A `reproduced`
   replay also requires the stored list to hash to `ids_hash`. Spec 04 §Search records "As built" has the
   full response shapes.
+- UI additions (TASK-090/091, additive): `record.identified_total` / `unclassified_total` are computed
+  fields (`total + excluded.total`; the two `unknown` buckets), derived on read and **never stored**
+  (`records.DERIVED` is excluded from the body), so old bodies have them and none can disagree with its own
+  counts; `replay.*` carries the replay's (null when refused). `POST /records {…, index_version}` refuses a
+  save on any index but that one (409 `API_INDEX_VERSION_UNAVAILABLE`, checked before the parse and the save
+  ceilings). `GET /records/{id}?replay=false` is the stored record with `replay: null`, no run, one token
+  without `include=ids` (full weight with ids), answered during `API_BUSY` (decision-014: the only v1 field
+  allowed to become nullable).
+
+## The record page and the methods text (TASK-044; spec 05 §Components 8 *As built*)
+`frontend/src/components/record/record-view.tsx` reads `?replay=false` first and the replay second; the
+methods text (`frontend/src/lib/methods-text.ts`) and the record's exports (`/export?record_id=` only) wait for
+the replay, so a `mismatch` renders neither. Every number the page and the methods text show is a record field;
+`record-fixture.json` (real API answers, `backend/tests/contract/record_fixture.py`) pins them in the tests.
 
 ## The CLI: `op record save` / `op record replay` (task-083; spec 08 §CLI)
 - The same functions: `save` is `records.freeze` + `RecordStore.insert` (the record equals `POST /records`'s

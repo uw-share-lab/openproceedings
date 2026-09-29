@@ -14,6 +14,8 @@ __pycache__/
 .benchmarks/
 # node (npm workspace at the root; frontend/ is the member)
 node_modules/
+frontend/playwright-report/
+frontend/test-results/
 .next/
 out/
 *.tsbuildinfo

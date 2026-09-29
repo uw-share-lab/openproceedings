@@ -9,7 +9,7 @@ openproceedings/
 ├── README.md  CLAUDE.md  AGENTS.md  CONTRIBUTING.md  LICENSE (MIT)
 ├── pyproject.toml  uv.lock      # uv WORKSPACE root: depends on the backend member; ruff, mypy-strict and pytest config; dev tools (ruff, mypy, pytest, hypothesis)
 ├── package.json  package-lock.json  .nvmrc   # npm WORKSPACE root (workspaces: ["frontend"]); deps hoisted to ./node_modules; Node 22
-├── Makefile                     # sync · fmt · lint · tooling · test · openapi · hooks · mutate · mutate-changed
+├── Makefile                     # sync · fmt · lint · tooling · test · e2e · openapi · hooks · mutate · mutate-changed
 ├── .claude/                     # committed: agents, skills, commands, hooks, learnings (roster: .claude/README.md)
 ├── .githooks/                   # commit-msg (attribution), pre-push (make lint + make tooling)
 ├── .github/                     # workflows (below), dependabot.yml
@@ -32,7 +32,7 @@ openproceedings/
 │   │   ├── coverage.py          # the snapshot manifest's venue × year × track × status breakdown (`GET /coverage`)
 │   │   ├── timestamps.py        # the API's one timestamp form (UTC, `Z`)
 │   │   └── cli.py               # `op` entry point
-│   └── tests/{unit,golden,differential,bench,contract,fixtures}/
+│   └── tests/{unit,golden,differential,bench,contract,e2e,fixtures}/
 ├── frontend/                    # npm workspace member: Next.js App Router, output standalone (spec 05; skeleton TASK-039)
 ├── docs/{specs,plans,results,design,usability,research}/   # created as needed
 ├── backlog/                     # Backlog.md: tasks, completed, docs, decisions — CLI only
@@ -109,7 +109,7 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha |
 | `nightly` (scheduled, not a PR check) | Three parallel jobs, each with its own time limit: the oracle-backed properties at 50,000 examples; the exhaustive tokenizer check (`OP_EXHAUSTIVE=1`) plus every other property at 50,000; and `make mutate` (every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent). Differential@50k gets its own job in task-057 (M4); full-corpus parity stays local (decision-004) |
 | `bench` → `bench` (advisory: not a required check yet) | pytest-benchmark on the 5k fixture index (`backend/tests/bench`, task-031): the PR's base and head on one runner; a minimum time over 20% slower than the base fails, and each benchmark asserts its spec 03 budget (p95). It becomes required once it has run green on a few PRs without false failures (runner noise); a maintainer adds it to `dev`'s required checks |
-| *(planned, M3)* `e2e` | Playwright |
+| `e2e` → `playwright` (advisory: not a required check yet) | `make e2e`: Playwright against the deterministic 5k fixture API (`backend/tests/e2e/`) and the standalone frontend: the spec 05 review flow, keyboard focus behavior, axe WCAG 2.2 AA in both themes at 1280 and 320 px, root reflow at 320 px, and platform-specific `/search` visual baselines in both themes on the fixed `ubuntu-24.04` CI label |
 
 `review-attested` is an **honesty check** against forgetting to review, not an access control. Anyone who
 can edit the PR body could paste the marker. The access control is branch protection plus human review on

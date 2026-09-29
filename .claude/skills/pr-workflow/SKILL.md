@@ -55,7 +55,8 @@ sha. Any commit after an approval — a typo fix, a rebase, an amend — produce
 | `learnings` (`pr-gates.yml`) | the branch adds or extends a learnings entry, or is labelled `no-learning` |
 | `review-attested` (`pr-gates.yml`) | the PR body attests APPROVE for the head sha |
 
-`e2e`, `bench` and `nightly` are **planned (M1+)** and don't exist yet (spec 08 §CI).
+The advisory `e2e` and `bench` checks should also be green before merge; `nightly` is scheduled rather
+than a PR check (spec 08 §CI).
 
 **Learnings rule.** Only a file named `YYYY-MM-DD-<slug>.md` directly in `.claude/learnings/` counts, added
 *or* modified: extending an existing entry with a dated addendum satisfies the gate. `README.md`,
