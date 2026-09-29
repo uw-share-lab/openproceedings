@@ -192,6 +192,26 @@ def test_an_index_entry_with_two_forum_ids_is_skipped_before_dedup() -> None:
     assert entries == [] and unlinked == 1
 
 
+def test_index_parser_is_attribute_order_independent_and_ignores_decoy_elements() -> None:
+    page = """<h1 class='decoy'>Proceedings</h1><h2 data-x='1' class='x'>Volume 235: International Conference</h2>
+    <div class='paper-count'><a href='decoy24a.html'>not a paper block</a></div>
+    <div data-x='1' class='extra paper'>
+      <span class='author-note'>Decoy Person</span>
+      <p data-x='1' class='extra title'>Actual Title</p>
+      <p class='details'><span data-x='1' class='extra authors'>Actual One, Actual Two</span></p>
+      <p class='links'>[<a href='https://example.org/decoy.html'>decoy</a>][<a target='_blank' href='abe24a.html'>abs</a>]
+        [<a href='abe24a-supp.pdf'>Supplementary PDF</a>][<a target='_blank' href='abe24a.pdf'>Download PDF</a>]
+        [<a target='_blank' href='https://openreview.net/forum?id=9U29U3cDKq'>OpenReview</a>]</p>
+    </div>"""
+    assert pmlr.heading(page) == (235, "International Conference")
+    entries, unlinked = pmlr.parse_volume_index(page, "https://proceedings.mlr.press/v235/")
+    assert unlinked == 0
+    assert entries == [
+        pmlr.Entry("https://proceedings.mlr.press/v235/abe24a.html", "Actual Title", ("Actual One", "Actual Two"),
+                   "https://proceedings.mlr.press/v235/abe24a.pdf", "9U29U3cDKq"),
+    ]  # fmt: skip
+
+
 def test_v235_abstract_forum_link_and_unknown_track(tmp_path: Path) -> None:
     seed_v235(tmp_path)
     result = mine(tmp_path, 235)

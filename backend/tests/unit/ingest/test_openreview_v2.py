@@ -303,6 +303,45 @@ def test_a_listing_whose_count_disagrees_is_refused(tmp_path: Path) -> None:
         orv.crawl(client(tmp_path, server), "ICLR", 2024)
 
 
+def test_a_multi_page_listing_whose_count_changes_between_pages_is_refused(tmp_path: Path) -> None:
+    server = world(accepted=3)
+
+    def grown_first_page(request: Request) -> Response | None:
+        q = parse_qs(urlsplit(request.url).query)
+        if q.get("content.venueid") != [CONF] or q.get("offset") != ["0"]:
+            return None
+        # 4 on page 1, 3 on page 2: {3, 4} pops 3, which the 3 rows match, so only the count-change guard refuses
+        # (a first-page count below the rows would be caught by the row check instead, testing nothing here)
+        return json_response({"notes": server.notes[CONF][:2], "count": 4})  # page 2 says 3, as the rows do
+
+    server.override = grown_first_page
+    with pytest.raises(orv.CrawlError, match=r"changed between its cached pages.*--refresh"):
+        orv.crawl(client(tmp_path, server), "ICLR", 2024, page_size=2)
+
+
+@pytest.mark.parametrize("conflicting", [False, True])
+def test_a_note_in_two_listings_is_a_counted_duplicate_only_when_its_record_is_identical(
+    tmp_path: Path, conflicting: bool
+) -> None:
+    server = world()
+    again = clone(server.notes[CONF][0], server.notes[CONF][0]["id"], server.notes[CONF][0]["number"])
+    if conflicting:
+        again["content"]["title"]["value"] = "Changed Title"
+    server.notes[f"{CONF}/Rejected_Submission"].append(again)  # its own venueid still says accepted
+    if conflicting:
+        with pytest.raises(orv.CrawlError, match=r"conflicting data in two status listings.*--refresh"):
+            orv.crawl(client(tmp_path, server), "ICLR", 2024)
+        return
+    result = orv.crawl(client(tmp_path, server), "ICLR", 2024)
+    assert result.report.skipped["duplicate"] == 1 and result.report.notes_read == 9
+    assert result.report.imported == len(result.records) == 8
+    assert result.report.venueids[f"{CONF}/Rejected_Submission"] == 2
+    [kept] = [r for r in result.records if r.native == again["id"]]
+    assert {c.url for c in kept.provenance} == {  # the first listing's claims are kept
+        next(u for u in server.gets() if parse_qs(urlsplit(u).query).get("content.venueid") == [CONF])
+    }
+
+
 @pytest.mark.parametrize("count", [None, "1", True, -1])
 def test_a_listing_with_a_missing_or_invalid_count_is_refused(tmp_path: Path, count: object) -> None:
     server = world()
