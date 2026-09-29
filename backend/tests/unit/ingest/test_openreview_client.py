@@ -212,9 +212,22 @@ def test_a_null_nonreaders_does_not_make_a_private_note_public(
     tmp_path: Path, acl: dict[str, object]
 ) -> None:
     note = {"id": "PrivateNote1", "forum": "PrivateNote1", "content": {}, **acl}
-    with pytest.raises(OpenReviewPublicDataError, match="not world-readable"):
+    with pytest.raises(OpenReviewPublicDataError, match="not world-readable") as refused:
         client(tmp_path, answering(json_response({"notes": [note], "count": 1}))).get("/notes", PARAMS)
     assert not list((tmp_path / "http").rglob("*.json"))
+    assert "ICLR.cc/2017/pcs" not in str(refused.value)  # the ACL's shape is named, never its entries
+
+
+def test_the_refusal_names_the_acl_shape() -> None:
+    from openproceedings.ingest.sources.openreview_client import _acl_shape
+
+    note = {"readers": ["~Some_Person1", "everyone"], "nonreaders": None}
+    assert (_acl_shape(note, "readers"), _acl_shape(note, "nonreaders")) == (
+        "readers list of 2 naming everyone",
+        "nonreaders null",
+    )
+    assert _acl_shape({"nonreaders": ""}, "nonreaders") == "nonreaders str"
+    assert _acl_shape({}, "readers") == "readers absent"
 
 
 def test_group_responses_are_projected_with_the_same_acl_rules(tmp_path: Path) -> None:
