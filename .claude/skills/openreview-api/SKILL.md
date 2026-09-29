@@ -182,4 +182,7 @@ Blogposts, workshop and city-workshop forms, a group's venueid block, the `count
 `limit` error, the cross-host 404 and the anonymous challenge page; and each v1 year's status carrier
 above, including one invitation listing per v1 venue-year with a group. `backend/tests/fixtures/http/scrub.py` turns a raw capture into a fixture (titles, abstracts,
 authors, ids of people and free text become synthetic; decision-004). Recording is a manual run, never a
-test: add a capture for every new shape, scrub it, and read the diff before committing.
+test: add a capture for every new shape, scrub it, and read the diff before committing. A transport wrapper
+sees a raw response before `OpenReviewClient` applies its public projection; if the client raises
+`OpenReviewPublicDataError`, delete that raw capture immediately. Scrubbing text does not make a
+non-world-readable note safe to commit.
