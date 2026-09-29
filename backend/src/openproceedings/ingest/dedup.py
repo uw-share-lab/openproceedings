@@ -369,8 +369,8 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
     for group in step2.groups():
         chained = [clusters[ci] for ci in group]
         # keys chained clusters that must not share a record: keep every cluster on its own. A cluster set
-        # aside on one key (TASK-126) never merges through another. A track one never chains in: every key
-        # applies the same track rule. A status one can (`_mergeable` ignores status; a lone rejected note
+        # aside on one key (TASK-126) never merges through another. A track one never merges: a key's group with a
+        # listing sets it aside again, one without refuses it on forum ids. A status one can (`_mergeable` ignores status; a lone rejected note
         # merges with its listing), and this re-check refuses it only because every non-listing record has
         # its own forum id (dedup refuses one naming neither a forum id nor its proceedings URL), unlike the
         # note the listing merged with. The chain splits: the safe direction, never a merge

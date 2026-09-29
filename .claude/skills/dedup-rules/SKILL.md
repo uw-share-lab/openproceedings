@@ -75,7 +75,8 @@ safe direction.
   ambiguous), as does every other accepted submission: two accepted OpenReview notes with one listing
   still refuse. Status only breaks a rivalry: a lone rejected note still merges with its listing (the
   proceedings then decide its status, decision-005). A set-aside cluster never merges through a second
-  key. A track one can't even chain in: every key's group puts it through the same track rule. A status
+  key. A track one can't: a key's group with a listing sets it aside again, and one without refuses it on
+  forum ids. A status
   one can, since `_mergeable` ignores status and a lone rejected note merges with its listing on another
   key; the chain re-check (the whole chained group, judged by `_mergeable`) then refuses it only because
   every non-listing record carries its own forum id (a record without one must name itself in a

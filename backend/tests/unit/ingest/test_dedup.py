@@ -441,7 +441,7 @@ def test_without_a_listing_nothing_is_set_aside() -> None:
 def test_a_rejected_note_chained_back_in_by_a_second_key_splits_the_chain() -> None:
     """The rejected note is set aside on "Trust in AI" but shares "Trust in Machines" with the listing,
     where it would merge alone (status is no bar to `_mergeable`). The chain re-check refuses the whole
-    chain on forum ids (every non-listing record has its own), so nothing merges: the safe direction."""
+    chain on forum ids (every non-listing record has its own; here a shared source too), so nothing merges: the safe direction."""
     accepted = paper("AbCd1234", "Trust in AI")
     listing = [paper(f"nips-{H[1]}", "Trust in AI", source="neurips_proceedings"),
                paper(f"nips-{H[1]}", "Trust in Machines", source="ris")]  # fmt: skip
