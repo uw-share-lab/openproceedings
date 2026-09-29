@@ -43,9 +43,10 @@ evidence rule with a fixture.
 - `<sha>` is md5 of the paper's number. On `proceedings.neurips.cc` that number never repeats, so the
   native id is `nips-<sha>` (spec 01 §Record schema). **The 2021 D&B host numbers round 1, round 2 and the
   main track separately**: its live page (2026-09-29) had 27 hashes in both rounds and 27 shared with 2021
-  main papers, all different papers (`docs/results/2026-09-29-proceedings-dry-runs.md`). There the id is `nips-<sha>-round1`/`-round2` (`urls.proceedings_native`),
-  and a link without a round is skipped as `no_round` (TASK-118). A listing's `count_ok` compares entries
-  with the stated count, before ids exist, so watch `skipped.duplicate` too.
+  main papers, all different papers (`docs/results/2026-09-29-proceedings-dry-runs.md`). There the id is
+  `nips-<sha>-round1`/`-round2` (`urls.proceedings_native`), and a link without a round, or dated other than
+  2021, is skipped as `no_round` (TASK-118). A listing's `count_ok` compares entries with the stated count,
+  before ids exist (and passes when the page states none), so watch `skipped.duplicate` too.
 - A PDF URL's abstract page is its `hash/<sha>-Abstract-<Track>.html` sibling by construction.
 - Drop the query string (real links carry `?utm_source=…`).
 - `proceedings.iclr.cc` uses the same grammar. It is not a spec 01 source today, so don't crawl it

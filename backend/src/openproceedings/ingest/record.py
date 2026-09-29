@@ -37,7 +37,7 @@ from openproceedings.ingest.classify import NEURIPS_DB_2021_ROUNDS
 from openproceedings.vocab import Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
-RECORD_SCHEMA_VERSION = "2"
+RECORD_SCHEMA_VERSION = "3"
 
 Source = Literal["openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "ris"]
 Presentation = Literal["oral", "spotlight", "poster"]
@@ -256,6 +256,10 @@ class PaperRecord(BaseModel):
             if not pattern.fullmatch(native) or venue != self.venue:
                 raise ValueError(
                     f"native id {native!r} is not a valid {venue} proceedings id for {self.venue}"
+                )
+            if native.rsplit("-", 1)[-1] in NEURIPS_DB_2021_ROUNDS and self.year != 2021:
+                raise ValueError(
+                    f"native id {native!r} is not a valid id for {self.year}: D&B rounds are 2021 only"
                 )
         elif not FORUM_ID.fullmatch(native):
             raise ValueError(f"native id {native!r} is neither an OpenReview forum id nor a proceedings id")

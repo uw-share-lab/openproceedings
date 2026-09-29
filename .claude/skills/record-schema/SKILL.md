@@ -73,7 +73,8 @@ in Scholar. The abstract is never Scholar's (`null` instead).
 
 ## Versions
 `RECORD_SCHEMA_VERSION` (`record.py`) names this shape: the fields, native-id forms and content_hash
-rule. It is `2` since TASK-096 added the `iclr_archive` provenance source. Change any of them and bump it;
+rule. It is `3` since TASK-118 added the round-qualified `nips-<hash>-round1`/`-round2` form (it was `2` from
+TASK-096, which added the `iclr_archive` provenance source). Change any of them and bump it;
 every snapshot manifest records it.
 
 ## content_hash

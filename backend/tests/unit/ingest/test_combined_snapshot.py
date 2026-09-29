@@ -28,9 +28,11 @@ from tests.unit.ingest.test_pmlr import seed_v28, seed_v235
 
 BUILT = datetime(2026, 9, 28, tzinfo=UTC)
 # Re-recorded by TASK-096 when the ICLR archive became a crawler and record schema v2 added its source;
-# the files hash was updated by TASK-115 when manifest format 2 added per-track coverage metadata.
+# the files hash was updated by TASK-115 when manifest format 2 added per-track coverage metadata, and by
+# TASK-118 when record schema v3 (round-qualified 2021 D&B ids) changed the manifest's record_schema_version;
+# no fixture here is on the D&B host, so the records, and SNAPSHOT_HASH, are unchanged.
 SNAPSHOT_HASH = "f84dae5aa502508a627871ff16eb0e7503adce52c01e9aa11ee55552480e0857"
-FILES_HASH = "d141e3041058a40fde636659fd5e83481d5d135a38a7ebaf3e7a8576393a7dea"
+FILES_HASH = "73504f19102db4cfcc73b140160e6a0b9561f247d05291f116b9fa315197be2b"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:

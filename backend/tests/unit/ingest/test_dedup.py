@@ -33,7 +33,8 @@ def self_url(native: str, year: int) -> str | None:
     prefix, _, rest = native.partition("-")
     if prefix == "nips" and rest.endswith(("-round1", "-round2")):  # the 2021 D&B host (TASK-118)
         sha, _, rnd = rest.partition("-")
-        return f"https://datasets-benchmarks-proceedings.neurips.cc/paper_files/paper/{year}/hash/{sha}-Abstract-{rnd}.html"
+        host = "https://datasets-benchmarks-proceedings.neurips.cc"
+        return f"{host}/paper_files/paper/{year}/hash/{sha}-Abstract-{rnd}.html"
     if prefix in ("nips", "iclr"):
         host = "neurips" if prefix == "nips" else "iclr"
         return f"https://proceedings.{host}.cc/paper_files/paper/{year}/hash/{rest}-Abstract-Conference.html"
@@ -300,12 +301,17 @@ def test_a_round_qualified_db_listing_merges_with_its_openreview_submission() ->
 
 @pytest.mark.parametrize("title_b", ["Trust in AI", "Reliance on AI"])
 def test_one_hash_on_the_main_host_and_in_each_db_round_is_three_papers(title_b: str) -> None:
-    """md5 of a per-site paper number: the same hash names a main-track paper and one paper per D&B round."""
+    """md5 of a per-site paper number: the same hash names a main-track paper and one paper per D&B round.
+    The sources differ, so with equal titles the title step does run, and refuses (two proceedings ids)."""
     records = [
-        db21(f"nips-{H[1]}", track="main"), db21(f"nips-{H[1]}-round1", title_b), db21(f"nips-{H[1]}-round2", title_b)
-    ]  # fmt: skip
+        db21(f"nips-{H[1]}", track="main", source="ris"),
+        db21(f"nips-{H[1]}-round1", title_b),
+        db21(f"nips-{H[1]}-round2", title_b),
+    ]
     result = dedup(records)
     assert sorted(r.id for r in result.records) == sorted(r.id for r in records) and not result.merges
+    if title_b == "Trust in AI":
+        assert set(resolutions(result)) == {"ambiguous_not_merged"}
 
 
 def test_an_openreview_record_naming_the_main_host_hash_is_not_merged_into_the_db_paper() -> None:

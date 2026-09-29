@@ -43,12 +43,21 @@ def test_native(url: str, native: str | None) -> None:
      (f"nips-{H}-Round1", False), (f"iclr-{H}-round1", False)],
 )  # fmt: skip
 def test_record_accepts_exactly_the_native_ids_urls_produce(native: str, ok: bool) -> None:
+    check_native(native, ok, 2021)
+
+
+def test_a_round_qualified_id_is_2021_only() -> None:
+    check_native(f"nips-{H}-round1", False, 2022)
+    check_native(f"nips-{H}", True, 2022)
+
+
+def check_native(native: str, ok: bool, year: int) -> None:
     venue = "ICLR" if native.startswith("iclr") else "NeurIPS"
 
     def build() -> PaperRecord:
         return PaperRecord.build(
-            id=f"op:{venue.lower()}:2021:{native}", title="A title", abstract=None, authors=("A. Author",),
-            venue=venue, year=2021, track="datasets_benchmarks" if venue == "NeurIPS" else "main",
+            id=f"op:{venue.lower()}:{year}:{native}", title="A title", abstract=None, authors=("A. Author",),
+            venue=venue, year=year, track="datasets_benchmarks" if venue == "NeurIPS" else "main",
             status="accepted",
         )  # fmt: skip
 

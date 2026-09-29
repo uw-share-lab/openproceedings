@@ -6,7 +6,8 @@ same order, same title). Only scholarmend's identifying claims decide anything; 
 never does:
 
 - **Identity** (venue, year, native id): an OpenReview venueid claim plus its forum id; a NeurIPS or
-  ICLR `proceedings_url` claim (`nips-`/`iclr-<hash>`, `urls.proceedings_native`); or a `pmlr_url` claim in an ICML volume
+  ICLR `proceedings_url` claim (`nips-`/`iclr-<hash>`, or `nips-<hash>-round1`/`-round2` on the 2021 D&B host;
+  `urls.proceedings_native`); or a `pmlr_url` claim in an ICML volume
   (`pmlr-v<N>-<key>`, `volumes.py`). The id is never minted: a record that points at an in-scope venue but
   yields no id is skipped as `unresolved` (or `no_id`), and one that points nowhere is `out_of_scope`.
 - **Track**: the venueid; else scholarmend's proceedings track; else the PMLR volume table.
@@ -155,7 +156,9 @@ def _listing(
             )
             if url_year != year or by_url.track != claimed:
                 return "conflict"
-        if (native := proceedings_native(url)) is None:  # a 2021 D&B URL without round1/round2
+        if (
+            native := proceedings_native(url)
+        ) is None:  # a D&B-host URL without round1/round2, or not dated 2021
             return "unresolved"
         return (venue, year, native, classify_proceedings(track),
                 ("proceedings_url", url), sorted({c["evidence"] for c, _ in proc}))  # fmt: skip

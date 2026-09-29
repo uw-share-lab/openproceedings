@@ -1,6 +1,8 @@
 # First live dry runs of the proceedings crawlers, and the NeurIPS 2021 D&B id collision (TASK-118), 2026-09-29
 
-**Result:** every listing's entries match the page's own count. For every gated cell the listing can
+**Result:** every listing that states a count has exactly that many entries. The 2021 D&B page states
+none, so its `count_ok` passes with nothing to compare, and its 174 entries are checked against the official
+count instead. For every gated cell the listing can
 settle, they also match the official count in `coverage-sources.md`: NeurIPS main 2013–2025, NeurIPS D&B
 2021–2025, and ICML 2013–2023 in PMLR. ICML 2024–2025 PMLR entries are track `unknown` until OpenReview
 supplies the track. v267's 3,330 include the 73 position papers that the official main count of 3,260
@@ -25,16 +27,16 @@ crawled, after skips. The NeurIPS table is the run **before** the TASK-118 fix.
 | NeurIPS | 2015 | https://proceedings.neurips.cc/paper_files/paper/2015 | 403 | 403 | main 403 | — | main 403 |
 | NeurIPS | 2016 | https://proceedings.neurips.cc/paper_files/paper/2016 | 569 | 569 | main 569 | — | main 569 |
 | NeurIPS | 2017 | https://proceedings.neurips.cc/paper_files/paper/2017 | 679 | 679 | main 679 | — | main 679 |
-| NeurIPS | 2018 | https://proceedings.neurips.cc/paper_files/paper/2018 | 1,009 | 1009 | main 1,009 | — | main 1,009 |
-| NeurIPS | 2019 | https://proceedings.neurips.cc/paper_files/paper/2019 | 1,428 | 1428 | main 1,428 | — | main 1,428 |
-| NeurIPS | 2020 | https://proceedings.neurips.cc/paper_files/paper/2020 | 1,898 | 1898 | main 1,898 | — | main 1,898 |
-| NeurIPS | 2021 | https://proceedings.neurips.cc/paper_files/paper/2021 | 2,334 | 2334 | main 2,334 | — | main 2,334 |
+| NeurIPS | 2018 | https://proceedings.neurips.cc/paper_files/paper/2018 | 1,009 | 1,009 | main 1,009 | — | main 1,009 |
+| NeurIPS | 2019 | https://proceedings.neurips.cc/paper_files/paper/2019 | 1,428 | 1,428 | main 1,428 | — | main 1,428 |
+| NeurIPS | 2020 | https://proceedings.neurips.cc/paper_files/paper/2020 | 1,898 | 1,898 | main 1,898 | — | main 1,898 |
+| NeurIPS | 2021 | https://proceedings.neurips.cc/paper_files/paper/2021 | 2,334 | 2,334 | main 2,334 | — | main 2,334 |
 | NeurIPS | 2021 | https://datasets-benchmarks-proceedings.neurips.cc/paper/2021 | 174 | — | datasets_benchmarks 120 | {"duplicate": 54} | datasets_benchmarks 174 |
-| NeurIPS | 2022 | https://proceedings.neurips.cc/paper_files/paper/2022 | 2,834 | 2834 | datasets_benchmarks 163, main 2,671 | — | datasets_benchmarks 163; main 2,671 |
-| NeurIPS | 2023 | https://proceedings.neurips.cc/paper_files/paper/2023 | 3,540 | 3540 | datasets_benchmarks 322, main 3,218 | — | datasets_benchmarks 322; main 3,218 |
-| NeurIPS | 2024 | https://proceedings.neurips.cc/paper_files/paper/2024 | 4,493 | 4493 | datasets_benchmarks 459, main 4,034 | — | datasets_benchmarks 459; main 4,034 |
+| NeurIPS | 2022 | https://proceedings.neurips.cc/paper_files/paper/2022 | 2,834 | 2,834 | datasets_benchmarks 163, main 2,671 | — | datasets_benchmarks 163; main 2,671 |
+| NeurIPS | 2023 | https://proceedings.neurips.cc/paper_files/paper/2023 | 3,540 | 3,540 | datasets_benchmarks 322, main 3,218 | — | datasets_benchmarks 322; main 3,218 |
+| NeurIPS | 2024 | https://proceedings.neurips.cc/paper_files/paper/2024 | 4,493 | 4,493 | datasets_benchmarks 459, main 4,034 | — | datasets_benchmarks 459; main 4,034 |
 | NeurIPS | 2025 | https://proceedings.neurips.cc/paper_files/paper/2025 | 64 | 64 | other 64 | — | — |
-| NeurIPS | 2025 | https://proceedings.neurips.cc/paper_files/paper/2025/vol38-main-conference | 5,823 | 5823 | datasets_benchmarks 497, main 5,286, position 40 | — | datasets_benchmarks 497; main 5,286 |
+| NeurIPS | 2025 | https://proceedings.neurips.cc/paper_files/paper/2025/vol38-main-conference | 5,823 | 5,823 | datasets_benchmarks 497, main 5,286, position 40 | — | datasets_benchmarks 497; main 5,286 |
 | ICML (PMLR v28) | 2013 | https://proceedings.mlr.press/v28/ | 283 | 283 | main 283 | — | main 283 |
 | ICML (PMLR v32) | 2014 | https://proceedings.mlr.press/v32/ | 310 | 310 | main 310 | — | main 310 |
 | ICML (PMLR v37) | 2015 | https://proceedings.mlr.press/v37/ | 270 | 270 | main 270 | — | main 270 |
@@ -65,7 +67,8 @@ were dropped. Counted over the cached index pages of that run:
 | hashes in both round 1 and round 2 | 27, **0** with the same title |
 | D&B hashes also on 2021 main-track papers | 27, **0** with the same title |
 
-The miner's `count_ok` compares entries with the stated count before any id exists, so it passed. The loss
+The page states no count, so `count_ok` (`stated is None or stated == listed`) had nothing to check. Even
+where a page does state one, `count_ok` compares entries before any id exists, so it can't see this loss. The loss
 showed only as `skipped: {"duplicate": 54}`. TASK-118 gives D&B-host papers the id
 `nips-<hash>-round1`/`-round2` (`urls.proceedings_native`), which is used by the miner, the RIS importer and
 dedup alike. The coverage report (TASK-054) must check each listing's `skipped`, not only `count_ok`.
