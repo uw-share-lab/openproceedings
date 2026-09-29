@@ -164,8 +164,12 @@ def credentials(environ: Mapping[str, str], dotenv: Path | None = None) -> Crede
 
 
 def _world_readable(value: Mapping[str, Any]) -> bool:
-    """Whether OpenReview's readers/nonreaders ACL makes an object available to `everyone`."""
-    readers, nonreaders = value.get("readers"), value.get("nonreaders", [])
+    """Whether OpenReview's readers/nonreaders ACL makes an object available to `everyone`. A null `nonreaders`
+    excludes no one, like `[]` or no key: API v1 writes it on public notes (ICLR 2017 workshop, TASK-119)."""
+    readers = value.get("readers")
+    nonreaders = value.get("nonreaders")
+    if nonreaders is None:  # null or absent; any other non-list value (even "", {} or False) is refused below
+        nonreaders = []
     if not isinstance(readers, list) or not all(isinstance(item, str) for item in readers):
         return False
     if not isinstance(nonreaders, list) or not all(isinstance(item, str) for item in nonreaders):

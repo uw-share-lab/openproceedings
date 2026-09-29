@@ -128,8 +128,10 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   budget wait on `ratelimit-remaining: 0`, 429 → `Retry-After` (seconds or HTTP date) → `ratelimit-reset` →
   backoff, 5xx / network / truncated JSON → `min(2^n, 60) s + jitter`, `max_attempts` 6, every wait capped at
   3,701 s. Cache: `http.ResponseCache` under `<data-dir>/cache/openreview/v2/http/`, keyed by the canonical URL
-  (parameters sorted). Before persistence, every top-level note/group must be readable by `everyone`,
-  only crawler-used top-level fields remain, and restricted v2 content fields are removed; all remaining
+  (parameters sorted). Before persistence, every top-level note/group must be readable by `everyone`
+  (`readers` a list naming `everyone`; `nonreaders` absent, `[]` or `null`, and never naming `everyone`; API v1
+  writes `null` on public notes, e.g. 59 of the 161 ICLR 2017 workshop submissions, TASK-119; any other
+  non-list ACL is refused), only crawler-used top-level fields remain, and restricted v2 content fields are removed; all remaining
   world-readable content keys are retained for the venue-year adapters. The payload carries a
   `public_projection` version; older raw entries are rejected offline and purged/refetched by a live run.
   Other malformed entries or entries naming another URL are `CacheError`s. Errors are the shared

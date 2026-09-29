@@ -193,7 +193,8 @@ disagrees (the withdrawn ICLR 2021 note `xGZG2kS5bFk` says `ICLR 2021 Poster`; t
 a venueid naming another track) gets `unknown` for that field and an `unresolved:openreview_v1` row in
 `conflicts.csv`. Responses are cached under
 `<data-dir>/cache/openreview/{v2,v1}/http/` (the shared `{key, payload}` cache contains only a versioned,
-world-readable projection; restricted fields are removed before persistence and older raw entries are
+world-readable projection (readers name `everyone`; a `null` nonreaders, which API v1 writes on public notes,
+excludes no one like `[]`); restricted fields are removed before persistence and older raw entries are
 invalid; a v1 client logs in on api2, whose token api1 accepts) and a finished
 venue-year writes `…/{v2,v1}/crawls/<Venue>-<Year>.json`, which `snapshot build` replays offline. Code:
 `ingest/sources/openreview_client.py` (OpenReview's policy and login on the shared HTTP layer),

@@ -177,6 +177,19 @@ def test_iclr_2017_status_and_track_from_content_venue_never_the_venueid(tmp_pat
     assert got[rejected["id"]].authors == () and crawl.report.authors_unsplit == 1
 
 
+def test_iclr_2017_notes_with_a_null_nonreaders_are_public_and_imported(tmp_path: Path) -> None:
+    """Derived case: the recorded 2017 notes with `nonreaders: null`, as 59 of the live 2017 workshop listing's
+    161 notes have it (2026-09-29). The public-data guard refused them and stopped the ICLR crawl (TASK-119)."""
+    notes = [
+        v1_note("iclr-2017/note-rejected-bare-venueid.json"),
+        v1_note("iclr-2017/note-invite-to-workshop.json"),
+    ]
+    for note in notes:
+        note["nonreaders"] = None
+    crawl = run(FakeOpenReviewV1({"ICLR.cc/2017/conference/-/submission": notes}), tmp_path, "ICLR", 2017)
+    assert sorted(by_forum(crawl)) == sorted(n["id"] for n in notes)
+
+
 def test_iclr_2018_status_from_the_acceptance_decision_note(tmp_path: Path) -> None:
     forum = v1_notes("iclr-2018/forum-rejected.json")  # not ordered: the submission is last
     sub = v1_note("iclr-2018/forum-rejected.json")
