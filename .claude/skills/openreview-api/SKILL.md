@@ -133,12 +133,16 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   `everyone`; API v1 writes `null` on public notes, e.g. 59 of the 161 ICLR 2017 workshop submissions, TASK-119; any other
   non-list ACL is refused), only crawler-used top-level fields remain, and restricted v2 content fields are removed; all remaining
   world-readable content keys are retained for the venue-year adapters. The payload carries a
-  `public_projection` version; older raw entries are rejected offline and purged/refetched by a live run.
+  `public_projection` version; older raw entries are rejected offline and purged/refetched by a live run. A
+  refusal (`OpenReviewPublicDataError`) names the ACL's shape and the canonical request (`GET <url>`: host,
+  path and sorted parameters, the cache key), never the response's data, the token or a credential (TASK-116).
   Other malformed entries or entries naming another URL are `CacheError`s. Errors are the shared
   `http.SourceError` family (`CacheMiss`, `RetriesExhausted`, `HTTPRefused`; `OpenReviewAuthError` on top).
 - Cache expiry (TASK-102; spec 01 §Pipeline, Cache expiry): `openreview_client.ttl` is `POLICY.ttl`. A live
   client re-fetches an API v2 entry past its TTL (accepted listing 7 days while its venue-year is open, 365
-  after; status listings and groups 1 day, then 90; API v1 never) and logs `openreview_cache_expired`; an
+  after; status listings and groups 1 day, then 90; API v1 never) and logs `openreview_cache_expired`
+  (`openreview_client.EVENTS`, with `openreview_retry_wait` and `openreview_budget_wait`: fixed constants,
+  `http.PolicyEvents`, never built from a prefix); an
   offline client (`--offline`, a dry run, `snapshot build`) never expires anything. Once one page of a
   listing expires, `_pages` re-fetches every later page too, so a listing's pages never mix two moments.
 - `ingest/sources/openreview_v2.py`: `crawl` (groups → venueids → pages → records), `note_record` (the
@@ -146,6 +150,14 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   (what `op snapshot build` calls). The group-tree enumeration (`?parent=` listings, containers, the
   `proposal` skip) is built from the research run's description; no `?parent=` listing is recorded yet, so
   record one per venue before the first full crawl.
+- Logs (TASK-116; logging-standards skill §Crawl lines), the same for v1 and v2: `openreview_crawl_started`
+  (`api`, `venue`, `year`, `offline`, `page_size`), `openreview_crawl_progress` at most every 30 s of the
+  client's monotonic clock (`common.Heartbeat`; notes read, `forums` on v1, imported, skipped, `requests`,
+  `cached`), `openreview_crawl_finished`, and at most one `openreview_crawl_attention` WARNING with the
+  anomaly counts (v1 and v2 both count `duplicate`; both report `cache_incompatible`, the pre-projection
+  entries the client purged and re-fetched). Per-note anomalies (`openreview_unknown_track`,
+  `openreview_v1_unmapped`, `openreview_v1_conflict`, `openreview_v1_duplicate`, `openreview_note_skipped`) and
+  each `openreview_cache_incompatible` are DEBUG.
 - A record id repeated byte-for-byte across status listings is counted as a duplicate. If its parsed
   non-provenance fields differ, the crawl refuses the mixed cache and asks for `--refresh`, rather than
   silently keeping whichever status listing happened to run first. The v1 crawler applies the same rule.

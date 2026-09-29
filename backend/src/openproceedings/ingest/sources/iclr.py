@@ -22,7 +22,7 @@ from openproceedings.ingest import urls
 from openproceedings.ingest.record import Claim, ClaimField, ClaimValue, PaperRecord, Source, Urls
 from openproceedings.ingest.sources.common import ListingReport, MinerError, record_from_claims
 from openproceedings.ingest.sources.html import Element, collapse, node_text, parse, text_after
-from openproceedings.ingest.sources.http import Fetcher
+from openproceedings.ingest.sources.http import Fetcher, canonical
 
 log = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ def _google_sites_entries(root: Element, base: str) -> list[Entry]:
 
 def parse_index(year: int, text: str, base: str) -> list[Entry]:
     """The accepted conference entries, unique by stable target and in page order."""
-    root = parse(text)
+    root = parse(text, canonical(base))
     if year == 2015:
         ordered = root.iter()
         items: list[Element] = []

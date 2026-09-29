@@ -22,9 +22,12 @@ ICLR archive, NeurIPS proceedings and PMLR) fetches through `HttpClient`, and on
   transport reads the cache only; a miss is `CacheMiss`, never a network call. The entry's fetch time is what
   every claim built from it carries.
 - **Expiry** (TASK-102). `Policy.ttl(url, now)` is how long an entry for `url` stays fresh (seconds; None: never
-  expires). A live client re-fetches an entry older than that, logs `<prefix>_cache_expired` and overwrites it;
+  expires). A live client re-fetches an entry older than that, logs its policy's `cache_expired` event
+  (`crawl_cache_expired`, `openreview_cache_expired`) and overwrites it;
   a client without a transport never expires anything, so an offline replay (`op snapshot build`) reads the
   same bytes whenever it runs. The proceedings never expire; OpenReview's TTLs are `openreview_client.ttl`.
+- **Log events.** A policy's event names are fixed constants (`PolicyEvents`: `CRAWL_EVENTS` here,
+  `openreview_client.EVENTS`), never built from a prefix, so every name is greppable (TASK-116).
 - **Errors.** One hierarchy under `SourceError` (each with a `reason` constant for the log), handled once in
   `cli.main` and in `snapshot.load_sources`. No message holds a credential, a token or response text.
 
@@ -234,6 +237,20 @@ def never_expires(url: str, now: datetime) -> float | None:
 
 
 @dataclass(frozen=True)
+class PolicyEvents:
+    """One policy's log event names, each a fixed constant (logging-standards: `event` is a constant)."""
+
+    retry_wait: str  # WARNING: a 429, a 5xx, a network error or a truncated 200, waited out
+    budget_wait: str  # INFO: a spent rate-limit budget, waited out
+    cache_expired: str  # INFO: a cached entry past its TTL, re-fetched
+
+
+CRAWL_EVENTS = PolicyEvents(
+    retry_wait="crawl_retry_wait", budget_wait="crawl_budget_wait", cache_expired="crawl_cache_expired"
+)
+
+
+@dataclass(frozen=True)
 class Policy:
     """One source's rules for the shared client. The defaults are the proceedings crawlers';
     `openreview_client.POLICY` is OpenReview's."""
@@ -252,7 +269,7 @@ class Policy:
     wait_after_last: bool = True  # back off after the last attempt too (a resumed run starts rested)
     max_body: int = 20 * 1024 * 1024
     timeout: float = 30.0
-    log_prefix: str = "crawl"  # `<prefix>_retry_wait`, `<prefix>_budget_wait`, `<prefix>_cache_expired`
+    events: PolicyEvents = CRAWL_EVENTS  # its log event names (fixed constants)
     # how long a cached response to `url` stays fresh at `now` (seconds; None: for good); only a live client
     # expires anything (module docstring, Expiry)
     ttl: Callable[[str, datetime], float | None] = never_expires
@@ -280,6 +297,12 @@ class Codec[T](Protocol):
     def fetched_at(self, entry: T) -> datetime: ...  # when the entry was fetched (its age, for expiry)
 
 
+def cache_name(url: str) -> str:
+    """A cache entry's name under its codec's directory: `<sha256[:2]>/<sha256>.json` of the canonical URL."""
+    key = hashlib.sha256(url.encode("utf-8")).hexdigest()
+    return f"{key[:2]}/{key}.json"
+
+
 class ResponseCache[T]:
     """One source's response cache: sha256-named files (never a path from URL text), atomic writes."""
 
@@ -287,8 +310,7 @@ class ResponseCache[T]:
         self.root, self.codec = root, codec
 
     def path(self, url: str) -> Path:
-        key = hashlib.sha256(url.encode("utf-8")).hexdigest()
-        return self.root / self.codec.subdir / key[:2] / f"{key}.json"
+        return self.root / self.codec.subdir / cache_name(url)
 
     def get(self, url: str) -> T | None:
         path = self.path(url)
@@ -362,7 +384,7 @@ class HttpClient[T]:
         if age <= ttl:
             return False
         self.stats.expired += 1
-        log.info(f"{self.policy.log_prefix}_cache_expired",
+        log.info(self.policy.events.cache_expired,
                  extra={"url": url, "age_s": round(age), "ttl_s": round(ttl)})  # fmt: skip
         return True
 
@@ -444,7 +466,7 @@ class HttpClient[T]:
 
     def _wait(self, seconds: float, url: str, why: str, attempt: int) -> None:
         self.stats.retries += 1
-        log.warning(f"{self.policy.log_prefix}_retry_wait", extra={
+        log.warning(self.policy.events.retry_wait, extra={
             "host": urlparse(url).netloc, "why": why, "attempt": attempt, "wait_s": round(seconds, 1)})  # fmt: skip
         self.clock.sleep(seconds)
 
@@ -455,7 +477,7 @@ class HttpClient[T]:
             return
         reset = _seconds(response.headers.get("ratelimit-reset"))
         wait = min(60.0 if reset is None else reset, self.policy.max_wait) + self.policy.hint_pad
-        log.info(f"{self.policy.log_prefix}_budget_wait",
+        log.info(self.policy.events.budget_wait,
                  extra={"host": urlparse(url).netloc, "wait_s": round(wait, 1)})  # fmt: skip
         self.clock.sleep(wait)
 

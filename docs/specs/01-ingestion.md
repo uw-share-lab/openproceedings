@@ -103,7 +103,9 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    honours `Retry-After` and `ratelimit-reset`; the sources differ only in their `Policy`. A crawl can resume.
 
    **Cache expiry (TASK-102).** Each `Policy` has a TTL per URL (`Policy.ttl`). A live crawl re-fetches an
-   entry older than its TTL, overwrites it and logs `<source>_cache_expired` (`url`, `age_s`, `ttl_s`).
+   entry older than its TTL, overwrites it and logs its policy's `cache_expired` event (`crawl_cache_expired`,
+   `openreview_cache_expired`; `url`, `age_s`, `ttl_s`). A policy's event names (`http.PolicyEvents`: also
+   `*_retry_wait` and `*_budget_wait`) are fixed constants, never built from a prefix (TASK-116).
    An offline client (`--offline`, `--dry-run`, `op snapshot build`) never expires anything, so a replay is a
    function of the cache and rebuilds the same bytes whenever it runs; `--refresh` still re-fetches at once.
    A venue-year is *open* until the end of its calendar year (its decisions may still be out, a withdrawal
@@ -217,6 +219,19 @@ through the volume table and refuses a year the table lacks. Each listing's repo
 count, tracks, abstracts missing and why, unknown tracks, crawl window) goes into the manifest's `sources`
 under `iclr_archive` / `neurips_proceedings` / `pmlr`. The ICLR archive accepts only 2014–2016 and mines
 the public accepted-paper listing itself, so its records intentionally retain `abstract=null`.
+
+**Crawl logs** (TASK-116; logging-standards skill §Crawl lines). A crawl logs a start line, heartbeats and an
+end line at INFO: `openreview_crawl_started` / `openreview_crawl_progress` (at most every 30 s of the HTTP
+client's monotonic clock, with `api`, `venue`, `year`, the counts so far, `requests` and `cached`) /
+`openreview_crawl_finished` (also `cache_incompatible`: pre-projection cache entries purged and re-fetched,
+each a DEBUG `openreview_cache_incompatible` line); `neurips_listing_started` / `neurips_listing_progress` / `neurips_listing_mined`
+and the `pmlr_volume_*` equivalents. A record-level anomaly (an unknown track, an unmapped status string, a
+duplicate, a record that won't build) is DEBUG; each listing or crawl logs at most one aggregate WARNING with
+the counts (`listing_attention`, `openreview_crawl_attention`), beside listing-level ones such as
+`listing_count_mismatch`. A proceedings page past the HTML parser's bounds (`html.HTMLBudgetError`, reason
+`html_budget`) names its URL and how to recover (an index page: `--refresh`; a paper page: delete its cache
+entry, `pages/<sha256[:2]>/<sha256>.json`); on a paper page it is counted as `invalid`, on a listing page it
+refuses the crawl.
 
 ## Error handling
 

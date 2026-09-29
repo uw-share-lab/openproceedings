@@ -218,6 +218,47 @@ def test_a_null_nonreaders_does_not_make_a_private_note_public(
     assert "ICLR.cc/2017/pcs" not in str(refused.value)  # the ACL's shape is named, never its entries
 
 
+def test_a_projection_refusal_names_the_canonical_request_and_nothing_else(tmp_path: Path) -> None:
+    """TASK-116: the refusal says which request to look at (the cache key: host, path, parameters sorted),
+    never the response's data, the token or a credential."""
+    note = {"id": "PrivateNote1", "forum": "PrivateNote1", "readers": ["~Some_Person1"],
+            "content": {"title": {"value": "do-not-show"}}}  # fmt: skip
+    params = {"offset": 0, "content.venueid": "ICLR.cc/2024/Conference", "limit": 1000}
+    c = client(tmp_path, answering(json_response({"notes": [note], "count": 1})))
+    with pytest.raises(OpenReviewPublicDataError, match="not world-readable") as refused:
+        c.get("/notes", params)
+    message = str(refused.value)
+    target = "https://api2.openreview.net/notes?content.venueid=ICLR.cc/2024/Conference&limit=1000&offset=0"
+    assert c.url("/notes", params) == target and f"GET {target} " in message
+    assert "readers list of 1 without everyone" in message  # the ACL's shape, as before
+    for leak in ("~Some_Person1", "do-not-show", "PrivateNote1", TOKEN, PASSWORD, USERNAME, "Bearer"):
+        assert leak not in message
+
+
+@pytest.mark.parametrize(
+    ("url", "data", "says"),
+    [
+        ("https://api2.openreview.net/profiles?id=x", {"profiles": []}, "has no public cache projection"),
+        ("https://api2.openreview.net/groups?id=G", {"groups": ["not-an-object"]}, "is not an object"),
+    ],
+)
+def test_every_projection_refusal_names_its_request(url: str, data: dict[str, object], says: str) -> None:
+    from openproceedings.ingest.sources.openreview_client import _public_projection
+
+    with pytest.raises(OpenReviewPublicDataError, match=says) as refused:
+        _public_projection(url, data)
+    assert f"GET {url} " in str(refused.value) and "not-an-object" not in str(refused.value)
+
+
+def test_openreview_policy_events_are_fixed_constants() -> None:
+    from openproceedings.ingest.sources.openreview_client import EVENTS, POLICY
+
+    assert POLICY.events is EVENTS
+    assert (EVENTS.retry_wait, EVENTS.budget_wait, EVENTS.cache_expired) == (
+        "openreview_retry_wait", "openreview_budget_wait", "openreview_cache_expired",
+    )  # fmt: skip
+
+
 def test_the_refusal_names_the_acl_shape() -> None:
     from openproceedings.ingest.sources.openreview_client import _acl_shape
 
@@ -365,13 +406,18 @@ def test_429_without_retry_after_uses_ratelimit_reset_never_the_epoch_header(tmp
     assert 2262.0 in clock.sleeps and max(clock.sleeps) < 3702
 
 
-def test_a_spent_budget_waits_for_the_window_to_reset(tmp_path: Path) -> None:
+def test_a_spent_budget_waits_for_the_window_to_reset(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     clock = FakeClock()
     server = answering(
         json_response(OK, headers={**BUDGET, "ratelimit-remaining": "0", "ratelimit-reset": "600"})
     )
-    client(tmp_path, server, clock).get("/notes", PARAMS)
+    with caplog.at_level(logging.INFO):
+        client(tmp_path, server, clock).get("/notes", PARAMS)
     assert clock.sleeps[-1] == 601.0
+    [wait] = [r for r in caplog.records if r.getMessage() == "openreview_budget_wait"]
+    assert wait.__dict__["wait_s"] == 601.0
 
 
 def test_a_hostile_wait_is_capped_at_about_an_hour(tmp_path: Path) -> None:

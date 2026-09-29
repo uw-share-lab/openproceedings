@@ -4,13 +4,18 @@ miss) is tested once in `test_http.py`."""
 
 from __future__ import annotations
 
+import ast
 import json
+import logging
 from datetime import timedelta
 from email.utils import format_datetime
 from pathlib import Path
 
 import pytest
+from openproceedings.ingest import sources
 from openproceedings.ingest.sources.http import (
+    CRAWL_EVENTS,
+    PROCEEDINGS,
     CacheError,
     FetchError,
     Page,
@@ -131,3 +136,47 @@ def test_cache_entries_are_fixture_shaped_and_checked(tmp_path: Path) -> None:
     path.write_text("{not json", encoding="utf-8")
     with pytest.raises(CacheError, match="unreadable"):
         cache.get(page.url)
+
+
+# --- log event names (TASK-116) ---------------------------------------------------------------------------
+
+
+def test_the_proceedings_policy_logs_fixed_event_names(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    assert PROCEEDINGS.events is CRAWL_EVENTS
+    spent = {"content-type": "text/html; charset=utf-8", "ratelimit-remaining": "0", "ratelimit-reset": "3"}
+    t = FakeTransport({URL: [response("", 503), response(PAGE, headers=spent)]})
+    f, _ = fetcher(tmp_path, t, HOSTS, min_interval=0)
+    with caplog.at_level(logging.INFO, logger="openproceedings.ingest.sources.http"):
+        assert f.get(URL).ok
+    assert [r.getMessage() for r in caplog.records] == ["crawl_retry_wait", "crawl_budget_wait"]
+
+
+LOG_METHODS = frozenset({"debug", "info", "warning", "error", "exception", "critical", "log"})
+
+
+def _is_logger(receiver: ast.expr) -> bool:
+    """`log`, `logger`, `self._log`, `x.log`: a receiver whose own name ends in `log` or `logger`."""
+    name = receiver.id if isinstance(receiver, ast.Name) else getattr(receiver, "attr", "")
+    return name.lower().endswith(("log", "logger"))
+
+
+def test_every_crawler_log_event_is_a_constant_never_built() -> None:
+    """logging-standards: `event` is a constant. A crawler's first log argument is a string literal or a
+    named constant (`self.policy.events.retry_wait`), never an f-string, a concatenation or a call."""
+    checked, receivers = 0, set()
+    for path in sorted(Path(sources.__file__).parent.glob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and node.func.attr in LOG_METHODS and _is_logger(node.func.value)):  # fmt: skip
+                continue
+            event = node.args[1 if node.func.attr == "log" else 0]
+            assert isinstance(event, ast.Constant | ast.Name | ast.Attribute), f"{path.name}:{node.lineno}"
+            assert not isinstance(event, ast.Constant) or isinstance(event.value, str), (
+                f"{path.name}:{node.lineno}"
+            )
+            checked += 1
+            receivers.add(ast.unparse(node.func.value))
+    assert checked >= 30  # the walk found the crawlers' log calls
+    assert {"log", "logger", "self._log"} <= receivers  # every receiver form the crawlers use was checked
