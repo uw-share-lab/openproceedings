@@ -112,6 +112,10 @@ optional parameter with the old behaviour as its default.
 One recorded exception: `RecordResponse.replay` is nullable, null only for the opt-in `replay=false`
 (decision-014). `backend/tests/contract/test_openapi_additive.py` diffs the snapshot against the released one
 on `origin/dev` by these rules (`ALLOWED` lists that exception); run it before any contract change lands.
+Locally it skips when `origin/dev` is missing. CI's `test` job compares against the commit the change builds
+on (the PR's base commit, or the pushed branch's previous tip), fetched by SHA into `OPENAPI_BASELINE_REF`, with
+`OPENAPI_BASELINE_REQUIRED=1`: an unreadable baseline fails there. A baseline commit with no snapshot yet (`main`
+before its first promotion) skips: there is no released contract to compare against (TASK-129).
 
 **Breaking**, which needs `/api/v2` or a decision record (`.claude/skills/decision-records/SKILL.md`):
 removing or renaming a field, changing a field's type or nullability, making an optional field required,

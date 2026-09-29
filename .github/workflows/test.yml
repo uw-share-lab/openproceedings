@@ -20,7 +20,20 @@ jobs:
         if: hashFiles('backend/pyproject.toml') != ''
       - name: Backend — unit, golden, differential, contract (properties at 200 examples, parallel)
         if: hashFiles('backend/pyproject.toml') != ''
+        env:
+          # The additive OpenAPI check compares against the commit this change builds on: the PR's base commit,
+          # or the pushed branch's previous tip. The shallow checkout lacks it, so fetch it by SHA, and make an
+          # unreadable baseline fail rather than skip (TASK-129).
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          OPENAPI_BASELINE_REQUIRED: "1"
         run: |
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA" \
+              || { echo "::error::could not fetch $BASE_SHA, the OpenAPI baseline"; exit 1; }
+            export OPENAPI_BASELINE_REF="$BASE_SHA"
+          else
+            export OPENAPI_BASELINE_REQUIRED=0  # a new branch's first push has no previous tip
+          fi
           uv sync --locked
           uv run --locked pytest -q -n auto --hypothesis-profile=pr
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
