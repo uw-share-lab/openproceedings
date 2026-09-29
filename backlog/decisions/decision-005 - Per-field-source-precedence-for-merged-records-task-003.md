@@ -51,18 +51,18 @@ with one; a record that shares one but stayed apart (ambiguous) keeps its status
 derived `unknown` is a claim: `status=unknown` from the proceedings source, with the listing URL, that listing's
 index-page fetch time and evidence `not listed: …` (a prefix reserved for it), which outranks OpenReview here, so the record equals what its
 claims resolve to and the `precedence:<source>` row is the `conflicts.csv` row. That absence claim names no
-paper, so dedup never counts it as a listing. The real-data check (6 records made `unknown` on snapshot
-`2026-09-29-eb72536c21d1`, 5 of them listed under another title) is
+paper, so dedup never counts it as a listing. The real-data check (4 records made `unknown` on snapshot
+`2026-09-29-4cd2bba17cad`, built after task-128; 3 of them listed under another title) is
 `docs/results/2026-09-29-reconcile-real-data.md`.
 
 **Track in an OpenReview venue-year (not enforced, open; task-072 measurement).** The `track` row says the
 proceedings answer only for venue-years not on OpenReview, but `PRECEDENCE` lets a listing that merged with no
 OpenReview note answer its own track in an OpenReview venue-year. On the 2026-09-29 crawl
-(`docs/results/2026-09-29-reconcile-real-data.md`) that is 151 records:
+(`docs/results/2026-09-29-reconcile-real-data.md`) that is 149 records:
 ICLR 2014 (1: an accepted archive paper whose OpenReview note didn't merge) and 2016 (80: OpenReview holds only
-ICLR 2016's workshop track), NeurIPS 2021–2025 main and D&B (6: five are the same paper as an OpenReview note under
-another title, two of them only because `html.py` drops a charref's `;` (task-128), and one shares its title with
-two OpenReview notes), and NeurIPS 2025's 64 `other` (Creative AI) listings. Taking the track from nowhere (`unknown`)
+ICLR 2016's workshop track), NeurIPS 2021–2025 main and D&B (4: three are the same paper as an OpenReview note under
+another title, and one shares its title with two OpenReview notes; before task-128 fixed `html.py`'s charref
+handling there were 151 records, two more listings whose mangled titles kept them apart), and NeurIPS 2025's 64 `other` (Creative AI) listings. Taking the track from nowhere (`unknown`)
 would drop ICLR 2016 main from 80 to 0 and ICLR 2014 main to 34 of 35 (−2.9%, outside the M4 gate's ±1%), so
 it was not enforced; the review lead decides whether "on OpenReview" means the venue-year's track, and what a
 listing's track becomes when OpenReview holds the track but not the paper. Deciding and enforcing this row is

@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-26 16:35'
-updated_date: '2026-09-29 23:36'
+updated_date: '2026-09-29 23:56'
 labels:
   - ingest
 milestone: m-4
@@ -60,4 +60,6 @@ Review round 1 (REQUEST_CHANGES), all fixed in one commit:
 - Docs: decision-005 and learnings link TASK-128 (charref) and TASK-130 (track row); results note docs/results/2026-09-29-reconcile-real-data.md (snapshot 2026-09-29-eb72536c21d1, commands, numbers; rebuild 2026-09-29-7fd4c937496e differs only in the 6 absence claims' fetched_at), linked from decision-005, learnings, spec 01. record-schema skill: 'not listed:' evidence prefix reserved. dedup-rules skill: papers moved between years as a known limit.
 - Not done (schema change): Reconciled counts (made unknown / left ambiguous / skipped incomplete) in the snapshot manifest. Adding a manifest key means bumping snapshot FORMAT_VERSION (its comment makes manifest keys part of the format) and snapshot verify requires format_version == FORMAT_VERSION; render() also takes DedupResult, not Reconciled. The counts are in the proceedings_reconciled / proceedings_reconcile_skipped log lines meanwhile.
 - Numbers get refreshed after rebasing onto TASK-128.
+
+Rebased onto TASK-128 (origin/fix/task-128-html-charref 9e4046f), no conflicts. Real-data re-run (read-only cache): snapshot 2026-09-29-4cd2bba17cad, index b170674bcf49. proceedings_reconciled crawls 29, unlisted 4, shares_listing 0, incomplete 1 (NeurIPS 2021, stated-count rule kept). Made unknown: NeurIPS 2023 D&B 3sRR2u72oQ (INSPECT) and pTSNoBTk8E (DynaDojo), 2024 main ftqjwZQz10 (DEX, truly absent), 2025 D&B mORzRZaqT4 (GuardSet-X/PolyGuard); the charref victims (2023 main Sg3aCpWUQP, 2025 main r8UWp9JeJi) now merge. All NeurIPS gated cells equal official. M4 gate PASS 43/44 + ICLR 2013 main owner-accepted exception (decision-016). Track-row measurement 151 -> 149; ICLR 2016 80->0 and 2014 35->34 unchanged. Results note, decision-005 and learnings refreshed.
 <!-- SECTION:NOTES:END -->
