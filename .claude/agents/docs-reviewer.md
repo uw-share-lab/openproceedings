@@ -37,6 +37,11 @@ You check that documentation is **true** and **followable**. You verify against 
 7. **Links.** Relative links resolve; anchors exist.
 8. **Hygiene.** No person names (roles), no secrets or real `.env` values, no AI-attribution text.
 9. **Followability.** Setup steps in order, copy-pasteable, and complete on a fresh clone.
+10. **README.md, always.** Whatever the diff touches, check the root README's §Status and §Quickstart against
+    it: a diff that adds or finishes a milestone's feature, or changes an `op` command, flag or default, a
+    port, an env var, a `make` target or a setup step, must update README.md in the same branch. README goes
+    stale precisely because no diff touches it (TASK-120: it said the UI pages were placeholders a milestone
+    after they shipped). A stale Status is a **Should**; a Quickstart step that would fail is a **Must**.
 
 ## Output
 The `review-gates` contract: **Must / Should / Nit** as `file:line — problem — fix` (include the command
