@@ -82,8 +82,9 @@ abstracts stay shown).
 - **Copyright office: recommended, not a gate.** TASK-135 puts the Context above to the copyright office;
   TASK-069 records its outcome, if any, before launch and does not wait on it. Whatever the answer, the
   owner's decision is to show the abstracts; only a new decision superseding this one changes that.
-- **Launch path.** TASK-069 (public launch) depends on TASK-133 (takedown contact) and TASK-134
-  (attribution in the result list), both in m-6.
+- **Launch path.** TASK-069 (public launch) depends on TASK-133 (takedown contact), TASK-134
+  (attribution in the result list), TASK-136 (takedown tooling) and TASK-138 (exports name the abstract's
+  source), all in m-6.
 - **Fixtures and git are unchanged.** Decision-004 (synthetic test fixtures, real-corpus checks run
   locally) said to revisit when this question was answered. This record covers serving abstracts on a
   deployment, not committing them: the corpus stays out of git, and fixtures stay synthetic. A CC BY PMLR

@@ -5,17 +5,19 @@ status: To Do
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 02:40'
+updated_date: '2026-09-30 02:43'
 labels:
   - query
 milestone: m-3
-dependencies: []
+dependencies:
+  - TASK-099
 ordinal: 123000
 ---
 
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Since TASK-099, a mixed AND/OR level with a branch that failed to parse (e.g. 'a b OR () OR c') gets reading: null, so the editor offers no button, but the warning's message still quotes '(a b) OR c', silently dropping the failed branch in the prose.
+Since TASK-099 (not yet merged when this was filed), a mixed AND/OR level with a branch that failed to parse (e.g. 'a b OR () OR c') gets reading: null, so the editor offers no button, but the warning's message still quotes '(a b) OR c', silently dropping the failed branch in the prose. Spec 02 §diagnostics.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
