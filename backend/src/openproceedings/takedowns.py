@@ -4,19 +4,20 @@ A deployment withholds an abstract a rights holder asked it to remove. Two files
 directory and never in git (`data/` is gitignored, and `protect-data-dir.sh` refuses `git add` of any
 `takedowns/` path):
 
-- **The list**, `<data-dir>/takedowns/withheld.txt`: UTF-8, one record id (`op:<venue>:<year>:<native>`) per
-  line; blank lines and everything from a `#` are ignored. It holds ids only, never who asked, so the API's
+- **The list**, `<data-dir>/takedowns/withheld.txt`: UTF-8 (a leading byte order mark is ignored), one record
+  id (`op:<venue>:<year>:<native>`) per line; blank lines and everything from a `#` are ignored. It holds ids only, never who asked, so the API's
   service user may read it (mode 0644 or 0640 with the API's group). `op snapshot build` withholds each listed
   abstract from the snapshot it writes (`ingest/snapshot.py::withhold`), and the API withholds each one at
-  serve time from every index version it loads (`api/state.py`: the list is re-read on every load and SIGHUP).
+  serve time from every index version it loads, under any id that version holds the paper under (`same_paper`,
+  TASK-067; `api/state.py`: the list is re-read on every load and SIGHUP).
   A missing file is an empty list, unless the path was named (`required`), or the API already applies a list or
   loads a snapshot that withheld abstracts (`api/state.py`): then it is `takedowns_missing`. A line that isn't a
   record id makes the whole list unusable (`TakedownError`): a build is refused, and the API keeps what it
   serves (or serves nothing at startup), so a typo never silently lets an abstract through.
 - **The log**, `<data-dir>/takedowns/log.jsonl`: one JSON object per request (`LOG_FIELDS`), kept by the
   operator, owned by the operator's account and mode 0600, since it holds the requester's details. Nothing in
-  the API reads it; `op takedown check` checks that it is the checking account's, its mode, and that each listed
-  id's latest entry is `withheld`.
+  the API reads it; `op takedown check` checks that it is the checking account's, its mode, that each listed
+  id's latest entry is `withheld`, and that each id whose latest entry is `withheld` is listed.
 
 Withholding a record (`withhold_record`) sets its `abstract` to null and drops its abstract claims, whose
 values are the abstract's text; everything else stays, so it is still found by its title (spec 01 §Error
@@ -28,6 +29,8 @@ from __future__ import annotations
 import json
 import os
 import stat
+import unicodedata
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -69,7 +72,8 @@ def parse(text: str, *, name: str = "withheld.txt") -> Withheld:
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
-        if not is_paper_id(line):
+        # an invisible character (U+200B, a BOM mid-file) would make an id that matches nothing (TASK-067)
+        if not is_paper_id(line) or any(unicodedata.category(ch) in ("Cc", "Cf") for ch in line):
             raise TakedownError(
                 f"{name} line {n}: {clip(line, 40)!r} is not a record id (op:<venue>:<year>:<native>); "
                 "write one id per line, with notes after a `#`"
@@ -83,7 +87,7 @@ def load(path: Path, *, required: bool = False) -> Withheld:
     a list the API was already applying: a missing file then lifts nothing silently). TakedownError when it
     can't be read or parsed, or is required and missing (reason `takedowns_missing`)."""
     try:
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8-sig")  # an editor's byte order mark is not part of the first id
     except FileNotFoundError:
         if required:
             raise TakedownError(
@@ -96,6 +100,39 @@ def load(path: Path, *, required: bool = False) -> Withheld:
             f"{path.name} can't be read ({type(e).__name__})", reason="takedowns_unreadable"
         ) from None
     return parse(text, name=path.name)
+
+
+def native(rid: str) -> str:
+    """A record id's native part (`op:<venue>:<year>:<native>`): the source's own id for the paper, which a
+    corrected venue or year leaves as it was (the rekey rule `snapshot.diff` and `snapshot.withhold` use)."""
+    return rid.split(":", 3)[-1]
+
+
+def same_paper(listed: Withheld, merges: Iterable[tuple[str, str]], ids: Iterable[str]) -> Withheld:
+    """Which of `ids` (one index version's records) are a listed paper, under its listed id or any other
+    (TASK-067): linked to a listed id by `merges` ((survivor, merged) pairs, from any build: the same paper
+    found twice), or holding its native id (the same paper rekeyed by a corrected venue or year), transitively.
+    The list names one id; an older version may hold the paper under an id it had before, or as a duplicate a
+    later build merged, and a newer one under the id it has now: each is withheld. Native ids are the sources'
+    own (an OpenReview forum id, a PMLR volume and key, a NeurIPS hash), never shared by two papers."""
+    held = list(ids)
+    if not listed:
+        return NONE
+    linked: dict[str, set[str]] = {}
+    for survivor, merged in merges:
+        linked.setdefault(survivor, set()).add(merged)
+        linked.setdefault(merged, set()).add(survivor)
+    by_native: dict[str, set[str]] = {}
+    for rid in (*held, *linked, *listed):
+        by_native.setdefault(native(rid), set()).add(rid)
+    found, todo = set(listed), list(listed)
+    while todo:
+        at = todo.pop()
+        for rid in linked.get(at, set()) | by_native[native(at)]:
+            if rid not in found:
+                found.add(rid)
+                todo.append(rid)
+    return frozenset(rid for rid in held if rid in found)
 
 
 def withhold_record(record: PaperRecord) -> PaperRecord:
@@ -119,8 +156,9 @@ class LogProblem:
 def check_log(path: Path, listed: Withheld) -> list[LogProblem]:
     """The log's problems: readable by anyone but its owner (mode & 0o077), owned by another account than the
     one checking it (the operator's), not JSON Lines of `LOG_FIELDS` with a `decision` in `DECISIONS`, or a
-    listed id whose latest entry (the last line naming it) isn't `withheld`. A list with no log is a problem
-    only when the list names an id. Messages name line numbers and record ids, never other values."""
+    listed id whose latest entry (the last line naming it) isn't `withheld`, or an id whose latest entry is
+    `withheld` that isn't listed (a line dropped from the list). A list with no log is a problem only when the
+    list names an id. Messages name line numbers and record ids, never other values."""
     try:
         st = path.stat()
     except FileNotFoundError:
@@ -167,5 +205,13 @@ def check_log(path: Path, listed: Withheld) -> list[LogProblem]:
         LogProblem(f"{rid} is listed but its latest entry in {path.name} is not `withheld`")
         for rid in sorted(listed)
         if latest.get(rid) != "withheld"
+    ]
+    problems += [  # the other direction: a line dropped from the list silently lifts a takedown (TASK-067)
+        LogProblem(
+            f"{rid}'s latest entry in {path.name} is `withheld`, but the list doesn't name it: list it again, "
+            "or log it lifted"
+        )
+        for rid, decision in sorted(latest.items())
+        if decision == "withheld" and rid not in listed
     ]
     return problems

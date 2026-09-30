@@ -19,14 +19,15 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from openproceedings import cli, takedown_check
+from openproceedings import cli, takedown_check, takedowns
 from openproceedings import export as exporter
 from openproceedings.api import export as route
 from openproceedings.api import papers as papers_route
 from openproceedings.api import search as search_route
+from openproceedings.api import server as api_server
 from openproceedings.api.state import IndexState, Served
 from openproceedings.engine.index import build_index
-from openproceedings.ingest.dedup import DedupResult
+from openproceedings.ingest.dedup import DedupResult, Merge
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import render, withhold
 from openproceedings.query.normalize import normalize
@@ -59,10 +60,12 @@ def _pick(papers: list[PaperRecord]) -> tuple[PaperRecord, str]:
     raise AssertionError("the fixture has no paper to take down")
 
 
-def _build(papers: list[PaperRecord], data: Path, name: str, listed: frozenset[str]) -> str:
+def _build(
+    papers: list[PaperRecord], data: Path, name: str, listed: frozenset[str], merges: tuple[Merge, ...] = ()
+) -> str:
     snap = data / "snapshots" / name
     snap.mkdir(parents=True)
-    done = withhold(DedupResult(tuple(sorted(papers, key=lambda p: p.id)), (), ()), listed)
+    done = withhold(DedupResult(tuple(sorted(papers, key=lambda p: p.id)), merges, ()), listed)
     for file, blob in render(done.result, [], BUILT, withheld=done.withheld).items():
         (snap / file).write_bytes(blob)
     return build_index(snap, data / "indexes", BUILT).index_version
@@ -90,8 +93,15 @@ def fixed_date(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def data_dir(store: Store, tmp_path: Path) -> Path:
+    """A copy of the store with an empty list: `new`'s snapshot withheld an abstract, so a missing list fails
+    every load (TASK-067); the tests of a missing list delete it."""
     shutil.copytree(store[0], tmp_path / "data", symlinks=True)
+    listing(tmp_path / "data")
     return tmp_path / "data"
+
+
+def unlisted(data_dir: Path) -> None:
+    (data_dir / "takedowns" / "withheld.txt").unlink()
 
 
 def listing(data_dir: Path, *ids: str, text: str | None = None) -> None:
@@ -402,6 +412,7 @@ def test_a_start_without_the_list_refuses_an_index_whose_snapshot_withheld(
     """The snapshot proves this deployment has takedowns, so a missing list (an unmounted takedowns/) is a
     failed load, never a silent lifting at startup."""
     point_current(data_dir, store[2])
+    unlisted(data_dir)
     with TestClient(make_app(data_dir)) as c:
         assert c.get("/api/v1/coverage").status_code == 503
     [failed] = [x for x in logs() if x["event"] == "index_load_failed"]
@@ -449,7 +460,9 @@ def test_the_check_passes_when_every_loaded_version_withholds(data_dir: Path, st
         c.get(EXPORT, params={"format": "jsonl", "q": "agents", "index_version": old})  # loads the pinned one
         report = takedown_check.check(fetcher(c), frozenset({paper.id}))
     assert report.problems == ()
-    assert set(report.index_versions) == {old, new} and report.exports == 2 * len(FORMATS)
+    assert set(report.index_versions) == {old, new} and report.exports == 2 * (
+        len(FORMATS) + 1
+    )  # + its title
 
 
 def test_the_check_fails_when_the_served_index_serves_a_listed_abstract(
@@ -576,3 +589,124 @@ def test_op_takedown_check_exits_1_on_a_problem_and_checks_the_log(
         assert "readable by others" in capsys.readouterr().out
         assert cli.main([*argv[:-1], "file:///etc/passwd"]) == 1
         assert "--api must be an http(s) URL" in capsys.readouterr().err
+
+
+# --- the same paper under another id on an older version (TASK-067) -------------------------------------------
+
+type Aliased = tuple[Path, str, str, PaperRecord, PaperRecord, PaperRecord]  # data, prev, new, paper, old ids
+
+
+@pytest.fixture(scope="module")
+def aliased_store(tmp_path_factory: pytest.TempPathFactory) -> Aliased:
+    """`prev` holds the paper as `rekeyed` (the same native id, a year off: the year later corrected) and as
+    `dup`, a duplicate record; `new` holds it under its own id, and its merges.csv says `dup` merged into it.
+    The list names only the id `new` has."""
+    data = tmp_path_factory.mktemp("aliased") / "data"
+    papers = [attributed(r) for r in list(records())[:300]]
+    paper, _ = _pick(papers)
+    _op, venue, year, native = paper.id.split(":", 3)
+    rekeyed = paper.model_copy(update={"id": f"op:{venue}:{int(year) - 1}:{native}", "year": int(year) - 1})
+    dup = paper.model_copy(update={"id": f"op:{venue}:{year}:Dup{native}"})
+    others = [p for p in papers if p.id != paper.id]
+    prev = _build([*others, rekeyed, dup], data, "prev", frozenset())
+    merge = Merge(paper.id, dup.id, "title_venue_year", "k", venue, int(year), "openreview")
+    new = _build(papers, data, "new", frozenset({paper.id}), (merge,))
+    (data / "indexes" / "current").symlink_to(new)
+    return data, prev, new, paper, rekeyed, dup
+
+
+@pytest.fixture
+def aliased(aliased_store: Aliased, tmp_path: Path) -> Aliased:
+    shutil.copytree(aliased_store[0], tmp_path / "data", symlinks=True)
+    listing(tmp_path / "data", aliased_store[3].id)
+    return (tmp_path / "data", *aliased_store[1:])
+
+
+def _title(paper: PaperRecord) -> str:
+    return f'title:"{" ".join(normalize(paper.title)[:8])}" {EVERY}'
+
+
+@pytest.mark.parametrize("fmt", FORMATS)
+def test_an_older_version_withholds_the_paper_under_its_older_ids(aliased: Aliased, fmt: str) -> None:
+    data, prev, _, paper, rekeyed, dup = aliased
+    with TestClient(make_app(data)) as c:
+        text = exported(c, fmt, q=_title(paper), index_version=prev)
+    assert withheld_in_export(fmt, text, rekeyed.id) and withheld_in_export(fmt, text, dup.id)
+    assert paper.abstract is not None and paper.abstract.split()[0] not in (text if fmt == "jsonl" else "")
+
+
+def test_op_export_withholds_the_older_ids_too(aliased: Aliased, capsys: pytest.CaptureFixture[str]) -> None:
+    data, prev, _, paper, rekeyed, dup = aliased
+    argv = ["--data-dir", str(data), "export", _title(paper), "--index", prev, "--format", "jsonl"]
+    assert cli.main(argv) == 0
+    out = capsys.readouterr().out
+    assert withheld_in_export("jsonl", out, rekeyed.id) and withheld_in_export("jsonl", out, dup.id)
+
+
+def test_the_check_catches_an_older_id_left_served(aliased: Aliased, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The mutant: withholding by the listed id only (as before TASK-067)."""
+    data, prev, _, paper, rekeyed, dup = aliased
+    with TestClient(make_app(data)) as c:
+        c.get(EXPORT, params={"format": "jsonl", "q": "agents", "index_version": prev})
+        assert takedown_check.check(fetcher(c), frozenset({paper.id})).problems == ()
+    monkeypatch.setattr(takedowns, "same_paper", lambda listed, merges, ids: listed & frozenset(ids))
+    with TestClient(make_app(data)) as c:
+        problems = takedown_check.check(fetcher(c), frozenset({paper.id})).problems
+    assert sorted(problems) == sorted(
+        f"{rid}: the jsonl export of index {prev} serves the abstract of {paper.id}'s paper under this id; "
+        "list it too"
+        for rid in (rekeyed.id, dup.id)
+    )
+
+
+# --- a missing list fails closed (TASK-067) ----------------------------------------------------------------------
+
+
+def test_a_rolled_back_index_without_the_list_serves_nothing(logs: Logs, data_dir: Path) -> None:
+    """`current` names `old`, from before the takedown, but `new`'s snapshot on disk withheld an abstract: the
+    deployment has takedowns, so a missing list fails the start (it would serve the listed abstract)."""
+    unlisted(data_dir)
+    with TestClient(make_app(data_dir)) as c:
+        assert c.get("/api/v1/coverage").status_code == 503
+    [failed] = [x for x in logs() if x["event"] == "index_load_failed"]
+    assert failed["reason"] == "takedowns_missing"
+
+
+def test_a_required_list_that_is_missing_serves_nothing(logs: Logs, data_dir: Path) -> None:
+    """No snapshot withheld anything yet, and no list: with the list required (`op serve` off loopback), the
+    start fails rather than serving every abstract a list SIGHUP'd in before the rebuild would withhold; an
+    empty list serves."""
+    shutil.rmtree(data_dir / "snapshots" / "new")
+    unlisted(data_dir)
+    with TestClient(make_app(data_dir)) as c:
+        assert c.get("/api/v1/coverage").status_code == 200  # not required: a local instance
+    with TestClient(make_app(data_dir, takedown_list_required=True)) as c:
+        assert c.get("/api/v1/coverage").status_code == 503
+    [failed] = [x for x in logs() if x["event"] == "index_load_failed"]
+    assert failed["reason"] == "takedowns_missing"
+    listing(data_dir)
+    with TestClient(make_app(data_dir, takedown_list_required=True)) as c:
+        assert c.get("/api/v1/coverage").status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("host", "required"), [("127.0.0.1", False), ("0.0.0.0", True), ("example.org", True)]
+)
+def test_op_serve_requires_the_list_off_loopback(
+    host: str, required: bool, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    served: list[Any] = []
+    monkeypatch.setattr(api_server, "serve", lambda config, *a: served.append(config))
+    assert cli.main(["--data-dir", str(tmp_path), "serve", "--host", host]) == 0
+    assert served[0].takedown_list_required is required
+
+
+def test_op_takedown_check_refuses_a_missing_list(
+    client: TestClient, data_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """TASK-067: a missing list is never "nothing to check" (an OP_DATA_DIR pointing elsewhere, a renamed file)."""
+    monkeypatch.setattr(takedown_check, "http", lambda base: fetcher(client))
+    unlisted(data_dir)
+    argv = ["--data-dir", str(data_dir), "takedown", "check", "--api", "http://127.0.0.1:8000"]
+    assert cli.main(argv) == 1
+    assert "withheld.txt is missing" in capsys.readouterr().err

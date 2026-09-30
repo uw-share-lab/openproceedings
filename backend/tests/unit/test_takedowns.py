@@ -163,3 +163,43 @@ def test_the_cell_query_names_the_ids_venue_and_year_and_every_track_and_status(
 )
 def test_retry_after_reads_whole_seconds_only(header: str | None, seconds: float) -> None:
     assert takedown_check.retry_after(header) == seconds
+
+
+# --- the same paper under another id (TASK-067) ------------------------------------------------------------------
+
+OLD, NEW = "op:icml:2023:Abcd1234", "op:icml:2024:Abcd1234"  # one native id: a rekey (a corrected year)
+DUP = "op:icml:2024:v235-smith24a"  # a duplicate some build merged into NEW
+
+
+def test_a_listed_paper_is_withheld_under_its_other_ids_in_any_version() -> None:
+    merges = [(NEW, DUP)]  # (survivor, merged)
+    assert takedowns.same_paper(frozenset({NEW}), merges, [OLD, DUP, B]) == {OLD, DUP}
+    assert takedowns.same_paper(frozenset({NEW}), (), [OLD, DUP, B]) == {
+        OLD
+    }  # no merge known: the rekey only
+    assert takedowns.same_paper(frozenset({OLD}), merges, [NEW, DUP]) == {NEW, DUP}  # forward too
+    assert takedowns.same_paper(frozenset({DUP}), merges, [OLD]) == {OLD}  # merged, then rekeyed
+    assert takedowns.same_paper(frozenset({NEW}), merges, [NEW]) == {NEW}
+    assert takedowns.same_paper(frozenset(), merges, [OLD, NEW, DUP]) == frozenset()
+
+
+def test_merges_chain_and_other_papers_are_left_alone() -> None:
+    far = "op:icml:2024:v235-jones24b"
+    merges = [(NEW, DUP), (DUP, far), (A, "op:iclr:2024:Other-99")]
+    assert takedowns.same_paper(frozenset({far}), merges, [NEW, OLD, A, B]) == {NEW, OLD}
+
+
+def test_an_id_the_log_withholds_but_the_list_dropped_is_a_problem(tmp_path: Path) -> None:
+    """TASK-067: a line deleted from the list lifts a takedown the log still records as `withheld`."""
+    path = log_file(tmp_path, entry(), entry(B), entry(B, "lifted"))
+    assert [p.message for p in check_log(path, frozenset())] == [
+        f"{A}'s latest entry in log.jsonl is `withheld`, but the list doesn't name it: list it again, or log it lifted"
+    ]
+    assert check_log(path, frozenset({A})) == []
+
+
+def test_a_byte_order_mark_is_read_and_an_invisible_character_is_refused(tmp_path: Path) -> None:
+    (tmp_path / "withheld.txt").write_text(f"﻿{A}\n", encoding="utf-8")
+    assert load(tmp_path / "withheld.txt") == {A}
+    with pytest.raises(TakedownError, match=r"line 1: .* is not a record id"):
+        parse(f"{A}​\n")

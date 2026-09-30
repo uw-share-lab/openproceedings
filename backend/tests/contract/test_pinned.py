@@ -16,6 +16,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from openproceedings.api.errors import ApiError
 from openproceedings.api.state import IndexState, Pinned, open_pinned
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.index import IndexBuildError
@@ -339,6 +340,26 @@ def test_at_most_one_pinned_index_opens_at_a_time(indexes: Path) -> None:
     assert opener.opened == ["aaaa01", "cccc03"]
 
 
+def test_a_wait_for_the_open_slot_past_its_bound_is_refused_busy(indexes: Path) -> None:
+    """TASK-067: clients rotating through more versions than the LRU holds queued every worker thread behind
+    the one open; past `open_wait_seconds` the wait is a 503 API_BUSY with Retry-After, never a queue."""
+    opener = Opener()
+    opener.gate["aaaa01"] = threading.Event()
+    s = IndexState(indexes, "current", opener, keep_pinned=1, open_wait_seconds=0.05, busy_retry_seconds=7)
+    with ThreadPoolExecutor(1) as pool:
+        first = pool.submit(s.pinned, "aaaa01")
+        while "aaaa01" not in opener.opened:
+            time.sleep(0.001)
+        started = time.monotonic()
+        with pytest.raises(ApiError) as e:
+            s.pinned("cccc03")
+        assert time.monotonic() - started < 5
+        assert e.value.code is DiagnosticCode.API_BUSY and e.value.headers == {"Retry-After": "7"}
+        opener.gate["aaaa01"].set()
+        assert first.result(10).reason == "ok"
+    assert s.pinned("cccc03").reason == "ok" and opener.opened == ["aaaa01", "cccc03"]  # not remembered
+
+
 def test_client_chosen_absent_versions_never_evict_a_remembered_tampered_one(indexes: Path) -> None:
     """`absent` is the one refusal a client causes at will (any name), so it has its own bounded map: naming
     more absent versions than the map holds can't make a tampered index be re-hashed (M3a review)."""
@@ -396,3 +417,16 @@ def test_available_leaves_out_refused_versions(data_dir: Path, store: Store) -> 
     assert s.available(s.engine) == sorted([store.big, store.small])
     assert s.pinned(store.small).reason == "unloadable"
     assert s.available(s.engine) == [store.big]
+
+
+def test_op_serve_sizes_the_pinned_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """TASK-067: the operator sizes the LRU to the versions the instance holds (spec 04)."""
+    from openproceedings import cli
+    from openproceedings.api import server as api_server
+
+    served: list[Any] = []
+    monkeypatch.setattr(api_server, "serve", lambda config, *a: served.append(config))
+    assert cli.main(["--data-dir", str(tmp_path), "serve", "--pinned-indexes", "8"]) == 0
+    assert cli.main(["--data-dir", str(tmp_path), "serve"]) == 0
+    assert [c.pinned_indexes for c in served] == [8, 4]
+    assert cli.main(["--data-dir", str(tmp_path), "serve", "--pinned-indexes", "0"]) == 1

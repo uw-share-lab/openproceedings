@@ -342,3 +342,21 @@ def test_cli_build_says_which_listed_ids_it_lacks(tmp_path: Path, capsys: pytest
     out = capsys.readouterr()
     assert json.loads(out.out)["takedowns_unmatched"] == ["op:iclr:2024:GoneAway01"]
     assert "1 listed id(s) no record of this build has: op:iclr:2024:GoneAway01" in out.err
+
+
+def test_cli_build_refuses_a_missing_list_once_a_snapshot_withheld(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """TASK-067: a snapshot on disk that withheld an abstract proves this deployment has takedowns, so a
+    missing default list (an unmounted or renamed takedowns/) never builds the abstract back in."""
+    data = tmp_path / "data"
+    assert cli.main(["--data-dir", str(data), "ingest", "ris", str(source(tmp_path))]) == 0
+    (data / "takedowns").mkdir()
+    (data / "takedowns" / "withheld.txt").write_text(f"{REJECTED}\n", encoding="utf-8")
+    assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 0
+    (data / "takedowns" / "withheld.txt").unlink()
+    capsys.readouterr()
+    assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 1
+    assert "withheld.txt is missing" in capsys.readouterr().err
+    (data / "takedowns" / "withheld.txt").write_text("", encoding="utf-8")  # emptied: lifted on purpose
+    assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 0

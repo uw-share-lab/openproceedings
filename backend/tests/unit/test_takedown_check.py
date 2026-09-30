@@ -20,6 +20,7 @@ from openproceedings.export import CSV_COLUMNS, TAKEDOWN, WITHHELD
 RID = "op:iclr:2024:Abcd1234"
 TWIN = "op:iclr:2024:Efgh5678"  # a second listed paper of the same venue-year
 V = "abcdef123456"
+AUTHORS = ["Ada Okafor", "Lin Wei"]
 
 
 @dataclass
@@ -40,6 +41,8 @@ class FakeApi:
     sentence: str = TAKEDOWN
     reason: str = "takedown"
     export_abstract: str | None = None
+    # records of the title-only export beyond the listed ones: (id, authors, abstract) (TASK-067)
+    others: tuple[tuple[str, list[str], str | None], ...] = ()
     calls: list[tuple[str, dict[str, str]]] = field(default_factory=list)
 
     def fetch(self, path: str, params: Mapping[str, str]) -> tuple[int, str]:
@@ -56,6 +59,7 @@ class FakeApi:
             paper = {
                 "id": rid,
                 "title": "Calibrated Trust",
+                "authors": AUTHORS,
                 "abstract": self.abstract,
                 "provenance": provenance,
             }
@@ -70,12 +74,22 @@ class FakeApi:
         fmt = params["format"]
         if fmt in self.export_status:
             return self.export_status[fmt], "{}"
+        if "venue:" not in params["q"]:  # the title in every venue and year: the paper under other ids
+            assert fmt == "jsonl"
+            rows = [(i, AUTHORS, None, True) for i in self.ids]
+            rows += [(i, authors, abstract, abstract is None) for i, authors, abstract in self.others]
+            return 200, "".join(
+                json.dumps({"id": i, "title": "Calibrated Trust", "authors": a, "abstract": ab,
+                            "abstract_withheld": w, "abstract_withheld_reason": "takedown" if w else None}) + "\n"
+                for i, a, ab, w in rows
+            )  # fmt: skip
         ids = [i for i in self.ids if fmt != self.drop_from]
         return 200, "".join(self.entry(fmt, i) for i in ids) if fmt != "csv" else self.csv(ids)
 
     def entry(self, fmt: str, rid: str) -> str:
         if fmt == "jsonl":
-            obj = {"id": rid, "abstract": self.export_abstract, "abstract_withheld": True,
+            obj = {"id": rid, "title": "Calibrated Trust", "authors": AUTHORS, "abstract": self.export_abstract,
+                   "abstract_withheld": True,
                    "abstract_withheld_reason": self.reason}  # fmt: skip
             return json.dumps(obj) + "\n"
         if fmt == "ris":
@@ -103,7 +117,19 @@ def test_an_instance_that_withholds_everything_passes_with_one_export_per_format
     api = FakeApi(ids=(RID, TWIN))
     report = takedown_check.check(api.fetch, frozenset(api.ids))
     assert report.problems == () and report.index_versions == (V,)
-    assert report.exports == 4  # the two ids share a venue-year: one export per format, not per id
+    # the two ids share a venue-year: one export per format, not per id; then one of each title (TASK-067)
+    assert report.exports == 4 + 2
+
+
+def test_the_paper_served_under_another_id_is_a_problem_and_another_paper_is_not() -> None:
+    """TASK-067: an id the paper had before a rekey, or a merged-away duplicate, serving the abstract; a
+    different paper with the same title (other authors), or the paper under another id withheld, is fine."""
+    old = "op:iclr:2023:Abcd1234"
+    api = FakeApi(others=((old, AUTHORS, "Leaked."), ("op:iclr:2024:Zzzz9999", ["B. Other"], "Its own.")))
+    assert problems(api) == [
+        f"{old}: the jsonl export of index {V} serves the abstract of {RID}'s paper under this id; list it too"
+    ]
+    assert problems(FakeApi(others=((old, AUTHORS, None),))) == []
 
 
 @pytest.mark.parametrize(

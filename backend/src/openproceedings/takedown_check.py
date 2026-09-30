@@ -70,9 +70,9 @@ def cell_query(rid: str) -> str:
     return f"venue:{VENUES[venue]} year:{year} {EVERY}"
 
 
-def title_query(title: str, rid: str) -> str | None:
-    """A query that finds the paper by (the start of) its title within its venue-year; None when the title has
-    no word that reads back as itself."""
+def title_query(title: str, rid: str | None) -> str | None:
+    """A query that finds the paper by (the start of) its title within its venue-year (`rid`'s), or in every
+    venue and year (`rid` None); None when the title has no word that reads back as itself."""
     words: list[str] = []
     for w in normalize(title):  # the leading run of words that read back as themselves: a phrase has no gaps
         if not (w.isascii() and w.isalnum()) or len(words) == MAX_TITLE_WORDS:
@@ -80,7 +80,7 @@ def title_query(title: str, rid: str) -> str | None:
         words.append(w)
     if not words or normalize(" ".join(words)) != words:
         return None
-    return f'title:"{" ".join(words)}" {cell_query(rid)}'
+    return f'title:"{" ".join(words)}" {EVERY if rid is None else cell_query(rid)}'
 
 
 def check(fetch: Fetch, listed: Withheld) -> Report:
@@ -92,7 +92,9 @@ def check(fetch: Fetch, listed: Withheld) -> Report:
             (f"GET /meta answered {status}: is the API up and serving an index?",), len(listed), (), 0
         )
     versions = tuple(json.loads(body)["index_versions"])
-    found = {rid for rid in sorted(listed) if _served(fetch, rid, problems)}
+    # each listed paper's title and authors, from the served index or any version's export of it
+    papers = {rid: paper for rid in sorted(listed) if (paper := _served(fetch, rid, problems)) is not None}
+    found = set(papers)
     cells: dict[str, list[str]] = {}
     for rid in sorted(listed):
         cells.setdefault(cell_query(rid), []).append(rid)
@@ -109,6 +111,10 @@ def check(fetch: Fetch, listed: Withheld) -> Report:
                     continue
                 answered.add(fmt)
                 for rid in ids:
+                    if fmt == "jsonl" and rid not in papers:
+                        papers.update(
+                            (o["id"], o) for o in map(json.loads, text.splitlines()) if o["id"] == rid
+                        )
                     verdict = _in_export(fmt, text, rid)
                     if verdict is None:
                         continue
@@ -123,6 +129,7 @@ def check(fetch: Fetch, listed: Withheld) -> Report:
                     for fmt in FORMATS
                     if fmt in answered and fmt not in formats
                 ]
+        exports += _other_ids(fetch, version, papers, problems)
     problems += [
         f"{rid}: no index this instance loads holds it; check the id on the list"
         for rid in sorted(listed - found)
@@ -130,16 +137,44 @@ def check(fetch: Fetch, listed: Withheld) -> Report:
     return Report(tuple(problems), len(listed), versions, exports)
 
 
-def _served(fetch: Fetch, rid: str, problems: list[str]) -> bool:
-    """The served index's paper page and search hit for `rid`; whether the served index holds it."""
+def _other_ids(
+    fetch: Fetch, version: str, papers: Mapping[str, Mapping[str, Any]], problems: list[str]
+) -> int:
+    """TASK-067: a version may hold a listed paper under another id (an id it had before a rekey, or a
+    duplicate a later build merged), which the API withholds too (`takedowns.same_paper`). One JSONL export
+    per listed paper, of its title in every venue and year: a record under another id with the same title and
+    authors that carries an abstract is a problem. The number of exports read."""
+    n = 0
+    for rid, paper in sorted(papers.items()):
+        query = title_query(paper["title"], None)
+        if query is None:
+            continue  # reported by `_served` for the served index; nothing to search by
+        status, text = fetch(f"{API}/export", {"format": "jsonl", "q": query, "index_version": version})
+        n += 1
+        if status != 200:
+            problems.append(f"{rid}: the jsonl export of its title on index {version} answered {status}")
+            continue
+        same = (normalize(paper["title"]), paper["authors"])
+        problems += [
+            f"{o['id']}: the jsonl export of index {version} serves the abstract of {rid}'s paper under this "
+            "id; list it too"
+            for o in map(json.loads, text.splitlines())
+            if o["id"] != rid and o["abstract"] is not None and (normalize(o["title"]), o["authors"]) == same
+        ]
+    return n
+
+
+def _served(fetch: Fetch, rid: str, problems: list[str]) -> dict[str, Any] | None:
+    """The served index's paper page and search hit for `rid`; the paper when the served index holds it."""
     status, body = fetch(f"{API}/papers/{urllib.parse.quote(rid, safe=':')}", {})
     if status == 404:
-        return False
+        return None
     if status != 200:
         problems.append(f"{rid}: GET /papers answered {status}")
-        return False
+        return None
     page = json.loads(body)
-    paper, version = page["paper"], page["index_version"]
+    paper: dict[str, Any] = page["paper"]
+    version = page["index_version"]
     if paper["abstract"] is not None or any(c["field"] == "abstract" for c in paper["provenance"]):
         problems.append(f"{rid}: /papers on index {version} serves its abstract or an abstract claim")
     if page.get("abstract_withheld") is not True:
@@ -147,7 +182,7 @@ def _served(fetch: Fetch, rid: str, problems: list[str]) -> bool:
     query = title_query(paper["title"], rid)
     if query is None:
         problems.append(f"{rid}: its title gives no query to find its search hit by; check /search by hand")
-        return True
+        return paper
     status, body = fetch(f"{API}/papers/{urllib.parse.quote(rid, safe=':')}", {"q": query})
     lit = json.loads(body) if status == 200 else None
     if lit is None or lit["matched"] is not True:
@@ -159,7 +194,7 @@ def _served(fetch: Fetch, rid: str, problems: list[str]) -> bool:
     status, body = fetch(f"{API}/search", {"q": query, "limit": "200"})
     if status != 200:
         problems.append(f"{rid}: /search for it answered {status}")
-        return True
+        return paper
     hits = [h for h in json.loads(body)["hits"] if h["id"] == rid]
     if not hits:
         problems.append(f"{rid}: /search by its title didn't return it; check /search by hand")
@@ -170,7 +205,7 @@ def _served(fetch: Fetch, rid: str, problems: list[str]) -> bool:
             )
         if hit.get("abstract_withheld") is not True:
             problems.append(f"{rid}: its /search hit on index {version} doesn't mark the abstract withheld")
-    return True
+    return paper
 
 
 def _in_export(fmt: str, text: str, rid: str) -> str | None:

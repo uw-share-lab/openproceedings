@@ -61,16 +61,24 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import FrameType
 from typing import TYPE_CHECKING, Literal
+from weakref import WeakKeyDictionary
 
+from openproceedings import takedowns
 from openproceedings.api.config import INDEX_NAME
 from openproceedings.api.errors import ApiError, current_access, frames, reason_of
 from openproceedings.diagnostics import DiagnosticCode, OpenProceedingsError
 from openproceedings.engine.index import VERSION_NAME, IndexBuildError
-from openproceedings.ingest.snapshot import RecordFile, SnapshotError, indexed_snapshot
+from openproceedings.ingest.snapshot import (
+    RecordFile,
+    SnapshotError,
+    any_withheld,
+    indexed_snapshot,
+    merges_on_disk,
+)
 from openproceedings.logs import elapsed_ms
 from openproceedings.takedowns import NONE, TakedownError, Withheld, list_path
 from openproceedings.takedowns import load as load_takedowns
@@ -106,12 +114,26 @@ class Served:
     records: RecordFile
     coverage: CoverageResponse
     listed: Withheld = NONE  # the takedown list as this bundle's load read it (TASK-136)
+    # every (survivor, merged) pair of every snapshot on disk, read with the list (TASK-067); empty with no list
+    merges: tuple[tuple[str, str], ...] = ()
+    # records → the ids of theirs that are a listed paper under another id (weakly keyed: a pin the LRU drops
+    # takes its entry with it)
+    _aliases: WeakKeyDictionary[RecordFile, Withheld] = field(
+        default_factory=WeakKeyDictionary, compare=False, repr=False
+    )
 
     def withheld_in(self, records: RecordFile | None) -> Withheld:
         """The ids whose abstracts a response from the index whose snapshot records are `records` withholds:
-        the takedown list, plus the ids that snapshot itself withheld (so they are marked withheld, not
-        missing). `records` None (a pinned snapshot that can't be verified): the list alone."""
-        return self.listed if records is None else self.listed | records.withheld
+        the takedown list; each id of `records` that is a listed paper under another id (an older version's
+        id before a rekey, or a duplicate a later build merged: `takedowns.same_paper`, TASK-067); and the ids
+        that snapshot itself withheld (so they are marked withheld, not missing). `records` None (a pinned
+        snapshot that can't be verified): the list alone."""
+        if records is None:
+            return self.listed
+        aliases = self._aliases.get(records)
+        if aliases is None:  # once per bundle and version: one pass over its ids
+            aliases = self._aliases[records] = takedowns.same_paper(self.listed, self.merges, records.ids())
+        return self.listed | aliases | records.withheld
 
 
 type Opener = Callable[[Path], TantivyEngine]  # TantivyEngine itself; tests wrap it to slow a load down
@@ -242,9 +264,11 @@ class IndexState:
         opener: Opener,
         *,
         keep_pinned: int = 4,
+        list_required: bool = False,
         refusal_seconds: float = 300.0,
         verification_slots: int = 1,
         busy_retry_seconds: int = 5,
+        open_wait_seconds: float = 2.0,
         slow_verification_seconds: float = 5.0,
         max_verification_seconds: float = 30.0,
         clock: Callable[[], float] = time.monotonic,
@@ -252,6 +276,7 @@ class IndexState:
         self._data_dir = data_dir
         self._name = name
         self._opener = opener
+        self._list_required = list_required  # a missing takedown list fails every load (TASK-067)
         # the served index, its snapshot's records and its coverage: built and checked together at load and
         # swapped as one reference, so a request that read it keeps its own index's records and coverage
         # however many swaps happen before it finishes
@@ -271,8 +296,10 @@ class IndexState:
         self._cache_lock = threading.Lock()
         self._opening: dict[str, threading.Lock] = {}  # one open per version at a time (under _cache_lock)
         # one pinned open at a time, of any version: each re-hashes a whole index, so parallel opens of
-        # many versions would multiply that cost (a request waits here, then finds its version cached)
+        # many versions would multiply that cost (a request waits here, then finds its version cached), for
+        # at most `open_wait_seconds`, then 503 API_BUSY (TASK-067: `_open_turn`)
         self._open_slot = threading.Lock()
+        self._open_wait_seconds = open_wait_seconds
         self._listing_failed = False  # `available` logs a failing listing once per change of state
         self._listing_lock = threading.Lock()  # guards the flip of `_listing_failed` and its log line
         # cold position verification, on every engine this state opens: at most `verification_slots` at a
@@ -281,6 +308,24 @@ class IndexState:
         self._busy_retry_seconds = busy_retry_seconds
         self._slow_verification_ms = slow_verification_seconds * 1000
         self._max_verification_seconds = max_verification_seconds
+
+    @contextmanager
+    def _open_turn(self) -> Iterator[None]:
+        """Hold the one pinned-open slot for the block, waiting at most `open_wait_seconds` for it, else 503
+        `API_BUSY` with `Retry-After` (TASK-067: an unbounded wait let clients rotating through more versions
+        than the LRU holds queue every worker thread behind one multi-second open). The refusal is not
+        remembered: the version is opened on a later request."""
+        if not self._open_slot.acquire(timeout=self._open_wait_seconds):
+            raise ApiError(
+                DiagnosticCode.API_BUSY,
+                "Another index version is being opened, and this request's version must wait its turn. Try "
+                f"again in {self._busy_retry_seconds} s.",
+                headers={"Retry-After": str(self._busy_retry_seconds)},
+            )
+        try:
+            yield
+        finally:
+            self._open_slot.release()
 
     @contextmanager
     def verification_slot(self) -> Iterator[Callable[[], None]]:
@@ -385,7 +430,14 @@ class IndexState:
             try:
                 listed, present = load_takedowns(list_path(self._data_dir), required=True), True
             except TakedownError as e:
-                if e.reason != "takedowns_missing" or (served is not None and served.listed):
+                if (
+                    e.reason != "takedowns_missing"
+                    or self._list_required
+                    or (served is not None and served.listed)
+                    # any snapshot on disk withheld one: this deployment has takedowns (TASK-067; covers a
+                    # `current` rolled back to an index from before the first one)
+                    or any_withheld(self._data_dir / "snapshots")
+                ):
                     raise
                 listed, present = NONE, False
             path = index_path(self._data_dir, self._name)
@@ -395,8 +447,7 @@ class IndexState:
                     log.info("index_unchanged", extra={"index_version": kept})
                     return True
                 # the same index, another list: the same engine and records, coverage counted again
-                coverage = coverage_of(served.engine, served.records, listed)
-                self._served = Served(served.engine, served.records, coverage, listed)
+                self._served = self._bundle(served.engine, served.records, listed)
                 log.info(
                     "takedowns_reloaded",
                     extra={
@@ -416,7 +467,7 @@ class IndexState:
                     reason="takedowns_missing",
                 )
             # the manifest checked against the records and the index
-            coverage = coverage_of(engine, records, listed)
+            bundle = self._bundle(engine, records, listed)
         except Exception as e:  # the handling layer: logged once, and the service keeps what it has
             fields: dict[str, object] = {
                 "error": type(e).__name__,
@@ -437,7 +488,7 @@ class IndexState:
             if served is not None and listed is not None and listed != served.listed:
                 self._keep_index_take_list(served, listed, started)
             return False
-        self._served = Served(engine, records, coverage, listed)  # the atomic swap: one reference assignment
+        self._served = bundle  # the atomic swap: one reference assignment
         log.info(
             "index_loaded" if previous is None else "index_swapped",
             extra={
@@ -451,12 +502,22 @@ class IndexState:
         )
         return True
 
+    def _bundle(self, engine: TantivyEngine, records: RecordFile, listed: Withheld) -> Served:
+        """What a load serves: with a list, every snapshot's merges read beside it (a snapshot whose merges.csv
+        doesn't match its manifest fails the load: SnapshotError), and the coverage counted with every id the
+        list withholds from `records`, under the listed id or another."""
+        merges = merges_on_disk(self._data_dir / "snapshots") if listed else ()
+        aliases = takedowns.same_paper(listed, merges, records.ids())
+        served = Served(engine, records, coverage_of(engine, records, listed | aliases), listed, merges)
+        served._aliases[records] = aliases
+        return served
+
     def _keep_index_take_list(self, served: Served, listed: Withheld, started: float) -> None:
         """After a failed load whose list parsed: keep serving the index, but with the new list, the operator's
         latest instruction (so a takedown sent with a bad promotion still applies, and so does a lifting). One
         more line, `takedowns_reloaded`; `takedowns_reload_failed` if even that fails (the old bundle stays)."""
         try:
-            coverage = coverage_of(served.engine, served.records, listed)
+            bundle = self._bundle(served.engine, served.records, listed)
         except Exception as e:  # the handling layer: the old bundle (and its list) is kept
             fields: dict[str, object] = {
                 "index_version": served.engine.index_version,
@@ -467,7 +528,7 @@ class IndexState:
                 fields["reason"] = reason
             log.error("takedowns_reload_failed", extra=fields)
             return
-        self._served = Served(served.engine, served.records, coverage, listed)
+        self._served = bundle
         log.info(
             "takedowns_reloaded",
             extra={
@@ -557,7 +618,7 @@ class IndexState:
                 if until > self._clock():
                     return None
                 del self._records_refused[version]
-        with self._open_slot:  # a verifying pass over the snapshot: one open of any kind at a time
+        with self._open_turn():  # a verifying pass over the snapshot: one open of any kind at a time
             with self._cache_lock:  # a waiter finds what the open before it found: kept, or refused
                 found = self._pinned_records.get(version)
                 until = self._records_refused.get(version)
@@ -621,7 +682,7 @@ class IndexState:
 
     def _resolve_and_open(self, version: str) -> Pinned:
         """`open_pinned` with this state's opener, its one open slot and its verification gate."""
-        return open_pinned(self._data_dir, version, self._opener, slot=self._open_slot, gate=self._gated)
+        return open_pinned(self._data_dir, version, self._opener, slot=self._open_turn(), gate=self._gated)
 
     def load_in_background(self) -> threading.Thread:
         thread = threading.Thread(target=self.load, name="op-index-load", daemon=True)

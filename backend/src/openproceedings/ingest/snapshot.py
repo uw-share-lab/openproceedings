@@ -690,6 +690,60 @@ def iter_records(snapshot: Path) -> Iterator[PaperRecord]:
         raise SnapshotError(f"{snapshot.name}: merges.csv or conflicts.csv doesn't match its manifest")
 
 
+def merges_on_disk(snapshots: Path) -> tuple[tuple[str, str], ...]:
+    """Every (survivor, merged) pair the merges.csv of any snapshot under `snapshots` records, sorted: what
+    the takedown list follows to the other ids a paper has had (TASK-067, `takedowns.same_paper`). Each file
+    must hash to its manifest's `files` entry: SnapshotError otherwise (reason `merges_mismatch`), so a
+    tampered or half-copied snapshot fails a load rather than hiding a link. A directory being written (a dot
+    name: `.tmp-…`, `.lock`) or with no manifest.json is not a snapshot and is skipped."""
+    pairs: set[tuple[str, str]] = set()
+    try:
+        dirs = sorted(d for d in snapshots.iterdir() if not d.name.startswith(".") and d.is_dir())
+    except FileNotFoundError:
+        return ()
+    for snapshot in dirs:
+        try:
+            manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError):
+            raise SnapshotError(
+                f"{snapshot.name}'s manifest can't be read", reason="merges_mismatch"
+            ) from None
+        try:
+            blob = (snapshot / "merges.csv").read_bytes()
+            if not isinstance(manifest, dict) or manifest["files"]["merges.csv"] != _sha256(blob):
+                raise KeyError("merges.csv")
+            rows = csv.DictReader(io.StringIO(blob.decode("utf-8")))
+            pairs.update((row["survivor_id"], row["merged_id"]) for row in rows)
+        except (OSError, ValueError, KeyError, TypeError):
+            raise SnapshotError(
+                f"{snapshot.name}: merges.csv doesn't match its manifest", reason="merges_mismatch"
+            ) from None
+    return tuple(sorted(pairs))
+
+
+def any_withheld(snapshots: Path) -> bool:
+    """Whether any snapshot under `snapshots` withheld an abstract (its manifest names `withheld` ids): proof
+    this deployment has takedowns, so a missing takedown list is a failure, never "nothing listed" (TASK-067).
+    A manifest that can't be read counts as one that did (fail closed); a directory being written (a dot name)
+    or with no manifest.json is skipped."""
+    try:
+        dirs = [d for d in snapshots.iterdir() if not d.name.startswith(".") and d.is_dir()]
+    except FileNotFoundError:
+        return False
+    for snapshot in dirs:
+        try:
+            manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError):
+            return True
+        if not isinstance(manifest, dict) or manifest.get("withheld", []) != []:
+            return True
+    return False
+
+
 def load_records(snapshot: Path) -> dict[str, PaperRecord]:
     """A snapshot's records by id (all in memory; `iter_records` streams them)."""
     return {r.id: r for r in iter_records(snapshot)}
@@ -815,6 +869,10 @@ class RecordFile:
 
     def __len__(self) -> int:
         return len(self._at)
+
+    def ids(self) -> Iterable[str]:
+        """Every record id the snapshot holds, ascending."""
+        return self._at.keys()
 
     def __contains__(self, rid: object) -> bool:
         return rid in self._at

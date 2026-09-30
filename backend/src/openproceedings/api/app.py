@@ -77,9 +77,11 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
         config.index,
         opener,
         keep_pinned=config.pinned_indexes,
+        list_required=config.takedown_list_required,
         refusal_seconds=config.pinned_refusal_seconds,
         verification_slots=config.verification_slots,
         busy_retry_seconds=config.busy_retry_seconds,
+        open_wait_seconds=config.pinned_open_wait_seconds,
         slow_verification_seconds=config.slow_verification_seconds,
         max_verification_seconds=config.max_verification_seconds,
     )
