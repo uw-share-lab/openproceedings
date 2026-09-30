@@ -239,13 +239,13 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
 
 | Agent | What it's for |
 |---|---|
-| [`embedding-engineer`](agents/embedding-engineer.md) | Builds the openproceedings semantic layer (M5, deferred to phase 2 by decision-017 |
-| [`near-miss-evaluator`](agents/near-miss-evaluator.md) | Evaluates the openproceedings semantic layer (M5, deferred to phase 2 by decision-017 |
+| [`embedding-engineer`](agents/embedding-engineer.md) | Builds the openproceedings semantic layer (M5, deferred to phase 2 by decision-017, not v1 work) |
+| [`near-miss-evaluator`](agents/near-miss-evaluator.md) | Evaluates the openproceedings semantic layer (M5, deferred to phase 2 by decision-017, not a v1 gate) |
 
 
 | Skill | What it's for |
 |---|---|
-| [`specter2-embeddings`](skills/specter2-embeddings/SKILL.md) | The semantic-layer standard (spec 06, M5, deferred to phase 2 by decision-017 |
+| [`specter2-embeddings`](skills/specter2-embeddings/SKILL.md) | The semantic-layer standard (spec 06, M5, deferred to phase 2 by decision-017, not v1 work) |
 
 
 ## Evaluation & research (spec 07)

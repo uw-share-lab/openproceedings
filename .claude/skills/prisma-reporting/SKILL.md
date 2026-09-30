@@ -67,7 +67,7 @@ The full table is in `.claude/skills/search-records/SKILL.md`: `input`, `mode`, 
 `canonical_hash`, `identification_query`, `index_version`, `tokenizer_version`, `query_version`,
 `snapshot_hash`, `crawl_dates` (with `crawl_dates_kind`), `sources`, `identification_citable`, `searched_at`,
 `total`, `excluded` (with `unknown` itemised), `expansions`, `translations`, `warnings`, `ids` and `ids_hash`,
-`dedup`, and `semantic_version` if the near-miss panel was open. Replay status (HTTP 200): `reproduced` (same `index_version` and `query_version`, `ids_hash` and
+`dedup`, and `semantic_version` if the near-miss panel was open (phase 2, deferred; always null in v1). Replay status (HTTP 200): `reproduced` (same `index_version` and `query_version`, `ids_hash` and
 `excluded` match); `drifted` (only a different index or query version available, with the changed inputs
 named and `+added / −removed`; `+0 / −0` is "membership-identical"); `mismatch` (same versions, but
 `ids_hash` or `excluded` differ) is a bug that breaks guarantee 4. **Do not cite** a record in `mismatch`:
@@ -112,7 +112,7 @@ clause is `crawl_dates["*"]` from–to, both dates (a crawl spans days; spec 04)
 - The export `N1` line (`openproceedings <index_version> · query <canonical_hash> · exported <UTC date>`,
   plus ` · record <record_id> · searched <UTC date>` when exported from a search record) lets a screener
   trace any record back to its search.
-- Semantic near-misses (06 §Features item 5): papers found by *revising `q`* from a near-miss chip are
+- Semantic near-misses (06 §Features item 5; phase 2, deferred by decision-017): papers found by *revising `q`* from a near-miss chip are
   database records from the revised string. The revision belongs in the search-development narrative, not
   under "other methods". Only a paper added **outside** `q` counts as "records identified from other
   methods". Search records store `semantic_version` whenever the panel was open.

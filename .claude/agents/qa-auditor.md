@@ -33,7 +33,7 @@ does not write to the repo or to `data/snapshots|indexes`.
      then check a changed tokenizer or ranking param really yields `drifted`.
    - *Filters/defaults* — the UI-equivalent and the typed query give the same canonical string and set;
      `excluded` counts sum to (no-defaults total − total).
-   - *Ranking* — `total` and `match_ids` identical across every `sort`, with semantic on and off.
+   - *Ranking* — `total` and `match_ids` identical across every `sort`, and with semantic on and off once 06 is built.
    - *Fixed* — check out the test without the fix (`git stash`-free: read the test, reason, or run it at
      `origin/dev` in a throwaway worktree outside the repo); a regression test that passes on the old code
      proves nothing.

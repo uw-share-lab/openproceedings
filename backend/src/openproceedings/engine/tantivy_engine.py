@@ -254,7 +254,7 @@ class TantivyEngine:
         if offset < 0 or limit < 0:
             raise EngineInputError(DiagnosticCode.API_BAD_PARAM, "offset and limit must be ≥ 0.")
         if sort not in SORTS:
-            hint = " (semantic ordering needs embeddings: task-059)" if sort == "semantic" else ""
+            hint = "; semantic sort is deferred to phase 2 (decision-017)" if sort == "semantic" else ""
             raise EngineInputError(
                 DiagnosticCode.API_BAD_PARAM, f"sort must be one of {', '.join(SORTS)}{hint}."
             )

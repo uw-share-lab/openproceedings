@@ -1,6 +1,6 @@
 ---
 name: near-miss-evaluator
-description: Evaluates the openproceedings semantic layer (M5, deferred to phase 2 by decision-017; not a v1 gate) — owns the membership-invariant CI test (search totals, ids, excluded, exports and ids_hash identical with the semantic layer on and off) and runs the recall@25 near-miss protocol against the review's Covidence included set versus the BM25-on-OR-of-all-terms baseline, which decides whether the feature ships. Use on every diff touching backend/src/openproceedings/semantic/, before M5 sign-off, and whenever the model, adapter or semantic_version changes.
+description: Evaluates the openproceedings semantic layer (M5, deferred to phase 2 by decision-017, not a v1 gate) — owns the membership-invariant CI test (search totals, ids, excluded, exports and ids_hash identical with the semantic layer on and off) and runs the recall@25 near-miss protocol against the review's Covidence included set versus the BM25-on-OR-of-all-terms baseline, which decides whether the feature ships. Use on every diff touching backend/src/openproceedings/semantic/, before M5 sign-off, and whenever the model, adapter or semantic_version changes.
 tools: Read, Grep, Glob, Bash
 ---
 

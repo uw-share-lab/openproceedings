@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-29 23:55'
-updated_date: '2026-09-30 00:01'
+updated_date: '2026-09-30 00:10'
 labels:
   - docs
   - scope
@@ -35,4 +35,6 @@ Backlog: TASK-058..062 and TASK-084 labelled deferred with a note citing decisio
 Docs: spec 00 (out-of-scope, architecture label, stack row, 06 row, M5 row), 06 status line, 07 §A semantic invariant and §F marked not v1 gates, 03 (sort=semantic refused in v1), 04 (/near-misses, semantic_version always null in v1), 08 (semantic/, op embed, op eval near-miss), README status, CLAUDE.md layout, embedding-engineer / near-miss-evaluator / specter2-embeddings / fastapi-conventions / api-contract / repo-conventions, roster area renamed and .claude/README.md regenerated. Field-weighted BM25 (spec 03, task-025, M2) is unaffected.
 Merged code left as is: records.py semantic_version (always None), cli.py PLANNED embed + PLANNED_EVALS near-miss, tantivy_engine.py sort=semantic hint (task-059), search-state.ts comment, schema.ts/openapi semantic_version.
 make lint, make tooling and make mutate-changed pass.
+
+Review round 1 (2026-09-29): roster descriptions use a comma (roster_index cuts at the first ";"); decision-017 separates the owner's decision (boolean-only v1; defer, not delete) from TASK-131's rationale and marks "what would bring it back" as proposed, pending owner confirmation; the refusal bullet corrected (HTTP: pydantic Sort Literal, 422 API_BAD_PARAM, no hint; CLI: argparse usage error; engine hint only on direct calls). Code: tantivy_engine.py hint now "semantic sort is deferred to phase 2 (decision-017)"; cli.py DEFERRED_TASKS makes op embed and op eval near-miss say "deferred to phase 2 (decision-017)" (tests in test_cli.py, test_rank.py). search-records, prisma-reporting, qa-auditor, property-testing, field-weighted-bm25, search-state.ts comment and spec 03 updated. make test (5327 passed, 2 skipped; vitest 2582), make lint, make tooling green.
 <!-- SECTION:NOTES:END -->

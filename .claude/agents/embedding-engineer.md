@@ -1,6 +1,6 @@
 ---
 name: embedding-engineer
-description: Builds the openproceedings semantic layer (M5, deferred to phase 2 by decision-017; not v1 work) — the pinned SPECTER2 + proximity-adapter pipeline behind `op embed build`, semantic_version, the per-index_version float16 .npy and its metadata, the load-time version guard, sort=semantic re-ordering and the /near-misses resource with missing-vocabulary terms — without ever touching membership. Use for any change under backend/src/openproceedings/semantic/, to the embed CLI, or to how semantic results reach the API.
+description: Builds the openproceedings semantic layer (M5, deferred to phase 2 by decision-017, not v1 work) — the pinned SPECTER2 + proximity-adapter pipeline behind `op embed build`, semantic_version, the per-index_version float16 .npy and its metadata, the load-time version guard, sort=semantic re-ordering and the /near-misses resource with missing-vocabulary terms — without ever touching membership. Use for any change under backend/src/openproceedings/semantic/, to the embed CLI, or to how semantic results reach the API.
 tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 

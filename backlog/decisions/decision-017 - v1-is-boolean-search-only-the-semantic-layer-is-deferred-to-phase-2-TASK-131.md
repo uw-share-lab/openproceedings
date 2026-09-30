@@ -13,7 +13,9 @@ the recall@25 evaluation; TASK-058 to 062 and TASK-084) between the full crawl (
 release (M6). Usability round 2 (TASK-068) was wired to depend on the near-miss panel (TASK-062), and the
 public launch (TASK-069) depends on round 2, so the release waited on the semantic layer.
 
-The project owner decided on 2026-09-29 that v1 only needs the Boolean search. The reasons:
+The project owner decided on 2026-09-29 that v1 only needs the Boolean search, and chose to defer the
+semantic layer rather than delete it. The owner's decision is those two points. The three reasons below are
+the rationale recorded by TASK-131, not the owner's words:
 - **Nothing in the Boolean system depends on it.** Spec 00 guarantee 5 (ranking never changes membership)
   means embeddings can only re-order the matched set or suggest papers in a separate panel. `total`,
   `excluded`, exports, search records and `ids_hash` come from the lexical set alone (spec 06 §Purpose,
@@ -58,12 +60,15 @@ the path to the v1 release (M6) depends on it.
 - **Docs:** spec 00 (architecture, stack, milestones), spec 06's status line, spec 07 §A and §F, spec 03,
   04 and 08 where they list semantic surface, README's status, and the `embedding-engineer`,
   `near-miss-evaluator` and `specter2-embeddings` roster entries say deferred and link this record.
-- **Already merged, left as is:** a `semantic_version: null` field on search records, `op embed` and `op
-  eval near-miss` listed as planned CLI commands (`cli.py` `PLANNED`, `PLANNED_EVALS`), and `sort=semantic`
-  refused with 422 `API_BAD_PARAM` and a hint naming task-059 (`engine/tantivy_engine.py`). They describe
-  the deferred work accurately and cost nothing to keep.
+- **Already merged, left as is:** a `semantic_version: null` field on search records, and `op embed` and
+  `op eval near-miss` as stub commands (`cli.py` `PLANNED`, `PLANNED_EVALS`); TASK-131 changed their
+  messages to "deferred to phase 2 (decision-017)" (`DEFERRED_TASKS`). `sort=semantic` is refused before
+  any semantic code could run: over HTTP, the API's closed `Sort` Literal (`api/models.py`) rejects it with
+  422 `API_BAD_PARAM` and pydantic's message; `op search --sort semantic` is an argparse usage error (exit
+  2). Only a direct engine call reaches `check_page` in `engine/tantivy_engine.py`, whose hint now says
+  "semantic sort is deferred to phase 2 (decision-017)". None of this costs anything to keep.
 
-**What would bring it back:** a v1 release (M6) is out, and either reviewers in usability testing report
+**What would bring it back** (proposed; pending owner confirmation): a v1 release (M6) is out, and either reviewers in usability testing report
 missing vocabulary as a real problem that the Boolean tools (wildcards, the concept-group builder, syntax
 help) don't solve, or a review team asks for query-revision suggestions. Resuming means a new decision that
 supersedes this one, re-checking spec 06 against the as-built API, and starting at TASK-058. The recall@25

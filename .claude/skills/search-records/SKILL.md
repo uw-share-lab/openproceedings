@@ -22,7 +22,7 @@ A search record is the citable artifact of a review search: "we ran *this* canon
 | `expansions`, `translations`, `warnings` | how the query was interpreted (PRISMA-S) |
 | `ids` (sorted) and `ids_hash` | membership, for replay and for the diff; see below |
 | `dedup` (`merged` and the manifest's not-merged conflicts by resolution: `ambiguous_not_merged`, and from body v2 `track_not_merged`, `venue_year_not_merged`) | the PRISMA-S item 16 deduplication-process statement (corpus-wide ingest merges, never a per-search removal count; `prisma-reporting`) |
-| `semantic_version` | optional. Set only if the near-miss panel was open when the record was made (spec 06). **Never** an input to `ids_hash`. |
+| `semantic_version` | always present; **null in v1**, because spec 06 is deferred to phase 2 (decision-017). Once 06 is built, set only if the near-miss panel was open when the record was made. **Never** an input to `ids_hash`. |
 | `schema_version`, `ranking_params` | as built (task-037): the index's other two `index_version` inputs, so a drifted replay names a method change even after the pinned index is deleted |
 
 Store the full sorted id list as well as the hash, compressed if needed. The diff cannot say *which*
