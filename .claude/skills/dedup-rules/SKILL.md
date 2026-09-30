@@ -1,6 +1,6 @@
 ---
 name: dedup-rules
-description: The deduplication standard for ingestion — the merge order (identical id, then the OpenReview forum link a PMLR listing carries, then normalized title within the same venue and year), the hard never-merge rules including the venuetriage (title, "") no-year over-merge trap, how merged fields and claims combine, and the merges.csv / conflicts.csv audit formats and property tests. Use when writing or reviewing backend/src/openproceedings/ingest/dedup.py, reading merges.csv or conflicts.csv, or investigating a paper that vanished or doubled between snapshots.
+description: The deduplication standard for ingestion — the merge order (identical id, then the OpenReview forum link a PMLR listing carries, then normalized title within the same venue and year), the hard never-merge rules including the venuetriage (title, "") no-year over-merge trap, how merged fields and claims combine, the post-dedup reconcile that makes an OpenReview-accepted paper the crawled proceedings don't list `unknown`, and the merges.csv / conflicts.csv audit formats and property tests. Use when writing or reviewing backend/src/openproceedings/ingest/dedup.py or reconcile.py, reading merges.csv or conflicts.csv, or investigating a paper that vanished or doubled between snapshots.
 ---
 
 # Dedup rules (spec 01 §Pipeline 4)
@@ -113,6 +113,45 @@ safe direction.
   merge key.
 - Iterate inputs in sorted-id order so the output doesn't depend on crawl order.
 
+## Reconcile: acceptance the proceedings don't list (TASK-072, decision-005; `ingest/reconcile.py`)
+After dedup, `op snapshot build` reconciles OpenReview acceptance against the crawled proceedings. Dedup can't:
+it needs to know which listings were crawled, and whether completely.
+- **Crawled** (`reconcile.crawled`, from the listing reports): a (proceedings source, venue, year) whose every
+  listing is complete: it states a count (`stated`) and matched it (`count_ok`), every entry became a record (a
+  repeated entry, `skipped.duplicate`, aside), and it names no volume left uncrawled (`see_also`). One incomplete
+  listing and the whole venue-year is left alone (logged as `proceedings_reconcile_skipped`): a skipped entry or
+  an unfollowed volume may hold the paper, and with no stated count nothing says the page showed every entry
+  (NeurIPS 2021's D&B page states none, so NeurIPS 2021 is not judged).
+- **Covered tracks**: `main`, `datasets_benchmarks` or `position` only, and only those the crawled listings'
+  records hold: a listing's own track claim, or, for a listing that can't say (`unknown`: PMLR v235/v267 mix main
+  and position papers), the track of the record it merged into. A track with no listing record (not published
+  yet) is never judged.
+- **Unlisted**: status won by an OpenReview `accepted` claim, in a covered venue-year and track, not a listing
+  (no proceedings claim, no proceedings id), and sharing no title key and no forum id (own or linked) with any
+  listing of the venue-year. A record that shares one but stayed apart may be the listed paper: it keeps its
+  status, and dedup's not-merged row already names it (`shares_listing` in the log line).
+- An unlisted record gains an **absence claim** per crawled source: `status=unknown` from that proceedings
+  source, the listing that holds the track as `url`, that listing's index-page fetch as `fetched_at`
+  (`ListingReport.fetched[0]`), evidence starting `not listed:` (`dedup.is_absence`; the prefix is reserved, see
+  the record-schema skill). The proceedings outrank OpenReview for status, so `resolve` gives `unknown` and the
+  `precedence:<source>` conflicts.csv row; the OpenReview claim stays. An absence claim is **not a listing**:
+  dedup leaves it out of a cluster's sources (and merges.csv's `sources`), so the record never looks listed and
+  a second dedup changes nothing. Reconcile strips absence claims before it judges, so it is idempotent, and a
+  claim a later crawl no longer supports disappears.
+- Merges are never changed; conflicts only gain the reconciled records' status rows.
+- Reconcile reads dedup's own rules, never copies: `dedup.PROCEEDINGS_SOURCES`, `dedup.PROCEEDINGS_TRACKS` and
+  `dedup.is_listing`.
+- **Known limit: a paper moved between years.** Reconcile compares within one venue-year, like dedup. A paper
+  whose OpenReview note is in one year and whose listing is in another (a deferred camera-ready) is `unknown` in
+  its OpenReview year, and its listing stays a separate record in the other year. No rule links them; a
+  reviewer reading the `precedence:` row finds it by title.
+- **Not enforced** (decision-005's track row, "proceedings only for venue-years not on OpenReview"): see
+  decision-005 §Track in an OpenReview venue-year.
+- Properties (`backend/tests/unit/ingest/test_reconcile.py`): every reconciled record is what its claims
+  resolve to; dedup on the output changes no record, merge or row; reconcile is idempotent; only unlisted
+  OpenReview acceptances change, only to `unknown`, only by adding absence claims, only where a complete crawl
+  covers the venue-year.
+
 ## Audit files (in the snapshot directory)
 `merges.csv`: `survivor_id,merged_id,rule,key,venue,year,sources`, where `rule` is `forum_id`,
 `native_id` (the same proceedings id), `forum_link` or `title_venue_year`, and `key` is the forum id, the
@@ -124,7 +163,8 @@ following the `forum_link` and `title_venue_year` rows from any `merged_id` reac
 (`snapshot.with_crawl_conflicts` follows them the same way).
 
 `conflicts.csv`: `id,field,value_a,source_a,value_b,source_b,resolution`, where `resolution` is
-`precedence:<source>` (the winner is `value_a`), `newest:<source>` or `tie:<source>` (one source, two
+`precedence:<source>` (the winner is `value_a`; a reconciled record's is `status`, `unknown` from the proceedings
+source against OpenReview's `accepted`), `newest:<source>` or `tie:<source>` (one source, two
 values; the kept one is `value_a`), `ambiguous_not_merged`, `track_not_merged`,
 `venue_year_not_merged`, or `unresolved:openreview_v1` (not dedup's: a v1 crawl found one note's own evidence
 disagreeing, such as a withdrawn invitation and an accepted `content.venue`; the record holds `unknown` for that

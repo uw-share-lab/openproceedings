@@ -230,7 +230,9 @@ def record_from_claims(record_id: str, claims: list[Claim]) -> PaperRecord:
 
 @dataclass(kw_only=False)
 class ListingReport(Report):
-    """One proceedings listing's crawl, for the snapshot manifest's `sources` (and the ingest command's output)."""
+    """One proceedings listing's crawl, for the snapshot manifest's `sources` (and the ingest command's output).
+    Every miner appends the index page's fetch first, so `fetched[0]` is when the listing was read (reconcile's
+    absence claims carry it)."""
 
     source: str  # iclr_archive | neurips_proceedings | pmlr
     venue: str

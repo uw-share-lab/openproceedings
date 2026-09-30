@@ -597,3 +597,13 @@ def test_a_listing_page_past_the_html_budget_names_its_url_and_how_to_recover(
     [line] = [e for e in map(json.loads, (x for x in err.splitlines() if x.startswith("{")))
               if e.get("event") == "cli_refused"]  # fmt: skip
     assert (line["level"], line["reason"], line["error"]) == ("WARNING", "html_budget", "HTMLBudgetError")
+
+
+def test_the_reports_first_fetch_is_the_index_page(tmp_path: Path) -> None:
+    """`ListingReport.fetched[0]` is the listing's own read (reconcile dates its absence claims by it)."""
+    cache = cache_of(tmp_path)
+    seed_fixture(cache, "neurips", Y13, at=T1)  # the index page read after its paper pages
+    seed_fixture(cache, "neurips", ABS13, edit=matching("Synthetic title 1"), at=T0)
+    seed(cache, "neurips", neurips_abs(2013, B13), "", status=404, at=T0)
+    [report] = mine(cache, 2013).reports
+    assert report.fetched[0] == T1 and T0 in report.fetched[1:]

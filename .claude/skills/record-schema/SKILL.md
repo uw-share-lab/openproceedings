@@ -45,7 +45,9 @@ forum the page links.
 ## Provenance claims
 One `Claim` per (field, source): `field`, `value`, `source` (`openreview_v2`, `openreview_v1`,
 `iclr_archive`, `neurips_proceedings`, `pmlr`, `ris`), `url`, `fetched_at` (**from the cache entry**, never `now()` at
-build time), `evidence` (for example `venueid=ICLR.cc/2024/Conference`, or a decision note id). Claims are
+build time), `evidence` (for example `venueid=ICLR.cc/2024/Conference`, or a decision note id). Evidence starting
+`not listed:` is **reserved** for reconcile's absence claims (`dedup.is_absence`, decision-005): no miner or
+importer may write it, or its claim would stop counting as a listing. Claims are
 frozen, with scalar fields only, so they are hashable and set-comparable. That shape follows scholarmend,
 where a mutable claim caused a blocking defect.
 

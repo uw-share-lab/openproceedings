@@ -15,7 +15,7 @@ from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources.html import MAX_DEPTH, HTMLBudgetError
 from openproceedings.ingest.sources.http import canonical
 
-from tests.unit.ingest.proceedings_helpers import fetcher, fixture_text, fixture_url, seed, seed_fixture
+from tests.unit.ingest.proceedings_helpers import T0, fetcher, fixture_text, fixture_url, seed, seed_fixture
 
 FIXTURES = {
     2014: "iclr/2014/conference-index.json",
@@ -200,3 +200,11 @@ def test_an_index_page_past_the_html_budget_names_its_url_and_how_to_recover(
     [line] = [e for e in map(json.loads, (x for x in err.splitlines() if x.startswith("{")))
               if e.get("event") == "cli_refused"]  # fmt: skip
     assert (line["level"], line["reason"], line["error"]) == ("WARNING", "html_budget", "HTMLBudgetError")
+
+
+def test_the_reports_first_fetch_is_the_index_page(tmp_path: Path) -> None:
+    """`ListingReport.fetched[0]` is the archive page's read (reconcile dates its absence claims by it); the
+    archive has no paper pages, so it is the only fetch."""
+    seed_year(tmp_path, 2014)
+    [report] = mine(tmp_path, 2014).reports
+    assert report.fetched == [T0]

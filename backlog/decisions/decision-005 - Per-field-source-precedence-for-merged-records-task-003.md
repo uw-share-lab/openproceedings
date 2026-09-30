@@ -24,7 +24,7 @@ unlisted source never answers it. All claims are kept, including the losing ones
 | Field | Precedence (best first) |
 |---|---|
 | `title`, `abstract`, `authors` | `openreview_v2`, `openreview_v1` (the venues' own platform, current first), then `iclr_archive`, `neurips_proceedings`, `pmlr` (for papers or years not on OpenReview, e.g. ICML before its move), then `ris` |
-| `status` | Where the venue-year's official proceedings (`iclr_archive`, `neurips_proceedings`, `pmlr`) are published and crawled, they decide acceptance: listed → `accepted`; OpenReview says accepted but not listed → `status=unknown` plus a `conflicts.csv` row (never silently accepted or rejected; `unknown` is itemised in exclusion counts). Otherwise `openreview_v2`, `openreview_v1` via `content.venueid` only (never an invitation); `ris` only through its claims (spec 01) |
+| `status` | Where the venue-year's official proceedings (`iclr_archive`, `neurips_proceedings`, `pmlr`) are published and crawled, they decide acceptance: listed → `accepted`; OpenReview says accepted but not listed → `status=unknown` plus a `conflicts.csv` row (the reconcile step after dedup, task-072, below) (never silently accepted or rejected; `unknown` is itemised in exclusion counts). Otherwise `openreview_v2`, `openreview_v1` via `content.venueid` only (never an invitation); `ris` only through its claims (spec 01) |
 | `track` | `openreview_v2`, `openreview_v1` via `content.venueid`; proceedings only for venue-years not on OpenReview; `ris` last (its track comes from those same claims, via scholarmend; in M2 it is the only source) |
 | `venue`, `year` | the source whose crawl scope defined the record, and it must agree with the venueid; a disagreement is a `conflicts.csv` row, never silently resolved. As built, venue and year are part of every merge key, so they can't differ inside a merge; a forum id seen in two venue-years is a `venue_year_not_merged` row and the records stay apart |
 
@@ -39,9 +39,34 @@ re-crawl), the newest `fetched_at` replaces the older claim, which is then writt
 `newest:<source>` row (or `tie:<source>` for an exact tie) when its value differs. "All claims are kept"
 means every *source's* claim, including the ones precedence overruled.
 
-**Not yet built:** "OpenReview says accepted but the crawled proceedings don't list it → `unknown` plus a
-`conflicts.csv` row" needs the set of crawled proceedings venue-years, which only the proceedings
-crawlers produce. It is a reconcile step after dedup: task-072 (M4, blocked by 052/053).
+**Built (task-072, 2026-09-29): the reconcile step after dedup** (`ingest/reconcile.py`; dedup-rules skill
+§Reconcile). "Published and crawled" means a (proceedings source, venue, year) whose every crawled listing is
+complete: it states a count and the count matched, every entry became a record, and it names no volume left
+uncrawled (`see_also`). The ICLR archive (2014–2016) counts as
+official proceedings, as this table names it; on the 2026-09-29 crawl it changes nothing, since OpenReview
+gives no accepted ICLR 2014–2016 conference paper. The rule applies per track: only a track the crawled
+listings hold (`main`, `datasets_benchmarks`, `position`; a mixed PMLR volume's own `unknown` covers the tracks
+its listings merged into). "Not listed" means merged with no listing and sharing no title key or forum id
+with one; a record that shares one but stayed apart (ambiguous) keeps its status and its dedup row. The
+derived `unknown` is a claim: `status=unknown` from the proceedings source, with the listing URL, that listing's
+index-page fetch time and evidence `not listed: …` (a prefix reserved for it), which outranks OpenReview here, so the record equals what its
+claims resolve to and the `precedence:<source>` row is the `conflicts.csv` row. That absence claim names no
+paper, so dedup never counts it as a listing. The real-data check (4 records made `unknown` on snapshot
+`2026-09-29-4cd2bba17cad`, built after task-128; 3 of them listed under another title) is
+`docs/results/2026-09-29-reconcile-real-data.md`.
+
+**Track in an OpenReview venue-year (not enforced, open; task-072 measurement).** The `track` row says the
+proceedings answer only for venue-years not on OpenReview, but `PRECEDENCE` lets a listing that merged with no
+OpenReview note answer its own track in an OpenReview venue-year. On the 2026-09-29 crawl
+(`docs/results/2026-09-29-reconcile-real-data.md`) that is 149 records:
+ICLR 2014 (1: an accepted archive paper whose OpenReview note didn't merge) and 2016 (80: OpenReview holds only
+ICLR 2016's workshop track), NeurIPS 2021–2025 main and D&B (4: three are the same paper as an OpenReview note under
+another title, and one shares its title with two OpenReview notes; before task-128 fixed `html.py`'s charref
+handling there were 151 records, two more listings whose mangled titles kept them apart), and NeurIPS 2025's 64 `other` (Creative AI) listings. Taking the track from nowhere (`unknown`)
+would drop ICLR 2016 main from 80 to 0 and ICLR 2014 main to 34 of 35 (−2.9%, outside the M4 gate's ±1%), so
+it was not enforced; the review lead decides whether "on OpenReview" means the venue-year's track, and what a
+listing's track becomes when OpenReview holds the track but not the paper. Deciding and enforcing this row is
+task-130; the charref fix is task-128.
 
 ## Consequences
 

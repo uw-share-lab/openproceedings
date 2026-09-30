@@ -56,9 +56,12 @@ PRECEDENCE: dict[ClaimField, tuple[Source, ...]] = {
 # Cross-source disagreements written to conflicts.csv. A title counts only when its dedup key differs
 # (decision-005); venue and year can't differ inside a merge (they're part of every merge key).
 CONFLICT_FIELDS: tuple[ClaimField, ...] = ("title", "track", "status")
-_PROCEEDINGS_SOURCES = frozenset({"iclr_archive", "neurips_proceedings", "pmlr"})
-_PROCEEDINGS_TRACKS = frozenset({"main", "datasets_benchmarks", "position"})  # proceedings never host others
+# the official proceedings sources, and the only tracks they host (reconcile.py reads both too)
+PROCEEDINGS_SOURCES: frozenset[str] = frozenset({"iclr_archive", "neurips_proceedings", "pmlr"})
+PROCEEDINGS_TRACKS: frozenset[str] = frozenset({"main", "datasets_benchmarks", "position"})
 _URL_FIELDS = ("urls.proceedings", "urls.pdf")
+ABSENT = "unknown"  # the status a crawled listing gives a paper it doesn't hold (`is_absence`)
+ABSENT_EVIDENCE = "not listed:"  # how an absence claim's evidence starts; no miner writes it
 # A listing names only accepted papers; `unknown` may still be one (unresolved v1 evidence), so it stays a rival.
 _LISTABLE_STATUSES = frozenset({"accepted", "unknown"})
 
@@ -114,8 +117,19 @@ def _exact(v: object) -> str:
     return json.dumps(v, sort_keys=True, ensure_ascii=False)
 
 
+def is_absence(claim: Claim) -> bool:
+    """Reconcile's statement that a crawled listing doesn't hold the paper (decision-005, TASK-072): a
+    proceedings source's `status=unknown` claim whose evidence starts `not listed:`. It names no paper, so it
+    gives the record no proceedings source and never makes it a listing."""
+    return (
+        claim.field == "status" and claim.source in PROCEEDINGS_SOURCES and claim.value == ABSENT
+        and (claim.evidence or "").startswith(ABSENT_EVIDENCE)
+    )  # fmt: skip
+
+
 def _sources(records: Iterable[PaperRecord]) -> frozenset[str]:
-    return frozenset(c.source for r in records for c in r.provenance)
+    """The sources that hold the records' paper (an absence claim holds none), for merging and merges.csv."""
+    return frozenset(c.source for r in records for c in r.provenance if not is_absence(c))
 
 
 def _one_per_field_and_source(record_id: str, claims: Iterable[Claim]) -> tuple[list[Claim], list[Conflict]]:
@@ -221,7 +235,7 @@ class _Cluster:
     forum_ids: frozenset[str]
 
 
-def _url_natives(claims: Iterable[Claim]) -> set[str]:
+def proceedings_ids(claims: Iterable[Claim]) -> set[str]:
     found: set[str] = set()
     for claim in claims:
         if claim.field not in _URL_FIELDS or not isinstance(claim.value, str):
@@ -235,7 +249,7 @@ def _url_natives(claims: Iterable[Claim]) -> set[str]:
     return found
 
 
-def _forum_ids(record: PaperRecord) -> frozenset[str]:
+def forum_ids(record: PaperRecord) -> frozenset[str]:
     """The record's own forum id and every forum id its kept `urls.forum` claims name."""
     linked = {
         f for c in record.provenance
@@ -246,17 +260,27 @@ def _forum_ids(record: PaperRecord) -> frozenset[str]:
     return frozenset(linked)
 
 
+def _listed(pids: Iterable[str], sources: Iterable[str]) -> bool:
+    return bool(set(pids) or PROCEEDINGS_SOURCES & set(sources))
+
+
+def is_listing(record: PaperRecord) -> bool:
+    """A listing, as dedup judges one: a proceedings source's claim (an absence claim is none), or a
+    proceedings id in a `urls.proceedings`/`urls.pdf` claim. Reconcile judges by the same rule."""
+    return _listed(proceedings_ids(record.provenance), _sources([record]))
+
+
 def _cluster(members: Sequence[PaperRecord], rid: str | None = None) -> _Cluster:
     rid = rid or members[0].id
     summary, _ = resolve(rid, [c for r in members for c in r.provenance])  # rows come from the final resolve
     claims = summary.provenance  # kept claims only: the output record carries nothing else
-    pids = _url_natives(claims)
+    pids = proceedings_ids(claims)
     sources = _sources(members)
     return _Cluster(
         id=rid, members=tuple(members), summary=summary, sources=sources,
         keys=frozenset(k for c in summary.provenance if c.field == "title" and (k := title_key(_text(c.value)))),
-        proceedings_ids=frozenset(pids), listed=bool(pids or sources & _PROCEEDINGS_SOURCES),
-        forum_ids=_forum_ids(summary),
+        proceedings_ids=frozenset(pids), listed=_listed(pids, sources),
+        forum_ids=forum_ids(summary),
     )  # fmt: skip
 
 
@@ -271,7 +295,7 @@ def _mergeable(group: Sequence[_Cluster], *, linked: bool = False) -> str | None
     if len(frozenset().union(*(c.proceedings_ids for c in group))) > 1:
         return "ambiguous_not_merged"  # two different proceedings papers
     if any(c.listed for c in group) and any(
-        c.summary.track not in _PROCEEDINGS_TRACKS and not (c.listed and c.summary.track == "unknown")
+        c.summary.track not in PROCEEDINGS_TRACKS and not (c.listed and c.summary.track == "unknown")
         for c in group
     ):  # only a listing's own `unknown` (a PMLR volume holding main and position papers) is let through
         return "track_not_merged"  # the proceedings never host it (an unknown track waits for evidence)
@@ -286,7 +310,7 @@ def _not_the_listed_paper(c: _Cluster) -> str | None:
     is not the listed one, though it may merge alone (decision-005: the proceedings then decide its status)."""
     if c.listed:
         return None
-    if c.summary.track not in _PROCEEDINGS_TRACKS and c.summary.track != "unknown":
+    if c.summary.track not in PROCEEDINGS_TRACKS and c.summary.track != "unknown":
         return "track_not_merged"
     if c.summary.status not in _LISTABLE_STATUSES:
         return "ambiguous_not_merged"  # another candidate for the listing took it
@@ -328,7 +352,7 @@ def dedup(records: Iterable[PaperRecord]) -> DedupResult:
         again, _ = resolve(r.id, r.provenance)
         if again != r:
             raise ValueError(f"{r.id}: fields don't match its own claims; dedup would silently change it")
-        if r.forum_id is None and r.native not in _url_natives(r.provenance):
+        if r.forum_id is None and r.native not in proceedings_ids(r.provenance):
             raise ValueError(f"{r.id}: a proceedings record must name itself in a urls.proceedings/pdf claim")
 
     # Step 1: identical id: the same forum id in the same venue and year, or the same proceedings id.

@@ -5,7 +5,9 @@
 `<cache>/openreview/{v2,v1}/` (`sources/openreview_v2.py`, `sources/openreview_v1.py`); `op ingest iclr|neurips|pmlr`
 cache proceedings pages (`sources/crawl.py`). `build` imports everything cached (the RIS files, each finished
 OpenReview crawl replayed from its cached responses, and each finished ICLR/NeurIPS/PMLR crawl re-mined from its cached
-pages), dedups, adds the conflicts a crawl found inside one source (`with_crawl_conflicts`), and writes
+pages), dedups, reconciles OpenReview acceptance against the crawled proceedings (`reconcile.py`: an
+OpenReview-accepted paper a complete listing doesn't hold becomes `unknown`, decision-005), adds the conflicts a
+crawl found inside one source (`with_crawl_conflicts`), and writes
 `<snapshots>/<crawl date>-<shorthash>/` with `records.jsonl`, `manifest.json`, `merges.csv` and
 `conflicts.csv`. It never fetches, so it works offline. It also reports (and logs) each venue-year status
 its records hold that their sources can't supply (`status_check`, TASK-109), without changing the snapshot.
@@ -43,6 +45,7 @@ from pydantic import ValidationError
 
 from openproceedings import __version__, storage
 from openproceedings.ingest.dedup import Conflict, DedupResult, Merge, dedup
+from openproceedings.ingest.reconcile import crawled, reconcile
 from openproceedings.ingest.record import RECORD_SCHEMA_VERSION, PaperRecord
 from openproceedings.ingest.ris import ImportReport, import_ris
 from openproceedings.ingest.sources.common import Report, sources_manifest
@@ -419,7 +422,7 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
     """Import, dedup and write a new immutable snapshot (or report the one that already has this hash)."""
     began = time.monotonic()
     records, reports, crawls = load_sources(cache)
-    result = with_crawl_conflicts(dedup(records), crawls)
+    result = with_crawl_conflicts(reconcile(dedup(records), crawled(crawls)).result, crawls)
     unexpected = tuple(unexpected_statuses(result.records))
     files = render(result, reports, built_at or datetime.now(UTC), crawls)
     manifest = json.loads(files["manifest.json"])
