@@ -12,7 +12,7 @@ from openproceedings.ingest.reconcile import Crawl, Key, Listing, crawled, recon
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources.common import ListingReport
 
-from tests.unit.ingest.test_dedup import T0, T1, T2, H, nips, paper
+from tests.unit.ingest.test_dedup import T0, T1, T2, H, archive, nips, paper
 from tests.unit.ingest.test_dedup_props import pools, records
 
 LISTING = "https://proceedings.neurips.cc/paper_files/paper/2024"
@@ -192,6 +192,17 @@ def test_an_absence_claim_that_no_longer_holds_is_dropped() -> None:
     again = reconcile(dedup(once.records), {})  # a later build without the crawl
     assert again.result.records == dedup(xs).records
     assert not any(c.id == NOTE and c.field == "status" for c in again.result.conflicts)
+
+
+def test_iclr_2016_main_keeps_its_archive_track_and_status_through_reconcile() -> None:
+    # decision-005 §Track, per track (TASK-130): OpenReview holds only ICLR 2016's workshop track
+    ws = dict(venue="ICLR", year=2016, source="openreview_v1", track="workshop", status="unknown")
+    xs = [archive(2016), paper("AbCd1234", **ws), paper("EfGh5678", "A workshop paper", **ws)]
+    crawls = crawl("iclr_archive", "ICLR", 2016, tracks=("main",))
+    once = run(xs, crawls)
+    assert once == dedup(xs)
+    assert by_id(once)[xs[0].id].track == "main" and by_id(once)[xs[0].id].status == "accepted"
+    assert reconcile(dedup(once.records), crawls).result == once  # idempotent
 
 
 def test_crawled_reads_completeness_from_the_listing_reports() -> None:

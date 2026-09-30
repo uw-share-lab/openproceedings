@@ -58,6 +58,18 @@ source (absence claims aside) and no OpenReview source.
 Giving those records track `unknown` would move ICLR 2016 main from 80 to 0 and ICLR 2014 main from 35 to 34
 (−2.9%, outside the gate's ±1%). The row is left for the review lead to decide (TASK-130).
 
+## Track, decided per track (TASK-130, 2026-09-29)
+The owner decided that "on OpenReview" means the venue-year's *track*: the proceedings decide a paper's track
+wherever OpenReview doesn't hold that venue-year's track (decision-005). That was already the behaviour: a
+record with an OpenReview track claim takes it, and one without takes its listing's. So TASK-130 pins it with
+tests and changes no code path. A rebuild from the same cache on the TASK-130 branch
+gives the same snapshot, `2026-09-29-4cd2bba17cad` (byte-identical `records.jsonl`, index `b170674bcf49`).
+**No cell changes**: 0 of 95,938 records differ in track or status. Every record's track is its OpenReview
+claim's where it has one, else its listing's (0 exceptions). The 149 records above keep their
+listings' tracks: ICLR 2014 main 1, ICLR 2016 main 80, NeurIPS 2021 main 1, 2023 D&B 2, 2025 D&B 1 and 2025
+`other` 64. `op eval coverage` gives **M4 gate: PASS**: 43 of 44 gated cells are within ±1%, and ICLR 2013 main
+is the owner-accepted exception (decision-016).
+
 ## Before TASK-128 (snapshot `2026-09-29-eb72536c21d1`, index `b2a358e2f955`)
 The first check ran before the charref fix. It made **6** records `unknown` and counted **151** track records.
 The two extra were NeurIPS 2023 main `Sg3aCpWUQP` and 2025 main `r8UWp9JeJi`. Their listings' titles were

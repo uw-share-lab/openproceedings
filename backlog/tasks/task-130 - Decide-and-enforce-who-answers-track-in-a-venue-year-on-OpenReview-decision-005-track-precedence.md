@@ -3,10 +3,11 @@ id: TASK-130
 title: >-
   Decide and enforce who answers track in a venue-year on OpenReview
   (decision-005 track precedence)
-status: To Do
+status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-29 23:23'
+updated_date: '2026-09-30 02:10'
 labels:
   - dedup
   - decision
@@ -22,6 +23,12 @@ decision-005 says proceedings answer track only for venue-years not on OpenRevie
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The owner's answer is recorded in decision-005 (or a superseding decision)
-- [ ] #2 dedup/reconcile enforce it with unit and property tests; the real-crawl effect per gated cell is listed
+- [x] #1 The owner's answer is recorded in decision-005 (or a superseding decision)
+- [x] #2 dedup/reconcile enforce it with unit and property tests; the real-crawl effect per gated cell is listed
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Owner's decision (2026-09-29): 'on OpenReview' is per track. Recorded in decision-005 (track row + §Track in an OpenReview venue-year: per track), evidence numbers kept. Operationally 'OpenReview holds the track' is read per record: an OpenReview track claim is the note's own content.venueid, so a record carrying one is on a held track and wins (PRECEDENCE, OpenReview first); a record with none takes its listing's track. OpenReview crawlers claim no proceedings URL and _mergeable keeps a note on a non-proceedings track (unknown included) apart from every listing, so wherever both answer OpenReview's track is a proceedings track. Current precedence already behaved exactly so: no logic change, a comment in dedup.py plus tests: test_dedup.py (ICLR 2016 archive main keeps main; OpenReview-held track beats the listing incl. D&B/main both ways, PMLR unknown, ICLR 2014 agree; a listing OpenReview doesn't hold keeps its own track in an OR-held track; an OR unknown note never merges into a listing), test_dedup_props.py (track rule property over pools; ICLR_2016 example in idempotence), test_reconcile.py (ICLR 2016 through reconcile, idempotent). Real data: scratch rebuild = snapshot 2026-09-29-4cd2bba17cad, records.jsonl byte-identical; 0 cells change; 149 proceedings-track records unchanged; op eval coverage M4 gate PASS 43/44 + ICLR 2013 exception. Spec 01, dedup-rules and record-schema skills, results doc updated.
+<!-- SECTION:NOTES:END -->

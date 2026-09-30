@@ -20,7 +20,8 @@ a review, a duplicate only shows in the hit count.
    are set aside as rivals and the rest merge if they may; the set-aside clusters stay separate records.
 
 A merged record's fields are re-resolved from the union of its claims by `PRECEDENCE` (held as data),
-never "whichever came first". So every input must already equal what its own claims resolve to; dedup
+never "whichever came first". Track is OpenReview's wherever the record carries an OpenReview track claim (so
+OpenReview holds that track), and the proceedings' elsewhere (decision-005 §Track, per track). So every input must already equal what its own claims resolve to; dedup
 refuses one that doesn't. When one source claims a field twice (the same paper in both searches), the
 newest claim replaces the older one, and a differing value is a `newest:`/`tie:` row. The output depends
 only on the set of inputs (sorted ids, set-based decisions).
@@ -45,6 +46,12 @@ _ACCEPTANCE: tuple[Source, ...] = (
     "iclr_archive", "neurips_proceedings", "pmlr", "openreview_v2", "openreview_v1", "ris",
 )  # fmt: skip
 # decision-005: OpenReview first for text and track; the official proceedings decide acceptance; RIS last.
+# Track is decided per track (owner, 2026-09-29; TASK-130): an OpenReview track claim is the note's own
+# content.venueid, so a record carrying one is on a track OpenReview holds, and that claim wins; a record with
+# none (ICLR 2016 main: OpenReview holds only its workshop track) takes the proceedings' track. The OpenReview
+# crawlers claim no proceedings URL, so a note is never a listing, and `_mergeable` keeps a note on any track
+# the proceedings don't host (`unknown` included) apart from every listing: in a merged record OpenReview's
+# track is always one the proceedings host too.
 PRECEDENCE: dict[ClaimField, tuple[Source, ...]] = {
     **dict.fromkeys(
         ("title", "abstract", "authors", "keywords", "presentation", "venue", "year", "track", "venue_id_raw"),
