@@ -16,6 +16,7 @@ const PAPER: Paper["paper"] = {
   abstract: "We study trust.",
   authors: ["Ada Lovelace", "Alan Turing"],
   venue: "ICLR",
+  venue_name: "International Conference on Learning Representations (ICLR 2024)",
   year: 2024,
   track: "main",
   status: "accepted",
@@ -110,13 +111,15 @@ describe("P1 matched (reached from a hit)", () => {
     expect(document.body.textContent).toContain("Index a1b2c3d4e5f6 · tokenizer t1 · query version q1");
   });
 
-  it("says a paper that isn't accepted is not in the proceedings", async () => {
+  it("says a paper that isn't accepted is not in the proceedings, naming the conference in full", async () => {
     draw(
       null,
       api(() => json(answer({ paper: { ...PAPER, status: "rejected" } }))),
     );
     expect(
-      await screen.findByText("Status: rejected — submitted to ICLR 2024, not in its proceedings."),
+      await screen.findByText(
+        "Status: rejected — submitted to International Conference on Learning Representations (ICLR 2024), not in its proceedings.",
+      ),
     ).toBeTruthy();
   });
 });

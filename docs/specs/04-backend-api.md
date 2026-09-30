@@ -265,7 +265,9 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   Information Processing Systems 36", "Proceedings of the 40th International Conference on Machine
   Learning"): an export also holds workshop, rejected and withdrawn papers, and all of ICLR, which no
   proceedings volume contains. The table is `CONFERENCES` in `vocab.py`, read by `venue_name()` (both also
-  importable from `export.py`), and its eras are checked for year order at import. A record for a year before
+  importable from `export.py`), and its eras are checked for year order at import. The API sends the same
+  string as `PaperRecord.venue_name`, which the paper page's status line shows (TASK-112); CSV and JSONL
+  exports don't carry it (their columns and keys are unchanged). A record for a year before
   its venue was held is refused when it is built (`PaperRecord`, spec 01 §Fields), so no index holds one and
   an export never meets one. `venue_name()` still raises, as a backstop, and it happens mid-stream: `op export
   --out` then leaves no file; `op export` to standard output has already written the records before it, and
@@ -798,7 +800,9 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     default or unrestricted field, the reasons, the widest-edit cap check) are 02 §Filter clauses. Goldens:
     `frontend/src/lib/filter-clause-golden.json` (`tests/contract/test_parse_filters.py`).
   - `GET /papers/{id}` answers `{index_version, tokenizer_version, query_version, paper}`, where `paper` is
-    the spec 01 `PaperRecord` (provenance and `content_hash` included). The served index decides whether the
+    the spec 01 `PaperRecord` (provenance and `content_hash` included), with its derived `venue_name`, the
+    venue string of §Exports (TASK-112: additive, always sent; computed from `venue` and `year` when the answer
+    is built, so every index already served has it, with no rebuild). The served index decides whether the
     id exists. Otherwise the answer is 404 `API_PAPER_NOT_FOUND`, whose message never repeats the id. An id
     that isn't shaped `op:<venue>:<year>:<native>` is 422 `API_BAD_PARAM` (the path's `pattern`, as a
     malformed record id is; M3a review), without the index being asked. The index

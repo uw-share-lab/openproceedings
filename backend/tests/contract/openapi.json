@@ -1416,6 +1416,12 @@
             ],
             "title": "Venue Id Raw"
           },
+          "venue_name": {
+            "description": "The conference's full name and the acronym it went by that year, e.g. `International Conference on Learning Representations (ICLR 2024)`: the venue string exports use (RIS `T2`; BibTeX `booktitle`, or the `note`'s `Submitted to …` for a paper not accepted). Derived from `venue` and `year`; never stored.",
+            "readOnly": true,
+            "title": "Venue Name",
+            "type": "string"
+          },
           "year": {
             "minimum": 1000,
             "title": "Year",
@@ -1436,7 +1442,8 @@
           "urls",
           "keywords",
           "provenance",
-          "content_hash"
+          "content_hash",
+          "venue_name"
         ],
         "title": "PaperRecord",
         "type": "object"

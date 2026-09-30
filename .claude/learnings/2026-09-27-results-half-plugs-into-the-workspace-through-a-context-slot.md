@@ -42,10 +42,11 @@ Build `/search`'s results, exclusion banner, filter sidebar (year included), pag
 - One DOM order for both widths: header, banner and Limits before the sidebar (the design's order had the
   sidebar first). Reverse if TASK-046's keyboard walkthrough or TASK-047 finds it confusing.
 - The paper status line says `ICLR 2024`, not the conference's full name, which only the backend knows.
-  Reverse when the API sends a venue name.
+  Reverse when the API sends a venue name. **Reversed by TASK-112** (2026-09-30): the API sends
+  `PaperRecord.venue_name` and the line names the conference in full.
 
 ## Follow-ups
-- [ ] TASK-112: add `venue_name` to `PaperRecord` for the status line (PA-5).
+- [x] TASK-112: `PaperRecord.venue_name` (derived, never stored); the status line reads the full venue string.
 - [ ] No separate copy task: review the new strings in TASK-047: "Type a four-digit year in both boxes, the
   earlier first.", "Page N is past the last page…", "No papers on page N…", "Admits …"/"Every year.",
   "Loading the paper…", "No provenance recorded."

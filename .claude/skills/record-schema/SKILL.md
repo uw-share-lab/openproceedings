@@ -27,6 +27,7 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | `keywords` | Stored and shown, **never indexed as text** (guarantee 2). |
 | `provenance` | `list[Claim]`, see below. |
 | `content_hash` | See below. |
+| `venue_name` | **Derived, never stored** (TASK-112): `vocab.venue_name(venue, year)`, a computed field. Sent with the record (`GET /papers/{id}`); `record.DERIVED` names it, and `snapshot.record_line` and `model_copy` dump with `exclude={*DERIVED}` (a set: mypy's `IncEx` refuses the frozenset itself). Stored data naming it is refused (`extra="forbid"`), so a dump you validate again must exclude it too. |
 
 ## Native ids
 | Source | `native` |
@@ -81,7 +82,8 @@ in Scholar. The abstract is never Scholar's (`null` instead).
 `RECORD_SCHEMA_VERSION` (`record.py`) names this shape: the fields, native-id forms and content_hash
 rule. It is `3` since TASK-118 added the round-qualified `nips-<hash>-round1`/`-round2` form (it was `2` from
 TASK-096, which added the `iclr_archive` provenance source). Change any of them and bump it;
-every snapshot manifest records it.
+every snapshot manifest records it. A derived field (`DERIVED`, never in `records.jsonl`) is not part of the
+stored shape: adding `venue_name` bumped nothing (TASK-112).
 
 ## content_hash
 `sha256` of the canonical JSON of the **searchable and filterable** fields: `title`, `abstract`,

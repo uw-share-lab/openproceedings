@@ -63,6 +63,13 @@ def test_a_hit_and_a_paper_record_agree_on_their_shared_fields() -> None:
     assert shared <= set(hit["required"]) and shared <= set(paper["required"])
 
 
+def test_a_paper_record_sends_its_venue_name() -> None:
+    """TASK-112: additive, always sent, a plain string (derived from `venue` and `year`, never stored)."""
+    paper = SCHEMAS["PaperRecord"]
+    assert paper["properties"]["venue_name"]["type"] == "string"
+    assert "venue_name" in paper["required"]
+
+
 def test_only_the_error_bodys_diagnostics_is_optional_and_never_null() -> None:
     body = SCHEMAS["ErrorBody"]
     assert set(body["properties"]) - set(body["required"]) == {"diagnostics"}
