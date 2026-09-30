@@ -58,7 +58,8 @@ LATEXISH = st.lists(
 ).map("".join)
 # runs of combining marks, with slashes among them (TASK-067: a run is scanned once)
 MARKS = st.lists(
-    st.sampled_from(["a", "=", "∈", " ", "\\\"", "\u0301", "\u0301", "\u0338", "\u0345", "\u20d7"]), max_size=40
+    st.sampled_from(["a", "=", "∈", " ", '\\"', "\u0301", "\u0301", "\u0338", "\u0345", "\u20d7"]),
+    max_size=40,
 ).map("".join)
 ASCII = st.text(alphabet=st.characters(max_codepoint=0x7F), max_size=80)
 
