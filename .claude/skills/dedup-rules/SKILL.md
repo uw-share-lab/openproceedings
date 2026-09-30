@@ -111,6 +111,16 @@ safe direction.
   differs only in case, punctuation or markup is no conflict) becomes a `precedence:<source>` row, and
   the winner comes from precedence. `venue` and `year` can't differ inside a merge: they're part of every
   merge key.
+- **Track is decided per track** (decision-005 §Track in an OpenReview venue-year; the owner's decision,
+  2026-09-29, TASK-130). Where OpenReview doesn't hold a venue-year's track, the proceedings decide it: ICLR
+  2016 main comes from the archive and stays `main`. Within a track OpenReview holds, a paper whose listing
+  merged with no OpenReview note takes its listing's track (the owner's second answer, 2026-09-29: NeurIPS 2025
+  Creative AI, the renamed D&B papers, ICLR 2014's one unmerged archive paper). Where a note merged, its track
+  wins. In code this is read per record, from the claims: an OpenReview track claim is the note's own
+  `content.venueid` and wins (OpenReview first in `PRECEDENCE`); a record without one takes its listing's
+  track. OpenReview claims no proceedings URL and `_mergeable` keeps a note on a track outside
+  `PROCEEDINGS_TRACKS` (`other` and `unknown` included) apart from every listing. So where both answer,
+  OpenReview's track is in `PROCEEDINGS_TRACKS` (property `test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings`).
 - Iterate inputs in sorted-id order so the output doesn't depend on crawl order.
 
 ## Reconcile: acceptance the proceedings don't list (TASK-072, decision-005; `ingest/reconcile.py`)
@@ -145,8 +155,7 @@ it needs to know which listings were crawled, and whether completely.
   whose OpenReview note is in one year and whose listing is in another (a deferred camera-ready) is `unknown` in
   its OpenReview year, and its listing stays a separate record in the other year. No rule links them; a
   reviewer reading the `precedence:` row finds it by title.
-- **Not enforced** (decision-005's track row, "proceedings only for venue-years not on OpenReview"): see
-  decision-005 §Track in an OpenReview venue-year.
+- Reconcile never touches `track`; decision-005's track row is dedup's (§Combining a merge, per track).
 - Properties (`backend/tests/unit/ingest/test_reconcile.py`): every reconciled record is what its claims
   resolve to; dedup on the output changes no record, merge or row; reconcile is idempotent; only unlisted
   OpenReview acceptances change, only to `unknown`, only by adding absence claims, only where a complete crawl

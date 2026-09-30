@@ -26,12 +26,13 @@ Build decision-005's reconcile step and check it against the real cache.
 
 ## Decisions (and what would change them)
 - Decision-005's track row (proceedings answer track only where OpenReview doesn't) was measured, not enforced: it
-  touches 149 records (151 before TASK-128) and would take ICLR 2016 main to 0 and ICLR 2014 main to 34/35. The review lead's reading of "on OpenReview" decides (TASK-130).
+  touches 149 records (151 before TASK-128) and would take ICLR 2016 main to 0 and ICLR 2014 main to 34/35. The review lead's reading of "on OpenReview" decides (TASK-130). Decided 2026-09-29: per track, and a paper with no note on a held track takes its listing's (decision-005 §Track).
 
 ## Follow-ups
 - [x] TASK-128: the `html.py` charref bug (hid two correct titles). Landed before TASK-072; the real-data check was
   re-run on it (6 → 4 made `unknown`).
-- [ ] TASK-130: decide and enforce decision-005's track row in an OpenReview venue-year.
+- [x] TASK-130: decide and enforce decision-005's track row in an OpenReview venue-year. Decided by the owner and
+  pinned by tests; see decision-005 §Track in an OpenReview venue-year.
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/dedup-rules/SKILL.md` §Reconcile; decision-005.

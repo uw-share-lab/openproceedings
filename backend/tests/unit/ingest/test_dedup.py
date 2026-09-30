@@ -216,6 +216,96 @@ def test_datasets_track_merges_into_proceedings() -> None:
     assert len(result.records) == 1
 
 
+# --- decision-005 §Track: "on OpenReview" is per track (owner, 2026-09-29; TASK-130) --------------------------
+
+ARXIV = "https://arxiv.org/abs/1511.06644"
+
+
+def archive(year: int = 2016, title: str = "Trust in AI", **kw: Any) -> PaperRecord:
+    """An ICLR archive main-track listing, named as the archive names it (an arXiv target's `iclr-` id)."""
+    target = urls.iclr_archive_target(ARXIV)
+    assert target is not None
+    return paper(
+        target[0], title, source="iclr_archive", venue="ICLR", year=year, urls_proceedings=ARXIV, **kw
+    )
+
+
+def test_iclr_2016_main_from_the_archive_keeps_main() -> None:
+    # OpenReview holds only ICLR 2016's workshop track: its notes carry no decision (status unknown)
+    ws = dict(venue="ICLR", year=2016, source="openreview_v1", track="workshop", status="unknown")
+    listing, same_title, other = (
+        archive(),
+        paper("AbCd1234", **ws),
+        paper("EfGh5678", "A workshop paper", **ws),
+    )
+    result = dedup([listing, same_title, other])
+    got = {r.id: (r.track, r.status) for r in result.records}
+    assert got == {listing.id: ("main", "accepted"), same_title.id: ("workshop", "unknown"),
+                   other.id: ("workshop", "unknown")}  # fmt: skip
+    assert result.merges == () and "track_not_merged" in resolutions(result)
+    assert not [
+        c for c in result.conflicts if c.field == "track"
+    ]  # no track claim competes with the archive's
+
+
+@pytest.mark.parametrize(
+    ("or_source", "venue", "year", "or_track", "listing", "listing_track"),
+    [
+        ("openreview_v2", "NeurIPS", 2023, "datasets_benchmarks", "neurips_proceedings", "main"),
+        ("openreview_v1", "NeurIPS", 2022, "main", "neurips_proceedings", "datasets_benchmarks"),
+        ("openreview_v2", "ICML", 2025, "position", "pmlr", "unknown"),  # a mixed volume says no track
+        ("openreview_v1", "ICLR", 2014, "main", "iclr_archive", "main"),  # the archive agrees: no row
+    ],
+)
+def test_where_openreview_holds_the_track_its_claim_beats_the_proceedings(
+    or_source: str, venue: str, year: int, or_track: str, listing: str, listing_track: str
+) -> None:
+    note = paper("AbCd1234", source=or_source, venue=venue, year=year, track=or_track)
+    if listing == "iclr_archive":
+        proc = archive(year)
+    else:
+        native = "pmlr-v267-key1" if listing == "pmlr" else f"nips-{H[1]}"
+        proc = paper(native, source=listing, venue=venue, year=year, track=listing_track)
+    result = dedup([proc, note])
+    [r] = result.records
+    assert (r.id, r.track, r.status) == (note.id, or_track, "accepted")
+    rows = [
+        (c.value_a, c.source_a, c.value_b, c.source_b, c.resolution)
+        for c in result.conflicts
+        if c.field == "track"
+    ]
+    expected = [(or_track, or_source, listing_track, listing, f"precedence:{or_source}")]
+    assert rows == (expected if or_track != listing_track else [])
+    assert dedup(result.records) == dedup(result.records[::-1])
+    assert dedup(result.records).records == result.records  # idempotent
+
+
+def test_a_listing_openreview_does_not_hold_keeps_its_own_track_in_a_track_openreview_holds() -> None:
+    # NeurIPS 2025: OpenReview holds Creative AI (`other`) and D&B, but not these two papers (one renamed for the
+    # camera-ready): the listings answer their own track; the note under the old title stays a record of its own
+    db = dict(venue="NeurIPS", year=2025, track="datasets_benchmarks")
+    creative = paper(f"nips-{H[1]}", "A Creative AI piece", source="neurips_proceedings", venue="NeurIPS",
+                     year=2025, track="other")  # fmt: skip
+    renamed = paper(f"nips-{H[2]}", "The camera-ready title", source="neurips_proceedings", **db)
+    note = paper("AbCd1234", "The submitted title", **db)
+    result = dedup([creative, renamed, note])
+    assert {r.id: r.track for r in result.records} == {
+        creative.id: "other",
+        renamed.id: "datasets_benchmarks",
+        note.id: "datasets_benchmarks",
+    }
+    assert result.merges == () and result.conflicts == ()
+
+
+def test_an_openreview_note_with_no_track_never_merges_into_a_listing() -> None:
+    # `unknown` names no track OpenReview holds; dedup keeps the note apart, so it never overrules the listing
+    listing = paper(f"nips-{H[1]}", source="neurips_proceedings")
+    note = paper("AbCd1234", track="unknown")
+    result = dedup([listing, note])
+    assert {r.id: r.track for r in result.records} == {listing.id: "main", note.id: "unknown"}
+    assert resolutions(result) == ["track_not_merged"]
+
+
 @pytest.mark.parametrize(
     ("why", "a", "b"),
     [

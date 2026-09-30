@@ -14,10 +14,10 @@ from collections import Counter
 from hypothesis import event, example, given
 from hypothesis import strategies as st
 from openproceedings.ingest import urls
-from openproceedings.ingest.dedup import DedupResult, dedup
+from openproceedings.ingest.dedup import PROCEEDINGS_TRACKS, DedupResult, dedup, proceedings_ids
 from openproceedings.ingest.record import PaperRecord
 
-from tests.unit.ingest.test_dedup import T0, T1, T2, H, nips, paper
+from tests.unit.ingest.test_dedup import T0, T1, T2, H, archive, nips, paper
 
 TITLES = ["Trust in AI", "trust in AI!", "Trust in Machines", "—"]
 FORUMS = ["AbCd1234", "EfGh5678", "IjKl9012"]
@@ -234,6 +234,13 @@ SAME_TITLE_OTHER_YEAR = [
 ]
 
 
+# ICLR 2016 (TASK-130): OpenReview holds only the workshop track; the archive's main listing and a same-title note
+ICLR_2016 = [
+    archive(2016),
+    paper("AbCd1234", venue="ICLR", year=2016, source="openreview_v1", track="workshop", status="unknown"),
+]
+
+
 @given(pools)
 @example(TWO_PROCEEDINGS_IDS)
 @example(WORKSHOP_INTO_RIS_LISTING)
@@ -241,6 +248,7 @@ SAME_TITLE_OTHER_YEAR = [
 @example(LINK_OTHER_TITLE)
 @example(LINK_OTHER_YEAR)
 @example(LINK_AGAINST_TITLE)
+@example(ICLR_2016)
 def test_idempotent(xs: list[PaperRecord]) -> None:
     once = dedup(xs)
     note(once)
@@ -320,3 +328,26 @@ def test_never_folds_two_papers(xs: list[PaperRecord]) -> None:
         if len(natives) > 1 and natives & set(PROCEEDINGS):  # merged into a proceedings listing
             # a proceedings track, or unknown when every side was a listing without one (a mixed PMLR volume)
             assert by_id[out].track in {"main", "datasets_benchmarks", "position", "unknown"}
+
+
+OPENREVIEW, OFFICIAL = ("openreview_v2", "openreview_v1"), ("iclr_archive", "neurips_proceedings", "pmlr")
+
+
+@given(pools)
+@example(ICLR_2016)
+@example(LINK_OTHER_TITLE)
+def test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings(xs: list[PaperRecord]) -> None:
+    """decision-005 §Track, per track (owner, 2026-09-29; TASK-130): a record carrying an OpenReview track claim
+    is on a track OpenReview holds, and takes it; one without takes the proceedings' track; RIS only alone."""
+    for r in dedup(xs).records:
+        claims = {c.source: c.value for c in r.provenance if c.field == "track"}
+        orv = [claims[s] for s in OPENREVIEW if s in claims]
+        official = [claims[s] for s in OFFICIAL if s in claims]
+        assert r.track == (orv or official or [claims["ris"]])[0]
+        event("track:" + ("openreview" if orv else "proceedings" if official else "ris"))
+        # a real OpenReview note names no proceedings paper; such a note never merges into a listing on a
+        # track outside PROCEEDINGS_TRACKS, so where both answer OpenReview's track is in it too
+        note_urls = [c for c in r.provenance if c.source in OPENREVIEW]
+        if orv and official and not proceedings_ids(note_urls):
+            event("track:openreview-over-proceedings")
+            assert orv[0] in PROCEEDINGS_TRACKS
