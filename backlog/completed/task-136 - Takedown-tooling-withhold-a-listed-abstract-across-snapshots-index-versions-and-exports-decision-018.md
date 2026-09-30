@@ -3,11 +3,11 @@ id: TASK-136
 title: >-
   Takedown tooling: withhold a listed abstract across snapshots, index versions
   and exports (decision-018)
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 02:11'
-updated_date: '2026-09-30 16:36'
+updated_date: '2026-09-30 19:43'
 labels:
   - ops
 milestone: m-6
@@ -65,3 +65,9 @@ Design (spec 08 §Deploy takedown procedure; decision-018/021; owner decisions 2
 Built in 8a97b40..HEAD. AC1: list <data-dir>/takedowns/withheld.txt (ids, # comments; malformed refuses; missing = empty unless named/applied/snapshot-withheld). AC2: op snapshot build withholds after dedup/reconcile (abstract, abstract claims, conflicts.csv texts); follows merged/rekeyed listed ids (takedowns_followed) and reports unmatched ones (takedowns_unmatched), never refusing; only records it took something from are named (listing an abstract-less record changes nothing); takedown_differs for same records / other withheld ids; recrawl test. AC3: manifest abstract_withheld(+by_track, ids), /coverage abstract_withheld (serve-time), op snapshot diff abstract_withheld{added,lifted}, op eval coverage note. AC4: served bundle carries the list, re-read on every load/SIGHUP (even an unchanged index; a failed promotion still applies it; a missing list once applied fails the reload); /search, /papers (+provenance, spans), every export format on served/index_version/record_id, op export. AC5: abstract_withheld on Hit and PaperResponse, CSV/JSONL abstract_withheld_reason, X-Abstracts-Withheld; UI RH-15/PA-8/CV-6/EX-E9. AC6: decision-022 (owner: accept). AC7: contract tests: replay reproduced with identical ids on the pinned old index after the list and a rebuild; record exports withheld. AC8: op takedown check --api (HTTP; unit tests break each sub-check against a fake API; contract mutants of the real routes fail it). AC9: deploy/web.Dockerfile + web-build-gate.sh (OPENPROCEEDINGS_INSTANCE required; public needs contact) + next.config.ts gate; the image was not built locally (Docker daemon not running). AC10: log <data-dir>/takedowns/log.jsonl, operator-owned 0600, fields in decision-022/spec 08; .gitignore, protect-data-dir.sh (forced/glob/case/parent-dir adds; case rows, mutants), .dockerignore; op takedown check checks owner, mode and each id's latest entry.
 Review gate: round 1 (11 reviewer roles) and round 2 findings fixed; see the PR's dispositions.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Takedown tooling (decision-018, decision-022). The list is <data-dir>/takedowns/withheld.txt: record ids with # comments. A malformed list fails closed. A missing list is refused once one is applied or once the loaded snapshot has withheld abstracts. op snapshot build withholds each listed abstract after dedup and reconcile: the abstract, its abstract claims and its conflicts.csv texts. A merged or rekeyed listed paper is followed to its new id, and an id with no record is reported, never refused. The manifest names and counts the withheld abstracts apart from missing ones, and op snapshot diff and /coverage report them. The API re-reads the list on every load and SIGHUP and withholds at serve time on every loaded index version: /search hits, /papers and its provenance and highlights, and every export (served, index_version, record_id, and op export). Marking is abstract_withheld in the API, abstract_withheld_reason in CSV and JSONL, the takedown sentence in RIS and BibTeX, the X-Abstracts-Withheld header, and the UI copy RH-15, PA-8, CV-6 and EX-E9. The oracle leak is accepted (the owner's decision): pinned versions keep matching the withheld text, so replays reproduce. op takedown check --api checks a running instance and the log. The web image has a required OPENPROCEEDINGS_INSTANCE, and a public build needs a takedown contact. The log (<data-dir>/takedowns/log.jsonl, operator-owned 0600) is kept out of git and out of the docker build context. Verified: make test (5959 passed, 2 skipped; vitest 3052 passed), make e2e 19/19, make lint, make tooling, and mutate --changed with 31 mutants and 0 problems. Three review rounds closed.
+<!-- SECTION:FINAL_SUMMARY:END -->
