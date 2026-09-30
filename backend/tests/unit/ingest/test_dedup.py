@@ -685,3 +685,34 @@ def test_records_must_match_their_claims() -> None:
     with pytest.raises(ValueError, match="no claim for"):
         dedup([PaperRecord.build(id=r.id, title="T", abstract=None, authors=(), venue="NeurIPS", year=2024,
                                  track="main", status="accepted")])  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("status", "presentation"),
+    [
+        ("accepted", "oral"),
+        ("unknown", None),
+        ("rejected", None),
+        ("withdrawn", None),
+        ("desk_rejected", None),
+    ],
+)
+def test_presentation_holds_only_while_the_resolved_status_is_accepted(
+    status: str, presentation: str | None
+) -> None:
+    record = paper("AbCd1234", status=status, presentation="oral")
+    assert (record.status, record.presentation) == (status, presentation)
+    assert any(
+        c.field == "presentation" and c.value == "oral" for c in record.provenance
+    )  # the claim is kept
+
+
+def test_a_proceedings_status_that_outranks_openreview_accepted_drops_the_presentation() -> None:
+    claims = [
+        *paper("AbCd1234", presentation="spotlight").provenance,
+        Claim(field="status", value="unknown", source="neurips_proceedings", fetched_at=T1),
+    ]
+    record, _ = resolve("op:neurips:2024:AbCd1234", claims)
+    assert (record.status, record.presentation) == ("unknown", None)
+    same = paper("AbCd1234")  # content_hash doesn't cover presentation
+    assert record.content_hash == same.model_copy(update={"status": "unknown"}).content_hash

@@ -54,3 +54,20 @@ def test_nested_sensitive_containers_remain_suppressed_until_the_outer_close() -
     ):
         assert private not in got
     assert "Synthetic abstract" in got and "Synthetic authors" in got
+
+
+def test_only_allow_listed_venue_labels_keep_an_at_sign_and_dotless_addresses_are_still_scrubbed() -> None:
+    values = {
+        "N0": ("venue", "BT@ICLR2024"),  # allow-listed label: kept
+        "N1": ("venue", "Tiny Papers @ ICLR 2024 Archive"),  # a bare "@": kept
+        "N2": ("venue", "user@localhost"),  # dotless address: scrubbed
+        "N3": ("venue", "a.b@mail.example.edu"),
+        "N4": ("title", "BT@ICLR2024"),  # the allow-list is for venue labels only
+        "N5": ("contact", "user@localhost"),
+    }
+    body = {"notes": [{"id": i, "content": {k: {"value": v}}} for i, (k, v) in values.items()]}
+    got, _ = scrub.scrub_json("https://api2.openreview.net/notes", body)
+    out = {n["id"]: next(iter(n["content"].values()))["value"] for n in got["notes"]}
+    assert (out["N0"], out["N1"]) == ("BT@ICLR2024", "Tiny Papers @ ICLR 2024 Archive")
+    assert all(out[i].startswith("synthetic.person") for i in ("N2", "N3", "N4", "N5"))
+    assert scrub.PERSON.search("user@localhost")

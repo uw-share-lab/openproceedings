@@ -226,3 +226,82 @@ def classify_neurips_listing(host: str, year: int, token: str | None) -> tuple[C
         return listed("unknown", f"track token {token} after {_DB_ALIAS_LAST_YEAR}: no rule")
     track = classify_proceedings(token).track
     return listed(track, f"track token {token}" + (": no rule" if track == "unknown" else ""))
+
+
+# --- presentation from an API v2 `content.venue` (TASK-101) --------------------------------------------------
+
+
+def _v2p(track: str, **by_presentation: str) -> dict[str, tuple[str, str | None]]:
+    """`content.venue` strings (`|`-separated) → (track, presentation); `none=` lists strings that state no
+    presentation."""
+    return {
+        s: (track, None if p == "none" else p)
+        for p, strings in by_presentation.items()
+        for s in strings.split("|")
+    }
+
+
+# `content.venue` on an accepted, non-workshop API v2 submission note, exactly as held in the TASK-054 crawl
+# cache (counts in spec 01 §Presentation) or a recorded fixture: (venue, year) → string → (the track its
+# venueid must give, presentation). Case and wording drift per year, so it's a table, never a regex. ICML
+# 2023's `OralPoster` and ICML 2025's `spotlightposter` are orals and spotlights that also had a poster slot:
+# the higher tier is the presentation. A `none` string is known and states no presentation (Tiny Papers'
+# Archive/Present/Notable tiers are not presentations). Anything unlisted is unmapped: `null`, counted.
+V2_PRESENTATION: dict[tuple[str, int], dict[str, tuple[str, str | None]]] = {
+    ("ICLR", 2024): {
+        **_v2p("main", oral="ICLR 2024 oral", spotlight="ICLR 2024 spotlight", poster="ICLR 2024 poster"),
+        **_v2p("blogpost", none="BT@ICLR2024"),
+        **_v2p("tiny_papers",
+               none="Tiny Papers @ ICLR 2024 Archive|Tiny Papers @ ICLR 2024 Present|Tiny Papers @ ICLR 2024 Notable"),
+    },
+    ("ICLR", 2025): {
+        **_v2p("main", oral="ICLR 2025 Oral", spotlight="ICLR 2025 Spotlight", poster="ICLR 2025 Poster"),
+        **_v2p("blogpost", none="ICLR 2025 Blogpost Track"),
+    },
+    ("ICLR", 2026): _v2p("main", poster="ICLR 2026 Poster"),  # fixture only: not crawled yet
+    ("ICML", 2023): _v2p("main", oral="ICML 2023 OralPoster", poster="ICML 2023 Poster"),
+    ("ICML", 2024): _v2p("main", oral="ICML 2024 Oral", spotlight="ICML 2024 Spotlight", poster="ICML 2024 Poster"),
+    ("ICML", 2025): {
+        **_v2p("main", oral="ICML 2025 oral", spotlight="ICML 2025 spotlightposter", poster="ICML 2025 poster"),
+        **_v2p("position", oral="ICML 2025 Position Paper Track oral",
+               spotlight="ICML 2025 Position Paper Track spotlightposter",
+               poster="ICML 2025 Position Paper Track poster"),
+    },
+    ("NeurIPS", 2023): {
+        **_v2p("main", oral="NeurIPS 2023 oral", spotlight="NeurIPS 2023 spotlight", poster="NeurIPS 2023 poster"),
+        **_v2p("datasets_benchmarks", oral="NeurIPS 2023 Datasets and Benchmarks Oral",
+               spotlight="NeurIPS 2023 Datasets and Benchmarks Spotlight",
+               poster="NeurIPS 2023 Datasets and Benchmarks Poster"),
+    },
+    ("NeurIPS", 2024): {
+        **_v2p("main", oral="NeurIPS 2024 oral", spotlight="NeurIPS 2024 spotlight", poster="NeurIPS 2024 poster"),
+        **_v2p("datasets_benchmarks", oral="NeurIPS 2024 Track Datasets and Benchmarks Oral",
+               spotlight="NeurIPS 2024 Track Datasets and Benchmarks Spotlight",
+               poster="NeurIPS 2024 Track Datasets and Benchmarks Poster"),
+        **_v2p("competition", none="NeurIPS 2024 Competition Track"),
+    },
+    ("NeurIPS", 2025): {
+        **_v2p("main", oral="NeurIPS 2025 oral", spotlight="NeurIPS 2025 spotlight", poster="NeurIPS 2025 poster"),
+        **_v2p("datasets_benchmarks", oral="NeurIPS 2025 Datasets and Benchmarks Track oral",
+               spotlight="NeurIPS 2025 Datasets and Benchmarks Track spotlight",
+               poster="NeurIPS 2025 Datasets and Benchmarks Track poster"),
+        **_v2p("position", oral="NeurIPS 2025 Position Paper Track Oral", none="NeurIPS 2025 Position Paper Track"),
+    },
+}  # fmt: skip
+
+
+@dataclass(frozen=True)
+class PresentationMatch:
+    value: str | None  # `oral` / `spotlight` / `poster`, or None
+    mapped: bool  # False: the string (or its track) isn't in the venue-year's table
+
+
+def classify_v2_presentation(venue: str, year: int, track: str, venue_string: object) -> PresentationMatch:
+    """The presentation an accepted, non-workshop API v2 note's `content.venue` states, matched exactly in its
+    venue-year's table. A string the table lacks, or lists under another track than the venueid gave, is
+    unmapped (`None`); the caller counts it. Workshop sessions are not the conference's presentations and
+    are never looked up."""
+    hit = V2_PRESENTATION.get((venue, year), {}).get(venue_string) if isinstance(venue_string, str) else None
+    if hit is None or hit[0] != track:
+        return PresentationMatch(None, mapped=False)
+    return PresentationMatch(hit[1], mapped=True)

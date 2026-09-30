@@ -55,6 +55,9 @@ KEEP_GROUP_CONTENT = {
 }
 # An email address or a profile id. Not a bare "@": venue strings like `Tiny Papers @ ICLR 2023` stay real.
 PERSON = re.compile(r"[^\s@]+@[^\s@]+|^~")
+# Controlled `content.venue` labels PERSON matches but that name no person, kept verbatim (and only as a venue
+# or venueid value). Add a label only after checking it on openreview.net; never relax PERSON instead.
+VENUE_LABELS = frozenset({"BT@ICLR2024"})  # ICLR 2024's blogpost track (TASK-101)
 
 
 class _Counter:
@@ -96,7 +99,9 @@ def _scrub_content(content: dict[str, Any], c: _Counter) -> dict[str, Any]:
     for key, raw in content.items():
         wrapped = isinstance(raw, dict) and "value" in raw
         value = raw["value"] if wrapped else raw
-        if key in KEEP_CONTENT and not (isinstance(value, str) and PERSON.search(value)):
+        if (key in KEEP_CONTENT and not (isinstance(value, str) and PERSON.search(value))) or (
+            key in ("venue", "venueid") and isinstance(value, str) and value in VENUE_LABELS
+        ):
             new = value
         else:
             new = _synthetic(key, value, c)

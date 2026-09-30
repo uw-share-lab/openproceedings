@@ -150,13 +150,19 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   (what `op snapshot build` calls). The group-tree enumeration (`?parent=` listings, containers, the
   `proposal` skip) is built from the research run's description; no `?parent=` listing is recorded yet, so
   record one per venue before the first full crawl.
+- Presentation (TASK-101; spec 01 §Presentation): `note_record` reads `content.venue` only for an accepted,
+  non-workshop note, through `classify.classify_v2_presentation` (exact strings per venue-year in
+  `classify.V2_PRESENTATION`, each with the track its venueid must give). An unlisted string is `null` and
+  counted (`presentation_unmapped` in the report, the finished line and the attention WARNING; a DEBUG
+  `openreview_presentation_unmapped` per note, forum id only). A new venue-year's strings get table rows and
+  a recorded note each (`notes-presentation-*.json`, trimmed from the crawl cache and scrubbed).
 - Logs (TASK-116; logging-standards skill §Crawl lines), the same for v1 and v2: `openreview_crawl_started`
   (`api`, `venue`, `year`, `offline`, `page_size`), `openreview_crawl_progress` at most every 30 s of the
   client's monotonic clock (`common.Heartbeat`; notes read, `forums` on v1, imported, skipped, `requests`,
   `cached`), `openreview_crawl_finished`, and at most one `openreview_crawl_attention` WARNING with the
   anomaly counts (v1 and v2 both count `duplicate`, v1 also `duplicate_submission`; both report `cache_incompatible`, the pre-projection
   entries the client purged and re-fetched). Per-note anomalies (`openreview_unknown_track`,
-  `openreview_v1_unmapped`, `openreview_v1_conflict`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`) and
+  `openreview_v1_unmapped`, `openreview_v1_conflict`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`, `openreview_presentation_unmapped`) and
   each `openreview_cache_incompatible` are DEBUG.
 - A record id repeated byte-for-byte across status listings is counted as a duplicate. If its parsed
   non-provenance fields differ, the crawl refuses the mixed cache and asks for `--refresh`, rather than

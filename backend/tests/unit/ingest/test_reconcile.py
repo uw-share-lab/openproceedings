@@ -63,6 +63,15 @@ def test_an_openreview_accepted_paper_the_crawled_listing_lacks_is_unknown_with_
     assert dedup([*LISTED]).merges == result.merges
 
 
+def test_a_reconcile_demoted_note_loses_its_presentation_and_a_listed_one_keeps_it() -> None:
+    listed = [paper("EfGh5678", "Listed paper", presentation="oral"), *LISTED[1:]]
+    result = run([*listed, paper("AbCd1234", "Not in the proceedings", presentation="oral")], crawl())
+    note, kept = by_id(result)[NOTE], by_id(result)["op:neurips:2024:EfGh5678"]
+    assert (note.status, note.presentation) == ("unknown", None)
+    assert any(c.field == "presentation" and c.value == "oral" for c in note.provenance)  # evidence kept
+    assert (kept.status, kept.presentation) == ("accepted", "oral")
+
+
 def test_a_listed_note_a_workshop_or_not_accepted_note_and_a_listing_are_left_alone() -> None:
     xs = [
         *LISTED,

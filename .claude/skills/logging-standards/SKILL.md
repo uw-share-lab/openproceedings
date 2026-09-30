@@ -75,7 +75,7 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   year or volume and `done` / `of`; their heartbeat is due at most every `PROGRESS_SECONDS` (30 s) of
   `time.monotonic`, checked after each record built. Never a line per item.
 - **Record-level anomalies are DEBUG** (`openreview_unknown_track`, `openreview_v1_unmapped`,
-  `openreview_v1_conflict`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`, `neurips_record_invalid`,
+  `openreview_v1_conflict`, `openreview_v1_duplicate`, `openreview_duplicate_submission`, `openreview_note_skipped`, `openreview_presentation_unmapped`, `neurips_record_invalid`,
   `pmlr_record_invalid`, and per cache entry `openreview_cache_incompatible`, a purged pre-projection entry,
   which a crawl reports as `cache_incompatible`). Each listing or crawl logs **at most one aggregate WARNING**
   with the counts

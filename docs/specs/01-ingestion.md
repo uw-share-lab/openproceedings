@@ -20,7 +20,7 @@ build.
 | `year` | int | Conference year, not the arXiv year. A year before the venue was held under its name (NeurIPS 1987, ICLR 2013, ICML 1988; `vocab.CONFERENCES`) is refused. |
 | `track` | enum | See the taxonomy below. Never defaults to `main`. Unknown stays `unknown`. |
 | `status` | enum | `accepted` \| `rejected` \| `withdrawn` \| `desk_rejected` \| `unknown` |
-| `presentation` | str \| null | `oral` / `spotlight` / `poster`, when the source states it. |
+| `presentation` | str \| null | `oral` / `spotlight` / `poster`, when the source states it (§Presentation). |
 | `venue_id_raw` | str \| null | OpenReview `content.venueid` verbatim, e.g. `NeurIPS.cc/2023/Track/Datasets_and_Benchmarks`. |
 | `urls` | object | `forum`, `pdf`, `proceedings`, `doi`, each optional. |
 | `keywords` | list[str] | Stored and displayed, **not searched** (guarantee 2). |
@@ -67,6 +67,53 @@ Every public submission is ingested and indexed whatever its status; the default
 rejected, withdrawn and desk-rejected submission; NeurIPS and ICML only rejected papers whose authors opt in
 (NeurIPS 2024 main: 201; ICML 2025: 162; ICML 2023–2024: none), and almost no withdrawn ones. So a status
 count is complete for ICLR and a floor elsewhere, and coverage (07 §C) says which.
+
+### Presentation (TASK-101)
+
+`presentation` is `oral`, `spotlight`, `poster` or `null`. It is display metadata: never a track (an oral is
+`main`), not in `content_hash`, and never a filter. It is set only where a source states it:
+
+- **API v1:** the decision note, or `content.venue` for the years whose venue string names it
+  (`ICLR 2017/2021/2022 {Oral,Spotlight,Poster}`, `ICLR 2023 poster`, `NeurIPS 2021 {Oral,Spotlight,Poster}`;
+  `openreview_v1._PRESENTATION`).
+- **API v2:** `content.venue` on an **accepted, non-workshop** submission note (track and status still come
+  from `content.venueid` alone), matched exactly in its venue-year's table, `classify.V2_PRESENTATION`
+  (string → the track its venueid must give, presentation). Wording and case drift every year, so it's a
+  table, never a regex, and the match is byte-exact: no strip, no case-fold, no whitespace collapse
+  (`ICLR 2024 Oral` is not `ICLR 2024 oral`). A string the table lacks, or lists under another track, or an
+  accepted note with no string `content.venue` at all, is **unmapped**:
+  `presentation` null, a DEBUG `openreview_presentation_unmapped` line with the forum id (never the string,
+  which can be free text), and one count per venue-year, `presentation_unmapped`, in the crawl report, the
+  `openreview_crawl_finished` line and the crawl's one `openreview_crawl_attention` WARNING. Rejected,
+  withdrawn, desk-rejected and `unknown` notes are never looked up (a venue string can't promote a status),
+  nor are workshop notes: a workshop's oral is not the conference's.
+- **Proceedings, ICLR archive, RIS:** not set by these importers.
+- **After dedup** (`dedup.resolve`): presentation follows the OpenReview-first order but status follows the
+  proceedings-first order, so a record keeps its presentation only while its resolved status is `accepted`.
+  A record reconcile demotes to `unknown` (OpenReview-accepted, not in the crawled proceedings), or any other
+  non-accepted status, shows `null`; the presentation claim stays in provenance as evidence.
+
+The v2 table, with each string's count of accepted submission notes in the TASK-054 crawl cache
+(2026-09-29); every string has a recorded note under `backend/tests/fixtures/http/openreview/v2/`:
+
+| Venue-year | `oral` | `spotlight` | `poster` | Stated, no presentation (`null`) |
+|---|---|---|---|---|
+| ICLR 2024 | `ICLR 2024 oral` 86 | `ICLR 2024 spotlight` 367 | `ICLR 2024 poster` 1,807 | `BT@ICLR2024` 22 (blogpost); `Tiny Papers @ ICLR 2024 {Archive 55, Present 98, Notable 39}` (tiny papers' tiers) |
+| ICLR 2025 | `ICLR 2025 Oral` 213 | `ICLR 2025 Spotlight` 380 | `ICLR 2025 Poster` 3,110 | `ICLR 2025 Blogpost Track` 49 |
+| ICLR 2026 | | | `ICLR 2026 Poster` (fixture only; not crawled) | |
+| ICML 2023 | `ICML 2023 OralPoster` 155 | | `ICML 2023 Poster` 1,673 | |
+| ICML 2024 | `ICML 2024 Oral` 144 | `ICML 2024 Spotlight` 191 | `ICML 2024 Poster` 2,275 | |
+| ICML 2025 | `ICML 2025 oral` 108; position `… Position Paper Track oral` 12 | `ICML 2025 spotlightposter` 211; position `… spotlightposter` 12 | `ICML 2025 poster` 2,938; position `… poster` 49 | |
+| NeurIPS 2023 | `NeurIPS 2023 oral` 67; D&B `NeurIPS 2023 Datasets and Benchmarks Oral` 10 | `… spotlight` 378; D&B `… Spotlight` 22 | `… poster` 2,773; D&B `… Poster` 290 | |
+| NeurIPS 2024 | `NeurIPS 2024 oral` 61; D&B `NeurIPS 2024 Track Datasets and Benchmarks Oral` 11 | `… spotlight` 326; D&B `… Spotlight` 56 | `… poster` 3,648; D&B `… Poster` 392 | `NeurIPS 2024 Competition Track` 16 |
+| NeurIPS 2025 | `NeurIPS 2025 oral` 77; D&B `NeurIPS 2025 Datasets and Benchmarks Track oral` 7; position `NeurIPS 2025 Position Paper Track Oral` 9 | `… spotlight` 687; D&B `… spotlight` 56 | `… poster` 4,522; D&B `… poster` 434 | `NeurIPS 2025 Position Paper Track` 31 |
+
+ICML 2023's `OralPoster` and ICML 2025's `spotlightposter` are orals and spotlights that also had a poster
+slot; the higher tier is the presentation (ICML 2023: 155 + 1,673 = the 1,828 accepted notes). No accepted,
+non-workshop string in the cache is unmapped. Known unmapped strings, left out until someone can say what
+they mean: `ICML 2026 regular` (recorded; not a presentation word) and ICLR 2026's `Oral`, ICML 2026's
+`spotlight` (seen live 2026-09-27, research doc, but with no recorded note yet); each is counted when those
+years are crawled.
 
 ## Sources
 

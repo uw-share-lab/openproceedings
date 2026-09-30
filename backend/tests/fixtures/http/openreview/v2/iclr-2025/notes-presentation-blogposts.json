@@ -1,0 +1,80 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-054 authenticated live crawl cache (public projection); extracted for TASK-101",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing trimmed from 49 to 1 notes, one per content.venue string (order kept); count is the listing's"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=ICLR.cc/2025/BlogPosts&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "388",
+   "ratelimit-reset": "3429"
+  },
+  "json": {
+   "count": 49,
+   "notes": [
+    {
+     "content": {
+      "_bibtex": {
+       "value": "Synthetic bibtex text 1."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 2."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person3",
+        "~Synthetic_Person4",
+        "~Synthetic_Person5"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 6",
+        "Synthetic Author 7",
+        "Synthetic Author 8"
+       ]
+      },
+      "blogpost_url": {
+       "value": "Synthetic blogpost url text 9."
+      },
+      "conflict_of_interest": {
+       "value": "Synthetic conflict of interest text 10."
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_11"
+      },
+      "title": {
+       "value": "Synthetic title text 12."
+      },
+      "venue": {
+       "value": "ICLR 2025 Blogpost Track"
+      },
+      "venueid": {
+       "value": "ICLR.cc/2025/BlogPosts"
+      }
+     },
+     "forum": "pZqvfsUpeh",
+     "id": "pZqvfsUpeh",
+     "invitations": [
+      "ICLR.cc/2025/BlogPosts/-/Submission",
+      "ICLR.cc/2025/BlogPosts/-/Post_Submission",
+      "ICLR.cc/2025/BlogPosts/-/Edit"
+     ],
+     "number": 8,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

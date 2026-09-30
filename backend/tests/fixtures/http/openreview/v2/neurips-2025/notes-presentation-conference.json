@@ -1,0 +1,238 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-054 authenticated live crawl cache (public projection); extracted for TASK-101",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing trimmed from 1000 to 3 notes, one per content.venue string (order kept); count is the listing's"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=NeurIPS.cc/2025/Conference&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "402",
+   "ratelimit-reset": "3410"
+  },
+  "json": {
+   "count": 5286,
+   "notes": [
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 1."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 2."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 3."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person4",
+        "~Synthetic_Person5",
+        "~Synthetic_Person6",
+        "~Synthetic_Person7",
+        "~Synthetic_Person8",
+        "~Synthetic_Person9"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 10",
+        "Synthetic Author 11",
+        "Synthetic Author 12",
+        "Synthetic Author 13",
+        "Synthetic Author 14",
+        "Synthetic Author 15"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 16.",
+        "Synthetic keywords text 17.",
+        "Synthetic keywords text 18.",
+        "Synthetic keywords text 19.",
+        "Synthetic keywords text 20.",
+        "Synthetic keywords text 21.",
+        "Synthetic keywords text 22.",
+        "Synthetic keywords text 23.",
+        "Synthetic keywords text 24.",
+        "Synthetic keywords text 25."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_26"
+      },
+      "pdf": {
+       "value": "/pdf/9d1f6f190dc61c680591db656c765517b95acedc.pdf"
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 27."
+      },
+      "title": {
+       "value": "Synthetic title text 28."
+      },
+      "venue": {
+       "value": "NeurIPS 2025 poster"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2025/Conference"
+      }
+     },
+     "forum": "jNQ40aw5qL",
+     "id": "jNQ40aw5qL",
+     "invitations": [
+      "NeurIPS.cc/2025/Conference/-/Submission",
+      "NeurIPS.cc/2025/Conference/-/Post_Submission",
+      "NeurIPS.cc/2025/Conference/Submission1/-/Full_Submission",
+      "NeurIPS.cc/2025/Conference/Submission1/-/Supplementary_Material",
+      "NeurIPS.cc/2025/Conference/-/Edit",
+      "NeurIPS.cc/2025/Conference/Submission1/-/Camera_Ready_Revision"
+     ],
+     "number": 1,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "_bibtex": {
+       "value": "Synthetic bibtex text 29."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 30."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person31",
+        "~Synthetic_Person32",
+        "~Synthetic_Person33",
+        "~Synthetic_Person34"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 35",
+        "Synthetic Author 36",
+        "Synthetic Author 37",
+        "Synthetic Author 38"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 39.",
+        "Synthetic keywords text 40.",
+        "Synthetic keywords text 41."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_42"
+      },
+      "pdf": {
+       "value": "/pdf/41c4fd1d94e202d98c55bf60d0461ff3f3bfec2b.pdf"
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 43."
+      },
+      "supplementary_material": {
+       "value": "/attachment/36d3e9445a7d83d35f12c117b517340020e4e7d2.zip"
+      },
+      "title": {
+       "value": "Synthetic title text 44."
+      },
+      "venue": {
+       "value": "NeurIPS 2025 spotlight"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2025/Conference"
+      }
+     },
+     "forum": "8OGTkEJrmb",
+     "id": "8OGTkEJrmb",
+     "invitations": [
+      "NeurIPS.cc/2025/Conference/-/Submission",
+      "NeurIPS.cc/2025/Conference/-/Post_Submission",
+      "NeurIPS.cc/2025/Conference/Submission13/-/Full_Submission",
+      "NeurIPS.cc/2025/Conference/Submission13/-/Supplementary_Material",
+      "NeurIPS.cc/2025/Conference/-/Edit",
+      "NeurIPS.cc/2025/Conference/Submission13/-/Camera_Ready_Revision"
+     ],
+     "number": 13,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "_bibtex": {
+       "value": "Synthetic bibtex text 45."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 46."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person47",
+        "~Synthetic_Person48",
+        "~Synthetic_Person49",
+        "~Synthetic_Person50",
+        "~Synthetic_Person51"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 52",
+        "Synthetic Author 53",
+        "Synthetic Author 54",
+        "Synthetic Author 55",
+        "Synthetic Author 56"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 57."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_58"
+      },
+      "pdf": {
+       "value": "/pdf/4722ddabe96351b7f9dcddce46c8949135cacdf2.pdf"
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 59."
+      },
+      "title": {
+       "value": "Synthetic title text 60."
+      },
+      "venue": {
+       "value": "NeurIPS 2025 oral"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2025/Conference"
+      }
+     },
+     "forum": "uWj4s7rMnR",
+     "id": "uWj4s7rMnR",
+     "invitations": [
+      "NeurIPS.cc/2025/Conference/-/Submission",
+      "NeurIPS.cc/2025/Conference/-/Post_Submission",
+      "NeurIPS.cc/2025/Conference/Submission754/-/Full_Submission",
+      "NeurIPS.cc/2025/Conference/-/Edit",
+      "NeurIPS.cc/2025/Conference/Submission754/-/Camera_Ready_Revision"
+     ],
+     "number": 754,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}
