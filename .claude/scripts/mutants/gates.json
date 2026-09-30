@@ -1189,5 +1189,11 @@
   "file": ".claude/hooks/enforce-pr-workflow.sh",
   "old": " and \"--no-deref\" not in args)",
   "new": ")"
+ },
+ {
+  "label": "record: unresolvable base not refused",
+  "file": ".claude/scripts/record-review.py",
+  "old": "        if resolves != 0:",
+  "new": "        if False:"
  }
 ]

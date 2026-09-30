@@ -10,7 +10,8 @@ Refuses to record unless:
   * the working tree is clean — the approval must cover exactly the committed bytes;
   * every finding line in <dispositions.md> is dispositioned (a Kreate lesson, 2026-09-17: findings
     "noted as non-blocking" were lost, because deferring creates no artifact):
-        - [must|should|nit] <file:line> <summary> → fixed <sha>          (sha must be an ancestor of HEAD)
+        - [must|should|nit] <file:line> <summary> → fixed <sha>          (an ancestor of HEAD, not on origin/dev,
+                                                                           which must resolve)
         - [must|should|nit] <file:line> <summary> → task-NNN             (the Backlog task must exist)
         - [should|nit]      <file:line> <summary> → rejected: <reason>   (must-fix cannot be rejected)
     or the file states "No findings." on its own line;
@@ -59,6 +60,13 @@ def check_disposition(level: str, disp: str, root: Path, head: str) -> str | Non
         )
         if not ok:
             return f"fixed {sha}: not an ancestor of HEAD"
+        # Resolve the base first: `merge-base --is-ancestor` exits 128 for a base that doesn't resolve, which
+        # would read as "not on the base" and pass a commit that predates the review (TASK-067).
+        resolves = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"{BASE}^{{commit}}"], capture_output=True
+        ).returncode
+        if resolves != 0:
+            return f"fixed {sha}: the base {BASE} doesn't resolve (run `git fetch origin dev`), so it can't be checked"
         on_base = (
             subprocess.run(["git", "merge-base", "--is-ancestor", sha, BASE], capture_output=True).returncode
             == 0

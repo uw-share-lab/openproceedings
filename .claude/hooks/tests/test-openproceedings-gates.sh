@@ -201,6 +201,13 @@ check_cmd err "fixed sha reachable but not ancestor"  python3 "$RECORD" APPROVE 
 BASESHA=$(g rev-parse --short origin/dev)
 printf -- '- [must] a.py:1 bug → fixed %s\n' "$BASESHA" > "$TMP/d7.md"
 check_cmd err "fixed sha already on origin/dev"       python3 "$RECORD" APPROVE "$TMP/d7.md"
+# an unresolvable base must refuse, not read merge-base's exit 128 as "not on the base" (TASK-067)
+check_cmd err "fixed <base sha>, OP_REVIEW_BASE=nope"  env OP_REVIEW_BASE=nope python3 "$RECORD" APPROVE "$TMP/d7.md"
+check_cmd err "fixed <new sha>, OP_REVIEW_BASE=nope"   env OP_REVIEW_BASE=nope python3 "$RECORD" APPROVE "$TMP/d3.md"
+BASEFULL=$(g rev-parse origin/dev); g update-ref -d refs/remotes/origin/dev
+check_cmd err "fixed <base sha>, origin/dev deleted"   python3 "$RECORD" APPROVE "$TMP/d7.md"
+g update-ref refs/remotes/origin/dev "$BASEFULL"
+check_cmd ok  "fixed <new sha> with the base restored" python3 "$RECORD" APPROVE "$TMP/d3.md"
 printf -- '- [nit] a.py:1 name → rejected: ..........\n' > "$TMP/d8.md"
 check_cmd err "rejection without a real reason"       python3 "$RECORD" APPROVE "$TMP/d8.md"
 printf -- '- [must] a.py:1 bug → fixed %s\nNo findings.\n' "$SHA" > "$TMP/d9.md"

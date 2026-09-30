@@ -64,7 +64,7 @@ sha. Any commit after an approval — a typo fix, a rebase, an amend — produce
   `*`, indented or not. A tag on a line that isn't a well-formed bullet is refused as malformed.
 - It refuses: a dirty tree; an undispositioned finding; a `[must]` dispositioned as anything but
   `fixed <sha>`; a `fixed <sha>` that is not an ancestor of HEAD **or is already on `origin/dev`** (it
-  predates the review); a `task-NNN` that doesn't exist; a `rejected:` reason shorter than three words;
+  predates the review), or any `fixed <sha>` while `origin/dev` doesn't resolve (fetch it first); a `task-NNN` that doesn't exist; a `rejected:` reason shorter than three words;
   and a file that says `No findings.` while also listing findings. Never hand-write a record; fix what the
   script names.
 - Records are **per-sha**: an approval covers exactly one commit.
