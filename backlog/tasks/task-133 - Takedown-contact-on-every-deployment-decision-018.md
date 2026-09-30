@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 00:52'
-updated_date: '2026-09-30 02:03'
+updated_date: '2026-09-30 02:12'
 labels:
   - frontend
   - ops
@@ -51,6 +51,8 @@ Takedown procedure: spec 08 §Deploy. Nothing withholds an abstract today (snaps
 Visual baselines: footer hidden in e2e/visual.css (its text is build-configured and accessibility.spec.ts checks it), so the existing darwin/linux baselines stay valid; an amd64 Linux rebaseline was not possible locally (Next build fails under QEMU emulation: --no-opt in NODE_OPTIONS; Chromium screenshot capture fails).
 
 Verification: npm test --workspace frontend 34 files / 2607 tests passed; make lint exit 0; make tooling all case tables passed. make e2e: run 1 (footer present) 13/15, only the two visual baselines failed on the added footer height; footer then hidden in visual.css. Run 3: 14/15 passed, incl. the footer test (home/search/paper/coverage at 1280 and 320 px), 320px reflow, visual light/dark and all spec05 flows; the one failure was the first axe test's 30 s timeout under host load average ~100 (passed in run 1 with the footer; the same test passed at 320 px and in dark). A solo rerun under the same load timed out the same way.
+
+Review round 1 (all fixed): email regex restricted to ASCII [A-Za-z0-9._+-]@labels.TLD, applied inside mailto: too (tests cover ?cc=, %0A, %40, #, &, /, =, Cyrillic, U+202E, U+200B); a set but unusable value now throws, and next.config.ts calls checkTakedownContactEnv so the build fails; unset warns once in production ('publicly reachable instances must set NEXT_PUBLIC_TAKEDOWN_CONTACT'); no per-render warning; URLs must be printable ASCII with no username/password; the label is host+path (no query, no hash). FT-3 adds 'Issues there are public, so leave out personal details.'; spec 08 notes fallback requests are public and cites TASK-136 for missing tooling. TASK-136 created (takedown tooling); TASK-069 now depends on it. CLAUDE.md lists site-footer.tsx and takedown-contact.ts. Learnings entry: Linux visual baselines can't be regenerated on an Apple-silicon Mac.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

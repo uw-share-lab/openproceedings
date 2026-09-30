@@ -43,16 +43,18 @@ describe("SiteFooter", () => {
   it.each([undefined, ""])("still names a contact when the variable is %j (FT-3)", (contact) => {
     const { text, link } = footerOf(contact);
     expect(text).toBe(
-      "To have an abstract removed from this site, open an issue at github.com/uw-share-lab/openproceedings/issues.",
+      "To have an abstract removed from this site, open an issue at github.com/uw-share-lab/openproceedings/issues." +
+        " Issues there are public, so leave out personal details.",
     );
     expect(link.getAttribute("href")).toBe("https://github.com/uw-share-lab/openproceedings/issues");
   });
 
-  it("falls back rather than render an unusable link", () => {
+  it("never renders an unusable contact, and never warns per render", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const { link } = footerOf("javascript:alert(1)");
-    expect(link.getAttribute("href")).toBe("https://github.com/uw-share-lab/openproceedings/issues");
-    expect(warn).toHaveBeenCalledOnce();
+    vi.stubEnv("NEXT_PUBLIC_TAKEDOWN_CONTACT", "a@b.org?cc=evil%40x.org");
+    expect(() => render(<SiteFooter />)).toThrow(/NEXT_PUBLIC_TAKEDOWN_CONTACT/);
+    footerOf(undefined);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("underlines the link and lets a long address wrap at 320 px", () => {

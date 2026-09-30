@@ -291,7 +291,8 @@ warnings, the save's index check), the design doc says so; its open questions li
 - Every page ends with a footer (`<footer>` after `<main>`, the `contentinfo` landmark;
   `components/site-footer.tsx`) naming the deployment's takedown contact (decision-018; TASK-133): one line,
   copy deck FT-1 to FT-3, from `NEXT_PUBLIC_TAKEDOWN_CONTACT` (an email address or an http(s) page, compiled in
-  at build time), falling back to the project's issue tracker when unset or unusable, never to nothing. A publicly
+  at build time), falling back to the project's issue tracker when unset (never to nothing); a set but unusable value fails the
+  build (`next.config.ts`). A publicly
   reachable instance must set it; private, local and development ones need not (spec 08 §Deploy, which also
   holds the takedown procedure).
 - Security headers on every route (`frontend/src/lib/security-headers.ts`, set by `next.config.ts`):
