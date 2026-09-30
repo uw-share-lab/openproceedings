@@ -1,11 +1,11 @@
 ---
 id: TASK-099
 title: '/parse: a machine-readable reading on WARN_MIXED_AND_OR'
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-27 21:11'
-updated_date: '2026-09-30 02:28'
+updated_date: '2026-09-30 02:46'
 labels:
   - api
   - frontend
@@ -49,4 +49,6 @@ Tests: test_parser.py goldens pin (span, reading) for 16 mixed cases (native + s
 Docs: spec 02 (Precedence rule, ParseResult), 04 (Conventions), 05 (Components 1), error-diagnostics and codemirror-lezer skills; the TASK-041 learning's follow-up ticked.
 
 Review round 1 (all fixed): Must, the capped summary 500 (validator relaxed; contract test with 22 levels on /parse and /search; property example past the cap, the MAX_PER_CODE assume removed). Should 2, a failed branch gives reading null (parser test, spec 02). Should 3, records tests: a v2 body without the key reads as null; GET /records/{id} returns a saved reading (stored and replayed); search-records skill notes the tolerant key. Nit 4, the e2e asserts the reading's length.
+
+Review round 2 (1fbc748): approved. The property test test_loading_a_mixed_reading_keeps_the_query_and_clears_that_level failed once under load and could not be reproduced; it passed 3 runs at the ci profile (2,000 examples) afterwards. The message-prose follow-up is TASK-140.
 <!-- SECTION:NOTES:END -->
