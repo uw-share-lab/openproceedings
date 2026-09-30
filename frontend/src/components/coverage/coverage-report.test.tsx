@@ -188,7 +188,7 @@ describe("the header", () => {
     // a window within one day is written once, with "on"
     expect(s.crawl_dates["*"]!.from.slice(0, 10)).toBe(s.crawl_dates["*"]!.to.slice(0, 10));
     expect(text).toContain(`Google Scholar searches run on ${s.crawl_dates["*"]!.from.slice(0, 10)}`);
-    expect(text).toContain(`ris: google scholar searches run on ${s.crawl_dates.ris!.from.slice(0, 10)}`);
+    expect(text).toContain(`ris: Google Scholar searches run on ${s.crawl_dates.ris!.from.slice(0, 10)}`);
     expect(text).not.toMatch(/Crawled/);
     expect(text).toContain(`Sources: ${s.sources.join(", ")}`);
     expect(text).toContain("its counts are not PRISMA identification numbers");
@@ -216,7 +216,7 @@ describe("the header", () => {
     data.snapshot.crawl_dates_kind = { "*": "crawl", ris: "crawl" };
     render(<CoverageReport coverage={data} />);
     expect(screen.getByText(/^Built /).textContent).toContain(" · Crawled 2026-09-20 to 2026-09-26");
-    expect(document.body.textContent).toContain("ris: crawled 2026-09-20 to 2026-09-26");
+    expect(document.body.textContent).toContain("ris: Crawled 2026-09-20 to 2026-09-26");
   });
 });
 

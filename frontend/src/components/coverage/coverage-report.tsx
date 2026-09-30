@@ -56,7 +56,7 @@ function Header({ coverage }: { coverage: Coverage }) {
           <Fragment key={source}>
             {" · "}
             <code className="font-mono">{source}</code>:{" "}
-            {windowText(windowVerb(snapshot.crawl_dates_kind[source]).toLowerCase(), window)}
+            {windowText(windowVerb(snapshot.crawl_dates_kind[source]), window)}
           </Fragment>
         ))}
       </p>
