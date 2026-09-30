@@ -66,7 +66,7 @@ fresh() {
     pr 1  'feat: add the lexer' 2026-01-02T00:00:00Z "$C1" dev feat/lexer; echo ","
     pr 2  'fix(query): keep NEAR <in> one [field] for __init__ and venue_name' 2026-01-03T00:00:00Z "$C2" dev fix/near; echo ","
     pr 9  'ci: pin actions' 2026-01-03T00:00:00Z "$C2" dev ci/pin; echo ","
-    pr 3  'Read the archive*' 2026-01-04T00:00:00Z "$C3" dev fix/archive; echo ","
+    pr 3  'Read the archive* and `x' 2026-01-04T00:00:00Z "$C3" dev fix/archive; echo ","
     pr 4  'feat!: drop the v0 route' 2026-01-05T00:00:00Z "$C4" dev feat/drop; echo ","
     pr 11 'Tidy the notes, recall@25' 2026-01-05T00:00:00Z "$C4" dev misc-branch; echo ","
     pr 5  'Promote dev to main' 2026-01-03T00:00:00Z "$C2" main dev O/R; echo ","
@@ -118,7 +118,7 @@ fresh; expect ok "writes CHANGELOG.md"
 ### Fixed
 
 - a fork branch named like a release ([#13](https://github.com/o/r/pull/13))
-- Read the archive\* ([#3](https://github.com/o/r/pull/3))
+- Read the archive\* and \`x ([#3](https://github.com/o/r/pull/3))
 
 ## 0.1.0
 
@@ -215,6 +215,9 @@ fresh; data 0.2.0 2 2 2; manifest "$IDX" 2 2 0.26.2 "$(printf 'b%.0s' $(seq 1 64
 expect err "the index's snapshot_hash differs"                          --release 0.2.0
 fresh; data 0.2.0 2 2 2; manifest "$IDX" 2 3 0.26.2
 expect err "the index's schema_version differs"                         --release 0.2.0
+fresh; data 0.2.0 2 2 2; manifest "$IDX" 2 2 0.27.0
+expect err "the index's tantivy_version differs (code and table agree)" --release 0.2.0
+said  "names the manifest's tantivy_version"                            "tantivy_version 0.26.2 (its manifest says 0.27.0)"
 fresh; data 0.2.0 2 2 2; mkdir -p "$TMP/elsewhere/indexes"; rm -rf "$TMP/elsewhere/indexes/$IDX"; mv "$R/data/indexes/$IDX" "$TMP/elsewhere/indexes/"
 expect ok  "--data-dir names where the index lives"                     --release 0.2.0 --data-dir "$TMP/elsewhere"
 if OP_DATA_DIR="$TMP/elsewhere" python3 "$R/.claude/scripts/changelog.py" --repo o/r --prs "$TMP/prs.json" --release 0.2.0 > "$TMP/out" 2>&1; then
@@ -292,6 +295,8 @@ fresh; printf 'releases = 1\n' > "$R/docs/releases.toml"
 expect err "releases is not a table of tables"
 fresh; sed -i.bak 's/^\[releases."0.1.0"\]/[releases."v0.1.0"]/' "$R/docs/releases.toml"
 expect err "a table keyed v0.1.0"
+"${G[@]}" tag -d v0.1.0 >/dev/null
+expect err "a table keyed v0.1.0 with no tags (no section renders it)"
 fresh; printf 'notes = "a new\\n  crawl"\n' >> "$R/docs/releases.toml"
 expect ok  "notes are written on one line"
 has   "the notes line"                                                  "- a new crawl"

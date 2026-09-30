@@ -90,11 +90,10 @@
   "new": "missing: set[str] = set()"
  },
  {
-  "label": "changelog: a non-version table key accepted (equivalent: data_block's version_key refuses the same key)",
+  "label": "changelog: a non-version table key accepted",
   "file": ".claude/scripts/changelog.py",
   "old": "    for version, entry in releases.items():\n        version_key(version)\n",
-  "new": "    for version, entry in releases.items():\n",
-  "equivalent": true
+  "new": "    for version, entry in releases.items():\n"
  },
  {
   "label": "changelog: a tagged version can be released again",
@@ -221,5 +220,17 @@
   "file": ".claude/scripts/changelog.py",
   "old": "    \"deps\": \"Internal\",",
   "new": "    \"deps\": \"Changed\","
+ },
+ {
+  "label": "changelog: manifest tantivy_version not checked",
+  "file": ".claude/scripts/changelog.py",
+  "old": "MANIFEST_KEYS = (\"index_version\", \"snapshot_hash\", \"tokenizer_version\", \"schema_version\", \"tantivy_version\")",
+  "new": "MANIFEST_KEYS = (\"index_version\", \"snapshot_hash\", \"tokenizer_version\", \"schema_version\")"
+ },
+ {
+  "label": "changelog: backticks not escaped",
+  "file": ".claude/scripts/changelog.py",
+  "old": "MD_SPECIAL = re.compile(r\"[\\\\*\\[\\]<>`]|",
+  "new": "MD_SPECIAL = re.compile(r\"[\\\\*\\[\\]<>]|"
  }
 ]

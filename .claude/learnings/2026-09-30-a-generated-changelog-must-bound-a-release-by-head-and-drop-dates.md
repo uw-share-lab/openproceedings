@@ -60,6 +60,6 @@ Define the release process and generate `CHANGELOG.md` from merged PRs, before a
 - Skill / agent / CLAUDE.md updated? — `docs/specs/08-ops-and-tooling.md` §Release and §Branch protection,
   `.claude/agents/release-manager.md`, `.claude/commands/open-pr.md`, the `pr-workflow`, `repo-conventions`
   and `no-ai-attribution` skills, `CLAUDE.md`.
-- Test or hook added? — `.claude/scripts/tests/test-changelog.sh` (120 rows) and 37 mutants in
+- Test or hook added? — `.claude/scripts/tests/test-changelog.sh` (123 rows) and 39 mutants in
   `.claude/scripts/mutants/changelog.json`; `block-ai-attribution.sh` scans `gh release create`/`edit` notes
   (5 rows in `test-openproceedings-gates.sh`, 2 mutants in `gates.json`).
