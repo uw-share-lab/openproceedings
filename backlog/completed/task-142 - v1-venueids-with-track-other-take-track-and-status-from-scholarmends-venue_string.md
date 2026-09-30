@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 04:30'
-updated_date: '2026-09-30 05:23'
+updated_date: '2026-09-30 05:34'
 labels:
   - ingest
 milestone: m-4
@@ -23,7 +23,7 @@ Found by TASK-098's review (2026-09-30). The RIS importer uses scholarmend's ven
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [x] #1 For v1 venueids whose track is 'other', the importer takes track and status from venue_string when the venue and year agree (per the openreview-venueids table), with evidence
+- [x] #1 For v1 venueids whose track is 'other' and that the openreview-venueids table says take their track from content.venue (classify.V1_TRACK_FROM_VENUE: ICLR 2013/2017 lower-case conference), the importer takes track and status from venue_string when the venue and year agree, with evidence
 - [x] #2 Hand-written fixture cases (ICLR 2017 poster/oral/workshop, 2023 blogpost) and a real-data check
 <!-- AC:END -->
 
@@ -39,6 +39,8 @@ TDD: add ICLR 2017 poster/oral/workshop/rejected/another-year and ICLR 2023 blog
 Scope: only the openreview-venueids table's no-track forms (ICLR.cc/2013/conference, ICLR.cc/2017/conference) take track from venue_string; other 'other' venueids (e.g. NeurIPS.cc/2022/Challenge/CellSeg) and suffixed forms keep other/unknown, so a string can never lift an out-of-taxonomy group into main. ICLR 2023 BlogPosts already classifies as track blogpost (_TRACKS, 2023+), so TASK-098's code already used 'Blogposts @ ICLR 2023'; the new fixture row pins it. decision-020 untouched (no ranking between v1 signals is introduced; the venue string is still the only RIS v1 status signal and a listing still decides acceptance per decision-005). Real data: data/cache/ris/out-covidence (1,391 read, 1,377 imported) and out-covidence-2020-2024 (443 read, 428 imported): repr of every record plus both ImportReports identical on origin/dev and the branch (sha256 14268ea2...); 0 venue_string claims, 0 ICLR 2013/2017 venueids.
 
 Validation: make test 5,641 passed, 1 failed (test_openreview_v1_authors.py::test_a_split_always_has_the_id_count, Hypothesis too_slow health check under load average ~90 from parallel agents; unrelated file; passed 3 reruns and with the failing seed). make lint and make tooling pass.
+
+Real-data evidence (review): the RIS corpus check above is no-regression only (it has no affected record). The new path was run over the 2026-09-29 v1 crawl cache: 543 ICLR 2017 notes with ICLR.cc/2017/conference, fed to ris._identity as scholarmend 0.1.4 claims, give 198 main/accepted (183 Poster + 15 Oral) = official_counts ICLR 2017 main 198; 263 main/rejected; 82 workshop/unknown; no workshop-listing note accepted. Review round 1 added the listing test (test_a_listing_meets_the_track_an_other_venueid_takes_from_its_venue_string).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

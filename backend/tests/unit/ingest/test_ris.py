@@ -896,3 +896,54 @@ def test_a_listing_overrides_a_v1_venue_strings_rejection(tmp_path: Path) -> Non
     r = by_id[V1["submitted"]]
     assert (r.track, r.status) == ("main", "accepted") and report.status_overrides == 1
     assert r.claims("status")[0].evidence.endswith(" (overrides venue_string status rejected)")  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize(
+    ("row", "key", "string", "status", "override"),
+    [
+        (9, "2017_poster", "ICLR 2017 Poster", "accepted", False),  # the listing agrees: nothing to override
+        (
+            12,
+            "2017_rejected",
+            "Submitted to ICLR 2017",
+            "accepted",
+            True,
+        ),  # decision-005: the proceedings decide
+        (
+            11,
+            "2017_workshop",
+            "ICLR 2017 Invite to Workshop",
+            None,
+            False,
+        ),  # workshop vs a main listing: conflict
+        (13, "2017_another_year", "ICLR 2022 Poster", None, False),  # refused, so `other` vs main: conflict
+    ],
+)
+def test_a_listing_meets_the_track_an_other_venueid_takes_from_its_venue_string(
+    tmp_path: Path, row: int, key: str, string: str, status: str | None, override: bool
+) -> None:
+    """TASK-142: before it, an ICLR 2017 `conference` record with a listing was always a conflict (`other`
+    vs main); now the listing is checked against the string's track, which keeps its venue_string evidence."""
+
+    def with_listing(e: Entries) -> None:
+        url = f"https://proceedings.iclr.cc/paper_files/paper/2017/hash/{H1}-Abstract-Conference.html"
+        e[row]["claims"] += [
+            claim(f, v, "proceedings_url", url)
+            for f, v in (("venue", "ICLR"), ("year", "2017"), ("track", "Conference"))
+        ]
+
+    (tmp_path / "base").mkdir()
+    (tmp_path / "edited").mkdir()
+    base = run(tmp_path / "base", lambda e: None, V1_FIXTURE)[1]
+    by_id, report = run(tmp_path / "edited", with_listing, V1_FIXTURE)
+    if status is None:
+        assert V1[key] not in by_id and report.skipped["conflict"] == base.skipped["conflict"] + 1
+        return
+    r = by_id[V1[key]]
+    assert (r.track, r.status) == ("main", status) and report.status_overrides == int(override)
+    assert [c.evidence for c in r.claims("track")] == [
+        f"scholarmend:openreview_api venueid=ICLR.cc/2017/conference venue_string={string}"
+    ]
+    [ev] = [c.evidence for c in r.claims("status")]
+    assert ev is not None and ev.startswith("scholarmend:proceedings_url https://proceedings.iclr.cc/")
+    assert ev.endswith(" (overrides venue_string status rejected)") is override
