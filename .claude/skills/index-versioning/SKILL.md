@@ -46,7 +46,8 @@ data/indexes/current            symlink → the served version
   or a promotion takes no indexes lock, so retire checks the pins and the symlinks once more after renaming
   the directory aside (`.retiring-<version>`, never swept), and renames it back on a hit or on anything raised,
   Ctrl-C included; only the few syscalls before the removal remain open. A failed rename-back logs ERROR
-  `index_retire_restore_failed`: `mv indexes/.retiring-<version> indexes/<version>` by hand before anything else.
+  `index_retire_restore_failed`: `mv indexes/.retiring-<version> indexes/<version>` by hand before anything else;
+  until then every retire of that version is refused as `retire_cut_short`.
 - The API loads a **pinned** older version to replay a record (`.claude/skills/search-records/SKILL.md`).
   Replay returns HTTP 200 with one of three statuses (spec 04 §Search records):
   - **`reproduced`**: the same `index_version` **and** `query_version` are available, and both `ids_hash`

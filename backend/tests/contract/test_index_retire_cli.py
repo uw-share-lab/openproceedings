@@ -7,6 +7,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import shutil
 import sqlite3
 import threading
 from pathlib import Path
@@ -412,3 +413,26 @@ def test_a_failed_rename_back_is_an_error_the_operator_is_told_to_fix(
     assert (aside / "manifest.json").is_file()  # the sweep left it for the operator
     real_rename(aside, data_dir / "indexes" / store.small)  # the operator's step
     assert op(capsys, data_dir, "index", "retire", store.small)[0] == 0
+
+
+@pytest.mark.parametrize("case", ["absent", "rebuilt", "dry_run"])
+def test_a_retire_cut_short_blocks_the_next_one(
+    capsys: Capsys, data_dir: Path, store: Store, case: str
+) -> None:
+    """A `.retiring-<v>` left by a failed restore: every later retire of v is refused with the manual step,
+    whether v is gone, was rebuilt meanwhile, or the run is a dry run; nothing is touched."""
+    indexes = data_dir / "indexes"
+    aside = indexes / f".retiring-{store.small}"
+    if case == "absent":
+        (indexes / store.small).rename(aside)
+    else:  # v is there too (rebuilt, or never moved): a copy stands in for the set-aside one
+        shutil.copytree(indexes / store.small, aside)
+    before = tree(data_dir)
+    argv = ["index", "retire", store.small, *(["--dry-run"] if case == "dry_run" else [])]
+    code, out, err = op(capsys, data_dir, *argv)
+    assert code == 1 and out == ""
+    assert f"a previous retire of {store.small} was cut short" in err
+    assert f"`mv indexes/.retiring-{store.small} indexes/{store.small}`" in err
+    assert tree(data_dir) == before
+    [line] = [x for x in log_lines(err) if x["event"] == "index_retire_refused"]
+    assert (line["reason"], line["index_version"]) == ("retire_cut_short", store.small)

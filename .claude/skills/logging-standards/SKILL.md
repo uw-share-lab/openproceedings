@@ -126,7 +126,9 @@ logs one line with `index_version`, `pinned` and the outcome: `index_retired` (I
 `tmp_left: true` when its `.tmp-` directory survived), `index_retire_checked` (`--dry-run`) or
 `index_retire_refused` (WARNING with its `reason`; DEBUG for a malformed name, which is left out), plus
 ERROR `index_retire_restore_failed` (the `.retiring-` directory's name and errno name) when a set-aside index
-can't be renamed back. A
+can't be renamed back. That run logs two lines: the ERROR, then the `index_retire_refused` (or `cli_refused`,
+or nothing for Ctrl-C) of whatever made it restore. A later retire of that version is refused with reason
+`retire_cut_short` until the directory is moved back. A
 `storage.sweep` that can't remove a `.tmp-` leftover logs `tmp_sweep_failed` (WARNING, its name and the
 chmod's errno name) and carries on.
 

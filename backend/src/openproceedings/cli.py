@@ -511,6 +511,15 @@ def _index_retire(ns: argparse.Namespace) -> int:
                 "not an index_version (lowercase hex and `-`, starting with a hex digit)",
                 None,
             )
+        aside = indexes / f".retiring-{version}"
+        if aside.exists() or aside.is_symlink():  # before anything else: v may be absent, or rebuilt
+            return (
+                "retire_cut_short",
+                f"a previous retire of {version} was cut short and left {aside.name}; rename it back by hand "
+                f"(`mv indexes/{aside.name} indexes/{version}`; if {version} was rebuilt meanwhile it holds the "
+                f"same index, so remove one copy instead) before retiring",
+                None,
+            )
         target = indexes / version
         if target.is_symlink() or not target.is_dir():
             return "not_found", f"no index directory {version} under <data-dir>/indexes", None
@@ -581,9 +590,9 @@ def _index_retire(ns: argparse.Namespace) -> int:
         # passes; then renamed to a `.tmp-` name, the commit point after which a sweep may finish the removal
         aside = indexes / f".retiring-{version}"
         doomed = indexes / f"{storage.TMP}retire-{version}"
-        target.rename(aside)
         committed = False
         try:
+            target.rename(aside)
             # neither a promotion nor a save takes the lock: look once more, now that the name is gone
             reason, message, pinned = pins()
             if not reason and (link := named_by_link()) is not None:
