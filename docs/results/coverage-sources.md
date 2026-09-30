@@ -20,9 +20,10 @@ No row is an estimate, and no row comes from an aggregator. Where sources differ
 this rule picks, and the other values are listed under §Disagreements. To count a list, the page was
 fetched once and its distinct paper entries were counted (by paper id or title).
 
-The denominator is the final proceedings population where one exists. The numerator names the same
-population: since TASK-072 (decision-005), an OpenReview-accepted paper absent from the crawled proceedings is
-demoted to `unknown` (`docs/results/2026-09-29-reconcile-real-data.md`).
+The denominator is the final proceedings population where one exists. Since TASK-072 (decision-005), the
+numerator names the same population wherever reconcile runs: an OpenReview-accepted paper absent from the
+crawled proceedings is demoted to `unknown` (`docs/results/2026-09-29-reconcile-real-data.md`). Reconcile
+skipped NeurIPS 2021, because its D&B listing states no count, so no NeurIPS 2021 record is demoted.
 
 | venue | year | track | official_accepted | what it counts | source (URL or citation) | accessed |
 |---|---|---|---|---|---|---|
@@ -108,7 +109,11 @@ out of 24), ICLR 2023's virtual-site list, and NeurIPS 2025 D&B's former virtual
 - **NeurIPS 2021 main:** the proceedings (2,334) equal the fact sheet (2,334). The OpenReview v1 `venue`
   strings say 2,630 accepted (facts doc). The gap was 300 papers OpenReview v1 lists twice (297 of them
   accepted), which the v1 crawler now collapses (TASK-125, facts doc); the index then has 2,335 accepted
-  (`2026-09-29-coverage.md`). The official number itself is not in doubt.
+  (`2026-09-29-coverage.md`). The +1 is one paper counted twice: "Stochastic Online Linear Regression: the
+  Forward Algorithm to Replace Ridge" is `op:neurips:2021:rDdb26AQ0SO` (OpenReview only) and
+  `op:neurips:2021:nips-cca289d2a4acd14c1cd9a84ffb41dd29` (proceedings only). Dedup refuses to merge them
+  because OpenReview also has `W6e384Lkjbw` under the same title, and reconcile skipped NeurIPS 2021
+  (TASK-132). The official number itself is not in doubt.
 - **NeurIPS 2022 main:** the proceedings have 2,671, the same as OpenReview's `NeurIPS 2022 Accept`. The fact
   sheet gives 2,905 accepted papers but does not say which tracks that total covers. It is larger than main
   plus D&B (2,834), so the row uses the proceedings.
