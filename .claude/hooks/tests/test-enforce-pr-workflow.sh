@@ -216,6 +216,35 @@ git -C "$REPO" config alias.mc commit
 check main      block 'git mc -m x'                                # alias from the repo's own config
 git -C "$REPO" config --unset alias.mc
 
+echo "every other way to make a commit on, or move, a protected branch (TASK-067):"
+check main      block 'git cherry-pick x'
+check dev       block 'git revert HEAD'
+check main      block 'git am fix.patch'
+check main      block 'git rebase feat'
+check main      block 'git commit-tree HEAD^{tree} -m x'
+check main      block 'git reset --hard feat'                      # main now points at feat's commits
+check main      block 'git reset --soft HEAD~1'
+check main      allow 'git reset --hard origin/main'               # sync with origin
+check main      allow 'git reset --hard @{u}'
+check main      allow 'git reset --hard'                           # discard local edits, main unmoved
+: > "$REPO/notes.txt"                                               # an untracked file to unstage by name
+check main      allow 'git reset notes.txt'                        # unstage a path
+check main      allow 'git reset -- feat'                          # ... after --, always a path
+check main      block 'git update-ref HEAD feat'                   # HEAD is main here: moves it
+check feature/x allow 'git update-ref HEAD feat'                   # positive control: off main
+check main      allow 'git update-ref --no-deref HEAD feat'        # detaches HEAD; main stays put
+check main      block 'git pull --no-ff'                           # a merge commit even when ff is possible
+check dev       block 'git pull --no-ff origin dev'
+check feature/x allow 'git pull --no-ff'
+check feature/x allow 'git cherry-pick x'                          # positive control: off main
+check feature/x allow 'git rebase origin/dev'
+check feature/x allow 'git reset --hard origin/dev'
+check feature/x block 'git update-ref refs/heads/main HEAD'        # moves local main from anywhere
+check feature/x block 'git update-ref -d refs/heads/dev'
+check feature/x block 'git update-ref -m msg refs/heads/dev HEAD'
+check feature/x block 'git update-ref --stdin'                     # refs read from stdin: refuse to guess
+check feature/x allow 'git update-ref refs/heads/feature/x HEAD'
+
 echo "eval re-parses its argument:"
 check main       block 'eval "git push origin main"'
 check main       block 'eval "git commit -m x"'
@@ -258,6 +287,14 @@ check_cwd main "$REPO" block 'git commit -m x'                    # positive con
 # reverse ($REPO -> $WT, must chain into the feature worktree and allow), plus an absolute-reset case.
 WT_TO_REPO=$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$REPO" "$WT")
 REPO_TO_WT=$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$WT" "$REPO")
+echo "--git-dir / GIT_DIR point git at another worktree's branch (TASK-067):"
+check_cwd main "$WT" block "GIT_DIR=\"$REPO/.git\" git commit -m x"          # json cwd = feature worktree
+check_cwd main "$WT" block "git --git-dir=\"$REPO/.git\" commit -m x"
+check_cwd main "$WT" block "git --git-dir \"$REPO/.git\" cherry-pick x"
+check_cwd main "$WT" block "env GIT_DIR=\"$REPO/.git\" git merge x"
+check_cwd main "$WT" allow "GIT_DIR=\"$WT/.git\" git commit -m x"            # positive control: its own gitfile
+check_cwd main "$REPO" allow "git --git-dir=\"$WT/.git\" commit -m x"        # ... and the other way round
+
 echo "multiple -C flags chain like real git (defect 1 -- HIGH bypass fix):"
 # ambient/json cwd is an unrelated dir (the OTHER worktree/repo); the chain, not the cwd, decides.
 check_cwd main "$WT"   block "git -C \"$WT\" -C \"$WT_TO_REPO\" commit -m x"   # rel chain -> main worktree

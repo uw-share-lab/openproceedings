@@ -3,8 +3,11 @@
 # land through a pull request. The team flow is feature -> PR -> dev (integration) -> PR -> main (prod).
 #
 # Blocks, from ANY branch, any git command that would write or delete a remote PROTECTED ref
-# ('main'/'dev'), and blocks `git commit`/`git merge`/non-deletion `git push` while checked out on a
-# protected branch. Deleting a remote *feature* branch is allowed (it cannot rewrite a protected
+# ('main'/'dev') or move a local one with `git update-ref`, and blocks `git commit` (and the other ways to
+# make a commit: cherry-pick, revert, am, rebase, commit-tree), `git merge`, `git pull --no-ff`, a
+# `git reset` to anything but HEAD or the upstream, and non-deletion `git push` while checked out on a
+# protected branch — the branch of the `--git-dir`/`GIT_DIR=` repository when the command names one.
+# Deleting a remote *feature* branch is allowed (it cannot rewrite a protected
 # branch's history); read-only plumbing that merely contains "merge"/"push" as a substring (e.g.
 # `git merge-base`) is allowed. Everywhere below, "main" in the older prose means "a protected branch".
 #
@@ -79,7 +82,7 @@ import json, os, re, shlex, subprocess, sys
 # `git push origin HEAD:dev;` read `dev;` as the ref), and compare command names by basename
 # (`/usr/bin/git`).
 sys.path.insert(0, os.environ.get("HOOK_LIB", ""))
-from cmdparse import (Argv, ParseError, base as _base, expand_git_alias, git_config, git_subcommand,
+from cmdparse import (Argv, ParseError, base as _base, expand_git_alias, git_config, git_dir, git_subcommand,
                       is_redirect as _is_redirect, is_separator as _is_sep, strip_prefixes, tokenize as _tokenize,
                       xargs_hides_args)
 
@@ -104,28 +107,33 @@ SEPARATORS = {"&&", "||", ";", "|", "&"}  # _split() maps every separator (incl.
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 SOURCE_CMDS = {".", "source"}  # always run a file; no -c-string form exists for these
 PROTECTED = {"main", "dev"}    # branches that only a merged PR may write; extend here to add more
+# Subcommands that make a commit on the checked-out branch, like `git commit` (TASK-067)
+COMMIT_MAKERS = {"commit", "cherry-pick", "revert", "am", "rebase", "commit-tree"}
+RESET_MODES = {"--hard", "--soft", "--mixed", "--keep", "--merge"}
 # `git -c` keys (lower-cased) that decide what a refspec-less `git push` sends and where
 PUSH_TARGET_CONFIG = re.compile(r"remote\..+\.push|push\.default|remote\.pushdefault")
 
 _branch_cache = {}
 
 
-def get_branch(directory):
-    """Resolve the checked-out branch of `directory` via a real `git -C`, memoized. Returns ''
+def get_branch(directory, gitdir=None):
+    """Resolve the checked-out branch of `directory` via a real `git -C`, memoized — of the `gitdir`
+    repository when the git command names one (`--git-dir`, `GIT_DIR=`; TASK-067). Returns ''
     (never matches a protected branch) if the directory doesn't exist or isn't inside a git worktree — in
     that case the git call being analyzed would itself fail at runtime, so under-blocking here is
     harmless."""
     d = directory or HOOK_CWD
-    if d not in _branch_cache:
+    key = (d, gitdir)
+    if key not in _branch_cache:
         try:
             r = subprocess.run(
-                ["git", "-C", d, "rev-parse", "--abbrev-ref", "HEAD"],
+                ["git", "-C", d, *(["--git-dir", gitdir] if gitdir else []), "rev-parse", "--abbrev-ref", "HEAD"],
                 capture_output=True, text=True, timeout=5,
             )
-            _branch_cache[d] = r.stdout.strip() if r.returncode == 0 else ""
+            _branch_cache[key] = r.stdout.strip() if r.returncode == 0 else ""
         except Exception:
-            _branch_cache[d] = ""
-    return _branch_cache[d]
+            _branch_cache[key] = ""
+    return _branch_cache[key]
 
 
 def resolve_dir(candidate, base):
@@ -149,9 +157,9 @@ def dest_protected(refspec):
     return dst in PROTECTED
 
 
-def push_verdict(args, directory, config):
-    """Classify the args following `git push`, using the branch checked out in `directory` and the
-    `git -c` settings in `config`."""
+def push_verdict(args, directory, config, gitdir=None):
+    """Classify the args following `git push`, using the branch checked out in `directory` (or `gitdir`)
+    and the `git -c` settings in `config`."""
     flags = [a for a in args if a.startswith("-")]
     positionals = [a for a in args if not a.startswith("-")]
     refspecs = positionals[1:]  # positionals[0] is the remote
@@ -176,7 +184,7 @@ def push_verdict(args, directory, config):
         return "protected-ref"  # `--delete` with no ref named: refuse to guess
     if deletion:
         return "allow"     # deleting a remote feature ref — cannot touch a protected branch
-    if get_branch(directory) in PROTECTED:
+    if get_branch(directory, gitdir) in PROTECTED:
         return "protected"  # ordinary push while standing on a protected branch
     return "allow"
 
@@ -193,24 +201,69 @@ def git_verdict(argv, directory):
     if g is None:
         return "allow"
     sub, args, effective_dir = g
+    gitdir = git_dir(argv, directory)
+    branch = get_branch(effective_dir, gitdir)
+    on_protected = branch in PROTECTED
 
     if xargs_hides_args(argv, effective_dir):
         return "xargs"  # it appends refspecs/paths from stdin that this gate cannot see
     if sub == "push":
-        return push_verdict(args, effective_dir, git_config(argv))
+        return push_verdict(args, effective_dir, git_config(argv), gitdir)
+    if sub == "update-ref":
+        return update_ref_verdict(args, on_protected)
     if sub == "pull":
-        return "allow"  # sync carve-out: fetch + integrate into LOCAL main only; see header rationale.
+        # sync carve-out: fetch + integrate into LOCAL main only; see header rationale. `--no-ff` makes a
+        # merge commit even when a fast-forward is possible.
+        return "protected-merge" if on_protected and "--no-ff" in args else "allow"
     if sub == "merge":
         # sync carve-out: a fast-forward-only merge creates no merge commit, so it's allowed on a
         # protected branch. Require --ff-only AND reject --no-ff/--ff — those OVERRIDE --ff-only and
         # would still make a merge commit (a commit on the protected branch). A plain merge is
         # likewise a commit and blocked.
         ff_sync = "--ff-only" in args and not ({"--no-ff", "--ff"} & set(args))
-        if get_branch(effective_dir) in PROTECTED and not ff_sync:
+        if on_protected and not ff_sync:
             return "protected-merge"
-    elif sub == "commit" and get_branch(effective_dir) in PROTECTED:
+    elif sub in COMMIT_MAKERS and on_protected:
+        return "protected"
+    elif sub == "reset" and on_protected and reset_moves_branch(args, branch, effective_dir):
         return "protected"
     return "allow"
+
+
+def update_ref_verdict(args, on_protected):
+    """`git update-ref [-m msg] [-d] [--no-deref] <ref> …` writes a ref directly: refuse a protected one, from
+    any branch; HEAD while a protected branch is checked out (it moves that branch); or refs read from
+    --stdin, which this gate can't see."""
+    if "--stdin" in args:
+        return "protected-update-ref"
+    positionals, skip = [], False
+    for a in args:
+        if skip:
+            skip = False
+        elif a == "-m":
+            skip = True
+        elif not a.startswith("-"):
+            positionals.append(a)
+    if not positionals:
+        return "allow"
+    ref = positionals[0]
+    if dest_protected(ref) or (ref in ("HEAD", "@") and on_protected and "--no-deref" not in args):
+        return "protected-update-ref"
+    return "allow"
+
+
+def reset_moves_branch(args, branch, directory):
+    """True if this `git reset` points the checked-out branch at another commit. Resetting to HEAD (no
+    target) or to the branch's own upstream is a sync; `git reset <path>` / `git reset -- <path>` unstages."""
+    if "--" in args:
+        args = args[: args.index("--")]
+    positionals = [a for a in args if not a.startswith("-")]
+    if not positionals:
+        return False
+    target = positionals[0]
+    if not RESET_MODES & set(args) and os.path.exists(resolve_dir(target, directory)):
+        return False  # a path: unstaging moves nothing
+    return target not in {"HEAD", "@", "@{u}", "@{upstream}", f"origin/{branch}", f"{branch}@{{u}}", f"{branch}@{{upstream}}"}
 
 
 warnings = []  # opaque-script wrappers seen along the way; only surfaced if nothing else blocks
@@ -372,7 +425,8 @@ if [ -z "$verdict" ] || [ "$verdict" = "parse-fail" ]; then
   esac
   if [ "$verdict" = "allow" ]; then
     case "$input" in
-      *"git commit"*|*"git merge"*) [ "$on_protected" = 1 ] && verdict="protected" ;;
+      *"git commit"*|*"git merge"*|*"git cherry-pick"*|*"git revert"*|*"git am "*|*"git rebase"*|*"git reset"*)
+        [ "$on_protected" = 1 ] && verdict="protected" ;;
     esac
   fi
 fi
@@ -397,6 +451,12 @@ case "$verdict" in
     echo "  git switch -c <branch>" >&2
     echo "  git commit ...   &&   git push -u origin <branch>" >&2
     echo "  gh pr create --base dev --fill   &&   gh pr merge --squash --delete-branch" >&2
+    exit 2
+    ;;
+  protected-update-ref)
+    echo "Refusing: this git update-ref would move or delete a protected branch (main/dev) directly (or reads" >&2
+    echo "the refs to write from --stdin, which this gate can't see). Only a merged pull request changes them;" >&2
+    echo "to sync a local protected branch use 'git pull' or 'git merge --ff-only <ref>'." >&2
     exit 2
     ;;
   protected-ref)

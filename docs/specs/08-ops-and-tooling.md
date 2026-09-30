@@ -487,7 +487,7 @@ exists and could shadow the project command.
 
 | Hook | Event | Blocks / does |
 |---|---|---|
-| `enforce-pr-workflow.sh` | PreToolUse Bash | `git commit`/`push`/`merge` on `main` or `dev`, and any write to those remote refs (from Kreate) |
+| `enforce-pr-workflow.sh` | PreToolUse Bash | `git commit` (and `cherry-pick`, `revert`, `am`, `rebase`, `commit-tree`), `push`, `merge`, `pull --no-ff` and a `reset` to anything but HEAD or the upstream on `main` or `dev` (the branch of the `--git-dir`/`GIT_DIR=` repo when one is named); any write to those remote refs (`HEAD:heads/dev` included) or `git update-ref` of the local ones; a push, add, commit, rm or mv run by `xargs` (from Kreate) |
 | `require-review.sh` | PreToolUse Bash | `git push` of any unreviewed commit (every refspec source, `--all`, the `--git-dir` repo's HEAD); a refspec-less push whose `git -c` settings choose the refspec; a push run by `xargs`; `gh pr create`/`new` without an APPROVE record for the head, or without an added or extended learnings entry |
 | `block-ai-attribution.sh` | PreToolUse Bash | A message-writing git command, PR-writing gh command or `gh release create`/`edit` whose text (incl. heredocs, `--trailer`, `-F`, `--body-file` and `--notes-file` files) has a Claude co-author trailer or "Generated with" footer; `.githooks/commit-msg` covers editor commits |
 | `enforce-backlog-cli.sh` | PreToolUse Write/Edit/MultiEdit/NotebookEdit | Hand edits under `backlog/` (from Kreate; decision bodies are Edit-only) |

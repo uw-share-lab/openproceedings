@@ -1081,5 +1081,113 @@
   "file": ".claude/hooks/enforce-pr-workflow.sh",
   "old": "    dst = dst.removeprefix(\"refs/\").removeprefix(\"heads/\")",
   "new": "    dst = dst.rsplit(\"/\", 1)[-1]"
+ },
+ {
+  "label": "PR gate: --git-dir/GIT_DIR branch ignored",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    gitdir = git_dir(argv, directory)",
+  "new": "    gitdir = None"
+ },
+ {
+  "label": "PR gate: get_branch ignores the git dir",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "[\"git\", \"-C\", d, *([\"--git-dir\", gitdir] if gitdir else []), \"rev-parse\"",
+  "new": "[\"git\", \"-C\", d, \"rev-parse\""
+ },
+ {
+  "label": "PR gate: cherry-pick not a commit maker",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "COMMIT_MAKERS = {\"commit\", \"cherry-pick\",",
+  "new": "COMMIT_MAKERS = {\"commit\","
+ },
+ {
+  "label": "PR gate: revert not a commit maker",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "\"cherry-pick\", \"revert\", \"am\"",
+  "new": "\"cherry-pick\", \"am\""
+ },
+ {
+  "label": "PR gate: am not a commit maker",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "\"revert\", \"am\", \"rebase\"",
+  "new": "\"revert\", \"rebase\""
+ },
+ {
+  "label": "PR gate: rebase not a commit maker",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "\"am\", \"rebase\", \"commit-tree\"}",
+  "new": "\"am\", \"commit-tree\"}"
+ },
+ {
+  "label": "PR gate: commit-tree not a commit maker",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "\"rebase\", \"commit-tree\"}",
+  "new": "\"rebase\"}"
+ },
+ {
+  "label": "PR gate: reset not gated",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    elif sub == \"reset\" and on_protected and reset_moves_branch(args, branch, effective_dir):",
+  "new": "    elif False:"
+ },
+ {
+  "label": "PR gate: reset to the upstream refused",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    return target not in {\"HEAD\",",
+  "new": "    return True or target not in {\"HEAD\","
+ },
+ {
+  "label": "PR gate: reset <path> read as a commit",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if not RESET_MODES & set(args) and os.path.exists(resolve_dir(target, directory)):",
+  "new": "    if False:"
+ },
+ {
+  "label": "PR gate: reset -- not cut",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if \"--\" in args:\n        args = args[: args.index(\"--\")]\n",
+  "new": ""
+ },
+ {
+  "label": "PR gate: reset with no target read as a move",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if not positionals:\n        return False\n    target = positionals[0]",
+  "new": "    if not positionals:\n        return True\n    target = positionals[0]"
+ },
+ {
+  "label": "PR gate: pull --no-ff allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        return \"protected-merge\" if on_protected and \"--no-ff\" in args else \"allow\"",
+  "new": "        return \"allow\""
+ },
+ {
+  "label": "PR gate: update-ref not gated",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        return update_ref_verdict(args, on_protected)",
+  "new": "        return \"allow\""
+ },
+ {
+  "label": "PR gate: update-ref --stdin allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if \"--stdin\" in args:\n        return \"protected-update-ref\"",
+  "new": "    if False:\n        return \"protected-update-ref\""
+ },
+ {
+  "label": "PR gate: update-ref -m value read as the ref",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        elif a == \"-m\":\n            skip = True\n",
+  "new": ""
+ },
+ {
+  "label": "PR gate: update-ref HEAD on main allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "(ref in (\"HEAD\", \"@\") and on_protected and \"--no-deref\" not in args)",
+  "new": "False"
+ },
+ {
+  "label": "PR gate: update-ref --no-deref HEAD refused",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": " and \"--no-deref\" not in args)",
+  "new": ")"
  }
 ]
