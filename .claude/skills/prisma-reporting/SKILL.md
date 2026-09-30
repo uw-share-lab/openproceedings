@@ -42,7 +42,7 @@ whether the search was re-run (replay status) · a stable link to the search rec
 `dedup.merged` and `dedup.ambiguous_not_merged` counts from the manifest (stored in the search record's
 `dedup`, 04 §Search records) describe how the database was built: cross-source records merged at ingest,
 before indexing. `dedup.track_not_merged` and `dedup.venue_year_not_merged` (body v2) count look-alike
-pairs deliberately kept apart (a track the proceedings never host; two records of one venue-year); the
+pairs deliberately kept apart (a pair the dedup track rule refuses; two records of one venue-year); the
 statement may mention them. Report them only in that statement. Never put them in the flow diagram's
 duplicates box or present them as removed by this search. **Duplicates Covidence finds** (between this export
 and other databases' records) **do** go in the flow diagram's duplicates box: they are the review's own

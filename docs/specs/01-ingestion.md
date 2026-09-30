@@ -177,18 +177,23 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    `ingest/dedup.py`. Merge on (a) an identical id (the same forum ID in the same venue and year, or the
    same proceedings id), then (a′) the forum link (TASK-105): records naming the same OpenReview forum id,
    as their id or in a `urls.forum` claim (PMLR's index links the forum from ICML 2023), merge in the same
-   venue and year whatever their titles say; a link across venue-years, to a track the proceedings don't
-   host, or shared by two listings is a `conflicts.csv` row, never a merge. Then (b) a normalized title (the token contract) with the same venue and year. Two
+   venue and year whatever their titles say; a link across venue-years, against the track rule below, or
+   shared by two listings is a `conflicts.csv` row, never a merge. Then (b) a normalized title (the token contract) with the same venue and year. Two
    records are merged **only** when venue and year agree. That lesson comes from venuetriage: records
    with no year must never merge on `(title, "")`. **Two OpenReview records with different forum IDs are
    never merged** (the API v1 crawl has already collapsed two notes of one identical paper, TASK-125, and a silent twin into its accepted note, TASK-132), nor a listing linking one forum with a note of another: a main-track paper and its same-year workshop version can share a title. Title
    matching only links records *across* sources (OpenReview ↔ proceedings ↔ RIS), never joins two different
-   proceedings papers, and never puts a paper whose track the proceedings don't host (workshop, other,
-   `unknown`) into a proceedings listing. When a title group holds a listing, a note that can't be the
-   listed paper (a workshop or other track the proceedings don't host, or rejected, withdrawn or
-   desk-rejected: proceedings list only accepted papers; an `unknown` track or status stays a rival) is no
-   rival for it (TASK-126): the rest merge if they may, and that note stays its own record with a
-   `conflicts.csv` row. A merged record's fields are re-resolved from the union of its claims by the decision-005 precedence table. Track is decided
+   proceedings papers, and never breaks the **track rule**: a merge that involves a proceedings listing holds
+   only `main`, `datasets_benchmarks` and `position` records (a mixed PMLR volume's own `unknown` included), or
+   only NeurIPS Creative AI records (TASK-137). The NeurIPS proceedings host Creative AI, which the taxonomy
+   files under `other`; a record counts as Creative AI only when every source claiming its track claims `other`
+   and backs it with the `NeurIPS.cc/<Y>/Creative_AI_Track` venueid (any status suffix) or a
+   `-Creative_AI_Track` proceedings URL of the same year. Every other track (workshop, tiny papers, blogposts,
+   competition, any other `other` such as `Education_Program`, a note's `unknown`) never merges with a listing,
+   and the two families never mix. When a title group holds a listing, a note that can't be the listed paper (a
+   track the rule keeps from every listing in the group, or rejected, withdrawn or desk-rejected: proceedings list
+   only accepted papers; an `unknown` track or status stays a rival) is no rival for it (TASK-126): the rest merge
+   if they may, and that note stays its own record with a `conflicts.csv` row. A merged record's fields are re-resolved from the union of its claims by the decision-005 precedence table. Track is decided
    per track (decision-005, the owner's decision of 2026-09-29): the proceedings decide a paper's track wherever
    OpenReview doesn't hold that venue-year's track (ICLR 2016 main, from the archive, stays `main`), and an
    OpenReview track claim, the note's own `content.venueid`, wins wherever the record carries one. Within a track

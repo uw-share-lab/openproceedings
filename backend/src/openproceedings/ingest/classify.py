@@ -71,6 +71,10 @@ _PROCEEDINGS = {
     "Position_Paper_Track": "position",
     "Creative_AI_Track": "other",
 }
+# NeurIPS's Creative AI track: the one `other` form both OpenReview (`NeurIPS.cc/<Y>/Creative_AI_Track`) and the
+# NeurIPS proceedings (`-Abstract-Creative_AI_Track.html`) name, so dedup may merge a Creative AI note with its
+# listing (TASK-137). Every other `other` form is OpenReview's alone.
+CREATIVE_AI = "Creative_AI_Track"
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +129,18 @@ def classify_venueid(venueid: str) -> Classification:
     else:  # the bare path means accepted only for a form we know (skill: rule 2); `other` stays unknown
         status = "accepted" if track != "other" else "unknown"
     return Classification(track=track, status=status, venue=venue, year=year, venue_id_raw=venueid)
+
+
+def is_creative_ai_venueid(venueid: str, year: int) -> bool:
+    """Whether `venueid` is NeurIPS `year`'s Creative AI track (`CREATIVE_AI`), bare or with a status suffix,
+    exactly: no other organisation, year or path (TASK-137)."""
+    m = _VENUEID.fullmatch(venueid)
+    if m is None or m.group(1) != "NeurIPS" or int(m.group(2)) != year:
+        return False
+    segments = m.group(3).split("/")
+    if len(segments) == 2 and (segments[1] in _STATUS_SUFFIX or _STATUS_LIKE.fullmatch(segments[1])):
+        segments = segments[:1]
+    return segments == [CREATIVE_AI] and classify_venueid(venueid).track == "other"
 
 
 def is_v1(venue: str, year: int) -> bool:

@@ -16,6 +16,7 @@ from openproceedings.ingest.classify import (
     classify_proceedings,
     classify_v1_venue,
     classify_venueid,
+    is_creative_ai_venueid,
     is_v1,
 )
 
@@ -294,6 +295,30 @@ def test_proceedings_claims(token: str, track: str) -> None:
     assert c.track == track
     assert c.parsed is (track != "unknown")
     assert c.status == "accepted"  # a proceedings listing means accepted (spec 01; decision-005)
+
+
+CREATIVE_AI = [  # (venueid, year, is NeurIPS <year>'s Creative AI track): TASK-137, dedup's track rule
+    ("NeurIPS.cc/2025/Creative_AI_Track", 2025, True),  # live (2025: 92 bare-path notes)
+    ("NeurIPS.cc/2025/Creative_AI_Track/Rejected_Submission", 2025, True),
+    ("NeurIPS.cc/2025/Creative_AI_Track/Withdrawn", 2025, True),  # an unmapped status word is still stripped
+    ("NeurIPS.cc/2026/Creative_AI_Track", 2026, True),
+    ("NeurIPS.cc/2025/Creative_AI_Track", 2024, False),  # the record's own year only
+    ("ICML.cc/2025/Creative_AI_Track", 2025, False),  # another organisation
+    ("NeurIPS.cc/2025/Education_Program", 2025, False),  # the other NeurIPS 2025 `other` form
+    ("NeurIPS.cc/2025/Track/Creative_AI_Track", 2025, False),
+    ("NeurIPS.cc/2025/Creative_AI_Track/Extra", 2025, False),
+    ("NeurIPS.cc/2025/Workshop/Creative_AI_Track", 2025, False),  # workshop wins
+    ("NeurIPS.cc/2025/creative_ai_track", 2025, False),  # exact spelling only
+    ("NeurIPS.cc/2025/Conference", 2025, False),
+    ("Creative_AI_Track", 2025, False),
+]
+
+
+@pytest.mark.parametrize(("venueid", "year", "expected"), CREATIVE_AI)
+def test_creative_ai_venueid_is_exact(venueid: str, year: int, expected: bool) -> None:
+    assert is_creative_ai_venueid(venueid, year) is expected
+    if expected:  # the taxonomy still files it under `other`: the track rule, not the table, admits it
+        assert classify_venueid(venueid).track == "other"
 
 
 # --- Recorded notes (backend/tests/fixtures/http/openreview; TASK-002's live run, TASK-094/095) ---

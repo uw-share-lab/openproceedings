@@ -14,7 +14,13 @@ from collections import Counter
 from hypothesis import event, example, given
 from hypothesis import strategies as st
 from openproceedings.ingest import urls
-from openproceedings.ingest.dedup import PROCEEDINGS_TRACKS, DedupResult, dedup, proceedings_ids
+from openproceedings.ingest.dedup import (
+    PROCEEDINGS_TRACKS,
+    DedupResult,
+    dedup,
+    is_creative_ai,
+    proceedings_ids,
+)
 from openproceedings.ingest.record import PaperRecord
 
 from tests.unit.ingest.test_dedup import T0, T1, T2, H, archive, nips, paper
@@ -58,7 +64,9 @@ def records(draw: st.DrawFn) -> PaperRecord:
         source=source,
         venue=venue,
         year=draw(st.sampled_from([2023, 2024])),
-        track=draw(st.sampled_from(["main", "workshop", "position", "datasets_benchmarks", "unknown"])),
+        track=draw(
+            st.sampled_from(["main", "workshop", "position", "datasets_benchmarks", "unknown", "other"])
+        ),
         status=draw(st.sampled_from(["accepted", "rejected", "unknown"])),
         abstract=draw(st.sampled_from([None, "An abstract.", "Another abstract."])),
         fetched=draw(st.sampled_from([T0, T1, T2])),
@@ -150,8 +158,72 @@ def rivals(draw: st.DrawFn) -> tuple[list[PaperRecord], list[str], bool, int]:
     return base + aside + noise, [r.id for r in aside], real, year
 
 
+# same-title records that can never be a Creative AI listing's paper (TASK-137), by kind; `main_note` only while no
+# main-track listing shares the title (then it may be that listing's paper, and stays a rival)
+CREATIVE_ASIDE = ["education", "bare_other", "workshop", "main_note"]
+# … and ones that keep the listing and its note apart: another Creative AI candidate, or a second listing
+CREATIVE_BLOCKERS = ["creative_rival", "main_listing"]
+
+
+@st.composite
+def creative(draw: st.DrawFn) -> tuple[list[PaperRecord], list[str], bool, int]:
+    """A NeurIPS Creative AI listing (the proceedings', its RIS copy, or both), its Creative AI note (bare path
+    or a status suffix) and same-title others, plus noise from other venue-years: (records, the set-aside ids,
+    whether a blocker is present, the year)."""
+    year = draw(st.sampled_from([2023, 2024]))
+    title = lambda: draw(st.sampled_from(TITLES[:2]))  # noqa: E731  (one key, two spellings)
+    url = (
+        f"https://proceedings.neurips.cc/paper_files/paper/{year}/hash/{H[1]}-Abstract-Creative_AI_Track.html"
+    )
+    venueid = f"NeurIPS.cc/{year}/Creative_AI_Track"
+    xs = [
+        paper(f"nips-{H[1]}", title(), source=src, year=year, track="other", urls_proceedings=url,
+              fetched=draw(st.sampled_from([T0, T1])))
+        for src in draw(st.lists(st.sampled_from(["neurips_proceedings", "ris"]), min_size=1, max_size=2, unique=True))
+    ]  # fmt: skip
+    suffix, status = draw(st.sampled_from([("", "unknown"), ("/Rejected_Submission", "rejected")]))
+    xs.append(
+        paper("AbCd1234", title(), year=year, track="other", status=status, venue_id_raw=venueid + suffix,
+              source=draw(st.sampled_from(["openreview_v2", "openreview_v1"])))
+    )  # fmt: skip
+    kinds = draw(st.lists(st.sampled_from(CREATIVE_ASIDE + CREATIVE_BLOCKERS), max_size=3, unique=True))
+    others = {
+        "education": dict(
+            track="other", status="unknown", venue_id_raw=f"NeurIPS.cc/{year}/Education_Program"
+        ),
+        "bare_other": dict(track="other", status="unknown"),
+        "workshop": dict(track="workshop"),
+        "main_note": dict(track="main"),
+        "creative_rival": dict(track="other", status="unknown", venue_id_raw=venueid),
+    }
+    aside = []
+    for fid, kind in zip(["EfGh5678", "IjKl9012", "MnOp3456"], kinds, strict=False):
+        if kind == "main_listing":
+            xs.append(paper(f"nips-{H[2]}", title(), source="neurips_proceedings", year=year))
+            continue
+        xs.append(paper(fid, title(), year=year, source=draw(st.sampled_from(["openreview_v2", "ris"])),
+                        **others[kind]))  # fmt: skip
+        if kind in CREATIVE_ASIDE and not (kind == "main_note" and "main_listing" in kinds):
+            aside.append(xs[-1].id)
+    blocked = (
+        any(k in CREATIVE_BLOCKERS for k in kinds)
+        or (
+            "main_note" in kinds and "main_listing" in kinds
+        )  # a main note beside a main listing: a candidate
+        # a rejected note merges with its listing only alone (TASK-126): beside any rival it is set aside too
+        or (status == "rejected" and bool(kinds))
+    )
+    noise = draw(st.lists(records().filter(lambda r: (r.venue, r.year) != ("NeurIPS", year)), max_size=3))
+    return xs + noise, aside, blocked, year
+
+
 pools = st.one_of(
-    st.lists(records(), max_size=10), chains(), links(), links(), rivals().map(lambda t: t[0])
+    st.lists(records(), max_size=10),
+    chains(),
+    links(),
+    links(),
+    rivals().map(lambda t: t[0]),
+    creative().map(lambda t: t[0]),
 )  # links() twice: weighted
 
 # the reviewer's two over-merges, pinned
@@ -326,8 +398,42 @@ def test_never_folds_two_papers(xs: list[PaperRecord]) -> None:
             assert len(set().union(*(linked_forums(copies) for copies in copies_of.values()))) <= 1
         assert len(natives & set(PROCEEDINGS)) <= 1  # nor do distinct proceedings papers
         if len(natives) > 1 and natives & set(PROCEEDINGS):  # merged into a proceedings listing
-            # a proceedings track, or unknown when every side was a listing without one (a mixed PMLR volume)
-            assert by_id[out].track in {"main", "datasets_benchmarks", "position", "unknown"}
+            # a proceedings track, or unknown when every side was a listing without one (a mixed PMLR volume),
+            # or `other` only where every input is NeurIPS Creative AI (TASK-137)
+            members = [x for x in xs if ends[x.id] == out]
+            if by_id[out].track == "other":
+                assert is_creative_ai(by_id[out]) and all(is_creative_ai(x) for x in members)
+            else:
+                assert by_id[out].track in {"main", "datasets_benchmarks", "position", "unknown"}
+                assert not any(is_creative_ai(x) for x in members)
+
+
+@given(creative(), st.randoms(use_true_random=False))
+def test_a_creative_ai_listing_merges_with_its_own_note_and_nothing_else(
+    shape: tuple[list[PaperRecord], list[str], bool, int], rnd: random.Random
+) -> None:
+    """TASK-137: the listing and its Creative AI note merge unless another candidate blocks them; every
+    same-title record of another family is set aside with its row, and never merges."""
+    xs, aside, blocked, year = shape
+    rnd.shuffle(xs)
+    result = dedup(xs)
+    note(result)
+    outputs = Counter(r.id for r in result.records)
+    assert Counter(r.id for r in xs) == outputs + Counter(m.merged_id for m in result.merges)
+    ends = final_ids(result)
+    orv, listing = f"op:neurips:{year}:AbCd1234", f"op:neurips:{year}:nips-{H[1]}"
+    assert (ends[listing] == ends[orv]) is not blocked
+    assert all(ends[i] == i and i not in {m.survivor_id for m in result.merges} for i in aside)
+    if not blocked:
+        merged = {r.id: r for r in result.records}[orv]
+        assert merged.track == "other" and is_creative_ai(merged)
+        if any(c.source == "neurips_proceedings" for c in merged.provenance):  # RIS alone is outranked
+            assert merged.status == "accepted"
+        reported = {(c.value_a, c.value_b) for c in result.conflicts if c.field == "title_key"}
+        assert all((orv, i) in reported for i in aside)
+    for x in xs:  # nothing but Creative AI ever shares a record with the Creative AI listing
+        if ends[x.id] == ends[listing]:
+            assert is_creative_ai(x)
 
 
 OPENREVIEW, OFFICIAL = ("openreview_v2", "openreview_v1"), ("iclr_archive", "neurips_proceedings", "pmlr")
@@ -345,9 +451,9 @@ def test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings(xs: l
         official = [claims[s] for s in OFFICIAL if s in claims]
         assert r.track == (orv or official or [claims["ris"]])[0]
         event("track:" + ("openreview" if orv else "proceedings" if official else "ris"))
-        # a real OpenReview note names no proceedings paper; such a note never merges into a listing on a
-        # track outside PROCEEDINGS_TRACKS, so where both answer OpenReview's track is in it too
+        # a real OpenReview note names no proceedings paper; such a note merges into a listing only on a
+        # track in PROCEEDINGS_TRACKS, or as NeurIPS Creative AI beside a Creative AI listing (TASK-137)
         note_urls = [c for c in r.provenance if c.source in OPENREVIEW]
         if orv and official and not proceedings_ids(note_urls):
             event("track:openreview-over-proceedings")
-            assert orv[0] in PROCEEDINGS_TRACKS
+            assert orv[0] in PROCEEDINGS_TRACKS or (is_creative_ai(r) and set(official) == {"other"})

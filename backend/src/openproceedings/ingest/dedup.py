@@ -9,15 +9,21 @@ a review, a duplicate only shows in the hit count.
    Then the **forum link** (TASK-105): clusters that name the same forum id, as their own id or in a kept
    `urls.forum` claim (PMLR's index links the OpenReview forum from 2023; v235 is recorded), merge in the
    same venue and year whatever their titles say, unless the result would hold two forum ids, two
-   proceedings ids, or a track the proceedings don't host. A refused link, and a link across venue-years,
-   is a `conflicts.csv` row.
+   proceedings ids, or fail the track rule. A refused link, and a link across venue-years, is a
+   `conflicts.csv` row.
 2. Clusters then merge on `(venue, year, title key)` only **across sources** (their provenance source
-   sets are disjoint), never two different forum ids (own or linked) or two different proceedings ids, and never a
-   paper whose track the proceedings don't host into a proceedings listing (a record with a proceedings
-   id or a proceedings source). A key that would join clusters sharing a source is ambiguous: nothing
+   sets are disjoint), never two different forum ids (own or linked) or two different proceedings ids, and never
+   against the **track rule**. A key that would join clusters sharing a source is ambiguous: nothing
    merges, and `conflicts.csv` says so. When such a key holds a listing, the clusters that can't be the
-   listed paper (TASK-126: a track the proceedings don't host, or a status other than accepted/unknown)
-   are set aside as rivals and the rest merge if they may; the set-aside clusters stay separate records.
+   listed paper (TASK-126: a track the rule keeps from every listing in the group, or a status other than
+   accepted/unknown) are set aside as rivals and the rest merge if they may; the set-aside clusters stay
+   separate records.
+
+The track rule, wherever a listing (a record with a proceedings id or a proceedings source) is involved: every
+record is on a `PROCEEDINGS_TRACKS` track (a listing's own `unknown` included), or every record is NeurIPS
+Creative AI (`is_creative_ai`, TASK-137: track `other` that each claiming source backs with the Creative AI
+venueid or proceedings URL). The two never mix, and nothing else (workshop, tiny papers, blogposts,
+competition, any other `other`, a note's `unknown`) ever merges with a listing.
 
 A merged record's fields are re-resolved from the union of its claims by `PRECEDENCE` (held as data),
 never "whichever came first". Track is OpenReview's wherever the record carries an OpenReview track claim (so
@@ -35,7 +41,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-from openproceedings.ingest import urls
+from openproceedings.ingest import classify, urls
 from openproceedings.ingest.record import Claim, ClaimField, PaperRecord, Source, Urls
 from openproceedings.query.normalize import normalize
 
@@ -50,9 +56,9 @@ _ACCEPTANCE: tuple[Source, ...] = (
 # content.venueid, so a record carrying one is on a track OpenReview holds, and that claim wins; a record with
 # none takes its listing's track, whether OpenReview doesn't hold the track (ICLR 2016 main) or holds it but the
 # paper's note didn't merge (the owner's second answer, 2026-09-29). The OpenReview crawlers claim no proceedings
-# URL, so a note is never a listing, and `_mergeable` keeps a note on a track outside `PROCEEDINGS_TRACKS`
-# (`other` and `unknown` included) apart from every listing: in a merged record OpenReview's track is always in
-# `PROCEEDINGS_TRACKS` too.
+# URL, so a note is never a listing, and `_mergeable`'s track rule keeps a note apart from every listing unless
+# both are on `PROCEEDINGS_TRACKS` or both are NeurIPS Creative AI (TASK-137): in a merged record OpenReview's
+# track is in `PROCEEDINGS_TRACKS`, or is `other` on a Creative AI record whose listing says `other` too.
 PRECEDENCE: dict[ClaimField, tuple[Source, ...]] = {
     **dict.fromkeys(
         ("title", "abstract", "authors", "keywords", "presentation", "venue", "year", "track", "venue_id_raw"),
@@ -64,7 +70,10 @@ PRECEDENCE: dict[ClaimField, tuple[Source, ...]] = {
 # Cross-source disagreements written to conflicts.csv. A title counts only when its dedup key differs
 # (decision-005); venue and year can't differ inside a merge (they're part of every merge key).
 CONFLICT_FIELDS: tuple[ClaimField, ...] = ("title", "track", "status")
-# the official proceedings sources, and the only tracks they host (reconcile.py reads both too)
+# the official proceedings sources, and the taxonomy tracks they host (reconcile.py reads both too). NeurIPS's
+# proceedings also host Creative AI, which the taxonomy files under `other`; `other` holds more than Creative AI
+# (Education_Program, High_School_Projects_Track, …), so it is not listed here: dedup's track rule admits Creative
+# AI by its own evidence (`is_creative_ai`, TASK-137), and reconcile never judges it.
 PROCEEDINGS_SOURCES: frozenset[str] = frozenset({"iclr_archive", "neurips_proceedings", "pmlr"})
 PROCEEDINGS_TRACKS: frozenset[str] = frozenset({"main", "datasets_benchmarks", "position"})
 _URL_FIELDS = ("urls.proceedings", "urls.pdf")
@@ -379,6 +388,38 @@ def is_listing(record: PaperRecord) -> bool:
     return _listed(proceedings_ids(record.provenance), _sources([record]))
 
 
+def _names_creative_ai(claims: Sequence[Claim], year: int) -> bool:
+    """One source's claims show NeurIPS `year`'s Creative AI track: at least one piece of evidence, and all of it
+    agrees. Evidence is a `venue_id_raw` claim (the note's `content.venueid`) or a NeurIPS proceedings
+    `urls.proceedings`/`urls.pdf` claim (its track token)."""
+    said: list[bool] = []
+    for c in claims:
+        if c.field == "venue_id_raw" and isinstance(c.value, str):
+            said.append(classify.is_creative_ai_venueid(c.value, year))
+        elif (
+            c.field in _URL_FIELDS and isinstance(c.value, str) and (parts := urls.proceedings_parts(c.value))
+        ):
+            said.append(parts[:2] == ("NeurIPS", year) and parts[3] == classify.CREATIVE_AI)
+    return bool(said) and all(said)
+
+
+def is_creative_ai(record: PaperRecord) -> bool:
+    """A NeurIPS Creative AI record (TASK-137): track `other`, and every source with a track claim claims `other`
+    and backs it with Creative AI evidence (`_names_creative_ai`). An `other` without that evidence
+    (Education_Program, an unseen form) is not Creative AI, and the track rule keeps it from every listing."""
+    if record.venue != "NeurIPS" or record.track != "other":
+        return False
+    by_source: dict[str, list[Claim]] = defaultdict(list)
+    for c in record.provenance:
+        by_source[c.source].append(c)
+    claimed = [src for src, cs in by_source.items() if any(c.field == "track" for c in cs)]
+    return all(
+        all(c.value == "other" for c in by_source[src] if c.field == "track")
+        and _names_creative_ai(by_source[src], record.year)
+        for src in claimed
+    )
+
+
 def _cluster(members: Sequence[PaperRecord], rid: str | None = None) -> _Cluster:
     rid = rid or members[0].id
     summary, _ = resolve(rid, [c for r in members for c in r.provenance])  # rows come from the final resolve
@@ -393,6 +434,17 @@ def _cluster(members: Sequence[PaperRecord], rid: str | None = None) -> _Cluster
     )  # fmt: skip
 
 
+def _family(c: _Cluster) -> str | None:
+    """The cluster's side of the track rule: `creative_ai` (NeurIPS Creative AI, TASK-137), `proceedings` (a
+    `PROCEEDINGS_TRACKS` track, or a listing's own `unknown`: a PMLR volume holding main and position papers),
+    or None: a track no listing may merge with (an unknown track waits for evidence)."""
+    if is_creative_ai(c.summary):
+        return "creative_ai"
+    if c.summary.track in PROCEEDINGS_TRACKS or (c.listed and c.summary.track == "unknown"):
+        return "proceedings"
+    return None
+
+
 def _mergeable(group: Sequence[_Cluster], *, linked: bool = False) -> str | None:
     """Why these step-1 clusters must not share a record, or None if they may. `linked`: they share a forum
     id (the forum link), so one source on two sides is no ambiguity: the id says which paper each is."""
@@ -403,23 +455,25 @@ def _mergeable(group: Sequence[_Cluster], *, linked: bool = False) -> str | None
         return "ambiguous_not_merged"  # two different OpenReview submissions (own or linked forum ids)
     if len(frozenset().union(*(c.proceedings_ids for c in group))) > 1:
         return "ambiguous_not_merged"  # two different proceedings papers
-    if any(c.listed for c in group) and any(
-        c.summary.track not in PROCEEDINGS_TRACKS and not (c.listed and c.summary.track == "unknown")
-        for c in group
-    ):  # only a listing's own `unknown` (a PMLR volume holding main and position papers) is let through
-        return "track_not_merged"  # the proceedings never host it (an unknown track waits for evidence)
+    if any(c.listed for c in group):  # the track rule: one family, and never None
+        families = {_family(c) for c in group}
+        if len(families) > 1 or None in families:
+            return "track_not_merged"
     return None
 
 
-def _not_the_listed_paper(c: _Cluster) -> str | None:
-    """Why a cluster can never be a proceedings listing's paper, as its not-merged resolution, or None if it
-    may be one (TASK-126). A listing is always a candidate. A track the proceedings don't host is the track
-    rule of `_mergeable`; an `unknown` track only waits for evidence, so like an `unknown` status it stays a
-    candidate (and a rival). Proceedings list only accepted papers: a rejected, withdrawn or desk-rejected note
-    is not the listed one, though it may merge alone (decision-005: the proceedings then decide its status)."""
+def _not_the_listed_paper(c: _Cluster, group: Sequence[_Cluster]) -> str | None:
+    """Why a cluster can never be the paper of a proceedings listing in `group`, as its not-merged resolution, or
+    None if it may be one (TASK-126). A listing is always a candidate. A track the track rule keeps from every
+    listing in the group is set aside (a workshop note; a Creative AI note beside a main listing, or a main note
+    beside a Creative AI one, TASK-137); an `unknown` track only waits for evidence, so like an `unknown` status
+    it stays a candidate (and a rival). Proceedings list only accepted papers: a rejected, withdrawn or
+    desk-rejected note is not the listed one, though it may merge alone (decision-005: the proceedings then
+    decide its status)."""
     if c.listed:
         return None
-    if c.summary.track not in PROCEEDINGS_TRACKS and c.summary.track != "unknown":
+    family, listed = _family(c), {f for x in group if x.listed and (f := _family(x))}
+    if c.summary.track != "unknown" and (family is None or (listed and family not in listed)):
         return "track_not_merged"
     if c.summary.status not in _LISTABLE_STATUSES:
         return "ambiguous_not_merged"  # another candidate for the listing took it
@@ -434,7 +488,7 @@ def _merging(group: Sequence[_Cluster]) -> list[int] | None:
         return list(range(len(group)))
     if not any(c.listed for c in group):
         return None
-    rest = [i for i, c in enumerate(group) if _not_the_listed_paper(c) is None]
+    rest = [i for i, c in enumerate(group) if _not_the_listed_paper(c, group) is None]
     if len(rest) < 2 or _mergeable([group[i] for i in rest]) is not None:
         return None  # rest == group is refused here as well: `_mergeable` has just refused the whole group
     return rest
@@ -601,7 +655,7 @@ def _refusals(out: Sequence[PaperRecord]) -> set[Conflict]:
         # its own reason; the rest as before (a key whose records could merge alone was refused in a chain)
         aside: dict[str, str] = {}
         if _mergeable(bucket) is not None and any(c.listed for c in bucket):
-            aside = {c.id: why for c in bucket if (why := _not_the_listed_paper(c))}
+            aside = {c.id: why for c in bucket if (why := _not_the_listed_paper(c, bucket))}
         if aside:
             listing = next(c for c in bucket if c.listed)
             rows.update(_pair(listing, c, aside[c.id]) for c in bucket if c.id in aside)

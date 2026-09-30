@@ -16,6 +16,7 @@ from openproceedings.ingest.dedup import (
     abstract_claim,
     attribution,
     dedup,
+    is_creative_ai,
     resolve,
     title_key,
 )
@@ -287,8 +288,7 @@ def test_a_listing_openreview_does_not_hold_keeps_its_own_track_in_a_track_openr
     # NeurIPS 2025: OpenReview holds Creative AI (`other`) and D&B, but not these two papers (one renamed for the
     # camera-ready): the listings answer their own track; the note under the old title stays a record of its own
     db = dict(venue="NeurIPS", year=2025, track="datasets_benchmarks")
-    creative = paper(f"nips-{H[1]}", "A Creative AI piece", source="neurips_proceedings", venue="NeurIPS",
-                     year=2025, track="other")  # fmt: skip
+    creative = creative_listing(title="A Creative AI piece")
     renamed = paper(f"nips-{H[2]}", "The camera-ready title", source="neurips_proceedings", **db)
     note = paper("AbCd1234", "The submitted title", **db)
     result = dedup([creative, renamed, note])
@@ -651,6 +651,131 @@ def test_an_old_style_proceedings_url_names_its_paper() -> None:
     listing = paper(f"nips-{hexed}", source="neurips_proceedings", year=2021)
     same = paper("AbCd1234", year=2021, urls_pdf=upper)
     assert len(dedup([same, listing]).records) == 1  # upper-case hex names the same paper
+
+
+# --- TASK-137: a NeurIPS Creative AI listing merges with its own Creative AI note ------------------------
+
+
+def creative_url(n: int = 1, year: int = 2025, token: str = "Creative_AI_Track") -> str:
+    return f"https://proceedings.neurips.cc/paper_files/paper/{year}/hash/{H[n]}-Abstract-{token}.html"
+
+
+def creative_listing(n: int = 1, title: str = "Trust in AI", source: str = "neurips_proceedings",
+                     **kw: Any) -> PaperRecord:  # fmt: skip
+    """A NeurIPS 2025 Creative AI listing, as the proceedings crawler (or the RIS importer) builds one."""
+    kw.setdefault("urls_proceedings", creative_url(n))
+    return paper(f"nips-{H[n]}", title, source=source, year=2025, track="other", **kw)
+
+
+def creative_note(fid: str = "AbCd1234", title: str = "Trust in AI", status: str = "unknown",
+                  venueid: str = "NeurIPS.cc/2025/Creative_AI_Track", **kw: Any) -> PaperRecord:  # fmt: skip
+    """A Creative AI OpenReview note: a bare-path `other` venueid is status `unknown` (openreview-venueids)."""
+    kw.setdefault("track", "other")
+    return paper(fid, title, year=2025, status=status, venue_id_raw=venueid, **kw)
+
+
+def test_a_creative_ai_listing_merges_with_its_own_note() -> None:
+    listing, note = creative_listing(), creative_note()
+    assert is_creative_ai(listing) and is_creative_ai(note)
+    result = dedup([listing, note])
+    [r] = result.records
+    assert (r.id, r.track, r.status) == (note.id, "other", "accepted")  # the proceedings decide acceptance
+    assert r.venue_id_raw == "NeurIPS.cc/2025/Creative_AI_Track" and is_creative_ai(r)
+    assert result.merges == (
+        Merge(note.id, listing.id, "title_venue_year", "trust in ai", "NeurIPS", 2025, "neurips_proceedings"),
+    )
+    assert [(c.field, c.value_a, c.value_b, c.resolution) for c in result.conflicts] == [
+        ("status", "accepted", "unknown", "precedence:neurips_proceedings")
+    ]
+    assert dedup(result.records).records == result.records
+    assert dedup([note, listing]) == result
+
+
+def test_a_creative_ai_listing_its_ris_copy_and_its_note_are_one_record() -> None:
+    xs = [creative_listing(), creative_listing(source="ris", fetched=T1), creative_note()]
+    [r] = dedup(xs).records
+    assert r.track == "other" and r.status == "accepted"
+
+
+def test_a_rejected_creative_ai_note_alone_merges_and_the_proceedings_decide() -> None:
+    venueid = "NeurIPS.cc/2025/Creative_AI_Track/Rejected_Submission"
+    [r] = dedup([creative_listing(), creative_note(status="rejected", venueid=venueid)]).records
+    assert r.status == "accepted"  # as for a main-track note (decision-005)
+
+
+@pytest.mark.parametrize(
+    ("why", "records"),
+    [
+        (
+            "an Education_Program note (the other NeurIPS 2025 `other`) into a Creative AI listing",
+            [creative_listing(), creative_note(venueid="NeurIPS.cc/2025/Education_Program")],
+        ),
+        ("an `other` note with no venueid into a Creative AI listing",
+         [creative_listing(), paper("AbCd1234", year=2025, track="other", status="unknown")]),
+        ("a note whose venueid names another year",
+         [creative_listing(), creative_note(venueid="NeurIPS.cc/2024/Creative_AI_Track")]),
+        ("a Creative AI note into a main-track listing",
+         [paper(f"nips-{H[1]}", source="neurips_proceedings", year=2025), creative_note()]),
+        ("a main-track note into a Creative AI listing",
+         [creative_listing(), paper("AbCd1234", year=2025)]),
+        ("an `other` listing whose URL names the main conference",
+         [creative_listing(urls_proceedings=creative_url(token="Conference")), creative_note()]),
+        ("a workshop note into a Creative AI listing", [creative_listing(), creative_note(track="workshop")]),
+        ("a note of unknown track into a Creative AI listing", [creative_listing(), creative_note(track="unknown")]),
+        ("a Creative AI note and a listing from ICLR",
+         [paper(f"iclr-{H[1]}", source="iclr_archive", venue="ICLR", year=2025, track="other"),
+          paper("AbCd1234", venue="ICLR", year=2025, track="other", status="unknown",
+                venue_id_raw="NeurIPS.cc/2025/Creative_AI_Track")]),
+    ],
+)  # fmt: skip
+def test_creative_ai_never_merges_across_the_track_rule(why: str, records: list[PaperRecord]) -> None:
+    result = dedup(records)
+    assert len(result.records) == 2 and not result.merges
+    assert resolutions(result) == ["track_not_merged"]
+
+
+@pytest.mark.parametrize("track", ["workshop", "tiny_papers", "blogpost", "competition", "other", "unknown"])
+@pytest.mark.parametrize("listing", ["main", "creative_ai"])
+def test_no_other_track_merges_into_a_listing(track: str, listing: str) -> None:
+    """Every other never-merge rule stands: only Creative AI evidence admits `other`, and only beside Creative AI."""
+    lst = (
+        creative_listing()
+        if listing == "creative_ai"
+        else paper(f"nips-{H[1]}", source="neurips_proceedings", year=2025)
+    )
+    note = paper("AbCd1234", year=2025, track=track, status="accepted")
+    result = dedup([lst, note])
+    assert len(result.records) == 2 and resolutions(result) == ["track_not_merged"]
+
+
+def test_same_title_rivals_of_another_family_are_set_aside_both_ways() -> None:
+    """A Creative AI listing beside a main listing's title (TASK-126's set-aside, per family): each listing merges
+    with its own family's note; a workshop, Education_Program or other-family note stays apart with its row."""
+    listing, note = creative_listing(), creative_note()
+    main_note = paper("EfGh5678", year=2025)
+    workshop = paper("IjKl9012", year=2025, track="workshop")
+    education = creative_note("MnOp3456", venueid="NeurIPS.cc/2025/Education_Program")
+    result = dedup([listing, note, main_note, workshop, education])
+    assert [(m.survivor_id, m.merged_id) for m in result.merges] == [(note.id, listing.id)]
+    rows = [(c.field, c.value_a, c.value_b, c.resolution) for c in result.conflicts if c.field == "title_key"]
+    assert rows == [
+        ("title_key", note.id, x.id, "track_not_merged") for x in (main_note, workshop, education)
+    ]
+    again = dedup(result.records)
+    assert (again.records, again.conflicts, again.merges) == (result.records, result.conflicts, ())
+    # and the other way round: a main listing and its note merge past a same-title Creative AI note
+    main_listing = paper(f"nips-{H[2]}", source="neurips_proceedings", year=2025)
+    result = dedup([main_listing, main_note, note])
+    assert [(m.survivor_id, m.merged_id) for m in result.merges] == [(main_note.id, main_listing.id)]
+    assert [(c.value_b, c.resolution) for c in result.conflicts if c.field == "title_key"] == [
+        (note.id, "track_not_merged")
+    ]
+
+
+def test_two_creative_ai_notes_for_one_listing_are_ambiguous() -> None:
+    result = dedup([creative_listing(), creative_note(), creative_note("EfGh5678")])
+    assert len(result.records) == 3 and not result.merges
+    assert set(resolutions(result)) == {"ambiguous_not_merged"}
 
 
 # --- the forum link (TASK-105): a proceedings listing that names its OpenReview forum ------------------

@@ -71,7 +71,7 @@ evidence rule with a fixture.
 | `Position_Paper_Track` | `position` (OpenReview and the 2025 vol38 proceedings companion both carry it) |
 | `round1`, `round2` (2021 D&B host only) | `datasets_benchmarks` |
 | none (1987–2021 on `proceedings.neurips.cc`) | `main`, by host and year (see the grammar table) |
-| `Creative_AI_Track` | `other` (keep the raw segment for audit) |
+| `Creative_AI_Track` | `other` (keep the raw segment for audit); dedup merges the listing with its own `NeurIPS.cc/<Y>/Creative_AI_Track` note by this token (`dedup.is_creative_ai`, TASK-137) |
 | anything else | `unknown`, counted (`unknown_track` in the import report) and flagged for attention; never a default (as built: `classify_proceedings`) |
 
 The alias means one track never counts as two in the manifest. Mapping an unknown segment to `unknown`

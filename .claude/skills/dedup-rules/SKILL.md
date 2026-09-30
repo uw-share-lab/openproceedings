@@ -69,9 +69,10 @@ safe direction.
   the link to the kept one), or those 121 go unmerged or ambiguous.
 - **Except a rival that can't be the listed paper (TASK-126).** When a title group is refused but holds a
   listing, the clusters that can never be that listing's paper are set aside and the rest are judged again
-  (`_merging`, `_not_the_listed_paper`): a non-listing cluster whose track the proceedings don't host
-  (anything but `main`, `datasets_benchmarks`, `position` and `unknown`: the track rule, minus `unknown`)
-  or whose status is `rejected`, `withdrawn` or `desk_rejected` (proceedings list only accepted papers).
+  (`_merging`, `_not_the_listed_paper`): a non-listing cluster whose track the track rule below keeps from
+  every listing in the group (a workshop note; a Creative AI note beside only a main-track listing, or a
+  main-track note beside only a Creative AI one, TASK-137; never an `unknown` track) or whose status is
+  `rejected`, `withdrawn` or `desk_rejected` (proceedings list only accepted papers).
   The rest merge if `_mergeable` lets them; the set-aside clusters stay separate records, each with a
   `conflicts.csv` row against the first listing: `track_not_merged` for the track, `ambiguous_not_merged`
   for the status. On the 2026-09-29 crawl this merged 201 listings whose title an accepted workshop paper
@@ -88,13 +89,27 @@ safe direction.
   every non-listing record carries its own forum id (a record without one must name itself in a
   proceedings URL), which differs from the forum id of the note the listing merged with. The chain splits
   into its step-1 clusters: the pair is not merged either (the safe direction, never a merge).
-- A paper whose track the proceedings don't host (anything but `main`, `datasets_benchmarks`,
-  `position`) into a **proceedings listing**: a cluster with a proceedings source *or* a proceedings id,
-  so a RIS record with a `nips-`/`iclr-`/`pmlr-` id counts. Proceedings never host workshop papers. A
-  non-listing record with track `unknown` also stays apart until evidence arrives; once the crawlers land
-  (M4) such duplicates show up as `track_not_merged` rows to review. The one exemption is a listing's
-  *own* `unknown`: a PMLR volume that holds both main and position papers (v235, v267) can't say which
-  track a paper is in, so it merges with the OpenReview record, whose track wins by precedence.
+- **Against the track rule** (`_family`, `_mergeable`), wherever a **proceedings listing** is involved (a
+  cluster with a proceedings source *or* a proceedings id, so a RIS record with a `nips-`/`iclr-`/`pmlr-` id
+  counts). Every cluster must be in one family: `proceedings` (`main`, `datasets_benchmarks`, `position`, i.e.
+  `PROCEEDINGS_TRACKS`) or `creative_ai` (NeurIPS Creative AI, TASK-137), never both, never neither.
+  Proceedings never host workshop papers, tiny papers, blogposts or competition entries. A non-listing record
+  with track `unknown` also stays apart until evidence arrives (a `track_not_merged` row to review). The one
+  exemption is a listing's *own* `unknown`: a PMLR volume that holds both main and position papers (v235,
+  v267) can't say which track a paper is in, so it is `proceedings` family and merges with the OpenReview
+  record, whose track wins by precedence.
+  **Creative AI (TASK-137).** The NeurIPS proceedings host Creative AI (2025: 64 listings), which the taxonomy
+  files under `other`. `other` also holds OpenReview forms no proceedings host (NeurIPS 2025
+  `Education_Program`: 54 notes; `High_School_Projects_Track`, `Competition/LMC`, forms outside their year
+  window, …), so `other` is **not** in `PROCEEDINGS_TRACKS` and reconcile never judges it. Instead a record is
+  `creative_ai` (`dedup.is_creative_ai`) when it is NeurIPS, track `other`, and every source with a track claim
+  claims `other` and backs it with Creative AI evidence of the record's year, all agreeing: a `venue_id_raw`
+  claim that is `NeurIPS.cc/<Y>/Creative_AI_Track` bare or with a status suffix
+  (`classify.is_creative_ai_venueid`), or a NeurIPS proceedings `urls.proceedings`/`urls.pdf` whose track token
+  is `Creative_AI_Track`. So a Creative AI listing merges with its own Creative AI note (the paper's own note
+  answers its track, decision-005; both say `other`, and the proceedings decide acceptance: OpenReview's bare
+  Creative AI path is status `unknown`), and with nothing else: an `Education_Program` note, an `other` without
+  that evidence, and a main-track note or listing all stay apart.
 - **Every proceedings-id record names itself** in a kept `urls.proceedings`/`urls.pdf` claim (dedup
   refuses one that doesn't). Proceedings ids are read from those claims, so a merged record still carries
   the ids of the listings it absorbed, and a second run can't fold another listing in. URL forms,
@@ -124,9 +139,10 @@ safe direction.
   Creative AI, the renamed D&B papers, ICLR 2014's one unmerged archive paper). Where a note merged, its track
   wins. In code this is read per record, from the claims: an OpenReview track claim is the note's own
   `content.venueid` and wins (OpenReview first in `PRECEDENCE`); a record without one takes its listing's
-  track. OpenReview claims no proceedings URL and `_mergeable` keeps a note on a track outside
-  `PROCEEDINGS_TRACKS` (`other` and `unknown` included) apart from every listing. So where both answer,
-  OpenReview's track is in `PROCEEDINGS_TRACKS` (property `test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings`).
+  track. OpenReview claims no proceedings URL and the track rule keeps a note apart from every listing unless
+  both are `proceedings` family or both are Creative AI. So where both answer, OpenReview's track is in
+  `PROCEEDINGS_TRACKS`, or both say `other` on a Creative AI record (property
+  `test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings`).
 - Iterate inputs in sorted-id order so the output doesn't depend on crawl order.
 
 ## Reconcile: acceptance the proceedings don't list (TASK-072, decision-005; `ingest/reconcile.py`)
@@ -156,7 +172,8 @@ it needs to know which listings were crawled, and whether completely.
   claim a later crawl no longer supports disappears.
 - Merges are never changed; conflicts only gain the reconciled records' status rows.
 - Reconcile reads dedup's own rules, never copies: `dedup.PROCEEDINGS_SOURCES`, `dedup.PROCEEDINGS_TRACKS` and
-  `dedup.is_listing`.
+  `dedup.is_listing`. Creative AI is not a covered track (`other` is not in `PROCEEDINGS_TRACKS`; TASK-137): an
+  unlisted Creative AI note is never judged, and OpenReview gives its bare path status `unknown` anyway.
 - **Known limit: a paper moved between years.** Reconcile compares within one venue-year, like dedup. A paper
   whose OpenReview note is in one year and whose listing is in another (a deferred camera-ready) is `unknown` in
   its OpenReview year, and its listing stays a separate record in the other year. No rule links them; a
@@ -211,4 +228,9 @@ fixtures: `test_dedup_forum_link.py`.
   not-accepted notes, sometimes a real rival) is never merged, has its `conflicts.csv` row, and blocks
   nothing: the listing and its note merge unless a real rival is present.
 - Never folds two papers: distinct forum ids (own, or linked by a `urls.forum` claim), or distinct
-  proceedings ids, never share a record, and a merge into a proceedings listing keeps a proceedings track.
+  proceedings ids, never share a record, and a merge into a proceedings listing keeps a proceedings track, or
+  `other` only where every input is Creative AI.
+- A Creative AI listing merges with its own Creative AI note (TASK-137; the `creative` strategy: the listing,
+  its RIS copy, its bare or rejected note, same-title `Education_Program`, evidence-less `other`, workshop and
+  main-track notes, a second Creative AI note or a main-track listing) unless another candidate blocks it; every
+  other-family record is set aside with its row, and only Creative AI inputs ever share its record.
