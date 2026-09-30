@@ -4,6 +4,10 @@
  * `NEXT_PUBLIC_API_BASE_URL`: an email address (`takedown@example.org` or `mailto:…`) or an `https://` /
  * `http://` page. Unset, the footer points at the project's issue tracker instead of naming no one. Set but
  * unusable, it is refused: `next.config.ts` calls `checkTakedownContactEnv`, which throws, so the build fails.
+ *
+ * A build also says what kind of instance it is, with `OPENPROCEEDINGS_INSTANCE` (TASK-136): `public` (publicly
+ * reachable) refuses to build without a contact; `private` (private, local or development) and unset build
+ * with the fallback. The `web` image requires it to be set (`deploy/web.Dockerfile`, `deploy/web-build-gate.sh`).
  */
 
 /** The repository's issues page (the project's own contact), used when a deployment names none. */
@@ -68,16 +72,35 @@ export function takedownContact(raw: string | undefined): TakedownContact {
   return { kind: "url", href: url.href, label: hostAndPath(url) };
 }
 
+/** The kinds of instance a build may declare with `OPENPROCEEDINGS_INSTANCE` (unset reads as `private`). */
+export const INSTANCES = ["public", "private"] as const;
+
 /**
- * The build's check (`next.config.ts`): throws on a set but unusable value; in production, warns once when the
- * variable is unset, because a publicly reachable instance must set it (spec 08 §Deploy).
+ * The build's check (`next.config.ts`): throws on a set but unusable value, on an `instance` other than
+ * `INSTANCES`, and on a `public` instance with no contact (decision-018: a publicly reachable instance names one;
+ * TASK-136); otherwise, in production, warns once when the variable is unset, because a publicly reachable
+ * instance must set it (spec 08 §Deploy).
  */
 export function checkTakedownContactEnv(
   raw: string | undefined,
   production: boolean,
   warn: (message: string) => void = (message) => console.warn(message),
+  instance: string | undefined = undefined,
 ): void {
-  if (takedownContact(raw).kind === "fallback" && production) {
+  const kind = instance?.trim() ?? "";
+  if (kind !== "" && !(INSTANCES as readonly string[]).includes(kind)) {
+    throw new TakedownContactError(
+      `OPENPROCEEDINGS_INSTANCE must be "public" or "private", not ${JSON.stringify(kind)}.`,
+    );
+  }
+  const fallback = takedownContact(raw).kind === "fallback";
+  if (fallback && kind === "public") {
+    throw new TakedownContactError(
+      "OPENPROCEEDINGS_INSTANCE=public needs NEXT_PUBLIC_TAKEDOWN_CONTACT: a publicly reachable instance " +
+        "names a takedown contact (decision-018, spec 08 §Deploy). Set it to an email address or an http(s) page.",
+    );
+  }
+  if (fallback && production) {
     warn(
       "WARNING: NEXT_PUBLIC_TAKEDOWN_CONTACT is unset, so the footer links to the project's public issue " +
         "tracker. Publicly reachable instances must set NEXT_PUBLIC_TAKEDOWN_CONTACT (decision-018, spec 08 §Deploy).",
