@@ -15,6 +15,7 @@ a task that is Done does not stay in `backlog/tasks/`.
 | Starting work | `backlog task edit <id> -s "In Progress" -a @<you>`; add a plan (`--plan`) |
 | As you go | Tick acceptance criteria as each is met (`--check-ac <n>`); add notes (`--append-notes`; `--notes` replaces them) when you learn something that changes the plan; create a new task for any follow-up **when you find it** |
 | Scope changes | Edit the description/ACs so they match what you're actually doing; a stale AC is a lie |
+| Adding a dependency | `--dep` **replaces** the whole list: pass the old ids plus the new (`--dep task-063,task-065,task-133`), then check the `dependencies:` diff |
 | Done | All ACs checked → `backlog task edit <id> -s Done --final-summary "…"` → **`backlog task complete <id>`**, which moves it into `backlog/completed/` |
 
 `backlog task complete` is the only way a task leaves `backlog/tasks/`. Never move files by hand: editor

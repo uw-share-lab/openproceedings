@@ -1,11 +1,11 @@
 ---
 id: TASK-063
 title: 'Decide: can a public instance serve abstracts?'
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-30 01:07'
+updated_date: '2026-09-30 01:13'
 labels:
   - decision
 milestone: m-6
@@ -32,3 +32,9 @@ Decision-018 (accepted, 2026-09-29): the public instance serves every abstract, 
 
 Gaps found, now tasks: TASK-133 (takedown contact; proposed withhold-from-next-index_version procedure; pinned older versions still serve the abstract), TASK-134 (result list lacks authors and abstract source; PMLR citation+hyperlink met only on the paper page), both m-6 and TASK-069 dependencies. Not tasked: records carry no licence field (OpenReview's per-note license is dropped by _public_projection); only a licensed-only fallback would need it, and there is none. Exports carry URL links but no source/licence statement (TASK-134 AC#3 notes it).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Recorded decision-018 (accepted, 2026-09-29): the public instance serves every abstract, each record attributed to its source with a link, and a public instance names a takedown contact (private, local and dev deployments may omit it). Context holds the sources table (OpenReview terms and CC0 clause from the 2023-09-22 version; NeurIPS copyright FAQ; PMLR agreement with the ICML 2017 form as the CC BY boundary and the ICML 2016 form checked for v28–v48; arXiv CC0 as a future alternative) and the fair-dealing basis (s. 29, CCH factors). The unlicensed years rest on fair dealing alone; the owner's answer ("lets just show the abstracts") means no fallback, so the UWaterloo copyright-office consultation is recommended, not a gate (TASK-135, m-6; TASK-069 AC#5 records its outcome). Spec 00 Q1 closed; spec 08 §Deploy and README state what is served and the prerequisites; testing-standards skill updated. Gaps became TASK-133 (takedown contact; proposed procedure and the pinned-version gap) and TASK-134 (attribution in the result list), both m-6 and TASK-069 dependencies. Verified: make lint, make tooling. Not legal advice.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -20,13 +20,14 @@ Where the served abstracts come from (spec 01 §Sources; abstract precedence is 
 |---|---|---|
 | OpenReview | ICLR 2013, 2014 and 2016–2023 (API v1) and 2024+ (v2); NeurIPS 2021+; ICML 2023+. ICLR 2014 is on OpenReview without decisions: in the 2026-09-29 snapshot its 88 notes give 34 of the 35 accepted main records their abstract (through the archive's linked forum ids) and 54 records of status `unknown`. ICLR 2016 has only its workshop track there (125 notes, status `unknown`). ICLR 2015 is not on OpenReview ([`docs/results/2026-09-29-coverage.md`](../../docs/results/2026-09-29-coverage.md)). | [Terms of use](https://openreview.net/legal/terms), current version "Last updated: September 24, 2024". "Metadata" includes "an Article's title, Authors, Submitter, abstract…", and "To the extent that the Submitter or OpenReview has a copyright interest in metadata associated with a Work, a Creative Commons Public Domain Dedication (CC0 1.0) will apply." The CC0 clause is in the 22 Sep 2023 version of the terms and absent from the 24 May 2022 version, so for ICLR, NeurIPS and ICML **2024+** OpenReview's terms dedicate the abstracts under CC0; earlier OpenReview years are not clearly covered. Each note has a per-paper `license` field, but the crawl's public projection drops it (`_public_projection` in `backend/src/openproceedings/ingest/sources/openreview_client.py`), so records don't carry it. |
 | NeurIPS proceedings (`proceedings.neurips.cc`) | NeurIPS 2013–2020 (the only source before 2021); later years only for papers OpenReview lacks | [Copyright FAQ](https://neurips.cc/FAQ/Copyright): authors keep copyright and grant NeurIPS a non-exclusive licence. The FAQ grants no licence to third parties. |
-| PMLR (`proceedings.mlr.press`) | ICML 2013–2022; 2023+ only for papers OpenReview lacks | PMLR's [publication agreement](https://proceedings.mlr.press/pmlr-license-agreement.html) grants the public a CC BY 4.0 licence and requires any attribution to include "a citation to the original publication of the article in the proceedings as well as a hyperlink to the PMLR web site linking to the original paper"; the page states no start volume. The [ICML 2017 publication agreement](https://media.nips.cc/Conferences/ICML2017/permission_to_publish_icml2017.pdf) (v70) has the same CC BY 4.0 grant and attribution clause, so v70 is the first ICML volume known to be CC BY. ICML 2018–2022 (v80–v162) are taken to be under the same agreement; their per-year forms were not each checked. ICML 2013–2016 (v28, v32, v37, v48): no CC licence ("Authors retain copyright"). |
+| PMLR (`proceedings.mlr.press`) | ICML 2013–2022; 2023+ only for papers OpenReview lacks | PMLR's [publication agreement](https://proceedings.mlr.press/pmlr-license-agreement.html) grants the public a CC BY 4.0 licence and requires any attribution to include "a citation to the original publication of the article in the proceedings as well as a hyperlink to the PMLR web site linking to the original paper"; the page states no start volume. The [ICML 2017 publication agreement](https://media.nips.cc/Conferences/ICML2017/permission_to_publish_icml2017.pdf) (v70) has the same CC BY 4.0 grant and attribution clause, so v70 is the first ICML volume known to be CC BY. ICML 2018–2022 (v80–v162) are taken to be under the same agreement; their per-year forms were not each checked. ICML 2013–2016 (v28, v32, v37, v48): no CC BY grant found. What was checked: the [ICML 2016 permission to publish form](https://icml.cc/2016/wp-content/uploads/permission_to_publish_icml2016.pdf) (v48) grants IMLS, ICML and JMLR the right to publish and nothing to the public, and the authors "reserve all other proprietary rights … including copyright"; the 2013–2015 forms were not found or checked. |
 | ICLR archive (`iclr.cc/archive`) | none | No licence, but the archive supplies no abstract (spec 01 §Sources). Its ICLR 2015 and 2016 conference records, and one accepted ICLR 2014 record, have `abstract=null`, so there is nothing to serve. |
 | arXiv | not used | Metadata, abstracts included, is [CC0](https://info.arxiv.org/help/license/index.html). A possible future source for the unlicensed years; not crawled. |
 
-So three groups of served abstracts have no licence to redistribute: NeurIPS 2013–2020 (and any later paper
-filled from the proceedings), ICML 2013–2016, and OpenReview years before the CC0 clause (ICLR 2013, 2014
-and 2016–2023, NeurIPS 2021–2023, ICML 2023) unless a paper's own `license` says otherwise.
+So three groups of served abstracts have no licence to redistribute that we found: NeurIPS 2013–2020 (and any
+later paper filled from the proceedings), ICML 2013–2016 (no CC BY grant found; the 2016 form checked), and
+OpenReview years before the CC0 clause (ICLR 2013, 2014 and 2016–2023, NeurIPS 2021–2023, ICML 2023) unless a
+paper's own `license` says otherwise.
 
 **The basis for the unlicensed years**, to put to the University of Waterloo copyright office (TASK-135):
 fair dealing under the Canadian Copyright Act, s. 29 (research, private study, education), assessed with
@@ -58,7 +59,8 @@ just show the abstracts". There is no fallback to (b).
 The project owner decided on 2026-09-29 that the public instance shows every abstract in the index, each
 record attributed to its source with a link to it, and that a public instance names a takedown contact.
 The unlicensed years rest on fair dealing alone. Consulting the University of Waterloo copyright office
-before the public launch is recommended (TASK-135), not a gate.
+before the public launch is recommended (TASK-135), not a gate (following from the owner's answer that the
+abstracts stay shown).
 
 ## Consequences
 

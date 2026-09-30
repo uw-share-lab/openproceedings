@@ -1,6 +1,6 @@
 # `gh pr edit` fails on this GitHub, so the review attestation goes through the REST API
 
-**Key lesson:** Use `gh api -X PATCH repos/{owner}/{repo}/pulls/<n>` to change a PR body, because `gh pr edit` fails on the retired Projects (classic) API. Merge PRs whose learnings or dispositions cite commit SHAs with a merge commit, not a squash. Build a large backlog from a script that checks dependency order before it creates anything.
+**Key lesson:** Use `gh api -X PATCH repos/{owner}/{repo}/pulls/<n>` to change a PR body, because `gh pr edit` fails on the retired Projects (classic) API. Merge PRs whose learnings or dispositions cite commit SHAs with a merge commit, not a squash. Build a large backlog from a script that checks dependency order before it creates anything. `backlog task edit --dep` replaces the whole dependency list: pass the old ids plus the new.
 
 - **Date:** 2026-09-25 · **Task:** task-008 (M0 exit) · **Area:** tooling
 - **Artifacts:** PR #1 (merged as `1377b9d`), `.claude/scripts/record-review.py` (`--attest`), backlog milestones m-0…m-6
@@ -39,3 +39,11 @@ Merge the M0 tooling PR into `dev`, close M0, and create the M0–M6 backlog.
 ## Propagated to
 - `.claude/scripts/record-review.py` (`--attest` via REST).
 - `.claude/skills/pr-workflow/SKILL.md` (merge method): see the note added below.
+
+## Addendum — 2026-09-29
+- The `--dep` trap recurred in TASK-063: `backlog task edit 69 --dep task-133 --dep task-134` dropped TASK-069's
+  five existing dependencies (TASK-063, 065, 066, 067, 068); the `Depends on (2 direct, 2 total)` line in the
+  CLI's output and the `dependencies:` diff showed it, and re-running with the full list fixed it. It recurred
+  because the lesson was only under Dead ends, not in the Key lesson that `INDEX.md` shows every session.
+- Propagated: the Key lesson above now says it, and `.claude/skills/task-hygiene/SKILL.md` §Tasks has an
+  "Adding a dependency" row.
