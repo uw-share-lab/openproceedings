@@ -517,6 +517,30 @@ check $R block "xargs through a shell alias"          "$(payload_bash "echo othe
 check $R block "--git-dir: HEAD of the other worktree" "$(payload_bash "git --git-dir='$TMP/wt-other/.git' push origin HEAD")"
 check $R block "GIT_DIR=: HEAD of the other worktree"  "$(payload_bash "GIT_DIR='$TMP/wt-other/.git' git push origin HEAD")"
 
+# review records are written only by record-review.py: no shell write or file tool may forge one
+check $R block "printf APPROVE > …/op-reviews/<sha>"   "$(payload_bash "printf 'APPROVE\n' > \"\$(git rev-parse --git-common-dir)/op-reviews/\$(git rev-parse HEAD)\"")"
+check $R block "… with the \$(…) target unquoted"     "$(payload_bash "printf 'APPROVE\n' > \$(git rev-parse --git-common-dir)/op-reviews/abc")"
+check $R block "tee into op-reviews/"                 "$(payload_bash 'echo APPROVE | tee .git/op-reviews/abc')"
+check $R block "cp a record into op-reviews/"         "$(payload_bash 'cp /tmp/r .git/op-reviews/abc')"
+check $R block "rm a record"                          "$(payload_bash 'rm .git/op-reviews/abc')"
+check $R block "cd into op-reviews, then write"       "$(payload_bash 'cd .git/op-reviews && echo APPROVE > abc')"
+check $R block "python -c writing a record"           "$(payload_bash "python3 -c \"open('.git/op-reviews/x','w').write('APPROVE')\"")"
+check $R block "OP-Reviews in another case (APFS)"    "$(payload_bash 'echo APPROVE > .git/OP-Reviews/abc')"
+check $R block "cat > a record (a reader, redirected)" "$(payload_bash 'cat /tmp/r > .git/op-reviews/abc')"
+check $R block "unparseable write to a record"        "$(payload_bash 'echo APPROVE > .git/op-reviews/x "')"
+check $R allow "listing records, 2>&1"                "$(payload_bash 'ls .git/op-reviews 2>&1')"
+check $R allow "listing records, 2>/dev/null"         "$(payload_bash 'ls .git/op-reviews 2>/dev/null')"
+check $R allow "record-review.py writes the record"   "$(payload_bash 'python3 .claude/scripts/record-review.py APPROVE f.md')"
+check $R allow "reading a record"                     "$(payload_bash 'cat "$(git rev-parse --git-common-dir)/op-reviews/abc"')"
+check $R allow "listing the records"                  "$(payload_bash 'ls .git/op-reviews | head -3')"
+check $R block "Write to .git/op-reviews/x"           "$(payload_file Write "$REPO/.git/op-reviews/x")"
+check $R block "Edit of a relative op-reviews path"   "$(payload_file Edit ".git/op-reviews/x")"
+nbr=$(python3 -c 'import json,sys; print(json.dumps({"tool_name":"NotebookEdit","cwd":sys.argv[1],"tool_input":{"notebook_path":sys.argv[1]+"/.git/op-reviews/n.ipynb"}}))' "$REPO")
+check $R block "NotebookEdit into op-reviews/"        "$nbr"
+ln -s "$REPO/.git/op-reviews" "$TMP/revlink"
+check $R block "Write through a symlink to op-reviews/" "$(payload_file Write "$TMP/revlink/x")"
+check $R allow "Write to an ordinary file"            "$(payload_file Write "$REPO/README.md")"
+
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")
 case "$out" in *TOKENIZER_VERSION*) pass=$((pass+1)); echo "  ok   reminder on normalize.py";; *) fail=$((fail+1)); echo "  FAIL no reminder on normalize.py";; esac

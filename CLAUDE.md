@@ -106,7 +106,7 @@ fixtures under `backend/tests/fixtures/`; recording them is a separate, manual `
 | Hook | Enforces |
 |---|---|
 | `enforce-pr-workflow.sh` | `main` and `dev` take no direct commits (cherry-pick, revert, am and rebase included), pushes, merges or ref moves (`update-ref`, `reset`). Flow: `feature → PR → dev → PR → main`. |
-| `require-review.sh` | `git push` / `gh pr create` need an **APPROVE record for the exact HEAD sha**, written by `record-review.py` after `/review-gate`. `gh pr create` also needs an added or extended learnings entry. |
+| `require-review.sh` | `git push` / `gh pr create` need an **APPROVE record for the exact HEAD sha**, written by `record-review.py` after `/review-gate`. `gh pr create` also needs an added or extended learnings entry. No record under `op-reviews/` is written by hand (Bash or a file tool). |
 | `block-ai-attribution.sh` | No `Co-Authored-By: Claude` or "Generated with Claude Code" in commits, PRs or release notes. `.claude/` is committed; authorship is not. |
 | `enforce-backlog-cli.sh` | No hand edits under `backlog/`. Use the `backlog` CLI. (Decision *bodies* may be edited, since the CLI can't write them.) |
 | `protect-data-dir.sh` | `data/snapshots/` and `data/indexes/` are immutable. `data/` and any `takedowns/` directory are never committed. |

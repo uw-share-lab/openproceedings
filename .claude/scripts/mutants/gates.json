@@ -1195,5 +1195,59 @@
   "file": ".claude/scripts/record-review.py",
   "old": "        if resolves != 0:",
   "new": "        if False:"
+ },
+ {
+  "label": "record guard: file tools not checked",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    if target and any(RECORD_WORD.search(p) for p in (os.path.normpath(full), os.path.realpath(full))):",
+  "new": "    if False:"
+ },
+ {
+  "label": "record guard: symlinks not followed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "(os.path.normpath(full), os.path.realpath(full))",
+  "new": "(os.path.normpath(full),)"
+ },
+ {
+  "label": "record guard: case-sensitive",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "RECORD_WORD = re.compile(r\"(^|/)op-reviews(/|$)\", re.IGNORECASE)",
+  "new": "RECORD_WORD = re.compile(r\"(^|/)op-reviews(/|$)\")"
+ },
+ {
+  "label": "record guard: Bash not checked",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "if any(RECORD_WORD.search(w) for w in tokenize(cmd)):",
+  "new": "if False:"
+ },
+ {
+  "label": "record guard: redirects not writes",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    if writes or any(argv",
+  "new": "    if any(argv"
+ },
+ {
+  "label": "record guard: every command a reader",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "any(argv and argv[0] not in RECORD_READERS for argv, _ in commands)",
+  "new": "False"
+ },
+ {
+  "label": "record guard: fd dup read as a write",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "\">\" in op and not (op.endswith(\"&\") and target.isdigit()) and target",
+  "new": "\">\" in op and target"
+ },
+ {
+  "label": "record guard: /dev/null read as a write",
+  "file": ".claude/hooks/require-review.sh",
+  "old": " and target != \"/dev/null\"",
+  "new": ""
+ },
+ {
+  "label": "record guard: unparseable write allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "|op-reviews\", cmd, re.IGNORECASE)",
+  "new": "\", cmd, re.IGNORECASE)"
  }
 ]

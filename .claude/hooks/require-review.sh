@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# PreToolUse(Bash) review gate: nothing leaves this machine unreviewed, and no PR opens without a lesson.
+# PreToolUse(Bash; Write/Edit/MultiEdit/NotebookEdit for §4) review gate: nothing leaves this machine
+# unreviewed, no PR opens without a lesson, and no review record is written by hand.
 #
 # 1. `git push` of any ref (not a pure deletion) is blocked unless every commit being pushed has an
 #    APPROVE review record at  $(git rev-parse --git-common-dir)/op-reviews/<sha>  — written ONLY by
@@ -18,6 +19,12 @@
 #    constituent PRs were each reviewed and each carried a learning; main's own gate is a second
 #    person's approval.
 #
+# 4. A review record is never written by hand: a Bash command that names an op-reviews/ path and writes (an
+#    output redirect, or any command but a reader such as cat/ls), and a Write/Edit/MultiEdit/NotebookEdit
+#    whose path (symlinks followed) is inside op-reviews/, are blocked (TASK-067: `printf 'APPROVE\n' >
+#    "$(git rev-parse --git-common-dir)/op-reviews/<sha>"` forged an approval). record-review.py writes
+#    the file itself, so running it names no such path.
+#
 # An unparseable command that looks like a push or a PR is blocked (fail closed), and so is a push run by
 # xargs, whose appended refspecs this gate can't see (TASK-067).
 #
@@ -26,10 +33,10 @@
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 input=$(cat)
 HOOK_INPUT="$input" python3 - "$HOOK_DIR" <<'PY'
-import os, re, sys
+import json, os, re, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
 from cmdparse import (ParseError, gh_subcommand, git, git_config, git_dir, git_subcommand, opt_value, opt_values,
-                      read_payload, simple_commands, xargs_hides_args)
+                      read_payload, redirect_targets, simple_commands, tokenize, xargs_hides_args)
 
 ENTRY_NAME = re.compile(r"^\.claude/learnings/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$")  # same rule as learnings_index.py
 PUSH_VALUE_OPTS = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
@@ -92,6 +99,30 @@ def safe_branch(name, what):
         block([f"Review gate: {what} {name!r} is not a valid branch name — refusing to pass it to git."])
     return name
 
+# §4: the records themselves. A word naming an op-reviews/ path (any case: APFS folds it), in a command
+# that writes (an output redirect, or any command but a reader), is a forged or deleted record.
+RECORD_WORD = re.compile(r"(^|/)op-reviews(/|$)", re.IGNORECASE)
+RECORD_READERS = {"cat", "ls", "head", "tail", "less", "more", "grep", "wc", "stat", "file", "test", "["}
+FILE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
+
+def forged_record_block():
+    block(["Review gate: review records (<git-common-dir>/op-reviews/) are written only by",
+           "  python3 .claude/scripts/record-review.py APPROVE <dispositions.md>",
+           "after /review-gate. Don't write, copy, move or delete one by hand or with a file tool."])
+
+try:
+    payload = json.loads(os.environ.get("HOOK_INPUT") or "{}")
+except ValueError:
+    payload = {}
+if payload.get("tool_name") in FILE_TOOLS:
+    tool_input = payload.get("tool_input") or {}
+    target = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
+    full = os.path.join(payload.get("cwd") or os.getcwd(), target)
+    # the path as written and with symlinks followed (a link into op-reviews/ writes a record too)
+    if target and any(RECORD_WORD.search(p) for p in (os.path.normpath(full), os.path.realpath(full))):
+        forged_record_block()
+    sys.exit(0)
+
 cmd, cwd = read_payload()
 if not cmd:  # no raw-text prefilter: `gi\<newline>t push` only becomes `git` after parsing (review round 6)
     sys.exit(0)
@@ -99,10 +130,17 @@ try:
     commands = list(simple_commands(cmd, cwd))
 except ParseError:
     # Fail CLOSED (review round 3): a command the parser can't read may still be a push or a PR.
-    if re.search(r"\bgit\b[^\n]*\bpush\b|\bgh\b[^\n]*\bpr\b", cmd):
-        block(["Review gate: this command could not be parsed (unbalanced quotes?) and appears to push or open",
-               "a PR — refusing rather than letting it through unexamined. Fix the quoting and retry."])
+    if re.search(r"\bgit\b[^\n]*\bpush\b|\bgh\b[^\n]*\bpr\b|op-reviews", cmd, re.IGNORECASE):
+        block(["Review gate: this command could not be parsed (unbalanced quotes?) and appears to push, open",
+               "a PR or touch a review record — refusing rather than letting it through unexamined. Fix the",
+               "quoting and retry."])
     sys.exit(0)
+
+if any(RECORD_WORD.search(w) for w in tokenize(cmd)):
+    writes = any(">" in op and not (op.endswith("&") and target.isdigit()) and target != "/dev/null"
+                 for op, target, _ in redirect_targets(cmd, cwd))
+    if writes or any(argv and argv[0] not in RECORD_READERS for argv, _ in commands):
+        forged_record_block()
 
 for argv, d in commands:
     g = git_subcommand(argv, d)
