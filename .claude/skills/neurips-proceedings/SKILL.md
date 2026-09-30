@@ -58,7 +58,8 @@ evidence rule with a fixture.
   322 D&B, 2024 4,034 + 459 D&B. 2022–2023 and 2024 D&B equal OpenReview's accepted counts; 2024 main is
   one short of OpenReview's 4,035 (DEX, on no listing, is `unknown` since TASK-072), and 2021 main is 296
   short of the 2,630 OpenReview v1 venues call accepted, of which 297 are accepted papers listed twice
-  (collapsed since TASK-125); the index's remaining +1 over 2,334 is an unmerged pair (TASK-132).
+  (collapsed since TASK-125); the index's last +1 over 2,334, a pair kept apart by a silent third note, merges
+  since TASK-132, so the index matches 2,334.
 - Pre-2022 abstract pages also link `<sha>-Metadata.json` and `<sha>-Reviews.html`.
 
 ## Track vocabulary (closed)

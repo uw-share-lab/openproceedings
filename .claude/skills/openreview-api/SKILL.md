@@ -199,10 +199,14 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   title, authors, abstract, keywords, pdf, track, status, presentation, venueid), when each has a pdf, an
   integer `number` and no crawl conflict; the others are `skipped.duplicate_submission` (non-routine in `op eval
   coverage`), a DEBUG `openreview_duplicate_submission` line (`forum`, `kept`) and a count in
-  `openreview_crawl_attention`. Differing notes stay apart: NeurIPS 2021 `W6e384Lkjbw`/`rDdb26AQ0SO` share a pdf
-  but one has no venue; ICLR 2018 lists 24 pdfs as a blind and a withdrawn note; the 11 NeurIPS 2021 D&B title
-  pairs are Round 1 rejections resubmitted to Round 2 with another pdf. v2 has no identical-pdf notes and
-  doesn't run the rule.
+  `openreview_crawl_attention`. **A silent twin** (TASK-132) collapses too, after them: in a `status_from="venue"`
+  year, a note with status `unknown` and no `venue` or `venueid` key is dropped when its paper's only other
+  record is accepted, conflict-free and identical to it but for status, presentation and venueid; that record is
+  kept whatever the numbers (`collapse_silent_twins`, same counter and log line): NeurIPS 2021 `W6e384Lkjbw` #5999
+  into `rDdb26AQ0SO` #11021 (same pdf, supplementary, title, authors, abstract, keywords; the proceedings link
+  `W6e384Lkjbw`), the only case on the 2026-09-29 crawl. Other differing notes stay apart: ICLR 2018 lists 24 pdfs
+  as a blind and a withdrawn note; the 11 NeurIPS 2021 D&B title pairs are Round 1 rejections resubmitted to
+  Round 2 with another pdf. v2 has no identical-pdf notes and doesn't run the rule.
 - Authors are split only when the split can be checked (decision-019, `split_authors`): early ICLR 2017 notes give
   `content.authors` as one string, and 33 list-typed notes of 2016–2021 carry `and Name` or `A and B` entries.
   A list with neither is kept as listed; otherwise the pieces (split at `, and `, `,`, ` and `, a leading `and `

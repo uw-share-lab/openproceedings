@@ -50,17 +50,23 @@ safe direction.
   claims, `ingest/urls.py`). That's ambiguous: write a `conflicts.csv` row and keep them all separate.
   The same holds when two keys chain clusters that must not share a record: every cluster in the chain
   stays separate (`field = title_key_chain`).
-  Dedup never decides that two OpenReview notes are one paper. The one case where they are, API v1's
-  NeurIPS 2021 notes that repeat a paper under a second id and number with identical content (300 main-track
-  papers on the 2026-09-29 crawl), is collapsed by the crawler before records reach dedup
+  Dedup never decides that two OpenReview notes are one paper. The one case where they are, API v1's NeurIPS
+  2021 notes that repeat a paper under a second id and number with identical content (300 main-track papers on
+  the 2026-09-29 crawl), is collapsed by the crawler before records reach dedup
   (`openreview_v1.collapse_duplicate_submissions`, TASK-125; openreview-api skill), so the survivor merges
-  with its proceedings record here. Anything short of identical (another pdf, status or title) still arrives
-  as two notes and stays ambiguous. The kept note is the lowest number, a tie-break, not the one the
+  with its proceedings record here. So is a **silent twin** (TASK-132): a note with no `venue` and no
+  `venueid` (status `unknown`, in a year whose one status carrier is `content.venue`) is dropped when its
+  paper's only other record is an accepted note identical to it in everything but status, presentation and
+  venueid (`openreview_v1.collapse_silent_twins`; NeurIPS 2021 `W6e384Lkjbw` into `rDdb26AQ0SO`, the one case
+  on the 2026-09-29 crawl). Anything else short of identical (another pdf or title, two statuses, a rejected
+  twin) still arrives as two notes and stays ambiguous: dedup never judges it (TASK-126's set-aside keeps an
+  `unknown` note a rival). Of identical notes the kept one is the lowest number, a tie-break, not the one the
   proceedings name: NeurIPS 2021's proceedings pages link the kept forum for 177 of the 297 accepted pairs and
-  the dropped one for 120 (`0hJ-U3aqUDf` kept, `rvKD3iqtBdk` linked). No NeurIPS importer claims that link
-  as `urls.forum` today, so title matching merges all 297. If one ever does, the forum link would point the 120
-  at a note the crawl dropped: the survivor must then follow the proceedings' link (collapse to the linked
-  note, or re-point the link to the kept one), or those 120 go unmerged or ambiguous.
+  the dropped one for 120 (`0hJ-U3aqUDf` kept, `rvKD3iqtBdk` linked), and for the silent twin they link the
+  dropped `W6e384Lkjbw`. No NeurIPS importer claims that link as `urls.forum` today, so title matching merges
+  all 297 and the silent twin's note. If one ever does, the forum link would point those 121 at a note the
+  crawl dropped: the survivor must then follow the proceedings' link (collapse to the linked note, or re-point
+  the link to the kept one), or those 121 go unmerged or ambiguous.
 - **Except a rival that can't be the listed paper (TASK-126).** When a title group is refused but holds a
   listing, the clusters that can never be that listing's paper are set aside and the rest are judged again
   (`_merging`, `_not_the_listed_paper`): a non-listing cluster whose track the proceedings don't host

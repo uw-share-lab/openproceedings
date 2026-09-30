@@ -737,10 +737,21 @@ def test_two_notes_of_one_paper_collapse_to_the_lowest_number_and_are_counted(
         {"abstract": "Another synthetic abstract."},
         {"keywords": ["Another keyword."]},
         {"venue": "NeurIPS 2021 Spotlight"},  # another presentation
-        {"venue": None},  # W6e384Lkjbw: same pdf, but no venue, so another status (unknown)
+        {"venue": None},  # no venue but a venueid: not silent (TASK-132 needs both absent), so another status
+        {"venue": ""},  # an empty venue string is not an absent one: never a silent twin
         {"venueid": None},  # the same status and track, but another (here no) venueid
     ],
-    ids=["pdf", "title", "authors", "abstract", "keywords", "presentation", "status", "venueid"],
+    ids=[
+        "pdf",
+        "title",
+        "authors",
+        "abstract",
+        "keywords",
+        "presentation",
+        "status",
+        "empty-venue",
+        "venueid",
+    ],
 )
 def test_notes_that_differ_in_any_compared_field_stay_two_records(
     tmp_path: Path, second: dict[str, Any]
@@ -785,6 +796,188 @@ def test_a_same_paper_note_in_another_track_or_status_listing_is_not_collapsed(t
     crawl = run(server, tmp_path, "NeurIPS", 2021)
     assert {outcome(r) for r in crawl.records} == {("main", "accepted", "poster"), ("main", "unknown", None)}
     assert crawl.report.skipped["duplicate_submission"] == 0
+
+
+# --- a silent twin (rule 5, TASK-132) ----------------------------------------------------------------------------
+
+SILENT, SPEAKING = "W6e384Lkjbw", "rDdb26AQ0SO"
+
+
+def silent_pair() -> tuple[dict[str, Any], dict[str, Any]]:
+    """NeurIPS 2021 `W6e384Lkjbw` #5999 (no `venue`, no `venueid`: status unknown) and `rDdb26AQ0SO` #11021
+    (`NeurIPS 2021 Poster`), as recorded from the 2026-09-29 crawl (offsets 1000 and 0 of the main listing): the
+    same pdf and supplementary material, and the free text the real notes share scrubbed to the same text."""
+    silent = v1_note("neurips-2021/notes-main-listing-silent-twin.json")
+    speaking = v1_note("neurips-2021/notes-main-listing-accepted-silent-twin.json")
+    assert (silent["id"], silent["number"], speaking["id"], speaking["number"]) == (
+        SILENT,
+        5999,
+        SPEAKING,
+        11021,
+    )
+    assert "venue" not in silent["content"] and "venueid" not in silent["content"]
+    assert speaking["content"]["venue"] == "NeurIPS 2021 Poster"
+    shared = ("title", "authors", "abstract", "keywords", "pdf", "supplementary_material")
+    assert all(silent["content"][k] == speaking["content"][k] for k in shared)
+    return silent, speaking
+
+
+@pytest.mark.parametrize("listed_first", ["silent", "speaking"])
+def test_a_silent_twin_collapses_into_its_accepted_note_whatever_the_numbers(
+    tmp_path: Path, listed_first: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The real pair: the silent note has the lower number, but the accepted note is kept (it is the one with
+    evidence), with only its own claims; the silent note is a counted `duplicate_submission`."""
+    silent, speaking = silent_pair()
+    notes = [silent, speaking] if listed_first == "silent" else [speaking, silent]
+    server = FakeOpenReviewV1({NEURIPS_2021_MAIN: notes})
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        crawl = run(server, tmp_path, "NeurIPS", 2021, page_size=1)
+    [record] = crawl.records
+    assert record.native == SPEAKING and outcome(record) == ("main", "accepted", "poster")
+    assert record.venue_id_raw == "NeurIPS.cc/2021/Conference"
+    kept_page = [u for u in server.gets() if "invitation=" in u][notes.index(speaking)]
+    assert {c.url for c in record.provenance} == {kept_page}
+    assert crawl.report.skipped["duplicate_submission"] == 1 and (
+        crawl.report.notes_read,
+        crawl.report.imported,
+    ) == (2, 1)
+    assert crawl.report.track_status == {"main": {"accepted": 1}} and crawl.report.unknown_status == 0
+    [line] = [r for r in caplog.records if r.getMessage() == "openreview_duplicate_submission"]
+    assert (line.__dict__["forum"], line.__dict__["kept"]) == (SILENT, SPEAKING)
+
+
+def test_without_its_twin_a_silent_note_is_an_unknown_record(tmp_path: Path) -> None:
+    silent, _ = silent_pair()
+    crawl = run(FakeOpenReviewV1({NEURIPS_2021_MAIN: [silent]}), tmp_path, "NeurIPS", 2021)
+    [record] = crawl.records
+    assert (record.native, outcome(record)) == (SILENT, ("main", "unknown", None))
+    assert crawl.report.skipped["duplicate_submission"] == 0 and crawl.report.unmapped["content.venue"] == 1
+
+
+@pytest.mark.parametrize(
+    "speaking_changes",
+    [
+        {"pdf": "/pdf/0123456789abcdef0123456789abcdef01234567.pdf"},  # another pdf: another submission
+        {"title": "Another synthetic title."},
+        {"authors": ["Synthetic Author 7", "Synthetic Author 9", "Synthetic Author 8"]},  # order counts
+        {"abstract": "Another synthetic abstract."},
+        {"keywords": ["Another keyword."]},
+        {"venue": "NeurIPS 2021 Submitted"},  # rejected: only an acceptance absorbs a silent twin
+    ],
+    ids=["pdf", "title", "authors", "abstract", "keywords", "rejected"],
+)
+def test_a_silent_note_that_differs_or_whose_twin_is_not_accepted_stays_a_record(
+    tmp_path: Path, speaking_changes: dict[str, Any]
+) -> None:
+    silent, speaking = silent_pair()
+    speaking["content"].update(speaking_changes)
+    crawl = run(FakeOpenReviewV1({NEURIPS_2021_MAIN: [silent, speaking]}), tmp_path, "NeurIPS", 2021)
+    assert {r.native for r in crawl.records} == {SILENT, SPEAKING}
+    assert crawl.report.skipped["duplicate_submission"] == 0
+
+
+def test_a_silent_note_with_two_differing_accepted_twins_is_never_given_one(tmp_path: Path) -> None:
+    """Poster and spotlight twins: two notes with evidence that disagree on presentation, so which one the silent
+    note would join is a choice. Nothing is collapsed."""
+    silent, speaking = silent_pair()
+    spotlight = v1_clone(speaking, "Zz9Spotlight", 12000, venue="NeurIPS 2021 Spotlight")
+    crawl = run(
+        FakeOpenReviewV1({NEURIPS_2021_MAIN: [silent, speaking, spotlight]}), tmp_path, "NeurIPS", 2021
+    )
+    assert {r.native for r in crawl.records} == {SILENT, SPEAKING, "Zz9Spotlight"}
+    assert crawl.report.skipped["duplicate_submission"] == 0
+
+
+def test_a_silent_note_joins_an_accepted_pair_after_the_pair_collapses(tmp_path: Path) -> None:
+    """Two identical accepted notes (rule 5) and a silent third: the pair collapses to its lower number first,
+    then the silent note joins that record."""
+    silent, speaking = silent_pair()
+    copy = v1_clone(speaking, "Zz9Identical", 12000)
+    crawl = run(FakeOpenReviewV1({NEURIPS_2021_MAIN: [copy, silent, speaking]}), tmp_path, "NeurIPS", 2021)
+    [record] = crawl.records
+    assert record.native == SPEAKING and outcome(record) == ("main", "accepted", "poster")
+    assert crawl.report.skipped["duplicate_submission"] == 2
+
+
+def test_a_note_is_silent_only_on_the_submission_listing_of_a_venue_year(tmp_path: Path) -> None:
+    """On the withdrawn listing the invitation speaks (`withdrawn`), so the note is no silent twin; in a year whose
+    status also comes from a decision note (ICLR 2021), a note without a venue isn't silent either: its forum may
+    hold the decision."""
+    silent, speaking = silent_pair()
+    withdrawn = "NeurIPS.cc/2021/Conference/-/Withdrawn_Submission"
+    crawl = run(
+        FakeOpenReviewV1({NEURIPS_2021_MAIN: [speaking], withdrawn: [silent]}),
+        tmp_path / "w",
+        "NeurIPS",
+        2021,
+    )
+    # rule 4 instead: an accepted note whose pdf a withdrawn note shares is `unknown` with a conflict row
+    assert {(r.native, r.status) for r in crawl.records} == {(SILENT, "withdrawn"), (SPEAKING, "unknown")}
+
+    accepted = v1_note("iclr-2021/note-accepted.json")
+    quiet = v1_clone(accepted, "Zz9NoVenue", accepted["number"] + 1, venue=None, venueid=None)
+    server = FakeOpenReviewV1({BLIND.format(y=2021): [accepted, quiet]}, {"Zz9NoVenue": []})
+    crawl = run(server, tmp_path / "iclr", "ICLR", 2021)
+    assert {(r.native, r.status) for r in crawl.records} == {
+        (accepted["id"], "accepted"),
+        ("Zz9NoVenue", "unknown"),
+    }
+    assert crawl.report.skipped["duplicate_submission"] == 0
+
+
+def test_a_record_with_a_crawl_conflict_is_a_rival_for_a_silent_note(tmp_path: Path) -> None:
+    """A third note of the paper on the withdrawn listing whose venue says accepted (a crawl conflict: `unknown`,
+    exempt from rule 5) is still a second candidate: the silent note stays a record (found by the property test)."""
+    silent, speaking = silent_pair()
+    conflicted = v1_clone(speaking, "Zz9Conflict", 12000)
+    withdrawn = "NeurIPS.cc/2021/Conference/-/Withdrawn_Submission"
+    server = FakeOpenReviewV1({NEURIPS_2021_MAIN: [silent, speaking], withdrawn: [conflicted]})
+    crawl = run(server, tmp_path, "NeurIPS", 2021)
+    assert {(r.native, r.status) for r in crawl.records} == {
+        (SILENT, "unknown"),
+        (SPEAKING, "accepted"),
+        ("Zz9Conflict", "unknown"),
+    }
+    assert {c.id for c in crawl.report.conflicts} == {"op:neurips:2021:Zz9Conflict"}
+    assert crawl.report.skipped["duplicate_submission"] == 0
+
+
+def test_two_silent_notes_of_one_accepted_paper_are_never_collapsed(tmp_path: Path) -> None:
+    """Rule 5 needs exactly two records, the silent note and the accepted one. A second silent note without a
+    number (so the identical-note collapse leaves it alone) makes three: nothing collapses."""
+    silent, speaking = silent_pair()
+    numberless = v1_clone(silent, "Zz9Numberless")
+    del numberless["number"]
+    server = FakeOpenReviewV1({NEURIPS_2021_MAIN: [silent, speaking, numberless]})
+    crawl = run(server, tmp_path, "NeurIPS", 2021)
+    assert {(r.native, r.status) for r in crawl.records} == {
+        (SILENT, "unknown"),
+        (SPEAKING, "accepted"),
+        ("Zz9Numberless", "unknown"),
+    }
+    assert crawl.report.skipped["duplicate_submission"] == 0
+
+
+def test_a_silent_note_in_another_track_stays_a_record(tmp_path: Path) -> None:
+    """Silent on the D&B Round 2 listing (its track is the listing's), its twin accepted in main: two tracks."""
+    silent, speaking = silent_pair()
+    round2 = "NeurIPS.cc/2021/Track/Datasets_and_Benchmarks/Round2/-/Submission"
+    crawl = run(
+        FakeOpenReviewV1({NEURIPS_2021_MAIN: [speaking], round2: [silent]}), tmp_path, "NeurIPS", 2021
+    )
+    assert {(r.native, r.track) for r in crawl.records} == {
+        (SILENT, "datasets_benchmarks"),
+        (SPEAKING, "main"),
+    }
+    assert crawl.report.skipped["duplicate_submission"] == 0
+
+
+def test_a_silent_note_without_a_pdf_is_never_collapsed(tmp_path: Path) -> None:
+    silent, speaking = silent_pair()
+    del silent["content"]["pdf"], speaking["content"]["pdf"]
+    crawl = run(FakeOpenReviewV1({NEURIPS_2021_MAIN: [silent, speaking]}), tmp_path, "NeurIPS", 2021)
+    assert {r.native for r in crawl.records} == {SILENT, SPEAKING}
 
 
 # --- an accepted note with a withdrawn twin (rule 4 across two notes, decision-020) ------------------------------

@@ -181,7 +181,7 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    host, or shared by two listings is a `conflicts.csv` row, never a merge. Then (b) a normalized title (the token contract) with the same venue and year. Two
    records are merged **only** when venue and year agree. That lesson comes from venuetriage: records
    with no year must never merge on `(title, "")`. **Two OpenReview records with different forum IDs are
-   never merged** (the API v1 crawl has already collapsed two notes of one identical paper, TASK-125), nor a listing linking one forum with a note of another: a main-track paper and its same-year workshop version can share a title. Title
+   never merged** (the API v1 crawl has already collapsed two notes of one identical paper, TASK-125, and a silent twin into its accepted note, TASK-132), nor a listing linking one forum with a note of another: a main-track paper and its same-year workshop version can share a title. Title
    matching only links records *across* sources (OpenReview ↔ proceedings ↔ RIS), never joins two different
    proceedings papers, and never puts a paper whose track the proceedings don't host (workshop, other,
    `unknown`) into a proceedings listing. When a title group holds a listing, a note that can't be the
@@ -294,8 +294,17 @@ venueid, all exact), each with a pdf and an integer note `number` and no crawl c
 lowest-numbered note (a deterministic tie-break whatever the listing order, not "the original": the NeurIPS
 2021 proceedings link the kept forum for 177 of the 297 accepted pairs and the dropped one for 120); every other note is counted in the
 report's `skipped.duplicate_submission`, a DEBUG `openreview_duplicate_submission` line and the crawl's
-`openreview_crawl_attention`. Notes differing in any compared field (another pdf; ICLR 2018's blind vs
-withdrawn copies of one pdf) stay separate, and a note without a pdf is never collapsed. API v2 has no such
+`openreview_crawl_attention`. **A silent twin** (TASK-132) is the one exception to "identical": in a year whose one
+status carrier is `content.venue`, a note with status `unknown` and neither a `venue` nor a `venueid` key says
+nothing about its status. After the identical notes collapse, such a note is dropped (counted the same way) when
+exactly one other record with a pdf is identical to it in everything but status, presentation and venueid, and
+that record is `accepted` with no crawl conflict: no absence of evidence contradicts an acceptance, while a
+second such record (with evidence or with a conflict), or a rejection, would be a choice. The kept record is the accepted one whatever the
+numbers. On the 2026-09-29 crawl this is one pair: NeurIPS 2021 `W6e384Lkjbw` #5999 (no venue; the proceedings
+link it) and `rDdb26AQ0SO` #11021 (`NeurIPS 2021 Poster`), with the same pdf, supplementary material, title,
+authors, abstract and keywords, so the paper merges with its proceedings record. Notes differing in any other
+compared field (another pdf; ICLR 2018's blind vs withdrawn copies of one pdf) stay separate, and a note without
+a pdf is never collapsed. API v2 has no such
 notes (the 2026-09-29 crawl) and doesn't run this rule. Responses are cached under
 `<data-dir>/cache/openreview/{v2,v1}/http/` (the shared `{key, payload}` cache contains only a versioned,
 world-readable projection; restricted fields are removed before persistence and older raw entries are

@@ -390,6 +390,8 @@ V1_NOTES: list[tuple[str, str, str, str]] = [
     ("v1/iclr-2023/notes-blogposts-blind-submission.json", "blogpost", "blogpost", "accepted"),
     ("v1/neurips-2021/note-rejected.json", "main", "main", "rejected"),  # `NeurIPS 2021 Submitted`
     ("v1/neurips-2021/notes-main-listing.json", "main", "main", "accepted"),
+    # rDdb26AQ0SO, the accepted twin of the silent W6e384Lkjbw (TASK-132)
+    ("v1/neurips-2021/notes-main-listing-accepted-silent-twin.json", "main", "main", "accepted"),
     (
         "v1/neurips-2021/note-db-round1-rejected.json",
         "datasets_benchmarks",
@@ -445,6 +447,7 @@ V1_NO_VENUE_EVIDENCE = {
     "v1/iclr-2022/note-withdrawn-empty-venueid.json",  # `venue = venueid = ""`
     "v1/iclr-2022/notes-desk-rejected-listing.json",
     "v1/iclr-2023/note-desk-rejected.json",
+    "v1/neurips-2021/notes-main-listing-silent-twin.json",  # W6e384Lkjbw: no venue, no venueid (TASK-132)
 }
 
 
