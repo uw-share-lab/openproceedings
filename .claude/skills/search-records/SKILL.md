@@ -93,6 +93,8 @@ translations that changed later cannot alter the replay.
   searched_at, id_set, body)` points at it. Saving the same set again costs one body (~1 KB).
 - **Bodies are versioned** (`body_version`, now 2) and read with frozen, tolerant types (a diagnostic's
   `code` is a string, unknown keys ignored), so changing a live enum never makes an old record unreadable.
+  A diagnostic's `reading` (TASK-099, `WARN_MIXED_AND_OR`) is a tolerant key: a body saved before it existed
+  has none and reads as `reading: null`, with no `body_version` bump.
   `backend/tests/fixtures/records/record-v1.json` must stay readable; a newer `body_version` is a 500.
   v2 added `sources`, `identification_citable`, `crawl_dates_kind` and two `dedup` counts: a v1 body reads
   them as null ("not recorded", never guessed), and a v2 body without them, or whose

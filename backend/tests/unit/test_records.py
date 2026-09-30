@@ -403,6 +403,17 @@ def test_a_committed_v1_body_stays_readable(store: RecordStore) -> None:
     assert (got.dedup.track_not_merged, got.dedup.venue_year_not_merged) == (None, None)
 
 
+def test_a_v2_body_whose_diagnostics_have_no_reading_key_reads_it_as_null(store: RecordStore) -> None:
+    """TASK-099: a body saved before `reading` existed has diagnostics without the key; a tolerant stored
+    diagnostic reads it as null (and keeps one that has it)."""
+    old = {"code": "WARN_MIXED_AND_OR", "message": "read as `(a b) OR c`", "span": [0, 8]}
+    new = {**old, "reading": "(a b) OR c"}
+    body = {**fields(), "record_id": "v2noreading0", "warnings": [old, new]}
+    insert_raw(store, "v2noreading0", json.dumps(body), IDS)
+    got = store.get("v2noreading0")
+    assert got is not None and [d.reading for d in got.warnings] == [None, "(a b) OR c"]
+
+
 @pytest.mark.parametrize("missing", ["sources", "identification_citable", "crawl_dates_kind"])
 def test_a_v2_body_without_its_bootstrap_fields_is_refused(store: RecordStore, missing: str) -> None:
     body = {**fields(), "record_id": "v2v2v2v2v2v2"}

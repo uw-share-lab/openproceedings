@@ -9,11 +9,15 @@
 import type { Diagnostic as EditorDiagnostic } from "@codemirror/lint";
 import { codePointLength, codePointSpanToUtf16 } from "@/api/spans";
 
-/** A server diagnostic: `{code, message, span}` (spec 04 §Conventions), from `/parse` or an error envelope. */
+/**
+ * A server diagnostic: `{code, message, span, reading}` (spec 04 §Conventions), from `/parse` or an error
+ * envelope. `reading` is only ever set on `WARN_MIXED_AND_OR` (TASK-099).
+ */
 export interface ServerDiagnostic {
   readonly code: string;
   readonly message: string;
   readonly span: readonly number[] | null;
+  readonly reading: string | null;
 }
 
 /** errors → "error", warnings → "warning", translations → "info" (codemirror-lezer skill). */
@@ -25,6 +29,9 @@ export interface Item {
   readonly message: string;
   /** Half-open code points into the text the diagnostic was reported for; `null` when it has no place. */
   readonly span: readonly [number, number] | null;
+  /** `WARN_MIXED_AND_OR`'s text at `span` as the server read it, parenthesised; `null` on every other code, and
+   * on a `WARN_MIXED_AND_OR` with none to offer (a branch that doesn't parse, the "… and N more" summary). */
+  readonly reading: string | null;
 }
 
 export interface DiagnosticLists {
@@ -41,7 +48,7 @@ function spanOf(span: readonly number[] | null): readonly [number, number] | nul
 }
 
 export function itemOf(severity: Severity, d: ServerDiagnostic): Item {
-  return { severity, code: d.code, message: d.message, span: spanOf(d.span) };
+  return { severity, code: d.code, message: d.message, span: spanOf(d.span), reading: d.reading };
 }
 
 const bySpan = (a: Item, b: Item) => (a.span?.[0] ?? Infinity) - (b.span?.[0] ?? Infinity);
@@ -114,18 +121,14 @@ export function helpHref(code: string): string {
   return `/help/syntax#${SLOW_CLAUSES.has(code) ? "slow-clauses" : code.toLowerCase()}`;
 }
 
-const MIXED_READING =
-  /^AND binds tighter than OR, so this is read as `([\s\S]*)` — add parentheses if you meant something else\./;
-
 /**
- * "Load with parentheses" (pre-pass S7): the reading the server reported in a `WARN_MIXED_AND_OR` message,
- * spliced over the warning's span in `text`, or `null` when there is nothing to load faithfully (another
- * message shape, no span, or a reading the server shortened with `…`).
+ * "Load with parentheses" (pre-pass S7): the server's `reading` of a `WARN_MIXED_AND_OR` (a field, TASK-099;
+ * the message is never parsed) spliced over the warning's span in `text`, or `null` when there is nothing to
+ * load faithfully (another code, no reading, no span, or a span that doesn't fit `text`).
  */
 export function withParentheses(text: string, item: Item): string | null {
-  if (item.code !== "WARN_MIXED_AND_OR" || item.span === null) return null;
-  const reading = MIXED_READING.exec(item.message)?.[1];
-  if (reading === undefined || reading.endsWith("…")) return null;
+  const { reading } = item;
+  if (item.code !== "WARN_MIXED_AND_OR" || item.span === null || reading === null) return null;
   try {
     const [from, to] = codePointSpanToUtf16(text, item.span);
     return text.slice(0, from) + reading + text.slice(to);

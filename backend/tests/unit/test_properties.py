@@ -8,10 +8,10 @@ from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.query.ast import And, Filter, Node, Not, Or, structure
 from openproceedings.query.canonical import canonicalize, render
-from openproceedings.query.parser import MAX_QUERY_LENGTH, parse
+from openproceedings.query.parser import MAX_PER_CODE, MAX_QUERY_LENGTH, parse
 
 from tests.corpus import fixture_records
-from tests.strategies import asts, filters, near_cap_queries, negative_asts
+from tests.strategies import asts, filters, near_cap_queries, negative_asts, queries
 
 ENGINE = ReferenceEngine(fixture_records())
 
@@ -127,3 +127,33 @@ def test_an_accepted_query_near_the_cap_replays_from_its_canonical_string(q: str
     again = parse(result.canonical)
     assert again.errors == [], (q, again.errors)
     assert again.canonical == result.canonical and again.canonical_hash == result.canonical_hash
+
+
+def _mixed(q: str, mode: str) -> list[tuple[int, int] | None]:
+    return [w.span for w in parse(q, mode).warnings if w.code is DiagnosticCode.WARN_MIXED_AND_OR]  # type: ignore[arg-type]
+
+
+@settings(deadline=None)
+@given(queries(), st.sampled_from(["native", "scholar"]))
+@example("x (a b OR c) OR y z", "native")  # nested levels: each reading clears its own level only
+@example("a b   OR   c", "native")  # the reading is shorter than the span it replaces
+@example(" ".join(f"(a{i} b{i} OR c{i})" for i in range(22)), "native")  # past the cap: "… and 2 more"
+def test_loading_a_mixed_reading_keeps_the_query_and_clears_that_level(q: str, mode: str) -> None:
+    """TASK-099: WARN_MIXED_AND_OR's `reading`, spliced over its span ("Load with parentheses"), gives a query
+    with the same canonical form and one mixed level fewer (the other levels are quoted as typed). In a query
+    that parses, only the "… and N more" summary past MAX_PER_CODE has no reading."""
+    result = parse(q, mode)  # type: ignore[arg-type]
+    mixed = [w for w in result.warnings if w.code is DiagnosticCode.WARN_MIXED_AND_OR]
+    assume(not result.errors and mixed)
+    capped = len(mixed) > MAX_PER_CODE
+    assert [w.reading is None for w in mixed].count(True) == int(capped), q
+    for w in mixed:
+        if w.reading is None:
+            continue  # the summary
+        assert w.span is not None
+        loaded = q[: w.span[0]] + w.reading + q[w.span[1] :]
+        after = parse(loaded, mode)  # type: ignore[arg-type]
+        assert after.errors == [], (q, loaded, after.errors)
+        assert after.canonical == result.canonical, (q, loaded)
+        left = len(_mixed(loaded, mode))
+        assert left <= len(mixed) if capped else left == len(mixed) - 1, (q, loaded)

@@ -83,7 +83,7 @@ def test_422_an_engine_refusal_keeps_its_own_code(client: TestClient) -> None:
     )
     # spec 04 row 1: a PARSE_/FIELD_/WILDCARD_ refusal carries diagnostics (no span when none is known)
     assert error["diagnostics"] == [
-        {"code": "WILDCARD_TOO_MANY_EXPANSIONS", "message": error["message"], "span": None}
+        {"code": "WILDCARD_TOO_MANY_EXPANSIONS", "message": error["message"], "span": None, "reading": None}
     ]
 
 

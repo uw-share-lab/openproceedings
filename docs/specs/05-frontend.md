@@ -140,7 +140,9 @@ warnings, the save's index check), the design doc says so; its open questions li
    operators, fields, phrases and wildcards. Inline squiggles from `/parse` diagnostics (debounced 250 ms)
    using the spans the server returns. Autocomplete for fields and for the `track:`/`venue:` values from
    `/meta`. The **server's parser is authoritative.** The client grammar only highlights, it never
-   decides.
+   decides. A `WARN_MIXED_AND_OR` line offers **Load with parentheses**, which splices the warning's
+   `reading` field over its span in the draft (never searching); with no `reading` it isn't offered. The
+   client never parses a diagnostic's `message` (TASK-099).
 2. **"How we read your query."** A collapsible tree view of the AST, with the default filters shown in grey
    as explicit clauses.
 3. **Query builder.** Mirrors how the review's strings are structured: **concept groups** (rows). Terms

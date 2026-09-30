@@ -605,6 +605,21 @@ def test_no_query_text_in_any_log_line(client: TestClient, logs: Logs) -> None:
     assert len(lines) == 4 and all("canonical_hash" in x for x in lines[:3])  # the 4th didn't parse
 
 
+def test_a_saved_mixed_and_or_warning_returns_its_reading(client: TestClient) -> None:
+    """TASK-099: the record stores each diagnostic whole, `reading` included, and GET /records/{id} returns it,
+    stored and replayed alike."""
+    record_id = save(client, "trust calibration OR reliance")
+    for params in ({"replay": "false"}, {}):
+        r = client.get(f"/api/v1/records/{record_id}", params=params)
+        assert r.status_code == 200, r.text
+        [w] = r.json()["record"]["warnings"]
+        assert (w["code"], w["span"], w["reading"]) == (
+            "WARN_MIXED_AND_OR",
+            [0, 29],
+            "(trust calibration) OR reliance",
+        )
+
+
 def test_the_stored_record_holds_the_query_text(client: TestClient, data_dir: Path) -> None:
     record_id = save(client, f"{SECRET} OR trust")
     stored = store_of(data_dir).get(record_id)

@@ -14,17 +14,18 @@ const item = (code: string, span: [number, number] | null, severity: Item["sever
   code,
   message: `${code} message`,
   span,
+  reading: null,
 });
 
 describe("itemsOf", () => {
   it("orders errors, then warnings, then translations, each by span, and keeps the server's words", () => {
     const items = itemsOf({
       errors: [
-        { code: "B", message: "b", span: [5, 6] },
-        { code: "A", message: "a", span: [1, 2] },
+        { code: "B", message: "b", span: [5, 6], reading: null },
+        { code: "A", message: "a", span: [1, 2], reading: null },
       ],
-      warnings: [{ code: "W", message: "w", span: null }],
-      translations: [{ code: "T", message: "t", span: [0, 1] }],
+      warnings: [{ code: "W", message: "w", span: null, reading: null }],
+      translations: [{ code: "T", message: "t", span: [0, 1], reading: null }],
     });
     expect(items.map((i) => [i.severity, i.code, i.message])).toEqual([
       ["error", "A", "a"],
@@ -37,8 +38,8 @@ describe("itemsOf", () => {
   it("drops a span that isn't two ordered whole numbers instead of guessing", () => {
     const [bad, backwards] = itemsOf({
       errors: [
-        { code: "X", message: "x", span: [1] },
-        { code: "Y", message: "y", span: [4, 2] },
+        { code: "X", message: "x", span: [1], reading: null },
+        { code: "Y", message: "y", span: [4, 2], reading: null },
       ],
       warnings: [],
       translations: [],
@@ -122,11 +123,13 @@ describe("helpHref", () => {
 });
 
 describe("withParentheses (Load with parentheses)", () => {
-  const mixed = (reading: string, span: [number, number]): Item => ({
+  // the message quotes no reading at all: the action reads the `reading` field only (TASK-099)
+  const mixed = (reading: string | null, span: [number, number] | null): Item => ({
     severity: "warning",
     code: "WARN_MIXED_AND_OR",
-    message: `AND binds tighter than OR, so this is read as \`${reading}\` — add parentheses if you meant something else.`,
+    message: "AND binds tighter than OR — add parentheses if you meant something else.",
     span,
+    reading,
   });
 
   it("splices the server's reading over the warning's span", () => {
@@ -139,18 +142,28 @@ describe("withParentheses (Load with parentheses)", () => {
     expect(withParentheses("𝐱 a OR b c", mixed("a OR (b c)", [2, 10]))).toBe("𝐱 a OR (b c)");
   });
 
-  it("keeps the Scholar-mode sentence after the reading", () => {
-    const item = mixed("a OR (b c)", [0, 8]);
-    const scholar = {
-      ...item,
-      message: `${item.message} Google Scholar binds OR tighter, so it would have grouped this the other way.`,
+  it("loads a reading longer than the one the message quotes (the field is never shortened)", () => {
+    const text = Array.from({ length: 30 }, (_, i) => `t${i}`).join(" OR ") + " z";
+    const reading = text.slice(0, -" t29 z".length) + " OR (t29 z)";
+    const item = {
+      ...mixed(reading, [0, text.length] as [number, number]),
+      message: "… read as `t0 OR t1 …`",
     };
-    expect(withParentheses("a OR b c", scholar)).toBe("a OR (b c)");
+    expect(withParentheses(text, item)).toBe(reading);
   });
 
-  it("offers nothing for a reading the server shortened, another code, or a span that doesn't fit", () => {
-    expect(withParentheses("a OR b c", mixed("a OR (b…", [0, 8]))).toBeNull();
-    expect(withParentheses("a OR b c", { ...mixed("a", [0, 8]), code: "WARN_CJK_RUN" })).toBeNull();
+  it("never reads the message: a reading quoted there but absent from the field loads nothing", () => {
+    const item = {
+      ...mixed(null, [0, 8]),
+      message:
+        "AND binds tighter than OR, so this is read as `a OR (b c)` — add parentheses if you meant something else.",
+    };
+    expect(withParentheses("a OR b c", item)).toBeNull();
+  });
+
+  it("offers nothing for another code, no span, or a span that doesn't fit", () => {
+    expect(withParentheses("a OR b c", { ...mixed("a OR (b c)", [0, 8]), code: "WARN_CJK_RUN" })).toBeNull();
+    expect(withParentheses("a OR b c", mixed("a OR (b c)", null))).toBeNull();
     expect(withParentheses("a", mixed("a OR (b c)", [0, 8]))).toBeNull();
   });
 });

@@ -10,7 +10,7 @@ from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.query.ast import And, Filter, Near, Node, Not, Or, Phrase, Term, Wildcard, YearRange
 from openproceedings.query.canonical import canonicalize, render
-from openproceedings.query.parser import MAX_DEPTH, MAX_QUERY_LENGTH, parse
+from openproceedings.query.parser import MAX_DEPTH, MAX_PER_CODE, MAX_QUERY_LENGTH, parse
 
 
 def show(n: Node) -> str:
@@ -134,19 +134,85 @@ def test_year_values_are_ranges() -> None:
     )
 
 
-MIXED = [
-    ("a b OR c", (0, 8)),
-    ("a OR b c", (0, 8)),
-    ("a AND b OR c", (0, 12)),
-    ("x (a b OR c)", (3, 11)),  # the warning is on the level that mixes, inside the parentheses
+# Every mixed AND/OR case: (q, mode, [(span, reading)]), one pair per WARN_MIXED_AND_OR in span order. The
+# reading is the diagnostic's `reading` field (TASK-099): the text at the span as it was read, which the
+# editor's "Load with parentheses" splices over the span.
+LONG_OR = " OR ".join(
+    f"term{i:02d}" for i in range(24)
+)  # > 120 code points: the message clips, `reading` doesn't
+MIXED: list[tuple[str, Literal["native", "scholar"], list[tuple[tuple[int, int], str]]]] = [
+    ("a b OR c", "native", [((0, 8), "(a b) OR c")]),
+    ("a OR b c", "native", [((0, 8), "a OR (b c)")]),
+    ("a AND b OR c", "native", [((0, 12), "(a AND b) OR c")]),
+    ("x (a b OR c)", "native", [((3, 11), "(a b) OR c")]),  # on the level that mixes, inside the parentheses
+    ("a | b c", "native", [((0, 7), "a OR (b c)")]),  # `|` is read as OR
+    ("a b\nOR  c", "native", [((0, 9), "(a b) OR c")]),  # the separator is written ` OR `, whatever was typed
+    ("a b OR c OR d e", "native", [((0, 15), "(a b) OR c OR (d e)")]),
+    ("a NEAR/1 b OR c d", "native", [((0, 17), "a NEAR/1 b OR (c d)")]),  # NEAR is not an AND group
+    ("-a b OR c", "native", [((0, 9), "(-a b) OR c")]),
+    ("title:a b OR c", "native", [((0, 14), "(title:a b) OR c")]),
+    ("title:(a b OR c)", "native", [((7, 15), "(a b) OR c")]),
+    ("𝐱 a OR b c", "native", [((0, 10), "(𝐱 a) OR (b c)")]),  # code points: the astral letter is one
+    (
+        "x (a b OR c) OR y z",
+        "native",
+        [
+            ((0, 19), "(x (a b OR c)) OR (y z)"),
+            ((3, 11), "(a b) OR c"),
+        ],  # the outer level quotes the inner as typed
+    ),
+    (f"z {LONG_OR}", "native", [((0, len(LONG_OR) + 2), f"(z term00) OR {LONG_OR[len('term00 OR ') :]}")]),
+    ("a AND b OR c", "scholar", [((0, 12), "(a AND b) OR c")]),
+    ("trust OR reliance AND calibration", "scholar", [((0, 33), "trust OR (reliance AND calibration)")]),
 ]
 
 
-@pytest.mark.parametrize(("q", "span"), MIXED, ids=[q for q, _ in MIXED])
-def test_mixed_and_or_warns(q: str, span: tuple[int, int]) -> None:
-    result = parse(q)
-    assert [(w.code, w.span) for w in result.warnings] == [(DiagnosticCode.WARN_MIXED_AND_OR, span)]
-    assert "parenthes" in result.warnings[0].message
+@pytest.mark.parametrize(("q", "mode", "want"), MIXED, ids=[f"{m}:{q[:30]}" for q, m, _ in MIXED])
+def test_mixed_and_or_warns_with_its_reading(
+    q: str, mode: Literal["native", "scholar"], want: list[tuple[tuple[int, int], str]]
+) -> None:
+    result = parse(q, mode)
+    mixed = sorted(
+        (w for w in result.warnings if w.code is DiagnosticCode.WARN_MIXED_AND_OR),
+        key=lambda w: w.span or (0, 0),
+    )
+    assert [(w.span, w.reading) for w in mixed] == want
+    assert all("parenthes" in w.message for w in mixed)
+    # every other diagnostic has no reading (the model enforces it; this pins what the parser sends)
+    assert all(
+        d.reading is None for d in result.errors + result.translations + result.warnings if d not in mixed
+    )
+    for w in mixed:
+        assert w.span is not None and w.reading is not None
+        loaded = q[: w.span[0]] + w.reading + q[w.span[1] :]
+        after = parse(loaded, mode)
+        assert after.canonical == result.canonical  # loading the reading never changes what is searched
+        assert sum(x.code is DiagnosticCode.WARN_MIXED_AND_OR for x in after.warnings) == len(mixed) - 1
+
+
+def test_a_level_with_a_branch_that_does_not_parse_offers_no_reading() -> None:
+    """The failed branch has no node, so a reading would silently drop its text (`a b OR () OR c` →
+    `(a b) OR c`): the warning is still given, with `reading` null, so no Load with parentheses."""
+    result = parse("a b OR () OR c")
+    assert [e.code for e in result.errors] == [DiagnosticCode.PARSE_EMPTY_GROUP]
+    [w] = result.warnings
+    assert (w.code, w.span, w.reading) == (DiagnosticCode.WARN_MIXED_AND_OR, (0, 14), None)
+
+
+def test_the_summary_past_the_per_code_cap_has_no_reading() -> None:
+    """22 mixed levels: 20 warnings with their readings, then "… and 2 more like these." with none (it stands
+    for two levels). The validator allows a null reading on WARN_MIXED_AND_OR, so this parses (it used to 500)."""
+    q = " ".join(f"(a{i} b{i} OR c{i})" for i in range(22))
+    mixed = [w for w in parse(q).warnings if w.code is DiagnosticCode.WARN_MIXED_AND_OR]
+    assert len(mixed) == MAX_PER_CODE + 1
+    assert all(w.reading == f"(a{i} b{i}) OR c{i}" for i, w in enumerate(mixed[:MAX_PER_CODE]))
+    assert (mixed[-1].message, mixed[-1].reading) == ("… and 2 more like these.", None)
+
+
+def test_the_message_clips_a_long_reading_but_the_field_does_not() -> None:
+    [w] = parse(f"z {LONG_OR}").warnings
+    assert w.reading is not None and len(w.reading) > 120
+    assert w.reading not in w.message and "…`" in w.message
 
 
 def test_mixed_warning_shows_the_reading() -> None:
@@ -493,6 +559,7 @@ def test_m1_gate_mutant_rows() -> None:
     """Each row kills a mutant that survived the M1 gate's QA pass (P5, P6, P7, C9b, D6)."""
     [mixed] = [w for w in parse("a NEAR/1 b OR c d").warnings if w.code is DiagnosticCode.WARN_MIXED_AND_OR]
     assert "`a NEAR/1 b OR (c d)`" in mixed.message  # the NEAR span covers both operands
+    assert mixed.reading == "a NEAR/1 b OR (c d)"
     assert DiagnosticCode.WARN_FILTER_SCOPE not in [w.code for w in parse("year:2023 OR title:2024").warnings]
     assert DiagnosticCode.WARN_FILTER_SCOPE not in [w.code for w in parse("year:2023 OR (2024 -)").warnings]
     tree = parse("year:2020 OR 5").ast

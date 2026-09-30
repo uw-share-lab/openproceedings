@@ -11,7 +11,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Strict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, Strict, field_validator, model_validator
 
 
 class DiagnosticCode(StrEnum):
@@ -115,14 +115,29 @@ def by_position(d: Diagnostic) -> tuple[int, int]:
     return d.span or (0, 0)
 
 
+# the only codes whose Diagnostic may carry a `reading` (TASK-099): the level as it was read, parenthesised. Even
+# there it can be null: the "… and N more" summary, and a level with a branch that doesn't parse.
+READING_CODES = frozenset({DiagnosticCode.WARN_MIXED_AND_OR})
+
+
 class Diagnostic(BaseModel):
-    """A warning, error or translation notice about a query, with a half-open code-point span into `q`."""
+    """A warning, error or translation notice about a query, with a half-open code-point span into `q`.
+    `reading` is only ever set on `WARN_MIXED_AND_OR`, so a client never parses `message` for it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", json_schema_serialization_defaults_required=True)
 
     code: DiagnosticCode
     message: str
     span: tuple[Annotated[int, Strict()], Annotated[int, Strict()]] | None = None
+    reading: str | None = Field(
+        default=None,
+        description="Only ever set on `WARN_MIXED_AND_OR`: the text at `span` as it was read, each `AND` group in "
+        "parentheses and the branches joined with ` OR ` (`a b OR c` → `(a b) OR c`). Replacing `span` in `q` with "
+        "it gives a query with the same canonical form whose level no longer mixes `AND` and `OR`. Never "
+        "shortened, unlike the reading quoted in `message`. Null on every other code, and on a "
+        '`WARN_MIXED_AND_OR` that has none to offer: the "… and N more" summary, or a level with a branch '
+        "that doesn't parse.",
+    )
 
     @field_validator("message")
     @classmethod
@@ -137,6 +152,14 @@ class Diagnostic(BaseModel):
         if v is not None and not (0 <= v[0] <= v[1]):
             raise ValueError(f"span must be a half-open [start, end) range with 0 <= start <= end, got {v}")
         return v
+
+    @model_validator(mode="after")
+    def _reading_only_where_defined(self) -> Diagnostic:
+        if self.reading is not None and self.code not in READING_CODES:
+            raise ValueError(f"{self.code} takes no `reading`")
+        if self.reading is not None and not self.reading.strip():
+            raise ValueError("a reading must not be blank")
+        return self
 
 
 class OpenProceedingsError(Exception):

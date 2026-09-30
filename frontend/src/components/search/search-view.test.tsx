@@ -470,7 +470,11 @@ describe("filter sidebar (spec 05 §4; W13)", () => {
       stateOf({ q: "(trust" }),
       handler({
         parse: (text) =>
-          json(parsed(text, { errors: [{ code: "PARSE_UNBALANCED_PAREN", message: "m", span: [0, 1] }] })),
+          json(
+            parsed(text, {
+              errors: [{ code: "PARSE_UNBALANCED_PAREN", message: "m", span: [0, 1], reading: null }],
+            }),
+          ),
         search: () => json({ error: { code: "PARSE_UNBALANCED_PAREN", message: "m", diagnostics: [] } }, 422),
       }),
     );
@@ -638,7 +642,9 @@ describe("refusals and failures (W6, W9, W10, W12)", () => {
         parse: (text) =>
           json(
             text === bad
-              ? parsed(text, { errors: [{ code: "PARSE_UNBALANCED_PAREN", message: "m", span: [6, 7] }] })
+              ? parsed(text, {
+                  errors: [{ code: "PARSE_UNBALANCED_PAREN", message: "m", span: [6, 7], reading: null }],
+                })
               : parsed(text, { filters: unrestricted(text) }),
           ),
       }),

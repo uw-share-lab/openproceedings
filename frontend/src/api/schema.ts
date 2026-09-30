@@ -360,11 +360,17 @@ export interface components {
         /**
          * Diagnostic
          * @description A warning, error or translation notice about a query, with a half-open code-point span into `q`.
+         *     `reading` is only ever set on `WARN_MIXED_AND_OR`, so a client never parses `message` for it.
          */
         Diagnostic: {
             code: components["schemas"]["DiagnosticCode"];
             /** Message */
             message: string;
+            /**
+             * Reading
+             * @description Only ever set on `WARN_MIXED_AND_OR`: the text at `span` as it was read, each `AND` group in parentheses and the branches joined with ` OR ` (`a b OR c` → `(a b) OR c`). Replacing `span` in `q` with it gives a query with the same canonical form whose level no longer mixes `AND` and `OR`. Never shortened, unlike the reading quoted in `message`. Null on every other code, and on a `WARN_MIXED_AND_OR` that has none to offer: the "… and N more" summary, or a level with a branch that doesn't parse.
+             */
+            reading: string | null;
             /** Span */
             span: [
                 number,
@@ -1181,13 +1187,19 @@ export interface components {
         ];
         /**
          * StoredDiagnostic
-         * @description A diagnostic as the record saved it: its code is a string, so a retired code stays readable.
+         * @description A diagnostic as the record saved it: its code is a string, so a retired code stays readable. `reading`
+         *     is null on a record saved before it existed.
          */
         StoredDiagnostic: {
             /** Code */
             code: string;
             /** Message */
             message: string;
+            /**
+             * Reading
+             * @description The diagnostic's `reading` as saved (`WARN_MIXED_AND_OR` only); null on every other code and on a record saved before the field existed.
+             */
+            reading: string | null;
             /** Span */
             span: [
                 number,

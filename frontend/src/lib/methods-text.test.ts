@@ -217,7 +217,9 @@ describe("the methods text for the API's own records (every number is the record
 
   it("words a translation code this version doesn't know with its recorded message", () => {
     const { record, canonical, identification } = citable(RECORDS.scholar);
-    record.translations = [{ code: "COMPAT_FUTURE", message: "`~` became NEAR/5", span: null }];
+    record.translations = [
+      { code: "COMPAT_FUTURE", message: "`~` became NEAR/5", span: null, reading: null },
+    ];
     const text = methodsText({
       record,
       parseCanonical: canonical,

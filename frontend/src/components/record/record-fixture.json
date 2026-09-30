@@ -783,7 +783,8 @@
           {
             "code": "PARSE_EXPECTED_TERM",
             "message": "The query is empty — type a word or phrase to search for.",
-            "span": [0, 0]
+            "span": [0, 0],
+            "reading": null
           }
         ],
         "translations": [],
@@ -1131,7 +1132,8 @@
           {
             "code": "PARSE_ALL_NEGATIVE",
             "message": "Every part of this query is negated (`NOT …`), so it would match almost everything — add something to search for, e.g. `trust NOT bias`.",
-            "span": [0, 9]
+            "span": [0, 9],
+            "reading": null
           }
         ],
         "translations": [],
@@ -1616,19 +1618,22 @@
             {
               "code": "COMPAT_NO_STEMMING",
               "message": "Google Scholar stems words; openproceedings matches them exactly, so `large language`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `language$`).",
-              "span": [0, 36]
+              "span": [0, 36],
+              "reading": null
             },
             {
               "code": "COMPAT_SOURCE_ALIAS",
               "message": "`source:ICLR` is read as `venue:ICLR`.",
-              "span": [7, 11]
+              "span": [7, 11],
+              "reading": null
             }
           ],
           "warnings": [
             {
               "code": "WARN_MIXED_AND_OR",
               "message": "AND binds tighter than OR, so this is read as `(source:ICLR \"large language\") OR trust` — add parentheses if you meant something else. Google Scholar binds OR tighter, so it would have grouped this the other way.",
-              "span": [0, 36]
+              "span": [0, 36],
+              "reading": "(source:ICLR \"large language\") OR trust"
             }
           ],
           "ids": null,
@@ -1718,19 +1723,22 @@
             {
               "code": "COMPAT_NO_STEMMING",
               "message": "Google Scholar stems words; openproceedings matches them exactly, so `large language`, `trust` match only those forms (not plurals or other endings). Add `$` or `*` where they should count (e.g. `language$`).",
-              "span": [0, 36]
+              "span": [0, 36],
+              "reading": null
             },
             {
               "code": "COMPAT_SOURCE_ALIAS",
               "message": "`source:ICLR` is read as `venue:ICLR`.",
-              "span": [7, 11]
+              "span": [7, 11],
+              "reading": null
             }
           ],
           "warnings": [
             {
               "code": "WARN_MIXED_AND_OR",
               "message": "AND binds tighter than OR, so this is read as `(source:ICLR \"large language\") OR trust` — add parentheses if you meant something else. Google Scholar binds OR tighter, so it would have grouped this the other way.",
-              "span": [0, 36]
+              "span": [0, 36],
+              "reading": "(source:ICLR \"large language\") OR trust"
             }
           ],
           "ids": null,

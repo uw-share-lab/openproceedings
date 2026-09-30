@@ -67,7 +67,9 @@ Colours come from `ui-design-system` tokens so both themes pass contrast.
   `{q, mode}` to `/api/v1/parse`; a newer draft cancels the older request, and an answer is shown only for the
   text it was asked about (see "Squiggles are pushed, not linted" above).
 - Map `errors → "error"`, `warnings → "warning"`, `translations → "info"`; message = server message
-  verbatim, `source` = its code. Never rewrite server wording.
+  verbatim, `source` = its code. Never rewrite server wording, and never parse it: an action that needs data
+  from a diagnostic reads a field (`withParentheses` in `diagnostics.ts` splices `WARN_MIXED_AND_OR`'s
+  `reading` over its span; TASK-099).
 - Spans: diagnostic spans are half-open `[start, end)` code-point offsets over `q` (spec 04
   §Conventions). Convert them to CodeMirror positions (UTF-16) with the one shared helper
   (`src/api/spans.ts`, `.claude/skills/nextjs-conventions/SKILL.md`), never a second conversion. Clamp to

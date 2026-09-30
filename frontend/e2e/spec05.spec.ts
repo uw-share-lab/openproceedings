@@ -149,6 +149,28 @@ test("the editor exposes completion, diagnostics and submission to the keyboard"
   await expect(page.locator(".cm-panel-lint")).toBeVisible();
 });
 
+test("Load with parentheses loads the server's whole reading of a mixed AND/OR query, unsearched", async ({
+  page,
+}) => {
+  // a reading over 120 code points, so the warning's message quotes it shortened: the button uses the
+  // diagnostic's `reading` field (TASK-099), which never is
+  const terms = ["reliance", "overreliance", "appropriate reliance", "human-AI teaming", "calibrated trust"];
+  const tail = terms.map((t) => (t.includes(" ") ? `"${t}"` : t)).join(" OR ");
+  const q = `trust calibration OR ${tail} OR automation bias OR complacency`;
+  const read = `(trust calibration) OR ${tail} OR (automation bias) OR complacency`;
+  expect(read.length).toBeGreaterThan(120);
+  await page.goto("/");
+  const editor = page.getByRole("textbox", { name: "Query" });
+  await expect(editor).toBeFocused();
+  await page.keyboard.type(q);
+  const load = page.getByRole("button", { name: "Load with parentheses" });
+  await expect(load).toBeVisible();
+  await load.click();
+  await expect(editor).toHaveText(read);
+  await expect(page).toHaveURL(/\/$/); // loaded as a draft: nothing was searched
+  await expect(load).toBeHidden(); // the loaded text no longer mixes AND and OR
+});
+
 test("the Text and Builder tabs and builder editing work by keyboard alone", async ({ page }) => {
   await page.goto(`/search?${new URLSearchParams({ q: "(trust OR reliance) AND benchmark" })}`);
   await expect(page.getByText(/\d+ papers/).first()).toBeVisible();

@@ -42,7 +42,9 @@ describe("createApi", () => {
       error: {
         code: "PARSE_UNBALANCED_PAREN",
         message: "unbalanced (",
-        diagnostics: [{ code: "PARSE_UNBALANCED_PAREN", message: "unbalanced (", span: [0, 1] }],
+        diagnostics: [
+          { code: "PARSE_UNBALANCED_PAREN", message: "unbalanced (", span: [0, 1], reading: null },
+        ],
       },
     };
     const api = createApi("http://api.test", answering(422, envelope));

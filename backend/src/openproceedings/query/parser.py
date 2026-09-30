@@ -5,7 +5,7 @@ problem is a Diagnostic with a span, `ast` is None exactly when there are errors
 one mistake gives one error (an error already reported inside a span suppresses follow-on errors there).
 
 - A level that mixes AND and OR without parentheses parses by precedence and raises WARN_MIXED_AND_OR,
-  showing how it was read.
+  showing how it was read: quoted (clipped) in the message and whole in `reading` (TASK-099).
 - A bare word or range OR-joined to a filter that is a valid value of that filter's field
   (`year:2023 OR 2024`) is searched as text, as written, and raises WARN_FILTER_SCOPE.
 - A word that normalises to several tokens is a Phrase; a wildcard word's wildcard goes on its last token
@@ -278,6 +278,8 @@ class _Parser:
                 for n, compound in branches
                 if n
             )
+            # a branch that didn't parse has no node, so the reading would drop its text: offer none then
+            whole = len(nodes) == len(branches)
             self.warnings.append(
                 Diagnostic(
                     code=DiagnosticCode.WARN_MIXED_AND_OR,
@@ -289,6 +291,7 @@ class _Parser:
                         else ""
                     ),
                     span=(nodes[0].span[0], nodes[-1].span[1]),
+                    reading=reading if whole else None,  # unclipped: what "Load with parentheses" splices
                 )
             )
         if len(branches) > 1:
@@ -788,7 +791,7 @@ def _capped(diagnostics: list[Diagnostic]) -> list[Diagnostic]:
         if len(group) > MAX_PER_CODE:
             rest = group[MAX_PER_CODE:]
             first, last = rest[0].span or (0, 0), rest[-1].span or (0, 0)
-            out.append(
+            out.append(  # no `reading`: the summary stands for several levels, not one
                 Diagnostic(code=code, message=f"… and {len(rest)} more like these.", span=(first[0], last[1]))
             )
     return sorted(out, key=by_position)
