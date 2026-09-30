@@ -20,6 +20,14 @@ and hooks that are the project's guardrails. Read-only.
 `git diff origin/dev...HEAD` (or the named scope). Grep the whole tree, not just the diff, for anything a
 finding implies (`grep -rn "OPENREVIEW_\|Authorization\|password" backend/ deploy/ .github/`).
 
+On a whole-tree review (TASK-067), also look for what a diff review can't see:
+- **Cost on hostile input.** A per-character loop that scans ahead (quadratic), in code reached by `q` or by a
+  stored field that is rendered per request. Time it at 2k and 20k characters.
+- **Id-keyed lists across versions.** A list of record ids (takedowns) applied to data that holds the same
+  paper under another id: an older index version, a merged-away duplicate, a pre-rekey id.
+- **Case-table rows that pass by fixture accident.** Ask which part of the fixture blocks the row. Try the
+  same command in a repo without that part.
+
 ## Crawlers (`ingest/`)
 - **Credentials.** Read only from `.env`/environment; never defaulted, echoed, or put in a URL. The bearer
   token must not reach logs, exception messages, the disk cache key/body, or recorded HTTP fixtures —
