@@ -41,5 +41,11 @@ export function securityHeaders(options: SecurityHeaderOptions): { key: string; 
     { key: "X-Frame-Options", value: "DENY" },
     // Search URLs carry the query text in `q`, so no page sends its URL to another site.
     { key: "Referrer-Policy", value: "no-referrer" },
+    // No page uses a device; a script injected despite the CSP gets none of them either.
+    { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+    // HTTPS only, for two years, once a browser has seen the site over HTTPS (TASK-067: no downgrade to
+    // plain HTTP on a later visit). Browsers ignore it over plain HTTP, so a local production build still
+    // works; left out of `next dev`. No includeSubDomains: the hosting domain isn't decided (TASK-064).
+    ...(options.dev ? [] : [{ key: "Strict-Transport-Security", value: "max-age=63072000" }]),
   ];
 }
