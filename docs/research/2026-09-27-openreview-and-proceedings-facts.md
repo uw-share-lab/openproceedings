@@ -169,7 +169,7 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
   `duplicate_submission`, keeping the lower number (`-K4tIyQLaY`). Every other v1 venue-year (ICLR
   2013–2023, NeurIPS 2022) and every v2 venue-year (ICLR 2024–2025, ICML 2023–2025, NeurIPS 2023–2025)
   collapses 0. A full offline `op snapshot build` from that cache then has NeurIPS 2021 main at 2,335
-  accepted (2,333 merged with the proceedings, 1 OpenReview-only, 1 proceedings-only) against the official
+  (2,334 since TASK-132) accepted (2,333 merged with the proceedings, 1 OpenReview-only, 1 proceedings-only) against the official
   2,334, where the trial had 2,929 (2,036 merged, 595 OpenReview-only, 298 proceedings-only).
 - The kept note (lowest number) is a tie-break, not the one the proceedings name: the cached NeurIPS 2021
   proceedings pages link the kept forum for 177 of the 297 accepted pairs and the dropped forum for 120 (never

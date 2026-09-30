@@ -3,11 +3,11 @@ id: TASK-132
 title: >-
   Dedup: NeurIPS 2021 'Stochastic Online Linear Regression' stays split because
   a third OpenReview note shares its title
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 00:39'
-updated_date: '2026-09-30 03:12'
+updated_date: '2026-09-30 03:30'
 labels:
   - dedup
 milestone: m-4
@@ -36,4 +36,12 @@ AC#2: rule 5 extended in the crawler (openreview_v1.collapse_silent_twins, after
 AC#3 (scratch builds under scratchpad/task132, cache symlinked read-only): offline v1 replay old vs new: exactly one new collapse (rDdb26AQ0SO keeps, W6e384Lkjbw dropped); every other v1 venue-year unchanged; NeurIPS 2021 2,720 -> 2,719 records, duplicate_submission 300 -> 301. Full build base 1494b3c66a4a (index b6abb3b4d018) vs new c6c9a156fdf7 (index dd58cd19856e): records 95,938 -> 95,936; only cells changed NeurIPS 2021 main accepted 2,335 -> 2,334 (official 2,334, delta 0) and main unknown 1 -> 0; op snapshot diff: removed W6e384Lkjbw and nips-cca289d2... (merged into rDdb26AQ0SO, which gains the proceedings URL and claims), nothing else changed; merges.csv +1 row (rDdb26AQ0SO <- nips-cca289d2..., title_venue_year); conflicts.csv -2 rows (W6e384Lkjbw's two title_key ambiguous_not_merged rows). op eval coverage --check: PASS, 43 of 44 within 1%, 1 accepted exception (ICLR 2013).
 
 Review follow-up in-branch: the property test found that a record with a crawl conflict (a withdrawn-listing note whose venue says accepted: unknown, exempt from rule 5) was not counted as a rival, so a silent note could still join the accepted note beside it. collapse_silent_twins now groups every record with a pdf and requires the silent note's only other record to be accepted and conflict-free; unit test added and shown to fail on the earlier version. The real-data replay is unchanged (the one pair only). Checks: full backend suite 5,517 passed, 1 failed: test_openapi_additive, which fails the same way with this branch's changes stashed, because local origin/dev is now ahead (TASK-099 added Diagnostic.reading) and the branch predates it, so it clears on rebase. make lint 0, make tooling 0 (232 + 27 passed). Not marked Done.
+
+Review round (approved with 2 Shoulds), after rebase on origin/dev f7ed88b: (1) collapse_silent_twins now requires exactly two records in the match group, the silent note (still unknown, no crawl conflict) and one accepted, conflict-free, non-silent record, matching the docstring/spec's 'exactly one other record'; new unit test with two silent notes (one numberless so the identical-note collapse leaves it) and an accepted twin asserts nothing collapses, and fails on the previous version. (2) The crawl() call site is restored to the pre-TASK-132 identical-note loop plus a separate silent-twin loop with the comment 'collapse_silent_twins must skip the same exempt records as the twin rule (see TASK-139)', so TASK-139's rename rebases cleanly. Nits: dedup-rules paragraph reflowed; facts doc notes 2,334 since TASK-132. The property test's crawls skip storage.fsync (F_FULLFSYNC was about 75% of each crawl and tripped the 500 ms dev deadline under xdist once); now about 3 s. Real-data replay unchanged: exactly the one pair. Checks: ingest tests 1,209 passed (3 runs under xdist), full backend suite 5,540 passed / 2 skipped, make lint 0, make tooling 232 + 27 passed.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+NeurIPS 2021 main was +1 (2,335 vs 2,334) because one paper stayed split: OpenReview v1 holds it as W6e384Lkjbw (#5999, no venue or venueid, so status unknown) and rDdb26AQ0SO (#11021, NeurIPS 2021 Poster), with the same pdf, supplementary, title, authors, abstract and keywords, so dedup refused the title group. TASK-125's collapse needs identical status; TASK-126 keeps an unknown note a rival. The v1 crawler's rule 5 now drops such a silent note (status_from venue, both keys absent, still unknown, no conflict) when its paper's only other record is accepted and conflict-free (collapse_silent_twins). Verified with fixture-backed unit tests, a Hypothesis property file, hand mutants, an offline replay of every v1 venue-year (exactly this pair collapses), and a scratch rebuild from the real cache: NeurIPS 2021 main 2,334 (official 2,334), merges.csv +1 row, conflicts.csv -2 rows, op eval coverage PASS. Spec 01, the openreview-api, dedup-rules and neurips-proceedings skills, the facts doc and coverage-sources.md updated; learning addendum on the TASK-125 entry.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -17,6 +17,7 @@ from unittest import mock
 
 from hypothesis import example, given
 from hypothesis import strategies as st
+from openproceedings import storage
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources import openreview_v1 as v1
 from openproceedings.ingest.sources.openreview_client import Credentials
@@ -62,7 +63,9 @@ def notes(draw: st.DrawFn) -> dict[str, list[dict[str, Any]]]:
 
 
 def crawl(listings: dict[str, list[dict[str, Any]]]) -> v1.Crawl:
-    with tempfile.TemporaryDirectory() as tmp:
+    # the cache's F_FULLFSYNC is most of a crawl's time and varies with disk load, which the 500 ms dev deadline
+    # measures; a throwaway cache needs no durability
+    with tempfile.TemporaryDirectory() as tmp, mock.patch.object(storage, "fsync"):
         client = v1.make_client(Path(tmp), credentials=Credentials(USERNAME, PASSWORD),
                                 transport=FakeOpenReviewV1(listings), clock=FakeClock(), jitter=lambda: 0.0)  # fmt: skip
         return v1.crawl(client, "NeurIPS", 2021)

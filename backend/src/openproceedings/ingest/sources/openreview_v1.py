@@ -741,8 +741,12 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
         report.conflicts.append(c)
         log.debug("openreview_v1_conflict", extra={"forum": c.id.split(":", 3)[3], "field": c.field})
     conflicted = {c.id for c in report.conflicts}
-    collapsed = collapse_duplicate_submissions(records, numbers, conflicted)
-    for kept, dropped in sorted(collapsed + collapse_silent_twins(records, silent, conflicted)):
+    for kept, dropped in collapse_duplicate_submissions(records, numbers, conflicted):
+        report.skipped[DUPLICATE_SUBMISSION] += 1
+        log.debug("openreview_duplicate_submission", extra={"forum": dropped, "kept": kept})
+    # rule 5's silent twin (TASK-132), after the identical notes.
+    # collapse_silent_twins must skip the same exempt records as the twin rule (see TASK-139)
+    for kept, dropped in collapse_silent_twins(records, silent, conflicted):
         report.skipped[DUPLICATE_SUBMISSION] += 1
         log.debug("openreview_duplicate_submission", extra={"forum": dropped, "kept": kept})
     for r in records.values():
@@ -912,23 +916,26 @@ def collapse_silent_twins(
     records: dict[str, PaperRecord], silent: Set[str], exempt: Set[str] = frozenset()
 ) -> list[tuple[str, str]]:
     """Remove from `records` every silent note (module docstring rule 5) whose group, the records with a pdf that
-    are equal by `_same_paper_but_status`, holds exactly one other record, accepted and without a crawl conflict;
-    return the (kept, removed) native ids, sorted. The accepted record is kept whatever the numbers: it is the one
-    with evidence. Run after `collapse_duplicate_submissions`, so notes identical to it are gone. Any other record
-    of the paper, with evidence or with a crawl conflict (whose status is `unknown` for a reason), or a silent
-    note with a conflict, is a second candidate: then nothing is removed."""
+    are equal by `_same_paper_but_status`, holds exactly two records: the silent note, still `unknown` and without
+    a crawl conflict, and one accepted record without a crawl conflict. Return the (kept, removed) native ids,
+    sorted. The accepted record is kept whatever the numbers: it is the one with evidence. Run after
+    `collapse_duplicate_submissions`, so notes identical to the accepted one are gone. Any third record (with
+    evidence, with a conflict, or a second silent note) makes the group a choice: then nothing is removed."""
     groups: defaultdict[str, list[str]] = defaultdict(list)
     for rid, record in records.items():
         if record.urls.pdf is not None:
             groups[_same_paper_but_status(record)].append(rid)
     out = []
     for rids in groups.values():
-        quiet = [rid for rid in rids if rid in silent and rid not in exempt]
-        others = [rid for rid in rids if rid not in quiet]
-        if not quiet or len(others) != 1 or others[0] in exempt or records[others[0]].status != "accepted":
+        if len(rids) != 2 or any(rid in exempt for rid in rids):
             continue
-        kept = records[others[0]].native
-        out += [(kept, records.pop(rid).native) for rid in quiet]
+        quiet = [rid for rid in rids if rid in silent and records[rid].status == "unknown"]
+        if len(quiet) != 1:
+            continue
+        [other] = [rid for rid in rids if rid not in quiet]
+        if other in silent or records[other].status != "accepted":
+            continue
+        out.append((records[other].native, records.pop(quiet[0]).native))
     return sorted(out)
 
 

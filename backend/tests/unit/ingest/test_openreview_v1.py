@@ -943,6 +943,22 @@ def test_a_record_with_a_crawl_conflict_is_a_rival_for_a_silent_note(tmp_path: P
     assert crawl.report.skipped["duplicate_submission"] == 0
 
 
+def test_two_silent_notes_of_one_accepted_paper_are_never_collapsed(tmp_path: Path) -> None:
+    """Rule 5 needs exactly two records, the silent note and the accepted one. A second silent note without a
+    number (so the identical-note collapse leaves it alone) makes three: nothing collapses."""
+    silent, speaking = silent_pair()
+    numberless = v1_clone(silent, "Zz9Numberless")
+    del numberless["number"]
+    server = FakeOpenReviewV1({NEURIPS_2021_MAIN: [silent, speaking, numberless]})
+    crawl = run(server, tmp_path, "NeurIPS", 2021)
+    assert {(r.native, r.status) for r in crawl.records} == {
+        (SILENT, "unknown"),
+        (SPEAKING, "accepted"),
+        ("Zz9Numberless", "unknown"),
+    }
+    assert crawl.report.skipped["duplicate_submission"] == 0
+
+
 def test_a_silent_note_in_another_track_stays_a_record(tmp_path: Path) -> None:
     """Silent on the D&B Round 2 listing (its track is the listing's), its twin accepted in main: two tracks."""
     silent, speaking = silent_pair()
