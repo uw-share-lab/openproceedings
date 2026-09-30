@@ -83,9 +83,9 @@ to OpenReview's track. This was already the behaviour before the decision (task-
 so the decision changes no record: tests pin it (`test_dedup.py`, `test_dedup_props.py`, `test_reconcile.py`).
 The real-crawl check is in `docs/results/2026-09-29-reconcile-real-data.md` §Track, decided per track.
 
-**Creative AI listings merge with their own notes (amended 2026-09-30; task-137).** A correctness fix inside the
-owner's first answer (a paper's own OpenReview note answers its track), not a new decision. The NeurIPS
-proceedings host Creative AI, which the taxonomy files under `other`, so the rule above kept every Creative AI
+**Creative AI listings merge with their own notes (amended 2026-09-30; task-137).** Decided by the owner,
+2026-09-30: a NeurIPS Creative AI listing merges with its own OpenReview note; other `other` tracks still never
+merge. The implementation below is the implementer's. The NeurIPS proceedings host Creative AI, which the taxonomy files under `other`, so the rule above kept every Creative AI
 listing apart from its own `NeurIPS.cc/<Y>/Creative_AI_Track` note: one paper, two records. `other` is not only
 Creative AI (NeurIPS 2025 also has 54 `Education_Program` notes; the venueid table lists
 `High_School_Projects_Track`, `Competition/LMC` and others), so `other` stays out of `PROCEEDINGS_TRACKS` and
@@ -99,7 +99,9 @@ status `unknown`). So wherever both answer, OpenReview's track is in `PROCEEDING
 NeurIPS 2025 Creative AI listings merged with their notes (2 of them past a same-title workshop note, now set
 aside). 5 stay listing-only: 4 match no note, and 1 (LUMIA) matches two Creative AI notes and is ambiguous.
 NeurIPS 2025 `other`/`unknown` fell from 146 to 87 records (the 59 absorbed notes); `other`/`accepted` stays 64.
-No other cell moved, and the M4 coverage gate is unchanged (PASS, 43 of 44 plus the accepted exception).
+No other cell moved, and the M4 coverage gate is unchanged (PASS, 43 of 44 plus the accepted exception). The
+commands, both snapshots and the unmerged listings are in
+[`docs/results/2026-09-30-creative-ai-merge.md`](../../docs/results/2026-09-30-creative-ai-merge.md).
 Of the 69 records the owner's second answer counted, 5 of the 64 Creative AI ones still take their listing's
 track alone.
 

@@ -406,7 +406,8 @@ def _names_creative_ai(claims: Sequence[Claim], year: int) -> bool:
 def is_creative_ai(record: PaperRecord) -> bool:
     """A NeurIPS Creative AI record (TASK-137): track `other`, and every source with a track claim claims `other`
     and backs it with Creative AI evidence (`_names_creative_ai`). An `other` without that evidence
-    (Education_Program, an unseen form) is not Creative AI, and the track rule keeps it from every listing."""
+    (Education_Program, an unseen form) is not Creative AI, and the track rule keeps it from every listing. A
+    source with no track claim (a reconcile absence claim's, say) is not checked: it says nothing about the track."""
     if record.venue != "NeurIPS" or record.track != "other":
         return False
     by_source: dict[str, list[Claim]] = defaultdict(list)

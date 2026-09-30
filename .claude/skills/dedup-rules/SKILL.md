@@ -98,7 +98,9 @@ safe direction.
   exemption is a listing's *own* `unknown`: a PMLR volume that holds both main and position papers (v235,
   v267) can't say which track a paper is in, so it is `proceedings` family and merges with the OpenReview
   record, whose track wins by precedence.
-  **Creative AI (TASK-137).** The NeurIPS proceedings host Creative AI (2025: 64 listings), which the taxonomy
+  **Creative AI (TASK-137; decided by the owner, 2026-09-30).** A Creative AI listing merges with its own
+  OpenReview note; other `other` tracks still never merge. The NeurIPS proceedings host Creative AI (2025: 64
+  listings; 59 merge on the 2026-09-29 crawl, `docs/results/2026-09-30-creative-ai-merge.md`), which the taxonomy
   files under `other`. `other` also holds OpenReview forms no proceedings host (NeurIPS 2025
   `Education_Program`: 54 notes; `High_School_Projects_Track`, `Competition/LMC`, forms outside their year
   window, …), so `other` is **not** in `PROCEEDINGS_TRACKS` and reconcile never judges it. Instead a record is
