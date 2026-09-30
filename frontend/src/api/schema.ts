@@ -36,7 +36,9 @@ export interface paths {
          * @description Every record the query matches, in `format`: of `q` (with `mode`, default `native`) on the pinned
          *     `index_version` (else the served index), or the stored ids of search record `record_id` (alone) from the
          *     index it names. Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and
-         *     index (for a record, its stored `total`).
+         *     index (for a record, its stored `total`). Each record names its abstract's source (decision-018), from the
+         *     exported index's snapshot: a pinned index whose snapshot this instance can't verify is 409
+         *     `API_INDEX_VERSION_UNAVAILABLE`.
          */
         get: operations["export"];
         put?: never;

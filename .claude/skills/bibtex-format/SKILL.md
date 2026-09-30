@@ -15,6 +15,7 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
   url       = {https://…},
   doi       = {…},
   abstract  = {…},
+  abstract_source = {PMLR https://proceedings.mlr.press/v202/okafor23a.html},
   keywords  = {main, status:accepted},
   openproceedings_id = {op:iclr:2024:iilhN2MycO},
   note      = {openproceedings a1b2c3d4e5f6 · query 9f8e7d… · exported 2026-09-25}
@@ -39,6 +40,12 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
 - `openproceedings_id = {<id>}` is on **every** entry (spec 04 §Exports), so a round-trip recovers the id
   of every record, proceedings-only ones (PMLR, NeurIPS `nips-<hash>`) included, which have no forum `url`
   to parse. refaudit's field regex `(\w+)\s*=` accepts the underscore.
+- `abstract_source = {<site> <url>}` after `abstract`, when the abstract has an attribution (TASK-138,
+  decision-018; spec 04 §Exports): the same words as RIS's `N1  - Abstract source:` line (the results list's
+  site name, ` (via RIS import)` for a `ris` claim, the url when there is one), from the snapshot's
+  `RecordFile.attributions`. Escaped like every value (`_braced`: a url's `%`, `&`, `#` gain a backslash, as in
+  `url`). A new field, not a change to `note`: `note` keeps exactly the provenance line (after the `Submitted
+  to` sentence), so it stays additive; refaudit's `(\w+)\s*=` reads the name and styles don't print it.
 - `author`: `Last, First` joined by ` and `. Brace a name that contains the word `and` or a comma, or
   that is an organisation (`{OpenAI Team}`).
 
@@ -90,4 +97,6 @@ Parse the exported file with `refaudit.bibtex.parse_string` (`refaudit` is a pin
 added with task-036; never vendored) and assert: the entry count equals `X-Total`, keys are unique, the ids
 recovered from `openproceedings_id` equal `match_ids` (a PMLR-only fixture record included), `title` (minus its protective outer braces), `author`, `year` and `abstract`
 round-trip after whitespace normalisation, and the unbalanced-brace, `%`, `@` and non-ASCII-author fixtures parse into the right
-number of entries.
+number of entries. `abstract_source` round-trips to the snapshot's attribution
+(`backend/tests/contract/test_export_attribution.py`), and a url with `%`, `&` and `#` in it swallows no later
+entry.

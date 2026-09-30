@@ -26,8 +26,19 @@ fixtures. The reference parser strips values, so it reads either ending.
 | `DO` | DOI, only if present | |
 | `ID` | the openproceedings paper `id` | So exports round-trip (spec 04 §Exports). Exactly one line. |
 | `KW` | two lines: the `track` value (`main`, `datasets_benchmarks`, …), then `status:<status>` | Track from `.claude/skills/track-taxonomy/SKILL.md`. The status line is meant to show a Covidence screener that a paper was rejected or withdrawn, since `T2` names the conference it was submitted to (spec 04 §Exports). Covidence shows neither `KW` nor `N1` to screeners (hand check, `docs/results/2026-09-27-covidence-check.md`), so a Covidence review must exclude by status before import (default `status:accepted`); Zotero and EndNote show both. |
-| `N1` | for a paper not `accepted`, first `Submitted to <venue string>; status: <status in words> (not in its proceedings).` (`unknown`: "not known to be in its proceedings"); then, on every record, `openproceedings <index_version> · query <canonical_hash> · exported <UTC date>`, plus ` · record <record_id> · searched <UTC date>` when the export is pinned by a search record | Exactly one provenance line, always the last `N1`. `·` is U+00B7. Dates are `YYYY-MM-DD` UTC. The status sentence is what a screener reads in Notes; `TY` stays `CPAPER` and `T2` the venue string whatever the status (spec 04 §Exports). |
+| `N1` | for a paper not `accepted`, first `Submitted to <venue string>; status: <status in words> (not in its proceedings).` (`unknown`: "not known to be in its proceedings"); then, when the abstract has a source, `Abstract source: <site> <url>` (below); then, on every record, `openproceedings <index_version> · query <canonical_hash> · exported <UTC date>`, plus ` · record <record_id> · searched <UTC date>` when the export is pinned by a search record | Exactly one provenance line, always the last `N1`. `·` is U+00B7. Dates are `YYYY-MM-DD` UTC. The status sentence is what a screener reads in Notes; `TY` stays `CPAPER` and `T2` the venue string whatever the status (spec 04 §Exports). |
 | `ER` | empty | |
+
+**Abstract source (TASK-138, decision-018; spec 04 §Exports).** One `N1  - Abstract source: <site> <url>`
+line for a record whose abstract has an attribution (the snapshot's `RecordFile.attributions`, what `/search`
+sends as `abstract_source`; never recomputed): `<site>` is the results list's name (`OpenReview`,
+`NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`), plus ` (via RIS import)` for a `ris`
+claim; `an imported RIS file` when the route names no known site; no url when there is none. For example
+`N1  - Abstract source: PMLR https://proceedings.mlr.press/v202/okafor23a.html` (PMLR's CC BY 4.0 asks for the
+link). No abstract, or none a claim holds: no line. It is additive: `N1` was already repeatable, the status
+sentence stays first and the provenance line last, and Covidence imported the fixture's two-`N1` record
+cleanly (it shows no `N1` to screeners). A reader that wants the provenance takes the **last** `N1`, never
+the first or the only one. The Covidence fixture's records have no claims, so its bytes are unchanged.
 
 **Id carrier:** the round-trip test reads the openproceedings `id` back from the `ID` tag, for every
 record including PMLR-only ones. Never overload `N1` or recover ids from `UR`.
@@ -57,7 +68,9 @@ choice parses. Match the known-good file unless the Covidence fixture shows othe
 1. the record count equals `X-Total` and `/search` `total`;
 2. the set of ids equals `match_ids` for the query;
 3. `TI`, `AB`, the ordered `AU` list, `PY` and `T2` equal the stored record field for field;
-4. every record has exactly one `N1`, and it names the served `index_version` and `canonical_hash`;
+4. every record has exactly one provenance `N1`, the last, naming the served `index_version` and
+   `canonical_hash`, and at most one `Abstract source:` `N1`, equal to the snapshot's attribution
+   (`backend/tests/contract/test_export_attribution.py`);
 5. no value contains `\n`, `…` or `\r`.
 Freeze the clock so the `N1` date is fixed and the file can be byte-compared to a golden fixture.
 Cover records with no abstract, no DOI, no PDF URL, a non-ASCII author and a title with LaTeX. One

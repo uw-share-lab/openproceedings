@@ -175,7 +175,9 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   followed by ` · record <record_id> · searched <UTC date of searched_at>`), always the last `N1`. A paper that
   is not `accepted` has one more `N1` before it: `Submitted to <venue string>; status: <status in words> (not
   in its proceedings).` (`unknown` reads "not known to be in its proceedings"; `desk_rejected` reads "desk
-  rejected"), so the Notes a screener sees say it plainly; `TY` and `T2` are unchanged. Checked against
+  rejected"), so the Notes a screener sees say it plainly; `TY` and `T2` are unchanged. A record whose abstract
+  has a source then has `N1  - Abstract source: <site> <url>` before the provenance line (**Abstract source
+  in every format**, below; TASK-138). Checked against
   the reference RIS parser, `scholarmend.parse.parse_ris` (the pinned `scholarmend` PyPI package), plus one
   fixture imported into Covidence by hand (`docs/results/2026-09-27-covidence-check.md`, done 2026-09-27).
 - **Status in every format** (task-004 review). The venue string names the conference a paper was
@@ -187,6 +189,38 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   `status` column, and BibTeX has
   it in `keywords` and in the entry type below. RIS keeps `TY  - CPAPER` for every status, so one export
   imports as one reference type.
+- **Abstract source in every format** (TASK-138, decision-018). Each exported abstract names where it came
+  from and links there, as the results list does (TASK-134): PMLR's CC BY 4.0 terms ask for a citation (the
+  record itself: authors, title, venue, year) and a hyperlink to the paper's PMLR page, and an export hands the
+  text out. The attribution is the record's `Attribution` from the exported index's snapshot, computed once
+  when the snapshot is loaded (`RecordFile.attributions`, `ingest/dedup.py::attribution`), the same one
+  `GET /search` sends as `abstract_source`; nothing recomputes it. `<site>` is the results list's name for the
+  origin (`OpenReview`, `NeurIPS Proceedings`, `ICLR Proceedings`, `PMLR`, `ICLR archive`; `export.ORIGIN_NAMES`,
+  pinned equal to `hit-item.tsx`'s), plus ` (via RIS import)` when the claim came through an imported RIS file;
+  a route that names no known site reads `an imported RIS file`; the url is left out when there is none.
+
+  | Format | Carries it as | Example (the PMLR record `op:icml:2023:pmlr-v202-okafor23a`) |
+  |---|---|---|
+  | RIS | one more `N1`, after the status sentence and before the provenance line (which stays the last `N1`) | `N1  - Abstract source: PMLR https://proceedings.mlr.press/v202/okafor23a.html` |
+  | BibTeX | a field `abstract_source`, after `abstract` | `abstract_source = {PMLR https://proceedings.mlr.press/v202/okafor23a.html},` |
+  | CSV | three columns appended after `searched_at`: `abstract_source` (the claim's source), `abstract_origin` (the site), `abstract_url` | `…,pmlr,pmlr,https://proceedings.mlr.press/v202/okafor23a.html` |
+  | JSONL | `abstract_source`: `{source, origin, url}` (the `/search` hit's object) or null | `"abstract_source": {"origin": "pmlr", "source": "pmlr", "url": "https://proceedings.mlr.press/v202/okafor23a.html"}` |
+
+  A record with no abstract, or whose abstract no claim holds (synthetic fixtures), names nothing: no `N1`, no
+  field, three empty CSV cells, JSONL null. **Additive** under the versioning rules (api-contract skill): no
+  existing line, field or column changes value or position among its peers. RIS `N1` was already repeatable
+  and its documented contract (the status sentence first, the provenance line last) holds; Covidence imported
+  the rejected fixture record's two `N1` lines cleanly and shows no `N1` to screeners
+  (`docs/results/2026-09-27-covidence-check.md`), and scholarmend's parser keeps every repeated tag. BibTeX
+  readers keep or ignore a field they don't know (refaudit reads it; styles don't print it), as with
+  `openproceedings_id`. CSV readers by name or by position see every earlier column where it was; JSONL gains a
+  key as a response gains a field. The Covidence fixture's records carry no claims, so its pinned bytes are
+  unchanged and the hand import stands. An export reads the exported index's snapshot records: the served
+  bundle's, or for a pinned `index_version` or a record's own index `IndexState.pinned_records` (verified on
+  first use, kept beside the pinned engine); when that snapshot can't be verified the export is 409
+  `API_INDEX_VERSION_UNAVAILABLE` before the first byte, never sent without attribution. `op export` verifies
+  the snapshot as the server loads it, and fails (no file) without it. A record the index holds but its
+  snapshot lacks is an internal error mid-stream (logged, counted short), as on `GET /search`.
 - **`TY` is `CPAPER`, not `JOUR`** (task-004). Every exported paper is a conference paper. Zotero's RIS
   translator (`RIS.js`, 2026-01-05) imports `CPAPER` as `conferencePaper` and puts `T2` in its
   `conferenceName`; a `JOUR` would become a `journalArticle` with the conference in `publicationTitle`.
@@ -233,8 +267,9 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   rename and recent years by hand, and every venue from 2013 to 2026.
 - **CSV:** one row per paper, the columns of the schema in 01 plus the provenance columns `index_version`,
   `canonical_hash`, `exported_at`, `record_id` and `searched_at` (the last two empty unless the export is
-  pinned by a search record; JSONL has the same five fields, null when not pinned), UTF-8 with a BOM (so
-  Excel opens it correctly).
+  pinned by a search record; JSONL has the same five fields, null when not pinned), then the abstract-source
+  columns `abstract_source`, `abstract_origin` and `abstract_url` (TASK-138, above; JSONL: one
+  `abstract_source` object), UTF-8 with a BOM (so Excel opens it correctly).
 - **BibTeX:** `@inproceedings` for an `accepted` paper, with `booktitle` = the venue string. Any other status
   (`rejected`, `withdrawn`, `desk_rejected`, `unknown`) is `@unpublished`, BibTeX's type for a paper with an
   author and title that was not formally published, and has **no `booktitle`**. Its `note` starts
@@ -256,14 +291,16 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   (plus ` · record <record_id> · searched <date>` when pinned by a record; after
   the `Submitted to …` sentence on an `@unpublished` entry).
   Every entry carries `openproceedings_id = {<id>}`, so a round-trip recovers the id of every record,
-  proceedings-only (PMLR, NeurIPS) ones included. Output must pass `refaudit.bibtex.parse_string` (the pinned `refaudit` PyPI package).
+  proceedings-only (PMLR, NeurIPS) ones included, and an entry with an attributed abstract carries
+  `abstract_source = {<site> <url>}` after `abstract` (TASK-138, above). Output must pass `refaudit.bibtex.parse_string` (the pinned `refaudit` PyPI package).
 - As built (task-030, `export.py`, used by `op export` and, byte for byte, by `GET /export` since task-036):
   - **RIS:** `TY  - CPAPER`, with `UR` forum, then pdf, then proceedings. Each record ends `ER  - `. Line breaks
     inside a value become single spaces and control characters are dropped, since RIS is line-based. URLs
     are validated at ingest as one-line http(s) addresses, so none can carry a forged record.
   - **CSV:** UTF-8 with a BOM (Excel); every field of the stored display record plus the facets and the
     provenance columns `index_version`, `canonical_hash`, `exported_at` (the UTC date), `record_id` and
-  `searched_at` (empty unless pinned by a record). Two fields of
+  `searched_at` (empty unless pinned by a record), then `abstract_source`, `abstract_origin` and
+  `abstract_url` (empty when the abstract names no source). Two fields of
     spec 01 are left out: `provenance` (per-field claims, a nested list) and `content_hash`. Both stay in the
     snapshot that `index_version` pins. Lists are joined with "; " (ambiguous if a value holds one; JSONL
     keeps lists). A text cell starting, after leading spaces, with `=`, `+`, `-` or `@` (full-width forms
@@ -279,7 +316,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
     an odd backslash run before it loses one backslash). A value never ends on a backslash. An
     author name holding a standalone `and`, or `others`, is braced, so it isn't split or read as et al.
   - **JSONL:** one object per record, with `index_version`, `canonical_hash`, `exported_at`, `record_id` and
-    `searched_at` (null unless pinned by a record): the lossless
+    `searched_at` (null unless pinned by a record) and `abstract_source` (`{source, origin, url}` or null): the lossless
     format (CSV's formula guard adds a `'` to some cells). U+2028, U+2029 and U+0085 are escaped, so a record
     stays one line for every reader.
 
@@ -888,7 +925,10 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   `absent`, the one refusal a client causes at will, is remembered in a map of its own (at most 256), so
   naming many absent versions never evicts a remembered `unloadable` or `tampered` one (at most 256 more).
   Engines are held in an LRU of `ApiConfig.pinned_indexes` (default 4; size it to the versions the instance
-  holds); an open logs `pinned_index_opened` (INFO, with `ms`). A cache hit takes only the short map lock,
+  holds); an open logs `pinned_index_opened` (INFO, with `ms`). A pinned export also needs that index's snapshot records, to name each abstract's
+  source (TASK-138): `IndexState.pinned_records` verifies them on first use, in the same one-at-a-time open slot,
+  logs `pinned_snapshot_opened` (INFO, with `ms`), keeps them in an LRU of the same size, and remembers a
+  failure (`pinned_snapshot_unavailable`, WARNING, with `reason`) as a refused pin is remembered. A cache hit takes only the short map lock,
   never a lock an open holds; **at most one pinned index opens at a time** (each re-hashes a whole index;
   security review), and one version asked for at once is opened once. An engine dropped from the LRU stays alive while a stream still
   holds it, so memory is bounded by the LRU plus the exports in flight (each costs `export_weight` of the
@@ -902,6 +942,10 @@ shows SV-9 and never retries that request (spec 05 §Error states).
 
 - Contract tests for each endpoint using an in-process `TestClient` over the 5k-record fixture index.
 - Export round-trips: parse the RIS/CSV/BibTeX output back and get the same IDs and fields.
+- Every format names each abstract's source, equal to the snapshot's attribution and to `/search`'s
+  `abstract_source`, read back with scholarmend's RIS parser and refaudit's BibTeX parser, on the served index, a
+  pinned `index_version` and a record's own index; a pinned index whose snapshot is gone is 409 before the first
+  byte (`backend/tests/contract/test_export_attribution.py`, TASK-138).
 - Search-record replay tests for the reproduced, drifted and mismatch paths. The mismatch path uses a
   fixture record inserted with a wrong `ids_hash` or `excluded` (the store stays append-only), and asserts a `200` with
   `status: "mismatch"` plus one `API_REPLAY_MISMATCH` ERROR log line.

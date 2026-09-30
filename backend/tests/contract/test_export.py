@@ -341,7 +341,7 @@ RECORD = {"id": "x:1", "title": "T", "abstract": None, "authors": [], "venue": "
 @pytest.mark.parametrize("n, total", [(1, 2), (3, 2), (0, 1)])  # short, over, and nothing at all
 def test_a_stream_that_miscounts_fails_rather_than_pass_as_complete(n: int, total: int) -> None:
     provenance = exporter.Provenance("abc", "0" * 64, DATE)
-    body = route._body("jsonl", iter([RECORD] * n), provenance, total=total)
+    body = route._body("jsonl", iter([RECORD] * n), provenance, total, {"x:1": None})
     sent = next(body)  # what it has goes out; the miscount is found after the last record
     assert sent.count(b"\n") == n
     with pytest.raises(EngineInternalError):
@@ -350,7 +350,7 @@ def test_a_stream_that_miscounts_fails_rather_than_pass_as_complete(n: int, tota
 
 def test_a_stream_that_counts_right_ends_cleanly() -> None:
     provenance = exporter.Provenance("abc", "0" * 64, DATE)
-    assert b"".join(route._body("jsonl", iter([RECORD] * 3), provenance, total=3)).count(b"\n") == 3
+    assert b"".join(route._body("jsonl", iter([RECORD] * 3), provenance, 3, {"x:1": None})).count(b"\n") == 3
 
 
 def test_the_access_line_has_the_hash_and_total_and_no_query_text(
@@ -427,7 +427,10 @@ def test_the_body_is_sent_in_bounded_chunks_as_it_is_written(client: TestClient,
     assert [m.get("more_body", False) for m in bodies][-1] is False
     text = b"".join(chunks).decode("utf-8")
     longest = max(
-        len(e) for e in exporter.entries(fmt, _documents(client, BROAD), _provenance(client, BROAD))
+        len(e)
+        for e in exporter.entries(
+            fmt, _documents(client, BROAD), _provenance(client, BROAD), sources=_sources(client)
+        )
     )
     assert all(len(c.decode("utf-8")) <= route.CHUNK + longest for c in chunks)
     assert text.encode("utf-8") == ok(client, BROAD, fmt).content  # the same bytes, however cut
@@ -436,6 +439,10 @@ def test_the_body_is_sent_in_bounded_chunks_as_it_is_written(client: TestClient,
 def _documents(client: TestClient, q: str) -> Iterator[dict[str, Any]]:
     engine = client.app.state.index.engine  # type: ignore[attr-defined]
     return engine.documents(parse(q).effective_ast)[1]  # type: ignore[no-any-return]
+
+
+def _sources(client: TestClient) -> exporter.Sources:
+    return client.app.state.index.served.records.attributions  # type: ignore[attr-defined,no-any-return]
 
 
 def _provenance(client: TestClient, q: str) -> exporter.Provenance:
@@ -543,7 +550,8 @@ def pinned(fmt: str, body: bytes, record_id: str, searched_at: str) -> bytes:
             f" · exported {DATE}}}", f" · exported {DATE}{tail.replace('_', chr(92) + '_')}}}"
         )
     elif fmt == "csv":
-        text = text.replace(f",{DATE},,\r\n", f",{DATE},{exporter._cell(record_id)},{searched_at}\r\n")
+        # this store's abstracts have no claims, so the three abstract-source columns after them are empty
+        text = text.replace(f",{DATE},,,,,\r\n", f",{DATE},{exporter._cell(record_id)},{searched_at},,,\r\n")
     else:
         text = text.replace('"record_id": null', f'"record_id": "{record_id}"')
         text = text.replace('"searched_at": null', f'"searched_at": "{searched_at}"')

@@ -12,13 +12,17 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from openproceedings import export, vocab
+from openproceedings.api.state import snapshot_records
 from openproceedings.cli import main
 from openproceedings.engine.index import build_index
+from openproceedings.engine.protocol import EngineInternalError
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.export import Provenance, bibtex_key, write
+from openproceedings.ingest.dedup import Attribution, Origin
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.query.parser import parse
 from pydantic import ValidationError
@@ -64,7 +68,8 @@ def exported(data_dir: Path, fmt: str, q: str = ALL) -> tuple[str, int]:
     engine = TantivyEngine(index_of(data_dir))
     total, documents = engine.documents(parse(q).effective_ast)  # type: ignore[arg-type]
     out = io.StringIO()
-    n = write(fmt, documents, PROVENANCE, out)
+    sources = snapshot_records(data_dir, index_of(data_dir), engine.index_version).attributions
+    n = write(fmt, documents, PROVENANCE, out, sources=sources)
     assert n == total
     return out.getvalue(), n
 
@@ -326,7 +331,7 @@ def test_op_export_leaves_nothing_when_it_fails(
 ) -> None:
     if failure == "write":
 
-        def broken(*_args: object) -> int:
+        def broken(*_args: object, **_kw: object) -> int:
             raise OSError("disk full")
 
         monkeypatch.setattr(export, "write", broken)
@@ -360,7 +365,7 @@ def test_op_export_to_stdout(data_dir: Path, capsys: pytest.CaptureFixture[str])
 def test_a_closed_pipe_stops_quietly(
     data_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def closed(*_args: object) -> int:
+    def closed(*_args: object, **_kw: object) -> int:
         raise BrokenPipeError
 
     monkeypatch.setattr(export, "write", closed)
@@ -790,7 +795,7 @@ def test_an_unknown_format_is_refused_by_header_and_entries_alike(fmt: str) -> N
     with pytest.raises(ValueError, match="unknown export format"):
         export.header(fmt)
     with pytest.raises(ValueError, match="unknown export format"):
-        export.entries(fmt, [], PROVENANCE)
+        export.entries(fmt, [], PROVENANCE, sources={})
 
 
 # --- review-gate fixes (M3a) ------------------------------------------------------------------------------
@@ -910,3 +915,155 @@ def test_check_count_is_the_one_count_check_of_both_exports() -> None:
     for written in (2, 4):
         with pytest.raises(EngineInternalError, match=f"exported {written} records, but 3 match"):
             export.check_count(written, 3)
+
+
+# --- each abstract names its source (TASK-138, decision-018; spec 04 §Exports) ------------------------------
+PMLR_PAGE = "https://proceedings.mlr.press/v202/okafor23a.html"
+PMLR = Attribution("pmlr", "pmlr", PMLR_PAGE)
+PMLR_RECORD: dict[str, object] = {
+    "id": "op:icml:2023:pmlr-v202-okafor23a", "title": "Sample-Efficient Evaluation", "abstract": "We adapt.",
+    "authors": ["Okafor, Chidi"], "venue": "ICML", "year": 2023, "track": "main", "status": "accepted",
+    "presentation": None, "venue_id_raw": None, "keywords": [],
+    "urls": {"forum": None, "pdf": None, "proceedings": PMLR_PAGE, "doi": None},
+}  # fmt: skip
+# the columns before TASK-138, in their order: the three abstract-source columns only follow them
+CSV_COLUMNS_BEFORE = (
+    "id", "title", "abstract", "authors", "venue", "year", "track", "status", "presentation",
+    "venue_id_raw", "forum", "pdf", "proceedings", "doi", "keywords", "index_version", "canonical_hash",
+    "exported_at", "record_id", "searched_at",
+)  # fmt: skip
+
+
+def attributed_export(fmt: str, record: dict[str, object], source: Attribution | None) -> str:
+    return export.header(fmt) + "".join(
+        export.entries(fmt, [record], PROVENANCE, sources={str(record["id"]): source})
+    )
+
+
+def test_each_format_names_a_pmlr_abstracts_source_byte_for_byte() -> None:
+    """The mapping, pinned whole on one PMLR record: only additions, every earlier line, field and column as
+    it was (spec 04 §Exports; api-contract §Versioning rules)."""
+    assert attributed_export("ris", PMLR_RECORD, PMLR) == (
+        "TY  - CPAPER\nTI  - Sample-Efficient Evaluation\nAB  - We adapt.\nAU  - Okafor, Chidi\nPY  - 2023\n"
+        "T2  - International Conference on Machine Learning (ICML 2023)\n"
+        f"UR  - {PMLR_PAGE}\nID  - op:icml:2023:pmlr-v202-okafor23a\nKW  - main\nKW  - status:accepted\n"
+        f"N1  - Abstract source: PMLR {PMLR_PAGE}\n"
+        f"N1  - {PROVENANCE.line()}\nER  - \n\n"
+    )
+    assert attributed_export("bibtex", PMLR_RECORD, PMLR) == (
+        "@inproceedings{okafor2023sample,\n  title = {Sample-Efficient Evaluation},\n"
+        "  author = {Okafor, Chidi},\n"
+        "  booktitle = {International Conference on Machine Learning (ICML 2023)},\n  year = 2023,\n"
+        "  abstract = {We adapt.},\n"
+        f"  abstract_source = {{PMLR {PMLR_PAGE}}},\n"
+        f"  url = {{{PMLR_PAGE}}},\n  keywords = {{main, status:accepted}},\n"
+        f"  note = {{{PROVENANCE.line()}}},\n  openproceedings_id = {{op:icml:2023:pmlr-v202-okafor23a}}\n}}\n\n"
+    )
+    assert attributed_export("csv", PMLR_RECORD, PMLR) == (
+        "﻿" + ",".join(export.CSV_COLUMNS) + "\r\n"
+        'op:icml:2023:pmlr-v202-okafor23a,Sample-Efficient Evaluation,We adapt.,"Okafor, Chidi",ICML,2023,'
+        f"main,accepted,,,,,{PMLR_PAGE},,,abcdef123456,{'0' * 64},2026-09-26,,,pmlr,pmlr,{PMLR_PAGE}\r\n"
+    )
+    (obj,) = [json.loads(x) for x in attributed_export("jsonl", PMLR_RECORD, PMLR).splitlines()]
+    assert obj["abstract_source"] == {"source": "pmlr", "origin": "pmlr", "url": PMLR_PAGE}
+    assert {k: v for k, v in obj.items() if k != "abstract_source"} == {
+        **PMLR_RECORD, "index_version": "abcdef123456", "canonical_hash": "0" * 64, "exported_at": "2026-09-26",
+        "record_id": None, "searched_at": None,
+    }  # fmt: skip
+
+
+def test_without_a_source_every_format_is_byte_for_byte_what_it_was() -> None:
+    """A record whose abstract no claim holds (or with none) gets no line and no field; CSV its three columns
+    empty, JSONL `abstract_source: null`."""
+    no_abstract = {**PMLR_RECORD, "abstract": None}
+    for record, source in ((PMLR_RECORD, None), (no_abstract, PMLR)):  # an attribution without text: nothing
+        ris = attributed_export("ris", record, source)
+        assert "Abstract source" not in ris and ris.count("N1  - ") == 1
+        assert "abstract_source" not in attributed_export("bibtex", record, source)
+        assert attributed_export("csv", record, source).endswith(",2026-09-26,,,,,\r\n")
+        (obj,) = [json.loads(x) for x in attributed_export("jsonl", record, source).splitlines()]
+        assert obj["abstract_source"] is None
+
+
+def test_the_csv_columns_before_task_138_keep_their_positions() -> None:
+    assert (*CSV_COLUMNS_BEFORE, "abstract_source", "abstract_origin", "abstract_url") == export.CSV_COLUMNS
+
+
+@pytest.mark.parametrize(
+    "source, words",
+    [
+        (Attribution("openreview_v2", "openreview", "https://openreview.net/forum?id=X"), "OpenReview https://openreview.net/forum?id=X"),
+        (Attribution("neurips_proceedings", "neurips_proceedings", "https://proceedings.neurips.cc/p"), "NeurIPS Proceedings https://proceedings.neurips.cc/p"),
+        (Attribution("ris", "iclr_proceedings", "https://proceedings.iclr.cc/p"), "ICLR Proceedings (via RIS import) https://proceedings.iclr.cc/p"),
+        (Attribution("ris", "pmlr", None), "PMLR (via RIS import)"),  # evidence on another site: named, unlinked
+        (Attribution("ris", None, None), "an imported RIS file"),  # a route naming no known site
+    ],
+)  # fmt: skip
+def test_the_source_reads_as_the_results_list_names_it(source: Attribution, words: str) -> None:
+    assert export.credit(source) == words
+    ris = attributed_export("ris", PMLR_RECORD, source)
+    assert f"N1  - Abstract source: {words}\n" in ris
+
+
+def test_the_source_line_sits_between_the_status_sentence_and_the_provenance_line() -> None:
+    """A rejected paper's notes: the status sentence first (as before), the provenance line last (as before)."""
+    from scholarmend.parse import parse_ris
+
+    rejected = {**PMLR_RECORD, "status": "rejected"}
+    (parsed,) = parse_ris(attributed_export("ris", rejected, PMLR), "x.ris")
+    assert parsed.fields["N1"] == [
+        "Submitted to International Conference on Machine Learning (ICML 2023); status: rejected (not in its proceedings).",
+        f"Abstract source: PMLR {PMLR_PAGE}",
+        PROVENANCE.line(),
+    ]
+    (entry,) = parse_string(attributed_export("bibtex", rejected, PMLR))
+    assert entry.fields["abstract_source"] == f"PMLR {PMLR_PAGE}"
+    assert entry.fields["note"].startswith("Submitted to ") and entry.fields["note"].endswith(
+        PROVENANCE.line()
+    )
+
+
+def test_a_bibtex_source_with_special_characters_stays_one_parseable_field() -> None:
+    odd = Attribution("pmlr", "pmlr", "https://proceedings.mlr.press/v1/a%20b.html?x=1&y=2#top")
+    text = attributed_export("bibtex", PMLR_RECORD, odd) + attributed_export("bibtex", PMLR_RECORD, PMLR)
+    first, second = parse_string(text)
+    assert (
+        first.fields["abstract_source"]
+        == "PMLR https://proceedings.mlr.press/v1/a\\%20b.html?x=1\\&y=2\\#top"
+    )
+    assert second.fields["abstract_source"] == f"PMLR {PMLR_PAGE}"  # nothing swallowed
+
+
+@pytest.mark.parametrize("fmt", export.FORMATS)
+def test_a_record_the_sources_lack_is_an_internal_error_never_an_unattributed_export(fmt: str) -> None:
+    with pytest.raises(EngineInternalError, match="missing from its snapshot"):
+        list(export.entries(fmt, [PMLR_RECORD], PROVENANCE, sources={}))
+
+
+def test_op_export_names_the_abstract_source_from_the_snapshot(data_dir: Path) -> None:
+    """The unit corpus's abstracts are `openreview_v2` claims: AbCd0001 links its forum, the others have none."""
+    from scholarmend.parse import parse_ris
+
+    ris, _n = exported(data_dir, "ris")
+    notes = {r.first("ID").rsplit(":", 1)[1]: r.fields["N1"] for r in parse_ris(ris, "x.ris")}
+    assert notes["AbCd0001"] == [
+        "Abstract source: OpenReview https://openreview.net/forum?id=AbCd0001",
+        PROVENANCE.line(),
+    ]
+    assert notes["AbCd0004"] == ["Abstract source: OpenReview", PROVENANCE.line()]  # no forum url: unlinked
+    assert notes["AbCd0002"] == [PROVENANCE.line()]  # no abstract, no source
+    bib, _n = exported(data_dir, "bibtex")
+    by = {e.fields["openproceedings_id"].rsplit(":", 1)[1]: e.fields for e in parse_string(bib)}
+    assert by["AbCd0001"]["abstract_source"] == "OpenReview https://openreview.net/forum?id=AbCd0001"
+    assert "abstract_source" not in by["AbCd0002"]
+
+
+def test_the_site_names_are_the_results_lists() -> None:
+    """`ORIGIN_NAMES` here and in `hit-item.tsx` say the same, so a screener reads one name for one site."""
+    tsx = (Path(__file__).resolve().parents[3] / "frontend/src/components/search/hit-item.tsx").read_text(
+        "utf-8"
+    )
+    block = re.search(r"const ORIGIN_NAMES[^{]*\{(.*?)\};", tsx, re.DOTALL)
+    assert block is not None
+    assert dict(re.findall(r"(\w+): \"([^\"]+)\"", block.group(1))) == export.ORIGIN_NAMES
+    assert set(export.ORIGIN_NAMES) == set(get_args(Origin))
