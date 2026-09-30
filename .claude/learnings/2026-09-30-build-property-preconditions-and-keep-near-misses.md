@@ -11,8 +11,9 @@ by generating queries with a toggleable year clause instead of drawing any claus
 `assume()`ing it.
 
 ## What we learned
-- The old property threw away about 70% of its draws (4 pr runs: 526/726, 695/895, 395/595, 595/795 invalid;
-  41% failed to parse, 20% had a year clause that wasn't toggleable), and of the 200 it kept, almost none were
+- The old property threw away 66 to 79% of its draws (7 pr runs: 595/795, 769/969, 613/813, 586/786 on the
+  test as it was, and 526/726, 695/895, 395/595 on a scratch copy with `event` counts; about 41% of cases
+  failed to parse, 20% had a year clause that wasn't toggleable), and of the 200 it kept, almost none were
   near-cap (a near-cap query nearly always had a canonical form over the cap, or a year filter nested under
   its ORs) and only 2 to 7% had a year clause to splice (evidence: `--hypothesis-show-statistics` with
   `event` counts on a scratch copy of the old test).
@@ -26,9 +27,10 @@ by generating queries with a toggleable year clause instead of drawing any claus
   all through a run, not just early (a per-case timeline of one run showed them spread evenly), so they are not
   only the early size cap in `internal/conjecture/engine.py`; tree mutations that copy one span over another
   are the likely rest. `clause_queries()` alone showed 118 invalid per 200, `near_cap_queries(1_800, 2_000)` 36.
-  The rebuilt property shows 27 to 58 per 200 (20 pr runs: 19 under 20%, one at 22.5%), none rejected by the
-  test. Fewer drawn near-cap parts (two instead of six) and span labels per recursion depth changed nothing.
-- `filter_clauses` costs several parses (150 to 250 ms on a 2,000-character OR), one parse about 5 to 40 ms:
+  The rebuilt property shows 22 to 50 per 200 (13 pr runs on the final code, 9.0 to 20.0%; one run on an
+  earlier version reached 22.5%), none rejected by the test. Fewer drawn near-cap parts (two instead of six) and span labels per recursion depth changed nothing.
+- `filter_clauses` costs several parses (150 to 250 ms on a 2,000-character OR), one parse about 5 to 40 ms
+  (evidence: `time.time()` around `parse` and `filter_clauses` on `" OR ".join(f"w{i}" for i in range(250))`):
   sizing a padded query by bisection with `filter_clauses` made the test take minutes.
 
 - A fit criterion that checks only the edit can pass a query that doesn't parse: the ci profile (2,000
@@ -48,9 +50,12 @@ by generating queries with a toggleable year clause instead of drawing any claus
   parts → fewer draws and a fit that ends in filler; the drawn parts still cover the near-cap shapes, the filler
   covers the length.
 
+- Two other properties in `test_clauses.py` still `assume()` a parse (the one-wrap and single-value-click
+  properties) → they don't fail the health check today, and rebuilding them is outside TASK-145 → a
+  `filter_too_much` failure in either would reverse it.
+
 ## Follow-ups
-- [ ] none: other properties in `test_clauses.py` still `assume()` a parse (lines 237, 289); they don't fail the
-  health check today, so they are left as they are (named in the PR as a deferral).
+none
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/property-testing/SKILL.md` (as built: `year_edit_cases`;
