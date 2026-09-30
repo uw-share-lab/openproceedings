@@ -1,6 +1,6 @@
 # The crawl cache is the evidence for a string table, and scrub.py read `BT@ICLR2024` as an email
 
-**Key lesson:** Build an exact-string table from the real crawl cache (every distinct value, with counts) and give each row a recorded note trimmed from that cache. Then table-test each retained label, because `scrub.py` can quietly rewrite a controlled string: it turned `BT@ICLR2024` into `synthetic.person16@example.org`.
+**Key lesson:** Build an exact-string table from the real crawl cache (every distinct value, with counts) and give each row a recorded note trimmed from that cache. Then table-test each retained label, because `scrub.py` can quietly rewrite a controlled string: it turned `BT@ICLR2024` into `synthetic.person16@example.org` (fix: allow-list the label; never loosen the email pattern).
 
 - **Date:** 2026-09-30 · **Task:** task-101 · **Area:** ingest
 - **Artifacts:** `backend/src/openproceedings/ingest/classify.py` (`V2_PRESENTATION`), `backend/tests/fixtures/http/openreview/v2/*/notes-presentation-*.json`, `backend/tests/fixtures/http/scrub.py` (`PERSON`), spec 01 §Presentation
@@ -17,13 +17,15 @@ Parse `presentation` from API v2 `content.venue` using a per-venue-year table of
   through `scrub.py` makes a fixture under the existing conventions (`_recorded.run` names the cache,
   `trimmed` gives the original row count).
 - `scrub.py`'s email pattern `[^\s@]+@[^\s@]+` matched `BT@ICLR2024` and replaced the label. Only the table
-  test caught it: the row's note was no longer found. An email needs a dotted domain, so the pattern now
-  requires one (a regression test is in `test_fixture_scrub.py`, and `V2_VENUE_LABELS` has a row for it).
+  test caught it: the row's note was no longer found. Relaxing the pattern (a dotted domain) was rejected in
+  review because it lets `user@localhost` through; the fix is an explicit allow-list, `VENUE_LABELS`, honoured
+  only for `venue`/`venueid` values (tests in `test_fixture_scrub.py`; `V2_VENUE_LABELS` has a row for it).
 - Workshop venue strings are free-form (about 335 of them mention oral, spotlight or poster, one wording per
   workshop), so a table can't cover them. Scoping the lookup to accepted, non-workshop notes keeps the
   unmapped count meaningful, and it was 0 on the real cache.
 
 ## Dead ends — don't repeat these
+- Loosening a personal-data regex to let one controlled label through: allow-list the label instead.
 - Mapping a string from its wording alone. `ICML 2023 OralPoster` and `ICML 2025 spotlightposter` needed
   the counts to justify them (155 + 1,673 = the 1,828 accepted ICML 2023 notes). `ICML 2026 regular` stays
   unmapped because nothing says what it means.

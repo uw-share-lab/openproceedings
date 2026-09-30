@@ -179,10 +179,15 @@ def resolve(record_id: str, claims: Iterable[Claim]) -> tuple[PaperRecord, list[
     def value(fld: str, default: Any = None) -> Any:
         return best[fld].value if fld in best else default
 
+    # presentation (OpenReview first) is how an accepted paper was presented, so it holds only while the
+    # resolved status (proceedings first) is `accepted`: a reconcile-demoted `unknown` shows none. Its claim
+    # stays in provenance (spec 01 §Presentation).
+    presentation = value("presentation") if value("status") == "accepted" else None
+
     record = PaperRecord.build(
         id=record_id, title=value("title"), abstract=value("abstract"), authors=value("authors", ()),
         venue=value("venue"), year=value("year"), track=value("track"), status=value("status"),
-        presentation=value("presentation"), venue_id_raw=value("venue_id_raw"), keywords=value("keywords", ()),
+        presentation=presentation, venue_id_raw=value("venue_id_raw"), keywords=value("keywords", ()),
         urls=Urls(forum=value("urls.forum"), pdf=value("urls.pdf"), proceedings=value("urls.proceedings"),
                   doi=value("urls.doi")),
         provenance=tuple(kept),

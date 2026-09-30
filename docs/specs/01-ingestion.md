@@ -79,13 +79,19 @@ count is complete for ICLR and a floor elsewhere, and coverage (07 §C) says whi
 - **API v2:** `content.venue` on an **accepted, non-workshop** submission note (track and status still come
   from `content.venueid` alone), matched exactly in its venue-year's table, `classify.V2_PRESENTATION`
   (string → the track its venueid must give, presentation). Wording and case drift every year, so it's a
-  table, never a regex. A string the table lacks, or lists under another track, is **unmapped**:
+  table, never a regex, and the match is byte-exact: no strip, no case-fold, no whitespace collapse
+  (`ICLR 2024 Oral` is not `ICLR 2024 oral`). A string the table lacks, or lists under another track, or an
+  accepted note with no string `content.venue` at all, is **unmapped**:
   `presentation` null, a DEBUG `openreview_presentation_unmapped` line with the forum id (never the string,
   which can be free text), and one count per venue-year, `presentation_unmapped`, in the crawl report, the
   `openreview_crawl_finished` line and the crawl's one `openreview_crawl_attention` WARNING. Rejected,
   withdrawn, desk-rejected and `unknown` notes are never looked up (a venue string can't promote a status),
   nor are workshop notes: a workshop's oral is not the conference's.
 - **Proceedings, ICLR archive, RIS:** not set by these importers.
+- **After dedup** (`dedup.resolve`): presentation follows the OpenReview-first order but status follows the
+  proceedings-first order, so a record keeps its presentation only while its resolved status is `accepted`.
+  A record reconcile demotes to `unknown` (OpenReview-accepted, not in the crawled proceedings), or any other
+  non-accepted status, shows `null`; the presentation claim stays in provenance as evidence.
 
 The v2 table, with each string's count of accepted submission notes in the TASK-054 crawl cache
 (2026-09-29); every string has a recorded note under `backend/tests/fixtures/http/openreview/v2/`:

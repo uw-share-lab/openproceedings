@@ -415,6 +415,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
         report.track_status.setdefault(r.track, Counter())[r.status] += 1
     report.imported = len(records)
     report.unknown_track = sum(r.track == "unknown" for r in records.values())
+    # only notes that became records: one skipped as invalid, or a re-listed duplicate, isn't counted twice
     report.presentation_unmapped = sum(f"op:{venue.lower()}:{year}:{n}" in records for n in unmapped)
     report.abstract_missing = sum(r.abstract is None for r in records.values())
     incompatible = client.incompatible - purged  # this crawl's share of the client's count
