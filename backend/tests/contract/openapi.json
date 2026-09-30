@@ -354,6 +354,7 @@
       "CoverageTotals": {
         "properties": {
           "abstract_missing": {
+            "description": "Of `records`, those without an abstract because their sources gave none (title-only). Abstracts withheld at a rights holder's request are counted in `abstract_withheld` instead (decision-022), including ids the takedown list names since the snapshot was built, so this can drop after a reload of the same `index_version`; `op eval coverage` reports the snapshot's own counts.",
             "title": "Abstract Missing",
             "type": "integer"
           },
@@ -1495,7 +1496,8 @@
             "title": "Matched"
           },
           "paper": {
-            "$ref": "#/components/schemas/PaperRecord"
+            "$ref": "#/components/schemas/PaperRecord",
+            "description": "The snapshot record the index was built from (spec 01), provenance included. When `abstract_withheld`, it comes without its abstract and its abstract claims, and its `content_hash` is recomputed for what it shows (decision-022)."
           },
           "query_version": {
             "title": "Query Version",
@@ -3033,7 +3035,7 @@
         "description": "One spec 07 §C cell, venue × year × track (TASK-082): what the snapshot indexed for the track, beside\nthe official accepted count where one is sourced (`official_counts.py`, each with its citation).",
         "properties": {
           "abstract_missing": {
-            "description": "Of `records`, those without an abstract (title-only), withheld ones apart.",
+            "description": "Of `records`, those without an abstract because their sources gave none (title-only). Abstracts withheld at a rights holder's request are counted in `abstract_withheld` instead (decision-022), including ids the takedown list names since the snapshot was built, so this can drop after a reload of the same `index_version`; `op eval coverage` reports the snapshot's own counts.",
             "title": "Abstract Missing",
             "type": "integer"
           },
@@ -3255,6 +3257,7 @@
         "description": "One venue-year of the snapshot (`coverage.breakdown`): its cells in vocabulary order (`unknown`\nlast, never folded), and its unknown and missing-abstract counts, 0 included.",
         "properties": {
           "abstract_missing": {
+            "description": "Of `records`, those without an abstract because their sources gave none (title-only). Abstracts withheld at a rights holder's request are counted in `abstract_withheld` instead (decision-022), including ids the takedown list names since the snapshot was built, so this can drop after a reload of the same `index_version`; `op eval coverage` reports the snapshot's own counts.",
             "title": "Abstract Missing",
             "type": "integer"
           },
@@ -3672,6 +3675,13 @@
                     "unavailable"
                   ],
                   "type": "string"
+                }
+              },
+              "X-Abstracts-Withheld": {
+                "description": "How many records of the body have their abstract withheld at a rights holder's request (a takedown, decision-022): each says so in the file; 0 when none",
+                "schema": {
+                  "minimum": 0,
+                  "type": "integer"
                 }
               },
               "X-Index-Version": {

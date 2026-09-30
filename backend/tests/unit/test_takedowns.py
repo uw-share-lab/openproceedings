@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from openproceedings import takedowns
+from openproceedings import takedown_check, takedowns
 from openproceedings.takedowns import LOG_FIELDS, TakedownError, check_log, load, parse
 
 A, B = "op:iclr:2024:Rej_ected-1", "op:neurips:2025:nips-0123456789abcdef0123456789abcdef"
@@ -76,8 +76,30 @@ def test_a_log_others_can_read_is_a_problem(tmp_path: Path, mode: int) -> None:
 def test_a_listed_id_without_a_withheld_entry_is_a_problem(tmp_path: Path) -> None:
     path = log_file(tmp_path, entry(B, "declined"))
     assert [p.message for p in check_log(path, frozenset({B}))] == [
-        f"{B} is listed but log.jsonl has no `withheld` entry for it"
+        f"{B} is listed but its latest entry in log.jsonl is not `withheld`"
     ]
+
+
+def test_the_latest_entry_for_an_id_is_the_one_that_counts(tmp_path: Path) -> None:
+    lifted = log_file(tmp_path, entry(), entry(decision="lifted"))
+    assert [p.message for p in check_log(lifted, frozenset({A}))] == [
+        f"{A} is listed but its latest entry in log.jsonl is not `withheld`"
+    ]
+    again = log_file(tmp_path, entry(), entry(decision="lifted"), entry())
+    assert check_log(again, frozenset({A})) == []
+
+
+def test_a_log_owned_by_another_account_is_a_problem(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = log_file(tmp_path, entry())
+    monkeypatch.setattr(takedowns.os, "getuid", lambda: path.stat().st_uid + 1)
+    [problem] = check_log(path, frozenset({A}))
+    assert "owned by another account" in problem.message
+
+
+def test_a_named_list_that_is_missing_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(TakedownError) as e:
+        load(tmp_path / "withheld.txt", required=True)
+    assert e.value.reason == "takedowns_missing"
 
 
 def test_a_missing_log_is_a_problem_only_when_something_is_listed(tmp_path: Path) -> None:
@@ -101,3 +123,35 @@ def test_a_malformed_entry_is_named_by_line_never_quoted(tmp_path: Path, line: s
     problems = check_log(log_file(tmp_path, entry(), line), frozenset({A}))
     assert [p.message.split(":")[0] for p in problems] == ["log.jsonl line 2"]
     assert all("Rights Holder" not in p.message and "example.org" not in p.message for p in problems)
+
+
+# --- op takedown check's pure parts -------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("title", "phrase"),
+    [
+        ("Calibrated Trust in Agents", "calibrated trust in agents"),
+        ("Learning with 日本語 data", "learning with"),  # a phrase has no gaps: the leading run only
+        ("α-divergence bounds", None),  # no usable leading word
+    ],
+)
+def test_the_title_query_is_the_leading_run_of_plain_words(title: str, phrase: str | None) -> None:
+    got = takedown_check.title_query(title, A)
+    if phrase is None:
+        assert got is None
+    else:
+        assert got == f'title:"{phrase}" {takedown_check.cell_query(A)}'
+
+
+def test_the_cell_query_names_the_ids_venue_and_year_and_every_track_and_status() -> None:
+    q = takedown_check.cell_query(A)
+    assert q.startswith("venue:ICLR year:2024 track:(") and "status:(accepted" in q
+
+
+@pytest.mark.parametrize(
+    ("header", "seconds"),
+    [(None, 1.0), ("3", 3.0), ("600", 60.0), ("Wed, 21 Oct 2026 07:28:00 GMT", 1.0), ("-1", 1.0)],
+)
+def test_retry_after_reads_whole_seconds_only(header: str | None, seconds: float) -> None:
+    assert takedown_check.retry_after(header) == seconds

@@ -5,7 +5,6 @@
 !deploy/web-build-gate.sh
 !package.json
 !package-lock.json
-!.nvmrc
 !frontend/
 frontend/node_modules
 frontend/.next
@@ -15,3 +14,4 @@ frontend/playwright-report
 **/.env.*
 **/data
 **/takedowns
+frontend/tsconfig.tsbuildinfo

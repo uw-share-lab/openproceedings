@@ -26,6 +26,8 @@ export function paperHref(id: string, q: string, mode: Mode): string {
 /** A withheld abstract, in place of the text (copy RH-15 and PA-8; decision-022): the record is still found by
  * its title, and an older index may still match the query on the withheld words. */
 export const ABSTRACT_WITHHELD = "Abstract removed from this site at a rights holder's request";
+/** After it, on a result and a matched paper page: the search may have matched words in it (decision-022). */
+export const WITHHELD_TERMS = "Any terms it matched in the removed abstract aren't shown.";
 
 /** Authors shown before "et al." (ui-design-system §Result item); the rest behind "Show all n authors". */
 export const AUTHORS_SHOWN = 3;
@@ -168,7 +170,9 @@ export function HitItem({ hit, q, mode }: { hit: SearchHit; q: string; mode: Mod
         status={hit.status}
       />
       {hit.abstract_withheld ? (
-        <p className="text-sm text-muted-foreground">{ABSTRACT_WITHHELD}</p>
+        <p className="text-sm text-muted-foreground">
+          {ABSTRACT_WITHHELD}. {WITHHELD_TERMS}
+        </p>
       ) : hit.abstract === null ? (
         <p className="text-sm text-muted-foreground">No abstract in the index</p>
       ) : (

@@ -77,7 +77,7 @@ reviews without the UI.
     `API_*` codes that point into `q`.
   - **Headers are in the contract**: an export's 200 declares `X-Total`, `X-Index-Version`,
     `X-Tokenizer-Version`, `X-Query-Version` (this code's, on a `record_id` export too),
-    `Content-Disposition` and `X-Abstract-Source` (decision-021); every route's 405 declares `Allow` and its 429 `Retry-After` (not `/healthz`'s,
+    `Content-Disposition`, `X-Abstract-Source` (decision-021) and `X-Abstracts-Withheld` (decision-022); every route's 405 declares `Allow` and its 429 `Retry-After` (not `/healthz`'s,
     which is never limited; the 429's description names every bucket that can refuse: the client's, its
     network's, a query's position-verified clauses, the save ceilings); every route that runs a query
     (`/search`, `/export`, `/papers/{id}`, `POST /records`, `GET /records/{id}`, `/diff`) declares its 503 with `Retry-After`
@@ -215,6 +215,9 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   | CSV | four columns appended after `searched_at`: `abstract_source` (the claim's route code, e.g. `pmlr` or `ris`, where RIS and BibTeX give the site in words), `abstract_origin` (the site's code; empty when the claim names no known site), `abstract_url`, `abstract_withheld` (`true`/`false`) | `…,pmlr,pmlr,https://proceedings.mlr.press/v202/okafor23a.html,false` |
   | JSONL | `abstract_source`: `{source, origin, url}` (the `/search` hit's object) or null; `abstract_withheld`: a boolean | `"abstract_source": {"origin": "pmlr", "source": "pmlr", "url": "https://proceedings.mlr.press/v202/okafor23a.html"}, "abstract_withheld": false` |
 
+  TASK-136 appends one more CSV column and JSONL key, `abstract_withheld_reason` (below, **Withheld by a
+  takedown**).
+
   A record with no abstract, or whose abstract no claim holds (synthetic fixtures), names nothing: no `N1`, no
   field, three empty CSV cells, JSONL null. **Additive** under
   [decision-021](../../backlog/decisions/decision-021%20-%20Additions-to-an-export-format-are-additive-under-api-v1-and-a-pinned-export-whose-snapshot-cannot-be-verified-withholds-its-abstracts-TASK-138.md)
@@ -257,10 +260,14 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   **Withheld by a takedown** (TASK-136, [decision-022](../../backlog/decisions/decision-022%20-%20A-takedown-withholds-an-abstracts-display-not-its-matching-on-every-loaded-index-version-the-takedown-list-and-log-live-in-the-data-directory-TASK-136.md)):
   a record on the deployment's takedown list (spec 08 §Deploy), or one the exported index's snapshot withheld,
   goes out the same way, whatever index is exported (served, `index_version=`, `record_id=`, and `op export`):
-  no abstract and no source, the RIS `N1` and BibTeX `abstract_withheld` reading `Abstract withheld: this
-  instance removed it at a rights holder's request (a takedown), so no abstract is exported (decision-022).`
+  no abstract and no source, the RIS `N1` and BibTeX `abstract_withheld` reading `Abstract withheld: removed
+  from this site at a rights holder's request, so no abstract is exported (decision-022).`
   (`export.TAKEDOWN`), CSV `abstract_withheld` `true`, JSONL `abstract_withheld: true`. Only that record is
-  withheld, so `X-Abstract-Source` stays `attributed`. Why an abstract is withheld is one more CSV column,
+  withheld, so `X-Abstract-Source` stays `attributed`; `X-Abstracts-Withheld` counts such records before the
+  body (for a record export, its stored ids on the list; for a query, the listed ids the index holds that the
+  query matches, judged as `/papers/{id}?q=` judges them), and the web app's Export menu and record page say
+  so (EX-E9): Covidence shows screeners no `N1`, so check the header (or the CSV's `abstract_withheld_reason`)
+  and report those records as screened on title and metadata alone. Why an abstract is withheld is one more CSV column,
   `abstract_withheld_reason`, appended after `abstract_withheld` (`takedown`, `source_unavailable`, or empty
   when nothing is withheld), and a JSONL key of the same name (null when nothing is withheld): additive under
   decision-021. A record both listed and in an unattributable export says `takedown`.
@@ -371,7 +378,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   export` counts what it wrote against the query's total before renaming its temporary file into place.
 - Exports stream, and are not paginated or truncated. The response headers `X-Total` (equal to the search's
   `total`) and `X-Index-Version` say exactly which set was exported (with `X-Tokenizer-Version` and
-  `X-Query-Version`); `X-Abstract-Source` says whether the abstracts are attributed or withheld (decision-021). An export started during an index
+  `X-Query-Version`); `X-Abstract-Source` says whether the abstracts are attributed or all withheld (decision-021), and `X-Abstracts-Withheld` how many records a takedown withholds (decision-022). An export started during an index
   hot-swap finishes on the index it began on.
 - An export pinned by `record_id` hands over exactly the cited set: the record's **stored** ids (sorted),
   read from the index the record names. The query is never re-run, so a later `query_version` changes
@@ -907,7 +914,13 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   listed since), never counted in `abstract_missing`.
   - The numbers are the manifest of the snapshot the served index was built from (`counts`,
     `abstract_missing`, `unknown_track`, `record_count`: counted from the records once, at snapshot build),
-    reshaped by `coverage.breakdown`, which never recounts. `unknown` is never folded: it is its own cell,
+    reshaped by `coverage.breakdown`, which never recounts; the one serve-time adjustment is the takedown
+    list's (TASK-136): each listed id the snapshot holds but didn't withhold is counted in `abstract_withheld`
+    and, if it had no abstract, taken out of `abstract_missing` (`api/coverage.py::_withhold_listed`). So under
+    one `index_version` those two can change after a reload (every load and SIGHUP re-reads the list and
+    recomputes coverage, even when the index is unchanged); `op eval coverage` reports the snapshot's own counts
+    and is the one a methods section cites (spec 07 §C). `abstract_missing` narrowed with TASK-136 (decision-022):
+    it no longer counts withheld abstracts; with no takedown every value is what it was. `unknown` is never folded: it is its own cell,
     and every venue-year carries `unknown_track` and `unknown_status`, 0 included. Missing abstracts are per
     venue-year and, since manifest format 2, per track. A format-1 manifest (built before TASK-082) has no
     per-track keys: the load takes each track's missing abstracts and sources from its one pass over the
@@ -922,7 +935,9 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     vocabulary, a manifest that disagrees with the records, a missing or different snapshot, or a record
     count that differs from the index's document count. The reasons are `snapshot_missing`,
     `snapshot_unreadable`, `snapshot_hash_mismatch`, `index_manifest_invalid`, `manifest_invalid`,
-    `counts_mismatch`, `abstract_missing_mismatch`, `track_facts_mismatch` and `doc_count_mismatch`. At startup the failure is 503 `API_INDEX_NOT_LOADED`; on SIGHUP the old index and
+    `counts_mismatch`, `abstract_missing_mismatch`, `abstract_withheld_mismatch`, `track_facts_mismatch`,
+    `doc_count_mismatch`, `withheld_invalid` and `withheld_abstract_present` (the snapshot's withheld ids), and
+    the takedown list's `takedowns_invalid`, `takedowns_unreadable` and `takedowns_missing`. At startup the failure is 503 `API_INDEX_NOT_LOADED`; on SIGHUP the old index and
     its coverage keep serving. Coverage is never partial and never recomputed per request. One
     `coverage_computed` INFO line is written per load.
 - As built (task-036, `api/export.py`; review fixes 2026-09-27):
@@ -953,11 +968,13 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     last record (`export.check_count`, the check `op export` ends with too); it never ends as if complete. A client that hangs up mid-stream is `client_disconnected:
     true` on the access line (tested through uvicorn).
   - Headers: `X-Total`, `X-Index-Version`, `X-Tokenizer-Version`, `X-Query-Version`, `X-Abstract-Source`
-    (`attributed`, or `unavailable` when the abstracts are withheld; all exposed to CORS), `Content-Disposition: attachment; filename="openproceedings-<index_version>-<first 12 of
+    (`attributed`, or `unavailable` when the abstracts are withheld), `X-Abstracts-Withheld` (the records a
+    takedown withholds; TASK-136; all exposed to CORS), `Content-Disposition: attachment; filename="openproceedings-<index_version>-<first 12 of
     canonical_hash>.<ext>"` (`ris`, `csv`, `bib`, `jsonl`), and `Content-Type`
     `application/x-research-info-systems`, `text/csv`, `application/x-bibtex` or `application/x-ndjson`,
     each with `; charset=utf-8`. The access line carries `canonical_hash`, `total`, the `index_version`
-    exported and `abstract_source` (the `X-Abstract-Source` sent), so withheld exports can be counted.
+    exported, `abstract_source` (the `X-Abstract-Source` sent) and `abstracts_withheld` (the
+    `X-Abstracts-Withheld` sent), so withheld exports can be counted.
   - `index_version` must look like one (`[0-9a-f][0-9a-f-]{0,63}`; `current` is not a version), else 422
     `API_BAD_PARAM`. The served version is the served engine; any other comes from `IndexState.pinned`
     (§Implementation notes, pinned indexes). Anything but `ok` is 409 `API_INDEX_VERSION_UNAVAILABLE`:

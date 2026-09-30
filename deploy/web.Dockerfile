@@ -21,7 +21,7 @@ ENV OPENPROCEEDINGS_INSTANCE=${OPENPROCEEDINGS_INSTANCE} \
 WORKDIR /repo
 COPY deploy/web-build-gate.sh deploy/
 RUN sh deploy/web-build-gate.sh
-COPY package.json package-lock.json .nvmrc ./
+COPY package.json package-lock.json ./
 COPY frontend/package.json frontend/
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY frontend/ frontend/

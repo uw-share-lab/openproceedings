@@ -104,6 +104,7 @@ def annotate(
     canonical_hash: str | None = None,
     total: int | None = None,
     abstract_source: AbstractSource | None = None,
+    abstracts_withheld: int | None = None,
 ) -> None:
     """Add privacy-safe fields to the access line. Keyword-only and typed, so no query text fits."""
     fields = access_fields(request)
@@ -112,6 +113,7 @@ def annotate(
         ("canonical_hash", canonical_hash),
         ("total", total),
         ("abstract_source", abstract_source),
+        ("abstracts_withheld", abstracts_withheld),
     ):
         if value is not None:
             fields[key] = value

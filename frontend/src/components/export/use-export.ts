@@ -17,7 +17,7 @@ import {
   type ExportResult,
   type ExportSource,
 } from "@/lib/export";
-import { WITHHELD_TEXT } from "./export-notice";
+import { removedText, WITHHELD_TEXT } from "./export-notice";
 
 export type ExportNoticeResult = Exclude<ExportResult, { kind: "ok" }>;
 
@@ -28,6 +28,8 @@ export interface ExportState {
   readonly notice: ExportNoticeResult | null;
   /** The last download has no abstracts (`X-Abstract-Source: unavailable`), until the next one starts. */
   readonly withheld: boolean;
+  /** Records of the last download whose abstract was removed at a rights holder's request (EX-E9). */
+  readonly removed: number;
   readonly announcement: string;
   readonly start: (format: ExportFormat) => void;
   /** Start the last format again (the notice's Retry). */
@@ -39,6 +41,7 @@ export function useExport(source: ExportSource): ExportState {
   const [busy, setBusy] = useState<ExportFormat | null>(null);
   const [notice, setNotice] = useState<ExportNoticeResult | null>(null);
   const [withheld, setWithheld] = useState(false);
+  const [removed, setRemoved] = useState(0);
   const [announcement, setAnnouncement] = useState("");
   const last = useRef<ExportFormat | null>(null);
   const running = useRef(false);
@@ -51,6 +54,7 @@ export function useExport(source: ExportSource): ExportState {
     setBusy(format);
     setNotice(null);
     setWithheld(false);
+    setRemoved(0);
     setAnnouncement(`Export started: ${plural(source.total, "paper")}, ${label}.`);
     void fetchExport(api, source, format).then(
       (result) => {
@@ -59,7 +63,16 @@ export function useExport(source: ExportSource): ExportState {
         if (result.kind === "ok") {
           saveBlob(result.blob, result.filename);
           setWithheld(result.abstractsWithheld);
-          setAnnouncement(result.abstractsWithheld ? `Download ready. ${WITHHELD_TEXT}` : "Download ready.");
+          setRemoved(result.removed);
+          setAnnouncement(
+            [
+              "Download ready.",
+              result.abstractsWithheld ? WITHHELD_TEXT : "",
+              result.removed > 0 ? removedText(result.removed) : "",
+            ]
+              .filter(Boolean)
+              .join(" "),
+          );
         } else {
           setNotice(result);
           setAnnouncement("Nothing was downloaded.");
@@ -79,6 +92,7 @@ export function useExport(source: ExportSource): ExportState {
     busy,
     notice,
     withheld,
+    removed,
     announcement,
     start,
     retry: () => {

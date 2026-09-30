@@ -69,12 +69,18 @@ marker lands where the replay reads it), and adds the conflicts a v1 crawl found
 `conflicts.csv` (`with_crawl_conflicts`). **Takedowns** (TASK-136, decision-022): `build` withholds every
 abstract on the takedown list (`--takedowns`, default `<data-dir>/takedowns/withheld.txt`; `takedowns.py`)
 after dedup and reconcile (`snapshot.withhold`: `abstract` null, the abstract claims dropped, those records'
-abstract `conflicts.csv` values replaced by `(withheld: takedown)`), so `snapshot_hash` covers the effect and a
-recrawl can't restore one; a listed id no record of the build has refuses it (`takedown_unmatched`). When
-something is withheld the manifest adds `withheld` (the sorted ids), `abstract_withheld` (venue → year, 0
+abstract `conflicts.csv` values replaced by `(withheld: takedown)`, repeated rows collapsed), so
+`snapshot_hash` covers the effect and a recrawl can't restore one. A listed id the build holds under another id
+(merged: `merges.csv`; rekeyed: the one record with its native id) is followed, its successor withheld too
+(`takedowns_followed`); a listed id with no record at all is reported (`takedowns_unmatched`), never refused
+(both on stderr and in the build's JSON). When something is withheld the manifest adds `withheld` (the sorted
+ids whose record lost an abstract or an abstract claim: listing a record with none changes nothing),
+`abstract_withheld` (venue → year, 0
 included) and `abstract_withheld_by_track` (venue → year → track, 0 included), and `abstract_missing` (both
 maps) leaves those records out; with nothing withheld the keys are absent, so the manifest (still format 2) is
-what it was. `withheld` is in `AUDITED`: a rebuild whose existing directory withholds other ids is refused.
+what it was. `withheld` is in `AUDITED`: an existing directory with these very records whose manifest names
+other withheld ids is refused as `takedown_differs` (serve it as it is; the API applies the list), never with
+the advice to retire it.
 `RecordFile` checks each withheld id is a record with no abstract and no abstract claim, and counts them. The manifest may hold build times; `records.jsonl` may not. `/coverage`
 (spec 04) and `coverage-auditor` read these counts directly. A format-1 manifest (built before TASK-082)
 still loads: `/coverage` then takes the per-track facts from the records the load verified, and the statuses

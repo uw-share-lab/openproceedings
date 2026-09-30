@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Schemas } from "@/api/client";
-import { ABSTRACT_WITHHELD, attributionText, HitItem, shownAuthors } from "./hit-item";
+import { ABSTRACT_WITHHELD, attributionText, HitItem, shownAuthors, WITHHELD_TERMS } from "./hit-item";
 
 afterEach(cleanup);
 
@@ -161,7 +161,7 @@ describe("the abstract's attribution (decision-018, RH-12)", () => {
 describe("a withheld abstract (TASK-136, decision-022, RH-15)", () => {
   it("says it was removed at a rights holder's request, never that the index has none", () => {
     const article = show({ abstract: null, abstract_source: null, abstract_withheld: true });
-    expect(within(article).getByText(ABSTRACT_WITHHELD)).toBeTruthy();
+    expect(within(article).getByText(`${ABSTRACT_WITHHELD}. ${WITHHELD_TERMS}`)).toBeTruthy();
     expect(within(article).queryByText("No abstract in the index")).toBeNull();
     expect(attribution(article)).toBeUndefined();
     expect(article.querySelectorAll("mark")).toHaveLength(0);
@@ -171,7 +171,7 @@ describe("a withheld abstract (TASK-136, decision-022, RH-15)", () => {
 
   it("shows the marker whatever text a client was sent with it", () => {
     const article = show({ abstract_withheld: true, abstract_source: null });
-    expect(within(article).getByText(ABSTRACT_WITHHELD)).toBeTruthy();
+    expect(within(article).getByText(`${ABSTRACT_WITHHELD}. ${WITHHELD_TERMS}`)).toBeTruthy();
     expect(article.textContent).not.toContain(HIT.abstract);
   });
 });

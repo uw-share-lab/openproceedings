@@ -58,7 +58,7 @@ from openproceedings.takedowns import NONE, Withheld
 from openproceedings.vocab import venue_name
 
 __all__ = [
-    "CSV_COLUMNS", "FORMATS", "ORIGIN_NAMES", "TAKEDOWN", "WITHHELD", "WITHHELD_REASONS", "Provenance", "Sources", "bibtex_key", "check_count",
+    "CSV_COLUMNS", "FORMATS", "ORIGIN_NAMES", "SENTENCES", "TAKEDOWN", "WITHHELD", "WITHHELD_REASONS", "Provenance", "Sources", "bibtex_key", "check_count",
     "credit", "entries", "header", "utc_date", "write",
 ]  # fmt: skip
 
@@ -84,8 +84,7 @@ ORIGIN_NAMES = {
 _SOURCE = "abstract_source"  # the key `entries` adds to each record it hands a writer
 _WITHHELD = "abstract_withheld"  # likewise: True when the record's abstract is withheld
 _REASON = "abstract_withheld_reason"  # likewise: why (`WITHHELD_REASONS`), None when it isn't
-# why an abstract is withheld: a takedown (TASK-136), or an export whose snapshot can't attribute it (decision-021)
-WITHHELD_REASONS = ("takedown", "source_unavailable")
+
 # what a record says when its abstract is withheld (decision-021): RIS `N1`, BibTeX `abstract_withheld`
 WITHHELD = (
     "Abstract withheld: its source could not be attributed on this instance (the index's snapshot is "
@@ -93,10 +92,13 @@ WITHHELD = (
 )
 # what a record says when a takedown withholds its abstract (TASK-136, decision-022)
 TAKEDOWN = (
-    "Abstract withheld: this instance removed it at a rights holder's request (a takedown), so no abstract is "
-    "exported (decision-022)."
+    "Abstract withheld: removed from this site at a rights holder's request, so no abstract is exported "
+    "(decision-022)."
 )
+# why an abstract is withheld (the CSV/JSONL `abstract_withheld_reason`) → what the record says: a takedown
+# (TASK-136), or an export whose snapshot can't attribute it (decision-021)
 SENTENCES = {"takedown": TAKEDOWN, "source_unavailable": WITHHELD}
+WITHHELD_REASONS = tuple(SENTENCES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,14 +170,14 @@ def _attributed(
     Without `sources`, each record's abstract is dropped and it is marked withheld; so is a record `withheld`
     lists, whatever `sources` says (its reason `takedown`)."""
     for r in records:
+        if sources is not None and r["id"] not in sources:  # checked for every record, withheld or not
+            raise EngineInternalError(
+                DiagnosticCode.API_INTERNAL, "a paper the index holds is missing from its snapshot"
+            )
         if r["id"] in withheld:
             yield {**r, "abstract": None, _SOURCE: None, _WITHHELD: True, _REASON: "takedown"}
         elif sources is None:
             yield {**r, "abstract": None, _SOURCE: None, _WITHHELD: True, _REASON: "source_unavailable"}
-        elif r["id"] not in sources:
-            raise EngineInternalError(
-                DiagnosticCode.API_INTERNAL, "a paper the index holds is missing from its snapshot"
-            )
         else:
             yield {**r, _SOURCE: sources[r["id"]], _WITHHELD: False, _REASON: None}
 

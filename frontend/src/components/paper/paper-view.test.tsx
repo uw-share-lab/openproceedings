@@ -145,7 +145,7 @@ describe("a withheld abstract (TASK-136, decision-022, PA-8)", () => {
     expect(screen.getByText(ABSTRACT_WITHHELD)).toBeTruthy();
     expect(screen.queryByText("No abstract in the index")).toBeNull();
     expect(document.body.textContent).toContain(
-      "Matches trust* (native syntax): matched terms are highlighted. Terms it matched in the removed abstract aren't shown.",
+      "Matches trust* (native syntax): matched terms are highlighted. Any terms it matched in the removed abstract aren't shown.",
     );
     expect([...document.querySelectorAll("mark")].map((m) => m.textContent)).toEqual(["Trustworthy"]);
   });

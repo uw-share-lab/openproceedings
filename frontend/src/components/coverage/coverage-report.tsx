@@ -83,11 +83,11 @@ function Header({ coverage }: { coverage: Coverage }) {
   );
 }
 
-/** Under a "No abstract" count: the abstracts removed at a rights holders' request (decision-022; copy CV-6),
+/** Under a "No abstract" count: the abstracts removed at a rights holder's request (decision-022; copy CV-6),
  * which that count leaves out. Nothing when there are none. */
 function Withheld({ n }: { n: number }) {
   if (n === 0) return null;
-  return <span className="block text-xs text-muted-foreground">+ {count(n)} removed on request</span>;
+  return <span className="block text-xs text-muted-foreground">and {count(n)} removed on request</span>;
 }
 
 function Gate({ track }: { track: Track }) {
@@ -281,7 +281,8 @@ export function CoverageReport({ coverage }: { coverage: Coverage }) {
               const key = `${vy.venue}-${vy.year}`;
               const id = `coverage-detail-${key}`;
               const expanded = open.has(key);
-              const noAbstracts = vy.records > 0 && vy.abstract_missing === vy.records;
+              // no record shows an abstract: missing ones and removed ones together
+              const noAbstracts = vy.records > 0 && vy.abstract_missing + vy.abstract_withheld === vy.records;
               return (
                 <Fragment key={key}>
                   <tr className="border-b">

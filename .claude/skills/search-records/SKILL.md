@@ -114,7 +114,9 @@ A record must go (a legal request, personal data in `input`). With the API stopp
 3. Re-create the trigger exactly as `records.py`'s `_SCHEMA` declares it (starting the API also re-creates any
    missing trigger: every statement is `CREATE … IF NOT EXISTS`), and check `.schema records` shows all
    three triggers.
-4. Record the takedown (date, id, reason, who) in the operator log; the record page then 404s.
+4. Record the deletion (date, id, reason, who) in the operator's own records, **not** in
+   `<data-dir>/takedowns/log.jsonl` (that log holds abstract takedowns in a fixed shape `op takedown check`
+   verifies); the record page then 404s.
 
 This deletes a *search record*. A takedown of a paper's *abstract* is another procedure (spec 08 §Deploy,
 decision-022): it deletes nothing, and a record whose results include the paper still replays `reproduced` on

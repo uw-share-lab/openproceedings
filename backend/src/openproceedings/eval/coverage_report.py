@@ -560,8 +560,23 @@ def render(
         "|---|---|---|---|",
         f"| {t['records']:,} | {t['abstract_missing']:,} | {t['unknown_track']:,} | {t['unknown_status']:,} |",
         "",
+        *withheld_note(t),
     ]
     return "\n".join(lines)
+
+
+def withheld_note(totals: Mapping[str, Any]) -> list[str]:
+    """A line under the totals when the snapshot withheld abstracts by a takedown (decision-022): they are not
+    among the missing abstracts, so a report that cites the missing count says so. Nothing otherwise, so a
+    report of a snapshot that withheld nothing reads as before."""
+    n = totals.get("abstract_withheld", 0)
+    if not n:
+        return []
+    return [
+        f"{n:,} more record{'s have' if n != 1 else ' has'} no abstract here: withheld at a rights holder's request "
+        "(a takedown, decision-022), and not counted in the missing abstracts above.",
+        "",
+    ]
 
 
 def write(text: str, out_dir: Path, day: date) -> tuple[Path, bool]:

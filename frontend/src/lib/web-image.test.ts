@@ -70,6 +70,13 @@ describe("deploy/web.Dockerfile", () => {
     expect(at("RUN npm ci")).toBeLessThan(at("RUN npm run build --workspace frontend"));
   });
 
+  it("ignores no source file: nothing tracked lies under a data/ or takedowns/ directory but the root data/", () => {
+    const tracked = spawnSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8" }).stdout.split("\n");
+    expect(tracked.length).toBeGreaterThan(100);
+    const swallowed = tracked.filter((f) => /(^|\/)(data|takedowns)\//i.test(f) && !f.startsWith("data/"));
+    expect(swallowed).toEqual([]);
+  });
+
   it("builds from a context that holds no data, takedown log or .env file", () => {
     const ignore = readFileSync(path.join(ROOT, ".dockerignore"), "utf8").split("\n");
     expect(ignore[ignore.findIndex((l) => !l.startsWith("#"))]).toBe("*"); // an allow-list

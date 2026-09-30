@@ -22,7 +22,7 @@
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 input=$(cat)
 HOOK_INPUT="$input" python3 - "$HOOK_DIR" <<'PY'
-import glob, json, os, sys
+import fnmatch, glob, json, os, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
 from cmdparse import ParseError, git_subcommand, opt_values, read_payload, redirect_targets, repo_root, simple_commands
 
@@ -52,6 +52,29 @@ def rel(path, base):
 
 def any_rel(pred, path, base):
     return any(pred(rel(p, base)) for p in expand(path, base))
+
+# the heavy trees a forced `git add <dir>` walk never enters (none holds a takedowns/ directory of ours)
+WALK_SKIP = {".git", "node_modules", ".venv", ".next", "cache", "snapshots", "indexes", "records", "embeddings"}
+
+def through_takedowns(path, base, forced):
+    """Would `git add [-f] path` reach a takedowns/ directory? Any path component named `takedowns` (any
+    case: APFS folds it), a glob that matches one, and, for a forced add of a directory (`.` included), a
+    `takedowns` directory anywhere under it (git -f stages ignored files too)."""
+    for p in expand(path, base) if forced else [path]:  # unforced, git leaves ignored files out of a glob
+        full = os.path.normpath(p if os.path.isabs(p) else os.path.join(base, p))
+        parts = [c.lower() for c in full.split(os.sep)]
+        if "takedowns" in parts:
+            return True
+        # forced: a glob component git's pathspec could match it with (`takedown[s]`, `t*`); unforced, git
+        # itself leaves ignored files out, so `git add 'src/*'` stays allowed
+        if forced and any(fnmatch.fnmatchcase("takedowns", c) for c in parts if any(ch in c for ch in "*?[")):
+            return True
+        if forced and os.path.isdir(full):
+            for _root, dirs, _files in os.walk(full):
+                if any(d.lower() == "takedowns" for d in dirs):
+                    return True
+                dirs[:] = [d for d in dirs if d not in WALK_SKIP]
+    return False
 
 def inside_immutable(r):
     return r is not None and (r.startswith("data/snapshots/") or r.startswith("data/indexes/"))
@@ -106,7 +129,7 @@ for argv, d in commands:
         forced = any(x in ("-f", "--force") or (x.startswith("-") and not x.startswith("--") and "f" in x) for x in a)
         if forced and any((r := rel(p, g[2])) is not None and (r == "data" or r.startswith("data/")) for p in a if not p.startswith("-")):
             refuse("Blocked: data/ is never committed (corpus licensing unresolved; spec 00). Don't force-add it.")
-        if any("takedowns" in os.path.normpath(p).split(os.sep) for p in a if not p.startswith("-")):
+        if any(through_takedowns(p, g[2], forced) for p in a if not p.startswith("-")):
             refuse("Blocked: a takedowns/ directory holds the takedown list and the operator's log, with "
                    "requesters' details (TASK-136); it is never committed.")
         continue

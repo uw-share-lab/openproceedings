@@ -72,7 +72,8 @@ abstracts stay shown).
   provenance table names the `abstract` claim's source with a "source" link. The result list
   (`frontend/src/components/search/hit-item.tsx`) shows the abstract with the outbound links but no
   authors and no statement of which source the abstract came from: TASK-134, a launch prerequisite.
-- **A takedown contact on public instances.** Every page of a public instance names a contact for rights
+- **A takedown contact on public instances** (the procedure below is superseded in part by decision-022,
+  TASK-136, which built it). Every page of a public instance names a contact for rights
   holders (TASK-133). Private, local and development deployments may omit it. None exists in the code or
   docs yet. TASK-133's proposed procedure, not yet decided, is to withhold that record's abstract from the
   next `index_version` (the record stays, matched on title, as a missing abstract already is; spec 01

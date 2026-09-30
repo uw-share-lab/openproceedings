@@ -22,6 +22,8 @@ from fastapi.testclient import TestClient
 from openproceedings import cli, takedown_check
 from openproceedings import export as exporter
 from openproceedings.api import export as route
+from openproceedings.api import papers as papers_route
+from openproceedings.api import search as search_route
 from openproceedings.api.state import IndexState, Served
 from openproceedings.engine.index import build_index
 from openproceedings.ingest.dedup import DedupResult
@@ -59,8 +61,8 @@ def _pick(papers: list[PaperRecord]) -> tuple[PaperRecord, str]:
 def _build(papers: list[PaperRecord], data: Path, name: str, listed: frozenset[str]) -> str:
     snap = data / "snapshots" / name
     snap.mkdir(parents=True)
-    result = withhold(DedupResult(tuple(sorted(papers, key=lambda p: p.id)), (), ()), listed)
-    for file, blob in render(result, [], BUILT, withheld=listed).items():
+    done = withhold(DedupResult(tuple(sorted(papers, key=lambda p: p.id)), (), ()), listed)
+    for file, blob in render(done.result, [], BUILT, withheld=done.withheld).items():
         (snap / file).write_bytes(blob)
     return build_index(snap, data / "indexes", BUILT).index_version
 
@@ -131,7 +133,13 @@ def withheld_in_export(fmt: str, text: str, rid: str) -> bool:
     back with the reference parsers)."""
     if fmt == "ris":
         [rec] = [r for r in parse_ris(text, "x.ris") if r.first("ID") == rid]
-        return not rec.fields.get("AB") and exporter.TAKEDOWN in rec.fields["N1"]
+        notes = rec.fields["N1"]
+        return (
+            not rec.fields.get("AB")
+            and notes[-1].startswith("openproceedings ")  # the provenance line stays the last N1
+            and notes[-2] == exporter.TAKEDOWN  # the takedown sentence just before it
+            and sum(n.startswith("Abstract ") for n in notes) == 1  # no source line beside it
+        )
     if fmt == "bibtex":
         [e] = [e for e in parse_string(text) if e.fields["openproceedings_id"] == rid]
         return "abstract" not in e.fields and e.fields.get("abstract_withheld") == exporter.TAKEDOWN
@@ -208,6 +216,24 @@ def test_every_export_withholds_the_listed_abstract(
     body = exported(client, fmt, q=q)
     assert paper.abstract not in body and withheld_in_export(fmt, body, paper.id)
     assert exported(client, fmt, q=q, index_version=old) == body  # the served index, named
+
+
+def test_the_export_counts_the_records_it_withholds_in_a_header(
+    client: TestClient, data_dir: Path, store: Store
+) -> None:
+    """`X-Abstracts-Withheld` (decision-022): how many records of the body a takedown withholds, before the
+    body; the served index, a named one and a search record's own index alike; 0 when none."""
+    _, old, _, paper, word = store
+    q = f"abstract:{word} {EVERY}"
+    record_id = save(client, q)
+    assert client.get(EXPORT, params={"format": "ris", "q": q}).headers["X-Abstracts-Withheld"] == "0"
+    listing(data_dir, paper.id)
+    assert reload(client)
+    for params in ({"q": q}, {"q": q, "index_version": old}, {"record_id": record_id}):
+        r = client.get(EXPORT, params={"format": "csv", **params})
+        assert (r.headers["X-Abstracts-Withheld"], r.headers["X-Abstract-Source"]) == ("1", "attributed")
+    other = client.get(EXPORT, params={"format": "csv", "q": f"agents NOT abstract:{word} {EVERY}"})
+    assert other.headers["X-Abstracts-Withheld"] == "0"  # the listed paper isn't in that set
 
 
 def test_op_export_withholds_as_the_api_does(
@@ -288,6 +314,54 @@ def test_coverage_counts_what_is_withheld_when_served(
 
 
 # --- the list's lifecycle ---------------------------------------------------------------------------------------
+
+
+def test_coverage_counts_a_listed_record_without_an_abstract_once(
+    client: TestClient, data_dir: Path, store: Store
+) -> None:
+    """Listed after the build, a record the sources gave no abstract moves from missing to withheld: never
+    counted twice, at every level."""
+    before = client.get("/api/v1/coverage").json()
+    bare = next(
+        attributed(r) for r in list(records())[:900] if attributed(r).abstract is None
+    )  # the same 900 records the indexes hold
+    listing(data_dir, bare.id)
+    assert reload(client)
+    after = client.get("/api/v1/coverage").json()
+
+    def at(c: dict[str, Any]) -> tuple[tuple[int, int], ...]:
+        [vy] = [v for v in c["venue_years"] if (v["venue"], v["year"]) == (bare.venue, bare.year)]
+        [track] = [t for t in vy["tracks"] if t["track"] == bare.track]
+        return tuple((x["abstract_missing"], x["abstract_withheld"]) for x in (c["totals"], vy, track))
+
+    assert at(after) == tuple((m - 1, w + 1) for m, w in at(before))
+
+
+def test_a_missing_list_after_one_was_applied_fails_the_reload(
+    client: TestClient, data_dir: Path, store: Store
+) -> None:
+    """A renamed or unmounted takedowns/ never lifts every takedown silently: the reload fails and the list
+    in force stays."""
+    _, _, _, paper, _ = store
+    listing(data_dir, paper.id)
+    assert reload(client)
+    (data_dir / "takedowns" / "withheld.txt").unlink()
+    assert reload(client) is False
+    assert client.get(f"/api/v1/papers/{paper.id}").json()["abstract_withheld"] is True
+
+
+def test_a_failed_promotion_still_applies_a_new_list(
+    client: TestClient, data_dir: Path, store: Store
+) -> None:
+    """The list parsed, the index `current` names doesn't load: the served index keeps serving, with the new
+    list (withholding more is the safe direction)."""
+    _, _, _, paper, _ = store
+    listing(data_dir, paper.id)
+    current = data_dir / "indexes" / "current"
+    current.unlink()
+    current.symlink_to("does-not-exist")
+    assert reload(client) is False
+    assert client.get(f"/api/v1/papers/{paper.id}").json()["abstract_withheld"] is True
 
 
 def test_the_list_is_reread_on_reload_and_a_bad_list_changes_nothing(
@@ -372,6 +446,58 @@ def test_the_check_fails_when_only_a_pinned_versions_export_serves_it(
         report = takedown_check.check(fetcher(c), frozenset({paper.id}))
     assert sorted(report.problems) == sorted(
         f"{paper.id}: the {fmt} export of index {old} serves its abstract" for fmt in FORMATS
+    )
+
+
+def _check_with(data_dir: Path, store: Store) -> list[str]:
+    _, _, _, paper, _ = store
+    listing(data_dir, paper.id)
+    with TestClient(make_app(data_dir)) as c:
+        return sorted(takedown_check.check(fetcher(c), frozenset({paper.id})).problems)
+
+
+def test_the_check_catches_an_abstract_claim_left_on_the_paper_page(
+    data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, old, _, paper, _ = store
+    monkeypatch.setattr(papers_route, "withhold_record", lambda r: r.model_copy(update={"abstract": None}))
+    assert _check_with(data_dir, store) == [
+        f"{paper.id}: /papers on index {old} serves its abstract or an abstract claim"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("leak", "problem"),
+    [
+        ("abstract_source", "serves the abstract, its spans or its source"),
+        ("abstract_withheld", "doesn't mark the abstract withheld"),
+    ],
+)
+def test_the_check_catches_a_hit_that_keeps_its_source_or_loses_its_marker(
+    data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch, leak: str, problem: str
+) -> None:
+    _, old, _, paper, _ = store
+    real = search_route._hit
+
+    def leaky(found: Any, source: Any, *, withheld: bool) -> Any:
+        hit = real(found, source, withheld=withheld)
+        update = {"abstract_source": source} if leak == "abstract_source" else {"abstract_withheld": False}
+        return hit.model_copy(update=update) if withheld else hit
+
+    monkeypatch.setattr(search_route, "_hit", leaky)
+    assert _check_with(data_dir, store) == [f"{paper.id}: its /search hit on index {old} {problem}"]
+
+
+def test_the_check_catches_an_export_that_doesnt_say_why(
+    data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The RIS and BibTeX markers are the sentence; CSV and JSONL say it with `abstract_withheld_reason`."""
+    _, old, new, paper, _ = store
+    monkeypatch.setitem(exporter.SENTENCES, "takedown", "Abstract withheld.")
+    assert _check_with(data_dir, store) == sorted(
+        f"{paper.id}: the {fmt} export of index {v} doesn't say a takedown withheld it"
+        for v in (old, new)
+        for fmt in ("bibtex", "ris")
     )
 
 

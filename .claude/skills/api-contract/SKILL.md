@@ -110,7 +110,8 @@ abstract's source from the exported index's snapshot (`RecordFile.attributions`;
 every abstract withheld, `X-Abstract-Source: unavailable` and a marker in each record (decision-021). A record a
 takedown withholds (TASK-136, decision-022) is exported without its abstract on every index version, marked the
 same way; CSV appends `abstract_withheld_reason` (`takedown`, `source_unavailable` or empty) after
-`abstract_withheld`, and JSONL has the same key. `/search` hits and `/papers/{id}` carry `abstract_withheld`
+`abstract_withheld`, and JSONL has the same key; the response counts those records in `X-Abstracts-Withheld`
+(an integer header, declared, exposed to CORS, on the access line as `abstracts_withheld`). `/search` hits and `/papers/{id}` carry `abstract_withheld`
 (a boolean, additive) and `/coverage` an `abstract_withheld` count beside `abstract_missing`.
 
 ## Versioning rules

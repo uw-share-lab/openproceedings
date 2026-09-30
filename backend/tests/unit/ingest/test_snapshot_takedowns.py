@@ -6,10 +6,13 @@ from __future__ import annotations
 
 import json
 import stat
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from openproceedings import cli
+from openproceedings.ingest.dedup import DedupResult, Merge, dedup
+from openproceedings.ingest.reconcile import crawled, reconcile
 from openproceedings.ingest.snapshot import (
     WITHHELD_VALUE,
     RecordFile,
@@ -18,6 +21,9 @@ from openproceedings.ingest.snapshot import (
     diff,
     ingest_ris,
     load_records,
+    load_sources,
+    with_crawl_conflicts,
+    withhold,
 )
 
 from tests.unit.ingest.test_snapshot import BUILT, NEURIPS, REJECTED, source, writable_copy
@@ -88,41 +94,86 @@ def test_a_recrawl_and_rebuild_cannot_restore_a_listed_abstract(cache: Path, tmp
     assert load_records(unlisted.path)[REJECTED].abstract is not None
 
 
-def test_a_listed_id_the_build_has_no_record_of_refuses_it(cache: Path, tmp_path: Path) -> None:
-    """A rekeyed or merged paper would otherwise get its abstract back under its new id."""
-    gone = "op:iclr:2025:Rej_ected-1"  # the same paper, had its year been corrected
-    with pytest.raises(SnapshotError, match="1 id\\(s\\) no record of this build has") as e:
-        build(cache, tmp_path / "snapshots", BUILT, takedowns=frozenset({REJECTED, gone}))
-    assert e.value.reason == "takedown_unmatched" and gone in str(e.value)
-    assert not (tmp_path / "snapshots").exists() or not [
-        p for p in (tmp_path / "snapshots").iterdir() if p.name != ".lock"
-    ]
+def _result(cache: Path) -> DedupResult:
+    """The fixture cache's dedup result, as `build` computes it before withholding."""
+    records, _reports, crawls = load_sources(cache)
+    return with_crawl_conflicts(reconcile(dedup(records), crawled(crawls)).result, crawls)
 
 
-def test_a_listed_record_without_an_abstract_is_withheld_not_missing(cache: Path, tmp_path: Path) -> None:
-    result = build(cache, tmp_path / "snapshots", BUILT, takedowns=frozenset({NO_ABSTRACT}))
-    m = manifest(result.path)
-    assert m["withheld"] == [NO_ABSTRACT]
-    assert m["abstract_missing"]["ICML"]["2023"] == 0  # type: ignore[index]
-    assert m["abstract_withheld"]["ICML"]["2023"] == 1  # type: ignore[index]
+def test_a_listed_id_the_build_lacks_is_reported_never_refused(cache: Path, tmp_path: Path) -> None:
+    """A paper gone from its sources stays listed for the older versions that hold it: the build goes on, and
+    says which ids it doesn't hold (`op takedown check` names a typo)."""
+    gone = "op:neurips:2019:GoneFromSources1"
+    result = build(cache, tmp_path / "snapshots", BUILT, takedowns=frozenset({REJECTED, gone}))
+    assert result.created and result.takedowns_unmatched == (gone,) and result.takedowns_followed == {}
+    assert result.withheld == (REJECTED,) and manifest(result.path)["withheld"] == [REJECTED]
 
 
-def test_an_existing_snapshot_withholding_other_ids_is_refused(cache: Path, tmp_path: Path) -> None:
-    """The listed record had no abstract, so records.jsonl (and the directory name) are what an unlisted build
-    writes: `_holds` compares `withheld`, so the unlisted snapshot isn't passed off as this one."""
-    build(cache, tmp_path / "snapshots", BUILT)
-    with pytest.raises(SnapshotError, match="isn't this snapshot"):
-        build(cache, tmp_path / "snapshots", BUILT, takedowns=frozenset({NO_ABSTRACT}))
+def test_a_rekeyed_listed_paper_is_followed_to_its_new_id(cache: Path) -> None:
+    """Its year corrected, the paper has a new id: the old one (still on the list, since older versions hold it)
+    leads to the new one, whose abstract is withheld too, so a rekey never brings the abstract back."""
+    result = _result(cache)
+    old = next(r for r in result.records if r.id == REJECTED)
+    moved = old.model_copy(update={"id": "op:iclr:2025:Rej_ected-1", "year": 2025})
+    rekeyed = replace(result, records=tuple(sorted((*(r for r in result.records if r.id != REJECTED), moved),
+                                                   key=lambda r: r.id)))  # fmt: skip
+    done = withhold(rekeyed, frozenset({REJECTED}))
+    assert done.followed == {REJECTED: moved.id} and done.unmatched == ()
+    assert done.withheld == {moved.id}
+    [new] = [r for r in done.result.records if r.id == moved.id]
+    assert new.abstract is None and new.claims("abstract") == ()
+
+
+def test_a_listed_paper_merged_into_another_is_followed_to_the_survivor(cache: Path) -> None:
+    result = _result(cache)
+    merged = replace(
+        result,
+        records=tuple(r for r in result.records if r.id != REJECTED),
+        merges=(Merge(NEURIPS, REJECTED, "title_venue_year", "x", "ICLR", 2024, "ris"),),
+    )
+    done = withhold(merged, frozenset({REJECTED}))
+    assert done.followed == {REJECTED: NEURIPS} and done.withheld == {NEURIPS}
+    assert next(r for r in done.result.records if r.id == NEURIPS).abstract is None
+
+
+def test_listing_a_record_without_an_abstract_changes_nothing_in_the_snapshot(
+    cache: Path, tmp_path: Path
+) -> None:
+    """Nothing to withhold, so the snapshot is the unlisted one, byte for byte (the API marks the id withheld
+    from the list at serve time): listing it never blocks a rebuild."""
+    plain = build(cache, tmp_path / "snapshots", BUILT)
+    listed = build(cache, tmp_path / "snapshots", BUILT, takedowns=frozenset({NO_ABSTRACT}))
+    assert (listed.path, listed.created, listed.withheld) == (plain.path, False, ())
+    assert "withheld" not in manifest(listed.path)
+
+
+def test_the_same_records_withholding_other_abstracts_is_refused_without_advising_retirement(
+    cache: Path, tmp_path: Path
+) -> None:
+    """A directory holding these very records whose manifest names other withheld ids (as when a listed
+    abstract went from its source after a build that withheld it): refused as `takedown_differs`, saying to
+    serve it as it is, never to retire a snapshot a search record may pin."""
+    first = build(cache, tmp_path / "snapshots", BUILT, takedowns=frozenset({REJECTED}))
+    first.path.chmod(0o755)
+    m = manifest(first.path)
+    for key in ("withheld", "abstract_withheld", "abstract_withheld_by_track"):
+        del m[key]
+    (first.path / "manifest.json").chmod(0o644)
+    (first.path / "manifest.json").write_text(json.dumps(m), encoding="utf-8")
+    with pytest.raises(SnapshotError, match="serve it as it is") as e:
+        build(cache, tmp_path / "snapshots", BUILT, takedowns=frozenset({REJECTED}))
+    assert e.value.reason == "takedown_differs"
 
 
 def test_the_reader_counts_withheld_apart_from_missing(cache: Path, tmp_path: Path) -> None:
-    result = build(cache, tmp_path / "snapshots", BUILT, takedowns=frozenset({REJECTED, NO_ABSTRACT}))
+    result = build(cache, tmp_path / "snapshots", BUILT, takedowns=frozenset({REJECTED, NEURIPS}))
     records = RecordFile(result.path)
-    assert records.withheld == {REJECTED, NO_ABSTRACT}
-    assert dict(records.abstract_withheld) == {("ICLR", 2024): 1, ("ICML", 2023): 1}
-    assert dict(records.track_withheld) == {("ICLR", 2024, "main"): 1, ("ICML", 2023, "main"): 1}
-    assert dict(records.abstract_missing) == {("ICLR", 2025): 1}
+    assert records.withheld == {REJECTED, NEURIPS}
+    assert dict(records.abstract_withheld) == {("ICLR", 2024): 1, ("NeurIPS", 2025): 1}
+    assert dict(records.track_withheld) == {("ICLR", 2024, "main"): 1, ("NeurIPS", 2025, "main"): 1}
+    assert dict(records.abstract_missing) == {("ICLR", 2025): 1, ("ICML", 2023): 1}
     assert records.attributions[REJECTED] is None  # no abstract, so nothing to attribute
+    assert REJECTED in records and "op:iclr:2024:NotHere001" not in records
 
 
 def _edited(snapshot: Path, out: Path, edit_manifest: object) -> Path:
@@ -156,11 +207,11 @@ def test_the_reader_refuses_a_manifest_whose_withheld_ids_dont_hold(
 
 
 def test_diff_names_the_abstracts_withheld_and_lifted(cache: Path, tmp_path: Path) -> None:
-    before = build(cache, tmp_path / "snapshots", BUILT, takedowns=frozenset({NO_ABSTRACT})).path
+    before = build(cache, tmp_path / "snapshots", BUILT, takedowns=frozenset({NEURIPS})).path
     after = build(cache, tmp_path / "snapshots", BUILT, takedowns=frozenset({REJECTED})).path
     got = diff(before, after)
-    assert got["abstract_withheld"] == {"added": [REJECTED], "lifted": [NO_ABSTRACT]}
-    assert got["changed"] == {REJECTED: ["abstract"]}
+    assert got["abstract_withheld"] == {"added": [REJECTED], "lifted": [NEURIPS]}
+    assert got["changed"] == {NEURIPS: ["abstract"], REJECTED: ["abstract"]}
     assert diff(after, after)["abstract_withheld"] == {"added": [], "lifted": []}
 
 
@@ -177,7 +228,8 @@ def test_cli_build_reads_the_list_from_the_data_dir(
     capsys.readouterr()
     assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 0
     built = json.loads(capsys.readouterr().out)
-    assert built["abstracts_withheld"] == 1
+    assert built["abstracts_withheld"] == [REJECTED]
+    assert (built["takedowns_followed"], built["takedowns_unmatched"]) == ({}, [])
     assert load_records(Path(built["path"]))[REJECTED].abstract is None
     assert stat.S_IMODE(Path(built["path"]).stat().st_mode) == 0o555
 
@@ -201,4 +253,36 @@ def test_cli_build_without_a_list_withholds_nothing(
     assert cli.main(["--data-dir", str(data), "ingest", "ris", str(source(tmp_path))]) == 0
     capsys.readouterr()
     assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 0
-    assert json.loads(capsys.readouterr().out)["abstracts_withheld"] == 0
+    assert json.loads(capsys.readouterr().out)["abstracts_withheld"] == []
+
+
+def test_cli_build_refuses_a_named_list_that_is_missing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A mistyped --takedowns path is never read as "nothing listed"."""
+    data = tmp_path / "data"
+    assert cli.main(["--data-dir", str(data), "ingest", "ris", str(source(tmp_path))]) == 0
+    capsys.readouterr()
+    argv = [
+        "--data-dir",
+        str(data),
+        "snapshot",
+        "build",
+        "--takedowns",
+        str(tmp_path / "takedown" / "list.txt"),
+    ]
+    assert cli.main(argv) == 1
+    assert "list.txt is missing" in capsys.readouterr().err
+    assert not (data / "snapshots").exists()
+
+
+def test_cli_build_says_which_listed_ids_it_lacks(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    data = tmp_path / "data"
+    assert cli.main(["--data-dir", str(data), "ingest", "ris", str(source(tmp_path))]) == 0
+    (data / "takedowns").mkdir()
+    (data / "takedowns" / "withheld.txt").write_text("op:iclr:2024:GoneAway01\n", encoding="utf-8")
+    capsys.readouterr()
+    assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 0
+    out = capsys.readouterr()
+    assert json.loads(out.out)["takedowns_unmatched"] == ["op:iclr:2024:GoneAway01"]
+    assert "1 listed id(s) no record of this build has: op:iclr:2024:GoneAway01" in out.err

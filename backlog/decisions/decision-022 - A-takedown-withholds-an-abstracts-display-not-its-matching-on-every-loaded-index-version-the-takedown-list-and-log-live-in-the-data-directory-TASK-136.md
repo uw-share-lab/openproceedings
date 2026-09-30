@@ -49,7 +49,9 @@ spec 08's proposal and were settled in TASK-136.
    and everything after `#` ignored, ids only (so the API's service user may read it: 0644, or 0640 with the
    API's group). A line that is not one record id makes the whole list unusable: `op snapshot build` refuses to
    run and the API keeps what it already serves (at startup it serves nothing: 503), never a silent partial list.
-   A missing file is an empty list.
+   A missing file is an empty list, until the API applies a non-empty one: then a missing file fails the reload
+   (`takedowns_missing`), so an unmounted or renamed directory never lifts every takedown silently. A list named
+   explicitly (`--takedowns`, `--list`) must exist.
 4. **What covers it.** `op snapshot build` withholds each listed abstract after dedup and reconcile (the record
    keeps its title and every other field; its abstract claims, whose values are the text, are dropped, and so
    are the abstract texts of its `conflicts.csv` rows). So `snapshot_hash`, and with it `index_version`, covers
@@ -57,14 +59,20 @@ spec 08's proposal and were settled in TASK-136.
    without a rebuild. The manifest names the withheld ids (`withheld`) and counts them per venue-year and track
    (`abstract_withheld`, `abstract_withheld_by_track`), apart from `abstract_missing`; the keys appear only when
    something is withheld, so a snapshot withholding nothing is byte-identical to before (format 2 unchanged),
-   and `withheld` is one of the keys a rebuild must reproduce. A listed id that no record of the build has
-   refuses the build: a paper whose id changed (a corrected venue or year) or that merged into another would
-   otherwise get its abstract back under its new id.
+   and `withheld` is one of the keys a rebuild must reproduce. `withheld` names only the records the build took
+   something out of: listing a record whose sources gave no abstract leaves the snapshot byte-identical (serve
+   time marks it from the list), so it never blocks a rebuild. A listed id the build holds under another id
+   (merged into another record, or rekeyed by a corrected venue or year) is followed: the new id's abstract is
+   withheld too, so neither a rekey nor a merge brings it back, and the operator adds the new id to the list
+   while **keeping the old one**, which older versions still hold. A listed id the build has no record of at all
+   (a paper gone from its sources) is reported, never refused: refusing would push the operator to delete the
+   line, which would lift the takedown on every older version that still holds the paper.
 5. **The marker.** A withheld abstract is never shown as missing (guarantee 6): hits and `/papers/{id}` carry
    `abstract_withheld: true`, `/coverage` counts `abstract_withheld` apart from `abstract_missing`, exports say so
    in each record (RIS `N1` and BibTeX `abstract_withheld` = the takedown sentence; CSV `abstract_withheld` true
-   and `abstract_withheld_reason` `takedown`; JSONL the same keys), and the UI says "Abstract removed from this
-   site at a rights holder's request". An abstract the snapshot itself withheld is marked too, whether or not the
+   and `abstract_withheld_reason` `takedown`; JSONL the same keys; the response counts them in
+   `X-Abstracts-Withheld`, which the web app shows, EX-E9), and the UI says "Abstract removed from this site at a
+   rights holder's request. Any terms it matched in the removed abstract aren't shown." An abstract the snapshot itself withheld is marked too, whether or not the
    list still names it. All of these are additive under `/api/v1` (spec 04 §Conventions; decision-021 rule 1).
 6. **Replay and the record page.** A search record replays on its pinned index as before: `reproduced`, its ids
    unchanged. Its exports withhold the listed abstracts the pinned index still holds. The record page shows no
@@ -73,7 +81,8 @@ spec 08's proposal and were settled in TASK-136.
 ## Consequences
 
 - **Every loaded version, from the next reload.** The API re-reads the list on every load and SIGHUP, even when
-  `current` is unchanged, so an operator can withhold an abstract at once (list it, SIGHUP) and rebuild later.
+  `current` is unchanged, so an operator can withhold an abstract at once (list it, SIGHUP) and rebuild later;
+  a reload whose new index fails to load still applies a new list to the index it keeps serving.
 - **What a pinned version still reveals.** Whether a query matches the paper (it is a hit, `/papers?q=` says
   `matched: true`), and the paper's position in the ranking (BM25 over the withheld text). Nothing of the text:
   no words, spans or excerpt. Anyone able to guess the abstract's words can confirm them one query at a time;
@@ -83,8 +92,10 @@ spec 08's proposal and were settled in TASK-136.
   and replayed on the new one reports `drifted`, as for any rebuild.
 - **`content_hash`.** A withheld record's `/papers/{id}` answer has the `content_hash` of what it shows (no
   abstract), the one the rebuilt snapshot holds.
-- **Checking it.** `op takedown check --api <url>` asks the running API, for every listed id and every index
-  version `/meta` lists, and exits 1 on any served abstract, span, source or missing marker (TASK-136 AC8).
+- **Checking it.** `op takedown check --api <url>` asks the running API, and exits 1 on any served abstract,
+  abstract claim, span, source or missing marker: `/papers` and `/search` on the served index, and every export
+  format on every index version `/meta` lists (TASK-136 AC8); and on a log that is not the operator's, readable
+  by others, or missing a listed id's `withheld` entry.
 - **Lifting a takedown** means removing the line (and logging `lifted`): the API shows the abstract again on the
   versions that still hold it after the next reload; a snapshot built while it was listed keeps it withheld
   until a rebuild without the id.

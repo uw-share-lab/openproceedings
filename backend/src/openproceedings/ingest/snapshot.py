@@ -36,7 +36,7 @@ import time
 import unicodedata
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import astuple, dataclass, fields, replace
+from dataclasses import astuple, dataclass, field, fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -120,6 +120,10 @@ class BuildResult:
     # each (venue, year, status) its records hold that their sources can't supply (TASK-109): reported and
     # logged, never written into the snapshot
     unexpected_statuses: tuple[UnexpectedStatus, ...] = ()
+    # the takedown list's effect (TASK-136): ids withheld, listed ids followed to a new id, listed ids not held
+    withheld: tuple[str, ...] = ()
+    takedowns_followed: Mapping[str, str] = field(default_factory=dict)
+    takedowns_unmatched: tuple[str, ...] = ()
 
 
 def _sha256(data: bytes) -> str:
@@ -358,33 +362,64 @@ def with_crawl_conflicts(result: DedupResult, crawls: Sequence[Report]) -> Dedup
 WITHHELD_VALUE = "(withheld: takedown)"  # what conflicts.csv says in place of a withheld abstract's text
 
 
-def withhold(result: DedupResult, ids: Withheld) -> DedupResult:
+@dataclass(frozen=True)
+class Withholding:
+    """What `withhold` did: the result with the abstracts withheld; `withheld`, the ids whose record lost an
+    abstract or an abstract claim (what the manifest names); `followed`, each listed id this build holds under
+    another id (merged into a survivor, or rekeyed: the same native id under a corrected venue or year) → the
+    id it withheld instead; and `unmatched`, the listed ids no record of this build has or leads to."""
+
+    result: DedupResult
+    withheld: Withheld
+    followed: Mapping[str, str]
+    unmatched: tuple[str, ...]
+
+
+def _successor(rid: str, result: DedupResult, held: set[str]) -> str | None:
+    """The id this build holds `rid`'s paper under, when it holds it under another: the survivor it merged into
+    (following merges.csv), else the one record with its native id (a rekey, the rule `diff` uses)."""
+    survivor = {m.merged_id: m.survivor_id for m in result.merges if m.merged_id != m.survivor_id}
+    seen, at = {rid}, rid
+    while (nxt := survivor.get(at)) is not None and nxt not in seen:
+        at = nxt
+        seen.add(at)
+    if at != rid and at in held:
+        return at
+    native = rid.split(":", 3)[-1]
+    same = [h for h in held if h.split(":", 3)[-1] == native]
+    return same[0] if len(same) == 1 else None
+
+
+def withhold(result: DedupResult, ids: Withheld) -> Withholding:
     """`result` with the abstract of every record in `ids` (the takedown list) withheld: `abstract` null and its
     abstract claims dropped (`takedowns.withhold_record`), and the abstract texts of its conflicts.csv rows
     replaced by `WITHHELD_VALUE`. Applied after dedup and reconcile, so whatever the sources supply, the
-    snapshot never holds a listed abstract. A listed id no record has is refused (reason `takedown_unmatched`):
-    a paper whose id changed (a corrected venue or year) or that merged into another would otherwise get its
-    abstract back under its new id, so the operator must list the new id (or drop the line) first."""
+    snapshot never holds a listed abstract. A listed id this build holds under another id (merged, or rekeyed
+    by a corrected venue or year) is followed: its successor is withheld too, so the abstract never comes back
+    under a new id (the list keeps the old id, which older index versions still hold). A listed id no record
+    has or leads to is reported, never refused: a paper gone from its sources stays listed for the versions
+    that still hold it (a typo is what `op takedown check` reports)."""
     if not ids:
-        return result
+        return Withholding(result, NONE, {}, ())
     held = {r.id for r in result.records}
-    if unmatched := sorted(ids - held):
-        raise SnapshotError(
-            f"the takedown list names {len(unmatched)} id(s) no record of this build has ({', '.join(unmatched[:5])}"
-            f"{', …' if len(unmatched) > 5 else ''}): the paper's id may have changed or it may have merged into "
-            "another; list the id it has now (op snapshot diff names rekeyed ids) or remove the line, then build again",
-            reason="takedown_unmatched",
-        )
-    records = tuple(withhold_record(r) if r.id in ids else r for r in result.records)
+    followed = {rid: nxt for rid in sorted(ids - held) if (nxt := _successor(rid, result, held)) is not None}
+    unmatched = tuple(sorted(ids - held - followed.keys()))
+    targets = (ids & held) | set(followed.values())
+    changed = frozenset(
+        r.id for r in result.records if r.id in targets and (r.abstract is not None or r.claims("abstract"))
+    )
+    records = tuple(withhold_record(r) if r.id in changed else r for r in result.records)
     conflicts = tuple(
         sorted(
-            replace(c, value_a=WITHHELD_VALUE, value_b=WITHHELD_VALUE)
-            if c.id in ids and c.field == "abstract"
-            else c
-            for c in result.conflicts
+            {
+                replace(c, value_a=WITHHELD_VALUE, value_b=WITHHELD_VALUE)
+                if c.id in targets and c.field == "abstract"
+                else c
+                for c in result.conflicts
+            }
         )
     )
-    return replace(result, records=records, conflicts=conflicts)
+    return Withholding(replace(result, records=records, conflicts=conflicts), changed, followed, unmatched)
 
 
 def render(
@@ -396,9 +431,10 @@ def render(
 ) -> dict[str, bytes]:
     """The snapshot's files. Everything but manifest.json's `built_at` is a function of the inputs.
     `crawls` are the crawlers' reports (OpenReview v2 and v1, ICLR, NeurIPS, PMLR). `withheld` are the ids
-    whose abstracts `withhold` took out (each must be a record of `result` with no abstract and no abstract
-    claim): the manifest then names them and counts them per venue-year and track, and they are not counted
-    as missing abstracts (TASK-136)."""
+    whose abstracts `withhold` took out (`Withholding.withheld`: each a record of `result` with no abstract and
+    no abstract claim left): the manifest then names them and counts them per venue-year and track, and they
+    are not counted as missing abstracts (TASK-136). A listed record that had nothing to withhold is not
+    named, so listing it leaves the snapshot byte-identical."""
     records = sorted(result.records, key=lambda r: r.id)
     if not records:
         raise SnapshotError("no records to snapshot")
@@ -489,9 +525,15 @@ def build(
     began = time.monotonic()
     records, reports, crawls = load_sources(cache)
     result = with_crawl_conflicts(reconcile(dedup(records), crawled(crawls)).result, crawls)
-    result = withhold(result, takedowns)
+    withholding = withhold(result, takedowns)
+    result = withholding.result
     unexpected = tuple(unexpected_statuses(result.records))
-    files = render(result, reports, built_at or datetime.now(UTC), crawls, takedowns)
+    files = render(result, reports, built_at or datetime.now(UTC), crawls, withholding.withheld)
+
+    def result_at(target: Path, created: bool) -> BuildResult:
+        return BuildResult(target, snapshot_hash, created, unexpected, tuple(sorted(withholding.withheld)),
+                           dict(withholding.followed), withholding.unmatched)  # fmt: skip
+
     manifest = json.loads(files["manifest.json"])
     snapshot_hash = manifest["snapshot_hash"]
     target = snapshots / f"{manifest['crawl_date']}-{snapshot_hash[:SHORT]}"
@@ -499,13 +541,26 @@ def build(
         storage.sweep(snapshots)
         if target.exists():
             if not _holds(target, snapshot_hash, manifest):
+                if _holds(target, snapshot_hash, {**manifest, "withheld": _withheld_or_none(target)}):
+                    raise SnapshotError(
+                        f"{target.name} holds these very records but names other withheld abstracts (a listed "
+                        "record's abstract went from its sources since it was built): serve it as it is (the "
+                        "API applies the takedown list to it), or build from a cache that changes a record",
+                        reason="takedown_differs",
+                    )
                 raise SnapshotError(
                     f"{target.name} exists but isn't this snapshot in the current format; snapshots are "
                     "immutable: retire it (release-manager prune path) and build again"
                 )
             storage.lock(target)  # a crash between placing and locking left it writable
-            log.info("snapshot_exists", extra={"snapshot": target.name, "snapshot_hash": snapshot_hash})
-            return BuildResult(target, snapshot_hash, created=False, unexpected_statuses=unexpected)
+            log.info(
+                "snapshot_exists",
+                extra={"snapshot": target.name, "snapshot_hash": snapshot_hash,
+                       "abstracts_withheld": len(withholding.withheld),
+                       "takedowns_followed": len(withholding.followed),
+                       "takedowns_unmatched": len(withholding.unmatched)},
+            )  # fmt: skip
+            return result_at(target, created=False)
         with storage.staging(snapshots) as tmp:
             for name, data in files.items():
                 (tmp / name).write_bytes(data)
@@ -514,10 +569,12 @@ def build(
         "snapshot_built" if created else "snapshot_exists",
         extra={"snapshot": target.name, "snapshot_hash": snapshot_hash, "records": manifest["record_count"],
                "merges": manifest["merges"]["total"], "conflicts": manifest["conflicts"]["total"],
-               "abstracts_withheld": len(takedowns),
+               "abstracts_withheld": len(withholding.withheld),
+               "takedowns_followed": len(withholding.followed),
+               "takedowns_unmatched": len(withholding.unmatched),
                "unexpected_statuses": len(unexpected), "ms": elapsed_ms(began, time.monotonic)},
     )  # fmt: skip
-    return BuildResult(target, snapshot_hash, created=created, unexpected_statuses=unexpected)
+    return result_at(target, created=created)
 
 
 class _OnePass:
@@ -722,6 +779,9 @@ class RecordFile:
     def __len__(self) -> int:
         return len(self._at)
 
+    def __contains__(self, rid: object) -> bool:
+        return rid in self._at
+
     def get(self, rid: str) -> PaperRecord | None:
         """The record with id `rid`, or None if the snapshot has none."""
         at = self._at.get(rid)
@@ -781,6 +841,15 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
         "provenance_only": provenance_only,
         "abstract_withheld": {"added": sorted(now - was), "lifted": sorted(was - now)},
     }
+
+
+def _withheld_or_none(snapshot: Path) -> list[str] | None:
+    """A snapshot's manifest `withheld` as written (None when it has none), for comparing with a fresh one."""
+    try:
+        listed = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8")).get("withheld")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return listed if isinstance(listed, list) else None
 
 
 def _withheld(snapshot: Path) -> frozenset[str]:

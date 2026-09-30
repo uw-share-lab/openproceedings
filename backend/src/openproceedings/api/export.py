@@ -14,7 +14,10 @@ snapshot records, computed when they were loaded (`RecordFile.attributions`, wha
 index's snapshot can't be verified the same records are exported with every abstract withheld and marked so
 in the file, and `X-Abstract-Source: unavailable` (decision-021): never an abstract without attribution.
 Whatever index is exported, each record the takedown list names (as the served bundle's load read it), or that
-index's snapshot withheld, goes out without its abstract, marked so (TASK-136, decision-022; `Served.withheld_in`).
+index's snapshot withheld, goes out without its abstract, marked so (TASK-136, decision-022; `Served.withheld_in`),
+and `X-Abstracts-Withheld` counts them before the body: for a record export, its stored ids on the list; for a
+query, the listed ids the index holds that the query matches (`search.highlight`, the evaluation `/papers?q=`
+uses, one per listed id: the list is short).
 
 Everything that can refuse happens before the first byte: the parameters, the parse (422 with
 diagnostics), the record's pin and replay, the pin (409 `API_INDEX_VERSION_UNAVAILABLE`), every wildcard's
@@ -47,9 +50,9 @@ from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.export import Provenance, Sources, check_count, entries, header, utc_date
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.normalize import TOKENIZER_VERSION
-from openproceedings.query.parser import Mode
+from openproceedings.query.parser import Mode, ParseResult
 from openproceedings.records import RECORD_ID, ids_hash
-from openproceedings.search import expanded
+from openproceedings.search import expanded, highlight
 from openproceedings.takedowns import NONE, Withheld
 
 router = APIRouter(prefix=API_PREFIX)
@@ -130,6 +133,11 @@ def _bad(message: str) -> ApiError:
                     "record says so (decision-021)",
                     {"type": "string", "enum": list(ABSTRACT_SOURCE_STATES)},
                 ),
+                "X-Abstracts-Withheld": response_header(
+                    "How many records of the body have their abstract withheld at a rights holder's request (a "
+                    "takedown, decision-022): each says so in the file; 0 when none",
+                    {"type": "integer", "minimum": 0},
+                ),
             },
         },
         **BUSY,
@@ -192,6 +200,7 @@ def export(
         # the cited set exactly: the record's stored ids, from the index it names (never a re-run query)
         canonical_hash = record.canonical_hash
         total, documents = len(ids), stored_documents(engine, ids)
+        removed = sum(i in withheld for i in ids)
         pinned_by = {"record_id": record.record_id, "searched_at": record.searched_at}  # in the provenance
         annotate(request, canonical_hash=canonical_hash)
     else:
@@ -210,8 +219,9 @@ def export(
         check_candidates(request, engine, ast)  # 422 API_QUERY_TOO_COSTLY before any verification
         sources, withheld = sources_of(request, bundle, engine)  # once nothing about the query can refuse
         total, documents = engine.documents(ast)  # the one collection; records are read as they stream
+        removed = matched_among(engine, result, withheld)
     abstract_source: AbstractSource = "unavailable" if sources is None else "attributed"
-    annotate(request, total=total, abstract_source=abstract_source)
+    annotate(request, total=total, abstract_source=abstract_source, abstracts_withheld=removed)
     provenance = Provenance(engine.index_version, canonical_hash, utc_date(), **pinned_by)
     media, ext = MEDIA[fmt]
     filename = f"openproceedings-{engine.index_version}-{canonical_hash[:12]}.{ext}"
@@ -225,8 +235,17 @@ def export(
             "X-Query-Version": QUERY_VERSION,
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Abstract-Source": abstract_source,
+            "X-Abstracts-Withheld": str(removed),
         },
     )
+
+
+def matched_among(engine: TantivyEngine, result: ParseResult, withheld: Withheld) -> int:
+    """How many of `withheld` the query `result` matches on `engine`: each listed id the index holds, judged
+    as `/papers/{id}?q=` judges it (`search.highlight` on its display record), so the count is the number of
+    records in the export's body a takedown withholds."""
+    shown = engine.display(sorted(withheld)) if withheld else {}
+    return sum(highlight(engine, result, record) is not None for record in shown.values())
 
 
 STORED_CHUNK = 1_000  # stored ids read per index lookup while a record's export streams

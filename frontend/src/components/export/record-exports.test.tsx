@@ -16,13 +16,14 @@ afterEach(() => {
 
 const RECORD = { recordId: "Ab3dE5fG7hJ9", indexVersion: "a1b2c3d4e5f6", total: 3 };
 
-function file(abstractSource: string): Response {
+function file(abstractSource: string, removed = "0"): Response {
   return new Response("TY  - CPAPER\nER  - \n", {
     headers: {
       "X-Index-Version": RECORD.indexVersion,
       "X-Total": String(RECORD.total),
       "Content-Disposition": 'attachment; filename="openproceedings-x.ris"',
       "X-Abstract-Source": abstractSource,
+      "X-Abstracts-Withheld": removed,
     },
   });
 }
@@ -41,5 +42,13 @@ describe("a record's exports (spec 05 §Pages)", () => {
     fireEvent.click(screen.getByRole("button", { name: "RIS, 3 papers" }));
     expect(await screen.findByText("Download ready.")).toBeTruthy();
     expect(screen.queryByText(/This file has no abstracts/)).toBeNull();
+    expect(screen.queryByText(/rights holder's request/)).toBeNull();
+  });
+
+  it("says when a paper's abstract was removed at a rights holder's request (EX-E9, decision-022)", async () => {
+    renderWithApi(<RecordExports {...RECORD} indexGone={false} />, () => file("attributed", "1"));
+    fireEvent.click(screen.getByRole("button", { name: "RIS, 3 papers" }));
+    expect(await screen.findByText(/^Download ready\. 1 paper in this file has no abstract/)).toBeTruthy();
+    expect(screen.getByText(/they would screen those papers on titles alone/)).toBeTruthy();
   });
 });

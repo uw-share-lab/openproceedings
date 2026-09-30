@@ -8,7 +8,8 @@
  * `X-Total` the shown total, or the body is abandoned and nothing is saved. A different index is "the index
  * changed" (E3); the same index with another count is a bug (EX-E3b; guarantee 4), never worded as a swap.
  * `X-Abstract-Source: unavailable` still downloads (the cited set is complete), but the file has no abstracts
- * (decision-021), so the result says so and the menu warns (EX-E8).
+ * (decision-021), so the result says so and the menu warns (EX-E8). `X-Abstracts-Withheld` counts the records
+ * whose abstract was removed at a rights holder's request (decision-022); a count above 0 warns too (EX-E9).
  */
 import type { Api } from "@/api/client";
 import { outcomeOf, type Failure } from "@/api/outcome";
@@ -49,6 +50,8 @@ export type ExportResult =
       readonly filename: string;
       /** `X-Abstract-Source: unavailable`: every abstract withheld, each record says why (decision-021). */
       readonly abstractsWithheld: boolean;
+      /** `X-Abstracts-Withheld`: records whose abstract was removed at a rights holder's request (0 if absent). */
+      readonly removed: number;
     }
   /** `X-Index-Version` isn't the shown index (EX-E4). */
   | { readonly kind: "index_changed"; readonly shown: string; readonly got: string }
@@ -109,7 +112,13 @@ export async function fetchExport(
     blob,
     filename: filenameOf(response.headers.get("Content-Disposition"), source, format),
     abstractsWithheld: response.headers.get("X-Abstract-Source") === "unavailable",
+    removed: countOf(response.headers.get("X-Abstracts-Withheld")),
   };
+}
+
+/** A count header: a non-negative integer, else 0 (an older API that doesn't send it). */
+function countOf(header: string | null): number {
+  return header !== null && /^[0-9]+$/.test(header) ? Number(header) : 0;
 }
 
 /** Hand a downloaded file to the browser under `filename` (an `<a download>` over an object URL). */

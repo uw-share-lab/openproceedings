@@ -188,9 +188,11 @@ warnings, the save's index check), the design doc says so; its open questions li
    *As built (TASK-136, decision-022).* An abstract the instance withholds at a rights holder's request (the
    API's `abstract_withheld`) reads "Abstract removed from this site at a rights holder's request" (copy RH-15,
    PA-8) in the result and on the paper page, never "No abstract in the index"; no excerpt, spans or attribution.
-   A matched paper page adds "Terms it matched in the removed abstract aren't shown." (an older index may still
-   match on the withheld words). `/coverage` counts removed abstracts in its totals and under each "No abstract"
-   count, only when there are any (CV-6).
+   The result, and a matched paper page, add "Any terms it matched in the removed abstract aren't shown." (an
+   older index may still match on the withheld words). `/coverage` counts removed abstracts in its totals and
+   under each "No abstract" count, only when there are any (CV-6). An export whose `X-Abstracts-Withheld` is
+   above 0 is saved and says how many papers in the file have their abstract removed (EX-E9), in the Export
+   menu and on the record page, as EX-E8 does for a file with no abstracts.
 
    *As built (TASK-134, decision-018).* Each result shows its authors under the title (the first three and
    "et al.", with a "Show all n authors" button, `aria-expanded`, for the full list) and, under the abstract, its

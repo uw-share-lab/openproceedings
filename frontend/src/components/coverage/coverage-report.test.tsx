@@ -205,7 +205,7 @@ describe("the header", () => {
     expect(document.body.textContent).not.toMatch(/rights holder|removed on request/);
     cleanup();
     const c = copy();
-    const vy = c.venue_years[0]!;
+    const vy = c.venue_years.find((v) => v.records > v.abstract_missing + 2)!;
     const track = vy.tracks[0]!;
     c.totals.abstract_withheld = 2;
     vy.abstract_withheld = 2;
@@ -215,7 +215,16 @@ describe("the header", () => {
       "of unknown status · 2 with the abstract removed at a rights holder's request",
     );
     const noAbstract = [...row(vy.venue, vy.year).querySelectorAll("td")][2]!;
-    expect(noAbstract.textContent).toContain(`${count(vy.abstract_missing)}+ 2 removed on request`);
+    expect(noAbstract.textContent).toContain(`${count(vy.abstract_missing)}and 2 removed on request`);
+    // a venue-year whose every record lacks a shown abstract, removed ones included, is flagged (CV-5)
+    cleanup();
+    const all = copy();
+    const flagged = all.venue_years.find((v) => v.records > v.abstract_missing)!;
+    flagged.abstract_withheld = flagged.records - flagged.abstract_missing;
+    render(<CoverageReport coverage={all} />);
+    expect([...row(flagged.venue, flagged.year).querySelectorAll("td")][2]!.textContent).toContain(
+      "no abstracts: only titles are searchable",
+    );
   });
 
   it("says Crawled for a crawl and drops the citability note for a citable snapshot", () => {

@@ -377,8 +377,13 @@ class IndexState:
         previous = self.engine
         kept = previous.index_version if previous is not None else None
         attempted: str | None = None
+        listed: Withheld | None = None
         try:
-            listed = load_takedowns(list_path(self._data_dir))  # first: a bad list changes nothing
+            # first: a bad list changes nothing; once a list is applied, a missing file is a failure, never a
+            # silent lifting of every takedown (an unmounted or renamed takedowns/)
+            listed = load_takedowns(
+                list_path(self._data_dir), required=served is not None and bool(served.listed)
+            )
             path = index_path(self._data_dir, self._name)
             attempted = path.name
             if served is not None and path.name == served.engine.index_version:
@@ -393,6 +398,7 @@ class IndexState:
                     extra={
                         "index_version": kept,
                         "abstracts_withheld": len(listed),
+                        "takedowns_not_in_index": _not_in(listed, served.records),
                         "ms": elapsed_ms(started),
                     },
                 )
@@ -418,6 +424,8 @@ class IndexState:
             ):
                 fields["frames"] = frames(e)
             log.error("index_load_failed", extra=fields)  # the type, never the message (it names paths)
+            if served is not None and listed is not None and listed != served.listed:
+                self._keep_index_take_list(served, listed, started)
             return False
         self._served = Served(engine, records, coverage, listed)  # the atomic swap: one reference assignment
         log.info(
@@ -426,10 +434,31 @@ class IndexState:
                 "index_version": engine.index_version,
                 "previous_index_version": kept,
                 "abstracts_withheld": len(listed),
+                "takedowns_not_in_index": _not_in(listed, records),
                 "ms": elapsed_ms(started),
             },
         )
         return True
+
+    def _keep_index_take_list(self, served: Served, listed: Withheld, started: float) -> None:
+        """After a failed load whose list parsed: keep serving the index, but with the new list (withholding
+        more is the safe direction, so a takedown sent with a bad promotion still applies). One more line,
+        `takedowns_reloaded`; nothing if even that fails (the old bundle stays, as logged)."""
+        try:
+            coverage = coverage_of(served.engine, served.records, listed)
+        except Exception as e:  # the handling layer: the old bundle (and its list) is kept
+            log.error("takedowns_reload_failed", extra={"error": type(e).__name__, "reason": reason_of(e)})
+            return
+        self._served = Served(served.engine, served.records, coverage, listed)
+        log.info(
+            "takedowns_reloaded",
+            extra={
+                "index_version": served.engine.index_version,
+                "abstracts_withheld": len(listed),
+                "takedowns_not_in_index": _not_in(listed, served.records),
+                "ms": elapsed_ms(started),
+            },
+        )
 
     def available(self, engine: TantivyEngine | None) -> list[str]:
         """Every index_version this instance can serve (`GET /meta`), sorted: each directory directly under
@@ -580,6 +609,12 @@ class IndexState:
         thread = threading.Thread(target=self.load, name="op-index-load", daemon=True)
         thread.start()
         return thread
+
+
+def _not_in(listed: Withheld, records: RecordFile) -> int:
+    """How many listed ids the index's records don't hold (a count for the log, never the ids): a paper since
+    rekeyed, or gone, or a typo (`op takedown check` names them)."""
+    return sum(i not in records for i in listed)
 
 
 def install_sighup(state: IndexState) -> Callable[[], None]:

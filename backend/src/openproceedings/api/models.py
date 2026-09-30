@@ -153,6 +153,12 @@ ABSTRACT_WITHHELD_DOC = (
     "a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources "
     "gave none."
 )
+MISSING_COUNT_DOC = (
+    "Of `records`, those without an abstract because their sources gave none (title-only). Abstracts withheld at "
+    "a rights holder's request are counted in `abstract_withheld` instead (decision-022), including ids the "
+    "takedown list names since the snapshot was built, so this can drop after a reload of the same "
+    "`index_version`; `op eval coverage` reports the snapshot's own counts."
+)
 WITHHELD_COUNT_DOC = (
     "Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, "
     "decision-022): counted here, not in `abstract_missing`."
@@ -212,9 +218,11 @@ PAPER_MODE_DOC = f"{MODE_DOC} Only with `q`: `scholar` without `q` is 422 `API_B
 
 
 class PaperResponse(Versioned):
-    # the snapshot record the index was built from (spec 01), provenance included; a withheld abstract's record
-    # comes without its abstract and its abstract claims, `content_hash` recomputed for what remains
-    paper: PaperRecord
+    paper: PaperRecord = Field(
+        description="The snapshot record the index was built from (spec 01), provenance included. When "
+        "`abstract_withheld`, it comes without its abstract and its abstract claims, and its `content_hash` is "
+        "recomputed for what it shows (decision-022)."
+    )
     matched: bool | None = Field(
         description="With `q`: whether the query (default filters included) matches this paper on this "
         "index, i.e. whether `/search` would count it in `total`. Null without `q`."
@@ -371,9 +379,7 @@ class TrackCoverage(Model):
     track: Track
     records: int = Field(description="Records of this track, every status.")
     indexed_accepted: int = Field(description="Of `records`, those with status `accepted`.")
-    abstract_missing: int = Field(
-        description="Of `records`, those without an abstract (title-only), withheld ones apart."
-    )
+    abstract_missing: int = Field(description=MISSING_COUNT_DOC)
     abstract_withheld: int = Field(description=WITHHELD_COUNT_DOC)  # TASK-136: additive
     sources: list[Source] = Field(description="The sources the track's records came from (claim sources).")
     official_accepted: int | None = Field(
@@ -405,7 +411,7 @@ class VenueYearCoverage(Model):
     venue: Venue
     year: int
     records: int
-    abstract_missing: int
+    abstract_missing: int = Field(description=MISSING_COUNT_DOC)
     abstract_withheld: int = Field(description=WITHHELD_COUNT_DOC)  # TASK-136: additive
     unknown_track: int
     unknown_status: int
@@ -422,7 +428,7 @@ class VenueYearCoverage(Model):
 
 class CoverageTotals(Model):
     records: int  # = the index's document count
-    abstract_missing: int
+    abstract_missing: int = Field(description=MISSING_COUNT_DOC)
     abstract_withheld: int = Field(description=WITHHELD_COUNT_DOC)  # TASK-136: additive
     unknown_track: int
     unknown_status: int

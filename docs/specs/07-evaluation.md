@@ -71,7 +71,11 @@ cell (manifest format 2, TASK-082).
 The methods text cites the coverage report (with its snapshot hash) as the database-scope caveat.
 `GET /coverage` serves every column per cell (`venue_years[].tracks`: sources, indexed accepted,
 `official_accepted` with its citation, `delta`, `delta_pct`, `gated`, `within_gate`, missing abstracts) and
-the statuses indexed per venue-year; `/coverage` in the UI renders the same data.
+the statuses indexed per venue-year; `/coverage` in the UI renders the same data. A takedown (TASK-136,
+decision-022) adds `abstract_withheld` beside the missing abstracts, which then leave the withheld ones out;
+the served `/coverage` also counts ids the takedown list names since the snapshot was built, while the report
+(`op eval coverage`) keeps the snapshot's own counts and says under its totals how many it withheld: the report
+is the citable figure.
 As built (TASK-054): `op eval coverage` renders `docs/results/<date>-coverage.md` from that same computation
 (`api.coverage.compute` on the index, `eval/coverage_report.py`). It adds the gate verdict over every gated
 official cell, with a cell the snapshot holds no record for as a gap (0 indexed, ✗); a cause note for every

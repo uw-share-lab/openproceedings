@@ -433,11 +433,23 @@ def _snapshot_build(ns: argparse.Namespace) -> int:
     from openproceedings import takedowns
     from openproceedings.ingest.snapshot import build
 
-    listed = takedowns.load(ns.takedowns or takedowns.list_path(ns.data_dir))  # refused before any work
+    # refused before any work; a list named with --takedowns must exist
+    listed = takedowns.load(
+        ns.takedowns or takedowns.list_path(ns.data_dir), required=ns.takedowns is not None
+    )
     result = build(ns.cache or ns.data_dir / "cache", ns.out or ns.data_dir / "snapshots", takedowns=listed)
     _print({"path": str(result.path), "snapshot_hash": result.snapshot_hash, "created": result.created,
-            "abstracts_withheld": len(listed),
+            "abstracts_withheld": list(result.withheld), "takedowns_followed": dict(result.takedowns_followed),
+            "takedowns_unmatched": list(result.takedowns_unmatched),
             "unexpected_statuses": [u.to_json() for u in result.unexpected_statuses]})  # fmt: skip
+    for old, new in sorted(result.takedowns_followed.items()):
+        print(f"op snapshot build: {old} is {new} in this build, and its abstract was withheld under that id "
+              f"too; add {new} to the takedown list and keep {old} (older index versions hold it)",
+              file=sys.stderr)  # fmt: skip
+    if result.takedowns_unmatched:
+        print(f"op snapshot build: {len(result.takedowns_unmatched)} listed id(s) no record of this build has: "
+              f"{', '.join(result.takedowns_unmatched)}; keep them listed while an index version holds them, and "
+              "check each against `op takedown check` (a typo is a problem there)", file=sys.stderr)  # fmt: skip
     return 0
 
 
@@ -1355,8 +1367,12 @@ def _takedown_check(ns: argparse.Namespace) -> int:
 
     if urlsplit(ns.api).scheme not in ("http", "https") or not urlsplit(ns.api).netloc:
         raise _usage(f"--api must be an http(s) URL, not {ns.api!r}")
-    listed = takedowns.load(ns.list or takedowns.list_path(ns.data_dir))
+    listed = takedowns.load(ns.list or takedowns.list_path(ns.data_dir), required=ns.list is not None)
     log_problems = takedowns.check_log(ns.log or takedowns.log_path(ns.data_dir), listed)
+    if not listed:
+        print(
+            "op takedown check: the takedown list names no id, so there is nothing to check", file=sys.stderr
+        )
     report = check(http(ns.api), listed)
     problems = [*(p.message for p in log_problems), *report.problems]
     for line in problems:

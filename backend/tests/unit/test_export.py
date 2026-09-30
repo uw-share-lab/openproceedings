@@ -27,6 +27,7 @@ from openproceedings.ingest.record import PaperRecord
 from openproceedings.query.parser import parse
 from pydantic import ValidationError
 from refaudit.bibtex import parse_string
+from scholarmend.parse import parse_ris
 
 from tests.unit.engine.test_index import snapshot_of
 from tests.unit.ingest.test_dedup import paper
@@ -1141,3 +1142,56 @@ def test_the_abstract_source_header_states_are_a_closed_enum() -> None:
     from openproceedings.api.openapi import CLOSED_ENUMS
 
     assert frozenset(ABSTRACT_SOURCE_STATES) == CLOSED_ENUMS["abstract source state"]
+
+
+# --- takedowns (TASK-136, decision-022) ---------------------------------------------------------------------
+
+
+def taken_down(fmt: str, records: list[dict[str, object]], sources: export.Sources | None) -> str:
+    return export.header(fmt) + "".join(
+        export.entries(fmt, records, PROVENANCE, sources=sources, withheld=frozenset({str(records[0]["id"])}))
+    )
+
+
+def test_a_rejected_papers_takedown_n1s_are_status_takedown_provenance() -> None:
+    rejected = {**PMLR_RECORD, "status": "rejected"}
+    (rec,) = parse_ris(taken_down("ris", [rejected], {str(rejected["id"]): PMLR}), "x.ris")
+    assert rec.fields["N1"] == [
+        "Submitted to International Conference on Machine Learning (ICML 2023); status: rejected (not in its proceedings).",
+        export.TAKEDOWN,
+        PROVENANCE.line(),
+    ]
+    assert "AB" not in rec.fields
+
+
+def test_a_listed_record_says_takedown_even_where_nothing_can_be_attributed() -> None:
+    """Both reasons hold for the first record; the takedown is named. The second, unlisted, says the source
+    can't be attributed (decision-021)."""
+    other = {**PMLR_RECORD, "id": "op:icml:2023:pmlr-v202-other23a"}
+    records = [PMLR_RECORD, other]
+    ris = parse_ris(taken_down("ris", records, None), "x.ris")
+    assert [r.fields["N1"][-2] for r in ris] == [export.TAKEDOWN, export.WITHHELD]
+    bib = parse_string(taken_down("bibtex", records, None))
+    assert [e.fields["abstract_withheld"] for e in bib] == [export.TAKEDOWN, export.WITHHELD]
+    rows = list(csv.DictReader(io.StringIO(taken_down("csv", records, None).removeprefix("﻿"))))
+    assert [(r["abstract_withheld"], r["abstract_withheld_reason"]) for r in rows] == [
+        ("true", "takedown"), ("true", "source_unavailable"),
+    ]  # fmt: skip
+    objs = [json.loads(x) for x in taken_down("jsonl", records, None).splitlines()]
+    assert [(o["abstract"], o["abstract_withheld_reason"]) for o in objs] == [
+        (None, "takedown"), (None, "source_unavailable"),
+    ]  # fmt: skip
+
+
+def test_every_withheld_reason_has_its_sentence() -> None:
+    assert export.WITHHELD_REASONS == tuple(export.SENTENCES) == ("takedown", "source_unavailable")
+    assert export.SENTENCES["takedown"] == export.TAKEDOWN != export.WITHHELD
+
+
+def test_a_withheld_record_the_snapshot_lacks_is_still_an_internal_error() -> None:
+    with pytest.raises(EngineInternalError, match="missing from its snapshot"):
+        list(
+            export.entries(
+                "ris", [PMLR_RECORD], PROVENANCE, sources={}, withheld=frozenset({PMLR_RECORD["id"]})
+            )
+        )  # type: ignore[arg-type]

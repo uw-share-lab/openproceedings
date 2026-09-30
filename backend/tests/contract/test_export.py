@@ -379,8 +379,10 @@ def test_the_openapi_document_describes_the_export(client: TestClient) -> None:
     assert set(headers) == {
         "X-Total", "X-Index-Version", "X-Tokenizer-Version", "X-Query-Version", "Content-Disposition",
         "X-Abstract-Source",
+        "X-Abstracts-Withheld",  # TASK-136
     }  # fmt: skip
     assert headers["X-Abstract-Source"]["schema"]["enum"] == ["attributed", "unavailable"]
+    assert headers["X-Abstracts-Withheld"]["schema"] == {"type": "integer", "minimum": 0}
     assert headers["X-Total"]["schema"]["type"] == "integer"
 
 

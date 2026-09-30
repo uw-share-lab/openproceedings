@@ -9,9 +9,18 @@ each id on the takedown list:
 - `GET /search` with that query: the paper's hit has no abstract, no abstract spans, no `abstract_source`, and
   `abstract_withheld` true;
 - `GET /export` in every format, for every index version `GET /meta` lists (`index_version=`), with the query
-  that selects the paper's venue-year (filters only, every track and status): wherever the paper is in the
-  file, it has no abstract and says a takedown withheld it (RIS `N1` / BibTeX `abstract_withheld` = the
-  takedown sentence, CSV and JSONL `abstract_withheld` true with reason `takedown`).
+  that selects a venue-year (filters only, every track and status): once per version, format and venue-year
+  that holds a listed id (so a list of many ids costs cells × versions × 4 exports, versions outermost, so each
+  pinned index is opened once). Wherever a listed paper is in the file it has no abstract and says a takedown
+  withheld it (RIS `N1` / BibTeX `abstract_withheld` = the takedown sentence, CSV and JSONL `abstract_withheld`
+  true with reason `takedown`); a paper found in one format of a version must be in all four (a format the
+  check can no longer read is a problem, never a silent pass).
+
+Only the served index answers `/papers` and `/search`, so the span and marker checks there cover it alone; the
+route tests (`tests/contract/test_takedowns.py`) cover highlights on every path, since a title query rarely
+lights abstract words. Run it as the operator's account (it reads the log), against the API itself (e.g.
+`http://127.0.0.1:8000` on the host), not through the proxy: it follows no redirect, and it waits out a 429's
+`Retry-After` (every export costs the rate limit's export weight).
 
 A listed id that no loaded index version holds is a problem too (a typo, or a paper whose id changed: `op
 snapshot build` refuses such a list as well). Every problem names the id, the index version and the response;
@@ -64,7 +73,11 @@ def cell_query(rid: str) -> str:
 def title_query(title: str, rid: str) -> str | None:
     """A query that finds the paper by (the start of) its title within its venue-year; None when the title has
     no word that reads back as itself."""
-    words = [w for w in normalize(title) if w.isascii() and w.isalnum()][:MAX_TITLE_WORDS]
+    words: list[str] = []
+    for w in normalize(title):  # the leading run of words that read back as themselves: a phrase has no gaps
+        if not (w.isascii() and w.isalnum()) or len(words) == MAX_TITLE_WORDS:
+            break
+        words.append(w)
     if not words or normalize(" ".join(words)) != words:
         return None
     return f'title:"{" ".join(words)}" {cell_query(rid)}'
@@ -79,25 +92,39 @@ def check(fetch: Fetch, listed: Withheld) -> Report:
             (f"GET /meta answered {status}: is the API up and serving an index?",), len(listed), (), 0
         )
     versions = tuple(json.loads(body)["index_versions"])
-    exports = 0
+    found = {rid for rid in sorted(listed) if _served(fetch, rid, problems)}
+    cells: dict[str, list[str]] = {}
     for rid in sorted(listed):
-        found = _served(fetch, rid, problems)
-        query = cell_query(rid)
-        for version in versions:
+        cells.setdefault(cell_query(rid), []).append(rid)
+    exports = 0
+    for version in versions:  # outermost: each pinned index is opened once, not once per id
+        for query, ids in cells.items():
+            held: dict[str, set[str]] = {}  # id → the formats of this version's export that hold it
             for fmt in FORMATS:
                 status, text = fetch(f"{API}/export", {"format": fmt, "q": query, "index_version": version})
                 exports += 1
                 if status != 200:
-                    problems.append(f"{rid}: export {fmt} of index {version} answered {status}")
+                    problems.append(f"{', '.join(ids)}: export {fmt} of index {version} answered {status}")
                     continue
-                verdict = _in_export(fmt, text, rid)
-                if verdict is None:
-                    continue
-                found = True
-                if verdict:
-                    problems.append(f"{rid}: the {fmt} export of index {version} {verdict}")
-        if not found:
-            problems.append(f"{rid}: no index this instance loads holds it; check the id on the list")
+                for rid in ids:
+                    verdict = _in_export(fmt, text, rid)
+                    if verdict is None:
+                        continue
+                    held.setdefault(rid, set()).add(fmt)
+                    if verdict:
+                        problems.append(f"{rid}: the {fmt} export of index {version} {verdict}")
+            for rid, formats in sorted(held.items()):
+                found.add(rid)
+                problems += [
+                    f"{rid}: the {fmt} export of index {version} doesn't hold it, though its "
+                    f"{sorted(formats)[0]} export does (can this check still read {fmt}?)"
+                    for fmt in FORMATS
+                    if fmt not in formats
+                ]
+    problems += [
+        f"{rid}: no index this instance loads holds it; check the id on the list"
+        for rid in sorted(listed - found)
+    ]
     return Report(tuple(problems), len(listed), versions, exports)
 
 
@@ -120,7 +147,12 @@ def _served(fetch: Fetch, rid: str, problems: list[str]) -> bool:
         problems.append(f"{rid}: its title gives no query to find its search hit by; check /search by hand")
         return True
     status, body = fetch(f"{API}/papers/{urllib.parse.quote(rid, safe=':')}", {"q": query})
-    if status == 200 and json.loads(body)["highlights"]["abstract"]:
+    lit = json.loads(body) if status == 200 else None
+    if lit is None or lit["matched"] is not True:
+        problems.append(
+            f"{rid}: /papers?q= by its title answered {status} or didn't match it; check it by hand"
+        )
+    elif lit["highlights"]["abstract"]:
         problems.append(f"{rid}: /papers?q= on index {version} highlights the withheld abstract")
     status, body = fetch(f"{API}/search", {"q": query, "limit": "200"})
     if status != 200:
@@ -183,21 +215,34 @@ def _records(fmt: str, text: str, rid: str) -> Iterator[tuple[bool, bool]]:
                 )
 
 
-def http(base: str, *, retries: int = 5) -> Fetch:
-    """A `Fetch` against the API at `base` (`http://127.0.0.1:8000`), waiting out a 429's `Retry-After`."""
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse every redirect: the check asks the API itself, so a redirect means it is talking to something else
+    (the refusal comes back as the 3xx, which the check reports as a problem)."""
+
+    def redirect_request(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+
+def retry_after(value: str | None) -> float:
+    """A 429's `Retry-After` as seconds to wait: its whole seconds, capped at 60; 1 when absent or not seconds."""
+    return float(min(int(value), 60)) if value is not None and value.strip().isdigit() else 1.0
+
+
+def http(base: str, *, retries: int = 5, timeout: float = 300.0) -> Fetch:
+    """A `Fetch` against the API at `base` (`http://127.0.0.1:8000`, an http(s) URL the CLI checked): no
+    redirects, `timeout` seconds per socket operation, a 429 waited out (`Retry-After`) up to `retries` times."""
     root = base.rstrip("/")
+    opener = urllib.request.build_opener(_NoRedirect)
 
     def fetch(path: str, params: Mapping[str, str]) -> tuple[int, str]:
         url = root + path + (f"?{urllib.parse.urlencode(params)}" if params else "")
         for attempt in range(retries + 1):
             try:
-                with urllib.request.urlopen(
-                    url, timeout=600
-                ) as r:  # an operator's own http(s) URL (the CLI checks)
+                with opener.open(url, timeout=timeout) as r:
                     return int(r.status), r.read().decode("utf-8")
             except urllib.error.HTTPError as e:
                 if e.code == 429 and attempt < retries:
-                    time.sleep(min(float(e.headers.get("Retry-After") or 1), 60))
+                    time.sleep(retry_after(e.headers.get("Retry-After")))
                     continue
                 return e.code, e.read().decode("utf-8", "replace")
         raise AssertionError("unreachable")

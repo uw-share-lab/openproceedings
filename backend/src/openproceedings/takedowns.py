@@ -24,11 +24,10 @@ handling). Its `content_hash` is recomputed for what remains.
 from __future__ import annotations
 
 import json
+import os
 import stat
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from openproceedings.diagnostics import clip
 from openproceedings.ingest.record import PaperRecord, is_paper_id
@@ -77,11 +76,18 @@ def parse(text: str, *, name: str = "withheld.txt") -> Withheld:
     return frozenset(ids)
 
 
-def load(path: Path) -> Withheld:
-    """The list at `path`; empty when there is no such file. TakedownError when it can't be read or parsed."""
+def load(path: Path, *, required: bool = False) -> Withheld:
+    """The list at `path`; empty when there is no such file, unless `required` (a path the operator named, or
+    a list the API was already applying: a missing file then lifts nothing silently). TakedownError when it
+    can't be read or parsed, or is required and missing (reason `takedowns_missing`)."""
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
+        if required:
+            raise TakedownError(
+                f"{path.name} is missing: restore the takedown list (or empty it to lift every takedown)",
+                reason="takedowns_missing",
+            ) from None
         return NONE
     except (OSError, UnicodeDecodeError) as e:
         raise TakedownError(
@@ -101,11 +107,6 @@ def withhold_record(record: PaperRecord) -> PaperRecord:
     )
 
 
-def withhold_display(record: Mapping[str, Any]) -> dict[str, Any]:
-    """An index's display record (`TantivyEngine.display`) with its abstract withheld."""
-    return {**record, "abstract": None}
-
-
 @dataclass(frozen=True, slots=True)
 class LogProblem:
     """What `check_log` found wrong, for `op takedown check` to print (never a requester's details)."""
@@ -114,14 +115,22 @@ class LogProblem:
 
 
 def check_log(path: Path, listed: Withheld) -> list[LogProblem]:
-    """The log's problems: readable by anyone but its owner (mode & 0o077), not JSON Lines of `LOG_FIELDS`
-    with a `decision` in `DECISIONS`, or a listed id with no `withheld` entry. A list with no log is a problem
+    """The log's problems: readable by anyone but its owner (mode & 0o077), owned by another account than the
+    one checking it (the operator's), not JSON Lines of `LOG_FIELDS` with a `decision` in `DECISIONS`, or a
+    listed id whose latest entry (the last line naming it) isn't `withheld`. A list with no log is a problem
     only when the list names an id. Messages name line numbers and record ids, never other values."""
     try:
-        mode = path.stat().st_mode
+        st = path.stat()
     except FileNotFoundError:
         return [LogProblem(f"{path.name} is missing: log each listed takedown")] if listed else []
+    mode = st.st_mode
     problems: list[LogProblem] = []
+    if st.st_uid != os.getuid():
+        problems.append(
+            LogProblem(
+                f"{path.name} is owned by another account: it belongs to the operator's, who runs this check"
+            )
+        )
     if stat.S_IMODE(mode) & 0o077:
         problems.append(
             LogProblem(
@@ -133,7 +142,7 @@ def check_log(path: Path, listed: Withheld) -> list[LogProblem]:
         lines = path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError) as e:
         return [*problems, LogProblem(f"{path.name} can't be read ({type(e).__name__})")]
-    logged: set[str] = set()
+    latest: dict[str, str] = {}
     for n, raw in enumerate(lines, start=1):
         if not raw.strip():
             continue
@@ -151,10 +160,10 @@ def check_log(path: Path, listed: Withheld) -> list[LogProblem]:
                 LogProblem(f"{path.name} line {n}: record_id or decision ({'/'.join(DECISIONS)}) is invalid")
             )
             continue
-        if decision == "withheld":
-            logged.add(rid)
+        latest[rid] = decision
     problems += [
-        LogProblem(f"{rid} is listed but {path.name} has no `withheld` entry for it")
-        for rid in sorted(listed - logged)
+        LogProblem(f"{rid} is listed but its latest entry in {path.name} is not `withheld`")
+        for rid in sorted(listed)
+        if latest.get(rid) != "withheld"
     ]
     return problems
