@@ -15,7 +15,9 @@ const GATE = path.join(ROOT, "deploy", "web-build-gate.sh");
 const DOCKERFILE = readFileSync(path.join(ROOT, "deploy", "web.Dockerfile"), "utf8");
 
 function gate(env: Record<string, string>) {
-  const run = spawnSync("sh", [GATE], { env: { PATH: process.env.PATH ?? "", ...env }, encoding: "utf8" });
+  // only these variables: nothing from the test's own environment reaches the gate
+  const clean = { PATH: process.env.PATH ?? "", ...env } as unknown as NodeJS.ProcessEnv;
+  const run = spawnSync("sh", [GATE], { env: clean, encoding: "utf8" });
   return { status: run.status, err: run.stderr, out: run.stdout };
 }
 
