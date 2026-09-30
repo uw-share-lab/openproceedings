@@ -12,7 +12,8 @@ matter to a gate:
     the argv comes back as an `Argv` that records the `VAR=val` words and whether xargs runs it;
   * command names compare by basename (`/usr/bin/git` is `git`);
   * redirections leave argv as (operator, target) pairs (`redirect_targets`);
-  * `cd <dir>` is tracked and `bash -c "…"` / `eval "…"` are recursed into.
+  * `cd <dir>` is tracked and `bash -c "…"` / `eval "…"` are recursed into;
+  * a git alias (`-c alias.<name>=…` or the repo's config; `!shell` ones too) becomes what git runs for it.
 A command that cannot be parsed raises ParseError; every gate treats that as a reason to BLOCK a command
 that looks like what it guards (fail closed), never to allow it.
 
@@ -103,7 +104,78 @@ RESERVED = {
     "esac",
     "function",
 }
-GIT_VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
+GIT_VALUE_OPTS = {"-C", "-c", "--config-env", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
+# git's builtins: git never lets an alias shadow one, so only another name is looked up as an alias (a name
+# missing here costs one `git config` call, never a wrong answer).
+GIT_BUILTINS = frozenset(
+    [
+        "add",
+        "am",
+        "apply",
+        "bisect",
+        "blame",
+        "branch",
+        "cat-file",
+        "check-ignore",
+        "check-ref-format",
+        "checkout",
+        "cherry",
+        "cherry-pick",
+        "clean",
+        "clone",
+        "commit",
+        "commit-tree",
+        "config",
+        "describe",
+        "diff",
+        "fetch",
+        "for-each-ref",
+        "format-patch",
+        "fsck",
+        "gc",
+        "grep",
+        "hash-object",
+        "help",
+        "init",
+        "log",
+        "ls-files",
+        "ls-remote",
+        "ls-tree",
+        "merge",
+        "merge-base",
+        "mv",
+        "notes",
+        "pull",
+        "push",
+        "range-diff",
+        "rebase",
+        "reflog",
+        "remote",
+        "reset",
+        "restore",
+        "rev-list",
+        "rev-parse",
+        "revert",
+        "rm",
+        "shortlog",
+        "show",
+        "show-ref",
+        "sparse-checkout",
+        "stage",
+        "stash",
+        "status",
+        "switch",
+        "symbolic-ref",
+        "tag",
+        "update-index",
+        "update-ref",
+        "var",
+        "version",
+        "worktree",
+        "write-tree",
+    ]
+)
+ALIAS_DEPTH = 8  # git itself refuses a non-shell alias loop; this bounds shell aliases calling git aliases
 GH_VALUE_OPTS = {"-R", "--repo"}
 HEREDOC = re.compile(r"<<(?P<dash>-?)[ \t]*\\?(?P<q>['\"]?)(?P<delim>[A-Za-z_][\w-]*)(?P=q)")
 
@@ -396,6 +468,11 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[list[str], str, list
                 yield [], state["dir"], redirects
             continue
         head = argv[0]
+        if head == "git":
+            # an alias is replaced by what git runs for it (TASK-067: `git -c alias.p=push p origin x`)
+            for expanded, d in expand_git_alias(argv, state["dir"], state.get("depth", 0)):
+                yield expanded, d, redirects
+            continue
         if head == "cd" and len(argv) > 1 and not argv[1].startswith("-"):
             state["dir"] = _resolve(argv[1], state["dir"])
             continue
@@ -414,22 +491,87 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[list[str], str, list
         yield argv, state["dir"], redirects
 
 
-def git_subcommand(argv: list[str], directory: str) -> tuple[str, list[str], str] | None:
-    """For a `git ...` argv return (subcommand, args, effective_dir), honouring chained -C; else None."""
-    if not argv or argv[0] != "git":
-        return None
-    eff = directory
+def _git_options(argv: list[str], directory: str) -> tuple[int, str, dict[str, str], str | None]:
+    """Read git's global options: (index of the subcommand, effective dir after chained -C, the `-c` /
+    `--config-env` settings with lower-cased keys (a `--config-env` value is unknown: ''), the git dir from
+    `--git-dir` or a `GIT_DIR=` before the command, resolved against the effective dir, or None)."""
+    eff, config, gitdir = directory, {}, getattr(argv, "assigns", {}).get("GIT_DIR")
     j = 1
     while j < len(argv) and argv[j].startswith("-"):
-        if argv[j] in GIT_VALUE_OPTS:
-            if argv[j] == "-C" and j + 1 < len(argv):
-                eff = _resolve(argv[j + 1], eff)
-            j += 2
-        else:
+        opt, eq, attached = argv[j].partition("=") if argv[j].startswith("--") else (argv[j], "", "")
+        if opt not in GIT_VALUE_OPTS:
             j += 1
+            continue
+        value = attached if eq else (argv[j + 1] if j + 1 < len(argv) else "")
+        j += 1 if eq else 2
+        if opt == "-C":
+            eff = _resolve(value, eff)
+        elif opt in ("-c", "--config-env"):
+            key, _, v = value.partition("=")
+            config[key.lower()] = v if opt == "-c" else ""
+        elif opt == "--git-dir":
+            gitdir = value
+    return j, eff, config, (_resolve(gitdir, eff) if gitdir else None)
+
+
+def git_subcommand(argv: list[str], directory: str) -> tuple[str, list[str], str] | None:
+    """For a `git ...` argv return (subcommand, args, effective_dir), honouring chained -C; else None.
+    Aliases are already expanded by `simple_commands` (`expand_git_alias`)."""
+    if not argv or argv[0] != "git":
+        return None
+    j, eff, _, _ = _git_options(argv, directory)
     if j >= len(argv):
         return None
     return argv[j], argv[j + 1 :], eff
+
+
+def git_config(argv: list[str]) -> dict[str, str]:
+    """The `-c key=value` / `--config-env key=…` settings on a `git ...` argv, keys lower-cased."""
+    return _git_options(argv, ".")[2] if argv and argv[0] == "git" else {}
+
+
+def git_dir(argv: list[str], directory: str) -> str | None:
+    """The repository a `git ...` argv runs against when it isn't the one `directory` is in: `--git-dir`,
+    else a `GIT_DIR=` assignment before it (TASK-067: `GIT_DIR=<main>/.git git commit` from a worktree)."""
+    return _git_options(argv, directory)[3] if argv and argv[0] == "git" else None
+
+
+def expand_git_alias(argv: Argv, directory: str, depth: int = 0) -> list[tuple[Argv, str]]:
+    """The command(s) git runs for `git [opts] <alias> args`: an alias from `-c alias.<name>=…` or the repo's
+    config (`git config --get alias.<name>`) is replaced by its words, and a `!shell` alias by the commands
+    in its text (run from the top of the worktree, the outer `-c` settings passed on, as git does). Anything
+    else comes back unchanged as [(argv, directory)]. Raises ParseError on an unreadable or looping alias."""
+    j, eff, config, gitdir = _git_options(argv, directory)
+    if j >= len(argv) or argv[j] in GIT_BUILTINS:
+        return [(argv, directory)]
+    name = argv[j].lower()
+    body = config.get(f"alias.{name}")
+    if body is None:
+        body = git(eff, *(["--git-dir", gitdir] if gitdir else []), "config", "--get", f"alias.{name}")
+    if not body:
+        return [(argv, directory)]  # not an alias: a git-<name> program, or a typo git rejects
+    if depth >= ALIAS_DEPTH:
+        raise ParseError(f"git alias {name!r} nests too deep (a loop?)")
+    rest = argv[j + 1 :]
+    if not body.startswith("!"):
+        try:
+            words = shlex.split(body)
+        except ValueError as exc:
+            raise ParseError(f"git alias {name!r}: {exc}") from exc
+        expanded = Argv([*argv[:j], *words, *rest], argv.via_xargs, argv.assigns)
+        return expand_git_alias(expanded, directory, depth + 1)
+    # A shell alias: git runs `sh -c '<text> "$@"'` with the args at the worktree top; its git commands see
+    # the outer -c settings (GIT_CONFIG_PARAMETERS) and git dir (GIT_DIR).
+    outer_c = [w for k, v in config.items() for w in ("-c", f"{k}={v}")]
+    assigns = {**argv.assigns, **({"GIT_DIR": gitdir} if gitdir else {})}
+    text = " ".join([body[1:], *(shlex.quote(r) for r in rest)])
+    out = []
+    for inner, d, _ in _walk(tokenize(text), {"dir": repo_root(eff), "depth": depth + 1}):
+        if inner and inner[0] == "git":
+            inner = Argv(["git", *outer_c, *inner[1:]], inner.via_xargs, {**assigns, **inner.assigns})
+        inner.via_xargs = inner.via_xargs or argv.via_xargs
+        out.append((inner, d))
+    return out
 
 
 def gh_subcommand(argv: list[str]) -> tuple[str, str, list[str]] | None:

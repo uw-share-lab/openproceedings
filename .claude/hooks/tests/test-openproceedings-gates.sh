@@ -481,6 +481,34 @@ check_hides True  'ls | xargs git add -f'
 check_hides True  'ls | xargs /usr/bin/git commit'
 check_hides False 'ls | xargs echo'
 check_hides False 'rm -f x'
+# git -c config overrides and aliases: the gate must judge what git will actually push
+check $R block "-c remote.origin.push picks the ref"  "$(payload_bash 'git -c remote.origin.push=refs/heads/other2:refs/heads/other2 push origin')"
+check $R block "-c push.default, no refspec"          "$(payload_bash 'git -c push.default=matching push origin')"
+check $R block "-c remote.pushDefault, no refspec"    "$(payload_bash 'git -c remote.pushDefault=origin push')"
+check $R allow "-c of an unrelated key"               "$(payload_bash 'git -c color.ui=never push origin mut')"
+check $R allow "-c remote.origin.push, refspec named" "$(payload_bash 'git -c remote.origin.push=other2 push origin mut')"
+check $R block "-c alias.p=push p (unreviewed)"       "$(payload_bash 'git -c alias.p=push p origin other2')"
+check $R allow "-c alias.p=push p (approved)"         "$(payload_bash 'git -c alias.p=push p origin mut')"
+check $R block "-c alias.P (names are case-blind)"    "$(payload_bash 'git -c alias.P=push p origin other2')"
+check $R block "alias with options: -c 'alias.p=push -u'" "$(payload_bash "git -c 'alias.p=push -u' p origin other2")"
+check $R block "shell alias '!git push'"              "$(payload_bash "git -c 'alias.sp=!git push' sp origin other2")"
+check $R block "alias to an alias"                    "$(payload_bash 'git -c alias.a=b -c alias.b=push a origin other2')"
+g config alias.pp push
+check $R block "repo-configured alias (git config)"   "$(payload_bash 'git pp origin other2')"
+check $R allow "repo alias cannot shadow a builtin"   "$(payload_bash 'git -c alias.status=push status origin other2')"
+g config --unset alias.pp
+git init -q "$TMP/aliasrepo" && git -C "$TMP/aliasrepo" config alias.zz push
+check $R block "alias read from the --git-dir repo"   "$(payload_bash "git --git-dir='$TMP/aliasrepo/.git' zz origin other2")"
+check $R block "--config-env remote.origin.push=VAR"  "$(payload_bash 'git --config-env remote.origin.push=V push origin')"
+check $R allow "self-calling shell alias is bounded"  "$(payload_bash "git -c 'alias.lp=!git lp' lp")"
+check $R block "git P runs alias.p (names are case-blind)" "$(payload_bash 'git -c alias.p=push P origin other2')"
+check $R allow "-c remote.origin.pushurl is not a refspec" "$(payload_bash 'git -c remote.origin.pushurl=x push origin')"
+check $R block "shell alias sees the outer -c settings" "$(payload_bash "git -c remote.origin.push=other2:other2 -c 'alias.sp=!git push origin' sp")"
+check $R block "shell alias sees the outer --git-dir"  "$(payload_bash "git --git-dir='$TMP/wt-other/.git' -c 'alias.sp=!git push origin HEAD' sp")"
+check $R block "xargs through an alias"               "$(payload_bash 'echo other2 | xargs git -c alias.p=push p origin')"
+check $R block "xargs through a shell alias"          "$(payload_bash "echo other2 | xargs git -c 'alias.sp=!git push origin' sp")"
+check $R block "--git-dir: HEAD of the other worktree" "$(payload_bash "git --git-dir='$TMP/wt-other/.git' push origin HEAD")"
+check $R block "GIT_DIR=: HEAD of the other worktree"  "$(payload_bash "GIT_DIR='$TMP/wt-other/.git' git push origin HEAD")"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")

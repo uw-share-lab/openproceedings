@@ -24,7 +24,9 @@
 #
 # The decision tokenizes the command and parses each git subcommand and its push refspecs — it does
 # not substring-match the raw text — and it recurses into `bash -c "..."`/`sh -lc '...'` wrappers
-# and `eval "..."`. Exit 2 blocks the call and feeds stderr back to the agent.
+# and `eval "..."`. Git aliases are expanded first (cmdparse.expand_git_alias), and a refspec-less push
+# whose `git -c` settings choose the destination is refused. Exit 2 blocks the call and feeds stderr
+# back to the agent.
 #
 # Branch/worktree awareness: the "current branch" is resolved against the ACTUAL target of the git
 # operation, not a bare `git rev-parse` in the hook subprocess's own ambient CWD. That ambient CWD is
@@ -70,15 +72,16 @@ except Exception:
 branch=$(git -C "$hook_cwd" rev-parse --abbrev-ref HEAD 2>/dev/null)
 
 verdict=$(HOOK_INPUT="$input" HOOK_CWD="$hook_cwd" HOOK_LIB="$(cd "$(dirname "$0")" && pwd)/lib" python3 <<'PY' 2>/dev/null
-import json, os, shlex, subprocess, sys
+import json, os, re, shlex, subprocess, sys
 
 # openproceedings: tokenize with the shared cmdparse tokenizer so unspaced `;`/`&&`, newlines, `(`/`)` and
 # redirects are separate tokens (security review round 2: `if true; then git push origin HEAD:dev; fi` and
 # `git push origin HEAD:dev;` read `dev;` as the ref), and compare command names by basename
 # (`/usr/bin/git`).
 sys.path.insert(0, os.environ.get("HOOK_LIB", ""))
-from cmdparse import (Argv, base as _base, git_subcommand, is_redirect as _is_redirect, is_separator as _is_sep,
-                      strip_prefixes, tokenize as _tokenize, xargs_hides_args)
+from cmdparse import (Argv, ParseError, base as _base, expand_git_alias, git_config, git_subcommand,
+                      is_redirect as _is_redirect, is_separator as _is_sep, strip_prefixes, tokenize as _tokenize,
+                      xargs_hides_args)
 
 def _split(text):
     """Punctuation-aware tokens; separators normalised into SEPARATORS, redirect operators dropped."""
@@ -101,6 +104,8 @@ SEPARATORS = {"&&", "||", ";", "|", "&"}  # _split() maps every separator (incl.
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 SOURCE_CMDS = {".", "source"}  # always run a file; no -c-string form exists for these
 PROTECTED = {"main", "dev"}    # branches that only a merged PR may write; extend here to add more
+# `git -c` keys (lower-cased) that decide what a refspec-less `git push` sends and where
+PUSH_TARGET_CONFIG = re.compile(r"remote\..+\.push|push\.default|remote\.pushdefault")
 
 _branch_cache = {}
 
@@ -143,14 +148,19 @@ def dest_protected(refspec):
     return dst in PROTECTED
 
 
-def push_verdict(args, directory):
-    """Classify the args following `git push`, using the branch checked out in `directory`."""
+def push_verdict(args, directory, config):
+    """Classify the args following `git push`, using the branch checked out in `directory` and the
+    `git -c` settings in `config`."""
     flags = [a for a in args if a.startswith("-")]
     positionals = [a for a in args if not a.startswith("-")]
     refspecs = positionals[1:]  # positionals[0] is the remote
 
     # --mirror/--all can create or delete a protected branch without ever naming it.
     if any(f in ("--mirror", "--all") for f in flags):
+        return "protected-ref"
+    # With no refspec, `-c remote.<name>.push` / `push.default` / `remote.pushDefault` decide what is
+    # pushed where (`git -c remote.origin.push=HEAD:refs/heads/dev push origin`): refuse to guess.
+    if not refspecs and any(PUSH_TARGET_CONFIG.fullmatch(k) for k in config):
         return "protected-ref"
 
     # Any refspec whose destination is protected — update OR delete — is refused from anywhere.
@@ -167,6 +177,38 @@ def push_verdict(args, directory):
         return "allow"     # deleting a remote feature ref — cannot touch a protected branch
     if get_branch(directory) in PROTECTED:
         return "protected"  # ordinary push while standing on a protected branch
+    return "allow"
+
+
+def git_verdict(argv, directory):
+    """Classify one `git …` argv (aliases already expanded), run from `directory`."""
+    # git_subcommand skips git's global options to reach the subcommand, CHAINING every `-C <dir>` the
+    # way git itself does (git's own semantics, and this takes priority over any `cd`): multiple `-C`
+    # flags compose left-to-right — each relative `-C` is resolved against the directory the
+    # PRECEDING `-C` established, an absolute `-C` resets the base. Keeping only the last value
+    # and resolving it against the outer dir would mis-resolve `-C a -C ../b` and let a
+    # main-worktree target slip through. The chain starts at `state["dir"]` (the `cd`/cwd base).
+    g = git_subcommand(argv, directory)
+    if g is None:
+        return "allow"
+    sub, args, effective_dir = g
+
+    if xargs_hides_args(argv, effective_dir):
+        return "xargs"  # it appends refspecs/paths from stdin that this gate cannot see
+    if sub == "push":
+        return push_verdict(args, effective_dir, git_config(argv))
+    if sub == "pull":
+        return "allow"  # sync carve-out: fetch + integrate into LOCAL main only; see header rationale.
+    if sub == "merge":
+        # sync carve-out: a fast-forward-only merge creates no merge commit, so it's allowed on a
+        # protected branch. Require --ff-only AND reject --no-ff/--ff — those OVERRIDE --ff-only and
+        # would still make a merge commit (a commit on the protected branch). A plain merge is
+        # likewise a commit and blocked.
+        ff_sync = "--ff-only" in args and not ({"--no-ff", "--ff"} & set(args))
+        if get_branch(effective_dir) in PROTECTED and not ff_sync:
+            return "protected-merge"
+    elif sub == "commit" and get_branch(effective_dir) in PROTECTED:
+        return "protected"
     return "allow"
 
 
@@ -281,35 +323,14 @@ def analyze(tokens, state):
         argv.via_xargs = argv.via_xargs or state.get("xargs", False)
         i = k
 
-        # git_subcommand skips git's global options to reach the subcommand, CHAINING every `-C <dir>` the
-        # way git itself does (git's own semantics, and this takes priority over any `cd`): multiple `-C`
-        # flags compose left-to-right — each relative `-C` is resolved against the directory the
-        # PRECEDING `-C` established, an absolute `-C` resets the base. Keeping only the last value
-        # and resolving it against the outer dir would mis-resolve `-C a -C ../b` and let a
-        # main-worktree target slip through. The chain starts at `state["dir"]` (the `cd`/cwd base).
-        g = git_subcommand(argv, local["dir"])
-        if g is None:
-            continue
-        sub, args, effective_dir = g
-
-        if xargs_hides_args(argv, effective_dir):
-            return "xargs"  # it appends refspecs/paths from stdin that this gate cannot see
-        if sub == "push":
-            v = push_verdict(args, effective_dir)
+        try:
+            calls = expand_git_alias(argv, local["dir"])  # `git -c alias.p=push p …` → what git runs
+        except ParseError:
+            return "parse-fail"
+        for call, d in calls:
+            v = git_verdict(call, d)
             if v != "allow":
                 return v
-        elif sub == "pull":
-            pass  # sync carve-out: fetch + integrate into LOCAL main only; see header rationale.
-        elif sub == "merge":
-            # sync carve-out: a fast-forward-only merge creates no merge commit, so it's allowed on a
-            # protected branch. Require --ff-only AND reject --no-ff/--ff — those OVERRIDE --ff-only and
-            # would still make a merge commit (a commit on the protected branch). A plain merge is
-            # likewise a commit and blocked.
-            ff_sync = "--ff-only" in args and not ({"--no-ff", "--ff"} & set(args))
-            if get_branch(effective_dir) in PROTECTED and not ff_sync:
-                return "protected-merge"
-        elif sub == "commit" and get_branch(effective_dir) in PROTECTED:
-            return "protected"
 
     return "allow"
 

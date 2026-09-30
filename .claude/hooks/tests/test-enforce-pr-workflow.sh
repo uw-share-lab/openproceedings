@@ -201,6 +201,19 @@ check feature/x block 'echo dev | xargs git push origin'           # xargs suppl
 check feature/x block "echo origin dev | xargs sh -c 'git push \"\$@\"' sh"   # ... also through sh -c "\$@"
 check feature/x allow 'echo x | xargs git log -1'                  # positive control
 
+echo "git -c config overrides and aliases are expanded before classifying (TASK-067):"
+check feature/x block 'git -c remote.origin.push=HEAD:refs/heads/dev push origin'   # -c picks the destination
+check feature/x block 'git -c push.default=matching push origin'
+check feature/x allow 'git -c color.ui=never push origin feat'     # positive control: unrelated key
+check feature/x block 'git -c alias.p=push p origin HEAD:dev'
+check main      block 'git -c alias.ci=commit ci -m x'
+check feature/x allow 'git -c alias.ci=commit ci -m x'             # positive control: off main
+check feature/x block "git -c 'alias.sp=!git push origin HEAD:dev' sp"   # shell alias: its git commands are read
+check feature/x allow "git -c 'alias.sp=!git push origin feat' sp"      # positive control
+git -C "$REPO" config alias.mc commit
+check main      block 'git mc -m x'                                # alias from the repo's own config
+git -C "$REPO" config --unset alias.mc
+
 echo "eval re-parses its argument:"
 check main       block 'eval "git push origin main"'
 check main       block 'eval "git commit -m x"'

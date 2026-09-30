@@ -918,5 +918,150 @@
   "file": ".claude/hooks/enforce-pr-workflow.sh",
   "old": "        argv.via_xargs = argv.via_xargs or state.get(\"xargs\", False)\n",
   "new": ""
+ },
+ {
+  "label": "git -c not read",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            config[key.lower()] = v if opt == \"-c\" else \"\"",
+  "new": "            pass"
+ },
+ {
+  "label": "git -c keys case-sensitive",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            config[key.lower()] = v if opt == \"-c\" else \"\"",
+  "new": "            config[key] = v if opt == \"-c\" else \"\""
+ },
+ {
+  "label": "--config-env not a value option",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "GIT_VALUE_OPTS = {\"-C\", \"-c\", \"--config-env\",",
+  "new": "GIT_VALUE_OPTS = {\"-C\", \"-c\","
+ },
+ {
+  "label": "--git-dir not read",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            gitdir = value",
+  "new": "            pass"
+ },
+ {
+  "label": "GIT_DIR= assignment ignored",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "getattr(argv, \"assigns\", {}).get(\"GIT_DIR\")",
+  "new": "None"
+ },
+ {
+  "label": "git aliases not expanded in simple_commands",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            for expanded, d in expand_git_alias(argv, state[\"dir\"], state.get(\"depth\", 0)):",
+  "new": "            for expanded, d in [(argv, state[\"dir\"])]:"
+ },
+ {
+  "label": "builtins looked up as aliases",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if j >= len(argv) or argv[j] in GIT_BUILTINS:",
+  "new": "    if j >= len(argv):"
+ },
+ {
+  "label": "-c alias ignored",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    body = config.get(f\"alias.{name}\")",
+  "new": "    body = None"
+ },
+ {
+  "label": "repo alias not looked up",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        body = git(eff, *([\"--git-dir\", gitdir] if gitdir else []), \"config\", \"--get\", f\"alias.{name}\")",
+  "new": "        body = \"\""
+ },
+ {
+  "label": "alias lookup ignores --git-dir",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        body = git(eff, *([\"--git-dir\", gitdir] if gitdir else []), \"config\"",
+  "new": "        body = git(eff, \"config\""
+ },
+ {
+  "label": "alias names case-sensitive",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    name = argv[j].lower()",
+  "new": "    name = argv[j]"
+ },
+ {
+  "label": "alias depth unbounded",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if depth >= ALIAS_DEPTH:",
+  "new": "    if False:"
+ },
+ {
+  "label": "shell alias not expanded",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if not body.startswith(\"!\"):",
+  "new": "    if True:"
+ },
+ {
+  "label": "alias drops the xargs flag",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        expanded = Argv([*argv[:j], *words, *rest], argv.via_xargs, argv.assigns)",
+  "new": "        expanded = Argv([*argv[:j], *words, *rest])"
+ },
+ {
+  "label": "shell alias drops outer -c",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            inner = Argv([\"git\", *outer_c, *inner[1:]]",
+  "new": "            inner = Argv([\"git\", *inner[1:]]"
+ },
+ {
+  "label": "shell alias drops outer git dir",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    assigns = {**argv.assigns, **({\"GIT_DIR\": gitdir} if gitdir else {})}",
+  "new": "    assigns = {**argv.assigns}"
+ },
+ {
+  "label": "shell alias args not appended",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    text = \" \".join([body[1:], *(shlex.quote(r) for r in rest)])",
+  "new": "    text = body[1:]"
+ },
+ {
+  "label": "shell alias drops the xargs flag",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        inner.via_xargs = inner.via_xargs or argv.via_xargs\n",
+  "new": ""
+ },
+ {
+  "label": "require-review: -c push target ignored",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "            if any(PUSH_TARGET_CONFIG.fullmatch(k) for k in git_config(argv)):",
+  "new": "            if False:"
+ },
+ {
+  "label": "require-review: push target keys prefix-matched",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "            if any(PUSH_TARGET_CONFIG.fullmatch(k) for k in git_config(argv)):",
+  "new": "            if any(PUSH_TARGET_CONFIG.match(k) for k in git_config(argv)):"
+ },
+ {
+  "label": "require-review: --git-dir ignored",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "        repo = [\"--git-dir\", gd] if gd else []",
+  "new": "        repo = []"
+ },
+ {
+  "label": "PR gate: -c push target ignored",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if not refspecs and any(PUSH_TARGET_CONFIG.fullmatch(k) for k in config):",
+  "new": "    if False:"
+ },
+ {
+  "label": "PR gate: aliases not expanded",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "            calls = expand_git_alias(argv, local[\"dir\"])",
+  "new": "            calls = [(argv, local[\"dir\"])]"
+ },
+ {
+  "label": "PR gate: unreadable alias allowed (EQUIVALENT: git refuses an unreadable alias, so the fallback's verdict is the same)",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        except ParseError:\n            return \"parse-fail\"",
+  "new": "        except ParseError:\n            return \"allow\"",
+  "equivalent": true
  }
 ]

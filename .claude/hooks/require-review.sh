@@ -7,7 +7,9 @@
 #    every finding was dispositioned (fixed / task-NNN / rejected with a reason). A new commit after the
 #    review has a new sha, so it needs a new review: an older approval can never satisfy the gate.
 #    Sources checked: each refspec's source (deletions `:dst` skipped, others still checked), HEAD when
-#    no refspec is given, and every local branch for --all / --mirror.
+#    no refspec is given, and every local branch for --all / --mirror; in the `--git-dir`/`GIT_DIR=` repo
+#    when one is named. A refspec-less push whose `git -c` settings choose what is pushed (remote.<name>.push,
+#    push.default, remote.pushDefault) is blocked. Aliases are expanded first (cmdparse).
 # 2. `gh pr create` (and its alias `gh pr new`) is blocked unless (1) holds for the PR head AND the branch
 #    adds or extends a `.claude/learnings/` entry relative to the PR base (default: the repo default
 #    branch, `dev`). Opt out only for a PR that genuinely taught nothing by passing `--label no-learning`;
@@ -26,10 +28,13 @@ input=$(cat)
 HOOK_INPUT="$input" python3 - "$HOOK_DIR" <<'PY'
 import os, re, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import ParseError, gh_subcommand, git, git_subcommand, opt_value, opt_values, read_payload, simple_commands, xargs_hides_args
+from cmdparse import (ParseError, gh_subcommand, git, git_config, git_dir, git_subcommand, opt_value, opt_values,
+                      read_payload, simple_commands, xargs_hides_args)
 
 ENTRY_NAME = re.compile(r"^\.claude/learnings/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$")  # same rule as learnings_index.py
 PUSH_VALUE_OPTS = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
+# `git -c` keys (lower-cased) that decide what a refspec-less `git push` sends and where
+PUSH_TARGET_CONFIG = re.compile(r"remote\..+\.push|push\.default|remote\.pushdefault")
 
 def review_status(directory, sha):
     common = git(directory, "rev-parse", "--path-format=absolute", "--git-common-dir")
@@ -103,6 +108,8 @@ for argv, d in commands:
     g = git_subcommand(argv, d)
     if g and g[0] == "push":
         _, args, eff = g
+        gd = git_dir(argv, d)  # `git --git-dir=<other>/.git push origin HEAD` pushes the other worktree's HEAD
+        repo = ["--git-dir", gd] if gd else []
         if xargs_hides_args(argv, d):
             block(["Review gate: `xargs git push` is blocked — xargs appends refspecs this gate cannot see, so it",
                    "cannot tell which commits are pushed. Name the refspecs on the command line instead."])
@@ -110,7 +117,7 @@ for argv, d in commands:
         if "--delete" in flags or "-d" in flags:
             continue  # every named ref is deleted; no code is pushed
         if "--all" in flags or "--mirror" in flags or "--branches" in flags:
-            heads = git(eff, "for-each-ref", "--format=%(refname:short) %(objectname)", "refs/heads")
+            heads = git(eff, *repo, "for-each-ref", "--format=%(refname:short) %(objectname)", "refs/heads")
             for line in heads.splitlines():
                 name, sha = line.rsplit(" ", 1)
                 need_review(eff, sha, f"`git push --all` (branch {name})")
@@ -118,11 +125,15 @@ for argv, d in commands:
         refspecs = push_positionals(args)[1:]
         pushed = [r.lstrip("+").split(":", 1)[0] for r in refspecs if not r.lstrip("+").startswith(":")]
         if not refspecs:
+            if any(PUSH_TARGET_CONFIG.fullmatch(k) for k in git_config(argv)):
+                # `git -c remote.origin.push=other:other push origin` pushes `other`, not HEAD (TASK-067)
+                block(["Review gate: this `git push` names no refspec, and its `git -c` settings choose what is",
+                       "pushed (remote.<name>.push / push.default / remote.pushDefault). Name the refspec instead."])
             pushed = ["HEAD"]
         if not pushed and ("--tags" in flags or "--follow-tags" in flags):
             continue
         for src in pushed:
-            sha = git(eff, "rev-parse", "--verify", "--quiet", f"{src}^{{commit}}")
+            sha = git(eff, *repo, "rev-parse", "--verify", "--quiet", f"{src}^{{commit}}")
             need_review(eff, sha, f"`git push` of {src}")
     h = gh_subcommand(argv)
     if h and h[0] == "pr" and h[1] == "create":

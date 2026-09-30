@@ -488,7 +488,7 @@ exists and could shadow the project command.
 | Hook | Event | Blocks / does |
 |---|---|---|
 | `enforce-pr-workflow.sh` | PreToolUse Bash | `git commit`/`push`/`merge` on `main` or `dev`, and any write to those remote refs (from Kreate) |
-| `require-review.sh` | PreToolUse Bash | `git push` of any unreviewed commit (every refspec source, `--all`); `gh pr create`/`new` without an APPROVE record for the head, or without an added or extended learnings entry |
+| `require-review.sh` | PreToolUse Bash | `git push` of any unreviewed commit (every refspec source, `--all`, the `--git-dir` repo's HEAD); a refspec-less push whose `git -c` settings choose the refspec; a push run by `xargs`; `gh pr create`/`new` without an APPROVE record for the head, or without an added or extended learnings entry |
 | `block-ai-attribution.sh` | PreToolUse Bash | A message-writing git command, PR-writing gh command or `gh release create`/`edit` whose text (incl. heredocs, `--trailer`, `-F`, `--body-file` and `--notes-file` files) has a Claude co-author trailer or "Generated with" footer; `.githooks/commit-msg` covers editor commits |
 | `enforce-backlog-cli.sh` | PreToolUse Write/Edit/MultiEdit/NotebookEdit | Hand edits under `backlog/` (from Kreate; decision bodies are Edit-only) |
 | `protect-data-dir.sh` | PreToolUse Write/Edit/MultiEdit/NotebookEdit/Bash | Any write into, move of or deletion of `data/snapshots/`, `data/indexes/` (or `data/` itself), incl. globs expanded against the filesystem (`rm -rf data*`, `*`), redirects, `cp`/`rsync`/`tee`/`dd`/`truncate`, `find -delete`, `sed -i`; `git clean -x/-X` and `git stash --all` (they remove gitignored `data/`); `git add -f data/`; `git add` (forced or not) of any path through a `takedowns/` directory (the takedown list and log, TASK-136); and shell `mv`/`git mv`/`cp`/`rm`/redirects into `backlog/` (only the CLI moves tasks) |
@@ -512,7 +512,10 @@ them:
   stays one word; `#` starts a comment only at the start of an unquoted word, as in bash; an unquoted
   `<<DELIM`/`<<'DELIM'` heredoc body is dropped unread (never `<<<`);
 - redirections come out of argv as separate `(operator, target)` pairs;
-- it follows `cd`, `-C`, `bash -c` and `eval`.
+- it follows `cd`, `-C`, `bash -c` and `eval`;
+- a git alias is replaced by what git runs for it, whether set with `git -c alias.<name>=…` or in the repo's
+  config, and a `!shell` alias by the commands in its text; a builtin is never looked up, as git never lets
+  an alias shadow one. A git command's `-c` settings and its `--git-dir` or `GIT_DIR=` are read too.
 
 `enforce-pr-workflow.sh` uses the same tokenizer. A command the parser cannot read is **blocked**, never
 allowed, when it looks like what a gate guards (fail closed). The threat model is honest mistakes, not
