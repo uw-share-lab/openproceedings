@@ -1,7 +1,7 @@
 ---
 id: TASK-112
 title: venue_name on PaperRecord for the paper page status line
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-27 22:46'
 updated_date: '2026-09-30 06:27'

@@ -2,7 +2,7 @@
 
 **Key lesson:** Put a count that a stored record can derive (`identified_total = total + excluded.total`) in a pydantic `computed_field` and exclude it from the stored body (`records.DERIVED`). Then every old body reads with it, no stored value can disagree with its own counts, and the OpenAPI schema still marks it required. Check each /api/v1 change with `test_openapi_additive.py` against `origin/dev`, not by reading the diff.
 
-- **Date:** 2026-09-27 · **Task:** task-090, task-091 · **Area:** api
+- **Date:** 2026-09-27 · **Task:** task-090, task-091, task-112 · **Area:** api
 - **Artifacts:** `backend/src/openproceedings/records.py` (`SearchRecord.identified_total`, `DERIVED`), `backend/src/openproceedings/api/middleware.py` (`stored_read`), `backend/tests/contract/test_openapi_additive.py`, `backend/tests/contract/test_ui_additions.py`, decision-014
 
 ## What we set out to do
@@ -46,3 +46,26 @@ index, a record read without a replay, coverage citability and clause spans), al
   the additive checker), `.claude/skills/search-records/SKILL.md` (derived fields never stored, the pin,
   `replay=false`).
 - Test or hook added? `backend/tests/contract/test_openapi_additive.py`, `backend/tests/contract/test_ui_additions.py`.
+
+## Addendum — 2026-09-30 (TASK-112: `PaperRecord.venue_name`)
+The same pattern on a **strict, `extra="forbid"` stored model** (`PaperRecord`, loaded with
+`model_validate_json`) has two traps that `SearchRecord`'s lenient `_Stored` reader hid.
+- **A dump no longer validates as input.** `model_dump()` now carries the computed field and `extra="forbid"`
+  refuses it, so every dump that is validated again must pass `exclude={*DERIVED}` (`record.DERIVED`;
+  `snapshot.record_line` and `PaperRecord.model_copy` do). mypy wants a `set`, not the frozenset itself
+  (`IncEx`). Evidence: the full suite without those excludes failed only `test_round_trips_through_json` and
+  `test_a_stale_hash_is_rejected_on_load`.
+- **Tests that expect a refusal can start passing for the wrong reason.** `test_an_extra_field_is_rejected`,
+  `test_every_required_field_is_required` and `test_stored_data_can_never_ask_for_a_new_hash` validate a dump
+  and expect an error; with the computed field in the dump they were refused for `venue_name`, not for what
+  they test. They now dump with `exclude={*DERIVED}`. After adding a computed field, grep the tests for
+  `model_dump` feeding `model_validate` and check each refusal still refuses for its own reason.
+
+**Dead end:** a `model_validator(mode="before")` that pops a matching `venue_name`, so dumps would round-trip.
+Any before-validator on the model makes `model_validate_json` hand pydantic a Python dict, so the strict
+fields lose JSON-mode coercion: 24 snapshot tests failed loading (`datetime_type`, `tuple_type`,
+`int_type`). Don't add a before-validator to a strict model loaded from JSON.
+
+**Decision:** derived, not stored, so no `RECORD_SCHEMA_VERSION` bump, no index rebuild and no
+`index_version` change; every index already served sends it. Reverse if a derived value ever depends on
+something outside the record (then it has to be stored, and versioned).
