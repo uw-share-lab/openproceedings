@@ -32,7 +32,7 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `backend/tests/{unit,golden,differential,bench,contract,e2e,fixtures}/` | Tests by kind (`testing-standards`); `e2e/fixture_server.py` serves the temporary 5k browser fixture | |
 | `frontend/` (M3) | 05: Next.js app, an npm workspace | `frontend/src/api/schema.ts` is generated |
 | `frontend/e2e/` | Playwright full-stack, accessibility and visual tests; platform-specific baselines in `__screenshots__/` | Run with `make e2e` |
-| `CHANGELOG.md` (root) | Release notes, generated from merged PRs by `.claude/scripts/changelog.py` (`make changelog`) | Spec 08 §Release, decision-022 |
+| `CHANGELOG.md` (root) | Release notes, generated from merged PRs by `.claude/scripts/changelog.py` (`make changelog`) | Spec 08 §Release, decision-023 |
 | `docs/releases.toml` | Each release's data: the `index_version` it was verified on, its snapshot hash, the three versions | Read by `changelog.py`; a released table is never edited |
 | `docs/specs/` | `NN-name.md`, changed only by PR (`spec-writing`) | |
 | `docs/{design,usability,research}/` | Created as needed | |

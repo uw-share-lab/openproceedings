@@ -67,10 +67,10 @@ openapi: frontend-deps
 	uv run --locked op openapi --out backend/tests/contract/openapi.json
 	npm run --silent gen:api --workspace frontend
 
-# CHANGELOG.md from the merged PRs (gh api), the v* tags and docs/releases.toml; decision-022. It reads GitHub,
+# CHANGELOG.md from the merged PRs (gh api), the v* tags and docs/releases.toml; decision-023. It reads GitHub,
 # so no CI job runs it: a release branch regenerates it with RELEASE=<its version> (spec 08 §Release).
 changelog:
-	python3 .claude/scripts/changelog.py $(if $(RELEASE),--release $(RELEASE))
+	python3 .claude/scripts/changelog.py $(if $(RELEASE),--release '$(RELEASE)')
 
 hooks:
 	scripts/setup-dev.sh

@@ -267,7 +267,7 @@ documents both variables.
   withheld text; replay and record-page behaviour; a check that no listed id's abstract is served; a web-image
   build ARG and required-variable gate for public deploys; and where the operator's log lives.
 
-## Release (M6; decision-022, TASK-066)
+## Release (M6; decision-023, TASK-066)
 
 A release is a commit on `main`, reached by a `dev → main` promotion PR, and tagged `vX.Y.Z`. It holds the
 code at that commit (the backend package and the frontend, one version), its `CHANGELOG.md` section, and its

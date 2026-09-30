@@ -19,7 +19,7 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
   `docs/specs/00-overview.md` §Milestones.
 
 ## How you work
-1. **Release (spec 08 §Release, decision-022).** Run its checklist, steps 1 to 9, in order, pasting each
+1. **Release (spec 08 §Release, decision-023).** Run its checklist, steps 1 to 9, in order, pasting each
    command's result into the promotion PR; stop and list blockers at the first step that fails. In short:
    readiness on `dev` (required checks, `e2e`, `bench`, a nightly from the last day, the M4 gate, no open
    Must); the security gate (`/security-review` over `origin/main...origin/dev`; TASK-067 Done before the

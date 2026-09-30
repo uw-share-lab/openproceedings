@@ -1,9 +1,9 @@
 ---
-id: decision-022
+id: decision-023
 title: >-
   One semver app version, tagged on main, independent of index_version;
   CHANGELOG generated from merged PRs (TASK-066)
-date: '2026-09-30 14:18'
+date: '2026-09-30 15:16'
 status: accepted
 ---
 ## Context

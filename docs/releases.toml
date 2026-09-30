@@ -1,4 +1,4 @@
-# The data each release was verified on (spec 08 §Release, decision-022). One table per release, added on
+# The data each release was verified on (spec 08 §Release, decision-023). One table per release, added on
 # its release/<version> branch before `make changelog RELEASE=<version>`; .claude/scripts/changelog.py
 # writes it into the release's Data section, refuses a release without one, and with --release checks it
 # against the code at HEAD (TOKENIZER_VERSION, SCHEMA_VERSION, QUERY_VERSION, uv.lock's Tantivy) and against

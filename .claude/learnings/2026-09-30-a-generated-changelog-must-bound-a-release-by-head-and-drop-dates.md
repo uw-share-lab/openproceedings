@@ -5,7 +5,7 @@
 - **Date:** 2026-09-30 · **Task:** TASK-066 · **Area:** ops
 - **Artifacts:** `.claude/scripts/changelog.py`, `.claude/scripts/tests/test-changelog.sh`,
   `.claude/scripts/mutants/changelog.json`, `.claude/hooks/block-ai-attribution.sh`,
-  `docs/specs/08-ops-and-tooling.md` §Release, decision-022
+  `docs/specs/08-ops-and-tooling.md` §Release, decision-023
 
 ## What we set out to do
 Define the release process and generate `CHANGELOG.md` from merged PRs, before any deploy or tag exists.
@@ -43,7 +43,7 @@ Define the release process and generate `CHANGELOG.md` from merged PRs, before a
   refused first); give a refusal row exactly one fault (qa-auditor, round 1).
 
 ## Decisions (and what would change them)
-- One semver app version, independent of `index_version` (decision-022) → data and code ship separately and
+- One semver app version, independent of `index_version` (decision-023) → data and code ship separately and
   search records pin data versions, not the app → revisit if a second deployable or `/api/v2` appears.
 - No CI check of `CHANGELOG.md` → it reads GitHub and every merge would stale it → revisit if releases become
   frequent enough that a stale Unreleased section misleads.

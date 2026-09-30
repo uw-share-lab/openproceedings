@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Case table for .claude/scripts/changelog.py (spec 08 §Release, decision-022). Each case builds a
+# Case table for .claude/scripts/changelog.py (spec 08 §Release, decision-023). Each case builds a
 # throwaway repo (real commits and v* tags; the backend and frontend manifests; the code constants and
 # uv.lock the script reads; an index manifest under data/indexes/; docs/releases.toml) with the script copied
 # in, feeds it a PR list with --prs (or a fake `gh` on PATH that runs the script's own --jq filter over a

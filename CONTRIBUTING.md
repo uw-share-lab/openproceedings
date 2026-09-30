@@ -49,7 +49,7 @@ API answers every request with an HTML browser-check page instead of JSON (check
 5. CI must pass: `lint`, `test`, `claude-tooling`, `attribution`, `learnings`, `review-attested`.
    Merge into `dev` yourself once it's green.
 6. Promote `dev → main` with a PR (`--base main --head dev`). It needs a second person's approval. A release
-   (version bump, generated `CHANGELOG.md`, tag) follows the checklist in spec 08 §Release (decision-022).
+   (version bump, generated `CHANGELOG.md`, tag) follows the checklist in spec 08 §Release (decision-023).
 
 ## Rules the tooling enforces
 - **No AI authorship** in commits or PRs: no `Co-Authored-By: Claude` and no "Generated with …" footers.
