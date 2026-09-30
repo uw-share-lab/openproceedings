@@ -42,8 +42,11 @@ Takedowns (TASK-136, decision-022): every load, and every SIGHUP even when `curr
 index, re-reads the takedown list (`<data_dir>/takedowns/withheld.txt`, `openproceedings.takedowns`) into the
 bundle (`Served.listed`) and recomputes its coverage with it, so a listed abstract is withheld from every
 response of every index version this instance loads from the next reload on: the served one and each pinned one
-(`Served.withheld_in`). A list that can't be read or parsed fails the load as a bad index does (the old bundle,
-and its list, kept); a missing list withholds nothing.
+(`Served.withheld_in`), under the listed id or any other id a version holds the paper under (every snapshot's
+merges and the native id, read with the list: `takedowns.same_paper`, TASK-067). A list that can't be read or
+parsed fails the load as a bad index does (the old bundle, and its list, kept). A missing list fails it too
+when the list is required (`op serve` off loopback), a list is already applied, or any snapshot on disk
+withheld an abstract; otherwise it withholds nothing (TASK-067).
 
 Every failure line carries a `reason` constant, never a message (messages name paths): an
 `IndexSelectionError`'s (`name_invalid`, `not_found`, `outside_indexes`), an `IndexBuildError`'s

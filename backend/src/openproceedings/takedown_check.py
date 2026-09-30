@@ -16,6 +16,12 @@ each id on the takedown list:
   true with reason `takedown`); a paper found in one format of a version must be in all four (a format the
   check can no longer read is a problem, never a silent pass).
 
+- `GET /export` (JSONL) of each listed paper's title in every venue and year, for every index version
+  (TASK-067): a record under another id with the same title and authors that carries an abstract is the paper
+  served under an id it had before (a rekey) or as a duplicate a later build merged; the API withholds those
+  too (`takedowns.same_paper`), so one that isn't is a problem (list that id too). The title and authors come
+  from `/papers` on the served index, or from a version's JSONL export of the id.
+
 Only the served index answers `/papers` and `/search`, so the span and marker checks there cover it alone; the
 route tests (`tests/contract/test_takedowns.py`) cover highlights on every path, since a title query rarely
 lights abstract words. Run it as the operator's account (it reads the log), against the API itself (e.g.

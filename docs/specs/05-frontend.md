@@ -330,8 +330,10 @@ warnings, the save's index check), the design doc says so; its open questions li
   App Router's streamed payload and the theme script are inline and a nonce would force dynamic rendering;
   `connect-src` adds the API origin when `NEXT_PUBLIC_API_BASE_URL` is set; `object-src 'none'`,
   `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`; `'unsafe-eval'` only under `next
-  dev`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Referrer-Policy: no-referrer`
-  (search URLs carry the query). Because inline scripts are allowed, HTML is never built from strings:
+  dev`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`
+  (search URLs carry the query), `Permissions-Policy: camera=(), microphone=(), geolocation=()`, and, outside
+  `next dev`, `Strict-Transport-Security: max-age=63072000` (no `includeSubDomains` until the hosting domain
+  is decided; TASK-067). Because inline scripts are allowed, HTML is never built from strings:
   eslint's `react/no-danger` is an error, and highlights are text nodes cut at the API's spans.
 
 ## Testing
