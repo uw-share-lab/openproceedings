@@ -89,6 +89,12 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   parser's bounds (`html_budget`) names its URL, `--refresh` and its cache entry.
 
 ## API access line (INFO, exactly one per request)
+Index loads (`api/state.py`): `index_loaded` / `index_swapped` carry `abstracts_withheld` (how many ids the
+takedown list names; never the ids), and a SIGHUP that finds the same index but another list logs
+`takedowns_reloaded` (INFO, the same count); a list that doesn't parse is `index_load_failed` with `reason`
+`takedowns_invalid` or `takedowns_unreadable`. `op takedown check` logs one `takedown_checked` (INFO, WARNING when
+it found problems) with `listed`, `index_versions` and `problems` counts: never an id's text or a requester.
+
 `request` event with: `request_id`, `method`, `route` (the template, e.g. `/api/v1/papers/{id}`, not the
 concrete path), `status`, `ms`, `index_version`, `canonical_hash` (search/export), `total`, `abstract_source`
 (export: its `X-Abstract-Source`, `unavailable` when it withheld the abstracts, decision-021), and `code` (the

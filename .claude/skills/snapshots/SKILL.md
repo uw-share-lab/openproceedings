@@ -66,7 +66,16 @@ finished crawl offline through one mechanism (`sources/crawl.replay_all` over ea
 OpenReview v2, v1, NeurIPS, PMLR, in that order; every source's reports share `common.Report`, whose fetch
 times make each `crawl_window`; `op ingest` writes each source's markers through the same `Crawls.ingest`, so a
 marker lands where the replay reads it), and adds the conflicts a v1 crawl found inside one source to
-`conflicts.csv` (`with_crawl_conflicts`). The manifest may hold build times; `records.jsonl` may not. `/coverage`
+`conflicts.csv` (`with_crawl_conflicts`). **Takedowns** (TASK-136, decision-022): `build` withholds every
+abstract on the takedown list (`--takedowns`, default `<data-dir>/takedowns/withheld.txt`; `takedowns.py`)
+after dedup and reconcile (`snapshot.withhold`: `abstract` null, the abstract claims dropped, those records'
+abstract `conflicts.csv` values replaced by `(withheld: takedown)`), so `snapshot_hash` covers the effect and a
+recrawl can't restore one; a listed id no record of the build has refuses it (`takedown_unmatched`). When
+something is withheld the manifest adds `withheld` (the sorted ids), `abstract_withheld` (venue → year, 0
+included) and `abstract_withheld_by_track` (venue → year → track, 0 included), and `abstract_missing` (both
+maps) leaves those records out; with nothing withheld the keys are absent, so the manifest (still format 2) is
+what it was. `withheld` is in `AUDITED`: a rebuild whose existing directory withholds other ids is refused.
+`RecordFile` checks each withheld id is a record with no abstract and no abstract claim, and counts them. The manifest may hold build times; `records.jsonl` may not. `/coverage`
 (spec 04) and `coverage-auditor` read these counts directly. A format-1 manifest (built before TASK-082)
 still loads: `/coverage` then takes the per-track facts from the records the load verified, and the statuses
 indexed from the source table. A rebuild of the same inputs finds the format-1 directory "not in the current
@@ -104,7 +113,8 @@ marked crawl) is refused.
 - Reading a snapshot (`load_records`, used by `diff`) requires a manifest whose `snapshot_hash` matches
   `records.jsonl`, unique ids and valid records; errors name the line and the error kind, never text.
 - `.claude/hooks/protect-data-dir.sh` blocks Write/Edit under `data/snapshots/` and `data/indexes/`,
-  blocks `rm`/`mv`/`truncate`/`sed -i` there, and blocks `git add -f data/`. A block is correct
+  blocks `rm`/`mv`/`truncate`/`sed -i` there, blocks `git add -f data/`, and blocks `git add` of any path
+  through a `takedowns/` directory (the takedown list and the operator's log). A block is correct
   behaviour, not an obstacle. Build a new snapshot instead.
 - Old snapshots are retired only through the documented prune path (`release-manager`), never deleted by
   hand while a search record references them. There is no `op snapshot` prune or delete command yet (`build`
@@ -115,8 +125,9 @@ marked crawl) is refused.
   snapshot.
 
 ## CLI
-- `op [--data-dir data] snapshot build [--from <cache>] [--out <snapshots>]` imports all cached sources,
-  then dedup → write. It never fetches, so it works offline, and an offline cache never expires (TASK-102),
+- `op [--data-dir data] snapshot build [--from <cache>] [--out <snapshots>] [--takedowns <list>]` imports all
+  cached sources, then dedup → reconcile → withhold the takedown list's abstracts → write (it prints
+  `abstracts_withheld` too; a list that doesn't parse is refused before anything is read). It never fetches, so it works offline, and an offline cache never expires (TASK-102),
   so the same cache rebuilds the same bytes at any date. It prints `{path, snapshot_hash, created,
   unexpected_statuses}`; `created: false` means a snapshot with that hash already existed and nothing was
   written. `unexpected_statuses` (TASK-109, `ingest/status_check.py`) lists each (venue, year, status) whose
@@ -126,7 +137,8 @@ marked crawl) is refused.
   id under a new venue or year, with the fields that differ) and **changed** (where `content_hash`
   differs, with the changed fields named), plus separate counts of **display-only** changes (`authors`,
   `urls`, `keywords`, `presentation` or `venue_id_raw` differ but the hash doesn't) and provenance-only
-  changes. Every
+  changes, and `abstract_withheld` (`added`: ids the second withholds and the first didn't; `lifted`: the
+  reverse; from the manifests' `withheld`). Every
   snapshot promotion needs one: a removed id in a stable venue-year is a regression until explained.
 
 ## Checklist

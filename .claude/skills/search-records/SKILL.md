@@ -116,6 +116,10 @@ A record must go (a legal request, personal data in `input`). With the API stopp
    three triggers.
 4. Record the takedown (date, id, reason, who) in the operator log; the record page then 404s.
 
+This deletes a *search record*. A takedown of a paper's *abstract* is another procedure (spec 08 §Deploy,
+decision-022): it deletes nothing, and a record whose results include the paper still replays `reproduced` on
+its pinned index; only its exports leave that abstract out.
+
 ## As built (task-037 and its review fixes)
 - Code: `backend/src/openproceedings/records.py` (`ids_hash`, `SearchRecord`, `identify`, `freeze`,
   `RecordStore`, `replay`), `api/records.py` (routes and the `/export` hook), `IndexState.pinned` in

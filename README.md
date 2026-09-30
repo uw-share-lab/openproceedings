@@ -26,7 +26,11 @@ abstracts under CC0, and PMLR grants CC BY 4.0 (known from ICML 2017, v70); the 
 fair dealing alone. Consulting the University of Waterloo copyright office before launch is recommended, not a
 gate
 ([decision-018](backlog/decisions/decision-018%20-%20The-public-instance-serves-every-abstract-with-attribution-and-a-source-link-and-a-takedown-contact-on-public-instances-TASK-063.md),
-spec 08 §Deploy). This is the project's decision, not legal advice.
+spec 08 §Deploy). A takedown withholds a listed abstract from every index version the instance serves, in
+results, paper pages and exports, and marks it as removed
+([decision-022](backlog/decisions/decision-022%20-%20A-takedown-withholds-an-abstracts-display-not-its-matching-on-every-loaded-index-version-the-takedown-list-and-log-live-in-the-data-directory-TASK-136.md);
+the list, the operator's log and `op takedown check` are in spec 08 §Deploy). This is the project's decision,
+not legal advice.
 
 Start with [`docs/specs/00-overview.md`](docs/specs/00-overview.md). Contributor workflow (branches, reviews, the
 gates the tooling enforces) is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
@@ -101,7 +105,10 @@ With `NEXT_PUBLIC_API_BASE_URL` unset, the UI calls the API on its own origin (b
 `NEXT_PUBLIC_TAKEDOWN_CONTACT` (also compiled in at build time) is the address or page the footer gives rights
 holders for removing an abstract, e.g. `NEXT_PUBLIC_TAKEDOWN_CONTACT=takedown@example.org`; a publicly reachable
 deployment must set its own; private and local ones may leave it unset (decision-018, spec 08 §Deploy). Unset, the footer links to this repository's (public) issues page; a value that is
-neither a plain email address nor an http(s) URL fails the build.
+neither a plain email address nor an http(s) URL fails the build. `OPENPROCEEDINGS_INSTANCE=public` makes a
+missing contact fail the build too, and the `web` image requires it: `docker build -f deploy/web.Dockerfile
+--build-arg OPENPROCEEDINGS_INSTANCE=public --build-arg NEXT_PUBLIC_TAKEDOWN_CONTACT=takedown@your.org .`
+(`private` for a private, local or development one).
 
 ### 7. Reports
 `uv run op eval coverage --index <index_version>` writes `docs/results/<date>-coverage.md`: indexed against

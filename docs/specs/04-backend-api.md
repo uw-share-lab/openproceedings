@@ -128,6 +128,14 @@ reviews without the UI.
 }
 ```
 
+`abstract_withheld` (TASK-136, additive; decision-022) is true when this instance withholds the hit's abstract at
+a rights holder's request (a takedown, spec 08 §Deploy): `abstract` is then null, `highlights.abstract` empty
+and `abstract_source` null, on every index version (a hit on an older version may have matched the withheld
+text: what matches is never changed, guarantee 4). False means a null `abstract` is one the sources didn't give.
+`GET /papers/{id}` carries the same `abstract_withheld` at its top level, and then answers the paper without
+its abstract and its abstract claims (`content_hash` recomputed for what it shows) and with no abstract spans;
+its `matched` is still the index's answer.
+
 `abstract_source` (TASK-134, additive; decision-018) names where a hit's `abstract` came from so the result list
 can attribute it:
 - `source`: the provenance claim precedence took the abstract from (decision-005; the open `Source` set, as
@@ -246,6 +254,16 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   RIS record has three `N1` lines, untested in Covidence (low risk, since the lines are notes Covidence doesn't
   show; `docs/results/2026-09-27-covidence-check.md`). A record the index holds but its
   snapshot lacks is an internal error mid-stream (logged, counted short), as on `GET /search`.
+  **Withheld by a takedown** (TASK-136, [decision-022](../../backlog/decisions/decision-022%20-%20A-takedown-withholds-an-abstracts-display-not-its-matching-on-every-loaded-index-version-the-takedown-list-and-log-live-in-the-data-directory-TASK-136.md)):
+  a record on the deployment's takedown list (spec 08 §Deploy), or one the exported index's snapshot withheld,
+  goes out the same way, whatever index is exported (served, `index_version=`, `record_id=`, and `op export`):
+  no abstract and no source, the RIS `N1` and BibTeX `abstract_withheld` reading `Abstract withheld: this
+  instance removed it at a rights holder's request (a takedown), so no abstract is exported (decision-022).`
+  (`export.TAKEDOWN`), CSV `abstract_withheld` `true`, JSONL `abstract_withheld: true`. Only that record is
+  withheld, so `X-Abstract-Source` stays `attributed`. Why an abstract is withheld is one more CSV column,
+  `abstract_withheld_reason`, appended after `abstract_withheld` (`takedown`, `source_unavailable`, or empty
+  when nothing is withheld), and a JSONL key of the same name (null when nothing is withheld): additive under
+  decision-021. A record both listed and in an unattributable export says `takedown`.
 - **`TY` is `CPAPER`, not `JOUR`** (task-004). Every exported paper is a conference paper. Zotero's RIS
   translator (`RIS.js`, 2026-01-05) imports `CPAPER` as `conferencePaper` and puts `T2` in its
   `conferenceName`; a `JOUR` would become a `journalArticle` with the conference in `publicationTitle`.
@@ -296,7 +314,8 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   `canonical_hash`, `exported_at`, `record_id` and `searched_at` (the last two empty unless the export is
   pinned by a search record; JSONL has the same five fields, null when not pinned), then the abstract-source
   columns `abstract_source`, `abstract_origin`, `abstract_url` and `abstract_withheld` (TASK-138, above;
-  JSONL: an `abstract_source` object and `abstract_withheld`), UTF-8 with a BOM (so Excel opens it correctly).
+  JSONL: an `abstract_source` object and `abstract_withheld`), then `abstract_withheld_reason` (TASK-136;
+  JSONL the same key), UTF-8 with a BOM (so Excel opens it correctly).
 - **BibTeX:** `@inproceedings` for an `accepted` paper, with `booktitle` = the venue string. Any other status
   (`rejected`, `withdrawn`, `desk_rejected`, `unknown`) is `@unpublished`, BibTeX's type for a paper with an
   author and title that was not formally published, and has **no `booktitle`**. Its `note` starts
@@ -327,7 +346,8 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   - **CSV:** UTF-8 with a BOM (Excel); every field of the stored display record plus the facets and the
     provenance columns `index_version`, `canonical_hash`, `exported_at` (the UTC date), `record_id` and
   `searched_at` (empty unless pinned by a record), then `abstract_source`, `abstract_origin` and
-  `abstract_url` (empty when the abstract names no source), then `abstract_withheld` (`true`/`false`). Two fields of
+  `abstract_url` (empty when the abstract names no source), then `abstract_withheld` (`true`/`false`), then
+  `abstract_withheld_reason` (`takedown`, `source_unavailable` or empty; TASK-136). Two fields of
     spec 01 are left out: `provenance` (per-field claims, a nested list) and `content_hash`. Both stay in the
     snapshot that `index_version` pins. Lists are joined with "; " (ambiguous if a value holds one; JSONL
     keeps lists). A text cell starting, after leading spaces, with `=`, `+`, `-` or `@` (full-width forms
@@ -343,7 +363,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
     an odd backslash run before it loses one backslash). A value never ends on a backslash. An
     author name holding a standalone `and`, or `others`, is braced, so it isn't split or read as et al.
   - **JSONL:** one object per record, with `index_version`, `canonical_hash`, `exported_at`, `record_id` and
-    `searched_at` (null unless pinned by a record), `abstract_source` (`{source, origin, url}` or null) and `abstract_withheld`: the lossless
+    `searched_at` (null unless pinned by a record), `abstract_source` (`{source, origin, url}` or null), `abstract_withheld` and `abstract_withheld_reason`: the lossless
     format (CSV's formula guard adds a `'` to some cells). U+2028, U+2029 and U+0085 are escaped, so a record
     stays one line for every reader.
 
@@ -870,7 +890,8 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   `built_at`, `sources`, and (TASK-091, additive) `crawl_dates_kind` and `identification_citable`, derived
   exactly as a search record's (`vocab.crawl_dates_kind`, `vocab.bootstrap_only`; a unit test compares the
   two source for source), so the coverage page can say "crawled" or "Scholar searches run" and whether counts
-  on this snapshot are PRISMA identification numbers), `totals` (`records`, `abstract_missing`, `unknown_track`, `unknown_status`) and
+  on this snapshot are PRISMA identification numbers), `totals` (`records`, `abstract_missing`, `abstract_withheld`
+  (TASK-136, additive), `unknown_track`, `unknown_status`) and
   `venue_years`: one entry per venue-year, ordered by venue name then year, with the same four counts and
   `cells`, a `{track, status, count}` per non-empty cell in vocabulary order (`vocab.py`; `unknown` last).
   TASK-082 adds, additively: per venue-year `statuses_indexed` (the statuses its sources can contain, spec
@@ -880,7 +901,10 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   `docs/results/coverage-sources.md`; null while none is sourced), `delta`, `delta_pct` (unrounded percent),
   `gated` (a main-track or D&B cell with an official count) and `within_gate` (|delta| ≤ 1% of the official
   count, exact; null unless gated). `snapshot.crawl_dates` gains a key per claim source (format 2's
-  `crawl_windows`), in a search record too.
+  `crawl_windows`), in a search record too. TASK-136 adds `abstract_withheld` to the totals, each venue-year and
+  each track (decision-022): the abstracts this instance withholds when it serves (those the snapshot withheld,
+  from the manifest's `abstract_withheld` keys and checked against the records, plus the takedown list's ids
+  listed since), never counted in `abstract_missing`.
   - The numbers are the manifest of the snapshot the served index was built from (`counts`,
     `abstract_missing`, `unknown_track`, `record_count`: counted from the records once, at snapshot build),
     reshaped by `coverage.breakdown`, which never recounts. `unknown` is never folded: it is its own cell,

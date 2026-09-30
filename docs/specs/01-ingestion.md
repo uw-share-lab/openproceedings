@@ -220,7 +220,10 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    the crawl date and the snapshot hash. Snapshots are immutable. `data/` is gitignored. Since manifest
    format 2 (TASK-082) it also holds, per venue × year × track, the missing abstracts and the claim
    sources of its records; per claim source, its crawl window; and per venue-year, the **statuses
-   indexed** (spec 07 §C). Its `merges` and `conflicts` count the rows of `merges.csv` and `conflicts.csv`:
+   indexed** (spec 07 §C). A build withholds every abstract on the deployment's takedown list (spec 08
+   §Deploy, decision-022): the record keeps everything but its `abstract` (null) and its abstract claims,
+   and the manifest names those ids (`withheld`) and counts them per venue-year and track
+   (`abstract_withheld`, `abstract_withheld_by_track`), apart from the missing abstracts. Its `merges` and `conflicts` count the rows of `merges.csv` and `conflicts.csv`:
    `conflicts` is `total` plus one count per resolution kind present (the part of `resolution` before any
    `:`): `precedence` (a field decided by the source precedence table, `precedence:<source>`, reconcile's
    absence claims included), `newest` and `tie` (one source gave two values for a field: `newest:<source>` when the newest was kept, `tie:<source>`

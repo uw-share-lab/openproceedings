@@ -720,5 +720,17 @@
   "file": ".claude/hooks/block-ai-attribution.sh",
   "old": "        texts += [file_text(f, d) for f in opt_values(h[2], \"--notes-file\", \"-F\")]\n",
   "new": ""
+ },
+ {
+  "label": "git add of a takedowns/ path allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if any(\"takedowns\" in os.path.normpath(p).split(os.sep) for p in a if not p.startswith(\"-\")):",
+  "new": "        if False and any(\"takedowns\" in os.path.normpath(p).split(os.sep) for p in a if not p.startswith(\"-\")):"
+ },
+ {
+  "label": "takedowns matched as a substring",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if any(\"takedowns\" in os.path.normpath(p).split(os.sep) for p in a if not p.startswith(\"-\")):",
+  "new": "        if any(\"takedowns\" in os.path.normpath(p) for p in a if not p.startswith(\"-\")):"
  }
 ]

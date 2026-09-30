@@ -185,6 +185,13 @@ warnings, the save's index check), the design doc says so; its open questions li
    and `/parse` only (no client arithmetic beyond reading them). Highlights and the abstract excerpt:
    `src/lib/excerpt.ts`. `/paper/[id]`: `src/components/paper/paper-view.tsx`.
 
+   *As built (TASK-136, decision-022).* An abstract the instance withholds at a rights holder's request (the
+   API's `abstract_withheld`) reads "Abstract removed from this site at a rights holder's request" (copy RH-15,
+   PA-8) in the result and on the paper page, never "No abstract in the index"; no excerpt, spans or attribution.
+   A matched paper page adds "Terms it matched in the removed abstract aren't shown." (an older index may still
+   match on the withheld words). `/coverage` counts removed abstracts in its totals and under each "No abstract"
+   count, only when there are any (CV-6).
+
    *As built (TASK-134, decision-018).* Each result shows its authors under the title (the first three and
    "et al.", with a "Show all n authors" button, `aria-expanded`, for the full list) and, under the abstract, its
    attribution "Abstract: `<site>`" linking to the paper's page there (the hit's `abstract_source.origin` and
@@ -311,7 +318,8 @@ warnings, the save's index check), the design doc says so; its open questions li
   at build time), falling back to the project's issue tracker when unset (never to nothing); a set but unusable value fails the
   build (`next.config.ts`). A publicly
   reachable instance must set it; private, local and development ones need not (spec 08 §Deploy, which also
-  holds the takedown procedure).
+  holds the takedown procedure). A build with `OPENPROCEEDINGS_INSTANCE=public` fails without it, and the `web`
+  image (`deploy/web.Dockerfile`) requires `OPENPROCEEDINGS_INSTANCE` to be set (TASK-136).
 - Security headers on every route (`frontend/src/lib/security-headers.ts`, set by `next.config.ts`):
   `Content-Security-Policy` (`default-src 'self'`; scripts and styles `'self' 'unsafe-inline'`, since the
   App Router's streamed payload and the theme script are inline and a nonce would force dynamic rendering;

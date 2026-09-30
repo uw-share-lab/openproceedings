@@ -8,7 +8,9 @@
 #   sed -i/--in-place and >/>> redirects that target them — or that target data/, data/snapshots or
 #   data/indexes themselves (`rm -rf data` destroys every snapshot).
 # - data/ is gitignored and never committed (corpus licensing is unresolved; spec 00). `git add -f` of
-#   anything under the repo-root data/ is refused.
+#   anything under the repo-root data/ is refused. `git add` (forced or not) of any path with a `takedowns`
+#   directory in it is refused wherever it sits: the takedown list and log (TASK-136, decision-022) live in a
+#   data directory, and the log holds requesters' details.
 # - backlog/ is CLI-managed (task-hygiene skill): only the `backlog` CLI moves a task (e.g. `backlog task
 #   complete` into backlog/completed/). Bash mv / git mv / cp / rm / tee / redirects that target files
 #   under backlog/ are refused here; enforce-backlog-cli.sh covers editor writes.
@@ -104,6 +106,9 @@ for argv, d in commands:
         forced = any(x in ("-f", "--force") or (x.startswith("-") and not x.startswith("--") and "f" in x) for x in a)
         if forced and any((r := rel(p, g[2])) is not None and (r == "data" or r.startswith("data/")) for p in a if not p.startswith("-")):
             refuse("Blocked: data/ is never committed (corpus licensing unresolved; spec 00). Don't force-add it.")
+        if any("takedowns" in os.path.normpath(p).split(os.sep) for p in a if not p.startswith("-")):
+            refuse("Blocked: a takedowns/ directory holds the takedown list and the operator's log, with "
+                   "requesters' details (TASK-136); it is never committed.")
         continue
     gm = git_subcommand(argv, d)
     if gm and gm[0] == "clean":

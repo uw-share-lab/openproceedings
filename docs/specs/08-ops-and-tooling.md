@@ -31,13 +31,15 @@ openproceedings/
 │   │   ├── records.py           # search records: ids_hash, the append-only store, replay (04 §Search records)
 │   │   ├── coverage.py          # the snapshot manifest's venue × year × track × status breakdown (`GET /coverage`)
 │   │   ├── timestamps.py        # the API's one timestamp form (UTC, `Z`)
+│   │   ├── takedowns.py         # the takedown list and log (TASK-136, decision-022)
+│   │   ├── takedown_check.py    # `op takedown check`: does a running API serve a listed abstract?
 │   │   └── cli.py               # `op` entry point
 │   └── tests/{unit,golden,differential,bench,contract,e2e,fixtures}/
 ├── frontend/                    # npm workspace member: Next.js App Router, output standalone (spec 05; skeleton TASK-039)
 ├── docs/{specs,plans,results,design,usability,research}/   # created as needed; docs/releases.toml: each release's data (§Release)
 ├── backlog/                     # Backlog.md: tasks, completed, docs, decisions — CLI only
-├── deploy/                      # (M6, planned) Dockerfiles, compose.yml
-└── data/                        # gitignored: cache/, snapshots/, indexes/, embeddings/, research/, records/ (records.sqlite)
+├── deploy/                      # web.Dockerfile + web-build-gate.sh (TASK-136); compose.yml and the api image planned (TASK-065)
+└── data/                        # gitignored: cache/, snapshots/, indexes/, embeddings/, research/, records/ (records.sqlite), takedowns/ (list and log)
 ```
 
 **Environment:** uv for all Python. `uv sync` at the root installs every workspace member and the dev tools
@@ -49,10 +51,11 @@ into one `.venv` from one `uv.lock`. New Python packages join by adding their di
 | Command | Does |
 |---|---|
 | `op ingest openreview\|iclr\|neurips\|pmlr\|ris … [--offline]` | fetch sources (`--offline`: cache only, no network) |
-| `op snapshot build` · `op snapshot diff <a> <b>` | build an immutable snapshot, or compare two. There is no prune or delete command: keep the snapshot of every index a search record pins (the versions `op index retire` refuses), since that record's exports read it to attribute each abstract and withhold every abstract without it (decision-021); a future prune command must refuse while a record pins an index built from the snapshot |
+| `op snapshot build [--takedowns <file>]` · `op snapshot diff <a> <b>` | build an immutable snapshot, or compare two. The build withholds every abstract on the takedown list (default `<data-dir>/takedowns/withheld.txt`; §Deploy, decision-022): a list that doesn't parse, or that names an id no record of the build has, refuses it; its JSON names `abstracts_withheld`. The diff's `abstract_withheld` names the ids withheld (`added`) and no longer withheld (`lifted`) between the two. There is no prune or delete command: keep the snapshot of every index a search record pins (the versions `op index retire` refuses), since that record's exports read it to attribute each abstract and withhold every abstract without it (decision-021); a future prune command must refuse while a record pins an index built from the snapshot |
 | `op index build --snapshot <dir\|name\|hash prefix> [--out <dir>]` · `op index parity --index <v> [--snapshot <id>]` · `op index retire <index_version> [--dry-run]` (TASK-085) | build an immutable index; check it holds `normalize()`'s tokens for its snapshot (local, over the real corpus); retire an old one: delete `<data-dir>/indexes/<index_version>/` under the indexes lock `op index build` holds: set aside as `.retiring-<index_version>` (no reader finds half an index, and no sweep deletes it), checked once more, then renamed to `.tmp-retire-<index_version>` (the commit point) and removed; the next build or retire sweeps a removal cut short. Refused, exit 1, one line to stderr, nothing touched: while any search record pins it (`RecordStore.pinned`, the count reported; a deleted pinned index would leave those records' replays permanently `drifted`), while `current` or any other symlink in `indexes/` points at it, when the record store can't be read, or when the name isn't an index_version directory directly under `indexes/` (the name is checked against the index_version format before any path is built, so `../x` never names a path). `--dry-run` runs the checks and reports the outcome with the same exit status, deleting nothing. Order: repoint `current` to the new version, SIGHUP the API, confirm `/api/v1/meta` reports the new version, then retire the old one (the API keeps serving the old version until its reload). It can't see an `op serve --index <index_version>` that serves the version by name: check what each running instance serves first. A promotion (`ln -sfn`) and a record save take no indexes lock, so after the rename the pins and every symlink's target are checked again and a hit, or anything raised (Ctrl-C included), renames the directory back and refuses or re-raises. If that rename-back fails, one ERROR `index_retire_restore_failed` names the `.retiring-` directory and the operator must `mv` it back to `<index_version>` before serving it or running another build or retire (no sweep touches it; until then every retire of that version, `--dry-run` included, is refused as `retire_cut_short`, whether `<index_version>` is absent or was rebuilt); what remains is the few syscalls between that check and the removal, after which a save or replay naming the version finds it absent. It says so when it waits for the lock. A chmod or removal that fails after the rename still retires the version (its name is gone) and reports `tmp_left`; a sweep that can't remove a leftover logs `tmp_sweep_failed` and carries on, so it never fails a later build. One log line: `index_retired` (INFO; WARNING with `tmp_left`), `index_retire_checked` (dry run) or `index_retire_refused` (WARNING; DEBUG for a malformed name, which is not logged), each with the version, the pinned count and the outcome or reason |
 | `op search "<q>" [--mode scholar] [--explain \| --ids] [--engine tantivy\|reference] [--sort <s>] [--limit <n>] [--index <dir\|version>]` | ranked hits under a PRISMA header (default): searched time, index, crawl window (first to last fetch), tokenizer and query versions; a bootstrap-corpus caution when the index holds only RIS, or a caution that the sources are unknown when its snapshot isn't in the data dir or its hash differs; identified, removed by default filters (ineligible and unclassified), screened; the canonical and identification strings; every wildcard's expansion (its count and first 10 terms; every term with `--explain`); the sorted id set (`--ids`; `--engine reference` runs the oracle over the index's snapshot, `--ids` only); or the compiled query (`--explain`). Diagnostics go to stderr as user output; one `search_run` INFO line per run (task-030) |
-| `op export "<q>" --format ris\|csv\|bibtex\|jsonl [--mode scholar] [--index <dir\|version>] [--out <file>]` | export the full matched set in id order (spec 04 §Exports), streamed to stdout or written whole to `--out` (never a partial file); the count is checked against the query's total. It verifies the index's snapshot to name each abstract's source (TASK-138); without it, every abstract is withheld and each record says so, with a warning on stderr and exit 0 (decision-021) |
+| `op export "<q>" --format ris\|csv\|bibtex\|jsonl [--mode scholar] [--index <dir\|version>] [--out <file>]` | export the full matched set in id order (spec 04 §Exports), streamed to stdout or written whole to `--out` (never a partial file); the count is checked against the query's total. It verifies the index's snapshot to name each abstract's source (TASK-138); without it, every abstract is withheld and each record says so, with a warning on stderr and exit 0 (decision-021). It withholds the takedown list's abstracts as the API does (decision-022); a list that doesn't parse refuses it |
+| `op takedown check --api <url> [--list <file>] [--log <file>]` (TASK-136) | ask a running API (over HTTP, so what is served, whatever the code path), for each id on the takedown list, whether any index version it loads serves that abstract: `/papers/{id}` and its highlights, the `/search` hit found by the title, and every export format of every version `/meta` lists (the paper's venue-year, filters only); and check the takedown log (mode 0600, one `withheld` entry per listed id). Prints each problem (ids, versions and formats, never text or requesters' details) and exits 1 on any, 0 otherwise; a `takedown_checked` log line with the counts. It waits out a 429's `Retry-After`; point it at the API itself (e.g. `http://127.0.0.1:8000` on the host), not through the proxy |
 | `op record save "<q>" [--mode scholar] [--index current\|<index_version>] [--json]` · `op record replay <id> [--index current\|<index_version>] [--json]` | freeze a search as a search record in `<data-dir>/records/records.sqlite` (the same functions as `POST /records`, `records.freeze` + `RecordStore.insert`: a record identical to the API's but for its id and time) and print its id, page and PRISMA summary, or the stored record (`--json`); replay one (the same function as `GET /records/{id}`, `records.replay`) on its own index when the data dir holds it, else on `--index` (default `current`), and print the status, `reproduced` / `drifted` / `mismatch`, the changed inputs and `+added / −removed`, or the API's `replay` block (`--json`). `--index` is a name under `<data-dir>/indexes`, never a directory: a record pins a version a replay must find by name. Left out, as serving policy: the rate limit, the save ceilings, and the verified-clause cap and candidate ceiling, so a CLI replay is never withheld (decision-010); the store's size cap and free-space floor (the API's defaults) apply (task-083) |
 | `op serve [--host] [--port] [--index current\|<index_version>] [--cors-origin …] [--trusted-proxy …] [--rate-capacity] [--rate-refill] [--export-weight] [--no-rate-limit] [--max-verified-clauses] [--max-verification-candidates] [--max-verification-seconds] [--log-query-text]` | run the API (04 §Implementation notes, as built): one uvicorn process over `<data-dir>/indexes/<index>`; SIGHUP reloads it. Refused as usage, each option named with the validator's reason: a trusted proxy wider than /8 or /32, `--no-rate-limit` with a non-loopback `--host` (§Deploy), and limits that could never be paid (decision-010) |
 | `op embed build` (deferred with 06, decision-017; task-058) | build embeddings for the current index (06) |
@@ -208,10 +211,8 @@ still open (00, question 5).
 on paper pages and in exports. Before a deployment is public: (1) each record names the source of its abstract
 and links to it, and a PMLR abstract appears with its citation and a link to the PMLR page (CC BY 4.0's
 attribution terms; TASK-134 for the result list); (2) every page names a takedown contact (TASK-133). Private,
-local and development deployments may omit the contact. TASK-133's proposed takedown procedure, not yet
-decided, withholds the record's abstract from the next `index_version`; older versions that search records pin
-still serve it, because `op index retire` refuses a pinned version, and TASK-133 settles how a takedown
-reaches them. The unlicensed years rest on fair dealing alone; consulting the University of Waterloo copyright
+local and development deployments may omit the contact. A takedown withholds a record's abstract from every
+index version the instance loads (the procedure below, decision-022). The unlicensed years rest on fair dealing alone; consulting the University of Waterloo copyright
 office before launch is recommended (TASK-135), and TASK-069 records its outcome, if any, but does not wait on
 it.
 
@@ -224,48 +225,75 @@ The contact is set with `NEXT_PUBLIC_TAKEDOWN_CONTACT` when the `web` image is *
 password). `next.config.ts` checks it: a value that is set but unusable **fails the build**; unset, the footer
 links to the project's issue tracker (`https://github.com/uw-share-lab/openproceedings/issues`) rather than
 naming no one, and the production build (`next build`) warns that publicly reachable instances must set
-`NEXT_PUBLIC_TAKEDOWN_CONTACT`. The e2e suite
+`NEXT_PUBLIC_TAKEDOWN_CONTACT`. A build also declares what kind of instance it is with `OPENPROCEEDINGS_INSTANCE`
+(TASK-136): `public` refuses to build without a contact (`next.config.ts`, `checkTakedownContactEnv`); `private`
+and unset build with the fallback. The `web` image (`deploy/web.Dockerfile`, built from the repository root)
+takes `NEXT_PUBLIC_TAKEDOWN_CONTACT`, `NEXT_PUBLIC_API_BASE_URL` and `OPENPROCEEDINGS_INSTANCE` as build
+arguments; `OPENPROCEEDINGS_INSTANCE` has no default, and `deploy/web-build-gate.sh` refuses, before anything is
+installed, a build that doesn't set it to `public` or `private` and a `public` one without a contact:
+
+```
+docker build -f deploy/web.Dockerfile --build-arg OPENPROCEEDINGS_INSTANCE=public \
+  --build-arg NEXT_PUBLIC_TAKEDOWN_CONTACT=takedown@your.org --build-arg NEXT_PUBLIC_API_BASE_URL= -t openproceedings-web .
+```
+
+`.dockerignore` sends only what the image copies (never `data/`, a `takedowns/` directory or a `.env` file).
+The e2e suite
 builds with the placeholder `takedown@example.org` (`frontend/playwright.config.ts`); `frontend/.env.example`
 documents both variables.
 
-**Takedown procedure (proposed by TASK-133; nothing below is automated yet).**
+**Takedown procedure (TASK-133's proposal, built by TASK-136; decision-022).**
 - **Who receives a request:** the deployment's operator, at that contact. A request that arrives on the issue
   tracker through the footer's fallback goes to the project maintainers, who pass it to the operator of the
   deployment it names, or act on it for a deployment they run. Fallback requests are **public** (GitHub issues
   are), so the footer asks requesters to leave out personal details (FT-3); a public instance sets its own
   contact.
-- **What is removed:** the record's `abstract` only, from the next `index_version`. The record stays and is
-  still matched on its title, as a record with a missing abstract is (01 §Error handling).
-- **How it is applied, as built: by hand, and not yet per record.** No `op` command or build step withholds
-  one abstract today. `op snapshot build` replays the crawl cache as fetched, a snapshot can't be edited (its
-  files are hash-checked against `snapshot_hash`, and `data/snapshots/` is write-protected), and the next
-  crawl would fetch the abstract again. Until the tooling below exists, the operator acknowledges the
-  request, logs it, and, if the abstract has to go before then, takes the public instance offline. With the
-  tooling, the operator adds the record id to the deployment's takedown list, runs `op snapshot build` (which
-  sets `abstract` to `null` for each listed id and counts them in the manifest), then `op index build`, and
-  promotes the new `index_version` as for any refresh (switch `current`, SIGHUP).
-- **Older index versions keep the abstract.** Indexes are immutable, and a search record pins the index it
-  was run on: the API loads that version for the record's replay and its exports (`/export?record_id=`, or
-  `?index_version=`), and `op index retire` refuses to retire a version any record pins (TASK-085: it
-  reports the count and deletes nothing).
-  So a new `index_version` alone leaves the abstract retrievable through exports from a pinned older one.
-  The procedure closes this at serve time: the API applies the takedown list to every response that carries
-  an abstract (search hits, `/papers/{id}`, exports), whatever index version answers. That changes what is
-  shown, not what matches: a pinned version still matches on the abstract it holds, so a record's ids and its
-  replay are unchanged (guarantee 4), and each withheld abstract is marked as withheld, not shown as missing
-  (guarantee 6). This is not built (see below).
-- **How it is recorded:** in a takedown log the operator keeps outside git (it holds the requester's
-  details): the record id, the date received, the requester and the basis they give, the decision, the date
-  applied and the first `index_version` without the abstract. With the tooling, the snapshot manifest also
-  counts withheld abstracts, so `/coverage` shows them and a snapshot diff names the records whose abstract
-  went.
-- **Missing tooling** (TASK-136; decision-018 requires the contact; the removal this procedure proposes needs
-  this tooling before a public launch): a takedown list
-  read by `op snapshot build` (its place and format, and whether `snapshot_hash` covers it); the withheld
-  count in the manifest and on `/coverage`; the serve-time withholding above, applied to every index version
-  the API loads, with a withheld marker distinct from missing; a decision on pinned versions still matching on
-  withheld text; replay and record-page behaviour; a check that no listed id's abstract is served; a web-image
-  build ARG and required-variable gate for public deploys; and where the operator's log lives.
+- **What is removed:** the record's `abstract`, and with it its abstract claims (their values are the text).
+  The record stays and is still matched on its title, as a record with a missing abstract is (01 §Error
+  handling). What *matches* on an index version that still holds the text doesn't change (below).
+- **The takedown list,** `<data-dir>/takedowns/withheld.txt` (`openproceedings/takedowns.py`): UTF-8, one record
+  id per line, blank lines and everything after `#` ignored (`op:iclr:2024:AbCd1234  # 2026-09-30, see the
+  log`). Ids only: the API's service user reads it (mode 0644, or 0640 with the API's group). A line that isn't
+  one record id makes the whole list unusable: `op snapshot build` and `op export` refuse, and the API keeps what
+  it serves (at startup it serves nothing, 503); a missing file is an empty list. Never committed:
+  `.gitignore` ignores every `takedowns/` directory and `protect-data-dir.sh` refuses `git add` of a path
+  through one.
+- **How it is applied.** (1) Log the request (below). (2) Add the id to the list and send the API SIGHUP: from
+  that reload, every index version it loads, the served one and each pinned one (a search record's replay and
+  exports, `/export?index_version=`), withholds the abstract at serve time (below). The API re-reads the list on
+  every load and SIGHUP, even when `current` hasn't moved. (3) Run `op snapshot build`: it withholds every listed
+  abstract after dedup and reconcile, whatever the cache supplies (a recrawl can't bring one back), so the new
+  snapshot, and its `snapshot_hash` and `index_version`, no longer hold it; its manifest names the withheld ids
+  (`withheld`) and counts them per venue-year and track (`abstract_withheld`, `abstract_withheld_by_track`, not
+  counted in `abstract_missing`), and `op snapshot diff` names them (`abstract_withheld.added`). A listed id that
+  no record of the build has refuses the build: the paper's id changed (a corrected venue or year) or it merged
+  into another, and would otherwise get its abstract back under the new id; list the id it has now (the diff's
+  `rekeyed`) and build again. (4) `op index build`, promote the new `index_version` as for any refresh (switch
+  `current`, SIGHUP), and record it in the log as `first_index_version`. (5) Run `op takedown check --api
+  http://127.0.0.1:8000`: exit 0 means no loaded version serves a listed abstract.
+- **At serve time, on every loaded version** (decision-022): `/search` hits have `abstract` null, no abstract
+  highlight spans, `abstract_source` null and `abstract_withheld: true`; `/papers/{id}` has no abstract and no
+  abstract claim, no abstract spans, and `abstract_withheld: true`; every export format (served, pinned by
+  `index_version` or by a search record, and `op export`) leaves the abstract out and says so in the record
+  (RIS `N1` and BibTeX `abstract_withheld` = "Abstract withheld: this instance removed it at a rights holder's
+  request (a takedown)…", CSV and JSONL `abstract_withheld` true with `abstract_withheld_reason` `takedown`);
+  `/coverage` counts `abstract_withheld` apart from `abstract_missing`; the UI says "Abstract removed from this
+  site at a rights holder's request". An abstract the served snapshot itself withheld is marked the same way.
+- **Older index versions still match on it (the oracle leak, accepted: decision-022).** Indexes are immutable,
+  a search record pins the index it was run on, and `op index retire` refuses a pinned version (TASK-085). A
+  pinned version keeps matching on the text it holds, so replaying a saved search there returns the same ids
+  (guarantee 4): the paper is still a hit, and `/papers?q=` still says `matched: true`, but no word, span or
+  excerpt of the text is shown. A version no record pins can be retired to end even that.
+- **The takedown log,** `<data-dir>/takedowns/log.jsonl`, on the deployment host, outside the repository (owner,
+  2026-09-30): owned by the operator's account (not the API's service user), mode 0600, never committed, and
+  kept out of image build contexts (`.dockerignore`), since it holds requesters' details. One JSON object per
+  request, exactly these keys: `record_id`, `received` (date), `requester` (name and contact), `basis` (what
+  they state), `decision` (`withheld`, `declined` or `lifted`), `applied` (date, or null), `first_index_version`
+  (the first `index_version` built without the abstract, or null until then). Update an entry's `applied` and
+  `first_index_version` in place as the steps complete. The API never reads it; `op takedown check` fails when
+  it is readable by others, malformed, or has no `withheld` entry for a listed id.
+- **Lifting a takedown:** log `lifted`, remove the line, SIGHUP; versions that still hold the text show it
+  again. A snapshot built while the id was listed keeps it withheld (and marked) until one is built without it.
 
 ## Release (M6; decision-023, TASK-066)
 
@@ -445,7 +473,7 @@ exists and could shadow the project command.
 | `require-review.sh` | PreToolUse Bash | `git push` of any unreviewed commit (every refspec source, `--all`); `gh pr create`/`new` without an APPROVE record for the head, or without an added or extended learnings entry |
 | `block-ai-attribution.sh` | PreToolUse Bash | A message-writing git command, PR-writing gh command or `gh release create`/`edit` whose text (incl. heredocs, `--trailer`, `-F`, `--body-file` and `--notes-file` files) has a Claude co-author trailer or "Generated with" footer; `.githooks/commit-msg` covers editor commits |
 | `enforce-backlog-cli.sh` | PreToolUse Write/Edit/MultiEdit/NotebookEdit | Hand edits under `backlog/` (from Kreate; decision bodies are Edit-only) |
-| `protect-data-dir.sh` | PreToolUse Write/Edit/MultiEdit/NotebookEdit/Bash | Any write into, move of or deletion of `data/snapshots/`, `data/indexes/` (or `data/` itself), incl. globs expanded against the filesystem (`rm -rf data*`, `*`), redirects, `cp`/`rsync`/`tee`/`dd`/`truncate`, `find -delete`, `sed -i`; `git clean -x/-X` and `git stash --all` (they remove gitignored `data/`); `git add -f data/`; and shell `mv`/`git mv`/`cp`/`rm`/redirects into `backlog/` (only the CLI moves tasks) |
+| `protect-data-dir.sh` | PreToolUse Write/Edit/MultiEdit/NotebookEdit/Bash | Any write into, move of or deletion of `data/snapshots/`, `data/indexes/` (or `data/` itself), incl. globs expanded against the filesystem (`rm -rf data*`, `*`), redirects, `cp`/`rsync`/`tee`/`dd`/`truncate`, `find -delete`, `sed -i`; `git clean -x/-X` and `git stash --all` (they remove gitignored `data/`); `git add -f data/`; `git add` (forced or not) of any path through a `takedowns/` directory (the takedown list and log, TASK-136); and shell `mv`/`git mv`/`cp`/`rm`/redirects into `backlog/` (only the CLI moves tasks) |
 | `autofix.sh` | PostToolUse Write/Edit/MultiEdit | Formats and fixes the edited file; reports what remains (never blocks) |
 | `remind-token-contract.sh` | PostToolUse Write/Edit/MultiEdit | Editing `normalize.py` or the tokenizer → reminder to bump `TOKENIZER_VERSION` and run the parity and differential tests |
 | `load-learnings.sh` | SessionStart | Puts `.claude/learnings/INDEX.md` into every session's context |

@@ -78,7 +78,7 @@ abstracts stay shown).
   next `index_version` (the record stays, matched on title, as a missing abstract already is; spec 01
   §Error handling). A known gap in that procedure: older `index_version`s still serve the abstract while
   search records pin them, because `op index retire` refuses to retire a pinned version (spec 08 §CLI);
-  TASK-133 must settle how a takedown reaches them.
+  TASK-133 must settle how a takedown reaches them. (Settled by decision-022, TASK-136: every loaded index version withholds a listed abstract at serve time, and pinned versions keep matching on it.)
 - **Copyright office: recommended, not a gate.** TASK-135 puts the Context above to the copyright office;
   TASK-069 records its outcome, if any, before launch and does not wait on it. Whatever the answer, the
   owner's decision is to show the abstracts; only a new decision superseding this one changes that.

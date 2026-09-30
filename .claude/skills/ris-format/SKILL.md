@@ -51,6 +51,12 @@ imported there screens on titles alone with nothing saying why: the web app's Ex
 warn on `unavailable` (spec 05), and spec 04 §Exports tells reviewers to check the header or the CSV's
 `abstract_withheld` column before importing.
 
+**Withheld by a takedown (TASK-136, decision-022).** A record on the deployment's takedown list (or withheld
+by the exported index's snapshot) has no `AB` and no `Abstract source:` line; instead `N1  - Abstract withheld:
+this instance removed it at a rights holder's request (a takedown), so no abstract is exported (decision-022).`
+(`export.TAKEDOWN`), in the same place, before the provenance line. Only that record: `X-Abstract-Source` stays
+`attributed`. The same Covidence caveat applies.
+
 **Id carrier:** the round-trip test reads the openproceedings `id` back from the `ID` tag, for every
 record including PMLR-only ones. Never overload `N1` or recover ids from `UR`.
 
