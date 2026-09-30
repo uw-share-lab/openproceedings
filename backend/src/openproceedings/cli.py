@@ -951,8 +951,11 @@ def _reference(ns: argparse.Namespace, index: Path) -> ReferenceEngine:
 
 
 def _export(ns: argparse.Namespace) -> int:
+    from openproceedings.api.errors import reason_of
+    from openproceedings.api.state import snapshot_records
     from openproceedings.engine.tantivy_engine import TantivyEngine
-    from openproceedings.export import Provenance, check_count, utc_date, write
+    from openproceedings.export import Provenance, Sources, check_count, utc_date, write
+    from openproceedings.ingest.snapshot import SnapshotError
 
     started = time.perf_counter()
     result = _parsed(ns)
@@ -964,14 +967,31 @@ def _export(ns: argparse.Namespace) -> int:
         raise _usage(f"--out {ns.out} is a directory; name a file")
     if ns.out is not None and not ns.out.parent.is_dir():
         raise _usage(f"--out {ns.out}: no directory {ns.out.parent}")
-    engine = TantivyEngine(_index_path(ns))
+    path = _index_path(ns)
+    engine = TantivyEngine(path)
+    # each abstract's source (decision-018, TASK-138), from the verified snapshot, as the server loads it;
+    # without it every abstract is withheld and each record says so (decision-021), with a warning
+    sources: Sources | None
+    try:
+        sources = snapshot_records(ns.data_dir, path, engine.index_version).attributions
+    except (SnapshotError, OSError) as e:
+        sources = None
+        log.warning(
+            "export_abstracts_withheld",
+            extra={"index_version": engine.index_version, "error": type(e).__name__, "reason": reason_of(e)},
+        )
+        print(
+            f"op export: warning: the snapshot of index {engine.index_version} can't be verified ({e}), so "
+            "abstracts can't be attributed: every abstract is withheld and each record says so (decision-021)",
+            file=sys.stderr,
+        )
     total, documents = engine.documents(ast)
     provenance = Provenance(engine.index_version, result.canonical_hash, utc_date())
 
     if ns.out is None:  # UTF-8 and untranslated newlines whatever the terminal's locale (spec 04)
         out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="", write_through=True)
         try:
-            n = write(ns.format, documents, provenance, out)
+            n = write(ns.format, documents, provenance, out, sources=sources)
         finally:
             out.detach()  # leave sys.stdout usable
         check_count(n, total)
@@ -983,7 +1003,7 @@ def _export(ns: argparse.Namespace) -> int:
             if ns.out.exists():
                 os.fchmod(fd, ns.out.stat().st_mode & 0o777)
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as stream:
-                n = write(ns.format, documents, provenance, stream)
+                n = write(ns.format, documents, provenance, stream, sources=sources)
             check_count(n, total)
             partial.replace(ns.out)
         finally:

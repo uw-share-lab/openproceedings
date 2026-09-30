@@ -7,6 +7,8 @@
  * The response headers are read **before** the body (design E1): `X-Index-Version` must be the shown index and
  * `X-Total` the shown total, or the body is abandoned and nothing is saved. A different index is "the index
  * changed" (E3); the same index with another count is a bug (EX-E3b; guarantee 4), never worded as a swap.
+ * `X-Abstract-Source: unavailable` still downloads (the cited set is complete), but the file has no abstracts
+ * (decision-021), so the result says so and the menu warns (EX-E8).
  */
 import type { Api } from "@/api/client";
 import { outcomeOf, type Failure } from "@/api/outcome";
@@ -41,7 +43,13 @@ export type ExportSource =
     };
 
 export type ExportResult =
-  | { readonly kind: "ok"; readonly blob: Blob; readonly filename: string }
+  | {
+      readonly kind: "ok";
+      readonly blob: Blob;
+      readonly filename: string;
+      /** `X-Abstract-Source: unavailable`: every abstract withheld, each record says why (decision-021). */
+      readonly abstractsWithheld: boolean;
+    }
   /** `X-Index-Version` isn't the shown index (EX-E4). */
   | { readonly kind: "index_changed"; readonly shown: string; readonly got: string }
   /** 409 `API_INDEX_VERSION_UNAVAILABLE`: the pinned index isn't served here (EX-E4's 409 line, RC-13). */
@@ -100,6 +108,7 @@ export async function fetchExport(
     kind: "ok",
     blob,
     filename: filenameOf(response.headers.get("Content-Disposition"), source, format),
+    abstractsWithheld: response.headers.get("X-Abstract-Source") === "unavailable",
   };
 }
 

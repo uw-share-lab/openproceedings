@@ -213,11 +213,21 @@ def test_the_status_specific_headers_are_in_the_contract() -> None:
 
 
 def test_cors_exposes_every_header_a_client_reads(store: Store) -> None:
-    assert {"Content-Disposition", "Location", "X-Total", "Retry-After"} <= set(EXPOSED_HEADERS)
+    declared = {
+        name
+        for item in DOC["paths"].values()
+        for op in item.values()
+        for response in op["responses"].values()
+        for name in response.get("headers", {})
+    }
+    # every header a response declares, but a 405's `Allow` (a client's own calls never get one)
+    assert declared - {"Allow"} <= set(EXPOSED_HEADERS)
+    assert {"Content-Disposition", "Location", "X-Total", "Retry-After", "X-Abstract-Source"} <= declared
     app = make_app(store.indexes.parent, cors_origins=("https://openproceedings.example",))
     with TestClient(app) as c:
         r = c.get("/api/v1/healthz", headers={"Origin": "https://openproceedings.example"})
-    assert "Content-Disposition" in r.headers["access-control-expose-headers"]
+    exposed = {h.strip() for h in r.headers["access-control-expose-headers"].split(",")}
+    assert {"Content-Disposition", "X-Abstract-Source"} <= exposed
 
 
 # --- nits ------------------------------------------------------------------------------------------------------------

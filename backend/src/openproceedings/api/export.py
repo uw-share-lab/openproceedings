@@ -8,11 +8,16 @@ record (`record_id` alone): exactly the record's stored ids, the set it cites, r
 (never a re-run query, so a later query_version doesn't change what is handed to screening), its provenance
 naming the record and its search date; refused 409
 `API_INDEX_VERSION_UNAVAILABLE` when that index isn't here and 409 `API_RECORD_MISMATCH` when the replay is
-a mismatch.
+a mismatch. Each record names its abstract's source (decision-018, TASK-138) from the exported index's
+snapshot records, computed when they were loaded (`RecordFile.attributions`, what `GET /search` sends as
+`abstract_source`): the served bundle's, or a pinned index's (`IndexState.pinned_records`). When a pinned
+index's snapshot can't be verified the same records are exported with every abstract withheld and marked so
+in the file, and `X-Abstract-Source: unavailable` (decision-021): never an abstract without attribution.
 
 Everything that can refuse happens before the first byte: the parameters, the parse (422 with
 diagnostics), the record's pin and replay, the pin (409 `API_INDEX_VERSION_UNAVAILABLE`), every wildcard's
-expansion (422, located) and the one collection of the match set that gives `X-Total`. Then a sync
+expansion (422, located) and the one collection of the match set that gives `X-Total`. The exported index's
+attributions are read before the first byte too, but never refuse: an unverifiable snapshot withholds. Then a sync
 generator streams the records from the engine the request took, so an export started before a hot swap
 finishes on its index. A failure after the first byte is logged by `LastCatch` and marks the access line
 `aborted` (the client has its 200 by then); a stream that wrote fewer or more records than `X-Total` fails
@@ -22,22 +27,22 @@ the same way, never silently.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 
-from openproceedings.api.deps import EngineDep, annotate, check_candidates, searchable
+from openproceedings.api.deps import AbstractSource, ServedDep, annotate, check_candidates, searchable
 from openproceedings.api.errors import ApiError
 from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import MODE_DOC, Q_DOC, VERSION_PARAM
 from openproceedings.api.openapi import BUSY, response_header
 from openproceedings.api.records import refuse_mismatch, stored_record
-from openproceedings.api.state import IndexState
+from openproceedings.api.state import IndexState, Served
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.protocol import EngineInternalError
 from openproceedings.engine.tantivy_engine import TantivyEngine
-from openproceedings.export import Provenance, check_count, entries, header, utc_date
+from openproceedings.export import Provenance, Sources, check_count, entries, header, utc_date
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import Mode
@@ -54,6 +59,8 @@ MEDIA: dict[str, tuple[str, str]] = {
     "bibtex": ("application/x-bibtex; charset=utf-8", "bib"),
     "jsonl": ("application/x-ndjson; charset=utf-8", "jsonl"),
 }
+# the `X-Abstract-Source` values, also the access line's `abstract_source` (decision-021)
+ABSTRACT_SOURCE_STATES: tuple[AbstractSource, ...] = get_args(AbstractSource.__value__)
 CHUNK = 64 * 1024  # characters per body chunk (64 Ki): whole records, never split or reordered
 RECORD_PARAM = f"^(?:{RECORD_ID.pattern})$"
 
@@ -73,6 +80,17 @@ def pinned_engine(request: Request, served: TantivyEngine, index_version: str | 
         )
     annotate(request, index_version=pinned.engine.index_version)
     return pinned.engine
+
+
+def sources_of(request: Request, served: Served, engine: TantivyEngine) -> Sources | None:
+    """Each record's abstract attribution in `engine`'s snapshot: the served bundle's when `engine` is the
+    served one, else the pinned index's; None when that snapshot can't be verified, and the export then
+    withholds every abstract (decision-021: an abstract never goes out without attribution, decision-018)."""
+    if engine is served.engine:
+        return served.records.attributions
+    state: IndexState = request.app.state.index
+    records = state.pinned_records(engine.index_version)
+    return None if records is None else records.attributions
 
 
 def _bad(message: str) -> ApiError:
@@ -101,6 +119,12 @@ def _bad(message: str) -> ApiError:
                 "Content-Disposition": response_header(
                     'attachment; filename="openproceedings-<index_version>-<first 12 of canonical_hash>.<ext>"'
                 ),
+                "X-Abstract-Source": response_header(
+                    "`attributed`: each abstract names its source (decision-018). `unavailable`: the exported "
+                    "index's snapshot can't be verified on this instance, so every abstract is withheld and each "
+                    "record says so (decision-021)",
+                    {"type": "string", "enum": list(ABSTRACT_SOURCE_STATES)},
+                ),
             },
         },
         **BUSY,
@@ -108,7 +132,7 @@ def _bad(message: str) -> ApiError:
 )
 def export(
     request: Request,
-    served: EngineDep,
+    bundle: ServedDep,
     fmt: Annotated[ExportFormat, Query(alias="format", description="The file format.")],
     q: Annotated[str | None, Query(description=Q_DOC + " Required unless `record_id` is given.")] = None,
     mode: Annotated[
@@ -138,7 +162,10 @@ def export(
     """Every record the query matches, in `format`: of `q` (with `mode`, default `native`) on the pinned
     `index_version` (else the served index), or the stored ids of search record `record_id` (alone) from the
     index it names. Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and
-    index (for a record, its stored `total`)."""
+    index (for a record, its stored `total`). Each record names its abstract's source (decision-018), from the
+    exported index's snapshot; for a pinned index whose snapshot this instance can't verify, the same records
+    with every abstract withheld and `X-Abstract-Source: unavailable` (decision-021)."""
+    served = bundle.engine  # the request's one read of the served index (its records are `bundle.records`)
     if record_id is not None:
         # `mode=native` (the declared default) is accepted: a record replays its canonical string natively
         if q is not None or index_version is not None:
@@ -156,6 +183,7 @@ def export(
             raise ApiError(
                 DiagnosticCode.API_RECORD_MISMATCH, "This search record's stored ids don't match it."
             )
+        sources = sources_of(request, bundle, engine)  # once nothing about the record can refuse
         # the cited set exactly: the record's stored ids, from the index it names (never a re-run query)
         canonical_hash = record.canonical_hash
         total, documents = len(ids), stored_documents(engine, ids)
@@ -175,13 +203,15 @@ def export(
         pinned_by = {}
         expanded(engine, ast)  # an over-cap wildcard is a located 422 before anything is compiled
         check_candidates(request, engine, ast)  # 422 API_QUERY_TOO_COSTLY before any verification
+        sources = sources_of(request, bundle, engine)  # once nothing about the query can refuse
         total, documents = engine.documents(ast)  # the one collection; records are read as they stream
-    annotate(request, total=total)
+    abstract_source: AbstractSource = "unavailable" if sources is None else "attributed"
+    annotate(request, total=total, abstract_source=abstract_source)
     provenance = Provenance(engine.index_version, canonical_hash, utc_date(), **pinned_by)
     media, ext = MEDIA[fmt]
     filename = f"openproceedings-{engine.index_version}-{canonical_hash[:12]}.{ext}"
     return StreamingResponse(
-        _body(fmt, documents, provenance, total),
+        _body(fmt, documents, provenance, total, sources),
         media_type=media,
         headers={
             "X-Total": str(total),
@@ -189,6 +219,7 @@ def export(
             "X-Tokenizer-Version": TOKENIZER_VERSION,
             "X-Query-Version": QUERY_VERSION,
             "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Abstract-Source": abstract_source,
         },
     )
 
@@ -210,13 +241,17 @@ def stored_documents(engine: TantivyEngine, ids: list[str]) -> Iterator[dict[str
 
 
 def _body(
-    fmt: str, documents: Iterator[dict[str, Any]], provenance: Provenance, total: int
+    fmt: str,
+    documents: Iterator[dict[str, Any]],
+    provenance: Provenance,
+    total: int,
+    sources: Sources | None,
 ) -> Iterator[bytes]:
     """`header(fmt)` then every entry, UTF-8, in chunks of at most `CHUNK` characters plus one entry;
     counted against `total` at the end (a shortfall or an excess raises, after the last byte it has)."""
     first = header(fmt)
     parts, size, n = [first], len(first), 0
-    for entry in entries(fmt, documents, provenance):
+    for entry in entries(fmt, documents, provenance, sources=sources):
         n += 1
         parts.append(entry)
         size += len(entry)

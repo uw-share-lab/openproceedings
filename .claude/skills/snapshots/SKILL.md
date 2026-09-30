@@ -107,7 +107,12 @@ marked crawl) is refused.
   blocks `rm`/`mv`/`truncate`/`sed -i` there, and blocks `git add -f data/`. A block is correct
   behaviour, not an obstacle. Build a new snapshot instead.
 - Old snapshots are retired only through the documented prune path (`release-manager`), never deleted by
-  hand while a search record references them.
+  hand while a search record references them. There is no `op snapshot` prune or delete command yet (`build`
+  and `diff` only). **Keep the snapshot of every index a search record pins** (the indexes
+  `op index retire` refuses to retire): an export of that record, or of that `index_version`, reads the
+  snapshot to name each abstract's source, and without it withholds every abstract (decision-021; the replay
+  itself needs only the index). A future prune command must refuse while a record pins an index built from the
+  snapshot.
 
 ## CLI
 - `op [--data-dir data] snapshot build [--from <cache>] [--out <snapshots>]` imports all cached sources,

@@ -55,7 +55,8 @@ def test_a_missing_id_ends_the_stream_short_and_the_body_fails_loudly(missing_at
     engine = FakeEngine(set(wanted) - {wanted[missing_at]})
     got = [d["id"] for d in route.stored_documents(engine, wanted)]  # type: ignore[arg-type]
     assert got == wanted[:missing_at]  # stops at the gap: nothing after it is passed off as complete
-    body = route._body("jsonl", route.stored_documents(engine, wanted), PROVENANCE, total=len(wanted))  # type: ignore[arg-type]
+    sources = dict.fromkeys(wanted)  # no abstract to attribute
+    body = route._body("jsonl", route.stored_documents(engine, wanted), PROVENANCE, len(wanted), sources)  # type: ignore[arg-type]
     with pytest.raises(EngineInternalError, match=f"exported {missing_at} records, but {len(wanted)} match"):
         b"".join(body)
 

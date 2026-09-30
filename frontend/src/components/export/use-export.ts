@@ -3,7 +3,8 @@
 /**
  * One export at a time, from a search or a record (design E1, R1): which format is being prepared, why the
  * last one didn't download, and what to announce ("Export started: 412 papers, RIS." then "Download ready.",
- * design §Keyboard and screen reader). The download continues when the menu closes.
+ * design §Keyboard and screen reader). The download continues when the menu closes. A download whose abstracts
+ * were withheld (decision-021) is still saved, and says so until the next export starts (EX-E8).
  */
 import { useRef, useState } from "react";
 import { plural } from "@/editor/diagnostics";
@@ -16,6 +17,7 @@ import {
   type ExportResult,
   type ExportSource,
 } from "@/lib/export";
+import { WITHHELD_TEXT } from "./export-notice";
 
 export type ExportNoticeResult = Exclude<ExportResult, { kind: "ok" }>;
 
@@ -24,6 +26,8 @@ export interface ExportState {
   readonly busy: ExportFormat | null;
   /** Why the last export didn't download, until the next one starts. */
   readonly notice: ExportNoticeResult | null;
+  /** The last download has no abstracts (`X-Abstract-Source: unavailable`), until the next one starts. */
+  readonly withheld: boolean;
   readonly announcement: string;
   readonly start: (format: ExportFormat) => void;
   /** Start the last format again (the notice's Retry). */
@@ -34,6 +38,7 @@ export function useExport(source: ExportSource): ExportState {
   const api = useApi();
   const [busy, setBusy] = useState<ExportFormat | null>(null);
   const [notice, setNotice] = useState<ExportNoticeResult | null>(null);
+  const [withheld, setWithheld] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const last = useRef<ExportFormat | null>(null);
   const running = useRef(false);
@@ -45,6 +50,7 @@ export function useExport(source: ExportSource): ExportState {
     const label = FORMATS.find((f) => f.format === format)?.label ?? format;
     setBusy(format);
     setNotice(null);
+    setWithheld(false);
     setAnnouncement(`Export started: ${plural(source.total, "paper")}, ${label}.`);
     void fetchExport(api, source, format).then(
       (result) => {
@@ -52,7 +58,8 @@ export function useExport(source: ExportSource): ExportState {
         setBusy(null);
         if (result.kind === "ok") {
           saveBlob(result.blob, result.filename);
-          setAnnouncement("Download ready.");
+          setWithheld(result.abstractsWithheld);
+          setAnnouncement(result.abstractsWithheld ? `Download ready. ${WITHHELD_TEXT}` : "Download ready.");
         } else {
           setNotice(result);
           setAnnouncement("Nothing was downloaded.");
@@ -71,6 +78,7 @@ export function useExport(source: ExportSource): ExportState {
   return {
     busy,
     notice,
+    withheld,
     announcement,
     start,
     retry: () => {

@@ -46,7 +46,8 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    `current` (or any other symlink in `indexes/`) points at. It can't see an instance started with
    `op serve --index <that version>`: check what each running instance serves. If it logs ERROR
    `index_retire_restore_failed`, move `indexes/.retiring-<version>` back to `indexes/<version>` by hand first. Snapshots have no retire
-   command yet. `protect-data-dir.sh` blocks edits; deletion is a decision record.
+   command yet. `protect-data-dir.sh` blocks edits; deletion is a decision record. Keep the snapshot of every
+   pinned index: its exports need it to attribute abstracts, and withhold them without it (decision-021).
 6. **Record** a decision for anything that changes defaults, tokenizer or sources, and a learnings entry
    for the release; follow `CLAUDE.md` §Closing workflow.
 

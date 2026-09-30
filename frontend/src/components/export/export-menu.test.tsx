@@ -187,6 +187,27 @@ describe("exporting (design E1, E3)", () => {
     expect(URL.createObjectURL).toHaveBeenCalledOnce();
   });
 
+  it("saves a file whose abstracts were withheld, and says so until the next export (EX-E8)", async () => {
+    let headers: Record<string, string> = { "X-Abstract-Source": "unavailable" };
+    const { trigger } = draw(() => file(headers));
+    expect(screen.queryByText(/This file has no abstracts/)).toBeNull();
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getAllByRole("menuitem")[0] as HTMLElement);
+    expect(await screen.findByText(/^Download ready\. This file has no abstracts/)).toBeTruthy();
+    expect(URL.createObjectURL).toHaveBeenCalledOnce();
+    const notice = screen.getByText(/Covidence doesn't show that note to screeners/);
+    expect(notice.textContent).toContain("This file has no abstracts: their source couldn't be attributed");
+    // the next export clears it as it starts, whether or not it downloads
+    headers = { "X-Abstract-Source": "attributed", "X-Index-Version": "9f8e7d6c5b4a" };
+    fireEvent.click(screen.getAllByRole("menuitem")[0] as HTMLElement);
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.queryByText(/Covidence doesn't show that note to screeners/)).toBeNull();
+    headers = { "X-Abstract-Source": "attributed" };
+    fireEvent.click(screen.getAllByRole("menuitem")[0] as HTMLElement);
+    expect(await screen.findByText("Download ready.")).toBeTruthy();
+    expect(screen.queryByText(/This file has no abstracts/)).toBeNull();
+  });
+
   it("downloads nothing when the index changed, and offers Search again", async () => {
     const { trigger, onSearchAgain } = draw(() => file({ "X-Index-Version": "9f8e7d6c5b4a" }));
     fireEvent.click(trigger);

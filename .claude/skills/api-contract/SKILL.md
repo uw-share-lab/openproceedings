@@ -72,7 +72,7 @@ Checked by `backend/tests/contract/test_contract_v1.py`; keep to them in every n
   fails on an enum in neither. Open ones get "Open set: … handle a value you don't know." in the schema.
 - **`ErrorBody.code` is `ErrorCode`**: the registry's codes with an HTTP status, derived, never hand-listed.
 - **Status-specific headers are declared** (`response_header`): an export's 200 (`X-Total`, the three
-  versions, `Content-Disposition`), every 405 (`Allow`) and 429 (`Retry-After`), the 503 `API_BUSY` of every
+  versions, `Content-Disposition`, `X-Abstract-Source`: closed enum `attributed`/`unavailable`, decision-021), every 405 (`Allow`) and 429 (`Retry-After`), the 503 `API_BUSY` of every
   route that runs a query (`Retry-After`, `openapi.BUSY`: `/search`, `/export`, `/papers/{id}`, the record routes), a 201
   (`Location`); CORS exposes each (`app.EXPOSED_HEADERS`).
 - `info.version` is the API version (`v1`), not the package's.
@@ -102,14 +102,25 @@ say exactly which set was exported; `X-Tokenizer-Version` and `X-Query-Version` 
 versions a JSON response has in its body. Exports are ordered by `id` and are never paginated or truncated. An
 export started during an index hot-swap finishes on the index it began on. The field mapping of each
 format is pinned in `.claude/skills/ris-format/SKILL.md` and `.claude/skills/bibtex-format/SKILL.md`. CSV
-is one row per paper: the 01 schema columns plus `index_version` and `canonical_hash` provenance columns,
-UTF-8 **with BOM**.
+is one row per paper: the 01 schema columns plus the provenance columns (`index_version`, `canonical_hash`,
+`exported_at`, `record_id`, `searched_at`) and the abstract-source columns (`abstract_source`,
+`abstract_origin`, `abstract_url`, `abstract_withheld`; TASK-138), UTF-8 **with BOM**. Every format names each
+abstract's source from the exported index's snapshot (`RecordFile.attributions`; a pinned index's through
+`IndexState.pinned_records`). When a pinned index's snapshot can't be verified the export is still a 200 with
+every abstract withheld, `X-Abstract-Source: unavailable` and a marker in each record (decision-021).
 
 ## Versioning rules
 Allowed within `v1` (additive): a new endpoint, a new response field (always sent, so required in the
 schema; an old client ignores it: response schemas carry no `additionalProperties: false`,
 `openapi.open_response_objects`), a new value in an enum listed **open** (`OPEN_ENUMS`, decision-009), a new
-optional parameter with the old behaviour as its default.
+optional parameter with the old behaviour as its default. **In an export format** (decision-021, TASK-138): a
+new RIS line of a tag that already repeats, placed so every documented position still holds (the provenance
+`N1` stays last); a new BibTeX field; a new CSV column appended after the last; a new JSONL key. Each only when
+no existing line, field or column changes its value or its position among its peers, and the Covidence fixture
+either keeps its bytes or is re-imported. Precedent: the M3a gate appended `record_id` and `searched_at`.
+Not protected (decision-021 says so): CSV readers with a fixed column list (pandas `names=`, readr fixed
+`col_types`), JSONL readers with a strict schema (`additionalProperties: false`), RIS readers that take the
+first `N1` as the provenance line.
 
 One recorded exception: `RecordResponse.replay` is nullable, null only for the opt-in `replay=false`
 (decision-014). `backend/tests/contract/test_openapi_additive.py` diffs the snapshot against the released one
@@ -125,8 +136,8 @@ tightening validation (for example a lower `limit` cap), changing a default (`so
 filters), changing what a field *means* (`total` counting something else), changing error codes, a new
 value in a **closed** enum (`mode`, `sort`, `format`, the replay `status`, …) or moving an enum from open to
 closed, and
-changing an export's field mapping or byte format. External scripts and Covidence imports depend on
-those formats.
+changing an export's existing field mapping or byte format (a value, a field's content such as BibTeX `note`, a
+column's position, a line's documented place), or removing anything from it (decision-021). External scripts and Covidence imports depend on those formats.
 
 ## Codegen and freshness (as built, TASK-040)
 **One command: `make openapi`.** Run it after any change to a route, a parameter or a response model, and

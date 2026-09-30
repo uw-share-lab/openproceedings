@@ -31,6 +31,13 @@ most one pinned index is opened (and so re-hashed) at a time, whatever its versi
 before that one-at-a-time slot is taken, so a version this instance doesn't hold is refused at once, never
 queued behind another version's open.
 
+A pinned export also names each abstract's source (decision-018, TASK-138), so it needs that index's snapshot
+records: `IndexState.pinned_records(version)` verifies them as a load does (`snapshot_records`), on first use
+only (a replay or diff never needs them), in the same one-at-a-time open slot, and keeps them beside the
+engine in an LRU of the same size. None when the snapshot can't be verified (one WARNING
+`pinned_snapshot_unavailable` with its reason, then remembered like a refused pin): the export then withholds
+every abstract (decision-021), never sending one without attribution.
+
 Every failure line carries a `reason` constant, never a message (messages name paths): an
 `IndexSelectionError`'s (`name_invalid`, `not_found`, `outside_indexes`), an `IndexBuildError`'s
 (`unreadable`, `manifest_changed`, `files_mismatch`, `doc_count_mismatch`), an `IndexUnservable`'s
@@ -241,6 +248,8 @@ class IndexState:
         self._refusal_seconds = refusal_seconds
         self._clock = clock
         self._pinned: OrderedDict[str, TantivyEngine] = OrderedDict()
+        self._pinned_records: OrderedDict[str, RecordFile] = OrderedDict()  # a pinned export's (TASK-138)
+        self._records_refused: OrderedDict[str, float] = OrderedDict()  # version -> until (not re-verified)
         self._refused: OrderedDict[str, tuple[PinnedReason, float]] = OrderedDict()
         self._absent: OrderedDict[str, float] = OrderedDict()
         self._cache_lock = threading.Lock()
@@ -343,6 +352,7 @@ class IndexState:
             with self._cache_lock:
                 self._refused.clear()  # a reload (SIGHUP) looks at every refused pin again
                 self._absent.clear()
+                self._records_refused.clear()
             return self._load()
 
     def _load(self) -> bool:
@@ -445,6 +455,54 @@ class IndexState:
         with self._cache_lock:
             self._opening.pop(version, None)
         return cached
+
+    def pinned_records(self, version: str) -> RecordFile | None:
+        """The verified snapshot records of index `version` (the served one's if it is that version), for a
+        pinned export's attributions; None, logged once per failed attempt, when they can't be verified. Call
+        it after `pinned(version)` answered `ok`: the name is taken as already resolved to that index. A
+        failure is remembered as a refused pin is (`refusal_seconds`, or until the next reload), so a snapshot
+        that doesn't verify is not re-hashed per request."""
+        served = self._served
+        if served is not None and served.engine.index_version == version:
+            return served.records
+        with self._cache_lock:
+            found = self._pinned_records.get(version)
+            if found is not None:
+                self._pinned_records.move_to_end(version)
+                return found
+            until = self._records_refused.get(version)
+            if until is not None:
+                if until > self._clock():
+                    return None
+                del self._records_refused[version]
+        with self._open_slot:  # a verifying pass over the snapshot: one open of any kind at a time
+            with self._cache_lock:  # a waiter finds what the open before it found: kept, or refused
+                found = self._pinned_records.get(version)
+                until = self._records_refused.get(version)
+                if found is None and until is not None and until > self._clock():
+                    return None
+            if found is None:
+                started = time.perf_counter()
+                try:
+                    found = snapshot_records(self._data_dir, index_path(self._data_dir, version), version)
+                except (IndexSelectionError, SnapshotError, OSError) as e:
+                    log.warning(
+                        "pinned_snapshot_unavailable",
+                        extra={"index_version": version, "error": type(e).__name__, "reason": reason_of(e)},
+                    )
+                    with self._cache_lock:
+                        self._records_refused[version] = self._clock() + self._refusal_seconds
+                        while len(self._records_refused) > MAX_REFUSALS:
+                            self._records_refused.popitem(last=False)
+                    return None
+                log.info(
+                    "pinned_snapshot_opened", extra={"index_version": version, "ms": elapsed_ms(started)}
+                )
+                with self._cache_lock:
+                    self._pinned_records[version] = found
+                    while len(self._pinned_records) > self._keep_pinned:
+                        self._pinned_records.popitem(last=False)  # the least recently used
+        return found
 
     def _cached(self, version: str) -> Pinned | None:
         with self._cache_lock:

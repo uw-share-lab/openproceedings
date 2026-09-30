@@ -213,7 +213,13 @@ TASK_DIRS = [FIXTURE.parents[2] / "backlog" / d for d in ("tasks", "completed")]
 
 def render(records: list[dict[str, Any]] = RECORDS) -> str:
     out = io.StringIO()
-    assert write("ris", sorted(records, key=lambda r: r["id"]), PROVENANCE, out) == len(records)
+    # the fixture's records carry no provenance, so no abstract names a source (TASK-138): the bytes a person
+    # imported stay the writer's, and the extra `N1` an attributed record gets has the rejected record's
+    # second `N1` as its Covidence precedent (spec 04 §Exports)
+    unattributed = {r["id"]: None for r in records}
+    assert write("ris", sorted(records, key=lambda r: r["id"]), PROVENANCE, out, sources=unattributed) == len(
+        records
+    )
     return out.getvalue()
 
 

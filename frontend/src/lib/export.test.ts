@@ -64,6 +64,14 @@ describe("fetchExport: pinned to what was shown (design E1)", () => {
     }
   });
 
+  it("downloads a file whose abstracts were withheld, and says so (decision-021)", async () => {
+    const attributed = await run(SEARCH, () => file({ ...good, "X-Abstract-Source": "attributed" })).result;
+    expect(attributed.kind === "ok" && attributed.abstractsWithheld).toBe(false);
+    const withheld = await run(RECORD, () => file({ ...good, "X-Abstract-Source": "unavailable" })).result;
+    expect(withheld.kind).toBe("ok");
+    expect(withheld.kind === "ok" && withheld.abstractsWithheld).toBe(true);
+  });
+
   it("exports a record by its record_id alone: never its q, never a re-run", async () => {
     const { result, calls } = run(RECORD, () => file(good));
     expect((await result).kind).toBe("ok");

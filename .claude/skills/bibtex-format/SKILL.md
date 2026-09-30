@@ -12,9 +12,10 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
   author    = {Doe, Jane and Roe, Richard},
   booktitle = {International Conference on Learning Representations (ICLR 2024)},
   year      = {2024},
+  abstract  = {…},
+  abstract_source = {PMLR https://proceedings.mlr.press/v202/okafor23a.html},
   url       = {https://…},
   doi       = {…},
-  abstract  = {…},
   keywords  = {main, status:accepted},
   openproceedings_id = {op:iclr:2024:iilhN2MycO},
   note      = {openproceedings a1b2c3d4e5f6 · query 9f8e7d… · exported 2026-09-25}
@@ -39,6 +40,15 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
 - `openproceedings_id = {<id>}` is on **every** entry (spec 04 §Exports), so a round-trip recovers the id
   of every record, proceedings-only ones (PMLR, NeurIPS `nips-<hash>`) included, which have no forum `url`
   to parse. refaudit's field regex `(\w+)\s*=` accepts the underscore.
+- `abstract_source = {<site> <url>}` after `abstract`, when the abstract has an attribution (TASK-138,
+  decision-018; spec 04 §Exports): the same words as RIS's `N1  - Abstract source:` line (the results list's
+  site name, ` (via RIS import)` for a `ris` claim, the url when there is one), from the snapshot's
+  `RecordFile.attributions`. Escaped like every value (`_braced`, as in `url`: a url's `%`, `&`, `#` gain a
+  backslash, `@` is written `{@}`, and when its braces don't balance every brace is dropped). A new field, not a change to `note`: `note` keeps exactly the provenance line (after the `Submitted
+  to` sentence), so it stays additive (decision-021); refaudit's `(\w+)\s*=` reads the name and styles don't
+  print it. When a pinned export's snapshot can't be verified (decision-021) there is no `abstract` and no
+  `abstract_source`; instead `abstract_withheld = {Abstract withheld: … (decision-018).}` (`export.WITHHELD`), a
+  field rather than a sentence in `note`, since changing `note` is breaking and styles typeset it.
 - `author`: `Last, First` joined by ` and `. Brace a name that contains the word `and` or a comma, or
   that is an organisation (`{OpenAI Team}`).
 
@@ -65,10 +75,13 @@ identifier. The id lives in `openproceedings_id`.
 ## Escaping
 Abstracts contain real LaTeX (`$\epsilon$-DP`, `\textbf{63.7\%}`). Keep it; escaping it would change the
 text screeners see.
-- **Braces must balance** in every value. If a value's braces don't balance, escape every brace in it as
-  `\{`/`\}`. refaudit's brace matcher skips the character after a backslash, so escaped braces are safe.
-- Escape bare `%` as `\%` (an unescaped `%` comments out the rest of the line in LaTeX), and bare `&`,
-  `#` and `_` outside math.
+- **Braces must balance** in every value. If a value's braces don't balance (counted with and without
+  regard to backslashes), drop every brace in it, and the backslash that escaped one (`_debraced`): BibTeX
+  counts braces without regard to backslashes while refaudit honours `\{`, so an escaped brace would be read
+  differently by the two and could swallow the next entry. Balanced, unescaped braces stay (`{BERT}`).
+- Escape bare `%` as `\%` (an unescaped `%` comments out the rest of the line in LaTeX), and bare `&` and
+  `#`. A bare `_` is escaped as `\_` only in `note`, which styles typeset; other values keep it (a url's or
+  an id's `_`, and `$…$` math, must read back unchanged).
 - The `@type{key,` pattern must never appear inside a value. refaudit finds entries with a regex over
   the whole file, not only at line starts. Write `@` in values as `{@}`.
 - Collapse newlines inside values to spaces (refaudit normalises whitespace anyway).
@@ -90,4 +103,6 @@ Parse the exported file with `refaudit.bibtex.parse_string` (`refaudit` is a pin
 added with task-036; never vendored) and assert: the entry count equals `X-Total`, keys are unique, the ids
 recovered from `openproceedings_id` equal `match_ids` (a PMLR-only fixture record included), `title` (minus its protective outer braces), `author`, `year` and `abstract`
 round-trip after whitespace normalisation, and the unbalanced-brace, `%`, `@` and non-ASCII-author fixtures parse into the right
-number of entries.
+number of entries. `abstract_source` round-trips to the snapshot's attribution
+(`backend/tests/contract/test_export_attribution.py`), and a url with `%`, `&` and `#` in it swallows no later
+entry.

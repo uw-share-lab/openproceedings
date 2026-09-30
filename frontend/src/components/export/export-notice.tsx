@@ -111,6 +111,26 @@ export function FailureNotice({ failure, onRetry }: { failure: Failure; onRetry:
 
 const code = (text: string) => <code className="font-mono break-all">{text}</code>;
 
+/** EX-E8: the downloaded file has no abstracts (`X-Abstract-Source: unavailable`, decision-021). */
+export const WITHHELD_TEXT =
+  "This file has no abstracts: their source couldn't be attributed on this instance (the index's snapshot is " +
+  "unavailable), so each record says its abstract was withheld. Titles, authors and venues are complete.";
+const WITHHELD_COVIDENCE =
+  "Covidence doesn't show that note to screeners, so they would screen these papers on titles alone. To " +
+  "screen on abstracts, ask whoever runs this instance to restore the snapshot of this index.";
+
+/** A saved export whose abstracts were withheld (EX-E8). Announced by the export's own live region. */
+export function WithheldNotice() {
+  return (
+    <div className={warnBox}>
+      <p className="break-words">
+        <span aria-hidden="true">⚠ </span>
+        {WITHHELD_TEXT} {WITHHELD_COVIDENCE}
+      </p>
+    </div>
+  );
+}
+
 /** Why an export didn't download (every case but `ok`). */
 export function ExportNotice({
   result,

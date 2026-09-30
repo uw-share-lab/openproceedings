@@ -251,7 +251,11 @@ warnings, the save's index check), the design doc says so; its open questions li
    and Save (`components/record/save-record.tsx`) sit in the results header, both disabled with the reason
    while the draft is dirty or the results are stale. An export is `GET /export?format&q&mode&index_version=<shown>`
    (`lib/export.ts`): its headers are read before the body, and a different `X-Index-Version` ("the index
-   changed") or, on the same index, a different `X-Total` (a bug) abandons it with nothing saved. The menu's
+   changed") or, on the same index, a different `X-Total` (a bug) abandons it with nothing saved. A file sent
+   with `X-Abstract-Source: unavailable` (a pinned index whose snapshot this instance can't verify, so every
+   abstract is withheld; decision-021) is saved, since the cited set is complete, and the menu and the record
+   page's exports then show copy EX-E8 (also announced) until the next export starts: Covidence hides the
+   file's own withheld note from screeners (TASK-138). The menu's
    status and track warnings list `facets[field][value]` for each value the searched clause admits beyond the
    default (`fieldWarning`; zeros left out, never summed), or name the reason with no numbers when the clause is
    negated, nested or written more than once; the formats wait until `/parse` has reported on the shown

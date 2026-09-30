@@ -3518,7 +3518,7 @@
     },
     "/api/v1/export": {
       "get": {
-        "description": "Every record the query matches, in `format`: of `q` (with `mode`, default `native`) on the pinned\n`index_version` (else the served index), or the stored ids of search record `record_id` (alone) from the\nindex it names. Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and\nindex (for a record, its stored `total`).",
+        "description": "Every record the query matches, in `format`: of `q` (with `mode`, default `native`) on the pinned\n`index_version` (else the served index), or the stored ids of search record `record_id` (alone) from the\nindex it names. Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and\nindex (for a record, its stored `total`). Each record names its abstract's source (decision-018), from the\nexported index's snapshot; for a pinned index whose snapshot this instance can't verify, the same records\nwith every abstract withheld and `X-Abstract-Source: unavailable` (decision-021).",
         "operationId": "export",
         "parameters": [
           {
@@ -3624,6 +3624,16 @@
               "Content-Disposition": {
                 "description": "attachment; filename=\"openproceedings-<index_version>-<first 12 of canonical_hash>.<ext>\"",
                 "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Abstract-Source": {
+                "description": "`attributed`: each abstract names its source (decision-018). `unavailable`: the exported index's snapshot can't be verified on this instance, so every abstract is withheld and each record says so (decision-021)",
+                "schema": {
+                  "enum": [
+                    "attributed",
+                    "unavailable"
+                  ],
                   "type": "string"
                 }
               },
