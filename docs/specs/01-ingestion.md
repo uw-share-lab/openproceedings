@@ -214,7 +214,14 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    the crawl date and the snapshot hash. Snapshots are immutable. `data/` is gitignored. Since manifest
    format 2 (TASK-082) it also holds, per venue × year × track, the missing abstracts and the claim
    sources of its records; per claim source, its crawl window; and per venue-year, the **statuses
-   indexed** (spec 07 §C).
+   indexed** (spec 07 §C). Its `merges` and `conflicts` count the rows of `merges.csv` and `conflicts.csv`:
+   `conflicts` is `total` plus one count per resolution kind present (the part of `resolution` before any
+   `:`): `precedence` (a field decided by the source precedence table, `precedence:<source>`, reconcile's
+   absence claims included), `newest` and `tie` (one source gave two values for a field: `newest:<source>` when the newest was kept, `tie:<source>`
+   when both were fetched at the same moment),
+   `ambiguous_not_merged`, `track_not_merged` and `venue_year_not_merged` (merges refused), and `unresolved`
+   (`unresolved:<source>`: one source's own signals disagree, so the field is `unknown`; decision-020). A kind
+   with no rows is absent, not 0.
 
 **Statuses indexed** are which statuses a venue-year's sources can contain at all, from the source table in
 `ingest/statuses.py` (`SOURCE_STATUSES`, one row per claim source): an OpenReview venueid can carry every
@@ -262,7 +269,19 @@ venueid; ICLR 2014 and 2016 have no decisions (`unknown`), and ICLR 2015 has not
 can't answer for a year is listed in the report's `coverage_gaps`, never raised. A note whose own evidence
 disagrees (the withdrawn ICLR 2021 note `xGZG2kS5bFk` says `ICLR 2021 Poster`; two decision notes that disagree;
 a venueid naming another track) gets `unknown` for that field and an `unresolved:openreview_v1` row in
-`conflicts.csv`. **Two notes of one paper are one record** (TASK-125): API v1 holds 300 NeurIPS 2021 main-track
+`conflicts.csv` (counted as `unresolved` in the manifest's `conflicts`). No signal outranks another
+(decision-020): `xGZG2kS5bFk` was withdrawn yet presented at ICLR 2021, while ICLR 2018's `S1p31z-Ab` was
+accepted by its decision note yet withdrawn and not presented, so any fixed ranking is wrong for one of them.
+The same holds across two notes of one paper: an accepted record whose pdf a withdrawn or desk-rejected record
+of the same crawl shares (`S1p31z-Ab` and its withdrawn twin `SJTCsqMUf`) becomes `unknown` with an
+`unresolved:openreview_v1` row, and the twin keeps its own status (`withdrawn_twins`, run after the listings and
+before the collapse below). **Authors** (decision-019): `content.authors` is split into names only when the split
+can be checked. A list with no entry starting with `and ` and none joining two names with ` and ` is kept as
+listed, whatever its length. Otherwise (one string, as early ICLR 2017 writes it, or a list with such an entry)
+each entry loses a leading `and ` and is split at `, and `, `,` and ` and `; the split is kept only when it gives
+exactly as many names as the note's `authorids` (or its `author_emails`, a list or one comma-separated string,
+when there are no ids) and no name still needs splitting. A refused split leaves the authors empty; either way
+the authors claim's evidence keeps the raw value, and the report counts `authors_split` and `authors_unsplit`. **Two notes of one paper are one record** (TASK-125): API v1 holds 300 NeurIPS 2021 main-track
 papers twice, as two Blind_Submission notes with different ids and numbers whose content is identical but for
 the id embedded in `_bibtex` (e.g. `-K4tIyQLaY` #292 and `BW2Z6B7S9KZ` #8244), which dedup would refuse as two
 submissions with one title. After a v1 venue-year's listings, records identical in everything but their id,
@@ -328,7 +347,9 @@ refuses the crawl.
 ## Testing
 
 - Recorded HTTP fixtures (VCR-style) for each source and each year's schema variant, recorded by hand
-  and scrubbed of real text (titles, abstracts, authors replaced; structure kept), per decision-004.
+  and scrubbed of real text (titles, abstracts, authors replaced; structure kept, including the separators
+  between author names and the count of a comma-separated email string, which the v1 author splitter reads),
+  per decision-004.
 - A venueid-parsing table test covering every venueid form seen in scholarmend's 90 validated cases, plus
   the known workshop forms.
 - Dedup property tests. Never merge across venue or year. Merging is idempotent and order-independent,

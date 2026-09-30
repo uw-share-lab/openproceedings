@@ -17,6 +17,10 @@ What it adds to that data, and nothing else:
   OpenReview venue-year crawl that is incomplete or has coverage gaps, conflicts, unmapped venues, non-routine
   skipped groups or non-routine skipped notes, from the snapshot manifest's `sources`: a passing `count_ok` can
   hide a loss at the id step (TASK-118). Routine: `not_submission` notes and `proposal`/`container` groups.
+- **Unresolved records.** Every `conflicts.csv` row a source left unresolved (`unresolved:<source>`: its own
+  signals disagree, so the field is `unknown`, decision-020), by record id, with the cell it would count in if the
+  field were resolved and whether that cell is gated (spec 07 §C; TASK-113). `load_unresolved` reads them from
+  the snapshot's `conflicts.csv`, checked against the manifest's hash.
 
 `cov` and `manifest` are plain mappings in `coverage.breakdown`'s and the manifest's JSON shapes, as the rest of
 the coverage code passes them.
@@ -24,6 +28,9 @@ the coverage code passes them.
 
 from __future__ import annotations
 
+import csv
+import hashlib
+import io
 import re
 import tomllib
 import unicodedata
@@ -81,6 +88,31 @@ class AcceptedException:
 
     def matches(self, indexed: int, official: int) -> bool:
         return (indexed, official) == (self.indexed, self.official)
+
+
+@dataclass(frozen=True, order=True)
+class Unresolved:
+    """A `conflicts.csv` row whose resolution is `unresolved:<source>`: the record's `field` is `unknown` because
+    `value_a` and `value_b` (each a value with its evidence) came from one source and disagree."""
+
+    id: str
+    field: str
+    value_a: str
+    value_b: str
+    resolution: str
+
+
+def load_unresolved(snapshot: Path, manifest: Mapping[str, Any]) -> tuple[Unresolved, ...]:
+    """The `unresolved:*` rows of `<snapshot>/conflicts.csv`, sorted, after checking the file's sha256 is the one
+    the manifest's `files` records (ValueError otherwise: a report never reads an audit file it can't vouch for)."""
+    data = (snapshot / "conflicts.csv").read_bytes()
+    if hashlib.sha256(data).hexdigest() != manifest.get("files", {}).get("conflicts.csv"):
+        raise ValueError(f"{snapshot.name}: conflicts.csv doesn't match its manifest's hash")
+    rows = csv.DictReader(io.StringIO(data.decode("utf-8")))
+    return tuple(sorted(
+        Unresolved(r["id"], r["field"], r["value_a"], r["value_b"], r["resolution"])
+        for r in rows if r["resolution"].startswith("unresolved:")
+    ))  # fmt: skip
 
 
 @dataclass(frozen=True)
@@ -341,6 +373,32 @@ def _listing_rows(manifest: Mapping[str, Any]) -> tuple[list[str], list[str]]:
     return listings, crawls
 
 
+def _unresolved_row(u: Unresolved, official: OfficialTable, locate: Locate | None) -> str:
+    """One unresolved record's row. The cell it would count in: for `status`, its own track's cell; for `track`,
+    the cell of each track a side names (its first word); each marked gated or not."""
+    where = None if locate is None else locate(u.id)
+    if where is None:
+        cells = "not in the snapshot"
+    else:
+        venue, year, track, _ = where
+        tracks = [track] if u.field != "track" else [
+            t for t in dict.fromkeys(v.split(" ", 1)[0] for v in (u.value_a, u.value_b)) if t in TRACK_ORDER
+        ]  # fmt: skip
+        cells = (
+            " or ".join(
+                f"{venue} {year} {t} ({'gated' if (venue, year, t) in official and t in GATED_TRACKS else 'not gated'})"
+                for t in tracks
+            )
+            or "no track named"
+        )
+    return f"| {u.id} | {u.field} | {cells} | {_cell_text(u.value_a)} | {_cell_text(u.value_b)} |"
+
+
+def _cell_text(text: str) -> str:
+    """`text` safe in a Markdown table cell."""
+    return text.replace("|", "\\|").replace("\n", " ")
+
+
 def _group_reasons(skipped_groups: Mapping[str, str]) -> dict[str, int]:
     """Skipped v2 groups by reason, the routine ones left out."""
     out: dict[str, int] = {}
@@ -363,9 +421,11 @@ def render(
     causes: Mapping[CellKey, str] | None = None,
     exceptions: Mapping[CellKey, AcceptedException] | None = None,
     locate: Locate | None = None,
+    unresolved: Sequence[Unresolved] = (),
 ) -> str:
     """The report's Markdown. `cov` is the coverage the API serves (`coverage.breakdown`'s shape); `manifest` is
-    the same snapshot's manifest (for the listings); `locate` finds an exception's papers in it (`gate`)."""
+    the same snapshot's manifest (for the listings); `locate` finds an exception's papers in it (`gate`) and each
+    unresolved record's cell; `unresolved` is the snapshot's unresolved conflict rows (`load_unresolved`)."""
     causes = causes or {}
     exceptions = exceptions or {}
     verdict = gate(cov, official, exceptions, locate)
@@ -475,6 +535,14 @@ def render(
         lines.append(
             "None: every crawl is complete, with no coverage gaps, conflicts, unmapped venues or non-routine skips."
         )
+    lines += ["", "## Unresolved records", ""]
+    if unresolved:
+        lines += ["A source's own signals disagree, so the field is `unknown` (decision-020); each record would count "
+                  "in the cell shown if the field were resolved.", "",
+                  "| record | field | would count in | signal A | signal B |", "|---|---|---|---|---|",
+                  *(_unresolved_row(u, official, locate) for u in unresolved)]  # fmt: skip
+    else:
+        lines.append("None: no source left a field unresolved.")
     t = cov["totals"]
     lines += [
         "",

@@ -540,6 +540,7 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
         failing_summary,
         gate,
         load_cause_file,
+        load_unresolved,
         missing_decisions,
         render,
         stale_causes,
@@ -575,6 +576,7 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
         return None if r is None else (r.venue, r.year, r.track, r.status)
 
     official = _official_table()
+    unresolved = load_unresolved(records.path.parent, records.manifest)  # conflicts.csv, hash-checked
     meta = Meta(
         date=day,
         index_version=engine.index_version,
@@ -590,6 +592,7 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
         causes=causes,
         exceptions=exceptions,
         locate=locate,
+        unresolved=unresolved,
     )
     written, replaced = write(text, out, day)
     verdict = gate(coverage, official, exceptions, locate)
@@ -598,7 +601,7 @@ def _eval_coverage(ns: argparse.Namespace) -> int:
         "index_version": engine.index_version, "gated": verdict.gated, "passing": verdict.passing,
         "gaps": verdict.gaps, "unclassified": sum(k not in causes for k, _ in verdict.failing),
         "accepted_exceptions": len(verdict.accepted), "stale_causes": len(stale),
-        "stale_exceptions": len(stale_ex), "replaced": replaced, "ms": elapsed_ms(started),
+        "stale_exceptions": len(stale_ex), "unresolved": len(unresolved), "replaced": replaced, "ms": elapsed_ms(started),
     })  # fmt: skip
     print(f"wrote {written}", file=sys.stderr)
     state = "PASS" if verdict.passed else "FAIL"

@@ -8,8 +8,11 @@ What a fixture keeps real: ids, forum ids, numbers, venueids, venue strings, dec
 recommendations, invitations, signatures that name a group, dates, pagination fields, the status code and
 the rate-limit and content-type headers, and the HTML structure the adapters parse. What it replaces with
 synthetic text of the same type: titles, abstracts, authors, author ids, keywords, reviews, comments,
-bibtex, emails and profile ids (`~Name1`), and free text in general. Long listings are trimmed to a few
-entries; the fixture's `_recorded.trimmed` says so.
+bibtex, emails and profile ids (`~Name1`), and free text in general. An authors value keeps its shape, which
+the v1 author splitter reads (decision-019): each name becomes `Synthetic Author <n>` and the separators between
+names (a leading `and `, `, and `, `,`, ` and `) stay, and a comma-separated email string keeps its count. Long
+listings are trimmed to a few entries (a capture may name the notes to keep in `"keep_ids"`); the fixture's
+`_recorded.trimmed` says so.
 
     python backend/tests/fixtures/http/scrub.py <captures-dir>   # rewrites every capture under it
 
@@ -58,6 +61,8 @@ PERSON = re.compile(r"[^\s@]+@[^\s@]+|^~")
 # Controlled `content.venue` labels PERSON matches but that name no person, kept verbatim (and only as a venue
 # or venueid value). Add a label only after checking it on openreview.net; never relax PERSON instead.
 VENUE_LABELS = frozenset({"BT@ICLR2024"})  # ICLR 2024's blogpost track (TASK-101)
+# The separators between author names in a v1 `authors` value, kept by the scrub (the splitter's own table).
+AUTHOR_SEPARATOR = re.compile(r"(^\s*and\s+|,\s*and\s+|,\s*|\s+and\s+)")
 
 
 class _Counter:
@@ -81,9 +86,14 @@ def _synthetic(key: str, value: Any, c: _Counter) -> Any:
         if value == "":
             return ""
         if key == "authorids" or PERSON.search(value):
+            if "," in value:  # `a@x, b@y` (early ICLR 2017 `author_emails`): as many synthetic ones
+                return ", ".join(_person(p, c) for p in value.split(",") if p.strip())
             return _person(value, c)
         if key == "authors":
-            return f"Synthetic Author {c.next()}"
+            return "".join(
+                p if i % 2 or not p.strip() else f"Synthetic Author {c.next()}"
+                for i, p in enumerate(AUTHOR_SEPARATOR.split(value))
+            )
         if key == "paperhash":
             return f"synthetic|synthetic_title_{c.next()}"
         return f"Synthetic {key.lower().replace('_', ' ').strip()} text {c.next()}."
@@ -163,13 +173,20 @@ def _trim_forum(notes: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], str 
     return keep, note
 
 
-def scrub_json(url: str, body: Any) -> tuple[Any, str | None]:
+def scrub_json(url: str, body: Any, keep_ids: list[str] | None = None) -> tuple[Any, str | None]:
     c = _Counter()
     trimmed = None
     if isinstance(body, dict) and "notes" in body:
         notes = body["notes"]
         if "forum=" in url:
             notes, trimmed = _trim_forum(notes)
+        elif keep_ids:
+            kept = [n for n in notes if n.get("id") in keep_ids]
+            missing = sorted(set(keep_ids) - {n.get("id") for n in kept})
+            if missing:
+                raise ValueError(f"{url}: keep_ids not on this page: {', '.join(missing)}")
+            trimmed = f"listing page trimmed from {len(notes)} to {len(kept)} notes (order kept; `count` is the page's)"
+            notes = kept
         body = {**body, "notes": [scrub_note(n, c) for n in notes]}
     elif isinstance(body, dict) and "groups" in body:
         groups = []
@@ -471,14 +488,14 @@ def fixture(capture: dict[str, Any]) -> dict[str, Any]:
     text = capture["body"]
     trimmed = None
     if "json" in headers.get("content-type", ""):
-        body, trimmed = scrub_json(url, json.loads(text))
+        body, trimmed = scrub_json(url, json.loads(text), capture.get("keep_ids"))
         response["json"] = body
     else:
         page, trimmed = scrub_html(url, text)
         response["text"] = page
     recorded: dict[str, Any] = {
         "date": RECORDED,
-        "run": "authenticated OpenReview fixture run",
+        "run": capture.get("run", "authenticated OpenReview fixture run"),
         "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
     }
     if trimmed:

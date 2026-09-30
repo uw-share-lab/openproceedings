@@ -176,7 +176,8 @@ following the `forum_link` and `title_venue_year` rows from any `merged_id` reac
 source against OpenReview's `accepted`), `newest:<source>` or `tie:<source>` (one source, two
 values; the kept one is `value_a`), `ambiguous_not_merged`, `track_not_merged`,
 `venue_year_not_merged`, or `unresolved:openreview_v1` (not dedup's: a v1 crawl found one note's own evidence
-disagreeing, such as a withdrawn invitation and an accepted `content.venue`; the record holds `unknown` for that
+disagreeing, such as a withdrawn invitation and an accepted `content.venue`, or an accepted note whose pdf a
+withdrawn note shares, decision-020; the record holds `unknown` for that
 field, and `value_a`/`value_b` name each value with its evidence; `snapshot.with_crawl_conflicts` adds it). For the not-merged resolutions, `field` is `title_key`, `title_key_chain`,
 `forum_id` (one forum id, own or linked, on records that stayed apart) or `forum_id_chain`, and the values
 are the two record ids, with their sources (a set-aside rival's row is paired with the first listing of its

@@ -349,7 +349,11 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   `sources` is the manifest's `sources` keys, sorted; `identification_citable` is `not
   bootstrap_only(sources)` (false for today's RIS-only corpus; the record page then shows the CLI's caution
   and no methods text, 05). `dedup` is `{merged: manifest merges.total, ambiguous_not_merged,
-  track_not_merged, venue_year_not_merged: manifest conflicts.<each>, 0 when absent}`.
+  track_not_merged, venue_year_not_merged: manifest conflicts.<each>, 0 when absent}`. The manifest's
+  other conflict kinds (`precedence`, `newest`, `tie`, `unresolved`; spec 01 §Pipeline 5) are deliberately not in
+  `dedup`: they are field disagreements, not merge decisions, so they say nothing about how duplicates were
+  removed. In particular `unresolved` (a source's own signals disagree and the field is `unknown`, decision-020)
+  is a classification outcome; the coverage report lists those records (spec 07 §C).
   `searched_at` is UTC to the second (`…Z`). `semantic_version` is null until the near-miss panel exists
   (M5, deferred to phase 2 by decision-017), so it is always null in v1. `excluded` keeps the pinned bucket order.
 - **`ids` are left out of `GET /records/{id}`** (`record.ids` is null) unless `?include=ids`; to fetch the

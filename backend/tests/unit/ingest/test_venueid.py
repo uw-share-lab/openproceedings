@@ -377,6 +377,7 @@ V1_NOTES: list[tuple[str, str, str, str]] = [
     ("v1/iclr-2017/note-authors-string-live.json", "other", "main", "rejected"),
     ("v1/iclr-2017/note-workshop-invitation-live.json", "other", "workshop", "unknown"),
     ("v1/iclr-2017/notes-conference-listing.json", "other", "main", "accepted"),
+    ("v1/iclr-2017/notes-conference-authors-string.json", "other", "main", "rejected"),  # TASK-113
     ("v1/iclr-2021/note-accepted.json", "main", "main", "accepted"),
     ("v1/iclr-2021/forum-accepted.json", "main", "main", "accepted"),
     # the venue string alone says accepted; the withdrawn invitation disagrees: the v1 adapter makes it unknown + a conflict row
@@ -419,6 +420,13 @@ V1_NO_VENUE_EVIDENCE = {
     "v1/iclr-2016/notes-workshop.json",
     "v1/iclr-2017/note-workshop-null-nonreaders-live.json",  # nonreaders null (TASK-119); no venue string
     "v1/iclr-2018/forum-rejected.json",
+    "v1/iclr-2017/notes-workshop-authors-and.json",  # TASK-113 author shapes; its first note has no venue
+    "v1/iclr-2018/forum-accepted-with-withdrawn-twin.json",  # TASK-113: ELMo, accepted by its decision note
+    "v1/iclr-2018/notes-blind-accepted-with-withdrawn-twin.json",
+    "v1/iclr-2018/notes-withdrawn-twin-of-accepted.json",
+    "v1/iclr-2018/notes-blind-authors-and.json",
+    "v1/iclr-2020/notes-blind-authors-and.json",
+    "v1/iclr-2021/notes-blind-authors-and.json",
     "v1/iclr-2018/notes-blind-listing.json",
     "v1/iclr-2018/notes-withdrawn-listing.json",
     "v1/iclr-2019/forum-rejected-meta-review.json",

@@ -28,13 +28,21 @@ The authority rules (never broken):
    the string, which can be free text).
 4. When a note's own evidence disagrees (a withdrawn-invitation note whose `content.venue` says accepted, such
    as ICLR 2021 `xGZG2kS5bFk`; two decision notes that disagree), the status is `unknown` and the disagreement
-   is a `conflicts.csv` row (`unresolved:openreview_v1`), never resolved by picking one side.
+   is a `conflicts.csv` row (`unresolved:openreview_v1`), never resolved by picking one side (decision-020: no
+   signal outranks another; `xGZG2kS5bFk` was withdrawn yet presented, ICLR 2018 `S1p31z-Ab` accepted yet not
+   presented). Likewise across two notes of one paper: an accepted record whose pdf a withdrawn or
+   desk-rejected record of the crawl shares (`S1p31z-Ab` and its withdrawn twin `SJTCsqMUf`) becomes `unknown`
+   with such a row (`withdrawn_twins`); the twin keeps its status.
 5. **Two notes of one paper are one record** (TASK-125): OpenReview v1 holds 300 NeurIPS 2021 main-track papers as
    two Blind_Submission notes (different id and number, identical content but for the id in `_bibtex`), which
    dedup would otherwise refuse as two submissions with one title. After the listings, records that are
    identical in everything but their id, forum URL and provenance, with a pdf and a note number, are
    collapsed to the lowest-numbered note; each other note is counted in `skipped["duplicate_submission"]`
    (`collapse_duplicate_submissions`). A record with a crawl conflict is never collapsed.
+
+`content.authors` is split into names only by decision-019's count-checked rule (`split_authors`): a list with
+no `and`-joined entry is taken as listed; otherwise the split must give exactly as many names as the note has
+author ids, or the authors stay empty (counted in `authors_unsplit`), the raw value kept in the claim's evidence.
 
 Every value is a claim with `source="openreview_v1"`, the page URL it came from (the listing page, or the
 forum page for a decision note) and that page's `fetched_at` from the cache. A finished crawl writes
@@ -305,8 +313,9 @@ class CrawlReport(Report):
     unknown_track: int = 0
     unknown_status: int = 0
     abstract_missing: int = 0
+    authors_split: int = 0  # `content.authors` split by the count-checked rule (decision-019)
     authors_unsplit: int = (
-        0  # `content.authors` was one string (early ICLR 2017): kept out, never split by guess
+        0  # a split the rule refused: authors kept out (empty), the raw value in the evidence
     )
     track_status: dict[str, Counter[str]] = field(default_factory=dict)
     gaps: tuple[str, ...] = ()
@@ -332,6 +341,7 @@ class CrawlReport(Report):
             "unknown_track": self.unknown_track,
             "unknown_status": self.unknown_status,
             "abstract_missing": self.abstract_missing,
+            "authors_split": self.authors_split,
             "authors_unsplit": self.authors_unsplit,
             "conflicts": len(self.conflicts),
             "track_status": {t: dict(sorted(s.items())) for t, s in sorted(self.track_status.items())},
@@ -515,6 +525,68 @@ def _pdf(nid: str, value: Any) -> str | None:
     return None
 
 
+# --- authors (decision-019) ------------------------------------------------------------------------------------
+
+_LEADING_AND = re.compile(r"^and\s+")
+_AUTHOR_SEPARATOR = re.compile(
+    r",\s*and\s+|,|\s+and\s+"
+)  # `, and ` first, so an Oxford comma is one separator
+_NEEDS_SPLIT = re.compile(r"^\s*and\s|\sand\s")  # an entry starting with `and `, or `A and B` in one entry
+
+AuthorsHow = Literal["listed", "split", "refused"]
+
+
+def author_count(content: Mapping[str, Any]) -> int | None:
+    """How many authors the note names by id: `content.authorids`, or `content.author_emails` (a list, or one
+    comma-separated string, as early ICLR 2017 writes it) when there are no ids; None when neither says."""
+    ids = content.get("authorids")
+    if isinstance(ids, list):
+        return len(ids)
+    emails = content.get("author_emails")
+    if isinstance(emails, list):
+        return len(emails)
+    if isinstance(emails, str) and emails.strip():
+        return sum(1 for e in emails.split(",") if e.strip())
+    return None
+
+
+def _split_entry(entry: str) -> list[str]:
+    body = _LEADING_AND.sub("", entry.strip(), count=1)
+    return [p.strip() for p in _AUTHOR_SEPARATOR.split(body) if p.strip()]
+
+
+def split_authors(raw: Any, count: int | None) -> tuple[tuple[str, ...], AuthorsHow]:
+    """`content.authors` as names (decision-019). A list with no entry starting with `and ` and none joining two
+    names with ` and ` is taken as listed, untouched. Anything else (one string, or a list with such an entry) is
+    split: each entry loses a leading `and ` and is split at `, and `, `,` and ` and `. The split is accepted only
+    when it gives exactly `count` names (the note's author ids, `author_count`) and no name still needs a split;
+    otherwise it is refused and the authors are empty. So an accepted split always has the id count, and a
+    split's output, taken again, is listed as it is."""
+    if isinstance(raw, list):
+        entries = [v for v in raw if isinstance(v, str) and v.strip()]
+        if not any(_NEEDS_SPLIT.search(v) for v in entries):
+            return tuple(entries), "listed"
+    elif isinstance(raw, str) and raw.strip():
+        entries = [raw]
+    else:
+        return (), "listed"
+    names = [name for entry in entries for name in _split_entry(entry)]
+    if count is None or len(names) != count or any(_NEEDS_SPLIT.search(n) or n == "and" for n in names):
+        return (), "refused"
+    return tuple(names), "split"
+
+
+def _authors_evidence(raw: Any, count: int | None, how: AuthorsHow, names: Sequence[str]) -> str:
+    """The authors claim's evidence: `content.authors` when listed; else the rule's outcome and the raw value."""
+    if how == "listed":
+        return "content.authors"
+    counted = "no content.authorids or author_emails to count" if count is None else f"{count} author ids"
+    shown = json.dumps(raw, ensure_ascii=False)
+    if how == "split":
+        return f"content.authors split at `and` and commas into {len(names)} names, as many as its {counted} (raw: {shown})"
+    return f"content.authors not split: its pieces don't match its {counted} (raw: {shown})"
+
+
 def note_record(
     ad: Adapter, listing: Listing, note: Mapping[str, Any], listing_page: Page, read_forum: ForumReader,
     report: CrawlReport | None = None,
@@ -538,7 +610,8 @@ def note_record(
     if abstract is not None and (abstract.startswith("…") or abstract.endswith("…")):
         abstract = None
     raw_authors = content.get("authors")
-    authors = _strings(raw_authors)
+    count = author_count(content)
+    authors, authors_how = split_authors(raw_authors, count)
     keywords = _strings(content.get("keywords"))
     vid = _content_str(content, "venueid")
     urls = Urls(forum=_FORUM_URL.format(nid), pdf=_pdf(nid, content.get("pdf")))
@@ -554,7 +627,7 @@ def note_record(
         claim("track", verdict.track, verdict.track_evidence, verdict.track_page),
         claim("status", verdict.status, verdict.status_evidence, verdict.status_page),
         claim("title", title, "content.title"),
-        claim("authors", authors, "content.authors"),
+        claim("authors", authors, _authors_evidence(raw_authors, count, authors_how, authors)),
         claim("urls.forum", urls.forum, "note.id"),
     ]  # fmt: skip
     if verdict.presentation is not None:
@@ -578,8 +651,10 @@ def note_record(
     except ValidationError:
         return "invalid"
     if report is not None:
-        if isinstance(raw_authors, str) and raw_authors.strip():
-            report.authors_unsplit += 1
+        report.authors_split += authors_how == "split"
+        report.authors_unsplit += authors_how == "refused"
+        if authors_how == "refused":
+            log.debug("openreview_v1_authors_unsplit", extra={"forum": nid})
         if verdict.unmapped is not None:
             report.unmapped[verdict.unmapped] += 1
             log.debug("openreview_v1_unmapped", extra={"forum": nid, "evidence": verdict.unmapped})
@@ -638,6 +713,9 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
                 raise
             report.complete = False
             report.would_fetch.append(e.url)
+    for c in withdrawn_twins(records):  # rule 4 across two notes: after every listing, before rule 5
+        report.conflicts.append(c)
+        log.debug("openreview_v1_conflict", extra={"forum": c.id.split(":", 3)[3], "field": c.field})
     conflicted = {c.id for c in report.conflicts}
     for kept, dropped in collapse_duplicate_submissions(records, numbers, conflicted):
         report.skipped[DUPLICATE_SUBMISSION] += 1
@@ -771,6 +849,45 @@ def collapse_duplicate_submissions(
         for rid in rest:
             out.append((records[kept].native, records.pop(rid).native))
     return sorted(out)
+
+
+# --- an accepted note with a withdrawn twin (rule 4, decision-020) ----------------------------------------------
+
+_NOT_PRESENTED = ("withdrawn", "desk_rejected")
+
+
+def withdrawn_twins(records: dict[str, PaperRecord]) -> list[Conflict]:
+    """Set to `unknown` every accepted record whose pdf another record of the crawl, withdrawn or desk-rejected,
+    shares (module docstring rule 4: two notes of one paper whose status signals disagree), and return its
+    `unresolved:openreview_v1` rows, one per record, sorted. The twin keeps its own status, and the accepted
+    record loses its presentation (it came from the decision it no longer has). E.g. ICLR 2018 `S1p31z-Ab`: its
+    decision note says `Accept (Poster)`, and `SJTCsqMUf`, listed as withdrawn, is the same pdf; the paper was
+    not presented at ICLR 2018. No signal outranks another: ICLR 2021 `xGZG2kS5bFk` was withdrawn and presented."""
+    gone: defaultdict[str, list[PaperRecord]] = defaultdict(list)
+    for r in records.values():
+        if r.urls.pdf is not None and r.status in _NOT_PRESENTED:
+            gone[r.urls.pdf].append(r)
+    out: list[Conflict] = []
+    for rid in sorted(records):
+        r = records[rid]
+        if r.status != "accepted" or r.urls.pdf is None:
+            continue
+        twins = sorted((t for t in gone.get(r.urls.pdf, ()) if t.id != rid), key=lambda t: t.id)
+        if not twins:
+            continue
+        [was] = [c for c in r.claims("status") if c.source == SOURCE]
+        twin = twins[0]
+        [twin_claim] = [c for c in twin.claims("status") if c.source == SOURCE]
+        side_b = f"{twin.status} (twin {twin.native}, same pdf: {twin_claim.evidence})"
+        status = Claim.model_validate(
+            {**was.model_dump(), "value": "unknown", "evidence": f"conflict: {was.evidence} vs {side_b}"}
+        )
+        provenance = (*(c for c in r.provenance if c.field not in ("status", "presentation")), status)
+        records[rid] = r.model_copy(
+            update={"status": "unknown", "presentation": None, "provenance": provenance}
+        )
+        out.append(Conflict(rid, "status", f"accepted ({was.evidence})", SOURCE, side_b, SOURCE, CONFLICT))
+    return out
 
 
 # --- the crawl files ------------------------------------------------------------------------------------------
