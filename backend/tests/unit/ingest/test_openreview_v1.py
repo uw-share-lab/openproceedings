@@ -985,9 +985,12 @@ def test_a_silent_note_without_a_pdf_is_never_collapsed(tmp_path: Path) -> None:
 ELMO, ELMO_TWIN, ELMO_DECISION = "S1p31z-Ab", "SJTCsqMUf", "S1HRmJaHM"
 
 
-def elmo_world(decision: str = "Accept (Poster)", twin_pdf: str | None = None) -> FakeOpenReviewV1:
+def elmo_world(
+    decision: str | None = "Accept (Poster)", twin_pdf: str | None = None, twin_listing: str = WITHDRAWN
+) -> FakeOpenReviewV1:
     """ICLR 2018 `S1p31z-Ab` (its decision note `Accept (Poster)`) and `SJTCsqMUf`, listed as withdrawn with the
-    same pdf, as recorded; `decision` and `twin_pdf` vary one of them."""
+    same pdf, as recorded; `decision` (None: the forum without its decision note, as the 12 undecided ICLR 2018
+    blind notes with a withdrawn twin), `twin_pdf` and `twin_listing` vary one of them."""
     blind = v1_note("iclr-2018/notes-blind-accepted-with-withdrawn-twin.json")
     twin = v1_note("iclr-2018/notes-withdrawn-twin-of-accepted.json")
     assert blind["id"] == ELMO and twin["id"] == ELMO_TWIN
@@ -997,8 +1000,11 @@ def elmo_world(decision: str = "Accept (Poster)", twin_pdf: str | None = None) -
     forum = [
         dict(n, content={**n["content"], "decision": decision}) if n["id"] == ELMO_DECISION else n
         for n in v1_notes("iclr-2018/forum-accepted-with-withdrawn-twin.json")
+        if decision is not None or n["id"] != ELMO_DECISION
     ]
-    return FakeOpenReviewV1({BLIND.format(y=2018): [blind], WITHDRAWN.format(y=2018): [twin]}, {ELMO: forum})
+    return FakeOpenReviewV1(
+        {BLIND.format(y=2018): [blind], twin_listing.format(y=2018): [twin]}, {ELMO: forum}
+    )
 
 
 def test_an_accepted_note_with_a_withdrawn_twin_is_unknown_and_an_unresolved_conflict(tmp_path: Path) -> None:
@@ -1022,24 +1028,103 @@ def test_an_accepted_note_with_a_withdrawn_twin_is_unknown_and_an_unresolved_con
     assert manifest["unknown_status"] == 1 and manifest["skipped"]["duplicate_submission"] == 0
 
 
+OTHER_PDF = "/pdf/" + "0" * 40 + ".pdf"
+
+
 @pytest.mark.parametrize(
-    ("decision", "twin_pdf", "expected"),
+    ("decision", "twin_pdf", "expected", "rows"),
     [
-        ("Accept (Poster)", None, ("main", "unknown", None)),  # as recorded: the conflict
-        ("Accept (Oral)", None, ("main", "unknown", None)),  # any accepting decision
-        # another pdf: two papers, the decision stands
-        ("Accept (Poster)", "/pdf/" + "0" * 40 + ".pdf", ("main", "accepted", "poster")),
-        ("Reject", None, ("main", "rejected", None)),  # the owner's rule covers an accepting decision only
-        ("Invite to Workshop Track", None, ("workshop", "unknown", None)),  # already unknown: no row
+        ("Accept (Poster)", None, ("main", "unknown", None), 1),  # as recorded: the conflict
+        ("Accept (Oral)", None, ("main", "unknown", None), 1),  # any accepting decision
+        ("Accept (Poster)", OTHER_PDF, ("main", "accepted", "poster"), 0),  # another pdf: two papers
+        # no decision at all: the twin's withdrawal is the one signal (the owner, 2026-09-29, TASK-139)
+        (None, None, ("main", "withdrawn", None), 0),
+        (None, OTHER_PDF, ("main", "unknown", None), 0),  # no decision, another pdf: still undecided
+        ("Reject", None, ("main", "rejected", None), 0),  # the owner: a rejected note stays rejected
+        ("Invite to Workshop Track", None, ("workshop", "unknown", None), 0),  # a decision, and another track
+    ],
+    ids=[
+        "poster",
+        "oral",
+        "accepted-other-pdf",
+        "no-decision",
+        "no-decision-other-pdf",
+        "reject",
+        "workshop",
     ],
 )
-def test_the_withdrawn_twin_rule_needs_an_accepted_record_and_the_same_pdf(
-    tmp_path: Path, decision: str, twin_pdf: str | None, expected: tuple[str, str, str | None]
+def test_the_withdrawn_twin_rule_by_the_blind_notes_decision(
+    tmp_path: Path,
+    decision: str | None,
+    twin_pdf: str | None,
+    expected: tuple[str, str, str | None],
+    rows: int,
 ) -> None:
     crawl = run(elmo_world(decision, twin_pdf), tmp_path, "ICLR", 2018)
     got = by_forum(crawl)
     assert outcome(got[ELMO]) == expected and outcome(got[ELMO_TWIN]) == ("main", "withdrawn", None)
-    assert len(crawl.report.conflicts) == (expected[1] == "unknown" and expected[0] == "main")
+    assert len(crawl.report.conflicts) == rows and len(crawl.records) == 2  # never collapsed
+
+
+def test_an_undecided_note_made_withdrawn_is_never_collapsed_into_its_twin(tmp_path: Path) -> None:
+    """The twin rule changes a status, never which records exist: even when the withdrawn twin's content is the
+    blind note's to the letter (live, the authors differ), the two stay two records after both are withdrawn."""
+    server = elmo_world(None)
+    [blind] = server.listings[BLIND.format(y=2018)]
+    [twin] = server.listings[WITHDRAWN.format(y=2018)]
+    twin["content"] = dict(blind["content"])
+    assert type(blind["number"]) is int and type(twin["number"]) is int
+    crawl = run(server, tmp_path, "ICLR", 2018)
+    assert {r.native: r.status for r in crawl.records} == {ELMO: "withdrawn", ELMO_TWIN: "withdrawn"}
+    assert crawl.report.skipped["duplicate_submission"] == 0
+
+
+def test_an_undecided_note_in_a_content_venue_year_keeps_unknown_beside_a_withdrawn_twin(
+    tmp_path: Path,
+) -> None:
+    """Only the found absence of a decision note (`NO_DECISION_NOTE`, ICLR 2018–2021's decision-note years)
+    counts as "no decision at all". A NeurIPS 2021 blind note with no `content.venue` (a content.venue year,
+    where a note's silence is another rule's business) stays `unknown` beside a withdrawn twin of its pdf."""
+    note, twin = neurips_2021_twins(venue=None)
+    del note["content"]["venue"]
+    server = FakeOpenReviewV1({NEURIPS_2021_MAIN: [note],
+                               "NeurIPS.cc/2021/Conference/-/Withdrawn_Submission": [twin]})  # fmt: skip
+    crawl = run(server, tmp_path, "NeurIPS", 2021)
+    got = by_forum(crawl)
+    assert outcome(got[note["id"]]) == ("main", "unknown", None)
+    assert claim(got[note["id"]], "status").evidence != v1.NO_DECISION_NOTE
+    assert outcome(got[twin["id"]]) == ("main", "withdrawn", None)
+    assert crawl.report.conflicts == [] and len(crawl.records) == 2
+    decision_note_years = {k for k, ad in v1.ADAPTERS.items() if ad.decision_notes is not None}
+    assert decision_note_years == {("ICLR", y) for y in (2018, 2019, 2020, 2021)}
+
+
+def test_an_undecided_note_with_a_withdrawn_twin_is_withdrawn_with_the_twin_as_evidence(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The 12 ICLR 2018 blind notes with no decision note and a withdrawn twin (the owner's answer, TASK-139):
+    `withdrawn`, the claim citing the twin's listing page and naming it, and no conflict row, since nothing
+    disagrees. Its forum page (where no decision was found) is still what the evidence starts from."""
+    server = elmo_world(None)
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        crawl = run(server, tmp_path, "ICLR", 2018)
+    got = by_forum(crawl)
+    status, twin_status = claim(got[ELMO], "status"), claim(got[ELMO_TWIN], "status")
+    assert (status.value, status.source) == ("withdrawn", "openreview_v1")
+    assert status.evidence == (
+        f"{v1.NO_DECISION_NOTE}; withdrawn twin {ELMO_TWIN} shares the pdf (invitation={WITHDRAWN.format(y=2018)})"
+    )
+    assert (status.url, status.fetched_at) == (twin_status.url, twin_status.fetched_at)
+    assert "invitation=" in status.url and WITHDRAWN.format(y=2018).split("/")[-1] in status.url
+    assert got[ELMO].claims("presentation") == () and got[ELMO].presentation is None
+    assert crawl.report.conflicts == []
+    manifest = crawl.report.to_manifest()
+    assert manifest["track_status"] == {"main": {"withdrawn": 2}} and manifest["unknown_status"] == 0
+    [line] = [r for r in caplog.records if r.getMessage() == "openreview_v1_withdrawn_twin"]
+    assert (line.levelno, line.__dict__["forum"]) == (logging.DEBUG, ELMO)
+
+
+NOTHING = v1.Twins([], [])
 
 
 def _forum(nid: str) -> str:
@@ -1062,17 +1147,17 @@ def test_the_twin_rule_is_order_free_and_idempotent(tmp_path: Path) -> None:
     accepted, twin = pre_rule_pair(tmp_path)
     for order in ((accepted, twin), (twin, accepted)):
         world = {r.id: r for r in order}
-        [row] = v1.withdrawn_twins(world)
+        [row] = v1.withdrawn_twins(world).conflicts
         assert row.id == accepted.id and row.value_b.startswith(f"withdrawn (twin {ELMO_TWIN}, same pdf:")
         assert world[accepted.id].status == "unknown" and world[twin.id].status == "withdrawn"
-        assert v1.withdrawn_twins(world) == []  # an unknown record has no conflict left to find
+        assert v1.withdrawn_twins(world) == NOTHING  # an unknown record has no conflict left to find
 
 
 def test_the_row_names_every_withdrawn_twin(tmp_path: Path) -> None:
     accepted, twin = pre_rule_pair(tmp_path)
     second = twin.model_copy(update={"id": "op:iclr:2018:SecondTwin18"})
     world = {r.id: r for r in (accepted, twin, second)}
-    [row] = v1.withdrawn_twins(world)
+    [row] = v1.withdrawn_twins(world).conflicts
     assert row.value_b.count("twin ") == 2
     assert row.value_b.index(f"twin {ELMO_TWIN},") < row.value_b.index("twin SecondTwin18,")
 
@@ -1098,7 +1183,92 @@ def test_no_conflict_without_a_withdrawn_same_track_twin_of_the_pdf(
         twin.id: twin.model_copy(update=change_twin),
     }
     before = dict(world)
-    assert v1.withdrawn_twins(world) == [] and world == before  # both statuses kept
+    assert v1.withdrawn_twins(world) == NOTHING and world == before  # both statuses kept
+
+
+def as_status(r: PaperRecord, status: str, evidence: str) -> PaperRecord:
+    """`r` with its status (and its status claim's value and evidence) replaced, as the listings could give it."""
+    [was] = r.claims("status")
+    kept = tuple(c for c in r.provenance if c.field not in ("status", "presentation"))
+    now = was.model_copy(update={"value": status, "evidence": evidence})
+    return r.model_copy(update={"status": status, "presentation": None, "provenance": (*kept, now)})
+
+
+DECIDED = f"decision note {ELMO_DECISION} (decision=Reject)"
+UNDECIDED = v1.NO_DECISION_NOTE
+
+
+@pytest.mark.parametrize(
+    ("blind", "twin", "change_twin", "expected"),
+    [
+        (("unknown", UNDECIDED), ("withdrawn", None), {}, "withdrawn"),  # the owner's answer (1)
+        (("rejected", DECIDED), ("withdrawn", None), {}, "rejected"),  # answer (2): stays rejected
+        (("unknown", UNDECIDED), ("desk_rejected", "invitation=x"), {}, "unknown"),  # answer (3): no effect
+        (("accepted", DECIDED), ("desk_rejected", "invitation=x"), {}, "accepted"),  # answer (3), accepted side
+        (("accepted", DECIDED), ("withdrawn", None), {}, "unknown"),  # decision-020: unknown and a row
+        (("unknown", UNDECIDED), ("withdrawn", None), {"track": "workshop"}, "unknown"),  # another track
+        # unknown for another reason than no decision: a conflict, an unmapped string, a dry run
+        (("unknown", "decision notes disagree"), ("withdrawn", None), {}, "unknown"),
+        (("unknown", "decision note string not in the table"), ("withdrawn", None), {}, "unknown"),
+        (("unknown", "decision note not fetched (dry run)"), ("withdrawn", None), {}, "unknown"),
+        (("withdrawn", "invitation=y"), ("withdrawn", None), {}, "withdrawn"),  # both withdrawn: untouched
+    ],
+    ids=["undecided", "rejected", "undecided-desk", "accepted-desk", "accepted", "undecided-other-track",
+         "conflict", "unmapped", "dry-run", "withdrawn"],
+)  # fmt: skip
+def test_the_twin_rule_table(
+    tmp_path: Path,
+    blind: tuple[str, str],
+    twin: tuple[str, str | None],
+    change_twin: dict[str, Any],
+    expected: str,
+) -> None:
+    accepted, withdrawn = pre_rule_pair(tmp_path)
+    b = as_status(accepted, *blind)
+    t = withdrawn if twin[1] is None else as_status(withdrawn, twin[0], twin[1])
+    t = t.model_copy(update=change_twin)
+    world = {b.id: b, t.id: t}
+    got = v1.withdrawn_twins(world)
+    assert world[b.id].status == expected and world[t.id] == t  # the twin never changes
+    assert got.withdrawn == ([b.id] if expected != blind[0] == "unknown" else [])
+    assert [c.id for c in got.conflicts] == ([b.id] if blind[0] == "accepted" != expected else [])
+    if expected == blind[0]:
+        assert world[b.id] == b  # untouched, claims and all
+
+
+def test_the_undecided_rule_is_order_free_and_idempotent(tmp_path: Path) -> None:
+    """An accepted note, an undecided note and a withdrawn note of one pdf (not seen live): the accepted one is
+    `unknown` with a row naming the listed twin only, the undecided one `withdrawn`, whatever the order; a second
+    run changes nothing (its newly withdrawn record makes nothing else withdrawn or unknown)."""
+    accepted, twin = pre_rule_pair(tmp_path)
+    undecided = as_status(accepted, "unknown", UNDECIDED).model_copy(
+        update={"id": "op:iclr:2018:Undecided18"}
+    )
+    results = []
+    for order in ((accepted, undecided, twin), (twin, undecided, accepted), (undecided, twin, accepted)):
+        world = {r.id: r for r in order}
+        got = v1.withdrawn_twins(world)
+        assert got.withdrawn == [undecided.id] and [c.id for c in got.conflicts] == [accepted.id]
+        assert "Undecided18" not in got.conflicts[0].value_b
+        assert {r.id: r.status for r in world.values()} == {
+            accepted.id: "unknown", undecided.id: "withdrawn", twin.id: "withdrawn"}  # fmt: skip
+        after = dict(world)
+        assert v1.withdrawn_twins(world) == NOTHING and world == after
+        results.append(sorted(world.items()))
+    assert results[0] == results[1] == results[2]
+
+
+def test_an_undecided_note_names_every_withdrawn_twin_in_id_order(tmp_path: Path) -> None:
+    accepted, twin = pre_rule_pair(tmp_path)
+    undecided = as_status(accepted, "unknown", UNDECIDED)
+    second = twin.model_copy(update={"id": "op:iclr:2018:ASecondTwin"})
+    world = {r.id: r for r in (undecided, twin, second)}
+    assert v1.withdrawn_twins(world).withdrawn == [undecided.id]
+    [status] = world[undecided.id].claims("status")
+    assert status.evidence.count("withdrawn twin ") == 2
+    assert status.evidence.index("twin ASecondTwin ") < status.evidence.index(f"twin {ELMO_TWIN} ")
+    [first] = second.claims("status")
+    assert status.url == first.url  # the first twin's listing page
 
 
 def test_an_arxiv_pdf_link_is_no_pdf_so_no_twin(tmp_path: Path) -> None:
