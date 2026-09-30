@@ -20,10 +20,9 @@ No row is an estimate, and no row comes from an aggregator. Where sources differ
 this rule picks, and the other values are listed under §Disagreements. To count a list, the page was
 fetched once and its distinct paper entries were counted (by paper id or title).
 
-The denominator is the final proceedings population where one exists. Until TASK-072 is built,
-OpenReview-accepted papers absent from proceedings are not yet demoted to `unknown`, so a newly crawled
-numerator can temporarily name a broader population; the coverage report must describe that limitation
-rather than interpreting every mismatch as a missing proceedings record.
+The denominator is the final proceedings population where one exists. The numerator names the same
+population: since TASK-072 (decision-005), an OpenReview-accepted paper absent from the crawled proceedings is
+demoted to `unknown` (`docs/results/2026-09-29-reconcile-real-data.md`).
 
 | venue | year | track | official_accepted | what it counts | source (URL or citation) | accessed |
 |---|---|---|---|---|---|---|
@@ -107,14 +106,16 @@ out of 24), ICLR 2023's virtual-site list, and NeurIPS 2025 D&B's former virtual
   `Position:`, which leaves 3,257 main. OpenReview also has 3,257 main (facts doc). PMLR does not separate
   the tracks, so rule 2 applies and the row uses 3,260. The difference is 3 papers (0.1%).
 - **NeurIPS 2021 main:** the proceedings (2,334) equal the fact sheet (2,334). The OpenReview v1 `venue`
-  strings say 2,630 accepted (facts doc). That gap is unexplained and is TASK-054's to resolve. The official
-  number itself is not in doubt.
+  strings say 2,630 accepted (facts doc). The gap was 300 papers OpenReview v1 lists twice (297 of them
+  accepted), which the v1 crawler now collapses (TASK-125, facts doc); the index then has 2,335 accepted
+  (`2026-09-29-coverage.md`). The official number itself is not in doubt.
 - **NeurIPS 2022 main:** the proceedings have 2,671, the same as OpenReview's `NeurIPS 2022 Accept`. The fact
   sheet gives 2,905 accepted papers but does not say which tracks that total covers. It is larger than main
   plus D&B (2,834), so the row uses the proceedings.
 - **NeurIPS 2024:** the proceedings have 4,034 main and 459 D&B, and the fact sheet announced 4,037 and 460.
-  OpenReview has 4,035 main (facts doc). The conference site's D&B listing has 460 ids, and 459 of them have
-  a title. The rows use the proceedings.
+  OpenReview has 4,035 main (facts doc); the extra one, DEX (`op:neurips:2024:ftqjwZQz10`), is on no
+  proceedings listing and is `unknown` since TASK-072. The conference site's D&B listing has 460 ids, and 459
+  of them have a title. The rows use the proceedings.
 - **NeurIPS 2025:** the base proceedings page lists Creative AI (64 papers) and links the published vol38
   companion, whose 5,823 paper entries split into 5,286 main, 497 D&B and 40 position. The fact sheet and
   PC chairs' blog announced 5,290 main (of 21,575 submissions):

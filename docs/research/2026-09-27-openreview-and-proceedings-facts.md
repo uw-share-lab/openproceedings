@@ -262,7 +262,7 @@ Workshop names include hyphens and digits (`SCI-FM`, `CLRLC-LLMs`, `7HVU`).
 - Cross-check (TASK-052/072): 2022 main 2,671 and D&B 163, 2023 main 3,218 and D&B 322, 2024 D&B 459
   all equal OpenReview's accepted counts. **2024 main: proceedings 4,034, OpenReview 4,035** (one
   paper to reconcile). **2021 main: proceedings 2,334, OpenReview v1 venues say 2,630 accepted**
-  (2,286 poster + 284 spotlight + 60 oral) — unexplained; TASK-054 must resolve it before gating.
+  (2,286 poster + 284 spotlight + 60 oral) — explained by the TASK-125 section above (297 accepted notes listed twice).
 
 ## PMLR (proceedings.mlr.press)
 - The index `https://proceedings.mlr.press/` lists every volume as
