@@ -926,7 +926,7 @@ PMLR_RECORD: dict[str, object] = {
     "presentation": None, "venue_id_raw": None, "keywords": [],
     "urls": {"forum": None, "pdf": None, "proceedings": PMLR_PAGE, "doi": None},
 }  # fmt: skip
-# the columns before TASK-138, in their order: the three abstract-source columns only follow them
+# the columns before TASK-138, in their order: its four abstract columns only follow them
 CSV_COLUMNS_BEFORE = (
     "id", "title", "abstract", "authors", "venue", "year", "track", "status", "presentation",
     "venue_id_raw", "forum", "pdf", "proceedings", "doi", "keywords", "index_version", "canonical_hash",
@@ -974,8 +974,8 @@ def test_each_format_names_a_pmlr_abstracts_source_byte_for_byte() -> None:
 
 
 def test_without_a_source_every_format_is_byte_for_byte_what_it_was() -> None:
-    """A record whose abstract no claim holds (or with none) gets no line and no field; CSV its three columns
-    empty, JSONL `abstract_source: null`."""
+    """A record whose abstract no claim holds (or with none) gets no line and no field; CSV its three source
+    columns empty (`abstract_withheld` false), JSONL `abstract_source: null`."""
     no_abstract = {**PMLR_RECORD, "abstract": None}
     for record, source in ((PMLR_RECORD, None), (no_abstract, PMLR)):  # an attribution without text: nothing
         ris = attributed_export("ris", record, source)
@@ -1035,6 +1035,39 @@ def test_a_bibtex_source_with_special_characters_stays_one_parseable_field() -> 
         == "PMLR https://proceedings.mlr.press/v1/a\\%20b.html?x=1\\&y=2\\#top"
     )
     assert second.fields["abstract_source"] == f"PMLR {PMLR_PAGE}"  # nothing swallowed
+
+
+@pytest.mark.parametrize(
+    "url, bibtex, ris",
+    [
+        ("https://ex.org/p/@user", "https://ex.org/p/{@}user", "https://ex.org/p/@user"),
+        # unbalanced braces are dropped in BibTeX, as `url` drops them (bibtex-format §Escaping)
+        ("https://ex.org/p/{abc", "https://ex.org/p/abc", "https://ex.org/p/{abc"),
+        ("https://ex.org/p/}abc{", "https://ex.org/p/abc", "https://ex.org/p/}abc{"),
+        ("https://ex.org/ünï/çödé", "https://ex.org/ünï/çödé", "https://ex.org/ünï/çödé"),
+        ("https://ex.org/" + "x" * 5000, "https://ex.org/" + "x" * 5000, "https://ex.org/" + "x" * 5000),
+        # a line break can't start a new RIS tag: it becomes one space
+        ("https://x/a\nAB  - y", "https://x/a AB - y", "https://x/a AB - y"),
+    ],
+)
+def test_an_odd_source_url_reads_back_in_one_record_with_the_reference_parsers(
+    url: str, bibtex: str, ris: str
+) -> None:
+    """Two records, the first with an odd url: scholarmend and refaudit read both whole (AC#2)."""
+    from scholarmend.parse import parse_ris
+
+    odd = Attribution("pmlr", "pmlr", url)
+    first, second = parse_string(
+        attributed_export("bibtex", PMLR_RECORD, odd) + attributed_export("bibtex", PMLR_RECORD, PMLR)
+    )
+    assert first.fields["abstract_source"] == f"PMLR {bibtex}"
+    assert second.fields["abstract_source"] == f"PMLR {PMLR_PAGE}"
+    one, two = parse_ris(
+        attributed_export("ris", PMLR_RECORD, odd) + attributed_export("ris", PMLR_RECORD, PMLR), "x.ris"
+    )
+    assert one.fields["N1"] == [f"Abstract source: PMLR {ris}", PROVENANCE.line()]
+    assert one.fields["AB"] == ["We adapt."]
+    assert two.fields["N1"] == [f"Abstract source: PMLR {PMLR_PAGE}", PROVENANCE.line()]
 
 
 @pytest.mark.parametrize("fmt", export.FORMATS)

@@ -12,10 +12,10 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
   author    = {Doe, Jane and Roe, Richard},
   booktitle = {International Conference on Learning Representations (ICLR 2024)},
   year      = {2024},
-  url       = {https://…},
-  doi       = {…},
   abstract  = {…},
   abstract_source = {PMLR https://proceedings.mlr.press/v202/okafor23a.html},
+  url       = {https://…},
+  doi       = {…},
   keywords  = {main, status:accepted},
   openproceedings_id = {op:iclr:2024:iilhN2MycO},
   note      = {openproceedings a1b2c3d4e5f6 · query 9f8e7d… · exported 2026-09-25}
@@ -43,8 +43,8 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
 - `abstract_source = {<site> <url>}` after `abstract`, when the abstract has an attribution (TASK-138,
   decision-018; spec 04 §Exports): the same words as RIS's `N1  - Abstract source:` line (the results list's
   site name, ` (via RIS import)` for a `ris` claim, the url when there is one), from the snapshot's
-  `RecordFile.attributions`. Escaped like every value (`_braced`: a url's `%`, `&`, `#` gain a backslash, as in
-  `url`). A new field, not a change to `note`: `note` keeps exactly the provenance line (after the `Submitted
+  `RecordFile.attributions`. Escaped like every value (`_braced`: a url's `%`, `&`, `#` gain a backslash and
+  unbalanced braces are dropped, as in `url`). A new field, not a change to `note`: `note` keeps exactly the provenance line (after the `Submitted
   to` sentence), so it stays additive (decision-021); refaudit's `(\w+)\s*=` reads the name and styles don't
   print it. When a pinned export's snapshot can't be verified (decision-021) there is no `abstract` and no
   `abstract_source`; instead `abstract_withheld = {Abstract withheld: … (decision-018).}` (`export.WITHHELD`), a

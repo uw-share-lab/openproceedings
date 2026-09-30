@@ -140,5 +140,9 @@ Record the result below. The export only changes to `JOUR` through a spec 04 cha
   sentence, the source, the provenance. **Untested in Covidence**: this import covered two `N1` lines
   (record 1), which imported cleanly. Low risk: Covidence showed no `N1` to screeners, and a third line of the
   same tag is the same shape. Not re-imported.
+- The same invisibility cuts the other way for a **withheld** export: its only in-file marker in RIS is an
+  `N1`, which Covidence doesn't show, so its records reach screeners as titles with no abstract and no reason.
+  Before importing, check the download's `X-Abstract-Source` (the web app's Export menu warns on
+  `unavailable`) or the CSV's `abstract_withheld` column, and report title-only screening for those records.
 - This fixture is unchanged: its records carry no provenance claims, so no abstract names a source, and the
   sha256 above is still what the writer writes (`backend/tests/unit/test_covidence_fixture.py`).

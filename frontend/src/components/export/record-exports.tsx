@@ -10,7 +10,7 @@ import { useId } from "react";
 import { plural } from "@/editor/diagnostics";
 import { FORMATS } from "@/lib/export";
 import { CovidenceHelp } from "./covidence-help";
-import { button, ExportNotice } from "./export-notice";
+import { button, ExportNotice, WithheldNotice } from "./export-notice";
 import { useExport } from "./use-export";
 
 export function RecordExports({
@@ -72,6 +72,7 @@ export function RecordExports({
       {exporter.notice !== null && (
         <ExportNotice result={exporter.notice} onRetry={exporter.retry} onSearchAgain={null} />
       )}
+      {exporter.withheld && <WithheldNotice />}
       <CovidenceHelp />
     </section>
   );

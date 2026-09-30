@@ -90,7 +90,8 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 
 ## API access line (INFO, exactly one per request)
 `request` event with: `request_id`, `method`, `route` (the template, e.g. `/api/v1/papers/{id}`, not the
-concrete path), `status`, `ms`, `index_version`, `canonical_hash` (search/export), `total`, and `code` (the
+concrete path), `status`, `ms`, `index_version`, `canonical_hash` (search/export), `total`, `abstract_source`
+(export: its `X-Abstract-Source`, `unavailable` when it withheld the abstracts, decision-021), and `code` (the
 error envelope's code, on every refusal and every 500; `api.errors.note_code`), and for a route that runs a
 query `verified_clauses` (its position-verified clauses), `verification_candidates` (what their checks
 would read, summed; absent with none) and `verify_ms` (the time it held a verification slot; absent when it

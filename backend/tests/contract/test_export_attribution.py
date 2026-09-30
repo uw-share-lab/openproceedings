@@ -1,9 +1,11 @@
 """`GET /api/v1/export` names each abstract's source in every format (TASK-138; decision-018; spec 04 §Exports):
 RIS an `N1  - Abstract source: <site> <url>` line before the provenance line, BibTeX an `abstract_source`
-field, CSV three columns appended after the others, JSONL an `abstract_source` object, all from the exported
-index's snapshot records (what `GET /search` sends as `abstract_source`). Read back with scholarmend's RIS
-parser and refaudit's BibTeX parser; the served index, a pinned `index_version` and a search record's own
-index alike; a pinned index whose snapshot is gone is refused, never exported without attribution."""
+field, CSV three source columns and `abstract_withheld` appended after the others, JSONL an `abstract_source`
+object and `abstract_withheld`, all from the exported index's snapshot records (what `GET /search` sends as
+`abstract_source`). Read back with scholarmend's RIS parser and refaudit's BibTeX parser; the served index, a
+pinned `index_version` and a search record's own index alike. A pinned index whose snapshot can't be verified
+is exported with every abstract withheld and each record saying so (decision-021), never an abstract without
+attribution; its snapshot records are held in an LRU and a failure is remembered for `refusal_seconds`."""
 
 from __future__ import annotations
 
@@ -11,7 +13,7 @@ import csv
 import io
 import json
 import shutil
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +42,7 @@ SITE = {
     "iclr_proceedings": "ICLR Proceedings",
     "pmlr": "PMLR",
 }
+type Built = tuple[Path, str, str, str]  # the data directory, and indexes `a` (served), `b` and `c`
 
 
 @pytest.fixture(autouse=True)
@@ -49,19 +52,20 @@ def fixed_date(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(scope="module")
-def store(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str, str]:
-    """Two indexes of `attributed` records (so abstracts carry claims): `a` (every 3rd fixture record, served)
-    and `b` (the next third)."""
+def store(tmp_path_factory: pytest.TempPathFactory) -> Built:
+    """Three indexes of `attributed` records (so abstracts carry claims): `a` (every 3rd fixture record,
+    served), `b` (the next third) and `c` (the last)."""
     data = tmp_path_factory.mktemp("export-attributed") / "data"
     corpus = list(records())
     a = build(corpus[::3], data / "snapshots", "a", data / "indexes", attributed)
     b = build(corpus[1::3], data / "snapshots", "b", data / "indexes", attributed)
+    c = build(corpus[2::3], data / "snapshots", "c", data / "indexes", attributed)
     (data / "indexes" / "current").symlink_to(a)
-    return data, a, b
+    return data, a, b, c
 
 
 @pytest.fixture
-def data_dir(store: tuple[Path, str, str], tmp_path: Path) -> Path:
+def data_dir(store: Built, tmp_path: Path) -> Path:
     shutil.copytree(store[0], tmp_path / "data", symlinks=True)
     return tmp_path / "data"
 
@@ -195,18 +199,18 @@ def test_op_export_writes_the_same_attributed_bytes(
 
 
 def test_a_pinned_index_version_names_its_own_snapshots_sources(
-    client: TestClient, data_dir: Path, store: tuple[Path, str, str]
+    client: TestClient, data_dir: Path, store: Built
 ) -> None:
-    _data, _a, b = store
+    _data, _a, b, _c = store
     for fmt in exporter.FORMATS:
         check(fmt, body(client, fmt, q=Q, index_version=b), attributions(data_dir, "b"))
 
 
 def test_a_record_export_names_the_sources_of_the_index_it_names(
-    client: TestClient, data_dir: Path, store: tuple[Path, str, str]
+    client: TestClient, data_dir: Path, store: Built
 ) -> None:
     """A search record saved on `a`, exported after `b` is served: `a`'s snapshot attributes its abstracts."""
-    _data, _a, b = store
+    _data, _a, b, _c = store
     record_id = save(client, Q)
     point_current(data_dir, b)
     assert client.app.state.index.load()  # type: ignore[attr-defined]
@@ -214,10 +218,8 @@ def test_a_record_export_names_the_sources_of_the_index_it_names(
         check(fmt, body(client, fmt, record_id=record_id), attributions(data_dir, "a"))
 
 
-def test_a_pinned_snapshot_is_verified_once_and_kept(
-    client: TestClient, store: tuple[Path, str, str]
-) -> None:
-    _data, _a, b = store
+def test_a_pinned_snapshot_is_verified_once_and_kept(client: TestClient, store: Built) -> None:
+    _data, _a, b, _c = store
     state = client.app.state.index  # type: ignore[attr-defined]
     first = state.pinned_records(b)
     assert first is not None and state.pinned_records(b) is first
@@ -225,12 +227,12 @@ def test_a_pinned_snapshot_is_verified_once_and_kept(
 
 
 def test_a_snapshot_that_wont_verify_is_remembered_not_rehashed_per_request(
-    data_dir: Path, store: tuple[Path, str, str], monkeypatch: pytest.MonkeyPatch
+    data_dir: Path, store: Built, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """As a refused pin is: one verifying attempt per `refusal_seconds` (or reload), not one per export."""
     from openproceedings.api import state as state_module
 
-    _data, _a, b = store
+    _data, _a, b, _c = store
     shutil.rmtree(data_dir / "snapshots" / "b")
     real, calls = state_module.snapshot_records, []
 
@@ -247,6 +249,66 @@ def test_a_snapshot_that_wont_verify_is_remembered_not_rehashed_per_request(
         assert c.app.state.index.load()  # type: ignore[attr-defined]  # a reload looks again
         withheld_export(c, "csv", q=Q, index_version=b)
         assert calls == [b, b]
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = 1_000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def counted_state(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch, clock: Clock, keep: int
+) -> tuple[Any, list[str]]:
+    """An unloaded `IndexState` (so no version is the served one) and the versions it verified, in order."""
+    from openproceedings.api import state as state_module
+    from openproceedings.engine.tantivy_engine import TantivyEngine
+
+    real, calls = state_module.snapshot_records, []
+
+    def counted(*args: Any) -> RecordFile:
+        calls.append(args[2])
+        return real(*args)
+
+    monkeypatch.setattr(state_module, "snapshot_records", counted)
+    s = state_module.IndexState(
+        data_dir, "current", TantivyEngine, keep_pinned=keep, refusal_seconds=60.0, clock=clock
+    )
+    return s, calls
+
+
+def test_pinned_snapshot_records_are_an_lru_of_the_configured_size(
+    data_dir: Path, store: Built, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """As the pinned engines are (`test_pinned.py`): a hit is kept without re-verifying, and a third version
+    drops the least recently used."""
+    _data, a, b, c = store
+    s, calls = counted_state(data_dir, monkeypatch, Clock(), keep=2)
+    kept = s.pinned_records(a)
+    assert kept is not None and s.pinned_records(b) is not None
+    assert s.pinned_records(a) is kept  # used again: `b` is now the least recent
+    assert s.pinned_records(c) is not None  # a third version: `b` goes
+    assert calls == [a, b, c]
+    assert s.pinned_records(a) is kept and calls == [a, b, c]  # still held
+    assert s.pinned_records(b) is not None and calls == [a, b, c, b]  # dropped, so verified again
+
+
+def test_a_remembered_unverifiable_snapshot_is_verified_again_after_refusal_seconds(
+    data_dir: Path, store: Built, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _data, _a, b, _c = store
+    kept = tmp_path / "b-snapshot"
+    shutil.move(data_dir / "snapshots" / "b", kept)
+    clock = Clock()
+    s, calls = counted_state(data_dir, monkeypatch, clock, keep=2)
+    assert s.pinned_records(b) is None and calls == [b]
+    shutil.move(kept, data_dir / "snapshots" / "b")  # restored, but the refusal is remembered
+    clock.now += 59.0
+    assert s.pinned_records(b) is None and calls == [b]
+    clock.now += 2.0  # past refusal_seconds: verified again, and now it verifies
+    assert s.pinned_records(b) is not None and calls == [b, b]
 
 
 # --- a pinned index whose snapshot can't be verified: abstracts withheld (decision-021) ---------------------
@@ -293,9 +355,9 @@ def attributed_ids(client: TestClient, **params: Any) -> list[str]:
 
 @pytest.mark.parametrize("fmt", exporter.FORMATS)
 def test_a_pinned_index_version_whose_snapshot_is_gone_withholds_every_abstract(
-    data_dir: Path, store: tuple[Path, str, str], fmt: str
+    data_dir: Path, store: Built, fmt: str
 ) -> None:
-    _data, _a, b = store
+    _data, _a, b, _c = store
     with TestClient(make_app(data_dir)) as c:
         ids = attributed_ids(c, q=Q, index_version=b)
     shutil.rmtree(data_dir / "snapshots" / "b")
@@ -304,13 +366,27 @@ def test_a_pinned_index_version_whose_snapshot_is_gone_withholds_every_abstract(
         assert c.get(EXPORT, params={"format": fmt, "q": Q}).headers["x-abstract-source"] == "attributed"
 
 
+def test_the_access_line_says_whether_the_export_withheld_its_abstracts(
+    data_dir: Path, store: Built, logs: Callable[[], list[dict[str, Any]]]
+) -> None:
+    """An operator can count degraded exports and match a report to a request, not only the client."""
+    _data, _a, b, _c = store
+    shutil.rmtree(data_dir / "snapshots" / "b")
+    with TestClient(make_app(data_dir)) as c:
+        withheld_export(c, "ris", q=Q, index_version=b)
+        withheld_export(c, "ris", q=Q, index_version=b)  # the refusal remembered: still on the access line
+        body(c, "ris", q=Q)
+    lines = [line for line in logs() if line["event"] == "request" and line["route"] == EXPORT]
+    assert [line["abstract_source"] for line in lines] == ["unavailable", "unavailable", "attributed"]
+
+
 @pytest.mark.parametrize("fmt", exporter.FORMATS)
 def test_a_record_whose_index_snapshot_is_gone_withholds_abstracts_and_still_replays(
-    data_dir: Path, store: tuple[Path, str, str], fmt: str
+    data_dir: Path, store: Built, fmt: str
 ) -> None:
     """A record saved on `a`, `b` served, `a`'s snapshot gone: the cited ids go out without abstracts, and
     the record still replays `reproduced` (a replay needs the index, not the snapshot)."""
-    _data, _a, b = store
+    _data, _a, b, _c = store
     with TestClient(make_app(data_dir)) as c:
         record_id = save(c, Q)
         ids = attributed_ids(c, record_id=record_id)

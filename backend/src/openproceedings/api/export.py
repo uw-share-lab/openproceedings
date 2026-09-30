@@ -15,8 +15,9 @@ index's snapshot can't be verified the same records are exported with every abst
 in the file, and `X-Abstract-Source: unavailable` (decision-021): never an abstract without attribution.
 
 Everything that can refuse happens before the first byte: the parameters, the parse (422 with
-diagnostics), the record's pin and replay, the pin (409 `API_INDEX_VERSION_UNAVAILABLE`), its snapshot's attributions, every wildcard's
-expansion (422, located) and the one collection of the match set that gives `X-Total`. Then a sync
+diagnostics), the record's pin and replay, the pin (409 `API_INDEX_VERSION_UNAVAILABLE`), every wildcard's
+expansion (422, located) and the one collection of the match set that gives `X-Total`. The exported index's
+attributions are read before the first byte too, but never refuse: an unverifiable snapshot withholds. Then a sync
 generator streams the records from the engine the request took, so an export started before a hot swap
 finishes on its index. A failure after the first byte is logged by `LastCatch` and marks the access line
 `aborted` (the client has its 200 by then); a stream that wrote fewer or more records than `X-Total` fails
@@ -26,12 +27,12 @@ the same way, never silently.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 
-from openproceedings.api.deps import ServedDep, annotate, check_candidates, searchable
+from openproceedings.api.deps import AbstractSource, ServedDep, annotate, check_candidates, searchable
 from openproceedings.api.errors import ApiError
 from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import MODE_DOC, Q_DOC, VERSION_PARAM
@@ -58,7 +59,8 @@ MEDIA: dict[str, tuple[str, str]] = {
     "bibtex": ("application/x-bibtex; charset=utf-8", "bib"),
     "jsonl": ("application/x-ndjson; charset=utf-8", "jsonl"),
 }
-ABSTRACT_SOURCE_STATES = ("attributed", "unavailable")  # the `X-Abstract-Source` values (decision-021)
+# the `X-Abstract-Source` values, also the access line's `abstract_source` (decision-021)
+ABSTRACT_SOURCE_STATES: tuple[AbstractSource, ...] = get_args(AbstractSource.__value__)
 CHUNK = 64 * 1024  # characters per body chunk (64 Ki): whole records, never split or reordered
 RECORD_PARAM = f"^(?:{RECORD_ID.pattern})$"
 
@@ -174,7 +176,6 @@ def export(
             )
         record = stored_record(request, record_id)  # 422, 404
         engine = pinned_engine(request, served, record.index_version)  # 409 unless its own index is here
-        sources = sources_of(request, bundle, engine)
         refuse_mismatch(request, record, served)  # 409 on a mismatch replay (it runs on that same index)
         ids = record.ids
         # the replay refuses these too; never stream them (X-Total is the list's length, its `total`)
@@ -182,6 +183,7 @@ def export(
             raise ApiError(
                 DiagnosticCode.API_RECORD_MISMATCH, "This search record's stored ids don't match it."
             )
+        sources = sources_of(request, bundle, engine)  # once nothing about the record can refuse
         # the cited set exactly: the record's stored ids, from the index it names (never a re-run query)
         canonical_hash = record.canonical_hash
         total, documents = len(ids), stored_documents(engine, ids)
@@ -203,7 +205,8 @@ def export(
         expanded(engine, ast)  # an over-cap wildcard is a located 422 before anything is compiled
         check_candidates(request, engine, ast)  # 422 API_QUERY_TOO_COSTLY before any verification
         total, documents = engine.documents(ast)  # the one collection; records are read as they stream
-    annotate(request, total=total)
+    abstract_source: AbstractSource = "unavailable" if sources is None else "attributed"
+    annotate(request, total=total, abstract_source=abstract_source)
     provenance = Provenance(engine.index_version, canonical_hash, utc_date(), **pinned_by)
     media, ext = MEDIA[fmt]
     filename = f"openproceedings-{engine.index_version}-{canonical_hash[:12]}.{ext}"
@@ -216,7 +219,7 @@ def export(
             "X-Tokenizer-Version": TOKENIZER_VERSION,
             "X-Query-Version": QUERY_VERSION,
             "Content-Disposition": f'attachment; filename="{filename}"',
-            "X-Abstract-Source": "unavailable" if sources is None else "attributed",
+            "X-Abstract-Source": abstract_source,
         },
     )
 

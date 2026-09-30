@@ -39,3 +39,14 @@ when the snapshot loads.
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/api-contract/SKILL.md` (§Exports are contract too), spec 04 §Exports and §Implementation notes
 - Test or hook added? — `backend/tests/contract/test_export_attribution.py` (pinned, record-pinned, snapshot-gone withheld on both paths with replay still `reproduced`, refusal-memory cases); decision-021; spec 08 and the snapshots skill (keep a pinned index's snapshot)
+
+## Addendum — 2026-09-30 (review gate)
+- **A degraded response needs a reader on every side, not only a header.** The first withholding cut signalled
+  `X-Abstract-Source: unavailable` and a marker in each record, but nothing read the header: the web app said
+  "Download ready." and the access line looked like any 200, while the RIS marker is an `N1` Covidence hides from
+  screeners (evidence: the gate's review-methodologist and usability-auditor findings;
+  `frontend/src/lib/export.ts` read only `X-Index-Version` and `X-Total`). Now the access line carries
+  `abstract_source`, and the Export menu and record page show copy EX-E8 (`export-menu.test.tsx`).
+- **New caches need their eviction and expiry tested, not only their hits.** `pinned_records`'s LRU and refusal
+  expiry survived mutants (qa-auditor) until `test_export_attribution.py` gained a three-index LRU test and a
+  clocked `refusal_seconds` test.

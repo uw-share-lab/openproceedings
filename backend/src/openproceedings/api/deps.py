@@ -15,7 +15,7 @@ privacy-safe fields a route adds to its access line.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from fastapi import Depends, Request
 from fastapi.dependencies.models import Dependant
@@ -35,6 +35,7 @@ from openproceedings.search import expanded
 if TYPE_CHECKING:
     from openproceedings.api.state import IndexState
 
+type AbstractSource = Literal["attributed", "unavailable"]  # an export's `X-Abstract-Source` (decision-021)
 MAX_LOGGED_CODES = 10  # distinct diagnostic codes on one access line; more are counted, not listed
 MAX_NAMED_PARAMS = 5  # unknown or repeated parameters a refusal names; more are counted
 # a route's query parameter names are cached on the route itself (it lives and dies with them): a global
@@ -102,6 +103,7 @@ def annotate(
     index_version: str | None = None,
     canonical_hash: str | None = None,
     total: int | None = None,
+    abstract_source: AbstractSource | None = None,
 ) -> None:
     """Add privacy-safe fields to the access line. Keyword-only and typed, so no query text fits."""
     fields = access_fields(request)
@@ -109,6 +111,7 @@ def annotate(
         ("index_version", index_version),
         ("canonical_hash", canonical_hash),
         ("total", total),
+        ("abstract_source", abstract_source),
     ):
         if value is not None:
             fields[key] = value

@@ -6,7 +6,7 @@ Exact, reproducible Boolean search over **NeurIPS, ICLR and ICML** titles and ab
 - **No stemming.** `benchmarking` matches `benchmarking`, not `benchmark`. Wildcards are opt-in (`benchmark*`, `model$`).
 - **Track-aware.** Workshop, competition and rejected papers are indexed, but the default filters exclude them. Every search reports how many were excluded, which gives you the PRISMA "removed before screening" count.
 - **Reproducible.** Every result carries an index version. Saved search records can be replayed.
-- **Review-ready exports.** RIS (for Covidence), CSV, BibTeX and JSONL, with full abstracts.
+- **Review-ready exports.** RIS (for Covidence), CSV, BibTeX and JSONL, with full abstracts, each naming its source.
 
 ## Status
 

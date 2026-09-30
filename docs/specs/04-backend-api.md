@@ -68,15 +68,16 @@ reviews without the UI.
     know (the schema says "Open set"): error codes, diagnostic codes (a stored record's are plain strings),
     `venue`, `track`, `status`, `presentation`, a provenance claim's `source` and `field`, the text and filter
     field names, `ChangedInput.input`, and a `/parse` filter clause's `reason` (decision-011). **Closed** — a new value is a breaking change: `mode`, `sort`, the
-    export `format`, the replay `status`, `ChangedInput.kind`, a wildcard's `op`, `include`.
+    export `format`, the replay `status`, `ChangedInput.kind`, a wildcard's `op`, `include`, and an export's
+    `X-Abstract-Source` (`attributed`, `unavailable`; decision-021).
   - **`ErrorBody.code` is its own schema, `ErrorCode`**: exactly the registry's codes that have an HTTP status
     (`PARSE_*`, `FIELD_*`, `WILDCARD_*`, the `API_*` ones but the log-only `API_REPLAY_MISMATCH`), derived from
     the registry and tested against it. `diagnostics` is present on the `PARSE_*`, `FIELD_*` and `WILDCARD_*`
     refusals and on `API_TOO_MANY_VERIFIED_CLAUSES` and `API_QUERY_TOO_COSTLY` (decision-010), the two
     `API_*` codes that point into `q`.
   - **Headers are in the contract**: an export's 200 declares `X-Total`, `X-Index-Version`,
-    `X-Tokenizer-Version`, `X-Query-Version` (this code's, on a `record_id` export too) and
-    `Content-Disposition`; every route's 405 declares `Allow` and its 429 `Retry-After` (not `/healthz`'s,
+    `X-Tokenizer-Version`, `X-Query-Version` (this code's, on a `record_id` export too),
+    `Content-Disposition` and `X-Abstract-Source` (decision-021); every route's 405 declares `Allow` and its 429 `Retry-After` (not `/healthz`'s,
     which is never limited; the 429's description names every bucket that can refuse: the client's, its
     network's, a query's position-verified clauses, the save ceilings); every route that runs a query
     (`/search`, `/export`, `/papers/{id}`, `POST /records`, `GET /records/{id}`, `/diff`) declares its 503 with `Retry-After`
@@ -203,7 +204,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   |---|---|---|
   | RIS | one more `N1`, after the status sentence and before the provenance line (which stays the last `N1`) | `N1  - Abstract source: PMLR https://proceedings.mlr.press/v202/okafor23a.html` |
   | BibTeX | a field `abstract_source`, after `abstract` | `abstract_source = {PMLR https://proceedings.mlr.press/v202/okafor23a.html},` |
-  | CSV | four columns appended after `searched_at`: `abstract_source` (the claim's source), `abstract_origin` (the site), `abstract_url`, `abstract_withheld` (`true`/`false`) | `…,pmlr,pmlr,https://proceedings.mlr.press/v202/okafor23a.html,false` |
+  | CSV | four columns appended after `searched_at`: `abstract_source` (the claim's route code, e.g. `pmlr` or `ris`, where RIS and BibTeX give the site in words), `abstract_origin` (the site's code), `abstract_url`, `abstract_withheld` (`true`/`false`) | `…,pmlr,pmlr,https://proceedings.mlr.press/v202/okafor23a.html,false` |
   | JSONL | `abstract_source`: `{source, origin, url}` (the `/search` hit's object) or null; `abstract_withheld`: a boolean | `"abstract_source": {"origin": "pmlr", "source": "pmlr", "url": "https://proceedings.mlr.press/v202/okafor23a.html"}, "abstract_withheld": false` |
 
   A record with no abstract, or whose abstract no claim holds (synthetic fixtures), names nothing: no `N1`, no
@@ -223,20 +224,27 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   key as a response gains a field. The Covidence fixture's records carry no claims, so its pinned bytes are
   unchanged and the hand import stands. An export reads the exported index's snapshot records: the served
   bundle's, or for a pinned `index_version` or a record's own index `IndexState.pinned_records` (verified on
-  first use, kept beside the pinned engine). Every export sends `X-Abstract-Source: attributed`.
+  first use, kept beside the pinned engine). An export whose abstracts are attributed sends
+  `X-Abstract-Source: attributed`; a withheld one sends `unavailable` (below).
   **Withheld** (decision-021): when a pinned index exists but its snapshot can't be verified, the same records
   and metadata are exported with every abstract left out (no RIS `AB`, no BibTeX `abstract`, CSV `abstract`
   empty, JSONL `abstract` null, no source anywhere), `X-Abstract-Source: unavailable`, and each record says so
   in the file: an RIS `N1` (before the provenance line) and a BibTeX `abstract_withheld` field reading
   `Abstract withheld: its source could not be attributed on this instance (the index's snapshot is
   unavailable), so no abstract is exported (decision-018).` (`export.WITHHELD`), CSV `abstract_withheld`
-  `true`, JSONL `abstract_withheld: true`. It is not refused: the cited set still goes out, and no abstract
+  `true`, JSONL `abstract_withheld: true`. Every record is marked, whether or not the index holds an abstract
+  for it: without the snapshot the export can't tell a record the source had no abstract for from one it
+  withheld. It is not refused: the cited set still goes out, and no abstract
   leaves without its source. The record's replay needs only the index and stays `reproduced`. `op export`
   verifies the snapshot as the server loads it; without it, it withholds the same way, warns on stderr
   (`op export: warning: … every abstract is withheld …`, and a WARNING `export_abstracts_withheld` log line
   with `reason`) and exits 0. A pinned index's snapshot must therefore be kept while a record pins the index
-  (spec 08 §CLI). An attributed rejected paper's RIS record has three `N1` lines, untested in Covidence (low
-  risk; `docs/results/2026-09-27-covidence-check.md`). A record the index holds but its
+  (spec 08 §CLI). **Covidence hides the withheld marker**: it shows no `N1` to screeners, so an RIS import of
+  a withheld export screens on titles alone with nothing on the card saying why. Before importing, check the
+  download's `X-Abstract-Source` (the web app's Export menu says so, spec 05) or the CSV's `abstract_withheld`
+  column, and report title-only screening for those records in the methods. An attributed rejected paper's
+  RIS record has three `N1` lines, untested in Covidence (low risk, since the lines are notes Covidence doesn't
+  show; `docs/results/2026-09-27-covidence-check.md`). A record the index holds but its
   snapshot lacks is an internal error mid-stream (logged, counted short), as on `GET /search`.
 - **`TY` is `CPAPER`, not `JOUR`** (task-004). Every exported paper is a conference paper. Zotero's RIS
   translator (`RIS.js`, 2026-01-05) imports `CPAPER` as `conferencePaper` and puts `T2` in its
@@ -916,12 +924,12 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     `aborted: true`. A stream whose record count is below or above `X-Total` fails the same way after its
     last record (`export.check_count`, the check `op export` ends with too); it never ends as if complete. A client that hangs up mid-stream is `client_disconnected:
     true` on the access line (tested through uvicorn).
-  - Headers: `X-Total`, `X-Index-Version`, `X-Tokenizer-Version`, `X-Query-Version` (all exposed to CORS),
-    `Content-Disposition: attachment; filename="openproceedings-<index_version>-<first 12 of
+  - Headers: `X-Total`, `X-Index-Version`, `X-Tokenizer-Version`, `X-Query-Version`, `X-Abstract-Source`
+    (`attributed`, or `unavailable` when the abstracts are withheld; all exposed to CORS), `Content-Disposition: attachment; filename="openproceedings-<index_version>-<first 12 of
     canonical_hash>.<ext>"` (`ris`, `csv`, `bib`, `jsonl`), and `Content-Type`
     `application/x-research-info-systems`, `text/csv`, `application/x-bibtex` or `application/x-ndjson`,
-    each with `; charset=utf-8`. The access line carries `canonical_hash`, `total` and the `index_version`
-    exported.
+    each with `; charset=utf-8`. The access line carries `canonical_hash`, `total`, the `index_version`
+    exported and `abstract_source` (the `X-Abstract-Source` sent), so withheld exports can be counted.
   - `index_version` must look like one (`[0-9a-f][0-9a-f-]{0,63}`; `current` is not a version), else 422
     `API_BAD_PARAM`. The served version is the served engine; any other comes from `IndexState.pinned`
     (§Implementation notes, pinned indexes). Anything but `ok` is 409 `API_INDEX_VERSION_UNAVAILABLE`:
@@ -948,9 +956,10 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   failure (`pinned_snapshot_unavailable`, WARNING, with `reason`) as a refused pin is remembered (a waiter
   behind the slot re-checks both the kept records and the refusal). Cost per pinned version: the first export
   of it waits for one verifying pass over its `records.jsonl` (read, hashed, and each line parsed once to
-  compute its attribution; roughly the served index's load time for a snapshot of the same size, seconds for
-  the 5k–80k corpora) behind any other pinned open, and then holds in memory each record's byte range and
-  attribution (a few hundred bytes a record: tens of MB at 80k) for as long as it stays in the LRU, beside
+  compute its attribution; roughly the served index's load time for a snapshot of the same size; estimated,
+  not measured: seconds for the 5k–80k corpora) behind any other pinned open, and then holds in memory each
+  record's byte range and attribution (estimated at a few hundred bytes a record: tens of MB at 80k; the
+  `pinned_snapshot_opened` line's `ms` is the measured open time) for as long as it stays in the LRU, beside
   the pinned engine. The attribution of an old version comes from **today's** `attribution()` code over that
   snapshot's claims (decision-021), not the code that built the index. A cache hit takes only the short map lock,
   never a lock an open holds; **at most one pinned index opens at a time** (each re-hashes a whole index;

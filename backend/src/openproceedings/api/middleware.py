@@ -59,6 +59,7 @@ ANNOTATIONS = (
     "index_version",
     "canonical_hash",
     "total",
+    "abstract_source",  # an export's `X-Abstract-Source`: `unavailable` when it withheld abstracts (decision-021)
     "token_count",
     "n_errors",
     "error_codes",
