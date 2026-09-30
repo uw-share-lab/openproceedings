@@ -33,7 +33,11 @@ export function termWildcards(ast: AstNode, spans: ReadonlyMap<number, CodePoint
   const keys = new Map<number, string[]>();
   for (const [id, [from, to]] of spans) {
     const inside = all.filter((w) => spanOf(w)[0] >= from && spanOf(w)[1] <= to);
-    if (inside.length > 0) keys.set(id, [...new Set(inside.map((w) => `${w.stem}${w.op}`))]);
+    if (inside.length > 0)
+      keys.set(
+        id,
+        inside.map((w) => `${w.stem}${w.op}`),
+      ); // a group shows each key once
   }
   return keys;
 }
