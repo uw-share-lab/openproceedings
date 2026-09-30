@@ -54,8 +54,8 @@ safe direction.
   2021 notes that repeat a paper under a second id and number with identical content (300 main-track papers on
   the 2026-09-29 crawl), is collapsed by the crawler before records reach dedup
   (`openreview_v1.collapse_duplicate_submissions`, TASK-125; openreview-api skill), so the survivor merges
-  with its proceedings record here. So is a **silent twin** (TASK-132): a note with no `venue` and no
-  `venueid` (status `unknown`, in a year whose one status carrier is `content.venue`) is dropped when its
+  with its proceedings record here. So is a **silent twin** (TASK-132): a note with no non-null `venue` and no
+  non-null `venueid` (status `unknown`, in a year whose one status carrier is `content.venue`) is dropped when its
   paper's only other record is an accepted note identical to it in everything but status, presentation and
   venueid (`openreview_v1.collapse_silent_twins`; NeurIPS 2021 `W6e384Lkjbw` into `rDdb26AQ0SO`, the one case
   on the 2026-09-29 crawl), and only if every note it stands for after the identical-note collapse is silent

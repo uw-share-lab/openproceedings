@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from hypothesis import example, given
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from openproceedings import storage
 from openproceedings.ingest.record import PaperRecord
@@ -125,6 +125,8 @@ CHAINED = {
 }
 
 
+# three crawls per example (listing order, note numbers): the `pr` profile's deadline, not the 500 ms dev one
+@settings(deadline=2_000)
 @given(notes(), st.randoms(use_true_random=False))
 @example(REAL_PAIR, random.Random(0))
 @example(CHAINED, random.Random(0))

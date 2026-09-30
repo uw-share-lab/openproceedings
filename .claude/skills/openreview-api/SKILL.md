@@ -203,7 +203,7 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   integer `number` and no crawl conflict; the others are `skipped.duplicate_submission` (non-routine in `op eval
   coverage`), a DEBUG `openreview_duplicate_submission` line (`forum`, `kept`) and a count in
   `openreview_crawl_attention`. **A silent twin** (TASK-132) collapses too, after them: in a `status_from="venue"`
-  year, a note with status `unknown` and no `venue` or `venueid` key is dropped when its paper's only other
+  year, a note with status `unknown` and no non-null `venue` or `venueid` is dropped when its paper's only other
   record is accepted, conflict-free and identical to it but for status, presentation and venueid; that record is
   kept whatever the numbers (`collapse_silent_twins`, same counter and log line). A note the identical-note
   collapse kept is silent only if every note it absorbed was (TASK-147: an absorbed `venue: ''` is a value, so
