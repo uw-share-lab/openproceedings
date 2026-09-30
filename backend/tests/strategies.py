@@ -462,8 +462,8 @@ def year_edit_cases(draw: st.DrawFn) -> YearEditCase:
         sep = draw(st.sampled_from([" ", " OR ", " AND ", " | "]))
         glue = draw(st.sampled_from([" ", " AND ", ""]))
         year_first = draw(st.booleans())
-        # A few drawn parts, then distinct filler up to the target: drawing every part, as near_cap_queries
-        # does, overran Hypothesis's test-case size in about a third of these draws.
+        # A few drawn parts for the shapes, then distinct filler (no draws) up to the target: drawing every
+        # part, as near_cap_queries does, takes a hundred or so parts, and the fit cuts the last of them off.
         parts = draw(st.lists(_NO_YEAR_NEAR_CAP_PARTS, min_size=1, max_size=6))
         filler = draw(st.sampled_from(["w{}", "title:(t{} OR u{})", "w{} title:(t{} OR u{})"]))
         while len(sep.join(parts)) < target:

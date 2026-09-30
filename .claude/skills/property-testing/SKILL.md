@@ -47,7 +47,9 @@ far are golden rows (`("0", "0")` in test_canonical.py; `trust (trust OR track:m
 Not yet: stems near the 200-expansion cap (needs the 5k fixture, task-057).
 `year_edit_cases()` (TASK-145) builds queries whose year clause is toggleable, in either mode, instead of
 drawing `clause_queries()`/`near_cap_queries()` and `assume()`ing it: the toggleability rules are in its grammar,
-and only the padding toward the length and depth caps is cut back, by one parse of the widest year edit.
+and only the padding toward the length and depth caps is cut back, by parsing the query and its widest year
+edit. About one case in five is a near miss (one step past a rule) that `filter_clauses` must refuse with that
+reason, so the property still sees a clause wrongly reported toggleable.
 
 ## Properties that must hold
 1. **Parser totality:** `parse(s)` never raises for any `str`; bad input yields `errors`.
@@ -74,9 +76,9 @@ and only the padding toward the length and depth caps is cut back, by one parse 
   than disabling it in `ci`.
 - Don't `assume()` away large parts of the space (e.g. `assume(no wildcards)`); Hypothesis will report
   `FailedHealthCheck` or silently test less. Constrain the strategy instead.
-- `--hypothesis-show-statistics` counts as invalid both `assume()`/filter rejections (listed as "gave up
-  because") and Hypothesis's own overruns ("exceeded maximum test case size"): early on it caps each case at
-  five times its smallest extension, so a strategy whose typical case is much bigger than its simplest one
-  overruns. Drawing a near-cap query part by part does that; draw a few parts and pad with cheap, distinct
-  filler (TASK-145).
+- `--hypothesis-show-statistics` counts as invalid both rejections (`assume()`, `.filter()`; listed as "gave up
+  because") and Hypothesis's own overruns ("exceeded maximum test case size" in `HYPOTHESIS_EXPERIMENTAL_OBSERVABILITY`
+  output, no "gave up" line). Recursive strategies overrun all through a run (`clause_queries()` alone: about a
+  third of cases; `year_edit_cases()`: 10 to 20%, none rejected), so read the "gave up" lines for filtering, not
+  the invalid count (TASK-145).
 - A property that can't fail is not a test: mutation-check it once by breaking the code it covers.
