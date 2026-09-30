@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Providers } from "@/components/providers";
+import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 import { ThemePicker } from "@/components/theme-picker";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 focus:outline-none">
             <Providers>{children}</Providers>
           </main>
+          <SiteFooter />
         </ThemeProvider>
       </body>
     </html>

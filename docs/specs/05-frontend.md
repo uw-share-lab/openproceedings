@@ -288,6 +288,12 @@ warnings, the save's index check), the design doc says so; its open questions li
   OS). Layout usable at 360 px wide, and no sideways scroll at 320 px (reading on a phone is allowed;
   writing queries on a phone is not a goal). The focus ring is a solid 2 px `--ring` outline, never
   translucent. Every page has a skip link to `<main id="main">` and a title `<page> · openproceedings`.
+- Every page ends with a footer (`<footer>` after `<main>`, the `contentinfo` landmark;
+  `components/site-footer.tsx`) naming the deployment's takedown contact (decision-018; TASK-133): one line,
+  copy deck FT-1 to FT-3, from `NEXT_PUBLIC_TAKEDOWN_CONTACT` (an email address or an http(s) page, compiled in
+  at build time), falling back to the project's issue tracker when unset or unusable, never to nothing. A publicly
+  reachable instance must set it; private, local and development ones need not (spec 08 §Deploy, which also
+  holds the takedown procedure).
 - Security headers on every route (`frontend/src/lib/security-headers.ts`, set by `next.config.ts`):
   `Content-Security-Policy` (`default-src 'self'`; scripts and styles `'self' 'unsafe-inline'`, since the
   App Router's streamed payload and the theme script are inline and a nonce would force dynamic rendering;
@@ -305,6 +311,7 @@ warnings, the save's index check), the design doc says so; its open questions li
   complete records with the shown index provenance → save a record → the record page shows
   `reproduced`; targeted keyboard flows cover the primary editor, builder, filter, paging, export and save
   interactions, while axe samples success, error, expanded, dialog, builder, paper, record, coverage and
-  syntax states in both themes at desktop and 320 px.
+  syntax states in both themes at desktop and 320 px, and the footer's takedown contact is checked on the home,
+  search, paper and coverage pages at both widths.
 - Visual regression on the search view (both themes), with platform-specific baselines and Linux CI on a
   fixed `ubuntu-24.04` runner label (whose hosted image revision can still change).

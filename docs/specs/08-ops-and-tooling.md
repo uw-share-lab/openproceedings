@@ -211,6 +211,50 @@ reaches them. The unlicensed years rest on fair dealing alone; consulting the Un
 office before launch is recommended (TASK-135), and TASK-069 records its outcome, if any, but does not wait on
 it.
 
+**Takedown contact (decision-018, TASK-133).** A publicly reachable instance **must** name a takedown contact;
+private, local and development deployments may leave it unset. The frontend renders the footer on every page
+either way (`frontend/src/components/site-footer.tsx`, the `contentinfo` landmark; copy deck FT-1 to FT-3).
+The contact is set with `NEXT_PUBLIC_TAKEDOWN_CONTACT` when the `web` image is **built** (Next compiles
+`NEXT_PUBLIC_*` in, as with `NEXT_PUBLIC_API_BASE_URL`): an email address (`takedown@example.org` or
+`mailto:…`) or an `https://` page. Unset, the footer links to the project's issue tracker
+(`https://github.com/uw-share-lab/openproceedings/issues`) rather than naming no one; a value that is neither
+an address nor an http(s) URL is treated the same way and prints a warning in the build log. The e2e suite
+builds with the placeholder `takedown@example.org` (`frontend/playwright.config.ts`); `frontend/.env.example`
+documents both variables.
+
+**Takedown procedure (proposed by TASK-133; nothing below is automated yet).**
+- **Who receives a request:** the deployment's operator, at that contact. A request that arrives on the issue
+  tracker through the footer's fallback goes to the project maintainers, who pass it to the operator of the
+  deployment it names, or act on it for a deployment they run.
+- **What is removed:** the record's `abstract` only, from the next `index_version`. The record stays and is
+  still matched on its title, as a record with a missing abstract is (01 §Error handling).
+- **How it is applied, as built: by hand, and not yet per record.** No `op` command or build step withholds
+  one abstract today. `op snapshot build` replays the crawl cache as fetched, a snapshot can't be edited (its
+  files are hash-checked against `snapshot_hash`, and `data/snapshots/` is write-protected), and the next
+  crawl would fetch the abstract again. Until the tooling below exists, the operator acknowledges the
+  request, logs it, and, if the abstract has to go before then, takes the public instance offline. With the
+  tooling, the operator adds the record id to the deployment's takedown list, runs `op snapshot build` (which
+  sets `abstract` to `null` for each listed id and counts them in the manifest), then `op index build`, and
+  promotes the new `index_version` as for any refresh (switch `current`, SIGHUP).
+- **Older index versions keep the abstract.** Indexes are immutable, and a search record pins the index it
+  was run on: the API loads that version for the record's replay and its exports (`/export?record_id=`, or
+  `?index_version=`), and `op index retire` (planned, task-065) refuses to retire a version any record pins.
+  So a new `index_version` alone leaves the abstract retrievable through exports from a pinned older one.
+  The procedure closes this at serve time: the API applies the takedown list to every response that carries
+  an abstract (search hits, `/papers/{id}`, exports), whatever index version answers. That changes what is
+  shown, not what matches: a pinned version still matches on the abstract it holds, so a record's ids and its
+  replay are unchanged (guarantee 4), and each withheld abstract is marked as withheld, not shown as missing
+  (guarantee 6). This is not built (see below).
+- **How it is recorded:** in a takedown log the operator keeps outside git (it holds the requester's
+  details): the record id, the date received, the requester and the basis they give, the decision, the date
+  applied and the first `index_version` without the abstract. With the tooling, the snapshot manifest also
+  counts withheld abstracts, so `/coverage` shows them and a snapshot diff names the records whose abstract
+  went.
+- **Missing tooling** (decision-018 promises the removal, so a public instance needs it): a takedown list
+  read by `op snapshot build` (its place and format, and whether `snapshot_hash` covers it); the withheld
+  count in the manifest and on `/coverage`; the serve-time withholding above, applied to every index version
+  the API loads; and a check that no listed id's abstract is served.
+
 ---
 
 ## `.claude/` roster

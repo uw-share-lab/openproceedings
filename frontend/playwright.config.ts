@@ -42,6 +42,8 @@ export default defineConfig({
         HOSTNAME: "127.0.0.1",
         PORT: "3000",
         NEXT_PUBLIC_API_BASE_URL: "http://127.0.0.1:8000",
+        // A placeholder (RFC 2606 domain): e2e checks the footer names the configured contact.
+        NEXT_PUBLIC_TAKEDOWN_CONTACT: "takedown@example.org",
         NEXT_TELEMETRY_DISABLED: "1",
       },
       url: "http://127.0.0.1:3000",
