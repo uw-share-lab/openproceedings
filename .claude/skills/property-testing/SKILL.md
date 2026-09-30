@@ -47,9 +47,10 @@ far are golden rows (`("0", "0")` in test_canonical.py; `trust (trust OR track:m
 Not yet: stems near the 200-expansion cap (needs the 5k fixture, task-057).
 `year_edit_cases()` (TASK-145) builds queries whose year clause is toggleable, in either mode, instead of
 drawing `clause_queries()`/`near_cap_queries()` and `assume()`ing it: the toggleability rules are in its grammar,
-and only the padding toward the length and depth caps is cut back, by parsing the query and its widest year
-edit. Some cases are near misses (one step past a rule; a few percent to a quarter, varying by run) that `filter_clauses` must refuse with that
-reason, so the property still sees a clause wrongly reported toggleable.
+including year filters nested beside the clause and an OR of year filters as the clause (spec 02: neither blocks
+the edit), and only the padding toward the length and depth caps is cut back, by parsing the query and its widest
+year edit. Some cases are near misses (one step past a rule; a few percent to a quarter, varying by run) that
+`filter_clauses` must refuse with that reason, so the property still sees a clause wrongly reported toggleable.
 
 ## Properties that must hold
 1. **Parser totality:** `parse(s)` never raises for any `str`; bad input yields `errors`.
@@ -79,6 +80,6 @@ reason, so the property still sees a clause wrongly reported toggleable.
 - `--hypothesis-show-statistics` counts as invalid both rejections (`assume()`, `.filter()`; listed as "gave up
   because") and Hypothesis's own overruns ("exceeded maximum test case size" in `HYPOTHESIS_EXPERIMENTAL_OBSERVABILITY`
   output, no "gave up" line). Recursive strategies overrun all through a run (`clause_queries()` alone: about a
-  third of cases; `year_edit_cases()`: 9 to 20%, none rejected), so read the "gave up" lines for filtering, not
+  third of cases; `year_edit_cases()`: 10 to 20%, none rejected), so read the "gave up" lines for filtering, not
   the invalid count (TASK-145).
 - A property that can't fail is not a test: mutation-check it once by breaking the code it covers.

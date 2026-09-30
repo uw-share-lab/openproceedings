@@ -280,7 +280,7 @@ CLAUSE_WORDS = st.sampled_from(
 
 
 CLAUSE_FIELDS = ("venue", "track", "status", "year", "track", "status")
-_YEAR_CLAUSES = ["year:2021", "year:2020..2022", "year:(2019 OR 2023..2024)"]
+_YEAR_CLAUSES = ("year:2021", "year:2020..2022", "year:(2019 OR 2023..2024)")
 YEAR_CLAUSES = st.sampled_from(_YEAR_CLAUSES)
 CLAUSE_PREFIXES = ("", "", "", "", "-", "NOT ", "NOT NOT ")
 
@@ -339,9 +339,8 @@ def clause_queries(draw: st.DrawFn, depth: int = 0) -> str:
 _NO_YEAR_FIELDS = tuple(f for f in CLAUSE_FIELDS if f != "year")
 _NO_YEAR_FILTERS = st.sampled_from([f for f in _FILTER_STRINGS if not f.startswith("year:")])
 _NO_YEAR_NEAR_CAP_PARTS = _near_cap_parts(_NO_YEAR_FILTERS)
-_WIDEST_YEAR = _widest_clause(
-    "year"
-)  # the widest year clause a year action writes, as filter_clauses checks it
+# the widest year clause a year action writes, as filter_clauses checks it
+_WIDEST_YEAR = _widest_clause("year")
 # The top-level clause: a year filter, or an OR of year filters (one clause: the canonical form makes it one filter)
 _YEAR_SHAPES = st.sampled_from(
     [*_YEAR_CLAUSES, "(year:2021 OR year:2020..2022)", "(year:2019 OR year:2023..2024)"]

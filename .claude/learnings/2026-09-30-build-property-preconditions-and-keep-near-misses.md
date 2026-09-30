@@ -27,8 +27,9 @@ by generating queries with a toggleable year clause instead of drawing any claus
   all through a run, not just early (a per-case timeline of one run showed them spread evenly), so they are not
   only the early size cap in `internal/conjecture/engine.py`; tree mutations that copy one span over another
   are the likely rest. `clause_queries()` alone showed 118 invalid per 200, `near_cap_queries(1_800, 2_000)` 36.
-  The rebuilt property shows 22 to 50 per 200 (13 pr runs on the final code, 9.0 to 20.0%; one run on an
-  earlier version reached 22.5%), none rejected by the test. Fewer drawn near-cap parts (two instead of six) and span labels per recursion depth changed nothing.
+  The rebuilt property shows 22 to 50 per 200 (13 pr runs on the final code, 9.9 to 20.0%; one run on an
+  earlier version reached 22.5%), none rejected by the test. Fewer drawn near-cap parts (two instead of six)
+  and span labels per recursion depth changed nothing.
 - `filter_clauses` costs several parses (150 to 250 ms on a 2,000-character OR), one parse about 5 to 40 ms
   (evidence: `time.time()` around `parse` and `filter_clauses` on `" OR ".join(f"w{i}" for i in range(250))`):
   sizing a padded query by bisection with `filter_clauses` made the test take minutes.
