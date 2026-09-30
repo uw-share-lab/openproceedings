@@ -1,11 +1,11 @@
 ---
 id: TASK-101
 title: Parse presentation (oral/spotlight/poster) from OpenReview content.venue
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-27 21:19'
-updated_date: '2026-09-30 01:10'
+updated_date: '2026-09-30 01:20'
 labels:
   - ingest
 milestone: m-4
@@ -36,6 +36,8 @@ Fixtures: 17 notes-presentation-*.json, one note per string, trimmed from the cr
 Real data (scratch OP_DATA_DIR, cache symlinked; base = origin/dev built the same way): presentation_unmapped = 0 for all 8 v2 venue-years; ids, content_hash and every non-presentation field identical to base; op eval coverage identical (PASS 43/44, ICLR 2013 accepted exception). Checks: pytest 5422 passed/2 skipped, make lint, make tooling green.
 
 Review round 1 (coordinator): (S1) dedup.resolve now drops presentation to null unless the resolved status is accepted (claim kept in provenance); tests in test_dedup (every status, proceedings-outranked) and test_reconcile (reconcile-demoted note loses it, listed one keeps it); documented in spec 01 §Presentation and record-schema. Scratch rebuild: exactly 4 records lose poster (NeurIPS 2023 3sRR2u72oQ, pTSNoBTk8E; NeurIPS 2024 ftqjwZQz10; NeurIPS 2025 mORzRZaqT4, all reconcile-unknown); 0 non-accepted records with a presentation; ids and content_hash unchanged; coverage gate identical (PASS 43/44). Combined-snapshot hashes unchanged (its fixtures have no demoted presented record). (S2) scrub.py PERSON restored; explicit VENUE_LABELS allow-list for venue/venueid values; test asserts user@localhost scrubbed, BT@ICLR2024 kept; re-scrubbed fixtures byte-identical. (N1) spec states byte-exact matching and missing content.venue = unmapped. (N2) comment on the unmapped count.
+
+Review round 2 (637e135): approved; the venue allow-list check now guards non-string values.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

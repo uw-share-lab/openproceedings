@@ -100,7 +100,7 @@ def _scrub_content(content: dict[str, Any], c: _Counter) -> dict[str, Any]:
         wrapped = isinstance(raw, dict) and "value" in raw
         value = raw["value"] if wrapped else raw
         if (key in KEEP_CONTENT and not (isinstance(value, str) and PERSON.search(value))) or (
-            key in ("venue", "venueid") and value in VENUE_LABELS
+            key in ("venue", "venueid") and isinstance(value, str) and value in VENUE_LABELS
         ):
             new = value
         else:
