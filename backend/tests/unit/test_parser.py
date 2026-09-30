@@ -7,7 +7,7 @@ from typing import Literal
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.diagnostics import DiagnosticCode, by_position, clip
 from openproceedings.query.ast import And, Filter, Near, Node, Not, Or, Phrase, Term, Wildcard, YearRange
 from openproceedings.query.canonical import canonicalize, render
 from openproceedings.query.parser import MAX_DEPTH, MAX_PER_CODE, MAX_QUERY_LENGTH, parse
@@ -190,12 +190,13 @@ def test_mixed_and_or_warns_with_its_reading(
         assert sum(x.code is DiagnosticCode.WARN_MIXED_AND_OR for x in after.warnings) == len(mixed) - 1
 
 
-# TASK-140: a mixed level where part doesn't parse has no faithful reading, so `reading` is null and the message
-# quotes none (it once quoted `(a b) OR c` for `a b OR () OR c`, silently dropping the failed branch). The span
-# is the whole level, the failed part included. (q, mode, level span, the error that part raises)
+# TASK-140: a mixed level that raised an error while parsing has no faithful reading, so `reading` is null and
+# the message quotes the level as typed, not a reading (it once quoted `(a b) OR c` for `a b OR () OR c`,
+# silently dropping the failed branch). The span is the whole level, the failed part included.
+# (q, mode, level span, the error that part raises)
 NO_READING = (
-    "AND and OR are mixed here without parentheses, and part of it doesn't parse — fix the errors here first, "
-    "then add parentheses to choose how it groups (AND binds tighter than OR)."
+    "`{}` mixes AND and OR without parentheses, and it has errors — fix them first, then add parentheses to "
+    "choose how it groups (AND binds tighter than OR)."
 )
 SCHOLAR_NOTE = " Google Scholar binds OR tighter, so it would have grouped this the other way."
 FAILED: list[tuple[str, Literal["native", "scholar"], tuple[int, int], DiagnosticCode]] = [
@@ -217,14 +218,32 @@ FAILED: list[tuple[str, Literal["native", "scholar"], tuple[int, int], Diagnosti
 
 
 @pytest.mark.parametrize(("q", "mode", "span", "error"), FAILED, ids=[f"{m}:{q}" for q, m, _, _ in FAILED])
-def test_a_mixed_level_that_does_not_parse_quotes_no_reading(
+def test_a_mixed_level_with_errors_quotes_itself_not_a_reading(
     q: str, mode: Literal["native", "scholar"], span: tuple[int, int], error: DiagnosticCode
 ) -> None:
     result = parse(q, mode)
     assert [e.code for e in result.errors] == [error]
     [w] = [w for w in result.warnings if w.code is DiagnosticCode.WARN_MIXED_AND_OR]
-    want = NO_READING + (SCHOLAR_NOTE if mode == "scholar" else "")
+    want = NO_READING.format(q[slice(*span)]) + (SCHOLAR_NOTE if mode == "scholar" else "")
     assert (w.span, w.reading, w.message) == (span, None, want)
+
+
+def test_nested_levels_with_errors_quote_themselves() -> None:
+    """Each level quotes its own text, so the outer and inner warnings read differently."""
+    q = "a b OR (c d OR ())"
+    mixed = sorted(
+        (w for w in parse(q).warnings if w.code is DiagnosticCode.WARN_MIXED_AND_OR), key=by_position
+    )
+    assert [(w.span, w.reading, w.message) for w in mixed] == [
+        ((0, 18), None, NO_READING.format(q)),
+        ((8, 17), None, NO_READING.format("c d OR ()")),
+    ]
+
+
+def test_a_long_level_with_errors_is_clipped_like_a_reading() -> None:
+    q = f"z {LONG_OR} OR ()"
+    [w] = [w for w in parse(q).warnings if w.code is DiagnosticCode.WARN_MIXED_AND_OR]
+    assert (w.span, w.reading, w.message) == ((0, len(q)), None, NO_READING.format(clip(q, 120)))
 
 
 def test_an_error_outside_the_level_keeps_its_reading() -> None:

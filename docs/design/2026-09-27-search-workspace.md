@@ -268,9 +268,10 @@ Component rules:
 - **Diagnostics row** (spec 05 §1, ui-design-system §Transparency): warnings and translations of the
   **searched** query while the draft is clean, of the draft (labelled) while it is dirty (W3); server wording
   verbatim. Absent when there are none (no "No warnings").
-  `WARN_MIXED_AND_OR` carries **Show how it was read**, which opens the tree disclosure and moves focus to it,
-  and **Load with parentheses**, which puts the reading the server reported (the parenthesised string in its
-  message) into the editor as a draft, so the reader sees where the groups fall and edits from there (pre-pass
+  `WARN_MIXED_AND_OR` carries **Show how it was read**, which opens the tree disclosure and moves focus to it
+  (only when the tree can render: a query with errors has none, TASK-140), and **Load with parentheses**, which
+  puts the reading the server reported (the warning's `reading` field, TASK-099; offered only when it is set)
+  into the editor as a draft, so the reader sees where the groups fall and edits from there (pre-pass
   S7). It is never applied automatically.
 - **Translations** (Scholar mode) get their own row, before the warnings, headed "Read as native syntax:",
   one line per translation message, then `Searched as: <canonical>` in monospace with **Copy**. `COMPAT_NO_STEMMING`

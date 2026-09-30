@@ -30,7 +30,7 @@ export interface Item {
   /** Half-open code points into the text the diagnostic was reported for; `null` when it has no place. */
   readonly span: readonly [number, number] | null;
   /** `WARN_MIXED_AND_OR`'s text at `span` as the server read it, parenthesised; `null` on every other code, and
-   * on a `WARN_MIXED_AND_OR` with none to offer (a level where part doesn't parse, the "… and N more" summary). */
+   * on a `WARN_MIXED_AND_OR` with none to offer (a level that has errors, the "… and N more" summary). */
   readonly reading: string | null;
 }
 

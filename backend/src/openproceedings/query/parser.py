@@ -5,8 +5,9 @@ problem is a Diagnostic with a span, `ast` is None exactly when there are errors
 one mistake gives one error (an error already reported inside a span suppresses follow-on errors there).
 
 - A level that mixes AND and OR without parentheses parses by precedence and raises WARN_MIXED_AND_OR,
-  showing how it was read: quoted (clipped) in the message and whole in `reading` (TASK-099). When part of
-  the level doesn't parse there is no faithful reading: `reading` is null and the message quotes none (TASK-140).
+  showing how it was read: quoted (clipped) in the message and whole in `reading` (TASK-099). When parsing
+  the level raised an error there is no faithful reading: `reading` is null and the message quotes the level as
+  typed instead (TASK-140).
 - A bare word or range OR-joined to a filter that is a valid value of that filter's field
   (`year:2023 OR 2024`) is searched as text, as written, and raises WARN_FILTER_SCOPE.
 - A word that normalises to several tokens is a Phrase; a wildcard word's wildcard goes on its last token
@@ -287,8 +288,8 @@ class _Parser:
         The reading (each AND group parenthesised, the branches joined by ` OR `) is only offered when the whole
         level parsed: a branch that failed has no node, and an error inside a branch leaves text its node's span
         may not cover, so the reading would drop part of the level (`a b OR () OR c` → `(a b) OR c`). Then the
-        message quotes nothing and says to fix the errors first, so it never shows a reading the warning's
-        `reading` field doesn't carry (TASK-140)."""
+        message quotes the level as typed (not a reading) and says to fix the errors first, so it never shows a
+        reading the warning's `reading` field doesn't carry (TASK-140)."""
         scholar = (
             " Google Scholar binds OR tighter, so it would have grouped this the other way."
             if self.mode == "scholar"
@@ -298,9 +299,9 @@ class _Parser:
             self.warnings.append(
                 Diagnostic(
                     code=DiagnosticCode.WARN_MIXED_AND_OR,
-                    message="AND and OR are mixed here without parentheses, and part of it doesn't parse — fix "
-                    "the errors here first, then add parentheses to choose how it groups (AND binds tighter than "
-                    "OR)." + scholar,
+                    message=f"`{clip(self.q[slice(*level)], 120)}` mixes AND and OR without parentheses, and it "
+                    "has errors — fix them first, then add parentheses to choose how it groups (AND binds tighter "
+                    "than OR)." + scholar,
                     span=level,
                     reading=None,
                 )
