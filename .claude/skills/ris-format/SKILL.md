@@ -47,8 +47,8 @@ and no `Abstract source:` line; instead each record has `N1  - Abstract withheld
 attributed on this instance (the index's snapshot is unavailable), so no abstract is exported
 (decision-018).` (`export.WITHHELD`) before the provenance line, and the response has
 `X-Abstract-Source: unavailable`. Covidence hides that marker (it shows screeners no `N1`), so a withheld RIS
-imported there screens on titles alone with nothing saying why: the web app's Export menu warns on
-`unavailable` (spec 05), and spec 04 §Exports tells reviewers to check the header or the CSV's
+imported there screens on titles alone with nothing saying why: the web app's Export menu and record page
+warn on `unavailable` (spec 05), and spec 04 §Exports tells reviewers to check the header or the CSV's
 `abstract_withheld` column before importing.
 
 **Id carrier:** the round-trip test reads the openproceedings `id` back from the `ID` tag, for every

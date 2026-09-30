@@ -79,8 +79,9 @@ text screeners see.
   regard to backslashes), drop every brace in it, and the backslash that escaped one (`_debraced`): BibTeX
   counts braces without regard to backslashes while refaudit honours `\{`, so an escaped brace would be read
   differently by the two and could swallow the next entry. Balanced, unescaped braces stay (`{BERT}`).
-- Escape bare `%` as `\%` (an unescaped `%` comments out the rest of the line in LaTeX), and bare `&`,
-  `#` and `_` outside math.
+- Escape bare `%` as `\%` (an unescaped `%` comments out the rest of the line in LaTeX), and bare `&` and
+  `#`. A bare `_` is escaped as `\_` only in `note`, which styles typeset; other values keep it (a url's or
+  an id's `_`, and `$…$` math, must read back unchanged).
 - The `@type{key,` pattern must never appear inside a value. refaudit finds entries with a regex over
   the whole file, not only at line starts. Write `@` in values as `{@}`.
 - Collapse newlines inside values to spaces (refaudit normalises whitespace anyway).
