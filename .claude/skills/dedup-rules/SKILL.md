@@ -58,7 +58,8 @@ safe direction.
   `venueid` (status `unknown`, in a year whose one status carrier is `content.venue`) is dropped when its
   paper's only other record is an accepted note identical to it in everything but status, presentation and
   venueid (`openreview_v1.collapse_silent_twins`; NeurIPS 2021 `W6e384Lkjbw` into `rDdb26AQ0SO`, the one case
-  on the 2026-09-29 crawl). Anything else short of identical (another pdf or title, two statuses, a rejected
+  on the 2026-09-29 crawl), and only if every note it stands for after the identical-note collapse is silent
+  too (TASK-147). Anything else short of identical (another pdf or title, two statuses, a rejected
   twin) still arrives as two notes and stays ambiguous: dedup never judges it (TASK-126's set-aside keeps an
   `unknown` note a rival). Of identical notes the kept one is the lowest number, a tie-break, not the one the
   proceedings name: NeurIPS 2021's proceedings pages link the kept forum for 177 of the 297 accepted pairs and

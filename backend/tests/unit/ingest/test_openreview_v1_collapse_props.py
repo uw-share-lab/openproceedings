@@ -91,8 +91,37 @@ def silent_note(listings: dict[str, list[dict[str, Any]]], record: PaperRecord) 
 REAL_PAIR = {MAIN: [copy.deepcopy(SILENT), copy.deepcopy(SPEAKING)], WITHDRAWN: [], ROUND2: []}
 
 
+def main_note(nid: str, number: int, which: int, venue: str | None) -> dict[str, Any]:
+    """The silent note as `nid` #`number`, with the `which`-th pdf, title and abstract and the given venue."""
+    note = copy.deepcopy(SILENT)
+    note["id"] = note["forum"] = nid
+    note["number"] = number
+    note["content"].update(pdf=PDFS[which], title=TITLES[which], abstract=ABSTRACTS[which])
+    if venue is not ABSENT:
+        note["content"]["venue"] = venue
+    return note
+
+
+# TASK-147 (Hypothesis found it): rule 5 kept Note2 (silent) for its identical Note3, whose empty `venue` is a key
+# and so not silence; the silent-twin pass then folded Note2 into the accepted Note4. A survivor is silent only if
+# every note it stands for is, so Note2 stays: had Note3 carried the lower number, it would have been kept instead.
+# Note1 and Note5 are a plain rule-5 pair.
+CHAINED = {
+    MAIN: [
+        main_note("Zz0Note3", 3, 1, ""),
+        main_note("Zz1Note1", 1, 0, ABSENT),
+        main_note("Zz2Note4", 4, 1, "NeurIPS 2021 Poster"),
+        main_note("Zz3Note5", 5, 0, ABSENT),
+        main_note("Zz4Note2", 2, 1, ABSENT),
+    ],
+    WITHDRAWN: [],
+    ROUND2: [],
+}
+
+
 @given(notes(), st.randoms(use_true_random=False))
 @example(REAL_PAIR, random.Random(0))
+@example(CHAINED, random.Random(0))
 def test_a_collapse_never_folds_two_papers_or_loses_an_acceptance(
     listings: dict[str, list[dict[str, Any]]], rnd: random.Random
 ) -> None:
@@ -129,3 +158,23 @@ def test_a_collapse_never_folds_two_papers_or_loses_an_acceptance(
 def test_the_real_pair_collapses_to_its_accepted_note() -> None:
     [record] = crawl(copy.deepcopy(REAL_PAIR)).records
     assert (record.native, record.status, record.presentation) == ("rDdb26AQ0SO", "accepted", "poster")
+
+
+def test_a_survivor_that_stands_for_a_speaking_note_is_not_silent() -> None:
+    # TASK-147: rule 5 folds Note3 (an empty venue) into Note2 and Note5 into Note1; Note2 now stands for a note
+    # with a venue key, so it is no silent twin and stays beside the accepted Note4
+    got = crawl(copy.deepcopy(CHAINED))
+    assert [(r.native, r.status) for r in got.records] == [
+        ("Zz1Note1", "unknown"), ("Zz2Note4", "accepted"), ("Zz4Note2", "unknown")
+    ]  # fmt: skip
+    assert got.report.skipped["duplicate_submission"] == 2
+    # the same notes with Note2's and Note3's numbers swapped: rule 5 keeps Note3 instead, and the same paper
+    # survives as two records, so the silent-twin collapse no longer depends on rule 5's tie-break
+    swapped = copy.deepcopy(CHAINED)
+    for note in swapped[MAIN]:
+        note["number"] = {2: 3, 3: 2}.get(note["number"], note["number"])
+    got = crawl(swapped)
+    assert [(r.native, r.status) for r in got.records] == [
+        ("Zz0Note3", "unknown"), ("Zz1Note1", "unknown"), ("Zz2Note4", "accepted")
+    ]  # fmt: skip
+    assert got.report.skipped["duplicate_submission"] == 2
