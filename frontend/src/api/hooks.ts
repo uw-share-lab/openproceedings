@@ -19,7 +19,10 @@ export function useMeta(): Schemas["MetaResponse"] | null {
   return query.data ?? null;
 }
 
-/** `GET /coverage`: the corpus totals for the home page's coverage line. */
+/**
+ * `GET /coverage`: the whole answer for the home page's coverage line (index version, totals, venues and the
+ * corpus-wide window).
+ */
 export function useCoverage(): Schemas["CoverageResponse"] | null {
   const api = useApi();
   const query = useQuery({

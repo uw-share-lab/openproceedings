@@ -1,7 +1,12 @@
 /**
- * How `/coverage` writes the API's values (copy deck §8). Formatting only: every number shown is an API
- * field, written with `toLocaleString("en-US")`; nothing here counts, sums or compares records.
+ * How `/coverage` and the home page's coverage line write the API's values (copy deck §8). Formatting only:
+ * every number shown is an API field, written with `toLocaleString("en-US")`; nothing here counts, sums or
+ * compares records.
  */
+import type { Schemas } from "@/api/client";
+
+/** `crawl_dates`' corpus-wide key: the window over every source (spec 04 §Conventions). */
+export const ALL_SOURCES = "*";
 
 /** `1,805`: exact, never abbreviated. */
 export function count(n: number): string {
@@ -32,6 +37,25 @@ export function windowVerb(kind: string | undefined): string {
     default:
       return "Collected";
   }
+}
+
+/**
+ * `Crawled 2026-09-20 to 2026-09-26`: a window's ends as calendar days, after its label; a window within one
+ * day reads `Crawled on 2026-09-26`.
+ */
+export function windowText(label: string, window: Schemas["CrawlWindow"]): string {
+  const from = day(window.from);
+  const to = day(window.to);
+  return from === to ? `${label} on ${from}` : `${label} ${from} to ${to}`;
+}
+
+/**
+ * The corpus-wide window in words (`Google Scholar searches run on 2026-09-26`), the one sentence
+ * `/coverage` and the home line both show; `null` when the snapshot has no `*` window, which is left out.
+ */
+export function corpusWindow(snapshot: Schemas["SnapshotInfo"]): string | null {
+  const window = snapshot.crawl_dates[ALL_SOURCES];
+  return window ? windowText(windowVerb(snapshot.crawl_dates_kind[ALL_SOURCES]), window) : null;
 }
 
 /** `+1.3%`, `−0.4%`, `0.0%`: the API's unrounded `delta_pct` to one decimal (coverage-reporting §Report shape). */

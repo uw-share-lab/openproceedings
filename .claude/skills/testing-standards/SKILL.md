@@ -34,6 +34,11 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
   connection and DNS lookup raise `NetworkBlockedError` for the whole session (`test_no_network.py`). A test
   that needs a response gets a recorded fixture; there is no marker to opt out. Recording fixtures is a
   manual `op ingest` run by a person, never part of `make test` or CI.
+- **Frontend stubs answer with the API's own fixtures**, not hand-typed partial bodies: a `GET /coverage`
+  stub serves `src/components/coverage/coverage-fixture.json`, a record stub `record-fixture.json` (both kept
+  equal to the served API by backend contract tests). A partial body typed as the response is a lie the
+  compiler can't see: the next component that reads one more field crashes in an unrelated test file
+  (TASK-110, `concept-builder.test.tsx`).
 
 ## Rules
 1. **TDD.** Write the failing test first, watch it fail for the right reason, then implement. A bug fix
