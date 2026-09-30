@@ -465,22 +465,42 @@ def _index_parity(ns: argparse.Namespace) -> int:
 def _index_retire(ns: argparse.Namespace) -> int:
     """`op index retire <index_version>` (TASK-085): delete an unpinned, unserved index. Refused (exit 1, one
     line to stderr, nothing touched) when the name isn't an index_version, no such directory is directly under
-    <data-dir>/indexes, a symlink there (`current`) points at it, or a search record pins it: a deleted pinned
-    index turns those records' replays into permanent `drifted`. The checks run again under the indexes lock
-    (`storage.exclusive`, which `op index build` holds), then the directory is renamed to a `.tmp-` name (so no
-    reader ever finds half an index under its version) and removed; a removal cut short leaves only that
-    `.tmp-` directory, which the next build or retire sweeps. One log line: the version, the pinned count and
-    the outcome (logging-standards)."""
+    <data-dir>/indexes, a symlink there (`current`) points at it, the record store can't be read, or a search
+    record pins it: a deleted pinned index turns those records' replays into permanent `drifted`.
+
+    The checks run again under the indexes lock (`storage.exclusive`, which `op index build` holds), then the
+    directory is renamed to a `.tmp-` name (so no reader ever finds half an index under its version). Neither a
+    promotion (a hand-run `ln -sfn`) nor a record save takes that lock, so after the rename the pins and every
+    symlink's target are checked once more; a hit renames it back and refuses. What remains is the window
+    between that last check and the removal (a few syscalls), and any save or promotion naming the version
+    after it: both find the version absent (a save is refused; a replay reports `drifted`). A removal cut short
+    leaves only the `.tmp-` directory, which the next build or retire sweeps (`tmp_left`). One log line: the
+    version, the pinned count and the outcome (logging-standards)."""
     from openproceedings import storage
 
     started = time.perf_counter()
     version: str = ns.index_version
-    indexes = ns.data_dir / "indexes"
+    indexes: Path = ns.data_dir / "indexes"
+
+    def pins() -> tuple[str, str, int | None]:
+        from openproceedings.records import RECORDS_DIR, RecordStore
+
+        try:
+            pinned = RecordStore(ns.data_dir / RECORDS_DIR).pinned(version)
+        except (sqlite3.Error, OSError) as e:  # never guess "unpinned" from a store that can't be read
+            return "records_unreadable", f"the search-record store can't be read ({type(e).__name__})", None
+        if pinned:
+            return (
+                "pinned",
+                f"{pinned} search record{'s' if pinned != 1 else ''} pin{'' if pinned != 1 else 's'} {version}; "
+                "retiring it would leave their replays permanently drifted",
+                pinned,
+            )
+        return "", "", 0
 
     def check() -> tuple[str, str, int | None]:
         """(reason constant, message, pinned count): reason "" when the version may be retired."""
         from openproceedings.engine.index import VERSION_NAME
-        from openproceedings.records import RECORDS_DIR, RecordStore
 
         if not VERSION_NAME.fullmatch(version):  # never a path: `../x`, `current`, `a/b` are all refused here
             return (
@@ -499,18 +519,17 @@ def _index_retire(ns: argparse.Namespace) -> int:
                 continue
             if points_here:
                 return "current", f"`{link.name}` points at {version}: promote another index first", None
-        try:
-            pinned = RecordStore(ns.data_dir / RECORDS_DIR).pinned(version)
-        except sqlite3.Error as e:  # never guess "unpinned" from a store that can't be read
-            return "records_unreadable", f"the search-record store can't be read ({type(e).__name__})", None
-        if pinned:
-            return (
-                "pinned",
-                f"{pinned} search record{'s' if pinned != 1 else ''} pin{'' if pinned != 1 else 's'} {version}; "
-                "retiring it would leave their replays permanently drifted",
-                pinned,
-            )
-        return "", "", 0
+        return pins()
+
+    def named_by_link() -> str | None:
+        """A symlink in indexes/ whose target names the version (after the rename it dangles, so by name)."""
+        for link in sorted(indexes.iterdir()):
+            try:
+                if link.is_symlink() and Path(os.readlink(link)).name == version:
+                    return link.name
+            except OSError:
+                continue
+        return None
 
     def refuse(reason: str, message: str, pinned: int | None) -> int:
         fields: dict[str, object] = {"reason": reason, "pinned": pinned, "dry_run": ns.dry_run}
@@ -521,6 +540,9 @@ def _index_retire(ns: argparse.Namespace) -> int:
         print(f"op index retire: {message}{' (dry run)' if ns.dry_run else ''}", file=sys.stderr)
         return 1
 
+    def waiting() -> None:
+        print("op index retire: waiting for the indexes lock (a build or retire is running)", file=sys.stderr)
+
     reason, message, pinned = check()
     if reason:
         return refuse(reason, message, pinned)
@@ -529,21 +551,32 @@ def _index_retire(ns: argparse.Namespace) -> int:
                                                 "ms": elapsed_ms(started)})  # fmt: skip
         _print({"index_version": version, "pinned": 0, "retired": False, "dry_run": True})
         return 0
-    with storage.exclusive(indexes):
+    with storage.exclusive(indexes, on_wait=waiting):
         storage.sweep(indexes)
         reason, message, pinned = check()  # again, under the lock: a build or a promotion may have run
         if reason:
             return refuse(reason, message, pinned)
+        target = indexes / version
+        if target.is_symlink() or not target.is_dir():  # lstat, just before the rename
+            return refuse("not_found", f"no index directory {version} under <data-dir>/indexes", None)
         doomed = indexes / f"{storage.TMP}retire-{version}"
-        (indexes / version).rename(doomed)
-        storage.writable(doomed)
+        target.rename(doomed)
+        # neither a promotion nor a save takes the lock: look once more, now that the name is gone
+        reason, message, pinned = pins()
+        if not reason and (link := named_by_link()) is not None:
+            reason, message = "current", f"`{link}` came to point at {version} during the retire"
+        if reason:
+            doomed.rename(target)
+            return refuse(reason, message, pinned)
+        with contextlib.suppress(OSError):  # a file we can't chmod: rmtree removes what it can; `tmp_left`
+            storage.writable(doomed)
         shutil.rmtree(doomed, ignore_errors=True)
         left = doomed.exists()
     # WARNING when the `.tmp-` directory survived its removal (the next build or retire sweeps it)
     log.log(logging.WARNING if left else logging.INFO, "index_retired",
             extra={"index_version": version, "pinned": 0, "outcome": "retired", "tmp_left": left,
                    "ms": elapsed_ms(started)})  # fmt: skip
-    _print({"index_version": version, "pinned": 0, "retired": True, "dry_run": False})
+    _print({"index_version": version, "pinned": 0, "retired": True, "dry_run": False, "tmp_left": left})
     return 0
 
 

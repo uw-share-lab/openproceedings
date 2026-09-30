@@ -4,13 +4,15 @@ and refuses (exit 1, one line to stderr, nothing touched) while a search record 
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
 import pytest
-from openproceedings import cli
+from openproceedings import cli, storage
 from openproceedings.records import RECORDS_DIR, RecordStore
 
 from tests.contract.conftest import Store, point_current
@@ -134,7 +136,13 @@ def test_an_unpinned_version_is_retired(capsys: Capsys, data_dir: Path, store: S
     big = tree(data_dir / "indexes" / store.big)
     code, out, err = op(capsys, data_dir, "index", "retire", store.small)
     assert code == 0, err
-    assert json.loads(out) == {"index_version": store.small, "pinned": 0, "retired": True, "dry_run": False}
+    assert json.loads(out) == {
+        "index_version": store.small,
+        "pinned": 0,
+        "retired": True,
+        "dry_run": False,
+        "tmp_left": False,
+    }
     indexes = data_dir / "indexes"
     assert not (indexes / store.small).exists()
     assert sorted(p.name for p in indexes.iterdir() if not p.name.startswith(".")) == [store.big, "current"]
@@ -200,3 +208,135 @@ def test_index_help_lists_retire_as_implemented(capsys: Capsys) -> None:
     assert exc.value.code == 0
     out = capsys.readouterr().out
     assert "retire" in out and "pins it" in out and "planned" not in out
+
+
+# --- races and leftovers (TASK-085 review) ------------------------------------------------------------------
+def pinned_on_call(monkeypatch: pytest.MonkeyPatch, hook: Any) -> list[str]:
+    """Replace `RecordStore.pinned` with one that counts calls and returns `hook(call_number)` (0 if None)."""
+    calls: list[str] = []
+
+    def pinned(_self: RecordStore, version: str) -> int:
+        calls.append(version)
+        got = hook(len(calls))
+        return 0 if got is None else int(got)
+
+    monkeypatch.setattr(RecordStore, "pinned", pinned)
+    return calls
+
+
+def test_a_pin_made_during_the_retire_restores_the_index(
+    capsys: Capsys, data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A save takes no indexes lock: a pin that appears after the checks under the lock, before the removal,
+    renames the directory back and refuses. Calls: 1 before the lock, 2 under it, 3 after the rename."""
+    calls = pinned_on_call(monkeypatch, lambda n: 1 if n == 3 else 0)
+    before = tree(data_dir / "indexes" / store.small)
+    code, out, err = op(capsys, data_dir, "index", "retire", store.small)
+    assert len(calls) == 3 and code == 1 and out == ""
+    assert f"1 search record pins {store.small}" in err
+    assert tree(data_dir / "indexes" / store.small) == before
+    assert not list((data_dir / "indexes").glob(".tmp-*"))
+    [line] = [x for x in log_lines(err) if x["event"] == "index_retire_refused"]
+    assert (line["reason"], line["pinned"]) == ("pinned", 1)
+
+
+def test_a_symlink_made_during_the_retire_restores_the_index(
+    capsys: Capsys, data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A promotion (`ln -sfn`) takes no lock either: a link to the version made after the symlink scan under
+    the lock (here, during its pin check) is found after the rename, and the index is renamed back."""
+    link = data_dir / "indexes" / "next"
+
+    def promote(n: int) -> None:
+        if n == 2:
+            link.symlink_to(store.small)
+
+    pinned_on_call(monkeypatch, promote)
+    code, _out, err = op(capsys, data_dir, "index", "retire", store.small)
+    assert code == 1 and f"`next` came to point at {store.small} during the retire" in err
+    assert (data_dir / "indexes" / store.small / "manifest.json").is_file()
+    assert link.resolve() == (data_dir / "indexes" / store.small).resolve()
+
+
+def test_an_unreadable_records_directory_is_refused(
+    capsys: Capsys, data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A PermissionError (a 0700 records/ of another user) is refused like a corrupt store, with the one line."""
+
+    def denied(_self: RecordStore, _version: str) -> int:
+        raise PermissionError(13, "Permission denied", "records.sqlite")
+
+    monkeypatch.setattr(RecordStore, "pinned", denied)
+    code, _out, err = op(capsys, data_dir, "index", "retire", store.small)
+    assert code == 1 and "search-record store can't be read (PermissionError)" in err
+    assert (data_dir / "indexes" / store.small / "manifest.json").is_file()
+    [line] = [x for x in log_lines(err) if x["event"] == "index_retire_refused"]
+    assert line["reason"] == "records_unreadable" and line["level"] == "WARNING"
+    assert not [x for x in log_lines(err) if x["event"] == "cli_refused"]
+
+
+def test_a_leftover_that_cant_be_made_writable_is_reported_not_raised(
+    capsys: Capsys, data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A chmod that fails after the rename: the index is still retired (its name is gone), what survives the
+    removal is reported as `tmp_left`, and a later sweep (every build runs one) logs it and doesn't raise."""
+
+    def denied(_path: Path) -> None:
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(storage, "writable", denied)
+    monkeypatch.setattr(storage.shutil, "rmtree", lambda *_a, **_k: None)  # (shutil itself) nothing removed
+    code, out, err = op(capsys, data_dir, "index", "retire", store.small)
+    assert code == 0 and json.loads(out)["tmp_left"] is True
+    indexes = data_dir / "indexes"
+    assert not (indexes / store.small).exists() and (indexes / f".tmp-retire-{store.small}").is_dir()
+    [line] = [x for x in log_lines(err) if x["event"] == "index_retired"]
+    assert line["level"] == "WARNING" and line["tmp_left"] is True
+
+    with storage.exclusive(indexes):
+        storage.sweep(indexes)  # doesn't raise
+    assert (indexes / f".tmp-retire-{store.small}").is_dir()
+    monkeypatch.undo()
+    storage.sweep(indexes)  # once it can be cleaned, it is
+    assert not list(indexes.glob(".tmp-*"))
+
+
+def test_sweep_logs_a_leftover_it_cant_remove(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    leftover = tmp_path / ".tmp-stuck"
+    leftover.mkdir()
+
+    def denied(_path: Path) -> None:
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(storage, "writable", denied)
+    monkeypatch.setattr(storage.shutil, "rmtree", lambda *_a, **_k: None)
+    with caplog.at_level("WARNING", logger="openproceedings.storage"):
+        storage.sweep(tmp_path)
+    [rec] = [r for r in caplog.records if r.message == "tmp_sweep_failed"]
+    assert (rec.path, rec.reason) == (".tmp-stuck", "EPERM")  # type: ignore[attr-defined]
+
+
+def test_a_retire_blocked_on_the_lock_says_it_is_waiting(
+    capsys: Capsys, data_dir: Path, store: Store
+) -> None:
+    indexes = data_dir / "indexes"
+    held = (indexes / ".lock").open("a")
+    fcntl.flock(held.fileno(), fcntl.LOCK_EX)
+    result: list[int] = []
+    t = threading.Thread(target=lambda: result.append(cli.main(["--data-dir", str(data_dir), "index", "retire",
+                                                                 store.small])))  # fmt: skip
+    t.start()
+    try:
+        for _ in range(200):
+            if "waiting for the indexes lock" in capsys.readouterr().err:
+                break
+            t.join(0.02)
+        else:
+            pytest.fail("no waiting message")
+    finally:
+        fcntl.flock(held.fileno(), fcntl.LOCK_UN)
+        held.close()
+    t.join(10)
+    assert result == [0] and not (indexes / store.small).exists()

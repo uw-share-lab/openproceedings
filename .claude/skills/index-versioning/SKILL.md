@@ -41,8 +41,10 @@ data/indexes/current            symlink → the served version
   would leave those records' replays permanently `drifted`), while `current` or another symlink in
   `indexes/` points at the version, when the record store can't be read, and when the name isn't an
   index_version directory directly under `indexes/` (the format is checked before any path is built).
-  `--dry-run` runs the same checks and deletes nothing. It can't see an `op serve --index <version>` that
-  serves the version by name, so check each running instance first.
+  `--dry-run` runs the same checks and deletes nothing. Order: repoint `current` to the new version, SIGHUP the API, confirm `/api/v1/meta` reports the new version, then retire the old one (the API keeps serving the old version until its reload). It can't see an
+  `op serve --index <version>` that serves the version by name, so check each running instance first. A save
+  or a promotion takes no indexes lock, so retire checks the pins and the symlinks once more after renaming
+  the directory aside, and renames it back on a hit; only the few syscalls before the removal remain open.
 - The API loads a **pinned** older version to replay a record (`.claude/skills/search-records/SKILL.md`).
   Replay returns HTTP 200 with one of three statuses (spec 04 §Search records):
   - **`reproduced`**: the same `index_version` **and** `query_version` are available, and both `ids_hash`
