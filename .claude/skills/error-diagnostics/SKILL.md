@@ -85,8 +85,8 @@ use them exactly as named there.
   message is prose for people, and the **span** locates exactly what was typed. The `reading` **field** is
   data, never clipped or escaped (the message's quote of it is). A **fix hint** is text the user types back, so
   it quotes the query only when `diagnostics.verbatim(text)` holds (no escape needed); otherwise it says what
-  to do in words (`−foo`bar` → "type an ASCII hyphen `-` in its place", not `-foo\x60bar`). A property (`test_every_message_quotes_query_text_on_one_visible_line`) and goldens
-  (`test_parser.py::QUOTED`) pin it.
+  to do in words (`` −foo`bar `` → "type an ASCII hyphen `-` in its place", not `-foo\x60bar`). A property
+  (`test_every_message_quotes_query_text_on_one_visible_line`) and goldens (`test_parser.py::QUOTED`) pin it.
 - Message text is prose, not contract: codes, spans and `reading` are what clients use (they never parse
   `message`), so rewording a message is not a breaking change under `/api/v1`. Update the goldens that quote
   it deliberately (`frontend/src/help/syntax-golden.json` via `help_golden.py`, the copy deck).

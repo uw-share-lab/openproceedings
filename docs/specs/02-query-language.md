@@ -419,8 +419,8 @@ reading, 20 for an unterminated phrase; escapes count toward the limit), so no d
 The quote is one line of visible text: whitespace runs are one space, and a backtick or an invisible (control,
 format or surrogate) character is written as its escape (`\x60`, `\x00`, `\u202e`), so a backtick in the query
 can't end the message's quoting. A fix hint quotes the query only when it needs no escape, since it is text to
-type back. This is display only: `q`, the canonical string, spans and `reading` keep the text exactly as typed
-(TASK-141; error-diagnostics skill). The codes are in
+type back. This is display only: `q`, spans and `reading` keep the text exactly as typed, and the canonical form is
+never escaped (TASK-141; error-diagnostics skill). The codes are in
 `diagnostics.py`; the `PARSE_*`, `FIELD_*` and `WILDCARD_*` errors are 422s where a query is run (spec 04); `/parse`
 returns them as values.
 
