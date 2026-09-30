@@ -286,7 +286,7 @@ hosted (00, question 5). The first release is tagged once TASK-065 (deploy) is d
 |---|---|---|
 | app `X.Y.Z` | `backend/pyproject.toml` and `frontend/package.json` `version`, kept equal (also recorded in `uv.lock` and `package-lock.json`); `op --version` and the snapshot manifest's `openproceedings_version` report it | once per release, on its release branch |
 | `TOKENIZER_VERSION`, `SCHEMA_VERSION` | the code; inputs to `index_version` (03 §Versioning) | the `index-versioning` bump rules |
-| Tantivy | `uv.lock`; each index manifest's `tantivy_version` | a dependency upgrade |
+| Tantivy | `uv.lock`; each index manifest's `tantivy_version` (not an `index_version` input) | a dependency upgrade, which always bumps `SCHEMA_VERSION` too, so the release gets a new `index_version` it can build and serve (a replay reports it as `schema_version`) |
 | `QUERY_VERSION` | the code; in `canonical_hash` and every search record (04) | the `index-versioning` bump rules |
 | `index_version` | the data: `data/indexes/<index_version>/` | a new snapshot, or a tokenizer, schema or ranking change |
 
@@ -318,21 +318,24 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
 - **Sections:** a PR belongs to the oldest tag whose history holds its merge commit; with `--release X.Y.Z`,
   `HEAD` counts as that version's tag. A PR no tag holds is Unreleased.
 - **Groups**, by the title's Conventional Commits type: `feat` → Added; `docs`, `refactor`, `perf`, `revert`
-  → Changed; `fix` → Fixed; `chore`, `test`, `ci`, `build`, `style` → Internal. A title without one of these
+  → Changed; `fix` → Fixed; `chore`, `test`, `ci`, `build`, `style` and Dependabot's `deps` → Internal. A title without one of these
   types takes its head branch's `<type>/` prefix instead, else Changed. A known `type!:` is marked
   **Breaking**. Each line is the title's description (a scope first) and a link to the PR, in merge order.
 - **Data:** each release's section ends with its `docs/releases.toml` table (`index_version`,
   `snapshot_hash`, `tokenizer_version`, `schema_version`, `tantivy_version`, `query_version`) and which
   saved search records still reproduce. A release whose four versions differ from the previous release's
   starts with a `drifted` callout, and is refused as a PATCH.
-- **With `--release`**, the table must match the code at `HEAD` (the three constants and the Tantivy `uv.lock`
+- **With `--release`**, a Tantivy change without a `SCHEMA_VERSION` change is refused, and the table must
+  match the code at `HEAD` (the three constants and the Tantivy `uv.lock`
   pins) and the manifest of the index it names, `<--data-dir>/indexes/<index_version>/manifest.json`
   (default `data/`), so a hand-copied table can't hide a version change.
 - **Refuses** (exit 1, nothing written): a release with no data table or a table that disagrees with the code
   or its index; a `--release` version the two manifests don't both carry or that isn't newer than the latest
   tag; a merge commit the clone lacks, once there is a tag or `--release` to place it against
-  (`git fetch origin --tags`); malformed input; and a PR title or note with an AI-attribution marker, an
-  `@`-mention or a URL (release notes name roles and link only PRs; edit the title through the REST API).
+  (`git fetch origin --tags`); malformed input; and a PR title or note with an AI-attribution marker (checked
+  on the raw text with its whitespace collapsed), an `@`-mention, an email address or a URL (release notes
+  name roles and link only PRs; an npm scope such as `@types/node` and a pin such as `next@15.1.0` pass; edit
+  a refused title through the REST API).
 - `--check` exits 1 when the file differs; `--notes X.Y.Z` prints one release's section (the release notes).
   No CI job runs it, because it reads GitHub and every merge would make the file stale. Between releases its
   Unreleased section lags `dev`; any PR may refresh it.
@@ -349,8 +352,9 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    runbook, with `op snapshot diff <old> <new>` reviewed). Run, with the release's code: the golden and
    contract suites; `op index parity --index <v>`; `op eval coverage --index <v> --check --out <scratch>`
    (so no report lands in the tree); and `op record replay <id> --json` on a sample of search records from a
-   copy of the target instance's `records/records.sqlite`. Replay runs each record on the index it pins
-   whenever that index is present (`--index` is only the fallback). Required: with the four versions
+   copy of the target instance's `records/records.sqlite`, only records whose pinned index is present in the
+   local data dir (copy it, or leave the record out: replay runs a record on the index it pins when that
+   index is present, else falls back to `--index` and reports `drifted` for no real change). Required: with the four versions
    unchanged, every sampled record whose index is kept reports `reproduced`; with any changed, `drifted`,
    naming exactly the changed inputs; a `mismatch` (exit 3, `API_REPLAY_MISMATCH`) blocks the release.
 4. **Release branch.** From here until the tag exists, nothing else merges into `dev`. `git switch -c
@@ -358,7 +362,9 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    `frontend/package.json`, then `uv lock` and `npm install --package-lock-only --ignore-scripts`; add
    `[releases."X.Y.Z"]` to `docs/releases.toml` from step 3's index manifest
    (`data/indexes/<v>/manifest.json`) and the code's `QUERY_VERSION` (never edit a released table); `make
-   changelog RELEASE=X.Y.Z`, which checks the table, and read the section (a `drifted` callout, a Breaking
+   changelog RELEASE=X.Y.Z`, which checks the table against that manifest (so run it in the checkout that
+   holds `data/`, or set `OP_DATA_DIR` (read as by `op`) or `DATA_DIR=<dir>` to step 3's data dir; a fresh
+   worktree has no `data/`), and read the section (a `drifted` callout, a Breaking
    line). Then `/record-learnings`, `/review-gate` and `/open-pr` into `dev`, and merge it.
 5. **Promotion.** `gh pr create --base main --head dev --title "chore: promote dev to main for X.Y.Z"
    --body-file <the readiness evidence>`, not `/open-pr` (it pushes and attests, and a promotion does
@@ -367,22 +373,29 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    person (never self-approved, never bypassed; admins included) and `dev` up to date with `main` (step 7).
    Merge with a merge commit.
 6. **Tag and notes.** `git fetch origin` and check out `origin/main`; `python3 .claude/scripts/changelog.py
-   --check --release X.Y.Z` passes (the promotion holds exactly the PRs the file lists); `python3
-   .claude/scripts/changelog.py --release X.Y.Z --notes X.Y.Z > notes.md`; `gh release create vX.Y.Z --target
+   --check --release X.Y.Z` passes (the promotion holds exactly the PRs the file lists; with `OP_DATA_DIR` or
+   `--data-dir` naming step 3's data dir when this checkout doesn't hold `data/`); `python3 .claude/scripts/changelog.py --release X.Y.Z
+   --notes X.Y.Z > notes.md` (the same `--data-dir`); `gh release create vX.Y.Z --target
    "$(git rev-parse origin/main)" --title X.Y.Z --notes-file notes.md`, which creates the tag on GitHub
    (`require-review.sh` blocks an agent's `git push` of a tag, since `main`'s merge commit has no per-sha
    record; `block-ai-attribution.sh` scans the notes). The `v*` tag ruleset (§Branch protection) must already
-   be in place. No assets. Then `git fetch origin --tags` and check that
+   be in place: `gh api repos/<owner>/<name>/rulesets --jq '.[] | select(.target == "tag") | .name'` lists
+   it; paste the output into the promotion PR. No assets. Then `git fetch origin --tags` and check that
    `git rev-parse vX.Y.Z^{commit}` is that sha.
 7. **Back-merge.** `main` now holds the promotion's merge commit, which `dev` lacks, and the next promotion
    can't merge until `dev` has it. `git switch -c release/X.Y.Z-back-merge origin/dev && git merge --no-ff
-   origin/main` (no file changes), `/review-gate`, then `gh pr create --base dev --label no-learning` and
-   `record-review.py APPROVE <dispositions> --attest`; merge it. On `dev`,
-   `python3 .claude/scripts/changelog.py --check` then passes.
+   origin/main` (no file changes), `/review-gate`, `git push -u origin release/X.Y.Z-back-merge` (the review
+   record covers the merge commit), then `gh pr create --base dev --title "chore: back-merge main after
+   X.Y.Z" --body-file <file> --label no-learning` and `record-review.py APPROVE <dispositions> --attest`.
+   Merge it with a merge commit (`gh pr merge <n> --merge`, never `--squash` or `--rebase`, which would leave
+   `main`'s commit out of `dev`), then check `git fetch origin && git merge-base --is-ancestor origin/main
+   origin/dev`. On `dev`, `python3 .claude/scripts/changelog.py --check` then passes.
 8. **Retention.** Keep every index and snapshot a search record pins (`op index retire` refuses a pinned
-   index; §CLI). After a release that changes the four versions, its code can't serve the older pinned
-   indexes, but the release each record was saved under still can: keep them, and name that release in any
-   answer to a replay question.
+   index; §CLI). After a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy, its code
+   can't serve the older pinned indexes (after a `QUERY_VERSION`-only change it still serves them, and
+   replay reports `drifted`), but the release each record was saved under still can: keep them. To find that release for a
+   record, match its pinned index's manifest (`tokenizer_version`, `schema_version`, `tantivy_version`) and the
+   record's `query_version` against the releases' Data sections.
 9. **After.** Deploying the release, and promoting an index, follow §Deploy (together, for a release that
    changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy).
 

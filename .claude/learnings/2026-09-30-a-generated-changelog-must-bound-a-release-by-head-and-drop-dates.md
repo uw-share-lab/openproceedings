@@ -21,11 +21,15 @@ Define the release process and generate `CHANGELOG.md` from merged PRs, before a
   a clone whose remote is spelled `Owner/Repo` lists promotions (review round 1).
 - **Escaping can hide what a later check looks for.** The attribution check ran on the rendered Markdown, where
   `Generated with [Claude` had become `Generated with \[Claude` and no longer matched. Check raw input before
-  transforming it (review round 1, security-reviewer; row "a bracketed footer").
+  transforming it (review round 1, security-reviewer; row "a bracketed footer"), and collapse its whitespace
+  first: a double or non-breaking space slipped past a single-space pattern (round 2). A refusal pattern over
+  merged PR titles must not catch package names (`@types/node`, `next@15.1.0`): one Dependabot title would
+  block every run until someone retitles it (round 2, code-reviewer).
 - **Replay compatibility is more than the three named versions.** The engine refuses an index built with
   another Tantivy version as well as another tokenizer or schema (`engine/tantivy_engine.py` `unservable`), so
   a Tantivy upgrade makes every pinned index unservable: it is a MINOR release, and it can't ship without a new
-  index. A data table copied by hand from a running instance's `/meta` can also show the previous code's
+  index. Tantivy is not an `index_version` input, so without a `SCHEMA_VERSION` bump the rebuild gets the old id
+  and `op index build` keeps the old directory; the `index-versioning` skill now always requires the bump. A data table copied by hand from a running instance's `/meta` can also show the previous code's
   versions, so `--release` checks the table against the code constants, `uv.lock` and the index manifest.
 - **The promotion path is shaped by the hooks and branch protection, not by `/open-pr`.** `/open-pr` pushes
   and attests, which a promotion from `dev` can't do; `require-review.sh` exempts exactly
@@ -56,6 +60,6 @@ Define the release process and generate `CHANGELOG.md` from merged PRs, before a
 - Skill / agent / CLAUDE.md updated? — `docs/specs/08-ops-and-tooling.md` §Release and §Branch protection,
   `.claude/agents/release-manager.md`, `.claude/commands/open-pr.md`, the `pr-workflow`, `repo-conventions`
   and `no-ai-attribution` skills, `CLAUDE.md`.
-- Test or hook added? — `.claude/scripts/tests/test-changelog.sh` (109 rows) and 31 mutants in
+- Test or hook added? — `.claude/scripts/tests/test-changelog.sh` (120 rows) and 37 mutants in
   `.claude/scripts/mutants/changelog.json`; `block-ai-attribution.sh` scans `gh release create`/`edit` notes
   (5 rows in `test-openproceedings-gates.sh`, 2 mutants in `gates.json`).

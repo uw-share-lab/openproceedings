@@ -185,5 +185,41 @@
   "file": ".claude/scripts/changelog.py",
   "old": "                if any(data[v][k] != d[k] for k in COMPAT):\n                    break\n",
   "new": ""
+ },
+ {
+  "label": "changelog: whitespace not collapsed before the checks",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    text = \" \".join(text.split())\n    if hit := ATTRIBUTION.search(text):",
+  "new": "    if hit := ATTRIBUTION.search(text):"
+ },
+ {
+  "label": "changelog: email addresses allowed",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    r\"|[\\w.+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}\\b\"\n",
+  "new": ""
+ },
+ {
+  "label": "changelog: Tantivy alone allowed",
+  "file": ".claude/scripts/changelog.py",
+  "old": "            if \"tantivy_version\" in changed and \"schema_version\" not in changed:\n",
+  "new": "            if False:\n"
+ },
+ {
+  "label": "changelog: OP_DATA_DIR ignored",
+  "file": ".claude/scripts/changelog.py",
+  "old": "default=Path(os.environ.get(\"OP_DATA_DIR\") or ROOT / \"data\"),",
+  "new": "default=ROOT / \"data\","
+ },
+ {
+  "label": "changelog: an npm scope refused as a mention",
+  "file": ".claude/scripts/changelog.py",
+  "old": "(?![A-Za-z0-9-]|/)\"",
+  "new": "\""
+ },
+ {
+  "label": "changelog: deps titles not Internal",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    \"deps\": \"Internal\",",
+  "new": "    \"deps\": \"Changed\","
  }
 ]

@@ -95,4 +95,5 @@ phrase query per field, and every term's document frequency from the term dictio
 - Facet values are case-sensitive in the `raw` tokenizer. `venue:neurips` is case-insensitive in the
   language, so compile maps it to the stored spelling.
 - Treat a tantivy-py upgrade as able to change scores or segment behaviour. Re-run determinism and
-  differential suites, and bump `SCHEMA_VERSION` unless they prove the results identical.
+  differential suites, and always bump `SCHEMA_VERSION`: the engine refuses an index built with another
+  Tantivy, and without the bump the new build would get the old `index_version` (`index-versioning`).

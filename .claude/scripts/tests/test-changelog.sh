@@ -8,6 +8,7 @@
 # Usage: ./test-changelog.sh
 set -u
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
+unset OP_DATA_DIR  # the script reads it as its default --data-dir, as op does
 SRC="$(cd "$(dirname "$0")/../../.." && pwd)"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -216,6 +217,8 @@ fresh; data 0.2.0 2 2 2; manifest "$IDX" 2 3 0.26.2
 expect err "the index's schema_version differs"                         --release 0.2.0
 fresh; data 0.2.0 2 2 2; mkdir -p "$TMP/elsewhere/indexes"; rm -rf "$TMP/elsewhere/indexes/$IDX"; mv "$R/data/indexes/$IDX" "$TMP/elsewhere/indexes/"
 expect ok  "--data-dir names where the index lives"                     --release 0.2.0 --data-dir "$TMP/elsewhere"
+if OP_DATA_DIR="$TMP/elsewhere" python3 "$R/.claude/scripts/changelog.py" --repo o/r --prs "$TMP/prs.json" --release 0.2.0 > "$TMP/out" 2>&1; then
+  ok "OP_DATA_DIR is the default data dir, as for op"; else bad "OP_DATA_DIR ignored"; cat "$TMP/out"; fi
 
 echo "== --notes"
 fresh; python3 "$R/.claude/scripts/changelog.py" --repo o/r --prs "$TMP/prs.json" --notes 0.1.0 > "$TMP/notes" 2> "$TMP/out"
@@ -238,8 +241,15 @@ fresh; data 0.1.1 2 2 3; versions 0.1.1 0.1.1; code 2 2 3 0.26.2
 expect err "a QUERY_VERSION change in a patch release"                  --release 0.1.1
 fresh; data 0.1.1 2 3 2; versions 0.1.1 0.1.1; code 2 3 2 0.26.2; manifest "$IDX" 2 3 0.26.2
 expect err "a SCHEMA_VERSION change in a patch release"                 --release 0.1.1
-fresh; data 0.1.1 2 2 2 0.27.0; versions 0.1.1 0.1.1; code 2 2 2 0.27.0; manifest "$IDX" 2 2 0.27.0
-expect err "a Tantivy upgrade in a patch release"                       --release 0.1.1
+fresh; data 0.1.1 2 3 2 0.27.0; versions 0.1.1 0.1.1; code 2 3 2 0.27.0; manifest "$IDX" 2 3 0.27.0
+expect err "a Tantivy upgrade (with its schema bump) in a patch release" --release 0.1.1
+said  "refused as a patch"                                              "not a patch release"
+fresh; data 0.2.0 2 2 2 0.27.0; code 2 2 2 0.27.0; manifest "$IDX" 2 2 0.27.0
+expect err "a Tantivy upgrade without a SCHEMA_VERSION bump"            --release 0.2.0
+said  "names the missing bump"                                          "without a SCHEMA_VERSION bump"
+fresh; data 0.2.0 2 3 2 0.27.0; code 2 3 2 0.27.0; manifest "$IDX" 2 3 0.27.0
+expect ok  "a Tantivy upgrade with its SCHEMA_VERSION bump, minor"      --release 0.2.0
+has   "both are named"                                                  "(SCHEMA_VERSION 2 → 3, Tantivy 0.26.2 → 0.27.0)."
 fresh; data 0.2.0 2 2 3; code 2 2 3 0.26.2
 expect ok  "a QUERY_VERSION change in a minor release"                  --release 0.2.0
 has   "the Data line names the change"                                  "- Search records saved under 0.1.0 or earlier replay as \`drifted\` (QUERY_VERSION 2 → 3)."
@@ -304,6 +314,15 @@ fresh; sed -i.bak 's/"title":"ci: pin actions"/"title":"ci: noreply@anthropic.co
 expect err "an attribution address in a title"
 fresh; sed -i.bak 's/"title":"ci: pin actions"/"title":"chore: Generated with [Claude Code](x)"/' "$TMP/prs.json"
 expect err "a bracketed footer (escaping must not hide it)"
+fresh; sed -i.bak 's/"title":"ci: pin actions"/"title":"chore: Generated with  [Claude Code]"/' "$TMP/prs.json"
+expect err "a footer with a double space"
+fresh; sed -i.bak 's/"title":"ci: pin actions"/"title":"chore: Generated with\\u00a0[Claude Code]"/' "$TMP/prs.json"
+expect err "a footer with a non-breaking space"
+fresh; sed -i.bak 's/"title":"ci: pin actions"/"title":"fix: ask jane.doe@example.org"/' "$TMP/prs.json"
+expect err "an email address in a title"
+fresh; sed -i.bak 's/"title":"ci: pin actions"/"title":"deps: bump @types\/node and pin next@15.1.0 (@-mention rule)"/' "$TMP/prs.json"
+expect ok  "an npm scope, a version pin and the word @-mention pass"
+has   "a deps: title is Internal, the scope kept"                        "- bump @types/node and pin next@15.1.0 (@-mention rule) ([#9]"
 fresh; sed -i.bak 's/"title":"ci: pin actions"/"title":"ci: thanks @someone"/' "$TMP/prs.json"
 expect err "an @-mention in a title"
 fresh; sed -i.bak 's/"title":"ci: pin actions"/"title":"ci: see https:\/\/example.org"/' "$TMP/prs.json"

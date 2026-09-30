@@ -51,7 +51,10 @@ code and the index's manifest. The process and checklist are spec 08 §Release.
   releases' records still reproduce, and a record from an earlier release with other versions reproduces
   under that release's tag, on the index it pins.
 - Code and data ship separately, except a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or
-  Tantivy: its code can't serve the old index, so it deploys together with an index it built.
+  Tantivy: its code can't serve the old index, so it deploys together with an index it built. Tantivy is not
+  an `index_version` input, so a Tantivy upgrade always bumps `SCHEMA_VERSION` (the `index-versioning` skill
+  no longer allows an exception), or the new build would reuse the old id; `changelog.py --release` refuses a
+  Tantivy change alone.
 - A release bumps two manifests and both lockfiles; `changelog.py --release` refuses when the manifests
   disagree with the version, when a release lacks its data table or the table disagrees with the code or the
   index manifest, and when a PATCH changes one of the four versions.

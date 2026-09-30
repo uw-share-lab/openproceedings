@@ -32,8 +32,8 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    `/open-pr`), which needs a second person's approval (request it; never self-approve or bypass branch
    protection); tag with `gh release create --target` and notes from `changelog.py --notes` (a `git push` of
    a tag is blocked by `require-review.sh`); back-merge `main` into `dev` on `release/X.Y.Z-back-merge`.
-2. **Versions.** Any change of `TOKENIZER_VERSION`, `SCHEMA_VERSION`, Tantivy or `QUERY_VERSION` is at
-   least MINOR, is called out at the top of the notes, and makes records saved under earlier releases replay
+2. **Versions.** Any change of `TOKENIZER_VERSION`, `SCHEMA_VERSION`, Tantivy (which always bumps
+   `SCHEMA_VERSION` too) or `QUERY_VERSION` is at least MINOR, is called out at the top of the notes, and makes records saved under earlier releases replay
    as `drifted`; `changelog.py` refuses it as a PATCH and refuses a data table that disagrees with the code
    or the index manifest.
 3. **Code and data ship separately**, except a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or

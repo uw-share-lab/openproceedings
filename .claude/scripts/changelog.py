@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -58,14 +59,21 @@ TYPES = {
     "ci": "Internal",
     "build": "Internal",
     "style": "Internal",
+    "deps": "Internal",  # Dependabot's commit-message prefix (.github/dependabot.yml)
 }
 # The shared no-AI-attribution pattern (block-ai-attribution.sh, .githooks/commit-msg, pr-gates.yml).
 ATTRIBUTION = re.compile(
     r"co-authored-by[:=][^\n]*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com",
     re.IGNORECASE,
 )
-# Release notes name roles, not people, and link only PRs: a GitHub @-mention or a URL in a title is refused.
-MENTION_OR_URL = re.compile(r"(?<![\w.])@[A-Za-z0-9-]|://|\bwww\.", re.IGNORECASE)
+# Release notes name roles, not people, and link only PRs, so a title or note is refused for: a GitHub @-mention (not an npm scope such as `@types/node`, and not `@-mention` itself), an email address
+# (a dotted domain ending in letters, so `next@15.1.0` and `recall@25` pass), a URL or a `www.` address.
+MENTION_OR_URL = re.compile(
+    r"(?<![\w.])@[A-Za-z0-9][A-Za-z0-9-]*(?![A-Za-z0-9-]|/)"
+    r"|[\w.+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b"
+    r"|://|\bwww\.",
+    re.IGNORECASE,
+)
 # What decides whether a search record replays as `reproduced` (spec 08 §Release): the index's build inputs
 # the engine checks before serving it (engine/tantivy_engine.py `unservable`), and the query semantics.
 COMPAT = {
@@ -135,7 +143,9 @@ def repo_from_origin() -> str:
 
 def check_text(what: str, text: str) -> None:
     """Refuse text that would put an AI-attribution marker, a person or a link into the release notes. Run on
-    the raw text: escaping could hide a marker (`\\[Claude`) from the pattern."""
+    the raw text with its whitespace collapsed (a double or non-breaking space would slip past the pattern,
+    and escaping could hide a marker, `\\[Claude`, from it)."""
+    text = " ".join(text.split())
     if hit := ATTRIBUTION.search(text):
         raise Refusal(f"{what} carries an AI-attribution marker ({hit[0]!r}): fix it")
     if hit := MENTION_OR_URL.search(text):
@@ -352,6 +362,11 @@ def data_block(version: str, data: dict[str, dict[str, str]]) -> tuple[list[str]
         prev = earlier[-1]
         changed = [k for k in COMPAT if data[prev][k] != d[k]]
         if changed:
+            if "tantivy_version" in changed and "schema_version" not in changed:
+                raise Refusal(
+                    f"{version} upgrades Tantivy without a SCHEMA_VERSION bump: the index_version wouldn't "
+                    "change, so no new index could be built (index-versioning skill)"
+                )
             if version_key(version)[:2] == version_key(prev)[:2]:
                 raise Refusal(
                     f"{version} changes {', '.join(COMPAT[k] for k in changed)}: not a patch release"
@@ -449,7 +464,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--release", metavar="X.Y.Z", help="title the untagged PRs in HEAD as this release")
     ap.add_argument("--prs", type=Path, help="a JSON array of merged PRs instead of asking GitHub")
     ap.add_argument("--repo", help="OWNER/NAME for PR links (default: the origin remote)")
-    ap.add_argument("--data-dir", type=Path, default=ROOT / "data", help="holds indexes/ (default: data)")
+    ap.add_argument(
+        "--data-dir",
+        type=Path,
+        default=Path(os.environ.get("OP_DATA_DIR") or ROOT / "data"),
+        help="holds indexes/ (default: $OP_DATA_DIR, as for op, else data)",
+    )
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="exit 1 when CHANGELOG.md differs; write nothing")
     mode.add_argument("--notes", metavar="X.Y.Z", help="print this release's section; write nothing")

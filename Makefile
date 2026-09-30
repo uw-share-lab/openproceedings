@@ -12,7 +12,7 @@ help:
 	@echo "test     - backend (pytest, parallel via xdist) and frontend (vitest) tests"
 	@echo "e2e      - Playwright spec-05 flow, WCAG 2.2 AA and visual regression"
 	@echo "openapi  - regenerate the OpenAPI snapshot and frontend/src/api/schema.ts (commit both; CI checks)"
-	@echo "changelog - regenerate CHANGELOG.md from merged PRs (RELEASE=X.Y.Z on a release branch; spec 08 §Release)"
+	@echo "changelog - regenerate CHANGELOG.md from merged PRs (RELEASE=X.Y.Z [DATA_DIR=<dir>] on a release branch; spec 08 §Release)"
 	@echo "hooks    - install git hooks (commit-msg, pre-push) via scripts/setup-dev.sh"
 	@echo "mutate   - mutation-test every gate check in parallel (nightly CI; after changing a gate)"
 	@echo "mutate-changed - only mutants in files changed vs origin/dev (what reviews run)"
@@ -70,7 +70,7 @@ openapi: frontend-deps
 # CHANGELOG.md from the merged PRs (gh api), the v* tags and docs/releases.toml; decision-023. It reads GitHub,
 # so no CI job runs it: a release branch regenerates it with RELEASE=<its version> (spec 08 §Release).
 changelog:
-	python3 .claude/scripts/changelog.py $(if $(RELEASE),--release '$(RELEASE)')
+	python3 .claude/scripts/changelog.py $(if $(RELEASE),--release '$(RELEASE)') $(if $(DATA_DIR),--data-dir '$(DATA_DIR)')
 
 hooks:
 	scripts/setup-dev.sh
