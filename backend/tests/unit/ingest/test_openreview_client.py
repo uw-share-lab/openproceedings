@@ -534,3 +534,38 @@ def test_the_transport_bounds_the_body(loopback: tuple[str, list[str]]) -> None:
     )
     with pytest.raises(TransportError, match="body_too_large"):
         urllib_transport(Request("GET", f"{base}/ok", {}), timeout=5, max_body=4)
+
+
+@pytest.mark.parametrize(
+    "token",
+    ["abc\r\nX-Evil: y", "tok en", "abc\x00", "abcé", "abc" + "a" * 4094],
+    ids=["crlf", "space", "nul", "non-ascii", "too-long"],
+)
+def test_a_token_that_cant_be_a_header_is_refused_without_echoing_it(
+    tmp_path: Path, token: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """TASK-067: http.client refuses a CR/LF header with a ValueError quoting the whole `Bearer <token>`, which
+    reached `op`'s stderr unscrubbed; the login checks the token's shape first."""
+
+    def server(request: Request, timeout: float = 60.0) -> Response:
+        assert request.method == "POST"
+        return json_response({"token": token}, headers=JSON)
+
+    with caplog.at_level(logging.DEBUG), pytest.raises(OpenReviewAuthError) as e:
+        client(tmp_path, server).get("/notes", PARAMS)  # type: ignore[arg-type]
+    assert token not in str(e.value) and token not in caplog.text and "abc" not in str(e.value)
+
+
+def test_the_transport_never_echoes_a_header_value_it_cant_send() -> None:
+    with pytest.raises(TransportError) as e:
+        urllib_transport(
+            Request("GET", "http://127.0.0.1:9/x", {"Authorization": "Bearer SECRET\r\nX: y"}), 1
+        )
+    assert "SECRET" not in str(e.value) and e.value.__cause__ is None
+
+
+def test_the_live_transport_reads_no_more_than_the_policys_body_bound(tmp_path: Path) -> None:
+    from openproceedings.ingest.sources.http import Fetcher, PageCache
+
+    fetcher = Fetcher(PageCache(tmp_path), urllib_transport, hosts=frozenset({"example.org"}))
+    assert fetcher.transport.keywords == {"max_body": fetcher.policy.max_body}  # type: ignore[union-attr]

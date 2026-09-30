@@ -56,6 +56,7 @@ from openproceedings.records import RECORD_ID, ids_hash
 from openproceedings.search import Shown, expanded
 from openproceedings.takedowns import NONE, Withheld
 
+HEX = frozenset("0123456789abcdef")  # all a download name takes of a canonical_hash
 router = APIRouter(prefix=API_PREFIX)
 
 ExportFormat = Literal["ris", "csv", "bibtex", "jsonl"]  # export.FORMATS (a test pins them equal)
@@ -225,7 +226,7 @@ def export(
     annotate(request, total=total, abstract_source=abstract_source, abstracts_withheld=removed)
     provenance = Provenance(engine.index_version, canonical_hash, utc_date(), **pinned_by)
     media, ext = MEDIA[fmt]
-    filename = f"openproceedings-{engine.index_version}-{canonical_hash[:12]}.{ext}"
+    name = filename(engine.index_version, canonical_hash, ext)
     return StreamingResponse(
         _body(fmt, documents, provenance, total, sources, withheld),
         media_type=media,
@@ -234,7 +235,7 @@ def export(
             "X-Index-Version": engine.index_version,
             "X-Tokenizer-Version": TOKENIZER_VERSION,
             "X-Query-Version": QUERY_VERSION,
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": f'attachment; filename="{name}"',
             "X-Abstract-Source": abstract_source,
             "X-Abstracts-Withheld": str(removed),
         },
@@ -273,6 +274,13 @@ def stored_documents(engine: TantivyEngine, ids: list[str]) -> Iterator[dict[str
             if i not in shown:
                 return
             yield shown[i]
+
+
+def filename(index_version: str, canonical_hash: str, ext: str) -> str:
+    """The export's download name: its index_version (a route-checked hex name) and the first 12 hex digits of
+    its canonical_hash. A record's stored hash is only ever server-written hex, but only hex reaches the
+    Content-Disposition header, whatever the store holds (TASK-067)."""
+    return f"openproceedings-{index_version}-{''.join(c for c in canonical_hash[:12] if c in HEX)}.{ext}"
 
 
 def _body(

@@ -710,3 +710,18 @@ def test_op_takedown_check_refuses_a_missing_list(
     argv = ["--data-dir", str(data_dir), "takedown", "check", "--api", "http://127.0.0.1:8000"]
     assert cli.main(argv) == 1
     assert "withheld.txt is missing" in capsys.readouterr().err
+
+
+def test_no_response_may_be_stored_by_a_cache(client: TestClient, store: Store) -> None:
+    """TASK-067: a proxy or CDN in front of the API could keep serving an abstract after the SIGHUP that
+    withholds it; every answer, errors included, says `no-store`."""
+    _, _, _, paper, word = store
+    for path, params in [
+        (f"/api/v1/papers/{paper.id}", {}),
+        ("/api/v1/search", {"q": f"abstract:{word}"}),
+        (EXPORT, {"format": "ris", "q": f"abstract:{word}"}),
+        ("/api/v1/coverage", {}),
+        ("/api/v1/papers/op:iclr:2024:NotHere1", {}),
+        ("/api/v1/nowhere", {}),
+    ]:
+        assert client.get(path, params=params).headers["cache-control"] == "no-store", path

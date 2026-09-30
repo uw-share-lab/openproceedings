@@ -430,3 +430,15 @@ def test_op_serve_sizes_the_pinned_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert cli.main(["--data-dir", str(tmp_path), "serve"]) == 0
     assert [c.pinned_indexes for c in served] == [8, 4]
     assert cli.main(["--data-dir", str(tmp_path), "serve", "--pinned-indexes", "0"]) == 1
+
+
+def test_an_export_filename_is_only_ever_hex(tmp_path: Path) -> None:
+    """TASK-067: the stored record's `canonical_hash` is an unconstrained string; the Content-Disposition
+    filename takes only the hex it should be."""
+    from openproceedings.api.export import filename
+
+    assert (
+        filename("0019ed0fd2ad", "9a8a63bd309f" + "0" * 52, "csv")
+        == "openproceedings-0019ed0fd2ad-9a8a63bd309f.csv"
+    )
+    assert filename("0019ed0fd2ad", 'ab"\r\nX: y', "ris") == "openproceedings-0019ed0fd2ad-ab.ris"

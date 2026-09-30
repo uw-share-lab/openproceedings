@@ -32,7 +32,7 @@ from openproceedings.api import coverage, export, health, meta, papers, records,
 from openproceedings.api.config import ApiConfig
 from openproceedings.api.deps import strict_query
 from openproceedings.api.errors import install_error_handlers
-from openproceedings.api.middleware import API_PREFIX, AccessLog, BodyLimit, LastCatch, RateLimit
+from openproceedings.api.middleware import API_PREFIX, AccessLog, BodyLimit, LastCatch, NoStore, RateLimit
 from openproceedings.api.openapi import (
     API_VERSION,
     ERROR_RESPONSES,
@@ -137,5 +137,6 @@ def create_app(config: ApiConfig, *, opener: Opener | None = None) -> FastAPI:
         allow_headers=["Content-Type"],
         expose_headers=list(EXPOSED_HEADERS),
     )
+    app.add_middleware(NoStore)  # every response, refusals and errors included (TASK-067)
     app.add_middleware(AccessLog)
     return app

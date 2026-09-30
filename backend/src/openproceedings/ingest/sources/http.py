@@ -38,6 +38,7 @@ entries are layered on top in `openreview_client`.
 from __future__ import annotations
 
 import email.utils
+import functools
 import hashlib
 import json
 import logging
@@ -172,7 +173,9 @@ def urllib_transport(request: Request, timeout: float = 60.0, max_body: int = 64
                 body = e.read(max_body + 1)
             except (OSError, HTTPException):
                 body = b""
-    except (urllib.error.URLError, OSError, HTTPException) as e:
+    except (urllib.error.URLError, OSError, HTTPException, ValueError) as e:
+        # a ValueError is a header http.client won't send; its message quotes the value (a bearer token), so
+        # only the type goes on (TASK-067)
         raise TransportError(type(e).__name__) from None
     if len(body) > max_body:
         raise TransportError(_TOO_LARGE)
@@ -340,6 +343,8 @@ class HttpClient[T]:
 
     def __init__(self, cache: ResponseCache[T], transport: Transport | None, policy: Policy,
                  clock: Clock | None = None) -> None:  # fmt: skip
+        if transport is urllib_transport:  # the live transport reads no more than this policy's body bound
+            transport = functools.partial(urllib_transport, max_body=policy.max_body)
         self.cache, self.transport, self.policy = cache, transport, policy
         self.clock: Clock = clock or SystemClock()
         self.stats = FetchStats()
