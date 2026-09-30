@@ -7,7 +7,7 @@ status: To Do
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 13:44'
-updated_date: '2026-09-30 13:47'
+updated_date: '2026-09-30 13:48'
 labels:
   - dedup
   - bug
@@ -29,7 +29,7 @@ ordinal: 124000
 <!-- SECTION:DESCRIPTION:BEGIN -->
 Found 2026-09-30 while filing follow-ups (an earlier session had seen this test "flake"). `backend/tests/unit/ingest/test_openreview_v1_collapse_props.py::test_a_collapse_never_folds_two_papers_or_loses_an_acceptance` fails deterministically under `@reproduce_failure('6.168.1', b'AXicc2R1ZHZkdGRxZHVkAtIQyIAGIaJMOMTBbABZUQlF')` on dev (08baa08, and still on ba57c68); random runs usually pass, so it can flake the required `test` job on unrelated PRs. The error is `AssertionError: op:neurips:2021:Zz0Note3` at line 116, `assert silent_note(listings, gone) and gone.status == "unknown"`, where the test's oracle `silent_note` (test file :83) is False.
 
-The falsifying input (reproduced by the reviewer): five notes, all on NeurIPS 2021 Blind_Submission, with no Withdrawn listing. Three share content ("Another synthetic title.", same pdf): Zz0Note3 has `venue: ''` (an empty string, so not silent to either the code's `_says_nothing_of_status` or the oracle), Zz4Note2 has no venue key (silent), and Zz2Note4 has `venue: 'NeurIPS 2021 Poster'` (accepted). The report shows withdrawn_by_twin=0, no conflicts and duplicate_submission=3. The kept records are Note1 (unknown) and Note4 (accepted). The mechanism is a chain in the crawl (`openreview_v1.py` ~768-773): rule 5 (`collapse_duplicate_submissions`) folds Note3 into its identical twin Note2 (both unknown), then `collapse_silent_twins` (TASK-132) folds Note2 into the accepted Note4, so Note3's identical survivor is gone. No paper is split or merged wrongly and the acceptance is kept; what's in question is whether a rule-5 survivor that absorbed a non-silent note may still count as silent. TASK-139's withdrawn-twin changes (PR #45, ed30f73) and decision-020 are context only: nothing here is withdrawn. Priority High because a required CI job can fail on unrelated PRs, and because the collapse rules decide which records exist.
+The falsifying input (reproduced by the reviewer): five notes, all on NeurIPS 2021 Blind_Submission, with no Withdrawn listing. Three share content ("Another synthetic title.", same pdf): Zz0Note3 has `venue: ''` (an empty string, so not silent to either the code's `_says_nothing_of_status` or the oracle), Zz4Note2 has no venue key (silent), and Zz2Note4 has `venue: 'NeurIPS 2021 Poster'` (accepted). The report shows withdrawn_by_twin=0, no conflicts and duplicate_submission=3. The kept records are Note1 (unknown) and Note4 (accepted). The mechanism is a chain in the crawl (`openreview_v1.py` ~768-773): rule 5 (`collapse_duplicate_submissions`) folds Note3 into its identical twin Note2 (both unknown), then `collapse_silent_twins` (TASK-132) folds Note2 into the accepted Note4, so Note3's identical survivor is gone. (The third drop: rule 5 folds Zz3Note5 into its identical twin Note1, "Synthetic title text 14.", neither with a venue key.) No paper is split or merged wrongly and the acceptance is kept; what's in question is whether a rule-5 survivor that absorbed a non-silent note may still count as silent. TASK-139's withdrawn-twin changes (PR #45, ed30f73) and decision-020 are context only: nothing here is withdrawn. Priority High because a required CI job can fail on unrelated PRs, and because the collapse rules decide which records exist.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
