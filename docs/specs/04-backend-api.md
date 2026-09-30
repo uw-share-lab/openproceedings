@@ -204,7 +204,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   |---|---|---|
   | RIS | one more `N1`, after the status sentence and before the provenance line (which stays the last `N1`) | `N1  - Abstract source: PMLR https://proceedings.mlr.press/v202/okafor23a.html` |
   | BibTeX | a field `abstract_source`, after `abstract` | `abstract_source = {PMLR https://proceedings.mlr.press/v202/okafor23a.html},` |
-  | CSV | four columns appended after `searched_at`: `abstract_source` (the claim's route code, e.g. `pmlr` or `ris`, where RIS and BibTeX give the site in words), `abstract_origin` (the site's code), `abstract_url`, `abstract_withheld` (`true`/`false`) | `…,pmlr,pmlr,https://proceedings.mlr.press/v202/okafor23a.html,false` |
+  | CSV | four columns appended after `searched_at`: `abstract_source` (the claim's route code, e.g. `pmlr` or `ris`, where RIS and BibTeX give the site in words), `abstract_origin` (the site's code; empty when the claim names no known site), `abstract_url`, `abstract_withheld` (`true`/`false`) | `…,pmlr,pmlr,https://proceedings.mlr.press/v202/okafor23a.html,false` |
   | JSONL | `abstract_source`: `{source, origin, url}` (the `/search` hit's object) or null; `abstract_withheld`: a boolean | `"abstract_source": {"origin": "pmlr", "source": "pmlr", "url": "https://proceedings.mlr.press/v202/okafor23a.html"}, "abstract_withheld": false` |
 
   A record with no abstract, or whose abstract no claim holds (synthetic fixtures), names nothing: no `N1`, no
@@ -241,7 +241,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   with `reason`) and exits 0. A pinned index's snapshot must therefore be kept while a record pins the index
   (spec 08 §CLI). **Covidence hides the withheld marker**: it shows no `N1` to screeners, so an RIS import of
   a withheld export screens on titles alone with nothing on the card saying why. Before importing, check the
-  download's `X-Abstract-Source` (the web app's Export menu says so, spec 05) or the CSV's `abstract_withheld`
+  download's `X-Abstract-Source` (the web app's Export menu and the record page say so, spec 05) or the CSV's `abstract_withheld`
   column, and report title-only screening for those records in the methods. An attributed rejected paper's
   RIS record has three `N1` lines, untested in Covidence (low risk, since the lines are notes Covidence doesn't
   show; `docs/results/2026-09-27-covidence-check.md`). A record the index holds but its

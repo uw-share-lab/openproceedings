@@ -194,7 +194,6 @@ def export(
             raise _bad("Pass q (the query to export) or record_id (a saved search record).")
         result = searchable(request, q, mode)
         engine = pinned_engine(request, served, index_version)
-        sources = sources_of(request, bundle, engine)  # before the matches are collected
         ast = result.effective_ast
         if ast is None or result.canonical_hash is None:  # searchable refuses a query that didn't parse
             raise EngineInternalError(
@@ -204,6 +203,7 @@ def export(
         pinned_by = {}
         expanded(engine, ast)  # an over-cap wildcard is a located 422 before anything is compiled
         check_candidates(request, engine, ast)  # 422 API_QUERY_TOO_COSTLY before any verification
+        sources = sources_of(request, bundle, engine)  # once nothing about the query can refuse
         total, documents = engine.documents(ast)  # the one collection; records are read as they stream
     abstract_source: AbstractSource = "unavailable" if sources is None else "attributed"
     annotate(request, total=total, abstract_source=abstract_source)

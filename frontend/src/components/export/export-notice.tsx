@@ -116,7 +116,8 @@ export const WITHHELD_TEXT =
   "This file has no abstracts: their source couldn't be attributed on this instance (the index's snapshot is " +
   "unavailable), so each record says its abstract was withheld. Titles, authors and venues are complete.";
 const WITHHELD_COVIDENCE =
-  "Covidence doesn't show that note to screeners, so they would screen these papers on titles alone.";
+  "Covidence doesn't show that note to screeners, so they would screen these papers on titles alone. To " +
+  "screen on abstracts, ask whoever runs this instance to restore the snapshot of this index.";
 
 /** A saved export whose abstracts were withheld (EX-E8). Announced by the export's own live region. */
 export function WithheldNotice() {

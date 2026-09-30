@@ -43,8 +43,8 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
 - `abstract_source = {<site> <url>}` after `abstract`, when the abstract has an attribution (TASK-138,
   decision-018; spec 04 §Exports): the same words as RIS's `N1  - Abstract source:` line (the results list's
   site name, ` (via RIS import)` for a `ris` claim, the url when there is one), from the snapshot's
-  `RecordFile.attributions`. Escaped like every value (`_braced`: a url's `%`, `&`, `#` gain a backslash and
-  unbalanced braces are dropped, as in `url`). A new field, not a change to `note`: `note` keeps exactly the provenance line (after the `Submitted
+  `RecordFile.attributions`. Escaped like every value (`_braced`, as in `url`: a url's `%`, `&`, `#` gain a
+  backslash, `@` is written `{@}`, and when its braces don't balance every brace is dropped). A new field, not a change to `note`: `note` keeps exactly the provenance line (after the `Submitted
   to` sentence), so it stays additive (decision-021); refaudit's `(\w+)\s*=` reads the name and styles don't
   print it. When a pinned export's snapshot can't be verified (decision-021) there is no `abstract` and no
   `abstract_source`; instead `abstract_withheld = {Abstract withheld: … (decision-018).}` (`export.WITHHELD`), a
@@ -75,8 +75,10 @@ identifier. The id lives in `openproceedings_id`.
 ## Escaping
 Abstracts contain real LaTeX (`$\epsilon$-DP`, `\textbf{63.7\%}`). Keep it; escaping it would change the
 text screeners see.
-- **Braces must balance** in every value. If a value's braces don't balance, escape every brace in it as
-  `\{`/`\}`. refaudit's brace matcher skips the character after a backslash, so escaped braces are safe.
+- **Braces must balance** in every value. If a value's braces don't balance (counted with and without
+  regard to backslashes), drop every brace in it, and the backslash that escaped one (`_debraced`): BibTeX
+  counts braces without regard to backslashes while refaudit honours `\{`, so an escaped brace would be read
+  differently by the two and could swallow the next entry. Balanced, unescaped braces stay (`{BERT}`).
 - Escape bare `%` as `\%` (an unescaped `%` comments out the rest of the line in LaTeX), and bare `&`,
   `#` and `_` outside math.
 - The `@type{key,` pattern must never appear inside a value. refaudit finds entries with a regex over
