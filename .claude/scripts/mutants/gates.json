@@ -724,8 +724,8 @@
  {
   "label": "git add of a takedowns/ path allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        if any(through_takedowns(p, g[2], forced) for p in a if not p.startswith(\"-\")):",
-  "new": "        if False and any(through_takedowns(p, g[2], forced) for p in a if not p.startswith(\"-\")):"
+  "old": "        if any(through_takedowns(p, g[2], forced) for p in a if not p.startswith(\"-\")) or (",
+  "new": "        if False and any(through_takedowns(p, g[2], forced) for p in a if not p.startswith(\"-\")) or ("
  },
  {
   "label": "takedowns matched case-sensitively",
@@ -736,19 +736,37 @@
  {
   "label": "a forced add of a directory not walked for takedowns/",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        if forced and os.path.isdir(full):",
-  "new": "        if False and forced and os.path.isdir(full):"
- },
- {
-  "label": "a glob component not matched against takedowns",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        if forced and any(fnmatch.fnmatchcase(\"takedowns\", c) for c in parts if any(ch in c for ch in \"*?[\")):",
-  "new": "        if False and any(fnmatch.fnmatchcase(\"takedowns\", c) for c in parts if any(ch in c for ch in \"*?[\")):"
+  "old": "        if forced and os.path.isdir(full) and holds_takedowns(full):",
+  "new": "        if False and forced and os.path.isdir(full) and holds_takedowns(full):"
  },
  {
   "label": "unforced globs expanded",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "    for p in expand(path, base) if forced else [path]:",
   "new": "    for p in expand(path, base):"
+ },
+ {
+  "label": "a forced whole-tree add not checked for takedowns/",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            forced and whole_tree(a) and holds_takedowns(repo_root(g[2]))",
+  "new": "            False and forced and whole_tree(a) and holds_takedowns(repo_root(g[2]))"
+ },
+ {
+  "label": "git stage not read as git add",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if g and g[0] in (\"add\", \"stage\"):  # `git stage` is `git add`",
+  "new": "    if g and g[0] in (\"add\",):  # `git stage` is `git add`"
+ },
+ {
+  "label": "a forced glob not walked from its fixed prefix",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if forced and any(ch in path for ch in \"*?[\"):",
+  "new": "    if False and any(ch in path for ch in \"*?[\"):"
+ },
+ {
+  "label": "a magic pathspec not read as the whole tree",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    return not paths or any(x.startswith(\":\") for x in paths)",
+  "new": "    return not paths"
  }
 ]

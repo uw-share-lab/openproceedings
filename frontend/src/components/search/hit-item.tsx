@@ -28,6 +28,8 @@ export function paperHref(id: string, q: string, mode: Mode): string {
 export const ABSTRACT_WITHHELD = "Abstract removed from this site at a rights holder's request";
 /** After it, on a result and a matched paper page: the search may have matched words in it (decision-022). */
 export const WITHHELD_TERMS = "Any terms it matched in the removed abstract aren't shown.";
+/** The same on a result, where nothing names the search first. */
+export const WITHHELD_SEARCH_TERMS = "Any terms your search matched in the removed abstract aren't shown.";
 
 /** Authors shown before "et al." (ui-design-system §Result item); the rest behind "Show all n authors". */
 export const AUTHORS_SHOWN = 3;
@@ -171,7 +173,7 @@ export function HitItem({ hit, q, mode }: { hit: SearchHit; q: string; mode: Mod
       />
       {hit.abstract_withheld ? (
         <p className="text-sm text-muted-foreground">
-          {ABSTRACT_WITHHELD}. {WITHHELD_TERMS}
+          {ABSTRACT_WITHHELD}. {WITHHELD_SEARCH_TERMS}
         </p>
       ) : hit.abstract === null ? (
         <p className="text-sm text-muted-foreground">No abstract in the index</p>

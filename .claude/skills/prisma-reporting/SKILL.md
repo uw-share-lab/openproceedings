@@ -119,7 +119,8 @@ clause is `crawl_dates["*"]` from–to, both dates (a crawl spans days; spec 04)
 - **Withheld abstracts** (decision-021, decision-022). An export can hand over records without their abstract:
   every one when the exported index's snapshot can't be verified (`X-Abstract-Source: unavailable`, EX-E8),
   or the ones a rights holder had removed (a takedown: `X-Abstracts-Withheld: <n>`, EX-E9; each record's RIS
-  `N1` / BibTeX `abstract_withheld` says so, CSV/JSONL `abstract_withheld_reason`). Covidence shows screeners
+  `N1` / BibTeX `abstract_withheld` says so, CSV/JSONL `abstract_withheld_reason`; `op export` says the number
+  on stderr). Covidence shows screeners
   no `N1`, so report those records as screened on title and metadata alone, with their number. A search
   record's ids never change for a takedown (its pinned index still matches the withheld text, decision-022),
   but what an export of it contains can: cite the export date (the provenance `N1` carries it). The coverage

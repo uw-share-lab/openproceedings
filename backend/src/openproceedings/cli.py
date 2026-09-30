@@ -26,7 +26,7 @@ import sqlite3
 import sys
 import time
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -439,17 +439,25 @@ def _snapshot_build(ns: argparse.Namespace) -> int:
     )
     result = build(ns.cache or ns.data_dir / "cache", ns.out or ns.data_dir / "snapshots", takedowns=listed)
     _print({"path": str(result.path), "snapshot_hash": result.snapshot_hash, "created": result.created,
-            "abstracts_withheld": list(result.withheld), "takedowns_followed": dict(result.takedowns_followed),
+            "withheld_ids": list(result.withheld), "takedowns_followed": dict(result.takedowns_followed),
             "takedowns_unmatched": list(result.takedowns_unmatched),
             "unexpected_statuses": [u.to_json() for u in result.unexpected_statuses]})  # fmt: skip
     for old, new in sorted(result.takedowns_followed.items()):
-        print(f"op snapshot build: {old} is {new} in this build, and its abstract was withheld under that id "
-              f"too; add {new} to the takedown list and keep {old} (older index versions hold it)",
-              file=sys.stderr)  # fmt: skip
+        taken = (
+            "its abstract was withheld under that id too"
+            if new in result.withheld
+            else "it has no abstract here"
+        )
+        todo = (
+            "" if new in listed else f"add {new} to the takedown list (and log a `withheld` entry for it); "
+        )
+        print(f"op snapshot build: {old} is {new} in this build: {taken}; {todo}keep {old} listed (older index "
+              "versions hold it)", file=sys.stderr)  # fmt: skip
     if result.takedowns_unmatched:
         print(f"op snapshot build: {len(result.takedowns_unmatched)} listed id(s) no record of this build has: "
-              f"{', '.join(result.takedowns_unmatched)}; keep them listed while an index version holds them, and "
-              "check each against `op takedown check` (a typo is a problem there)", file=sys.stderr)  # fmt: skip
+              f"{', '.join(result.takedowns_unmatched)}; keep them listed while an index version holds them. If "
+              "one is in this build under an id the build couldn't tie to it, withhold that id by listing it too; "
+              "`op takedown check` names an id no loaded version holds", file=sys.stderr)  # fmt: skip
     return 0
 
 
@@ -1027,7 +1035,16 @@ def _export(ns: argparse.Namespace) -> int:
             "abstracts can't be attributed: every abstract is withheld and each record says so (decision-021)",
             file=sys.stderr,
         )
-    total, documents = engine.documents(ast)
+    total, found = engine.documents(ast)
+    removed = 0  # records a takedown withholds (the API's X-Abstracts-Withheld), counted as they stream
+
+    def documents_counted() -> Iterator[dict[str, Any]]:
+        nonlocal removed
+        for document in found:
+            removed += document["id"] in withheld
+            yield document
+
+    documents = documents_counted()
     provenance = Provenance(engine.index_version, result.canonical_hash, utc_date())
 
     if ns.out is None:  # UTF-8 and untranslated newlines whatever the terminal's locale (spec 04)
@@ -1051,6 +1068,9 @@ def _export(ns: argparse.Namespace) -> int:
         finally:
             partial.unlink(missing_ok=True)
     print(f"exported {n} records ({ns.format}) · {provenance.line()}", file=sys.stderr)
+    if removed:
+        print(f"op export: {removed} record(s) have their abstract withheld at a rights holder's request "
+              "(decision-022); each says so in the file", file=sys.stderr)  # fmt: skip
     _search_run(ns, started, engine.index_version, result, total)
     return 0
 

@@ -216,7 +216,7 @@ describe("exporting (design E1, E3)", () => {
     expect(await screen.findByText(/^Download ready\. 2 papers in this file have no abstract/)).toBeTruthy();
     const notice = screen.getByText(/they would screen those papers on titles alone/);
     expect(notice.textContent).toContain(
-      "2 papers in this file have no abstract: it was removed from this site at a rights holder's request",
+      "2 papers in this file have no abstract: each was removed from this site at a rights holder's request",
     );
     headers = { "X-Abstract-Source": "attributed", "X-Abstracts-Withheld": "0" };
     fireEvent.click(screen.getAllByRole("menuitem")[0] as HTMLElement);

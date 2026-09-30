@@ -22,8 +22,8 @@ lights abstract words. Run it as the operator's account (it reads the log), agai
 `http://127.0.0.1:8000` on the host), not through the proxy: it follows no redirect, and it waits out a 429's
 `Retry-After` (every export costs the rate limit's export weight).
 
-A listed id that no loaded index version holds is a problem too (a typo, or a paper whose id changed: `op
-snapshot build` refuses such a list as well). Every problem names the id, the index version and the response;
+A listed id that no loaded index version holds is a problem too (a typo, or a paper whose id changed and whose
+older versions are retired: `op snapshot build` reports such ids as `takedowns_unmatched`). Every problem names the id, the index version and the response;
 never an abstract's text. The HTTP layer is a `Fetch` (a path and parameters in, the status and body out): the
 CLI's is `urllib` against `--api`, a test's is the in-process app.
 """
@@ -100,12 +100,14 @@ def check(fetch: Fetch, listed: Withheld) -> Report:
     for version in versions:  # outermost: each pinned index is opened once, not once per id
         for query, ids in cells.items():
             held: dict[str, set[str]] = {}  # id → the formats of this version's export that hold it
+            answered: set[str] = set()  # the formats that answered 200 (a failed one is reported once, above)
             for fmt in FORMATS:
                 status, text = fetch(f"{API}/export", {"format": fmt, "q": query, "index_version": version})
                 exports += 1
                 if status != 200:
                     problems.append(f"{', '.join(ids)}: export {fmt} of index {version} answered {status}")
                     continue
+                answered.add(fmt)
                 for rid in ids:
                     verdict = _in_export(fmt, text, rid)
                     if verdict is None:
@@ -119,7 +121,7 @@ def check(fetch: Fetch, listed: Withheld) -> Report:
                     f"{rid}: the {fmt} export of index {version} doesn't hold it, though its "
                     f"{sorted(formats)[0]} export does (can this check still read {fmt}?)"
                     for fmt in FORMATS
-                    if fmt not in formats
+                    if fmt in answered and fmt not in formats
                 ]
     problems += [
         f"{rid}: no index this instance loads holds it; check the id on the list"
@@ -225,7 +227,8 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def retry_after(value: str | None) -> float:
     """A 429's `Retry-After` as seconds to wait: its whole seconds, capped at 60; 1 when absent or not seconds."""
-    return float(min(int(value), 60)) if value is not None and value.strip().isdigit() else 1.0
+    text = (value or "").strip()
+    return float(min(int(text), 60)) if text.isascii() and text.isdecimal() else 1.0
 
 
 def http(base: str, *, retries: int = 5, timeout: float = 300.0) -> Fetch:

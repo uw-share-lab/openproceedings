@@ -15,8 +15,8 @@ index's snapshot can't be verified the same records are exported with every abst
 in the file, and `X-Abstract-Source: unavailable` (decision-021): never an abstract without attribution.
 Whatever index is exported, each record the takedown list names (as the served bundle's load read it), or that
 index's snapshot withheld, goes out without its abstract, marked so (TASK-136, decision-022; `Served.withheld_in`),
-and `X-Abstracts-Withheld` counts them before the body: for a record export, its stored ids on the list; for a
-query, the listed ids the index holds that the query matches (`search.highlight`, the evaluation `/papers?q=`
+and `X-Abstracts-Withheld` counts them before the body: for a record export, its stored ids on the list or
+withheld by that index's snapshot; for a query, those of them the index holds that the query matches (`search.highlight`, the evaluation `/papers?q=`
 uses, one per listed id: the list is short).
 
 Everything that can refuse happens before the first byte: the parameters, the parse (422 with
@@ -45,6 +45,7 @@ from openproceedings.api.openapi import BUSY, response_header
 from openproceedings.api.records import refuse_mismatch, stored_record
 from openproceedings.api.state import IndexState, Served
 from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import EngineInternalError
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.export import Provenance, Sources, check_count, entries, header, utc_date
@@ -52,7 +53,7 @@ from openproceedings.query import QUERY_VERSION
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import Mode, ParseResult
 from openproceedings.records import RECORD_ID, ids_hash
-from openproceedings.search import expanded, highlight
+from openproceedings.search import Shown, expanded
 from openproceedings.takedowns import NONE, Withheld
 
 router = APIRouter(prefix=API_PREFIX)
@@ -242,10 +243,15 @@ def export(
 
 def matched_among(engine: TantivyEngine, result: ParseResult, withheld: Withheld) -> int:
     """How many of `withheld` the query `result` matches on `engine`: each listed id the index holds, judged
-    as `/papers/{id}?q=` judges it (`search.highlight` on its display record), so the count is the number of
-    records in the export's body a takedown withholds."""
+    as `/papers/{id}?q=` judges it (`search.highlight`: the `Highlighter` over its display record, with the
+    query's expansions computed once), so the count is the number of records in the body a takedown
+    withholds."""
     shown = engine.display(sorted(withheld)) if withheld else {}
-    return sum(highlight(engine, result, record) is not None for record in shown.values())
+    if not shown:
+        return 0
+    assert result.effective_ast is not None  # the caller's query parsed
+    lit = Highlighter(result.effective_ast, expanded(engine, result.effective_ast))
+    return sum(lit.match(Shown.of(record)) is not None for record in shown.values())
 
 
 STORED_CHUNK = 1_000  # stored ids read per index lookup while a record's export streams

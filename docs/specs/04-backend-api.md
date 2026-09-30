@@ -264,8 +264,8 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   from this site at a rights holder's request, so no abstract is exported (decision-022).`
   (`export.TAKEDOWN`), CSV `abstract_withheld` `true`, JSONL `abstract_withheld: true`. Only that record is
   withheld, so `X-Abstract-Source` stays `attributed`; `X-Abstracts-Withheld` counts such records before the
-  body (for a record export, its stored ids on the list; for a query, the listed ids the index holds that the
-  query matches, judged as `/papers/{id}?q=` judges them), and the web app's Export menu and record page say
+  body (for a record export, its stored ids on the list or withheld by that index's snapshot; for a query,
+  those of them the index holds that the query matches, judged as `/papers/{id}?q=` judges them), and the web app's Export menu and record page say
   so (EX-E9): Covidence shows screeners no `N1`, so check the header (or the CSV's `abstract_withheld_reason`)
   and report those records as screened on title and metadata alone. Why an abstract is withheld is one more CSV column,
   `abstract_withheld_reason`, appended after `abstract_withheld` (`takedown`, `source_unavailable`, or empty

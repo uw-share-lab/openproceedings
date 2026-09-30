@@ -133,7 +133,7 @@ marked crawl) is refused.
 ## CLI
 - `op [--data-dir data] snapshot build [--from <cache>] [--out <snapshots>] [--takedowns <list>]` imports all
   cached sources, then dedup → reconcile → withhold the takedown list's abstracts → write (it prints
-  `abstracts_withheld` too; a list that doesn't parse is refused before anything is read). It never fetches, so it works offline, and an offline cache never expires (TASK-102),
+  `withheld_ids`, `takedowns_followed` and `takedowns_unmatched` too; a list that doesn't parse is refused before anything is read). It never fetches, so it works offline, and an offline cache never expires (TASK-102),
   so the same cache rebuilds the same bytes at any date. It prints `{path, snapshot_hash, created,
   unexpected_statuses}`; `created: false` means a snapshot with that hash already existed and nothing was
   written. `unexpected_statuses` (TASK-109, `ingest/status_check.py`) lists each (venue, year, status) whose

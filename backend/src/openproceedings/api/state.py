@@ -405,6 +405,13 @@ class IndexState:
                 return True
             engine = self._gated(self._opener(path))  # verifies every file; the live engine is untouched
             records = snapshot_records(self._data_dir, path, engine.index_version)
+            present = list_path(self._data_dir).is_file()
+            if not present and records.withheld:  # this deployment has takedowns: the list can't just be gone
+                raise TakedownError(
+                    "the takedown list is missing, yet the index's snapshot withheld abstracts: restore it (or "
+                    "leave an empty one to lift every takedown)",
+                    reason="takedowns_missing",
+                )
             # the manifest checked against the records and the index
             coverage = coverage_of(engine, records, listed)
         except Exception as e:  # the handling layer: logged once, and the service keeps what it has
@@ -435,19 +442,27 @@ class IndexState:
                 "previous_index_version": kept,
                 "abstracts_withheld": len(listed),
                 "takedowns_not_in_index": _not_in(listed, records),
+                "takedowns_list": "present" if present else "absent",
                 "ms": elapsed_ms(started),
             },
         )
         return True
 
     def _keep_index_take_list(self, served: Served, listed: Withheld, started: float) -> None:
-        """After a failed load whose list parsed: keep serving the index, but with the new list (withholding
-        more is the safe direction, so a takedown sent with a bad promotion still applies). One more line,
-        `takedowns_reloaded`; nothing if even that fails (the old bundle stays, as logged)."""
+        """After a failed load whose list parsed: keep serving the index, but with the new list, the operator's
+        latest instruction (so a takedown sent with a bad promotion still applies, and so does a lifting). One
+        more line, `takedowns_reloaded`; `takedowns_reload_failed` if even that fails (the old bundle stays)."""
         try:
             coverage = coverage_of(served.engine, served.records, listed)
         except Exception as e:  # the handling layer: the old bundle (and its list) is kept
-            log.error("takedowns_reload_failed", extra={"error": type(e).__name__, "reason": reason_of(e)})
+            fields: dict[str, object] = {
+                "index_version": served.engine.index_version,
+                "error": type(e).__name__,
+                "ms": elapsed_ms(started),
+            }
+            if (reason := reason_of(e)) is not None:
+                fields["reason"] = reason
+            log.error("takedowns_reload_failed", extra=fields)
             return
         self._served = Served(served.engine, served.records, coverage, listed)
         log.info(

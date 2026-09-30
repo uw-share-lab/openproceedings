@@ -35,6 +35,7 @@ from refaudit.bibtex import parse_string
 from scholarmend.parse import parse_ris
 
 from tests.contract.conftest import attributed, make_app, point_current
+from tests.contract.test_pinned import Logs
 from tests.contract.test_records import replayed, save
 from tests.fixtures.corpus.synthetic_5k import records
 from tests.unit.engine.test_exclusions import BUILT
@@ -247,6 +248,10 @@ def test_op_export_withholds_as_the_api_does(
     with TestClient(make_app(data_dir)) as c:
         assert out.read_text(encoding="utf-8") == exported(c, "jsonl", q=f"abstract:{word} {EVERY}")
     assert withheld_in_export("jsonl", out.read_text(encoding="utf-8"), paper.id)
+    assert (
+        "op export: 1 record(s) have their abstract withheld at a rights holder's request"
+        in capsys.readouterr().err
+    )
 
 
 # --- a new index built with the list, the old one pinned by a search record ------------------------------------
@@ -288,6 +293,7 @@ def test_a_snapshot_withheld_abstract_is_marked_withheld_even_off_the_list(
     _, _, new, paper, _ = store
     with TestClient(make_app(data_dir)) as c:
         old_missing = c.get("/api/v1/coverage").json()["totals"]["abstract_missing"]
+    listing(data_dir)  # an empty list: every takedown lifted (a missing one would refuse the load, below)
     point_current(data_dir, new)
     with TestClient(make_app(data_dir)) as c:
         hit = the_hit(search(c, f'title:"{paper.title}" {EVERY}'), paper.id)
@@ -350,18 +356,56 @@ def test_a_missing_list_after_one_was_applied_fails_the_reload(
     assert client.get(f"/api/v1/papers/{paper.id}").json()["abstract_withheld"] is True
 
 
-def test_a_failed_promotion_still_applies_a_new_list(
-    client: TestClient, data_dir: Path, store: Store
-) -> None:
+def test_a_failed_promotion_still_applies_a_new_list(logs: Logs, data_dir: Path, store: Store) -> None:
     """The list parsed, the index `current` names doesn't load: the served index keeps serving, with the new
-    list (withholding more is the safe direction)."""
-    _, _, _, paper, _ = store
-    listing(data_dir, paper.id)
-    current = data_dir / "indexes" / "current"
-    current.unlink()
-    current.symlink_to("does-not-exist")
-    assert reload(client) is False
-    assert client.get(f"/api/v1/papers/{paper.id}").json()["abstract_withheld"] is True
+    list (the operator's latest instruction), and its coverage counts it; both lines are logged."""
+    _, old, _, paper, _ = store
+    with TestClient(make_app(data_dir)) as client:
+        listing(data_dir, paper.id)
+        current = data_dir / "indexes" / "current"
+        current.unlink()
+        current.symlink_to("does-not-exist")
+        assert reload(client) is False
+        assert client.get(f"/api/v1/papers/{paper.id}").json()["abstract_withheld"] is True
+        assert client.get("/api/v1/coverage").json()["totals"]["abstract_withheld"] == 1
+    events = [x for x in logs() if x["event"] in ("index_load_failed", "takedowns_reloaded")]
+    assert [x["event"] for x in events] == ["index_load_failed", "takedowns_reloaded"]
+    assert {k: events[1][k] for k in ("index_version", "abstracts_withheld", "takedowns_not_in_index")} == {
+        "index_version": old, "abstracts_withheld": 1, "takedowns_not_in_index": 0,
+    }  # fmt: skip
+
+
+def test_the_load_and_reload_lines_count_the_list(logs: Logs, data_dir: Path, store: Store) -> None:
+    """Counts, never ids: how many the list names, and how many of those the index doesn't hold."""
+    paper = store[3]
+    listing(data_dir, paper.id, "op:iclr:2024:NotInThisIndex")
+    with TestClient(make_app(data_dir)) as client:
+        listing(data_dir, paper.id)
+        assert reload(client)
+        r = client.get(EXPORT, params={"format": "jsonl", "q": f'title:"{paper.title}" {EVERY}'})
+        assert r.headers["X-Abstracts-Withheld"] == "1"
+    lines = logs()
+    [loaded] = [x for x in lines if x["event"] == "index_loaded"]
+    assert (loaded["abstracts_withheld"], loaded["takedowns_not_in_index"], loaded["takedowns_list"]) == (
+        2, 1, "present",
+    )  # fmt: skip
+    [reloaded] = [x for x in lines if x["event"] == "takedowns_reloaded"]
+    assert (reloaded["abstracts_withheld"], reloaded["takedowns_not_in_index"]) == (1, 0)
+    [access] = [x for x in lines if x["event"] == "request" and x.get("route") == EXPORT]
+    assert access["abstracts_withheld"] == 1
+    assert paper.id not in json.dumps(lines) and "NotInThisIndex" not in json.dumps(lines)
+
+
+def test_a_start_without_the_list_refuses_an_index_whose_snapshot_withheld(
+    logs: Logs, data_dir: Path, store: Store
+) -> None:
+    """The snapshot proves this deployment has takedowns, so a missing list (an unmounted takedowns/) is a
+    failed load, never a silent lifting at startup."""
+    point_current(data_dir, store[2])
+    with TestClient(make_app(data_dir)) as c:
+        assert c.get("/api/v1/coverage").status_code == 503
+    [failed] = [x for x in logs() if x["event"] == "index_load_failed"]
+    assert failed["reason"] == "takedowns_missing"
 
 
 def test_the_list_is_reread_on_reload_and_a_bad_list_changes_nothing(

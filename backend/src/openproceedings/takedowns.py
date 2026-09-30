@@ -9,12 +9,14 @@ directory and never in git (`data/` is gitignored, and `protect-data-dir.sh` ref
   service user may read it (mode 0644 or 0640 with the API's group). `op snapshot build` withholds each listed
   abstract from the snapshot it writes (`ingest/snapshot.py::withhold`), and the API withholds each one at
   serve time from every index version it loads (`api/state.py`: the list is re-read on every load and SIGHUP).
-  A missing file is an empty list. A line that isn't a record id makes the whole list unusable
-  (`TakedownError`): a build is refused, and the API keeps what it serves (or serves nothing at startup), so a
-  typo never silently lets an abstract through.
+  A missing file is an empty list, unless the path was named (`required`), or the API already applies a list or
+  loads a snapshot that withheld abstracts (`api/state.py`): then it is `takedowns_missing`. A line that isn't a
+  record id makes the whole list unusable (`TakedownError`): a build is refused, and the API keeps what it
+  serves (or serves nothing at startup), so a typo never silently lets an abstract through.
 - **The log**, `<data-dir>/takedowns/log.jsonl`: one JSON object per request (`LOG_FIELDS`), kept by the
   operator, owned by the operator's account and mode 0600, since it holds the requester's details. Nothing in
-  the API reads it; `op takedown check` checks its mode and that every listed id has a `withheld` entry.
+  the API reads it; `op takedown check` checks that it is the checking account's, its mode, and that each listed
+  id's latest entry is `withheld`.
 
 Withholding a record (`withhold_record`) sets its `abstract` to null and drops its abstract claims, whose
 values are the abstract's text; everything else stays, so it is still found by its title (spec 01 §Error

@@ -121,14 +121,15 @@ const WITHHELD_COVIDENCE =
 
 /** EX-E9: `n` records of the downloaded file have no abstract, removed at a rights holder's request (decision-022). */
 export function removedText(n: number): string {
-  const papers = n === 1 ? "1 paper in this file has" : `${n.toLocaleString("en")} papers in this file have`;
-  return (
-    `${papers} no abstract: it was removed from this site at a rights holder's request, and each such record ` +
-    "says so."
-  );
+  const which =
+    n === 1
+      ? "1 paper in this file has no abstract: it was"
+      : `${n.toLocaleString("en")} papers in this file have no abstract: each was`;
+  return `${which} removed from this site at a rights holder's request, and each such record says so.`;
 }
 const REMOVED_COVIDENCE =
-  "Covidence doesn't show that note to screeners, so they would screen those papers on titles alone.";
+  "Covidence doesn't show that note to screeners, so they would screen those papers on titles alone. Each " +
+  "paper's page here links to where it was published, which may still show its abstract.";
 
 /** A saved export with abstracts removed at a rights holder's request (EX-E9). Announced by the export's live
  * region. */

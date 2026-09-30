@@ -52,8 +52,7 @@ warn on `unavailable` (spec 05), and spec 04 §Exports tells reviewers to check 
 `abstract_withheld` column before importing.
 
 **Withheld by a takedown (TASK-136, decision-022).** A record on the deployment's takedown list (or withheld
-by the exported index's snapshot) has no `AB` and no `Abstract source:` line; instead `N1  - Abstract withheld:
-this instance removed it at a rights holder's request (a takedown), so no abstract is exported (decision-022).`
+by the exported index's snapshot) has no `AB` and no `Abstract source:` line; instead `N1  - Abstract withheld: removed from this site at a rights holder's request, so no abstract is exported (decision-022).`
 (`export.TAKEDOWN`), in the same place, before the provenance line. Only that record: `X-Abstract-Source` stays
 `attributed`. The same Covidence caveat applies.
 

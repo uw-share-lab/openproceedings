@@ -41,16 +41,18 @@ spec 08's proposal and were settled in TASK-136.
    `<data-dir>/takedowns/log.jsonl`, next to the list, owned by the operator's account, mode 0600, never
    committed. One JSON object per request with exactly `record_id`, `received`, `requester`, `basis`, `decision`
    (`withheld`, `declined` or `lifted`), `applied` and `first_index_version` (the first `index_version` built
-   without the abstract; null until then). The API never reads it. `op takedown check` fails when it is readable
-   by anyone but its owner, malformed, or missing a `withheld` entry for a listed id; `.gitignore` ignores every
+   without the abstract; null until then). The API never reads it. `op takedown check` fails when it is owned by
+   another account than the operator's running the check, readable by anyone but its owner, malformed, or when a
+   listed id's latest entry isn't `withheld`; `.gitignore` ignores every
    `takedowns/` directory and `protect-data-dir.sh` refuses `git add` of any path through one; `.dockerignore`
    keeps it out of image build contexts.
 3. **The list** (TASK-136) is `<data-dir>/takedowns/withheld.txt`: UTF-8, one record id per line, blank lines
    and everything after `#` ignored, ids only (so the API's service user may read it: 0644, or 0640 with the
    API's group). A line that is not one record id makes the whole list unusable: `op snapshot build` refuses to
    run and the API keeps what it already serves (at startup it serves nothing: 503), never a silent partial list.
-   A missing file is an empty list, until the API applies a non-empty one: then a missing file fails the reload
-   (`takedowns_missing`), so an unmounted or renamed directory never lifts every takedown silently. A list named
+   A missing file is an empty list, unless the API already applies a non-empty one or the index it loads has a
+   snapshot that withheld abstracts: then a missing file fails the load (`takedowns_missing`), so an unmounted
+   or renamed directory never lifts every takedown silently. A list named
    explicitly (`--takedowns`, `--list`) must exist.
 4. **What covers it.** `op snapshot build` withholds each listed abstract after dedup and reconcile (the record
    keeps its title and every other field; its abstract claims, whose values are the text, are dropped, and so
@@ -95,7 +97,7 @@ spec 08's proposal and were settled in TASK-136.
 - **Checking it.** `op takedown check --api <url>` asks the running API, and exits 1 on any served abstract,
   abstract claim, span, source or missing marker: `/papers` and `/search` on the served index, and every export
   format on every index version `/meta` lists (TASK-136 AC8); and on a log that is not the operator's, readable
-  by others, or missing a listed id's `withheld` entry.
+  by others, or whose latest entry for a listed id isn't `withheld`.
 - **Lifting a takedown** means removing the line (and logging `lifted`): the API shows the abstract again on the
   versions that still hold it after the next reload; a snapshot built while it was listed keeps it withheld
   until a rebuild without the id.

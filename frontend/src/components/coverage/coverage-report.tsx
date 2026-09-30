@@ -296,12 +296,20 @@ export function CoverageReport({ coverage }: { coverage: Coverage }) {
                         <span className="text-warn-fg">
                           <span aria-hidden="true">⚠ </span>
                           {count(vy.abstract_missing)}
-                          <span className="block text-xs">no abstracts: only titles are searchable</span>
+                          <Withheld n={vy.abstract_withheld} />
+                          <span className="block text-xs">
+                            {/* removed abstracts may still be matched on an older index (decision-022) */}
+                            {vy.abstract_withheld > 0
+                              ? "no abstracts shown"
+                              : "no abstracts: only titles are searchable"}
+                          </span>
                         </span>
                       ) : (
-                        count(vy.abstract_missing)
+                        <>
+                          {count(vy.abstract_missing)}
+                          <Withheld n={vy.abstract_withheld} />
+                        </>
                       )}
-                      <Withheld n={vy.abstract_withheld} />
                     </td>
                     <td className="px-2 text-right">{count(vy.unknown_track)}</td>
                     <td className="px-2 text-right">{count(vy.unknown_status)}</td>

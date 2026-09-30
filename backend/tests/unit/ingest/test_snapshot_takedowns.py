@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 from openproceedings import cli
-from openproceedings.ingest.dedup import DedupResult, Merge, dedup
+from openproceedings.ingest.dedup import Conflict, DedupResult, Merge, dedup
 from openproceedings.ingest.reconcile import crawled, reconcile
 from openproceedings.ingest.snapshot import (
     WITHHELD_VALUE,
@@ -136,6 +136,62 @@ def test_a_listed_paper_merged_into_another_is_followed_to_the_survivor(cache: P
     assert next(r for r in done.result.records if r.id == NEURIPS).abstract is None
 
 
+def test_a_paper_rekeyed_and_merged_is_followed_through_its_merge(cache: Path) -> None:
+    """Its year corrected (a new id) and merged into another record: the merge names the new id, and the one
+    merged-away id with the listed id's native id leads to the survivor."""
+    result = _result(cache)
+    moved = "op:iclr:2025:Rej_ected-1"
+    merged = replace(
+        result,
+        records=tuple(r for r in result.records if r.id != REJECTED),
+        merges=(Merge(NEURIPS, moved, "title_venue_year", "x", "ICLR", 2025, "ris"),),
+    )
+    done = withhold(merged, frozenset({REJECTED}))
+    assert done.followed == {REJECTED: NEURIPS} and done.withheld == {NEURIPS}
+
+
+def test_an_ambiguous_rekey_is_not_followed_but_reported(cache: Path) -> None:
+    """Two records with the listed id's native id: the build can't tell which is the paper, so it follows
+    neither and reports the id (the operator lists the right one)."""
+    result = _result(cache)
+    old = next(r for r in result.records if r.id == REJECTED)
+    twins = (old.model_copy(update={"id": "op:iclr:2025:Rej_ected-1", "year": 2025}),
+             old.model_copy(update={"id": "op:iclr:2023:Rej_ected-1", "year": 2023}))  # fmt: skip
+    rest = tuple(r for r in result.records if r.id != REJECTED)
+    done = withhold(
+        replace(result, records=tuple(sorted((*rest, *twins), key=lambda r: r.id))), frozenset({REJECTED})
+    )
+    assert (done.followed, done.unmatched, done.withheld) == ({}, (REJECTED,), frozenset())
+
+
+def test_a_followed_successors_conflict_texts_are_withheld_too(cache: Path) -> None:
+    result = _result(cache)
+    old = next(r for r in result.records if r.id == REJECTED)
+    moved = old.model_copy(update={"id": "op:iclr:2025:Rej_ected-1", "year": 2025})
+    clash = Conflict(moved.id, "abstract", REJECTED_ABSTRACT, "ris", RECRAWLED, "ris", "tie:ris")
+    rekeyed = replace(
+        result,
+        records=tuple(sorted((*(r for r in result.records if r.id != REJECTED), moved), key=lambda r: r.id)),
+        conflicts=(clash,),
+    )
+    done = withhold(rekeyed, frozenset({REJECTED}))
+    assert done.result.conflicts == (replace(clash, value_a=WITHHELD_VALUE, value_b=WITHHELD_VALUE),)
+
+
+def test_a_listed_record_with_only_overruled_abstract_claims_loses_them(cache: Path) -> None:
+    """No abstract, but claims whose values are an abstract's text (overruled by precedence): withheld too."""
+    result = _result(cache)
+    bare = next(r for r in result.records if r.id == NO_ABSTRACT)
+    claim = next(c for r in result.records for c in r.claims("abstract"))
+    with_claim = bare.model_copy(
+        update={"provenance": (*bare.provenance, claim.model_copy(update={"value": "Overruled text."}))}
+    )
+    changed = replace(result, records=tuple(with_claim if r.id == NO_ABSTRACT else r for r in result.records))
+    done = withhold(changed, frozenset({NO_ABSTRACT}))
+    assert done.withheld == {NO_ABSTRACT}
+    assert next(r for r in done.result.records if r.id == NO_ABSTRACT).claims("abstract") == ()
+
+
 def test_listing_a_record_without_an_abstract_changes_nothing_in_the_snapshot(
     cache: Path, tmp_path: Path
 ) -> None:
@@ -228,7 +284,7 @@ def test_cli_build_reads_the_list_from_the_data_dir(
     capsys.readouterr()
     assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 0
     built = json.loads(capsys.readouterr().out)
-    assert built["abstracts_withheld"] == [REJECTED]
+    assert built["withheld_ids"] == [REJECTED]
     assert (built["takedowns_followed"], built["takedowns_unmatched"]) == ({}, [])
     assert load_records(Path(built["path"]))[REJECTED].abstract is None
     assert stat.S_IMODE(Path(built["path"]).stat().st_mode) == 0o555
@@ -253,7 +309,7 @@ def test_cli_build_without_a_list_withholds_nothing(
     assert cli.main(["--data-dir", str(data), "ingest", "ris", str(source(tmp_path))]) == 0
     capsys.readouterr()
     assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 0
-    assert json.loads(capsys.readouterr().out)["abstracts_withheld"] == []
+    assert json.loads(capsys.readouterr().out)["withheld_ids"] == []
 
 
 def test_cli_build_refuses_a_named_list_that_is_missing(

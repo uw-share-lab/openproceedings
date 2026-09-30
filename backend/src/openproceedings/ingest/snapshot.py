@@ -379,15 +379,25 @@ def _successor(rid: str, result: DedupResult, held: set[str]) -> str | None:
     """The id this build holds `rid`'s paper under, when it holds it under another: the survivor it merged into
     (following merges.csv), else the one record with its native id (a rekey, the rule `diff` uses)."""
     survivor = {m.merged_id: m.survivor_id for m in result.merges if m.merged_id != m.survivor_id}
-    seen, at = {rid}, rid
-    while (nxt := survivor.get(at)) is not None and nxt not in seen:
-        at = nxt
-        seen.add(at)
-    if at != rid and at in held:
-        return at
     native = rid.split(":", 3)[-1]
+
+    def follow(start: str) -> str:
+        seen, at = {start}, start
+        while (nxt := survivor.get(at)) is not None and nxt not in seen:
+            at = nxt
+            seen.add(at)
+        return at
+
+    if (at := follow(rid)) != rid and at in held:
+        return at
     same = [h for h in held if h.split(":", 3)[-1] == native]
-    return same[0] if len(same) == 1 else None
+    if len(same) == 1:
+        return same[0]
+    # rekeyed *and* merged: the one merged-away id with its native id leads to the survivor
+    merged = [m for m in survivor if m.split(":", 3)[-1] == native]
+    if not same and len(merged) == 1 and (at := follow(merged[0])) in held:
+        return at
+    return None
 
 
 def withhold(result: DedupResult, ids: Withheld) -> Withholding:
@@ -409,16 +419,20 @@ def withhold(result: DedupResult, ids: Withheld) -> Withholding:
         r.id for r in result.records if r.id in targets and (r.abstract is not None or r.claims("abstract"))
     )
     records = tuple(withhold_record(r) if r.id in changed else r for r in result.records)
-    conflicts = tuple(
-        sorted(
-            {
-                replace(c, value_a=WITHHELD_VALUE, value_b=WITHHELD_VALUE)
-                if c.id in targets and c.field == "abstract"
-                else c
-                for c in result.conflicts
-            }
+    conflicts = result.conflicts
+    if any(
+        c.id in targets and c.field == "abstract" for c in conflicts
+    ):  # else left exactly as dedup wrote it
+        conflicts = tuple(
+            sorted(
+                {  # a set: rows that differed only by their abstract texts are one row now
+                    replace(c, value_a=WITHHELD_VALUE, value_b=WITHHELD_VALUE)
+                    if c.id in targets and c.field == "abstract"
+                    else c
+                    for c in conflicts
+                }
+            )
         )
-    )
     return Withholding(replace(result, records=records, conflicts=conflicts), changed, followed, unmatched)
 
 
