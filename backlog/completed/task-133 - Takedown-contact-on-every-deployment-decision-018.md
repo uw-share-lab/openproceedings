@@ -1,11 +1,11 @@
 ---
 id: TASK-133
 title: Takedown contact on public instances (decision-018)
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 00:52'
-updated_date: '2026-09-30 02:12'
+updated_date: '2026-09-30 02:19'
 labels:
   - frontend
   - ops
@@ -58,5 +58,5 @@ Review round 1 (all fixed): email regex restricted to ASCII [A-Za-z0-9._+-]@labe
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Site-wide footer (contentinfo) names the deployment's takedown contact from NEXT_PUBLIC_TAKEDOWN_CONTACT (email or http(s) page, build time), falling back to the repository's issues page when it is unset or unusable; copy FT-1..FT-3 in the copy deck. The takedown procedure proposed in spec 08 §Deploy: the operator receives requests; the abstract is withheld from the next index_version (manual until the missing tooling exists); older pinned versions are covered by proposed serve-time withholding; each request goes in an operator-kept log. Contact required only on publicly reachable instances. Verified by Vitest (parser, footer, layout), e2e footer checks on home/search/paper/coverage at 1280/320 px, lint and tooling.
+Site-wide footer (contentinfo) names the deployment's takedown contact from NEXT_PUBLIC_TAKEDOWN_CONTACT (email or http(s) page, build time), falling back to the repository's issues page when it is unset (an unusable value fails the build); copy FT-1..FT-3 in the copy deck. The takedown procedure proposed in spec 08 §Deploy: the operator receives requests; the abstract is withheld from the next index_version (manual until the missing tooling exists); older pinned versions are covered by proposed serve-time withholding; each request goes in an operator-kept log. Contact required only on publicly reachable instances. Verified by Vitest (parser, footer, layout), e2e footer checks on home/search/paper/coverage at 1280/320 px, lint and tooling.
 <!-- SECTION:FINAL_SUMMARY:END -->

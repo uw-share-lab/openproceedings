@@ -219,7 +219,7 @@ The contact is set with `NEXT_PUBLIC_TAKEDOWN_CONTACT` when the `web` image is *
 `mailto:…`, ASCII letters, digits and `._+-` only) or an `http(s)` page (printable ASCII, no username or
 password). `next.config.ts` checks it: a value that is set but unusable **fails the build**; unset, the footer
 links to the project's issue tracker (`https://github.com/uw-share-lab/openproceedings/issues`) rather than
-naming no one, and a production build or start prints one warning that publicly reachable instances must set
+naming no one, and the production build (`next build`) warns that publicly reachable instances must set
 `NEXT_PUBLIC_TAKEDOWN_CONTACT`. The e2e suite
 builds with the placeholder `takedown@example.org` (`frontend/playwright.config.ts`); `frontend/.env.example`
 documents both variables.

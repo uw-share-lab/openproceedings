@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-30 02:11'
+updated_date: '2026-09-30 02:19'
 labels:
   - ops
 milestone: m-6
@@ -40,4 +41,5 @@ decision-018 requires a takedown contact on every public instance; TASK-133 adde
 - [ ] #7 Search-record replay and the record page behave per guarantee 4 with listed abstracts, with tests
 - [ ] #8 A check fails when any listed abstract is served by any loaded index version
 - [ ] #9 Public deploys cannot build the web image without NEXT_PUBLIC_TAKEDOWN_CONTACT (a build ARG and a required-var gate)
+- [ ] #10 Where the operator's takedown log lives and who can access it is documented, and it stays out of git
 <!-- AC:END -->
