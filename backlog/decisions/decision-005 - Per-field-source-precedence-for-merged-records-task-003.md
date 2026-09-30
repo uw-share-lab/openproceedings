@@ -60,21 +60,29 @@ in the `track` row means the venue-year's *track*, not the venue-year: the proce
 wherever OpenReview doesn't hold that venue-year's track. ICLR 2016 has only its workshop track on OpenReview, so
 its 80 main papers come from the ICLR archive and keep track `main`. Where OpenReview does hold the track and
 holds the paper, OpenReview's track claim wins over the proceedings' (a `precedence:openreview_*` row when they
-differ). Where OpenReview holds the track but not the paper (a listing that merged with no note), the listing's
-own track claim is the only one, and it answers.
+differ).
+
+**A paper with no OpenReview note on a track OpenReview holds (decided by the owner, 2026-09-29; task-130).**
+The per-track reading alone left one case open: OpenReview holds the venue-year's track, but this paper's
+listing merged with no OpenReview note. The owner's second answer: the paper takes the track its proceedings
+listing gives it. On the 2026-09-29 crawl that is 69 records. ICLR 2014 main: 1 (an accepted archive paper whose
+OpenReview note didn't merge). NeurIPS main and D&B: 4 (INSPECT and DynaDojo in 2023 D&B and PolyGuard in 2025
+D&B are the same papers as OpenReview notes under their submitted titles; the 2021 main listing shares its title
+with two OpenReview notes). NeurIPS 2025 Creative AI (`other`): 64. The strict per-track reading would have made
+these 69 `unknown`, taking ICLR 2014 main to 34 of 35 (−2.9%, failing the M4 gate's ±1%).
 
 As built, "OpenReview holds the track" is read per record, from the claims, not from a table of crawled
 venueids. An OpenReview track claim is the note's own `content.venueid`, classified. So a record that carries
 one is on a track OpenReview holds, and `PRECEDENCE` (OpenReview first) gives it that track. A record with
 none takes the proceedings' track. The OpenReview crawlers claim no proceedings URL, so a note is never itself
-a listing. Dedup keeps a note on a track the proceedings don't host (`workshop`, `unknown`, …) apart from every
-listing (`track_not_merged`). So wherever both answer, OpenReview's track is one the proceedings host too. An
+a listing. Dedup keeps a note on a track outside `PROCEEDINGS_TRACKS` (`workshop`, `other`, `unknown`, …) apart from every
+listing (`track_not_merged`). So wherever both answer, OpenReview's track is in `PROCEEDINGS_TRACKS` too. An
 OpenReview `unknown` never overrules a listing's track, and a listing's `unknown` (a mixed PMLR volume) yields
 to OpenReview's track. This was already the behaviour before the decision (task-072 left it as an open question),
 so the decision changes no record: tests pin it (`test_dedup.py`, `test_dedup_props.py`, `test_reconcile.py`).
 The real-crawl check is in `docs/results/2026-09-29-reconcile-real-data.md` §Track, decided per track.
 
-The evidence the owner decided on (task-072's measurement on the 2026-09-29 crawl,
+The evidence the owner decided both answers on (task-072's measurement on the 2026-09-29 crawl,
 `docs/results/2026-09-29-reconcile-real-data.md`): 149 records in venue-years on OpenReview take their track
 from a proceedings listing with no OpenReview claim. ICLR 2014: 1 (an accepted archive paper whose OpenReview
 note didn't merge). ICLR 2016: 80 (OpenReview holds only its workshop track). NeurIPS 2021–2025 main and D&B: 4

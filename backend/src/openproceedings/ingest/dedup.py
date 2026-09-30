@@ -48,10 +48,11 @@ _ACCEPTANCE: tuple[Source, ...] = (
 # decision-005: OpenReview first for text and track; the official proceedings decide acceptance; RIS last.
 # Track is decided per track (owner, 2026-09-29; TASK-130): an OpenReview track claim is the note's own
 # content.venueid, so a record carrying one is on a track OpenReview holds, and that claim wins; a record with
-# none (ICLR 2016 main: OpenReview holds only its workshop track) takes the proceedings' track. The OpenReview
-# crawlers claim no proceedings URL, so a note is never a listing, and `_mergeable` keeps a note on any track
-# the proceedings don't host (`unknown` included) apart from every listing: in a merged record OpenReview's
-# track is always one the proceedings host too.
+# none takes its listing's track, whether OpenReview doesn't hold the track (ICLR 2016 main) or holds it but the
+# paper's note didn't merge (the owner's second answer, 2026-09-29). The OpenReview crawlers claim no proceedings
+# URL, so a note is never a listing, and `_mergeable` keeps a note on a track outside `PROCEEDINGS_TRACKS`
+# (`other` and `unknown` included) apart from every listing: in a merged record OpenReview's track is always in
+# `PROCEEDINGS_TRACKS` too.
 PRECEDENCE: dict[ClaimField, tuple[Source, ...]] = {
     **dict.fromkeys(
         ("title", "abstract", "authors", "keywords", "presentation", "venue", "year", "track", "venue_id_raw"),

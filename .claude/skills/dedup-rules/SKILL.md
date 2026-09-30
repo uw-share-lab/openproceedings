@@ -112,14 +112,15 @@ safe direction.
   the winner comes from precedence. `venue` and `year` can't differ inside a merge: they're part of every
   merge key.
 - **Track is decided per track** (decision-005 §Track in an OpenReview venue-year; the owner's decision,
-  2026-09-29, TASK-130). The proceedings decide a paper's track wherever OpenReview doesn't hold that
-  venue-year's track: ICLR 2016 main comes from the archive and stays `main`. "Holds" is read per record, from
-  the claims. An OpenReview track claim is the note's own `content.venueid`, so a record carrying one is on a
-  track OpenReview holds, and it wins (OpenReview first in `PRECEDENCE`). A record with none takes its
-  listing's track, including a listing on a track OpenReview holds whose note didn't merge (NeurIPS 2025
-  Creative AI, a renamed D&B paper). OpenReview claims no proceedings URL and `_mergeable` keeps a note on a
-  track the proceedings don't host (`unknown` included) apart from every listing. So where both answer,
-  OpenReview's track is one the proceedings host (property `test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings`).
+  2026-09-29, TASK-130). Where OpenReview doesn't hold a venue-year's track, the proceedings decide it: ICLR
+  2016 main comes from the archive and stays `main`. Within a track OpenReview holds, a paper whose listing
+  merged with no OpenReview note takes its listing's track (the owner's second answer, 2026-09-29: NeurIPS 2025
+  Creative AI, the renamed D&B papers, ICLR 2014's one unmerged archive paper). Where a note merged, its track
+  wins. In code this is read per record, from the claims: an OpenReview track claim is the note's own
+  `content.venueid` and wins (OpenReview first in `PRECEDENCE`); a record without one takes its listing's
+  track. OpenReview claims no proceedings URL and `_mergeable` keeps a note on a track outside
+  `PROCEEDINGS_TRACKS` (`other` and `unknown` included) apart from every listing. So where both answer,
+  OpenReview's track is in `PROCEEDINGS_TRACKS` (property `test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings`).
 - Iterate inputs in sorted-id order so the output doesn't depend on crawl order.
 
 ## Reconcile: acceptance the proceedings don't list (TASK-072, decision-005; `ingest/reconcile.py`)

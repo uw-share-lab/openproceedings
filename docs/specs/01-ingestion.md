@@ -191,7 +191,9 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    `conflicts.csv` row. A merged record's fields are re-resolved from the union of its claims by the decision-005 precedence table. Track is decided
    per track (decision-005, the owner's decision of 2026-09-29): the proceedings decide a paper's track wherever
    OpenReview doesn't hold that venue-year's track (ICLR 2016 main, from the archive, stays `main`), and an
-   OpenReview track claim, the note's own `content.venueid`, wins wherever the record carries one. Merges are written
+   OpenReview track claim, the note's own `content.venueid`, wins wherever the record carries one. Within a track
+   OpenReview holds, a record with no merged note takes its listing's track (the owner's second answer,
+   2026-09-29). Merges are written
    to `merges.csv`, and disagreements and refused merges to `conflicts.csv`, for audit (dedup-rules skill).
 
    **Reconcile** (`ingest/reconcile.py`, TASK-072, decision-005). Where a venue-year's official proceedings

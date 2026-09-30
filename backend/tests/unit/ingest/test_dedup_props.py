@@ -346,7 +346,7 @@ def test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings(xs: l
         assert r.track == (orv or official or [claims["ris"]])[0]
         event("track:" + ("openreview" if orv else "proceedings" if official else "ris"))
         # a real OpenReview note names no proceedings paper; such a note never merges into a listing on a
-        # track the proceedings don't host, so where both answer OpenReview's track is one they host too
+        # track outside PROCEEDINGS_TRACKS, so where both answer OpenReview's track is in it too
         note_urls = [c for c in r.provenance if c.source in OPENREVIEW]
         if orv and official and not proceedings_ids(note_urls):
             event("track:openreview-over-proceedings")
