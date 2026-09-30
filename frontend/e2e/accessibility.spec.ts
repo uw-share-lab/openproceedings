@@ -117,6 +117,8 @@ for (const theme of ["light", "dark"] as const) {
     test(`axe finds no WCAG 2.2 AA violations in selected UI states (${theme}, ${width}px)`, async ({
       page,
     }) => {
+      // twelve page loads and axe runs over pages of 50 results, each with its links and toggles
+      test.setTimeout(120_000);
       await page.setViewportSize({ width, height: 900 });
       await chooseTheme(page, theme);
       for (const state of states) {
@@ -139,6 +141,28 @@ test("compact controls meet the 24px WCAG 2.2 target minimum", async ({ page }) 
     const bounds = await button.boundingBox();
     expect(bounds?.width).toBeGreaterThanOrEqual(24);
     expect(bounds?.height).toBeGreaterThanOrEqual(24);
+  }
+});
+
+test("each result's author toggle and abstract source link meet the 24px target minimum", async ({
+  page,
+}) => {
+  await page.goto(`/search?${new URLSearchParams({ q: "trust" })}`);
+  await expect(page.getByText(/\d+ papers/).first()).toBeVisible();
+  const targets = [
+    page.getByRole("button", { name: /^Show all \d+ authors$/ }),
+    page
+      .locator("article p")
+      .filter({ hasText: /^Abstract: / })
+      .getByRole("link"),
+  ];
+  for (const found of targets) {
+    await expect(found.first()).toBeVisible();
+    for (const target of await found.all()) {
+      const bounds = await target.boundingBox();
+      expect(bounds?.width).toBeGreaterThanOrEqual(24);
+      expect(bounds?.height).toBeGreaterThanOrEqual(24);
+    }
   }
 });
 

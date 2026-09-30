@@ -121,9 +121,19 @@ reviews without the UI.
   "facets": { "venue": {...}, "year": {...}, "track": {...}, "status": {...} },
   "hits": [ { "id": "...", "title": "...", "abstract": "...", "authors": [...], "venue": "ICLR",
               "year": 2025, "track": "main", "status": "accepted", "presentation": "poster", "score": 12.3,
-              "highlights": { "title": [[0,5]], "abstract": [[102,114]] }, "urls": {...} } ]
+              "highlights": { "title": [[0,5]], "abstract": [[102,114]] }, "urls": {...},
+              "abstract_source": { "source": "pmlr", "url": "https://proceedings.mlr.press/v202/…html" } } ]
 }
 ```
+
+`abstract_source` (TASK-134, additive; decision-018) names where a hit's `abstract` came from so the result list
+can attribute it: `source` is the provenance claim precedence took the abstract from (decision-005; the open
+`Source` set) and `url` the paper's page at that source: the OpenReview forum (`urls.forum`; an OpenReview claim's
+own url is the API listing it was read from), the paper's proceedings page for `neurips_proceedings` and `pmlr`
+(PMLR's CC BY 4.0 terms ask for a link to it), null for `ris`. It is null when `abstract` is null or no claim
+holds the abstract's text. The route reads it from the served snapshot's records for the page's ids only
+(`RecordFile.get_many`; the index's display record keeps no provenance), so nothing about matching or the index
+changes.
 
 `excluded` always has this shape: `total` (= the `identification_ast` count − `total`, 03 §Exclusion
 accounting) plus a `track` and a `status` map whose buckets sum to it. Each map always carries an `unknown`

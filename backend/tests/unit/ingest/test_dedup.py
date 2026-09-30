@@ -12,6 +12,7 @@ from openproceedings.ingest.dedup import (
     PRECEDENCE,
     Conflict,
     Merge,
+    abstract_claim,
     dedup,
     resolve,
     title_key,
@@ -806,3 +807,37 @@ def test_a_proceedings_status_that_outranks_openreview_accepted_drops_the_presen
     assert (record.status, record.presentation) == ("unknown", None)
     same = paper("AbCd1234")  # content_hash doesn't cover presentation
     assert record.content_hash == same.model_copy(update={"status": "unknown"}).content_hash
+
+
+def _abstract(source: Any, value: str, url: str | None = None, at: datetime = T0) -> Claim:
+    return Claim(field="abstract", value=value, source=source, url=url, fetched_at=at)
+
+
+def _with(abstract: str | None, *claims: Claim) -> PaperRecord:
+    return PaperRecord.build(
+        id="op:icml:2022:pmlr-v162-a22a", title="Trust in AI", abstract=abstract, authors=(), venue="ICML",
+        year=2022, track="main", status="accepted", provenance=claims,
+    )  # fmt: skip
+
+
+def test_abstract_claim_is_the_one_precedence_took_the_abstract_from() -> None:
+    """TASK-134 (decision-018): the results list attributes an abstract to the claim `resolve` took it from."""
+    pmlr = _abstract("pmlr", "Same text.", "https://proceedings.mlr.press/v162/a22a.html")
+    ris = _abstract("ris", "Same text.")
+    orv = _abstract("openreview_v2", "Same text.", "https://api2.openreview.net/notes?offset=0")
+    assert abstract_claim(_with("Same text.", ris, pmlr)) == pmlr  # pmlr outranks ris
+    assert abstract_claim(_with("Same text.", ris, pmlr, orv)) == orv  # OpenReview first (decision-005)
+    scope = {"title": "Trust in AI", "venue": "ICML", "year": 2022, "track": "main", "status": "accepted"}
+    base = [Claim(field=f, value=v, source="pmlr", fetched_at=T0) for f, v in scope.items()]  # type: ignore[arg-type]
+    record, _ = resolve("op:icml:2022:pmlr-v162-a22a", [*base, pmlr, ris])
+    assert abstract_claim(record) == pmlr  # the claim `resolve` itself chose
+
+
+def test_abstract_claim_holds_the_abstracts_own_text() -> None:
+    other = _abstract("openreview_v2", "A different abstract.")
+    pmlr = _abstract("pmlr", "Shown text.", "https://proceedings.mlr.press/v162/a22a.html")
+    # a better-ranked claim with other text is not the source of the text shown
+    assert abstract_claim(_with("Shown text.", other, pmlr)) == pmlr
+    assert abstract_claim(_with("Shown text.", other)) is None  # no claim holds it: unknown, never guessed
+    assert abstract_claim(_with("Shown text.")) is None  # no provenance (a synthetic record)
+    assert abstract_claim(_with(None, pmlr)) is None  # no abstract, nothing to attribute

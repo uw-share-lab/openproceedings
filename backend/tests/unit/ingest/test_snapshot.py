@@ -779,3 +779,15 @@ def test_a_manifest_that_stops_listing_its_audit_files_is_refused(cache: Path, t
         (copy / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         with pytest.raises(SnapshotError, match="doesn't match its manifest"):
             load_records(copy)
+
+
+def test_get_many_reads_a_pages_records_as_get_does(cache: Path, tmp_path: Path) -> None:
+    """The search route reads a page's records in one open (TASK-134): the same records `get` gives, an id the
+    snapshot lacks left out, repeats collapsed, and no ids no read."""
+    records = RecordFile(build(cache, tmp_path / "s", BUILT).path)
+    ids = sorted(records._at)
+    assert ids, "the fixture snapshot has records"
+    asked = [*reversed(ids), ids[0], "op:iclr:2024:NotInTheSnapshot"]
+    assert records.get_many(asked) == {i: records.get(i) for i in ids}
+    assert records.get_many([]) == {}
+    assert records.get_many(["op:iclr:2024:NotInTheSnapshot"]) == {}

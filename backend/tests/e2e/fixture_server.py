@@ -1,4 +1,5 @@
-"""Serve the synthetic 5k fixture index for Playwright (TASK-046; spec 05 §Testing)."""
+"""Serve the synthetic 5k fixture index for Playwright (TASK-046; spec 05 §Testing). Its records carry authors
+and each abstract's source claim (`attributed`, TASK-134), so the results list's attribution is exercised."""
 
 from __future__ import annotations
 
@@ -8,14 +9,14 @@ from pathlib import Path
 from openproceedings.api import ApiConfig, RateLimit
 from openproceedings.api.server import serve
 
-from tests.contract.conftest import build
+from tests.contract.conftest import attributed, build
 from tests.fixtures.corpus.synthetic_5k import records
 
 
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="openproceedings-e2e-") as raw:
         data = Path(raw)
-        version = build(list(records()), data / "snapshots", "fixture", data / "indexes")
+        version = build(list(records()), data / "snapshots", "fixture", data / "indexes", attributed)
         (data / "indexes" / "current").symlink_to(version)
         config = ApiConfig(
             data_dir=data,

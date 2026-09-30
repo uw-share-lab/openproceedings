@@ -140,6 +140,17 @@ def _sources(records: Iterable[PaperRecord]) -> frozenset[str]:
     return frozenset(c.source for r in records for c in r.provenance if not is_absence(c))
 
 
+def abstract_claim(record: PaperRecord) -> Claim | None:
+    """The claim the record's abstract was taken from: of the abstract claims holding exactly that text, the one
+    `resolve` ranks first (PRECEDENCE, decision-005). None when the record has no abstract, or no claim holds
+    its text (a record built without provenance, as synthetic fixtures are)."""
+    if record.abstract is None:
+        return None
+    order = PRECEDENCE["abstract"]
+    held = [c for c in record.claims("abstract") if c.value == record.abstract]
+    return min(held, key=lambda c: order.index(c.source), default=None)
+
+
 def _one_per_field_and_source(record_id: str, claims: Iterable[Claim]) -> tuple[list[Claim], list[Conflict]]:
     """The newest claim for each (field, source). Any other value that source gave is a conflicts.csv row:
     `newest:<source>` when it is older, `tie:<source>` when it was fetched at the same moment (then the

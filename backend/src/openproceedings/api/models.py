@@ -130,6 +130,20 @@ class Highlights(Model):
     abstract: list[Span]
 
 
+ABSTRACT_SOURCE_DOC = (
+    "Where the hit's `abstract` was taken from, for attribution (decision-018): the source of the provenance "
+    "claim precedence chose it from (decision-005), and `url`, the paper's page at that source: the OpenReview "
+    "forum for `openreview_v1`/`openreview_v2`, the paper's proceedings page for `neurips_proceedings` and "
+    "`pmlr` (PMLR's CC BY 4.0 terms ask for this link), null when the source has no page (`ris`). Null when "
+    "`abstract` is null or no claim records its source. `GET /papers/{id}` has the full provenance."
+)
+
+
+class AbstractSource(Model):
+    source: Source
+    url: str | None
+
+
 class Hit(Model):
     id: str
     title: str
@@ -143,6 +157,7 @@ class Hit(Model):
     score: float
     highlights: Highlights
     urls: Urls
+    abstract_source: AbstractSource | None = Field(description=ABSTRACT_SOURCE_DOC)  # TASK-134: additive
 
 
 IDENTIFIED_DOC = (

@@ -2232,7 +2232,8 @@
               "pdf": null,
               "proceedings": null,
               "doi": null
-            }
+            },
+            "abstract_source": null
           }
         ]
       },
@@ -2419,7 +2420,8 @@
               "pdf": null,
               "proceedings": null,
               "doi": null
-            }
+            },
+            "abstract_source": null
           }
         ]
       },
@@ -2622,7 +2624,8 @@
               "pdf": null,
               "proceedings": null,
               "doi": null
-            }
+            },
+            "abstract_source": null
           }
         ]
       },
@@ -2826,7 +2829,8 @@
               "pdf": null,
               "proceedings": null,
               "doi": null
-            }
+            },
+            "abstract_source": null
           }
         ]
       },

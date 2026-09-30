@@ -81,6 +81,7 @@ const HIT: Hit = {
   score: 1.5,
   highlights: { title: [[0, 11]], abstract: [[11, 16]] },
   urls: { forum: "https://openreview.net/forum?id=abc", pdf: null, proceedings: null, doi: "10.1/x" },
+  abstract_source: { source: "openreview_v2", url: "https://openreview.net/forum?id=abc" },
 };
 
 function body(over: Partial<Body> = {}): Body {

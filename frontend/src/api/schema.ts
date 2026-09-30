@@ -221,6 +221,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AbstractSource */
+        AbstractSource: {
+            /**
+             * Source
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @enum {string}
+             */
+            source: "openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "ris";
+            /** Url */
+            url: string | null;
+        };
         /** And */
         And: {
             /** Children */
@@ -494,6 +505,8 @@ export interface components {
         Hit: {
             /** Abstract */
             abstract: string | null;
+            /** @description Where the hit's `abstract` was taken from, for attribution (decision-018): the source of the provenance claim precedence chose it from (decision-005), and `url`, the paper's page at that source: the OpenReview forum for `openreview_v1`/`openreview_v2`, the paper's proceedings page for `neurips_proceedings` and `pmlr` (PMLR's CC BY 4.0 terms ask for this link), null when the source has no page (`ris`). Null when `abstract` is null or no claim records its source. `GET /papers/{id}` has the full provenance. */
+            abstract_source: components["schemas"]["AbstractSource"] | null;
             /** Authors */
             authors: string[];
             highlights: components["schemas"]["Highlights"];

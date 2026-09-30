@@ -609,10 +609,26 @@ class RecordFile:
         with self.path.open("rb") as fh:
             fh.seek(at[0])
             raw = fh.read(at[1])
+        return self._validated(raw, at[0])
+
+    def get_many(self, rids: Iterable[str]) -> dict[str, PaperRecord]:
+        """The records with these ids (one open of the file for all of them, as a search page needs); an id the
+        snapshot doesn't hold is left out."""
+        found: dict[str, PaperRecord] = {}
+        spots = sorted({(at, rid) for rid in rids if (at := self._at.get(rid)) is not None})
+        if not spots:
+            return found
+        with self.path.open("rb") as fh:
+            for (offset, length), rid in spots:
+                fh.seek(offset)
+                found[rid] = self._validated(fh.read(length), offset)
+        return found
+
+    def _validated(self, raw: bytes, offset: int) -> PaperRecord:
         try:
             return PaperRecord.model_validate_json(raw)
         except ValidationError:
-            raise SnapshotError(f"{self.path.parent.name}: the record at byte {at[0]} is invalid") from None
+            raise SnapshotError(f"{self.path.parent.name}: the record at byte {offset} is invalid") from None
 
 
 def diff(a: Path, b: Path) -> dict[str, Any]:

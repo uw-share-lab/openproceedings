@@ -1,6 +1,40 @@
 {
   "components": {
     "schemas": {
+      "AbstractSource": {
+        "properties": {
+          "source": {
+            "description": "Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "enum": [
+              "openreview_v2",
+              "openreview_v1",
+              "iclr_archive",
+              "neurips_proceedings",
+              "pmlr",
+              "ris"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "source",
+          "url"
+        ],
+        "title": "AbstractSource",
+        "type": "object"
+      },
       "And": {
         "properties": {
           "children": {
@@ -808,6 +842,17 @@
             ],
             "title": "Abstract"
           },
+          "abstract_source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AbstractSource"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the hit's `abstract` was taken from, for attribution (decision-018): the source of the provenance claim precedence chose it from (decision-005), and `url`, the paper's page at that source: the OpenReview forum for `openreview_v1`/`openreview_v2`, the paper's proceedings page for `neurips_proceedings` and `pmlr` (PMLR's CC BY 4.0 terms ask for this link), null when the source has no page (`ris`). Null when `abstract` is null or no claim records its source. `GET /papers/{id}` has the full provenance."
+          },
           "authors": {
             "items": {
               "type": "string"
@@ -906,7 +951,8 @@
           "presentation",
           "score",
           "highlights",
-          "urls"
+          "urls",
+          "abstract_source"
         ],
         "title": "Hit",
         "type": "object"

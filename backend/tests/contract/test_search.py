@@ -38,7 +38,7 @@ QUERIES = [
 ]
 HIT_KEYS = {
     "id", "title", "abstract", "authors", "venue", "year", "track", "status", "presentation", "score",
-    "highlights", "urls",
+    "highlights", "urls", "abstract_source",
 }  # fmt: skip
 
 
