@@ -28,7 +28,10 @@ The code is `backend/src/openproceedings/ingest/ris.py`; its module docstring is
    yields no id: a forum without a venueid, a `neurips.cc/media` link, an unparseable URL), `no_id` (a
    venueid without a forum, ICML through PMC), `ambiguous` (two ids), `conflict` (a venueid and a listing
    that disagree on venue, year or track), `no_query_date`.
-3. **Track and status.** The venueid through `classify.py`; else the proceedings track claim; else the
+3. **Track and status.** The venueid through `classify.py` (in a v1 venue-year its status comes from
+   scholarmend's `venue_string` claim through `classify_v1_venue`, only when the claim's evidence names the
+   record's venueid and the string names its venue, year and track; else `unknown`, with the reason in the
+   evidence); else the proceedings track claim; else the
    volume table (`unknown` for volumes that mix main and position papers). A proceedings listing means
    `accepted` and overrides an agreeing venueid (decision-005; counted in `status_overrides`). Nothing else
    ever sets `accepted`. Never infer anything from `JF`, since that's Scholar's venue string.

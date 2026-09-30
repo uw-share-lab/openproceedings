@@ -3,7 +3,9 @@
 Every title, author, forum id and hash is invented (decision-004). The claim shapes copy real scholarmend
 0.1.3 output: a leading BOM, bare-URL evidence for `proceedings_url`/`pmlr_url` claims (twice when the
 RIS has both the page and the PDF), `venueid=<id>` for `openreview_api`, `openreview:<forum>` for its
-abstract, `clean.ris:TI=<title>` for Scholar. Run `python backend/tests/fixtures/ris/generate.py` after
+abstract, `clean.ris:TI=<title>` for Scholar. The `venue_string` rows (TASK-098, written to `v1/`) are written by
+hand, since the real corpus has none: the claim copies scholarmend 0.1.4's shape (OpenReview's `content.venue` verbatim,
+source `openreview_api`, tier 2, confidence 0.99, evidence `venueid=<id>`). Run `python backend/tests/fixtures/ris/generate.py` after
 changing a row; the test module documents what each row is for.
 """
 
@@ -58,11 +60,24 @@ def orv(
     return out
 
 
-ROWS: list[dict[str, Any]] = []
+def v1(title: str, fid: str, vid: str, venue_string: str, evidence: str | None = None,
+       also: tuple[str, str] | None = None) -> None:  # fmt: skip
+    """An OpenReview record with scholarmend 0.1.4's `venue_string` claim (evidence: its venueid), plus
+    optionally a second one (`also`: string, evidence)."""
+    venue, year, track = vid.split("/", 2)
+    venue = venue.removesuffix(".cc")
+    add(title, ["Voe, V"], venue, [f"https://openreview.net/pdf?id={fid}"], int(year), "An OpenReview snippet …",
+        [*orv(fid, vid, venue, int(year), track),
+         c("venue_string", venue_string, "openreview_api", evidence or f"venueid={vid}"),
+         *([c("venue_string", also[0], "openreview_api", also[1])] if also else [])], rows=V1_ROWS)  # fmt: skip
+
+
+ROWS: list[dict[str, Any]] = []  # mended.ris + resolved.json
+V1_ROWS: list[dict[str, Any]] = []  # v1/mended.ris + v1/resolved.json: the venue_string rows (TASK-098)
 
 
 def add(title: str, authors: list[str], jf: str, urls: list[str], py: int, ab: str, claims: list[dict[str, Any]],
-        m1: str | None = Q, extra: tuple[str, ...] = ()) -> None:  # fmt: skip
+        m1: str | None = Q, extra: tuple[str, ...] = (), rows: list[dict[str, Any]] = ROWS) -> None:  # fmt: skip
     scholar = f"clean.ris:TI={title}"
     ris = ["TY  - PDF", *(f"AU  - {a}" for a in authors), f"TI  - {title}", f"JF  - {jf}"]
     ris += (
@@ -74,7 +89,7 @@ def add(title: str, authors: list[str], jf: str, urls: list[str], py: int, ab: s
         c("abstract", ab, "scholar", scholar, 0, 0.3),
         c("authors", "; ".join(authors), "scholar", scholar, 0, 0.3),
     ]
-    ROWS.append({"ris": ris, "title": title, "claims": claims})
+    rows.append({"ris": ris, "title": title, "claims": claims})
 
 
 NEURIPS = ("proceedings.neurips.cc", 2025, H1)
@@ -128,15 +143,42 @@ add("A Synthetic Hidden Forum", ["Roe, S"], "ICLR", ["https://openreview.net/pdf
     [c("forum_id", "HiDden0001", "openreview_url", "https://openreview.net/pdf?id=HiDden0001")])  # fmt: skip
 add("A Synthetic NeurIPS Media Link", ["Soe, T"], "NeurIPS", ["https://neurips.cc/media/PosterPDFs/NeurIPS%202023/1.png"],
     2023, "Poster only …", [])  # fmt: skip
+# v1 venue-years (TASK-098): the venueid gives venue, year and track; the venue string gives status
+v1("A Synthetic v1 Poster", "V1Poster01", "ICLR.cc/2022/Conference", "ICLR 2022 Poster")
+v1("A Synthetic v1 Oral", "V1Oral0001", "NeurIPS.cc/2021/Conference", "NeurIPS 2021 Oral")
+v1("A Synthetic v1 Rejection", "V1Submit01", "ICLR.cc/2022/Conference", "ICLR 2022 Submitted")
+v1("A Synthetic v1 Withdrawal", "V1Withdr01", "ICLR.cc/2023/Conference", "")  # v1 withdrawn notes say ""
+v1("A Synthetic Unmapped Venue String", "V1Unmapp01", "ICLR.cc/2023/Conference", "ICLR 2023 Synthetic Track")
+v1(
+    "A Synthetic v2 Venue String",
+    "V2Ignore01",
+    "ICLR.cc/2024/Conference/Rejected_Submission",
+    "ICLR 2024 Poster",
+)
+v1("A Synthetic Venue String From Another Note", "V1Disagr01", "ICLR.cc/2022/Conference", "Submitted to ICLR 2023",
+   evidence="venueid=ICLR.cc/2023/Conference")  # fmt: skip
+# the string agrees with the venueid, but its evidence names another note's: still not used
+v1("A Synthetic Agreeing String From Another Note", "V1Agree001", "ICLR.cc/2022/Conference", "ICLR 2022 Poster",
+   evidence="venueid=ICLR.cc/2023/Conference")  # fmt: skip
+# two claims with the same agreeing string, only one with bad evidence: every claim must name the venueid
+v1("A Synthetic Pair With One Bad Claim", "V1OneBad01", "ICLR.cc/2022/Conference", "ICLR 2022 Poster",
+   also=("ICLR 2022 Poster", "venueid=ICLR.cc/2023/Conference"))  # fmt: skip
 
-if __name__ == "__main__":
-    (HERE / "mended.ris").write_text(
-        "﻿" + "\n".join(line for r in ROWS for line in r["ris"]), encoding="utf-8"
+
+def write(rows: list[dict[str, Any]], out: Path) -> None:
+    out.mkdir(exist_ok=True)
+    (out / "mended.ris").write_text(
+        "\ufeff" + "\n".join(line for r in rows for line in r["ris"]), encoding="utf-8"
     )
     resolved = [{"title": r["title"], "source_file": "clean.ris", "conflicts": [], "claims": r["claims"],
                  "fields": {cl["field"]: {k: cl[k] for k in ("confidence", "evidence", "source", "tier", "value")}
-                            for cl in reversed(r["claims"])}} for r in ROWS]  # fmt: skip
-    (HERE / "resolved.json").write_text(
+                            for cl in reversed(r["claims"])}} for r in rows]  # fmt: skip
+    (out / "resolved.json").write_text(
         json.dumps(resolved, indent=1, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    print(f"{len(ROWS)} records")
+    print(f"{out.name}: {len(rows)} records")
+
+
+if __name__ == "__main__":
+    write(ROWS, HERE)
+    write(V1_ROWS, HERE / "v1")

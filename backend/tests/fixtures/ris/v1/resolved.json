@@ -1,0 +1,1306 @@
+[
+ {
+  "title": "A Synthetic v1 Poster",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "forum_id",
+    "value": "V1Poster01",
+    "source": "openreview_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1Poster01"
+   },
+   {
+    "field": "venue_id",
+    "value": "ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "venue",
+    "value": "ICLR",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "year",
+    "value": "2022",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "track",
+    "value": "Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "venue_string",
+    "value": "ICLR 2022 Poster",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "abstract",
+    "value": "An OpenReview snippet …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Poster"
+   },
+   {
+    "field": "authors",
+    "value": "Voe, V",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Poster"
+   }
+  ],
+  "fields": {
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Poster",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Voe, V"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Poster",
+    "source": "scholar",
+    "tier": 0,
+    "value": "An OpenReview snippet …"
+   },
+   "venue_string": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR 2022 Poster"
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "Conference"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "2022"
+   },
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR"
+   },
+   "venue_id": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR.cc/2022/Conference"
+   },
+   "forum_id": {
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1Poster01",
+    "source": "openreview_url",
+    "tier": 2,
+    "value": "V1Poster01"
+   }
+  }
+ },
+ {
+  "title": "A Synthetic v1 Oral",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "forum_id",
+    "value": "V1Oral0001",
+    "source": "openreview_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1Oral0001"
+   },
+   {
+    "field": "venue_id",
+    "value": "NeurIPS.cc/2021/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=NeurIPS.cc/2021/Conference"
+   },
+   {
+    "field": "venue",
+    "value": "NeurIPS",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=NeurIPS.cc/2021/Conference"
+   },
+   {
+    "field": "year",
+    "value": "2021",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=NeurIPS.cc/2021/Conference"
+   },
+   {
+    "field": "track",
+    "value": "Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=NeurIPS.cc/2021/Conference"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=NeurIPS.cc/2021/Conference"
+   },
+   {
+    "field": "venue_string",
+    "value": "NeurIPS 2021 Oral",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=NeurIPS.cc/2021/Conference"
+   },
+   {
+    "field": "abstract",
+    "value": "An OpenReview snippet …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Oral"
+   },
+   {
+    "field": "authors",
+    "value": "Voe, V",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Oral"
+   }
+  ],
+  "fields": {
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Oral",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Voe, V"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Oral",
+    "source": "scholar",
+    "tier": 0,
+    "value": "An OpenReview snippet …"
+   },
+   "venue_string": {
+    "confidence": 0.99,
+    "evidence": "venueid=NeurIPS.cc/2021/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "NeurIPS 2021 Oral"
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "venueid=NeurIPS.cc/2021/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "venueid=NeurIPS.cc/2021/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "Conference"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "venueid=NeurIPS.cc/2021/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "2021"
+   },
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "venueid=NeurIPS.cc/2021/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "NeurIPS"
+   },
+   "venue_id": {
+    "confidence": 0.99,
+    "evidence": "venueid=NeurIPS.cc/2021/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "NeurIPS.cc/2021/Conference"
+   },
+   "forum_id": {
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1Oral0001",
+    "source": "openreview_url",
+    "tier": 2,
+    "value": "V1Oral0001"
+   }
+  }
+ },
+ {
+  "title": "A Synthetic v1 Rejection",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "forum_id",
+    "value": "V1Submit01",
+    "source": "openreview_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1Submit01"
+   },
+   {
+    "field": "venue_id",
+    "value": "ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "venue",
+    "value": "ICLR",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "year",
+    "value": "2022",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "track",
+    "value": "Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "venue_string",
+    "value": "ICLR 2022 Submitted",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "abstract",
+    "value": "An OpenReview snippet …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Rejection"
+   },
+   {
+    "field": "authors",
+    "value": "Voe, V",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Rejection"
+   }
+  ],
+  "fields": {
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Rejection",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Voe, V"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Rejection",
+    "source": "scholar",
+    "tier": 0,
+    "value": "An OpenReview snippet …"
+   },
+   "venue_string": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR 2022 Submitted"
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "Conference"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "2022"
+   },
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR"
+   },
+   "venue_id": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR.cc/2022/Conference"
+   },
+   "forum_id": {
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1Submit01",
+    "source": "openreview_url",
+    "tier": 2,
+    "value": "V1Submit01"
+   }
+  }
+ },
+ {
+  "title": "A Synthetic v1 Withdrawal",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "forum_id",
+    "value": "V1Withdr01",
+    "source": "openreview_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1Withdr01"
+   },
+   {
+    "field": "venue_id",
+    "value": "ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "venue",
+    "value": "ICLR",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "year",
+    "value": "2023",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "track",
+    "value": "Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "venue_string",
+    "value": "",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "abstract",
+    "value": "An OpenReview snippet …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Withdrawal"
+   },
+   {
+    "field": "authors",
+    "value": "Voe, V",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Withdrawal"
+   }
+  ],
+  "fields": {
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Withdrawal",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Voe, V"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v1 Withdrawal",
+    "source": "scholar",
+    "tier": 0,
+    "value": "An OpenReview snippet …"
+   },
+   "venue_string": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": ""
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "Conference"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "2023"
+   },
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR"
+   },
+   "venue_id": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR.cc/2023/Conference"
+   },
+   "forum_id": {
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1Withdr01",
+    "source": "openreview_url",
+    "tier": 2,
+    "value": "V1Withdr01"
+   }
+  }
+ },
+ {
+  "title": "A Synthetic Unmapped Venue String",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "forum_id",
+    "value": "V1Unmapp01",
+    "source": "openreview_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1Unmapp01"
+   },
+   {
+    "field": "venue_id",
+    "value": "ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "venue",
+    "value": "ICLR",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "year",
+    "value": "2023",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "track",
+    "value": "Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "venue_string",
+    "value": "ICLR 2023 Synthetic Track",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "abstract",
+    "value": "An OpenReview snippet …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Unmapped Venue String"
+   },
+   {
+    "field": "authors",
+    "value": "Voe, V",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Unmapped Venue String"
+   }
+  ],
+  "fields": {
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Unmapped Venue String",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Voe, V"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Unmapped Venue String",
+    "source": "scholar",
+    "tier": 0,
+    "value": "An OpenReview snippet …"
+   },
+   "venue_string": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR 2023 Synthetic Track"
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "Conference"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "2023"
+   },
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR"
+   },
+   "venue_id": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR.cc/2023/Conference"
+   },
+   "forum_id": {
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1Unmapp01",
+    "source": "openreview_url",
+    "tier": 2,
+    "value": "V1Unmapp01"
+   }
+  }
+ },
+ {
+  "title": "A Synthetic v2 Venue String",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "forum_id",
+    "value": "V2Ignore01",
+    "source": "openreview_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V2Ignore01"
+   },
+   {
+    "field": "venue_id",
+    "value": "ICLR.cc/2024/Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission"
+   },
+   {
+    "field": "venue",
+    "value": "ICLR",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission"
+   },
+   {
+    "field": "year",
+    "value": "2024",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission"
+   },
+   {
+    "field": "track",
+    "value": "Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission"
+   },
+   {
+    "field": "venue_string",
+    "value": "ICLR 2024 Poster",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission"
+   },
+   {
+    "field": "abstract",
+    "value": "An OpenReview snippet …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v2 Venue String"
+   },
+   {
+    "field": "authors",
+    "value": "Voe, V",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v2 Venue String"
+   }
+  ],
+  "fields": {
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v2 Venue String",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Voe, V"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic v2 Venue String",
+    "source": "scholar",
+    "tier": 0,
+    "value": "An OpenReview snippet …"
+   },
+   "venue_string": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR 2024 Poster"
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "Conference/Rejected_Submission"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "2024"
+   },
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR"
+   },
+   "venue_id": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2024/Conference/Rejected_Submission",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR.cc/2024/Conference/Rejected_Submission"
+   },
+   "forum_id": {
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V2Ignore01",
+    "source": "openreview_url",
+    "tier": 2,
+    "value": "V2Ignore01"
+   }
+  }
+ },
+ {
+  "title": "A Synthetic Venue String From Another Note",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "forum_id",
+    "value": "V1Disagr01",
+    "source": "openreview_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1Disagr01"
+   },
+   {
+    "field": "venue_id",
+    "value": "ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "venue",
+    "value": "ICLR",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "year",
+    "value": "2022",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "track",
+    "value": "Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "venue_string",
+    "value": "Submitted to ICLR 2023",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "abstract",
+    "value": "An OpenReview snippet …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Venue String From Another Note"
+   },
+   {
+    "field": "authors",
+    "value": "Voe, V",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Venue String From Another Note"
+   }
+  ],
+  "fields": {
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Venue String From Another Note",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Voe, V"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Venue String From Another Note",
+    "source": "scholar",
+    "tier": 0,
+    "value": "An OpenReview snippet …"
+   },
+   "venue_string": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "Submitted to ICLR 2023"
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "Conference"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "2022"
+   },
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR"
+   },
+   "venue_id": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR.cc/2022/Conference"
+   },
+   "forum_id": {
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1Disagr01",
+    "source": "openreview_url",
+    "tier": 2,
+    "value": "V1Disagr01"
+   }
+  }
+ },
+ {
+  "title": "A Synthetic Agreeing String From Another Note",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "forum_id",
+    "value": "V1Agree001",
+    "source": "openreview_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1Agree001"
+   },
+   {
+    "field": "venue_id",
+    "value": "ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "venue",
+    "value": "ICLR",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "year",
+    "value": "2022",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "track",
+    "value": "Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "venue_string",
+    "value": "ICLR 2022 Poster",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "abstract",
+    "value": "An OpenReview snippet …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Agreeing String From Another Note"
+   },
+   {
+    "field": "authors",
+    "value": "Voe, V",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Agreeing String From Another Note"
+   }
+  ],
+  "fields": {
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Agreeing String From Another Note",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Voe, V"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Agreeing String From Another Note",
+    "source": "scholar",
+    "tier": 0,
+    "value": "An OpenReview snippet …"
+   },
+   "venue_string": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR 2022 Poster"
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "Conference"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "2022"
+   },
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR"
+   },
+   "venue_id": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR.cc/2022/Conference"
+   },
+   "forum_id": {
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1Agree001",
+    "source": "openreview_url",
+    "tier": 2,
+    "value": "V1Agree001"
+   }
+  }
+ },
+ {
+  "title": "A Synthetic Pair With One Bad Claim",
+  "source_file": "clean.ris",
+  "conflicts": [],
+  "claims": [
+   {
+    "field": "forum_id",
+    "value": "V1OneBad01",
+    "source": "openreview_url",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1OneBad01"
+   },
+   {
+    "field": "venue_id",
+    "value": "ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "venue",
+    "value": "ICLR",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "year",
+    "value": "2022",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "track",
+    "value": "Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "version",
+    "value": "proceedings",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "venue_string",
+    "value": "ICLR 2022 Poster",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference"
+   },
+   {
+    "field": "venue_string",
+    "value": "ICLR 2022 Poster",
+    "source": "openreview_api",
+    "tier": 2,
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2023/Conference"
+   },
+   {
+    "field": "abstract",
+    "value": "An OpenReview snippet …",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Pair With One Bad Claim"
+   },
+   {
+    "field": "authors",
+    "value": "Voe, V",
+    "source": "scholar",
+    "tier": 0,
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Pair With One Bad Claim"
+   }
+  ],
+  "fields": {
+   "authors": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Pair With One Bad Claim",
+    "source": "scholar",
+    "tier": 0,
+    "value": "Voe, V"
+   },
+   "abstract": {
+    "confidence": 0.3,
+    "evidence": "clean.ris:TI=A Synthetic Pair With One Bad Claim",
+    "source": "scholar",
+    "tier": 0,
+    "value": "An OpenReview snippet …"
+   },
+   "venue_string": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR 2022 Poster"
+   },
+   "version": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "proceedings"
+   },
+   "track": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "Conference"
+   },
+   "year": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "2022"
+   },
+   "venue": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR"
+   },
+   "venue_id": {
+    "confidence": 0.99,
+    "evidence": "venueid=ICLR.cc/2022/Conference",
+    "source": "openreview_api",
+    "tier": 2,
+    "value": "ICLR.cc/2022/Conference"
+   },
+   "forum_id": {
+    "confidence": 0.99,
+    "evidence": "https://openreview.net/pdf?id=V1OneBad01",
+    "source": "openreview_url",
+    "tier": 2,
+    "value": "V1OneBad01"
+   }
+  }
+ }
+]
