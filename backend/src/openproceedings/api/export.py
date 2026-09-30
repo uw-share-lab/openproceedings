@@ -249,7 +249,12 @@ def matched_among(engine: TantivyEngine, result: ParseResult, withheld: Withheld
     shown = engine.display(sorted(withheld)) if withheld else {}
     if not shown:
         return 0
-    assert result.effective_ast is not None  # the caller's query parsed
+    if (
+        result.effective_ast is None
+    ):  # the caller's query parsed: an invariant, as `search.highlight` holds it
+        raise EngineInternalError(
+            DiagnosticCode.API_INTERNAL, "an export counted withheld records of no query"
+        )
     lit = Highlighter(result.effective_ast, expanded(engine, result.effective_ast))
     return sum(lit.match(Shown.of(record)) is not None for record in shown.values())
 

@@ -207,3 +207,44 @@ def redirecting() -> Iterator[str]:
 def test_the_http_client_follows_no_redirect(redirecting: str) -> None:
     status, _body = takedown_check.http(redirecting, timeout=10)(f"{takedown_check.API}/meta", {})
     assert status == 302
+
+
+class _Busy(http.server.BaseHTTPRequestHandler):
+    """429 with `Retry-After: 0` for the first `busy` requests, then 200."""
+
+    busy = 1
+    seen = 0
+
+    def do_GET(self) -> None:
+        type(self).seen += 1
+        if type(self).seen <= type(self).busy:
+            self.send_response(429)
+            self.send_header("Retry-After", "0")
+            self.end_headers()
+            return
+        body = b'{"index_versions": []}'
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args: Any) -> None:
+        pass
+
+
+@pytest.mark.parametrize(("busy", "retries", "status", "seen"), [(1, 5, 200, 2), (9, 1, 429, 2)])
+def test_the_http_client_waits_out_a_429_up_to_its_retries(
+    busy: int, retries: int, status: int, seen: int
+) -> None:
+    handler = type("Busy", (_Busy,), {"busy": busy, "seen": 0})
+    server = http.server.HTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        fetch = takedown_check.http(
+            f"http://127.0.0.1:{server.server_address[1]}", retries=retries, timeout=10
+        )
+        got, _body = fetch(f"{takedown_check.API}/meta", {})
+    finally:
+        server.shutdown()
+    assert (got, handler.seen) == (status, seen)

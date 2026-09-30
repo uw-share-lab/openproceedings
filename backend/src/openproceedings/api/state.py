@@ -381,9 +381,13 @@ class IndexState:
         try:
             # first: a bad list changes nothing; once a list is applied, a missing file is a failure, never a
             # silent lifting of every takedown (an unmounted or renamed takedowns/)
-            listed = load_takedowns(
-                list_path(self._data_dir), required=served is not None and bool(served.listed)
-            )
+            # one read tells both what the list says and whether it exists (no race between the two)
+            try:
+                listed, present = load_takedowns(list_path(self._data_dir), required=True), True
+            except TakedownError as e:
+                if e.reason != "takedowns_missing" or (served is not None and served.listed):
+                    raise
+                listed, present = NONE, False
             path = index_path(self._data_dir, self._name)
             attempted = path.name
             if served is not None and path.name == served.engine.index_version:
@@ -405,7 +409,6 @@ class IndexState:
                 return True
             engine = self._gated(self._opener(path))  # verifies every file; the live engine is untouched
             records = snapshot_records(self._data_dir, path, engine.index_version)
-            present = list_path(self._data_dir).is_file()
             if not present and records.withheld:  # this deployment has takedowns: the list can't just be gone
                 raise TakedownError(
                     "the takedown list is missing, yet the index's snapshot withheld abstracts: restore it (or "

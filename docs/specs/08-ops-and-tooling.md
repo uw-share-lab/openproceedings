@@ -259,7 +259,7 @@ documents both variables.
   keeps what it serves (at startup it serves nothing, 503). A missing file is an empty list, except when the
   API already applies a non-empty list, or the index it loads has a snapshot that withheld abstracts: then a
   missing file fails the load (`takedowns_missing`), so an unmounted or renamed `takedowns/` never lifts every
-  takedown silently; empty the file to lift them all. Every load logs `takedowns_list` (`present`/`absent`). Never committed:
+  takedown silently; empty the file to lift them all. Every index load and swap (`index_loaded`, `index_swapped`) logs `takedowns_list` (`present`/`absent`). Never committed:
   `.gitignore` ignores every `takedowns/` directory and `protect-data-dir.sh` refuses `git add` of a path
   through one.
 - **How it is applied.** (1) Log the request (below). (2) Add the id to the list and send the API SIGHUP: from

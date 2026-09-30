@@ -766,7 +766,13 @@
  {
   "label": "a magic pathspec not read as the whole tree",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "    return not paths or any(x.startswith(\":\") for x in paths)",
-  "new": "    return not paths"
+  "old": "        or any(x.startswith(\":\") for x in paths)",
+  "new": "        or False"
+ },
+ {
+  "label": "paths from a file not read as the whole tree",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        or any(x.startswith(\"--pathspec-from-file\") for x in args)  # `=file` or a separate `file` argument",
+  "new": "        or False"
  }
 ]

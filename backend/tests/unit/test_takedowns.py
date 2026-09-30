@@ -151,7 +151,15 @@ def test_the_cell_query_names_the_ids_venue_and_year_and_every_track_and_status(
 
 @pytest.mark.parametrize(
     ("header", "seconds"),
-    [(None, 1.0), ("3", 3.0), ("600", 60.0), ("Wed, 21 Oct 2026 07:28:00 GMT", 1.0), ("-1", 1.0)],
+    [
+        (None, 1.0),
+        ("3", 3.0),
+        ("600", 60.0),
+        ("Wed, 21 Oct 2026 07:28:00 GMT", 1.0),
+        ("-1", 1.0),
+        ("٣", 1.0),
+        ("²", 1.0),
+    ],
 )
 def test_retry_after_reads_whole_seconds_only(header: str | None, seconds: float) -> None:
     assert takedown_check.retry_after(header) == seconds

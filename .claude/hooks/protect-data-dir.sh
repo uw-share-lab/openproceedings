@@ -88,7 +88,11 @@ def whole_tree(args):
     """A forced `git add` that may stage the whole work tree: no path argument (`-f`, `-fA`, and
     `--pathspec-from-file=…`, whose paths the hook can't see) or a `:` magic pathspec (`:/`)."""
     paths = [x for x in args if not x.startswith("-")]
-    return not paths or any(x.startswith(":") for x in paths)
+    return (
+        not paths
+        or any(x.startswith("--pathspec-from-file") for x in args)  # `=file` or a separate `file` argument
+        or any(x.startswith(":") for x in paths)
+    )
 
 def inside_immutable(r):
     return r is not None and (r.startswith("data/snapshots/") or r.startswith("data/indexes/"))

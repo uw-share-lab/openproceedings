@@ -240,6 +240,7 @@ check $P block "git add -f ':/' (magic pathspec)"     "$(payload_bash "git add -
 check $P block "git add -f '*.jsonl' (git's * crosses /)" "$(payload_bash "git add -f '*.jsonl'")"
 check $P block "git stage -f ops"                     "$(payload_bash 'git stage -f ops')"
 check $P block "git add -f --pathspec-from-file=x"    "$(payload_bash 'git add -f --pathspec-from-file=list.txt')"
+check $P block "git add -f --pathspec-from-file x"    "$(payload_bash 'git add -f --pathspec-from-file list.txt')"
 check $P allow "git add -A unforced"                  "$(payload_bash 'git add -A')"
 check $P allow "git add -f a dir with no takedowns/"   "$(payload_bash 'git add -f backend')"
 rm -rf "$REPO/ops"
