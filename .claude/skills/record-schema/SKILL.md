@@ -71,7 +71,8 @@ claim only: an OpenReview venueid claim → its status (in a v1 venue-year, none
 `venue_string` claim, OpenReview's `content.venue`, decides through `classify_v1_venue` when every such
 claim's evidence names the record's venueid and the string names the venueid's venue, year and track,
 evidence `scholarmend:openreview_api venueid=… venue_string=…`; else `unknown`, the evidence saying why;
-TASK-098); a proceedings listing (NeurIPS/ICLR proceedings URL, or a PMLR URL in an ICML volume) → `accepted`, overriding a venueid that agrees on venue, year and track
+TASK-098. ICLR 2013/2017's lower-case `conference` venueid names no track, so there the string gives the
+track too, with the same evidence, when it names the venueid's venue and year; TASK-142); a proceedings listing (NeurIPS/ICLR proceedings URL, or a PMLR URL in an ICML volume) → `accepted`, overriding a venueid that agrees on venue, year and track
 (one that disagrees is a `conflict` and the record is skipped). A record with neither is never imported,
 so a RIS record is never `unknown` for lack of a claim. It is **never** inferred from the paper appearing
 in Scholar. The abstract is never Scholar's (`null` instead).

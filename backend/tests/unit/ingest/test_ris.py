@@ -8,7 +8,10 @@ date; 10 a forum scholarmend couldn't resolve; 11 a neurips.cc media link.
 `fixtures/ris/v1/` rows carry scholarmend 0.1.4's `venue_string` claim (hand-written, TASK-098): 0 ICLR 2022
 Poster; 1 NeurIPS 2021 Oral; 2 ICLR 2022 Submitted; 3 ICLR 2023 withdrawn (`""`); 4 an unmapped ICLR 2023
 string; 5 ICLR 2024 (v2: ignored); 6 an ICLR 2022 venueid whose venue string's evidence names another venueid;
-7 the same with a string that agrees with the venueid; 8 two agreeing claims, one with another venueid's evidence.
+7 the same with a string that agrees with the venueid; 8 two agreeing claims, one with another venueid's evidence;
+9–13 ICLR 2017's lower-case `conference` venueid (track `other`; TASK-142) with `ICLR 2017 Poster`, `ICLR 2017 Oral`,
+`ICLR 2017 Invite to Workshop`, `Submitted to ICLR 2017` and another year's `ICLR 2022 Poster`; 14 an ICLR 2023
+blog post (`Blogposts @ ICLR 2023`).
 """
 
 from __future__ import annotations
@@ -45,6 +48,12 @@ V1 = {
     "other_note": "op:iclr:2022:V1Disagr01",
     "agreeing_other_note": "op:iclr:2022:V1Agree001",
     "one_bad_claim": "op:iclr:2022:V1OneBad01",
+    "2017_poster": "op:iclr:2017:V1Ic17Pos1",
+    "2017_oral": "op:iclr:2017:V1Ic17Ora1",
+    "2017_workshop": "op:iclr:2017:V1Ic17Wks1",
+    "2017_rejected": "op:iclr:2017:V1Ic17Rej1",
+    "2017_another_year": "op:iclr:2017:V1Ic17Yr01",
+    "2023_blogpost": "op:iclr:2023:V1Blog2301",
 }
 
 Entries = list[dict[str, Any]]
@@ -664,8 +673,13 @@ def v1_imported() -> Imported:
 
 def test_v1_fixture_counts(v1_imported: Imported) -> None:
     by_id, report = v1_imported
-    assert set(by_id) == set(V1.values()) and (report.read, report.imported) == (9, 9)
-    assert report.track_status == {"main": {"accepted": 2, "rejected": 2, "unknown": 5}}
+    assert set(by_id) == set(V1.values()) and (report.read, report.imported) == (15, 15)
+    assert report.track_status == {
+        "main": {"accepted": 4, "rejected": 3, "unknown": 5},
+        "workshop": {"unknown": 1},
+        "other": {"unknown": 1},
+        "blogpost": {"accepted": 1},
+    }
     assert report.status_overrides == 0
 
 
@@ -721,6 +735,96 @@ def test_a_v1_venue_string_gives_status_with_its_provenance(
     assert {c.evidence for c in r.provenance if c.field in ("venue", "year", "track")} == {
         f"scholarmend:openreview_api venueid={r.venue_id_raw}"
     }
+
+
+@pytest.mark.parametrize(
+    ("row", "track", "status", "string"),
+    [
+        ("2017_poster", "main", "accepted", "ICLR 2017 Poster"),
+        ("2017_oral", "main", "accepted", "ICLR 2017 Oral"),
+        # invited to the workshop track: not a main-track acceptance, and whether it was presented isn't said
+        ("2017_workshop", "workshop", "unknown", "ICLR 2017 Invite to Workshop"),
+        ("2017_rejected", "main", "rejected", "Submitted to ICLR 2017"),
+    ],
+)
+def test_an_other_track_v1_venueid_takes_track_and_status_from_the_venue_string(
+    v1_imported: Imported, row: str, track: str, status: str, string: str
+) -> None:
+    """TASK-142: ICLR 2017 puts `ICLR.cc/2017/conference` on every conference note, workshop invitations
+    included, so the venueid's track is `other` and `content.venue` gives track and status (openreview-venueids
+    table), as the v1 crawler reads it. Venue and year still come from the venueid, and must agree."""
+    by_id, _ = v1_imported
+    r = by_id[V1[row]]
+    assert (r.venue, r.year, r.track, r.status) == ("ICLR", 2017, track, status)
+    assert r.venue_id_raw == "ICLR.cc/2017/conference"
+    used = f"scholarmend:openreview_api venueid=ICLR.cc/2017/conference venue_string={string}"
+    assert [c.evidence for c in r.claims("track")] == [used]
+    assert [c.evidence for c in r.claims("status")] == [used]
+    assert {c.evidence for c in r.provenance if c.field in ("venue", "year")} == {
+        "scholarmend:openreview_api venueid=ICLR.cc/2017/conference"
+    }
+
+
+def test_an_other_track_v1_venueid_refuses_another_years_venue_string(v1_imported: Imported) -> None:
+    by_id, _ = v1_imported
+    r = by_id[V1["2017_another_year"]]
+    assert (r.track, r.status) == ("other", "unknown")
+    base = "scholarmend:openreview_api venueid=ICLR.cc/2017/conference"
+    assert [c.evidence for c in r.claims("track")] == [base]
+    assert [c.evidence for c in r.claims("status")] == [
+        f"{base} " + NOT_STATUS.format("ICLR 2022 Poster names ICLR 2022 main")
+    ]
+
+
+def test_an_iclr_2023_blog_post_takes_status_from_its_venue_string(v1_imported: Imported) -> None:
+    """`ICLR.cc/2023/BlogPosts` already names the `blogpost` track, so the string must name it too."""
+    by_id, _ = v1_imported
+    r = by_id[V1["2023_blogpost"]]
+    assert (r.track, r.status) == ("blogpost", "accepted")
+    vid = "venueid=ICLR.cc/2023/BlogPosts"
+    assert [c.evidence for c in r.claims("track")] == [f"scholarmend:openreview_api {vid}"]
+    assert [c.evidence for c in r.claims("status")] == [
+        f"scholarmend:openreview_api {vid} venue_string=Blogposts @ ICLR 2023"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("vid", "string", "reason"),
+    [
+        # ICLR 2013's lower-case `conference` venueid: no 2013 string is in the v1 table
+        ("ICLR.cc/2013/conference", "ICLR 2017 Poster", "ICLR 2017 Poster names ICLR 2017 main"),
+        # an `other` venueid the table doesn't say takes its track from `content.venue`: never guessed as main
+        (
+            "NeurIPS.cc/2022/Challenge/CellSeg",
+            "NeurIPS 2022 Accept",
+            "NeurIPS 2022 Accept names NeurIPS 2022 main",
+        ),
+        # a status suffix on the 2017 form isn't the form the table names
+        (
+            "ICLR.cc/2017/conference/Withdrawn_Submission",
+            "ICLR 2017 Poster",
+            "ICLR 2017 Poster names ICLR 2017 main",
+        ),
+    ],
+)
+def test_only_the_tables_other_track_forms_take_track_from_the_venue_string(
+    tmp_path: Path, vid: str, string: str, reason: str
+) -> None:
+    def edit(e: Entries) -> None:
+        for c in e[9]["claims"]:  # row 9: the ICLR 2017 poster
+            if c["source"] == "openreview_api":
+                c["evidence"] = f"venueid={vid}"
+                if c["field"] == "venue_id":
+                    c["value"] = vid
+                if c["field"] == "venue_string":
+                    c["value"] = string
+
+    by_id, _ = run(tmp_path, edit, V1_FIXTURE)
+    [r] = [r for r in by_id.values() if r.venue_id_raw == vid]
+    assert (r.track, r.status) == ("other", "unknown")
+    assert r.claims("status")[0].evidence == f"scholarmend:openreview_api venueid={vid} " + NOT_STATUS.format(
+        reason
+    )
 
 
 def set_venue_string(row: int, value: object) -> Callable[[Entries], None]:
@@ -792,3 +896,54 @@ def test_a_listing_overrides_a_v1_venue_strings_rejection(tmp_path: Path) -> Non
     r = by_id[V1["submitted"]]
     assert (r.track, r.status) == ("main", "accepted") and report.status_overrides == 1
     assert r.claims("status")[0].evidence.endswith(" (overrides venue_string status rejected)")  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize(
+    ("row", "key", "string", "status", "override"),
+    [
+        (9, "2017_poster", "ICLR 2017 Poster", "accepted", False),  # the listing agrees: nothing to override
+        (
+            12,
+            "2017_rejected",
+            "Submitted to ICLR 2017",
+            "accepted",
+            True,
+        ),  # decision-005: the proceedings decide
+        (
+            11,
+            "2017_workshop",
+            "ICLR 2017 Invite to Workshop",
+            None,
+            False,
+        ),  # workshop vs a main listing: conflict
+        (13, "2017_another_year", "ICLR 2022 Poster", None, False),  # refused, so `other` vs main: conflict
+    ],
+)
+def test_a_listing_meets_the_track_an_other_venueid_takes_from_its_venue_string(
+    tmp_path: Path, row: int, key: str, string: str, status: str | None, override: bool
+) -> None:
+    """TASK-142: before it, an ICLR 2017 `conference` record with a listing was always a conflict (`other`
+    vs main); now the listing is checked against the string's track, which keeps its venue_string evidence."""
+
+    def with_listing(e: Entries) -> None:
+        url = f"https://proceedings.iclr.cc/paper_files/paper/2017/hash/{H1}-Abstract-Conference.html"
+        e[row]["claims"] += [
+            claim(f, v, "proceedings_url", url)
+            for f, v in (("venue", "ICLR"), ("year", "2017"), ("track", "Conference"))
+        ]
+
+    (tmp_path / "base").mkdir()
+    (tmp_path / "edited").mkdir()
+    base = run(tmp_path / "base", lambda e: None, V1_FIXTURE)[1]
+    by_id, report = run(tmp_path / "edited", with_listing, V1_FIXTURE)
+    if status is None:
+        assert V1[key] not in by_id and report.skipped["conflict"] == base.skipped["conflict"] + 1
+        return
+    r = by_id[V1[key]]
+    assert (r.track, r.status) == ("main", status) and report.status_overrides == int(override)
+    assert [c.evidence for c in r.claims("track")] == [
+        f"scholarmend:openreview_api venueid=ICLR.cc/2017/conference venue_string={string}"
+    ]
+    [ev] = [c.evidence for c in r.claims("status")]
+    assert ev is not None and ev.startswith("scholarmend:proceedings_url https://proceedings.iclr.cc/")
+    assert ev.endswith(" (overrides venue_string status rejected)") is override

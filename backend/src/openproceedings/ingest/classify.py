@@ -180,6 +180,14 @@ _V1_VENUE: dict[str, tuple[str, int, str, str]] = {
 }  # fmt: skip
 
 
+# v1 venueids that name no track (openreview-venueids table): ICLR 2013's and 2017's lower-case `conference`, which
+# 2017 puts on workshop invitations too. They classify as `other`; in the RIS importer a note's `content.venue` gives
+# its track as well as its status (TASK-142), and another `other` venueid's track is never taken from the string (the
+# v1 crawler, scoped by its listings, uses `openreview_v1._NOT_A_TRACK` instead). 2013 is listed to match the table:
+# no 2013 string is in `_V1_VENUE`, so a 2013 record stays `other`/`unknown`.
+V1_TRACK_FROM_VENUE = frozenset({"ICLR.cc/2013/conference", "ICLR.cc/2017/conference"})
+
+
 def classify_v1_venue(venue_string: str) -> Classification:
     """Venue, year, track and status from an API v1 submission note's `content.venue`, matched exactly: a v1
     year's status evidence, with the decision note and the withdrawn / desk-rejected invitations. An unlisted
