@@ -471,9 +471,8 @@ def _check_year_edit(case: YearEditCase, ranges: list[YearRange]) -> None:
     year = filters.year
     event(f"mode: {mode}")
     event(f"source: {case.source}")
-    if (
-        case.reason is not None
-    ):  # a near miss: filter_clauses must refuse it, for the reason it was built with
+    # a near miss: filter_clauses must refuse it, for the reason it was built with
+    if case.reason is not None:
         event(f"near miss: {case.reason}")
         assert not year.toggleable and year.reason == case.reason, (q, year.reason)
         return
@@ -482,6 +481,10 @@ def _check_year_edit(case: YearEditCase, ranges: list[YearRange]) -> None:
     clause = _year_clause(ranges)
     edited = f"({q}) AND {clause}" if start == end == len(q) else q[:start] + clause + q[end:]
     event("year clause: absent (wrapped)" if start == end == len(q) else "year clause: present (spliced)")
+    if " OR year:" in q[start:end]:
+        event("year clause: an OR of year filters")
+    if q.count("year:") > q[start:end].count("year:"):
+        event("year filter nested beside the clause")
     assert len(edited) <= MAX_QUERY_LENGTH, edited
     after = parse(edited, mode)
     assert after.errors == [], (edited, [e.code for e in after.errors])
@@ -495,7 +498,9 @@ def _check_year_edit(case: YearEditCase, ranges: list[YearRange]) -> None:
 _WIDEST = list(clauses.WIDEST_YEAR)
 
 
-# One near miss per reason, pinned (year_edit_cases builds each only now and then), and the widest edit that fits
+# One near miss per reason, pinned (year_edit_cases builds each only now and then); the cap's boundary (1,862
+# code points still fit, 1,863 don't); a year filter nested beside the top-level clause; an OR of year filters as
+# the clause
 @example(case=YearEditCase("trust -year:2021", "native", "pinned", "negated"), ranges=_WIDEST)
 @example(
     case=YearEditCase("trust year:2021 year:2020..2022", "scholar", "pinned", "multiple_clauses"),
@@ -505,10 +510,17 @@ _WIDEST = list(clauses.WIDEST_YEAR)
 @example(
     case=YearEditCase("trust (year:2021 OR track:main)", "scholar", "pinned", "mixed_fields"), ranges=_WIDEST
 )
-@example(case=YearEditCase("a" * 1_880, "native", "pinned", "too_long"), ranges=_WIDEST)
+@example(case=YearEditCase("a" * 1_863, "native", "pinned", "too_long"), ranges=_WIDEST)
 @example(case=YearEditCase("year:2021 " + "a" * 1_900, "scholar", "pinned", "too_long"), ranges=_WIDEST)
 @example(case=YearEditCase("(" * 64 + "a" + ")" * 64, "native", "pinned", "too_deep"), ranges=_WIDEST)
-@example(case=YearEditCase("a" * 1_853, "scholar", "pinned"), ranges=_WIDEST)
+@example(case=YearEditCase("trust NOT NOT (year:2021 x)", "scholar", "pinned", "nested"), ranges=_WIDEST)
+@example(case=YearEditCase("a" * 1_863, "scholar", "pinned", "too_long"), ranges=_WIDEST)
+@example(case=YearEditCase("a" * 1_862, "native", "pinned"), ranges=_WIDEST)
+@example(
+    case=YearEditCase("year:2021 (year:2023 OR x) NOT (year:2017 a)", "native", "pinned"), ranges=_WIDEST
+)
+@example(case=YearEditCase("x (year:2021 OR year:2020..2022)", "scholar", "pinned"), ranges=_WIDEST)
+@example(case=YearEditCase("a" * 1_862, "scholar", "pinned"), ranges=_WIDEST)
 @given(case=year_edit_cases(), ranges=_RANGES)
 @settings(deadline=None)
 def test_every_year_edit_on_a_toggleable_clause_parses_and_edits_only_that_clause(
