@@ -164,7 +164,7 @@ AREAS: dict[str, dict[str, list[str]]] = {
         ],
         "commands": ["design-feature", "usability-study"],
     },
-    "Semantic layer (spec 06)": {
+    "Semantic layer (spec 06, deferred: phase 2)": {
         "agents": ["embedding-engineer", "near-miss-evaluator"],
         "skills": ["specter2-embeddings"],
         "commands": [],

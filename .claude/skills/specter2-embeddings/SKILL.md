@@ -1,9 +1,13 @@
 ---
 name: specter2-embeddings
-description: The semantic-layer standard (spec 06, M5) — SPECTER2 base plus proximity adapter pinned by revision, semantic_version, one float16 .npy per index_version with its metadata, deterministic brute-force cosine, the title-only flag, the query centroid, and the rule that embeddings never change membership and are disabled on any version mismatch. Use when working in backend/src/openproceedings/semantic/, on `op embed build`, sort=semantic or /near-misses, or reviewing anything that lets embeddings near a result set.
+description: The semantic-layer standard (spec 06, M5, deferred to phase 2 by decision-017, not v1 work) — SPECTER2 base plus proximity adapter pinned by revision, semantic_version, one float16 .npy per index_version with its metadata, deterministic brute-force cosine, the title-only flag, the query centroid, and the rule that embeddings never change membership and are disabled on any version mismatch. Use when working in backend/src/openproceedings/semantic/, on `op embed build`, sort=semantic or /near-misses, or reviewing anything that lets embeddings near a result set.
 ---
 
 # SPECTER2 embeddings (spec 06)
+
+**Deferred (decision-017, 2026-09-29).** v1 is Boolean search only; the semantic layer (spec 06, M5) is
+phase 2 and not v1 work. Its tasks (TASK-058 to 062, TASK-084) are labelled `deferred`. Don't start them
+without a decision that supersedes decision-017.
 
 ## The rule (guarantee 5), which comes before everything else
 Embeddings may **re-order** the lexical matched set and **suggest** unmatched papers in a separate

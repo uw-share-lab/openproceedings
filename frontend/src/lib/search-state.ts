@@ -19,7 +19,7 @@ import defaultLimits from "./default-limits.json";
 export const MODES = ["native", "scholar"] as const;
 export type Mode = (typeof MODES)[number];
 
-/** Spec 03 §Ranking. `semantic` joins when spec 06 is enabled. */
+/** Spec 03 §Ranking. `semantic` (deferred) joins when spec 06 is enabled. */
 export const SORTS = ["relevance", "year_desc", "year_asc", "title"] as const;
 export type Sort = (typeof SORTS)[number];
 

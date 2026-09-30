@@ -147,7 +147,7 @@ def test_sort_keys(two: tuple[TantivyEngine, TantivyEngine]) -> None:
 def test_an_unknown_sort_is_a_bad_parameter(two: tuple[TantivyEngine, TantivyEngine]) -> None:
     with pytest.raises(EngineInputError, match="sort must be one of"):
         ranked(two[0], "trust", "citations")
-    with pytest.raises(EngineInputError, match="task-059"):
+    with pytest.raises(EngineInputError, match="deferred to phase 2 \\(decision-017\\)"):
         ranked(two[0], "trust", "semantic")
 
 

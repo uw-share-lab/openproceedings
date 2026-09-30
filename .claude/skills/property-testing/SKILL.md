@@ -51,7 +51,7 @@ Not yet: stems near the 200-expansion cap (needs the 5k fixture, task-057).
 2. **Canonical idempotence:** `parse(parse(s).canonical).canonical == parse(s).canonical`.
 3. **Round-trip:** `parse(render(ast)).ast == ast` for generated ASTs.
 4. **Differential:** `TantivyEngine.match_ids(ast) == ReferenceEngine.match_ids(ast)` on the 5k fixture.
-5. **Ranking invariance:** `set(ids)` identical across `sort` values and with the semantic layer on/off.
+5. **Ranking invariance:** `set(ids)` identical across `sort` values, and with the semantic layer on/off once 06 is built.
 6. **Dedup:** never merges across venue or year, never merges on `(title, "")`, and is idempotent.
 7. **Tokenizer:** `normalize(" ".join(normalize(x))) == normalize(x)`.
 

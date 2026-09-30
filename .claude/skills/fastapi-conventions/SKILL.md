@@ -8,7 +8,7 @@ description: How the openproceedings FastAPI service is built — /api/v1 base p
 ## App shape
 - One app factory, `create_app(config) -> FastAPI`, in `backend/src/openproceedings/api/`. Routers per
   resource (`search`, `parse`, `papers`, `export`, `records`, `coverage`, `meta`, `health`, and
-  `near_misses` at M5), all mounted under **`/api/v1`**, `/healthz` included (spec 04 §Endpoints: liveness and whether the
+  `near_misses` at M5, deferred to phase 2 by decision-017), all mounted under **`/api/v1`**, `/healthz` included (spec 04 §Endpoints: liveness and whether the
   index is loaded). Nothing is served outside `/api/v1`. Declare each router with
   `APIRouter(prefix=API_PREFIX)` and include it directly. Don't nest routers: FastAPI 0.141 keeps
   `scope["route"].path` relative to the declaring router, so the access line would log `/search` instead

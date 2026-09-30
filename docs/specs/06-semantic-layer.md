@@ -1,6 +1,10 @@
 # 06 — Semantic layer (phase 2, M5)
 
-Status: **draft for review** · depends on: 01, 03, 04 · consumed by: 05
+Status: **deferred: not in v1** (decision-017, 2026-09-29; v1 is Boolean search only) · **draft for review** · depends on: 01, 03, 04 · consumed by: 05
+
+Nothing below is built or planned for the v1 release. The design is kept for phase 2; its tasks (TASK-058
+to 062, TASK-084) are labelled `deferred` in milestone M5. Resuming it takes a decision that supersedes
+decision-017.
 
 ## Purpose and the one rule
 

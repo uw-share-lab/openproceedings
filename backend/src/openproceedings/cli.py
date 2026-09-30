@@ -53,7 +53,10 @@ log = logging.getLogger(__name__)
 
 # subcommand -> (help text, the Backlog task that implements it)
 PLANNED: dict[str, tuple[str, str]] = {
-    "embed": ("build SPECTER2 embeddings for the current index (spec 06)", "task-058"),
+    "embed": (
+        "build SPECTER2 embeddings for the current index (spec 06; deferred to phase 2, decision-017)",
+        "task-058",
+    ),
 }
 # `op eval <report>` reports still to come -> the task that implements them (coverage: TASK-054)
 PLANNED_EVALS: dict[str, str] = {"scholar": "task-056", "audit": "task-055", "near-miss": "task-061"}
@@ -62,6 +65,8 @@ PLANNED_EVALS: dict[str, str] = {"scholar": "task-056", "audit": "task-055", "ne
 EXIT_MISMATCH = 3
 # `op ingest <source>` sources still to come -> the task that implements them
 PLANNED_SOURCES: dict[str, str] = {}  # none left: ris, openreview, neurips and pmlr are all implemented
+# tasks deferred to phase 2 with the semantic layer (spec 06, decision-017): their stubs say so
+DEFERRED_TASKS: frozenset[str] = frozenset({"task-058", "task-061"})
 MIN_DELAY = 0.5  # seconds between requests to a proceedings host: never faster (politeness)
 
 
@@ -74,6 +79,11 @@ def default_data_dir() -> Path:
         if (parent / "backend").is_dir() and (parent / "pyproject.toml").is_file():
             return parent / "data"
     return Path("data")
+
+
+def _stub_status(task: str) -> str:
+    """How a stub names its task: planned, or deferred to phase 2 with the semantic layer (decision-017)."""
+    return "deferred to phase 2 (decision-017)" if task in DEFERRED_TASKS else f"planned in {task}"
 
 
 def _stub(p: argparse.ArgumentParser, name: str, task: str) -> None:
@@ -148,7 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
         )
         crawl.set_defaults(run=_ingest_crawl)
     for name, task in PLANNED_SOURCES.items():
-        _stub(sources.add_parser(name, help=f"planned in {task}"), f"ingest {name}", task)
+        _stub(sources.add_parser(name, help=_stub_status(task)), f"ingest {name}", task)
 
     snapshot = sub.add_parser("snapshot", help="build or diff immutable corpus snapshots (spec 01)")
     actions = snapshot.add_subparsers(dest="action", metavar="<action>", required=True)
@@ -305,7 +315,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     cov.set_defaults(run=_eval_coverage)
     for name, task in PLANNED_EVALS.items():
-        _stub(reports.add_parser(name, help=f"planned in {task}"), f"eval {name}", task)
+        _stub(reports.add_parser(name, help=_stub_status(task)), f"eval {name}", task)
 
     for name, (help_text, task) in PLANNED.items():
         _stub(sub.add_parser(name, help=help_text, description=help_text), name, task)
@@ -1168,7 +1178,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if hasattr(ns, "stub"):
         name, task = ns.stub
         print(
-            f"op {name}: not implemented yet — planned in {task} (backlog task view {task})", file=sys.stderr
+            f"op {name}: not implemented yet — {_stub_status(task)}; see `backlog task view {task}`",
+            file=sys.stderr,
         )
         return 2
     name = _command(ns)

@@ -38,6 +38,8 @@ venues.
 - Citation graphs.
 - Any matching that goes beyond the literal query: stemming, synonyms, or embeddings deciding what
   matches.
+- The semantic layer ([06](06-semantic-layer.md): embedding re-sort and the near-miss panel). v1 is
+  Boolean search only; 06 is deferred to phase 2 (decision-017).
 
 ## Guarantees (the invariants every part must uphold)
 
@@ -71,7 +73,7 @@ venues.
                     canonicalize                  matcher (test oracle)
                                    │
                                    ▼
-                          backend API (04)  ◄──── semantic layer (06, phase 2)
+                          backend API (04)  ◄──── semantic layer (06, deferred: phase 2)
                           FastAPI: search · parse · export ·        re-sort + near-miss panel
                           search records · coverage
                                    │
@@ -89,7 +91,7 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
 | Ingestion, query, index, API | **Python 3.12**, `uv`, FastAPI, pydantic v2 | Matches the lab's tools. The lab's own PyPI packages are pinned dependencies rather than copied code: `scholarmend` (RIS parsing, OpenReview venueid parsing and client, cache, claim ledger) for ingestion, and `refaudit` (BibTeX parser) for export tests. |
 | Index | **Tantivy** via `tantivy-py` | Rust speed, positional index, phrase/slop/regex queries, BM25, and custom tokenizers with no stemmer. |
 | Frontend | **Next.js (App Router) + TypeScript** | The lab already has Next.js experience. Hosting doesn't depend on Vercel. |
-| Semantic (phase 2) | SPECTER2 + a flat in-memory vector index | Built for scientific papers. About 80k vectors fit in RAM, so no vector database is needed. |
+| Semantic (deferred: phase 2, decision-017) | SPECTER2 + a flat in-memory vector index | Built for scientific papers. About 80k vectors fit in RAM, so no vector database is needed. Not in v1. |
 | Packaging | Docker Compose (`api`, `web`, read-only data volume) | Hosting location is undecided. The index is read-only files, so it can run anywhere. |
 
 ## Parts and specs
@@ -101,7 +103,7 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
 | 03 | [Search engine](03-search-engine.md) | Tokenizer, index schema, AST→Tantivy compilation, ranking, reference matcher, versioning |
 | 04 | [Backend API](04-backend-api.md) | HTTP contract, exports, search records, coverage |
 | 05 | [Frontend](05-frontend.md) | Pages, query editor, query builder, filters, results, export |
-| 06 | [Semantic layer](06-semantic-layer.md) | Embeddings, semantic re-sort, near-miss panel (phase 2) |
+| 06 | [Semantic layer](06-semantic-layer.md) | Embeddings, semantic re-sort, near-miss panel (deferred: phase 2, decision-017) |
 | 07 | [Evaluation](07-evaluation.md) | Exactness fixtures, differential tests, Scholar comparison, coverage and performance |
 | 08 | [Ops and tooling](08-ops-and-tooling.md) | Repo layout, CLI, CI, Docker, branch/PR rules, `.claude/` agents and skills roster |
 
@@ -114,7 +116,7 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
 | M2 | Index + CLI search over the Trust-Evals corpus (RIS import) (01 §RIS, 03) | `op search "<Most Updated string>"` runs. Differential tests against the oracle are green. |
 | M3 | API + frontend MVP (04, 05) | The team can run the review's queries in a browser and export RIS into Covidence. |
 | M4 | Full crawl of OpenReview and proceedings (01) | Every main-track and D&B cell with an official accepted count is within ±1%, or an owner-accepted exception (07 §C). |
-| M5 | Semantic layer (06) | Near-miss panel live. The invariant test proves membership never changes. |
+| M5 | Semantic layer (06): **deferred** to phase 2 (decision-017); not on the v1 path | When resumed: near-miss panel live, and the invariant test proves membership never changes. |
 | M6 | Hosting + public release | Licensing question resolved, repo made public, instance deployed. |
 
 ## Open questions (decide before the milestone named)

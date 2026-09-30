@@ -17,7 +17,7 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `backend/src/openproceedings/query/` | 02: `normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`, `ast.py`, `canonical.py`, `defaults.py`, `compat.py` | Pure; no I/O |
 | `backend/src/openproceedings/engine/` | 03: `protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py` (ranking included), `exclusions.py`, `highlight.py`, `parity.py` | Pure except index file reads |
 | `backend/src/openproceedings/api/` | 04: `app.py`, `config.py`, `state.py`, `deps.py`, `errors.py`, `middleware.py`, `models.py` (the contract), `openapi.py`, `server.py`; routers `search.py`, `papers.py`, `meta.py`, `coverage.py`, `records.py`, `export.py`, `health.py` | Transport only: routes call the package-level functions below |
-| `backend/src/openproceedings/semantic/` | 06 (phase 2) | Never imported by `query/` or `engine/` matching code |
+| `backend/src/openproceedings/semantic/` | 06 (deferred: phase 2, decision-017; not created) | Never imported by `query/` or `engine/` matching code |
 | `backend/src/openproceedings/eval/` | 07 report generators | Writes to `docs/results/` |
 | `backend/src/openproceedings/diagnostics.py` | The error-code registry (`error-diagnostics`) | |
 | `backend/src/openproceedings/vocab.py` | Venue, track and status vocabularies (spec 01), shared by ingest and the query language | Pure |

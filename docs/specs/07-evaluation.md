@@ -15,7 +15,7 @@ build). Others are reports (they're regenerated and committed as dated results, 
 | Golden queries | Query → expected ID set on a hand-built 200-record fixture, with the cases written to be tricky (benchmark/benchmarking, trust/trustworthy, hyphens, LaTeX, phrases that span fields, NEAR ordering) | 100% pass |
 | Differential | Hypothesis random ASTs: `TantivyEngine == ReferenceEngine` on the synthetic 5k fixture snapshot (decision-004) | 0 counterexamples in 200 examples per PR CI run, 2,000 and 50k nightly |
 | Tokenizer parity | Stored text, positions (phrase read-back) and every term's document frequency in the index == `normalize.py`, over the whole corpus (term frequency only as far as the phrases imply) | 0 diffs |
-| Semantic invariant | Search results identical with 06 on and off | 0 diffs |
+| Semantic invariant (deferred with 06, decision-017; not a v1 gate) | Search results identical with 06 on and off | 0 diffs, once 06 is built |
 | Determinism | Same canonical query + `index_version` → identical order and scores | 0 diffs |
 
 As built (task-028): the differential is `backend/tests/differential/`, on a synthetic 5k corpus generated
@@ -120,9 +120,11 @@ The ~80k numbers, and the position-verified cases spec 03 exempts, are a report
 (`backend/tests/bench/report_80k.py` → `docs/results/<date>-bench.md`), from the same synthetic generator at
 80k with abstracts of realistic length. The nightly full-index run is task-057.
 
-## F. Usefulness of near-misses (report, M5)
+## F. Usefulness of near-misses (report, M5: deferred)
 
-This is 06's recall@25 protocol, using the review's Covidence included set as ground truth.
+This is 06's recall@25 protocol, using the review's Covidence included set as ground truth. Deferred with
+06 (decision-017): v1 is Boolean search only, so neither this report nor §A's semantic invariant is a v1
+release gate. Both become required when the semantic layer is built.
 
 ## Error handling
 
@@ -136,7 +138,7 @@ This is 06's recall@25 protocol, using the review's Covidence included set as gr
 ## Testing
 
 The evaluation tooling is tested like any other code:
-- The report generators (`op eval scholar|coverage|audit|near-miss`) have unit tests on fixture inputs
+- The report generators (`op eval scholar|coverage|audit`, and `near-miss` when 06 is built) have unit tests on fixture inputs
   with known answers. For example, a coverage fixture with one cell off by 2% must fail the gate.
 - The CI gates in §A are checked for teeth by mutation. Deleting the comparison, or the oracle call, must
   make the suite fail (`qa-auditor`).
