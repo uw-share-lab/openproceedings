@@ -4,7 +4,7 @@ title: 'Deploy: compose, Caddy TLS, index promotion runbook'
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-30 02:56'
+updated_date: '2026-09-30 20:06'
 labels:
   - ops
 milestone: m-6
@@ -24,6 +24,7 @@ Spec 08 §Deploy (release-manager).
 <!-- AC:BEGIN -->
 - [ ] #1 docker compose up serves api + web over TLS
 - [ ] #2 Index promotion documented and tested; the runbook covers retire (implemented in TASK-085)
+- [ ] #3 The api container mounts only `<data-dir>/takedowns/withheld.txt` read-only, never `takedowns/log.jsonl`, and doesn't run as root or as the operator account that owns the log (source: TASK-136 deferral)
 <!-- AC:END -->
 
 ## Implementation Notes
