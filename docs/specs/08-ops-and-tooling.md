@@ -333,7 +333,8 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
   or its index; a `--release` version the two manifests don't both carry or that isn't newer than the latest
   tag; a merge commit the clone lacks, once there is a tag or `--release` to place it against
   (`git fetch origin --tags`); malformed input; and a PR title or note with an AI-attribution marker (checked
-  on the raw text with its whitespace collapsed), an `@`-mention, an email address or a URL (release notes
+  on the plain text: format and other default-ignorable characters dropped, whitespace collapsed, and NFKC
+  for the check; titles and notes render the same plain text), an `@`-mention, an email address or a URL (release notes
   name roles and link only PRs; an npm scope such as `@types/node` and a pin such as `next@15.1.0` pass; edit
   a refused title through the REST API).
 - `--check` exits 1 when the file differs; `--notes X.Y.Z` prints one release's section (the release notes).
