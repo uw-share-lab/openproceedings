@@ -7,7 +7,8 @@ date; 10 a forum scholarmend couldn't resolve; 11 a neurips.cc media link.
 
 `fixtures/ris/v1/` rows carry scholarmend 0.1.4's `venue_string` claim (hand-written, TASK-098): 0 ICLR 2022
 Poster; 1 NeurIPS 2021 Oral; 2 ICLR 2022 Submitted; 3 ICLR 2023 withdrawn (`""`); 4 an unmapped ICLR 2023
-string; 5 ICLR 2024 (v2: ignored); 6 an ICLR 2022 venueid whose venue string's evidence names another venueid.
+string; 5 ICLR 2024 (v2: ignored); 6 an ICLR 2022 venueid whose venue string's evidence names another venueid;
+7 the same with a string that agrees with the venueid; 8 two agreeing claims, one with another venueid's evidence.
 """
 
 from __future__ import annotations
@@ -42,6 +43,8 @@ V1 = {
     "unmapped": "op:iclr:2023:V1Unmapp01",
     "v2": "op:iclr:2024:V2Ignore01",
     "other_note": "op:iclr:2022:V1Disagr01",
+    "agreeing_other_note": "op:iclr:2022:V1Agree001",
+    "one_bad_claim": "op:iclr:2022:V1OneBad01",
 }
 
 Entries = list[dict[str, Any]]
@@ -661,8 +664,8 @@ def v1_imported() -> Imported:
 
 def test_v1_fixture_counts(v1_imported: Imported) -> None:
     by_id, report = v1_imported
-    assert set(by_id) == set(V1.values()) and (report.read, report.imported) == (7, 7)
-    assert report.track_status == {"main": {"accepted": 2, "rejected": 2, "unknown": 3}}
+    assert set(by_id) == set(V1.values()) and (report.read, report.imported) == (9, 9)
+    assert report.track_status == {"main": {"accepted": 2, "rejected": 2, "unknown": 5}}
     assert report.status_overrides == 0
 
 
@@ -688,6 +691,16 @@ NOT_STATUS = "(API v1 venue-year: not status evidence; venue_string not used: {}
         ("v2", "rejected", "venueid=ICLR.cc/2024/Conference/Rejected_Submission"),
         (
             "other_note",
+            "unknown",
+            "venueid=ICLR.cc/2022/Conference " + NOT_STATUS.format("its evidence names another venueid"),
+        ),
+        (
+            "agreeing_other_note",  # "ICLR 2022 Poster" would give accepted, but the evidence is another note's
+            "unknown",
+            "venueid=ICLR.cc/2022/Conference " + NOT_STATUS.format("its evidence names another venueid"),
+        ),
+        (
+            "one_bad_claim",  # one good claim doesn't outweigh a bad one: every claim must name the venueid
             "unknown",
             "venueid=ICLR.cc/2022/Conference " + NOT_STATUS.format("its evidence names another venueid"),
         ),

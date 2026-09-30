@@ -473,7 +473,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "pydantic", specifier = ">=2.8" },
-    { name = "scholarmend", specifier = ">=0.1.4" },
+    { name = "scholarmend", specifier = "==0.1.4" },
     { name = "tantivy", specifier = "==0.26.2" },
     { name = "uvicorn", specifier = ">=0.54.0" },
 ]

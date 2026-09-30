@@ -60,13 +60,16 @@ def orv(
     return out
 
 
-def v1(title: str, fid: str, vid: str, venue_string: str, evidence: str | None = None) -> None:
-    """An OpenReview record with scholarmend 0.1.4's `venue_string` claim (evidence: its venueid)."""
+def v1(title: str, fid: str, vid: str, venue_string: str, evidence: str | None = None,
+       also: tuple[str, str] | None = None) -> None:  # fmt: skip
+    """An OpenReview record with scholarmend 0.1.4's `venue_string` claim (evidence: its venueid), plus
+    optionally a second one (`also`: string, evidence)."""
     venue, year, track = vid.split("/", 2)
     venue = venue.removesuffix(".cc")
     add(title, ["Voe, V"], venue, [f"https://openreview.net/pdf?id={fid}"], int(year), "An OpenReview snippet …",
         [*orv(fid, vid, venue, int(year), track),
-         c("venue_string", venue_string, "openreview_api", evidence or f"venueid={vid}")], rows=V1_ROWS)  # fmt: skip
+         c("venue_string", venue_string, "openreview_api", evidence or f"venueid={vid}"),
+         *([c("venue_string", also[0], "openreview_api", also[1])] if also else [])], rows=V1_ROWS)  # fmt: skip
 
 
 ROWS: list[dict[str, Any]] = []  # mended.ris + resolved.json
@@ -154,6 +157,12 @@ v1(
 )
 v1("A Synthetic Venue String From Another Note", "V1Disagr01", "ICLR.cc/2022/Conference", "Submitted to ICLR 2023",
    evidence="venueid=ICLR.cc/2023/Conference")  # fmt: skip
+# the string agrees with the venueid, but its evidence names another note's: still not used
+v1("A Synthetic Agreeing String From Another Note", "V1Agree001", "ICLR.cc/2022/Conference", "ICLR 2022 Poster",
+   evidence="venueid=ICLR.cc/2023/Conference")  # fmt: skip
+# two claims with the same agreeing string, only one with bad evidence: every claim must name the venueid
+v1("A Synthetic Pair With One Bad Claim", "V1OneBad01", "ICLR.cc/2022/Conference", "ICLR 2022 Poster",
+   also=("ICLR 2022 Poster", "venueid=ICLR.cc/2023/Conference"))  # fmt: skip
 
 
 def write(rows: list[dict[str, Any]], out: Path) -> None:

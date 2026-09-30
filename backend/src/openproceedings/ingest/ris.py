@@ -14,7 +14,7 @@ never does:
 - **Status** comes from a claim only (spec 01): a venueid → its status, except that an API v1 venue-year's
   venueid (ICLR ≤2023, NeurIPS 2021–2022) is venue/year/track evidence only, since v1 puts the bare path on
   rejected papers too (TASK-095). There the status comes from scholarmend's `venue_string` claim (OpenReview's
-  `content.venue` verbatim, scholarmend ≥0.1.4; TASK-098) through `classify_v1_venue`, used only when its
+  `content.venue` verbatim, scholarmend 0.1.4; TASK-098) through `classify_v1_venue`, used only when its
   evidence names the record's venueid and the string names the venueid's venue, year and track; otherwise,
   or without one, it is `unknown` and the status evidence says why. Outside v1 years the claim is ignored. A
   proceedings listing → `accepted`. When both exist they must name the same venue, year and track (else the record is skipped as
@@ -196,7 +196,7 @@ def _v1_status(
     entry: dict[str, Any], vid: str, cls: Classification
 ) -> tuple[Classification, tuple[str, str], bool]:
     """An API v1 venue-year's status (its venueid gives none): scholarmend's `venue_string` claim, OpenReview's
-    `content.venue` verbatim (scholarmend >= 0.1.4), through `classify_v1_venue`. It is used only when its
+    `content.venue` verbatim (scholarmend 0.1.4), through `classify_v1_venue`. It is used only when its
     evidence names this record's venueid and the string names the venueid's venue, year and track; otherwise
     the status stays `unknown` and the evidence says why. Returns the classification, the status evidence and
     whether the string was used."""

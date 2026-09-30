@@ -3,10 +3,11 @@ id: TASK-098
 title: >-
   scholarmend emits content.venue as a claim so RIS imports of v1-year papers
   can take status from it
-status: In Progress
-assignee: []
+status: Done
+assignee:
+  - '@jeevanp03'
 created_date: '2026-09-27 21:11'
-updated_date: '2026-09-30 04:23'
+updated_date: '2026-09-30 04:31'
 labels:
   - ingest
 milestone: m-4
@@ -41,4 +42,12 @@ AC #1 was one criterion holding three (joined with commas); split into three, #1
 - Docs: spec 01 RIS importer row; record-schema, openreview-api skills; ris-importer agent. ris-format lists no import claims (export only), unchanged.
 
 Checks: full backend suite 5615 passed, 2 skipped, 1 failed: test_openreview_v1_collapse_props (Hypothesis, NeurIPS 2021 v1 crawl), under load in a 10-minute run. It imports neither ris.py nor scholarmend and passed alone 7 of 8 reruns (an earlier full run passed it), so it is a timing flake, not this change. make lint and make tooling green.
+
+Review round 1 (approved; Shoulds and Nits closed in one commit): scholarmend pinned ==0.1.4 (spec 00 pins the lab's own packages; spec 01 says pinned again). Two more hand-written v1 rows: an agreeing string (ICLR 2022 Poster on a 2022 venueid) whose evidence names ICLR.cc/2023/Conference, and two agreeing claims of which only one has bad evidence (the every-claim rule); both stay unknown. Spec 01 and the openreview-api skill now say that a v1 venueid whose track is other never takes status from venue_string today. That is ICLR 2017's and 2013's lower-case conference only: ICLR 2023 BlogPosts classifies as blogpost, matches its Blogposts @ ICLR 2023 strings, and does take status. Known and left as is: classify_v1_venue gives both NeurIPS 2021 D&B rounds the track datasets_benchmarks, so a Round1 venueid with a (Round 2) string passes the venue/year/track check. The round isn't part of an OpenReview record's identity, and the status (accepted or rejected) doesn't depend on the round. The coordinator is filing the follow-up for other-track v1 venueids.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+In an API v1 venue-year (ICLR 2013-2023, NeurIPS 2021-2022) the RIS importer now takes status from scholarmend 0.1.4's venue_string claim (OpenReview's content.venue) through classify_v1_venue. It uses the claim only when every such claim's evidence is venueid=<the record's venueid> and the one string names the venueid's venue, year and track. The status evidence records scholarmend:openreview_api venueid=<id> venue_string=<string>. Otherwise the status is unknown and the evidence says why. Outside v1 years the claim is ignored, and a proceedings listing still decides acceptance. scholarmend is pinned ==0.1.4. The tests use hand-written fixtures/ris/v1/ (9 rows) plus edit cases. The real corpus imports byte-identically (1,805 records, 0 v1-year, 0 venue_string claims). Docs updated: spec 01, the record-schema and openreview-api skills, and the ris-importer agent.
+<!-- SECTION:FINAL_SUMMARY:END -->
