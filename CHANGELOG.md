@@ -63,6 +63,7 @@ names the index it was verified on and which saved records still reproduce.
 - Merge a NeurIPS Creative AI listing with its own OpenReview note (TASK-137) ([#46](https://github.com/uw-share-lab/openproceedings/pull/46))
 - query: diagnostic quotes escape control characters and backticks (TASK-141) ([#48](https://github.com/uw-share-lab/openproceedings/pull/48))
 - ICLR 2013/2017 conference venueids take track from the venue string (TASK-142) ([#47](https://github.com/uw-share-lab/openproceedings/pull/47))
+- keep a v1 rule-5 survivor that absorbed a speaking note out of the silent-twin collapse (TASK-147) ([#53](https://github.com/uw-share-lab/openproceedings/pull/53))
 
 ### Internal
 
