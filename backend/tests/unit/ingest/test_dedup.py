@@ -842,6 +842,8 @@ FORUM = "https://openreview.net/forum?id=AbCd1234"
 NIPS_PAGE = nips(1)
 ICLR_PAGE = f"https://proceedings.iclr.cc/paper_files/paper/2024/hash/{H[2]}-Abstract-Conference.html"
 PMLR_PAGE = "https://proceedings.mlr.press/v162/a22a.html"
+NIPS_CUT = NIPS_PAGE.split("-Abstract")[0]  # a page cut after its hash, as 4 served RIS claims record it
+NATIVE = f"nips-{H[1]}"  # the record whose page NIPS_PAGE is
 
 
 @pytest.mark.parametrize(
@@ -866,9 +868,9 @@ PMLR_PAGE = "https://proceedings.mlr.press/v162/a22a.html"
         (_abstract("ris", "T", evidence="scholarmend:semantic_scholar s2:1"), FORUM, NIPS_PAGE,
          Attribution("ris", None, None)),
         (_abstract("ris", "T", evidence="scholarmend:proceedings_page"), None, None, Attribution("ris", None, None)),
-        # no proceedings link: the evidence's (possibly cut) url still names the site, unlinked
-        (_abstract("ris", "T", evidence=f"scholarmend:proceedings_page {NIPS_PAGE.split('-Abstract')[0]}"), None,
-         None, Attribution("ris", "neurips_proceedings", None)),
+        # no proceedings link: the evidence's url names the site, and is linked as this paper's page (below)
+        (_abstract("ris", "T", evidence=f"scholarmend:proceedings_page {NIPS_CUT}"), None,
+         None, Attribution("ris", "neurips_proceedings", NIPS_CUT)),
         (_abstract("ris", "T", evidence="scholarmend:proceedings_page https://example.org/p"), None,
          "https://example.org/p", Attribution("ris", None, None)),
         (_abstract("ris", "T"), FORUM, NIPS_PAGE, Attribution("ris", None, None)),
@@ -877,5 +879,36 @@ PMLR_PAGE = "https://proceedings.mlr.press/v162/a22a.html"
 def test_attribution_names_the_site_and_its_page(
     claim: Claim, forum: str | None, proceedings: str | None, expected: Attribution
 ) -> None:
-    assert attribution("T", [claim], forum=forum, proceedings=proceedings) == expected
-    assert attribution(None, [claim], forum=forum, proceedings=proceedings) is None
+    assert attribution("T", [claim], forum=forum, proceedings=proceedings, native=NATIVE) == expected
+    assert attribution(None, [claim], forum=forum, proceedings=proceedings, native=NATIVE) is None
+
+
+def _via(page: str) -> Claim:
+    return _abstract("ris", "T", evidence=f"scholarmend:proceedings_page {page}")
+
+
+def test_an_evidence_url_is_linked_only_as_this_records_own_page() -> None:
+    """With no proceedings link, the evidence's url is the page when it names the record's native id: in full,
+    or cut after its hash (the 4 served NeurIPS records); another paper's page, or a bare hash on the 2021 D&B
+    host (which names up to three papers), is named but not linked."""
+
+    def got(page: str, native: str) -> Attribution | None:
+        return attribution("T", [_via(page)], forum=None, proceedings=None, native=native)
+
+    assert got(NIPS_CUT, NATIVE) == Attribution("ris", "neurips_proceedings", NIPS_CUT)
+    assert got(NIPS_PAGE, NATIVE) == Attribution("ris", "neurips_proceedings", NIPS_PAGE)
+    assert got(NIPS_CUT, f"nips-{H[2]}") == Attribution("ris", "neurips_proceedings", None)
+    assert got(PMLR_PAGE, "pmlr-v162-a22a") == Attribution("ris", "pmlr", PMLR_PAGE)
+    assert got(PMLR_PAGE, "pmlr-v162-b22b") == Attribution("ris", "pmlr", None)
+    db = f"https://datasets-benchmarks-proceedings.neurips.cc/paper/2021/hash/{H[1]}"
+    assert got(db, NATIVE) == Attribution("ris", "neurips_proceedings", None)
+    assert got(ICLR_PAGE.split("-Abstract")[0], f"iclr-{H[2]}") == Attribution(
+        "ris", "iclr_proceedings", ICLR_PAGE.split("-Abstract")[0]
+    )
+
+
+def test_when_the_evidence_and_the_proceedings_link_name_different_sites_the_evidence_wins_unlinked() -> None:
+    both = attribution("T", [_via(NIPS_PAGE)], forum=None, proceedings=ICLR_PAGE, native=NATIVE)
+    assert both == Attribution("ris", "neurips_proceedings", None)
+    agree = attribution("T", [_via(NIPS_CUT)], forum=None, proceedings=NIPS_PAGE, native=NATIVE)
+    assert agree == Attribution("ris", "neurips_proceedings", NIPS_PAGE)  # same site: the record's link

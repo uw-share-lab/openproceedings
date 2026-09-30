@@ -208,6 +208,7 @@ describe("results header, hits and highlights (W5)", () => {
     const results = screen.getByRole("list", { name: "Results" });
     expect(skip.compareDocumentPosition(results) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(skip.className).toContain("focus:not-sr-only"); // shown when it has keyboard focus
+    expect(skip.getAttribute("href")).toBe("#results-pages");
     fireEvent.click(skip);
     expect(document.activeElement).toBe(screen.getByRole("navigation", { name: "Pages" }));
   });

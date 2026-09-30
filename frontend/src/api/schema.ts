@@ -225,7 +225,7 @@ export interface components {
         AbstractSource: {
             /**
              * Origin
-             * @description The site that published the abstract; null when the claim names none this instance knows.
+             * @description The site that published the abstract; null when the claim names none this instance knows. `iclr_archive` can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources).
              */
             origin: ("openreview" | "neurips_proceedings" | "iclr_proceedings" | "pmlr" | "iclr_archive") | null;
             /**

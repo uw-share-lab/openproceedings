@@ -133,14 +133,18 @@ can attribute it:
   `GET /papers/{id}` lists it). `ris` means it came through an imported RIS file (the Google Scholar
   bootstrap), which is most of the served corpus.
 - `origin`: the site that published it, an open set (`openreview`, `neurips_proceedings`, `iclr_proceedings`,
-  `pmlr`, `iclr_archive`). A direct claim maps to its site. A `ris` claim's evidence names its route
-  (`scholarmend:<route> <evidence>`, `ingest/ris.py`): `openreview_api` → `openreview`; `proceedings_page` →
-  the site `urls.proceedings`'s host names (NeurIPS, ICLR or PMLR proceedings), or, with no such link, the
-  site the evidence's own url names. Null when the route names no site this instance knows.
+  `pmlr`, `iclr_archive`; the last can't occur yet, since the ICLR archive supplies no abstracts). A direct
+  claim maps to its site. A `ris` claim's evidence names its route (`scholarmend:<route> <evidence>`,
+  `ingest/ris.py`): `openreview_api` → `openreview`; `proceedings_page` → the site its evidence url's host
+  names (NeurIPS, ICLR or PMLR proceedings), or `urls.proceedings`'s when the evidence has no url. Null when
+  the route names no site this instance knows.
 - `url`: the paper's page at `origin`: the OpenReview forum (`urls.forum`; an OpenReview claim's own url is the
-  API listing it was read from), the proceedings claim's page, or for `ris` the record's `urls.proceedings`
-  (PMLR's CC BY 4.0 terms ask for a link to it). Null when there is none (a `ris` proceedings route whose
-  record has no proceedings link is named but not linked: its evidence url may be cut short).
+  API listing it was read from), the proceedings claim's page, or, for a `ris` proceedings route, the record's
+  `urls.proceedings` when it is on the evidence's site; with no proceedings link, the evidence url itself when
+  it names the record's native id (in full, or cut after its NeurIPS/ICLR hash; never a bare hash on the 2021
+  D&B host; `urls.names_native`). Null otherwise: when the evidence and `urls.proceedings` name different
+  sites the evidence's site is named, unlinked. PMLR's CC BY 4.0 terms ask for the link. On the served
+  snapshot (2026-09-23) all 1,795 `ris` abstracts are linked.
 
 The object is null when `abstract` is null or no claim holds the abstract's text. `RecordFile` computes every
 record's attribution once, in its load pass over the served snapshot (`ingest/dedup.py::attribution`), so the

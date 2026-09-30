@@ -790,7 +790,11 @@ def test_the_reader_computes_each_records_attribution_once_at_load(cache: Path, 
         r = records.get(rid)
         assert r is not None
         expected = attribution(
-            r.abstract, r.claims("abstract"), forum=r.urls.forum, proceedings=r.urls.proceedings
+            r.abstract,
+            r.claims("abstract"),
+            forum=r.urls.forum,
+            proceedings=r.urls.proceedings,
+            native=r.native,
         )
         assert found == expected
     assert any(a is not None for a in records.attributions.values())

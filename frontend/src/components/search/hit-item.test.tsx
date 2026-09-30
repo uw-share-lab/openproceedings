@@ -129,7 +129,7 @@ describe("the abstract's attribution (decision-018, RH-12)", () => {
     });
     expect(link.getAttribute("href")).toBe(page);
     cleanup();
-    // a known site but no page to link (the RIS evidence's url may be cut short)
+    // a known site but no page to link (its evidence and proceedings link disagree, or name another paper)
     const unlinked = attribution(
       show({ abstract_source: { source: "ris", origin: "neurips_proceedings", url: null } }),
     );

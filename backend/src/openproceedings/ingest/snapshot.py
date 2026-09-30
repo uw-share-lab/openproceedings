@@ -586,7 +586,11 @@ class RecordFile:
                              for c in line["provenance"] if c["field"] == "abstract"]  # fmt: skip
                     urls = line["urls"]
                     credit = attribution(
-                        line["abstract"], about, forum=urls["forum"], proceedings=urls["proceedings"]
+                        line["abstract"],
+                        about,
+                        forum=urls["forum"],
+                        proceedings=urls["proceedings"],
+                        native=rid.split(":", 3)[-1],  # a malformed id matches no page
                     )
                 except (ValueError, KeyError, TypeError) as e:
                     raise SnapshotError(

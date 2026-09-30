@@ -330,7 +330,6 @@ function ResultsBody({
   onShowFilter,
   onSearchAgain,
 }: BodyProps) {
-  const pagingId = useId();
   const { parse } = controls;
   const current = parse !== null && parse.q === shownState.q && parse.mode === shownState.mode;
   const written: Limit[] =
@@ -447,10 +446,10 @@ function ResultsBody({
           {pages > 1 && response.hits.length > 0 && (
             // past 50 results' links and toggles, a keyboard user reaches the pages in one step (WCAG 2.4.1)
             <a
-              href={`#${pagingId}`}
+              href={`#${PAGES_ID}`}
               onClick={(e) => {
                 e.preventDefault();
-                document.getElementById(pagingId)?.focus();
+                document.getElementById(PAGES_ID)?.focus();
               }}
               className="sr-only focus:not-sr-only focus:inline-block focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm"
             >
@@ -465,7 +464,7 @@ function ResultsBody({
             ))}
           </ol>
           {pages > 1 && (
-            <Paging id={pagingId} page={state.page} pages={pages} onPage={onPage} state={state} />
+            <Paging id={PAGES_ID} page={state.page} pages={pages} onPage={onPage} state={state} />
           )}
         </div>
       </div>
@@ -519,6 +518,9 @@ function ZeroResults({ canonical, excluded }: { canonical: string; excluded: num
     </div>
   );
 }
+
+/** The pages' fragment id, the "Skip to pages" link's target: one results list per page, so a fixed id. */
+export const PAGES_ID = "results-pages";
 
 /** Numbered pages (design W5 "Paging"): ◂ Previous · Page n of m · Next ▸, and a Go to page input. */
 function Paging({

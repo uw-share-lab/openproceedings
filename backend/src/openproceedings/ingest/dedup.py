@@ -193,13 +193,19 @@ def abstract_claim[C: AbstractClaim](abstract: str | None, claims: Iterable[C]) 
 
 
 def attribution(
-    abstract: str | None, claims: Iterable[AbstractClaim], *, forum: str | None, proceedings: str | None
+    abstract: str | None,
+    claims: Iterable[AbstractClaim],
+    *,
+    forum: str | None,
+    proceedings: str | None,
+    native: str,
 ) -> Attribution | None:
     """The attribution of a record's abstract, from its abstract claims and its urls. OpenReview's page is the
     forum (its claims carry the API listing they were read from); a proceedings claim's url is the paper's own
-    page there. A `ris` claim names its route in its evidence: `openreview_api` → the forum, `proceedings_page`
-    → `proceedings`, whose host names the site (NeurIPS, ICLR or PMLR proceedings); with no such link, the
-    evidence's own url names the site, unlinked. Pure, over plain values, so
+    page there. A `ris` claim names its route in its evidence: `openreview_api` → the forum; `proceedings_page`
+    → the site its url's host names (NeurIPS, ICLR or PMLR proceedings), linking `proceedings` when that is on
+    the same site, else the evidence url when it is this record's (`native`) page, else unlinked. Pure, over
+    plain values, so
     the snapshot reader can run it once per record at load."""
     claim = abstract_claim(abstract, claims)
     if claim is None:
@@ -214,12 +220,19 @@ def attribution(
     if via == RIS_VIA_OPENREVIEW:
         return Attribution(source, "openreview", forum)
     if via == RIS_VIA_PROCEEDINGS:
-        # the record's proceedings link names the site and is the page; without one, the page the evidence
-        # names still says which site, but is not linked (the evidence url may be cut short)
-        if proceedings is not None and (site := _SITE_ORIGIN.get(urls.proceedings_site(proceedings) or "")):
-            return Attribution(source, site, proceedings)
-        if site := _SITE_ORIGIN.get(urls.proceedings_site(rest.split(" ", 1)[0]) or ""):
-            return Attribution(source, site, None)
+        # the evidence's url says which site the abstract was read from; the record's proceedings link is the
+        # page when it is on that site (or the evidence names none). When the two name different sites the
+        # evidence wins, unlinked; the evidence url itself is linked only when it is this paper's page
+        # (`urls.names_native`: some evidence urls stop after the hash)
+        page = rest.split(" ", 1)[0]
+        said = _SITE_ORIGIN.get(urls.proceedings_site(page) or "") if page else None
+        held = _SITE_ORIGIN.get(urls.proceedings_site(proceedings) or "") if proceedings else None
+        if held is not None and said in (None, held):
+            return Attribution(source, held, proceedings)
+        if said is not None:
+            return Attribution(
+                source, said, page if held is None and urls.names_native(page, native) else None
+            )
     return Attribution(source, None, None)  # a route that names no site this code knows: named, not linked
 
 

@@ -140,7 +140,10 @@ ABSTRACT_SOURCE_DOC = (
     "OpenReview forum, or the proceedings page; PMLR's CC BY 4.0 terms ask for this link), null when there is "
     "none. The whole object is null when `abstract` is null or no claim holds its text."
 )
-ORIGIN_DOC = "The site that published the abstract; null when the claim names none this instance knows."
+ORIGIN_DOC = (
+    "The site that published the abstract; null when the claim names none this instance knows. `iclr_archive` "
+    "can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources)."
+)
 
 
 class AbstractSource(Model):

@@ -1,11 +1,11 @@
 ---
 id: TASK-134
 title: Results list names each abstract's source (decision-018 attribution)
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 00:52'
-updated_date: '2026-09-30 02:43'
+updated_date: '2026-09-30 03:04'
 labels:
   - frontend
 milestone: m-6
@@ -48,4 +48,12 @@ Implementation (after review round 1, rebased on origin/dev 7f75d09):
 - Linux visual baselines left to the coordinator (from the PR's CI artifact); darwin baselines unchanged by the refresh run (within tolerance).
 - Exports (Should 3, follow-up to be filed by the coordinator): RIS N1 and BibTeX note carry only the openproceedings provenance line; RIS UR / BibTeX url give source links, but no export names which source the abstract came from. Not changed here (export mapping is contract).
 - decision-018 is stale at lines 64-66 (Consequences, first bullet, 'What exists already…'): it says the result list shows no authors and no statement of the abstract's source (TASK-134, a launch prerequisite). After TASK-134 merges that sentence should say the result list shows authors and 'Abstract: <site>' with a link (and '(via RIS import)'); left for the coordinator/decision owner, not edited here.
+
+Round 2: a ris proceedings_page abstract now takes its site from the evidence url; urls.proceedings is linked when on that site, else (no proceedings link) the evidence url itself when it names the record's native id (urls.names_native: full id, or a NeurIPS/ICLR page cut after its hash; never a bare hash on the 2021 D&B host); evidence and proceedings link on different sites -> evidence's site, unlinked. Served snapshot: all 1,795 ris abstracts linked (994 NeurIPS Proceedings, 639 ICLR Proceedings, 162 OpenReview). ORIGIN_DOC says iclr_archive can't occur yet. Skip link targets the fixed id #results-pages. Verified: contract + dedup/snapshot/urls unit tests (1710 passed, 1 skipped; test_openapi_additive fails only against the newer origin/dev 5c1b990, whose TASK-099 Diagnostic.reading this branch predates, and passes against the branch base 7f75d09), Vitest search-view + hit-item 48 passed, make lint, make tooling, make e2e 16 of 17 with the axe light-1280 run timing out under load average ~90, then accessibility.spec 7/7 on rerun.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The results list attributes every abstract (decision-018): each hit shows its authors (first three, et al., a toggle for the rest) and 'Abstract: <site>' linking the paper's page there, with '(via RIS import)' for RIS-imported abstracts; PMLR abstracts carry their citation and PMLR link. API (additive): Hit.abstract_source {source, origin, url}, computed once per record in RecordFile's load pass, so a search page is dict lookups (~95 us per 50 hits). A 'Skip to pages' link keeps paging keyboard-short. Verified by unit, contract, Vitest and e2e tests, the endpoint bench, and the served snapshot (all 1,795 RIS abstracts linked). Exports don't yet name the abstract's source (follow-up by the coordinator); Linux visual baselines to come from CI.
+<!-- SECTION:FINAL_SUMMARY:END -->
