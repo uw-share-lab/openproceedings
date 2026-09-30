@@ -272,16 +272,20 @@ a venueid naming another track) gets `unknown` for that field and an `unresolved
 `conflicts.csv` (counted as `unresolved` in the manifest's `conflicts`). No signal outranks another
 (decision-020): `xGZG2kS5bFk` was withdrawn yet presented at ICLR 2021, while ICLR 2018's `S1p31z-Ab` was
 accepted by its decision note yet withdrawn and not presented, so any fixed ranking is wrong for one of them.
-The same holds across two notes of one paper: an accepted record whose pdf a withdrawn or desk-rejected record
-of the same crawl shares (`S1p31z-Ab` and its withdrawn twin `SJTCsqMUf`) becomes `unknown` with an
-`unresolved:openreview_v1` row, and the twin keeps its own status (`withdrawn_twins`, run after the listings and
-before the collapse below). **Authors** (decision-019): `content.authors` is split into names only when the split
+The same holds across two notes of one paper: an accepted record whose pdf a withdrawn record of the same
+crawl and the same track shares (`S1p31z-Ab` and its withdrawn twin `SJTCsqMUf`) becomes `unknown` with an
+`unresolved:openreview_v1` row naming every such twin, and the twins keep their own status (`withdrawn_twins`, run
+after the listings and before the collapse below). A desk-rejected twin does not count (a desk rejection for a
+duplicate submission can leave the same pdf beside the presented copy), nor does a twin in another track (a
+workshop version of a conference paper), nor a record with no OpenReview pdf. **Authors** (decision-019): `content.authors` is split into names only when the split
 can be checked. A list with no entry starting with `and ` and none joining two names with ` and ` is kept as
 listed, whatever its length. Otherwise (one string, as early ICLR 2017 writes it, or a list with such an entry)
-each entry loses a leading `and ` and is split at `, and `, `,` and ` and `; the split is kept only when it gives
-exactly as many names as the note's `authorids` (or its `author_emails`, a list or one comma-separated string,
-when there are no ids) and no name still needs splitting. A refused split leaves the authors empty; either way
-the authors claim's evidence keeps the raw value, and the report counts `authors_split` and `authors_unsplit`. **Two notes of one paper are one record** (TASK-125): API v1 holds 300 NeurIPS 2021 main-track
+each entry loses a leading `and ` (a bare `and` entry becomes nothing) and a dangling trailing ` and`, and is
+split at `, and `, `,` and ` and ` (lowercase `and` only); the split is kept only when it gives exactly as many
+names as the note's `authorids` (or its `author_emails`, a list or one comma-separated string, when there are no
+ids) and no name still needs splitting. A refused split leaves the authors empty; either way the authors claim's
+evidence keeps the raw value, and the report counts `authors_split` and `authors_unsplit`, listing the refused
+notes in `authors_unsplit_ids` when there are any. **Two notes of one paper are one record** (TASK-125): API v1 holds 300 NeurIPS 2021 main-track
 papers twice, as two Blind_Submission notes with different ids and numbers whose content is identical but for
 the id embedded in `_bibtex` (e.g. `-K4tIyQLaY` #292 and `BW2Z6B7S9KZ` #8244), which dedup would refuse as two
 submissions with one title. After a v1 venue-year's listings, records identical in everything but their id,

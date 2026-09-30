@@ -209,8 +209,9 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   dropped) must number exactly the note's `authorids` (or `author_emails`), else the authors stay empty
   (`authors_unsplit`; e.g. ICLR 2017 `H1JBMVpdx`, whose `authors` is its title). The raw value stays in the
   claim's evidence; `authors_split` counts the splits kept.
-- An accepted note whose pdf a withdrawn (or desk-rejected) note of the crawl shares is `unknown` with an
-  `unresolved:openreview_v1` row (decision-020; ICLR 2018 `S1p31z-Ab` and `SJTCsqMUf`); the twin keeps its status.
+- An accepted note whose pdf a withdrawn note of the crawl in the same track shares is `unknown` with an
+  `unresolved:openreview_v1` row naming every twin (decision-020; ICLR 2018 `S1p31z-Ab` and `SJTCsqMUf`); the
+  twins keep their status. Desk-rejected twins and twins in another track don't count.
 - ICLR 2023 BlogPosts uses the verified
   `ICLR.cc/2023/BlogPosts/-/Blind_Submission` listing. NeurIPS 2021–2022 main-track withdrawn and
   desk-rejected invitations are crawled even though their verified listings are empty.

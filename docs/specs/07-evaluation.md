@@ -80,7 +80,8 @@ failing cell, read from `docs/results/coverage-causes.toml` (`["<Venue> <year> <
 disagreed with its page's count; and every OpenReview crawl that is incomplete or has coverage gaps, conflicts,
 unmapped venues, non-routine skipped groups or non-routine skipped notes; and every **unresolved record**
 (TASK-113): each `conflicts.csv` row a source left unresolved (`unresolved:<source>`, the field `unknown` because
-the source's own signals disagree, decision-020), by record id, with the cell it would count in were the field
+the source's own signals disagree, decision-020), by record id, with the record's track and status in the snapshot now (flagged when the field
+is no longer `unknown`, e.g. another source decided it after a merge), the cell it would count in were the field
 resolved (for `status`, the record's own track cell; for `track`, the cell of each track a side names) and
 whether that cell is gated, so a reader can see which gated deltas an unresolved record explains (on the
 2026-09-29 crawl: ICLR 2021 `xGZG2kS5bFk` and ICLR 2018 `S1p31z-Ab`, both ICLR main). The report reads

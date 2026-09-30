@@ -39,8 +39,13 @@ Options considered:
 
 The project owner decided (2026-09-29): when OpenReview v1 signals disagree about a status, the field stays
 `unknown`, with no ranking between signals. That now also covers two notes of one paper: an accepted record
-whose pdf a withdrawn or desk-rejected record of the same crawl shares becomes `unknown` with an
-`unresolved:openreview_v1` row naming both signals; the twin keeps its own status.
+whose pdf a withdrawn record of the same crawl shares becomes `unknown` with an `unresolved:openreview_v1` row
+naming both signals; the twin keeps its own status.
+
+Implementation limits (the reviewer's, not the owner's words): the twin must be withdrawn (not desk-rejected: a
+desk rejection for a duplicate submission can leave the same pdf beside the presented copy) and in the same track
+as the accepted record (a withdrawn conference note says nothing about an accepted workshop version); a record
+with no OpenReview pdf has no twin; the row names every twin found.
 
 ## Consequences
 
@@ -49,6 +54,8 @@ whose pdf a withdrawn or desk-rejected record of the same crawl shares becomes `
   of 860 (`xGZG2kS5bFk` is `unknown`, within ±1%).
 - Records change, so the next snapshot's `snapshot_hash` and `index_version` change for ICLR 2018; a saved search
   that matched `S1p31z-Ab` under `status:accepted` replays as `drifted`.
+- Desk-rejected twins are not flagged (none on the 2026-09-29 cache); whether one should be is a possible
+  follow-up.
 - Only an accepting status is flagged against a withdrawn twin. A rejected blind note with a withdrawn twin (10 in
   ICLR 2018) keeps both statuses: neither is in a default search, and the owner's decision names the accepted
   case. The 12 undecided blind notes with a withdrawn twin stay `unknown`; marking them withdrawn (which would

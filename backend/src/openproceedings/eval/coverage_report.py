@@ -18,8 +18,10 @@ What it adds to that data, and nothing else:
   skipped groups or non-routine skipped notes, from the snapshot manifest's `sources`: a passing `count_ok` can
   hide a loss at the id step (TASK-118). Routine: `not_submission` notes and `proposal`/`container` groups.
 - **Unresolved records.** Every `conflicts.csv` row a source left unresolved (`unresolved:<source>`: its own
-  signals disagree, so the field is `unknown`, decision-020), by record id, with the cell it would count in if the
-  field were resolved and whether that cell is gated (spec 07 §C; TASK-113). `load_unresolved` reads them from
+  signals disagree, so that source set the field to `unknown`, decision-020), by record id, with the record's
+  track and status in the snapshot now (flagged when the field is no longer `unknown`, e.g. another source decided
+  it after a merge), the cell it would count in if the field were resolved and whether that cell is gated (spec 07
+  §C; TASK-113). `load_unresolved` reads them from
   the snapshot's `conflicts.csv`, checked against the manifest's hash.
 
 `cov` and `manifest` are plain mappings in `coverage.breakdown`'s and the manifest's JSON shapes, as the rest of
@@ -378,9 +380,13 @@ def _unresolved_row(u: Unresolved, official: OfficialTable, locate: Locate | Non
     the cell of each track a side names (its first word); each marked gated or not."""
     where = None if locate is None else locate(u.id)
     if where is None:
-        cells = "not in the snapshot"
+        cells = now = "not in the snapshot"
     else:
-        venue, year, track, _ = where
+        venue, year, track, status = where
+        value = track if u.field == "track" else status if u.field == "status" else None
+        now = f"{track} / {status}" + (
+            "" if value in (None, "unknown") else f" (**{u.field} no longer unknown**)"
+        )
         tracks = [track] if u.field != "track" else [
             t for t in dict.fromkeys(v.split(" ", 1)[0] for v in (u.value_a, u.value_b)) if t in TRACK_ORDER
         ]  # fmt: skip
@@ -391,7 +397,7 @@ def _unresolved_row(u: Unresolved, official: OfficialTable, locate: Locate | Non
             )
             or "no track named"
         )
-    return f"| {u.id} | {u.field} | {cells} | {_cell_text(u.value_a)} | {_cell_text(u.value_b)} |"
+    return f"| {u.id} | {u.field} | {now} | {cells} | {_cell_text(u.value_a)} | {_cell_text(u.value_b)} |"
 
 
 def _cell_text(text: str) -> str:
@@ -537,9 +543,11 @@ def render(
         )
     lines += ["", "## Unresolved records", ""]
     if unresolved:
-        lines += ["A source's own signals disagree, so the field is `unknown` (decision-020); each record would count "
-                  "in the cell shown if the field were resolved.", "",
-                  "| record | field | would count in | signal A | signal B |", "|---|---|---|---|---|",
+        lines += ["A source's own signals disagree, so that source set the field to `unknown` (decision-020). \"now\" is "
+                  "the record's track / status in this snapshot (flagged if the field is no longer unknown); each "
+                  "record would count in the cell shown if the field were resolved.", "",
+                  "| record | field | now (track / status) | would count in | signal A | signal B |",
+                  "|---|---|---|---|---|---|",
                   *(_unresolved_row(u, official, locate) for u in unresolved)]  # fmt: skip
     else:
         lines.append("None: no source left a field unresolved.")

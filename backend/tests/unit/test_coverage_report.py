@@ -716,19 +716,35 @@ def unresolved_section(text: str) -> list[str]:
     return [ln for ln in section.splitlines() if ln.startswith("| op:")]
 
 
-def test_each_unresolved_record_is_listed_with_the_cell_it_would_count_in() -> None:
+def test_each_unresolved_record_is_listed_with_its_state_now_and_the_cell_it_would_count_in() -> None:
     manifest = manifest_of(corpus())
     cov = breakdown(manifest, "x", official=TABLE)
+
+    def locate(
+        rid: str,
+    ) -> Any:  # IC2014x0001's status is still unknown; IC2014x0002's track was decided since
+        cell = LOCATE(rid)
+        return (*cell[:3], "unknown") if rid == STATUS_ROW.id else cell
+
     text = render(
-        cov, manifest, META, official=TABLE, locate=LOCATE, unresolved=[STATUS_ROW, TRACK_ROW, GONE_ROW]
+        cov, manifest, META, official=TABLE, locate=locate, unresolved=[STATUS_ROW, TRACK_ROW, GONE_ROW]
     )
     assert unresolved_section(text) == [
-        "| op:iclr:2014:IC2014x0001 | status | ICLR 2014 main (gated) | withdrawn (invitation=X) "
+        "| op:iclr:2014:IC2014x0001 | status | main / unknown | ICLR 2014 main (gated) | withdrawn (invitation=X) "
         "| accepted (content.venue=Y) |",
-        "| op:iclr:2014:IC2014x0002 | track | ICLR 2014 main (gated) or ICLR 2014 workshop (not gated) "
-        "| main (invitation=X) | workshop (venueid=A\\|B) |",
-        "| op:iclr:2014:NotHere2014 | status | not in the snapshot | a | b |",
+        "| op:iclr:2014:IC2014x0002 | track | main / accepted (**track no longer unknown**) "
+        "| ICLR 2014 main (gated) or ICLR 2014 workshop (not gated) | main (invitation=X) | workshop (venueid=A\\|B) |",
+        "| op:iclr:2014:NotHere2014 | status | not in the snapshot | not in the snapshot | a | b |",
     ]  # fmt: skip
+
+
+def test_an_unresolved_status_decided_since_by_another_source_is_flagged() -> None:
+    manifest = manifest_of(corpus())
+    cov = breakdown(manifest, "x", official=TABLE)
+    [line] = unresolved_section(
+        render(cov, manifest, META, official=TABLE, locate=LOCATE, unresolved=[STATUS_ROW])
+    )
+    assert "| main / accepted (**status no longer unknown**) |" in line
 
 
 def test_no_unresolved_record_says_so() -> None:
@@ -767,6 +783,7 @@ def test_op_eval_coverage_lists_the_snapshots_unresolved_records(tmp_path: Path)
     assert (
         unresolved_section(written.read_text(encoding="utf-8"))
         == [
-            "| op:iclr:2014:IC2014x0001 | status | ICLR 2014 main (gated) | withdrawn (x) | accepted (y) |"  # the real table
+            "| op:iclr:2014:IC2014x0001 | status | main / accepted (**status no longer unknown**) "
+            "| ICLR 2014 main (gated) | withdrawn (x) | accepted (y) |"  # the real table; the test record is accepted
         ]
     )

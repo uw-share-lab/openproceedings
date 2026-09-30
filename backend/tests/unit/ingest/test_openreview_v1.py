@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from openproceedings import cli
 from openproceedings.ingest import snapshot as snap
-from openproceedings.ingest.record import PaperRecord
+from openproceedings.ingest.record import PaperRecord, Urls
 from openproceedings.ingest.sources import openreview_v1 as v1
 from openproceedings.ingest.sources import openreview_v2 as orv2
 from openproceedings.ingest.sources.http import CacheMiss as OpenReviewCacheMiss
@@ -849,22 +849,74 @@ def test_the_withdrawn_twin_rule_needs_an_accepted_record_and_the_same_pdf(
     assert len(crawl.report.conflicts) == (expected[1] == "unknown" and expected[0] == "main")
 
 
-def test_a_desk_rejected_twin_is_a_conflict_too_and_the_rule_is_order_free(tmp_path: Path) -> None:
+def _forum(nid: str) -> str:
+    return f"https://openreview.net/forum?id={nid}"
+
+
+def pre_rule_pair(tmp_path: Path) -> tuple[PaperRecord, PaperRecord]:
+    """ELMo's two records as the listings gave them, before the twin rule: accepted, and withdrawn."""
     records = {r.id: r for r in run(elmo_world(), tmp_path, "ICLR", 2018).records}
-    # rebuild the pre-rule state: the accepted record as its decision gave it, the twin desk-rejected
     elmo, twin = records[f"op:iclr:2018:{ELMO}"], records[f"op:iclr:2018:{ELMO_TWIN}"]
     [status] = elmo.claims("status")
     kept = tuple(c for c in elmo.provenance if c.field != "status")
     accepted = elmo.model_copy(
         update={"status": "accepted", "provenance": (*kept, status.model_copy(update={"value": "accepted"}))}
     )
-    desk = twin.model_copy(update={"status": "desk_rejected"})
-    for order in ((accepted, desk), (desk, accepted)):
+    return accepted, twin
+
+
+def test_the_twin_rule_is_order_free_and_idempotent(tmp_path: Path) -> None:
+    accepted, twin = pre_rule_pair(tmp_path)
+    for order in ((accepted, twin), (twin, accepted)):
         world = {r.id: r for r in order}
         [row] = v1.withdrawn_twins(world)
-        assert row.id == accepted.id and row.value_b.startswith(f"desk_rejected (twin {ELMO_TWIN}, same pdf:")
-        assert world[accepted.id].status == "unknown" and world[desk.id].status == "desk_rejected"
-        assert v1.withdrawn_twins(world) == []  # idempotent: an unknown record has no conflict left to find
+        assert row.id == accepted.id and row.value_b.startswith(f"withdrawn (twin {ELMO_TWIN}, same pdf:")
+        assert world[accepted.id].status == "unknown" and world[twin.id].status == "withdrawn"
+        assert v1.withdrawn_twins(world) == []  # an unknown record has no conflict left to find
+
+
+def test_the_row_names_every_withdrawn_twin(tmp_path: Path) -> None:
+    accepted, twin = pre_rule_pair(tmp_path)
+    second = twin.model_copy(update={"id": "op:iclr:2018:SecondTwin18"})
+    world = {r.id: r for r in (accepted, twin, second)}
+    [row] = v1.withdrawn_twins(world)
+    assert row.value_b.count("twin ") == 2
+    assert row.value_b.index(f"twin {ELMO_TWIN},") < row.value_b.index("twin SecondTwin18,")
+
+
+@pytest.mark.parametrize(
+    ("change_accepted", "change_twin"),
+    [
+        # a desk rejection (e.g. for a duplicate submission) can leave the same pdf beside the presented copy
+        ({}, {"status": "desk_rejected"}),
+        # an accepted workshop note beside a withdrawn conference note of the same pdf: two submissions
+        ({"track": "workshop"}, {}),
+        # no OpenReview pdf on either side (`_pdf` drops an arXiv link, as for ICLR 2013–2014): nothing to join on
+        ({"urls": Urls(forum=_forum(ELMO))}, {"urls": Urls(forum=_forum(ELMO_TWIN))}),
+    ],
+    ids=["desk-rejected twin", "another track", "no pdf"],
+)
+def test_no_conflict_without_a_withdrawn_same_track_twin_of_the_pdf(
+    tmp_path: Path, change_accepted: dict[str, Any], change_twin: dict[str, Any]
+) -> None:
+    accepted, twin = pre_rule_pair(tmp_path)
+    world = {
+        accepted.id: accepted.model_copy(update=change_accepted),
+        twin.id: twin.model_copy(update=change_twin),
+    }
+    before = dict(world)
+    assert v1.withdrawn_twins(world) == [] and world == before  # both statuses kept
+
+
+def test_an_arxiv_pdf_link_is_no_pdf_so_no_twin(tmp_path: Path) -> None:
+    arxiv = "http://arxiv.org/abs/1301.3781"
+    world = elmo_world()
+    for notes in world.listings.values():
+        for n in notes:
+            n["content"]["pdf"] = arxiv
+    crawl = run(world, tmp_path, "ICLR", 2018)
+    assert {r.native: r.status for r in crawl.records} == {ELMO: "accepted", ELMO_TWIN: "withdrawn"}
+    assert crawl.report.conflicts == [] and all(r.urls.pdf is None for r in crawl.records)
 
 
 def world_2021() -> FakeOpenReviewV1:

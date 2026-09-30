@@ -114,8 +114,8 @@ that is incomplete, has coverage gaps, conflicts, unmapped venues or non-routine
 and `container` are routine; `not_a_v2_venue`, which can be an unreadable group, and `no_submission_venue_id`
 are not), or skipped anything but
 `not_submission` replies. Then "Unresolved records" (TASK-113): every `conflicts.csv` row a source left
-unresolved (`unresolved:<source>`, the field `unknown`, decision-020), by record id, with the cell it would count
-in were it resolved and whether that cell is gated (`conflicts.csv` is read only after its sha256 matches the
+unresolved (`unresolved:<source>`, the field `unknown`, decision-020), by record id, with its track / status now (flagged when the field
+is no longer unknown), the cell it would count in were it resolved and whether that cell is gated (`conflicts.csv` is read only after its sha256 matches the
 manifest's `files`). Then totals of records, missing abstracts, `unknown` track and status. The report is
 written atomically; a same-day run replaces it. `--check` exits 1 when the gate fails (a matched accepted exception passes) or an exception is stale. The methods text cites this report (with its
 snapshot hash) as the database-scope caveat.

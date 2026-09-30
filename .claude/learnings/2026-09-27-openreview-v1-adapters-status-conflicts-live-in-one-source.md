@@ -68,7 +68,7 @@ two clean records until a pdf join across the crawl's records found them, so the
   `Synthetic Author N` and a comma-separated email string with one email, so no recorded fixture could exercise
   author splitting. It now keeps separators and counts (decision-004 still holds: no real names).
 - **A regex without `^` in `re.sub(count=1)` removes the first match anywhere.** The first splitter draft dropped
-  the ` and ` inside `Bowen Zhou and Mingbo Ma` instead of a leading `and `, turning a split into a refusal; the
+  the ` and ` inside an entry `"<name> and <name>"` (`Hk6a8N5xe`) instead of a leading `and `, turning a split into a refusal; the
   real-cache dry run over all v1 notes (before any fixture) caught it.
 - **Count-checking makes splitting safe.** Against `authorids` the rule splits 34 notes and refuses one
   (`H1JBMVpdx`, whose `authors` is its title: three pieces for two ids), where an unchecked split would have

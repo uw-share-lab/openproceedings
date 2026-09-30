@@ -62,7 +62,7 @@ PERSON = re.compile(r"[^\s@]+@[^\s@]+|^~")
 # or venueid value). Add a label only after checking it on openreview.net; never relax PERSON instead.
 VENUE_LABELS = frozenset({"BT@ICLR2024"})  # ICLR 2024's blogpost track (TASK-101)
 # The separators between author names in a v1 `authors` value, kept by the scrub (the splitter's own table).
-AUTHOR_SEPARATOR = re.compile(r"(^\s*and\s+|,\s*and\s+|,\s*|\s+and\s+)")
+AUTHOR_SEPARATOR = re.compile(r"(^\s*and\s+|,\s*and\s+|,\s*|\s+and\s+|\s+and\s*$|^\s*and\s*$)")
 
 
 class _Counter:

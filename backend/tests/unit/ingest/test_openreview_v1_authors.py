@@ -50,7 +50,7 @@ CASES = [
     # `A and B` joined in the first entry of a longer list
     ("iclr-2020/notes-blind-authors-and.json", 2020, BLIND.format(y=2020), "HklCmaVtPS",
      tuple(f"Synthetic Author {n}" for n in range(8, 12)), "split"),
-    # profile ids (`~and_Ben_Liang1` live) count as ids
+    # profile ids count as ids (live, the second is `~and_<Name>1`: the `and` is in the id too)
     ("iclr-2021/notes-blind-authors-and.json", 2021, BLIND.format(y=2021), "RepN5K31PT3",
      ("Synthetic Author 5", "Synthetic Author 6"), "split"),
 ]  # fmt: skip
@@ -86,6 +86,8 @@ def test_the_report_counts_splits_and_refusals(
     _, report = crawled(tmp_path, year, listing, fixture)
     manifest = report.to_manifest()
     assert (manifest["authors_split"], manifest["authors_unsplit"]) == counts
+    refused = manifest.get("authors_unsplit_ids")  # present only when a split was refused
+    assert refused == (["H1JBMVpdx"] if counts[1] else None)
 
 
 def test_a_string_with_nothing_to_count_against_is_refused(tmp_path: Path) -> None:
@@ -126,12 +128,17 @@ def test_author_count(content: dict[str, object], count: int | None) -> None:
         ("A and B", 2, (("A", "B"), "split")),
         ("and A", 1, (("A",), "split")),
         (
-            "Ferdinand Anders, Anand Rao",
+            "Synthetic Ferdinand, Anand Synthetic",
             2,
-            (("Ferdinand Anders", "Anand Rao"), "split"),
+            (("Synthetic Ferdinand", "Anand Synthetic"), "split"),
         ),  # `and` inside a name
         (["A", "B and C", "and D"], 4, (("A", "B", "C", "D"), "split")),
         (["A", "B and C"], 2, ((), "refused")),
+        (["A", "B", "and"], 2, (("A", "B"), "split")),  # a bare trailing `and` entry is no name
+        (["A and"], 1, (("A",), "split")),  # nor is a dangling ` and`
+        (["A and"], 2, ((), "refused")),
+        ("A And B", 1, (("A And B",), "split")),  # only lowercase `and` separates (documented, decision-019)
+        (["A", "B AND C"], 5, (("A", "B AND C"), "listed")),
         ("A, and and B", 2, ((), "refused")),  # a piece still starting with `and `
         (["A", " ", 3], 5, (("A",), "listed")),  # a clean list: blanks and non-strings dropped, never counted
         (None, 1, ((), "listed")),
