@@ -4,6 +4,10 @@ Fixture rows (`fixtures/ris/generate.py`): 0 NeurIPS proceedings page + PDF; 1 I
 2 ICLR proceedings with only a Scholar snippet; 3 arXiv; 4 no identifier; 5 ICML via PMC only; 6 PMLR
 v202; 7 ICLR rejected venueid; 8 NeurIPS D&B PDF on `Papers.NIPS.cc` with a query string; 9 no Query
 date; 10 a forum scholarmend couldn't resolve; 11 a neurips.cc media link.
+
+`fixtures/ris/v1/` rows carry scholarmend 0.1.4's `venue_string` claim (hand-written, TASK-098): 0 ICLR 2022
+Poster; 1 NeurIPS 2021 Oral; 2 ICLR 2022 Submitted; 3 ICLR 2023 withdrawn (`""`); 4 an unmapped ICLR 2023
+string; 5 ICLR 2024 (v2: ignored); 6 an ICLR 2022 venueid whose venue string's evidence names another venueid.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from openproceedings.ingest.ris import SKIP_REASONS, ImportReport, import_ris
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 
 FIXTURE = Path(__file__).parents[2] / "fixtures" / "ris"
+V1_FIXTURE = FIXTURE / "v1"
 H1 = "0123456789abcdef0123456789abcdef"
 NEURIPS = f"op:neurips:2025:nips-{H1}"
 ICLR = "op:iclr:2025:iclr-fedcba9876543210fedcba9876543210"
@@ -29,6 +34,15 @@ DB = "op:neurips:2024:nips-00112233445566778899aabbccddeeff"
 PMLR = "op:icml:2023:pmlr-v202-smith23a"
 WORKSHOP = "op:icml:2026:AbCdEf1234"
 REJECTED = "op:iclr:2024:Rej_ected-1"
+V1 = {
+    "poster": "op:iclr:2022:V1Poster01",
+    "oral": "op:neurips:2021:V1Oral0001",
+    "submitted": "op:iclr:2022:V1Submit01",
+    "withdrawn": "op:iclr:2023:V1Withdr01",
+    "unmapped": "op:iclr:2023:V1Unmapp01",
+    "v2": "op:iclr:2024:V2Ignore01",
+    "other_note": "op:iclr:2022:V1Disagr01",
+}
 
 Entries = list[dict[str, Any]]
 Imported = tuple[dict[str, PaperRecord], ImportReport]
@@ -40,10 +54,10 @@ def imported() -> Imported:
     return {r.id: r for r in records}, report
 
 
-def run(tmp_path: Path, edit: Callable[[Entries], object]) -> Imported:
+def run(tmp_path: Path, edit: Callable[[Entries], object], fixture: Path = FIXTURE) -> Imported:
     """Import a copy of the fixture with `resolved.json` edited in place by `edit`."""
-    (tmp_path / "mended.ris").write_bytes((FIXTURE / "mended.ris").read_bytes())
-    entries = json.loads((FIXTURE / "resolved.json").read_text(encoding="utf-8"))
+    (tmp_path / "mended.ris").write_bytes((fixture / "mended.ris").read_bytes())
+    entries = json.loads((fixture / "resolved.json").read_text(encoding="utf-8"))
     edit(entries)
     (tmp_path / "resolved.json").write_text(json.dumps(entries), encoding="utf-8")
     records, report = import_ris(tmp_path / "mended.ris")
@@ -485,7 +499,7 @@ def test_report_is_consistent_and_manifest_ready(imported: Imported) -> None:
     _, report = imported
     manifest = report.to_manifest()
     assert list(manifest) == sorted(manifest) and list(manifest["skipped"]) == sorted(manifest["skipped"])
-    assert manifest["parser_version"] == "0.1.3" and len(manifest["mended_sha256"]) == 64
+    assert manifest["parser_version"] == "0.1.4" and len(manifest["mended_sha256"]) == 64
     json.dumps(manifest)  # plain values only
     with pytest.raises(ValueError, match="read"):
         ImportReport(**{**report.__dict__, "imported": report.imported + 1})
@@ -637,3 +651,131 @@ def test_a_listing_decides_a_v1_venueids_acceptance(tmp_path: Path) -> None:
     assert (r.track, r.status) == ("main", "accepted") and report.status_overrides == 1
     [status] = r.claims("status")
     assert status.evidence is not None and status.evidence.endswith(" (overrides venueid status unknown)")
+
+
+@pytest.fixture(scope="module")
+def v1_imported() -> Imported:
+    records, report = import_ris(V1_FIXTURE / "mended.ris")
+    return {r.id: r for r in records}, report
+
+
+def test_v1_fixture_counts(v1_imported: Imported) -> None:
+    by_id, report = v1_imported
+    assert set(by_id) == set(V1.values()) and (report.read, report.imported) == (7, 7)
+    assert report.track_status == {"main": {"accepted": 2, "rejected": 2, "unknown": 3}}
+    assert report.status_overrides == 0
+
+
+NOT_STATUS = "(API v1 venue-year: not status evidence; venue_string not used: {})"
+
+
+@pytest.mark.parametrize(
+    ("row", "status", "evidence"),
+    [
+        ("poster", "accepted", "venueid=ICLR.cc/2022/Conference venue_string=ICLR 2022 Poster"),
+        ("oral", "accepted", "venueid=NeurIPS.cc/2021/Conference venue_string=NeurIPS 2021 Oral"),
+        ("submitted", "rejected", "venueid=ICLR.cc/2022/Conference venue_string=ICLR 2022 Submitted"),
+        (
+            "withdrawn",
+            "unknown",
+            "venueid=ICLR.cc/2023/Conference " + NOT_STATUS.format("not one non-empty string"),
+        ),
+        (
+            "unmapped",  # the string itself isn't kept: an unmapped one can be free text
+            "unknown",
+            "venueid=ICLR.cc/2023/Conference " + NOT_STATUS.format("not in the v1 table"),
+        ),
+        ("v2", "rejected", "venueid=ICLR.cc/2024/Conference/Rejected_Submission"),
+        (
+            "other_note",
+            "unknown",
+            "venueid=ICLR.cc/2022/Conference " + NOT_STATUS.format("its evidence names another venueid"),
+        ),
+    ],
+)
+def test_a_v1_venue_string_gives_status_with_its_provenance(
+    v1_imported: Imported, row: str, status: str, evidence: str
+) -> None:
+    """TASK-098: scholarmend 0.1.4's `venue_string` claim (OpenReview's `content.venue`) is a v1 venue-year's
+    status evidence through classify_v1_venue; outside v1 years, or unusable, it gives nothing."""
+    by_id, _ = v1_imported
+    r = by_id[V1[row]]
+    assert (r.track, r.status) == ("main", status)
+    [claim_] = r.claims("status")
+    assert claim_.evidence == f"scholarmend:openreview_api {evidence}"
+    assert claim_.source == "ris" and claim_.fetched_at == datetime(2026, 9, 19, 1, 6, 30, tzinfo=UTC)
+    # venue, year and track stay the venueid's
+    assert {c.evidence for c in r.provenance if c.field in ("venue", "year", "track")} == {
+        f"scholarmend:openreview_api venueid={r.venue_id_raw}"
+    }
+
+
+def set_venue_string(row: int, value: object) -> Callable[[Entries], None]:
+    def edit(e: Entries) -> None:
+        for c in e[row]["claims"]:
+            if c["field"] == "venue_string":
+                c["value"] = value
+
+    return edit
+
+
+@pytest.mark.parametrize(
+    ("why", "value", "reason"),
+    [
+        # a table string for the venueid's venue-year but another track: never a main-track acceptance
+        ("another track", "Blogposts @ ICLR 2023", "Blogposts @ ICLR 2023 names ICLR 2023 blogpost"),
+        ("another year", "ICLR 2022 Poster", "ICLR 2022 Poster names ICLR 2022 main"),
+        ("not a string", ["ICLR 2023 poster"], "not one non-empty string"),
+    ],
+)
+def test_a_venue_string_naming_another_venue_year_or_track_is_not_used(
+    tmp_path: Path, why: str, value: object, reason: str
+) -> None:
+    by_id, _ = run(tmp_path, set_venue_string(4, value), V1_FIXTURE)  # row 4: ICLR.cc/2023/Conference
+    r = by_id[V1["unmapped"]]
+    assert (r.track, r.status) == ("main", "unknown")
+    assert r.claims("status")[0].evidence == (
+        "scholarmend:openreview_api venueid=ICLR.cc/2023/Conference " + NOT_STATUS.format(reason)
+    )
+
+
+def test_two_different_venue_strings_are_not_used(tmp_path: Path) -> None:
+    def two(e: Entries) -> None:
+        e[0]["claims"].append(
+            claim("venue_string", "ICLR 2022 Submitted", "openreview_api", "venueid=ICLR.cc/2022/Conference")
+        )
+
+    by_id, _ = run(tmp_path, two, V1_FIXTURE)
+    r = by_id[V1["poster"]]
+    assert r.status == "unknown"
+    assert r.claims("status")[0].evidence.endswith(NOT_STATUS.format("not one non-empty string"))  # type: ignore[union-attr]
+
+
+def test_a_venue_string_from_another_source_is_ignored(tmp_path: Path) -> None:
+    def other_source(e: Entries) -> None:
+        for c in e[0]["claims"]:
+            if c["field"] == "venue_string":
+                c["source"] = "semanticscholar"
+
+    by_id, _ = run(tmp_path, other_source, V1_FIXTURE)
+    r = by_id[V1["poster"]]
+    assert r.status == "unknown"
+    assert r.claims("status")[0].evidence == (
+        "scholarmend:openreview_api venueid=ICLR.cc/2022/Conference (API v1 venue-year: not status evidence)"
+    )
+
+
+def test_a_listing_overrides_a_v1_venue_strings_rejection(tmp_path: Path) -> None:
+    """decision-005: the proceedings decide acceptance; the overruled venue-string status stays visible."""
+
+    def listed_rejection(e: Entries) -> None:
+        url = f"https://proceedings.iclr.cc/paper_files/paper/2022/hash/{H1}-Abstract-Conference.html"
+        e[2]["claims"] += [
+            claim(f, v, "proceedings_url", url)
+            for f, v in (("venue", "ICLR"), ("year", "2022"), ("track", "Conference"))
+        ]
+
+    by_id, report = run(tmp_path, listed_rejection, V1_FIXTURE)
+    r = by_id[V1["submitted"]]
+    assert (r.track, r.status) == ("main", "accepted") and report.status_overrides == 1
+    assert r.claims("status")[0].evidence.endswith(" (overrides venue_string status rejected)")  # type: ignore[union-attr]

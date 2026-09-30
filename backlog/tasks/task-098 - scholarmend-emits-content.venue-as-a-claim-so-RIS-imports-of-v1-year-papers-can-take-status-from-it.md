@@ -3,9 +3,10 @@ id: TASK-098
 title: >-
   scholarmend emits content.venue as a claim so RIS imports of v1-year papers
   can take status from it
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-27 21:11'
+updated_date: '2026-09-30 04:23'
 labels:
   - ingest
 milestone: m-4
@@ -21,5 +22,23 @@ Since TASK-095 a v1 venueid is not status evidence, and the RIS importer has no 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 scholarmend's RIS output carries content.venue for OpenReview papers,The importer passes it to classify_v1_venue and records the claim's provenance,Tests over the v1 fixtures
+- [x] #1 scholarmend's resolved.json carries OpenReview content.venue as a venue_string claim (scholarmend 0.1.4)
+- [x] #2 The importer passes it to classify_v1_venue and records the claim's provenance
+- [x] #3 Tests over the v1 fixtures
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+AC #1 was one criterion holding three (joined with commas); split into three, #1 reworded: the claim is in resolved.json, not the RIS output (scholarmend 0.1.4, released 2026-09-29; RIS output unchanged).
+
+- scholarmend requirement raised to >=0.1.4 (backend/pyproject.toml); uv.lock resolves 0.1.4.
+- ingest/ris.py _v1_status: in a v1 venue-year (classify.is_v1) the status comes from the venue_string claim with source openreview_api, through classify_v1_venue. Used only when every such claim's evidence is exactly venueid=<the record's venueid>, there is one non-empty string, it is in the v1 table, and it names the venueid's venue, year and track. Status evidence then reads scholarmend:openreview_api venueid=<id> venue_string=<string> (source ris, fetched_at the M1 Query date, like every RIS claim). Otherwise the status stays unknown and the evidence reads venueid=<id> (API v1 venue-year: not status evidence; venue_string not used: <why>); an unmapped string is not copied into the evidence (it can be free text). Outside v1 years the claim is ignored. A proceedings listing still overrides it (decision-005), noted as (overrides venue_string status <s>).
+- A string for another track is refused, so e.g. Blogposts @ ICLR 2023 on ICLR.cc/2023/Conference can never make a main-track acceptance. Consequence: ICLR 2017 (venueid track other) never takes status from its string here; no RIS record is in a v1 year today.
+- v1 has no withdrawn venue string: withdrawn v1 notes carry venue = venueid = "", so scholarmend emits no venueid and the record is skipped as unresolved; the fixture's withdrawn row (venue_string "") shows it stays unknown.
+- Tests: hand-written fixtures/ris/v1/ (generate.py V1_ROWS; the main fixture is byte-identical, so snapshot tests are untouched): poster, oral, Submitted, withdrawn, unmapped, a v2 year (ignored), evidence naming another venueid; plus edits for another track, another year, a non-string value, two strings, another source, and a listing override.
+- Real corpus (data/cache/ris, read-only): old and new importer give byte-identical records (1,805; 1377 + 428); 0 venue_string claims and 0 v1-year records.
+- Docs: spec 01 RIS importer row; record-schema, openreview-api skills; ris-importer agent. ris-format lists no import claims (export only), unchanged.
+
+Checks: full backend suite 5615 passed, 2 skipped, 1 failed: test_openreview_v1_collapse_props (Hypothesis, NeurIPS 2021 v1 crawl), under load in a 10-minute run. It imports neither ris.py nor scholarmend and passed alone 7 of 8 reruns (an earlier full run passed it), so it is a timing flake, not this change. make lint and make tooling green.
+<!-- SECTION:NOTES:END -->

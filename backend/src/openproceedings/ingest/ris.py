@@ -12,8 +12,11 @@ never does:
   yields no id is skipped as `unresolved` (or `no_id`), and one that points nowhere is `out_of_scope`.
 - **Track**: the venueid; else scholarmend's proceedings track; else the PMLR volume table.
 - **Status** comes from a claim only (spec 01): a venueid → its status, except that an API v1 venue-year's
-  venueid (ICLR ≤2023, NeurIPS 2021–2022) is venue/year/track evidence only and gives `unknown`, since v1
-  puts the bare path on rejected papers too (TASK-095; scholarmend's claims carry no `content.venue`); a
+  venueid (ICLR ≤2023, NeurIPS 2021–2022) is venue/year/track evidence only, since v1 puts the bare path on
+  rejected papers too (TASK-095). There the status comes from scholarmend's `venue_string` claim (OpenReview's
+  `content.venue` verbatim, scholarmend ≥0.1.4; TASK-098) through `classify_v1_venue`, used only when its
+  evidence names the record's venueid and the string names the venueid's venue, year and track; otherwise,
+  or without one, it is `unknown` and the status evidence says why. Outside v1 years the claim is ignored. A
   proceedings listing → `accepted`. When both exist they must name the same venue, year and track (else the record is skipped as
   a `conflict`); the proceedings then decide acceptance (decision-005), counted in `status_overrides`.
 - **Abstract**: OpenReview's, else the proceedings page's, else `None`; never Scholar's or Semantic
@@ -48,6 +51,7 @@ from openproceedings.ingest.classify import (
     Classification,
     classify_neurips_listing,
     classify_proceedings,
+    classify_v1_venue,
     classify_venueid,
     is_v1,
 )
@@ -188,6 +192,39 @@ def _url_fields(urls: list[str], source: str) -> tuple[tuple[ClaimField, str, st
     return tuple((f, u, source) for f, u in pairs if u)
 
 
+def _v1_status(
+    entry: dict[str, Any], vid: str, cls: Classification
+) -> tuple[Classification, tuple[str, str], bool]:
+    """An API v1 venue-year's status (its venueid gives none): scholarmend's `venue_string` claim, OpenReview's
+    `content.venue` verbatim (scholarmend >= 0.1.4), through `classify_v1_venue`. It is used only when its
+    evidence names this record's venueid and the string names the venueid's venue, year and track; otherwise
+    the status stays `unknown` and the evidence says why. Returns the classification, the status evidence and
+    whether the string was used."""
+    base = f"venueid={vid}"
+    claims = _claims(entry, "venue_string", "openreview_api")
+    if not claims:
+        return cls, ("openreview_api", f"{base} (API v1 venue-year: not status evidence)"), False
+    values = {c["value"] if isinstance(c["value"], str) else "" for c in claims}
+    s = values.pop() if len(values) == 1 else ""  # two different strings are no evidence either
+    by = classify_v1_venue(s)
+    if any(c["evidence"] != base for c in claims):
+        why = "its evidence names another venueid"
+    elif not s:
+        why = "not one non-empty string"  # e.g. a withdrawn v1 note's `""`
+    elif not by.parsed:
+        why = "not in the v1 table"  # the string itself isn't kept: it can be free text
+    elif (by.venue, by.year, by.track) != (cls.venue, cls.year, cls.track):
+        why = f"{s} names {by.venue} {by.year} {by.track}"
+    else:
+        used = Classification(cls.track, by.status, cls.venue, cls.year, vid)
+        return used, ("openreview_api", f"{base} venue_string={s}"), True
+    return (
+        cls,
+        ("openreview_api", f"{base} (API v1 venue-year: not status evidence; venue_string not used: {why})"),
+        False,
+    )
+
+
 def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
     """The record's identity, or the reason it can't be imported (one of SKIP_REASONS)."""
     venueids = {c["value"] for c in _claims(entry, "venue_id", "openreview_api")}
@@ -208,8 +245,10 @@ def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
         if not FORUM_ID.fullmatch(str(fid)):  # a malformed id skips this entry, not the whole file
             return "unresolved"
         evidence = dict.fromkeys(four, ("openreview_api", f"venueid={vid}"))
+        status_from = "venueid"
         if is_v1(venue, year):  # rejected papers carry the bare path too: the venueid never gives status
-            evidence["status"] = ("openreview_api", f"venueid={vid} (API v1 venue-year: not status evidence)")
+            cls, evidence["status"], used = _v1_status(entry, vid, cls)
+            status_from = "venue_string" if used else status_from
         url_claims: tuple[tuple[ClaimField, str, str], ...] = (
             ("urls.forum", f"https://openreview.net/forum?id={fid}", "openreview_url"),
         )
@@ -220,7 +259,7 @@ def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
                 return "conflict"  # decision-005: never silently resolved
             override = cls.status != "accepted"
             # the proceedings decide acceptance; an overruled venueid status stays visible in the evidence
-            note = f" (overrides venueid status {cls.status})" if override else ""
+            note = f" (overrides {status_from} status {cls.status})" if override else ""
             evidence["status"] = (l_ev[0], l_ev[1] + note)
             cls = Classification(cls.track, "accepted", venue, year, vid)
             url_claims += _url_fields(l_urls, l_ev[0])

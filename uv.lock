@@ -473,7 +473,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "pydantic", specifier = ">=2.8" },
-    { name = "scholarmend", specifier = "==0.1.3" },
+    { name = "scholarmend", specifier = ">=0.1.4" },
     { name = "tantivy", specifier = "==0.26.2" },
     { name = "uvicorn", specifier = ">=0.54.0" },
 ]
@@ -726,11 +726,11 @@ wheels = [
 
 [[package]]
 name = "scholarmend"
-version = "0.1.3"
+version = "0.1.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/a4/b3/221c7c22bd12c448c72e5b703afd7a5ca8accce2943f2c7a30ad301a5254/scholarmend-0.1.3.tar.gz", hash = "sha256:f94a9a9243799215f1f1af755aea12cbfc97876257e05533e134e10f04d73f7c", size = 60176, upload-time = "2026-09-26T03:42:22.52Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/d2/f6be2d452406538227eaa4c04c15defaca96656d6221e2cc5d687b4ca9e3/scholarmend-0.1.4.tar.gz", hash = "sha256:1ef0000bdc091f79abeed513a37b1a85ffec1c9690e0ca5fb4c0b25cb839b41a", size = 61337, upload-time = "2026-09-30T03:53:49.327Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/25/f2/964caa5646c497b3a263cfba08d34015356c716ffee97aaea4f2f8b3359e/scholarmend-0.1.3-py3-none-any.whl", hash = "sha256:e8233110cd9dbb8eb72232d25e1ff86d1598ce6fcb905e6bd298502016ce103f", size = 38215, upload-time = "2026-09-26T03:42:21.201Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/11/bdd712fa6860e785ebfc1460f7b09b2590cfe8ff82db0eb45f9e03d0d307/scholarmend-0.1.4-py3-none-any.whl", hash = "sha256:9a2bbbd1656a650f93160394e70e5a8d771df7a1c7d5de80f5aef5b51a3f60f4", size = 38519, upload-time = "2026-09-30T03:53:47.864Z" },
 ]
 
 [[package]]
