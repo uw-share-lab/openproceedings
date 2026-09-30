@@ -3,7 +3,7 @@ id: TASK-142
 title: >-
   v1 venueids with track other take track and status from scholarmend's
   venue_string
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 04:30'
