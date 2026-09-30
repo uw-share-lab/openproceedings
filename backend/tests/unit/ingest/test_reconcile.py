@@ -12,7 +12,7 @@ from openproceedings.ingest.reconcile import Crawl, Key, Listing, crawled, recon
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources.common import ListingReport
 
-from tests.unit.ingest.test_dedup import T0, T1, T2, H, paper
+from tests.unit.ingest.test_dedup import T0, T1, T2, H, nips, paper
 from tests.unit.ingest.test_dedup_props import pools, records
 
 LISTING = "https://proceedings.neurips.cc/paper_files/paper/2024"
@@ -123,6 +123,17 @@ def test_a_note_titled_like_a_listing_of_another_track_keeps_its_status() -> Non
     assert len(dedup(xs).records) == len(xs) - 1  # only the listed paper and its note merged
     outcome = reconcile(dedup(xs), crawl())  # the main note may still be the D&B listing's paper
     assert outcome.result == dedup(xs) and outcome.shares_listing == 2
+
+
+def test_a_note_naming_a_proceedings_paper_by_url_counts_as_a_listing() -> None:
+    xs = [  # a note whose urls.proceedings names a paper no crawled listing merged with, and a same-title note
+        *LISTED,
+        paper("AbCd1234", "Linked by URL", urls_proceedings=nips(3)),
+        paper("IjKl9012", "Linked by URL"),
+    ]
+    outcome = reconcile(dedup(xs), crawl())
+    assert outcome.result == dedup(xs)  # the first is a listing (not judged); the second shares its title
+    assert outcome.shares_listing == 1
 
 
 def test_a_listing_merged_into_an_unknown_track_record_covers_nothing() -> None:

@@ -15,6 +15,8 @@ from openproceedings.ingest.sources.html import MAX_DEPTH
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES, VOLUMES, icml_volume, load
 
 from tests.unit.ingest.proceedings_helpers import (
+    T0,
+    T1,
     FakeTransport,
     fetcher,
     fixture_text,
@@ -302,3 +304,13 @@ def test_a_volume_heading_past_the_html_budget_names_the_index_url() -> None:
     url = "https://proceedings.mlr.press/v28/"
     with pytest.raises(HTMLBudgetError, match=re.escape(f"{url}: HTML nesting exceeds")):
         pmlr.heading("<div>" * (MAX_DEPTH + 1), url)
+
+
+def test_the_reports_first_fetch_is_the_index_page(tmp_path: Path) -> None:
+    """`ListingReport.fetched[0]` is the volume index's read (reconcile dates its absence claims by it)."""
+    seed_fixture(tmp_path, "pmlr", V28, at=T1)  # the index page read after its paper pages
+    seed_fixture(tmp_path, "pmlr", "pmlr/v28/paper.json", at=T0)
+    for key in ("sznitman13", "boots13"):
+        seed(tmp_path, "pmlr", f"https://proceedings.mlr.press/v28/{key}.html", "", status=404, at=T0)
+    report = mine(tmp_path, 28).report
+    assert report.fetched[0] == T1 and T0 in report.fetched[1:]
