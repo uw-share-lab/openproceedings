@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 02:11'
-updated_date: '2026-09-30 14:14'
+updated_date: '2026-09-30 14:48'
 labels:
   - ops
 milestone: m-6
@@ -33,16 +33,16 @@ decision-018 requires a takedown contact on every public instance; TASK-133 adde
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The takedown list's file, format and location are specified, and whether snapshot_hash and the manifest cover it is decided and documented
-- [ ] #2 op snapshot build nulls every listed abstract, and a recrawl followed by a rebuild cannot restore one
-- [ ] #3 The withheld count appears in the snapshot manifest, on /coverage and in op snapshot diff
-- [ ] #4 Every index version the API loads withholds listed abstracts in hits, excerpts and highlights, /papers/{id} and its provenance, and every export format
-- [ ] #5 A withheld abstract carries a marker distinct from a missing one, in the API and the UI (guarantee 6)
-- [ ] #6 The oracle leak (pinned versions still match on withheld text) is decided: accepted with a written reason, or the field dropped from matching
-- [ ] #7 Search-record replay and the record page behave per guarantee 4 with listed abstracts, with tests
-- [ ] #8 A check fails when any listed abstract is served by any loaded index version
-- [ ] #9 Public deploys cannot build the web image without NEXT_PUBLIC_TAKEDOWN_CONTACT (a build ARG and a required-var gate)
-- [ ] #10 Where the operator's takedown log lives and who can access it is documented, and it stays out of git
+- [x] #1 The takedown list's file, format and location are specified, and whether snapshot_hash and the manifest cover it is decided and documented
+- [x] #2 op snapshot build nulls every listed abstract, and a recrawl followed by a rebuild cannot restore one
+- [x] #3 The withheld count appears in the snapshot manifest, on /coverage and in op snapshot diff
+- [x] #4 Every index version the API loads withholds listed abstracts in hits, excerpts and highlights, /papers/{id} and its provenance, and every export format
+- [x] #5 A withheld abstract carries a marker distinct from a missing one, in the API and the UI (guarantee 6)
+- [x] #6 The oracle leak (pinned versions still match on withheld text) is decided: accepted with a written reason, or the field dropped from matching
+- [x] #7 Search-record replay and the record page behave per guarantee 4 with listed abstracts, with tests
+- [x] #8 A check fails when any listed abstract is served by any loaded index version
+- [x] #9 Public deploys cannot build the web image without NEXT_PUBLIC_TAKEDOWN_CONTACT (a build ARG and a required-var gate)
+- [x] #10 Where the operator's takedown log lives and who can access it is documented, and it stays out of git
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -60,3 +60,9 @@ Design (spec 08 §Deploy takedown procedure; decision-018/021; owner decisions 2
 - AC10: log at <data-dir>/takedowns/log.jsonl, 0600 operator-owned, fields as spec 08; .gitignore + protect-data-dir.sh refuse adding takedowns/ paths; op takedown check fails on a group/world-readable log.
 Commits follow the ACs; TDD; make openapi; docs as built (spec 08, 04, 01, 05, skills, README).
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built as planned (commits 8a97b40..6983f26). AC1: list <data-dir>/takedowns/withheld.txt (ids, # comments; malformed refuses), snapshot_hash covers its effect, manifest names/counts withheld ids (keys only when non-empty; format 2 unchanged; withheld in AUDITED). AC2: op snapshot build --takedowns withholds after dedup/reconcile (abstract, abstract claims, conflicts.csv values); unmatched id refuses (takedown_unmatched); recrawl test. AC3: manifest abstract_withheld(+by_track), /coverage abstract_withheld (serve-time), op snapshot diff abstract_withheld{added,lifted}. AC4: served bundle carries the list, re-read on every load/SIGHUP even for an unchanged index; /search, /papers (+provenance, spans), every export format on served/index_version/record_id, op export. AC5: abstract_withheld on Hit and PaperResponse, CSV/JSONL abstract_withheld_reason; UI RH-15/PA-8/CV-6. AC6: decision-022 (owner: accept). AC7: contract tests: replay reproduced with identical ids on the pinned old index after the list and a rebuild; record exports withheld. AC8: op takedown check --api (HTTP; mutant tests fail it). AC9: deploy/web.Dockerfile + web-build-gate.sh (OPENPROCEEDINGS_INSTANCE required; public needs contact) + next.config.ts gate; image not built locally (Docker daemon not running). AC10: log <data-dir>/takedowns/log.jsonl, 0600 operator, fields in decision-022/spec 08; .gitignore, protect-data-dir.sh rows+mutants, .dockerignore; op takedown check checks mode and entries.
+<!-- SECTION:NOTES:END -->
