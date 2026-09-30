@@ -33,9 +33,10 @@ The code is `backend/src/openproceedings/ingest/ris.py`; its module docstring is
    record's venueid and the string names its venue, year and track, or only its venue and year for ICLR
    2013/2017's lower-case `conference` venueid, which names no track and so takes the string's track too
    (`V1_TRACK_FROM_VENUE`, TASK-142); else `unknown`, with the reason in the evidence); else the
-   proceedings track claim; else the volume table (`unknown` for volumes that mix main and position papers). A proceedings listing means
-   `accepted` and overrides an agreeing venueid (decision-005; counted in `status_overrides`). Nothing else
-   ever sets `accepted`. Never infer anything from `JF`, since that's Scholar's venue string.
+   proceedings track claim; else the volume table (`unknown` for volumes that mix main and position
+   papers). A proceedings listing means `accepted` and overrides an agreeing venueid (decision-005;
+   counted in `status_overrides`). Nothing else ever sets `accepted`. Never infer anything from `JF`,
+   since that's Scholar's venue string.
 4. **Abstract.** OpenReview's, else the proceedings page's, else `null` (counted). Never Scholar's `AB`
    or Semantic Scholar's.
 5. **Provenance.** Every field gets a `source="ris"` claim whose `evidence` names scholarmend's source
