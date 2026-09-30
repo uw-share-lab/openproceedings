@@ -32,8 +32,8 @@
  {
   "label": "absolute path not basenamed",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        rest = [base(rest[0]), *rest[1:]]",
-  "new": "        pass"
+  "old": "    out[:] = [base(rest[0]), *rest[1:]] if rest else []",
+  "new": "    out[:] = rest"
  },
  {
   "label": "comments not stripped",
@@ -92,8 +92,8 @@
  {
   "label": "bash -c not recursed",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                    yield from _walk(tokenize(argv[k + 1]), state)\n",
-  "new": ""
+  "old": "                    for inner in _walk(tokenize(argv[k + 1]), state):",
+  "new": "                    for inner in []:"
  },
  {
   "label": "-o value not skipped",
@@ -870,5 +870,53 @@
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "        or any(x.startswith(\"--pathspec-from-file\") for x in args)  # `=file` or a separate `file` argument",
   "new": "        or False"
+ },
+ {
+  "label": "xargs not flagged",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            out.via_xargs = out.via_xargs or name == \"xargs\"\n",
+  "new": ""
+ },
+ {
+  "label": "xargs flag not carried into sh -c",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                        inner[0].via_xargs = inner[0].via_xargs or argv.via_xargs\n",
+  "new": ""
+ },
+ {
+  "label": "xargs_hides_args ignores git",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    return g is not None and g[0] in XARGS_GUARDED_GIT",
+  "new": "    return False"
+ },
+ {
+  "label": "xargs_hides_args ignores rm/mv",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if argv and argv[0] in XARGS_GUARDED:\n        return True\n",
+  "new": ""
+ },
+ {
+  "label": "require-review: xargs push allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "        if xargs_hides_args(argv, d):\n",
+  "new": "        if False:\n"
+ },
+ {
+  "label": "PR gate: xargs verdict dropped",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "            return \"xargs\"",
+  "new": "            pass"
+ },
+ {
+  "label": "PR gate: xargs not carried into sh -c",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "                        state[\"xargs\"] = outer or strip_prefixes(tokens[s:k]).via_xargs",
+  "new": "                        state[\"xargs\"] = outer"
+ },
+ {
+  "label": "PR gate: xargs state ignored at git",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        argv.via_xargs = argv.via_xargs or state.get(\"xargs\", False)\n",
+  "new": ""
  }
 ]

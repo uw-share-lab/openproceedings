@@ -46,11 +46,12 @@
 #
 # Threat model: this is a GUARDRAIL against honest mistakes (a stray push while on main), not an
 # adversarial control. A static parser cannot expand what only the shell knows at runtime, so a git
-# command hidden behind `$(...)`, a `$var`, a here-string, a pipe into `bash`/`xargs`, or a script
+# command hidden behind `$(...)`, a `$var`, a here-string, a pipe into `bash`, or a script
 # file whose contents are never shown to this hook is NOT fully closed off — the opaque-script check
 # above only WARNS, it cannot prove the script is safe. A determined actor can still evade a
 # command-string parser. Do not mistake this hook for a hard security boundary; it exists to catch
 # accidental/automated main-mutations, not to stop someone who deliberately routes around it.
+# (A git push/add/commit/rm/mv run by `xargs` is refused outright: the words it appends are unseen.)
 # If python3 is unavailable the fail-closed fallback below still catches the plain-text
 # `git push`/`commit`/`merge` forms (using the same cwd-aware branch resolution, best-effort).
 input=$(cat)
@@ -76,7 +77,8 @@ import json, os, shlex, subprocess, sys
 # `git push origin HEAD:dev;` read `dev;` as the ref), and compare command names by basename
 # (`/usr/bin/git`).
 sys.path.insert(0, os.environ.get("HOOK_LIB", ""))
-from cmdparse import base as _base, is_redirect as _is_redirect, is_separator as _is_sep, tokenize as _tokenize
+from cmdparse import (Argv, base as _base, git_subcommand, is_redirect as _is_redirect, is_separator as _is_sep,
+                      strip_prefixes, tokenize as _tokenize, xargs_hides_args)
 
 def _split(text):
     """Punctuation-aware tokens; separators normalised into SEPARATORS, redirect operators dropped."""
@@ -96,8 +98,6 @@ except Exception:
     cmd = ""
 
 SEPARATORS = {"&&", "||", ";", "|", "&"}  # _split() maps every separator (incl. newline, parens) to ";"
-# git's own options that take a value; skip the value when hunting for the subcommand.
-VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 SOURCE_CMDS = {".", "source"}  # always run a file; no -c-string form exists for these
 PROTECTED = {"main", "dev"}    # branches that only a merged PR may write; extend here to add more
@@ -173,6 +173,17 @@ def push_verdict(args, directory):
 warnings = []  # opaque-script wrappers seen along the way; only surfaced if nothing else blocks
 
 
+def segment(tokens, i):
+    """Bounds [s, k) of the simple command holding tokens[i]: back to the previous separator, on to the next."""
+    s = i
+    while s > 0 and tokens[s - 1] not in SEPARATORS:
+        s -= 1
+    k = i
+    while k < len(tokens) and tokens[k] not in SEPARATORS:
+        k += 1
+    return s, k
+
+
 def analyze(tokens, state):
     """Walk tokens; return the first blocking verdict, else 'allow'. Recurses into shell wrappers.
     `state["dir"]` tracks the working directory implied by any `cd <dir>` seen so far in this
@@ -216,7 +227,12 @@ def analyze(tokens, state):
                             inner = _split(tokens[j + 1])
                         except ValueError:
                             return "parse-fail"
+                        # `xargs sh -c 'git push "$@"' sh`: the inner command's words still come from xargs
+                        outer = state.get("xargs", False)
+                        s, k = segment(tokens, i)
+                        state["xargs"] = outer or strip_prefixes(tokens[s:k]).via_xargs
                         v = analyze(inner, state)
+                        state["xargs"] = outer
                         if v != "allow":
                             return v
                     break
@@ -253,32 +269,31 @@ def analyze(tokens, state):
             i += 1
             continue
 
-        # Skip git's global options to reach the subcommand, CHAINING every `-C <dir>` the way git
-        # itself does (git's own semantics, and this takes priority over any `cd`): multiple `-C`
+        # The simple command this `git` belongs to: back to the previous separator and on to the next. Its
+        # prefixes (reserved words, wrappers, VAR=val) go through the shared cmdparse.strip_prefixes, so
+        # `xargs` and `GIT_DIR=` are seen (TASK-067). A `git` that isn't the command itself (`echo git
+        # commit`) is still read as git, as before: over-blocking a lookalike is the safe side.
+        s, k = segment(tokens, i)
+        local = {"dir": state["dir"]}  # `env -C dir` / `sudo -D dir` move this one command only
+        argv = strip_prefixes(tokens[s:k], local)
+        if not argv or argv[0] != "git":
+            argv = Argv(["git", *tokens[i + 1 : k]])
+        argv.via_xargs = argv.via_xargs or state.get("xargs", False)
+        i = k
+
+        # git_subcommand skips git's global options to reach the subcommand, CHAINING every `-C <dir>` the
+        # way git itself does (git's own semantics, and this takes priority over any `cd`): multiple `-C`
         # flags compose left-to-right — each relative `-C` is resolved against the directory the
         # PRECEDING `-C` established, an absolute `-C` resets the base. Keeping only the last value
         # and resolving it against the outer dir would mis-resolve `-C a -C ../b` and let a
         # main-worktree target slip through. The chain starts at `state["dir"]` (the `cd`/cwd base).
-        effective_dir = state["dir"]
-        j = i + 1
-        while j < len(tokens) and tokens[j].startswith("-"):
-            opt = tokens[j]
-            if opt in VALUE_OPTS:
-                if opt == "-C" and j + 1 < len(tokens):
-                    effective_dir = resolve_dir(unwrap(tokens[j + 1]), effective_dir)
-                j += 2
-            else:
-                j += 1
-        if j >= len(tokens):
-            break
+        g = git_subcommand(argv, local["dir"])
+        if g is None:
+            continue
+        sub, args, effective_dir = g
 
-        sub = tokens[j]
-        args = []
-        k = j + 1
-        while k < len(tokens) and tokens[k] not in SEPARATORS:
-            args.append(tokens[k])
-            k += 1
-
+        if xargs_hides_args(argv, effective_dir):
+            return "xargs"  # it appends refspecs/paths from stdin that this gate cannot see
         if sub == "push":
             v = push_verdict(args, effective_dir)
             if v != "allow":
@@ -295,8 +310,6 @@ def analyze(tokens, state):
                 return "protected-merge"
         elif sub == "commit" and get_branch(effective_dir) in PROTECTED:
             return "protected"
-
-        i = j + 1
 
     return "allow"
 
@@ -367,6 +380,11 @@ case "$verdict" in
   protected-ref)
     echo "Refusing: this command would write or delete a protected remote ref (main/dev) directly." >&2
     echo "Changes reach a protected branch only through a merged pull request (gh pr merge)." >&2
+    exit 2
+    ;;
+  xargs)
+    echo "Refusing: xargs runs a git push/add/commit/rm/mv here, and the refspecs or paths it appends come from" >&2
+    echo "stdin, which this gate cannot see. Run the git command with its arguments written out." >&2
     exit 2
     ;;
   warn:*)

@@ -9,6 +9,7 @@ matter to a gate:
   * leading reserved words (`if`/`then`/`do`/`{`/`!` …), `VAR=val`, and wrappers (`env`, `sudo`, `nice`,
     `timeout`, `xargs`, `stdbuf`, `watch`, `exec`, `time`, `nohup`, `command`, `builtin`) are stripped, each
     wrapper with its own table of value-taking options; `env -S '…'` is split, `env -C`/`sudo -D` move dir;
+    the argv comes back as an `Argv` that records the `VAR=val` words and whether xargs runs it;
   * command names compare by basename (`/usr/bin/git` is `git`);
   * redirections leave argv as (operator, target) pairs (`redirect_targets`);
   * `cd <dir>` is tracked and `bash -c "…"` / `eval "…"` are recursed into.
@@ -112,6 +113,26 @@ ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 class ParseError(ValueError):
     pass
+
+
+class Argv(list):
+    """An argv from `simple_commands`: the words, plus what its stripped prefixes said about it.
+    `via_xargs`: xargs runs it, appending words read from stdin that no gate can see (TASK-067: `echo other |
+    xargs git push origin` pushed `other` unchecked); see `xargs_hides_args`. `assigns`: the `VAR=val` words
+    before it, env's included (`GIT_DIR=… git commit`)."""
+
+    via_xargs: bool = False
+    assigns: dict[str, str]
+
+    def __init__(self, words: list[str], via_xargs: bool = False, assigns: dict[str, str] | None = None):
+        super().__init__(words)
+        self.via_xargs = via_xargs
+        self.assigns = assigns or {}
+
+
+# What xargs may not run: a command whose appended words (paths, refspecs) decide what a gate allows.
+XARGS_GUARDED = {"rm", "mv"}
+XARGS_GUARDED_GIT = {"push", "add", "stage", "commit", "rm", "mv"}
 
 
 def read_payload() -> tuple[str, str]:
@@ -263,23 +284,32 @@ def base(word: str) -> str:
     return os.path.basename(word) if "/" in word else word
 
 
-def _strip_prefixes(argv: list[str], state: dict | None = None) -> list[str]:
+def strip_prefixes(argv: list[str], state: dict | None = None) -> Argv:
     """Drop leading reserved words, `VAR=val` and wrappers (with their option values). `env -S 'cmd'`
-    splits its string into the command; `env -C dir` / `sudo -D dir` change the directory in `state`."""
+    splits its string into the command; `env -C dir` / `sudo -D dir` change the directory in `state`.
+    The result records whether xargs runs the command and the assignments before it (`Argv`)."""
+    return _strip_prefixes(argv, state, Argv([]))
+
+
+def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
     i = 0
     while i < len(argv):
         a = argv[i]
         if a in RESERVED or ASSIGNMENT.match(a):
+            if a not in RESERVED:
+                name, _, value = a.partition("=")
+                out.assigns[name] = value
             i += 1
         elif base(a) in WRAPPERS:
             name = base(a)
+            out.via_xargs = out.via_xargs or name == "xargs"
             i += 1
             while i < len(argv) and argv[i].startswith("-"):  # env -i, nice -n 5, sudo -u x, timeout -s KILL
                 opt, eq, attached = argv[i].partition("=")
                 takes_value = opt in WRAPPER_VALUE_OPTS[name]
                 value = attached if eq else (argv[i + 1] if takes_value and i + 1 < len(argv) else None)
                 if name == "env" and opt in ("-S", "--split-string") and value is not None:
-                    return _strip_prefixes([*tokenize(value), *argv[i + (1 if eq else 2) :]], state)
+                    return _strip_prefixes([*tokenize(value), *argv[i + (1 if eq else 2) :]], state, out)
                 if (
                     state is not None
                     and value is not None
@@ -295,9 +325,19 @@ def _strip_prefixes(argv: list[str], state: dict | None = None) -> list[str]:
         else:
             break
     rest = argv[i:]
-    if rest:
-        rest = [base(rest[0]), *rest[1:]]
-    return rest
+    out[:] = [base(rest[0]), *rest[1:]] if rest else []
+    return out
+
+
+def xargs_hides_args(argv: list[str], directory: str) -> bool:
+    """True when xargs runs `argv` and it is `rm`, `mv` or a git push/add/commit/rm/mv: the words xargs
+    appends are the paths or refspecs a gate decides on, and it cannot see them, so the gate fails closed."""
+    if not getattr(argv, "via_xargs", False):
+        return False
+    if argv and argv[0] in XARGS_GUARDED:
+        return True
+    g = git_subcommand(argv, directory)
+    return g is not None and g[0] in XARGS_GUARDED_GIT
 
 
 def is_redirect(tok: str) -> bool:
@@ -350,7 +390,7 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[list[str], str, list
             j += 1
         raw, i = tokens[i:j], j + 1
         args, redirects = split_redirects(raw)
-        argv = _strip_prefixes(args, state)
+        argv = strip_prefixes(args, state)
         if not argv:
             if redirects:
                 yield [], state["dir"], redirects
@@ -362,7 +402,10 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[list[str], str, list
         if head in SHELLS:
             for k, a in enumerate(argv[1:], start=1):
                 if a.startswith("-") and not a.startswith("--") and "c" in a and k + 1 < len(argv):
-                    yield from _walk(tokenize(argv[k + 1]), state)
+                    for inner in _walk(tokenize(argv[k + 1]), state):
+                        # `xargs sh -c 'git push origin "$0"'`: the words still come from xargs
+                        inner[0].via_xargs = inner[0].via_xargs or argv.via_xargs
+                        yield inner
                     break
             continue
         if head == "eval":

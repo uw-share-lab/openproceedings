@@ -16,7 +16,8 @@
 #    constituent PRs were each reviewed and each carried a learning; main's own gate is a second
 #    person's approval.
 #
-# An unparseable command that looks like a push or a PR is blocked (fail closed).
+# An unparseable command that looks like a push or a PR is blocked (fail closed), and so is a push run by
+# xargs, whose appended refspecs this gate can't see (TASK-067).
 #
 # Writing/deleting main or dev directly is enforce-pr-workflow.sh's job; this gate adds the review
 # requirement on top. Guardrail, not a security boundary (see lib/cmdparse.py). Exit 2 blocks.
@@ -25,7 +26,7 @@ input=$(cat)
 HOOK_INPUT="$input" python3 - "$HOOK_DIR" <<'PY'
 import os, re, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import ParseError, gh_subcommand, git, git_subcommand, opt_value, opt_values, read_payload, simple_commands
+from cmdparse import ParseError, gh_subcommand, git, git_subcommand, opt_value, opt_values, read_payload, simple_commands, xargs_hides_args
 
 ENTRY_NAME = re.compile(r"^\.claude/learnings/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$")  # same rule as learnings_index.py
 PUSH_VALUE_OPTS = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
@@ -102,6 +103,9 @@ for argv, d in commands:
     g = git_subcommand(argv, d)
     if g and g[0] == "push":
         _, args, eff = g
+        if xargs_hides_args(argv, d):
+            block(["Review gate: `xargs git push` is blocked — xargs appends refspecs this gate cannot see, so it",
+                   "cannot tell which commits are pushed. Name the refspecs on the command line instead."])
         flags = [a for a in args if a.startswith("-")]
         if "--delete" in flags or "-d" in flags:
             continue  # every named ref is deleted; no code is pushed

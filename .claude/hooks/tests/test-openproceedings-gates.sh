@@ -461,6 +461,27 @@ check $R block "continuation splits a word: git pu\\sh" "$(payload_bash "$(print
 check $R block "continuation splits the command: gi\\t" "$(payload_bash "$(printf 'gi\\\nt push origin other2')")"
 check $P block "continuation splits a flag: -fd\\x" "$(payload_bash "$(printf 'git clean -fd\\\nx')")"
 
+echo "== round-6 rows (TASK-067 security review: xargs, git -c/aliases, forged records, \$(cat file))"
+g switch -q mut
+approve                                    # HEAD (mut) approved, so each row below isolates its own check
+check $R block "xargs git push (appended refspec unseen)" "$(payload_bash 'echo other2 | xargs git push origin')"
+check $R block "xargs sh -c 'git push \"\$@\"'"        "$(payload_bash "echo origin other2 | xargs sh -c 'git push \"\$@\"' sh")"
+check $R allow "xargs of a non-push git command"      "$(payload_bash 'echo x | xargs git log -1')"
+# cmdparse.xargs_hides_args is shared: protect-data-dir.sh will refuse the rm/mv/git add forms with it
+hides() { python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from cmdparse import simple_commands, xargs_hides_args
+print(any(xargs_hides_args(a, d) for a, d in simple_commands(sys.argv[2], sys.argv[3])))' "$HOOKS/lib" "$1" "$REPO"; }
+check_hides() {  # check_hides <True|False> <command>
+  local got; got=$(hides "$2")
+  if [ "$got" = "$1" ]; then pass=$((pass+1)); printf '  ok   %-24s %-60s -> %s\n' "cmdparse" "xargs_hides_args: $2" "$got"
+  else fail=$((fail+1)); printf '  FAIL %-24s %-60s -> %s (want %s)\n' "cmdparse" "xargs_hides_args: $2" "$got" "$1"; fi
+}
+check_hides True  'find . -name x | xargs rm'
+check_hides True  'ls | xargs mv -t /tmp'
+check_hides True  'ls | xargs git add -f'
+check_hides True  'ls | xargs /usr/bin/git commit'
+check_hides False 'ls | xargs echo'
+check_hides False 'rm -f x'
+
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")
 case "$out" in *TOKENIZER_VERSION*) pass=$((pass+1)); echo "  ok   reminder on normalize.py";; *) fail=$((fail+1)); echo "  FAIL no reminder on normalize.py";; esac

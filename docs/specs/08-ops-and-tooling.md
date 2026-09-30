@@ -504,7 +504,9 @@ them:
   `do`/`done`, `{`/`}`, `!`, `esac`, `function`) are skipped;
 - `VAR=val` assignments and the wrappers `env`, `command`, `builtin`, `exec`, `time`, `nohup`, `nice`,
   `sudo`, `timeout`, `stdbuf`, `xargs` and `watch` are skipped, each with its own table of options that take
-  a value;
+  a value; the assignments are kept, and a command run by `xargs` is marked, because the words xargs appends
+  are invisible (`xargs_hides_args` flags `rm`, `mv` and `git push`/`add`/`commit`/`rm`/`mv` run that way;
+  `require-review.sh` and `enforce-pr-workflow.sh` refuse them);
 - command names are compared by basename (`/usr/bin/git`);
 - one pass over the whole text carries quote state across lines, so a multi-line quoted message
   stays one word; `#` starts a comment only at the start of an unquoted word, as in bash; an unquoted

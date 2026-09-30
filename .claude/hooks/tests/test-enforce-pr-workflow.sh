@@ -196,6 +196,11 @@ echo main'                                                              # separa
 check main  allow 'bash --norc -c "git status"'            # positive control: long opt + safe cmd
 check main  allow 'bash -cx "git status"'                  # positive control: cluster + safe cmd
 
+echo "xargs appends words no gate can see (TASK-067):"
+check feature/x block 'echo dev | xargs git push origin'           # xargs supplies the refspec
+check feature/x block "echo origin dev | xargs sh -c 'git push \"\$@\"' sh"   # ... also through sh -c "\$@"
+check feature/x allow 'echo x | xargs git log -1'                  # positive control
+
 echo "eval re-parses its argument:"
 check main       block 'eval "git push origin main"'
 check main       block 'eval "git commit -m x"'
