@@ -1267,5 +1267,23 @@
   "file": ".claude/hooks/block-ai-attribution.sh",
   "old": "|`\\s*cat\\s+([^`]*?)\\s*`\")",
   "new": "\")"
+ },
+ {
+  "label": "backlog: path not normalised",
+  "file": ".claude/hooks/enforce-backlog-cli.sh",
+  "old": "    p = os.path.realpath(os.path.join(d.get(\"cwd\") or os.getcwd(), p)).lower()",
+  "new": "    p = p"
+ },
+ {
+  "label": "backlog: path not lower-cased",
+  "file": ".claude/hooks/enforce-backlog-cli.sh",
+  "old": "or os.getcwd(), p)).lower()",
+  "new": "or os.getcwd(), p))"
+ },
+ {
+  "label": "backlog: payload cwd ignored",
+  "file": ".claude/hooks/enforce-backlog-cli.sh",
+  "old": "os.path.join(d.get(\"cwd\") or os.getcwd(), p)",
+  "new": "os.path.join(os.getcwd(), p)"
  }
 ]

@@ -16,11 +16,15 @@ path=''
 tool=''
 parsed=''
 # shellcheck disable=SC2016  # single quotes are deliberate: this is Python source, not shell
-eval "$(printf '%s' "$input" | python3 -c 'import json,sys,shlex
+eval "$(printf '%s' "$input" | python3 -c 'import json,os,sys,shlex
 # Emit nothing on failure -> `parsed` stays empty -> the guard below fails closed.
 d = json.load(sys.stdin)
 p = d.get("tool_input", {}).get("file_path", "") or ""
 t = d.get("tool_name", "") or ""
+# Normalise before matching (TASK-067): relative to the call'"'"'s cwd, `//`, `./`, `..` and symlinks resolved,
+# lower-cased because APFS folds case (`Backlog/tasks/` is `backlog/tasks/`).
+if p:
+    p = os.path.realpath(os.path.join(d.get("cwd") or os.getcwd(), p)).lower()
 print(f"path={shlex.quote(p)}; tool={shlex.quote(t)}; parsed=1")' 2>/dev/null)"
 
 # Fail CLOSED — but only for calls that could plausibly touch backlog/. If we cannot parse the tool call
@@ -29,7 +33,7 @@ print(f"path={shlex.quote(p)}; tool={shlex.quote(t)}; parsed=1")' 2>/dev/null)"
 # every Write/Edit in the repo — this hook runs on all of them.
 if [ -z "$parsed" ]; then
   case "$input" in
-    */backlog/*)
+    *[Bb][Aa][Cc][Kk][Ll][Oo][Gg]/*)
       echo "Backlog guard could not parse this tool call (python3 missing or malformed JSON), and the call" >&2
       echo "appears to touch backlog/ — refusing. This guard fails closed by design." >&2
       echo "Fix the environment, or make the change with the 'backlog' CLI." >&2
@@ -39,7 +43,7 @@ if [ -z "$parsed" ]; then
   exit 0
 fi
 
-case "$path" in
+case "$path" in   # normalised and lower-cased above
   */backlog/decisions/*)
     # Body authoring is Edit-only; creation still goes through the CLI.
     case "$tool" in Edit|MultiEdit) exit 0 ;; esac
@@ -49,7 +53,7 @@ case "$path" in
     echo "(Edit is permitted here because the CLI cannot write a decision body — see CLAUDE.md.)" >&2
     exit 2
     ;;
-  */backlog/tasks/*|*/backlog/drafts/*|*/backlog/docs/*|*/backlog/milestones/*|*/backlog/completed/*|*/backlog/archive/*|*/backlog/config.yml|*/backlog/Backlog.md)
+  */backlog/tasks/*|*/backlog/drafts/*|*/backlog/docs/*|*/backlog/milestones/*|*/backlog/completed/*|*/backlog/archive/*|*/backlog/config.yml|*/backlog/backlog.md)
     echo "Backlog.md files are CLI-managed — do not edit them directly. Use the 'backlog' CLI instead, e.g.:" >&2
     echo "  backlog task create / edit / view      (tasks & subtasks)" >&2
     echo "  backlog doc create                      (specs / plans)" >&2
