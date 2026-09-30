@@ -360,7 +360,7 @@ export interface components {
         /**
          * Diagnostic
          * @description A warning, error or translation notice about a query, with a half-open code-point span into `q`.
-         *     `reading` is set on `WARN_MIXED_AND_OR` only, so a client never parses `message` for it.
+         *     `reading` is only ever set on `WARN_MIXED_AND_OR`, so a client never parses `message` for it.
          */
         Diagnostic: {
             code: components["schemas"]["DiagnosticCode"];
@@ -368,7 +368,7 @@ export interface components {
             message: string;
             /**
              * Reading
-             * @description `WARN_MIXED_AND_OR` only, null on every other code: the text at `span` as it was read, each `AND` group in parentheses and the branches joined with ` OR ` (`a b OR c` → `(a b) OR c`). Replacing `span` in `q` with it gives a query with the same canonical form whose level no longer mixes `AND` and `OR`. Never shortened, unlike the reading quoted in `message`.
+             * @description Only ever set on `WARN_MIXED_AND_OR`: the text at `span` as it was read, each `AND` group in parentheses and the branches joined with ` OR ` (`a b OR c` → `(a b) OR c`). Replacing `span` in `q` with it gives a query with the same canonical form whose level no longer mixes `AND` and `OR`. Never shortened, unlike the reading quoted in `message`. Null on every other code, and on a `WARN_MIXED_AND_OR` that has none to offer: the "… and N more" summary, or a level with a branch that doesn't parse.
              */
             reading: string | null;
             /** Span */

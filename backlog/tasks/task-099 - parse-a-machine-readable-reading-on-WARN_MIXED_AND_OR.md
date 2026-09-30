@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-27 21:11'
-updated_date: '2026-09-30 02:20'
+updated_date: '2026-09-30 02:28'
 labels:
   - api
   - frontend
@@ -40,11 +40,13 @@ TASK-041's 'Load with parentheses' action extracts the parenthesised reading fro
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Field: `Diagnostic.reading: str | null`, always sent (required + nullable, so additive under /api/v1; test_openapi_additive passes against origin/dev). Set exactly on WARN_MIXED_AND_OR (`READING_CODES`, enforced by a model validator), null on every other code. Value: the warned level's text at `span` with each AND group parenthesised and branches joined by ` OR ` (`a b OR c` -> `(a b) OR c`), never clipped (the message clips at 120). Chosen over a code-specific payload: one shape everywhere, one nullable key. Not the canonical form: canonical adds defaults/field prefixes, while the action splices the reading over the span in the user's own text. `StoredDiagnostic` got the same key (null on records saved before), so a record returns what it stored.
+Field: `Diagnostic.reading: str | null`, always sent (required + nullable, so additive under /api/v1; test_openapi_additive passes against origin/dev). Only ever set on WARN_MIXED_AND_OR (`READING_CODES`; a model validator refuses it on any other code), null on every other code. Not required there: null on the "… and N more" summary past the per-code cap and on a level with a branch that does not parse (review round 1: an "always set" rule 500d /parse and /search on 21+ mixed levels, and a failed branch was silently dropped from the reading). Value: the warned level's text at `span` with each AND group parenthesised and branches joined by ` OR ` (`a b OR c` -> `(a b) OR c`), never clipped (the message clips at 120). Chosen over a code-specific payload: one shape everywhere, one nullable key. Not the canonical form: canonical adds defaults/field prefixes, while the action splices the reading over the span in the user's own text. `StoredDiagnostic` got the same key (null on records saved before), so a record returns what it stored.
 
 Frontend: `ServerDiagnostic`/`Item` carry `reading`; `withParentheses` reads it (MIXED_READING regex removed). No version-skew handling exists (frontend and API ship together), so no message fallback; a null reading simply offers no button.
 
 Tests: test_parser.py goldens pin (span, reading) for 16 mixed cases (native + scholar, NEAR, `|`, newline, astral, nested, >120 cp) and that splicing keeps canonical and clears one warning; property test over queries() in both modes; validator unit test; /parse + /search contract test; exact-dict contract tests and record-fixture.json updated; Vitest for the action (field only, never message; long reading; null reading); new e2e against the real server with a 147-cp reading. make test (5361 py + 2594 vitest), make e2e (16), make lint, make tooling green. One first make test run hit a hypothesis DeadlineExceeded in golden/test_reference_200 (untouched, timing under xdist load); passed alone and on the full rerun.
 
 Docs: spec 02 (Precedence rule, ParseResult), 04 (Conventions), 05 (Components 1), error-diagnostics and codemirror-lezer skills; the TASK-041 learning's follow-up ticked.
+
+Review round 1 (all fixed): Must, the capped summary 500 (validator relaxed; contract test with 22 levels on /parse and /search; property example past the cap, the MAX_PER_CODE assume removed). Should 2, a failed branch gives reading null (parser test, spec 02). Should 3, records tests: a v2 body without the key reads as null; GET /records/{id} returns a saved reading (stored and replayed); search-records skill notes the tolerant key. Nit 4, the e2e asserts the reading's length.
 <!-- SECTION:NOTES:END -->

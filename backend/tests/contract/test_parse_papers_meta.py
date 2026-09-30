@@ -77,6 +77,20 @@ def test_the_mixed_and_or_warning_carries_its_reading_as_a_field(client: TestCli
     assert searched == body["warnings"]
 
 
+def test_mixed_levels_past_the_per_code_cap_are_a_200_with_a_readingless_summary(client: TestClient) -> None:
+    """TASK-099 review: 22 mixed levels give 20 warnings with readings, then "… and 2 more like these." whose
+    `reading` is null. That summary once failed the Diagnostic validator, a 500 on /parse and /search."""
+    q = " ".join(f"(a{i} b{i} OR c{i})" for i in range(22))
+    r = client.post("/api/v1/parse", json={"q": q})
+    assert r.status_code == 200, r.text
+    mixed = [w for w in r.json()["warnings"] if w["code"] == "WARN_MIXED_AND_OR"]
+    assert len(mixed) == 21 and all(w["reading"] for w in mixed[:20])
+    assert (mixed[-1]["message"], mixed[-1]["reading"]) == ("… and 2 more like these.", None)
+    s = client.get("/api/v1/search", params={"q": q})
+    assert s.status_code == 200, s.text
+    assert s.json()["query"]["warnings"] == r.json()["warnings"]
+
+
 def test_parse_errors_are_values_with_code_point_spans(client: TestClient) -> None:
     body = client.post("/api/v1/parse", json={"q": "𝔸I (trust"}).json()
     assert [(e["code"], e["span"], e["reading"]) for e in body["errors"]] == [

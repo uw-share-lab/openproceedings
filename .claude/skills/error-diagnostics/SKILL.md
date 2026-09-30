@@ -11,12 +11,14 @@ class Diagnostic(BaseModel):  # frozen, extra="forbid"
     code: DiagnosticCode  # StrEnum from the registry
     message: str  # human sentence, includes the fix hint
     span: tuple[int, int] | None  # half-open [start, end) code-point offsets into the query input q
-    reading: str | None  # WARN_MIXED_AND_OR only (READING_CODES), else None; always sent (TASK-099)
+    reading: str | None  # only ever set on READING_CODES (WARN_MIXED_AND_OR); always sent (TASK-099)
 ```
 - **`reading`** is the one code-specific field, kept on the shared shape (optional, so additive) rather than
   a per-code payload: on `WARN_MIXED_AND_OR` it is the warned level as it was read, the text at `span` with
-  each `AND` group parenthesised (`a b OR c` → `(a b) OR c`), never clipped. A model validator makes it set
-  exactly on `READING_CODES`. The UI's "Load with parentheses" splices it over `span`; **a client never
+  each `AND` group parenthesised (`a b OR c` → `(a b) OR c`), never clipped. A model validator refuses it on
+  any code outside `READING_CODES`; it is **not** required there: the per-code cap's "… and N more" summary
+  (`parser._capped`, which builds every code's summary alike) and a level with a branch that doesn't parse
+  carry `reading: None` (an "always set" rule 500'd the summary; TASK-099 review). The UI's "Load with parentheses" splices it over `span`; **a client never
   parses `message`** for data. Data another code needs becomes a field the same way (a spec 04 change, additive:
   nullable, null on the other codes), never prose to extract.
 - `ParseResult.warnings`, `.errors`, `.translations` are all `list[Diagnostic]`. Non-empty `errors` ⇒ no

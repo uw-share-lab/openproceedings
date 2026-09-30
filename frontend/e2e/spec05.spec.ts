@@ -152,13 +152,13 @@ test("the editor exposes completion, diagnostics and submission to the keyboard"
 test("Load with parentheses loads the server's whole reading of a mixed AND/OR query, unsearched", async ({
   page,
 }) => {
-  // over 120 code points, so the warning's message quotes a shortened reading: the button uses the
+  // a reading over 120 code points, so the warning's message quotes it shortened: the button uses the
   // diagnostic's `reading` field (TASK-099), which never is
   const terms = ["reliance", "overreliance", "appropriate reliance", "human-AI teaming", "calibrated trust"];
   const tail = terms.map((t) => (t.includes(" ") ? `"${t}"` : t)).join(" OR ");
   const q = `trust calibration OR ${tail} OR automation bias OR complacency`;
   const read = `(trust calibration) OR ${tail} OR (automation bias) OR complacency`;
-  expect(q.length).toBeGreaterThan(120);
+  expect(read.length).toBeGreaterThan(120);
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Query" });
   await expect(editor).toBeFocused();

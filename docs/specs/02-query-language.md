@@ -122,7 +122,10 @@ Rules:
   in parentheses and the branches joined by ` OR ` (`a b OR c` → `(a b) OR c`; a nested level inside a
   branch is quoted as typed and keeps its own warning). Replacing the span with it gives the same
   canonical form and one warning fewer (property-tested). It is never clipped, unlike the reading the
-  message quotes (TASK-099).
+  message quotes (TASK-099). It is null when there is no faithful reading to offer: on a level with a
+  branch that doesn't parse (`a b OR () OR c`: the failed branch has no text in the tree, so the reading
+  would drop it), and on the "… and N more like these." summary past 20 warnings, which stands for
+  several levels.
 - A leading `NOT` or `-` on its own (an all-negative query) is an error. There has to be something to
   subtract from.
 - **Wildcards are opt-in and suffix-only:** `benchmark*` means zero or more characters.
@@ -363,8 +366,9 @@ ParseResult = {               # `query/parser.py`; every Optional below is None 
   identification_query: str | None,  # canonical without default conjuncts; "" = every record
   identification_ast: Node | None,    # the same set as a tree (None = every record): what counts use
   defaults: [ "track" | "status" ],   # fields whose top-level clause is the default
-  warnings: [Diagnostic],      # {code, message, span:[start,end], reading}; reading: str on
-                               #   WARN_MIXED_AND_OR (§Grammar, Precedence), null on every other code
+  warnings: [Diagnostic],      # {code, message, span:[start,end], reading}; reading: only ever a str on
+                               #   WARN_MIXED_AND_OR (§Grammar, Precedence; null there too when there's none
+                               #   to offer), null on every other code
   errors: [Diagnostic],        # non-empty ⇒ no search
   translations: [Diagnostic],  # Scholar-mode rewrites and notices (e.g. COMPAT_NO_STEMMING)
 }

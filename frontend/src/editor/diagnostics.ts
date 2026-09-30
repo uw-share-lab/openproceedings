@@ -11,7 +11,7 @@ import { codePointLength, codePointSpanToUtf16 } from "@/api/spans";
 
 /**
  * A server diagnostic: `{code, message, span, reading}` (spec 04 §Conventions), from `/parse` or an error
- * envelope. `reading` is set on `WARN_MIXED_AND_OR` only (TASK-099).
+ * envelope. `reading` is only ever set on `WARN_MIXED_AND_OR` (TASK-099).
  */
 export interface ServerDiagnostic {
   readonly code: string;
@@ -29,7 +29,8 @@ export interface Item {
   readonly message: string;
   /** Half-open code points into the text the diagnostic was reported for; `null` when it has no place. */
   readonly span: readonly [number, number] | null;
-  /** `WARN_MIXED_AND_OR`'s text at `span` as the server read it, parenthesised; `null` on every other code. */
+  /** `WARN_MIXED_AND_OR`'s text at `span` as the server read it, parenthesised; `null` on every other code, and
+   * on a `WARN_MIXED_AND_OR` with none to offer (a branch that doesn't parse, the "… and N more" summary). */
   readonly reading: string | null;
 }
 

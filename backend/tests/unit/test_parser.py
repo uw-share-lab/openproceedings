@@ -10,7 +10,7 @@ from hypothesis import strategies as st
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.query.ast import And, Filter, Near, Node, Not, Or, Phrase, Term, Wildcard, YearRange
 from openproceedings.query.canonical import canonicalize, render
-from openproceedings.query.parser import MAX_DEPTH, MAX_QUERY_LENGTH, parse
+from openproceedings.query.parser import MAX_DEPTH, MAX_PER_CODE, MAX_QUERY_LENGTH, parse
 
 
 def show(n: Node) -> str:
@@ -188,6 +188,25 @@ def test_mixed_and_or_warns_with_its_reading(
         after = parse(loaded, mode)
         assert after.canonical == result.canonical  # loading the reading never changes what is searched
         assert sum(x.code is DiagnosticCode.WARN_MIXED_AND_OR for x in after.warnings) == len(mixed) - 1
+
+
+def test_a_level_with_a_branch_that_does_not_parse_offers_no_reading() -> None:
+    """The failed branch has no node, so a reading would silently drop its text (`a b OR () OR c` →
+    `(a b) OR c`): the warning is still given, with `reading` null, so no Load with parentheses."""
+    result = parse("a b OR () OR c")
+    assert [e.code for e in result.errors] == [DiagnosticCode.PARSE_EMPTY_GROUP]
+    [w] = result.warnings
+    assert (w.code, w.span, w.reading) == (DiagnosticCode.WARN_MIXED_AND_OR, (0, 14), None)
+
+
+def test_the_summary_past_the_per_code_cap_has_no_reading() -> None:
+    """22 mixed levels: 20 warnings with their readings, then "… and 2 more like these." with none (it stands
+    for two levels). The validator allows a null reading on WARN_MIXED_AND_OR, so this parses (it used to 500)."""
+    q = " ".join(f"(a{i} b{i} OR c{i})" for i in range(22))
+    mixed = [w for w in parse(q).warnings if w.code is DiagnosticCode.WARN_MIXED_AND_OR]
+    assert len(mixed) == MAX_PER_CODE + 1
+    assert all(w.reading == f"(a{i} b{i}) OR c{i}" for i, w in enumerate(mixed[:MAX_PER_CODE]))
+    assert (mixed[-1].message, mixed[-1].reading) == ("… and 2 more like these.", None)
 
 
 def test_the_message_clips_a_long_reading_but_the_field_does_not() -> None:

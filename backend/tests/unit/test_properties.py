@@ -137,16 +137,23 @@ def _mixed(q: str, mode: str) -> list[tuple[int, int] | None]:
 @given(queries(), st.sampled_from(["native", "scholar"]))
 @example("x (a b OR c) OR y z", "native")  # nested levels: each reading clears its own level only
 @example("a b   OR   c", "native")  # the reading is shorter than the span it replaces
+@example(" ".join(f"(a{i} b{i} OR c{i})" for i in range(22)), "native")  # past the cap: "… and 2 more"
 def test_loading_a_mixed_reading_keeps_the_query_and_clears_that_level(q: str, mode: str) -> None:
     """TASK-099: WARN_MIXED_AND_OR's `reading`, spliced over its span ("Load with parentheses"), gives a query
-    with the same canonical form and one mixed level fewer (the other levels are quoted as typed)."""
+    with the same canonical form and one mixed level fewer (the other levels are quoted as typed). In a query
+    that parses, only the "… and N more" summary past MAX_PER_CODE has no reading."""
     result = parse(q, mode)  # type: ignore[arg-type]
     mixed = [w for w in result.warnings if w.code is DiagnosticCode.WARN_MIXED_AND_OR]
-    assume(not result.errors and mixed and len(mixed) < MAX_PER_CODE)
+    assume(not result.errors and mixed)
+    capped = len(mixed) > MAX_PER_CODE
+    assert [w.reading is None for w in mixed].count(True) == int(capped), q
     for w in mixed:
-        assert w.span is not None and w.reading is not None
+        if w.reading is None:
+            continue  # the summary
+        assert w.span is not None
         loaded = q[: w.span[0]] + w.reading + q[w.span[1] :]
         after = parse(loaded, mode)  # type: ignore[arg-type]
         assert after.errors == [], (q, loaded, after.errors)
         assert after.canonical == result.canonical, (q, loaded)
-        assert len(_mixed(loaded, mode)) == len(mixed) - 1, (q, loaded)
+        left = len(_mixed(loaded, mode))
+        assert left <= len(mixed) if capped else left == len(mixed) - 1, (q, loaded)
