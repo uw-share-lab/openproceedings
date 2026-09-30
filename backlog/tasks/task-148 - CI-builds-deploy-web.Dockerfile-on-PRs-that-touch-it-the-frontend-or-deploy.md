@@ -5,7 +5,7 @@ status: To Do
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 20:04'
-updated_date: '2026-09-30 20:04'
+updated_date: '2026-09-30 20:10'
 labels:
   - ci
   - ops
@@ -33,5 +33,5 @@ Source: TASK-136 (PR #55) deferral. `deploy/web.Dockerfile` (the `web` image: th
 - [ ] #2 The job builds a private image (`OPENPROCEEDINGS_INSTANCE=private`) and a public image with a placeholder `NEXT_PUBLIC_TAKEDOWN_CONTACT`, and both builds succeed on the PR that adds the job (link the run in the PR)
 - [ ] #3 The job also runs a public build with no takedown contact and passes only when that build fails at `web-build-gate.sh`, so the gate is exercised in the real image
 - [ ] #4 The job pins its actions by commit sha like the other workflows, has `permissions: contents: read`, and pushes no image
-- [ ] #5 Spec 08 §CI (the workflow table, marked advisory or required; §Branch protection too if it is made required) and §Deploy describe the job as built
+- [ ] #5 Spec 08 §CI (the workflow table, marked advisory or required) and §Deploy describe the job as built; if it is made required, §Branch protection lists it and a PR that touches none of the paths still reports the check (a workflow-level `paths` filter would leave a required check pending forever and block the PR; use a changed-files step that exits 0 instead), shown on such a PR
 <!-- AC:END -->

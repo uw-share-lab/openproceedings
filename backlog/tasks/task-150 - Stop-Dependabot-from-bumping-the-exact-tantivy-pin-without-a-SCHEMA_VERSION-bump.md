@@ -7,7 +7,7 @@ status: To Do
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 20:05'
-updated_date: '2026-09-30 20:05'
+updated_date: '2026-09-30 20:10'
 labels:
   - ci
   - ops
@@ -33,5 +33,5 @@ Source: the release-manager review of TASK-066 (PR #54), listed there as a defer
 <!-- AC:BEGIN -->
 - [ ] #1 A Dependabot PR that bumps tantivy on its own cannot reach dev: either Dependabot never opens one (an `ignore` for `tantivy` on the uv entry of `.github/dependabot.yml`), or a required CI check fails on any PR whose `uv.lock` tantivy version changes while `SCHEMA_VERSION` does not
 - [ ] #2 If a CI check is chosen: it has a case table under `.claude/scripts/tests/` with rows for tantivy changed alone (fails), tantivy and SCHEMA_VERSION changed together (passes) and neither changed (passes), and its mutants are killed (`make mutate-changed`)
-- [ ] #3 The chosen option and the reason for it are written in the index-versioning skill (the tantivy-py upgrade row) and spec 08 §Release, and the manual upgrade path (bump the pin, `uv lock`, bump SCHEMA_VERSION, rebuild) is stated there
+- [ ] #3 The chosen option and the reason for it are written in the index-versioning skill (the tantivy-py upgrade row) and spec 08 §Release, and the manual upgrade path (bump the pin, `uv lock`, bump SCHEMA_VERSION, rebuild) is stated there; if a CI check is chosen, spec 08 §CI (the workflow table) and §Branch protection (the required checks) list it
 <!-- AC:END -->

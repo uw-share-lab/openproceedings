@@ -5,6 +5,7 @@ status: To Do
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 20:05'
+updated_date: '2026-09-30 20:10'
 labels:
   - ops
 milestone: m-6
@@ -23,7 +24,7 @@ Source: a TASK-066 (PR #54) deferral. Spec 08 §Branch protection says that befo
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A tag ruleset targeting `refs/tags/v*` is active on uw-share-lab/openproceedings: tag creation is restricted to maintainers (the bypass list names only the maintainer role or team), and updating and deleting a matching tag are blocked for everyone
-- [ ] #2 `gh api repos/uw-share-lab/openproceedings/rulesets --jq '.[] | select(.target == "tag") | .name'` (spec 08 §Release step 6) prints the ruleset's name; the output is pasted into the task notes
-- [ ] #3 Spec 08 §Branch protection records the date the ruleset was applied and its name, as it does for the branch rules
+- [ ] #1 One or more active tag rulesets target `refs/tags/v*` on uw-share-lab/openproceedings: creating a matching tag is restricted to maintainers (the maintainer role or team is the only bypass actor on the ruleset that restricts creation), and updating and deleting a matching tag are blocked by a ruleset with an empty bypass list, because a ruleset's bypass list covers every rule in it
+- [ ] #2 `gh api repos/uw-share-lab/openproceedings/rulesets --jq '.[] | select(.target == "tag") | .name'` (spec 08 §Release step 6) prints the rulesets' names; the output is pasted into the task notes
+- [ ] #3 Spec 08 §Branch protection and §Release step 6 record the date the rulesets were applied, their names, and that the check may print more than one name
 <!-- AC:END -->
