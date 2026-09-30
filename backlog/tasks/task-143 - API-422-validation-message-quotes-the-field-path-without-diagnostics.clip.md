@@ -5,7 +5,7 @@ status: To Do
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 06:39'
-updated_date: '2026-09-30 06:43'
+updated_date: '2026-09-30 06:45'
 labels:
   - api
   - bug
@@ -20,7 +20,7 @@ ordinal: 120000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Found by TASK-141's review (PR #48, 2026-09-30). TASK-141 made diagnostics.clip() the one way a message quotes client-supplied text: whitespace runs collapse to one space, and a backtick or a Cc/Cf/Cs character is written as its Python escape, so a message stays one line of visible characters and its backtick quoting holds (the frontend's `Coded` pairs backticks, and it renders API messages too). The API's 422 handler (`_validation`, `backend/src/openproceedings/api/errors.py:185`; the `loc` join at line 190) joins each pydantic error's `loc` into the `API_BAD_PARAM` message raw. `loc` can name a key the client sent (an unexpected body key), so a newline, NUL, ESC, U+202E or backtick in a JSON key reaches the message unescaped. The offending value is already left out and the log gets the code only, so this is message hygiene, not a log leak.
+Found by TASK-141's review (PR #48, 2026-09-30). TASK-141 made diagnostics.clip() the one way a message quotes client-supplied text: whitespace runs collapse to one space, and a backtick or a Cc/Cf/Cs character is written as its Python escape, so a message stays one line of visible characters and its backtick quoting holds (the frontend's `Coded` pairs backticks, and it renders API messages too). The API's 422 handler (`_validation`, `backend/src/openproceedings/api/errors.py:185`; the `loc` join at line 191) joins each pydantic error's `loc` into the `API_BAD_PARAM` message raw. `loc` can name a key the client sent (an unexpected body key), so a newline, NUL, ESC, U+202E or backtick in a JSON key reaches the message unescaped. The offending value is already left out and the log gets the code only, so this is message hygiene, not a log leak.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
