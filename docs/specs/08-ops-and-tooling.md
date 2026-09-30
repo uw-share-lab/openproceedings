@@ -6,10 +6,10 @@ Status: **draft for review** · depends on: nothing · delivered in M0 (the rost
 
 ```
 openproceedings/
-├── README.md  CLAUDE.md  AGENTS.md  CONTRIBUTING.md  LICENSE (MIT)
+├── README.md  CLAUDE.md  AGENTS.md  CONTRIBUTING.md  LICENSE (MIT)  CHANGELOG.md (generated: §Release)
 ├── pyproject.toml  uv.lock      # uv WORKSPACE root: depends on the backend member; ruff, mypy-strict and pytest config; dev tools (ruff, mypy, pytest, hypothesis)
 ├── package.json  package-lock.json  .nvmrc   # npm WORKSPACE root (workspaces: ["frontend"]); deps hoisted to ./node_modules; Node 22
-├── Makefile                     # sync · fmt · lint · tooling · test · e2e · openapi · hooks · mutate · mutate-changed
+├── Makefile                     # sync · fmt · lint · tooling · test · e2e · openapi · changelog · hooks · mutate · mutate-changed
 ├── .claude/                     # committed: agents, skills, commands, hooks, learnings (roster: .claude/README.md)
 ├── .githooks/                   # commit-msg (attribution), pre-push (make lint + make tooling)
 ├── .github/                     # workflows (below), dependabot.yml
@@ -34,7 +34,7 @@ openproceedings/
 │   │   └── cli.py               # `op` entry point
 │   └── tests/{unit,golden,differential,bench,contract,e2e,fixtures}/
 ├── frontend/                    # npm workspace member: Next.js App Router, output standalone (spec 05; skeleton TASK-039)
-├── docs/{specs,plans,results,design,usability,research}/   # created as needed
+├── docs/{specs,plans,results,design,usability,research}/   # created as needed; docs/releases.toml: each release's data (§Release)
 ├── backlog/                     # Backlog.md: tasks, completed, docs, decisions — CLI only
 ├── deploy/                      # (M6, planned) Dockerfiles, compose.yml
 └── data/                        # gitignored: cache/, snapshots/, indexes/, embeddings/, research/, records/ (records.sqlite)
@@ -264,6 +264,90 @@ documents both variables.
   the API loads, with a withheld marker distinct from missing; a decision on pinned versions still matching on
   withheld text; replay and record-page behaviour; a check that no listed id's abstract is served; a web-image
   build ARG and required-variable gate for public deploys; and where the operator's log lives.
+
+## Release (M6; decision-022, TASK-066)
+
+A release is a commit on `main`, reached by a `dev → main` promotion PR, and tagged `vX.Y.Z`. It holds the
+code at that commit (the backend package and the frontend, one version), its `CHANGELOG.md` section, and its
+table in `docs/releases.toml`: the index it was verified on. It holds no data: snapshots and indexes are never
+committed or attached to a release (spec 00, open question 1). **Code and data ship separately.** A release
+never changes which `index_version` an instance serves; promoting an index is the §Deploy runbook, run on its
+own, and it is recorded in the next release's Data section. Nothing here depends on where an instance is
+hosted (00, question 5).
+
+**Versioning.** One semver version for the app, `MAJOR.MINOR.PATCH`:
+
+| Version | Lives in | Changes when |
+|---|---|---|
+| app `X.Y.Z` | `backend/pyproject.toml` and `frontend/package.json` `version`, kept equal (also recorded in `uv.lock` and `package-lock.json`); `op --version` and the snapshot manifest's `openproceedings_version` report it | once per release, on its release branch |
+| `TOKENIZER_VERSION`, `SCHEMA_VERSION` | the code; inputs to `index_version` (03 §Versioning) | the `index-versioning` bump rules |
+| `QUERY_VERSION` | the code; in `canonical_hash` and every search record (04) | the same rules |
+| `index_version` | the data: `data/indexes/<index_version>/` | a new snapshot, or a tokenizer, schema or ranking change |
+
+- **MAJOR:** a breaking change to the `/api/v1` contract (that is a new `/api/v2`), the `op` CLI, an export
+  format or the search-record store. Before 1.0.0 these bump MINOR.
+- **MINOR:** new features, and any change of `TOKENIZER_VERSION`, `SCHEMA_VERSION` or `QUERY_VERSION`: search
+  records saved on the previous release then replay as `drifted`, never `reproduced`.
+- **PATCH:** fixes that change none of those three.
+- The first tag is `v0.1.0`. Versions stay `0.y.z` until the owner declares the v1 release (M6), `1.0.0`.
+
+The app version never enters `index_version` or `canonical_hash`. A search record pins `index_version`,
+`tokenizer_version` and `query_version`, not the app version, so whether it replays as `reproduced` depends
+on those three and on its index being kept, never on which release runs.
+
+**`CHANGELOG.md`** is generated, never hand-edited: `make changelog` (on a release branch,
+`make changelog RELEASE=X.Y.Z`) runs `.claude/scripts/changelog.py`, whose case table is
+`.claude/scripts/tests/test-changelog.sh`.
+- **Input:** every merged PR from the REST API (`gh api`), the `vX.Y.Z` tags and `docs/releases.toml`
+  (`--prs <file>` reads the PR list from a file instead). No dates, authors or clock: the same inputs give the
+  same bytes.
+- **Counted:** PRs merged into `dev`, and into `main` except the `dev → main` promotions (they repeat what
+  `dev` already lists). Never `release/*` branches (their only change is this file and the version), nor PRs
+  into any other base.
+- **Sections:** a PR belongs to the oldest tag whose history holds its merge commit; with `--release X.Y.Z`,
+  `HEAD` counts as that version's tag. A PR no tag holds is Unreleased.
+- **Groups**, by the title's Conventional Commits type (else the head branch's `<type>/` prefix): `feat` →
+  Added; `docs`, `refactor`, `perf`, `revert` and any other → Changed; `fix` → Fixed; `chore`, `test`, `ci`,
+  `build`, `style` → Internal. A `type!:` title is marked **Breaking**. Each line is the title and a link to
+  the PR, in merge order.
+- **Data:** each release's section ends with its `docs/releases.toml` table: `index_version`, `snapshot_hash`,
+  the three versions, and how search records saved on the previous release replay. A release whose three
+  versions differ from the previous release's starts with a `drifted` callout, and is refused as a PATCH.
+- **Refuses** (exit 1, nothing written): a release with no data table, a `--release` version the two manifests
+  don't both carry or that isn't newer than the latest tag, a merge commit the clone lacks
+  (`git fetch origin --tags`), malformed input, and any AI-attribution marker in the output.
+- `--check` exits 1 when the file differs; `--notes X.Y.Z` prints one release's section (the release notes).
+  No CI job runs it, because it reads GitHub and every merge would make the file stale. Between releases its
+  Unreleased section lags `dev`; any PR may refresh it.
+
+**Checklist** (`release-manager`; paste each command's result into the promotion PR):
+1. **Readiness on `dev`.** The required checks are green on its head, and so are `e2e`, `bench` and a
+   `nightly` run from the last day. `backlog task list --plain` shows no open Must finding. The latest
+   `docs/results/*-coverage.md` passes the M4 gate.
+2. **Security gate.** `security-reviewer` (`/security-review`) over `origin/main...origin/dev`, every finding
+   dispositioned as in `/review-gate`. Before the first public release, TASK-067 (the pre-release security
+   review) is Done.
+3. **The index it is verified on** (the served `current`, or a new one built by the §Deploy runbook): the
+   golden and contract suites, `op index parity --index <v>`, `op eval coverage --index <v> --check`, and
+   `op record replay <id> --index <v>` on a sample of stored search records. A new `index_version` also needs
+   `op snapshot diff <old> <new>` reviewed.
+4. **Release branch.** From here until the tag exists, nothing else merges into `dev`.
+   `git switch -c release/X.Y.Z origin/dev`; set `version` to `X.Y.Z` in
+   `backend/pyproject.toml` and `frontend/package.json`, then `uv lock` and
+   `npm install --package-lock-only --ignore-scripts`; add `[releases."X.Y.Z"]` to `docs/releases.toml` from
+   step 3's index (`GET /api/v1/meta` or its manifest; never edit a released table); `make changelog
+   RELEASE=X.Y.Z`, and read the section (a `drifted` callout, a Breaking line). Then `/record-learnings`,
+   `/review-gate` and `/open-pr` into `dev`, and merge it.
+5. **Promotion.** `/open-pr main` from `dev`; it needs a
+   second person's approving review (never self-approved, never a bypass of the ruleset), and merges with a
+   merge commit.
+6. **Tag and notes.** On a fresh `main`, `python3 .claude/scripts/changelog.py --check --release X.Y.Z` passes
+   (the promotion holds exactly the PRs the file lists); then `python3 .claude/scripts/changelog.py --release
+   X.Y.Z --notes X.Y.Z > notes.md` and `gh release create vX.Y.Z --target <main's sha> --title X.Y.Z
+   --notes-file notes.md`, which creates the tag on GitHub (`require-review.sh` blocks an agent's
+   `git push` of a tag, since `main`'s merge commit has no per-sha record). No assets, no AI attribution,
+   roles not names. `git fetch origin --tags`; on `dev`, `python3 .claude/scripts/changelog.py --check` then passes.
+7. **After.** Deploying the release, and promoting an index, follow §Deploy; each is separate from the tag.
 
 ---
 

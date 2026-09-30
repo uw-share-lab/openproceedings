@@ -1,0 +1,12 @@
+# The data each release was verified on (spec 08 §Release, decision-022). One table per release, added on
+# its release/<version> branch before `make changelog RELEASE=<version>`; .claude/scripts/changelog.py
+# writes it into the release's Data section and refuses a release without one. Values come from the index
+# the release checklist verified (`GET /api/v1/meta`, or the index's manifest). Never edit a released entry.
+#
+# [releases."0.1.0"]
+# index_version = "<12 hex: the index_version the release was verified on>"
+# snapshot_hash = "<64 hex: that index's snapshot_hash>"
+# tokenizer_version = "2"
+# schema_version = "2"
+# query_version = "2"
+# notes = "optional: one line on the data, e.g. a new crawl or a changed default filter"

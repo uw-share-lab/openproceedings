@@ -1,0 +1,61 @@
+---
+id: decision-022
+title: >-
+  One semver app version, tagged on main, independent of index_version;
+  CHANGELOG generated from merged PRs (TASK-066)
+date: '2026-09-30 14:18'
+status: accepted
+---
+## Context
+
+TASK-066 defines the release process before the first release. Until now the code carried no release
+version: `backend/pyproject.toml` said `0.0.0` and `frontend/package.json` `0.1.0`, and nothing tagged `main`.
+The results a review cites are pinned by data, not code: guarantee 4 keys reproducibility to the canonical
+query and `index_version` (spec 03 §Versioning), and a search record also stores `tokenizer_version` and
+`query_version` (spec 04 §Search records). A reader of a release needs to know two things apart: what the code
+changed, and whether their saved searches still replay. Options considered:
+
+1. **Fold the data into the version** (e.g. `0.3.0+<index_version>`, or a release per index). Rejected: an
+   index promotion would then need a code release, and spec 08 §Deploy and the `release-manager` agent keep
+   code and data separate (a code release never silently changes the served `index_version`).
+2. **Separate versions for the backend and the frontend.** Rejected: they ship together from one commit, the
+   frontend's types are generated from the backend's OpenAPI document, and two numbers invite the question of
+   which pairs are compatible.
+3. **Calendar versions** (`2026.10.0`). Rejected: a date tells a reviewer nothing about whether their search
+   records drift; semver's MINOR/PATCH split can carry that.
+4. **One semver version for the app, with the replay-relevant versions stated beside it.** Chosen.
+
+For the changelog: a hand-written file drifts, and the repo already records every change as a PR whose title
+follows `<type>: <summary>` (`repo-conventions`), so the file can be generated. Options: from commit messages
+(merge commits and review fixes make that noisy), or from merged PRs (one line per reviewed change). Chosen:
+merged PRs, read from the REST API (`gh pr edit` fails here on the retired Projects API, so the repo's
+scripts use REST).
+
+## Decision
+
+The app has one `MAJOR.MINOR.PATCH` version, equal in `backend/pyproject.toml` and `frontend/package.json`,
+tagged `vX.Y.Z` on the `main` commit a `dev → main` promotion creates; the first tag is `v0.1.0`, and `1.0.0`
+is the owner's v1 release. A change of `TOKENIZER_VERSION`, `SCHEMA_VERSION` or `QUERY_VERSION` is at least a
+MINOR release and is called out at the top of its notes. `CHANGELOG.md` is generated from merged PRs by
+`.claude/scripts/changelog.py` (`make changelog`), with each release's data (the `index_version` it was
+verified on, its snapshot hash and the three versions) read from `docs/releases.toml`. The process and
+checklist are spec 08 §Release.
+
+## Consequences
+
+- The app version never enters `index_version` or `canonical_hash`, so this decision changes no index id and
+  makes no search record drift. Whether a record replays as `reproduced` still depends only on its three
+  pinned versions and on its index being kept; each release's Data section states it.
+- A release bumps two manifests and both lockfiles; `changelog.py --release` refuses when the manifests
+  disagree with the version, when a release lacks its data table, and when a PATCH changes one of the three
+  versions.
+- `CHANGELOG.md` is not checked in CI (it reads GitHub, and each merge would make it stale), so between
+  releases its Unreleased section lags `dev`; a release branch regenerates it. PR titles become release notes,
+  which makes the `<type>: <summary>` convention matter more; titles without a type fall back to the head
+  branch's prefix.
+- `require-review.sh` blocks an agent session's `git push` of a tag (the promotion's merge commit has no
+  per-sha record), so the tag is created with `gh release create --target`, not pushed.
+- Revisit if a second deployable (e.g. a separately released client) appears, or if the API ever versions
+  independently of the app (`/api/v2` alongside `/api/v1`).
+- Specs and tooling changed with it: spec 08 §Release (new), the `release-manager` agent, the Makefile's
+  `changelog` target, `.claude/scripts/tests/test-changelog.sh` and `.claude/scripts/mutants/changelog.json`.

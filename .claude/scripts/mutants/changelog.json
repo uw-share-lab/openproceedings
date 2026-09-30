@@ -1,0 +1,86 @@
+[
+ {
+  "label": "changelog: promotions not excluded",
+  "file": ".claude/scripts/changelog.py",
+  "old": "return pr.base == \"main\" and not promotion",
+  "new": "return pr.base == \"main\""
+ },
+ {
+  "label": "changelog: release branches counted",
+  "file": ".claude/scripts/changelog.py",
+  "old": "if pr.head.startswith(\"release/\"):",
+  "new": "if pr.head.startswith(\"release/x\"):"
+ },
+ {
+  "label": "changelog: attribution not refused",
+  "file": ".claude/scripts/changelog.py",
+  "old": "if hit := ATTRIBUTION.search(text):",
+  "new": "if hit := ATTRIBUTION.search(\"\"):"
+ },
+ {
+  "label": "changelog: version change allowed in a patch release",
+  "file": ".claude/scripts/changelog.py",
+  "old": "        if version_key(version)[:2] == version_key(prev)[:2]:\n",
+  "new": "        if False:\n"
+ },
+ {
+  "label": "changelog: frontend version not checked",
+  "file": ".claude/scripts/changelog.py",
+  "old": "if backend != version or frontend != version:",
+  "new": "if backend != version:"
+ },
+ {
+  "label": "changelog: missing merge commit read as untagged",
+  "file": ".claude/scripts/changelog.py",
+  "old": "if r.returncode != 1:",
+  "new": "if r.returncode == -1:"
+ },
+ {
+  "label": "changelog: merge order ignored",
+  "file": ".claude/scripts/changelog.py",
+  "old": "key=lambda p: (p.merged_at, p.number)",
+  "new": "key=lambda p: p.number"
+ },
+ {
+  "label": "changelog: titles not escaped",
+  "file": ".claude/scripts/changelog.py",
+  "old": "text = MD_SPECIAL.sub(r\"\\\\\\1\", \" \".join(desc.split()))",
+  "new": "text = \" \".join(desc.split())"
+ },
+ {
+  "label": "changelog: data hashes not checked",
+  "file": ".claude/scripts/changelog.py",
+  "old": "if key in HEX and not HEX[key].fullmatch(value):",
+  "new": "if False:"
+ },
+ {
+  "label": "changelog: a tagged version can be released again",
+  "file": ".claude/scripts/changelog.py",
+  "old": "if tags and version_key(a.release) <= version_key(tags[-1][1:]):",
+  "new": "if False:"
+ },
+ {
+  "label": "changelog: --check always passes",
+  "file": ".claude/scripts/changelog.py",
+  "old": "if current != text:",
+  "new": "if False:"
+ },
+ {
+  "label": "changelog: replay versions not compared",
+  "file": ".claude/scripts/changelog.py",
+  "old": "changed = [k for k in VERSIONS if prev and data[prev][k] != d[k]]",
+  "new": "changed: list[str] = []"
+ },
+ {
+  "label": "changelog: --release titles PRs outside HEAD",
+  "file": ".claude/scripts/changelog.py",
+  "old": "sections.setdefault(placed[pr.number], []).append(pr)",
+  "new": "sections.setdefault(placed[pr.number] or release, []).append(pr)"
+ },
+ {
+  "label": "changelog: --notes prints the first section",
+  "file": ".claude/scripts/changelog.py",
+  "old": "        if heading == version:\n",
+  "new": "        if True:\n"
+ }
+]

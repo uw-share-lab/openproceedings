@@ -15,20 +15,26 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
   `index_version` is made of and why snapshots and indexes are immutable.
 - `.claude/skills/search-records/SKILL.md` — replay (`reproduced`/`drifted`) depends on old indexes.
 - `.claude/skills/no-ai-attribution/SKILL.md` — changelog, tags and release notes included.
-- Specs: `docs/specs/08-ops-and-tooling.md` §Deploy, `docs/specs/03-search-engine.md` §Versioning,
+- Specs: `docs/specs/08-ops-and-tooling.md` §Release (the process, versioning and the checklist) and §Deploy, `docs/specs/03-search-engine.md` §Versioning,
   `docs/specs/00-overview.md` §Milestones.
 
 ## How you work
 1. **Readiness.** On `dev`: all required checks green on the head sha; nightly green within the last day;
    for M4+ the latest `docs/results/*-coverage.md` meets the ±1% gate; open Must findings = 0
    (`backlog task list --plain`). Stop and list blockers if not.
-2. **Version and changelog.** Semver for the app (verify at implementation time where the version lives,
-   e.g. `backend/pyproject.toml` and `frontend/package.json`, kept equal). `CHANGELOG.md` groups by Added /
-   Changed / Fixed and has a **Data** section: new `index_version`, snapshot hash, `TOKENIZER_VERSION`,
-   and whether existing search records will replay as `reproduced` or `drifted`.
+2. **Version and changelog** (decision-022). One semver app version in `backend/pyproject.toml` and
+   `frontend/package.json`, kept equal (then `uv lock` and `npm install --package-lock-only
+   --ignore-scripts`); a `TOKENIZER_VERSION`, `SCHEMA_VERSION` or `QUERY_VERSION` change is at least MINOR.
+   Add the release's `[releases."X.Y.Z"]` table to `docs/releases.toml` (the verified index's
+   `index_version`, snapshot hash and the three versions), then `make changelog RELEASE=X.Y.Z`:
+   `.claude/scripts/changelog.py` writes `CHANGELOG.md` from the merged PRs (Added / Changed / Fixed /
+   Internal) with a **Data** section saying whether existing search records replay as `reproduced` or
+   `drifted`, and refuses a PATCH that changes one of the three versions. Never hand-edit `CHANGELOG.md`.
 3. **Promotion PR.** On a `release/<version>` branch cut from `dev` (changelog + version bump), run
    `/review-gate` and `/open-pr` into `dev`; then open the `dev → main` PR (`/open-pr main`). It needs a
-   second person's approval — request it; never self-approve or bypass the ruleset. Tag after merge.
+   second person's approval — request it; never self-approve or bypass the ruleset. Tag after merge with
+   `gh release create vX.Y.Z --target <main's sha> --notes-file <changelog.py --release X.Y.Z --notes X.Y.Z>`
+   (spec 08 §Release step 6: `require-review.sh` blocks a `git push` of the tag).
 4. **Index promotion (runbook, spec 08 §Deploy).** Offline: `op snapshot build`, `op snapshot diff <old>
    <new>`, `op index build --snapshot <new>` → `data/indexes/<index_version>/`. Verify on that version:
    golden + contract suites, tokenizer parity (`op index parity --index <index_version>`), `op eval coverage --index <index_version> --check` (the M4 gate as its exit status), and replay of a sample of stored search
