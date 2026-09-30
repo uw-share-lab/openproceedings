@@ -54,9 +54,10 @@ def exclusive(parent: Path, on_wait: Callable[[], None] | None = None) -> Iterat
 
 def sweep(parent: Path) -> None:
     """Remove `.tmp-` directories a crashed run left behind. Called only under `exclusive(parent)`, so it
-    never touches a live run's staging directory. A leftover it can't remove (a file it can't chmod) is logged
-    once per sweep (WARNING `tmp_sweep_failed`, its name and the chmod's errno name, if any) and left, never raised: a stuck leftover
-    must not fail every later build."""
+    never touches a live run's staging directory. Each leftover it can't remove (a file it can't chmod) is
+    logged once per sweep that meets it (WARNING `tmp_sweep_failed`, its name and the chmod's errno name, if
+    any) and left, never raised: a stuck leftover must not fail every later build. `op index retire`'s
+    `.retiring-<v>` (an index set aside, not yet committed to removal) is not `.tmp-`, so never swept."""
     for leftover in parent.glob(f"{TMP}*"):
         reason = None
         try:

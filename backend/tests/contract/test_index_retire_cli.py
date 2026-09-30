@@ -7,6 +7,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import sqlite3
 import threading
 from pathlib import Path
 from typing import Any
@@ -340,3 +341,74 @@ def test_a_retire_blocked_on_the_lock_says_it_is_waiting(
         held.close()
     t.join(10)
     assert result == [0] and not (indexes / store.small).exists()
+
+
+# --- a failure between setting the index aside and committing its removal (TASK-085 round 2) ---------------
+@pytest.mark.parametrize("error", [KeyboardInterrupt, RuntimeError, sqlite3.OperationalError])
+def test_anything_raised_after_the_rename_puts_the_index_back(
+    capsys: Capsys, data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch, error: type[BaseException]
+) -> None:
+    """Ctrl-C in the store's busy wait, a bug, a store error: the index is back under its name before the
+    exception goes on (an OperationalError is a refusal, `records_unreadable`; the others propagate)."""
+
+    def boom(n: int) -> None:
+        if n == 3:
+            raise error("during the post-rename check")
+
+    pinned_on_call(monkeypatch, boom)
+    before = tree(data_dir / "indexes" / store.small)
+    if error is KeyboardInterrupt:
+        with pytest.raises(KeyboardInterrupt):
+            cli.main(["--data-dir", str(data_dir), "index", "retire", store.small])
+    else:
+        assert op(capsys, data_dir, "index", "retire", store.small)[0] == 1
+    assert tree(data_dir / "indexes" / store.small) == before
+    assert not [
+        p.name for p in (data_dir / "indexes").iterdir() if p.name.startswith((".tmp-", ".retiring-"))
+    ]
+
+
+def test_a_failure_in_the_symlink_recheck_puts_the_index_back(
+    capsys: Capsys, data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_iterdir = Path.iterdir
+    calls = pinned_on_call(monkeypatch, lambda _n: 0)
+
+    def iterdir(self: Path) -> Any:
+        if len(calls) == 3:  # the post-rename symlink scan (after the third pin check)
+            raise PermissionError(13, "Permission denied")
+        return real_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", iterdir)
+    code, _out, err = op(capsys, data_dir, "index", "retire", store.small)
+    assert code == 1 and "PermissionError" in err
+    monkeypatch.undo()
+    assert (data_dir / "indexes" / store.small / "manifest.json").is_file()
+    assert not (data_dir / "indexes" / f".retiring-{store.small}").exists()
+
+
+def test_a_failed_rename_back_is_an_error_the_operator_is_told_to_fix(
+    capsys: Capsys, data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The set-aside index stays as `.retiring-<v>`, which no sweep (so no later build or retire) deletes."""
+    real_rename = Path.rename
+    pinned_on_call(monkeypatch, lambda n: 1 if n == 3 else 0)
+
+    def rename(self: Path, target: Any) -> Any:
+        if Path(target).name == store.small:
+            raise OSError(16, "Device or resource busy")
+        return real_rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", rename)
+    code, _out, err = op(capsys, data_dir, "index", "retire", store.small)
+    monkeypatch.undo()
+    aside = data_dir / "indexes" / f".retiring-{store.small}"
+    assert code == 1 and aside.is_dir() and not (data_dir / "indexes" / store.small).exists()
+    assert f"could not rename .retiring-{store.small} back to {store.small}" in err and "by hand" in err
+    [line] = [x for x in log_lines(err) if x["event"] == "index_retire_restore_failed"]
+    assert (line["level"], line["path"], line["reason"]) == ("ERROR", aside.name, "EBUSY")
+    with storage.exclusive(data_dir / "indexes"):
+        storage.sweep(data_dir / "indexes")
+    assert (aside / "manifest.json").is_file()  # the sweep left it for the operator
+    real_rename(aside, data_dir / "indexes" / store.small)  # the operator's step
+    assert op(capsys, data_dir, "index", "retire", store.small)[0] == 0

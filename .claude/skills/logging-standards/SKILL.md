@@ -124,7 +124,9 @@ message. Long jobs say they're alive: `index_build_started`, `index_build_progre
 survives its removal logs `index_build_tmp_left` (WARNING, the directory's name only). `op index retire`
 logs one line with `index_version`, `pinned` and the outcome: `index_retired` (INFO; WARNING with
 `tmp_left: true` when its `.tmp-` directory survived), `index_retire_checked` (`--dry-run`) or
-`index_retire_refused` (WARNING with its `reason`; DEBUG for a malformed name, which is left out). A
+`index_retire_refused` (WARNING with its `reason`; DEBUG for a malformed name, which is left out), plus
+ERROR `index_retire_restore_failed` (the `.retiring-` directory's name and errno name) when a set-aside index
+can't be renamed back. A
 `storage.sweep` that can't remove a `.tmp-` leftover logs `tmp_sweep_failed` (WARNING, its name and the
 chmod's errno name) and carries on.
 

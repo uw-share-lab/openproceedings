@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import errno
 import io
 import json
 import logging
@@ -469,9 +470,11 @@ def _index_retire(ns: argparse.Namespace) -> int:
     record pins it: a deleted pinned index turns those records' replays into permanent `drifted`.
 
     The checks run again under the indexes lock (`storage.exclusive`, which `op index build` holds), then the
-    directory is renamed to a `.tmp-` name (so no reader ever finds half an index under its version). Neither a
-    promotion (a hand-run `ln -sfn`) nor a record save takes that lock, so after the rename the pins and every
-    symlink's target are checked once more; a hit renames it back and refuses. What remains is the window
+    directory is renamed aside to `.retiring-<v>` (so no reader ever finds half an index under its version, and
+    no sweep deletes it). Neither a promotion (a hand-run `ln -sfn`) nor a record save takes that lock, so the
+    pins and every symlink's target are checked once more; a hit, or anything raised (Ctrl-C included), renames
+    it back, and a failed rename-back is one ERROR `index_retire_restore_failed` telling the operator to move
+    it back by hand. Only then is it renamed to `.tmp-retire-<v>`, the commit point, and removed. What remains is the window
     between that last check and the removal (a few syscalls), and any save or promotion naming the version
     after it: both find the version absent (a save is refused; a replay reports `drifted`). A removal cut short
     leaves only the `.tmp-` directory, which the next build or retire sweeps (`tmp_left`). One log line: the
@@ -540,6 +543,21 @@ def _index_retire(ns: argparse.Namespace) -> int:
         print(f"op index retire: {message}{' (dry run)' if ns.dry_run else ''}", file=sys.stderr)
         return 1
 
+    def restore(aside: Path, target: Path) -> None:
+        """Rename the index back under its name; if that fails, say so loudly (ERROR, once) and how to fix it.
+        No sweep removes a `.retiring-` directory, so it waits for the operator intact."""
+        try:
+            aside.rename(target)
+        except OSError as e:
+            log.error("index_retire_restore_failed", extra={"index_version": version, "path": aside.name,
+                                                            "reason": errno.errorcode.get(e.errno or 0)})  # fmt: skip
+            print(
+                f"op index retire: could not rename {aside.name} back to {version} ({type(e).__name__}); "
+                f"rename it back by hand (`mv indexes/{aside.name} indexes/{version}`) before serving it or "
+                "running another build or retire",
+                file=sys.stderr,
+            )
+
     def waiting() -> None:
         print("op index retire: waiting for the indexes lock (a build or retire is running)", file=sys.stderr)
 
@@ -559,15 +577,26 @@ def _index_retire(ns: argparse.Namespace) -> int:
         target = indexes / version
         if target.is_symlink() or not target.is_dir():  # lstat, just before the rename
             return refuse("not_found", f"no index directory {version} under <data-dir>/indexes", None)
+        # aside under a name no sweep touches (not `.tmp-`, and not an index_version), until the last check
+        # passes; then renamed to a `.tmp-` name, the commit point after which a sweep may finish the removal
+        aside = indexes / f".retiring-{version}"
         doomed = indexes / f"{storage.TMP}retire-{version}"
-        target.rename(doomed)
-        # neither a promotion nor a save takes the lock: look once more, now that the name is gone
-        reason, message, pinned = pins()
-        if not reason and (link := named_by_link()) is not None:
-            reason, message = "current", f"`{link}` came to point at {version} during the retire"
-        if reason:
-            doomed.rename(target)
-            return refuse(reason, message, pinned)
+        target.rename(aside)
+        committed = False
+        try:
+            # neither a promotion nor a save takes the lock: look once more, now that the name is gone
+            reason, message, pinned = pins()
+            if not reason and (link := named_by_link()) is not None:
+                reason, message = "current", f"`{link}` came to point at {version} during the retire"
+            if reason:
+                restore(aside, target)
+                return refuse(reason, message, pinned)
+            aside.rename(doomed)
+            committed = True
+        except BaseException:  # anything, Ctrl-C included: the index goes back under its name first
+            if not committed and aside.exists():
+                restore(aside, target)
+            raise
         with contextlib.suppress(OSError):  # a file we can't chmod: rmtree removes what it can; `tmp_left`
             storage.writable(doomed)
         shutil.rmtree(doomed, ignore_errors=True)
