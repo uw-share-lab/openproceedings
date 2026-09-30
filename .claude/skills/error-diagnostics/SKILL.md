@@ -72,6 +72,21 @@ use them exactly as named there.
 - Say what is wrong, where, and how to fix it: "Wildcard stem `be*` is shorter than 3 characters — use a
   longer stem such as `bench*`." Unknown values list the valid ones.
 - Never blame the user; never say "invalid query" alone.
+- **Query text is quoted only through `diagnostics.clip`**, between backticks: `` f"`{clip(raw)}` …" ``, a
+  slice or a single character of the input included (`clip(raw[0])`), so a message is one line of visible text,
+  safe to log and copy, whatever the query holds (TASK-141). `clip` collapses each whitespace run (every
+  `str.isspace()` character: newline, tab, U+2028, NBSP, …) to one space; writes a backtick and every
+  invisible character (Unicode `Cc` control, `Cf` format such as a bidi override or a zero-width space, `Cs`
+  lone surrogate) as its Python escape (`` ` `` → `\x60`, NUL → `\x00`, U+202E → `\u202e`), so a backtick
+  typed in the query can't end the quote early (the UI's `Coded`/`Ticked` pair backticks); and shortens to 40
+  code points (120 for a `WARN_MIXED_AND_OR` level or reading), never splitting an escape. A backslash is not
+  escaped (LaTeX reads as typed), so `\x60` in a message may also be those four characters typed: the
+  message is prose for people, and the **span** locates exactly what was typed. `reading` is data, never
+  clipped or escaped. A property (`test_every_message_quotes_query_text_on_one_visible_line`) and goldens
+  (`test_parser.py::QUOTED`) pin it.
+- Message text is prose, not contract: codes, spans and `reading` are what clients use (they never parse
+  `message`), so rewording a message is not a breaking change under `/api/v1`. Update the goldens that quote
+  it deliberately (`frontend/src/help/syntax-golden.json` via `help_golden.py`, the copy deck).
 - Warnings are shown, never auto-fixed (guarantee 6). A warning does not change what the query means.
 
 ## Rules

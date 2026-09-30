@@ -300,7 +300,7 @@ class _Lexer:
         if not closed:
             self.error(
                 DiagnosticCode.PARSE_UNTERMINATED_PHRASE,
-                f'The phrase starting `{q[i : i + 20]}` has no closing quote — add a closing `"`.',
+                f'The phrase starting `{clip(q[i:n], 20)}` has no closing quote — add a closing `"`.',
                 i,
                 n,
             )
@@ -456,7 +456,7 @@ class _Lexer:
             s = wild[0]
             self.error(
                 DiagnosticCode.PARSE_WILDCARD_NOT_SUFFIX,
-                f"`{clip(raw)}` has a `{raw[s]}` that is neither a wildcard at the end of a word (e.g. `bench*`, "
+                f"`{clip(raw)}` has a `{clip(raw[s])}` that is neither a wildcard at the end of a word (e.g. `bench*`, "
                 "`model$`) nor closed LaTeX math (`$x$`) — search the whole word, or close the math.",
                 start + s,
                 start + s + 1,
@@ -565,7 +565,7 @@ class _Lexer:
         elif raw[0] in _LOOKALIKE_MINUS:
             self.warn(
                 DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
-                f"`{clip(raw)}` starts with `{raw[0]}`, which is not an operator, so the word is searched — to exclude "
+                f"`{clip(raw)}` starts with `{clip(raw[0])}`, which is not an operator, so the word is searched — to exclude "
                 f"it, type an ASCII hyphen: `-{clip(raw[1:])}`.",
                 start,
                 end,
@@ -686,7 +686,7 @@ class _Lexer:
         end = self.next_space[k]
         self.error(
             DiagnosticCode.PARSE_AMBIGUOUS_QUOTE,
-            f"The quote `{self.q[k]}` {why}, so it is unclear whether it opens or closes a phrase — "
+            f"The quote `{clip(self.q[k])}` {why}, so it is unclear whether it opens or closes a phrase — "
             + (
                 hint
                 or "put a space between them, or drop the inner quotes (a phrase cannot contain the same kind "

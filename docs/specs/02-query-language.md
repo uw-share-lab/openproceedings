@@ -414,7 +414,10 @@ the canonical form adds per term. The shortest refused inputs, measured with the
 802 (8-letter) code points, since every term gains `abstract:` and ` AND `; `-x` lists in Scholar mode 705–1,145;
 juxtaposed words 827 (2-letter), 967 (3), 1,163 (5), 1,340 (8); `title:(a OR b …)` groups 970–1,300; plain
 `OR` lists about 1,928. The error states how far the canonical form is over the cap and why. Diagnostics are capped at 20 per code ("… and N more"), and user text
-quoted in a message is clipped to 40 characters, so no diagnostic grows with the input. The codes are in
+quoted in a message is clipped to 40 characters, so no diagnostic grows with the input. The quote is one line
+of visible text: whitespace runs are one space, and a backtick or an invisible (control, format or surrogate)
+character is written as its escape (`\x60`, `\x00`, `\u202e`), so a backtick in the query can't end the
+message's quoting (TASK-141; error-diagnostics skill). The codes are in
 `diagnostics.py`; the `PARSE_*`, `FIELD_*` and `WILDCARD_*` errors are 422s where a query is run (spec 04); `/parse`
 returns them as values.
 

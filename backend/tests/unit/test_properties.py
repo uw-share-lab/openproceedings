@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
@@ -220,3 +221,36 @@ def test_the_mixed_message_quotes_only_the_reading_it_carries(q: str, mode: str)
             continue
         assert quoted == [clip(w.reading, 120)], (q, w.message)
         assert w.span is not None and _faithful(w.reading, q[slice(*w.span)]), (q, w.span, w.reading)
+
+
+# TASK-141: characters that would break a quoted span in a message (a backtick ends it; a newline, tab or the
+# like splits it across lines; a control or format character is invisible or rewrites a terminal)
+HOSTILE = st.sampled_from(
+    ["`", "\n", "\t", "\r", "\x00", "\x1b", "\x07", "\x7f", "\x85", " ", " ", " ", "​", "‮", "﻿", "\ud800"]
+)
+
+
+@st.composite
+def queries_with_hostile_characters(draw: st.DrawFn) -> str:
+    q = draw(st.one_of(queries(), queries_with_a_broken_piece()))
+    for _ in range(draw(st.integers(1, 4))):
+        at = draw(st.integers(0, len(q)))
+        q = q[:at] + draw(HOSTILE) + q[at:]
+    return q
+
+
+@settings(deadline=None)
+@given(queries_with_hostile_characters(), st.sampled_from(["native", "scholar"]))
+@example("a b OR `c`", "native")
+@example('"trust\x00 in\nmodels', "native")
+@example("trust NEAR/x`y b", "native")
+@example("venue:IC\x07LR", "scholar")
+def test_every_message_quotes_query_text_on_one_visible_line(q: str, mode: str) -> None:
+    """Every diagnostic that quotes the query does so through `clip`: its backticks pair up, and it holds no
+    whitespace but a space and no control, format or surrogate character, whatever the query contains."""
+    result = parse(q, mode)  # type: ignore[arg-type]
+    for d in result.errors + result.warnings + result.translations:
+        assert d.message.count("`") % 2 == 0, (q, d.message)
+        for c in d.message:
+            assert c == " " or not c.isspace(), (q, d.message)
+            assert unicodedata.category(c) not in ("Cc", "Cf", "Cs"), (q, d.message)

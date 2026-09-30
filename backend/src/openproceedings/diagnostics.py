@@ -8,6 +8,8 @@ Adding a code needs: an entry here, a golden test that produces it with its span
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from enum import StrEnum
 from typing import Annotated
 
@@ -105,9 +107,35 @@ def http_status(code: DiagnosticCode) -> int | None:
     return None
 
 
+_WHITESPACE = re.compile(r"\s+")  # exactly the str.isspace() characters, which the lexer splits words on
+_INVISIBLE = frozenset({"Cc", "Cf", "Cs"})  # control, format (bidi overrides, zero-width), lone surrogates
+
+
+def _shown(c: str) -> str:
+    """A character as a message quotes it: a backtick (it would end the quote) or an invisible character as
+    its Python escape (`\\x60`, `\\u202e`), anything else as itself."""
+    if c != "`" and unicodedata.category(c) not in _INVISIBLE:
+        return c
+    n = ord(c)
+    return f"\\x{n:02x}" if n < 0x100 else f"\\u{n:04x}" if n < 0x10000 else f"\\U{n:08x}"
+
+
 def clip(text: str, width: int = 40) -> str:
-    """User text quoted in a message, shortened so a diagnostic never grows with the input."""
-    return text if len(text) <= width else text[: width - 1] + "…"
+    """User text as every message quotes it, between backticks: one line of visible characters (whitespace runs
+    are one space; a backtick or an invisible character is escaped), shortened to at most `width` code points
+    so a diagnostic never grows with the input. An escape is never split. The span, not the message, locates
+    exactly what was typed (error-diagnostics skill, TASK-141)."""
+    pieces: list[str] = []
+    used = 0
+    for c in _WHITESPACE.sub(" ", text):
+        piece = _shown(c)
+        if used + len(piece) > width:  # too long: keep the whole pieces that fit before the ellipsis
+            while pieces and used + 1 > width:
+                used -= len(pieces.pop())
+            return "".join(pieces) + "…"
+        pieces.append(piece)
+        used += len(piece)
+    return "".join(pieces)
 
 
 def by_position(d: Diagnostic) -> tuple[int, int]:
