@@ -32,8 +32,10 @@ BUILT = datetime(2026, 9, 28, tzinfo=UTC)
 # TASK-118 when record schema v3 (round-qualified 2021 D&B ids) changed the manifest's record_schema_version;
 # no fixture here is on the D&B host, so the records, and SNAPSHOT_HASH, are unchanged. TASK-125 changed it again:
 # every API v1 crawl report's `skipped` gained `duplicate_submission` (0 for both v1 crawls here; records unchanged).
-SNAPSHOT_HASH = "f84dae5aa502508a627871ff16eb0e7503adce52c01e9aa11ee55552480e0857"
-FILES_HASH = "3aacf1e82f77604c824cd7326d7cc0350f70aaef0475f30afc1d1c31114a93d6"
+# TASK-101 changed both: the ICLR 2024 v2 accepted records now carry `presentation` (`ICLR 2024 poster`) and its
+# claim, and the v2 crawl report gained `presentation_unmapped` (0 here). content_hash doesn't cover presentation.
+SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bdd"
+FILES_HASH = "447b87075fb90d3132eb2032fc222591f83f6c780c6fa79824239c1c6e9660de"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:

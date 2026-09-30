@@ -1,0 +1,242 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-054 authenticated live crawl cache (public projection); extracted for TASK-101",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing trimmed from 1000 to 3 notes, one per content.venue string (order kept); count is the listing's"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api2.openreview.net/notes?content.venueid=NeurIPS.cc/2024/Conference&limit=1000&offset=0&sort=number%3Aasc",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "ratelimit-policy": "500;w=3600",
+   "ratelimit-remaining": "216",
+   "ratelimit-reset": "3215"
+  },
+  "json": {
+   "count": 4035,
+   "notes": [
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 1."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 2."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 3."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person4",
+        "~Synthetic_Person5",
+        "~Synthetic_Person6",
+        "~Synthetic_Person7",
+        "~Synthetic_Person8",
+        "~Synthetic_Person9",
+        "~Synthetic_Person10",
+        "~Synthetic_Person11"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 12",
+        "Synthetic Author 13",
+        "Synthetic Author 14",
+        "Synthetic Author 15",
+        "Synthetic Author 16",
+        "Synthetic Author 17",
+        "Synthetic Author 18",
+        "Synthetic Author 19"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 20.",
+        "Synthetic keywords text 21."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_22"
+      },
+      "pdf": {
+       "value": "/pdf/72621ba2893cdc746a92fa241286edca2ca9aab0.pdf"
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 23."
+      },
+      "title": {
+       "value": "Synthetic title text 24."
+      },
+      "venue": {
+       "value": "NeurIPS 2024 poster"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2024/Conference"
+      }
+     },
+     "forum": "JKEIYQUSUc",
+     "id": "JKEIYQUSUc",
+     "invitations": [
+      "NeurIPS.cc/2024/Conference/-/Submission",
+      "NeurIPS.cc/2024/Conference/-/Edit",
+      "NeurIPS.cc/2024/Conference/-/Post_Submission",
+      "NeurIPS.cc/2024/Conference/Submission3/-/Revision",
+      "NeurIPS.cc/2024/Conference/Submission3/-/Camera_Ready_Revision"
+     ],
+     "number": 3,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "_bibtex": {
+       "value": "Synthetic bibtex text 25."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 26."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person27",
+        "~Synthetic_Person28",
+        "~Synthetic_Person29",
+        "~Synthetic_Person30",
+        "~Synthetic_Person31"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 32",
+        "Synthetic Author 33",
+        "Synthetic Author 34",
+        "Synthetic Author 35",
+        "Synthetic Author 36"
+       ]
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 37.",
+        "Synthetic keywords text 38.",
+        "Synthetic keywords text 39.",
+        "Synthetic keywords text 40.",
+        "Synthetic keywords text 41.",
+        "Synthetic keywords text 42.",
+        "Synthetic keywords text 43."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_44"
+      },
+      "pdf": {
+       "value": "/pdf/ed5cc7e7c11e265ee3829cfa395ffc4d8e6168f0.pdf"
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 45."
+      },
+      "title": {
+       "value": "Synthetic title text 46."
+      },
+      "venue": {
+       "value": "NeurIPS 2024 oral"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2024/Conference"
+      }
+     },
+     "forum": "4bKEFyUHT4",
+     "id": "4bKEFyUHT4",
+     "invitations": [
+      "NeurIPS.cc/2024/Conference/-/Submission",
+      "NeurIPS.cc/2024/Conference/-/Edit",
+      "NeurIPS.cc/2024/Conference/-/Post_Submission",
+      "NeurIPS.cc/2024/Conference/Submission10/-/Revision",
+      "NeurIPS.cc/2024/Conference/Submission10/-/Camera_Ready_Revision"
+     ],
+     "number": 10,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "TLDR": {
+       "value": "Synthetic tldr text 47."
+      },
+      "_bibtex": {
+       "value": "Synthetic bibtex text 48."
+      },
+      "abstract": {
+       "value": "Synthetic abstract text 49."
+      },
+      "authorids": {
+       "value": [
+        "~Synthetic_Person50",
+        "~Synthetic_Person51",
+        "~Synthetic_Person52",
+        "~Synthetic_Person53"
+       ]
+      },
+      "authors": {
+       "value": [
+        "Synthetic Author 54",
+        "Synthetic Author 55",
+        "Synthetic Author 56",
+        "Synthetic Author 57"
+       ]
+      },
+      "flagged_for_ethics_review": {
+       "value": true
+      },
+      "keywords": {
+       "value": [
+        "Synthetic keywords text 58.",
+        "Synthetic keywords text 59.",
+        "Synthetic keywords text 60."
+       ]
+      },
+      "paperhash": {
+       "value": "synthetic|synthetic_title_61"
+      },
+      "pdf": {
+       "value": "/pdf/b1945fe2b72e490e9c7e95adbdc326222d288c7c.pdf"
+      },
+      "primary_area": {
+       "value": "Synthetic primary area text 62."
+      },
+      "title": {
+       "value": "Synthetic title text 63."
+      },
+      "venue": {
+       "value": "NeurIPS 2024 spotlight"
+      },
+      "venueid": {
+       "value": "NeurIPS.cc/2024/Conference"
+      }
+     },
+     "forum": "IDn9SiKgLy",
+     "id": "IDn9SiKgLy",
+     "invitations": [
+      "NeurIPS.cc/2024/Conference/-/Submission",
+      "NeurIPS.cc/2024/Conference/-/Edit",
+      "NeurIPS.cc/2024/Conference/-/Post_Submission",
+      "NeurIPS.cc/2024/Conference/Submission220/-/Revision",
+      "NeurIPS.cc/2024/Conference/-/Ethics_Review_Flag",
+      "NeurIPS.cc/2024/Conference/Submission220/-/Camera_Ready_Revision"
+     ],
+     "number": 220,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

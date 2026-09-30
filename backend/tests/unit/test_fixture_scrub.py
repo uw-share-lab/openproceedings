@@ -54,3 +54,12 @@ def test_nested_sensitive_containers_remain_suppressed_until_the_outer_close() -
     ):
         assert private not in got
     assert "Synthetic abstract" in got and "Synthetic authors" in got
+
+
+def test_a_venue_label_with_an_at_sign_but_no_domain_stays_real_and_an_email_does_not() -> None:
+    labels = ["BT@ICLR2024", "Tiny Papers @ ICLR 2024 Archive"]
+    body = {"notes": [{"id": f"N{i}", "content": {"venue": {"value": v}}} for i, v in enumerate(labels)]}
+    body["notes"].append({"id": "N9", "content": {"venue": {"value": "a.b@mail.example.edu"}}})
+    got, _ = scrub.scrub_json("https://api2.openreview.net/notes", body)
+    venues = [n["content"]["venue"]["value"] for n in got["notes"]]
+    assert venues[:2] == labels and venues[2].startswith("synthetic.person")

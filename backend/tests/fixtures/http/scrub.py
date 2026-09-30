@@ -53,8 +53,9 @@ KEEP_GROUP_CONTENT = {
     "start_date",
     "website",
 }
-# An email address or a profile id. Not a bare "@": venue strings like `Tiny Papers @ ICLR 2023` stay real.
-PERSON = re.compile(r"[^\s@]+@[^\s@]+|^~")
+# An email address or a profile id. Not a bare "@", nor one whose right side has no dot: venue strings like
+# `Tiny Papers @ ICLR 2023` and `BT@ICLR2024` (ICLR 2024's blogposts, TASK-101) stay real.
+PERSON = re.compile(r"[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+|^~")
 
 
 class _Counter:

@@ -4,6 +4,7 @@ snapshot build and the CLI. No network (conftest); the transport is `FakeOpenRev
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 from collections.abc import Callable
@@ -15,7 +16,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from openproceedings import cli
 from openproceedings.ingest import snapshot as snap
-from openproceedings.ingest.classify import classify_venueid
+from openproceedings.ingest.classify import V2_PRESENTATION, classify_venueid
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources import openreview_v2 as orv
 from openproceedings.ingest.sources.common import PROGRESS_SECONDS, Heartbeat
@@ -200,7 +201,11 @@ def test_claims_carry_the_source_the_page_and_its_fetch_time() -> None:
     fields = {c.field: c for c in record.provenance}
     assert fields["status"].evidence == fields["track"].evidence == f"venueid={CONF}"
     assert set(fields) == {"venue", "year", "track", "status", "title", "authors", "abstract", "keywords",
-                           "venue_id_raw", "urls.forum", "urls.pdf"}  # fmt: skip
+                           "presentation", "venue_id_raw", "urls.forum", "urls.pdf"}  # fmt: skip
+    assert (record.presentation, fields["presentation"].evidence) == (
+        "poster",
+        "content.venue=ICLR 2024 poster",
+    )
     assert record.urls.forum == f"https://openreview.net/forum?id={note['id']}"
     assert record.urls.pdf == f"https://openreview.net{note['content']['pdf']['value']}"
     assert record.abstract == "Synthetic abstract text 20." and record.title == "Synthetic title text 1."
@@ -211,6 +216,172 @@ def test_a_pdf_value_that_is_not_an_openreview_pdf_path_is_dropped() -> None:
     note["content"]["pdf"]["value"] = "https://evil.example/x.pdf"
     record = build(note)
     assert isinstance(record, PaperRecord) and record.urls.pdf is None
+
+
+# --- presentation (TASK-101) -------------------------------------------------------------------------------------
+
+# (fixture, content.venue, presentation): every row of classify.V2_PRESENTATION, each on a recorded note
+# (the notes-presentation-* fixtures are one note per string, trimmed from the TASK-054 crawl cache)
+PRESENTATIONS = [
+    ("iclr-2024/notes-presentation-conference.json", "ICLR 2024 oral", "oral"),
+    ("iclr-2024/notes-presentation-conference.json", "ICLR 2024 spotlight", "spotlight"),
+    ("iclr-2024/notes-presentation-conference.json", "ICLR 2024 poster", "poster"),
+    ("iclr-2024/notes-presentation-blogposts.json", "BT@ICLR2024", None),
+    ("iclr-2024/notes-presentation-tinypapers.json", "Tiny Papers @ ICLR 2024 Archive", None),
+    ("iclr-2024/notes-presentation-tinypapers.json", "Tiny Papers @ ICLR 2024 Present", None),
+    ("iclr-2024/notes-presentation-tinypapers.json", "Tiny Papers @ ICLR 2024 Notable", None),
+    ("iclr-2025/notes-presentation-conference.json", "ICLR 2025 Oral", "oral"),
+    ("iclr-2025/notes-presentation-conference.json", "ICLR 2025 Spotlight", "spotlight"),
+    ("iclr-2025/notes-presentation-conference.json", "ICLR 2025 Poster", "poster"),
+    ("iclr-2025/notes-presentation-blogposts.json", "ICLR 2025 Blogpost Track", None),
+    ("iclr-2026/notes-accepted.json", "ICLR 2026 Poster", "poster"),
+    ("icml-2023/notes-presentation-conference.json", "ICML 2023 OralPoster", "oral"),
+    ("icml-2023/notes-presentation-conference.json", "ICML 2023 Poster", "poster"),
+    ("icml-2024/notes-presentation-conference.json", "ICML 2024 Oral", "oral"),
+    ("icml-2024/notes-presentation-conference.json", "ICML 2024 Spotlight", "spotlight"),
+    ("icml-2024/notes-presentation-conference.json", "ICML 2024 Poster", "poster"),
+    ("icml-2025/notes-presentation-conference.json", "ICML 2025 oral", "oral"),
+    ("icml-2025/notes-presentation-conference.json", "ICML 2025 spotlightposter", "spotlight"),
+    ("icml-2025/notes-presentation-conference.json", "ICML 2025 poster", "poster"),
+    ("icml-2025/notes-presentation-position-paper-track.json", "ICML 2025 Position Paper Track oral", "oral"),
+    ("icml-2025/notes-presentation-position-paper-track.json", "ICML 2025 Position Paper Track spotlightposter",
+     "spotlight"),
+    ("icml-2025/notes-presentation-position-paper-track.json", "ICML 2025 Position Paper Track poster", "poster"),
+    ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 oral", "oral"),
+    ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 spotlight", "spotlight"),
+    ("neurips-2023/notes-presentation-conference.json", "NeurIPS 2023 poster", "poster"),
+    ("neurips-2023/notes-presentation-track-datasets-and-benchmarks.json",
+     "NeurIPS 2023 Datasets and Benchmarks Oral", "oral"),
+    ("neurips-2023/notes-presentation-track-datasets-and-benchmarks.json",
+     "NeurIPS 2023 Datasets and Benchmarks Spotlight", "spotlight"),
+    ("neurips-2023/notes-presentation-track-datasets-and-benchmarks.json",
+     "NeurIPS 2023 Datasets and Benchmarks Poster", "poster"),
+    ("neurips-2024/notes-presentation-conference.json", "NeurIPS 2024 oral", "oral"),
+    ("neurips-2024/notes-presentation-conference.json", "NeurIPS 2024 spotlight", "spotlight"),
+    ("neurips-2024/notes-presentation-conference.json", "NeurIPS 2024 poster", "poster"),
+    ("neurips-2024/notes-presentation-datasets-and-benchmarks-track.json",
+     "NeurIPS 2024 Track Datasets and Benchmarks Oral", "oral"),
+    ("neurips-2024/notes-presentation-datasets-and-benchmarks-track.json",
+     "NeurIPS 2024 Track Datasets and Benchmarks Spotlight", "spotlight"),
+    ("neurips-2024/notes-presentation-datasets-and-benchmarks-track.json",
+     "NeurIPS 2024 Track Datasets and Benchmarks Poster", "poster"),
+    ("neurips-2024/notes-presentation-competition-track.json", "NeurIPS 2024 Competition Track", None),
+    ("neurips-2025/notes-presentation-conference.json", "NeurIPS 2025 oral", "oral"),
+    ("neurips-2025/notes-presentation-conference.json", "NeurIPS 2025 spotlight", "spotlight"),
+    ("neurips-2025/notes-presentation-conference.json", "NeurIPS 2025 poster", "poster"),
+    ("neurips-2025/notes-presentation-datasets-and-benchmarks-track.json",
+     "NeurIPS 2025 Datasets and Benchmarks Track oral", "oral"),
+    ("neurips-2025/notes-presentation-datasets-and-benchmarks-track.json",
+     "NeurIPS 2025 Datasets and Benchmarks Track spotlight", "spotlight"),
+    ("neurips-2025/notes-presentation-datasets-and-benchmarks-track.json",
+     "NeurIPS 2025 Datasets and Benchmarks Track poster", "poster"),
+    ("neurips-2025/notes-presentation-position-paper-track.json", "NeurIPS 2025 Position Paper Track Oral", "oral"),
+    ("neurips-2025/notes-presentation-position-paper-track.json", "NeurIPS 2025 Position Paper Track", None),
+]  # fmt: skip
+
+
+def note_with_venue(fixture: str, venue_string: str) -> dict[str, Any]:
+    [note] = [
+        n
+        for n in recorded(fixture)["response"]["json"]["notes"]
+        if n["content"]["venue"]["value"] == venue_string
+    ]
+    return copy.deepcopy(note)  # type: ignore[no-any-return]
+
+
+def venue_year(fixture: str) -> tuple[str, int]:
+    slug, year = fixture.split("/")[0].rsplit("-", 1)
+    return {"iclr": "ICLR", "icml": "ICML", "neurips": "NeurIPS"}[slug], int(year)
+
+
+@pytest.mark.parametrize(("fixture", "venue_string", "presentation"), PRESENTATIONS)
+def test_each_verified_venue_string_gives_its_presentation(
+    fixture: str, venue_string: str, presentation: str | None
+) -> None:
+    venue, year = venue_year(fixture)
+    note, unmapped = note_with_venue(fixture, venue_string), set[str]()
+    record = orv.note_record(
+        note, venue=venue, year=year, page_url=PAGE_URL, fetched_at=FETCHED, unmapped=unmapped
+    )
+    assert isinstance(record, PaperRecord) and record.status == "accepted" and not unmapped
+    assert record.presentation == presentation
+    claims = [c for c in record.provenance if c.field == "presentation"]
+    expected = [("presentation", presentation, f"content.venue={venue_string}")] if presentation else []
+    assert [(c.field, c.value, c.evidence) for c in claims] == expected
+
+
+def test_the_table_holds_exactly_the_fixture_backed_strings() -> None:
+    table = {(v, y, s, p) for (v, y), rows in V2_PRESENTATION.items() for s, (_, p) in rows.items()}
+    assert table == {(*venue_year(f), s, p) for f, s, p in PRESENTATIONS}
+
+
+def unmapped_after(note: dict[str, Any], venue: str, year: int) -> tuple[PaperRecord | str, set[str]]:
+    unmapped = set[str]()
+    record = orv.note_record(
+        note, venue=venue, year=year, page_url=PAGE_URL, fetched_at=FETCHED, unmapped=unmapped
+    )
+    return record, unmapped
+
+
+def test_an_unrecognised_string_is_null_counted_and_logged_at_debug(caplog: pytest.LogCaptureFixture) -> None:
+    note = recorded_note(
+        "icml-2026/notes-accepted.json"
+    )  # `ICML 2026 regular`, recorded live: not in the table
+    with caplog.at_level(logging.DEBUG):
+        record, unmapped = unmapped_after(note, "ICML", 2026)
+    assert isinstance(record, PaperRecord) and (record.status, record.presentation) == ("accepted", None)
+    assert unmapped == {note["id"]} and "presentation" not in {c.field for c in record.provenance}
+    [line] = [r for r in caplog.records if r.getMessage() == "openreview_presentation_unmapped"]
+    assert line.levelno == logging.DEBUG and line.__dict__["forum"] == note["id"]
+    assert "venue_string" not in line.__dict__  # the string can be free text: never logged
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        {"venue": {"value": "ICLR 2024 Oral"}},  # another year's case: exact match only
+        {"venue": {"value": "ICLR 2025 oral"}},  # another venue-year's string
+        {"venue": {"value": ["ICLR 2024 oral"]}},  # not a string
+        {"venue": None},  # no content.venue
+    ],
+)
+def test_a_string_off_the_venue_years_table_is_unmapped(edit: dict[str, Any]) -> None:
+    note = recorded_note("iclr-2024/notes-accepted.json")
+    note["content"].update(edit)
+    note["content"] = {k: v for k, v in note["content"].items() if v is not None}
+    record, unmapped = unmapped_after(note, "ICLR", 2024)
+    assert isinstance(record, PaperRecord) and record.presentation is None and unmapped == {note["id"]}
+
+
+def test_a_string_listed_under_another_track_is_unmapped() -> None:
+    note = note_with_venue("neurips-2024/notes-presentation-datasets-and-benchmarks-track.json",
+                           "NeurIPS 2024 Track Datasets and Benchmarks Oral")  # fmt: skip
+    note["content"]["venueid"]["value"] = "NeurIPS.cc/2024/Conference"  # the venueid says main
+    record, unmapped = unmapped_after(note, "NeurIPS", 2024)
+    assert isinstance(record, PaperRecord) and record.track == "main"
+    assert record.presentation is None and unmapped == {note["id"]}
+
+
+@pytest.mark.parametrize(
+    ("fixture", "venue", "year"),
+    [
+        ("iclr-2024/notes-rejected.json", "ICLR", 2024),  # `Submitted to ICLR 2024`
+        ("iclr-2024/notes-withdrawn.json", "ICLR", 2024),
+        ("neurips-2025/notes-creative-ai.json", "NeurIPS", 2025),  # status unknown
+        ("neurips-2025/notes-workshop-city.json", "NeurIPS", 2025),  # accepted workshop: not the conference's
+    ],
+)
+def test_only_accepted_non_workshop_notes_are_looked_up(fixture: str, venue: str, year: int) -> None:
+    record, unmapped = unmapped_after(recorded_note(fixture), venue, year)
+    assert isinstance(record, PaperRecord) and record.presentation is None and not unmapped
+
+
+def test_a_rejected_note_never_takes_a_presentation_from_its_string() -> None:
+    note = recorded_note("iclr-2024/notes-rejected.json")
+    note["content"]["venue"]["value"] = "ICLR 2024 oral"  # the venueid decides status; venue can't promote
+    record, unmapped = unmapped_after(note, "ICLR", 2024)
+    assert isinstance(record, PaperRecord) and (record.status, record.presentation) == ("rejected", None)
+    assert not unmapped
 
 
 # --- the crawl ----------------------------------------------------------------------------------------------------
@@ -297,6 +468,41 @@ def test_per_note_anomalies_are_debug_and_the_crawl_has_one_attention_warning(
     assert {k: attention.__dict__[k] for k in ("api", "venue", "year", "unknown_track")} == {
         "api": "v2", "venue": "ICLR", "year": 2024, "unknown_track": 3,
     }  # fmt: skip
+
+
+def test_unmapped_presentations_are_counted_per_venue_year_in_one_attention_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    server = world(accepted=4)
+    for note in server.notes[CONF][:3]:
+        note["content"]["venue"]["value"] = "ICLR 2024 keynote"  # three notes the table doesn't know
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        result = orv.crawl(client(tmp_path, server), "ICLR", 2024)
+    assert [r.presentation for r in result.records if r.track == "main" and r.status == "accepted"].count(
+        None
+    ) == 3
+    assert {r.presentation for r in result.records if r.track == "tiny_papers"} == {
+        None
+    }  # a known `none` string
+    assert result.report.presentation_unmapped == 3 == result.report.to_manifest()["presentation_unmapped"]
+    assert len(lines(caplog, "openreview_presentation_unmapped")) == 3  # per record: DEBUG only
+    [attention] = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert attention.getMessage() == "openreview_crawl_attention"
+    assert (attention.__dict__["presentation_unmapped"], attention.__dict__["unknown_track"]) == (3, 0)
+    [finished] = lines(caplog, "openreview_crawl_finished")
+    assert finished.__dict__["presentation_unmapped"] == 3
+
+
+def test_a_crawl_whose_strings_are_all_mapped_has_no_attention_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        result = orv.crawl(client(tmp_path, world()), "ICLR", 2024)
+    assert result.report.presentation_unmapped == 0
+    assert {r.presentation for r in result.records if r.status == "accepted" and r.track == "main"} == {
+        "poster"
+    }
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
 
 
 def lines(caplog: pytest.LogCaptureFixture, event: str) -> list[logging.LogRecord]:

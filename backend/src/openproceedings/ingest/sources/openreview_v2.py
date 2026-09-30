@@ -19,6 +19,10 @@ One venue-year at a time (ICLR 2024+, NeurIPS 2023+, ICML 2023+; earlier years a
    forum id; the crawl's one `openreview_crawl_attention` WARNING counts them).
    Every value is a claim with `source="openreview_v2"`, the page URL it came from and the page's
    `fetched_at` from the cache.
+5. **Presentation** (TASK-101; spec 01 §Presentation). An accepted, non-workshop note's `content.venue` is
+   looked up exactly in its venue-year's table (`classify.classify_v2_presentation`); a string the table lacks
+   gives `presentation` null, a DEBUG `openreview_presentation_unmapped` line (forum id only) and a count,
+   `presentation_unmapped`, in the report and the crawl's lines.
 
 **Logs** (logging-standards; TASK-116): `openreview_crawl_started`, then `openreview_crawl_progress` at most every
 30 s on the client's monotonic clock (`common.Heartbeat`), then `openreview_crawl_finished` (all INFO, with `api`,
@@ -46,7 +50,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from openproceedings.ingest.classify import classify_venueid
+from openproceedings.ingest.classify import classify_v2_presentation, classify_venueid
 from openproceedings.ingest.record import FORUM_ID, Claim, ClaimField, ClaimValue, PaperRecord, Source, Urls
 from openproceedings.ingest.sources.common import CrawlError, Crawls, Heartbeat, Report
 from openproceedings.ingest.sources.http import CacheMiss
@@ -112,6 +116,7 @@ class CrawlReport(Report):
     imported: int = 0
     skipped: Counter[str] = field(default_factory=lambda: Counter(dict.fromkeys(SKIP_REASONS, 0)))
     unknown_track: int = 0
+    presentation_unmapped: int = 0  # accepted, non-workshop records whose content.venue isn't in the table
     abstract_missing: int = 0
     track_status: dict[str, Counter[str]] = field(default_factory=dict)
     would_fetch: list[str] = field(default_factory=list)  # dry run: the uncached requests met first
@@ -133,6 +138,7 @@ class CrawlReport(Report):
             "imported": self.imported,
             "skipped": dict(sorted(self.skipped.items())),
             "unknown_track": self.unknown_track,
+            "presentation_unmapped": self.presentation_unmapped,
             "abstract_missing": self.abstract_missing,
             "track_status": {t: dict(sorted(s.items())) for t, s in sorted(self.track_status.items())},
             "crawl_window": self.crawl_window(),
@@ -173,9 +179,17 @@ def _text(value: Any) -> str | None:
 
 
 def note_record(
-    note: Mapping[str, Any], *, venue: str, year: int, page_url: str, fetched_at: datetime
+    note: Mapping[str, Any],
+    *,
+    venue: str,
+    year: int,
+    page_url: str,
+    fetched_at: datetime,
+    unmapped: set[str] | None = None,
 ) -> PaperRecord | str:
-    """The record for one listed note, or the reason it is skipped (one of SKIP_REASONS)."""
+    """The record for one listed note, or the reason it is skipped (one of SKIP_REASONS). An accepted,
+    non-workshop note whose `content.venue` its venue-year's presentation table lacks gets `presentation`
+    null and its forum id added to `unmapped` (the crawl counts them)."""
     forum, nid = note.get("forum"), note.get("id")
     if not isinstance(nid, str) or nid != forum:
         return "not_submission"  # only the submission note speaks for the paper (zkNCWtw2fd)
@@ -197,6 +211,14 @@ def note_record(
         track, status, evidence = cls.track, cls.status, f"venueid={vid}"
         if not cls.parsed:
             log.debug("openreview_unknown_track", extra={"forum": nid, "why": "venueid_unparsed"})
+    presentation, venue_string = None, _value(content, "venue")
+    if status == "accepted" and track != "workshop":  # a workshop's sessions aren't the conference's
+        found = classify_v2_presentation(venue, year, track, venue_string)
+        presentation = found.value
+        if not found.mapped:
+            log.debug("openreview_presentation_unmapped", extra={"forum": nid})  # the string may be free text
+            if unmapped is not None:
+                unmapped.add(nid)
     abstract = _text(_value(content, "abstract"))
     if abstract is not None and (abstract.startswith("…") or abstract.endswith("…")):
         abstract = None  # the record refuses a snippet-shaped abstract; the paper is kept on its title
@@ -219,6 +241,8 @@ def note_record(
         provenance.append(claim("abstract", abstract, "content.abstract"))
     if keywords:
         provenance.append(claim("keywords", keywords, "content.keywords"))
+    if presentation is not None:
+        provenance.append(claim("presentation", presentation, f"content.venue={venue_string}"))
     if vid is not None:
         provenance.append(claim("venue_id_raw", vid, "content.venueid"))
     provenance.append(claim("urls.forum", urls.forum, "note.id"))
@@ -227,7 +251,7 @@ def note_record(
     try:
         return PaperRecord.build(
             id=f"op:{venue.lower()}:{year}:{nid}", title=title, abstract=abstract, authors=authors, venue=venue,
-            year=year, track=track, status=status, venue_id_raw=vid, urls=urls, keywords=keywords,
+            year=year, track=track, status=status, presentation=presentation, venue_id_raw=vid, urls=urls, keywords=keywords,
             provenance=tuple(provenance),
         )  # fmt: skip
     except ValidationError:
@@ -364,6 +388,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     began, purged = time.monotonic(), client.incompatible
     report = CrawlReport(venue, year, page_size=page_size)
     records: dict[str, PaperRecord] = {}
+    unmapped: set[str] = set()  # forum ids whose presentation string isn't in the table
     progress = Progress(log, client, report.api, venue, year, page_size, lambda: {
         "notes_read": report.notes_read, "imported": len(records), "skipped": sum(report.skipped.values())})  # fmt: skip
 
@@ -383,31 +408,35 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
                 report.skipped_groups[f"{group.id} venueid {vid}"] = "out_of_scope"
                 continue
             try:
-                _listing(client, vid, venue, year, report, records, page_size, progress.tick)
+                _listing(client, vid, venue, year, report, records, unmapped, page_size, progress.tick)
             except CacheMiss as e:
                 missed(e)
     for r in records.values():
         report.track_status.setdefault(r.track, Counter())[r.status] += 1
     report.imported = len(records)
     report.unknown_track = sum(r.track == "unknown" for r in records.values())
+    report.presentation_unmapped = sum(f"op:{venue.lower()}:{year}:{n}" in records for n in unmapped)
     report.abstract_missing = sum(r.abstract is None for r in records.values())
     incompatible = client.incompatible - purged  # this crawl's share of the client's count
     log.info("openreview_crawl_finished",
              extra={"api": report.api, "venue": venue, "year": year, "complete": report.complete, "groups": len(report.groups),
                     "notes_read": report.notes_read, "imported": report.imported,
                     "skipped": sum(report.skipped.values()), "unknown_track": report.unknown_track,
+                    "presentation_unmapped": report.presentation_unmapped,
                     "requests": client.requests, "cached": client.cached, "cache_incompatible": incompatible,
                     "ms": elapsed_ms(began, time.monotonic)})  # fmt: skip
     anomalies = {k: report.skipped[k] for k in ("out_of_scope", "invalid", "duplicate")}
-    if report.unknown_track or incompatible or any(anomalies.values()):
+    if report.unknown_track or report.presentation_unmapped or incompatible or any(anomalies.values()):
         log.warning("openreview_crawl_attention",
                     extra={"api": report.api, "venue": venue, "year": year, "unknown_track": report.unknown_track,
+                           "presentation_unmapped": report.presentation_unmapped,
                            **anomalies, "cache_incompatible": incompatible})  # fmt: skip
     return Crawl(tuple(sorted(records.values(), key=lambda r: r.id)), report)
 
 
 def _listing(client: OpenReviewClient, vid: str, venue: str, year: int, report: CrawlReport,
-             records: dict[str, PaperRecord], page_size: int, tick: Callable[[], None]) -> None:  # fmt: skip
+             records: dict[str, PaperRecord], unmapped: set[str], page_size: int,
+             tick: Callable[[], None]) -> None:  # fmt: skip
     """Page through one venueid's notes into `records`, checking the listing is consistent; `tick()` before
     each note (the crawl's heartbeat)."""
     params = {"content.venueid": vid, "sort": "number:asc"}
@@ -431,7 +460,9 @@ def _listing(client: OpenReviewClient, vid: str, venue: str, year: int, report: 
             if not isinstance(note, Mapping):
                 report.skipped["invalid"] += 1
                 continue
-            got = note_record(note, venue=venue, year=year, page_url=entry["url"], fetched_at=fetched_at)
+            got = note_record(
+                note, venue=venue, year=year, page_url=entry["url"], fetched_at=fetched_at, unmapped=unmapped
+            )
             report.notes_read += 1
             if isinstance(got, str):
                 report.skipped[got] += 1

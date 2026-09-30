@@ -330,11 +330,43 @@ V2_NOTES: list[tuple[str, str, str]] = [
     ("v2/neurips-2025/notes-position.json", "position", "accepted"),  # TASK-094 (was `other`)
     ("v2/neurips-2025/notes-workshop-city.json", "workshop", "accepted"),
     ("v2/neurips-2026/notes-accepted.json", "other", "unknown"),
+    # TASK-101: one note per presentation string, trimmed from the TASK-054 crawl cache
+    ("v2/iclr-2024/notes-presentation-conference.json", "main", "accepted"),
+    ("v2/iclr-2024/notes-presentation-blogposts.json", "blogpost", "accepted"),
+    ("v2/iclr-2024/notes-presentation-tinypapers.json", "tiny_papers", "accepted"),
+    ("v2/iclr-2025/notes-presentation-conference.json", "main", "accepted"),
+    ("v2/iclr-2025/notes-presentation-blogposts.json", "blogpost", "accepted"),
+    ("v2/icml-2023/notes-presentation-conference.json", "main", "accepted"),
+    ("v2/icml-2024/notes-presentation-conference.json", "main", "accepted"),
+    ("v2/icml-2025/notes-presentation-conference.json", "main", "accepted"),
+    ("v2/icml-2025/notes-presentation-position-paper-track.json", "position", "accepted"),
+    ("v2/neurips-2023/notes-presentation-conference.json", "main", "accepted"),
+    (
+        "v2/neurips-2023/notes-presentation-track-datasets-and-benchmarks.json",
+        "datasets_benchmarks",
+        "accepted",
+    ),
+    ("v2/neurips-2024/notes-presentation-conference.json", "main", "accepted"),
+    (
+        "v2/neurips-2024/notes-presentation-datasets-and-benchmarks-track.json",
+        "datasets_benchmarks",
+        "accepted",
+    ),
+    ("v2/neurips-2024/notes-presentation-competition-track.json", "competition", "accepted"),
+    ("v2/neurips-2025/notes-presentation-conference.json", "main", "accepted"),
+    (
+        "v2/neurips-2025/notes-presentation-datasets-and-benchmarks-track.json",
+        "datasets_benchmarks",
+        "accepted",
+    ),
+    ("v2/neurips-2025/notes-presentation-position-paper-track.json", "position", "accepted"),
 ]
 
 V2_VENUE_LABELS = [
     ("v2/iclr-2024/notes-tinypapers.json", "Tiny Papers @ ICLR 2024 Archive"),
     ("v2/neurips-2025/notes-workshop-city.json", "ResponsibleFM @ NeurIPS 2025"),
+    # TASK-101: scrub.py once read this label as an email address
+    ("v2/iclr-2024/notes-presentation-blogposts.json", "BT@ICLR2024"),
 ]
 
 V1_NOTES: list[tuple[str, str, str, str]] = [
