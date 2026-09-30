@@ -2,7 +2,8 @@
 
 /**
  * The home page's coverage line (design W1, copy deck CV-1; TASK-110): one `GET /coverage` answer, in the
- * words `/coverage` uses for the same facts, so the two pages can't disagree. It shows only what the API
+ * same words `/coverage` uses for the same facts (the pages fetch separately, so right after an index swap
+ * they can briefly show different answers). It shows only what the API
  * serves (no owner-accepted exceptions: those live in the gate report, spec 07 §C). While the answer is
  * loading, or when it fails, the line is left out: never a placeholder number.
  */
@@ -13,6 +14,7 @@ import { corpusWindow, count } from "./format";
 
 /** The venues with records, in the API's order (venue A–Z, as `/coverage` lists them). */
 function venues(coverage: Schemas["CoverageResponse"]): string[] {
+  // a Set keeps first-insertion order, so this keeps the API's order and drops only repeats, never a venue
   return [...new Set(coverage.venue_years.map((vy) => vy.venue))];
 }
 

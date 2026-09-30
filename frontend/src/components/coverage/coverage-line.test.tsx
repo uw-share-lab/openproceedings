@@ -29,7 +29,7 @@ describe("CoverageLine", () => {
   it("writes the fixture's GET /coverage answer", async () => {
     expect(await line(serve(COVERAGE))).toBe(
       "Index c60faee23898 · 39 records indexed · ICLR, ICML, NeurIPS · " +
-        "Google Scholar searches run 2026-09-26 to 2026-09-26 · Coverage ▸",
+        "Google Scholar searches run on 2026-09-26 · Coverage ▸",
     );
     expect(screen.getByRole("link", { name: "Coverage ▸" }).getAttribute("href")).toBe("/coverage");
   });
@@ -42,11 +42,18 @@ describe("CoverageLine", () => {
     expect(screen.getByText(/^Built /).textContent).toContain(` · ${window}`);
   });
 
-  it("says Crawled for a crawl window and leaves out a missing corpus window", async () => {
-    const crawled = structuredClone(COVERAGE);
-    crawled.snapshot.crawl_dates_kind["*"] = "crawl";
-    expect(await line(serve(crawled))).toContain(" · Crawled 2026-09-26 to 2026-09-26 · ");
-    cleanup();
+  it("writes a window's ends in order and the served total, not a sum of venue-years", async () => {
+    const data = structuredClone(COVERAGE);
+    data.snapshot.crawl_dates["*"] = { from: "2026-09-20T08:14:03Z", to: "2026-09-26T23:59:00Z" };
+    data.snapshot.crawl_dates_kind["*"] = "crawl";
+    data.totals.records = 1805; // not what venue_years add up to: the line shows the field as served
+    expect(await line(serve(data))).toBe(
+      "Index c60faee23898 · 1,805 records indexed · ICLR, ICML, NeurIPS · " +
+        "Crawled 2026-09-20 to 2026-09-26 · Coverage ▸",
+    );
+  });
+
+  it("leaves out a missing corpus window", async () => {
     const noWindow = structuredClone(COVERAGE);
     delete noWindow.snapshot.crawl_dates["*"];
     expect(await line(serve(noWindow))).toBe(

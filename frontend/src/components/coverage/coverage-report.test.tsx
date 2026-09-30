@@ -185,7 +185,10 @@ describe("the header", () => {
     expect(text).toContain(`Built ${s.built_at.slice(0, 10)} ${s.built_at.slice(11, 16)} UTC`);
     // the fixture is RIS-only: its window is when the Scholar searches were run, never a crawl
     expect(s.crawl_dates_kind["*"]).toBe("scholar_query_dates");
-    expect(text).toContain(`Google Scholar searches run ${s.crawl_dates["*"]!.from.slice(0, 10)} to`);
+    // a window within one day is written once, with "on"
+    expect(s.crawl_dates["*"]!.from.slice(0, 10)).toBe(s.crawl_dates["*"]!.to.slice(0, 10));
+    expect(text).toContain(`Google Scholar searches run on ${s.crawl_dates["*"]!.from.slice(0, 10)}`);
+    expect(text).toContain(`ris: google scholar searches run on ${s.crawl_dates.ris!.from.slice(0, 10)}`);
     expect(text).not.toMatch(/Crawled/);
     expect(text).toContain(`Sources: ${s.sources.join(", ")}`);
     expect(text).toContain("its counts are not PRISMA identification numbers");
@@ -204,6 +207,16 @@ describe("the header", () => {
     const text = document.body.textContent ?? "";
     expect(text).toContain("Crawled ");
     expect(text).not.toContain("PRISMA identification numbers");
+  });
+
+  it("writes a window over several days from its start to its end", () => {
+    const data = copy();
+    const window = { from: "2026-09-20T08:14:03Z", to: "2026-09-26T23:59:00Z" };
+    data.snapshot.crawl_dates = { "*": window, ris: window };
+    data.snapshot.crawl_dates_kind = { "*": "crawl", ris: "crawl" };
+    render(<CoverageReport coverage={data} />);
+    expect(screen.getByText(/^Built /).textContent).toContain(" · Crawled 2026-09-20 to 2026-09-26");
+    expect(document.body.textContent).toContain("ris: crawled 2026-09-20 to 2026-09-26");
   });
 });
 

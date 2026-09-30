@@ -39,13 +39,18 @@ export function windowVerb(kind: string | undefined): string {
   }
 }
 
-/** `Crawled 2026-09-20 to 2026-09-26`: a window's ends as calendar days, after its label. */
+/**
+ * `Crawled 2026-09-20 to 2026-09-26`: a window's ends as calendar days, after its label; a window within one
+ * day reads `Crawled on 2026-09-26`.
+ */
 export function windowText(label: string, window: Schemas["CrawlWindow"]): string {
-  return `${label} ${day(window.from)} to ${day(window.to)}`;
+  const from = day(window.from);
+  const to = day(window.to);
+  return from === to ? `${label} on ${from}` : `${label} ${from} to ${to}`;
 }
 
 /**
- * The corpus-wide window in words (`Google Scholar searches run 2026-09-26 to 2026-09-26`), the one sentence
+ * The corpus-wide window in words (`Google Scholar searches run on 2026-09-26`), the one sentence
  * `/coverage` and the home line both show; `null` when the snapshot has no `*` window, which is left out.
  */
 export function corpusWindow(snapshot: Schemas["SnapshotInfo"]): string | null {

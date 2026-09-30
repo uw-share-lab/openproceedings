@@ -98,7 +98,7 @@ test("the home coverage line states /coverage's facts in its words", async ({ pa
   await expect(page.getByRole("region", { name: "Coverage table" })).toBeVisible();
   const built = await page.getByText(/^Built /).innerText();
   const window = built.split(" · ")[1];
-  expect(window).toMatch(/ \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}$/);
+  expect(window).toMatch(/ (on \d{4}-\d{2}-\d{2}|\d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2})$/);
   const records = (await page.getByText(/ records · /).innerText()).split(" ")[0];
 
   await page.goto("/");

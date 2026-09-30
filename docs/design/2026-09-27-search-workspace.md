@@ -150,7 +150,7 @@ Conventions: `ux-design` §Wireframe conventions. Numbers are labelled with the 
   answer: `index_version`, `totals.records`, the venues of `venue_years` in the API's order (A–Z, as
   `/coverage` lists them) and the corpus-wide `snapshot.crawl_dates["*"]` window, worded by the same
   `corpusWindow()` as the `/coverage` header ("Crawled …", "Google Scholar searches run …" or "Collected
-  … to …", left out when there is no `*` window). It shows only what the API serves: owner-accepted
+  … to …", or "… on <day>" when both ends fall on one day; left out when there is no `*` window). It shows only what the API serves: owner-accepted
   coverage exceptions live in the gate report, not in `GET /coverage` (spec 07 §C). While loading, or if
   the request fails, the line is left out rather than showing a placeholder.
 
