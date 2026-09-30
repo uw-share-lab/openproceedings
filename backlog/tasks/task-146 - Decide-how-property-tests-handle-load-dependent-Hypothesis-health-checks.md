@@ -11,6 +11,9 @@ labels:
   - ci
 dependencies: []
 references:
+  - backend/tests/conftest.py
+  - .claude/skills/property-testing/SKILL.md
+  - .claude/skills/testing-standards/SKILL.md
   - .github/workflows/nightly.yml
 ordinal: 123000
 ---
