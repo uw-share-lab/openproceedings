@@ -7,13 +7,15 @@
 # (release create/edit: its notes are the release notes, spec 08 §Release), the WHOLE raw
 # command text is scanned — not individual flags — so -m, -am, -qm, --message=, --trailer, heredoc
 # bodies (`-F - <<EOF`, `-m "$(cat <<'EOF' …)"`), --body and --notes are all covered — plus the contents of
-# any -F/--file/--body-file/--notes-file that is a regular file (≤1 MB). `git commit` with no message opens an editor;
-# that path is covered by .githooks/commit-msg (scripts/setup-dev.sh installs it) and CI (pr-gates.yml).
+# any -F/--file/--body-file/--notes-file that is a regular file (≤1 MB), and of any file a `cat`, `< file`,
+# `$(cat file)`, `$(< file)` or backquoted `cat` in the command reads. `git commit` with no message opens
+# an editor; that path is covered by .githooks/commit-msg (scripts/setup-dev.sh installs it) and CI
+# (pr-gates.yml).
 # Exit 2 blocks the call and feeds stderr back to the agent.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 input=$(cat)
 HOOK_INPUT="$input" python3 - "$HOOK_DIR" <<'PY'
-import os, re, sys
+import os, re, shlex, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
 from cmdparse import ParseError, gh_subcommand, git_subcommand, opt_values, read_payload, redirect_targets, simple_commands
 
@@ -25,6 +27,9 @@ GIT_MSG = {"commit", "merge", "tag", "notes", "revert", "cherry-pick"}
 GH_PR_WRITE = {"create", "edit", "comment", "review", "merge"}
 GH_RELEASE_WRITE = {"create", "edit"}
 MAX_BYTES = 1_000_000
+# A file read inside a word: `-m "$(cat msg.txt)"`, `"$(< msg.txt)"`, "`cat msg.txt`" (TASK-067: a quoted
+# substitution is one word, so its `cat` is no command of its own).
+SUBST_READ = re.compile(r"\$\(\s*(?:cat\s+([^()]*?)|<\s*([^()]*?))\s*\)|`\s*cat\s+([^`]*?)\s*`")
 
 def file_text(path, base):
     if path == "-":
@@ -75,6 +80,12 @@ if relevant:
     for argv, d in commands:
         if argv and argv[0] == "cat":
             texts += [file_text(a, d) for a in argv[1:] if not a.startswith("-")]
+        for m in (m for word in argv for m in SUBST_READ.finditer(word)):
+            try:
+                names = shlex.split(next(g for g in m.groups() if g is not None))
+            except ValueError:
+                continue
+            texts += [file_text(a, d) for a in names if not a.startswith("-")]
 if relevant and (PATTERN.search(cmd) or any(PATTERN.search(t) for t in texts)):
     blocked()
 sys.exit(0)

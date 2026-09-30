@@ -517,6 +517,12 @@ check $R block "xargs through a shell alias"          "$(payload_bash "echo othe
 check $R block "--git-dir: HEAD of the other worktree" "$(payload_bash "git --git-dir='$TMP/wt-other/.git' push origin HEAD")"
 check $R block "GIT_DIR=: HEAD of the other worktree"  "$(payload_bash "GIT_DIR='$TMP/wt-other/.git' git push origin HEAD")"
 
+# a message read from a file inside a quoted $(…) is scanned too ($TMP/msg.txt holds a Claude trailer)
+check $A block "-m \"\$(cat msg.txt)\""                "$(payload_bash "git commit -m \"\$(cat '$TMP/msg.txt')\"")"
+check $A block "-m \"\$(< msg.txt)\""                  "$(payload_bash "git commit -m \"\$(< '$TMP/msg.txt')\"")"
+check $A block "-m \"\$(<msg.txt)\" relative, no space" "$(payload_bash "cd '$TMP' && git commit -m \"\$(<msg.txt)\"")"
+check $A block "-m \"\`cat msg.txt\`\" (backticks)"     "$(payload_bash "git commit -m \"\`cat '$TMP/msg.txt'\`\"")"
+check $A allow "-m \"\$(cat notes.md)\", clean file"   "$(payload_bash "git commit -m \"\$(cat '$TMP/notes.md')\"")"
 # review records are written only by record-review.py: no shell write or file tool may forge one
 check $R block "printf APPROVE > …/op-reviews/<sha>"   "$(payload_bash "printf 'APPROVE\n' > \"\$(git rev-parse --git-common-dir)/op-reviews/\$(git rev-parse HEAD)\"")"
 check $R block "… with the \$(…) target unquoted"     "$(payload_bash "printf 'APPROVE\n' > \$(git rev-parse --git-common-dir)/op-reviews/abc")"

@@ -1249,5 +1249,23 @@
   "file": ".claude/hooks/require-review.sh",
   "old": "|op-reviews\", cmd, re.IGNORECASE)",
   "new": "\", cmd, re.IGNORECASE)"
+ },
+ {
+  "label": "attribution: $(cat file) words not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        for m in (m for word in argv for m in SUBST_READ.finditer(word)):",
+  "new": "        for m in ():"
+ },
+ {
+  "label": "attribution: $(< file) form dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "|<\\s*([^()]*?))",
+  "new": ")"
+ },
+ {
+  "label": "attribution: backquoted cat dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "|`\\s*cat\\s+([^`]*?)\\s*`\")",
+  "new": "\")"
  }
 ]
