@@ -81,7 +81,11 @@ const HIT: Hit = {
   score: 1.5,
   highlights: { title: [[0, 11]], abstract: [[11, 16]] },
   urls: { forum: "https://openreview.net/forum?id=abc", pdf: null, proceedings: null, doi: "10.1/x" },
-  abstract_source: { source: "openreview_v2", url: "https://openreview.net/forum?id=abc" },
+  abstract_source: {
+    source: "openreview_v2",
+    origin: "openreview",
+    url: "https://openreview.net/forum?id=abc",
+  },
 };
 
 function body(over: Partial<Body> = {}): Body {
@@ -196,6 +200,16 @@ describe("results header, hits and highlights (W5)", () => {
     const link = within(heading).getByRole("link");
     expect(link.getAttribute("href")).toBe("/paper/op%3Aiclr%3A2024%3Aabc?q=trust&mode=native");
     expect(screen.getByRole("heading", { name: "Results, page 1 of 9" })).toBeTruthy();
+  });
+
+  it("a Skip to pages link at the top of the results moves focus to the pages", async () => {
+    await setup();
+    const skip = screen.getByRole("link", { name: "Skip to pages" });
+    const results = screen.getByRole("list", { name: "Results" });
+    expect(skip.compareDocumentPosition(results) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(skip.className).toContain("focus:not-sr-only"); // shown when it has keyboard focus
+    fireEvent.click(skip);
+    expect(document.activeElement).toBe(screen.getByRole("navigation", { name: "Pages" }));
   });
 
   it("draws badges as text (D&B named in full) and only the links the record has", async () => {

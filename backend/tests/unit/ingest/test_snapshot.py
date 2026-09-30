@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 from openproceedings import cli, storage
 from openproceedings.ingest import snapshot as snap
-from openproceedings.ingest.dedup import DedupResult, dedup
+from openproceedings.ingest.dedup import DedupResult, attribution, dedup
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import (
     DISPLAY,
@@ -781,13 +781,16 @@ def test_a_manifest_that_stops_listing_its_audit_files_is_refused(cache: Path, t
             load_records(copy)
 
 
-def test_get_many_reads_a_pages_records_as_get_does(cache: Path, tmp_path: Path) -> None:
-    """The search route reads a page's records in one open (TASK-134): the same records `get` gives, an id the
-    snapshot lacks left out, repeats collapsed, and no ids no read."""
+def test_the_reader_computes_each_records_attribution_once_at_load(cache: Path, tmp_path: Path) -> None:
+    """`GET /search` looks attributions up (TASK-134): one per record, equal to `attribution` over the record
+    a lookup validates, so the raw-JSON pass and the validated record agree."""
     records = RecordFile(build(cache, tmp_path / "s", BUILT).path)
-    ids = sorted(records._at)
-    assert ids, "the fixture snapshot has records"
-    asked = [*reversed(ids), ids[0], "op:iclr:2024:NotInTheSnapshot"]
-    assert records.get_many(asked) == {i: records.get(i) for i in ids}
-    assert records.get_many([]) == {}
-    assert records.get_many(["op:iclr:2024:NotInTheSnapshot"]) == {}
+    assert set(records.attributions) == set(records._at) and records.attributions
+    for rid, found in records.attributions.items():
+        r = records.get(rid)
+        assert r is not None
+        expected = attribution(
+            r.abstract, r.claims("abstract"), forum=r.urls.forum, proceedings=r.urls.proceedings
+        )
+        assert found == expected
+    assert any(a is not None for a in records.attributions.values())

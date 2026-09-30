@@ -10,9 +10,11 @@ from openproceedings.ingest import urls
 from openproceedings.ingest.dedup import (
     CONFLICT_FIELDS,
     PRECEDENCE,
+    Attribution,
     Conflict,
     Merge,
     abstract_claim,
+    attribution,
     dedup,
     resolve,
     title_key,
@@ -809,15 +811,8 @@ def test_a_proceedings_status_that_outranks_openreview_accepted_drops_the_presen
     assert record.content_hash == same.model_copy(update={"status": "unknown"}).content_hash
 
 
-def _abstract(source: Any, value: str, url: str | None = None, at: datetime = T0) -> Claim:
-    return Claim(field="abstract", value=value, source=source, url=url, fetched_at=at)
-
-
-def _with(abstract: str | None, *claims: Claim) -> PaperRecord:
-    return PaperRecord.build(
-        id="op:icml:2022:pmlr-v162-a22a", title="Trust in AI", abstract=abstract, authors=(), venue="ICML",
-        year=2022, track="main", status="accepted", provenance=claims,
-    )  # fmt: skip
+def _abstract(source: Any, value: str, url: str | None = None, evidence: str | None = None) -> Claim:
+    return Claim(field="abstract", value=value, source=source, url=url, fetched_at=T0, evidence=evidence)
 
 
 def test_abstract_claim_is_the_one_precedence_took_the_abstract_from() -> None:
@@ -825,19 +820,62 @@ def test_abstract_claim_is_the_one_precedence_took_the_abstract_from() -> None:
     pmlr = _abstract("pmlr", "Same text.", "https://proceedings.mlr.press/v162/a22a.html")
     ris = _abstract("ris", "Same text.")
     orv = _abstract("openreview_v2", "Same text.", "https://api2.openreview.net/notes?offset=0")
-    assert abstract_claim(_with("Same text.", ris, pmlr)) == pmlr  # pmlr outranks ris
-    assert abstract_claim(_with("Same text.", ris, pmlr, orv)) == orv  # OpenReview first (decision-005)
+    assert abstract_claim("Same text.", [ris, pmlr]) == pmlr  # pmlr outranks ris
+    assert abstract_claim("Same text.", [ris, pmlr, orv]) == orv  # OpenReview first (decision-005)
     scope = {"title": "Trust in AI", "venue": "ICML", "year": 2022, "track": "main", "status": "accepted"}
     base = [Claim(field=f, value=v, source="pmlr", fetched_at=T0) for f, v in scope.items()]  # type: ignore[arg-type]
     record, _ = resolve("op:icml:2022:pmlr-v162-a22a", [*base, pmlr, ris])
-    assert abstract_claim(record) == pmlr  # the claim `resolve` itself chose
+    assert abstract_claim(record.abstract, record.claims("abstract")) == pmlr  # the claim `resolve` chose
 
 
 def test_abstract_claim_holds_the_abstracts_own_text() -> None:
     other = _abstract("openreview_v2", "A different abstract.")
     pmlr = _abstract("pmlr", "Shown text.", "https://proceedings.mlr.press/v162/a22a.html")
     # a better-ranked claim with other text is not the source of the text shown
-    assert abstract_claim(_with("Shown text.", other, pmlr)) == pmlr
-    assert abstract_claim(_with("Shown text.", other)) is None  # no claim holds it: unknown, never guessed
-    assert abstract_claim(_with("Shown text.")) is None  # no provenance (a synthetic record)
-    assert abstract_claim(_with(None, pmlr)) is None  # no abstract, nothing to attribute
+    assert abstract_claim("Shown text.", [other, pmlr]) == pmlr
+    assert abstract_claim("Shown text.", [other]) is None  # no claim holds it: unknown, never guessed
+    assert abstract_claim("Shown text.", []) is None  # no provenance (a synthetic record)
+    assert abstract_claim(None, [pmlr]) is None  # no abstract, nothing to attribute
+
+
+FORUM = "https://openreview.net/forum?id=AbCd1234"
+NIPS_PAGE = nips(1)
+ICLR_PAGE = f"https://proceedings.iclr.cc/paper_files/paper/2024/hash/{H[2]}-Abstract-Conference.html"
+PMLR_PAGE = "https://proceedings.mlr.press/v162/a22a.html"
+
+
+@pytest.mark.parametrize(
+    ("claim", "forum", "proceedings", "expected"),
+    [
+        # a direct claim: OpenReview's page is the forum (its claim url is the API listing)
+        (_abstract("openreview_v1", "T", "https://api.openreview.net/notes"), FORUM, None,
+         Attribution("openreview_v1", "openreview", FORUM)),
+        (_abstract("pmlr", "T", PMLR_PAGE), None, PMLR_PAGE, Attribution("pmlr", "pmlr", PMLR_PAGE)),
+        (_abstract("neurips_proceedings", "T", NIPS_PAGE), None, NIPS_PAGE,
+         Attribution("neurips_proceedings", "neurips_proceedings", NIPS_PAGE)),
+        # an `ris` claim: its evidence names the route, and the record's url the page
+        (_abstract("ris", "T", evidence=f"scholarmend:proceedings_page {NIPS_PAGE}"), None, NIPS_PAGE,
+         Attribution("ris", "neurips_proceedings", NIPS_PAGE)),
+        (_abstract("ris", "T", evidence=f"scholarmend:proceedings_page {ICLR_PAGE}"), None, ICLR_PAGE,
+         Attribution("ris", "iclr_proceedings", ICLR_PAGE)),
+        (_abstract("ris", "T", evidence=f"scholarmend:proceedings_page {PMLR_PAGE}"), None, PMLR_PAGE,
+         Attribution("ris", "pmlr", PMLR_PAGE)),
+        (_abstract("ris", "T", evidence="scholarmend:openreview_api openreview:AbCd1234"), FORUM, None,
+         Attribution("ris", "openreview", FORUM)),
+        # a route that names no known site, or a proceedings route with no proceedings url: named, not linked
+        (_abstract("ris", "T", evidence="scholarmend:semantic_scholar s2:1"), FORUM, NIPS_PAGE,
+         Attribution("ris", None, None)),
+        (_abstract("ris", "T", evidence="scholarmend:proceedings_page"), None, None, Attribution("ris", None, None)),
+        # no proceedings link: the evidence's (possibly cut) url still names the site, unlinked
+        (_abstract("ris", "T", evidence=f"scholarmend:proceedings_page {NIPS_PAGE.split('-Abstract')[0]}"), None,
+         None, Attribution("ris", "neurips_proceedings", None)),
+        (_abstract("ris", "T", evidence="scholarmend:proceedings_page https://example.org/p"), None,
+         "https://example.org/p", Attribution("ris", None, None)),
+        (_abstract("ris", "T"), FORUM, NIPS_PAGE, Attribution("ris", None, None)),
+    ],
+)  # fmt: skip
+def test_attribution_names_the_site_and_its_page(
+    claim: Claim, forum: str | None, proceedings: str | None, expected: Attribution
+) -> None:
+    assert attribution("T", [claim], forum=forum, proceedings=proceedings) == expected
+    assert attribution(None, [claim], forum=forum, proceedings=proceedings) is None

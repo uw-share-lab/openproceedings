@@ -60,8 +60,9 @@ only when not `accepted`.
 ## Result item
 Title (link to `/paper/[id]`) with highlights → authors (first 3 + "et al.", a "Show all n authors" toggle for
 the rest; none when the record has no authors) → badges → abstract excerpt with highlights → the abstract's
-attribution, `Abstract: <source>` in `text-xs` muted text with the source an underlined link to the paper's page
-there (the hit's `abstract_source`, decision-018) → links (OpenReview · PDF · proceedings). Highlights are `<mark>` with bold + `--hl-*`; spans come from the API.
+attribution, `Abstract: <site>` in `text-xs` muted text with the site an underlined link to the paper's page
+there, and ` (via RIS import)` after it for an RIS-imported abstract (the hit's `abstract_source`, decision-018;
+its `aria-label` is the visible text plus ", abstract source for <title>") → links (OpenReview · PDF · proceedings). Highlights are `<mark>` with bold + `--hl-*`; spans come from the API.
 
 ## Copy rules
 Say what happened, with the number: "412 papers match". Errors quote the server message and hint. Methods

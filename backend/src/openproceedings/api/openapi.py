@@ -23,6 +23,7 @@ from fastapi.routing import APIRoute
 from openproceedings.api.errors import ErrorCode, ErrorEnvelope
 from openproceedings.api.models import ChangedInput
 from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.ingest.dedup import Origin
 from openproceedings.ingest.record import ClaimField, Presentation, Source
 from openproceedings.query.ast import FilterField, TextField
 from openproceedings.query.clauses import CLAUSE_REASONS
@@ -99,6 +100,7 @@ OPEN_ENUMS: dict[str, frozenset[str]] = {
     "status": frozenset(get_args(Status)),
     "presentation": frozenset(get_args(Presentation)),
     "claim source": frozenset(get_args(Source)),
+    "abstract origin": frozenset(get_args(Origin)),  # TASK-134: the site an abstract came from
     "claim field": frozenset(get_args(ClaimField)),
     "text field": frozenset(get_args(TextField)),
     "filter field": frozenset(get_args(FilterField)),

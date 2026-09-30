@@ -60,38 +60,52 @@ function Authors({ authors }: { authors: readonly string[] }) {
   );
 }
 
-/** A source as the attribution names it (copy RH-12). Sources are an open set (decision-009): one this code
- * doesn't know is named as it came. */
-const SOURCE_NAMES: Readonly<Record<string, string>> = {
-  openreview_v2: "OpenReview",
-  openreview_v1: "OpenReview",
+/** The site an abstract came from, as the attribution names it (copy RH-12). Origins are an open set
+ * (decision-009): one this code doesn't know is named as it came. */
+const ORIGIN_NAMES: Readonly<Record<string, string>> = {
+  openreview: "OpenReview",
   neurips_proceedings: "NeurIPS Proceedings",
+  iclr_proceedings: "ICLR Proceedings",
   pmlr: "PMLR",
   iclr_archive: "ICLR archive",
-  ris: "an imported RIS file",
 };
 
-export function sourceName(source: string): string {
-  return SOURCE_NAMES[source] ?? source;
+type AbstractFrom = NonNullable<SearchHit["abstract_source"]>;
+
+/** What the attribution says: the site ("PMLR"), and " (via RIS import)" when the claim came through an
+ * imported RIS file; a route that names no known site is "an imported RIS file" (or the source as it came). */
+export function attributionText(from: AbstractFrom): { site: string; via: string } {
+  if (from.origin === null) {
+    return { site: from.source === "ris" ? "an imported RIS file" : from.source, via: "" };
+  }
+  return {
+    site: ORIGIN_NAMES[from.origin] ?? from.origin,
+    via: from.source === "ris" ? " (via RIS import)" : "",
+  };
 }
 
-/** "Abstract: PMLR", the source a link to the paper's page there when it has one (decision-018). */
-function AbstractSource({ from }: { from: NonNullable<SearchHit["abstract_source"]> }) {
-  const name = sourceName(from.source);
+/** "Abstract: PMLR", the site a link to the paper's page there when it has one (decision-018). The link's
+ * accessible name starts with its visible text and adds "abstract source for <title>" (WCAG 2.5.3, 2.4.4), so
+ * it is told apart from the Links list's own "OpenReview"/"Proceedings" and from other results' links. An
+ * `aria-label`, not a hidden span: inside the inline-flex link a hidden span adds a space to the name. */
+function AbstractSource({ from, title }: { from: AbstractFrom; title: string }) {
+  const { site, via } = attributionText(from);
   return (
     <p className="text-xs text-muted-foreground">
       Abstract:{" "}
       {from.url === null ? (
-        name
+        site
       ) : (
         <a
           href={from.url}
           rel="noopener noreferrer"
+          aria-label={`${site}, abstract source for ${title}`}
           className="inline-flex min-h-6 items-center underline underline-offset-4"
         >
-          {name}
+          {site}
         </a>
       )}
+      {via}
     </p>
   );
 }
@@ -152,7 +166,7 @@ export function HitItem({ hit, q, mode }: { hit: SearchHit; q: string; mode: Mod
       ) : (
         <>
           <Abstract text={hit.abstract} spans={hit.highlights.abstract} />
-          {hit.abstract_source !== null && <AbstractSource from={hit.abstract_source} />}
+          {hit.abstract_source !== null && <AbstractSource from={hit.abstract_source} title={hit.title} />}
         </>
       )}
       <PaperLinks urls={hit.urls} label={`Links for ${hit.title}`} />

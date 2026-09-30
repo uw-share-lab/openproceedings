@@ -6,7 +6,8 @@ and head, fails a regression of the minimum over 20% (the least noise-prone stat
 assert the budgets from the timings measured:
 - a search returning the first 50 hits: p95 < 100 ms (every Trust-Evals protocol string, Scholar mode), with
   and without its display records and highlights (task-073; exclusion accounting has its own budget), and
-  as the `/search` endpoint runs it, with exclusion accounting and facets too (first page, facet memo cold);
+  as the `/search` endpoint runs it, with exclusion accounting, facets and each hit's `abstract_source` too
+  (first page, facet memo cold; TASK-134);
 - `match_ids` with exclusion accounting: p95 < 300 ms;
 - a wildcard expansion of up to 200 terms: p95 < 50 ms.
 The ~80k corpus and the position-verified cases are measured by `backend/tests/bench/report_80k.py` into
@@ -23,16 +24,19 @@ from typing import Any
 
 import pytest
 from openproceedings import search
+from openproceedings.api.search import page_attributions
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.compile import FIELDS
 from openproceedings.engine.exclusions import excluded
 from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import MAX_EXPANSIONS, EngineInputError
 from openproceedings.engine.tantivy_engine import TantivyEngine
+from openproceedings.ingest.snapshot import RecordFile
 from openproceedings.query.ast import Node, Wildcard
 from openproceedings.query.parser import ParseResult, parse
 from openproceedings.search import Shown
 
+from tests.contract.conftest import attributed, build
 from tests.fixtures.corpus.synthetic_5k import records
 from tests.golden.test_trust_evals import STRINGS
 from tests.unit.engine.test_exclusions import tantivy_of
@@ -101,24 +105,54 @@ def test_search_first_50_hits_with_highlights(benchmark: Any, engine: TantivyEng
 
 
 def search_endpoint(
-    engine: TantivyEngine, parsed: ParseResult, offset: int = 0, first: bool = True
+    engine: TantivyEngine,
+    parsed: ParseResult,
+    offset: int = 0,
+    first: bool = True,
+    records: RecordFile | None = None,
 ) -> object:
     """The whole of `GET /api/v1/search`'s engine work: `search.run` with facets and highlights (page, display
     records, highlights, exclusion accounting, disjunctive facets, the last on a worker thread overlapping the
-    page, so its wall time is below its CPU time). `first` forgets the facet memo, so the
-    call pays as a query's first page does (compiled queries and verified clauses stay warm); otherwise it
-    is a later page of the same query."""
+    page, so its wall time is below its CPU time), and with `records` each hit's `abstract_source` (TASK-134:
+    a lookup in what the snapshot reader computed at load, then the response object). `first` forgets the
+    facet memo, so the call pays as a query's first page does (compiled queries and verified clauses stay
+    warm); otherwise it is a later page of the same query."""
     if first:
         engine.faceted.clear()
-    return search.run(engine, parsed, offset=offset, limit=50, facets=True, highlight=True)
+    found = search.run(engine, parsed, offset=offset, limit=50, facets=True, highlight=True)
+    if records is not None:
+        page_attributions(records, [h.id for h in found.hits])
+    return found
+
+
+@pytest.fixture(scope="module")
+def served(tmp_path_factory: pytest.TempPathFactory) -> tuple[TantivyEngine, RecordFile]:
+    """The 5k corpus as the API serves it: its index and its snapshot's reader, the records carrying authors
+    and abstract claims (`attributed`), so `abstract_source` is built for most hits."""
+    root = tmp_path_factory.mktemp("bench-served")
+    version = build(list(records()), root / "snapshots", "bench", root / "indexes", attributed)
+    return TantivyEngine(root / "indexes" / version), RecordFile(root / "snapshots" / "bench")
 
 
 @pytest.mark.parametrize("name", list(STRINGS))
-def test_search_endpoint_first_page(benchmark: Any, engine: TantivyEngine, name: str) -> None:
+def test_search_endpoint_first_page(
+    benchmark: Any, served: tuple[TantivyEngine, RecordFile], name: str
+) -> None:
+    engine, snapshot = served
     parsed = trust_evals(name)
-    measure(benchmark, lambda: search_endpoint(engine, parsed), ENDPOINT_ROUNDS)  # wall time: facets overlap
+    measure(
+        benchmark, lambda: search_endpoint(engine, parsed, records=snapshot), ENDPOINT_ROUNDS
+    )  # facets overlap
     time = p95(benchmark)
     assert time is None or time < 0.100, f"p95 {time * 1000:.1f} ms"
+
+
+def test_the_endpoint_bench_builds_attributions(served: tuple[TantivyEngine, RecordFile]) -> None:
+    engine, snapshot = served
+    parsed = trust_evals(next(iter(STRINGS)))
+    found = search.run(engine, parsed, limit=50)
+    built = page_attributions(snapshot, [h.id for h in found.hits])
+    assert found.hits and any(a is not None for a in built.values())
 
 
 @pytest.mark.parametrize("name", list(STRINGS))

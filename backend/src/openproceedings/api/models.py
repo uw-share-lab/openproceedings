@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode
 from openproceedings.engine.index import VERSION_NAME
+from openproceedings.ingest.dedup import Origin
 from openproceedings.ingest.record import PaperRecord, Presentation, Source, Urls
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.ast import MIN_YEAR, FilterField, Node, TextField
@@ -131,16 +132,20 @@ class Highlights(Model):
 
 
 ABSTRACT_SOURCE_DOC = (
-    "Where the hit's `abstract` was taken from, for attribution (decision-018): the source of the provenance "
-    "claim precedence chose it from (decision-005), and `url`, the paper's page at that source: the OpenReview "
-    "forum for `openreview_v1`/`openreview_v2`, the paper's proceedings page for `neurips_proceedings` and "
-    "`pmlr` (PMLR's CC BY 4.0 terms ask for this link), null when the source has no page (`ris`). Null when "
-    "`abstract` is null or no claim records its source. `GET /papers/{id}` has the full provenance."
+    "Where the hit's `abstract` came from, for attribution (decision-018). `source`: the provenance claim "
+    "precedence took it from (decision-005), as `GET /papers/{id}` lists it; `ris` means it came through an "
+    "imported RIS file. `origin`: the site that published it, for a `ris` claim read from the claim's evidence "
+    "(`scholarmend:openreview_api` → `openreview`, `scholarmend:proceedings_page` → the proceedings its "
+    "`urls.proceedings` names), null when that names no known site. `url`: the paper's page at `origin` (the "
+    "OpenReview forum, or the proceedings page; PMLR's CC BY 4.0 terms ask for this link), null when there is "
+    "none. The whole object is null when `abstract` is null or no claim holds its text."
 )
+ORIGIN_DOC = "The site that published the abstract; null when the claim names none this instance knows."
 
 
 class AbstractSource(Model):
     source: Source
+    origin: Origin | None = Field(description=ORIGIN_DOC)
     url: str | None
 
 

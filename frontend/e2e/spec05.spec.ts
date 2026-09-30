@@ -254,9 +254,14 @@ test("filters, exclusions and paging work by keyboard and move focus to updated 
       .first(),
   ).toBeFocused();
 
+  // Skip to pages, at the top of the results, jumps past the 50 results' links and toggles
+  const skip = page.getByRole("link", { name: "Skip to pages" });
+  await tabTo(page, skip);
+  await expect(skip).toBeVisible(); // shown while it has keyboard focus
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("navigation", { name: "Pages" })).toBeFocused();
   const next = page.getByRole("button", { name: /Next/ });
-  // past 50 results, each with its title, authors toggle, abstract toggle, source and outbound links
-  await tabTo(page, next, 400);
+  await tabTo(page, next, 120);
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: /Results, page 2 of/ })).toBeFocused();
 });
@@ -337,9 +342,11 @@ test("each result shows its authors and names its abstract's source with a link 
   await expect(articles.first()).toBeVisible();
 
   // PMLR (CC BY 4.0): the result is the citation (title, authors, venue, year) and links to the PMLR page
-  const pmlr = articles.filter({ has: page.getByRole("link", { name: "PMLR", exact: true }) }).first();
-  await expect(pmlr.getByText("Abstract: PMLR")).toBeVisible();
-  await expect(pmlr.getByRole("link", { name: "PMLR", exact: true })).toHaveAttribute(
+  const pmlrLink = page.getByRole("link", { name: /^PMLR, abstract source for / });
+  const pmlr = articles.filter({ has: pmlrLink, hasNotText: "via RIS import" }).first();
+  await expect(pmlr.locator("p").filter({ hasText: /^Abstract: PMLR/ })).toBeVisible();
+  const title = await pmlr.getByRole("heading", { level: 3 }).innerText();
+  await expect(pmlr.getByRole("link", { name: `PMLR, abstract source for ${title}` })).toHaveAttribute(
     "href",
     /^https:\/\/proceedings\.mlr\.press\//,
   );
@@ -367,7 +374,16 @@ test("each result shows its authors and names its abstract's source with a link 
     .getByRole("article")
     .filter({ hasText: "Abstract: OpenReview" })
     .first()
-    .getByRole("link", { name: "OpenReview" })
-    .first();
+    .getByRole("link", { name: /^OpenReview, abstract source for / });
   await expect(openreview).toHaveAttribute("href", /^https:\/\/openreview\.net\/forum\?id=/);
+
+  // an abstract that came through an RIS import (most of the served corpus) names its real site and links it
+  const viaRis = page
+    .locator("article p")
+    .filter({ hasText: /^Abstract: ICLR Proceedings \(via RIS import\)$/ });
+  await expect(viaRis.first()).toBeVisible();
+  await expect(
+    viaRis.first().getByRole("link", { name: /^ICLR Proceedings, abstract source for / }),
+  ).toHaveAttribute("href", /^https:\/\/proceedings\.iclr\.cc\//);
+  await expect(viaRis.first()).not.toContainText("an imported RIS file");
 });

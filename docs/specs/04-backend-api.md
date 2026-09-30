@@ -122,18 +122,30 @@ reviews without the UI.
   "hits": [ { "id": "...", "title": "...", "abstract": "...", "authors": [...], "venue": "ICLR",
               "year": 2025, "track": "main", "status": "accepted", "presentation": "poster", "score": 12.3,
               "highlights": { "title": [[0,5]], "abstract": [[102,114]] }, "urls": {...},
-              "abstract_source": { "source": "pmlr", "url": "https://proceedings.mlr.press/v202/…html" } } ]
+              "abstract_source": { "source": "ris", "origin": "pmlr",
+                                   "url": "https://proceedings.mlr.press/v202/…html" } } ]
 }
 ```
 
 `abstract_source` (TASK-134, additive; decision-018) names where a hit's `abstract` came from so the result list
-can attribute it: `source` is the provenance claim precedence took the abstract from (decision-005; the open
-`Source` set) and `url` the paper's page at that source: the OpenReview forum (`urls.forum`; an OpenReview claim's
-own url is the API listing it was read from), the paper's proceedings page for `neurips_proceedings` and `pmlr`
-(PMLR's CC BY 4.0 terms ask for a link to it), null for `ris`. It is null when `abstract` is null or no claim
-holds the abstract's text. The route reads it from the served snapshot's records for the page's ids only
-(`RecordFile.get_many`; the index's display record keeps no provenance), so nothing about matching or the index
-changes.
+can attribute it:
+- `source`: the provenance claim precedence took the abstract from (decision-005; the open `Source` set, as
+  `GET /papers/{id}` lists it). `ris` means it came through an imported RIS file (the Google Scholar
+  bootstrap), which is most of the served corpus.
+- `origin`: the site that published it, an open set (`openreview`, `neurips_proceedings`, `iclr_proceedings`,
+  `pmlr`, `iclr_archive`). A direct claim maps to its site. A `ris` claim's evidence names its route
+  (`scholarmend:<route> <evidence>`, `ingest/ris.py`): `openreview_api` → `openreview`; `proceedings_page` →
+  the site `urls.proceedings`'s host names (NeurIPS, ICLR or PMLR proceedings), or, with no such link, the
+  site the evidence's own url names. Null when the route names no site this instance knows.
+- `url`: the paper's page at `origin`: the OpenReview forum (`urls.forum`; an OpenReview claim's own url is the
+  API listing it was read from), the proceedings claim's page, or for `ris` the record's `urls.proceedings`
+  (PMLR's CC BY 4.0 terms ask for a link to it). Null when there is none (a `ris` proceedings route whose
+  record has no proceedings link is named but not linked: its evidence url may be cut short).
+
+The object is null when `abstract` is null or no claim holds the abstract's text. `RecordFile` computes every
+record's attribution once, in its load pass over the served snapshot (`ingest/dedup.py::attribution`), so the
+route does a dict lookup per hit: no file I/O, and nothing about matching or the index changes (cost: spec 03
+§Performance budgets).
 
 `excluded` always has this shape: `total` (= the `identification_ast` count − `total`, 03 §Exclusion
 accounting) plus a `track` and a `status` map whose buckets sum to it. Each map always carries an `unknown`

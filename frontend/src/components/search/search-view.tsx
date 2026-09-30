@@ -330,6 +330,7 @@ function ResultsBody({
   onShowFilter,
   onSearchAgain,
 }: BodyProps) {
+  const pagingId = useId();
   const { parse } = controls;
   const current = parse !== null && parse.q === shownState.q && parse.mode === shownState.mode;
   const written: Limit[] =
@@ -443,6 +444,19 @@ function ResultsBody({
               </button>
             </p>
           )}
+          {pages > 1 && response.hits.length > 0 && (
+            // past 50 results' links and toggles, a keyboard user reaches the pages in one step (WCAG 2.4.1)
+            <a
+              href={`#${pagingId}`}
+              onClick={(e) => {
+                e.preventDefault();
+                document.getElementById(pagingId)?.focus();
+              }}
+              className="sr-only focus:not-sr-only focus:inline-block focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm"
+            >
+              Skip to pages
+            </a>
+          )}
           <ol aria-busy={busy} aria-label="Results">
             {response.hits.map((hit) => (
               <li key={hit.id}>
@@ -450,7 +464,9 @@ function ResultsBody({
               </li>
             ))}
           </ol>
-          {pages > 1 && <Paging page={state.page} pages={pages} onPage={onPage} state={state} />}
+          {pages > 1 && (
+            <Paging id={pagingId} page={state.page} pages={pages} onPage={onPage} state={state} />
+          )}
         </div>
       </div>
     </div>
@@ -506,11 +522,13 @@ function ZeroResults({ canonical, excluded }: { canonical: string; excluded: num
 
 /** Numbered pages (design W5 "Paging"): ◂ Previous · Page n of m · Next ▸, and a Go to page input. */
 function Paging({
+  id,
   page,
   pages,
   onPage,
   state,
 }: {
+  id: string;
   page: number;
   pages: number;
   onPage: (page: number) => void;
@@ -522,7 +540,7 @@ function Paging({
   const errorId = useId();
   const nav = "min-h-8 rounded-md border px-3 hover:bg-muted";
   return (
-    <nav aria-label="Pages" className="flex flex-wrap items-center gap-3 pt-2 text-sm">
+    <nav id={id} tabIndex={-1} aria-label="Pages" className="flex flex-wrap items-center gap-3 pt-2 text-sm">
       <button
         type="button"
         aria-disabled={page <= 1 ? true : undefined}

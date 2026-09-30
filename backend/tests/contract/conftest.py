@@ -10,6 +10,7 @@ be made to do on demand: hold a request or a stream across a swap, and fail in e
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import shutil
@@ -58,31 +59,50 @@ def attributed(r: Rec) -> PaperRecord:
     abstract claimed by the source that supplies that venue's abstracts (spec 01 §Sources), with the urls that
     source gives. ICML: `pmlr` (the claim's url is the paper's PMLR page); ICLR: `openreview_v2` (the claim's
     url is the API listing, the forum is `urls.forum`); NeurIPS: `neurips_proceedings`. Every 11th record also
-    carries an `ris` claim for its abstract, which precedence ranks last. The browser fixture serves these."""
+    carries an `ris` claim for its abstract, which precedence ranks last. Every 7th has **only** an `ris` claim,
+    as most of the served corpus does (the Google Scholar bootstrap): its evidence names the route, the
+    proceedings page (NeurIPS, ICLR and ICML; `urls.proceedings`) or, for every other ICLR one, the OpenReview
+    API (`urls.forum`). The browser fixture serves these."""
     paper = as_paper(r)
     n = int(paper.native.removeprefix("Fx"))
     authors = tuple(AUTHORS[(n + i) % len(AUTHORS)] for i in range(n % len(AUTHORS) + 1))
     claims = [*paper.provenance, Claim(field="authors", value=authors, source="ris", fetched_at=BUILT)]
     urls = Urls()
     if paper.abstract is not None:
-        if paper.venue == "ICML":
-            page = f"https://proceedings.mlr.press/fixture/{paper.native}.html"
-            source, claim_url, urls = "pmlr", page, Urls(proceedings=page)
-        elif paper.venue == "ICLR":
-            forum = f"https://openreview.net/forum?id={paper.native}"
-            source, claim_url, urls = (
-                "openreview_v2",
-                "https://api2.openreview.net/notes?offset=0",
-                Urls(forum=forum),
+        digest = hashlib.md5(paper.native.encode()).hexdigest()
+        forum = f"https://openreview.net/forum?id={paper.native}"
+        page = {
+            "ICML": f"https://proceedings.mlr.press/v{paper.year - 1800}/{paper.native.lower()}.html",
+            "ICLR": f"https://proceedings.iclr.cc/paper_files/paper/{paper.year}/hash/{digest}-Abstract-Conference.html",
+            "NeurIPS": f"https://proceedings.neurips.cc/paper_files/paper/{paper.year}/hash/{digest}-Abstract-Conference.html",
+        }[paper.venue]
+        if n % 7 == 0:
+            by_api = paper.venue == "ICLR" and n % 2 == 0
+            urls = Urls(forum=forum) if by_api else Urls(proceedings=page)
+            via = (
+                f"scholarmend:openreview_api openreview:{paper.native}"
+                if by_api
+                else f"scholarmend:proceedings_page {page}"
+            )
+            claims.append(
+                Claim(field="abstract", value=paper.abstract, source="ris", fetched_at=BUILT, evidence=via)
             )
         else:
-            page = f"https://proceedings.neurips.cc/fixture/{paper.native}-Abstract.html"
-            source, claim_url, urls = "neurips_proceedings", page, Urls(proceedings=page)
-        claims.append(
-            Claim(field="abstract", value=paper.abstract, source=source, url=claim_url, fetched_at=BUILT)
-        )
-        if n % 11 == 0:
-            claims.append(Claim(field="abstract", value=paper.abstract, source="ris", fetched_at=BUILT))
+            if paper.venue == "ICML":
+                source, claim_url, urls = "pmlr", page, Urls(proceedings=page)
+            elif paper.venue == "ICLR":
+                source, claim_url, urls = (
+                    "openreview_v2",
+                    "https://api2.openreview.net/notes?offset=0",
+                    Urls(forum=forum),
+                )
+            else:
+                source, claim_url, urls = "neurips_proceedings", page, Urls(proceedings=page)
+            claims.append(
+                Claim(field="abstract", value=paper.abstract, source=source, url=claim_url, fetched_at=BUILT)
+            )
+            if n % 11 == 0:
+                claims.append(Claim(field="abstract", value=paper.abstract, source="ris", fetched_at=BUILT))
     return paper.model_copy(update={"authors": authors, "urls": urls, "provenance": tuple(claims)})
 
 

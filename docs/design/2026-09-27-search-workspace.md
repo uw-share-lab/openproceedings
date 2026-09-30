@@ -342,7 +342,8 @@ Component rules:
   (`urls.pdf`), Proceedings (`urls.proceedings`), DOI (`urls.doi`), each only when present. Highlights are
   `<mark>` + bold + `--hl-*`, cut at the API spans with `hitHighlightsUtf16` (never re-matched). A paper with
   no abstract says "No abstract in the index" in muted text (not an empty line). Under the abstract, its
-  attribution "Abstract: `<source>`" linking to the paper's page there (`abstract_source`; decision-018, TASK-134,
+  attribution "Abstract: `<site>`" (plus "(via RIS import)" when it came through RIS) linking to the paper's
+  page there (`abstract_source`; decision-018, TASK-134,
   copy RH-12).
   - **Excerpt rule** (client display only, not matching): show the whole abstract when ≤ 600 characters;
     otherwise a window around the first highlight span, with `…` at a cut, and **Show full abstract**. The

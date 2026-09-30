@@ -127,6 +127,11 @@ The ~80k numbers, and the position-verified cases spec 03 exempts, are a report
 (`backend/tests/bench/report_80k.py` → `docs/results/<date>-bench.md`), from the same synthetic generator at
 80k with abstracts of realistic length. The nightly full-index run is task-057.
 
+The `/search` endpoint rows (`test_search_endpoint_first_page`) run over the 5k corpus as the API serves it
+(`attributed` records: authors and abstract claims) and include each hit's `abstract_source`, a lookup in
+what the snapshot reader computed at load (TASK-134; about 95 µs per 50-hit page on the served snapshot, spec
+03 §Performance budgets).
+
 ## F. Usefulness of near-misses (report, M5: deferred)
 
 This is 06's recall@25 protocol, using the review's Covidence included set as ground truth. Deferred with

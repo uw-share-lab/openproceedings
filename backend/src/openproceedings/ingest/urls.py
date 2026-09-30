@@ -33,6 +33,13 @@ _PMLR_GITHUB_PATH = re.compile(r"/mlresearch/v([0-9]+)/[^/]+/assets/([A-Za-z0-9_
 PREFIX = {"NeurIPS": "nips", "ICLR": "iclr"}
 
 
+def proceedings_site(url: str) -> str | None:
+    """Whose proceedings site `url` is on, by its host alone: `NeurIPS`, `ICLR` or `PMLR`, else None (the
+    results list's attribution names it; TASK-134)."""
+    host = urlparse(url).netloc.lower()
+    return _PROCEEDINGS_HOSTS.get(host) or ("PMLR" if host in _PMLR_HOSTS else None)
+
+
 def proceedings(url: str) -> tuple[str, str] | None:
     """(venue, hash) from a NeurIPS or ICLR proceedings URL; the hash may be any length (check it)."""
     parts = proceedings_parts(url)

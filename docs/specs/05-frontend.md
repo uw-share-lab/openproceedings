@@ -187,9 +187,14 @@ warnings, the save's index check), the design doc says so; its open questions li
 
    *As built (TASK-134, decision-018).* Each result shows its authors under the title (the first three and
    "et al.", with a "Show all n authors" button, `aria-expanded`, for the full list) and, under the abstract, its
-   attribution "Abstract: `<source>`" linking to the paper's page at that source (the hit's `abstract_source`:
-   OpenReview, NeurIPS Proceedings, PMLR; no link for an imported RIS file; no line when the API names no
-   source). A PMLR abstract is therefore shown with its citation (title, authors, venue, year) and a PMLR link.
+   attribution "Abstract: `<site>`" linking to the paper's page there (the hit's `abstract_source.origin` and
+   `url`: OpenReview, NeurIPS Proceedings, ICLR Proceedings, PMLR), with " (via RIS import)" after it when the
+   claim came through an imported RIS file; "an imported RIS file", unlinked, when its route names no known
+   site; no line when the API names no source. The link's `aria-label` is its visible site plus ", abstract source for `<title>`", so it is told
+   apart from the Links list's own "OpenReview"/"Proceedings". A PMLR
+   abstract is therefore shown with its citation (title, authors, venue, year) and a PMLR link. A "Skip to
+   pages" link at the top of the results (shown on keyboard focus) moves focus to the pages, past 50 results'
+   links and toggles.
 7. **Export menu.** RIS (Covidence), CSV, BibTeX, JSONL. Shows the count before downloading.
 8. **Save search record.** Creates `/records` and shows the permanent link plus generated methods text
    that says which string reproduces which number:

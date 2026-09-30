@@ -3,8 +3,8 @@
 Transport only: `/parse` is `query.parser.parse`, `/search` is `openproceedings.search.run`, the function
 `op search` calls, on the one engine this request read. Nothing here decides what matches, how it ranks,
 what the facets count or what the defaults removed. Each hit's `abstract_source` (TASK-134, decision-018) is
-read from the served snapshot's records for the page's ids alone: the index's display record keeps no
-provenance.
+looked up in what the served snapshot's reader computed at load (`RecordFile.attributions`): the index's
+display record keeps no provenance.
 """
 
 from __future__ import annotations
@@ -38,9 +38,8 @@ from openproceedings.api.models import (
 from openproceedings.api.openapi import BUSY
 from openproceedings.diagnostics import DiagnosticCode, InternalError
 from openproceedings.engine.exclusions import identified_total, unclassified_total
-from openproceedings.ingest.dedup import abstract_claim
-from openproceedings.ingest.record import PaperRecord, Urls
-from openproceedings.ingest.snapshot import RecordFile, SnapshotError
+from openproceedings.ingest.record import Urls
+from openproceedings.ingest.snapshot import RecordFile
 from openproceedings.query.clauses import filter_clauses
 from openproceedings.query.parser import Mode
 from openproceedings.search import Hit as Found
@@ -92,7 +91,7 @@ def search(
     )  # 422 API_QUERY_TOO_COSTLY before any verification
     found = run(engine, result, sort=sort, offset=offset, limit=limit, facets=True, highlight=True)
     annotate(request, total=found.total)
-    records = page_records(served.records, [h.id for h in found.hits])
+    sources = page_attributions(served.records, [h.id for h in found.hits])
     assert result.canonical is not None and result.canonical_hash is not None  # it parsed
     assert result.identification_query is not None and found.facets is not None
     return SearchResponse(
@@ -111,41 +110,25 @@ def search(
         identified_total=identified_total(found.total, found.excluded.total),
         unclassified_total=unclassified_total(found.excluded.track, found.excluded.status),
         facets=Facets.model_validate(found.facets),
-        hits=[_hit(h, records[h.id]) for h in found.hits],
+        hits=[_hit(h, sources[h.id]) for h in found.hits],
     )
 
 
-def page_records(records: RecordFile, ids: list[str]) -> dict[str, PaperRecord]:
-    """The snapshot records of a page's hits (one read of the file), for what the index's display record
-    lacks: each abstract's provenance. A hit the verified snapshot doesn't hold is an invariant broken (500),
-    as on `/papers/{id}`."""
-    try:
-        found = records.get_many(ids)
-    except (OSError, SnapshotError) as e:  # the file changed or vanished after it was verified at load
-        raise InternalError(DiagnosticCode.API_INTERNAL, "the index's snapshot is unreadable") from e
-    if len(found) != len(set(ids)):
-        raise InternalError(
-            DiagnosticCode.API_INTERNAL, "a paper the index holds is missing from its snapshot"
-        )
-    return found
+def page_attributions(records: RecordFile, ids: list[str]) -> dict[str, AbstractSource | None]:
+    """Each hit's `abstract_source`, looked up in what the served snapshot's reader computed at load (no file
+    I/O here). A hit the verified snapshot doesn't hold is an invariant broken (500), as on `/papers/{id}`."""
+    out: dict[str, AbstractSource | None] = {}
+    for i in ids:
+        if i not in records.attributions:
+            raise InternalError(
+                DiagnosticCode.API_INTERNAL, "a paper the index holds is missing from its snapshot"
+            )
+        a = records.attributions[i]
+        out[i] = None if a is None else AbstractSource(source=a.source, origin=a.origin, url=a.url)
+    return out
 
 
-_OPENREVIEW = frozenset({"openreview_v1", "openreview_v2"})
-
-
-def abstract_source(record: PaperRecord) -> AbstractSource | None:
-    """Where `record`'s abstract came from, to attribute it (decision-018): the claim precedence chose it from,
-    and the paper's page at that source. An OpenReview claim's url is the API listing it was read from, so the
-    page is the record's forum; a proceedings claim's url is the paper's own page (PMLR's CC BY 4.0 terms ask
-    for that link); `ris` has none."""
-    claim = abstract_claim(record)
-    if claim is None:
-        return None
-    url = record.urls.forum if claim.source in _OPENREVIEW else claim.url
-    return AbstractSource(source=claim.source, url=url)
-
-
-def _hit(found: Found, record: PaperRecord) -> Hit:
+def _hit(found: Found, abstract_source: AbstractSource | None) -> Hit:
     r: Any = found.record
     assert found.highlights is not None
     return Hit(
@@ -161,5 +144,5 @@ def _hit(found: Found, record: PaperRecord) -> Hit:
         score=found.score,
         highlights=Highlights(title=found.highlights["title"], abstract=found.highlights["abstract"]),
         urls=Urls.model_validate(r["urls"]),
-        abstract_source=abstract_source(record),
+        abstract_source=abstract_source,
     )

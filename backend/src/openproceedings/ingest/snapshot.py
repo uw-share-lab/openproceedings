@@ -39,12 +39,12 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import astuple, dataclass, fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from pydantic import ValidationError
 
 from openproceedings import __version__, storage
-from openproceedings.ingest.dedup import Conflict, DedupResult, Merge, dedup
+from openproceedings.ingest.dedup import Attribution, Conflict, DedupResult, Merge, attribution, dedup
 from openproceedings.ingest.reconcile import crawled, reconcile
 from openproceedings.ingest.record import RECORD_SCHEMA_VERSION, PaperRecord
 from openproceedings.ingest.ris import ImportReport, import_ris
@@ -533,6 +533,15 @@ def load_records(snapshot: Path) -> dict[str, PaperRecord]:
     return {r.id: r for r in iter_records(snapshot)}
 
 
+class _Claim(NamedTuple):
+    """An abstract claim as `attribution` reads it, from a record line's raw JSON."""
+
+    source: Any
+    value: Any
+    url: Any
+    evidence: Any
+
+
 class RecordFile:
     """Random access by id to a snapshot's records, holding only each line's byte range in memory (the API's
     `GET /papers/{id}`: the full record, provenance included, which the index doesn't store).
@@ -541,7 +550,8 @@ class RecordFile:
     manifest's `snapshot_hash` (so the file indexed is the snapshot named). The same pass counts the records
     per (venue, year, track, status), the missing abstracts per (venue, year) and per (venue, year, track), and
     the claim sources per (venue, year, track), and keeps the manifest it read, so `GET /coverage` checks the
-    manifest's counts against the records. A lookup reads its one line and
+    manifest's counts against the records; and each record's abstract attribution (`attributions`, TASK-134),
+    which `GET /search` reads per hit with no file I/O. A lookup reads its one line and
     validates it as a `PaperRecord`, which re-checks its `content_hash`. Snapshots are sealed read-only, so
     the bytes can't change underneath. Thread-safe: every lookup opens the file itself."""
 
@@ -552,6 +562,8 @@ class RecordFile:
         # (venue, year, track) → no abstract (0 included), and the claim sources of its records (TASK-082)
         self.track_missing: Counter[tuple[str, int, str]] = Counter()
         self.track_sources: dict[tuple[str, int, str], set[str]] = {}
+        # id → its abstract's attribution (TASK-134): computed here, once, so a search page is dict lookups
+        self.attributions: dict[str, Attribution | None] = {}
         try:
             read = _OnePass(snapshot)
             manifest = read.manifest
@@ -570,6 +582,12 @@ class RecordFile:
                     claimed = {c["source"] for c in line["provenance"]}
                     if not isinstance(rid, str) or not all(isinstance(c, str) for c in claimed):
                         raise TypeError(rid)
+                    about = [_Claim(c["source"], c["value"], c.get("url"), c.get("evidence"))
+                             for c in line["provenance"] if c["field"] == "abstract"]  # fmt: skip
+                    urls = line["urls"]
+                    credit = attribution(
+                        line["abstract"], about, forum=urls["forum"], proceedings=urls["proceedings"]
+                    )
                 except (ValueError, KeyError, TypeError) as e:
                     raise SnapshotError(
                         f"{snapshot.name} line {n}: invalid record ({_LINE_KIND[type(e).__name__]})"
@@ -577,6 +595,7 @@ class RecordFile:
                 if out_of_order := _id_order(previous, rid):
                     raise SnapshotError(f"{snapshot.name} line {n}: {out_of_order}")
                 self._at[rid] = (offset, len(raw))
+                self.attributions[rid] = credit
                 self.cells[cell] += 1
                 track = (line["venue"], line["year"], line["track"])
                 self.track_missing[track] += no_abstract
@@ -609,26 +628,10 @@ class RecordFile:
         with self.path.open("rb") as fh:
             fh.seek(at[0])
             raw = fh.read(at[1])
-        return self._validated(raw, at[0])
-
-    def get_many(self, rids: Iterable[str]) -> dict[str, PaperRecord]:
-        """The records with these ids (one open of the file for all of them, as a search page needs); an id the
-        snapshot doesn't hold is left out."""
-        found: dict[str, PaperRecord] = {}
-        spots = sorted({(at, rid) for rid in rids if (at := self._at.get(rid)) is not None})
-        if not spots:
-            return found
-        with self.path.open("rb") as fh:
-            for (offset, length), rid in spots:
-                fh.seek(offset)
-                found[rid] = self._validated(fh.read(length), offset)
-        return found
-
-    def _validated(self, raw: bytes, offset: int) -> PaperRecord:
         try:
             return PaperRecord.model_validate_json(raw)
         except ValidationError:
-            raise SnapshotError(f"{self.path.parent.name}: the record at byte {offset} is invalid") from None
+            raise SnapshotError(f"{self.path.parent.name}: the record at byte {at[0]} is invalid") from None
 
 
 def diff(a: Path, b: Path) -> dict[str, Any]:
