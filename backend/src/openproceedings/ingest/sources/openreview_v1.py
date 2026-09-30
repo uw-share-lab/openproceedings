@@ -44,14 +44,14 @@ The authority rules (never broken):
    collapsed to the lowest-numbered note; each other note is counted in `skipped["duplicate_submission"]`
    (`collapse_duplicate_submissions`). A record with a crawl conflict, or one the twin rule (rule 4) made
    `withdrawn`, is never collapsed, by this collapse or the silent-twin one.
-   **A silent twin** (TASK-132) is a note that says nothing about its status: in a year whose one status carrier
-   is `content.venue`, a submission-listing note with neither a non-null `venue` nor `venueid` (NeurIPS 2021
+   **A silent twin** (TASK-132) is a note that says nothing about its status: in a year whose one status carrier is
+   `content.venue`, a submission-listing note with neither a non-null `venue` nor `venueid` (NeurIPS 2021
    `W6e384Lkjbw` #5999, whose accepted twin `rDdb26AQ0SO` #11021 has the same pdf, supplementary material, title,
-   authors, abstract and keywords). Such a note is dropped when exactly one other record is identical to it in everything
-   but status, presentation and venueid, and that record is accepted with no crawl conflict
+   authors, abstract and keywords). Such a note is dropped when exactly one other record is identical to it in
+   everything but status, presentation and venueid, and that record is accepted with no crawl conflict
    (`collapse_silent_twins`, after rule 5; counted the same way). Its absence of evidence can't contradict an
-   acceptance; a second record (with evidence or a conflict) or a non-accepted one leaves every note a record.
-   A note rule 5 kept is silent only if every note it stands for is (TASK-147): one that absorbed a note with a
+   acceptance; a second record (with evidence or a conflict) or a non-accepted one leaves every note a record. A
+   note rule 5 kept is silent only if every note it stands for is (TASK-147): one that absorbed a note with a
    non-null `venue` or `venueid` (even `''`) is not, so which of two identical notes has the lower number never
    decides whether the paper's third, accepted note absorbs them.
 
