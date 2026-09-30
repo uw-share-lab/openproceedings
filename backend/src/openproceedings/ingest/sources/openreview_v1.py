@@ -52,7 +52,7 @@ The authority rules (never broken):
    (`collapse_silent_twins`, after rule 5; counted the same way). Its absence of evidence can't contradict an
    acceptance; a second record (with evidence or a conflict) or a non-accepted one leaves every note a record.
    A note rule 5 kept is silent only if every note it stands for is (TASK-147): one that absorbed a note with a
-   `venue` or `venueid` key (even an empty one) is not, so which of two identical notes has the lower number never
+   non-null `venue` or `venueid` (even `''`) is not, so which of two identical notes has the lower number never
    decides whether the paper's third, accepted note absorbs them.
 
 `content.authors` is split into names only by decision-019's count-checked rule (`split_authors`): a list with
@@ -949,9 +949,10 @@ def collapse_silent_twins(
     are equal by `_same_paper_but_status`, holds exactly two records: the silent note, still `unknown`, and one
     accepted record, neither in `exempt` (a crawl conflict, or made `withdrawn` by the twin rule). Return the (kept, removed) native ids,
     sorted. The accepted record is kept whatever the numbers: it is the one with evidence. Run after
-    `collapse_duplicate_submissions`, so notes identical to the accepted one are gone; `silent` must by then
-    hold only survivors every one of whose notes was silent (the crawl drops the others, TASK-147). Any third record (with
-    evidence, with a conflict, or a second silent note) makes the group a choice: then nothing is removed."""
+    `collapse_duplicate_submissions`, so notes identical to the accepted one are gone; by then `silent` must hold
+    only survivors whose absorbed notes were all silent too (the crawl drops the others, TASK-147). Any third
+    record (with evidence, with a conflict, or a second silent note) makes the group a choice: then nothing is
+    removed."""
     groups: defaultdict[str, list[str]] = defaultdict(list)
     for rid, record in records.items():
         if record.urls.pdf is not None:

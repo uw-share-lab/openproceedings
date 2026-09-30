@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import random
 import tempfile
+from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -88,6 +89,11 @@ def silent_note(listings: dict[str, list[dict[str, Any]]], record: PaperRecord) 
     )
 
 
+def papers(records: tuple[PaperRecord, ...]) -> Counter[tuple[str, str]]:
+    """Each paper (content and track, not status) with a status, as many times as records hold it."""
+    return Counter((v1._same_paper_but_status(r), r.status) for r in records)
+
+
 REAL_PAIR = {MAIN: [copy.deepcopy(SILENT), copy.deepcopy(SPEAKING)], WITHDRAWN: [], ROUND2: []}
 
 
@@ -154,6 +160,14 @@ def test_a_collapse_never_folds_two_papers_or_loses_an_acceptance(
     shuffled = {inv: rnd.sample(ns, len(ns)) for inv, ns in listings.items()}
     assert crawl(shuffled).records == got.records
 
+    # nor do the note numbers, rule 5's tie-break (TASK-147): permuted, the same papers survive with the same
+    # statuses, whichever note of each stands for them
+    renumbered = copy.deepcopy(listings)
+    ns = [n for inv in (MAIN, WITHDRAWN, ROUND2) for n in renumbered[inv]]
+    for n, number in zip(ns, rnd.sample([n["number"] for n in ns], len(ns)), strict=True):
+        n["number"] = number
+    assert papers(crawl(renumbered).records) == papers(got.records)
+
 
 def test_the_real_pair_collapses_to_its_accepted_note() -> None:
     [record] = crawl(copy.deepcopy(REAL_PAIR)).records
@@ -167,7 +181,7 @@ def test_a_survivor_that_stands_for_a_speaking_note_is_not_silent() -> None:
     assert [(r.native, r.status) for r in got.records] == [
         ("Zz1Note1", "unknown"), ("Zz2Note4", "accepted"), ("Zz4Note2", "unknown")
     ]  # fmt: skip
-    assert got.report.skipped["duplicate_submission"] == 2
+    assert (got.report.skipped["duplicate_submission"], got.report.unknown_status) == (2, 2)
     # the same notes with Note2's and Note3's numbers swapped: rule 5 keeps Note3 instead, and the same paper
     # survives as two records, so the silent-twin collapse no longer depends on rule 5's tie-break
     swapped = copy.deepcopy(CHAINED)
@@ -177,4 +191,21 @@ def test_a_survivor_that_stands_for_a_speaking_note_is_not_silent() -> None:
     assert [(r.native, r.status) for r in got.records] == [
         ("Zz0Note3", "unknown"), ("Zz1Note1", "unknown"), ("Zz2Note4", "accepted")
     ]  # fmt: skip
-    assert got.report.skipped["duplicate_submission"] == 2
+    assert (got.report.skipped["duplicate_submission"], got.report.unknown_status) == (2, 2)
+
+
+def test_a_survivor_of_only_silent_notes_still_folds_into_its_accepted_twin() -> None:
+    # the other half of TASK-147's rule: two identical silent notes are one silent survivor, whichever is kept
+    for first, second in ((1, 2), (2, 1)):
+        listings = {
+            MAIN: [
+                main_note("Zz0NoteA", first, 1, ABSENT),
+                main_note("Zz1NoteB", second, 1, ABSENT),
+                main_note("Zz2NoteC", 4, 1, "NeurIPS 2021 Poster"),
+            ],
+            WITHDRAWN: [],
+            ROUND2: [],
+        }
+        got = crawl(listings)
+        assert [(r.native, r.status) for r in got.records] == [("Zz2NoteC", "accepted")]
+        assert got.report.skipped["duplicate_submission"] == 2

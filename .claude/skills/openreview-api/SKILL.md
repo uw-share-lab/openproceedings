@@ -206,7 +206,7 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   year, a note with status `unknown` and no `venue` or `venueid` key is dropped when its paper's only other
   record is accepted, conflict-free and identical to it but for status, presentation and venueid; that record is
   kept whatever the numbers (`collapse_silent_twins`, same counter and log line). A note the identical-note
-  collapse kept is silent only if every note it absorbed was (TASK-147: an absorbed `venue: ''` is a key, so
+  collapse kept is silent only if every note it absorbed was (TASK-147: an absorbed `venue: ''` is a value, so
   not silence), or rule 5's number tie-break would decide the silent collapse. NeurIPS 2021 `W6e384Lkjbw` #5999
   into `rDdb26AQ0SO` #11021 (same pdf, supplementary, title, authors, abstract, keywords; the proceedings link
   `W6e384Lkjbw`), the only case on the 2026-09-29 crawl. Other differing notes stay apart: ICLR 2018 lists 24 pdfs

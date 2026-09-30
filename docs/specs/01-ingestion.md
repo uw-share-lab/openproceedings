@@ -318,9 +318,10 @@ exactly one other record with a pdf is identical to it in everything but status,
 that record is `accepted` with no crawl conflict: no absence of evidence contradicts an acceptance, while a
 second such record (with evidence or with a conflict), or a rejection, would be a choice. The kept record is the accepted one whatever the
 numbers. A note the identical-note collapse kept is silent only if every note it stands for is (TASK-147): one
-that absorbed a note with a `venue` or `venueid` key, even an empty one, stays beside the accepted note, so the
-tie-break between two identical notes never decides whether a third, accepted one absorbs them. On the 2026-09-29 crawl this is one pair: NeurIPS 2021 `W6e384Lkjbw` #5999 (no venue; the proceedings
-link it) and `rDdb26AQ0SO` #11021 (`NeurIPS 2021 Poster`), with the same pdf, supplementary material, title,
+that absorbed a note with a non-null `venue` or `venueid` (even `''`) stays a separate `unknown` record beside the
+accepted note (removed by the default status filter and itemised in `excluded.status.unknown`), so the tie-break
+between two identical notes never decides whether a third, accepted one absorbs them. On the 2026-09-29 crawl
+this is one pair: NeurIPS 2021 `W6e384Lkjbw` #5999 (no venue; the proceedings link it) and `rDdb26AQ0SO` #11021 (`NeurIPS 2021 Poster`), with the same pdf, supplementary material, title,
 authors, abstract and keywords, so the paper merges with its proceedings record. Notes differing in any other
 compared field (another pdf; ICLR 2018's blind vs withdrawn copies of one pdf) stay separate, and a note without
 a pdf is never collapsed. API v2 has no such
