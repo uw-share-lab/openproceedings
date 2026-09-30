@@ -76,11 +76,34 @@ venueids. An OpenReview track claim is the note's own `content.venueid`, classif
 one is on a track OpenReview holds, and `PRECEDENCE` (OpenReview first) gives it that track. A record with
 none takes the proceedings' track. The OpenReview crawlers claim no proceedings URL, so a note is never itself
 a listing. Dedup keeps a note on a track outside `PROCEEDINGS_TRACKS` (`workshop`, `other`, `unknown`, …) apart from every
-listing (`track_not_merged`). So wherever both answer, OpenReview's track is in `PROCEEDINGS_TRACKS` too. An
+listing (`track_not_merged`), except a Creative AI note beside its Creative AI listing (amended by task-137, below). So
+wherever both answer, OpenReview's track is in `PROCEEDINGS_TRACKS` too, or is Creative AI's `other`. An
 OpenReview `unknown` never overrules a listing's track, and a listing's `unknown` (a mixed PMLR volume) yields
 to OpenReview's track. This was already the behaviour before the decision (task-072 left it as an open question),
 so the decision changes no record: tests pin it (`test_dedup.py`, `test_dedup_props.py`, `test_reconcile.py`).
 The real-crawl check is in `docs/results/2026-09-29-reconcile-real-data.md` §Track, decided per track.
+
+**Creative AI listings merge with their own notes (amended 2026-09-30; task-137).** Decided by the owner,
+2026-09-30: a NeurIPS Creative AI listing merges with its own OpenReview note; other `other` tracks still never
+merge. The implementation below is the implementer's. The NeurIPS proceedings host Creative AI, which the taxonomy files under `other`, so the rule above kept every Creative AI
+listing apart from its own `NeurIPS.cc/<Y>/Creative_AI_Track` note: one paper, two records. `other` is not only
+Creative AI (NeurIPS 2025 also has 54 `Education_Program` notes; the venueid table lists
+`High_School_Projects_Track`, `Competition/LMC` and others), so `other` stays out of `PROCEEDINGS_TRACKS` and
+reconcile never judges it. Instead dedup's track rule admits NeurIPS Creative AI by its own evidence
+(`dedup.is_creative_ai`): a merge that involves a listing holds only `PROCEEDINGS_TRACKS` records or only
+Creative AI records, where Creative AI means every source claiming the track says `other` and backs it with the
+Creative AI venueid of the record's year (any status suffix) or a `-Creative_AI_Track` proceedings URL. Both
+sides say `other`, so no track changes; the proceedings decide acceptance (OpenReview's bare Creative AI path is
+status `unknown`). So wherever both answer, OpenReview's track is in `PROCEEDINGS_TRACKS` or is Creative AI's
+`other`. On the 2026-09-29 crawl (scratch snapshots `c6c9a156fdf7` before and `78f5a0204501` after), 59 of the 64
+NeurIPS 2025 Creative AI listings merged with their notes (2 of them past a same-title workshop note, now set
+aside). 5 stay listing-only: 4 match no note, and 1 (LUMIA) matches two Creative AI notes and is ambiguous.
+NeurIPS 2025 `other`/`unknown` fell from 146 to 87 records (the 59 absorbed notes); `other`/`accepted` stays 64.
+No other cell moved, and the M4 coverage gate is unchanged (PASS, 43 of 44 plus the accepted exception). The
+commands, both snapshots and the unmerged listings are in
+[`docs/results/2026-09-30-creative-ai-merge.md`](../../docs/results/2026-09-30-creative-ai-merge.md).
+Of the 69 records the owner's second answer counted, 5 of the 64 Creative AI ones still take their listing's
+track alone.
 
 The evidence the owner decided both answers on (task-072's measurement on the 2026-09-29 crawl,
 `docs/results/2026-09-29-reconcile-real-data.md`): 149 records in venue-years on OpenReview take their track

@@ -12,7 +12,7 @@ from openproceedings.ingest.reconcile import Crawl, Key, Listing, crawled, recon
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.sources.common import ListingReport
 
-from tests.unit.ingest.test_dedup import T0, T1, T2, H, archive, nips, paper
+from tests.unit.ingest.test_dedup import T0, T1, T2, H, archive, creative_listing, creative_note, nips, paper
 from tests.unit.ingest.test_dedup_props import pools, records
 
 LISTING = "https://proceedings.neurips.cc/paper_files/paper/2024"
@@ -91,6 +91,16 @@ def test_nothing_changes_where_the_track_venue_year_or_a_complete_crawl_is_missi
     assert run(xs, {}) == dedup(xs)
     outcome = reconcile(dedup(xs), crawl(complete=False))  # a listing skipped an entry: it may be this one
     assert outcome.result == dedup(xs) and outcome.incomplete == (("neurips_proceedings", "NeurIPS", 2024),)
+
+
+def test_creative_ai_is_never_judged_even_where_its_listing_merged_with_its_note() -> None:
+    """TASK-137: a Creative AI listing now merges with its note, but `other` is no covered track (it holds more
+    than Creative AI), so an unlisted Creative AI note keeps its status."""
+    xs = [creative_listing(), creative_note(),
+          creative_note("EfGh5678", "Not in the proceedings", status="accepted")]  # fmt: skip
+    crawls = crawl(year=2025, tracks=("main", "other"))
+    assert run(xs, crawls) == dedup(xs)
+    assert len(dedup(xs).records) == 2
 
 
 def test_a_track_counts_as_crawled_only_when_a_listing_record_holds_it() -> None:

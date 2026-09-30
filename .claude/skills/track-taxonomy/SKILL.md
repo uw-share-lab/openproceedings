@@ -15,7 +15,7 @@ description: The track and status enums from spec 01 with the source signal that
 | `competition` | NeurIPS `NeurIPS.cc/<Y>/Competition_Track` (2024+, verified; TASK-094) or `Track/Competition`; PMLR competition volumes (v123, v133, v176, v220) | no |
 | `tiny_papers` | ICLR Tiny Papers (2023–2024) | no |
 | `blogpost` | ICLR Blogpost track | no |
-| `other` | a form that parses but isn't listed above (e.g. `Creative_AI_Track`); `venue_id_raw` kept | no |
+| `other` | a form that parses but isn't listed above (e.g. `Creative_AI_Track`, `Education_Program`); `venue_id_raw` kept. Of these only NeurIPS Creative AI is also in the proceedings, so only it merges with a listing (dedup-rules §Never merge, TASK-137) | no |
 | `unknown` | no trustworthy signal | no, but always counted on coverage |
 
 Exact venueid spellings are in `.claude/skills/openreview-venueids/SKILL.md`, and proceedings path
