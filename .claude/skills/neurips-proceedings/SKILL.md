@@ -56,8 +56,9 @@ evidence rule with a fixture.
   accepted Round 1 and Round 2. 2022+ D&B is on the main host.
 - Year-page counts (2026-09-27): 2013 360, 2020 1,898, 2021 2,334, 2022 2,671 + 163 D&B, 2023 3,218 +
   322 D&B, 2024 4,034 + 459 D&B. 2022–2023 and 2024 D&B equal OpenReview's accepted counts; 2024 main is
-  one short of OpenReview's 4,035, and 2021 main is 296 short of the 2,630 OpenReview v1 venues call
-  accepted (TASK-054 resolves both).
+  one short of OpenReview's 4,035 (DEX, on no listing, is `unknown` since TASK-072), and 2021 main is 296
+  short of the 2,630 OpenReview v1 venues call accepted, of which 297 are accepted papers listed twice
+  (collapsed since TASK-125); the index's remaining +1 over 2,334 is an unmerged pair (TASK-132).
 - Pre-2022 abstract pages also link `<sha>-Metadata.json` and `<sha>-Reviews.html`.
 
 ## Track vocabulary (closed)
