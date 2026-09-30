@@ -218,6 +218,11 @@ as "current" and can load a pinned older version to replay a search record.
   The remaining headroom work (a non-ASCII tokenizer fast path, a re-measure on the real corpus) is
   task-088, in M4. `report_80k` reports both pages as wall p95 over 200 runs, and the first page's CPU per
   request.
+- Each hit's `abstract_source` (TASK-134, decision-018) costs the request a dict lookup per hit and one small
+  response object: `RecordFile` computes every record's attribution once, in the load pass it already makes
+  over the snapshot (spec 04 §SearchResponse). Measured on the served snapshot (1,805 records): about 95 µs
+  per 50-hit page, no file I/O, and about 230 bytes of memory per record (about 18 MB at 80k); the load pass
+  took 0.06 s in all. No index or `index_version` change. The `bench` workflow's `/search` rows include it.
 
 ## Testing
 

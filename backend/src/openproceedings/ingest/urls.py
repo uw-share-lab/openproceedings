@@ -33,6 +33,13 @@ _PMLR_GITHUB_PATH = re.compile(r"/mlresearch/v([0-9]+)/[^/]+/assets/([A-Za-z0-9_
 PREFIX = {"NeurIPS": "nips", "ICLR": "iclr"}
 
 
+def proceedings_site(url: str) -> str | None:
+    """Whose proceedings site `url` is on, by its host alone: `NeurIPS`, `ICLR` or `PMLR`, else None (the
+    results list's attribution names it; TASK-134)."""
+    host = urlparse(url).netloc.lower()
+    return _PROCEEDINGS_HOSTS.get(host) or ("PMLR" if host in _PMLR_HOSTS else None)
+
+
 def proceedings(url: str) -> tuple[str, str] | None:
     """(venue, hash) from a NeurIPS or ICLR proceedings URL; the hash may be any length (check it)."""
     parts = proceedings_parts(url)
@@ -75,6 +82,25 @@ def proceedings_native(url: str) -> str | None:
     if urlparse(url).netloc.lower() == NEURIPS_DB_2021_HOST:  # the same rule as classify_neurips_listing
         return f"{base}-{token}" if year == 2021 and token in NEURIPS_DB_2021_ROUNDS else None
     return base
+
+
+_HASH_TAIL = re.compile(r"/hash/([0-9a-fA-F]{32})/?")
+
+
+def names_native(url: str, native_id: str) -> bool:
+    """Whether `url` is the page of the paper whose native id is `native_id`: the id `native` reads from it, or,
+    for a NeurIPS or ICLR proceedings page cut after its hash (`…/paper/2024/hash/<32 hex>`, as some RIS
+    evidence records it), that hash with the host's prefix. Never by hash alone on the 2021 D&B host, where a
+    hash names up to three papers (TASK-118). The results list links an RIS abstract's evidence url only then
+    (TASK-134)."""
+    if native(url) == native_id:
+        return True
+    parsed = urlparse(url)
+    venue = _PROCEEDINGS_HOSTS.get(parsed.netloc.lower())
+    m = re.fullmatch(r"(?:/paper_files)?/paper/[0-9]{4}" + _HASH_TAIL.pattern, parsed.path)
+    if venue is None or m is None or parsed.netloc.lower() == NEURIPS_DB_2021_HOST:
+        return False
+    return native_id == f"{PREFIX[venue]}-{m.group(1).lower()}"
 
 
 def native(url: str) -> str | None:

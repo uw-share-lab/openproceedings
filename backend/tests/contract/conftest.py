@@ -10,6 +10,7 @@ be made to do on demand: hold a request or a stream across a swap, and fail in e
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import shutil
@@ -30,6 +31,7 @@ from openproceedings.diagnostics import DiagnosticCode, InternalError
 from openproceedings.engine.index import build_index
 from openproceedings.engine.protocol import EngineInputError
 from openproceedings.ingest.dedup import DedupResult
+from openproceedings.ingest.record import Claim, PaperRecord, Urls
 from openproceedings.ingest.snapshot import render
 from openproceedings.logs import configure_logging
 
@@ -48,11 +50,74 @@ class Store:
     small: str
 
 
-def build(corpus: list[Rec], snapshots: Path, name: str, indexes: Path) -> str:
-    """A snapshot `<snapshots>/<name>` of `corpus` and its index under `indexes`; the index_version."""
+# `attributed`'s authors: a record gets 1 to 6 of them, so both a short list and one cut to "et al." occur
+AUTHORS = ("Ada Okafor", "Bo Lindqvist", "Chen Wei", "Dana Haddad", "Emil Novak", "Farah Iqbal")
+
+
+def attributed(r: Rec) -> PaperRecord:
+    """`as_paper(r)` as a crawled record looks to the results list (TASK-134, decision-018): authors, and its
+    abstract claimed by the source that supplies that venue's abstracts (spec 01 §Sources), with the urls that
+    source gives. ICML: `pmlr` (the claim's url is the paper's PMLR page); ICLR: `openreview_v2` (the claim's
+    url is the API listing, the forum is `urls.forum`); NeurIPS: `neurips_proceedings`. Every 11th record also
+    carries an `ris` claim for its abstract, which precedence ranks last. Every 7th has **only** an `ris` claim,
+    as most of the served corpus does (the Google Scholar bootstrap): its evidence names the route, the
+    proceedings page (NeurIPS, ICLR and ICML; `urls.proceedings`) or, for every other ICLR one, the OpenReview
+    API (`urls.forum`). The browser fixture serves these."""
+    paper = as_paper(r)
+    n = int(paper.native.removeprefix("Fx"))
+    authors = tuple(AUTHORS[(n + i) % len(AUTHORS)] for i in range(n % len(AUTHORS) + 1))
+    claims = [*paper.provenance, Claim(field="authors", value=authors, source="ris", fetched_at=BUILT)]
+    urls = Urls()
+    if paper.abstract is not None:
+        digest = hashlib.md5(paper.native.encode()).hexdigest()
+        forum = f"https://openreview.net/forum?id={paper.native}"
+        page = {
+            "ICML": f"https://proceedings.mlr.press/v{paper.year - 1800}/{paper.native.lower()}.html",
+            "ICLR": f"https://proceedings.iclr.cc/paper_files/paper/{paper.year}/hash/{digest}-Abstract-Conference.html",
+            "NeurIPS": f"https://proceedings.neurips.cc/paper_files/paper/{paper.year}/hash/{digest}-Abstract-Conference.html",
+        }[paper.venue]
+        if n % 7 == 0:
+            by_api = paper.venue == "ICLR" and n % 2 == 0
+            urls = Urls(forum=forum) if by_api else Urls(proceedings=page)
+            via = (
+                f"scholarmend:openreview_api openreview:{paper.native}"
+                if by_api
+                else f"scholarmend:proceedings_page {page}"
+            )
+            claims.append(
+                Claim(field="abstract", value=paper.abstract, source="ris", fetched_at=BUILT, evidence=via)
+            )
+        else:
+            if paper.venue == "ICML":
+                source, claim_url, urls = "pmlr", page, Urls(proceedings=page)
+            elif paper.venue == "ICLR":
+                source, claim_url, urls = (
+                    "openreview_v2",
+                    "https://api2.openreview.net/notes?offset=0",
+                    Urls(forum=forum),
+                )
+            else:
+                source, claim_url, urls = "neurips_proceedings", page, Urls(proceedings=page)
+            claims.append(
+                Claim(field="abstract", value=paper.abstract, source=source, url=claim_url, fetched_at=BUILT)
+            )
+            if n % 11 == 0:
+                claims.append(Claim(field="abstract", value=paper.abstract, source="ris", fetched_at=BUILT))
+    return paper.model_copy(update={"authors": authors, "urls": urls, "provenance": tuple(claims)})
+
+
+def build(
+    corpus: list[Rec],
+    snapshots: Path,
+    name: str,
+    indexes: Path,
+    paper: Callable[[Rec], PaperRecord] = as_paper,
+) -> str:
+    """A snapshot `<snapshots>/<name>` of `corpus` (each record made a snapshot record by `paper`) and its index
+    under `indexes`; the index_version."""
     snap = snapshots / name
     snap.mkdir(parents=True)
-    papers = tuple(sorted((as_paper(r) for r in corpus), key=lambda p: p.id))
+    papers = tuple(sorted((paper(r) for r in corpus), key=lambda p: p.id))
     for file, data in render(DedupResult(papers, (), ()), [], BUILT).items():
         (snap / file).write_bytes(data)
     return build_index(snap, indexes, BUILT).index_version

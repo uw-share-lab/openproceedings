@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * One result (ui-design-system §Result item; design W5; copy RH-8–11): an `h3` title linking to
- * `/paper/<id>?q=&mode=`, badges, the abstract excerpt and the outbound links. Highlights are the API's spans
- * only (never re-matched); the excerpt window is chosen from them (`excerpt.ts`), so it never decides what
- * matched.
+ * One result (ui-design-system §Result item; design W5; copy RH-8–13): an `h3` title linking to
+ * `/paper/<id>?q=&mode=`, the authors (the first three and "et al.", with a button for the full list), badges,
+ * the abstract excerpt, the abstract's attribution ("Abstract: PMLR", linking to the paper's page there;
+ * decision-018, the API's `abstract_source`) and the outbound links. Highlights are the API's spans only
+ * (never re-matched); the excerpt window is chosen from them (`excerpt.ts`), so it never decides what matched.
  */
 import Link from "next/link";
 import { useId, useState } from "react";
@@ -18,6 +19,95 @@ import type { SearchHit } from "./use-search";
 /** The paper page for a hit: the query rides in the URL, so a shared link shows the same highlights. */
 export function paperHref(id: string, q: string, mode: Mode): string {
   return `/paper/${encodeURIComponent(id)}?${new URLSearchParams({ q, mode }).toString()}`;
+}
+
+/** Authors shown before "et al." (ui-design-system §Result item); the rest behind "Show all n authors". */
+export const AUTHORS_SHOWN = 3;
+
+/** The authors a result shows: all of them when there are at most `AUTHORS_SHOWN` or `full` is set. */
+export function shownAuthors(authors: readonly string[], full: boolean): { names: string; cut: boolean } {
+  const cut = !full && authors.length > AUTHORS_SHOWN;
+  return { names: (cut ? authors.slice(0, AUTHORS_SHOWN) : authors).join(", "), cut };
+}
+
+function Authors({ authors }: { authors: readonly string[] }) {
+  const [full, setFull] = useState(false);
+  const regionId = useId();
+  if (authors.length === 0) return null;
+  const { names, cut } = shownAuthors(authors, full);
+  return (
+    <p className="text-sm break-words">
+      <span id={regionId}>
+        <span className="sr-only">Authors: </span>
+        {names}
+        {cut && " et al."}
+      </span>
+      {authors.length > AUTHORS_SHOWN && (
+        <>
+          {" "}
+          <button
+            type="button"
+            aria-expanded={full}
+            aria-controls={regionId}
+            onClick={() => setFull(!full)}
+            className="min-h-6 text-xs underline underline-offset-4"
+          >
+            {full ? "Show fewer authors" : `Show all ${authors.length} authors`}
+          </button>
+        </>
+      )}
+    </p>
+  );
+}
+
+/** The site an abstract came from, as the attribution names it (copy RH-12). Origins are an open set
+ * (decision-009): one this code doesn't know is named as it came. */
+const ORIGIN_NAMES: Readonly<Record<string, string>> = {
+  openreview: "OpenReview",
+  neurips_proceedings: "NeurIPS Proceedings",
+  iclr_proceedings: "ICLR Proceedings",
+  pmlr: "PMLR",
+  iclr_archive: "ICLR archive",
+};
+
+type AbstractFrom = NonNullable<SearchHit["abstract_source"]>;
+
+/** What the attribution says: the site ("PMLR"), and " (via RIS import)" when the claim came through an
+ * imported RIS file; a route that names no known site is "an imported RIS file" (or the source as it came). */
+export function attributionText(from: AbstractFrom): { site: string; via: string } {
+  if (from.origin === null) {
+    return { site: from.source === "ris" ? "an imported RIS file" : from.source, via: "" };
+  }
+  return {
+    site: ORIGIN_NAMES[from.origin] ?? from.origin,
+    via: from.source === "ris" ? " (via RIS import)" : "",
+  };
+}
+
+/** "Abstract: PMLR", the site a link to the paper's page there when it has one (decision-018). The link's
+ * accessible name starts with its visible text and adds "abstract source for <title>" (WCAG 2.5.3, 2.4.4), so
+ * it is told apart from the Links list's own "OpenReview"/"Proceedings" and from other results' links. An
+ * `aria-label`, not a hidden span: inside the inline-flex link a hidden span adds a space to the name. */
+function AbstractSource({ from, title }: { from: AbstractFrom; title: string }) {
+  const { site, via } = attributionText(from);
+  return (
+    <p className="text-xs text-muted-foreground">
+      Abstract:{" "}
+      {from.url === null ? (
+        site
+      ) : (
+        <a
+          href={from.url}
+          rel="noopener noreferrer"
+          aria-label={`${site}, abstract source for ${title}`}
+          className="inline-flex min-h-6 items-center underline underline-offset-4"
+        >
+          {site}
+        </a>
+      )}
+      {via}
+    </p>
+  );
 }
 
 function Abstract({ text, spans }: { text: string; spans: readonly (readonly number[])[] }) {
@@ -63,6 +153,7 @@ export function HitItem({ hit, q, mode }: { hit: SearchHit; q: string; mode: Mod
           <Highlighted text={hit.title} spans={title} />
         </Link>
       </h3>
+      <Authors authors={hit.authors} />
       <PaperBadges
         venue={hit.venue}
         year={hit.year}
@@ -73,7 +164,10 @@ export function HitItem({ hit, q, mode }: { hit: SearchHit; q: string; mode: Mod
       {hit.abstract === null ? (
         <p className="text-sm text-muted-foreground">No abstract in the index</p>
       ) : (
-        <Abstract text={hit.abstract} spans={hit.highlights.abstract} />
+        <>
+          <Abstract text={hit.abstract} spans={hit.highlights.abstract} />
+          {hit.abstract_source !== null && <AbstractSource from={hit.abstract_source} title={hit.title} />}
+        </>
       )}
       <PaperLinks urls={hit.urls} label={`Links for ${hit.title}`} />
     </article>

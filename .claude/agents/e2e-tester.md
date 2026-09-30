@@ -40,6 +40,8 @@ retry you add.
 5. **Visual regression:** `toHaveScreenshot` for `/search` with results, light and dark. Freeze the clock
    (`page.clock`) and mask dates/record ids. Update baselines only with `--update-snapshots` when the
    change is intended, and say so in the PR with before/after.
+   A Linux baseline comes from the CI `e2e` run's artifact, never from a local Docker container (its font
+   metrics differ; learnings 2026-09-28 addendum).
 6. **Portable browser contract:** pin `@playwright/test` to an exact version in the lockfile, install its
    Chromium with `npx playwright install --with-deps chromium` in CI. Keep `{platform}` in
    `snapshotPathTemplate`: macOS and the fixed Ubuntu version label have separate reviewed baselines rather

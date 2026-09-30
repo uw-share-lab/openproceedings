@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 from openproceedings import cli, storage
 from openproceedings.ingest import snapshot as snap
-from openproceedings.ingest.dedup import DedupResult, dedup
+from openproceedings.ingest.dedup import DedupResult, attribution, dedup
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import (
     DISPLAY,
@@ -779,3 +779,22 @@ def test_a_manifest_that_stops_listing_its_audit_files_is_refused(cache: Path, t
         (copy / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         with pytest.raises(SnapshotError, match="doesn't match its manifest"):
             load_records(copy)
+
+
+def test_the_reader_computes_each_records_attribution_once_at_load(cache: Path, tmp_path: Path) -> None:
+    """`GET /search` looks attributions up (TASK-134): one per record, equal to `attribution` over the record
+    a lookup validates, so the raw-JSON pass and the validated record agree."""
+    records = RecordFile(build(cache, tmp_path / "s", BUILT).path)
+    assert set(records.attributions) == set(records._at) and records.attributions
+    for rid, found in records.attributions.items():
+        r = records.get(rid)
+        assert r is not None
+        expected = attribution(
+            r.abstract,
+            r.claims("abstract"),
+            forum=r.urls.forum,
+            proceedings=r.urls.proceedings,
+            native=r.native,
+        )
+        assert found == expected
+    assert any(a is not None for a in records.attributions.values())

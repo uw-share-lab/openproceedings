@@ -2,7 +2,9 @@
 
 Transport only: `/parse` is `query.parser.parse`, `/search` is `openproceedings.search.run`, the function
 `op search` calls, on the one engine this request read. Nothing here decides what matches, how it ranks,
-what the facets count or what the defaults removed.
+what the facets count or what the defaults removed. Each hit's `abstract_source` (TASK-134, decision-018) is
+looked up in what the served snapshot's reader computed at load (`RecordFile.attributions`): the index's
+display record keeps no provenance.
 """
 
 from __future__ import annotations
@@ -11,7 +13,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request
 
-from openproceedings.api.deps import EngineDep, annotate, check_candidates, parsed, searchable
+from openproceedings.api.deps import EngineDep, ServedDep, annotate, check_candidates, parsed, searchable
 from openproceedings.api.middleware import API_PREFIX
 from openproceedings.api.models import (
     DEFAULT_LIMIT,
@@ -21,6 +23,7 @@ from openproceedings.api.models import (
     OFFSET_DOC,
     Q_DOC,
     SORT_DOC,
+    AbstractSource,
     Excluded,
     Facets,
     Highlights,
@@ -33,8 +36,10 @@ from openproceedings.api.models import (
     versions,
 )
 from openproceedings.api.openapi import BUSY
+from openproceedings.diagnostics import DiagnosticCode, InternalError
 from openproceedings.engine.exclusions import identified_total, unclassified_total
 from openproceedings.ingest.record import Urls
+from openproceedings.ingest.snapshot import RecordFile
 from openproceedings.query.clauses import filter_clauses
 from openproceedings.query.parser import Mode
 from openproceedings.search import Hit as Found
@@ -68,7 +73,7 @@ def parse_query(request: Request, engine: EngineDep, body: ParseRequest) -> Pars
 @router.get("/search", response_model=SearchResponse, responses=BUSY)
 def search(
     request: Request,
-    engine: EngineDep,
+    served: ServedDep,
     q: Annotated[str, Query(description=Q_DOC)],
     mode: Annotated[Mode, Query(description=MODE_DOC)] = "native",
     sort: Annotated[Sort, Query(description=SORT_DOC)] = "relevance",
@@ -78,6 +83,7 @@ def search(
     """One page of the ranked matched set, with its total, exclusion accounting, disjunctive facets and
     highlights. `limit` over 200 is a 422 (never clamped); a query that doesn't parse is a 422 with its
     diagnostics."""
+    engine = served.engine  # the request's one read of the served index: its records are this engine's
     result = searchable(request, q, mode)
     assert result.effective_ast is not None  # searchable refuses a query that doesn't parse
     check_candidates(
@@ -85,6 +91,7 @@ def search(
     )  # 422 API_QUERY_TOO_COSTLY before any verification
     found = run(engine, result, sort=sort, offset=offset, limit=limit, facets=True, highlight=True)
     annotate(request, total=found.total)
+    sources = page_attributions(served.records, [h.id for h in found.hits])
     assert result.canonical is not None and result.canonical_hash is not None  # it parsed
     assert result.identification_query is not None and found.facets is not None
     return SearchResponse(
@@ -103,11 +110,25 @@ def search(
         identified_total=identified_total(found.total, found.excluded.total),
         unclassified_total=unclassified_total(found.excluded.track, found.excluded.status),
         facets=Facets.model_validate(found.facets),
-        hits=[_hit(h) for h in found.hits],
+        hits=[_hit(h, sources[h.id]) for h in found.hits],
     )
 
 
-def _hit(found: Found) -> Hit:
+def page_attributions(records: RecordFile, ids: list[str]) -> dict[str, AbstractSource | None]:
+    """Each hit's `abstract_source`, looked up in what the served snapshot's reader computed at load (no file
+    I/O here). A hit the verified snapshot doesn't hold is an invariant broken (500), as on `/papers/{id}`."""
+    out: dict[str, AbstractSource | None] = {}
+    for i in ids:
+        if i not in records.attributions:
+            raise InternalError(
+                DiagnosticCode.API_INTERNAL, "a paper the index holds is missing from its snapshot"
+            )
+        a = records.attributions[i]
+        out[i] = None if a is None else AbstractSource(source=a.source, origin=a.origin, url=a.url)
+    return out
+
+
+def _hit(found: Found, abstract_source: AbstractSource | None) -> Hit:
     r: Any = found.record
     assert found.highlights is not None
     return Hit(
@@ -123,4 +144,5 @@ def _hit(found: Found) -> Hit:
         score=found.score,
         highlights=Highlights(title=found.highlights["title"], abstract=found.highlights["abstract"]),
         urls=Urls.model_validate(r["urls"]),
+        abstract_source=abstract_source,
     )

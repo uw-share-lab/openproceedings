@@ -254,6 +254,12 @@ test("filters, exclusions and paging work by keyboard and move focus to updated 
       .first(),
   ).toBeFocused();
 
+  // Skip to pages, at the top of the results, jumps past the 50 results' links and toggles
+  const skip = page.getByRole("link", { name: "Skip to pages" });
+  await tabTo(page, skip);
+  await expect(skip).toBeVisible(); // shown while it has keyboard focus
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("navigation", { name: "Pages" })).toBeFocused();
   const next = page.getByRole("button", { name: /Next/ });
   await tabTo(page, next, 120);
   await page.keyboard.press("Enter");
@@ -325,4 +331,59 @@ test("dismissing a pending save preserves its eventual server result", async ({ 
   } finally {
     release();
   }
+});
+
+test("each result shows its authors and names its abstract's source with a link (decision-018)", async ({
+  page,
+}) => {
+  await page.goto(`/search?${new URLSearchParams({ q: "trust venue:ICML" })}`);
+  await expect(page.getByText(/\d+ papers/).first()).toBeVisible();
+  const articles = page.getByRole("article");
+  await expect(articles.first()).toBeVisible();
+
+  // PMLR (CC BY 4.0): the result is the citation (title, authors, venue, year) and links to the PMLR page
+  const pmlrLink = page.getByRole("link", { name: /^PMLR, abstract source for / });
+  const pmlr = articles.filter({ has: pmlrLink, hasNotText: "via RIS import" }).first();
+  await expect(pmlr.locator("p").filter({ hasText: /^Abstract: PMLR/ })).toBeVisible();
+  const title = await pmlr.getByRole("heading", { level: 3 }).innerText();
+  await expect(pmlr.getByRole("link", { name: `PMLR, abstract source for ${title}` })).toHaveAttribute(
+    "href",
+    /^https:\/\/proceedings\.mlr\.press\//,
+  );
+  await expect(pmlr.getByRole("heading", { level: 3 })).toBeVisible();
+  await expect(pmlr.getByRole("list", { name: "Details" })).toContainText("ICML");
+
+  // a long author list is cut to three and "et al.", and the full list opens by keyboard
+  const more = page.getByRole("button", { name: /^Show all \d+ authors$/ }).first();
+  const count = Number((await more.innerText()).replace(/[^0-9]/g, ""));
+  const listId = (await more.getAttribute("aria-controls")) as string;
+  const names = page.locator(`[id="${listId}"]`);
+  await expect(names).toContainText(" et al.");
+  await more.focus();
+  await page.keyboard.press("Enter");
+  const toggle = page.locator(`button[aria-controls="${listId}"]`);
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(toggle).toHaveText("Show fewer authors");
+  await expect(names).not.toContainText("et al.");
+  expect((await names.innerText()).replace(/^Authors:\s*/, "").split(", ")).toHaveLength(count);
+
+  // the other sources: OpenReview's abstract links to the forum
+  await page.goto(`/search?${new URLSearchParams({ q: "trust venue:ICLR" })}`);
+  await expect(page.getByText(/\d+ papers/).first()).toBeVisible();
+  const openreview = page
+    .getByRole("article")
+    .filter({ hasText: "Abstract: OpenReview" })
+    .first()
+    .getByRole("link", { name: /^OpenReview, abstract source for / });
+  await expect(openreview).toHaveAttribute("href", /^https:\/\/openreview\.net\/forum\?id=/);
+
+  // an abstract that came through an RIS import (most of the served corpus) names its real site and links it
+  const viaRis = page
+    .locator("article p")
+    .filter({ hasText: /^Abstract: ICLR Proceedings \(via RIS import\)$/ });
+  await expect(viaRis.first()).toBeVisible();
+  await expect(
+    viaRis.first().getByRole("link", { name: /^ICLR Proceedings, abstract source for / }),
+  ).toHaveAttribute("href", /^https:\/\/proceedings\.iclr\.cc\//);
+  await expect(viaRis.first()).not.toContainText("an imported RIS file");
 });

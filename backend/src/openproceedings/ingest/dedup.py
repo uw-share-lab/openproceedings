@@ -33,7 +33,7 @@ import json
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, Protocol
 
 from openproceedings.ingest import urls
 from openproceedings.ingest.record import Claim, ClaimField, PaperRecord, Source, Urls
@@ -138,6 +138,102 @@ def is_absence(claim: Claim) -> bool:
 def _sources(records: Iterable[PaperRecord]) -> frozenset[str]:
     """The sources that hold the records' paper (an absence claim holds none), for merging and merges.csv."""
     return frozenset(c.source for r in records for c in r.provenance if not is_absence(c))
+
+
+# The site that published an abstract, as the results list names it (TASK-134, decision-018). Distinct from a
+# claim's `Source`: a `ris` claim is a route, and its evidence says which of these the abstract came from.
+Origin = Literal["openreview", "neurips_proceedings", "iclr_proceedings", "pmlr", "iclr_archive"]
+_DIRECT_ORIGIN: dict[str, Origin] = {
+    "openreview_v2": "openreview", "openreview_v1": "openreview", "neurips_proceedings": "neurips_proceedings",
+    "pmlr": "pmlr", "iclr_archive": "iclr_archive",
+}  # fmt: skip
+_SITE_ORIGIN: dict[str, Origin] = {
+    "NeurIPS": "neurips_proceedings",
+    "ICLR": "iclr_proceedings",
+    "PMLR": "pmlr",
+}
+# how `ingest/ris.py` writes an abstract claim's evidence: `scholarmend:<its abstract source> <its evidence>`
+RIS_VIA_OPENREVIEW = "scholarmend:openreview_api"
+RIS_VIA_PROCEEDINGS = "scholarmend:proceedings_page"
+
+
+@dataclass(frozen=True, slots=True)
+class Attribution:
+    """Where a record's abstract came from (decision-018): `source`, the claim precedence took it from;
+    `origin`, the site that published it (for a `ris` claim, read from its evidence; None when that names no
+    known site); `url`, the paper's page at `origin` (None when there is none)."""
+
+    source: Source
+    origin: Origin | None
+    url: str | None
+
+
+class AbstractClaim(Protocol):
+    """What `attribution` reads of a claim: a `Claim`, or the snapshot reader's raw-JSON view of one."""
+
+    @property
+    def source(self) -> Any: ...
+    @property
+    def value(self) -> Any: ...
+    @property
+    def url(self) -> Any: ...
+    @property
+    def evidence(self) -> Any: ...
+
+
+def abstract_claim[C: AbstractClaim](abstract: str | None, claims: Iterable[C]) -> C | None:
+    """Of the abstract claims holding exactly the text `abstract`, the one `resolve` ranks first (PRECEDENCE,
+    decision-005). None when there is no abstract, or no claim holds its text (a record built without
+    provenance, as synthetic fixtures are)."""
+    if abstract is None:
+        return None
+    order = PRECEDENCE["abstract"]
+    held = [c for c in claims if c.value == abstract]
+    return min(held, key=lambda c: order.index(c.source), default=None)
+
+
+def attribution(
+    abstract: str | None,
+    claims: Iterable[AbstractClaim],
+    *,
+    forum: str | None,
+    proceedings: str | None,
+    native: str,
+) -> Attribution | None:
+    """The attribution of a record's abstract, from its abstract claims and its urls. OpenReview's page is the
+    forum (its claims carry the API listing they were read from); a proceedings claim's url is the paper's own
+    page there. A `ris` claim names its route in its evidence: `openreview_api` → the forum; `proceedings_page`
+    → the site its url's host names (NeurIPS, ICLR or PMLR proceedings), linking `proceedings` when that is on
+    the same site, else the evidence url when it is this record's (`native`) page, else unlinked. Pure, over
+    plain values, so
+    the snapshot reader can run it once per record at load."""
+    claim = abstract_claim(abstract, claims)
+    if claim is None:
+        return None
+    source: Source = claim.source
+    origin: Origin | None = _DIRECT_ORIGIN.get(source)
+    if origin == "openreview":
+        return Attribution(source, origin, forum)
+    if origin is not None:
+        return Attribution(source, origin, claim.url)
+    via, _, rest = (claim.evidence or "").partition(" ")
+    if via == RIS_VIA_OPENREVIEW:
+        return Attribution(source, "openreview", forum)
+    if via == RIS_VIA_PROCEEDINGS:
+        # the evidence's url says which site the abstract was read from; the record's proceedings link is the
+        # page when it is on that site (or the evidence names none). When the two name different sites the
+        # evidence wins, unlinked; the evidence url itself is linked only when it is this paper's page
+        # (`urls.names_native`: some evidence urls stop after the hash)
+        page = rest.split(" ", 1)[0]
+        said = _SITE_ORIGIN.get(urls.proceedings_site(page) or "") if page else None
+        held = _SITE_ORIGIN.get(urls.proceedings_site(proceedings) or "") if proceedings else None
+        if held is not None and said in (None, held):
+            return Attribution(source, held, proceedings)
+        if said is not None:
+            return Attribution(
+                source, said, page if held is None and urls.names_native(page, native) else None
+            )
+    return Attribution(source, None, None)  # a route that names no site this code knows: named, not linked
 
 
 def _one_per_field_and_source(record_id: str, claims: Iterable[Claim]) -> tuple[list[Claim], list[Conflict]]:

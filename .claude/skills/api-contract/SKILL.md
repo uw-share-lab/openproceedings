@@ -26,7 +26,9 @@ expansions{pattern: [terms]}}`,
 `index_version`, `tokenizer_version`, `query_version`, `total`, `excluded`, `identified_total`,
 `unclassified_total`, `facets`, `hits[]`. Each hit
 has `id, title, abstract, authors, venue, year, track, status, presentation, score, highlights{field:
-[[start,end]]}, urls`.
+[[start,end]]}, urls, abstract_source{source, origin, url}|null` (the claim the abstract came from, the site that
+published it, for `ris` read from the claim's evidence, and the paper's page there; TASK-134, decision-018;
+computed per record at snapshot load, `RecordFile.attributions`).
 
 **Every response** (not only `/search`) carries `index_version`, `tokenizer_version` and `query_version`
 (spec 04 §Conventions; `.claude/skills/index-versioning/SKILL.md`).

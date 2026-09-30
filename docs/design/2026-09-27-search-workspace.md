@@ -337,11 +337,14 @@ Component rules:
     the reader sees the syntax and types over it (pre-pass S14). New string: "Type a four-digit year in both
     boxes, the earlier first." (Set years with an unreadable box).
 - **Result item** (ui-design-system §Result item): `h3` title linking to `/paper/<id>?q=<q>&mode=<mode>`, with
-  highlights; badges `venue · year · track · presentation`, plus a status badge only when not `accepted`
+  highlights; authors (first three and "et al.", "Show all n authors"; TASK-134, copy RH-13); badges `venue · year · track · presentation`, plus a status badge only when not `accepted`
   (text, e.g. `rejected`); abstract excerpt with highlights; links OpenReview (`urls.forum`), PDF
   (`urls.pdf`), Proceedings (`urls.proceedings`), DOI (`urls.doi`), each only when present. Highlights are
   `<mark>` + bold + `--hl-*`, cut at the API spans with `hitHighlightsUtf16` (never re-matched). A paper with
-  no abstract says "No abstract in the index" in muted text (not an empty line).
+  no abstract says "No abstract in the index" in muted text (not an empty line). Under the abstract, its
+  attribution "Abstract: `<site>`" (plus "(via RIS import)" when it came through RIS) linking to the paper's
+  page there (`abstract_source`; decision-018, TASK-134,
+  copy RH-12).
   - **Excerpt rule** (client display only, not matching): show the whole abstract when ≤ 600 characters;
     otherwise a window around the first highlight span, with `…` at a cut, and **Show full abstract**. The
     window is chosen from the API spans, so it never decides what matched.

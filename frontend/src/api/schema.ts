@@ -221,6 +221,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AbstractSource */
+        AbstractSource: {
+            /**
+             * Origin
+             * @description The site that published the abstract; null when the claim names none this instance knows. `iclr_archive` can't occur yet: the ICLR archive supplies no abstracts (spec 01 §Sources).
+             */
+            origin: ("openreview" | "neurips_proceedings" | "iclr_proceedings" | "pmlr" | "iclr_archive") | null;
+            /**
+             * Source
+             * @description Open set: new values may be added within /api/v1; handle a value you don't know.
+             * @enum {string}
+             */
+            source: "openreview_v2" | "openreview_v1" | "iclr_archive" | "neurips_proceedings" | "pmlr" | "ris";
+            /** Url */
+            url: string | null;
+        };
         /** And */
         And: {
             /** Children */
@@ -494,6 +510,8 @@ export interface components {
         Hit: {
             /** Abstract */
             abstract: string | null;
+            /** @description Where the hit's `abstract` came from, for attribution (decision-018). `source`: the provenance claim precedence took it from (decision-005), as `GET /papers/{id}` lists it; `ris` means it came through an imported RIS file. `origin`: the site that published it, for a `ris` claim read from the claim's evidence (`scholarmend:openreview_api` → `openreview`, `scholarmend:proceedings_page` → the proceedings its `urls.proceedings` names), null when that names no known site. `url`: the paper's page at `origin` (the OpenReview forum, or the proceedings page; PMLR's CC BY 4.0 terms ask for this link), null when there is none. The whole object is null when `abstract` is null or no claim holds its text. */
+            abstract_source: components["schemas"]["AbstractSource"] | null;
             /** Authors */
             authors: string[];
             highlights: components["schemas"]["Highlights"];

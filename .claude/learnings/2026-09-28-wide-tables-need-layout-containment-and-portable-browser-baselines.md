@@ -55,3 +55,18 @@ reflow and light/dark visual regression, then run it against the production fron
   snapshot paths are now part of the E2E workflow.
 - Test added — `frontend/e2e/accessibility.spec.ts` enforces root reflow and scans populated client states;
   `frontend/e2e/visual.spec.ts` plus `frontend/playwright.config.ts` enforce both-theme baselines.
+
+## Addendum — 2026-09-29 (TASK-134)
+A local Docker image does not stand in for CI's Linux renderer either. Checked by rendering the unchanged
+`/search?q=trust` page in `mcr.microsoft.com/playwright:v1.63.0-noble` on an Apple-silicon host and comparing it
+with the committed `search-*-linux.png` (made on CI's `ubuntu-24.04` x86 runner):
+- `--platform linux/arm64` (native): 1440×7672 against the baseline's 1440×7891, 6–9% of pixels different, over
+  the 2% the config allows. Font metrics differ, so the whole page shifts.
+- the default amd64 image under emulation: Chromium lays the pager out 33,554,432 px (2^25) tall and
+  `Page.captureScreenshot` fails ("Unable to capture screenshot"); a full-page screenshot also needs `--ipc=host`.
+
+**Dead end:** don't regenerate `*-linux.png` from a local container and commit it as the CI baseline. Take the
+Linux baseline from the CI `e2e` run itself (its `playwright-report` artifact holds the actual screenshot) after
+reviewing it, and commit only the macOS baseline locally. TASK-134 left the Linux baselines stale for that reason.
+
+Propagated to: `.claude/agents/e2e-tester.md` step 5.
