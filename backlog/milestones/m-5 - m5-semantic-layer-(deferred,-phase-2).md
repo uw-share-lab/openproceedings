@@ -1,6 +1,6 @@
 ---
 id: m-5
-title: "M5 Semantic layer"
+title: "M5 Semantic layer (deferred, phase 2)"
 ---
 
 ## Description

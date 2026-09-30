@@ -234,18 +234,18 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
 | [`/usability-study`](commands/usability-study.md) | Plan a usability study of a named openproceedings flow |
 
 
-## Semantic layer (spec 06)
+## Semantic layer (spec 06, deferred: phase 2)
 
 
 | Agent | What it's for |
 |---|---|
-| [`embedding-engineer`](agents/embedding-engineer.md) | Builds the openproceedings semantic layer (M5) |
-| [`near-miss-evaluator`](agents/near-miss-evaluator.md) | Evaluates the openproceedings semantic layer |
+| [`embedding-engineer`](agents/embedding-engineer.md) | Builds the openproceedings semantic layer (M5, deferred to phase 2 by decision-017 |
+| [`near-miss-evaluator`](agents/near-miss-evaluator.md) | Evaluates the openproceedings semantic layer (M5, deferred to phase 2 by decision-017 |
 
 
 | Skill | What it's for |
 |---|---|
-| [`specter2-embeddings`](skills/specter2-embeddings/SKILL.md) | The semantic-layer standard (spec 06, M5) |
+| [`specter2-embeddings`](skills/specter2-embeddings/SKILL.md) | The semantic-layer standard (spec 06, M5, deferred to phase 2 by decision-017 |
 
 
 ## Evaluation & research (spec 07)

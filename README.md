@@ -16,7 +16,8 @@ Exact, reproducible Boolean search over **NeurIPS, ICLR and ICML** titles and ab
 | M2 | RIS ingestion, snapshots, the Tantivy index, `op search` / `op export` ([spec 01](docs/specs/01-ingestion.md), [spec 03](docs/specs/03-search-engine.md)) |
 | M3 | The `/api/v1` HTTP API (`op serve`; interactive docs at `/api/v1/docs`), search records (`op record save` / `replay`), and the web UI: query editor and builder, results, paper pages, exports, the coverage page and syntax help ([spec 04](docs/specs/04-backend-api.md), [spec 05](docs/specs/05-frontend.md)) |
 | M4 | Crawlers for OpenReview (API v1 and v2), the NeurIPS proceedings, PMLR and the ICLR archive (`op ingest …`), and the coverage report with the M4 gate (`op eval coverage`, [spec 07](docs/specs/07-evaluation.md) §C). The first full crawl's report is in progress (TASK-054). |
-| Later | Semantic "near-miss" suggestions (M5), and production deployment with Docker compose (`deploy/`, M6, TASK-065) |
+| Next | Production deployment with Docker compose (`deploy/`, M6, TASK-065) and the public v1 release |
+| Deferred | Semantic "near-miss" suggestions and re-sort (M5, [spec 06](docs/specs/06-semantic-layer.md)): phase 2, not in v1, which is Boolean search only (decision-017) |
 
 Start with [`docs/specs/00-overview.md`](docs/specs/00-overview.md). Contributor workflow (branches, reviews, the
 gates the tooling enforces) is in [`CONTRIBUTING.md`](CONTRIBUTING.md).

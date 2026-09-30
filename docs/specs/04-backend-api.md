@@ -95,7 +95,7 @@ reviews without the UI.
 | `GET` | `/coverage` | Counts per venue × year × track × status, abstract-missing counts, snapshot date, what kind its window is and whether its counts are citable; per venue-year the statuses indexed, per venue × year × track the spec 07 §C cell (official count, delta, gate) |
 | `GET` | `/meta` | Current and servable `index_version`s, the field names and the venue, track and status vocabularies (these feed the UI's autocomplete), and this instance's query `limits` |
 | `GET` | `/healthz` | Liveness and whether the index is loaded |
-| `GET` | `/near-misses` | **M5 only**: the semantic suggestion panel, a separate resource (see 06) |
+| `GET` | `/near-misses` | **M5 only, deferred** (not in v1, decision-017): the semantic suggestion panel, a separate resource (see 06) |
 
 ### `SearchResponse`
 
@@ -351,7 +351,7 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   and no methods text, 05). `dedup` is `{merged: manifest merges.total, ambiguous_not_merged,
   track_not_merged, venue_year_not_merged: manifest conflicts.<each>, 0 when absent}`.
   `searched_at` is UTC to the second (`…Z`). `semantic_version` is null until the near-miss panel exists
-  (M5). `excluded` keeps the pinned bucket order.
+  (M5, deferred to phase 2 by decision-017), so it is always null in v1. `excluded` keeps the pinned bucket order.
 - **`ids` are left out of `GET /records/{id}`** (`record.ids` is null) unless `?include=ids`; to fetch the
   papers themselves use `GET /export?record_id=` (§Exports).
 - **`record.identified_total` and `record.unclassified_total`** (TASK-090, additive) are derived when the
