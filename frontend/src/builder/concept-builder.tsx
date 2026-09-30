@@ -7,12 +7,16 @@
  * The draft text is canonical. The builder reads the server's `ast` of the draft (`read.ts`) and, on an edit,
  * rewrites the draft from its groups (`write.ts`); an untouched query is never rewritten, so Text → Builder →
  * Text leaves it byte for byte as typed. A query the builder can't show is read-only here, naming the first
- * construct that doesn't fit, and is never changed. Builder edits are draft edits: only Search changes the URL.
+ * construct that doesn't fit, and is never changed; the parts that do fit are shown under the notice, dimmed
+ * and not editable (B2). Builder edits are draft edits: only Search changes the URL. After a search, each group
+ * shows its own wildcards' expansions from that `/search` answer (TASK-111).
  */
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import type { Schemas } from "@/api/client";
 import { CopyButton } from "@/components/copy-button";
 import { useApi } from "@/components/providers";
+import { ExpansionLine } from "@/components/search/expansions-row";
 import { countText, itemsOf, type Item } from "@/editor/diagnostics";
 import type { ParseOutcome } from "@/editor/parse";
 import { parseQuery } from "@/editor/use-parse";
@@ -42,7 +46,8 @@ import {
   type CodePoints,
   type Scope,
 } from "./model";
-import { constructText, modelOf, readAst, sourceSpans } from "./read";
+import { termWildcards } from "./expansions";
+import { constructText, modelOf, readAst, readFitting, sourceSpans } from "./read";
 import { listItems } from "./terms";
 import { readsAsWritten, writeModel } from "./write";
 
@@ -56,7 +61,14 @@ export interface ConceptBuilderProps {
   /** The tab was just chosen: move focus into the panel once it has something to focus. */
   readonly focusOnOpen: boolean;
   readonly onFocused: () => void;
+  /** The last answered `/search`'s expansions, keyed `<stem><op>`; `null` before a search. */
+  readonly expansions?: Expansions | null;
 }
+
+export type Expansions = Schemas["QueryInfo"]["expansions"];
+
+/** Per term id, the `/search` keys of its wildcards (`expansions.ts`). */
+type WildcardKeys = ReadonlyMap<number, readonly string[]>;
 
 /** What the builder is editing, and the draft text it belongs to. */
 interface Session {
@@ -67,36 +79,76 @@ interface Session {
   readonly spans: ReadonlyMap<number, CodePoints>;
   /** The builder wrote `text` (so the server's reading of it can be checked against the model). */
   readonly written: boolean;
+  /** Each term's wildcards, as last known: kept for an unchanged term while the server reads an edit. */
+  readonly keys: WildcardKeys;
 }
 
 type Initial =
   | { readonly kind: "loading" }
   | { readonly kind: "fits"; readonly session: Session }
   | { readonly kind: "errors"; readonly items: readonly Item[] }
-  | { readonly kind: "blocked"; readonly blocker: Blocker }
+  | {
+      readonly kind: "blocked";
+      readonly blocker: Blocker;
+      /** The parts that fit, shown dimmed under the notice (design B2). */
+      readonly fitting: BuilderModel;
+      readonly keys: WildcardKeys;
+    }
   | { readonly kind: "unchecked" };
 
 const blank = (q: string) => q.trim() === "";
 
 function initialOf(text: string, mode: Mode, outcome: ParseOutcome | null): Initial {
   if (blank(text)) {
-    return { kind: "fits", session: { text, mode, model: emptyModel(), spans: new Map(), written: false } };
+    return {
+      kind: "fits",
+      session: { text, mode, model: emptyModel(), spans: new Map(), written: false, keys: new Map() },
+    };
   }
   if (outcome === null || outcome.q !== text || outcome.mode !== mode) return { kind: "loading" };
   if (outcome.kind !== "parsed") return { kind: "unchecked" };
   const { result } = outcome;
   if (result.errors.length > 0 || result.ast === null) return { kind: "errors", items: itemsOf(result) };
   const reading = readAst(result.ast);
-  if (reading.kind === "blocked") return { kind: "blocked", blocker: reading.blocker };
+  if (reading.kind === "blocked") {
+    const shape = readFitting(result.ast);
+    const fitting = modelOf(text, shape);
+    const keys = termWildcards(result.ast, sourceSpans(fitting, shape));
+    return { kind: "blocked", blocker: reading.blocker, fitting, keys };
+  }
   const model = modelOf(text, reading.shape);
+  const spans = sourceSpans(model, reading.shape);
   return {
     kind: "fits",
-    session: { text, mode, model, spans: sourceSpans(model, reading.shape), written: false },
+    session: { text, mode, model, spans, written: false, keys: termWildcards(result.ast, spans) },
   };
 }
 
 /** How a screen reader says a term: "trustworth star" (design §Screen reader structure). */
 const spoken = (t: string) => t.replace(/\*/gu, " star").replace(/\$/gu, " dollar");
+
+const termList = (group: BuilderGroup) =>
+  group.terms
+    .filter((t) => t.text !== "")
+    .map((t) => spoken(termWritten(t)))
+    .join(", ") || "no terms yet";
+/** A group's accessible name: "Group 2 of 3, any of: trustworth star, trust". */
+const groupLabel = (index: number, n: number, group: BuilderGroup) =>
+  `Group ${index + 1} of ${n}, any of: ${termList(group)}`;
+const excludeLabel = (group: BuilderGroup) => `Leave out papers with any of: ${termList(group)}`;
+
+/** The terms' wildcards that `keys` knows, carried to `next` for each term whose written text is unchanged. */
+function carryKeys(model: BuilderModel, keys: WildcardKeys, next: BuilderModel): WildcardKeys {
+  const all = (m: BuilderModel) =>
+    [...m.groups, ...(m.exclude === null ? [] : [m.exclude])].flatMap((g) => g.terms);
+  const was = new Map(all(model).map((t) => [t.id, termWritten(t)] as const));
+  const carried = new Map<number, readonly string[]>();
+  for (const t of all(next)) {
+    const k = keys.get(t.id);
+    if (k !== undefined && was.get(t.id) === termWritten(t)) carried.set(t.id, k);
+  }
+  return carried;
+}
 
 const BUTTON = "min-h-6 rounded-sm border px-1.5 text-xs hover:bg-muted aria-disabled:opacity-50";
 const GLYPH = { error: "✖", warning: "⚠", info: "↻" } as const;
@@ -168,12 +220,27 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
 
   const written = useMemo(() => (current === null ? null : writeModel(current.model)), [current]);
 
+  // The server's answer for the text shown: per-term diagnostics, the check of the builder's own query, and
+  // each term's wildcards (kept from before the edit while it is in flight)
+  const parsed =
+    outcome?.kind === "parsed" && outcome.q === text && outcome.mode === mode ? outcome.result : null;
+  const keys = useMemo(
+    () =>
+      current === null
+        ? new Map<number, readonly string[]>()
+        : parsed?.ast != null && parsed.errors.length === 0
+          ? termWildcards(parsed.ast, current.spans)
+          : current.keys,
+    [current, parsed],
+  );
+
   /** An edit: the model changes and the draft is rewritten from it. */
   const apply = (model: BuilderModel, say?: string) => {
     const next = writeModel(model);
     if (next.limitsUnsafe) return; // never written: the notice below says why
     const spans = new Map(next.terms.map((t) => [t.termId, t.span] as const));
-    setSession({ text: next.q, mode, model, spans, written: true });
+    const carried = current === null ? new Map() : carryKeys(current.model, keys, model);
+    setSession({ text: next.q, mode, model, spans, written: true, keys: carried });
     if (next.q !== text) props.onEdit(next.q);
     if (say !== undefined) setAnnouncement(say);
   };
@@ -187,6 +254,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
           text={text}
           onEditInText={props.onEditInText}
           onRetry={() => void query.refetch()}
+          expansions={props.expansions ?? null}
         />
       </div>
     );
@@ -196,9 +264,6 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
   const nGroups = model.groups.length;
   const groupNumber = (key: GroupKey) => (key === "exclude" ? null : key + 1);
 
-  // The server's answer for the builder's own query: per-term diagnostics, and whether it read it as meant
-  const parsed =
-    outcome?.kind === "parsed" && outcome.q === text && outcome.mode === mode ? outcome.result : null;
   const items = parsed === null ? [] : itemsOf(parsed);
   const termItems = new Map<number, Item[]>();
   for (const item of items) {
@@ -434,12 +499,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
           <li key={group.id} className="space-y-2">
             {index > 0 && <p className="text-xs font-bold tracking-wide">AND</p>}
             <GroupBox
-              label={`Group ${index + 1} of ${nGroups}, any of: ${
-                group.terms
-                  .filter((t) => t.text !== "")
-                  .map((t) => spoken(termWritten(t)))
-                  .join(", ") || "no terms yet"
-              }`}
+              label={groupLabel(index, nGroups, group)}
               onMove={(by) => move(index, by)}
               heading={
                 <h3 tabIndex={-1} data-focus={`heading:${group.id}`} className="font-medium">
@@ -473,6 +533,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
               }
             >
               {renderTerms(index, group)}
+              <GroupExpansions group={group} keys={keys} expansions={props.expansions ?? null} />
             </GroupBox>
           </li>
         ))}
@@ -481,12 +542,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
         <div className="space-y-2">
           <p className="text-xs font-bold tracking-wide">AND NOT</p>
           <GroupBox
-            label={`Leave out papers with any of: ${
-              model.exclude.terms
-                .filter((t) => t.text !== "")
-                .map((t) => spoken(termWritten(t)))
-                .join(", ") || "no terms yet"
-            }`}
+            label={excludeLabel(model.exclude)}
             heading={
               <h3 tabIndex={-1} data-focus="heading:exclude" className="font-medium">
                 Leave out papers with any of:
@@ -507,6 +563,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
             }
           >
             {renderTerms("exclude", model.exclude)}
+            <GroupExpansions group={model.exclude} keys={keys} expansions={props.expansions ?? null} />
           </GroupBox>
         </div>
       )}
@@ -554,7 +611,7 @@ function GroupBox({
 }: {
   label: string;
   heading: ReactNode;
-  actions: ReactNode;
+  actions?: ReactNode;
   onMove?: (by: -1 | 1) => void;
   children: ReactNode;
 }) {
@@ -573,7 +630,7 @@ function GroupBox({
     >
       <div className="flex flex-wrap items-center gap-2">
         {heading}
-        <div className="ml-auto flex gap-1">{actions}</div>
+        {actions !== undefined && <div className="ml-auto flex gap-1">{actions}</div>}
       </div>
       {children}
     </section>
@@ -756,18 +813,119 @@ function TermChip(p: TermChipProps) {
   );
 }
 
+/** A group's wildcards that the last `/search` expanded, one line each (as the Expansions row words them). */
+function GroupExpansions({
+  group,
+  keys,
+  expansions,
+}: {
+  group: BuilderGroup;
+  keys: WildcardKeys;
+  expansions: Expansions | null;
+}) {
+  if (expansions === null) return null;
+  const stems = [...new Set(group.terms.flatMap((t) => keys.get(t.id) ?? []))].filter((k) =>
+    Object.hasOwn(expansions, k),
+  );
+  if (stems.length === 0) return null;
+  return (
+    <ul aria-label="Expansions" className="space-y-1 text-xs">
+      {stems.map((stem) => (
+        <ExpansionLine key={stem} stem={stem} terms={expansions[stem] ?? []} />
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * The parts of a read-only query that fit (design B2; copy BD-11): its groups, Exclude row and limits, dimmed
+ * and with no controls, so the reader sees what the builder understood. Groups are numbered without "of m":
+ * the parts that don't fit aren't counted. No BD-4 tail on the limits, since nothing here is editable.
+ */
+function FittingParts({
+  model,
+  keys,
+  expansions,
+}: {
+  model: BuilderModel;
+  keys: WildcardKeys;
+  expansions: Expansions | null;
+}) {
+  const headingId = useId();
+  const n = model.groups.length;
+  if (n === 0 && model.exclude === null && model.limits.length === 0) return null;
+  const terms = (group: BuilderGroup) => (
+    <>
+      <ul className="flex flex-wrap items-start gap-2">
+        {group.terms.map((t) => (
+          <li key={t.id}>
+            <code className="rounded-md border border-dashed px-1 font-mono wrap-anywhere">
+              {termWritten(t)}
+            </code>
+          </li>
+        ))}
+      </ul>
+      <GroupExpansions group={group} keys={keys} expansions={expansions} />
+    </>
+  );
+  return (
+    <section aria-labelledby={headingId} className="space-y-2 text-muted-foreground">
+      <h3 id={headingId} className="font-medium">
+        Parts that fit the builder
+      </h3>
+      <p>Anything that doesn&apos;t fit is left out. Nothing here can be edited.</p>
+      <ol className="space-y-2">
+        {model.groups.map((group, index) => (
+          <li key={group.id} className="space-y-2">
+            {index > 0 && <p className="text-xs font-bold tracking-wide">AND</p>}
+            <GroupBox
+              label={`Group ${index + 1}, any of: ${termList(group)}`}
+              heading={<h4 className="font-medium">Group {index + 1}</h4>}
+            >
+              {terms(group)}
+            </GroupBox>
+          </li>
+        ))}
+      </ol>
+      {model.exclude !== null && (
+        <div className="space-y-2">
+          {n > 0 && <p className="text-xs font-bold tracking-wide">AND NOT</p>}
+          <GroupBox
+            label={excludeLabel(model.exclude)}
+            heading={<h4 className="font-medium">Leave out papers with any of:</h4>}
+          >
+            {terms(model.exclude)}
+          </GroupBox>
+        </div>
+      )}
+      {model.limits.length > 0 && (
+        <p className="break-words">
+          Limits:{" "}
+          {model.limits.map((limit, i) => (
+            <code key={i} className="mr-2 rounded-sm border border-dashed px-1 font-mono wrap-anywhere">
+              {limit}
+            </code>
+          ))}
+        </p>
+      )}
+    </section>
+  );
+}
+
 function ReadOnly({
   initial,
   slow,
   text,
   onEditInText,
   onRetry,
+  expansions,
 }: {
   initial: Initial | null;
   slow: boolean;
   text: string;
   onEditInText: (span?: CodePoints) => void;
   onRetry: () => void;
+  expansions: Expansions | null;
 }) {
   const box = "space-y-2 rounded-md border border-warn-border bg-warn-bg p-3 text-warn-fg";
   const edit = (
@@ -789,22 +947,25 @@ function ReadOnly({
     case "blocked": {
       const { blocker } = initial;
       return (
-        <div className={box}>
-          <h3 tabIndex={-1} data-focus="notice" className="font-medium">
-            This query is too complex for the builder
-          </h3>
-          <p className="break-words">
-            <code className="font-mono wrap-anywhere">{constructText(text, blocker)}</code> ({blocker.kind})
-            doesn&apos;t fit groups of alternatives. The builder shows lists of terms joined by OR, combined
-            with AND. Your query is unchanged.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {edit}
-            <button type="button" className={BUTTON} onClick={() => onEditInText(blocker.span)}>
-              Show it in the text
-            </button>
+        <>
+          <div className={box}>
+            <h3 tabIndex={-1} data-focus="notice" className="font-medium">
+              This query is too complex for the builder
+            </h3>
+            <p className="break-words">
+              <code className="font-mono wrap-anywhere">{constructText(text, blocker)}</code> ({blocker.kind})
+              doesn&apos;t fit groups of alternatives. The builder shows lists of terms joined by OR, combined
+              with AND. Your query is unchanged.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {edit}
+              <button type="button" className={BUTTON} onClick={() => onEditInText(blocker.span)}>
+                Show it in the text
+              </button>
+            </div>
           </div>
-        </div>
+          <FittingParts model={initial.fitting} keys={initial.keys} expansions={expansions} />
+        </>
       );
     }
     case "unchecked":

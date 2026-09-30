@@ -62,13 +62,18 @@ function group(n: AstNode): Leaf[] {
   return leaves;
 }
 
-export function readAst(ast: AstNode): Reading {
+/**
+ * Every top-level part of `ast`, read one by one: the ones that fit make the shape, and each one that doesn't
+ * is a blocker, in source order.
+ */
+function readParts(ast: AstNode): { shape: Shape; blockers: Blocker[] } {
   const groups: Leaf[][] = [];
   let exclude: Leaf[] | null = null;
   let excludeAt = 0;
   const limits: AstNode[] = [];
-  try {
-    for (const child of flat(ast, "and")) {
+  const blockers: Blocker[] = [];
+  for (const child of flat(ast, "and")) {
+    try {
       if (onlyFilters(child) || (child.kind === "not" && onlyFilters(child.child))) {
         limits.push(child);
       } else if (child.kind === "not") {
@@ -84,15 +89,29 @@ export function readAst(ast: AstNode): Reading {
       } else {
         groups.push(group(child));
       }
+    } catch (e) {
+      if (!(e instanceof Blocked)) throw e;
+      blockers.push({ kind: e.kind, span: e.span });
     }
-  } catch (e) {
-    if (e instanceof Blocked) return { kind: "blocked", blocker: { kind: e.kind, span: e.span } };
-    throw e;
   }
   return {
-    kind: "fits",
     shape: { groups, exclude, excludeAt: exclude === null ? groups.length : excludeAt, limits },
+    blockers,
   };
+}
+
+export function readAst(ast: AstNode): Reading {
+  const { shape, blockers } = readParts(ast);
+  const first = blockers[0];
+  return first === undefined ? { kind: "fits", shape } : { kind: "blocked", blocker: first };
+}
+
+/**
+ * The parts of a query that fit, whether or not the rest does: what the read-only builder shows dimmed under
+ * its notice (design B2). For a query that fits it is `readAst`'s shape.
+ */
+export function readFitting(ast: AstNode): Shape {
+  return readParts(ast).shape;
 }
 
 /** `q`'s text at a code-point span. */

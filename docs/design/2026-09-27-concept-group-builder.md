@@ -185,14 +185,40 @@ differs from or adds to the design above:
   and requires exactly its terms at the spans it wrote them, in its groups, with their scopes; otherwise it
   shows an alert ("The server reads the builder's query differently from these groups…"). The goldens make
   that unreachable for every case they hold.
-- **Not built here:** the wildcard expansions under a group "after Search" (they come from `/search`, whose
-  results are TASK-042's) and the dimmed "groups that did fit" under the B2 notice.
+- **Built in TASK-111:** the wildcard expansions under each group (and the Exclude row) after a search, and
+  the parts that fit under the B2 notice. See §As built (TASK-111).
 - **Tests:** `read.test.ts` (the fit rule against the backend's reading), `write.test.ts` (the write golden,
   seeded edits, the writer's rules), `concept-builder.test.tsx` (every state, keyboard, focus and
   announcements, `/parse` answered from the backend's real `ast`s), and
   `backend/tests/contract/test_frontend_builder_golden.py`. Regenerate: `(cd backend && uv run python -m
   tests.contract.test_frontend_builder_golden --write)`, then `UPDATE_BUILDER_GOLDEN=1 npm test --workspace
   frontend -- builder`.
+
+## As built (TASK-111)
+
+- **Expansions under each group.** `SearchView` passes the last answered `/search`'s `query.expansions` to
+  the workspace, which passes it to the builder. Each term's wildcards come from the server's `ast` of the
+  draft (`expansions.ts` `termWildcards`: every wildcard, phrase items included, inside the term's span,
+  keyed `<stem><op>` as `search.py` keys expansions). A group shows one line per wildcard that the search
+  expanded, in the Expansions row's own words (`ExpansionLine`, copy EX-2/3/5), in a list named
+  "Expansions" inside the group. A wildcard the last search didn't have shows nothing; before a search
+  there are none. An expansion is a fact about the index, not the query, so it stays shown while the draft
+  differs from the searched query. While the server reads a builder edit, a term whose written text didn't
+  change keeps its wildcards (`carryKeys`), so the other groups' lines don't flicker.
+- **The parts that fit, under the B2 notice** (copy BD-11). `read.ts` `readFitting` reads each top-level
+  part on its own (`readAst` is the same walk, reporting the first part that doesn't fit). The groups,
+  the first fitting `NOT` as the Exclude row, and the limits are shown under the notice in a region
+  "Parts that fit the builder", dimmed (`text-muted-foreground`, dashed borders) and with no controls:
+  terms are `<code>`, not buttons, so Tab goes from the notice's two buttons straight out of the panel.
+  Groups are "Group `<n>`" with no "of `<m>`", since the parts that don't fit aren't counted. "AND NOT"
+  appears only after a group. Nothing is shown when no part fits (a top-level `NEAR` or `OR` that doesn't
+  fit).
+- **Tests:** `read.test.ts` (`readFitting` equals `readAst`'s shape on every golden query that fits, and
+  keeps the fitting parts of blocked ones), `expansions.test.ts`, `concept-builder.test.tsx` (per-group
+  lines and their screen-reader text, none before a search, kept through an edit while `/parse` is held,
+  `+N more` reachable by Tab; the read-only parts, their names, the panel's Tab order, the Exclude row
+  with and without a group above it), and `search-view.test.tsx` (the `/search` answer reaches the
+  builder).
 
 ## Open questions
 1. Should the builder offer NEAR between two groups? Not in M3b (spec 05 defines rows as OR lists); revisit

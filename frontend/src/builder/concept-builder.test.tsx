@@ -55,8 +55,15 @@ function api(extra: (q: string, mode: Mode) => Response | null = () => null): Ha
   };
 }
 
-function setup(state: Partial<SearchState> = {}, handler: Handler = api()) {
-  const r = renderWithApi(<SearchWorkspace state={{ ...INITIAL_STATE, ...state }} />, handler);
+function setup(
+  state: Partial<SearchState> = {},
+  handler: Handler = api(),
+  expansions: Record<string, string[]> | null = null,
+) {
+  const r = renderWithApi(
+    <SearchWorkspace state={{ ...INITIAL_STATE, ...state }} expansions={expansions} />,
+    handler,
+  );
   const view = EditorView.findFromDOM(r.container.querySelector(".cm-editor") as HTMLElement);
   if (view === null) throw new Error("no editor");
   const doc = () => view.state.doc.toString();
@@ -432,5 +439,154 @@ describe("the read-only builder (design B2)", () => {
     await pass(10);
     expect(groups()).toHaveLength(1);
     expect(document.activeElement?.textContent).toBe("trust");
+  });
+});
+
+/** Every control Tab can reach inside `root`, in document order. */
+const tabbable = (root: HTMLElement) =>
+  [...root.querySelectorAll<HTMLElement>("button, input, select, textarea, a[href], [tabindex]")].filter(
+    (el) => el.getAttribute("tabindex") !== "-1" && !el.hasAttribute("disabled"),
+  );
+
+describe("wildcard expansions under each group (TASK-111)", () => {
+  const TRUSTWORTH = { "trustworth*": ["trustworth", "trustworthiness", "trustworthy"] };
+
+  it("shows each group's own wildcards' expansions from the last /search, and says them to a screen reader", async () => {
+    const { toBuilder } = setup({ q: EXAMPLE }, api(), TRUSTWORTH);
+    await toBuilder();
+    const [g1, g2, g3] = groups();
+    if (g1 === undefined || g2 === undefined || g3 === undefined) throw new Error("three groups");
+    const list = within(g2).getByRole("list", { name: "Expansions" });
+    expect(list.textContent).toBe(
+      "trustworth* → expands to 3 words: trustworth, trustworthiness, trustworthy",
+    );
+    expect(within(list).getByText("expands to 3 words:", { exact: false }).className).toContain("sr-only");
+    expect(within(g1).queryByRole("list", { name: "Expansions" })).toBeNull();
+    expect(within(g3).queryByRole("list", { name: "Expansions" })).toBeNull();
+  });
+
+  it("shows none before a search, or for a wildcard the last search didn't have", async () => {
+    const { toBuilder } = setup({ q: EXAMPLE }, api(), null);
+    await toBuilder();
+    expect(screen.queryByRole("list", { name: "Expansions" })).toBeNull();
+    cleanup();
+    const again = setup({ q: EXAMPLE }, api(), { "calibrat*": ["calibrate"] });
+    await again.toBuilder();
+    expect(screen.queryByRole("list", { name: "Expansions" })).toBeNull();
+  });
+
+  it("keeps a group's expansions through an edit to another group, while the server reads the edit", async () => {
+    // the edited query's /parse never answers: the unchanged terms keep what the builder knew
+    const held = api((q) =>
+      q.includes("leaderboard") ? (new Promise<Response>(() => {}) as unknown as Response) : null,
+    );
+    const { toBuilder } = setup({ q: EXAMPLE }, held, TRUSTWORTH);
+    await toBuilder();
+    const g3 = groups()[2];
+    if (g3 === undefined) throw new Error("group 3");
+    fireEvent.click(within(g3).getByRole("button", { name: "+ term" }));
+    await pass(10);
+    await typeTerm("leaderboard", "Tab");
+    fireEvent.blur(document.activeElement as HTMLElement);
+    await pass(10);
+    expect(queryText()).toContain("(benchmark OR leaderboard)");
+    const g2 = groups()[1];
+    if (g2 === undefined) throw new Error("group 2");
+    expect(within(g2).getByRole("list", { name: "Expansions" }).textContent).toContain("trustworthiness");
+  });
+
+  it("puts a long list's rest behind a +N more button the keyboard reaches", async () => {
+    const many = Array.from({ length: 11 }, (_, i) => `trustworth${String.fromCharCode(97 + i)}`);
+    const { toBuilder } = setup({ q: EXAMPLE }, api(), { "trustworth*": many });
+    await toBuilder();
+    const g2 = groups()[1];
+    if (g2 === undefined) throw new Error("group 2");
+    const more = within(g2).getByRole("button", { name: "+3 more" });
+    expect(tabbable(g2)).toContain(more);
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(more);
+    expect(within(g2).getByRole("button", { name: "Show fewer" }).getAttribute("aria-expanded")).toBe("true");
+    expect(within(g2).getByRole("list", { name: "Expansions" }).textContent).toContain("trustworthk");
+  });
+});
+
+describe("the parts that fit, under the read-only notice (design B2, TASK-111)", () => {
+  const PARTLY = '("x" | abstract:calibrat*) (venue:ICLR OR venue:ICML) trust NEAR/3 bias';
+
+  it("shows the groups and limits that fit, dimmed and without a single control, and focuses the notice", async () => {
+    const { toBuilder, doc } = setup({ q: PARTLY }, api(), { "calibrat*": ["calibrate", "calibration"] });
+    await toBuilder();
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { name: "This query is too complex for the builder" }),
+    );
+    const parts = screen.getByRole("region", { name: "Parts that fit the builder" });
+    expect(parts.className).toContain("text-muted-foreground");
+    expect(parts.textContent).toContain("Anything that doesn't fit is left out. Nothing here can be edited.");
+    const [g1, ...rest] = within(parts).getAllByRole("group");
+    expect(rest).toHaveLength(0);
+    expect(g1?.getAttribute("aria-label")).toBe('Group 1, any of: "x", abstract:calibrat star');
+    expect(within(parts).getByText("(venue:ICLR OR venue:ICML)").tagName).toBe("CODE");
+    expect(parts.textContent).not.toContain("NEAR");
+    // not editable: nothing to press, type in or choose
+    expect(tabbable(parts)).toEqual([]);
+    expect(within(parts).queryByRole("textbox")).toBeNull();
+    expect(within(parts).queryByRole("combobox")).toBeNull();
+    expect(within(g1 as HTMLElement).getByRole("list", { name: "Expansions" }).textContent).toContain(
+      "calibration",
+    );
+    // the panel's Tab order is the notice's two buttons only
+    const panel = screen.getByRole("tabpanel", { name: "Builder" });
+    expect(tabbable(panel).map((b) => b.textContent)).toEqual(["Edit in Text", "Show it in the text"]);
+    expect(doc()).toBe(PARTLY);
+  });
+
+  it("keeps the first NOT as the Exclude row and names the second one", async () => {
+    const { toBuilder } = setup({ q: "trust NOT a NOT b" });
+    await toBuilder();
+    expect(screen.getByText(/\(a second NOT\) doesn't fit/u)).toBeTruthy();
+    const parts = screen.getByRole("region", { name: "Parts that fit the builder" });
+    expect(
+      within(parts)
+        .getAllByRole("group")
+        .map((g) => g.getAttribute("aria-label")),
+    ).toEqual(["Group 1, any of: trust", "Leave out papers with any of: a"]);
+    expect(parts.textContent).toContain("AND NOT");
+  });
+
+  it("shows an Exclude row with no group above it without AND NOT", async () => {
+    const q = "(a NEAR/2 b) NOT c";
+    const term = (token: string, at: number) => ({
+      kind: "term" as const,
+      token,
+      field: null,
+      span: [at, at + 1] as [number, number],
+    });
+    const ast: Schemas["ParseResponse"]["ast"] = {
+      kind: "and",
+      span: [0, 18],
+      children: [
+        { kind: "near", distance: 2, span: [1, 11], left: term("a", 1), right: term("b", 10) },
+        { kind: "not", span: [13, 18], child: term("c", 17) },
+      ],
+    };
+    const { toBuilder } = setup(
+      { q },
+      api((x) => (x === q ? json(parsed(q, { ast })) : null)),
+    );
+    await toBuilder();
+    const parts = screen.getByRole("region", { name: "Parts that fit the builder" });
+    expect(
+      within(parts)
+        .getAllByRole("group")
+        .map((g) => g.getAttribute("aria-label")),
+    ).toEqual(["Leave out papers with any of: c"]);
+    expect(parts.textContent).not.toContain("AND NOT");
+  });
+
+  it("shows nothing under the notice when no part fits", async () => {
+    const { toBuilder } = setup({ q: "trust NEAR/5 calibrat*" });
+    await toBuilder();
+    expect(screen.queryByRole("region", { name: "Parts that fit the builder" })).toBeNull();
+    expect(screen.queryByRole("group")).toBeNull();
   });
 });

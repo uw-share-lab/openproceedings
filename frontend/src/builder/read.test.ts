@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readGolden } from "./golden";
-import { constructText, modelOf, readAst, type Shape } from "./read";
+import { constructText, modelOf, readAst, readFitting, type Shape } from "./read";
 
 const spans = (nodes: readonly { span: readonly number[] }[]) => nodes.map((n) => [...n.span]);
 
@@ -120,5 +120,55 @@ describe("constructText", () => {
     const text = constructText(long, { kind: "AND inside OR", span: [0, Array.from(long).length] });
     expect(Array.from(text)).toHaveLength(40);
     expect(text.endsWith("…")).toBe(true);
+  });
+});
+
+describe("readFitting: the parts of a query that fit (design B2, TASK-111)", () => {
+  const nativeAst = (q: string) => {
+    const c = cases.find((x) => x.q === q && x.mode === "native");
+    if (c?.ast == null) throw new Error(`no native golden case ${q}`);
+    return c.ast;
+  };
+
+  it.each(cases.filter((c) => c.ast !== null).map((c) => [`${c.mode}: ${c.q}`, c] as const))(
+    "is the whole reading of a query that fits: %s",
+    (_, c) => {
+      if (c.ast === null) throw new Error("filtered");
+      const reading = readAst(c.ast);
+      if (reading.kind === "fits") expect(asGolden(readFitting(c.ast))).toEqual(asGolden(reading.shape));
+    },
+  );
+
+  it("keeps the groups and limits around a construct that doesn't fit, and leaves the construct out", () => {
+    const shape = readFitting(
+      nativeAst('("x" | abstract:calibrat*) (venue:ICLR OR venue:ICML) trust NEAR/3 bias'),
+    );
+    expect(asGolden(shape)).toEqual({
+      groups: [
+        [
+          [1, 4],
+          [7, 25],
+        ],
+      ],
+      exclude: null,
+      exclude_at: 1,
+      limits: [[27, 53]],
+    });
+  });
+
+  it("keeps the first NOT as the Exclude row and leaves out a second", () => {
+    const shape = readFitting(nativeAst("trust NOT a NOT b"));
+    expect(asGolden(shape)).toEqual({ groups: [[[0, 5]]], exclude: [[10, 11]], exclude_at: 1, limits: [] });
+  });
+
+  it("has nothing when the whole query is the construct", () => {
+    for (const q of ["trust NEAR/5 calibrat*", "(a AND b) OR c", "track:workshop OR x"]) {
+      expect(asGolden(readFitting(nativeAst(q)))).toEqual({
+        groups: [],
+        exclude: null,
+        exclude_at: 0,
+        limits: [],
+      });
+    }
   });
 });
