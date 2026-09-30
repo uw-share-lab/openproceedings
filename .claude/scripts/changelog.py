@@ -34,6 +34,7 @@ import re
 import subprocess
 import sys
 import tomllib
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -66,8 +67,10 @@ ATTRIBUTION = re.compile(
     r"co-authored-by[:=][^\n]*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com",
     re.IGNORECASE,
 )
-# Release notes name roles, not people, and link only PRs, so a title or note is refused for: a GitHub @-mention (not an npm scope such as `@types/node`, and not `@-mention` itself), an email address
-# (a dotted domain ending in letters, so `next@15.1.0` and `recall@25` pass), a URL or a `www.` address.
+# Release notes name roles, not people, and link only PRs, so a title or note is refused for: a GitHub
+# @-mention (not an npm scope such as `@types/node`, nor `@-mention` itself; an `@org/team` team mention looks
+# like a scope and passes too), an email address (a dotted domain ending in letters, so `next@15.1.0` and
+# `recall@25` pass), a URL or a `www.` address.
 MENTION_OR_URL = re.compile(
     r"(?<![\w.])@[A-Za-z0-9][A-Za-z0-9-]*(?![A-Za-z0-9-]|/)"
     r"|[\w.+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b"
@@ -141,11 +144,18 @@ def repo_from_origin() -> str:
     return m[1]
 
 
+def plain(text: str) -> str:
+    """Text as a reader sees it: format characters (zero-width spaces and joiners, U+200B, U+2060) dropped,
+    since a renderer shows nothing for them, and whitespace (double, non-breaking) collapsed to one space.
+    What is checked and what is rendered are both this."""
+    return " ".join("".join(ch for ch in text if unicodedata.category(ch) != "Cf").split())
+
+
 def check_text(what: str, text: str) -> None:
     """Refuse text that would put an AI-attribution marker, a person or a link into the release notes. Run on
-    the raw text with its whitespace collapsed (a double or non-breaking space would slip past the pattern,
-    and escaping could hide a marker, `\\[Claude`, from it)."""
-    text = " ".join(text.split())
+    the `plain` text, before escaping (a zero-width or doubled space would slip past the pattern, and escaping
+    could hide a marker, `\\[Claude`, from it)."""
+    text = plain(text)
     if hit := ATTRIBUTION.search(text):
         raise Refusal(f"{what} carries an AI-attribution marker ({hit[0]!r}): fix it")
     if hit := MENTION_OR_URL.search(text):
@@ -343,7 +353,7 @@ def entry(pr: PR, repo: str) -> tuple[str, str]:
     else:
         b = BRANCH.match(pr.head)
         group, desc, breaking = TYPES.get(b["type"] if b else "", "Changed"), pr.title.strip(), False
-    text = MD_SPECIAL.sub(lambda c: "".join("\\" + ch for ch in c[0]), " ".join(desc.split()))
+    text = MD_SPECIAL.sub(lambda c: "".join("\\" + ch for ch in c[0]), plain(desc))
     if breaking:
         text = f"**Breaking:** {text}"
     return group, f"- {text} ([#{pr.number}](https://github.com/{repo}/pull/{pr.number}))"
@@ -398,7 +408,7 @@ def data_block(version: str, data: dict[str, dict[str, str]]) -> tuple[list[str]
         f"- {replay}",
     ]
     if "notes" in d:
-        lines.append(f"- {' '.join(d['notes'].split())}")
+        lines.append(f"- {plain(d['notes'])}")
     return callout, [*lines, ""]
 
 

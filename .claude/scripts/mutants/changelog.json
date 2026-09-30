@@ -74,8 +74,8 @@
  {
   "label": "changelog: titles not escaped",
   "file": ".claude/scripts/changelog.py",
-  "old": "text = MD_SPECIAL.sub(lambda c: \"\".join(\"\\\\\" + ch for ch in c[0]), \" \".join(desc.split()))",
-  "new": "text = \" \".join(desc.split())"
+  "old": "text = MD_SPECIAL.sub(lambda c: \"\".join(\"\\\\\" + ch for ch in c[0]), plain(desc))",
+  "new": "text = plain(desc)"
  },
  {
   "label": "changelog: data hashes not checked",
@@ -186,10 +186,10 @@
   "new": ""
  },
  {
-  "label": "changelog: whitespace not collapsed before the checks",
+  "label": "changelog: raw text not made plain before the checks",
   "file": ".claude/scripts/changelog.py",
-  "old": "    text = \" \".join(text.split())\n    if hit := ATTRIBUTION.search(text):",
-  "new": "    if hit := ATTRIBUTION.search(text):"
+  "old": "    text = plain(text)\n",
+  "new": ""
  },
  {
   "label": "changelog: email addresses allowed",
@@ -232,5 +232,11 @@
   "file": ".claude/scripts/changelog.py",
   "old": "MD_SPECIAL = re.compile(r\"[\\\\*\\[\\]<>`]|",
   "new": "MD_SPECIAL = re.compile(r\"[\\\\*\\[\\]<>]|"
+ },
+ {
+  "label": "changelog: format characters kept",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    return \" \".join(\"\".join(ch for ch in text if unicodedata.category(ch) != \"Cf\").split())",
+  "new": "    return \" \".join(text.split())"
  }
 ]
