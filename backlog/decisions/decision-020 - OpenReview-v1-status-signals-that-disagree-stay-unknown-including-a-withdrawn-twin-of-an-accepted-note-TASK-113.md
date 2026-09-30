@@ -49,26 +49,37 @@ with no OpenReview pdf has no twin; the row names every twin found.
 
 The owner's answers to the questions this record left open (2026-09-29, TASK-139):
 1. A blind note with **no decision at all** (no decision note in its forum) and a withdrawn twin (same pdf, same
-   track) becomes `withdrawn`. Nothing disagrees here: the twin's withdrawal is the only status signal, so this
-   is not a ranking between signals. The status claim says so honestly: it cites the first twin's listing page
-   and reads `no decision note in the forum; withdrawn twin <id> shares the pdf (invitation=…)`, naming every
-   twin in id order. There is no `conflicts.csv` row (the accepted case has one because its signals disagree;
-   this case has nothing unresolved), and the record is never collapsed with its twin (the rule changes a
-   status, never which records exist). Only the found absence of a decision note counts: a note `unknown` for
-   another reason (decision notes that disagree, an unmapped string, `Invite to Workshop Track`, an unfetched
-   forum in a dry run) stays `unknown`. The twins are the records withdrawn by their listing before the rule
-   runs, so the result is independent of record order and a second run changes nothing.
+   track) becomes `withdrawn`, with evidence naming the twin(s) and the listing page. Nothing disagrees here: the
+   twin's withdrawal is the only status signal, so this is not a ranking between signals.
 2. A **rejected** blind note with a withdrawn twin stays `rejected` (as implemented; now pinned by a test).
 3. **Desk-rejected** twins do not count (as implemented; pinned by a test).
 4. The implementation limits above (withdrawn twins only, same track, no pdf means no twin) are confirmed.
+
+Implementation details of answer 1 (the implementer's, TASK-139; pending owner confirmation):
+- The status claim cites the **first** twin's listing page (twins in id order; a claim has one url) and reads
+  `no decision note in the forum; withdrawn twin <id> shares the pdf (invitation=…)`, naming every twin.
+- There is **no `conflicts.csv` row**: the accepted case has one because its signals disagree; this case has
+  nothing unresolved.
+- The record is **never collapsed** with its twin by the duplicate collapse, even if their content matched: the
+  rule changes a status, never which records exist.
+- Only the found absence of a decision note (`no decision note in the forum`) counts. A note `unknown` for another
+  reason stays `unknown`: decision notes that disagree, a decision string not in the table, no submission number
+  to find the decision note by, a forum a dry run didn't fetch, `Invite to Workshop Track`.
+- The twins are the records withdrawn by their listing before the rule runs, so the result is independent of
+  record order and a second run changes nothing.
+- The crawl report moves each such note out of `unmapped` (where its missing decision note was counted) into its
+  own `withdrawn_by_twin` count, present in the manifest only when non-zero, so the crawl's attention warning and
+  the coverage report's crawl listing stop reporting notes that are answered.
 
 ## Consequences
 
 - `openreview_v1.withdrawn_twins` runs after a venue-year's listings and before the duplicate collapse; ICLR 2018
   `S1p31z-Ab` is `status:unknown` and ICLR 2018 main counts 336, the official number. ICLR 2021 main stays at 859
   of 860 (`xGZG2kS5bFk` is `unknown`, within ±1%).
-- Records change, so the next snapshot's `snapshot_hash` and `index_version` change for ICLR 2018; a saved search
-  that matched `S1p31z-Ab` under `status:accepted` replays as `drifted`.
+- Records change, so the next snapshot's `snapshot_hash` and `index_version` change for ICLR 2018. A saved search
+  that matched `S1p31z-Ab` under `status:accepted` still reproduces on its pinned `index_version` while that
+  index exists (`op index retire` refuses a pinned version, TASK-085); it replays as `drifted` only if the pinned
+  index is gone and it runs on a newer one.
 - Desk-rejected twins are not flagged (none on the 2026-09-29 cache); the owner confirmed this (answer 3).
 - Only an accepting status is flagged against a withdrawn twin. A rejected blind note with a withdrawn twin (10 in
   ICLR 2018) keeps both statuses: neither is in a default search, and the owner confirmed it (answer 2).
@@ -76,8 +87,10 @@ The owner's answers to the questions this record left open (2026-09-29, TASK-139
   2026-09-29 cache ICLR 2018 main goes from 13 `unknown` / 83 `withdrawn` to 1 `unknown` (`S1p31z-Ab`) / 95
   `withdrawn`; accepted stays 336 and no other v1 year has such a pair. Their records change, so the next
   snapshot's `snapshot_hash` and `index_version` change; no default search matches them before or after
-  (`status:accepted`), but a saved search with `status:withdrawn` or `status:unknown` over ICLR 2018 replays as
-  `drifted`.
+  (`status:accepted`). Any saved search with `status:withdrawn` or `status:unknown` whose results can include
+  these records (not only ICLR 2018-scoped ones) still reproduces on its pinned `index_version`; run on the new
+  index (the pinned one gone), it would replay as `drifted`. The ICLR 2018 crawl report's `unmapped` loses its
+  12 `decision_note` entries, now `withdrawn_by_twin: 12`.
 - Spec 01 §Sources (v1 as-built) and §Pipeline 5 (the manifest's `conflicts` keys), spec 04 (why `unresolved` is
   not in `dedup`), spec 07 §C (the coverage report lists every unresolved record with the cell it would count
   in), and the openreview-api, dedup-rules, snapshots and coverage-reporting skills say so.

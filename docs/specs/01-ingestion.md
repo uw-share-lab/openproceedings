@@ -281,7 +281,10 @@ workshop version of a conference paper), nor a record with no OpenReview pdf. A 
 (no decision note in its forum) and such a twin has one status signal, the twin's withdrawal, so it becomes
 `withdrawn` (the owner, 2026-09-29, TASK-139: ICLR 2018 main's 12 undecided blind notes), with no conflict row
 since nothing disagrees; its status claim cites the twin's listing page and names every twin
-(`no decision note in the forum; withdrawn twin <id> shares the pdf (invitation=…)`). A rejected record with a
+(`no decision note in the forum; withdrawn twin <id> shares the pdf (invitation=…)`). The crawl report moves each
+such note out of `unmapped` (where its missing decision note was counted) into `withdrawn_by_twin` (a manifest key
+present only when non-zero: 12 for ICLR 2018), so the attention warning and the coverage report's crawl listing no
+longer report it. A rejected record with a
 withdrawn twin stays `rejected` (10 in ICLR 2018), a record `unknown` for any other reason (a conflict, an unmapped
 string, `Invite to Workshop Track`) stays `unknown`, and the twins are the records withdrawn by their listing
 before the rule runs, so its result doesn't depend on order and a second run changes nothing. A record the rule

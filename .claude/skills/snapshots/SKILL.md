@@ -56,7 +56,7 @@ with the reason, each group's `public_*` flags, notes per venueid, read / import
 unknown_track, abstract_missing, track × status, page size); likewise `openreview_v1` for API v1 years
 (TASK-051: its `crawl_window`, absent when its crawls fetched nothing such as ICLR 2015 alone, and one v1
 `CrawlReport.to_manifest()` per venue-year: notes per invitation, forums read, read / imported / skipped by
-reason, `unmapped` status strings by evidence kind, unknown_track, unknown_status, `authors_split` and `authors_unsplit` (decision-019; `authors_unsplit_ids` when any were refused), the
+reason, `unmapped` status strings by evidence kind, unknown_track, unknown_status, `authors_split` and `authors_unsplit` (decision-019; `authors_unsplit_ids` when any were refused), `withdrawn_by_twin` when any undecided note was made withdrawn by its twin (decision-020, TASK-139), the
 number of conflicts, track × status and the year's `coverage_gaps`); and the proceedings crawlers
 (task-052/053) add `neurips_proceedings` and `pmlr`: each `{crawl_window, listings}`, one report per listing
 (venue, year, volume, listing URL, role, `stated` vs `listed` and `count_ok`, records, skipped by reason,

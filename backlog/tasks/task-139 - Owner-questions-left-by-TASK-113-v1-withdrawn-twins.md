@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 02:40'
-updated_date: '2026-09-30 03:21'
+updated_date: '2026-09-30 03:28'
 labels:
   - decision
 milestone: m-4
@@ -39,4 +39,8 @@ Real data (scratch OP_DATA_DIR scratchpad/task139, cache symlinked, snapshot 202
 Docs: spec 01 (v1 as-built), openreview-api skill, module docstring rule 4. coverage-sources.md unaffected (accepted counts unchanged).
 
 Checks: full backend suite 5534 passed, 1 failed (test_clauses Hypothesis FailedHealthCheck while a snapshot build ran alongside; rerun alone: 143 passed); test_openreview_v1.py 95 passed after the last test additions; make lint and make tooling pass.
+
+Review round 1 (Close TASK-139 review findings): decision-020 now separates the owner's answer 1 (withdrawn, evidence naming the twin(s) and the listing page) from the implementer's details (first twin's page, no conflicts row, never collapsed, only the found absence of a decision note, withdrawn_by_twin), marked pending owner confirmation; replay wording corrected (saved searches reproduce on their pinned index_version; drifted only once it is gone; any status:withdrawn/unknown search that can include these records). The crawl report moves each note made withdrawn out of unmapped into withdrawn_by_twin (manifest key only when non-zero; ICLR 2018: unmapped {} and withdrawn_by_twin 12), documented in spec 01, decision-020, openreview-api and snapshots skills.
+
+Open owner question (not implemented): should an anonymous blind copy of a withdrawn paper fold into its named withdrawn twin (one record instead of two withdrawn records of the same pdf)? Today both stay, and the twin rule never changes which records exist.
 <!-- SECTION:NOTES:END -->

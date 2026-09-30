@@ -34,8 +34,9 @@ The authority rules (never broken):
    crawl in the same track shares (`S1p31z-Ab` and its withdrawn twin `SJTCsqMUf`) becomes `unknown` with such a
    row (`withdrawn_twins`); the twin keeps its status. A record with no decision at all (no decision note in its
    forum) and such a twin has one status signal, the twin's withdrawal, so it becomes `withdrawn`, with no row
-   (TASK-139). A rejected record with a withdrawn twin, and any record with only a desk-rejected twin, keep
-   their status. A record the rule touched is never collapsed by rule 5 (neither collapse).
+   (TASK-139), counted in the report's `withdrawn_by_twin` instead of `unmapped`. A rejected record with a
+   withdrawn twin, and any record with only a desk-rejected twin, keep their status. A record the rule touched is
+   never collapsed by rule 5 (neither collapse).
 5. **Two notes of one paper are one record** (TASK-125): OpenReview v1 holds 300 NeurIPS 2021 main-track papers as
    two Blind_Submission notes (different id and number, identical content but for the id in `_bibtex`), which
    dedup would otherwise refuse as two submissions with one title. After the listings, records that are
@@ -331,6 +332,9 @@ class CrawlReport(Report):
     authors_unsplit: int = (
         0  # a split the rule refused: authors kept out (empty), the raw value in the evidence
     )
+    withdrawn_by_twin: int = (
+        0  # undecided notes the twin rule made `withdrawn`, no longer in `unmapped` (TASK-139)
+    )
     track_status: dict[str, Counter[str]] = field(default_factory=dict)
     gaps: tuple[str, ...] = ()
     conflicts: list[Conflict] = field(default_factory=list)
@@ -363,6 +367,7 @@ class CrawlReport(Report):
                 if self.authors_unsplit_ids
                 else {}
             ),
+            **({"withdrawn_by_twin": self.withdrawn_by_twin} if self.withdrawn_by_twin else {}),
             "conflicts": len(self.conflicts),
             "track_status": {t: dict(sorted(s.items())) for t, s in sorted(self.track_status.items())},
             "coverage_gaps": list(self.gaps),
@@ -748,7 +753,12 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
         report.conflicts.append(c)
         log.debug("openreview_v1_conflict", extra={"forum": c.id.split(":", 3)[3], "field": c.field})
     for rid in twins.withdrawn:
+        # its missing decision note was counted in `unmapped`; the twin now answers it, so it moves out of the
+        # attention count into its own
+        report.unmapped["decision_note"] -= 1
+        report.withdrawn_by_twin += 1
         log.debug("openreview_v1_withdrawn_twin", extra={"forum": records[rid].native})
+    report.unmapped = +report.unmapped  # drop a kind the twin rule emptied
     # a record the twin rule touched is never collapsed: the rule changes a status, never which records exist
     exempt = {c.id for c in report.conflicts} | set(twins.withdrawn)
     for kept, dropped in collapse_duplicate_submissions(records, numbers, exempt):
@@ -979,8 +989,11 @@ def withdrawn_twins(records: dict[str, PaperRecord]) -> Twins:
       `NO_DECISION_NOTE`) and a twin is set to `withdrawn`, with no row: the twin's withdrawal is its only status
       signal, so nothing disagrees. The status claim cites the first twin's listing page and names every twin
       (the owner's answer, 2026-09-29, TASK-139: clears ICLR 2018 main's 12 undecided unknowns).
-    - Any other record keeps its status: a rejected one (10 in ICLR 2018), one already `unknown` for another
-      reason (a conflict, an unmapped string, `Invite to Workshop Track`), a withdrawn or desk-rejected one.
+    - Any other record keeps its status: a rejected one (10 in ICLR 2018), one `unknown` for another reason
+      (decision notes that disagree, a decision string not in the table, no submission number to find the
+      decision note by, a forum a dry run didn't fetch, `Invite to Workshop Track`), a withdrawn or desk-rejected
+      one. The crawl moves each record made `withdrawn` out of the report's `unmapped` (where its missing decision
+      note was counted) into `withdrawn_by_twin`.
 
     Only a withdrawn twin counts (decision-020): a desk rejection (e.g. for a duplicate submission) can leave the
     same pdf beside the presented copy. A record with no pdf (or an arXiv link, which `_pdf` drops) has no twin.

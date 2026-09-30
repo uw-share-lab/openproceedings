@@ -1104,7 +1104,8 @@ def test_an_undecided_note_with_a_withdrawn_twin_is_withdrawn_with_the_twin_as_e
 ) -> None:
     """The 12 ICLR 2018 blind notes with no decision note and a withdrawn twin (the owner's answer, TASK-139):
     `withdrawn`, the claim citing the twin's listing page and naming it, and no conflict row, since nothing
-    disagrees. Its forum page (where no decision was found) is still what the evidence starts from."""
+    disagrees. The report moves it out of `unmapped` (where its missing decision note was counted) into
+    `withdrawn_by_twin`, so the crawl's attention warning no longer reports it."""
     server = elmo_world(None)
     with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
         crawl = run(server, tmp_path, "ICLR", 2018)
@@ -1120,8 +1121,22 @@ def test_an_undecided_note_with_a_withdrawn_twin_is_withdrawn_with_the_twin_as_e
     assert crawl.report.conflicts == []
     manifest = crawl.report.to_manifest()
     assert manifest["track_status"] == {"main": {"withdrawn": 2}} and manifest["unknown_status"] == 0
+    assert manifest["unmapped"] == {} and manifest["withdrawn_by_twin"] == 1
+    assert crawl.report.withdrawn_by_twin == 1 and not crawl.report.unmapped
     [line] = [r for r in caplog.records if r.getMessage() == "openreview_v1_withdrawn_twin"]
     assert (line.levelno, line.__dict__["forum"]) == (logging.DEBUG, ELMO)
+    assert "openreview_crawl_attention" not in [r.getMessage() for r in caplog.records]
+
+
+def test_an_undecided_note_without_a_twin_stays_unmapped_and_the_manifest_keeps_its_shape(
+    tmp_path: Path,
+) -> None:
+    """Another pdf: no twin, so the missing decision note stays in `unmapped` (and the attention warning), and a
+    crawl with no note made withdrawn has no `withdrawn_by_twin` key (every other crawl file is unchanged)."""
+    crawl = run(elmo_world(None, OTHER_PDF), tmp_path, "ICLR", 2018)
+    manifest = crawl.report.to_manifest()
+    assert manifest["unmapped"] == {"decision_note": 1} and "withdrawn_by_twin" not in manifest
+    assert crawl.report.withdrawn_by_twin == 0
 
 
 NOTHING = v1.Twins([], [])

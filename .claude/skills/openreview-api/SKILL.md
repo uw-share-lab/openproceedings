@@ -220,7 +220,8 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   `unresolved:openreview_v1` row naming every twin (decision-020; ICLR 2018 `S1p31z-Ab` and `SJTCsqMUf`); the
   twins keep their status. A note with no decision at all (no decision note in its forum) and such a twin is
   `withdrawn`, with no row, its claim citing the twin (`no decision note in the forum; withdrawn twin <id> shares
-  the pdf (…)`; the owner, TASK-139: ICLR 2018's 12). A rejected note with a twin stays `rejected`. Desk-rejected
+  the pdf (…)`; the owner, TASK-139: ICLR 2018's 12), counted in the report's `withdrawn_by_twin` (manifest key
+  only when non-zero) instead of `unmapped`. A rejected note with a twin stays `rejected`. Desk-rejected
   twins and twins in another track don't count, and a record the rule touched is never collapsed (rule 5).
 - ICLR 2023 BlogPosts uses the verified
   `ICLR.cc/2023/BlogPosts/-/Blind_Submission` listing. NeurIPS 2021–2022 main-track withdrawn and
