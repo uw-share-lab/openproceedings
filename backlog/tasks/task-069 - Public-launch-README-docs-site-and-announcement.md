@@ -4,7 +4,7 @@ title: 'Public launch: README, docs site and announcement'
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 01:09'
+updated_date: '2026-09-30 01:07'
 labels:
   - docs
 milestone: m-6
@@ -14,6 +14,8 @@ dependencies:
   - TASK-066
   - TASK-067
   - TASK-068
+  - TASK-133
+  - TASK-134
 ordinal: 68000
 ---
 
@@ -29,4 +31,5 @@ README and CONTRIBUTING as-built for external users; citation info.
 - [ ] #2 CITATION.cff added
 - [ ] #3 Repo visibility is public and README links the instance (spec 00 §Milestones M6)
 - [ ] #4 Public instance reachable over TLS with the current index_version on /healthz
+- [ ] #5 The outcome of the copyright-office consultation (TASK-135, recommended, not blocking), if any, is recorded before launch
 <!-- AC:END -->

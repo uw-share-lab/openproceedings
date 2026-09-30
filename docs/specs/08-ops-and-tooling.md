@@ -200,13 +200,16 @@ saved as another user leaves a store (and WAL files) the API can't write, or can
 means building a new `index_version` offline, switching the `current` symlink, and sending SIGHUP. Hosting is
 still open (00, question 5).
 
-**What a public instance serves (decision-018).** Every abstract in the index, in results, on paper pages and
-in exports. Before a deployment is public: (1) each record names the source of its abstract and links to
-it, and a PMLR abstract appears with its citation and a link to the PMLR page (CC BY 4.0's attribution
-terms); (2) every page names a takedown contact, and a takedown withholds that record's abstract from the
-next `index_version`; (3) the University of Waterloo copyright office has signed off (TASK-069). If sign-off
-is refused, a public instance shows only licensed abstracts (PMLR v70+, OpenReview under its CC0 clause) and
-decision-018 is superseded. Private and local deployments are unaffected.
+**What a public instance serves (decision-018; not legal advice).** Every abstract in the index, in results,
+on paper pages and in exports. Before a deployment is public: (1) each record names the source of its abstract
+and links to it, and a PMLR abstract appears with its citation and a link to the PMLR page (CC BY 4.0's
+attribution terms; TASK-134 for the result list); (2) every page names a takedown contact (TASK-133). Private,
+local and development deployments may omit the contact. TASK-133's proposed takedown procedure, not yet
+decided, withholds the record's abstract from the next `index_version`; older versions that search records pin
+still serve it, because `op index retire` refuses a pinned version, and TASK-133 settles how a takedown
+reaches them. The unlicensed years rest on fair dealing alone; consulting the University of Waterloo copyright
+office before launch is recommended (TASK-135), and TASK-069 records its outcome, if any, but does not wait on
+it.
 
 ---
 
