@@ -135,11 +135,17 @@ class Dedup(_Stored):
 
 
 class StoredDiagnostic(_Stored):
-    """A diagnostic as the record saved it: its code is a string, so a retired code stays readable."""
+    """A diagnostic as the record saved it: its code is a string, so a retired code stays readable. `reading`
+    is null on a record saved before it existed."""
 
     code: str
     message: str
     span: tuple[int, int] | None = None
+    reading: str | None = Field(
+        default=None,
+        description="The diagnostic's `reading` as saved (`WARN_MIXED_AND_OR` only); null on every other code "
+        "and on a record saved before the field existed.",
+    )
 
 
 class SearchRecord(_Stored):

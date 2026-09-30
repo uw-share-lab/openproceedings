@@ -5,7 +5,7 @@ problem is a Diagnostic with a span, `ast` is None exactly when there are errors
 one mistake gives one error (an error already reported inside a span suppresses follow-on errors there).
 
 - A level that mixes AND and OR without parentheses parses by precedence and raises WARN_MIXED_AND_OR,
-  showing how it was read.
+  showing how it was read: quoted (clipped) in the message and whole in `reading` (TASK-099).
 - A bare word or range OR-joined to a filter that is a valid value of that filter's field
   (`year:2023 OR 2024`) is searched as text, as written, and raises WARN_FILTER_SCOPE.
 - A word that normalises to several tokens is a Phrase; a wildcard word's wildcard goes on its last token
@@ -289,6 +289,7 @@ class _Parser:
                         else ""
                     ),
                     span=(nodes[0].span[0], nodes[-1].span[1]),
+                    reading=reading,  # unclipped: what "Load with parentheses" splices over the span
                 )
             )
         if len(branches) > 1:

@@ -33,11 +33,12 @@ afterEach(() => {
 });
 
 type Diag = Schemas["Diagnostic"];
-const diag = (code: Diag["code"], message: string, span: [number, number] | null): Diag => ({
-  code,
-  message,
-  span,
-});
+const diag = (
+  code: Diag["code"],
+  message: string,
+  span: [number, number] | null,
+  reading: string | null = null,
+): Diag => ({ code, message, span, reading });
 
 const parseCalls = (calls: Call[]) => calls.filter((c) => c.path === "/api/v1/parse");
 
@@ -290,7 +291,9 @@ describe("the diagnostics row", () => {
   });
 
   it("Load with parentheses puts the server's reading into the editor as a draft, without searching", async () => {
-    const handler = api((q) => json({ ...parsed(q), warnings: [diag("WARN_MIXED_AND_OR", mixed, [0, 12])] }));
+    // the reading comes from the `reading` field (TASK-099), never from the message, which here quotes none
+    const warning = diag("WARN_MIXED_AND_OR", "AND binds tighter than OR.", [0, 12], "a OR (b AND c)");
+    const handler = api((q) => json({ ...parsed(q), warnings: [warning] }));
     const { type, view, calls } = setup({}, handler);
     await type("a OR b AND c");
     await pass(300);
@@ -299,6 +302,15 @@ describe("the diagnostics row", () => {
     expect(nav.push).not.toHaveBeenCalled();
     await pass(300);
     expect(parseCalls(calls).at(-1)?.body).toEqual({ q: "a OR (b AND c)", mode: "native" });
+  });
+
+  it("offers no Load with parentheses for a mixed AND/OR warning without a reading", async () => {
+    const handler = api((q) => json({ ...parsed(q), warnings: [diag("WARN_MIXED_AND_OR", mixed, [0, 12])] }));
+    const { type } = setup({}, handler);
+    await type("a OR b AND c");
+    await pass(300);
+    expect(screen.getByRole("button", { name: "Show how it was read" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Load with parentheses" })).toBeNull();
   });
 
   it("offers Read as Google Scholar syntax for FIELD_COMPAT_ONLY: it sets the select and keeps the text", async () => {

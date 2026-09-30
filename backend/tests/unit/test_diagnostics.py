@@ -132,6 +132,19 @@ def test_message_must_not_be_empty() -> None:
         Diagnostic(code=DiagnosticCode.PARSE_EMPTY_GROUP, message="  ", span=None)
 
 
+def test_reading_is_set_exactly_on_warn_mixed_and_or() -> None:
+    """TASK-099: a client can rely on `reading` being there on WARN_MIXED_AND_OR and nowhere else."""
+    mixed = DiagnosticCode.WARN_MIXED_AND_OR
+    assert Diagnostic(code=mixed, message="m", span=(0, 8), reading="(a b) OR c").reading == "(a b) OR c"
+    assert Diagnostic(code=DiagnosticCode.WARN_CJK_RUN, message="m").reading is None
+    with pytest.raises(ValidationError, match="needs `reading`"):
+        Diagnostic(code=mixed, message="m", span=(0, 8))
+    with pytest.raises(ValidationError, match="takes no `reading`"):
+        Diagnostic(code=DiagnosticCode.WARN_CJK_RUN, message="m", reading="x")
+    with pytest.raises(ValidationError, match="blank"):
+        Diagnostic(code=mixed, message="m", span=(0, 8), reading="  ")
+
+
 def test_typed_error_carries_a_code() -> None:
     err = OpenProceedingsError(DiagnosticCode.API_INDEX_NOT_LOADED, "No index is loaded yet.")
     assert err.code is DiagnosticCode.API_INDEX_NOT_LOADED

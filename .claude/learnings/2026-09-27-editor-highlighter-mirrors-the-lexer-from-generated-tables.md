@@ -53,8 +53,8 @@ diagnostics as squiggles and an accessible list, and the draft/dirty behaviour o
   says so. A `linter()` source would be simpler only if nothing but squiggles used `/parse`.
 
 ## Follow-ups
-- [ ] TASK-099: add a machine-readable `reading` field on `WARN_MIXED_AND_OR` so "Load with parentheses"
-  needn't parse the message.
+- [x] TASK-099: `Diagnostic.reading` (set on `WARN_MIXED_AND_OR` only, never clipped) now drives "Load with
+  parentheses"; the message is no longer parsed, and a reading over 120 characters loads too.
 - [ ] TASK-100: ux-writer review of the new "The query couldn't be checked: …" strings for `/parse`
   refusals (429, 503, non-JSON, unreachable), which the copy deck doesn't word.
 

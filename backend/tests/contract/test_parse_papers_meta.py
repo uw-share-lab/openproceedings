@@ -64,9 +64,24 @@ def test_parse_is_02s_parse_result_without_identification_ast_plus_filters(
     assert {k: v for k, v in body.items() if k not in VERSIONS} == expected
 
 
+def test_the_mixed_and_or_warning_carries_its_reading_as_a_field(client: TestClient) -> None:
+    """TASK-099: WARN_MIXED_AND_OR's `reading` (the text at its code-point span, as read) is a field, sent on
+    /parse and /search alike, so a client never parses the message; every other diagnostic sends it null."""
+    q = "𝔸I trust or model OR calibration"  # an astral character, and a lowercase `or` warning with no reading
+    body = client.post("/api/v1/parse", json={"q": q}).json()
+    by_code = {w["code"]: w for w in body["warnings"]}
+    assert by_code["WARN_MIXED_AND_OR"]["span"] == [0, 32]
+    assert by_code["WARN_MIXED_AND_OR"]["reading"] == "(𝔸I trust or model) OR calibration"
+    assert by_code["WARN_LOWERCASE_OPERATOR"]["reading"] is None
+    searched = client.get("/api/v1/search", params={"q": q}).json()["query"]["warnings"]
+    assert searched == body["warnings"]
+
+
 def test_parse_errors_are_values_with_code_point_spans(client: TestClient) -> None:
     body = client.post("/api/v1/parse", json={"q": "𝔸I (trust"}).json()
-    assert [(e["code"], e["span"]) for e in body["errors"]] == [("PARSE_UNBALANCED_PAREN", [3, 4])]
+    assert [(e["code"], e["span"], e["reading"]) for e in body["errors"]] == [
+        ("PARSE_UNBALANCED_PAREN", [3, 4], None)
+    ]
     assert body["canonical"] is None and body["effective_ast"] is None and body["mode"] == "native"
 
 

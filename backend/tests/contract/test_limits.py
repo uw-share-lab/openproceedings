@@ -194,7 +194,12 @@ def test_a_40k_character_query_is_rejected_before_parsing(client: TestClient, no
     error = r.json()["error"]
     assert error["code"] == "PARSE_TOO_LONG"
     assert error["diagnostics"] == [
-        {"code": "PARSE_TOO_LONG", "message": error["message"], "span": [MAX_QUERY_LENGTH, len(q)]}
+        {
+            "code": "PARSE_TOO_LONG",
+            "message": error["message"],
+            "span": [MAX_QUERY_LENGTH, len(q)],
+            "reading": None,
+        }
     ]
     assert q[:50] not in r.text  # the refusal doesn't echo the query
 

@@ -292,7 +292,12 @@ describe("the editable builder (design B1)", () => {
   });
 
   it("shows a diagnostic under the term its span hits", async () => {
-    const warn: Diag = { code: "WARN_SYMBOLS_DROPPED", message: "`C++` loses its symbols", span: [9, 12] };
+    const warn: Diag = {
+      code: "WARN_SYMBOLS_DROPPED",
+      message: "`C++` loses its symbols",
+      span: [9, 12],
+      reading: null,
+    };
     const handler = api((q) =>
       q === "trust OR C++"
         ? json(
@@ -385,7 +390,14 @@ describe("the read-only builder (design B2)", () => {
               ast: null,
               effective_ast: null,
               canonical: null,
-              errors: [{ code: "PARSE_EXPECTED_TERM", message: "Expected a term after OR.", span: [6, 8] }],
+              errors: [
+                {
+                  code: "PARSE_EXPECTED_TERM",
+                  message: "Expected a term after OR.",
+                  span: [6, 8],
+                  reading: null,
+                },
+              ],
             }),
           )
         : null,

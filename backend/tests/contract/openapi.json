@@ -389,7 +389,7 @@
         "type": "object"
       },
       "Diagnostic": {
-        "description": "A warning, error or translation notice about a query, with a half-open code-point span into `q`.",
+        "description": "A warning, error or translation notice about a query, with a half-open code-point span into `q`.\n`reading` is set on `WARN_MIXED_AND_OR` only, so a client never parses `message` for it.",
         "properties": {
           "code": {
             "$ref": "#/components/schemas/DiagnosticCode"
@@ -397,6 +397,18 @@
           "message": {
             "title": "Message",
             "type": "string"
+          },
+          "reading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`WARN_MIXED_AND_OR` only, null on every other code: the text at `span` as it was read, each `AND` group in parentheses and the branches joined with ` OR ` (`a b OR c` → `(a b) OR c`). Replacing `span` in `q` with it gives a query with the same canonical form whose level no longer mixes `AND` and `OR`. Never shortened, unlike the reading quoted in `message`.",
+            "title": "Reading"
           },
           "span": {
             "anyOf": [
@@ -423,7 +435,8 @@
         "required": [
           "code",
           "message",
-          "span"
+          "span",
+          "reading"
         ],
         "title": "Diagnostic",
         "type": "object"
@@ -2818,7 +2831,7 @@
         "type": "array"
       },
       "StoredDiagnostic": {
-        "description": "A diagnostic as the record saved it: its code is a string, so a retired code stays readable.",
+        "description": "A diagnostic as the record saved it: its code is a string, so a retired code stays readable. `reading`\nis null on a record saved before it existed.",
         "properties": {
           "code": {
             "title": "Code",
@@ -2827,6 +2840,18 @@
           "message": {
             "title": "Message",
             "type": "string"
+          },
+          "reading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The diagnostic's `reading` as saved (`WARN_MIXED_AND_OR` only); null on every other code and on a record saved before the field existed.",
+            "title": "Reading"
           },
           "span": {
             "anyOf": [
@@ -2853,7 +2878,8 @@
         "required": [
           "code",
           "message",
-          "span"
+          "span",
+          "reading"
         ],
         "title": "StoredDiagnostic",
         "type": "object"
