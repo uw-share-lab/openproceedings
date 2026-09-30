@@ -4,9 +4,9 @@ implements it (spec 08 §CLI). The CLI and the API call the same functions.
 Implemented: `op ingest ris`, `op ingest openreview` (API v2, task-050; API v1, task-051),
 `op ingest iclr|neurips|pmlr` (TASK-096, task-052/053), `op snapshot build`, `op snapshot diff` (task-022), `op index build`
 (task-023), `op index parity` (task-029), `op search` (ranked, `--ids`, `--explain`, `--engine reference`;
-task-024/030), `op export` (task-030), `op serve` (task-034), `op openapi` (task-040) and `op record save` /
-`op record replay` (task-083). Results go to stdout; logs go to stderr; a refused operation exits 1 with its
-reason, a usage error or a stub exits 2, and `op record replay` exits 3 on a `mismatch` (`EXIT_MISMATCH`).
+task-024/030), `op export` (task-030), `op serve` (task-034), `op openapi` (task-040), `op record save` /
+`op record replay` (task-083) and `op index retire` (TASK-085). Results go to stdout; logs go to stderr; a
+refused operation exits 1 with its reason, a usage error or a stub exits 2, and `op record replay` exits 3 on a `mismatch` (`EXIT_MISMATCH`).
 """
 
 from __future__ import annotations
@@ -20,6 +20,8 @@ import math
 import os
 import re
 import secrets
+import shutil
+import sqlite3
 import sys
 import time
 from collections import Counter
@@ -187,7 +189,16 @@ def build_parser() -> argparse.ArgumentParser:
     ip.add_argument("--index", required=True, help="an index name under <data-dir>/indexes, or its directory")
     ip.add_argument("--snapshot", help="its snapshot (default: the one its manifest names)")
     ip.set_defaults(run=_index_parity)
-    _stub(index_actions.add_parser("retire", help="planned in task-065"), "index retire", "task-065")
+    ir = index_actions.add_parser(
+        "retire",
+        help="delete <data-dir>/indexes/<index_version>/; refused while a search record pins it or `current` "
+        "points at it",
+    )
+    ir.add_argument("index_version", help="the version directory's name under <data-dir>/indexes")
+    ir.add_argument(
+        "--dry-run", action="store_true", help="run every check and report the outcome; delete nothing"
+    )
+    ir.set_defaults(run=_index_retire)
 
     search = sub.add_parser(
         "search", help="run a query against an index: ranked hits, --ids or --explain (spec 02/03)"
@@ -448,6 +459,91 @@ def _index_parity(ns: argparse.Namespace) -> int:
     snapshot = resolve_snapshot(ns.snapshot or manifest["snapshot"], ns.data_dir / "snapshots")
     report = check_parity(path, snapshot, manifest=manifest)
     _print({"records": report.records, "terms": report.terms, "phrases": report.phrases, "differences": 0})
+    return 0
+
+
+def _index_retire(ns: argparse.Namespace) -> int:
+    """`op index retire <index_version>` (TASK-085): delete an unpinned, unserved index. Refused (exit 1, one
+    line to stderr, nothing touched) when the name isn't an index_version, no such directory is directly under
+    <data-dir>/indexes, a symlink there (`current`) points at it, or a search record pins it: a deleted pinned
+    index turns those records' replays into permanent `drifted`. The checks run again under the indexes lock
+    (`storage.exclusive`, which `op index build` holds), then the directory is renamed to a `.tmp-` name (so no
+    reader ever finds half an index under its version) and removed; a removal cut short leaves only that
+    `.tmp-` directory, which the next build or retire sweeps. One log line: the version, the pinned count and
+    the outcome (logging-standards)."""
+    from openproceedings import storage
+
+    started = time.perf_counter()
+    version: str = ns.index_version
+    indexes = ns.data_dir / "indexes"
+
+    def check() -> tuple[str, str, int | None]:
+        """(reason constant, message, pinned count): reason "" when the version may be retired."""
+        from openproceedings.engine.index import VERSION_NAME
+        from openproceedings.records import RECORDS_DIR, RecordStore
+
+        if not VERSION_NAME.fullmatch(version):  # never a path: `../x`, `current`, `a/b` are all refused here
+            return (
+                "name_invalid",
+                "not an index_version (lowercase hex and `-`, starting with a hex digit)",
+                None,
+            )
+        target = indexes / version
+        if target.is_symlink() or not target.is_dir():
+            return "not_found", f"no index directory {version} under <data-dir>/indexes", None
+        here = target.resolve()
+        for link in sorted(indexes.iterdir()):
+            try:
+                points_here = link.is_symlink() and link.resolve() == here
+            except (OSError, RuntimeError):  # a symlink loop points nowhere
+                continue
+            if points_here:
+                return "current", f"`{link.name}` points at {version}: promote another index first", None
+        try:
+            pinned = RecordStore(ns.data_dir / RECORDS_DIR).pinned(version)
+        except sqlite3.Error as e:  # never guess "unpinned" from a store that can't be read
+            return "records_unreadable", f"the search-record store can't be read ({type(e).__name__})", None
+        if pinned:
+            return (
+                "pinned",
+                f"{pinned} search record{'s' if pinned != 1 else ''} pin{'' if pinned != 1 else 's'} {version}; "
+                "retiring it would leave their replays permanently drifted",
+                pinned,
+            )
+        return "", "", 0
+
+    def refuse(reason: str, message: str, pinned: int | None) -> int:
+        fields: dict[str, object] = {"reason": reason, "pinned": pinned, "dry_run": ns.dry_run}
+        if reason != "name_invalid":  # a malformed name is the user's input: never logged, DEBUG at most
+            fields["index_version"] = version
+        log.log(logging.DEBUG if reason == "name_invalid" else logging.WARNING, "index_retire_refused",
+                extra={**fields, "ms": elapsed_ms(started)})  # fmt: skip
+        print(f"op index retire: {message}{' (dry run)' if ns.dry_run else ''}", file=sys.stderr)
+        return 1
+
+    reason, message, pinned = check()
+    if reason:
+        return refuse(reason, message, pinned)
+    if ns.dry_run:
+        log.info("index_retire_checked", extra={"index_version": version, "pinned": 0, "outcome": "would_retire",
+                                                "ms": elapsed_ms(started)})  # fmt: skip
+        _print({"index_version": version, "pinned": 0, "retired": False, "dry_run": True})
+        return 0
+    with storage.exclusive(indexes):
+        storage.sweep(indexes)
+        reason, message, pinned = check()  # again, under the lock: a build or a promotion may have run
+        if reason:
+            return refuse(reason, message, pinned)
+        doomed = indexes / f"{storage.TMP}retire-{version}"
+        (indexes / version).rename(doomed)
+        storage.writable(doomed)
+        shutil.rmtree(doomed, ignore_errors=True)
+        left = doomed.exists()
+    # WARNING when the `.tmp-` directory survived its removal (the next build or retire sweeps it)
+    log.log(logging.WARNING if left else logging.INFO, "index_retired",
+            extra={"index_version": version, "pinned": 0, "outcome": "retired", "tmp_left": left,
+                   "ms": elapsed_ms(started)})  # fmt: skip
+    _print({"index_version": version, "pinned": 0, "retired": True, "dry_run": False})
     return 0
 
 

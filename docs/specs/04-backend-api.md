@@ -393,7 +393,7 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   REPLACE deletes without firing DELETE triggers unless `recursive_triggers` is on). The triggers stop
   mistakes; they are not a security boundary against someone with the file. A store with a newer
   `schema_version` is refused. One connection per call. `RecordStore.pinned(index_version)` counts the
-  records that pin a version (check it before retiring one).
+  records that pin a version; `op index retire` refuses while it is above zero (TASK-085, spec 08 §CLI).
 - **Stored bodies are read with frozen, tolerant types** (a diagnostic's `code` is a plain string, unknown
   keys are ignored), so a later change to the live enums never makes an old record unreadable; a body whose
   `body_version` is newer than this code's is a 500. `backend/tests/fixtures/records/record-v1.json` is a

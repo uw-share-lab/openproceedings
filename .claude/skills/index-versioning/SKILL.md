@@ -35,7 +35,14 @@ data/indexes/current            symlink → the served version
 - Promotion: build offline → run the differential, parity and determinism suites → switch `current`
   atomically → SIGHUP the API. The API swaps its pointer atomically, and in-flight requests finish on the
   old version.
-- Keep every version referenced by a search record in `data/records/records.sqlite`. Check before deleting any.
+- Keep every version referenced by a search record in `data/records/records.sqlite`. Delete an old version
+  only with `op index retire <index_version>` (TASK-085; spec 08 §CLI), never by hand. It refuses (exit 1,
+  nothing touched) while `RecordStore.pinned(version) > 0` (it reports the count: a deleted pinned index
+  would leave those records' replays permanently `drifted`), while `current` or another symlink in
+  `indexes/` points at the version, when the record store can't be read, and when the name isn't an
+  index_version directory directly under `indexes/` (the format is checked before any path is built).
+  `--dry-run` runs the same checks and deletes nothing. It can't see an `op serve --index <version>` that
+  serves the version by name, so check each running instance first.
 - The API loads a **pinned** older version to replay a record (`.claude/skills/search-records/SKILL.md`).
   Replay returns HTTP 200 with one of three statuses (spec 04 §Search records):
   - **`reproduced`**: the same `index_version` **and** `query_version` are available, and both `ids_hash`
