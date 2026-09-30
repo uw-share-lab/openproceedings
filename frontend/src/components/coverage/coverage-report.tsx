@@ -3,13 +3,20 @@
 import { Fragment, useState } from "react";
 import type { Schemas } from "@/api/client";
 import { CopyButton } from "./copy-button";
-import { count, day, minuteUtc, percent, signed, windowVerb } from "./format";
+import {
+  ALL_SOURCES,
+  corpusWindow,
+  count,
+  minuteUtc,
+  percent,
+  signed,
+  windowText,
+  windowVerb,
+} from "./format";
 
 type Coverage = Schemas["CoverageResponse"];
 type VenueYear = Schemas["VenueYearCoverage"];
 type Track = Schemas["TrackCoverage"];
-
-const ALL_SOURCES = "*"; // `crawl_dates`' corpus-wide window (spec 04 §Conventions)
 
 /** "–" for a track × status pair with no cell: none indexed, never a made-up 0 (copy deck CV-4). */
 function None() {
@@ -21,18 +28,10 @@ function None() {
   );
 }
 
-function Window({ label, window }: { label: string; window: Schemas["CrawlWindow"] }) {
-  return (
-    <>
-      {label} {day(window.from)} to {day(window.to)}
-    </>
-  );
-}
-
 /** The snapshot facts and totals above the table (design C1; copy deck CV-1 to CV-3). */
 function Header({ coverage }: { coverage: Coverage }) {
   const { snapshot, totals } = coverage;
-  const corpus = snapshot.crawl_dates[ALL_SOURCES];
+  const corpus = corpusWindow(snapshot);
   const perSource = Object.entries(snapshot.crawl_dates).filter(([key]) => key !== ALL_SOURCES);
   return (
     <div className="space-y-1 text-sm">
@@ -49,12 +48,7 @@ function Header({ coverage }: { coverage: Coverage }) {
       </p>
       <p>
         Built {minuteUtc(snapshot.built_at)}
-        {corpus ? (
-          <>
-            {" · "}
-            <Window label={windowVerb(snapshot.crawl_dates_kind[ALL_SOURCES])} window={corpus} />
-          </>
-        ) : null}
+        {corpus === null ? null : ` · ${corpus}`}
       </p>
       <p>
         Sources: {snapshot.sources.join(", ")}
@@ -62,7 +56,7 @@ function Header({ coverage }: { coverage: Coverage }) {
           <Fragment key={source}>
             {" · "}
             <code className="font-mono">{source}</code>:{" "}
-            <Window label={windowVerb(snapshot.crawl_dates_kind[source]).toLowerCase()} window={window} />
+            {windowText(windowVerb(snapshot.crawl_dates_kind[source]).toLowerCase(), window)}
           </Fragment>
         ))}
       </p>

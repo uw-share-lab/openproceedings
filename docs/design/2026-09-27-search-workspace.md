@@ -135,8 +135,8 @@ Conventions: `ux-design` §Wireframe conventions. Numbers are labelled with the 
 │  ▸ trust* NEAR/5 calibrat*                                                               │
 │  ▸ "large language model$" AND (benchmark OR leaderboard) year:2023..2026                │
 │                                                                                          │
-│ Index a1b2c3d4e5f6 {/meta index_version} · 1,805 records indexed {coverage totals.records} ·      │
-│ NeurIPS, ICLR, ICML · Coverage ▸                                                         │
+│ Index a1b2c3d4e5f6 {coverage index_version} · 1,805 records indexed {totals.records} ·   │
+│ ICLR, ICML, NeurIPS {venue_years' venues} · Crawled 2026-09-20 to 2026-09-26 · Coverage ▸│
 └──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 - The first example is `main-7-most-updated` **verbatim** from `backend/tests/fixtures/queries/trust-evals.txt`
@@ -146,8 +146,13 @@ Conventions: `ux-design` §Wireframe conventions. Numbers are labelled with the 
   a search is always the reader's own act (3.2.2 On Input), and loading the example lets them read it first.
 - The examples are the review's strings as a native-mode `q` (main-7's Scholar string needs `mode=scholar`;
   an example carries its mode and sets the mode select when loaded).
-- The coverage line calls `GET /coverage` (`totals.records`) and `GET /meta` (`index_version`); if either
-  fails, the line is left out rather than showing a placeholder.
+- The coverage line (`src/components/coverage/coverage-line.tsx`, TASK-110) reads one `GET /coverage`
+  answer: `index_version`, `totals.records`, the venues of `venue_years` in the API's order (A–Z, as
+  `/coverage` lists them) and the corpus-wide `snapshot.crawl_dates["*"]` window, worded by the same
+  `corpusWindow()` as the `/coverage` header ("Crawled …", "Google Scholar searches run …" or "Collected
+  … to …", left out when there is no `*` window). It shows only what the API serves: owner-accepted
+  coverage exceptions live in the gate report, not in `GET /coverage` (spec 07 §C). While loading, or if
+  the request fails, the line is left out rather than showing a placeholder.
 
 ### W2 URL notice
 
@@ -610,7 +615,7 @@ messages (server registry, shown verbatim) and the ux-writer's review of each.
 | total, versions, excluded, facets, hits, highlights, expansions, warnings, translations, canonical, identification string | `SearchResponse` | exists |
 | clause spans, values, toggleable, reason, defaults, AST | `POST /parse` `filters`, `defaults`, `ast`, `effective_ast` | exists |
 | vocabulary for autocomplete and sidebar options; limits | `GET /meta` `values`, `limits` | exists |
-| coverage line on `/` | `GET /coverage` `totals.records` | exists |
+| coverage line on `/` | `GET /coverage` `index_version`, `totals.records`, `venue_years[].venue`, `snapshot.crawl_dates["*"]`, `snapshot.crawl_dates_kind["*"]` | exists |
 | wait time on 429/503 | `Retry-After` | exists (declared in the contract) |
 | span of a non-toggleable, non-negated clause (for "Show the clauses") | `ParsedClause.blocking_spans` (code-point spans of the clauses behind `multiple_clauses`/`nested`/`mixed_fields`) | **exists** (TASK-091); no AST walk needed |
 | per-year edit | a reducer action for `year` | exists (TASK-092: `yearSet`/`yearClear`/`yearAdd`/`yearRemove`); Open questions 2 |

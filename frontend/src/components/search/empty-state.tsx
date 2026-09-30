@@ -4,10 +4,10 @@
  * The empty workspace (`/`, and `/search` without `q`; design W1, copy ED-2 and ED-3): a syntax hint, the
  * review's main string and two plain examples, and the coverage line. An example loads into the editor as a
  * draft (with its syntax) and focuses it; it never searches, since a search is always the reader's own act.
- * The coverage line is left out when `/meta` or `/coverage` doesn't answer, never shown as a placeholder.
+ * The coverage line is `CoverageLine` (`GET /coverage` alone, in `/coverage`'s words).
  */
 import Link from "next/link";
-import { useCoverage, useMeta } from "@/api/hooks";
+import { CoverageLine } from "@/components/coverage/coverage-line";
 import { MORE_EXAMPLES, REVIEW_EXAMPLE, type Example } from "./examples";
 
 function ExampleButton({ example, onLoad }: { example: Example; onLoad: (e: Example) => void }) {
@@ -29,8 +29,6 @@ function ExampleButton({ example, onLoad }: { example: Example; onLoad: (e: Exam
 }
 
 export function EmptyState({ onLoad }: { onLoad: (example: Example) => void }) {
-  const meta = useMeta();
-  const coverage = useCoverage();
   return (
     <div className="space-y-3 text-sm">
       <p>
@@ -56,16 +54,7 @@ export function EmptyState({ onLoad }: { onLoad: (example: Example) => void }) {
           ))}
         </ul>
       </div>
-      {meta !== null && coverage !== null && (
-        <p className="text-muted-foreground">
-          Index <code className="font-mono break-all">{meta.index_version}</code> ·{" "}
-          <span className="tabular-nums">{coverage.totals.records.toLocaleString("en-US")}</span> records
-          indexed · {meta.values.venue.join(", ")} ·{" "}
-          <Link href="/coverage" className="underline underline-offset-4">
-            Coverage ▸
-          </Link>
-        </p>
-      )}
+      <CoverageLine />
     </div>
   );
 }

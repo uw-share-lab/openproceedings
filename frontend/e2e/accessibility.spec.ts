@@ -21,6 +21,7 @@ const states: State[] = [
     open: async (page) => {
       await page.goto("/");
       await expect(page.getByRole("button", { name: "Search", exact: true })).toBeVisible();
+      await expect(page.getByText(/records indexed/)).toBeVisible();
     },
   },
   { name: "search results", open: (page) => search(page) },
@@ -149,7 +150,7 @@ test("the 320px pages do not overflow sideways", async ({ page }) => {
     else if (path === "/coverage")
       await expect(page.getByRole("region", { name: "Coverage table" })).toBeVisible();
     else if (path === "/help/syntax") await expect(page.getByText(/At most .* characters/)).toBeVisible();
-    else await expect(page.getByRole("button", { name: "Search", exact: true })).toBeVisible();
+    else await expect(page.getByText(/records indexed/)).toBeVisible();
     const sizes = await page.evaluate(() => {
       const viewport = document.documentElement.clientWidth;
       const overflowing = [...document.querySelectorAll<HTMLElement>("body *")]

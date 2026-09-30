@@ -93,6 +93,23 @@ test("the spec 05 review flow searches, includes workshops, exports RIS and save
   await expect(page.getByText(/Reproduced on .*same .* papers/i)).toBeVisible();
 });
 
+test("the home coverage line states /coverage's facts in its words", async ({ page }) => {
+  await page.goto("/coverage");
+  await expect(page.getByRole("region", { name: "Coverage table" })).toBeVisible();
+  const built = await page.getByText(/^Built /).innerText();
+  const window = built.split(" · ")[1];
+  expect(window).toMatch(/ \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}$/);
+  const records = (await page.getByText(/ records · /).innerText()).split(" ")[0];
+
+  await page.goto("/");
+  const line = page.getByText(/records indexed/);
+  await expect(line).toBeVisible();
+  const text = await line.innerText();
+  expect(text).toContain(`${records} records indexed`);
+  expect(text).toContain(` · ${window} · `);
+  await expect(line.getByRole("link", { name: "Coverage ▸" })).toHaveAttribute("href", "/coverage");
+});
+
 test("the editor exposes completion, diagnostics and submission to the keyboard", async ({ page }) => {
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Query" });

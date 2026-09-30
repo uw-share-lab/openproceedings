@@ -15,6 +15,7 @@ import {
   type Call,
   type Handler,
 } from "@/test/api-stub";
+import coverageFixture from "@/components/coverage/coverage-fixture.json";
 import { REVIEW_EXAMPLE } from "./examples";
 import { SearchWorkspace, type SearchRefusal } from "./search-workspace";
 
@@ -40,14 +41,13 @@ const diag = (code: Diag["code"], message: string, span: [number, number] | null
 
 const parseCalls = (calls: Call[]) => calls.filter((c) => c.path === "/api/v1/parse");
 
-/** /meta and /coverage answer; /parse answers from `parse` (by default: parsed, no diagnostics). */
+/** /meta and /coverage (the API's own coverage fixture) answer; /parse answers from `parse` (by default: parsed, no diagnostics). */
 function api(
   parse: (q: string, mode: string, call: Call) => Response | Promise<Response> = (q) => json(parsed(q)),
 ): Handler {
   return (call) => {
     if (call.path === "/api/v1/meta") return json(META);
-    if (call.path === "/api/v1/coverage")
-      return json({ totals: { records: 1805, abstract_missing: 0, unknown_status: 0, unknown_track: 0 } });
+    if (call.path === "/api/v1/coverage") return json(coverageFixture);
     if (call.path === "/api/v1/parse") {
       const body = call.body as { q: string; mode: string };
       return parse(body.q, body.mode, call);
@@ -553,11 +553,12 @@ describe("the empty workspace (W1)", () => {
     expect(parseCalls(calls).at(-1)?.body).toEqual({ q: REVIEW_EXAMPLE.q, mode: "scholar" });
   });
 
-  it("shows the coverage line from /meta and /coverage, and leaves it out when one fails", async () => {
+  it("shows the coverage line from /coverage, and leaves it out when /coverage fails", async () => {
     setup();
     await pass(10);
     expect(screen.getByText(/records indexed/).textContent).toBe(
-      "Index a1b2c3d4e5f6 · 1,805 records indexed · NeurIPS, ICLR, ICML · Coverage ▸",
+      "Index c60faee23898 · 39 records indexed · ICLR, ICML, NeurIPS · " +
+        "Google Scholar searches run 2026-09-26 to 2026-09-26 · Coverage ▸",
     );
     cleanup();
     const failing: Handler = (call) =>

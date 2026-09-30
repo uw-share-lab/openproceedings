@@ -3,6 +3,7 @@ import { EditorView } from "@codemirror/view";
 import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Schemas } from "@/api/client";
+import coverageFixture from "@/components/coverage/coverage-fixture.json";
 import { SearchWorkspace } from "@/components/search/search-workspace";
 import { INITIAL_STATE, type Mode, type SearchState } from "@/lib/search-state";
 import {
@@ -40,9 +41,7 @@ const GOLDEN = readGolden();
 function api(extra: (q: string, mode: Mode) => Response | null = () => null): Handler {
   return (call: Call) => {
     if (call.path === "/api/v1/meta") return json(META);
-    if (call.path === "/api/v1/coverage") {
-      return json({ totals: { records: 1805, abstract_missing: 0, unknown_status: 0, unknown_track: 0 } });
-    }
+    if (call.path === "/api/v1/coverage") return json(coverageFixture);
     if (call.path === "/api/v1/parse") {
       const { q, mode } = call.body as { q: string; mode: Mode };
       const answer = extra(q, mode);
