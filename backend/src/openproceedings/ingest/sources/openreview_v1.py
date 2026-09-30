@@ -44,13 +44,16 @@ The authority rules (never broken):
    collapsed to the lowest-numbered note; each other note is counted in `skipped["duplicate_submission"]`
    (`collapse_duplicate_submissions`). A record with a crawl conflict, or one the twin rule (rule 4) made
    `withdrawn`, is never collapsed, by this collapse or the silent-twin one.
-   **A silent twin** (TASK-132) is a note that says nothing about its status: in a year whose one status carrier
-   is `content.venue`, a submission-listing note with neither `venue` nor `venueid` (NeurIPS 2021 `W6e384Lkjbw`
-   #5999, whose accepted twin `rDdb26AQ0SO` #11021 has the same pdf, supplementary material, title, authors,
-   abstract and keywords). Such a note is dropped when exactly one other record is identical to it in everything
-   but status, presentation and venueid, and that record is accepted with no crawl conflict
+   **A silent twin** (TASK-132) is a note that says nothing about its status: in a year whose one status carrier is
+   `content.venue`, a submission-listing note with neither a non-null `venue` nor `venueid` (NeurIPS 2021
+   `W6e384Lkjbw` #5999, whose accepted twin `rDdb26AQ0SO` #11021 has the same pdf, supplementary material, title,
+   authors, abstract and keywords). Such a note is dropped when exactly one other record is identical to it in
+   everything but status, presentation and venueid, and that record is accepted with no crawl conflict
    (`collapse_silent_twins`, after rule 5; counted the same way). Its absence of evidence can't contradict an
-   acceptance; a second record (with evidence or a conflict) or a non-accepted one leaves every note a record.
+   acceptance; a second record (with evidence or a conflict) or a non-accepted one leaves every note a record. A
+   note rule 5 kept is silent only if every note it stands for is (TASK-147): one that absorbed a note with a
+   non-null `venue` or `venueid` (even `''`) is not, so which of two identical notes has the lower number never
+   decides whether the paper's third, accepted note absorbs them.
 
 `content.authors` is split into names only by decision-019's count-checked rule (`split_authors`): a list with
 no `and`-joined entry is taken as listed; otherwise the split must give exactly as many names as the note has
@@ -764,9 +767,14 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     report.unmapped = +report.unmapped  # drop a kind the twin rule emptied
     # a record the twin rule touched is never collapsed: the rule changes a status, never which records exist
     exempt = {c.id for c in report.conflicts} | set(twins.withdrawn)
+    rid_of = {r.native: rid for rid, r in records.items()}
     for kept, dropped in collapse_duplicate_submissions(records, numbers, exempt):
         report.skipped[DUPLICATE_SUBMISSION] += 1
         log.debug("openreview_duplicate_submission", extra={"forum": dropped, "kept": kept})
+        # a survivor is silent only if every note it stands for is (TASK-147): otherwise the lower number alone
+        # would decide whether the silent-twin collapse sees a silent note
+        if rid_of[dropped] not in silent:
+            silent.discard(rid_of[kept])
     # rule 5's silent twin (TASK-132), after the identical notes; it skips the same records
     for kept, dropped in collapse_silent_twins(records, silent, exempt):
         report.skipped[DUPLICATE_SUBMISSION] += 1
@@ -907,9 +915,9 @@ def collapse_duplicate_submissions(
 def _says_nothing_of_status(ad: Adapter, note: Mapping[str, Any], record: PaperRecord) -> bool:
     """Whether a note carries no status evidence at all (rule 5's silent twin): its year reads status from
     `content.venue` alone, its status is `unknown` (a withdrawn or desk-rejected listing gives its own, and a note
-    with a crawl conflict is exempt from rule 5), and it has neither a `venue` nor a `venueid` key. A venue string
-    the table doesn't know is evidence nobody could read, not silence, and other years' carriers (a decision field
-    or note) can't be judged absent from the note alone."""
+    with a crawl conflict is exempt from rule 5), and it has neither a non-null `venue` nor a non-null `venueid`.
+    A venue string the table doesn't know is evidence nobody could read, not silence, and other years' carriers (a
+    decision field or note) can't be judged absent from the note alone."""
     content: Mapping[str, Any] = note["content"] if isinstance(note.get("content"), Mapping) else {}
     return (
         ad.status_from == "venue"
@@ -941,8 +949,10 @@ def collapse_silent_twins(
     are equal by `_same_paper_but_status`, holds exactly two records: the silent note, still `unknown`, and one
     accepted record, neither in `exempt` (a crawl conflict, or made `withdrawn` by the twin rule). Return the (kept, removed) native ids,
     sorted. The accepted record is kept whatever the numbers: it is the one with evidence. Run after
-    `collapse_duplicate_submissions`, so notes identical to the accepted one are gone. Any third record (with
-    evidence, with a conflict, or a second silent note) makes the group a choice: then nothing is removed."""
+    `collapse_duplicate_submissions`, so notes identical to the accepted one are gone; by then `silent` must hold
+    only survivors whose absorbed notes were all silent too (the crawl drops the others, TASK-147). Any third
+    record (with evidence, with a conflict, or a second silent note) makes the group a choice: then nothing is
+    removed."""
     groups: defaultdict[str, list[str]] = defaultdict(list)
     for rid, record in records.items():
         if record.urls.pdf is not None:
