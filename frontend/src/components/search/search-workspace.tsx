@@ -15,7 +15,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMeta } from "@/api/hooks";
 import { codePointLength, codePointSpanToUtf16 } from "@/api/spans";
-import { ConceptBuilder } from "@/builder/concept-builder";
+import { ConceptBuilder, type Expansions } from "@/builder/concept-builder";
 import { panelId, QueryTabList, tabId, type QueryTab } from "@/builder/query-tabs";
 import { countText, editorDiagnostics, itemOf, itemsOf, plural, type Item } from "@/editor/diagnostics";
 import type { ErrorEnvelope, ParseOutcome, ParseResponse } from "@/editor/parse";
@@ -56,6 +56,8 @@ export interface SearchWorkspaceProps {
   readonly openTree?: boolean;
   /** TASK-042: the results, sidebar and banner, drawn below the query half; they read `useWorkspaceSlot()`. */
   readonly results?: ReactNode;
+  /** The last answered `/search`'s `query.expansions`: the builder shows each group's own (TASK-111). */
+  readonly expansions?: Expansions | null;
 }
 
 /** `DRAFT_DIRTY`: the draft differs from the searched query (design W13; copy SB-6). */
@@ -205,7 +207,13 @@ function SearchedWarnings({ items }: { items: readonly Item[] }) {
   );
 }
 
-export function SearchWorkspace({ state, refusal = null, openTree = false, results }: SearchWorkspaceProps) {
+export function SearchWorkspace({
+  state,
+  refusal = null,
+  openTree = false,
+  results,
+  expansions = null,
+}: SearchWorkspaceProps) {
   const router = useRouter();
   const meta = useMeta();
   const editor = useRef<QueryEditorHandle>(null);
@@ -386,6 +394,7 @@ export function SearchWorkspace({ state, refusal = null, openTree = false, resul
               onEditInText={toText}
               focusOnOpen={enterBuilder}
               onFocused={builderFocused}
+              expansions={expansions}
             />
           )}
         </div>

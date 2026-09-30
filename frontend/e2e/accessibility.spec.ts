@@ -51,19 +51,23 @@ const states: State[] = [
   {
     name: "editable builder",
     open: async (page) => {
-      await search(page, "(trust OR reliance) AND benchmark");
+      await search(page, "(trust* OR reliance) AND benchmark");
       await page.getByRole("tab", { name: "Builder" }).click();
-      await expect(page.getByRole("group", { name: /Group 1 of 2/ })).toBeVisible();
+      const group = page.getByRole("group", { name: /Group 1 of 2/ });
+      await expect(group.getByRole("list", { name: "Expansions" })).toBeVisible();
     },
   },
   {
     name: "read-only builder",
     open: async (page) => {
-      await search(page, "trust NEAR/5 calibrat*");
+      // the parts that fit (TASK-111) are drawn dimmed under the notice, with a wildcard's expansions
+      await search(page, "(abstract:trust* OR reliance) (venue:ICLR OR venue:ICML) trust NEAR/3 bias");
       await page.getByRole("tab", { name: "Builder" }).click();
       await expect(
         page.getByRole("heading", { name: "This query is too complex for the builder" }),
       ).toBeVisible();
+      const parts = page.getByRole("region", { name: "Parts that fit the builder" });
+      await expect(parts.getByRole("list", { name: "Expansions" })).toBeVisible();
     },
   },
   {

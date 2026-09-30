@@ -187,6 +187,32 @@ describe("GET /search", () => {
   });
 });
 
+describe("the builder's expansions come from this /search answer (TASK-111)", () => {
+  it("shows the answer's expansions under the group whose wildcard they are", async () => {
+    const q = "trust* OR bias";
+    const ast: Schemas["ParseResponse"]["ast"] = {
+      kind: "or",
+      span: [0, 14],
+      children: [
+        { kind: "wildcard", stem: "trust", op: "*", field: null, span: [0, 6] },
+        { kind: "term", token: "bias", field: null, span: [10, 14] },
+      ],
+    };
+    const api = handler({
+      search: () =>
+        json(body({ query: { ...body().query, input: q, expansions: { "trust*": ["trust", "trusted"] } } })),
+      parse: (text) => json(parsed(text, { ast, filters: unrestricted(text) })),
+    });
+    await setup(stateOf({ q }), api);
+    fireEvent.click(screen.getByRole("tab", { name: "Builder" }));
+    await pass(10);
+    const group = screen.getByRole("group", { name: "Group 1 of 1, any of: trust star, bias" });
+    expect(within(group).getByRole("list", { name: "Expansions" }).textContent).toBe(
+      "trust* → expands to 2 words: trust, trusted",
+    );
+  });
+});
+
 describe("results header, hits and highlights (W5)", () => {
   it("shows the total, the full index version with Copy, and each hit's API highlights as <mark>", async () => {
     await setup();
