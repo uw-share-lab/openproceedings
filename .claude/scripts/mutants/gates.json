@@ -429,8 +429,8 @@
  {
   "label": "require-review fails open on parse error",
   "file": ".claude/hooks/require-review.sh",
-  "old": "if re.search(r\"\\bgit\\b[^\\n]*\\bpush\\b|\\bgh\\b[^\\n]*\\bpr\\b\", cmd):",
-  "new": "if False:"
+  "old": "    if re.search(r\"\\bgit\\b[^\\n]*\\bpush\\b|\\bgh\\b[^\\n]*\\bpr\\b|op-reviews\", cmd, re.IGNORECASE):",
+  "new": "    if False:"
  },
  {
   "label": "protect-data-dir fails open on parse error",
@@ -441,7 +441,7 @@
  {
   "label": "PR fallback checks commit before push",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "  if [ \"$verdict\" = \"allow\" ]; then\n    case \"$input\" in\n      *\"git commit\"*|*\"git merge\"*) [ \"$on_protected\" = 1 ] && verdict=\"protected\" ;;\n    esac\n  fi",
+  "old": "  if [ \"$verdict\" = \"allow\" ]; then\n    case \"$input\" in\n      *\"git commit\"*|*\"git merge\"*|*\"git cherry-pick\"*|*\"git revert\"*|*\"git am \"*|*\"git rebase\"*|*\"git reset\"*)\n        [ \"$on_protected\" = 1 ] && verdict=\"protected\" ;;\n    esac\n  fi",
   "new": "  case \"$input\" in *\"git commit\"*|*\"git merge\"*) verdict=\"allow\" ;; esac"
  },
  {
@@ -904,8 +904,8 @@
  {
   "label": "PR gate: xargs verdict dropped",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "            return \"xargs\"",
-  "new": "            pass"
+  "old": "        return \"xargs\"",
+  "new": "        pass"
  },
  {
   "label": "PR gate: xargs not carried into sh -c",
@@ -1006,14 +1006,14 @@
  {
   "label": "shell alias drops outer -c",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "            inner = Argv([\"git\", *outer_c, *inner[1:]]",
-  "new": "            inner = Argv([\"git\", *inner[1:]]"
+  "old": "\"git_c\": outer_c, \"git_dir\": gitdir}",
+  "new": "\"git_c\": [], \"git_dir\": gitdir}"
  },
  {
   "label": "shell alias drops outer git dir",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    assigns = {**argv.assigns, **({\"GIT_DIR\": gitdir} if gitdir else {})}",
-  "new": "    assigns = {**argv.assigns}"
+  "old": "\"git_c\": outer_c, \"git_dir\": gitdir}",
+  "new": "\"git_c\": outer_c, \"git_dir\": None}"
  },
  {
   "label": "shell alias args not appended",
@@ -1303,5 +1303,11 @@
   "file": ".claude/hooks/autofix.sh",
   "old": "'frontend/.prettierrc*' ",
   "new": ""
+ },
+ {
+  "label": "git inside a shell alias not given the outer settings",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if state.get(\"git_c\") or state.get(\"git_dir\"):",
+  "new": "            if False:"
  }
 ]

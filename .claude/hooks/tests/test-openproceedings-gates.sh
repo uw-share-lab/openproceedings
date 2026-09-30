@@ -483,6 +483,8 @@ g switch -q mut
 approve                                    # HEAD (mut) approved, so each row below isolates its own check
 check $R block "xargs git push (appended refspec unseen)" "$(payload_bash 'echo other2 | xargs git push origin')"
 check $R block "xargs sh -c 'git push \"\$@\"'"        "$(payload_bash "echo origin other2 | xargs sh -c 'git push \"\$@\"' sh")"
+check $R allow "<<< herestring, then an approved push" "$(payload_bash 'cat <<<x
+git push origin mut')"   # a herestring read as a heredoc never ends: the parse fails closed and blocks
 check $R allow "xargs of a non-push git command"      "$(payload_bash 'echo x | xargs git log -1')"
 # cmdparse.xargs_hides_args is shared: protect-data-dir.sh will refuse the rm/mv/git add forms with it
 hides() { python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from cmdparse import simple_commands, xargs_hides_args
@@ -525,6 +527,7 @@ check $R block "git P runs alias.p (names are case-blind)" "$(payload_bash 'git 
 check $R allow "-c remote.origin.pushurl is not a refspec" "$(payload_bash 'git -c remote.origin.pushurl=x push origin')"
 check $R block "shell alias sees the outer -c settings" "$(payload_bash "git -c remote.origin.push=other2:other2 -c 'alias.sp=!git push origin' sp")"
 check $R block "shell alias sees the outer --git-dir"  "$(payload_bash "git --git-dir='$TMP/wt-other/.git' -c 'alias.sp=!git push origin HEAD' sp")"
+check $R block "shell alias calling an outer -c alias" "$(payload_bash "git -c alias.p=push -c 'alias.sp=!git p origin other2' sp")"
 check $R block "xargs through an alias"               "$(payload_bash 'echo other2 | xargs git -c alias.p=push p origin')"
 check $R block "xargs through a shell alias"          "$(payload_bash "echo other2 | xargs git -c 'alias.sp=!git push origin' sp")"
 check $R block "--git-dir: HEAD of the other worktree" "$(payload_bash "git --git-dir='$TMP/wt-other/.git' push origin HEAD")"

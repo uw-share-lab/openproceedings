@@ -469,6 +469,13 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[list[str], str, list
             continue
         head = argv[0]
         if head == "git":
+            if state.get("git_c") or state.get("git_dir"):
+                # inside a `!shell` alias: git hands its -c settings (GIT_CONFIG_PARAMETERS) and git dir
+                # (GIT_DIR) on to the git commands the alias runs; an explicit GIT_DIR= still wins
+                gd = {"GIT_DIR": state["git_dir"]} if state.get("git_dir") else {}
+                argv = Argv(
+                    ["git", *state.get("git_c", []), *argv[1:]], argv.via_xargs, {**gd, **argv.assigns}
+                )
             # an alias is replaced by what git runs for it (TASK-067: `git -c alias.p=push p origin x`)
             for expanded, d in expand_git_alias(argv, state["dir"], state.get("depth", 0)):
                 yield expanded, d, redirects
@@ -563,12 +570,10 @@ def expand_git_alias(argv: Argv, directory: str, depth: int = 0) -> list[tuple[A
     # A shell alias: git runs `sh -c '<text> "$@"'` with the args at the worktree top; its git commands see
     # the outer -c settings (GIT_CONFIG_PARAMETERS) and git dir (GIT_DIR).
     outer_c = [w for k, v in config.items() for w in ("-c", f"{k}={v}")]
-    assigns = {**argv.assigns, **({"GIT_DIR": gitdir} if gitdir else {})}
     text = " ".join([body[1:], *(shlex.quote(r) for r in rest)])
+    inner_state = {"dir": repo_root(eff), "depth": depth + 1, "git_c": outer_c, "git_dir": gitdir}
     out = []
-    for inner, d, _ in _walk(tokenize(text), {"dir": repo_root(eff), "depth": depth + 1}):
-        if inner and inner[0] == "git":
-            inner = Argv(["git", *outer_c, *inner[1:]], inner.via_xargs, {**assigns, **inner.assigns})
+    for inner, d, _ in _walk(tokenize(text), inner_state):
         inner.via_xargs = inner.via_xargs or argv.via_xargs
         out.append((inner, d))
     return out
