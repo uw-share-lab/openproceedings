@@ -7,6 +7,7 @@ status: To Do
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 06:39'
+updated_date: '2026-09-30 06:43'
 labels:
   - frontend
   - bug
@@ -26,7 +27,7 @@ Found by TASK-141's review (PR #48, 2026-09-30). The URL↔state reducer (`front
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every place the reducer quotes a value it did not write itself (facet values, action values, clause values, year text, page numbers) goes through one quoting helper that escapes backticks and control characters the way diagnostics.clip() does (same escapes, so the backend and frontend read alike)
-- [ ] #2 A value containing a backtick, a newline, NUL, ESC or U+202E renders through `Coded` with the code spans still paired: Vitest cases for each refusal code that quotes a value, plus a property (fast-check or a table over hostile strings) asserting an even count of unescaped backticks in every refusal message
-- [ ] #3 The error-diagnostics skill (or spec 05 §the reducer) says frontend refusal messages quote values through that helper
+- [ ] #1 Every place the reducer quotes a value it did not write itself goes through one quoting helper that escapes backticks and control characters the way diagnostics.clip() does (same escapes, so backend and frontend messages read alike): the `SearchStateError` refusal messages (facet, action and clause values, year text, page numbers) and `noticeText`'s plain-text form of URL notices (`${n.param}=${n.value}`)
+- [ ] #2 A value containing a backtick, a newline, NUL, ESC or U+202E renders through `Coded` with the code spans still paired: Vitest cases for each refusal code that quotes a value and for `noticeText`, plus a property (fast-check or a table over hostile strings) asserting an even count of unescaped backticks in every such message
+- [ ] #3 Spec 05 §URL is state (guarantee 3), the paragraph listing the `SearchStateError` codes, and the error-diagnostics skill's quoting rule both say frontend messages quote client values through that helper
 <!-- AC:END -->
