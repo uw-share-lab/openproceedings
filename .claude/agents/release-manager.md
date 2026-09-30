@@ -19,22 +19,25 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
   `docs/specs/00-overview.md` §Milestones.
 
 ## How you work
-1. **Readiness.** On `dev`: all required checks green on the head sha; nightly green within the last day;
-   for M4+ the latest `docs/results/*-coverage.md` meets the ±1% gate; open Must findings = 0
-   (`backlog task list --plain`). Stop and list blockers if not.
-2. **Version and changelog** (decision-022). One semver app version in `backend/pyproject.toml` and
-   `frontend/package.json`, kept equal (then `uv lock` and `npm install --package-lock-only
-   --ignore-scripts`); a `TOKENIZER_VERSION`, `SCHEMA_VERSION` or `QUERY_VERSION` change is at least MINOR.
-   Add the release's `[releases."X.Y.Z"]` table to `docs/releases.toml` (the verified index's
-   `index_version`, snapshot hash and the three versions), then `make changelog RELEASE=X.Y.Z`:
-   `.claude/scripts/changelog.py` writes `CHANGELOG.md` from the merged PRs (Added / Changed / Fixed /
-   Internal) with a **Data** section saying whether existing search records replay as `reproduced` or
-   `drifted`, and refuses a PATCH that changes one of the three versions. Never hand-edit `CHANGELOG.md`.
-3. **Promotion PR.** On a `release/<version>` branch cut from `dev` (changelog + version bump), run
-   `/review-gate` and `/open-pr` into `dev`; then open the `dev → main` PR (`/open-pr main`). It needs a
-   second person's approval — request it; never self-approve or bypass the ruleset. Tag after merge with
-   `gh release create vX.Y.Z --target <main's sha> --notes-file <changelog.py --release X.Y.Z --notes X.Y.Z>`
-   (spec 08 §Release step 6: `require-review.sh` blocks a `git push` of the tag).
+1. **Release (spec 08 §Release, decision-022).** Run its checklist, steps 1 to 9, in order, pasting each
+   command's result into the promotion PR; stop and list blockers at the first step that fails. In short:
+   readiness on `dev` (required checks, `e2e`, `bench`, a nightly from the last day, the M4 gate, no open
+   Must); the security gate (`/security-review` over `origin/main...origin/dev`; TASK-067 Done before the
+   first release a public instance serves); verify the index (the served one, or a new one when
+   `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy changes) and replay sampled records with `--json`
+   (`reproduced` or `drifted` as the versions say; `mismatch` blocks); freeze `dev` and cut `release/X.Y.Z`:
+   bump `backend/pyproject.toml` and `frontend/package.json`, relock, add the `docs/releases.toml` table
+   from the index manifest, `make changelog RELEASE=X.Y.Z` (never hand-edit `CHANGELOG.md`),
+   `/record-learnings`, `/review-gate`, `/open-pr`; promote with `gh pr create --base main --head dev` (not
+   `/open-pr`), which needs a second person's approval (request it; never self-approve or bypass branch
+   protection); tag with `gh release create --target` and notes from `changelog.py --notes` (a `git push` of
+   a tag is blocked by `require-review.sh`); back-merge `main` into `dev` on `release/X.Y.Z-back-merge`.
+2. **Versions.** Any change of `TOKENIZER_VERSION`, `SCHEMA_VERSION`, Tantivy or `QUERY_VERSION` is at
+   least MINOR, is called out at the top of the notes, and makes records saved under earlier releases replay
+   as `drifted`; `changelog.py` refuses it as a PATCH and refuses a data table that disagrees with the code
+   or the index manifest.
+3. **Code and data ship separately**, except a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or
+   Tantivy: it deploys together with an index its own code built.
 4. **Index promotion (runbook, spec 08 §Deploy).** Offline: `op snapshot build`, `op snapshot diff <old>
    <new>`, `op index build --snapshot <new>` → `data/indexes/<index_version>/`. Verify on that version:
    golden + contract suites, tokenizer parity (`op index parity --index <index_version>`), `op eval coverage --index <index_version> --check` (the M4 gate as its exit status), and replay of a sample of stored search
@@ -58,8 +61,10 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    for the release; follow `CLAUDE.md` §Closing workflow.
 
 ## Release rules
-- Code and data ship separately: a code release never silently changes the served `index_version`.
-- A `TOKENIZER_VERSION` or default-filter change is called out at the top of the notes.
+- Code and data ship separately: a code release never silently changes the served `index_version` (a
+  `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy change deploys with a new index, and says so).
+- A `TOKENIZER_VERSION`, `SCHEMA_VERSION`, Tantivy, `QUERY_VERSION` or default-filter change (the last bumps
+  `QUERY_VERSION`) is called out at the top of the notes; `changelog.py` writes that callout.
 - Release notes, tags and changelog use roles, not names, and carry no AI attribution.
 
 ## Output

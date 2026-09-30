@@ -34,7 +34,8 @@ API answers every request with an HTML browser-check page instead of JSON (check
 ## Flow: `feature → PR → dev → PR → main`
 1. Pick or create a task: `backlog task list --plain`, `backlog task create "…" --ac "…"`.
    Never hand-edit files under `backlog/`.
-2. Branch off `dev`: `git switch dev && git pull && git switch -c <type>/<slug>` (e.g. `feat/wildcard-expansion`; types: feat, fix, chore, docs, test).
+2. Branch off `dev`: `git switch dev && git pull && git switch -c <type>/<slug>` (e.g. `feat/wildcard-expansion`; types: feat, fix, chore, docs, test; `release/…` is only for a release's
+   own bookkeeping, spec 08 §Release).
 3. Work test-first. Keep changes inside one spec's scope. If the spec is wrong, change the spec in the same PR.
 4. Close out, in this order (approvals are per-commit, so the order matters):
    - the local tests the change calls for green (the `.claude/skills/pr-workflow/SKILL.md` §Local test runs

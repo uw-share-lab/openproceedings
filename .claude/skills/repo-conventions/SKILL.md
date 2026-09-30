@@ -60,7 +60,9 @@ Test fixtures are the exception: small, hand-built or sampled records under `bac
 
 ## Names
 - **Branches:** `<type>/<slug>`, where type ∈ `feat`, `fix`, `chore`, `docs`, `test`
-  (e.g. `feat/wildcard-expansion-cap`). Never work on `dev` or `main` (`pr-workflow`).
+  (e.g. `feat/wildcard-expansion-cap`), plus `release/X.Y.Z` and `release/X.Y.Z-back-merge` for a release's
+  own bookkeeping only (spec 08 §Release; `changelog.py` leaves them out). Never work on `dev` or `main`
+  (`pr-workflow`).
 - **Commits and PR titles:** `<type>: <imperative summary>` (`fix: keep NEAR within one field`), with a
   body that says *why*. No AI attribution (`no-ai-attribution`).
 - **Dated files:** ISO date first, from the session's context date — never invented.

@@ -1,12 +1,15 @@
 # The data each release was verified on (spec 08 §Release, decision-022). One table per release, added on
 # its release/<version> branch before `make changelog RELEASE=<version>`; .claude/scripts/changelog.py
-# writes it into the release's Data section and refuses a release without one. Values come from the index
-# the release checklist verified (`GET /api/v1/meta`, or the index's manifest). Never edit a released entry.
+# writes it into the release's Data section, refuses a release without one, and with --release checks it
+# against the code at HEAD (TOKENIZER_VERSION, SCHEMA_VERSION, QUERY_VERSION, uv.lock's Tantivy) and against
+# data/indexes/<index_version>/manifest.json. Copy the index fields from that manifest and query_version
+# from backend/src/openproceedings/query/__init__.py. Never edit a released table.
 #
 # [releases."0.1.0"]
 # index_version = "<12 hex: the index_version the release was verified on>"
 # snapshot_hash = "<64 hex: that index's snapshot_hash>"
 # tokenizer_version = "2"
 # schema_version = "2"
+# tantivy_version = "0.26.2"
 # query_version = "2"
 # notes = "optional: one line on the data, e.g. a new crawl or a changed default filter"

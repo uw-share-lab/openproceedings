@@ -35,27 +35,39 @@ scripts use REST).
 
 The app has one `MAJOR.MINOR.PATCH` version, equal in `backend/pyproject.toml` and `frontend/package.json`,
 tagged `vX.Y.Z` on the `main` commit a `dev → main` promotion creates; the first tag is `v0.1.0`, and `1.0.0`
-is the owner's v1 release. A change of `TOKENIZER_VERSION`, `SCHEMA_VERSION` or `QUERY_VERSION` is at least a
-MINOR release and is called out at the top of its notes. `CHANGELOG.md` is generated from merged PRs by
+is the owner's v1 release. A change of `TOKENIZER_VERSION`, `SCHEMA_VERSION`, Tantivy or `QUERY_VERSION`
+(the inputs that decide whether a saved search record can still replay as `reproduced`) is at least a MINOR
+release and is called out at the top of its notes. `CHANGELOG.md` is generated from merged PRs by
 `.claude/scripts/changelog.py` (`make changelog`), with each release's data (the `index_version` it was
-verified on, its snapshot hash and the three versions) read from `docs/releases.toml`. The process and
-checklist are spec 08 §Release.
+verified on, its snapshot hash and those four versions) read from `docs/releases.toml` and checked against the
+code and the index's manifest. The process and checklist are spec 08 §Release.
 
 ## Consequences
 
 - The app version never enters `index_version` or `canonical_hash`, so this decision changes no index id and
-  makes no search record drift. Whether a record replays as `reproduced` still depends only on its three
-  pinned versions and on its index being kept; each release's Data section states it.
+  makes no search record drift. Whether a record replays as `reproduced` still depends only on its pinned
+  `index_version` and `query_version`, on that index being kept, and on the running code being able to serve
+  it (same `TOKENIZER_VERSION`, `SCHEMA_VERSION` and Tantivy); each release's Data section states which
+  releases' records still reproduce, and a record from an earlier release with other versions reproduces
+  under that release's tag, on the index it pins.
+- Code and data ship separately, except a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or
+  Tantivy: its code can't serve the old index, so it deploys together with an index it built.
 - A release bumps two manifests and both lockfiles; `changelog.py --release` refuses when the manifests
-  disagree with the version, when a release lacks its data table, and when a PATCH changes one of the three
-  versions.
+  disagree with the version, when a release lacks its data table or the table disagrees with the code or the
+  index manifest, and when a PATCH changes one of the four versions.
 - `CHANGELOG.md` is not checked in CI (it reads GitHub, and each merge would make it stale), so between
   releases its Unreleased section lags `dev`; a release branch regenerates it. PR titles become release notes,
   which makes the `<type>: <summary>` convention matter more; titles without a type fall back to the head
   branch's prefix.
 - `require-review.sh` blocks an agent session's `git push` of a tag (the promotion's merge commit has no
-  per-sha record), so the tag is created with `gh release create --target`, not pushed.
+  per-sha record), so the tag is created with `gh release create --target`, not pushed, and
+  `block-ai-attribution.sh` now scans `gh release create`/`edit` notes. `main`'s branch protection requires
+  the promotion branch to be up to date, so each promotion is followed by a back-merge of `main` into `dev`
+  (a `release/X.Y.Z-back-merge` PR, left out of the changelog). A tag ruleset on `v*` (a maintainer's
+  setting) keeps tags from moving.
 - Revisit if a second deployable (e.g. a separately released client) appears, or if the API ever versions
   independently of the app (`/api/v2` alongside `/api/v1`).
-- Specs and tooling changed with it: spec 08 §Release (new), the `release-manager` agent, the Makefile's
-  `changelog` target, `.claude/scripts/tests/test-changelog.sh` and `.claude/scripts/mutants/changelog.json`.
+- Specs and tooling changed with it: spec 08 §Release (new) and §Branch protection, the `release-manager`
+  agent, `/open-pr` (a promotion doesn't use it), the `pr-workflow`, `repo-conventions` and
+  `no-ai-attribution` skills, the Makefile's `changelog` target, `.claude/hooks/block-ai-attribution.sh`,
+  `.claude/scripts/tests/test-changelog.sh` and `.claude/scripts/mutants/changelog.json`.

@@ -708,5 +708,17 @@
   "file": ".claude/scripts/lint_tooling.py",
   "old": "dirs[:] = [d for d in dirs if d != \"worktrees\"]",
   "new": "dirs[:] = list(dirs)"
+ },
+ {
+  "label": "release notes not scanned",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    if h and h[0] == \"release\" and h[1] in GH_RELEASE_WRITE:\n",
+  "new": "    if False:\n"
+ },
+ {
+  "label": "release notes file not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        texts += [file_text(f, d) for f in opt_values(h[2], \"--notes-file\", \"-F\")]\n",
+  "new": ""
  }
 ]

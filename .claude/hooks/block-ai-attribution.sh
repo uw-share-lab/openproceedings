@@ -3,10 +3,11 @@
 #
 # Project decision (2026-09-25): `.claude/` is committed, but commits and PRs are authored by people.
 # When the command contains a message-writing git command (commit, merge, tag, notes, revert,
-# cherry-pick) or a PR-writing gh command (pr create/new/edit/comment/review/merge), the WHOLE raw
+# cherry-pick), a PR-writing gh command (pr create/new/edit/comment/review/merge) or a release-writing one
+# (release create/edit: its notes are the release notes, spec 08 §Release), the WHOLE raw
 # command text is scanned — not individual flags — so -m, -am, -qm, --message=, --trailer, heredoc
-# bodies (`-F - <<EOF`, `-m "$(cat <<'EOF' …)"`) and --body are all covered — plus the contents of any
-# -F/--file/--body-file that is a regular file (≤1 MB). `git commit` with no message opens an editor;
+# bodies (`-F - <<EOF`, `-m "$(cat <<'EOF' …)"`), --body and --notes are all covered — plus the contents of
+# any -F/--file/--body-file/--notes-file that is a regular file (≤1 MB). `git commit` with no message opens an editor;
 # that path is covered by .githooks/commit-msg (scripts/setup-dev.sh installs it) and CI (pr-gates.yml).
 # Exit 2 blocks the call and feeds stderr back to the agent.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -22,6 +23,7 @@ PATTERN = re.compile(
 )
 GIT_MSG = {"commit", "merge", "tag", "notes", "revert", "cherry-pick"}
 GH_PR_WRITE = {"create", "edit", "comment", "review", "merge"}
+GH_RELEASE_WRITE = {"create", "edit"}
 MAX_BYTES = 1_000_000
 
 def file_text(path, base):
@@ -37,7 +39,7 @@ def file_text(path, base):
         return ""
 
 def blocked():
-    print("Blocked: commits and PRs in openproceedings carry no AI authorship.", file=sys.stderr)
+    print("Blocked: commits, PRs and releases in openproceedings carry no AI authorship.", file=sys.stderr)
     print("Remove the 'Co-Authored-By: Claude …' trailer / 'Generated with Claude Code' footer and retry.", file=sys.stderr)
     print("(.claude/ tooling is committed; authorship is not. See CLAUDE.md → 'Authorship'.)", file=sys.stderr)
     sys.exit(2)
@@ -62,6 +64,9 @@ for argv, d in commands:
     if h and h[0] == "pr" and h[1] in GH_PR_WRITE:
         relevant = True
         texts += [file_text(f, d) for f in opt_values(h[2], "--body-file", "-F")]
+    if h and h[0] == "release" and h[1] in GH_RELEASE_WRITE:
+        relevant = True
+        texts += [file_text(f, d) for f in opt_values(h[2], "--notes-file", "-F")]
 if relevant:
     # A message fed on stdin: `git commit -F - < msg.txt` (input redirect) or `cat msg.txt | git commit -F -`.
     for op, target, d in redirect_targets(cmd, cwd):

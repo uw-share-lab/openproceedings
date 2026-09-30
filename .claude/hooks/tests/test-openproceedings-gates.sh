@@ -76,6 +76,14 @@ check $A block "gh pr new (alias) with trailer"       "$(payload_bash "gh pr new
 check $A block "attached short -b\"…\""               "$(payload_bash "gh pr create -t t -b\"$TRAILER\"")"
 printf 'msg\n\nCo-authored-by: claude <noreply@anthropic.com>\n' > "$TMP/msg.txt"
 check $A block "commit -F file with trailer"          "$(payload_bash "git commit -F '$TMP/msg.txt'")"
+check $A block "gh release create --notes footer"     "$(payload_bash 'gh release create v0.1.0 --target abc --notes "x
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)"')"
+check $A block "gh release create --notes-file"       "$(payload_bash "gh release create v0.1.0 --notes-file '$TMP/msg.txt'")"
+check $A block "gh release edit -F file"              "$(payload_bash "gh release edit v0.1.0 -F '$TMP/msg.txt'")"
+printf 'clean notes\n' > "$TMP/notes.md"
+check $A allow "gh release create, clean notes file"  "$(payload_bash "gh release create v0.1.0 --notes-file '$TMP/notes.md'")"
+check $A allow "gh release view is not a write"       "$(payload_bash "gh release view v0.1.0 --json body")"
 check $A allow "-F on a non-regular file is skipped"  "$(payload_bash 'git commit -F /dev/null')"
 check $A allow "human co-author is fine"              "$(payload_bash 'git commit -m "x
 

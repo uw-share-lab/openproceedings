@@ -1,6 +1,6 @@
 ---
 description: Open the PR for the current branch into dev — after /review-gate has approved HEAD and the learnings entry is committed — and attest the review in the PR body for CI
-argument-hint: "(optional) base branch, default dev; 'main' only for a dev→main promotion"
+argument-hint: "(optional) base branch, default dev (a dev→main promotion doesn't use this command)"
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -17,5 +17,6 @@ Open a pull request for the current branch. Base: ${ARGUMENTS:-dev}.
 4. `gh pr create --base <base> --title "<type>: <summary>" --body-file <file>`.
 5. `python3 .claude/scripts/record-review.py APPROVE <dispositions.md> --attest` to add the
    `<!-- op-review: <sha> APPROVE -->` line that CI's `review-attested` check reads.
-6. For a `dev → main` promotion: base `main`, head `dev`; it needs a second person's approval (ruleset).
+6. A `dev → main` promotion doesn't use this command (steps 1, 2 and 5 don't apply to it): spec 08 §Release
+   step 5 opens it with `gh pr create --base main --head dev`, and it needs a second person's approval.
 Report the PR URL and which CI checks it must pass.

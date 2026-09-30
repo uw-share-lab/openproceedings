@@ -16,7 +16,7 @@ Exact, reproducible Boolean search over **NeurIPS, ICLR and ICML** titles and ab
 | M2 | RIS ingestion, snapshots, the Tantivy index, `op search` / `op export` ([spec 01](docs/specs/01-ingestion.md), [spec 03](docs/specs/03-search-engine.md)) |
 | M3 | The `/api/v1` HTTP API (`op serve`; interactive docs at `/api/v1/docs`), search records (`op record save` / `replay`), and the web UI: query editor and builder, results, paper pages, exports, the coverage page and syntax help ([spec 04](docs/specs/04-backend-api.md), [spec 05](docs/specs/05-frontend.md)) |
 | M4 | Crawlers for OpenReview (API v1 and v2), the NeurIPS proceedings, PMLR and the ICLR archive (`op ingest …`), and the coverage report with the M4 gate (`op eval coverage`, [spec 07](docs/specs/07-evaluation.md) §C). The first full crawl's report passes the gate: 43 of 44 gated cells within ±1% and one owner-accepted exception ([`docs/results/2026-09-29-coverage.md`](docs/results/2026-09-29-coverage.md)). |
-| Next | Production deployment with Docker compose (`deploy/`, M6, TASK-065) and the public v1 release |
+| Next | Production deployment with Docker compose (`deploy/`, M6, TASK-065) and the first tagged release, then the public v1 release. Releases follow [spec 08](docs/specs/08-ops-and-tooling.md) §Release (one semver version, decision-022); release notes are the generated [`CHANGELOG.md`](CHANGELOG.md) |
 | Deferred | Semantic "near-miss" suggestions and re-sort (M5, [spec 06](docs/specs/06-semantic-layer.md)): phase 2, not in v1, which is Boolean search only (decision-017) |
 
 **Abstracts on a public instance.** A public deployment shows every abstract, attributed to its source

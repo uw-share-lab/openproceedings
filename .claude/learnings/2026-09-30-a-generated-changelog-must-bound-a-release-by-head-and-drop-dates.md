@@ -1,10 +1,11 @@
 # A generated changelog is reproducible only if a release is bounded by HEAD and nothing reads the clock
 
-**Key lesson:** Place each merged PR in a release by commit ancestry (the oldest `v*` tag, or HEAD for a pending `--release`), never by "untagged", and leave dates and authors out, so the file regenerates byte for byte before and after the tag; create the tag with `gh release create --target`, since `require-review.sh` blocks a `git push` of it.
+**Key lesson:** Place each merged PR in a release by commit ancestry (the oldest `v*` tag, or HEAD for a pending `--release`), leave dates and authors out, check release data against the code and the index manifest rather than trusting a hand-copied table, and plan the promotion around branch protection: `gh pr create --base main --head dev` (not `/open-pr`), the tag via `gh release create --target`, then a `main` → `dev` back-merge.
 
 - **Date:** 2026-09-30 · **Task:** TASK-066 · **Area:** ops
 - **Artifacts:** `.claude/scripts/changelog.py`, `.claude/scripts/tests/test-changelog.sh`,
-  `.claude/scripts/mutants/changelog.json`, `docs/specs/08-ops-and-tooling.md` §Release, decision-022
+  `.claude/scripts/mutants/changelog.json`, `.claude/hooks/block-ai-attribution.sh`,
+  `docs/specs/08-ops-and-tooling.md` §Release, decision-022
 
 ## What we set out to do
 Define the release process and generate `CHANGELOG.md` from merged PRs, before any deploy or tag exists.
@@ -13,25 +14,33 @@ Define the release process and generate `CHANGELOG.md` from merged PRs, before a
 - **"Untagged" is not "in this release".** The first version titled every untagged PR as the `--release`
   version. On `main` after a promotion, a PR merged into `dev` since would then be listed in a release that
   doesn't contain it. Bounding the pending release by `HEAD` (`git merge-base --is-ancestor <merge sha> HEAD`)
-  fixes it (evidence: the "on a HEAD behind dev" row, and the mutant "--release titles PRs outside HEAD",
-  killed).
-- **A release date breaks reproducibility.** The date is only known once the tag exists, so a file generated on
-  the release branch would differ from one regenerated after tagging. With no dates (the tag carries the date),
-  `--check` passes on both sides of the tag.
-- **The release's own PR has to be excluded.** A `release/*` PR merges after the file is generated; listing it
-  would make the file stale the moment it merges. The same goes for the `dev → main` promotion, which repeats
-  what `dev` lists. A fork PR whose head is also named `dev` is not a promotion (the head repo is compared).
-- **A tag can't be pushed from an agent session.** `require-review.sh` resolves each pushed ref to a commit and
-  demands a per-sha review record; `main`'s promotion merge commit has none (its review is the second
-  approval). `gh release create vX.Y.Z --target <sha>` creates the tag server-side instead
-  (`.claude/hooks/require-review.sh`, the `for src in pushed` loop).
+  fixes it (evidence: the "on a HEAD behind dev" row; the mutant "--release titles PRs outside HEAD", killed).
+- **A release date breaks reproducibility.** The date is only known once the tag exists, so a file generated
+  on the release branch would differ from one regenerated after tagging. With no dates (the tag carries the
+  date), `--check` passes on both sides of the tag. The repository name must be compared without case too, or
+  a clone whose remote is spelled `Owner/Repo` lists promotions (review round 1).
+- **Escaping can hide what a later check looks for.** The attribution check ran on the rendered Markdown, where
+  `Generated with [Claude` had become `Generated with \[Claude` and no longer matched. Check raw input before
+  transforming it (review round 1, security-reviewer; row "a bracketed footer").
+- **Replay compatibility is more than the three named versions.** The engine refuses an index built with
+  another Tantivy version as well as another tokenizer or schema (`engine/tantivy_engine.py` `unservable`), so
+  a Tantivy upgrade makes every pinned index unservable: it is a MINOR release, and it can't ship without a new
+  index. A data table copied by hand from a running instance's `/meta` can also show the previous code's
+  versions, so `--release` checks the table against the code constants, `uv.lock` and the index manifest.
+- **The promotion path is shaped by the hooks and branch protection, not by `/open-pr`.** `/open-pr` pushes
+  and attests, which a promotion from `dev` can't do; `require-review.sh` exempts exactly
+  `gh pr create --base main --head dev`. It also blocks a `git push` of a tag (the merge commit on `main` has
+  no per-sha record), so the tag is created server-side with `gh release create --target`. And `main` requires
+  the branch to be up to date, so after a merge-commit promotion `dev` lacks `main`'s merge commit and the next
+  promotion can't merge until `main` is merged back (release-manager review, round 1).
 - `git merge-base --is-ancestor` exits 1 for "not an ancestor" and 128 for a commit the clone lacks; treating
-  anything but 0 as "no" would silently file an unfetched PR as Unreleased (the mutant `r.returncode == -1`
-  survives until a row feeds an unknown sha; a first mutant, `> 1`, was equivalent to `!= 1`).
+  anything but 0 as "no" would silently file an unfetched PR as Unreleased.
 
 ## Dead ends — don't repeat these
 - A mutant that swaps `!= 1` for `> 1` survives because both refuse 128; mutate to a condition that never
   fires to prove the refusal is tested.
+- A "missing keys" row whose table also had a malformed value passed for the wrong reason (the hex check
+  refused first); give a refusal row exactly one fault (qa-auditor, round 1).
 
 ## Decisions (and what would change them)
 - One semver app version, independent of `index_version` (decision-022) → data and code ship separately and
@@ -41,10 +50,12 @@ Define the release process and generate `CHANGELOG.md` from merged PRs, before a
 
 ## Follow-ups
 - [ ] The first release (v0.1.0) and TASK-066 AC#1 wait on TASK-065 (deploy), which waits on TASK-064 (hosting).
+- [ ] A maintainer adds the `v*` tag ruleset (spec 08 §Branch protection) before the first tag.
 
 ## Propagated to
-- Skill / agent / CLAUDE.md updated? — `docs/specs/08-ops-and-tooling.md` §Release (checklist step 6: tag with
-  `gh release create`), `.claude/agents/release-manager.md` (steps 2 and 3), `CLAUDE.md` (Makefile list),
-  `.claude/skills/repo-conventions/SKILL.md` (CHANGELOG.md and docs/releases.toml rows).
-- Test or hook added? — `.claude/scripts/tests/test-changelog.sh` (59 rows) and 14 mutants in
-  `.claude/scripts/mutants/changelog.json`.
+- Skill / agent / CLAUDE.md updated? — `docs/specs/08-ops-and-tooling.md` §Release and §Branch protection,
+  `.claude/agents/release-manager.md`, `.claude/commands/open-pr.md`, the `pr-workflow`, `repo-conventions`
+  and `no-ai-attribution` skills, `CLAUDE.md`.
+- Test or hook added? — `.claude/scripts/tests/test-changelog.sh` (109 rows) and 31 mutants in
+  `.claude/scripts/mutants/changelog.json`; `block-ai-attribution.sh` scans `gh release create`/`edit` notes
+  (5 rows in `test-openproceedings-gates.sh`, 2 mutants in `gates.json`).

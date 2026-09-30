@@ -11,9 +11,11 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
 ```
 - `dev` and `main` take **no direct commits, pushes or merges** (`enforce-pr-workflow.sh`). All work is on
   a branch cut from an up-to-date `origin/dev`: `git fetch origin && git switch -c <type>/<slug> origin/dev`,
-  where type is `feat`, `fix`, `chore`, `docs` or `test` (e.g. `feat/wildcard-expansion`).
-- Feature PRs target `dev`. `main` is only updated by a `dev → main` promotion PR (`release-manager`),
-  which needs **a second person's approving review** (GitHub ruleset) on top of green checks.
+  where type is `feat`, `fix`, `chore`, `docs` or `test` (e.g. `feat/wildcard-expansion`); a release's own
+  bookkeeping uses `release/X.Y.Z` and `release/X.Y.Z-back-merge` (spec 08 §Release).
+- Feature PRs target `dev`. `main` is only updated by a `dev → main` promotion PR (`release-manager`,
+  spec 08 §Release), which needs **a second person's approving review** (branch protection) on top of green
+  checks, and `dev` up to date with `main`: after each promotion, `main` is merged back into `dev`.
 - Branch protection: both `dev` and `main` accept only PRs whose required checks are green.
 
 ## Closing order (CLAUDE.md §Closing workflow — approvals are per-commit)

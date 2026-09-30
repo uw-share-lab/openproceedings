@@ -74,7 +74,9 @@ The CLI and the API call the same functions, so the CLI alone is enough to run a
 
 ## Testing
 
-- Every hook has a case table under `.claude/hooks/tests/`, run by `make tooling` and CI `claude-tooling`.
+- Every hook has a case table under `.claude/hooks/tests/`, and every tooling script one under
+  `.claude/scripts/tests/` (the CI scripts, the network guard, `changelog.py`); `make tooling` and CI
+  `claude-tooling` run them all.
 - `make tooling` also runs the roster lint and the `.claude/README.md`, learnings-index and backlog checks.
 - CLI commands are covered by the suites of the spec they call (07); the CLI adds only argument-parsing
   and exit-code tests.
@@ -105,7 +107,7 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 |---|---|
 | `lint` → `lint` | `make lint` (ruff format/check, mypy --strict once `backend/src` exists, shellcheck, frontend prettier/eslint/tsc), then actionlint |
 | `test` → `test` | pytest under pytest-xdist at the `pr` Hypothesis profile (200 examples, 2 s deadline) (unit, golden, differential@200, contract; the 2,000-example `ci` profile runs nightly, TASK-127); vitest; `next build` (the standalone server must exist); OpenAPI snapshot and TS types freshness (`make openapi`, then `git diff --exit-code` on `backend/tests/contract/openapi.json` and `frontend/src/api/schema.ts`; unconditional, TASK-040) |
-| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`), every hook case table (`.claude/hooks/tests/`) and the tooling-script table (`.claude/scripts/tests/test-tooling-scripts.sh`) |
+| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`) |
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha |
 | `nightly` (scheduled, not a PR check) | Four parallel jobs, each with its own time limit: the whole backend suite at the `ci` profile (2,000 examples) under pytest-xdist; the oracle-backed properties at 50,000 examples; the exhaustive tokenizer check (`OP_EXHAUSTIVE=1`) plus every other property at 50,000; and `make mutate` (every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent). Differential@50k gets its own job in task-057 (M4); full-corpus parity stays local (decision-004) |
 | `bench` → `bench` (advisory: not a required check yet) | pytest-benchmark on the 5k fixture index (`backend/tests/bench`, task-031): the PR's base and head on one runner; a minimum time over 20% slower than the base fails, and each benchmark asserts its spec 03 budget (p95). It becomes required once it has run green on a few PRs without false failures (runner noise); a maintainer adds it to `dev`'s required checks |
@@ -270,10 +272,13 @@ documents both variables.
 A release is a commit on `main`, reached by a `dev → main` promotion PR, and tagged `vX.Y.Z`. It holds the
 code at that commit (the backend package and the frontend, one version), its `CHANGELOG.md` section, and its
 table in `docs/releases.toml`: the index it was verified on. It holds no data: snapshots and indexes are never
-committed or attached to a release (spec 00, open question 1). **Code and data ship separately.** A release
-never changes which `index_version` an instance serves; promoting an index is the §Deploy runbook, run on its
-own, and it is recorded in the next release's Data section. Nothing here depends on where an instance is
-hosted (00, question 5).
+committed or attached to a release (00 §Open questions 1, closed by decision-018: the corpus is never
+committed). **Code and data ship separately:** a release never changes which `index_version` an instance
+serves, and promoting an index is the §Deploy runbook, run on its own and recorded in the next release's Data
+section. The one exception is a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy: its
+code can't serve an index built with the old ones (spec 03; `engine/tantivy_engine.py` `unservable`), so it is
+verified on, and deployed with, an index its own code built. Nothing here depends on where an instance is
+hosted (00, question 5). The first release is tagged once TASK-065 (deploy) is done.
 
 **Versioning.** One semver version for the app, `MAJOR.MINOR.PATCH`:
 
@@ -281,41 +286,53 @@ hosted (00, question 5).
 |---|---|---|
 | app `X.Y.Z` | `backend/pyproject.toml` and `frontend/package.json` `version`, kept equal (also recorded in `uv.lock` and `package-lock.json`); `op --version` and the snapshot manifest's `openproceedings_version` report it | once per release, on its release branch |
 | `TOKENIZER_VERSION`, `SCHEMA_VERSION` | the code; inputs to `index_version` (03 §Versioning) | the `index-versioning` bump rules |
-| `QUERY_VERSION` | the code; in `canonical_hash` and every search record (04) | the same rules |
+| Tantivy | `uv.lock`; each index manifest's `tantivy_version` | a dependency upgrade |
+| `QUERY_VERSION` | the code; in `canonical_hash` and every search record (04) | the `index-versioning` bump rules |
 | `index_version` | the data: `data/indexes/<index_version>/` | a new snapshot, or a tokenizer, schema or ranking change |
 
 - **MAJOR:** a breaking change to the `/api/v1` contract (that is a new `/api/v2`), the `op` CLI, an export
   format or the search-record store. Before 1.0.0 these bump MINOR.
-- **MINOR:** new features, and any change of `TOKENIZER_VERSION`, `SCHEMA_VERSION` or `QUERY_VERSION`: search
-  records saved on the previous release then replay as `drifted`, never `reproduced`.
-- **PATCH:** fixes that change none of those three.
+- **MINOR:** new features, and any change of `TOKENIZER_VERSION`, `SCHEMA_VERSION`, Tantivy or
+  `QUERY_VERSION`: search records saved under the previous release then replay as `drifted`, never
+  `reproduced` (guarantee 4 is kept by saying so, never by hiding it).
+- **PATCH:** fixes that change none of those four.
 - The first tag is `v0.1.0`. Versions stay `0.y.z` until the owner declares the v1 release (M6), `1.0.0`.
 
 The app version never enters `index_version` or `canonical_hash`. A search record pins `index_version`,
-`tokenizer_version` and `query_version`, not the app version, so whether it replays as `reproduced` depends
-on those three and on its index being kept, never on which release runs.
+`tokenizer_version` and `query_version`, not the app version. It replays as `reproduced` while its index is
+kept, the running code can serve that index (same `TOKENIZER_VERSION`, `SCHEMA_VERSION` and Tantivy) and its
+`QUERY_VERSION` matches; otherwise as `drifted`, naming the changed inputs (04 §Search records). So a record
+saved under an earlier release with other versions is reproduced by running that release's tag on the index
+the record pins, which is why tags and retention (step 8) matter (guarantee 4).
 
 **`CHANGELOG.md`** is generated, never hand-edited: `make changelog` (on a release branch,
 `make changelog RELEASE=X.Y.Z`) runs `.claude/scripts/changelog.py`, whose case table is
-`.claude/scripts/tests/test-changelog.sh`.
+`.claude/scripts/tests/test-changelog.sh` and whose mutants are `.claude/scripts/mutants/changelog.json`.
 - **Input:** every merged PR from the REST API (`gh api`), the `vX.Y.Z` tags and `docs/releases.toml`
   (`--prs <file>` reads the PR list from a file instead). No dates, authors or clock: the same inputs give the
-  same bytes.
-- **Counted:** PRs merged into `dev`, and into `main` except the `dev → main` promotions (they repeat what
-  `dev` already lists). Never `release/*` branches (their only change is this file and the version), nor PRs
-  into any other base.
+  same bytes, in any clone (the repository name is compared without case).
+- **Counted:** PRs merged into `dev`, and into `main` except this repo's `dev → main` promotions (they repeat
+  what `dev` lists). Never this repo's `release/*` branches, which carry only release bookkeeping (the version
+  bump, the data table and this file before the promotion; the back-merge after the tag). Not PRs into any
+  other base.
 - **Sections:** a PR belongs to the oldest tag whose history holds its merge commit; with `--release X.Y.Z`,
   `HEAD` counts as that version's tag. A PR no tag holds is Unreleased.
-- **Groups**, by the title's Conventional Commits type (else the head branch's `<type>/` prefix): `feat` →
-  Added; `docs`, `refactor`, `perf`, `revert` and any other → Changed; `fix` → Fixed; `chore`, `test`, `ci`,
-  `build`, `style` → Internal. A `type!:` title is marked **Breaking**. Each line is the title and a link to
-  the PR, in merge order.
-- **Data:** each release's section ends with its `docs/releases.toml` table: `index_version`, `snapshot_hash`,
-  the three versions, and how search records saved on the previous release replay. A release whose three
-  versions differ from the previous release's starts with a `drifted` callout, and is refused as a PATCH.
-- **Refuses** (exit 1, nothing written): a release with no data table, a `--release` version the two manifests
-  don't both carry or that isn't newer than the latest tag, a merge commit the clone lacks
-  (`git fetch origin --tags`), malformed input, and any AI-attribution marker in the output.
+- **Groups**, by the title's Conventional Commits type: `feat` → Added; `docs`, `refactor`, `perf`, `revert`
+  → Changed; `fix` → Fixed; `chore`, `test`, `ci`, `build`, `style` → Internal. A title without one of these
+  types takes its head branch's `<type>/` prefix instead, else Changed. A known `type!:` is marked
+  **Breaking**. Each line is the title's description (a scope first) and a link to the PR, in merge order.
+- **Data:** each release's section ends with its `docs/releases.toml` table (`index_version`,
+  `snapshot_hash`, `tokenizer_version`, `schema_version`, `tantivy_version`, `query_version`) and which
+  saved search records still reproduce. A release whose four versions differ from the previous release's
+  starts with a `drifted` callout, and is refused as a PATCH.
+- **With `--release`**, the table must match the code at `HEAD` (the three constants and the Tantivy `uv.lock`
+  pins) and the manifest of the index it names, `<--data-dir>/indexes/<index_version>/manifest.json`
+  (default `data/`), so a hand-copied table can't hide a version change.
+- **Refuses** (exit 1, nothing written): a release with no data table or a table that disagrees with the code
+  or its index; a `--release` version the two manifests don't both carry or that isn't newer than the latest
+  tag; a merge commit the clone lacks, once there is a tag or `--release` to place it against
+  (`git fetch origin --tags`); malformed input; and a PR title or note with an AI-attribution marker, an
+  `@`-mention or a URL (release notes name roles and link only PRs; edit the title through the REST API).
 - `--check` exits 1 when the file differs; `--notes X.Y.Z` prints one release's section (the release notes).
   No CI job runs it, because it reads GitHub and every merge would make the file stale. Between releases its
   Unreleased section lags `dev`; any PR may refresh it.
@@ -325,29 +342,49 @@ on those three and on its index being kept, never on which release runs.
    `nightly` run from the last day. `backlog task list --plain` shows no open Must finding. The latest
    `docs/results/*-coverage.md` passes the M4 gate.
 2. **Security gate.** `security-reviewer` (`/security-review`) over `origin/main...origin/dev`, every finding
-   dispositioned as in `/review-gate`. Before the first public release, TASK-067 (the pre-release security
-   review) is Done.
-3. **The index it is verified on** (the served `current`, or a new one built by the §Deploy runbook): the
-   golden and contract suites, `op index parity --index <v>`, `op eval coverage --index <v> --check`, and
-   `op record replay <id> --index <v>` on a sample of stored search records. A new `index_version` also needs
-   `op snapshot diff <old> <new>` reviewed.
-4. **Release branch.** From here until the tag exists, nothing else merges into `dev`.
-   `git switch -c release/X.Y.Z origin/dev`; set `version` to `X.Y.Z` in
-   `backend/pyproject.toml` and `frontend/package.json`, then `uv lock` and
-   `npm install --package-lock-only --ignore-scripts`; add `[releases."X.Y.Z"]` to `docs/releases.toml` from
-   step 3's index (`GET /api/v1/meta` or its manifest; never edit a released table); `make changelog
-   RELEASE=X.Y.Z`, and read the section (a `drifted` callout, a Breaking line). Then `/record-learnings`,
-   `/review-gate` and `/open-pr` into `dev`, and merge it.
-5. **Promotion.** `/open-pr main` from `dev`; it needs a
-   second person's approving review (never self-approved, never a bypass of the ruleset), and merges with a
-   merge commit.
-6. **Tag and notes.** On a fresh `main`, `python3 .claude/scripts/changelog.py --check --release X.Y.Z` passes
-   (the promotion holds exactly the PRs the file lists); then `python3 .claude/scripts/changelog.py --release
-   X.Y.Z --notes X.Y.Z > notes.md` and `gh release create vX.Y.Z --target <main's sha> --title X.Y.Z
-   --notes-file notes.md`, which creates the tag on GitHub (`require-review.sh` blocks an agent's
-   `git push` of a tag, since `main`'s merge commit has no per-sha record). No assets, no AI attribution,
-   roles not names. `git fetch origin --tags`; on `dev`, `python3 .claude/scripts/changelog.py --check` then passes.
-7. **After.** Deploying the release, and promoting an index, follow §Deploy; each is separate from the tag.
+   dispositioned as in `/review-gate`. Before the first release a public instance serves, TASK-067 (the
+   pre-release security review) is Done.
+3. **The index it is verified on**, under a local data dir: the served index when the release changes none of
+   `TOKENIZER_VERSION`, `SCHEMA_VERSION` and Tantivy, else a new one built by the release's code (§Deploy
+   runbook, with `op snapshot diff <old> <new>` reviewed). Run, with the release's code: the golden and
+   contract suites; `op index parity --index <v>`; `op eval coverage --index <v> --check --out <scratch>`
+   (so no report lands in the tree); and `op record replay <id> --json` on a sample of search records from a
+   copy of the target instance's `records/records.sqlite`. Replay runs each record on the index it pins
+   whenever that index is present (`--index` is only the fallback). Required: with the four versions
+   unchanged, every sampled record whose index is kept reports `reproduced`; with any changed, `drifted`,
+   naming exactly the changed inputs; a `mismatch` (exit 3, `API_REPLAY_MISMATCH`) blocks the release.
+4. **Release branch.** From here until the tag exists, nothing else merges into `dev`. `git switch -c
+   release/X.Y.Z origin/dev`; set `version` to `X.Y.Z` in `backend/pyproject.toml` and
+   `frontend/package.json`, then `uv lock` and `npm install --package-lock-only --ignore-scripts`; add
+   `[releases."X.Y.Z"]` to `docs/releases.toml` from step 3's index manifest
+   (`data/indexes/<v>/manifest.json`) and the code's `QUERY_VERSION` (never edit a released table); `make
+   changelog RELEASE=X.Y.Z`, which checks the table, and read the section (a `drifted` callout, a Breaking
+   line). Then `/record-learnings`, `/review-gate` and `/open-pr` into `dev`, and merge it.
+5. **Promotion.** `gh pr create --base main --head dev --title "chore: promote dev to main for X.Y.Z"
+   --body-file <the readiness evidence>`, not `/open-pr` (it pushes and attests, and a promotion does
+   neither; `require-review.sh` exempts exactly this command, and CI exempts a same-repo promotion from
+   `learnings` and `review-attested`). `main`'s branch protection needs one approving review from a second
+   person (never self-approved, never bypassed; admins included) and `dev` up to date with `main` (step 7).
+   Merge with a merge commit.
+6. **Tag and notes.** `git fetch origin` and check out `origin/main`; `python3 .claude/scripts/changelog.py
+   --check --release X.Y.Z` passes (the promotion holds exactly the PRs the file lists); `python3
+   .claude/scripts/changelog.py --release X.Y.Z --notes X.Y.Z > notes.md`; `gh release create vX.Y.Z --target
+   "$(git rev-parse origin/main)" --title X.Y.Z --notes-file notes.md`, which creates the tag on GitHub
+   (`require-review.sh` blocks an agent's `git push` of a tag, since `main`'s merge commit has no per-sha
+   record; `block-ai-attribution.sh` scans the notes). The `v*` tag ruleset (§Branch protection) must already
+   be in place. No assets. Then `git fetch origin --tags` and check that
+   `git rev-parse vX.Y.Z^{commit}` is that sha.
+7. **Back-merge.** `main` now holds the promotion's merge commit, which `dev` lacks, and the next promotion
+   can't merge until `dev` has it. `git switch -c release/X.Y.Z-back-merge origin/dev && git merge --no-ff
+   origin/main` (no file changes), `/review-gate`, then `gh pr create --base dev --label no-learning` and
+   `record-review.py APPROVE <dispositions> --attest`; merge it. On `dev`,
+   `python3 .claude/scripts/changelog.py --check` then passes.
+8. **Retention.** Keep every index and snapshot a search record pins (`op index retire` refuses a pinned
+   index; §CLI). After a release that changes the four versions, its code can't serve the older pinned
+   indexes, but the release each record was saved under still can: keep them, and name that release in any
+   answer to a replay question.
+9. **After.** Deploying the release, and promoting an index, follow §Deploy (together, for a release that
+   changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy).
 
 ---
 
@@ -392,7 +429,7 @@ exists and could shadow the project command.
 |---|---|---|
 | `enforce-pr-workflow.sh` | PreToolUse Bash | `git commit`/`push`/`merge` on `main` or `dev`, and any write to those remote refs (from Kreate) |
 | `require-review.sh` | PreToolUse Bash | `git push` of any unreviewed commit (every refspec source, `--all`); `gh pr create`/`new` without an APPROVE record for the head, or without an added or extended learnings entry |
-| `block-ai-attribution.sh` | PreToolUse Bash | A message-writing git command or PR-writing gh command whose text (incl. heredocs, `--trailer`, `-F` files) has a Claude co-author trailer or "Generated with" footer; `.githooks/commit-msg` covers editor commits |
+| `block-ai-attribution.sh` | PreToolUse Bash | A message-writing git command, PR-writing gh command or `gh release create`/`edit` whose text (incl. heredocs, `--trailer`, `-F`, `--body-file` and `--notes-file` files) has a Claude co-author trailer or "Generated with" footer; `.githooks/commit-msg` covers editor commits |
 | `enforce-backlog-cli.sh` | PreToolUse Write/Edit/MultiEdit/NotebookEdit | Hand edits under `backlog/` (from Kreate; decision bodies are Edit-only) |
 | `protect-data-dir.sh` | PreToolUse Write/Edit/MultiEdit/NotebookEdit/Bash | Any write into, move of or deletion of `data/snapshots/`, `data/indexes/` (or `data/` itself), incl. globs expanded against the filesystem (`rm -rf data*`, `*`), redirects, `cp`/`rsync`/`tee`/`dd`/`truncate`, `find -delete`, `sed -i`; `git clean -x/-X` and `git stash --all` (they remove gitignored `data/`); `git add -f data/`; and shell `mv`/`git mv`/`cp`/`rm`/redirects into `backlog/` (only the CLI moves tasks) |
 | `autofix.sh` | PostToolUse Write/Edit/MultiEdit | Formats and fixes the edited file; reports what remains (never blocks) |
@@ -431,6 +468,9 @@ the reason. Mutants run in parallel: the full set takes minutes, and `--changed`
 
 `dev` and `main` require a PR, with these checks green: `lint`, `test`, `claude-tooling`, `attribution`,
 `learnings`, `review-attested`. No force-push, no deletion, admins included, and conversations must be
-resolved. `main` additionally requires 1 approving review. This was applied on 2026-09-25, after the repo was
+resolved. `main` additionally requires 1 approving review and the branch up to date with it (so each
+promotion is followed by §Release step 7's back-merge). This was applied on 2026-09-25, after the repo was
 made public (free-plan orgs can't protect private repos). `dev` is the default branch, and merged feature
-branches are deleted automatically.
+branches are deleted automatically. **Before the first release tag**, a maintainer adds a tag ruleset on `v*`:
+only maintainers create one, and none is updated or deleted (a moved tag would silently re-section
+`CHANGELOG.md`); §Release step 6 checks it is in place.
