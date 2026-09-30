@@ -125,8 +125,8 @@ CHAINED = {
 }
 
 
-# three crawls per example (listing order, note numbers): the `pr` profile's deadline, not the 500 ms dev one
-@settings(deadline=2_000)
+# four crawls per example (uncollapsed, as listed, shuffled, renumbered): no per-example deadline
+@settings(deadline=None)
 @given(notes(), st.randoms(use_true_random=False))
 @example(REAL_PAIR, random.Random(0))
 @example(CHAINED, random.Random(0))
