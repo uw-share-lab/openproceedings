@@ -60,8 +60,9 @@ Implementation details of answer 1 (the implementer's, TASK-139; pending owner c
   `no decision note in the forum; withdrawn twin <id> shares the pdf (invitation=…)`, naming every twin.
 - There is **no `conflicts.csv` row**: the accepted case has one because its signals disagree; this case has
   nothing unresolved.
-- The record is **never collapsed** with its twin by the duplicate collapse, even if their content matched: the
-  rule changes a status, never which records exist.
+- The record is **never collapsed** with its twin, even if their content matched: both collapses (the
+  duplicate-submission one and TASK-132's silent-twin one) skip it, as they skip a record with a crawl conflict.
+  The rule changes a status, never which records exist.
 - Only the found absence of a decision note (`no decision note in the forum`) counts. A note `unknown` for another
   reason stays `unknown`: decision notes that disagree, a decision string not in the table, no submission number
   to find the decision note by, a forum a dry run didn't fetch, `Invite to Workshop Track`.

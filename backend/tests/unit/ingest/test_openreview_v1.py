@@ -1418,3 +1418,19 @@ def test_cli_refuses_a_year_on_neither_api_before_fetching(
     argv = ["--data-dir", str(tmp_path), "ingest", "openreview", "--venue", "NeurIPS", "--years", "2020-2021"]
     assert cli.main(argv) == 1
     assert "not on OpenReview" in capsys.readouterr().err and not (tmp_path / "cache").exists()
+
+
+def test_a_twin_rule_miscount_raises_instead_of_hiding_a_negative_unmapped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If the twin rule ever reported a record made withdrawn whose missing decision note wasn't counted in
+    `unmapped`, the crawl refuses rather than letting `+report.unmapped` drop the negative count."""
+    real = v1.withdrawn_twins
+
+    def overcounting(records: dict[str, PaperRecord]) -> v1.Twins:
+        got = real(records)
+        return v1.Twins(got.conflicts, [*got.withdrawn, *sorted(records)])
+
+    monkeypatch.setattr(v1, "withdrawn_twins", overcounting)
+    with pytest.raises(RuntimeError, match="more undecided notes than were counted"):
+        run(elmo_world(None), tmp_path, "ICLR", 2018)

@@ -42,7 +42,8 @@ The authority rules (never broken):
    dedup would otherwise refuse as two submissions with one title. After the listings, records that are
    identical in everything but their id, forum URL and provenance, with a pdf and a note number, are
    collapsed to the lowest-numbered note; each other note is counted in `skipped["duplicate_submission"]`
-   (`collapse_duplicate_submissions`). A record with a crawl conflict is never collapsed.
+   (`collapse_duplicate_submissions`). A record with a crawl conflict, or one the twin rule (rule 4) made
+   `withdrawn`, is never collapsed, by this collapse or the silent-twin one.
    **A silent twin** (TASK-132) is a note that says nothing about its status: in a year whose one status carrier
    is `content.venue`, a submission-listing note with neither `venue` nor `venueid` (NeurIPS 2021 `W6e384Lkjbw`
    #5999, whose accepted twin `rDdb26AQ0SO` #11021 has the same pdf, supplementary material, title, authors,
@@ -758,6 +759,8 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
         report.unmapped["decision_note"] -= 1
         report.withdrawn_by_twin += 1
         log.debug("openreview_v1_withdrawn_twin", extra={"forum": records[rid].native})
+    if report.unmapped["decision_note"] < 0:  # each such note was counted once; never hide a miscount
+        raise RuntimeError(f"{venue} {year}: the twin rule resolved more undecided notes than were counted")
     report.unmapped = +report.unmapped  # drop a kind the twin rule emptied
     # a record the twin rule touched is never collapsed: the rule changes a status, never which records exist
     exempt = {c.id for c in report.conflicts} | set(twins.withdrawn)
@@ -883,7 +886,7 @@ def collapse_duplicate_submissions(
 ) -> list[tuple[str, str]]:
     """Remove from `records` every second note of one paper (module docstring rule 5) and return the (kept,
     removed) native ids, sorted. Only records with a pdf and an integer note `number`, and not in `exempt` (those
-    with a crawl conflict), are candidates. The lowest number (then the lowest id) is kept: a deterministic
+    with a crawl conflict or made `withdrawn` by the twin rule), are candidates. The lowest number (then the lowest id) is kept: a deterministic
     tie-break, so the choice doesn't depend on which listing or page order the API returned and the same cache
     always keeps the same id. It is not "the original": the NeurIPS 2021 proceedings link the kept forum for
     177 of the 297 accepted pairs and the dropped one for 120 (e.g. `0hJ-U3aqUDf` #401 kept, `rvKD3iqtBdk`
@@ -935,8 +938,8 @@ def collapse_silent_twins(
     records: dict[str, PaperRecord], silent: Set[str], exempt: Set[str] = frozenset()
 ) -> list[tuple[str, str]]:
     """Remove from `records` every silent note (module docstring rule 5) whose group, the records with a pdf that
-    are equal by `_same_paper_but_status`, holds exactly two records: the silent note, still `unknown` and without
-    a crawl conflict, and one accepted record without a crawl conflict. Return the (kept, removed) native ids,
+    are equal by `_same_paper_but_status`, holds exactly two records: the silent note, still `unknown`, and one
+    accepted record, neither in `exempt` (a crawl conflict, or made `withdrawn` by the twin rule). Return the (kept, removed) native ids,
     sorted. The accepted record is kept whatever the numbers: it is the one with evidence. Run after
     `collapse_duplicate_submissions`, so notes identical to the accepted one are gone. Any third record (with
     evidence, with a conflict, or a second silent note) makes the group a choice: then nothing is removed."""
