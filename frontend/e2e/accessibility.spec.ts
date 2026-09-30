@@ -193,3 +193,34 @@ test("the 320px pages do not overflow sideways", async ({ page }) => {
     ).toBeLessThanOrEqual(sizes.viewport);
   }
 });
+
+test("every page ends with the takedown contact footer (decision-018)", async ({ page }) => {
+  const pages: State[] = [
+    states[0],
+    states[1],
+    states.find((s) => s.name === "paper detail"),
+    states.find((s) => s.name === "coverage"),
+  ].filter((s): s is State => s !== undefined);
+  expect(pages.map((s) => s.name)).toEqual(["home", "search results", "paper detail", "coverage"]);
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const state of pages) {
+      await test.step(`${state.name} at ${width}px`, async () => {
+        await state.open(page);
+        const footer = page.getByRole("contentinfo");
+        await expect(footer).toHaveCount(1);
+        await expect(footer).toHaveText(
+          "To have an abstract removed from this site, email takedown@example.org.",
+        );
+        const link = footer.getByRole("link", { name: "takedown@example.org" });
+        await expect(link).toHaveAttribute("href", "mailto:takedown@example.org");
+        const box = await link.boundingBox();
+        const viewport = await page.evaluate(() => document.documentElement.clientWidth);
+        expect(
+          box && box.x >= 0 && box.x + box.width <= viewport + 1,
+          `${state.name} link inside ${viewport}px`,
+        ).toBe(true);
+      });
+    }
+  }
+});

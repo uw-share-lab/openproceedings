@@ -98,6 +98,10 @@ PORT=3000 HOSTNAME=127.0.0.1 npm run start --workspace frontend   # open http://
 Open the UI at the origin you allowed with `--cors-origin` (`http://localhost:3000`, not `http://127.0.0.1:3000`):
 the browser treats the two as different origins.
 With `NEXT_PUBLIC_API_BASE_URL` unset, the UI calls the API on its own origin (behind one reverse proxy).
+`NEXT_PUBLIC_TAKEDOWN_CONTACT` (also compiled in at build time) is the address or page the footer gives rights
+holders for removing an abstract, e.g. `NEXT_PUBLIC_TAKEDOWN_CONTACT=takedown@example.org`; a publicly reachable
+deployment must set its own; private and local ones may leave it unset (decision-018, spec 08 §Deploy). Unset, the footer links to this repository's (public) issues page; a value that is
+neither a plain email address nor an http(s) URL fails the build.
 
 ### 7. Reports
 `uv run op eval coverage --index <index_version>` writes `docs/results/<date>-coverage.md`: indexed against

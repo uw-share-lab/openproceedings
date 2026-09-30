@@ -63,6 +63,16 @@ describe("root layout", () => {
     expect(classes(doc.querySelector("main"))).toContain("min-w-0");
   });
 
+  it("ends every page with a footer landmark naming the takedown contact (decision-018)", () => {
+    const doc = renderLayout();
+    const footer = doc.querySelector("body footer");
+    // A <footer> outside <main> and <article> is the page's contentinfo landmark; it follows <main>.
+    expect(footer?.closest("main, article, section, aside, nav")).toBeNull();
+    expect(doc.querySelector("main ~ footer")).toBe(footer);
+    expect(footer?.textContent).toMatch(/^To have an abstract removed from this site, /);
+    expect(footer?.querySelector("a")?.getAttribute("href")).toBeTruthy();
+  });
+
   it("marks the current section in the nav", () => {
     const current = renderLayout().querySelectorAll('nav a[aria-current="page"]');
     expect([...current].map((a) => a.textContent)).toEqual(["Search"]);

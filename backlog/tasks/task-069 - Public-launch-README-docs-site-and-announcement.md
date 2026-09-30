@@ -4,7 +4,7 @@ title: 'Public launch: README, docs site and announcement'
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-30 01:07'
+updated_date: '2026-09-30 02:11'
 labels:
   - docs
 milestone: m-6
@@ -16,6 +16,7 @@ dependencies:
   - TASK-068
   - TASK-133
   - TASK-134
+  - TASK-136
 ordinal: 68000
 ---
 
