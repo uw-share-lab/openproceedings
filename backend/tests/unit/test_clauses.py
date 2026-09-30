@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from hypothesis import assume, given, settings
+from hypothesis import assume, event, example, given, seed, settings
 from hypothesis import strategies as st
 from openproceedings.query import clauses
 from openproceedings.query.ast import (
@@ -39,7 +39,7 @@ from openproceedings.query.clauses import (
 from openproceedings.query.parser import MAX_QUERY_LENGTH, Mode, ParseResult, parse
 from pydantic import ValidationError
 
-from tests.strategies import clause_queries, near_cap_queries, queries
+from tests.strategies import YearEditCase, clause_queries, near_cap_queries, queries, year_edit_cases
 
 ROOT = Path(__file__).resolve().parents[3]
 GOLDEN: list[dict[str, Any]] = json.loads(
@@ -454,37 +454,80 @@ def _merged(ranges: list[YearRange]) -> list[YearRange]:
 
 
 _YEARS = st.integers(MIN_YEAR, MAX_YEAR)
+# up to six drawn ranges, merged, then the first MAX_YEAR_RANGES of them: the most a year action writes
 _RANGES = st.lists(
     st.tuples(_YEARS, _YEARS).map(lambda t: YearRange(lo=min(t), hi=max(t))), min_size=1, max_size=6
-).map(_merged)
+).map(lambda rs: _merged(rs)[: clauses.MAX_YEAR_RANGES])
+# The seed at which drawing any clause or near-cap query and assume()ing the preconditions failed the
+# filter_too_much health check every time (TASK-145); year_edit_cases builds the preconditions instead.
+_FILTER_TOO_MUCH_SEED = 197275319351247031457750150800712837025
 
 
-@given(
-    q=st.one_of(clause_queries(), near_cap_queries(1_800, 2_000)),
-    mode=st.sampled_from(["native", "scholar"]),
-    ranges=_RANGES,
-)
-@settings(deadline=None)
-def test_every_year_edit_on_a_toggleable_clause_parses_and_edits_only_that_clause(
-    q: str, mode: Mode, ranges: list[YearRange]
-) -> None:
-    """Guarantee 3 for the year control: any year clause a year action writes (at most MAX_YEAR_RANGES merged
-    ranges) over a toggleable year clause gives a query that parses, within the cap, whose top-level year clause
-    admits exactly those ranges, and whose every other effective conjunct is unchanged."""
-    assume(len(ranges) <= clauses.MAX_YEAR_RANGES)
+def _check_year_edit(case: YearEditCase, ranges: list[YearRange]) -> None:
+    q, mode = case.q, case.mode
     before = parse(q, mode)
-    assume(before.ast is not None)
     filters = filter_clauses(q, before)
-    assert filters is not None
+    assert filters is not None, (q, [e.code for e in before.errors])
     year = filters.year
-    assume(year.toggleable and year.span is not None)
-    assert year.span is not None
+    event(f"mode: {mode}")
+    event(f"source: {case.source}")
+    if (
+        case.reason is not None
+    ):  # a near miss: filter_clauses must refuse it, for the reason it was built with
+        event(f"near miss: {case.reason}")
+        assert not year.toggleable and year.reason == case.reason, (q, year.reason)
+        return
+    assert year.toggleable and year.span is not None, (q, year.reason)  # year_edit_cases builds it so
     start, end = year.span
     clause = _year_clause(ranges)
     edited = f"({q}) AND {clause}" if start == end == len(q) else q[:start] + clause + q[end:]
+    event("year clause: absent (wrapped)" if start == end == len(q) else "year clause: present (spliced)")
     assert len(edited) <= MAX_QUERY_LENGTH, edited
     after = parse(edited, mode)
     assert after.errors == [], (edited, [e.code for e in after.errors])
+    longest = max(len(edited), len(after.canonical or ""))  # the cap holds for both (decision-008)
+    event("edit within 200 code points of the cap" if longest > MAX_QUERY_LENGTH - 200 else "edit shorter")
     assert _rest(after.effective_ast, "year") == _rest(before.effective_ast, "year"), edited
     own = [c for c in _top(after.effective_ast) if _field_of(c) == "year"]
     assert len(own) == 1 and isinstance(own[0], Filter) and list(own[0].values) == ranges, edited
+
+
+_WIDEST = list(clauses.WIDEST_YEAR)
+
+
+# One near miss per reason, pinned (year_edit_cases builds each only now and then), and the widest edit that fits
+@example(case=YearEditCase("trust -year:2021", "native", "pinned", "negated"), ranges=_WIDEST)
+@example(
+    case=YearEditCase("trust year:2021 year:2020..2022", "scholar", "pinned", "multiple_clauses"),
+    ranges=_WIDEST,
+)
+@example(case=YearEditCase("trust (year:2021 OR x)", "native", "pinned", "nested"), ranges=_WIDEST)
+@example(
+    case=YearEditCase("trust (year:2021 OR track:main)", "scholar", "pinned", "mixed_fields"), ranges=_WIDEST
+)
+@example(case=YearEditCase("a" * 1_880, "native", "pinned", "too_long"), ranges=_WIDEST)
+@example(case=YearEditCase("year:2021 " + "a" * 1_900, "scholar", "pinned", "too_long"), ranges=_WIDEST)
+@example(case=YearEditCase("(" * 64 + "a" + ")" * 64, "native", "pinned", "too_deep"), ranges=_WIDEST)
+@example(case=YearEditCase("a" * 1_853, "scholar", "pinned"), ranges=_WIDEST)
+@given(case=year_edit_cases(), ranges=_RANGES)
+@settings(deadline=None)
+def test_every_year_edit_on_a_toggleable_clause_parses_and_edits_only_that_clause(
+    case: YearEditCase, ranges: list[YearRange]
+) -> None:
+    """Guarantee 3 for the year control: any year clause a year action writes (at most MAX_YEAR_RANGES merged
+    ranges) over a toggleable year clause gives a query that parses, within the cap, whose top-level year clause
+    admits exactly those ranges, and whose every other effective conjunct is unchanged. And the near misses
+    `year_edit_cases` builds (one step past a rule) are refused, with the reason they were built with."""
+    _check_year_edit(case, ranges)
+
+
+# 200 at every profile: the health check runs on the first draws, and the property's own run above is the one
+# that scales with the profile
+@seed(_FILTER_TOO_MUCH_SEED)
+@given(case=year_edit_cases(), ranges=_RANGES)
+@settings(deadline=None, max_examples=200)
+def test_the_year_edit_property_passes_at_the_seed_that_failed_its_health_check(
+    case: YearEditCase, ranges: list[YearRange]
+) -> None:
+    """TASK-145 regression: the same property at the seed where it used to filter out too many draws."""
+    _check_year_edit(case, ranges)

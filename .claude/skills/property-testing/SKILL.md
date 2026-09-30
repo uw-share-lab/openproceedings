@@ -45,6 +45,9 @@ profile (200) in parallel; the nightly workflow runs the whole suite at `ci` (2,
 oracle-backed job and the rest (about 35 and 20 minutes locally). Counterexamples found so
 far are golden rows (`("0", "0")` in test_canonical.py; `trust (trust OR track:main)` in test_defaults.py).
 Not yet: stems near the 200-expansion cap (needs the 5k fixture, task-057).
+`year_edit_cases()` (TASK-145) builds queries whose year clause is toggleable, in either mode, instead of
+drawing `clause_queries()`/`near_cap_queries()` and `assume()`ing it: the toggleability rules are in its grammar,
+and only the padding toward the length and depth caps is cut back, by one parse of the widest year edit.
 
 ## Properties that must hold
 1. **Parser totality:** `parse(s)` never raises for any `str`; bad input yields `errors`.
@@ -71,4 +74,9 @@ Not yet: stems near the 200-expansion cap (needs the 5k fixture, task-057).
   than disabling it in `ci`.
 - Don't `assume()` away large parts of the space (e.g. `assume(no wildcards)`); Hypothesis will report
   `FailedHealthCheck` or silently test less. Constrain the strategy instead.
+- `--hypothesis-show-statistics` counts as invalid both `assume()`/filter rejections (listed as "gave up
+  because") and Hypothesis's own overruns ("exceeded maximum test case size"): early on it caps each case at
+  five times its smallest extension, so a strategy whose typical case is much bigger than its simplest one
+  overruns. Drawing a near-cap query part by part does that; draw a few parts and pad with cheap, distinct
+  filler (TASK-145).
 - A property that can't fail is not a test: mutation-check it once by breaking the code it covers.
