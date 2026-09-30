@@ -188,7 +188,7 @@
  {
   "label": "changelog: raw text not made plain before the checks",
   "file": ".claude/scripts/changelog.py",
-  "old": "    text = plain(text)\n",
+  "old": "    # NFKC too, for the check only: fullwidth letters and ligatures read as the plain ones\n    text = plain(unicodedata.normalize(\"NFKC\", plain(text)))\n",
   "new": ""
  },
  {
@@ -238,5 +238,23 @@
   "file": ".claude/scripts/changelog.py",
   "old": "    return \" \".join(\"\".join(ch for ch in text if unicodedata.category(ch) != \"Cf\").split())",
   "new": "    return \" \".join(text.split())"
+ },
+ {
+  "label": "changelog: notes rendered without plain",
+  "file": ".claude/scripts/changelog.py",
+  "old": "lines.append(f\"- {plain(d['notes'])}\")",
+  "new": "lines.append(f\"- {' '.join(d['notes'].split())}\")"
+ },
+ {
+  "label": "changelog: default-ignorables kept",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    text = IGNORABLE.sub(\"\", text)\n",
+  "new": ""
+ },
+ {
+  "label": "changelog: no NFKC before the checks",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    text = plain(unicodedata.normalize(\"NFKC\", plain(text)))",
+  "new": "    text = plain(text)"
  }
 ]

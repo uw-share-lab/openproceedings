@@ -144,10 +144,16 @@ def repo_from_origin() -> str:
     return m[1]
 
 
+# Default-ignorable code points outside category Cf, which a renderer also shows as nothing: the combining
+# grapheme joiner, the Hangul fillers, the Mongolian and ordinary variation selectors.
+IGNORABLE = re.compile("[\u034f\u115f\u1160\u180b-\u180f\ufe00-\ufe0f]")
+
+
 def plain(text: str) -> str:
-    """Text as a reader sees it: format characters (zero-width spaces and joiners, U+200B, U+2060) dropped,
-    since a renderer shows nothing for them, and whitespace (double, non-breaking) collapsed to one space.
-    What is checked and what is rendered are both this."""
+    """Text as a reader sees it: format characters (zero-width spaces and joiners, U+200B, U+2060) and the
+    other default-ignorable code points dropped, since a renderer shows nothing for them, and whitespace
+    (double, non-breaking) collapsed to one space. What is checked and what is rendered are both this."""
+    text = IGNORABLE.sub("", text)
     return " ".join("".join(ch for ch in text if unicodedata.category(ch) != "Cf").split())
 
 
@@ -155,7 +161,8 @@ def check_text(what: str, text: str) -> None:
     """Refuse text that would put an AI-attribution marker, a person or a link into the release notes. Run on
     the `plain` text, before escaping (a zero-width or doubled space would slip past the pattern, and escaping
     could hide a marker, `\\[Claude`, from it)."""
-    text = plain(text)
+    # NFKC too, for the check only: fullwidth letters and ligatures read as the plain ones
+    text = plain(unicodedata.normalize("NFKC", plain(text)))
     if hit := ATTRIBUTION.search(text):
         raise Refusal(f"{what} carries an AI-attribution marker ({hit[0]!r}): fix it")
     if hit := MENTION_OR_URL.search(text):

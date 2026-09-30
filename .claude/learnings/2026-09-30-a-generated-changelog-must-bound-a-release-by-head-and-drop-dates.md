@@ -22,7 +22,7 @@ Define the release process and generate `CHANGELOG.md` from merged PRs, before a
 - **Escaping can hide what a later check looks for.** The attribution check ran on the rendered Markdown, where
   `Generated with [Claude` had become `Generated with \[Claude` and no longer matched. Check raw input before
   transforming it (review round 1, security-reviewer; row "a bracketed footer"), and make it plain
-  first (drop format characters, collapse whitespace): a double, non-breaking or zero-width space slipped past
+  first (drop format and other default-ignorable characters, collapse whitespace; NFKC for the check): a double, non-breaking or zero-width space slipped past
   a single-space pattern (rounds 2 and 3), and the renderer must show the same plain text that was checked. A refusal pattern over
   merged PR titles must not catch package names (`@types/node`, `next@15.1.0`): one Dependabot title would
   block every run until someone retitles it (round 2, code-reviewer).
@@ -61,6 +61,6 @@ Define the release process and generate `CHANGELOG.md` from merged PRs, before a
 - Skill / agent / CLAUDE.md updated? — `docs/specs/08-ops-and-tooling.md` §Release and §Branch protection,
   `.claude/agents/release-manager.md`, `.claude/commands/open-pr.md`, the `pr-workflow`, `repo-conventions`
   and `no-ai-attribution` skills, `CLAUDE.md`.
-- Test or hook added? — `.claude/scripts/tests/test-changelog.sh` (127 rows) and 40 mutants in
+- Test or hook added? — `.claude/scripts/tests/test-changelog.sh` (131 rows) and 43 mutants in
   `.claude/scripts/mutants/changelog.json`; `block-ai-attribution.sh` scans `gh release create`/`edit` notes
   (5 rows in `test-openproceedings-gates.sh`, 2 mutants in `gates.json`).
