@@ -86,8 +86,8 @@
  {
   "label": "git -C ignored",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                eff = _resolve(argv[j + 1], eff)",
-  "new": "                pass"
+  "old": "            eff = _resolve(value, eff)",
+  "new": "            pass"
  },
  {
   "label": "bash -c not recursed",
