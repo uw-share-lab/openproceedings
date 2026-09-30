@@ -85,7 +85,9 @@ out of 24), ICLR 2023's virtual-site list, and NeurIPS 2025 D&B's former virtual
   exception at exactly 23 vs 24 ([decision-016](../../backlog/decisions/decision-016%20-%20ICLR-2013-main-is-an-owner-accepted-coverage-exception-keep-OpenReviews-workshop-decision-for-Factorized-Topic-Models-TASK-054.md),
   `coverage-causes.toml`).
 - **ICLR 2018:** the virtual-site list has 336. The OpenReview decision notes give 337 (23 oral + 314 poster,
-  facts doc). The row uses 336. One paper may have been withdrawn after acceptance; this is not verified.
+  facts doc). The row uses 336. The extra one is ELMo (`S1p31z-Ab`, `Accept (Poster)`), whose pdf is also listed
+  as the withdrawn note `SJTCsqMUf`: accepted, then withdrawn, not presented at ICLR 2018. Since TASK-113
+  (decision-020) its status is `unknown` with an `unresolved:openreview_v1` row, and the index holds 336.
 - **ICLR 2019:** the virtual-site list has 501. No count announced on iclr.cc was found (the 2019 press page
   has no numbers). Secondary sites quote 502 (24 oral + 478 poster), but no primary source for it was found.
 - **ICLR 2021:** the fact sheet's 860 posters equal the virtual-site list (860). OpenReview has 859 accepted

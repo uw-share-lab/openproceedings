@@ -1,0 +1,113 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-113: trimmed from the 2026-09-29 crawl cache (fetched 2026-09-29T09:04:27.342713+00:00)",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing page trimmed from 935 to 3 notes (order kept; `count` is the page's)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2018/Conference/-/Blind_Submission&limit=1000&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "count": 935,
+   "notes": [
+    {
+     "content": {
+      "_bibtex": "Synthetic bibtex text 1.",
+      "abstract": "Synthetic abstract text 2.",
+      "authorids": [
+       "synthetic.person3@example.org",
+       "synthetic.person4@example.org",
+       "synthetic.person5@example.org"
+      ],
+      "authors": [
+       "Synthetic Author 6",
+       "Synthetic Author 7",
+       "and Synthetic Author 8"
+      ],
+      "data": "Synthetic data text 9.",
+      "keywords": [],
+      "paperhash": "synthetic|synthetic_title_10",
+      "pdf": "/pdf/ce62b654cabb663319c54a3b64c1bb91efa0d5b2.pdf",
+      "title": "Synthetic title text 11."
+     },
+     "forum": "r1ISxGZRb",
+     "id": "r1ISxGZRb",
+     "invitation": "ICLR.cc/2018/Conference/-/Blind_Submission",
+     "number": 768,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "_bibtex": "Synthetic bibtex text 12.",
+      "abstract": "Synthetic abstract text 13.",
+      "authorids": [
+       "synthetic.person14@example.org"
+      ],
+      "authors": [
+       "Synthetic Author 15",
+       "Synthetic Author 16"
+      ],
+      "data": "Synthetic data text 17.",
+      "keywords": [
+       "Synthetic keywords text 18.",
+       "Synthetic keywords text 19."
+      ],
+      "paperhash": "synthetic|synthetic_title_20",
+      "pdf": "/pdf/4cff208c5bfa9edb6dcb0c3490095ae3761e823d.pdf",
+      "title": "Synthetic title text 21."
+     },
+     "forum": "Hy3MvSlRW",
+     "id": "Hy3MvSlRW",
+     "invitation": "ICLR.cc/2018/Conference/-/Blind_Submission",
+     "number": 256,
+     "readers": [
+      "everyone"
+     ]
+    },
+    {
+     "content": {
+      "TL;DR": "Synthetic tl;dr text 22.",
+      "_bibtex": "Synthetic bibtex text 23.",
+      "abstract": "Synthetic abstract text 24.",
+      "authorids": [
+       "synthetic.person25@example.org",
+       "synthetic.person26@example.org"
+      ],
+      "authors": [
+       "Synthetic Author 27 and Synthetic Author 28"
+      ],
+      "keywords": [
+       "Synthetic keywords text 29.",
+       "Synthetic keywords text 30.",
+       "Synthetic keywords text 31.",
+       "Synthetic keywords text 32.",
+       "Synthetic keywords text 33.",
+       "Synthetic keywords text 34.",
+       "Synthetic keywords text 35."
+      ],
+      "paperhash": "synthetic|synthetic_title_36",
+      "pdf": "/pdf/79862cef4ea997e07936532dcb53794f6bca59ff.pdf",
+      "title": "Synthetic title text 37."
+     },
+     "forum": "BJij4yg0Z",
+     "id": "BJij4yg0Z",
+     "invitation": "ICLR.cc/2018/Conference/-/Blind_Submission",
+     "number": 201,
+     "readers": [
+      "everyone"
+     ]
+    }
+   ]
+  }
+ }
+}

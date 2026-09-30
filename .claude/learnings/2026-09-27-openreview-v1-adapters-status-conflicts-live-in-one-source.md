@@ -43,7 +43,7 @@ snapshot replay, and test them only against the TASK-002 recorded fixtures.
 ## Follow-ups
 - [ ] (proposed, no task yet: parallel-branch ids) record live fixtures for the v1 gaps listed in the TASK-051
   notes, then extend `ADAPTERS`.
-- [ ] (proposed, no task yet) decide how to split early ICLR 2017 `authors` strings (`authors_unsplit`).
+- [x] decide how to split early ICLR 2017 `authors` strings (`authors_unsplit`): TASK-113, decision-019.
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/openreview-api/SKILL.md` §The v1 crawler as built;
@@ -51,3 +51,27 @@ snapshot replay, and test them only against the TASK-002 recorded fixtures.
   (`sources.openreview_v1`); `.claude/skills/record-schema/SKILL.md`; `.claude/agents/openreview-crawler.md`;
   `CLAUDE.md` layout; spec 01 §CLI; spec 08 layout.
 - Test or hook added? — `backend/tests/unit/ingest/test_openreview_v1.py` (one replay test per adapter).
+
+## Addendum — 2026-09-29 (TASK-113)
+
+**Key lesson:** A v1 contradiction can span two notes of one paper, and then each record looks consistent on its
+own: ICLR 2018 `S1p31z-Ab` (decision note `Accept (Poster)`) and `SJTCsqMUf` (withdrawn invitation, same pdf) were
+two clean records until a pdf join across the crawl's records found them, so the per-note check never could.
+
+- **Evidence.** The 2026-09-29 cache has 24 blind/withdrawn pdf pairs, all ICLR 2018 (accepted 1, rejected 10,
+  `Invite to Workshop Track` 1, undecided 12); ICLR 2018 main counted 337 vs 336 official, within ±1%, so the gate
+  never flagged it. `withdrawn_twins` makes the accepted one `unknown` (decision-020); the rebuilt scratch report
+  shows 336 of 336 and lists both unresolved records by id (spec 07 §C).
+- **No ranking fits both known cases.** `xGZG2kS5bFk` (ICLR 2021) was withdrawn yet presented; ELMo accepted yet
+  not presented. Keep `unknown` and list the record; an outside source (accepted list, overrides) is the fix.
+- **A scrub can erase the structure a parser reads.** `scrub.py` replaced a whole authors value with one
+  `Synthetic Author N` and a comma-separated email string with one email, so no recorded fixture could exercise
+  author splitting. It now keeps separators and counts (decision-004 still holds: no real names).
+- **A regex without `^` in `re.sub(count=1)` removes the first match anywhere.** The first splitter draft dropped
+  the ` and ` inside an entry `"<name> and <name>"` (`Hk6a8N5xe`) instead of a leading `and `, turning a split into a refusal; the
+  real-cache dry run over all v1 notes (before any fixture) caught it.
+- **Count-checking makes splitting safe.** Against `authorids` the rule splits 34 notes and refuses one
+  (`H1JBMVpdx`, whose `authors` is its title: three pieces for two ids), where an unchecked split would have
+  indexed title fragments as people.
+- Propagated to: spec 01 (§Sources v1 as-built, §Pipeline 5, §Testing), spec 04, spec 07 §C, the openreview-api,
+  dedup-rules, snapshots and coverage-reporting skills.

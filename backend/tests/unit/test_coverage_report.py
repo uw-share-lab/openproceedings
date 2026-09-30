@@ -18,14 +18,16 @@ from openproceedings.engine.index import build_index
 from openproceedings.eval.coverage_report import (
     AcceptedException,
     Meta,
+    Unresolved,
     Verdict,
     gate,
     load_cause_file,
+    load_unresolved,
     missing_decisions,
     render,
     stale_exceptions,
 )
-from openproceedings.ingest.dedup import DedupResult
+from openproceedings.ingest.dedup import Conflict, DedupResult
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import render as render_snapshot
 from openproceedings.ingest.sources.common import ListingReport
@@ -695,3 +697,93 @@ def test_an_exception_without_its_decision_record_is_refused_before_anything_is_
     assert main(eval_args(data_dir, tmp_path / "r", "--check")) == 1
     assert "no decision record for decision-999" in capsys.readouterr().err
     assert not (tmp_path / "r").exists()
+
+
+# --- unresolved records (spec 07 §C, TASK-113) ----------------------------------------------------------------
+
+V1 = "unresolved:openreview_v1"
+STATUS_ROW = Unresolved(
+    "op:iclr:2014:IC2014x0001", "status", "withdrawn (invitation=X)", "accepted (content.venue=Y)", V1
+)
+TRACK_ROW = Unresolved(
+    "op:iclr:2014:IC2014x0002", "track", "main (invitation=X)", "workshop (venueid=A|B)", V1
+)
+GONE_ROW = Unresolved("op:iclr:2014:NotHere2014", "status", "a", "b", V1)
+
+
+def unresolved_section(text: str) -> list[str]:
+    section = text.split("## Unresolved records\n", 1)[1].split("\n## ", 1)[0]
+    return [ln for ln in section.splitlines() if ln.startswith("| op:")]
+
+
+def test_each_unresolved_record_is_listed_with_its_state_now_and_the_cell_it_would_count_in() -> None:
+    manifest = manifest_of(corpus())
+    cov = breakdown(manifest, "x", official=TABLE)
+
+    def locate(
+        rid: str,
+    ) -> Any:  # IC2014x0001's status is still unknown; IC2014x0002's track was decided since
+        cell = LOCATE(rid)
+        return (*cell[:3], "unknown") if rid == STATUS_ROW.id else cell
+
+    text = render(
+        cov, manifest, META, official=TABLE, locate=locate, unresolved=[STATUS_ROW, TRACK_ROW, GONE_ROW]
+    )
+    assert unresolved_section(text) == [
+        "| op:iclr:2014:IC2014x0001 | status | main / unknown | ICLR 2014 main (gated) | withdrawn (invitation=X) "
+        "| accepted (content.venue=Y) |",
+        "| op:iclr:2014:IC2014x0002 | track | main / accepted (**track no longer unknown**) "
+        "| ICLR 2014 main (gated) or ICLR 2014 workshop (not gated) | main (invitation=X) | workshop (venueid=A\\|B) |",
+        "| op:iclr:2014:NotHere2014 | status | not in the snapshot | — | a | b |",
+    ]  # fmt: skip
+
+
+def test_an_unresolved_status_decided_since_by_another_source_is_flagged() -> None:
+    manifest = manifest_of(corpus())
+    cov = breakdown(manifest, "x", official=TABLE)
+    [line] = unresolved_section(
+        render(cov, manifest, META, official=TABLE, locate=LOCATE, unresolved=[STATUS_ROW])
+    )
+    assert "| main / accepted (**status no longer unknown**) |" in line
+
+
+def test_no_unresolved_record_says_so() -> None:
+    assert "## Unresolved records\n\nNone: no source left a field unresolved." in report()
+
+
+def test_unresolved_rows_load_from_the_snapshots_conflicts_file_checked_against_its_hash(
+    tmp_path: Path,
+) -> None:
+    rows = (Conflict("op:iclr:2014:IC2014x0001", "status", "withdrawn (x)", "openreview_v1", "accepted (y)",
+                     "openreview_v1", V1),
+            Conflict("op:iclr:2014:IC2014x0003", "title_key", "a", "ris", "b", "ris", "ambiguous_not_merged"))  # fmt: skip
+    for name, data in render_snapshot(DedupResult(tuple(corpus()), (), rows), [], BUILT).items():
+        (tmp_path / name).write_bytes(data)
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    assert load_unresolved(tmp_path, manifest) == (
+        Unresolved("op:iclr:2014:IC2014x0001", "status", "withdrawn (x)", "accepted (y)", V1),
+    )
+    (tmp_path / "conflicts.csv").write_bytes((tmp_path / "conflicts.csv").read_bytes() + b"x")
+    with pytest.raises(ValueError, match=r"conflicts\.csv doesn't match"):
+        load_unresolved(tmp_path, manifest)
+
+
+def test_op_eval_coverage_lists_the_snapshots_unresolved_records(tmp_path: Path) -> None:
+    root = tmp_path / "data"
+    snap = root / "snapshots" / "2026-09-29-test"
+    snap.mkdir(parents=True)
+    row = Conflict("op:iclr:2014:IC2014x0001", "status", "withdrawn (x)", "openreview_v1", "accepted (y)",
+                   "openreview_v1", V1)  # fmt: skip
+    for name, data in render_snapshot(DedupResult(tuple(corpus()), (), (row,)), [], BUILT).items():
+        (snap / name).write_bytes(data)
+    build_index(snap, root / "indexes")
+    out = tmp_path / "results"
+    assert main(eval_args(root, out)) == 0
+    [written] = list(out.iterdir())
+    assert (
+        unresolved_section(written.read_text(encoding="utf-8"))
+        == [
+            "| op:iclr:2014:IC2014x0001 | status | main / accepted (**status no longer unknown**) "
+            "| ICLR 2014 main (gated) | withdrawn (x) | accepted (y) |"  # the real table; the test record is accepted
+        ]
+    )

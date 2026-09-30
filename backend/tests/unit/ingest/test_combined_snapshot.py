@@ -34,8 +34,11 @@ BUILT = datetime(2026, 9, 28, tzinfo=UTC)
 # every API v1 crawl report's `skipped` gained `duplicate_submission` (0 for both v1 crawls here; records unchanged).
 # TASK-101 changed both: the ICLR 2024 v2 accepted records now carry `presentation` (`ICLR 2024 poster`) and its
 # claim, and the v2 crawl report gained `presentation_unmapped` (0 here). content_hash doesn't cover presentation.
+# TASK-113 changed FILES_HASH again: every API v1 crawl report gained `authors_split` (decision-019; 0 here). Its
+# records here are unchanged (no fixture in this build has a split author list or a withdrawn twin), so
+# SNAPSHOT_HASH is TASK-101's.
 SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bdd"
-FILES_HASH = "447b87075fb90d3132eb2032fc222591f83f6c780c6fa79824239c1c6e9660de"
+FILES_HASH = "f101db2e2fa26859ebe7bd45962b702f7cbaae24b57bb5662a3fc23614ee7174"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:

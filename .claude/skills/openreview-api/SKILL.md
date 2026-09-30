@@ -203,8 +203,16 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   but one has no venue; ICLR 2018 lists 24 pdfs as a blind and a withdrawn note; the 11 NeurIPS 2021 D&B title
   pairs are Round 1 rejections resubmitted to Round 2 with another pdf. v2 has no identical-pdf notes and
   doesn't run the rule.
-- Early ICLR 2017 notes give `content.authors` as one string: kept out (`authors_unsplit` in the report), never
-  split by guess. ICLR 2023 BlogPosts uses the verified
+- Authors are split only when the split can be checked (decision-019, `split_authors`): early ICLR 2017 notes give
+  `content.authors` as one string, and 33 list-typed notes of 2016–2021 carry `and Name` or `A and B` entries.
+  A list with neither is kept as listed; otherwise the pieces (split at `, and `, `,`, ` and `, a leading `and `
+  dropped) must number exactly the note's `authorids` (or `author_emails`), else the authors stay empty
+  (`authors_unsplit`; e.g. ICLR 2017 `H1JBMVpdx`, whose `authors` is its title). The raw value stays in the
+  claim's evidence; `authors_split` counts the splits kept.
+- An accepted note whose pdf a withdrawn note of the crawl in the same track shares is `unknown` with an
+  `unresolved:openreview_v1` row naming every twin (decision-020; ICLR 2018 `S1p31z-Ab` and `SJTCsqMUf`); the
+  twins keep their status. Desk-rejected twins and twins in another track don't count.
+- ICLR 2023 BlogPosts uses the verified
   `ICLR.cc/2023/BlogPosts/-/Blind_Submission` listing. NeurIPS 2021–2022 main-track withdrawn and
   desk-rejected invitations are crawled even though their verified listings are empty.
 
@@ -215,8 +223,11 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
 Blogposts, workshop and city-workshop forms, a group's venueid block, the `count`/`offset` shape, the
 `limit` error, the cross-host 404, the anonymous challenge page and a public v1 note with `nonreaders: null`
 (`v1/iclr-2017/note-workshop-null-nonreaders-live.json`, TASK-119); and each v1 year's status carrier
-above, including one invitation listing per v1 venue-year with a group. `backend/tests/fixtures/http/scrub.py` turns a raw capture into a fixture (titles, abstracts,
-authors, ids of people and free text become synthetic; decision-004). Recording is a manual run, never a
+above, including one invitation listing per v1 venue-year with a group; and (TASK-113, trimmed from the
+2026-09-29 crawl cache) ELMo's accepted blind note, withdrawn twin and forum (`v1/iclr-2018/*withdrawn-twin*`)
+and the v1 author shapes (`v1/iclr-20{17,18,20,21}/notes-*-authors-*.json`). `backend/tests/fixtures/http/scrub.py` turns a raw capture into a fixture (titles, abstracts,
+authors, ids of people and free text become synthetic, keeping an authors value's separators and an email
+string's count; a capture's `keep_ids` trims a listing page to those notes; decision-004). Recording is a manual run, never a
 test: add a capture for every new shape, scrub it, and read the diff before committing. A transport wrapper
 sees a raw response before `OpenReviewClient` applies its public projection; if the client raises
 `OpenReviewPublicDataError`, delete that raw capture immediately. Scrubbing text does not make a

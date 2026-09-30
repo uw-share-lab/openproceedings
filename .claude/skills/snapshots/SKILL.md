@@ -44,8 +44,9 @@ track, 0 included), `sources_by_track` (venue → year → track → the claim s
 `statuses_indexed` (venue → year → the statuses its sources can contain, from `ingest/statuses.py`, plus any
 its records hold) and `crawl_windows` (per claim source, its first and last `fetched_at`: the window
 `crawl_dates` uses, and narrower than the source's own `crawl_window`, which spans every response fetched,
-records or not; TASK-122); `merges` and `conflicts` (a `total` plus a count per rule /
-resolution kind); `files` (the sha256 of `merges.csv` and `conflicts.csv`, which `snapshot_hash` doesn't
+records or not; TASK-122); `merges` (a `total` plus a count per rule) and `conflicts` (a `total` plus one count
+per resolution kind present, the part before any `:`: `precedence`, `newest`, `tie`, `ambiguous_not_merged`,
+`track_not_merged`, `venue_year_not_merged`, `unresolved`; an absent kind means 0; spec 01 §Pipeline 5); `files` (the sha256 of `merges.csv` and `conflicts.csv`, which `snapshot_hash` doesn't
 cover); and `sources` — for RIS, one `ImportReport.to_manifest()` per cached file (both inputs' sha256,
 the installed scholarmend `parser_version`, read / imported / skipped by reason, abstract_missing,
 unknown_track, status_overrides, track × status) under `ris` (present whenever no other source is); once
@@ -55,7 +56,7 @@ with the reason, each group's `public_*` flags, notes per venueid, read / import
 unknown_track, abstract_missing, track × status, page size); likewise `openreview_v1` for API v1 years
 (TASK-051: its `crawl_window`, absent when its crawls fetched nothing such as ICLR 2015 alone, and one v1
 `CrawlReport.to_manifest()` per venue-year: notes per invitation, forums read, read / imported / skipped by
-reason, `unmapped` status strings by evidence kind, unknown_track, unknown_status, `authors_unsplit`, the
+reason, `unmapped` status strings by evidence kind, unknown_track, unknown_status, `authors_split` and `authors_unsplit` (decision-019; `authors_unsplit_ids` when any were refused), the
 number of conflicts, track × status and the year's `coverage_gaps`); and the proceedings crawlers
 (task-052/053) add `neurips_proceedings` and `pmlr`: each `{crawl_window, listings}`, one report per listing
 (venue, year, volume, listing URL, role, `stated` vs `listed` and `count_ok`, records, skipped by reason,
