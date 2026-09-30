@@ -269,6 +269,23 @@ def test_script_join_is_linear() -> None:
     assert large < small * 8  # 4× the input: linear is ~4×, quadratic ~16×
 
 
+@pytest.mark.parametrize("text", ["\u0301", "a\u0301", "a\u0338\u0301"])
+def test_a_run_of_marks_is_linear(text: str) -> None:
+    # TASK-067: each mark rescanned the rest of its run, so a query or abstract of a few thousand marks cost
+    # seconds; a mark-heavy `q` is anyone's to send
+    import time
+
+    def secs(n: int) -> float:
+        body = text + "\u0301" * n
+        t = time.thread_time()
+        tokenize(body)
+        return time.thread_time() - t
+
+    secs(1000)
+    small, large = min(secs(5_000) for _ in range(9)), min(secs(20_000) for _ in range(9))
+    assert large < small * 8
+
+
 @pytest.mark.parametrize(
     ("text", "spans"),
     [

@@ -508,6 +508,10 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
             buf = []
 
     n = len(text)
+    # The run of combining marks last found (TASK-067): it ends at `run_end` and its last slash is before
+    # `run_slash`. A mark inside a run reuses them, so a run is scanned once, not once per mark (quadratic: a
+    # `q` or an abstract of a few thousand marks cost seconds).
+    run_end = run_slash = 0
     i = 0
     while i < n:
         c, stop = text[i], i + 1
@@ -562,10 +566,14 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
                 rest.append(c)
             i = stop
             continue
-        j = i + 1
-        while j < n and latex[j] == KEEP and unicodedata.combining(text[j]):
-            j += 1
-        cluster = "\u0338" in text[i + 1 : j]
+        if i + 1 > run_end:  # past the last run found: find where the marks after i end, and the last slash
+            run_end = run_slash = i + 1
+            while run_end < n and latex[run_end] == KEEP and unicodedata.combining(text[run_end]):
+                if text[run_end] == "\u0338":
+                    run_slash = run_end + 1
+                run_end += 1
+        j = run_end  # whether a position continues a run doesn't depend on where the run began
+        cluster = run_slash > i + 1  # a slash among text[i + 1 : j]
         if cluster:
             # a slash among the marks after a character: NFKC the whole cluster, as the whole-string rule
             # would (`∈` + slash is `∉`, full-width `＝` + slash is `≠`, whatever the marks' order)

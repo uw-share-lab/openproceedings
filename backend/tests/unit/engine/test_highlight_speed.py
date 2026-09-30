@@ -56,15 +56,20 @@ LATEXISH = st.lists(
     st.sampled_from([*TRICKY_ALPHABET, *"\\$^_{}()[]xX", "alpha", "le", "not", "in", "\u0338", "×", "½"]),
     max_size=30,
 ).map("".join)
+# runs of combining marks, with slashes among them (TASK-067: a run is scanned once)
+MARKS = st.lists(
+    st.sampled_from(["a", "=", "∈", " ", "\\\"", "\u0301", "\u0301", "\u0338", "\u0345", "\u20d7"]), max_size=40
+).map("".join)
 ASCII = st.text(alphabet=st.characters(max_codepoint=0x7F), max_size=80)
 
 
-@given(st.one_of(st.text(max_size=80), ASCII, LATEXISH))
+@given(st.one_of(st.text(max_size=80), ASCII, LATEXISH, MARKS))
 @example("Trust in AI: GPT-4o, 5 models.")  # the whole-text ASCII path
 @example("na\u00efve e\u0301 5\u00d73")  # non-ASCII: the loop, its ASCII branch around the rest
 @example("a\u0301b")  # an ASCII letter with a mark after it leaves the branch
 @example('$x^2$ G\\"odel \\alpha \\emph{x} \\-')  # ASCII, but LaTeX: never the whole-text path
 @example("x\u00bd\u0338y =\u0345\u0338")  # combining-slash clusters (task-075)
+@example("\u0301\u0301\u0338\u0301 a\u0301\u0301=\u0301\u0338")  # marks before a slash in one run (TASK-067)
 @example("\\\"{O}del \\'etude \\-x $^2x$")  # markup that opens a word: its span starts there (task-074)
 def test_tokenize_gives_exactly_the_old_tokens(text: str) -> None:
     assert full(tokenize(text)) == full(tokenize_before(text))
