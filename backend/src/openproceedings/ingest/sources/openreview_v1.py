@@ -45,8 +45,8 @@ The authority rules (never broken):
    (`collapse_duplicate_submissions`). A record with a crawl conflict, or one the twin rule (rule 4) made
    `withdrawn`, is never collapsed, by this collapse or the silent-twin one.
    **A silent twin** (TASK-132) is a note that says nothing about its status: in a year whose one status carrier
-   is `content.venue`, a submission-listing note with neither `venue` nor `venueid` (NeurIPS 2021 `W6e384Lkjbw`
-   #5999, whose accepted twin `rDdb26AQ0SO` #11021 has the same pdf, supplementary material, title, authors,
+   is `content.venue`, a submission-listing note with neither a non-null `venue` nor `venueid` (NeurIPS 2021
+   `W6e384Lkjbw` #5999, whose accepted twin `rDdb26AQ0SO` #11021 has the same pdf, supplementary material, title, authors,
    abstract and keywords). Such a note is dropped when exactly one other record is identical to it in everything
    but status, presentation and venueid, and that record is accepted with no crawl conflict
    (`collapse_silent_twins`, after rule 5; counted the same way). Its absence of evidence can't contradict an
@@ -915,9 +915,9 @@ def collapse_duplicate_submissions(
 def _says_nothing_of_status(ad: Adapter, note: Mapping[str, Any], record: PaperRecord) -> bool:
     """Whether a note carries no status evidence at all (rule 5's silent twin): its year reads status from
     `content.venue` alone, its status is `unknown` (a withdrawn or desk-rejected listing gives its own, and a note
-    with a crawl conflict is exempt from rule 5), and it has neither a `venue` nor a `venueid` key. A venue string
-    the table doesn't know is evidence nobody could read, not silence, and other years' carriers (a decision field
-    or note) can't be judged absent from the note alone."""
+    with a crawl conflict is exempt from rule 5), and it has neither a non-null `venue` nor a non-null `venueid`.
+    A venue string the table doesn't know is evidence nobody could read, not silence, and other years' carriers (a
+    decision field or note) can't be judged absent from the note alone."""
     content: Mapping[str, Any] = note["content"] if isinstance(note.get("content"), Mapping) else {}
     return (
         ad.status_from == "venue"
