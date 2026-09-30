@@ -357,6 +357,11 @@
             "title": "Abstract Missing",
             "type": "integer"
           },
+          "abstract_withheld": {
+            "description": "Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.",
+            "title": "Abstract Withheld",
+            "type": "integer"
+          },
           "records": {
             "title": "Records",
             "type": "integer"
@@ -373,6 +378,7 @@
         "required": [
           "records",
           "abstract_missing",
+          "abstract_withheld",
           "unknown_track",
           "unknown_status"
         ],
@@ -874,6 +880,11 @@
             ],
             "description": "Where the hit's `abstract` came from, for attribution (decision-018). `source`: the provenance claim precedence took it from (decision-005), as `GET /papers/{id}` lists it; `ris` means it came through an imported RIS file. `origin`: the site that published it, for a `ris` claim read from the claim's evidence (`scholarmend:openreview_api` → `openreview`, `scholarmend:proceedings_page` → the proceedings its `urls.proceedings` names), null when that names no known site. `url`: the paper's page at `origin` (the OpenReview forum, or the proceedings page; PMLR's CC BY 4.0 terms ask for this link), null when there is none. The whole object is null when `abstract` is null or no claim holds its text."
           },
+          "abstract_withheld": {
+            "description": "True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.",
+            "title": "Abstract Withheld",
+            "type": "boolean"
+          },
           "authors": {
             "items": {
               "type": "string"
@@ -973,7 +984,8 @@
           "score",
           "highlights",
           "urls",
-          "abstract_source"
+          "abstract_source",
+          "abstract_withheld"
         ],
         "title": "Hit",
         "type": "object"
@@ -1450,6 +1462,11 @@
       },
       "PaperResponse": {
         "properties": {
+          "abstract_withheld": {
+            "description": "True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.",
+            "title": "Abstract Withheld",
+            "type": "boolean"
+          },
           "highlights": {
             "anyOf": [
               {
@@ -1495,7 +1512,8 @@
           "query_version",
           "paper",
           "matched",
-          "highlights"
+          "highlights",
+          "abstract_withheld"
         ],
         "title": "PaperResponse",
         "type": "object"
@@ -3015,8 +3033,13 @@
         "description": "One spec 07 §C cell, venue × year × track (TASK-082): what the snapshot indexed for the track, beside\nthe official accepted count where one is sourced (`official_counts.py`, each with its citation).",
         "properties": {
           "abstract_missing": {
-            "description": "Of `records`, those without an abstract (title-only).",
+            "description": "Of `records`, those without an abstract (title-only), withheld ones apart.",
             "title": "Abstract Missing",
+            "type": "integer"
+          },
+          "abstract_withheld": {
+            "description": "Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.",
+            "title": "Abstract Withheld",
             "type": "integer"
           },
           "delta": {
@@ -3158,6 +3181,7 @@
           "records",
           "indexed_accepted",
           "abstract_missing",
+          "abstract_withheld",
           "sources",
           "official_accepted",
           "official_counts",
@@ -3234,6 +3258,11 @@
             "title": "Abstract Missing",
             "type": "integer"
           },
+          "abstract_withheld": {
+            "description": "Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.",
+            "title": "Abstract Withheld",
+            "type": "integer"
+          },
           "cells": {
             "items": {
               "$ref": "#/components/schemas/CoverageCell"
@@ -3297,6 +3326,7 @@
           "year",
           "records",
           "abstract_missing",
+          "abstract_withheld",
           "unknown_track",
           "unknown_status",
           "cells",

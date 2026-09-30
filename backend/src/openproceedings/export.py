@@ -13,15 +13,16 @@ openproceedings id, so an export round-trips to the ids it came from.
   so line breaks inside a value become single spaces.
 - CSV: the record fields of spec 01 plus `index_version`, `canonical_hash`, `exported_at`, `record_id` and
   `searched_at` (the last two empty unless pinned by a record), then `abstract_source`, `abstract_origin` and
-  `abstract_url`, then `abstract_withheld` (`true`/`false`), UTF-8 with a BOM (Excel). Lists (authors, keywords) are joined with "; ".
+  `abstract_url`, then `abstract_withheld` (`true`/`false`), then `abstract_withheld_reason` (`takedown`,
+  `source_unavailable` or empty), UTF-8 with a BOM (Excel). Lists (authors, keywords) are joined with "; ".
 - BibTeX: `@inproceedings` for an accepted paper, `@unpublished` (no `booktitle`; `note` starts "Submitted to
   <venue>, status: <status in words>.") for any other; keyed `<first author's last name><year><first title
   word>` (ASCII, lower-case), a repeat key suffixed a, b, … (decision-007); `keywords` holds the track and
   `status:<status>`, `abstract_source` the abstract's source (`<site> <url>`), `abstract_withheld` the withheld
   sentence (only when withheld), `note` the provenance and `openproceedings_id` the id. Every `@` is written `{@}`.
 - JSONL: one JSON object per record, with `index_version`, `canonical_hash`, `exported_at`, `record_id` and
-  `searched_at` (null unless pinned by a record), `abstract_source` (`{source, origin, url}` or null) and
-  `abstract_withheld` (a boolean).
+  `searched_at` (null unless pinned by a record), `abstract_source` (`{source, origin, url}` or null),
+  `abstract_withheld` (a boolean) and `abstract_withheld_reason` (`takedown`, `source_unavailable` or null).
 
 The abstract's source (decision-018, TASK-138) is each record's `Attribution`, computed once per record when
 the snapshot is loaded (`RecordFile.attributions`, the same one `GET /search` sends as `abstract_source`):
@@ -32,6 +33,11 @@ index whose snapshot can't be verified, decision-021): every abstract is withhel
 BibTeX `abstract_withheld` field, CSV/JSONL `abstract_withheld` true). Only additions: no field, line or
 column that existed before changed (decision-021; spec 04 §Exports). A record with no abstract, or none a
 claim holds, names no source.
+
+A takedown (TASK-136, decision-022): each record whose id is in `withheld` (the deployment's takedown list,
+plus the ids the exported index's snapshot withheld) goes out the same way, marked withheld, its reason
+`takedown` and its sentence `TAKEDOWN` (RIS `N1`, BibTeX `abstract_withheld`). A record both listed and in an
+unattributable export says `takedown`.
 """
 
 from __future__ import annotations
@@ -48,10 +54,11 @@ from typing import Any, TextIO
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.protocol import EngineInternalError
 from openproceedings.ingest.dedup import Attribution
+from openproceedings.takedowns import NONE, Withheld
 from openproceedings.vocab import venue_name
 
 __all__ = [
-    "CSV_COLUMNS", "FORMATS", "ORIGIN_NAMES", "WITHHELD", "Provenance", "Sources", "bibtex_key", "check_count",
+    "CSV_COLUMNS", "FORMATS", "ORIGIN_NAMES", "TAKEDOWN", "WITHHELD", "WITHHELD_REASONS", "Provenance", "Sources", "bibtex_key", "check_count",
     "credit", "entries", "header", "utc_date", "write",
 ]  # fmt: skip
 
@@ -60,9 +67,10 @@ CSV_COLUMNS = (
     "id", "title", "abstract", "authors", "venue", "year", "track", "status", "presentation",
     "venue_id_raw", "forum", "pdf", "proceedings", "doi", "keywords", "index_version", "canonical_hash",
     "exported_at", "record_id", "searched_at", "abstract_source", "abstract_origin", "abstract_url",
-    "abstract_withheld",
+    "abstract_withheld", "abstract_withheld_reason",
 )  # fmt: skip
-# (TASK-138's four abstract columns are appended last, so every earlier column keeps its position)
+# (TASK-138's four abstract columns, then TASK-136's reason, are appended last: every earlier column keeps its
+# position)
 # each record id → its abstract's attribution (`RecordFile.attributions`, computed at snapshot load)
 type Sources = Mapping[str, Attribution | None]
 # the site that published an abstract, in words: the results list's names (`hit-item.tsx`'s ORIGIN_NAMES)
@@ -74,12 +82,21 @@ ORIGIN_NAMES = {
     "iclr_archive": "ICLR archive",
 }
 _SOURCE = "abstract_source"  # the key `entries` adds to each record it hands a writer
-_WITHHELD = "abstract_withheld"  # likewise: True when the export withholds abstracts (sources unavailable)
+_WITHHELD = "abstract_withheld"  # likewise: True when the record's abstract is withheld
+_REASON = "abstract_withheld_reason"  # likewise: why (`WITHHELD_REASONS`), None when it isn't
+# why an abstract is withheld: a takedown (TASK-136), or an export whose snapshot can't attribute it (decision-021)
+WITHHELD_REASONS = ("takedown", "source_unavailable")
 # what a record says when its abstract is withheld (decision-021): RIS `N1`, BibTeX `abstract_withheld`
 WITHHELD = (
     "Abstract withheld: its source could not be attributed on this instance (the index's snapshot is "
     "unavailable), so no abstract is exported (decision-018)."
 )
+# what a record says when a takedown withholds its abstract (TASK-136, decision-022)
+TAKEDOWN = (
+    "Abstract withheld: this instance removed it at a rights holder's request (a takedown), so no abstract is "
+    "exported (decision-022)."
+)
+SENTENCES = {"takedown": TAKEDOWN, "source_unavailable": WITHHELD}
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,31 +143,41 @@ def header(fmt: str) -> str:
 
 
 def entries(
-    fmt: str, records: Iterable[dict[str, Any]], provenance: Provenance, *, sources: Sources | None
+    fmt: str,
+    records: Iterable[dict[str, Any]],
+    provenance: Provenance,
+    *,
+    sources: Sources | None,
+    withheld: Withheld = NONE,
 ) -> Iterator[str]:
     """One string per record of `records`, as `fmt` writes it (after `header(fmt)`), each naming its abstract's
     source from `sources` (the snapshot's `RecordFile.attributions`); `None` withholds every abstract, each
-    record saying so (the attribution is unavailable, decision-021)."""
+    record saying so (the attribution is unavailable, decision-021). Each record whose id is in `withheld` (a
+    takedown, TASK-136) goes out without its abstract, saying so."""
     if fmt not in FORMATS:
         raise ValueError(f"unknown export format {fmt!r}")
     writer = {"ris": _ris, "csv": _csv, "bibtex": _bibtex, "jsonl": _jsonl}[fmt]
-    return writer(_attributed(records, sources), provenance)
+    return writer(_attributed(records, sources, withheld), provenance)
 
 
-def _attributed(records: Iterable[dict[str, Any]], sources: Sources | None) -> Iterator[dict[str, Any]]:
+def _attributed(
+    records: Iterable[dict[str, Any]], sources: Sources | None, withheld: Withheld
+) -> Iterator[dict[str, Any]]:
     """Each record with its abstract's attribution under `abstract_source`. A record `sources` doesn't hold is
     an invariant broken (the index and its snapshot disagree): EngineInternalError, as on `GET /search`.
-    Without `sources`, each record's abstract is dropped and it is marked withheld."""
-    if sources is None:
-        for r in records:
-            yield {**r, "abstract": None, _SOURCE: None, _WITHHELD: True}
-        return
+    Without `sources`, each record's abstract is dropped and it is marked withheld; so is a record `withheld`
+    lists, whatever `sources` says (its reason `takedown`)."""
     for r in records:
-        if r["id"] not in sources:
+        if r["id"] in withheld:
+            yield {**r, "abstract": None, _SOURCE: None, _WITHHELD: True, _REASON: "takedown"}
+        elif sources is None:
+            yield {**r, "abstract": None, _SOURCE: None, _WITHHELD: True, _REASON: "source_unavailable"}
+        elif r["id"] not in sources:
             raise EngineInternalError(
                 DiagnosticCode.API_INTERNAL, "a paper the index holds is missing from its snapshot"
             )
-        yield {**r, _SOURCE: sources[r["id"]]}
+        else:
+            yield {**r, _SOURCE: sources[r["id"]], _WITHHELD: False, _REASON: None}
 
 
 def write(
@@ -160,12 +187,13 @@ def write(
     out: TextIO,
     *,
     sources: Sources | None,
+    withheld: Withheld = NONE,
 ) -> int:
     """Stream `records` to `out` as `fmt`; the number written. `op export` writes a file or stdout with
     it; `GET /api/v1/export` streams the same `header` and `entries`, so both give the same bytes."""
     out.write(header(fmt))
     n = 0
-    for chunk in entries(fmt, records, provenance, sources=sources):
+    for chunk in entries(fmt, records, provenance, sources=sources, withheld=withheld):
         out.write(chunk)
         n += 1
     return n
@@ -245,7 +273,7 @@ def _ris(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         if (source := _credit_of(r)) is not None:  # after the status sentence, before the provenance line
             lines.append(("N1", f"Abstract source: {credit(source)}"))
         elif r.get(_WITHHELD):
-            lines.append(("N1", WITHHELD))
+            lines.append(("N1", SENTENCES[r[_REASON]]))
         lines.append(("N1", p.line()))
         yield "".join(f"{tag}  - {value}\n" for tag, value in lines) + "ER  - \n\n"
 
@@ -275,6 +303,7 @@ def _csv(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             "abstract_origin": source.origin if source else None,
             "abstract_url": source.url if source else None,
             "abstract_withheld": "true" if r.get(_WITHHELD) else "false",
+            "abstract_withheld_reason": r.get(_REASON),
         }
         yield _csv_row(_cell(row[c]) for c in CSV_COLUMNS)
 
@@ -420,7 +449,7 @@ def _bibtex(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
         if (source := _credit_of(r)) is not None:
             fields.append(("abstract_source", _braced(credit(source))))
         elif r.get(_WITHHELD):
-            fields.append(("abstract_withheld", _braced(WITHHELD)))
+            fields.append(("abstract_withheld", _braced(SENTENCES[r[_REASON]])))
         urls = _urls(r)
         if urls:
             fields.append(("url", _braced(urls[0])))
@@ -464,6 +493,7 @@ def _jsonl(records: Iterable[dict[str, Any]], p: Provenance) -> Iterator[str]:
             if source is None
             else {"source": source.source, "origin": source.origin, "url": source.url},
             _WITHHELD: bool(r.get(_WITHHELD)),
+            _REASON: r.get(_REASON),
             "index_version": p.index_version,
             "canonical_hash": p.canonical_hash,
             "exported_at": p.date,

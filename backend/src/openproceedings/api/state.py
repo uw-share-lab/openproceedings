@@ -38,6 +38,13 @@ engine in an LRU of the same size. None when the snapshot can't be verified (one
 `pinned_snapshot_unavailable` with its reason, then remembered like a refused pin): the export then withholds
 every abstract (decision-021), never sending one without attribution.
 
+Takedowns (TASK-136, decision-022): every load, and every SIGHUP even when `current` still names the served
+index, re-reads the takedown list (`<data_dir>/takedowns/withheld.txt`, `openproceedings.takedowns`) into the
+bundle (`Served.listed`) and recomputes its coverage with it, so a listed abstract is withheld from every
+response of every index version this instance loads from the next reload on: the served one and each pinned one
+(`Served.withheld_in`). A list that can't be read or parsed fails the load as a bad index does (the old bundle,
+and its list, kept); a missing list withholds nothing.
+
 Every failure line carries a `reason` constant, never a message (messages name paths): an
 `IndexSelectionError`'s (`name_invalid`, `not_found`, `outside_indexes`), an `IndexBuildError`'s
 (`unreadable`, `manifest_changed`, `files_mismatch`, `doc_count_mismatch`), an `IndexUnservable`'s
@@ -65,6 +72,8 @@ from openproceedings.diagnostics import DiagnosticCode, OpenProceedingsError
 from openproceedings.engine.index import VERSION_NAME, IndexBuildError
 from openproceedings.ingest.snapshot import RecordFile, SnapshotError, indexed_snapshot
 from openproceedings.logs import elapsed_ms
+from openproceedings.takedowns import NONE, TakedownError, Withheld, list_path
+from openproceedings.takedowns import load as load_takedowns
 
 if TYPE_CHECKING:
     from openproceedings.api.models import CoverageResponse
@@ -96,6 +105,13 @@ class Served:
     engine: TantivyEngine
     records: RecordFile
     coverage: CoverageResponse
+    listed: Withheld = NONE  # the takedown list as this bundle's load read it (TASK-136)
+
+    def withheld_in(self, records: RecordFile | None) -> Withheld:
+        """The ids whose abstracts a response from the index whose snapshot records are `records` withholds:
+        the takedown list, plus the ids that snapshot itself withheld (so they are marked withheld, not
+        missing). `records` None (a pinned snapshot that can't be verified): the list alone."""
+        return self.listed if records is None else self.listed | records.withheld
 
 
 type Opener = Callable[[Path], TantivyEngine]  # TantivyEngine itself; tests wrap it to slow a load down
@@ -212,10 +228,10 @@ def snapshot_records(data_dir: Path, index: Path, index_version: str) -> RecordF
     return records
 
 
-def coverage_of(engine: TantivyEngine, records: RecordFile) -> CoverageResponse:
+def coverage_of(engine: TantivyEngine, records: RecordFile, listed: Withheld = NONE) -> CoverageResponse:
     from openproceedings.api.coverage import compute  # the router module; imported here, not at the top
 
-    return compute(engine, records)
+    return compute(engine, records, listed)
 
 
 class IndexState:
@@ -357,18 +373,34 @@ class IndexState:
 
     def _load(self) -> bool:
         started = time.perf_counter()
+        served = self._served
         previous = self.engine
         kept = previous.index_version if previous is not None else None
         attempted: str | None = None
         try:
+            listed = load_takedowns(list_path(self._data_dir))  # first: a bad list changes nothing
             path = index_path(self._data_dir, self._name)
             attempted = path.name
-            if previous is not None and path.name == previous.index_version:
-                log.info("index_unchanged", extra={"index_version": kept})
+            if served is not None and path.name == served.engine.index_version:
+                if listed == served.listed:
+                    log.info("index_unchanged", extra={"index_version": kept})
+                    return True
+                # the same index, another list: the same engine and records, coverage counted again
+                coverage = coverage_of(served.engine, served.records, listed)
+                self._served = Served(served.engine, served.records, coverage, listed)
+                log.info(
+                    "takedowns_reloaded",
+                    extra={
+                        "index_version": kept,
+                        "abstracts_withheld": len(listed),
+                        "ms": elapsed_ms(started),
+                    },
+                )
                 return True
             engine = self._gated(self._opener(path))  # verifies every file; the live engine is untouched
             records = snapshot_records(self._data_dir, path, engine.index_version)
-            coverage = coverage_of(engine, records)  # the manifest checked against the records and the index
+            # the manifest checked against the records and the index
+            coverage = coverage_of(engine, records, listed)
         except Exception as e:  # the handling layer: logged once, and the service keeps what it has
             fields: dict[str, object] = {
                 "error": type(e).__name__,
@@ -381,16 +413,19 @@ class IndexState:
             reason = reason_of(e)  # a constant (not_found, files_mismatch, ENOENT, …), never a path
             if reason is not None:
                 fields["reason"] = reason
-            if not isinstance(e, IndexSelectionError | OSError | OpenProceedingsError | SnapshotError):
+            if not isinstance(
+                e, IndexSelectionError | OSError | OpenProceedingsError | SnapshotError | TakedownError
+            ):
                 fields["frames"] = frames(e)
             log.error("index_load_failed", extra=fields)  # the type, never the message (it names paths)
             return False
-        self._served = Served(engine, records, coverage)  # the atomic swap: one reference assignment
+        self._served = Served(engine, records, coverage, listed)  # the atomic swap: one reference assignment
         log.info(
             "index_loaded" if previous is None else "index_swapped",
             extra={
                 "index_version": engine.index_version,
                 "previous_index_version": kept,
+                "abstracts_withheld": len(listed),
                 "ms": elapsed_ms(started),
             },
         )

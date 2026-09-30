@@ -962,12 +962,13 @@ def test_each_format_names_a_pmlr_abstracts_source_byte_for_byte() -> None:
     assert attributed_export("csv", PMLR_RECORD, PMLR) == (
         "﻿" + ",".join(export.CSV_COLUMNS) + "\r\n"
         'op:icml:2023:pmlr-v202-okafor23a,Sample-Efficient Evaluation,We adapt.,"Okafor, Chidi",ICML,2023,'
-        f"main,accepted,,,,,{PMLR_PAGE},,,abcdef123456,{'0' * 64},2026-09-26,,,pmlr,pmlr,{PMLR_PAGE},false\r\n"
+        f"main,accepted,,,,,{PMLR_PAGE},,,abcdef123456,{'0' * 64},2026-09-26,,,pmlr,pmlr,{PMLR_PAGE},false,\r\n"
     )
     (obj,) = [json.loads(x) for x in attributed_export("jsonl", PMLR_RECORD, PMLR).splitlines()]
     assert obj["abstract_source"] == {"source": "pmlr", "origin": "pmlr", "url": PMLR_PAGE}
-    assert obj["abstract_withheld"] is False
-    assert {k: v for k, v in obj.items() if k not in ("abstract_source", "abstract_withheld")} == {
+    assert obj["abstract_withheld"] is False and obj["abstract_withheld_reason"] is None
+    withheld_keys = ("abstract_source", "abstract_withheld", "abstract_withheld_reason")
+    assert {k: v for k, v in obj.items() if k not in withheld_keys} == {
         **PMLR_RECORD, "index_version": "abcdef123456", "canonical_hash": "0" * 64, "exported_at": "2026-09-26",
         "record_id": None, "searched_at": None,
     }  # fmt: skip
@@ -981,7 +982,7 @@ def test_without_a_source_every_format_is_byte_for_byte_what_it_was() -> None:
         ris = attributed_export("ris", record, source)
         assert "Abstract source" not in ris and ris.count("N1  - ") == 1
         assert "abstract_source" not in attributed_export("bibtex", record, source)
-        assert attributed_export("csv", record, source).endswith(",2026-09-26,,,,,,false\r\n")
+        assert attributed_export("csv", record, source).endswith(",2026-09-26,,,,,,false,\r\n")
         (obj,) = [json.loads(x) for x in attributed_export("jsonl", record, source).splitlines()]
         assert obj["abstract_source"] is None
 
@@ -989,6 +990,7 @@ def test_without_a_source_every_format_is_byte_for_byte_what_it_was() -> None:
 def test_the_csv_columns_before_task_138_keep_their_positions() -> None:
     assert (
         *CSV_COLUMNS_BEFORE, "abstract_source", "abstract_origin", "abstract_url", "abstract_withheld",
+        "abstract_withheld_reason",  # TASK-136, appended last (decision-021 rule 1)
     ) == export.CSV_COLUMNS  # fmt: skip
 
 
@@ -1127,10 +1129,11 @@ def test_without_sources_every_abstract_is_withheld_and_each_record_says_so() ->
     (entry,) = parse_string(withheld("bibtex", PMLR_RECORD))
     assert "abstract" not in entry.fields and "abstract_source" not in entry.fields
     assert entry.fields["abstract_withheld"] == export.WITHHELD and entry.fields["note"] == PROVENANCE.line()
-    assert withheld("csv", PMLR_RECORD).endswith(",2026-09-26,,,,,,true\r\n")
+    assert withheld("csv", PMLR_RECORD).endswith(",2026-09-26,,,,,,true,source_unavailable\r\n")
     assert ",We adapt.," not in withheld("csv", PMLR_RECORD)
     (obj,) = [json.loads(x) for x in withheld("jsonl", PMLR_RECORD).splitlines()]
     assert obj["abstract"] is None and obj["abstract_source"] is None and obj["abstract_withheld"] is True
+    assert obj["abstract_withheld_reason"] == "source_unavailable"
 
 
 def test_the_abstract_source_header_states_are_a_closed_enum() -> None:

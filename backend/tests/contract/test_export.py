@@ -555,7 +555,7 @@ def pinned(fmt: str, body: bytes, record_id: str, searched_at: str) -> bytes:
         # this store's abstracts have no claims: the three abstract-source columns after them are empty, and
         # nothing is withheld
         text = text.replace(
-            f",{DATE},,,,,,false\r\n", f",{DATE},{exporter._cell(record_id)},{searched_at},,,,false\r\n"
+            f",{DATE},,,,,,false,\r\n", f",{DATE},{exporter._cell(record_id)},{searched_at},,,,false,\r\n"
         )
     else:
         text = text.replace('"record_id": null', f'"record_id": "{record_id}"')
