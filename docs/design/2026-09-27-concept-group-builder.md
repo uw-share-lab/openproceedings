@@ -208,17 +208,22 @@ differs from or adds to the design above:
 - **The parts that fit, under the B2 notice** (copy BD-11). `read.ts` `readFitting` reads each top-level
   part on its own (`readAst` is the same walk, reporting the first part that doesn't fit). The groups,
   the first fitting `NOT` as the Exclude row, and the limits are shown under the notice in a region
-  "Parts that fit the builder", dimmed (`text-muted-foreground`, dashed borders) and with no controls:
-  terms are `<code>`, not buttons, so Tab goes from the notice's two buttons straight out of the panel.
+  "Parts that fit the builder", dimmed (`text-muted-foreground`, dashed borders) and with no editing
+  controls: terms are `<code>`, not buttons, so Tab goes from the notice's two buttons out of the panel,
+  stopping only at a long expansion's `+N more` (EX-2; it shows more words, it edits nothing, and it keeps
+  the foreground colour so it doesn't look disabled).
   Groups are "Group `<n>`" with no "of `<m>`", since the parts that don't fit aren't counted. "AND NOT"
   appears only after a group. Nothing is shown when no part fits (a top-level `NEAR` or `OR` that doesn't
   fit).
 - **Tests:** `read.test.ts` (`readFitting` equals `readAst`'s shape on every golden query that fits, and
-  keeps the fitting parts of blocked ones), `expansions.test.ts`, `concept-builder.test.tsx` (per-group
-  lines and their screen-reader text, none before a search, kept through an edit while `/parse` is held,
-  `+N more` reachable by Tab; the read-only parts, their names, the panel's Tab order, the Exclude row
-  with and without a group above it), and `search-view.test.tsx` (the `/search` answer reaches the
-  builder).
+  keeps the fitting parts of blocked ones; with two blockers `readAst` names the first),
+  `expansions.test.ts`, `concept-builder.test.tsx` (per-group lines and their screen-reader text, none
+  before a search, kept through an edit while `/parse` is held and dropped at once for the edited wildcard,
+  a wildcard added in the builder shown once `/parse` answers, the Exclude row's lines, a repeated
+  wildcard shown once, `+N more` reachable by Tab; the read-only parts, their names, the panel's Tab order
+  with and without a long expansion, the Exclude row with and without a group above it),
+  `search-view.test.tsx` (the `/search` answer reaches the builder), and `e2e/accessibility.spec.ts` (axe
+  over the editable builder with a group's expansions and the read-only builder with its parts that fit).
 
 ## Open questions
 1. Should the builder offer NEAR between two groups? Not in M3b (spec 05 defines rows as OR lists); revisit

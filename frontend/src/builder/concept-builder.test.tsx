@@ -495,6 +495,63 @@ describe("wildcard expansions under each group (TASK-111)", () => {
     expect(within(g2).getByRole("list", { name: "Expansions" }).textContent).toContain("trustworthiness");
   });
 
+  it("drops an edited wildcard's expansions at once, while the server reads the edit", async () => {
+    const held = api((q) =>
+      q.includes("trustee") ? (new Promise<Response>(() => {}) as unknown as Response) : null,
+    );
+    const { toBuilder } = setup({ q: EXAMPLE }, held, TRUSTWORTH);
+    await toBuilder();
+    const g2 = () => groups()[1] as HTMLElement;
+    expect(within(g2()).getByRole("list", { name: "Expansions" })).toBeTruthy();
+    fireEvent.click(within(g2()).getByRole("button", { name: "trustworth*" }));
+    await pass(10);
+    await typeTerm("trustee", "Tab");
+    fireEvent.blur(document.activeElement as HTMLElement);
+    await pass(10);
+    expect(queryText()).toContain("(trustee OR trust)");
+    expect(within(g2()).queryByRole("list", { name: "Expansions" })).toBeNull();
+  });
+
+  it("shows a wildcard added in the builder once the server has read it", async () => {
+    // the builder's query with leaderboar* in group 3: the golden leaderboard query's ast, that term a wildcard
+    const golden = GOLDEN.find((c) => c.q.includes("(benchmark OR leaderboard)") && c.mode === "native");
+    if (golden?.ast == null) throw new Error("no golden leaderboard query");
+    const ast = JSON.parse(
+      JSON.stringify(golden.ast).replace(
+        /"kind":"term","token":"leaderboard","field":null/u,
+        '"kind":"wildcard","stem":"leaderboar","op":"*","field":null',
+      ),
+    ) as Schemas["ParseResponse"]["ast"];
+    const written = golden.q.replace("leaderboard", "leaderboar*");
+    const handler = api((q) => (q === written ? json(parsed(q, { ast })) : null));
+    const { toBuilder } = setup({ q: EXAMPLE }, handler, { "leaderboar*": ["leaderboard", "leaderboards"] });
+    await toBuilder();
+    const g3 = () => groups()[2] as HTMLElement;
+    fireEvent.click(within(g3()).getByRole("button", { name: "+ term" }));
+    await pass(10);
+    await typeTerm("leaderboar*", "Tab");
+    fireEvent.blur(document.activeElement as HTMLElement);
+    await pass(10);
+    expect(queryText()).toBe(written);
+    expect(within(g3()).getByRole("list", { name: "Expansions" }).textContent).toBe(
+      "leaderboar* → expands to 2 words: leaderboard, leaderboards",
+    );
+  });
+
+  it("shows the Exclude row's expansions too, and a wildcard written twice once", async () => {
+    const q = '("x" OR model$ OR model$) -title:(“vision language” | “vision language” | gpt-4*)';
+    const { toBuilder } = setup({ q }, api(), { "4*": ["4", "4o"], model$: ["model", "models"] });
+    await toBuilder();
+    const g1 = groups()[0] as HTMLElement;
+    expect(
+      within(within(g1).getByRole("list", { name: "Expansions" })).getAllByRole("listitem"),
+    ).toHaveLength(1);
+    const exclude = screen.getByRole("group", { name: /^Leave out papers with any of:/u });
+    expect(within(exclude).getByRole("list", { name: "Expansions" }).textContent).toBe(
+      "4* → expands to 2 words: 4, 4o",
+    );
+  });
+
   it("puts a long list's rest behind a +N more button the keyboard reaches", async () => {
     const many = Array.from({ length: 11 }, (_, i) => `trustworth${String.fromCharCode(97 + i)}`);
     const { toBuilder } = setup({ q: EXAMPLE }, api(), { "trustworth*": many });
@@ -538,6 +595,22 @@ describe("the parts that fit, under the read-only notice (design B2, TASK-111)",
     const panel = screen.getByRole("tabpanel", { name: "Builder" });
     expect(tabbable(panel).map((b) => b.textContent)).toEqual(["Edit in Text", "Show it in the text"]);
     expect(doc()).toBe(PARTLY);
+  });
+
+  it("keeps a long expansion's +N more, the only button among the parts that fit", async () => {
+    const many = Array.from({ length: 10 }, (_, i) => `calibrat${String.fromCharCode(97 + i)}`);
+    const { toBuilder } = setup({ q: PARTLY }, api(), { "calibrat*": many });
+    await toBuilder();
+    const parts = screen.getByRole("region", { name: "Parts that fit the builder" });
+    const more = within(parts).getByRole("button", { name: "+2 more" });
+    expect(tabbable(parts)).toEqual([more]);
+    expect(more.className).toContain("text-foreground");
+    const panel = screen.getByRole("tabpanel", { name: "Builder" });
+    expect(tabbable(panel).map((b) => b.textContent)).toEqual([
+      "Edit in Text",
+      "Show it in the text",
+      "+2 more",
+    ]);
   });
 
   it("keeps the first NOT as the Exclude row and names the second one", async () => {

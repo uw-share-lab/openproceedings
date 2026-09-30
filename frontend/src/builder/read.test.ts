@@ -172,3 +172,27 @@ describe("readFitting: the parts of a query that fit (design B2, TASK-111)", () 
     }
   });
 });
+
+describe("readAst names the first of several constructs that don't fit", () => {
+  it("reports the NEAR, not the second NOT after it, and readFitting keeps the first NOT", () => {
+    // trust NEAR/3 bias NOT a NOT b
+    const leaf = (token: string, at: number) =>
+      ({ kind: "term", token, field: null, span: [at, at + token.length] }) as const;
+    const ast = {
+      kind: "and",
+      span: [0, 29],
+      children: [
+        { kind: "near", distance: 3, span: [0, 17], left: leaf("trust", 0), right: leaf("bias", 13) },
+        { kind: "not", span: [18, 23], child: leaf("a", 22) },
+        { kind: "not", span: [24, 29], child: leaf("b", 28) },
+      ],
+    } as unknown as Parameters<typeof readAst>[0];
+    expect(readAst(ast)).toEqual({ kind: "blocked", blocker: { kind: "proximity", span: [0, 17] } });
+    expect(asGolden(readFitting(ast))).toEqual({
+      groups: [],
+      exclude: [[22, 23]],
+      exclude_at: 0,
+      limits: [],
+    });
+  });
+});

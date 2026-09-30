@@ -46,7 +46,8 @@ function onlyFilters(n: AstNode): boolean {
   return n.kind === "filter" || (n.kind === "or" && n.children.every(onlyFilters));
 }
 
-const spanOf = (n: AstNode): CodePoints => [n.span[0] ?? 0, n.span[1] ?? 0];
+/** A node's span; the generated type allows a short tuple, which the server never sends. */
+export const spanOf = (n: AstNode): CodePoints => [n.span[0] ?? 0, n.span[1] ?? 0];
 
 /** A group's leaves, or the construct that blocks it (for AND, a limit or NOT inside it: the group itself). */
 function group(n: AstNode): Leaf[] {

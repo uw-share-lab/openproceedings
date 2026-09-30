@@ -37,7 +37,7 @@ export function ExpansionLine({ stem, terms }: { stem: string; terms: readonly s
                 type="button"
                 aria-expanded={all}
                 onClick={() => setAll(!all)}
-                className="min-h-6 min-w-6 rounded-sm border px-1.5 text-xs hover:bg-muted"
+                className="min-h-6 min-w-6 rounded-sm border px-1.5 text-xs text-foreground hover:bg-muted"
               >
                 {all ? "Show fewer" : `+${hidden.toLocaleString("en-US")} more`}
               </button>

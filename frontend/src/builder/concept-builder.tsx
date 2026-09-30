@@ -839,7 +839,8 @@ function GroupExpansions({
 
 /**
  * The parts of a read-only query that fit (design B2; copy BD-11): its groups, Exclude row and limits, dimmed
- * and with no controls, so the reader sees what the builder understood. Groups are numbered without "of m":
+ * and with no editing controls (a long expansion's `+N more` is the only button), so the reader sees what the
+ * builder understood. Groups are numbered without "of m":
  * the parts that don't fit aren't counted. No BD-4 tail on the limits, since nothing here is editable.
  */
 function FittingParts({
