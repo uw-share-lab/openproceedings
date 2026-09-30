@@ -39,12 +39,18 @@ each tree strategy takes a `Vocab`, default the 200-record fixture's, `synthetic
 200-record fixture's real term dictionary plus awkward extras (operator words, filter values as text,
 digits, Thai, kana, CJK). Import it as `from tests.strategies import …`. Properties over them live in
 `tests/unit/test_properties.py` (round-trip without printing-caused warnings, match-set preservation by
-the oracle, all-negative rejection, Scholar mode reads canonical strings identically). PR CI runs the `dev`
+the oracle, all-negative rejection, Scholar mode reads canonical strings identically). PR CI runs the `pr`
 profile (200) in parallel; the nightly workflow runs the whole suite at `ci` (2,000) and every property at
 `nightly` (50,000), the latter split into an
 oracle-backed job and the rest (about 35 and 20 minutes locally). Counterexamples found so
 far are golden rows (`("0", "0")` in test_canonical.py; `trust (trust OR track:main)` in test_defaults.py).
 Not yet: stems near the 200-expansion cap (needs the 5k fixture, task-057).
+`year_edit_cases()` (TASK-145) builds queries whose year clause is toggleable, in either mode, instead of
+drawing `clause_queries()`/`near_cap_queries()` and `assume()`ing it: the toggleability rules are in its grammar,
+including year filters nested beside the clause and an OR of year filters as the clause (spec 02: neither blocks
+the edit), and only the padding toward the length and depth caps is cut back, by parsing the query and its widest
+year edit. Some cases are near misses (one step past a rule; a few percent to a quarter, varying by run) that
+`filter_clauses` must refuse with that reason, so the property still sees a clause wrongly reported toggleable.
 
 ## Properties that must hold
 1. **Parser totality:** `parse(s)` never raises for any `str`; bad input yields `errors`.
@@ -71,4 +77,9 @@ Not yet: stems near the 200-expansion cap (needs the 5k fixture, task-057).
   than disabling it in `ci`.
 - Don't `assume()` away large parts of the space (e.g. `assume(no wildcards)`); Hypothesis will report
   `FailedHealthCheck` or silently test less. Constrain the strategy instead.
+- `--hypothesis-show-statistics` counts as invalid both rejections (`assume()`, `.filter()`; listed as "gave up
+  because") and Hypothesis's own overruns ("exceeded maximum test case size" in `HYPOTHESIS_EXPERIMENTAL_OBSERVABILITY`
+  output, no "gave up" line). Recursive strategies overrun all through a run (`clause_queries()` alone: about a
+  third of cases; `year_edit_cases()`: 10 to 20%, none rejected), so read the "gave up" lines for filtering, not
+  the invalid count (TASK-145).
 - A property that can't fail is not a test: mutation-check it once by breaking the code it covers.
