@@ -15,8 +15,8 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 
 ## Layout (monorepo)
 - Root: `pyproject.toml` is the **uv workspace** root, with repo-wide ruff config and one `uv.lock`.
-  `Makefile` has `sync`, `fmt`, `lint`, `tooling`, `test`, `e2e`, `openapi`, `hooks`, `mutate` and
-  `mutate-changed` (`make help`).
+  `Makefile` has `sync`, `fmt`, `lint`, `tooling`, `test`, `e2e`, `openapi`, `changelog`, `hooks`, `mutate` and
+  `mutate-changed` (`make help`). `CHANGELOG.md` is generated (`make changelog`; spec 08 §Release, decision-023).
 - `backend/`: the uv workspace member, Python package `openproceedings` (`cli.py` → `op`, `search.py` (one
   ranked search, which `op search` and the API search route both run), `export.py`, `logs.py`,
   `diagnostics.py`, `vocab.py`, `storage.py`, `records.py` (search records: `ids_hash`, the append-only store, replay), `coverage.py` (the snapshot manifest's venue × year × track × status breakdown), `official_counts.py` (official accepted counts and the M4 gate), `timestamps.py` (the API's one UTC `Z` timestamp form), `query/` (`normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`,
@@ -106,7 +106,7 @@ fixtures under `backend/tests/fixtures/`; recording them is a separate, manual `
 |---|---|
 | `enforce-pr-workflow.sh` | `main` and `dev` take no direct commits, pushes or merges. Flow: `feature → PR → dev → PR → main`. |
 | `require-review.sh` | `git push` / `gh pr create` need an **APPROVE record for the exact HEAD sha**, written by `record-review.py` after `/review-gate`. `gh pr create` also needs an added or extended learnings entry. |
-| `block-ai-attribution.sh` | No `Co-Authored-By: Claude` or "Generated with Claude Code" in commits or PRs. `.claude/` is committed; authorship is not. |
+| `block-ai-attribution.sh` | No `Co-Authored-By: Claude` or "Generated with Claude Code" in commits, PRs or release notes. `.claude/` is committed; authorship is not. |
 | `enforce-backlog-cli.sh` | No hand edits under `backlog/`. Use the `backlog` CLI. (Decision *bodies* may be edited, since the CLI can't write them.) |
 | `protect-data-dir.sh` | `data/snapshots/` and `data/indexes/` are immutable. `data/` is never committed. |
 | `remind-token-contract.sh` | Reminds you to bump `TOKENIZER_VERSION` and run the parity and differential suites after a tokenizer edit. |

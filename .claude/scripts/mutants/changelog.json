@@ -1,0 +1,260 @@
+[
+ {
+  "label": "changelog: promotions not excluded",
+  "file": ".claude/scripts/changelog.py",
+  "old": "return pr.base == \"main\" and not (pr.head == \"dev\" and ours)",
+  "new": "return pr.base == \"main\""
+ },
+ {
+  "label": "changelog: fork dev PR treated as promotion",
+  "file": ".claude/scripts/changelog.py",
+  "old": "return pr.base == \"main\" and not (pr.head == \"dev\" and ours)",
+  "new": "return pr.base == \"main\" and not pr.head == \"dev\""
+ },
+ {
+  "label": "changelog: release branches counted",
+  "file": ".claude/scripts/changelog.py",
+  "old": "if pr.head.startswith(\"release/\") and ours:",
+  "new": "if pr.head.startswith(\"release/x/\") and ours:"
+ },
+ {
+  "label": "changelog: fork release/* branch dropped",
+  "file": ".claude/scripts/changelog.py",
+  "old": "if pr.head.startswith(\"release/\") and ours:",
+  "new": "if pr.head.startswith(\"release/\"):"
+ },
+ {
+  "label": "changelog: head repo compared case-sensitively",
+  "file": ".claude/scripts/changelog.py",
+  "old": "head_repo=None if row.get(\"head_repo\") is None else str(row[\"head_repo\"]).lower(),",
+  "new": "head_repo=None if row.get(\"head_repo\") is None else str(row[\"head_repo\"]),"
+ },
+ {
+  "label": "changelog: raw title not checked (escaping hides markers)",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    check_text(f\"PR #{pr.number}'s title\", pr.title)\n",
+  "new": ""
+ },
+ {
+  "label": "changelog: mentions and URLs allowed",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    if hit := MENTION_OR_URL.search(text):",
+  "new": "    if hit := MENTION_OR_URL.search(\"\"):"
+ },
+ {
+  "label": "changelog: version change allowed in a patch release",
+  "file": ".claude/scripts/changelog.py",
+  "old": "            if version_key(version)[:2] == version_key(prev)[:2]:\n",
+  "new": "            if False:\n"
+ },
+ {
+  "label": "changelog: frontend version not checked",
+  "file": ".claude/scripts/changelog.py",
+  "old": "if backend != version or frontend != version:",
+  "new": "if backend != version:"
+ },
+ {
+  "label": "changelog: missing merge commit read as untagged",
+  "file": ".claude/scripts/changelog.py",
+  "old": "if r.returncode != 1:",
+  "new": "if r.returncode == -1:"
+ },
+ {
+  "label": "changelog: merge order ignored",
+  "file": ".claude/scripts/changelog.py",
+  "old": "key=lambda p: (p.merged_at, p.number)",
+  "new": "key=lambda p: p.number"
+ },
+ {
+  "label": "changelog: merge order tiebreak dropped",
+  "file": ".claude/scripts/changelog.py",
+  "old": "key=lambda p: (p.merged_at, p.number)",
+  "new": "key=lambda p: p.merged_at"
+ },
+ {
+  "label": "changelog: titles not escaped",
+  "file": ".claude/scripts/changelog.py",
+  "old": "text = MD_SPECIAL.sub(lambda c: \"\".join(\"\\\\\" + ch for ch in c[0]), plain(desc))",
+  "new": "text = plain(desc)"
+ },
+ {
+  "label": "changelog: data hashes not checked",
+  "file": ".claude/scripts/changelog.py",
+  "old": "if key in HEX and not HEX[key].fullmatch(value):",
+  "new": "if False:"
+ },
+ {
+  "label": "changelog: missing data keys not refused",
+  "file": ".claude/scripts/changelog.py",
+  "old": "missing = DATA_KEYS - {\"notes\"} - set(entry)",
+  "new": "missing: set[str] = set()"
+ },
+ {
+  "label": "changelog: a non-version table key accepted",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    for version, entry in releases.items():\n        version_key(version)\n",
+  "new": "    for version, entry in releases.items():\n"
+ },
+ {
+  "label": "changelog: a tagged version can be released again",
+  "file": ".claude/scripts/changelog.py",
+  "old": "if tags and version_key(a.release) <= version_key(tags[-1][1:]):",
+  "new": "if False:"
+ },
+ {
+  "label": "changelog: --check always passes",
+  "file": ".claude/scripts/changelog.py",
+  "old": "if current != text:",
+  "new": "if False:"
+ },
+ {
+  "label": "changelog: replay versions not compared",
+  "file": ".claude/scripts/changelog.py",
+  "old": "changed = [k for k in COMPAT if data[prev][k] != d[k]]",
+  "new": "changed: list[str] = []"
+ },
+ {
+  "label": "changelog: previous release = oldest",
+  "file": ".claude/scripts/changelog.py",
+  "old": "prev = earlier[-1]",
+  "new": "prev = earlier[0]"
+ },
+ {
+  "label": "changelog: only the first changed version named",
+  "file": ".claude/scripts/changelog.py",
+  "old": "moves = \", \".join(f\"{COMPAT[k]} {data[prev][k]} → {d[k]}\" for k in changed)",
+  "new": "moves = \", \".join(f\"{COMPAT[k]} {data[prev][k]} → {d[k]}\" for k in changed[:1])"
+ },
+ {
+  "label": "changelog: tags sorted newest first",
+  "file": ".claude/scripts/changelog.py",
+  "old": "return sorted(tags, key=lambda t: version_key(t[1:]))",
+  "new": "return sorted(tags, key=lambda t: version_key(t[1:]), reverse=True)"
+ },
+ {
+  "label": "changelog: tags sorted as strings",
+  "file": ".claude/scripts/changelog.py",
+  "old": "return sorted(tags, key=lambda t: version_key(t[1:]))",
+  "new": "return sorted(tags)"
+ },
+ {
+  "label": "changelog: --release titles PRs outside HEAD",
+  "file": ".claude/scripts/changelog.py",
+  "old": "sections.setdefault(placed[pr.number], []).append(pr)",
+  "new": "sections.setdefault(placed[pr.number] or release, []).append(pr)"
+ },
+ {
+  "label": "changelog: --notes matches a heading prefix",
+  "file": ".claude/scripts/changelog.py",
+  "old": "        if heading == version:\n",
+  "new": "        if heading.startswith(version):\n"
+ },
+ {
+  "label": "changelog: jq keeps unmerged PRs",
+  "file": ".claude/scripts/changelog.py",
+  "old": "\".[] | select(.merged_at != null) | {number",
+  "new": "\".[] | {number"
+ },
+ {
+  "label": "changelog: jq takes the base repo",
+  "file": ".claude/scripts/changelog.py",
+  "old": "head_repo: .head.repo.full_name",
+  "new": "head_repo: .base.repo.full_name"
+ },
+ {
+  "label": "changelog: https origin not parsed",
+  "file": ".claude/scripts/changelog.py",
+  "old": "github\\.com[:/]",
+  "new": "github\\.com:"
+ },
+ {
+  "label": "changelog: table not checked against the code",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    wrong = [f\"{COMPAT[k]} {d[k]} (the code says {v})\" for k, v in code_versions().items() if d[k] != v]\n",
+  "new": "    wrong: list[str] = []\n"
+ },
+ {
+  "label": "changelog: table not checked against the index manifest",
+  "file": ".claude/scripts/changelog.py",
+  "old": "            if manifest.get(k) != d[k]\n",
+  "new": "            if False\n"
+ },
+ {
+  "label": "changelog: reproduced run not bounded by a change",
+  "file": ".claude/scripts/changelog.py",
+  "old": "                if any(data[v][k] != d[k] for k in COMPAT):\n                    break\n",
+  "new": ""
+ },
+ {
+  "label": "changelog: raw text not made plain before the checks",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    # NFKC too, for the check only: fullwidth letters and ligatures read as the plain ones\n    text = plain(unicodedata.normalize(\"NFKC\", plain(text)))\n",
+  "new": ""
+ },
+ {
+  "label": "changelog: email addresses allowed",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    r\"|[\\w.+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}\\b\"\n",
+  "new": ""
+ },
+ {
+  "label": "changelog: Tantivy alone allowed",
+  "file": ".claude/scripts/changelog.py",
+  "old": "            if \"tantivy_version\" in changed and \"schema_version\" not in changed:\n",
+  "new": "            if False:\n"
+ },
+ {
+  "label": "changelog: OP_DATA_DIR ignored",
+  "file": ".claude/scripts/changelog.py",
+  "old": "default=Path(os.environ.get(\"OP_DATA_DIR\") or ROOT / \"data\"),",
+  "new": "default=ROOT / \"data\","
+ },
+ {
+  "label": "changelog: an npm scope refused as a mention",
+  "file": ".claude/scripts/changelog.py",
+  "old": "(?![A-Za-z0-9-]|/)\"",
+  "new": "\""
+ },
+ {
+  "label": "changelog: deps titles not Internal",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    \"deps\": \"Internal\",",
+  "new": "    \"deps\": \"Changed\","
+ },
+ {
+  "label": "changelog: manifest tantivy_version not checked",
+  "file": ".claude/scripts/changelog.py",
+  "old": "MANIFEST_KEYS = (\"index_version\", \"snapshot_hash\", \"tokenizer_version\", \"schema_version\", \"tantivy_version\")",
+  "new": "MANIFEST_KEYS = (\"index_version\", \"snapshot_hash\", \"tokenizer_version\", \"schema_version\")"
+ },
+ {
+  "label": "changelog: backticks not escaped",
+  "file": ".claude/scripts/changelog.py",
+  "old": "MD_SPECIAL = re.compile(r\"[\\\\*\\[\\]<>`]|",
+  "new": "MD_SPECIAL = re.compile(r\"[\\\\*\\[\\]<>]|"
+ },
+ {
+  "label": "changelog: format characters kept",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    return \" \".join(\"\".join(ch for ch in text if unicodedata.category(ch) != \"Cf\").split())",
+  "new": "    return \" \".join(text.split())"
+ },
+ {
+  "label": "changelog: notes rendered without plain",
+  "file": ".claude/scripts/changelog.py",
+  "old": "lines.append(f\"- {plain(d['notes'])}\")",
+  "new": "lines.append(f\"- {' '.join(d['notes'].split())}\")"
+ },
+ {
+  "label": "changelog: default-ignorables kept",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    text = IGNORABLE.sub(\"\", text)\n",
+  "new": ""
+ },
+ {
+  "label": "changelog: no NFKC before the checks",
+  "file": ".claude/scripts/changelog.py",
+  "old": "    text = plain(unicodedata.normalize(\"NFKC\", plain(text)))",
+  "new": "    text = plain(text)"
+ }
+]

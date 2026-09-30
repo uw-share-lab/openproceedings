@@ -64,7 +64,7 @@ data/indexes/current            symlink → the served version
 | Any input could tokenize differently (`normalize.py`, LaTeX rules, the analyzer) | `TOKENIZER_VERSION` (rule in `.claude/skills/token-contract/SKILL.md`) |
 | Index field set, field type, index options (positions, freqs), stored layout, analyzer registration, how a field is populated (e.g. missing abstract → `""`) | `SCHEMA_VERSION` |
 | Weights, k1, b, sort definitions | nothing to bump. They are in `ranking_params` already, so `index_version` changes |
-| A tantivy-py upgrade | `SCHEMA_VERSION`, unless the determinism and differential suites prove identical IDs, order and scores |
+| A tantivy-py upgrade | `SCHEMA_VERSION`, always: Tantivy is not an `index_version` input, and the engine refuses an index built with another Tantivy (`unservable`), so without the bump the new code could neither serve the old index nor build a new id (`op index build` finds the id and keeps the old directory). `changelog.py --release` refuses a release that changes Tantivy alone (spec 08 §Release) |
 | Parser, compiler (NEAR/slop, wildcard rules), default-filter set, `source:` alias table: any change that could make some query mean something different | `query_version` (not part of `index_version`) |
 | New snapshot | nothing to bump; `snapshot_hash` changes |
 | Pure refactor proven identical by parity + determinism | none |

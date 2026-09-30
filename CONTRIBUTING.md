@@ -34,7 +34,8 @@ API answers every request with an HTML browser-check page instead of JSON (check
 ## Flow: `feature → PR → dev → PR → main`
 1. Pick or create a task: `backlog task list --plain`, `backlog task create "…" --ac "…"`.
    Never hand-edit files under `backlog/`.
-2. Branch off `dev`: `git switch dev && git pull && git switch -c <type>/<slug>` (e.g. `feat/wildcard-expansion`; types: feat, fix, chore, docs, test).
+2. Branch off `dev`: `git switch dev && git pull && git switch -c <type>/<slug>` (e.g. `feat/wildcard-expansion`; types: feat, fix, chore, docs, test; `release/X.Y.Z` and `release/X.Y.Z-back-merge`
+   are only for a release's own bookkeeping, spec 08 §Release).
 3. Work test-first. Keep changes inside one spec's scope. If the spec is wrong, change the spec in the same PR.
 4. Close out, in this order (approvals are per-commit, so the order matters):
    - the local tests the change calls for green (the `.claude/skills/pr-workflow/SKILL.md` §Local test runs
@@ -47,7 +48,8 @@ API answers every request with an HTML browser-check page instead of JSON (check
    - `/open-pr` (pushes, opens the PR into `dev`, attests the review).
 5. CI must pass: `lint`, `test`, `claude-tooling`, `attribution`, `learnings`, `review-attested`.
    Merge into `dev` yourself once it's green.
-6. Promote `dev → main` with a PR (`--base main --head dev`). It needs a second person's approval.
+6. Promote `dev → main` with a PR (`--base main --head dev`). It needs a second person's approval. A release
+   (version bump, generated `CHANGELOG.md`, tag) follows the checklist in spec 08 §Release (decision-023).
 
 ## Rules the tooling enforces
 - **No AI authorship** in commits or PRs: no `Co-Authored-By: Claude` and no "Generated with …" footers.

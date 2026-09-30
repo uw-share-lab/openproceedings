@@ -9,7 +9,7 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | Path | Holds | Notes |
 |---|---|---|
 | `pyproject.toml`, `uv.lock` (root) | The **uv workspace** root: repo-wide ruff config, dev group (ruff, mypy), one lock | `uv sync` at the root; members join via `[tool.uv.workspace] members` |
-| `Makefile` | `sync`, `fmt`, `lint`, `tooling`, `test`, `e2e`, `openapi`, `hooks`, `mutate`, `mutate-changed` | `make lint` is exactly CI's `lint` job; pre-push runs `make lint` + `make tooling` |
+| `Makefile` | `sync`, `fmt`, `lint`, `tooling`, `test`, `e2e`, `openapi`, `changelog`, `hooks`, `mutate`, `mutate-changed` | `make lint` is exactly CI's `lint` job; pre-push runs `make lint` + `make tooling` |
 | `.githooks/` | `commit-msg` (attribution), `pre-push` (`make lint` + `make tooling`) | Installed by `scripts/setup-dev.sh` |
 | `.github/` | Workflows, `dependabot.yml` | Actions pinned by SHA |
 | `backend/` (M1) | The uv workspace member, package `openproceedings` (`backend/pyproject.toml`) | |
@@ -32,6 +32,8 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `backend/tests/{unit,golden,differential,bench,contract,e2e,fixtures}/` | Tests by kind (`testing-standards`); `e2e/fixture_server.py` serves the temporary 5k browser fixture | |
 | `frontend/` (M3) | 05: Next.js app, an npm workspace | `frontend/src/api/schema.ts` is generated |
 | `frontend/e2e/` | Playwright full-stack, accessibility and visual tests; platform-specific baselines in `__screenshots__/` | Run with `make e2e` |
+| `CHANGELOG.md` (root) | Release notes, generated from merged PRs by `.claude/scripts/changelog.py` (`make changelog`) | Spec 08 §Release, decision-023 |
+| `docs/releases.toml` | Each release's data: the `index_version` it was verified on, its snapshot hash, the three versions | Read by `changelog.py`; a released table is never edited |
 | `docs/specs/` | `NN-name.md`, changed only by PR (`spec-writing`) | |
 | `docs/{design,usability,research}/` | Created as needed | |
 | `docs/plans/` | Implementation plans, `YYYY-MM-DD-<slug>.md` | |
@@ -53,11 +55,14 @@ Test fixtures are the exception: small, hand-built or sampled records under `bac
 - `frontend/src/api/schema.ts` — regenerate it from the OpenAPI schema.
 - `.claude/learnings/INDEX.md` — regenerate with `python3 .claude/scripts/learnings_index.py`.
 - `.claude/README.md` — regenerate with `python3 .claude/scripts/roster_index.py`.
+- `CHANGELOG.md` — regenerate with `make changelog` (spec 08 §Release).
 - Review records — only `record-review.py` writes them.
 
 ## Names
 - **Branches:** `<type>/<slug>`, where type ∈ `feat`, `fix`, `chore`, `docs`, `test`
-  (e.g. `feat/wildcard-expansion-cap`). Never work on `dev` or `main` (`pr-workflow`).
+  (e.g. `feat/wildcard-expansion-cap`), plus `release/X.Y.Z` and `release/X.Y.Z-back-merge` for a release's
+  own bookkeeping only (spec 08 §Release; `changelog.py` leaves them out). Never work on `dev` or `main`
+  (`pr-workflow`).
 - **Commits and PR titles:** `<type>: <imperative summary>` (`fix: keep NEAR within one field`), with a
   body that says *why*. No AI attribution (`no-ai-attribution`).
 - **Dated files:** ISO date first, from the session's context date — never invented.
