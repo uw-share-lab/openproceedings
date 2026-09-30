@@ -38,7 +38,7 @@ length. Otherwise each entry (the one string, or each list entry) loses a leadin
 count when there are no ids). A refused split leaves the authors empty and is counted in `authors_unsplit`; the
 raw value stays in the authors claim's evidence either way.
 
-Implementation details (the implementer's, adopted after review; pending owner confirmation): a split is also refused when a
+Implementation details (the implementer's, adopted after review; confirmed by the owner on 2026-09-29, TASK-139): a split is also refused when a
 resulting name still needs a split (a guard that keeps a split's output stable when taken again); a bare `and`
 entry and a dangling trailing ` and` are dropped like a leading `and ` (`["A", "B", "and"]` is `A`, `B`); only
 lowercase `and` is a separator (`And`/`AND` are left as written: every `and` seen live is lowercase); and the

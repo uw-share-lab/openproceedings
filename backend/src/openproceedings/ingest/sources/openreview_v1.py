@@ -32,13 +32,18 @@ The authority rules (never broken):
    signal outranks another; `xGZG2kS5bFk` was withdrawn yet presented, ICLR 2018 `S1p31z-Ab` accepted yet not
    presented). Likewise across two notes of one paper: an accepted record whose pdf a withdrawn record of the
    crawl in the same track shares (`S1p31z-Ab` and its withdrawn twin `SJTCsqMUf`) becomes `unknown` with such a
-   row (`withdrawn_twins`); the twin keeps its status.
+   row (`withdrawn_twins`); the twin keeps its status. A record with no decision at all (no decision note in its
+   forum) and such a twin has one status signal, the twin's withdrawal, so it becomes `withdrawn`, with no row
+   (TASK-139), counted in the report's `withdrawn_by_twin` instead of `unmapped`. A rejected record with a
+   withdrawn twin, and any record with only a desk-rejected twin, keep their status. A record the rule touched is
+   never collapsed by rule 5 (neither collapse).
 5. **Two notes of one paper are one record** (TASK-125): OpenReview v1 holds 300 NeurIPS 2021 main-track papers as
    two Blind_Submission notes (different id and number, identical content but for the id in `_bibtex`), which
    dedup would otherwise refuse as two submissions with one title. After the listings, records that are
    identical in everything but their id, forum URL and provenance, with a pdf and a note number, are
    collapsed to the lowest-numbered note; each other note is counted in `skipped["duplicate_submission"]`
-   (`collapse_duplicate_submissions`). A record with a crawl conflict is never collapsed.
+   (`collapse_duplicate_submissions`). A record with a crawl conflict, or one the twin rule (rule 4) made
+   `withdrawn`, is never collapsed, by this collapse or the silent-twin one.
    **A silent twin** (TASK-132) is a note that says nothing about its status: in a year whose one status carrier
    is `content.venue`, a submission-listing note with neither `venue` nor `venueid` (NeurIPS 2021 `W6e384Lkjbw`
    #5999, whose accepted twin `rDdb26AQ0SO` #11021 has the same pdf, supplementary material, title, authors,
@@ -93,6 +98,9 @@ log = logging.getLogger(__name__)
 SOURCE: Source = "openreview_v1"
 PAGE_SIZE = 1000  # the API's maximum (`limit=1001` is a 400 on v1 too)
 CONFLICT = "unresolved:openreview_v1"  # conflicts.csv resolution: the record's value is `unknown`
+NO_DECISION_NOTE = (
+    "no decision note in the forum"  # a status claim's evidence: the forum has no decision at all
+)
 _FORUM_URL = "https://openreview.net/forum?id={}"
 DUPLICATE_SUBMISSION = "duplicate_submission"  # a second note of one paper (rule 5), counted, never a record
 V1_SKIP_REASONS = (*SKIP_REASONS, DUPLICATE_SUBMISSION)
@@ -325,6 +333,9 @@ class CrawlReport(Report):
     authors_unsplit: int = (
         0  # a split the rule refused: authors kept out (empty), the raw value in the evidence
     )
+    withdrawn_by_twin: int = (
+        0  # undecided notes the twin rule made `withdrawn`, no longer in `unmapped` (TASK-139)
+    )
     track_status: dict[str, Counter[str]] = field(default_factory=dict)
     gaps: tuple[str, ...] = ()
     conflicts: list[Conflict] = field(default_factory=list)
@@ -357,6 +368,7 @@ class CrawlReport(Report):
                 if self.authors_unsplit_ids
                 else {}
             ),
+            **({"withdrawn_by_twin": self.withdrawn_by_twin} if self.withdrawn_by_twin else {}),
             "conflicts": len(self.conflicts),
             "track_status": {t: dict(sorted(s.items())) for t, s in sorted(self.track_status.items())},
             "coverage_gaps": list(self.gaps),
@@ -444,7 +456,7 @@ def _decision_note(ad: Adapter, note: Mapping[str, Any], read_forum: ForumReader
         and isinstance(value := n["content"].get(spec.field), str)
     )  # fmt: skip
     if not decisions:
-        return _Found(None, "no decision note in the forum", page, "decision_note")
+        return _Found(None, NO_DECISION_NOTE, page, "decision_note")
     if any(value not in spec.values for _, value in decisions):
         return _Found(None, "decision note string not in the table", page, "decision_note")
     if len({spec.values[value] for _, value in decisions}) > 1:
@@ -737,16 +749,26 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
                 raise
             report.complete = False
             report.would_fetch.append(e.url)
-    for c in withdrawn_twins(records):  # rule 4 across two notes: after every listing, before rule 5
+    twins = withdrawn_twins(records)  # rule 4 across two notes: after every listing, before rule 5
+    for c in twins.conflicts:
         report.conflicts.append(c)
         log.debug("openreview_v1_conflict", extra={"forum": c.id.split(":", 3)[3], "field": c.field})
-    conflicted = {c.id for c in report.conflicts}
-    for kept, dropped in collapse_duplicate_submissions(records, numbers, conflicted):
+    for rid in twins.withdrawn:
+        # its missing decision note was counted in `unmapped`; the twin now answers it, so it moves out of the
+        # attention count into its own
+        report.unmapped["decision_note"] -= 1
+        report.withdrawn_by_twin += 1
+        log.debug("openreview_v1_withdrawn_twin", extra={"forum": records[rid].native})
+    if report.unmapped["decision_note"] < 0:  # each such note was counted once; never hide a miscount
+        raise RuntimeError(f"{venue} {year}: the twin rule resolved more undecided notes than were counted")
+    report.unmapped = +report.unmapped  # drop a kind the twin rule emptied
+    # a record the twin rule touched is never collapsed: the rule changes a status, never which records exist
+    exempt = {c.id for c in report.conflicts} | set(twins.withdrawn)
+    for kept, dropped in collapse_duplicate_submissions(records, numbers, exempt):
         report.skipped[DUPLICATE_SUBMISSION] += 1
         log.debug("openreview_duplicate_submission", extra={"forum": dropped, "kept": kept})
-    # rule 5's silent twin (TASK-132), after the identical notes.
-    # collapse_silent_twins must skip the same exempt records as the twin rule (see TASK-139)
-    for kept, dropped in collapse_silent_twins(records, silent, conflicted):
+    # rule 5's silent twin (TASK-132), after the identical notes; it skips the same records
+    for kept, dropped in collapse_silent_twins(records, silent, exempt):
         report.skipped[DUPLICATE_SUBMISSION] += 1
         log.debug("openreview_duplicate_submission", extra={"forum": dropped, "kept": kept})
     for r in records.values():
@@ -864,7 +886,7 @@ def collapse_duplicate_submissions(
 ) -> list[tuple[str, str]]:
     """Remove from `records` every second note of one paper (module docstring rule 5) and return the (kept,
     removed) native ids, sorted. Only records with a pdf and an integer note `number`, and not in `exempt` (those
-    with a crawl conflict), are candidates. The lowest number (then the lowest id) is kept: a deterministic
+    with a crawl conflict or made `withdrawn` by the twin rule), are candidates. The lowest number (then the lowest id) is kept: a deterministic
     tie-break, so the choice doesn't depend on which listing or page order the API returned and the same cache
     always keeps the same id. It is not "the original": the NeurIPS 2021 proceedings link the kept forum for
     177 of the 297 accepted pairs and the dropped one for 120 (e.g. `0hJ-U3aqUDf` #401 kept, `rvKD3iqtBdk`
@@ -916,8 +938,8 @@ def collapse_silent_twins(
     records: dict[str, PaperRecord], silent: Set[str], exempt: Set[str] = frozenset()
 ) -> list[tuple[str, str]]:
     """Remove from `records` every silent note (module docstring rule 5) whose group, the records with a pdf that
-    are equal by `_same_paper_but_status`, holds exactly two records: the silent note, still `unknown` and without
-    a crawl conflict, and one accepted record without a crawl conflict. Return the (kept, removed) native ids,
+    are equal by `_same_paper_but_status`, holds exactly two records: the silent note, still `unknown`, and one
+    accepted record, neither in `exempt` (a crawl conflict, or made `withdrawn` by the twin rule). Return the (kept, removed) native ids,
     sorted. The accepted record is kept whatever the numbers: it is the one with evidence. Run after
     `collapse_duplicate_submissions`, so notes identical to the accepted one are gone. Any third record (with
     evidence, with a conflict, or a second silent note) makes the group a choice: then nothing is removed."""
@@ -939,50 +961,88 @@ def collapse_silent_twins(
     return sorted(out)
 
 
-# --- an accepted note with a withdrawn twin (rule 4, decision-020) ----------------------------------------------
+# --- a note with a withdrawn twin (rule 4, decision-020) ----------------------------------------------------
 
 
-def withdrawn_twins(records: dict[str, PaperRecord]) -> list[Conflict]:
-    """Set to `unknown` every accepted record whose pdf another record of the crawl in the same track, withdrawn,
-    shares (module docstring rule 4: two notes of one paper whose status signals disagree), and return its
-    `unresolved:openreview_v1` rows, one per record, sorted; the row names every such twin. The twins keep their
-    own status, and the accepted record loses its presentation (it came from the decision it no longer has). E.g.
-    ICLR 2018 `S1p31z-Ab`: its decision note says `Accept (Poster)`, and `SJTCsqMUf`, listed as withdrawn, is the
-    same pdf; the paper was not presented at ICLR 2018. No signal outranks another: ICLR 2021 `xGZG2kS5bFk` was
-    withdrawn and presented. Only a withdrawn twin counts (decision-020): a desk rejection (e.g. for a duplicate
-    submission) can leave the same pdf beside the presented copy. A record with no pdf (or an arXiv link, which
-    `_pdf` drops) has no twin."""
+@dataclass(frozen=True)
+class Twins:
+    """What `withdrawn_twins` changed: the conflict rows of the accepted records it set to `unknown`, and the ids
+    of the undecided records it set to `withdrawn`, both sorted."""
+
+    conflicts: list[Conflict]
+    withdrawn: list[str]
+
+
+def _status_claim(r: PaperRecord) -> Claim:
+    [c] = [c for c in r.claims("status") if c.source == SOURCE]
+    return c
+
+
+def withdrawn_twins(records: dict[str, PaperRecord]) -> Twins:
+    """Apply the withdrawn-twin rule (module docstring rule 4, decision-020) to `records` in place. A record's
+    twins are the other records of the crawl in the same track, listed as withdrawn, that share its pdf; they
+    keep their own status.
+
+    - An **accepted** record with a twin is set to `unknown` and loses its presentation (it came from the decision
+      it no longer has), with one `unresolved:openreview_v1` row naming every twin: two notes of one paper whose
+      status signals disagree. E.g. ICLR 2018 `S1p31z-Ab`: its decision note says `Accept (Poster)`, and
+      `SJTCsqMUf`, listed as withdrawn, is the same pdf; the paper was not presented at ICLR 2018. No signal
+      outranks another: ICLR 2021 `xGZG2kS5bFk` was withdrawn and presented.
+    - A record with **no decision at all** (its forum has no decision note: status `unknown`, evidence
+      `NO_DECISION_NOTE`) and a twin is set to `withdrawn`, with no row: the twin's withdrawal is its only status
+      signal, so nothing disagrees. The status claim cites the first twin's listing page and names every twin
+      (the owner's answer, 2026-09-29, TASK-139: clears ICLR 2018 main's 12 undecided unknowns).
+    - Any other record keeps its status: a rejected one (10 in ICLR 2018), one `unknown` for another reason
+      (decision notes that disagree, a decision string not in the table, no submission number to find the
+      decision note by, a forum a dry run didn't fetch, `Invite to Workshop Track`), a withdrawn or desk-rejected
+      one. The crawl moves each record made `withdrawn` out of the report's `unmapped` (where its missing decision
+      note was counted) into `withdrawn_by_twin`.
+
+    Only a withdrawn twin counts (decision-020): a desk rejection (e.g. for a duplicate submission) can leave the
+    same pdf beside the presented copy. A record with no pdf (or an arXiv link, which `_pdf` drops) has no twin.
+    The twins are the records withdrawn before the rule runs, so the result doesn't depend on record order, and
+    running it again changes nothing."""
     gone: defaultdict[str, list[PaperRecord]] = defaultdict(list)
     for r in records.values():
         if r.urls.pdf is not None and r.status == "withdrawn":
             gone[r.urls.pdf].append(r)
-    out: list[Conflict] = []
+    conflicts: list[Conflict] = []
+    withdrawn: list[str] = []
     for rid in sorted(records):
         r = records[rid]
-        if r.status != "accepted" or r.urls.pdf is None:
+        if r.urls.pdf is None or r.status not in ("accepted", "unknown"):
+            continue
+        was = _status_claim(r)
+        if r.status == "unknown" and was.evidence != NO_DECISION_NOTE:
             continue
         twins = sorted(
             (t for t in gone.get(r.urls.pdf, ()) if t.id != rid and t.track == r.track), key=lambda t: t.id
         )
         if not twins:
             continue
-        [was] = [c for c in r.claims("status") if c.source == SOURCE]
-        named = "; ".join(
-            f"twin {t.native}, same pdf: {c.evidence}"
-            for t in twins
-            for c in t.claims("status")
-            if c.source == SOURCE
-        )
-        side_b = f"withdrawn ({named})"
-        status = Claim.model_validate(
-            {**was.model_dump(), "value": "unknown", "evidence": f"conflict: {was.evidence} vs {side_b}"}
-        )
+        said = [(t, _status_claim(t)) for t in twins]
+        if r.status == "unknown":
+            named = "; ".join(f"withdrawn twin {t.native} shares the pdf ({c.evidence})" for t, c in said)
+            first = said[0][1]
+            status = Claim(
+                field="status", value="withdrawn", source=SOURCE, url=first.url, fetched_at=first.fetched_at,
+                evidence=f"{NO_DECISION_NOTE}; {named}",
+            )  # fmt: skip
+            update: dict[str, Any] = {"status": "withdrawn"}
+            withdrawn.append(rid)
+        else:
+            named = "; ".join(f"twin {t.native}, same pdf: {c.evidence}" for t, c in said)
+            side_b = f"withdrawn ({named})"
+            status = Claim.model_validate(
+                {**was.model_dump(), "value": "unknown", "evidence": f"conflict: {was.evidence} vs {side_b}"}
+            )
+            update = {"status": "unknown", "presentation": None}
+            conflicts.append(
+                Conflict(rid, "status", f"accepted ({was.evidence})", SOURCE, side_b, SOURCE, CONFLICT)
+            )
         provenance = (*(c for c in r.provenance if c.field not in ("status", "presentation")), status)
-        records[rid] = r.model_copy(
-            update={"status": "unknown", "presentation": None, "provenance": provenance}
-        )
-        out.append(Conflict(rid, "status", f"accepted ({was.evidence})", SOURCE, side_b, SOURCE, CONFLICT))
-    return out
+        records[rid] = r.model_copy(update={**update, "provenance": provenance})
+    return Twins(conflicts, withdrawn)
 
 
 # --- the crawl files ------------------------------------------------------------------------------------------
