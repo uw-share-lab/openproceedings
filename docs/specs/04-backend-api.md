@@ -189,7 +189,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   `status` column, and BibTeX has
   it in `keywords` and in the entry type below. RIS keeps `TY  - CPAPER` for every status, so one export
   imports as one reference type.
-- **Abstract source in every format** (TASK-138, decision-018). Each exported abstract names where it came
+- **Abstract source in every format** (TASK-138, decision-018, decision-021). Each exported abstract names where it came
   from and links there, as the results list does (TASK-134): PMLR's CC BY 4.0 terms ask for a citation (the
   record itself: authors, title, venue, year) and a hyperlink to the paper's PMLR page, and an export hands the
   text out. The attribution is the record's `Attribution` from the exported index's snapshot, computed once
@@ -203,12 +203,18 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   |---|---|---|
   | RIS | one more `N1`, after the status sentence and before the provenance line (which stays the last `N1`) | `N1  - Abstract source: PMLR https://proceedings.mlr.press/v202/okafor23a.html` |
   | BibTeX | a field `abstract_source`, after `abstract` | `abstract_source = {PMLR https://proceedings.mlr.press/v202/okafor23a.html},` |
-  | CSV | three columns appended after `searched_at`: `abstract_source` (the claim's source), `abstract_origin` (the site), `abstract_url` | `…,pmlr,pmlr,https://proceedings.mlr.press/v202/okafor23a.html` |
-  | JSONL | `abstract_source`: `{source, origin, url}` (the `/search` hit's object) or null | `"abstract_source": {"origin": "pmlr", "source": "pmlr", "url": "https://proceedings.mlr.press/v202/okafor23a.html"}` |
+  | CSV | four columns appended after `searched_at`: `abstract_source` (the claim's source), `abstract_origin` (the site), `abstract_url`, `abstract_withheld` (`true`/`false`) | `…,pmlr,pmlr,https://proceedings.mlr.press/v202/okafor23a.html,false` |
+  | JSONL | `abstract_source`: `{source, origin, url}` (the `/search` hit's object) or null; `abstract_withheld`: a boolean | `"abstract_source": {"origin": "pmlr", "source": "pmlr", "url": "https://proceedings.mlr.press/v202/okafor23a.html"}, "abstract_withheld": false` |
 
   A record with no abstract, or whose abstract no claim holds (synthetic fixtures), names nothing: no `N1`, no
-  field, three empty CSV cells, JSONL null. **Additive** under the versioning rules (api-contract skill): no
-  existing line, field or column changes value or position among its peers. RIS `N1` was already repeatable
+  field, three empty CSV cells, JSONL null. **Additive** under
+  [decision-021](../../backlog/decisions/decision-021%20-%20Additions-to-an-export-format-are-additive-under-api-v1-and-a-pinned-export-whose-snapshot-cannot-be-verified-withholds-its-abstracts-TASK-138.md)
+  (an added RIS line of a repeating tag, BibTeX field, appended CSV column or JSONL key is additive; changing an
+  existing field, a column's position or a line's placement, or removing anything, is breaking): no existing
+  line, field or column changes value or position among its peers. It does not protect a CSV reader with a
+  fixed column list (pandas `names=`, readr with fixed `col_types`), a JSONL reader with a strict schema
+  (`additionalProperties: false`), or an RIS reader that takes the first `N1` as the provenance line: read CSV
+  by header, JSONL by key, and the provenance from the last `N1`. RIS `N1` was already repeatable
   and its documented contract (the status sentence first, the provenance line last) holds; Covidence imported
   the rejected fixture record's two `N1` lines cleanly and shows no `N1` to screeners
   (`docs/results/2026-09-27-covidence-check.md`), and scholarmend's parser keeps every repeated tag. BibTeX
@@ -217,9 +223,20 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   key as a response gains a field. The Covidence fixture's records carry no claims, so its pinned bytes are
   unchanged and the hand import stands. An export reads the exported index's snapshot records: the served
   bundle's, or for a pinned `index_version` or a record's own index `IndexState.pinned_records` (verified on
-  first use, kept beside the pinned engine); when that snapshot can't be verified the export is 409
-  `API_INDEX_VERSION_UNAVAILABLE` before the first byte, never sent without attribution. `op export` verifies
-  the snapshot as the server loads it, and fails (no file) without it. A record the index holds but its
+  first use, kept beside the pinned engine). Every export sends `X-Abstract-Source: attributed`.
+  **Withheld** (decision-021): when a pinned index exists but its snapshot can't be verified, the same records
+  and metadata are exported with every abstract left out (no RIS `AB`, no BibTeX `abstract`, CSV `abstract`
+  empty, JSONL `abstract` null, no source anywhere), `X-Abstract-Source: unavailable`, and each record says so
+  in the file: an RIS `N1` (before the provenance line) and a BibTeX `abstract_withheld` field reading
+  `Abstract withheld: its source could not be attributed on this instance (the index's snapshot is
+  unavailable), so no abstract is exported (decision-018).` (`export.WITHHELD`), CSV `abstract_withheld`
+  `true`, JSONL `abstract_withheld: true`. It is not refused: the cited set still goes out, and no abstract
+  leaves without its source. The record's replay needs only the index and stays `reproduced`. `op export`
+  verifies the snapshot as the server loads it; without it, it withholds the same way, warns on stderr
+  (`op export: warning: … every abstract is withheld …`, and a WARNING `export_abstracts_withheld` log line
+  with `reason`) and exits 0. A pinned index's snapshot must therefore be kept while a record pins the index
+  (spec 08 §CLI). An attributed rejected paper's RIS record has three `N1` lines, untested in Covidence (low
+  risk; `docs/results/2026-09-27-covidence-check.md`). A record the index holds but its
   snapshot lacks is an internal error mid-stream (logged, counted short), as on `GET /search`.
 - **`TY` is `CPAPER`, not `JOUR`** (task-004). Every exported paper is a conference paper. Zotero's RIS
   translator (`RIS.js`, 2026-01-05) imports `CPAPER` as `conferencePaper` and puts `T2` in its
@@ -268,8 +285,8 @@ rewrites the query (guarantee 3). No hidden facet state exists.
 - **CSV:** one row per paper, the columns of the schema in 01 plus the provenance columns `index_version`,
   `canonical_hash`, `exported_at`, `record_id` and `searched_at` (the last two empty unless the export is
   pinned by a search record; JSONL has the same five fields, null when not pinned), then the abstract-source
-  columns `abstract_source`, `abstract_origin` and `abstract_url` (TASK-138, above; JSONL: one
-  `abstract_source` object), UTF-8 with a BOM (so Excel opens it correctly).
+  columns `abstract_source`, `abstract_origin`, `abstract_url` and `abstract_withheld` (TASK-138, above;
+  JSONL: an `abstract_source` object and `abstract_withheld`), UTF-8 with a BOM (so Excel opens it correctly).
 - **BibTeX:** `@inproceedings` for an `accepted` paper, with `booktitle` = the venue string. Any other status
   (`rejected`, `withdrawn`, `desk_rejected`, `unknown`) is `@unpublished`, BibTeX's type for a paper with an
   author and title that was not formally published, and has **no `booktitle`**. Its `note` starts
@@ -300,7 +317,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   - **CSV:** UTF-8 with a BOM (Excel); every field of the stored display record plus the facets and the
     provenance columns `index_version`, `canonical_hash`, `exported_at` (the UTC date), `record_id` and
   `searched_at` (empty unless pinned by a record), then `abstract_source`, `abstract_origin` and
-  `abstract_url` (empty when the abstract names no source). Two fields of
+  `abstract_url` (empty when the abstract names no source), then `abstract_withheld` (`true`/`false`). Two fields of
     spec 01 are left out: `provenance` (per-field claims, a nested list) and `content_hash`. Both stay in the
     snapshot that `index_version` pins. Lists are joined with "; " (ambiguous if a value holds one; JSONL
     keeps lists). A text cell starting, after leading spaces, with `=`, `+`, `-` or `@` (full-width forms
@@ -316,7 +333,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
     an odd backslash run before it loses one backslash). A value never ends on a backslash. An
     author name holding a standalone `and`, or `others`, is braced, so it isn't split or read as et al.
   - **JSONL:** one object per record, with `index_version`, `canonical_hash`, `exported_at`, `record_id` and
-    `searched_at` (null unless pinned by a record) and `abstract_source` (`{source, origin, url}` or null): the lossless
+    `searched_at` (null unless pinned by a record), `abstract_source` (`{source, origin, url}` or null) and `abstract_withheld`: the lossless
     format (CSV's formula guard adds a `'` to some cells). U+2028, U+2029 and U+0085 are escaped, so a record
     stays one line for every reader.
 
@@ -324,7 +341,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   export` counts what it wrote against the query's total before renaming its temporary file into place.
 - Exports stream, and are not paginated or truncated. The response headers `X-Total` (equal to the search's
   `total`) and `X-Index-Version` say exactly which set was exported (with `X-Tokenizer-Version` and
-  `X-Query-Version`). An export started during an index
+  `X-Query-Version`); `X-Abstract-Source` says whether the abstracts are attributed or withheld (decision-021). An export started during an index
   hot-swap finishes on the index it began on.
 - An export pinned by `record_id` hands over exactly the cited set: the record's **stored** ids (sorted),
   read from the index the record names. The query is never re-run, so a later `query_version` changes
@@ -928,7 +945,14 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   holds); an open logs `pinned_index_opened` (INFO, with `ms`). A pinned export also needs that index's snapshot records, to name each abstract's
   source (TASK-138): `IndexState.pinned_records` verifies them on first use, in the same one-at-a-time open slot,
   logs `pinned_snapshot_opened` (INFO, with `ms`), keeps them in an LRU of the same size, and remembers a
-  failure (`pinned_snapshot_unavailable`, WARNING, with `reason`) as a refused pin is remembered. A cache hit takes only the short map lock,
+  failure (`pinned_snapshot_unavailable`, WARNING, with `reason`) as a refused pin is remembered (a waiter
+  behind the slot re-checks both the kept records and the refusal). Cost per pinned version: the first export
+  of it waits for one verifying pass over its `records.jsonl` (read, hashed, and each line parsed once to
+  compute its attribution; roughly the served index's load time for a snapshot of the same size, seconds for
+  the 5k–80k corpora) behind any other pinned open, and then holds in memory each record's byte range and
+  attribution (a few hundred bytes a record: tens of MB at 80k) for as long as it stays in the LRU, beside
+  the pinned engine. The attribution of an old version comes from **today's** `attribution()` code over that
+  snapshot's claims (decision-021), not the code that built the index. A cache hit takes only the short map lock,
   never a lock an open holds; **at most one pinned index opens at a time** (each re-hashes a whole index;
   security review), and one version asked for at once is opened once. An engine dropped from the LRU stays alive while a stream still
   holds it, so memory is bounded by the LRU plus the exports in flight (each costs `export_weight` of the
@@ -944,8 +968,10 @@ shows SV-9 and never retries that request (spec 05 §Error states).
 - Export round-trips: parse the RIS/CSV/BibTeX output back and get the same IDs and fields.
 - Every format names each abstract's source, equal to the snapshot's attribution and to `/search`'s
   `abstract_source`, read back with scholarmend's RIS parser and refaudit's BibTeX parser, on the served index, a
-  pinned `index_version` and a record's own index; a pinned index whose snapshot is gone is 409 before the first
-  byte (`backend/tests/contract/test_export_attribution.py`, TASK-138).
+  pinned `index_version` and a record's own index; a pinned index whose snapshot is gone (both paths) is a 200
+  with every abstract withheld, `X-Abstract-Source: unavailable` and the marker in every record, and the
+  record still replays `reproduced` (`backend/tests/contract/test_export_attribution.py`, TASK-138,
+  decision-021).
 - Search-record replay tests for the reproduced, drifted and mismatch paths. The mismatch path uses a
   fixture record inserted with a wrong `ids_hash` or `excluded` (the store stays append-only), and asserts a `200` with
   `status: "mismatch"` plus one `API_REPLAY_MISMATCH` ERROR log line.

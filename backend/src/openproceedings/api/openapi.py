@@ -117,6 +117,8 @@ CLOSED_ENUMS: dict[str, frozenset[str]] = {
     "drift kind": frozenset({"corpus", "method"}),
     "wildcard op": frozenset({"*", "$"}),
     "include": frozenset({"ids"}),
+    # `X-Abstract-Source` on an export's 200 (decision-021; `api/export.py::ABSTRACT_SOURCE_STATES`)
+    "abstract source state": frozenset({"attributed", "unavailable"}),
 }
 OPEN_NOTE = "Open set: new values may be added within /api/v1; handle a value you don't know."
 

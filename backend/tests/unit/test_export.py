@@ -962,11 +962,12 @@ def test_each_format_names_a_pmlr_abstracts_source_byte_for_byte() -> None:
     assert attributed_export("csv", PMLR_RECORD, PMLR) == (
         "﻿" + ",".join(export.CSV_COLUMNS) + "\r\n"
         'op:icml:2023:pmlr-v202-okafor23a,Sample-Efficient Evaluation,We adapt.,"Okafor, Chidi",ICML,2023,'
-        f"main,accepted,,,,,{PMLR_PAGE},,,abcdef123456,{'0' * 64},2026-09-26,,,pmlr,pmlr,{PMLR_PAGE}\r\n"
+        f"main,accepted,,,,,{PMLR_PAGE},,,abcdef123456,{'0' * 64},2026-09-26,,,pmlr,pmlr,{PMLR_PAGE},false\r\n"
     )
     (obj,) = [json.loads(x) for x in attributed_export("jsonl", PMLR_RECORD, PMLR).splitlines()]
     assert obj["abstract_source"] == {"source": "pmlr", "origin": "pmlr", "url": PMLR_PAGE}
-    assert {k: v for k, v in obj.items() if k != "abstract_source"} == {
+    assert obj["abstract_withheld"] is False
+    assert {k: v for k, v in obj.items() if k not in ("abstract_source", "abstract_withheld")} == {
         **PMLR_RECORD, "index_version": "abcdef123456", "canonical_hash": "0" * 64, "exported_at": "2026-09-26",
         "record_id": None, "searched_at": None,
     }  # fmt: skip
@@ -980,13 +981,15 @@ def test_without_a_source_every_format_is_byte_for_byte_what_it_was() -> None:
         ris = attributed_export("ris", record, source)
         assert "Abstract source" not in ris and ris.count("N1  - ") == 1
         assert "abstract_source" not in attributed_export("bibtex", record, source)
-        assert attributed_export("csv", record, source).endswith(",2026-09-26,,,,,\r\n")
+        assert attributed_export("csv", record, source).endswith(",2026-09-26,,,,,,false\r\n")
         (obj,) = [json.loads(x) for x in attributed_export("jsonl", record, source).splitlines()]
         assert obj["abstract_source"] is None
 
 
 def test_the_csv_columns_before_task_138_keep_their_positions() -> None:
-    assert (*CSV_COLUMNS_BEFORE, "abstract_source", "abstract_origin", "abstract_url") == export.CSV_COLUMNS
+    assert (
+        *CSV_COLUMNS_BEFORE, "abstract_source", "abstract_origin", "abstract_url", "abstract_withheld",
+    ) == export.CSV_COLUMNS  # fmt: skip
 
 
 @pytest.mark.parametrize(
@@ -1067,3 +1070,38 @@ def test_the_site_names_are_the_results_lists() -> None:
     assert block is not None
     assert dict(re.findall(r"(\w+): \"([^\"]+)\"", block.group(1))) == export.ORIGIN_NAMES
     assert set(export.ORIGIN_NAMES) == set(get_args(Origin))
+
+
+def test_without_sources_every_abstract_is_withheld_and_each_record_says_so() -> None:
+    """decision-021: a pinned index whose snapshot can't be verified. The same record and metadata, no abstract,
+    no source, and the withheld sentence in the file itself (added lines, fields and keys only)."""
+    from scholarmend.parse import parse_ris
+
+    def withheld(fmt: str, record: dict[str, object]) -> str:
+        return export.header(fmt) + "".join(export.entries(fmt, [record], PROVENANCE, sources=None))
+
+    rejected = {**PMLR_RECORD, "status": "rejected"}
+    (parsed,) = parse_ris(withheld("ris", rejected), "x.ris")
+    assert "AB" not in parsed.fields and parsed.fields["TI"] == ["Sample-Efficient Evaluation"]
+    assert parsed.fields["N1"] == [
+        "Submitted to International Conference on Machine Learning (ICML 2023); status: rejected (not in its proceedings).",
+        export.WITHHELD,
+        PROVENANCE.line(),
+    ]
+    assert withheld("ris", PMLR_RECORD) == attributed_export("ris", PMLR_RECORD, PMLR).replace(
+        "AB  - We adapt.\n", ""
+    ).replace(f"N1  - Abstract source: PMLR {PMLR_PAGE}\n", f"N1  - {export.WITHHELD}\n")
+    (entry,) = parse_string(withheld("bibtex", PMLR_RECORD))
+    assert "abstract" not in entry.fields and "abstract_source" not in entry.fields
+    assert entry.fields["abstract_withheld"] == export.WITHHELD and entry.fields["note"] == PROVENANCE.line()
+    assert withheld("csv", PMLR_RECORD).endswith(",2026-09-26,,,,,,true\r\n")
+    assert ",We adapt.," not in withheld("csv", PMLR_RECORD)
+    (obj,) = [json.loads(x) for x in withheld("jsonl", PMLR_RECORD).splitlines()]
+    assert obj["abstract"] is None and obj["abstract_source"] is None and obj["abstract_withheld"] is True
+
+
+def test_the_abstract_source_header_states_are_a_closed_enum() -> None:
+    from openproceedings.api.export import ABSTRACT_SOURCE_STATES
+    from openproceedings.api.openapi import CLOSED_ENUMS
+
+    assert frozenset(ABSTRACT_SOURCE_STATES) == CLOSED_ENUMS["abstract source state"]

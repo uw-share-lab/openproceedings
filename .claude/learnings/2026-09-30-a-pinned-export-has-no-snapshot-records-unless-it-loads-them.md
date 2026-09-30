@@ -1,6 +1,6 @@
 # A pinned export has no snapshot records unless it loads them: only the served bundle carries them
 
-**Key lesson:** Per-record data computed at snapshot load (`RecordFile.attributions`) lives only on the served bundle (`Served.records`); a pinned `index_version` or record export gets a bare `TantivyEngine` from `IndexState.pinned`, so anything an export needs beyond the index's display record must come through `IndexState.pinned_records(version)` (refused with 409 when the snapshot won't verify), never be skipped silently for pinned engines.
+**Key lesson:** Per-record data computed at snapshot load (`RecordFile.attributions`) lives only on the served bundle (`Served.records`); a pinned `index_version` or record export gets a bare `TantivyEngine` from `IndexState.pinned`, so anything an export needs beyond the index's display record must come through `IndexState.pinned_records(version)`, and a snapshot that won't verify must change the export visibly (decision-021: abstracts withheld, `X-Abstract-Source: unavailable`, a marker in each record), never be skipped silently for pinned engines.
 
 - **Date:** 2026-09-30 · **Task:** task-138 · **Area:** api
 - **Artifacts:** `backend/src/openproceedings/api/state.py` (`pinned_records`), `backend/src/openproceedings/api/export.py` (`sources_of`), `backend/tests/contract/test_export_attribution.py`
@@ -27,8 +27,10 @@ when the snapshot loads.
   `entries`/`write` take `sources` as a required keyword and a record missing from it is an internal error.
 
 ## Decisions (and what would change them)
-- A pinned index whose snapshot can't be verified refuses the export (409 `API_INDEX_VERSION_UNAVAILABLE`)
-  rather than sending it unattributed (decision-018). Storing the attribution in the index itself would remove
+- A pinned index whose snapshot can't be verified still exports the cited records, with every abstract
+  withheld and each record saying so (decision-021, the owner's call on 2026-09-30): decision-018 forbids an
+  abstract without attribution, not the export. A first cut refused with 409, which would have made a cited
+  set unexportable for want of a snapshot. Storing the attribution in the index itself would remove
   the snapshot dependency, but changes every `index_version`.
 
 ## Follow-ups
@@ -36,4 +38,4 @@ when the snapshot loads.
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/api-contract/SKILL.md` (§Exports are contract too), spec 04 §Exports and §Implementation notes
-- Test or hook added? — `backend/tests/contract/test_export_attribution.py` (pinned, record-pinned, snapshot-gone and refusal-memory cases)
+- Test or hook added? — `backend/tests/contract/test_export_attribution.py` (pinned, record-pinned, snapshot-gone withheld on both paths with replay still `reproduced`, refusal-memory cases); decision-021; spec 08 and the snapshots skill (keep a pinned index's snapshot)

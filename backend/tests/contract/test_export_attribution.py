@@ -79,6 +79,7 @@ def attributions(data_dir: Path, snapshot: str) -> dict[str, Attribution | None]
 def body(client: TestClient, fmt: str, **params: Any) -> str:
     r = client.get(EXPORT, params={"format": fmt, **params})
     assert r.status_code == 200, r.text
+    assert r.headers["x-abstract-source"] == "attributed"
     return r.content.decode("utf-8")
 
 
@@ -108,10 +109,11 @@ def credits(fmt: str, text: str) -> dict[str, Any]:
         return {e.fields["openproceedings_id"]: e.fields.get("abstract_source") for e in parse_string(text)}
     if fmt == "csv":
         rows = csv.DictReader(io.StringIO(text.removeprefix("﻿")))
-        assert rows.fieldnames is not None and rows.fieldnames[-3:] == [
+        assert rows.fieldnames is not None and rows.fieldnames[-4:] == [
             "abstract_source",
             "abstract_origin",
             "abstract_url",
+            "abstract_withheld",
         ]
         return {
             row["id"]: (row["abstract_source"], row["abstract_origin"], row["abstract_url"]) for row in rows
@@ -212,21 +214,6 @@ def test_a_record_export_names_the_sources_of_the_index_it_names(
         check(fmt, body(client, fmt, record_id=record_id), attributions(data_dir, "a"))
 
 
-def test_a_pinned_index_whose_snapshot_is_gone_is_409_not_an_unattributed_export(
-    data_dir: Path, store: tuple[Path, str, str]
-) -> None:
-    _data, _a, b = store
-    shutil.rmtree(data_dir / "snapshots" / "b")
-    with TestClient(make_app(data_dir)) as c:
-        r = c.get(EXPORT, params={"format": "ris", "q": Q, "index_version": b})
-        assert r.status_code == 409, r.text
-        assert r.json()["error"]["code"] == "API_INDEX_VERSION_UNAVAILABLE"
-        assert "x-total" not in r.headers  # refused before the stream
-        assert (
-            c.get(EXPORT, params={"format": "ris", "q": Q}).status_code == 200
-        )  # the served one still exports
-
-
 def test_a_pinned_snapshot_is_verified_once_and_kept(
     client: TestClient, store: tuple[Path, str, str]
 ) -> None:
@@ -235,13 +222,6 @@ def test_a_pinned_snapshot_is_verified_once_and_kept(
     first = state.pinned_records(b)
     assert first is not None and state.pinned_records(b) is first
     assert state.pinned_records(state.engine.index_version) is state.served.records  # the served one's own
-
-
-def test_op_export_without_the_snapshot_fails_and_writes_nothing(data_dir: Path, tmp_path: Path) -> None:
-    shutil.rmtree(data_dir / "snapshots" / "a")
-    out = tmp_path / "cli.ris"
-    assert cli.main(["--data-dir", str(data_dir), "export", Q, "--format", "ris", "--out", str(out)]) != 0
-    assert not out.exists()
 
 
 def test_a_snapshot_that_wont_verify_is_remembered_not_rehashed_per_request(
@@ -262,8 +242,94 @@ def test_a_snapshot_that_wont_verify_is_remembered_not_rehashed_per_request(
     with TestClient(make_app(data_dir)) as c:
         calls.clear()  # the served index's own load
         for _ in range(3):
-            assert c.get(EXPORT, params={"format": "csv", "q": Q, "index_version": b}).status_code == 409
+            withheld_export(c, "csv", q=Q, index_version=b)
         assert calls == [b]
         assert c.app.state.index.load()  # type: ignore[attr-defined]  # a reload looks again
-        assert c.get(EXPORT, params={"format": "csv", "q": Q, "index_version": b}).status_code == 409
+        withheld_export(c, "csv", q=Q, index_version=b)
         assert calls == [b, b]
+
+
+# --- a pinned index whose snapshot can't be verified: abstracts withheld (decision-021) ---------------------
+def withheld_export(client: TestClient, fmt: str, **params: Any) -> str:
+    r = client.get(EXPORT, params={"format": fmt, **params})
+    assert r.status_code == 200, r.text
+    assert r.headers["x-abstract-source"] == "unavailable"
+    return r.content.decode("utf-8")
+
+
+def check_withheld(fmt: str, text: str, ids: list[str]) -> None:
+    """The same records, no abstract and no source anywhere, and each record saying why."""
+    if fmt == "ris":
+        parsed = parse_ris(text, "export.ris")
+        assert [r.first("ID") for r in parsed] == ids
+        for r in parsed:
+            assert "AB" not in r.fields and r.fields["TI"]
+            assert exporter.WITHHELD in r.fields["N1"] and r.fields["N1"][-1].startswith("openproceedings ")
+            assert not any(n.startswith("Abstract source:") for n in r.fields["N1"])
+    elif fmt == "bibtex":
+        entries = parse_string(text)
+        assert [e.fields["openproceedings_id"] for e in entries] == ids
+        for e in entries:
+            assert "abstract" not in e.fields and "abstract_source" not in e.fields
+            assert e.fields["abstract_withheld"] == exporter.WITHHELD
+    elif fmt == "csv":
+        rows = list(csv.DictReader(io.StringIO(text.removeprefix("\ufeff"))))
+        assert [row["id"] for row in rows] == ids
+        assert all(row["abstract"] == "" and row["abstract_withheld"] == "true" for row in rows)
+        assert all(
+            row["abstract_source"] == row["abstract_origin"] == row["abstract_url"] == "" for row in rows
+        )
+    else:
+        objs = [json.loads(line) for line in text.splitlines()]
+        assert [o["id"] for o in objs] == ids
+        assert all(
+            o["abstract"] is None and o["abstract_source"] is None and o["abstract_withheld"] for o in objs
+        )
+
+
+def attributed_ids(client: TestClient, **params: Any) -> list[str]:
+    return [json.loads(x)["id"] for x in body(client, "jsonl", **params).splitlines()]
+
+
+@pytest.mark.parametrize("fmt", exporter.FORMATS)
+def test_a_pinned_index_version_whose_snapshot_is_gone_withholds_every_abstract(
+    data_dir: Path, store: tuple[Path, str, str], fmt: str
+) -> None:
+    _data, _a, b = store
+    with TestClient(make_app(data_dir)) as c:
+        ids = attributed_ids(c, q=Q, index_version=b)
+    shutil.rmtree(data_dir / "snapshots" / "b")
+    with TestClient(make_app(data_dir)) as c:
+        check_withheld(fmt, withheld_export(c, fmt, q=Q, index_version=b), ids)
+        assert c.get(EXPORT, params={"format": fmt, "q": Q}).headers["x-abstract-source"] == "attributed"
+
+
+@pytest.mark.parametrize("fmt", exporter.FORMATS)
+def test_a_record_whose_index_snapshot_is_gone_withholds_abstracts_and_still_replays(
+    data_dir: Path, store: tuple[Path, str, str], fmt: str
+) -> None:
+    """A record saved on `a`, `b` served, `a`'s snapshot gone: the cited ids go out without abstracts, and
+    the record still replays `reproduced` (a replay needs the index, not the snapshot)."""
+    _data, _a, b = store
+    with TestClient(make_app(data_dir)) as c:
+        record_id = save(c, Q)
+        ids = attributed_ids(c, record_id=record_id)
+    point_current(data_dir, b)
+    shutil.rmtree(data_dir / "snapshots" / "a")
+    with TestClient(make_app(data_dir)) as c:
+        check_withheld(fmt, withheld_export(c, fmt, record_id=record_id), ids)
+        replay = c.get(f"/api/v1/records/{record_id}")
+        assert replay.status_code == 200 and replay.json()["replay"]["status"] == "reproduced"
+
+
+def test_op_export_without_the_snapshot_withholds_abstracts_with_a_warning(
+    data_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with TestClient(make_app(data_dir)) as c:
+        ids = attributed_ids(c, q=Q)
+    shutil.rmtree(data_dir / "snapshots" / "a")
+    out = tmp_path / "cli.ris"
+    assert cli.main(["--data-dir", str(data_dir), "export", Q, "--format", "ris", "--out", str(out)]) == 0
+    check_withheld("ris", out.read_text(encoding="utf-8"), ids)
+    err = capsys.readouterr().err
+    assert "op export: warning:" in err and "every abstract is withheld" in err

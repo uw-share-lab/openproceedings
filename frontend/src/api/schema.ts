@@ -37,8 +37,8 @@ export interface paths {
          *     `index_version` (else the served index), or the stored ids of search record `record_id` (alone) from the
          *     index it names. Never paginated or truncated; `X-Total` equals `/search`'s `total` for the same query and
          *     index (for a record, its stored `total`). Each record names its abstract's source (decision-018), from the
-         *     exported index's snapshot: a pinned index whose snapshot this instance can't verify is 409
-         *     `API_INDEX_VERSION_UNAVAILABLE`.
+         *     exported index's snapshot; for a pinned index whose snapshot this instance can't verify, the same records
+         *     with every abstract withheld and `X-Abstract-Source: unavailable` (decision-021).
          */
         get: operations["export"];
         put?: never;
@@ -1488,6 +1488,8 @@ export interface operations {
                 headers: {
                     /** @description attachment; filename="openproceedings-<index_version>-<first 12 of canonical_hash>.<ext>" */
                     "Content-Disposition"?: string;
+                    /** @description `attributed`: each abstract names its source (decision-018). `unavailable`: the exported index's snapshot can't be verified on this instance, so every abstract is withheld and each record says so (decision-021) */
+                    "X-Abstract-Source"?: "attributed" | "unavailable";
                     /** @description The index the records were read from */
                     "X-Index-Version"?: string;
                     /** @description This code's query_version (on a `record_id` export too, whatever the record's own) */

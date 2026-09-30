@@ -132,3 +132,13 @@ Record the result below. The export only changes to `JOUR` through a spec 04 cha
   Covidence's count to it, or its count to Covidence's.
 - 2026-09-27, run by the project owner with the assistant driving the browser for the first import. The
   owner deleted the throwaway review the same day.
+
+## Addendum — 2026-09-30 (TASK-138, decision-021)
+- Exports now add `N1  - Abstract source: <site> <url>` before the provenance line of every record whose
+  abstract has a source (and, where a pinned index's snapshot can't be verified, an `N1  - Abstract withheld: …`
+  line instead, with no `AB`). An attributed **rejected** paper therefore has **three** `N1` lines: the status
+  sentence, the source, the provenance. **Untested in Covidence**: this import covered two `N1` lines
+  (record 1), which imported cleanly. Low risk: Covidence showed no `N1` to screeners, and a third line of the
+  same tag is the same shape. Not re-imported.
+- This fixture is unchanged: its records carry no provenance claims, so no abstract names a source, and the
+  sha256 above is still what the writer writes (`backend/tests/unit/test_covidence_fixture.py`).

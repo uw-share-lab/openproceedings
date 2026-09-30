@@ -38,7 +38,15 @@ claim; `an imported RIS file` when the route names no known site; no url when th
 link). No abstract, or none a claim holds: no line. It is additive: `N1` was already repeatable, the status
 sentence stays first and the provenance line last, and Covidence imported the fixture's two-`N1` record
 cleanly (it shows no `N1` to screeners). A reader that wants the provenance takes the **last** `N1`, never
-the first or the only one. The Covidence fixture's records have no claims, so its bytes are unchanged.
+the first or the only one (decision-021 names that reader as one additions don't protect). The Covidence
+fixture's records have no claims, so its bytes are unchanged; an attributed rejected paper has three `N1`
+lines, untested in Covidence (low risk).
+
+**Withheld abstracts (decision-021).** A pinned export whose index's snapshot can't be verified has no `AB`
+and no `Abstract source:` line; instead each record has `N1  - Abstract withheld: its source could not be
+attributed on this instance (the index's snapshot is unavailable), so no abstract is exported
+(decision-018).` (`export.WITHHELD`) before the provenance line, and the response has
+`X-Abstract-Source: unavailable`.
 
 **Id carrier:** the round-trip test reads the openproceedings `id` back from the `ID` tag, for every
 record including PMLR-only ones. Never overload `N1` or recover ids from `UR`.

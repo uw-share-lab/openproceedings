@@ -59,6 +59,7 @@ EXPOSED_HEADERS = (
     "X-Query-Version",
     "Retry-After",
     "Content-Disposition",
+    "X-Abstract-Source",
     "Location",
 )
 

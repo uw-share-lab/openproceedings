@@ -35,8 +35,8 @@ A pinned export also names each abstract's source (decision-018, TASK-138), so i
 records: `IndexState.pinned_records(version)` verifies them as a load does (`snapshot_records`), on first use
 only (a replay or diff never needs them), in the same one-at-a-time open slot, and keeps them beside the
 engine in an LRU of the same size. None when the snapshot can't be verified (one WARNING
-`pinned_snapshot_unavailable` with its reason, then remembered like a refused pin): the export is then
-refused, never sent without attribution.
+`pinned_snapshot_unavailable` with its reason, then remembered like a refused pin): the export then withholds
+every abstract (decision-021), never sending one without attribution.
 
 Every failure line carries a `reason` constant, never a message (messages name paths): an
 `IndexSelectionError`'s (`name_invalid`, `not_found`, `outside_indexes`), an `IndexBuildError`'s
@@ -476,8 +476,11 @@ class IndexState:
                     return None
                 del self._records_refused[version]
         with self._open_slot:  # a verifying pass over the snapshot: one open of any kind at a time
-            with self._cache_lock:
+            with self._cache_lock:  # a waiter finds what the open before it found: kept, or refused
                 found = self._pinned_records.get(version)
+                until = self._records_refused.get(version)
+                if found is None and until is not None and until > self._clock():
+                    return None
             if found is None:
                 started = time.perf_counter()
                 try:

@@ -25,9 +25,11 @@ report, and the main session fixes.
    (what `make openapi` and the CI `test` job regenerate). Any difference is a Must. Also flag a model change whose snapshot did not change, which means the snapshot test is not
    covering it.
 3. **Classify each change** using the versioning rules. Removed or renamed fields, type or nullability
-   changes, optional→required, tightened validation, changed defaults, changed error codes, and changed
-   export mappings are **breaking**. A breaking change inside `/api/v1` without a decision record is a
-   Must.
+   changes, optional→required, tightened validation, changed defaults, changed error codes, and a changed
+   or removed export field, column position or line placement are **breaking**. Additions to an export
+   format (an RIS line of a repeating tag that keeps every documented position, a BibTeX field, a CSV column
+   appended last, a JSONL key) are **additive** (decision-021). A breaking change inside `/api/v1` without a
+   decision record is a Must.
 4. **Shape checks:** every response has `index_version` and `tokenizer_version`. `excluded` and
    `expansions` are never optional-and-omitted. `total` does not vary with `sort`, `offset`, `limit` or
    the semantic layer. Facets exclude only their own field's filter. `/near-misses` never merges into

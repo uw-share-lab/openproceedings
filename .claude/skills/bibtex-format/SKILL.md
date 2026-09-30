@@ -45,7 +45,10 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
   site name, ` (via RIS import)` for a `ris` claim, the url when there is one), from the snapshot's
   `RecordFile.attributions`. Escaped like every value (`_braced`: a url's `%`, `&`, `#` gain a backslash, as in
   `url`). A new field, not a change to `note`: `note` keeps exactly the provenance line (after the `Submitted
-  to` sentence), so it stays additive; refaudit's `(\w+)\s*=` reads the name and styles don't print it.
+  to` sentence), so it stays additive (decision-021); refaudit's `(\w+)\s*=` reads the name and styles don't
+  print it. When a pinned export's snapshot can't be verified (decision-021) there is no `abstract` and no
+  `abstract_source`; instead `abstract_withheld = {Abstract withheld: … (decision-018).}` (`export.WITHHELD`), a
+  field rather than a sentence in `note`, since changing `note` is breaking and styles typeset it.
 - `author`: `Last, First` joined by ` and `. Brace a name that contains the word `and` or a comma, or
   that is an organisation (`{OpenAI Team}`).
 

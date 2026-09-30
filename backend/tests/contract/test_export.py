@@ -378,7 +378,9 @@ def test_the_openapi_document_describes_the_export(client: TestClient) -> None:
     headers = op["responses"]["200"]["headers"]
     assert set(headers) == {
         "X-Total", "X-Index-Version", "X-Tokenizer-Version", "X-Query-Version", "Content-Disposition",
+        "X-Abstract-Source",
     }  # fmt: skip
+    assert headers["X-Abstract-Source"]["schema"]["enum"] == ["attributed", "unavailable"]
     assert headers["X-Total"]["schema"]["type"] == "integer"
 
 
@@ -550,8 +552,11 @@ def pinned(fmt: str, body: bytes, record_id: str, searched_at: str) -> bytes:
             f" · exported {DATE}}}", f" · exported {DATE}{tail.replace('_', chr(92) + '_')}}}"
         )
     elif fmt == "csv":
-        # this store's abstracts have no claims, so the three abstract-source columns after them are empty
-        text = text.replace(f",{DATE},,,,,\r\n", f",{DATE},{exporter._cell(record_id)},{searched_at},,,\r\n")
+        # this store's abstracts have no claims: the three abstract-source columns after them are empty, and
+        # nothing is withheld
+        text = text.replace(
+            f",{DATE},,,,,,false\r\n", f",{DATE},{exporter._cell(record_id)},{searched_at},,,,false\r\n"
+        )
     else:
         text = text.replace('"record_id": null', f'"record_id": "{record_id}"')
         text = text.replace('"searched_at": null', f'"searched_at": "{searched_at}"')
