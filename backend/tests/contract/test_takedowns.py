@@ -13,16 +13,16 @@ import csv
 import io
 import json
 import shutil
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from openproceedings import cli
+from openproceedings import cli, takedown_check
 from openproceedings import export as exporter
 from openproceedings.api import export as route
-from openproceedings.api.state import IndexState
+from openproceedings.api.state import IndexState, Served
 from openproceedings.engine.index import build_index
 from openproceedings.ingest.dedup import DedupResult
 from openproceedings.ingest.record import PaperRecord
@@ -310,3 +310,99 @@ def test_a_bad_list_at_startup_serves_nothing(data_dir: Path) -> None:
     with TestClient(make_app(data_dir)) as c:
         r = c.get("/api/v1/coverage")
         assert r.status_code == 503 and r.json()["error"]["code"] == "API_INDEX_NOT_LOADED"
+
+
+# --- op takedown check (AC8) ------------------------------------------------------------------------------------
+
+
+def fetcher(client: TestClient) -> takedown_check.Fetch:
+    def fetch(path: str, params: Mapping[str, str]) -> tuple[int, str]:
+        r = client.get(path, params=dict(params))
+        return r.status_code, r.text
+
+    return fetch
+
+
+def test_the_check_passes_when_every_loaded_version_withholds(data_dir: Path, store: Store) -> None:
+    _, old, new, paper, _ = store
+    listing(data_dir, paper.id)
+    point_current(data_dir, new)
+    with TestClient(make_app(data_dir)) as c:
+        c.get(EXPORT, params={"format": "jsonl", "q": "agents", "index_version": old})  # loads the pinned one
+        report = takedown_check.check(fetcher(c), frozenset({paper.id}))
+    assert report.problems == ()
+    assert set(report.index_versions) == {old, new} and report.exports == 2 * len(FORMATS)
+
+
+def test_the_check_fails_when_the_served_index_serves_a_listed_abstract(
+    data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The mutant: serve-time withholding switched off. The old index (served) still holds the abstract."""
+    _, old, _, paper, _ = store
+    listing(data_dir, paper.id)
+    monkeypatch.setattr(Served, "withheld_in", lambda self, records: frozenset())
+    with TestClient(make_app(data_dir)) as c:
+        report = takedown_check.check(fetcher(c), frozenset({paper.id}))
+    problems = "\n".join(report.problems)
+    assert f"{paper.id}: /papers on index {old} serves its abstract" in problems
+    assert "doesn't mark the abstract withheld" in problems
+    assert f"its /search hit on index {old} serves the abstract" in problems
+    for fmt in FORMATS:
+        assert f"the {fmt} export of index {old} serves its abstract" in problems
+    assert paper.abstract is not None and paper.abstract not in problems
+
+
+def test_the_check_fails_when_only_a_pinned_versions_export_serves_it(
+    data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The new index (served) withheld it in its snapshot; the mutant drops the list, so the old one, loaded
+    only as a pin, would hand it out in exports."""
+    _, old, new, paper, _ = store
+    listing(data_dir, paper.id)
+    point_current(data_dir, new)
+    real = Served.withheld_in
+    monkeypatch.setattr(
+        Served,
+        "withheld_in",
+        lambda self, records: (
+            real(self, records) if records is self.records else real(self, records) - self.listed
+        ),
+    )
+    with TestClient(make_app(data_dir)) as c:
+        report = takedown_check.check(fetcher(c), frozenset({paper.id}))
+    assert sorted(report.problems) == sorted(
+        f"{paper.id}: the {fmt} export of index {old} serves its abstract" for fmt in FORMATS
+    )
+
+
+def test_the_check_names_a_listed_id_no_index_holds(client: TestClient) -> None:
+    report = takedown_check.check(fetcher(client), frozenset({"op:iclr:2024:NotInAnyIndex"}))
+    assert report.problems == (
+        "op:iclr:2024:NotInAnyIndex: no index this instance loads holds it; check the id on the list",
+    )
+
+
+def test_op_takedown_check_exits_1_on_a_problem_and_checks_the_log(
+    data_dir: Path, store: Store, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, _, _, paper, _ = store
+    listing(data_dir, paper.id)
+    with TestClient(make_app(data_dir)) as c:
+        monkeypatch.setattr(takedown_check, "http", lambda base: fetcher(c))
+        argv = ["--data-dir", str(data_dir), "takedown", "check", "--api", "http://127.0.0.1:8000"]
+        assert cli.main(argv) == 1  # the log is missing
+        out = capsys.readouterr()
+        assert out.out == "log.jsonl is missing: log each listed takedown\n"
+        log = data_dir / "takedowns" / "log.jsonl"
+        log.write_text(json.dumps({
+            "record_id": paper.id, "received": "2026-09-30", "requester": "R <r@example.org>", "basis": "copyright",
+            "decision": "withheld", "applied": "2026-09-30", "first_index_version": None,
+        }) + "\n", encoding="utf-8")  # fmt: skip
+        log.chmod(0o600)
+        assert cli.main(argv) == 0
+        assert "0 problem(s): 1 listed id(s) across 2 index version(s)" in capsys.readouterr().err
+        log.chmod(0o644)
+        assert cli.main(argv) == 1
+        assert "readable by others" in capsys.readouterr().out
+        assert cli.main([*argv[:-1], "file:///etc/passwd"]) == 1
+        assert "--api must be an http(s) URL" in capsys.readouterr().err

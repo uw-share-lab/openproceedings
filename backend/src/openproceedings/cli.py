@@ -234,6 +234,20 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--out", type=Path, help="write to this file (default standard output)")
     export.set_defaults(run=_export)
 
+    takedown = sub.add_parser(
+        "takedown", help="check that no abstract on the takedown list is served (spec 08 §Deploy; TASK-136)"
+    )
+    takedown_actions = takedown.add_subparsers(dest="action", metavar="<action>", required=True)
+    tc = takedown_actions.add_parser(
+        "check",
+        help="ask a running API, for every index version it loads, whether it serves any listed abstract; and "
+        "check the takedown log; exit 1 on any problem",
+    )
+    tc.add_argument("--api", required=True, help="the API's base URL, e.g. http://127.0.0.1:8000")
+    tc.add_argument("--list", type=Path, help="the takedown list (default <data-dir>/takedowns/withheld.txt)")
+    tc.add_argument("--log", type=Path, help="the takedown log (default <data-dir>/takedowns/log.jsonl)")
+    tc.set_defaults(run=_takedown_check)
+
     record = sub.add_parser(
         "record", help="save or replay a search record: reproduced | drifted | mismatch (spec 04)"
     )
@@ -1329,6 +1343,35 @@ def _openapi(ns: argparse.Namespace) -> int:
     else:
         ns.out.write_text(text, encoding="utf-8")
     return 0
+
+
+def _takedown_check(ns: argparse.Namespace) -> int:
+    """`op takedown check` (TASK-136 AC8): every problem on stdout, one per line, then a summary; exit 1 on any.
+    One log line with the counts, never an id's abstract (nor a requester's details)."""
+    from urllib.parse import urlsplit
+
+    from openproceedings import takedowns
+    from openproceedings.takedown_check import check, http
+
+    if urlsplit(ns.api).scheme not in ("http", "https") or not urlsplit(ns.api).netloc:
+        raise _usage(f"--api must be an http(s) URL, not {ns.api!r}")
+    listed = takedowns.load(ns.list or takedowns.list_path(ns.data_dir))
+    log_problems = takedowns.check_log(ns.log or takedowns.log_path(ns.data_dir), listed)
+    report = check(http(ns.api), listed)
+    problems = [*(p.message for p in log_problems), *report.problems]
+    for line in problems:
+        print(line)
+    print(
+        f"{len(problems)} problem(s): {report.ids} listed id(s) across {len(report.index_versions)} index "
+        f"version(s), {report.exports} export(s) read",
+        file=sys.stderr,
+    )
+    log.log(
+        logging.WARNING if problems else logging.INFO,
+        "takedown_checked",
+        extra={"listed": report.ids, "index_versions": len(report.index_versions), "problems": len(problems)},
+    )
+    return 1 if problems else 0
 
 
 def _snapshot_diff(ns: argparse.Namespace) -> int:
