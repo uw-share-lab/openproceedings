@@ -1309,5 +1309,215 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "            if state.get(\"git_c\") or state.get(\"git_dir\"):",
   "new": "            if False:"
+ },
+ {
+  "label": "pdd: inside_immutable not case-folded",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(r.lower().startswith(\"data/snapshots/\") or r.lower().startswith(\"data/indexes/\"))",
+  "new": "(r.startswith(\"data/snapshots/\") or r.startswith(\"data/indexes/\"))"
+ },
+ {
+  "label": "pdd: data/ itself not case-folded",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "r.lower() in (\"data\", \"data/snapshots\", \"data/indexes\")",
+  "new": "r in (\"data\", \"data/snapshots\", \"data/indexes\")"
+ },
+ {
+  "label": "pdd: backlog not case-folded",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(r.lower() == \"backlog\" or r.lower().startswith(\"backlog/\"))",
+  "new": "(r == \"backlog\" or r.startswith(\"backlog/\"))"
+ },
+ {
+  "label": "pdd: is_data not case-folded",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(r.lower() == \"data\" or r.lower().startswith(\"data/\"))",
+  "new": "(r == \"data\" or r.startswith(\"data/\"))"
+ },
+ {
+  "label": "pdd: parse-error check not case-folded",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "if \"data\" in cmd.lower() or",
+  "new": "if \"data\" in cmd or"
+ },
+ {
+  "label": "pdd: a target holding data/ on disk ignored",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "if is_or_contains_immutable(rel(p, base)) or holds_immutable(full):",
+  "new": "if is_or_contains_immutable(rel(p, base)):"
+ },
+ {
+  "label": "pdd: an ancestor of the repo ignored",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "if os.path.commonpath([full, root]) == full and holds_immutable(root):",
+  "new": "if False:"
+ },
+ {
+  "label": "pdd: unlink not destructive",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "\"rmdir\", \"unlink\"}",
+  "new": "\"rmdir\"}"
+ },
+ {
+  "label": "pdd: xargs clause removed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if getattr(argv, \"via_xargs\", False) and (",
+  "new": "    if False and ("
+ },
+ {
+  "label": "pdd: xargs git subcommands allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        or (g is not None and g[0] in (\"add\", \"stage\", \"rm\", \"mv\", \"update-index\"))\n",
+  "new": ""
+ },
+ {
+  "label": "pdd: xargs sed -i allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        or (head in (\"sed\", \"perl\") and in_place)\n",
+  "new": ""
+ },
+ {
+  "label": "pdd: xargs refused in any repo",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": ") and (os.path.isdir(os.path.join(root_, \"data\")) or os.path.isdir(os.path.join(root_, \"backlog\"))):",
+  "new": "):"
+ },
+ {
+  "label": "pdd: forced pathspec-from-file allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if forced and any(x.startswith(\"--pathspec-from-file\") for x in a):",
+  "new": "        if False:"
+ },
+ {
+  "label": "pdd: forced whole-tree add allowed with data/",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if forced and whole_tree(a) and os.path.isdir(os.path.join(repo_root(g[2]), \"data\")):",
+  "new": "        if False:"
+ },
+ {
+  "label": "pdd: undryable forced add allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if staged is None:\n                refuse(",
+  "new": "            if staged is None:\n                staged = []\n            if False:\n                refuse("
+ },
+ {
+  "label": "pdd: dry run data/ ignored",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if any(is_data(s) for s in staged):",
+  "new": "            if False:"
+ },
+ {
+  "label": "pdd: dry run takedowns ignored",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if any(has_takedowns(s) for s in staged):",
+  "new": "            if False:"
+ },
+ {
+  "label": "pdd: dry run without --ignore-missing",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "\"--dry-run\", \"--ignore-missing\",",
+  "new": "\"--dry-run\","
+ },
+ {
+  "label": "pdd: dry run keeps -C",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "DRY_RUN_DROP = {\"-C\", ",
+  "new": "DRY_RUN_DROP = {"
+ },
+ {
+  "label": "pdd: dry run keeps -c",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "DRY_RUN_DROP = {\"-C\", \"-c\", ",
+  "new": "DRY_RUN_DROP = {\"-C\", "
+ },
+ {
+  "label": "pdd: update-index unseen paths allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if \"--index-info\" in a or (\"--add\" in a and \"--stdin\" in a):",
+  "new": "        if False:"
+ },
+ {
+  "label": "pdd: update-index --index-info allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if \"--index-info\" in a or (\"--add\" in a and \"--stdin\" in a):",
+  "new": "        if (\"--add\" in a and \"--stdin\" in a):"
+ },
+ {
+  "label": "pdd: update-index --cacheinfo path unsplit",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "for w in (p, p.split(\",\")[-1])]",
+  "new": "for w in (p,)]"
+ },
+ {
+  "label": "pdd: update-index data/ allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if \"--add\" in a and any(any_rel(is_data, w, g[2]) for w in words):",
+  "new": "        if False:"
+ },
+ {
+  "label": "pdd: update-index takedowns allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if \"--add\" in a and any(through_takedowns(w, g[2], False) for w in words):",
+  "new": "        if False:"
+ },
+ {
+  "label": "pdd: rsync --delete above data/ allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if head == \"rsync\" and paths and any(a.startswith(\"--delete\") for a in args) and covers_immutable(paths[-1], d):",
+  "new": "    if False:"
+ },
+ {
+  "label": "pdd: find -ok not checked",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": " or \"-ok\" in args",
+  "new": ""
+ },
+ {
+  "label": "pdd: find checks only its first start",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "any(covers_immutable(p, d) for p in find_starts(args))",
+  "new": "any(covers_immutable(p, d) for p in find_starts(args)[:1])"
+ },
+ {
+  "label": "pdd: find with no start is not .",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    return starts or [\".\"]",
+  "new": "    return starts"
+ },
+ {
+  "label": "pdd: find -L read as a start",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    while k < len(args) and args[k] in (\"-H\", \"-L\", \"-P\", \"-E\", \"-X\", \"-d\", \"-s\", \"-x\"):\n        k += 1\n",
+  "new": ""
+ },
+ {
+  "label": "pdd: perl read like sed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if head == \"perl\":\n        in_place = perl_in_place(args)\n",
+  "new": ""
+ },
+ {
+  "label": "pdd: perl -M value read as switches",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if c in \"MmIxdDCFl0\":\n                break\n",
+  "new": ""
+ },
+ {
+  "label": "pdd: perl -i on a snapshot allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if head in (\"sed\", \"perl\") and in_place and any(any_rel(inside_immutable",
+  "new": "    if head == \"sed\" and in_place and any(any_rel(inside_immutable"
+ },
+ {
+  "label": "pdd: backlog in-place edit allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        refuse(BACKLOG_EDIT_MSG)",
+  "new": "        pass"
+ },
+ {
+  "label": "pdd: decision bodies not exempt",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "in_backlog(r) and not in_decisions(r)",
+  "new": "in_backlog(r)"
  }
 ]
