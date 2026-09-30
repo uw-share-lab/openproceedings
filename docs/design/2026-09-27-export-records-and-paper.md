@@ -372,7 +372,8 @@ Counts come from the record: identified = `total + excluded.total` and unclassif
 ```
 - Calls `GET /papers/{id}?q=<q>&mode=<mode>` (the `q` rides in the URL); draws `highlights` with the same
   component as the result list (API spans only).
-- A paper that isn't `accepted` gets a status line under the badges, the same sentence the RIS `N1` uses:
+- A paper that isn't `accepted` gets a status line under the badges, naming the venue with the same venue
+  string as the RIS `N1`:
   "Status: rejected — submitted to International Conference on Learning Representations (ICLR 2024), not in
   its proceedings."
 - "Back to results" is history back when the previous entry is this `/search`, otherwise a link to
@@ -380,9 +381,10 @@ Counts come from the record: identified = `total + excluded.total` and unclassif
 - **As built (TASK-042):** "Back to results" is always the link `/search?q=&mode=` (page 1; `/search` for a
   direct link): with `Referrer-Policy: no-referrer` the page can't tell where it was reached from. The status
   line first named the venue as `<venue> <year>` ("submitted to ICLR 2024"), because the conference's full
-  name was only in the backend's `vocab.CONFERENCES` era table; since TASK-112 it reads the API's
-  `paper.venue_name`, so it is the sentence above, the RIS `N1`'s venue string. Provenance values that are lists are joined with `; `; a
-  claim's `url` is a "source ▸" link after its evidence text. The query in the URL is fetched as
+  name was only in the backend's `vocab.CONFERENCES` era table. Since TASK-112 it reads the API's
+  `paper.venue_name`, so it reads as the example above, with the venue string RIS `T2` and the first `N1`
+  use. Provenance values that are lists are joined with `; `; a claim's `url` is a "source ▸" link after its
+  evidence text. The query in the URL is fetched as
   `["paper", id, q, mode]`.
 
 ### P2 Not matched (`matched: false`)

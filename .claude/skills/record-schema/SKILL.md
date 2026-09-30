@@ -27,7 +27,7 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | `keywords` | Stored and shown, **never indexed as text** (guarantee 2). |
 | `provenance` | `list[Claim]`, see below. |
 | `content_hash` | See below. |
-| `venue_name` | **Derived, never stored** (TASK-112): `vocab.venue_name(venue, year)`, a computed field. Sent with the record (`GET /papers/{id}`); `record.DERIVED` names it, and `snapshot.record_line` and `model_copy` dump with `exclude=DERIVED`. Stored data naming it is refused (`extra="forbid"`), so a dump you validate again must exclude it too. |
+| `venue_name` | **Derived, never stored** (TASK-112): `vocab.venue_name(venue, year)`, a computed field. Sent with the record (`GET /papers/{id}`); `record.DERIVED` names it, and `snapshot.record_line` and `model_copy` dump with `exclude={*DERIVED}` (a set: mypy's `IncEx` refuses the frozenset itself). Stored data naming it is refused (`extra="forbid"`), so a dump you validate again must exclude it too. |
 
 ## Native ids
 | Source | `native` |

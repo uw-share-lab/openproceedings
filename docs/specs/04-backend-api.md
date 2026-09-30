@@ -801,7 +801,7 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     `frontend/src/lib/filter-clause-golden.json` (`tests/contract/test_parse_filters.py`).
   - `GET /papers/{id}` answers `{index_version, tokenizer_version, query_version, paper}`, where `paper` is
     the spec 01 `PaperRecord` (provenance and `content_hash` included), with its derived `venue_name`, the venue
-    string below (TASK-112: additive, always sent; computed from `venue` and `year` when the answer is built, so
+    string of §Exports (TASK-112: additive, always sent; computed from `venue` and `year` when the answer is built, so
     every index already served has it, with no rebuild). The served index decides whether the
     id exists. Otherwise the answer is 404 `API_PAPER_NOT_FOUND`, whose message never repeats the id. An id
     that isn't shaped `op:<venue>:<year>:<native>` is 422 `API_BAD_PARAM` (the path's `pattern`, as a

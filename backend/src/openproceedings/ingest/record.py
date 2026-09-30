@@ -211,8 +211,9 @@ class PaperRecord(BaseModel):
 
     @computed_field(  # type: ignore[prop-decorator]
         description="The conference's full name and the acronym it went by that year, e.g. `International "
-        "Conference on Learning Representations (ICLR 2024)`: the venue string exports use as RIS `T2` and "
-        "BibTeX `booktitle`. Derived from `venue` and `year`; never stored."
+        "Conference on Learning Representations (ICLR 2024)`: the venue string exports use (RIS `T2`; BibTeX "
+        "`booktitle`, or the `note`'s `Submitted to …` for a paper not accepted). Derived from `venue` and "
+        "`year`; never stored."
     )
     @property
     def venue_name(self) -> str:

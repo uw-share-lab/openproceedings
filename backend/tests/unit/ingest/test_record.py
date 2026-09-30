@@ -98,7 +98,7 @@ def test_hash_changes_with_every_covered_field(field: str, value: Any) -> None:
 
 
 def test_a_stale_hash_is_rejected_on_load() -> None:
-    data = record().model_dump(exclude=DERIVED)
+    data = record().model_dump(exclude={*DERIVED})
     data["title"] = "Tampered"
     with pytest.raises(ValidationError, match="content_hash"):
         PaperRecord.model_validate(data)
@@ -108,7 +108,7 @@ def test_a_stale_hash_is_rejected_on_load() -> None:
 def test_stored_data_can_never_ask_for_a_new_hash(fake: str) -> None:
     line = (
         record()
-        .model_dump_json(exclude=DERIVED)
+        .model_dump_json(exclude={*DERIVED})
         .replace(record().content_hash, fake)
         .replace("Trust Calibration", "Tampered")
     )
@@ -122,7 +122,7 @@ def test_a_four_character_native_id_is_a_forum_id() -> None:
 
 def test_round_trips_through_json() -> None:
     r = record()
-    assert PaperRecord.model_validate_json(r.model_dump_json(exclude=DERIVED)) == r
+    assert PaperRecord.model_validate_json(r.model_dump_json(exclude={*DERIVED})) == r
 
 
 INVALID: list[tuple[str, dict[str, Any]]] = [
@@ -185,7 +185,7 @@ def test_invalid_records_cannot_be_built(why: str, overrides: dict[str, Any]) ->
 
 
 def test_an_extra_field_is_rejected() -> None:
-    data = record().model_dump(exclude=DERIVED)
+    data = record().model_dump(exclude={*DERIVED})
     data["source"] = "x"
     with pytest.raises(ValidationError):
         PaperRecord.model_validate(data)
@@ -207,7 +207,7 @@ def test_a_real_abstract_may_contain_an_ellipsis() -> None:
     "missing", ["id", "title", "abstract", "authors", "venue", "year", "track", "status"]
 )
 def test_every_required_field_is_required(missing: str) -> None:
-    data = record().model_dump(exclude=DERIVED)
+    data = record().model_dump(exclude={*DERIVED})
     del data[missing]
     with pytest.raises(ValidationError) as err:
         PaperRecord.model_validate(data)
