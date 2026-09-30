@@ -28,3 +28,11 @@ Explain NeurIPS 2021 main at 2,929 accepted against the official 2,334 (+25.5%) 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `docs/specs/01-ingestion.md`, `.claude/skills/openreview-api/SKILL.md`, `.claude/skills/dedup-rules/SKILL.md`, `.claude/skills/logging-standards/SKILL.md`
 - Test or hook added? — the collapse tests in `test_openreview_v1.py`
+
+## Addendum — 2026-09-30 (task-132)
+**Key lesson:** `unknown` because a note carries no evidence is not a disagreement. Before recording two same-pdf notes as "not the same paper", diff them field by field: missing status evidence alone can't split a paper.
+
+- TASK-125 kept NeurIPS 2021 `W6e384Lkjbw` and `rDdb26AQ0SO` apart as "same pdf but not the same paper by content", and a test row pinned it. A field-level diff of the cached notes shows the same pdf and supplementary sha1s, title, authors, author ids, abstract, keywords, TL;DR and paperhash. Only `venue`/`venueid` (absent on `W6e384Lkjbw`), `_bibtex`, `checklist`, `submission_history*` and `thumbnail` differ. The proceedings page even links `W6e384Lkjbw` (evidence: the offset-0 and offset-1000 Blind_Submission pages and `neurips/pages/ad/adb9a2ae…` in the 2026-09-29 cache).
+- Its `unknown` came from absence (NeurIPS 2021 reads status only from `content.venue`), so it contradicted nothing. The crawler now drops such a silent note for its one accepted twin (`collapse_silent_twins`). An offline replay of every v1 venue-year collapses exactly this pair, and NeurIPS 2021 main goes from 2,335 to 2,334.
+- The rule is narrow on purpose: only a `status_from="venue"` year, only with both keys absent (an empty or unmapped venue string is evidence nobody can read, not silence), only into an accepted twin, and never with two twins that carry evidence. Mutants of each condition are killed by `test_openreview_v1.py` or `test_openreview_v1_collapse_props.py`.
+- Propagated to: `docs/specs/01-ingestion.md`, the `openreview-api`, `dedup-rules` and `neurips-proceedings` skills, the facts doc and `docs/results/coverage-sources.md`.

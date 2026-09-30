@@ -175,9 +175,20 @@ No bulk data was kept. Recorded, scrubbed fixtures of each response shape are un
   proceedings pages link the kept forum for 177 of the 297 accepted pairs and the dropped forum for 120 (never
   both, never neither), e.g. `0hJ-U3aqUDf` #401 kept while the proceedings link `rvKD3iqtBdk` #3462. Harmless
   while the NeurIPS importer doesn't claim that link as `urls.forum` (dedup-rules skill).
-- Same pdf but not the same paper by content, kept apart: NeurIPS 2021 `W6e384Lkjbw` (#5999, no `venue`,
-  so status unknown) and `rDdb26AQ0SO` (accepted); ICLR 2018's 24 pdfs listed as a blind note and a
-  withdrawn note (status differs, authors differ on 12).
+- Same pdf, kept apart: ICLR 2018's 24 pdfs listed as a blind note and a withdrawn note (status differs, authors
+  differ on 12).
+- **NeurIPS 2021 `W6e384Lkjbw` is a silent twin (TASK-132)**, not another paper. It (#5999) and `rDdb26AQ0SO`
+  (#11021, `NeurIPS 2021 Poster`) are Blind_Submission notes with the same pdf and supplementary sha1s and the
+  same title, authors, author ids, abstract, keywords, TL;DR and paperhash. `W6e384Lkjbw` has no `venue` and no
+  `venueid` (the only such main-track note with a twin; `5fPBtLSGk21` #5943 is the other note without them, and
+  has none), so NeurIPS 2021's one status carrier says nothing and its status was `unknown` (`unmapped
+  content.venue`). It is the original submission: its `submission_history` fields are filled (a UAI 2021
+  resubmission) and `rDdb26AQ0SO`'s are empty. The proceedings page (`cca289d2…`) links `W6e384Lkjbw`. Neither
+  earlier rule caught it: TASK-125's collapse needs identical status and venueid, and TASK-126's set-aside keeps
+  an `unknown` note as a rival. The crawler now drops the silent note for its accepted twin
+  (`collapse_silent_twins`); an offline replay collapses exactly this one pair across every v1 venue-year (NeurIPS
+  2021: 2,719 records, 301 `duplicate_submission`), and the full build has NeurIPS 2021 main at 2,334 accepted,
+  the official count.
 - The NeurIPS 2021 D&B surplus (185 accepted vs 174 official in the trial) is **not** this: OpenReview's D&B
   rounds hold exactly 174 accepted notes, and its 11 same-title pairs are a Round 1 rejection and a Round 2
   acceptance with different pdfs (resubmissions). The crawl keeps both notes, and dedup still refuses to guess

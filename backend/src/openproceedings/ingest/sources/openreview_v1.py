@@ -39,6 +39,13 @@ The authority rules (never broken):
    identical in everything but their id, forum URL and provenance, with a pdf and a note number, are
    collapsed to the lowest-numbered note; each other note is counted in `skipped["duplicate_submission"]`
    (`collapse_duplicate_submissions`). A record with a crawl conflict is never collapsed.
+   **A silent twin** (TASK-132) is a note that says nothing about its status: in a year whose one status carrier
+   is `content.venue`, a submission-listing note with neither `venue` nor `venueid` (NeurIPS 2021 `W6e384Lkjbw`
+   #5999, whose accepted twin `rDdb26AQ0SO` #11021 has the same pdf, supplementary material, title, authors,
+   abstract and keywords). Such a note is dropped when exactly one other record is identical to it in everything
+   but status, presentation and venueid, and that record is accepted with no crawl conflict
+   (`collapse_silent_twins`, after rule 5; counted the same way). Its absence of evidence can't contradict an
+   acceptance; a second record (with evidence or a conflict) or a non-accepted one leaves every note a record.
 
 `content.authors` is split into names only by decision-019's count-checked rule (`split_authors`): a list with
 no `and`-joined entry is taken as listed; otherwise the split must give exactly as many names as the note has
@@ -693,6 +700,7 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
     report = CrawlReport(venue, year, page_size=page_size, gaps=ad.gaps)
     records: dict[str, PaperRecord] = {}
     numbers: dict[str, object] = {}  # record id → its note's `number`, for rule 5
+    silent: set[str] = set()  # records whose note carries no status evidence (rule 5's silent twin)
     # heartbeats count `imported` before rule 5's collapse, which runs after the listings: NeurIPS 2021's last
     # heartbeat can show up to 3,020 imported where the finished line says 2,720
     progress = Progress(log, client, report.api, venue, year, page_size, lambda: {
@@ -721,7 +729,9 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
 
     for listing in ad.listings:
         try:
-            _listing(client, ad, listing, report, records, numbers, read_forum, page_size, progress.tick)
+            _listing(
+                client, ad, listing, report, records, numbers, silent, read_forum, page_size, progress.tick
+            )
         except CacheMiss as e:
             if not dry_run:
                 raise
@@ -731,7 +741,8 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
         report.conflicts.append(c)
         log.debug("openreview_v1_conflict", extra={"forum": c.id.split(":", 3)[3], "field": c.field})
     conflicted = {c.id for c in report.conflicts}
-    for kept, dropped in collapse_duplicate_submissions(records, numbers, conflicted):
+    collapsed = collapse_duplicate_submissions(records, numbers, conflicted)
+    for kept, dropped in sorted(collapsed + collapse_silent_twins(records, silent, conflicted)):
         report.skipped[DUPLICATE_SUBMISSION] += 1
         log.debug("openreview_duplicate_submission", extra={"forum": dropped, "kept": kept})
     for r in records.values():
@@ -774,10 +785,10 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
 
 
 def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: CrawlReport,
-             records: dict[str, PaperRecord], numbers: dict[str, object], read_forum: ForumReader,
-             page_size: int, tick: Callable[[], None]) -> None:  # fmt: skip
-    """Page through one invitation's notes into `records`, checking the listing is consistent (v1 sends
-    `count` on every page); `tick()` before each note (the crawl's heartbeat)."""
+             records: dict[str, PaperRecord], numbers: dict[str, object], silent: set[str],
+             read_forum: ForumReader, page_size: int, tick: Callable[[], None]) -> None:  # fmt: skip
+    """Page through one invitation's notes into `records` (and the silent ones' ids into `silent`), checking the
+    listing is consistent (v1 sends `count` on every page); `tick()` before each note (the crawl's heartbeat)."""
     seen: set[str] = set()
     rows = 0
     counts: set[int] = set()
@@ -818,6 +829,8 @@ def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: Cr
             else:
                 records[got.id] = got
                 numbers[got.id] = note.get("number")
+                if _says_nothing_of_status(ad, note, got):
+                    silent.add(got.id)
     if rows != len(seen) or len(counts) > 1 or (counts and counts.pop() != rows):
         raise CrawlError(
             f"the listing of {listing.invitation} changed between its cached pages (rows, distinct ids and count "
@@ -862,6 +875,60 @@ def collapse_duplicate_submissions(
         kept, *rest = sorted(rids, key=lambda rid: (numbers[rid], rid))
         for rid in rest:
             out.append((records[kept].native, records.pop(rid).native))
+    return sorted(out)
+
+
+def _says_nothing_of_status(ad: Adapter, note: Mapping[str, Any], record: PaperRecord) -> bool:
+    """Whether a note carries no status evidence at all (rule 5's silent twin): its year reads status from
+    `content.venue` alone, its status is `unknown` (a withdrawn or desk-rejected listing gives its own, and a note
+    with a crawl conflict is exempt from rule 5), and it has neither a `venue` nor a `venueid` key. A venue string
+    the table doesn't know is evidence nobody could read, not silence, and other years' carriers (a decision field
+    or note) can't be judged absent from the note alone."""
+    content: Mapping[str, Any] = note["content"] if isinstance(note.get("content"), Mapping) else {}
+    return (
+        ad.status_from == "venue"
+        and record.status == "unknown"
+        and content.get("venue") is None
+        and content.get("venueid") is None
+    )
+
+
+def _same_paper_but_status(record: PaperRecord) -> str:
+    """`_same_paper` without the fields a silent note can't supply: status (and the hash over it), presentation
+    and venueid. Title, authors, abstract, keywords, pdf and track still match exactly."""
+    return json.dumps(
+        record.model_dump(
+            mode="json",
+            exclude={
+                "id": True, "provenance": True, "urls": {"forum"}, "status": True, "presentation": True,
+                "venue_id_raw": True, "content_hash": True,
+            },
+        ),
+        sort_keys=True,
+    )  # fmt: skip
+
+
+def collapse_silent_twins(
+    records: dict[str, PaperRecord], silent: Set[str], exempt: Set[str] = frozenset()
+) -> list[tuple[str, str]]:
+    """Remove from `records` every silent note (module docstring rule 5) whose group, the records with a pdf that
+    are equal by `_same_paper_but_status`, holds exactly one other record, accepted and without a crawl conflict;
+    return the (kept, removed) native ids, sorted. The accepted record is kept whatever the numbers: it is the one
+    with evidence. Run after `collapse_duplicate_submissions`, so notes identical to it are gone. Any other record
+    of the paper, with evidence or with a crawl conflict (whose status is `unknown` for a reason), or a silent
+    note with a conflict, is a second candidate: then nothing is removed."""
+    groups: defaultdict[str, list[str]] = defaultdict(list)
+    for rid, record in records.items():
+        if record.urls.pdf is not None:
+            groups[_same_paper_but_status(record)].append(rid)
+    out = []
+    for rids in groups.values():
+        quiet = [rid for rid in rids if rid in silent and rid not in exempt]
+        others = [rid for rid in rids if rid not in quiet]
+        if not quiet or len(others) != 1 or others[0] in exempt or records[others[0]].status != "accepted":
+            continue
+        kept = records[others[0]].native
+        out += [(kept, records.pop(rid).native) for rid in quiet]
     return sorted(out)
 
 
