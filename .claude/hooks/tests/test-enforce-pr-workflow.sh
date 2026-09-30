@@ -148,6 +148,8 @@ check main       block 'git push origin :dev'
 check feature/wip block 'git push origin HEAD:dev'         # write dev from a feature branch
 check feature/wip block 'git push origin +dev:dev'
 check feature/wip block 'git push origin --delete refs/heads/dev'
+check feature/wip block 'git push origin HEAD:heads/dev'          # git reads heads/dev as refs/heads/dev (TASK-067)
+check feature/wip allow 'git push origin HEAD:refs/heads/feature/dev' # a feature branch that ends in /dev
 
 echo "shell wrappers do not launder the command:"
 check main block 'bash -c "git push origin main"'

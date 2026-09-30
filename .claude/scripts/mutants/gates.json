@@ -1063,5 +1063,23 @@
   "old": "        except ParseError:\n            return \"parse-fail\"",
   "new": "        except ParseError:\n            return \"allow\"",
   "equivalent": true
+ },
+ {
+  "label": "PR gate: refs/ not stripped from a push destination",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    dst = dst.removeprefix(\"refs/\").removeprefix(\"heads/\")",
+  "new": "    dst = dst.removeprefix(\"heads/\")"
+ },
+ {
+  "label": "PR gate: heads/ not stripped from a push destination",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    dst = dst.removeprefix(\"refs/\").removeprefix(\"heads/\")",
+  "new": "    dst = dst.removeprefix(\"refs/\")"
+ },
+ {
+  "label": "PR gate: push destination compared by its last component",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    dst = dst.removeprefix(\"refs/\").removeprefix(\"heads/\")",
+  "new": "    dst = dst.rsplit(\"/\", 1)[-1]"
  }
 ]

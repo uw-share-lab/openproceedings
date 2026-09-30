@@ -143,8 +143,9 @@ def dest_protected(refspec):
     """True if this push refspec's DESTINATION ref is a protected branch (any branch can name it)."""
     s = refspec.lstrip("+")  # a leading '+' is a force marker, not part of the ref
     dst = s.split(":", 1)[1] if ":" in s else s
-    if dst.startswith("refs/"):
-        dst = dst.rsplit("/", 1)[-1]
+    # git reads `refs/heads/dev`, `heads/dev` and `dev` as the same branch (TASK-067: `HEAD:heads/dev`
+    # passed); `refs/heads/feature/dev` is another branch.
+    dst = dst.removeprefix("refs/").removeprefix("heads/")
     return dst in PROTECTED
 
 
