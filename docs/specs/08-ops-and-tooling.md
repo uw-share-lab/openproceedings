@@ -200,6 +200,14 @@ saved as another user leaves a store (and WAL files) the API can't write, or can
 means building a new `index_version` offline, switching the `current` symlink, and sending SIGHUP. Hosting is
 still open (00, question 5).
 
+**What a public instance serves (decision-018).** Every abstract in the index, in results, on paper pages and
+in exports. Before a deployment is public: (1) each record names the source of its abstract and links to
+it, and a PMLR abstract appears with its citation and a link to the PMLR page (CC BY 4.0's attribution
+terms); (2) every page names a takedown contact, and a takedown withholds that record's abstract from the
+next `index_version`; (3) the University of Waterloo copyright office has signed off (TASK-069). If sign-off
+is refused, a public instance shows only licensed abstracts (PMLR v70+, OpenReview under its CC0 clause) and
+decision-018 is superseded. Private and local deployments are unaffected.
+
 ---
 
 ## `.claude/` roster
