@@ -4,7 +4,7 @@ title: 'Deploy: compose, Caddy TLS, index promotion runbook'
 status: To Do
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-26 19:07'
+updated_date: '2026-09-30 02:56'
 labels:
   - ops
 milestone: m-6
@@ -23,7 +23,7 @@ Spec 08 §Deploy (release-manager).
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 docker compose up serves api + web over TLS
-- [ ] #2 Index promotion and op index retire documented and tested
+- [ ] #2 Index promotion documented and tested; the runbook covers retire (implemented in TASK-085)
 <!-- AC:END -->
 
 ## Implementation Notes

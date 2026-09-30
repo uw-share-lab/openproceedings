@@ -36,8 +36,17 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    SIGHUP to `api`, and check `/api/v1/meta` and `/healthz` report the new version. Rollback = repoint to
    the previous version and SIGHUP.
 5. **Retention.** Never delete an index or snapshot that any row in `data/records/records.sqlite` references;
-   list referenced versions before pruning. `protect-data-dir.sh` blocks edits; deletion is a decision
-   record.
+   list referenced versions before pruning. Retire an index only with `op index retire <index_version>`,
+   in this order: repoint `current`, SIGHUP `api`, confirm `/api/v1/meta` reports the new version (the API
+   keeps serving the old one until its reload), then retire. Before retiring:
+   - `grep -rn <index_version> docs/results data/embeddings` (committed reports and any embeddings directory
+     cite versions; a cited version is a decision to retire, not a default);
+   - run `op index retire <index_version> --dry-run`.
+   It refuses, reporting the count, while any search record pins the version, and refuses a version
+   `current` (or any other symlink in `indexes/`) points at. It can't see an instance started with
+   `op serve --index <that version>`: check what each running instance serves. If it logs ERROR
+   `index_retire_restore_failed`, move `indexes/.retiring-<version>` back to `indexes/<version>` by hand first. Snapshots have no retire
+   command yet. `protect-data-dir.sh` blocks edits; deletion is a decision record.
 6. **Record** a decision for anything that changes defaults, tokenizer or sources, and a learnings entry
    for the release; follow `CLAUDE.md` §Closing workflow.
 

@@ -35,9 +35,9 @@ the replay must tell the truth: `reproduced` only when the ids are provably iden
    changed inputs, and diffs the stored id list.
 5. **Run it.** `uv run pytest backend/tests/contract -q -k record`, then a manual loop with `op serve`:
    create a record, replay it, swap `data/indexes/current` to another fixture version, and replay again.
-6. **Retention.** Before any index version is deleted, list the records pinned to it
-   (`sqlite3 data/records/records.sqlite "select count(*) …"`) and report them. Records on a deleted version can
-   only ever be `drifted`. `release-manager` must know that before promoting.
+6. **Retention.** An index version is deleted only by `op index retire <index_version>`, which refuses while
+   `RecordStore.pinned(version) > 0` and reports the count (`--dry-run` checks without deleting). Records on a
+   deleted version can only ever be `drifted`. `release-manager` must know that before promoting.
 
 ## Output
 The diff summary. The replay matrix you ran (reproduced / drifted / mismatch, with counts). Test commands

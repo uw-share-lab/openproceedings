@@ -121,7 +121,16 @@ exception nothing anticipated is one `cli_failed` ERROR line with the traceback;
 the exception's message, which can quote input, so the API (task-034) logs frames and type, not the
 message. Long jobs say they're alive: `index_build_started`, `index_build_progress` every 10k documents,
 `index_built`; `index_parity_ok` when a parity check passes. A failed build whose `.tmp-*` staging directory
-survives its removal logs `index_build_tmp_left` (WARNING, the directory's name only).
+survives its removal logs `index_build_tmp_left` (WARNING, the directory's name only). `op index retire`
+logs one line with `index_version`, `pinned` and the outcome: `index_retired` (INFO; WARNING with
+`tmp_left: true` when its `.tmp-` directory survived), `index_retire_checked` (`--dry-run`) or
+`index_retire_refused` (WARNING with its `reason`; DEBUG for a malformed name, which is left out), plus
+ERROR `index_retire_restore_failed` (the `.retiring-` directory's name and errno name) when a set-aside index
+can't be renamed back. That run logs two lines: the ERROR, then the `index_retire_refused` (or `cli_refused`,
+or nothing for Ctrl-C) of whatever made it restore. A later retire of that version is refused with reason
+`retire_cut_short` until the directory is moved back. A
+`storage.sweep` that can't remove a `.tmp-` leftover logs `tmp_sweep_failed` (WARNING, its name and the
+chmod's errno name) and carries on.
 
 ## Review checklist (`observability-reviewer`)
 1. Does every new failure path produce exactly one log at the right level?

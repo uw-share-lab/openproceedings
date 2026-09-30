@@ -159,7 +159,7 @@ def test_default_log_format_is_json() -> None:
     "argv",
     [
         ["embed", "build", "--index", "current"],
-        ["--log-level", "debug", "--log-format", "json", "index", "retire", "old"],
+        ["--log-level", "debug", "--log-format", "json", "eval", "audit", "old"],
         ["eval", "scholar", "--query", "trust"],
     ],
 )

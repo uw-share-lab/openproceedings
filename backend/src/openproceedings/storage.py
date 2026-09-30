@@ -8,6 +8,7 @@ it; the next run sweeps `.tmp-` leftovers under the lock. Used by `ingest/snapsh
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import json
 import logging
@@ -34,11 +35,17 @@ def writable(path: Path) -> None:
 
 
 @contextmanager
-def exclusive(parent: Path) -> Iterator[None]:
-    """Hold `<parent>/.lock` exclusively: one build or ingest at a time writes into `parent`."""
+def exclusive(parent: Path, on_wait: Callable[[], None] | None = None) -> Iterator[None]:
+    """Hold `<parent>/.lock` exclusively: one build or ingest at a time writes into `parent`. `on_wait` is
+    called once if another run holds it, before blocking (so a command can say it is waiting)."""
     parent.mkdir(parents=True, exist_ok=True)
     with (parent / ".lock").open("a") as fh:
-        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            if on_wait is not None:
+                on_wait()
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
         try:
             yield
         finally:
@@ -47,10 +54,19 @@ def exclusive(parent: Path) -> Iterator[None]:
 
 def sweep(parent: Path) -> None:
     """Remove `.tmp-` directories a crashed run left behind. Called only under `exclusive(parent)`, so it
-    never touches a live run's staging directory."""
+    never touches a live run's staging directory. Each leftover it can't remove (a file it can't chmod) is
+    logged once per sweep that meets it (WARNING `tmp_sweep_failed`, its name and the chmod's errno name, if
+    any) and left, never raised: a stuck leftover must not fail every later build. `op index retire`'s
+    `.retiring-<v>` (an index set aside, not yet committed to removal) is not `.tmp-`, so never swept."""
     for leftover in parent.glob(f"{TMP}*"):
-        writable(leftover)
+        reason = None
+        try:
+            writable(leftover)
+        except OSError as e:  # rmtree below removes what it can; what survives is reported
+            reason = errno.errorcode.get(e.errno or 0, type(e).__name__)
         shutil.rmtree(leftover, ignore_errors=True)
+        if leftover.exists() or leftover.is_symlink():
+            log.warning("tmp_sweep_failed", extra={"path": leftover.name, "reason": reason})
 
 
 def sync(directory: Path) -> None:
