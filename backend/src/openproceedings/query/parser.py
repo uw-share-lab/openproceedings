@@ -5,7 +5,8 @@ problem is a Diagnostic with a span, `ast` is None exactly when there are errors
 one mistake gives one error (an error already reported inside a span suppresses follow-on errors there).
 
 - A level that mixes AND and OR without parentheses parses by precedence and raises WARN_MIXED_AND_OR,
-  showing how it was read: quoted (clipped) in the message and whole in `reading` (TASK-099).
+  showing how it was read: quoted (clipped) in the message and whole in `reading` (TASK-099). When part of
+  the level doesn't parse there is no faithful reading: `reading` is null and the message quotes none (TASK-140).
 - A bare word or range OR-joined to a filter that is a valid value of that filter's field
   (`year:2023 OR 2024`) is searched as text, as written, and raises WARN_FILTER_SCOPE.
 - A word that normalises to several tokens is a Phrase; a wildcard word's wildcard goes on its last token
@@ -273,30 +274,52 @@ class _Parser:
             branches.append(self.and_expr(field))
         nodes = [n for n, _ in branches if n is not None]
         if len(branches) > 1 and any(compound for _, compound in branches) and nodes:
-            reading = " OR ".join(
-                f"({self.q[slice(*n.span)]})" if compound else self.q[slice(*n.span)]
-                for n, compound in branches
-                if n
-            )
-            # a branch that didn't parse has no node, so the reading would drop its text: offer none then
-            whole = len(nodes) == len(branches)
-            self.warnings.append(
-                Diagnostic(
-                    code=DiagnosticCode.WARN_MIXED_AND_OR,
-                    message=f"AND binds tighter than OR, so this is read as `{clip(reading, 120)}` — add parentheses "
-                    "if you meant something else."
-                    + (
-                        " Google Scholar binds OR tighter, so it would have grouped this the other way."
-                        if self.mode == "scholar"
-                        else ""
-                    ),
-                    span=(nodes[0].span[0], nodes[-1].span[1]),
-                    reading=reading if whole else None,  # unclipped: what "Load with parentheses" splices
-                )
-            )
+            self.mixed_and_or(branches, nodes, (self.toks[start].start, self.toks[self.i - 1].end))
         if len(branches) > 1:
             self.filter_scope(self.toks[start : self.i], nodes)
         return self.combine(Or, nodes)
+
+    def mixed_and_or(
+        self, branches: list[tuple[Node | None, bool]], nodes: list[Node], level: tuple[int, int]
+    ) -> None:
+        """WARN_MIXED_AND_OR on one OR level with an AND group among its branches, spanning the level.
+
+        The reading (each AND group parenthesised, the branches joined by ` OR `) is only offered when the whole
+        level parsed: a branch that failed has no node, and an error inside a branch leaves text its node's span
+        may not cover, so the reading would drop part of the level (`a b OR () OR c` → `(a b) OR c`). Then the
+        message quotes nothing and says to fix the errors first, so it never shows a reading the warning's
+        `reading` field doesn't carry (TASK-140)."""
+        scholar = (
+            " Google Scholar binds OR tighter, so it would have grouped this the other way."
+            if self.mode == "scholar"
+            else ""
+        )
+        if len(nodes) < len(branches) or self.reported(*level):
+            self.warnings.append(
+                Diagnostic(
+                    code=DiagnosticCode.WARN_MIXED_AND_OR,
+                    message="AND and OR are mixed here without parentheses, and part of it doesn't parse — fix "
+                    "the errors here first, then add parentheses to choose how it groups (AND binds tighter than "
+                    "OR)." + scholar,
+                    span=level,
+                    reading=None,
+                )
+            )
+            return
+        reading = " OR ".join(
+            f"({self.q[slice(*n.span)]})" if compound else self.q[slice(*n.span)]
+            for n, compound in branches
+            if n
+        )
+        self.warnings.append(
+            Diagnostic(
+                code=DiagnosticCode.WARN_MIXED_AND_OR,
+                message=f"AND binds tighter than OR, so this is read as `{clip(reading, 120)}` — add parentheses "
+                "if you meant something else." + scholar,
+                span=(nodes[0].span[0], nodes[-1].span[1]),
+                reading=reading,  # unclipped: what "Load with parentheses" splices
+            )
+        )
 
     def filter_scope(self, toks: tuple[Lexeme, ...], nodes: list[Node]) -> None:
         """WARN_FILTER_SCOPE for `year:2023 OR 2024`: an OR branch that is just a bare value of the field of

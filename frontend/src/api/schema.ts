@@ -384,7 +384,7 @@ export interface components {
             message: string;
             /**
              * Reading
-             * @description Only ever set on `WARN_MIXED_AND_OR`: the text at `span` as it was read, each `AND` group in parentheses and the branches joined with ` OR ` (`a b OR c` → `(a b) OR c`). Replacing `span` in `q` with it gives a query with the same canonical form whose level no longer mixes `AND` and `OR`. Never shortened, unlike the reading quoted in `message`. Null on every other code, and on a `WARN_MIXED_AND_OR` that has none to offer: the "… and N more" summary, or a level with a branch that doesn't parse.
+             * @description Only ever set on `WARN_MIXED_AND_OR`: the text at `span` as it was read, each `AND` group in parentheses and the branches joined with ` OR ` (`a b OR c` → `(a b) OR c`). Replacing `span` in `q` with it gives a query with the same canonical form whose level no longer mixes `AND` and `OR`. Never shortened, unlike the reading quoted in `message`. Null on every other code, and on a `WARN_MIXED_AND_OR` that has none to offer: the "… and N more" summary, or a level where part doesn't parse (its `message` then quotes no reading either).
              */
             reading: string | null;
             /** Span */

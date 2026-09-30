@@ -190,13 +190,49 @@ def test_mixed_and_or_warns_with_its_reading(
         assert sum(x.code is DiagnosticCode.WARN_MIXED_AND_OR for x in after.warnings) == len(mixed) - 1
 
 
-def test_a_level_with_a_branch_that_does_not_parse_offers_no_reading() -> None:
-    """The failed branch has no node, so a reading would silently drop its text (`a b OR () OR c` →
-    `(a b) OR c`): the warning is still given, with `reading` null, so no Load with parentheses."""
-    result = parse("a b OR () OR c")
-    assert [e.code for e in result.errors] == [DiagnosticCode.PARSE_EMPTY_GROUP]
+# TASK-140: a mixed level where part doesn't parse has no faithful reading, so `reading` is null and the message
+# quotes none (it once quoted `(a b) OR c` for `a b OR () OR c`, silently dropping the failed branch). The span
+# is the whole level, the failed part included. (q, mode, level span, the error that part raises)
+NO_READING = (
+    "AND and OR are mixed here without parentheses, and part of it doesn't parse — fix the errors here first, "
+    "then add parentheses to choose how it groups (AND binds tighter than OR)."
+)
+SCHOLAR_NOTE = " Google Scholar binds OR tighter, so it would have grouped this the other way."
+FAILED: list[tuple[str, Literal["native", "scholar"], tuple[int, int], DiagnosticCode]] = [
+    ("a b OR () OR c", "native", (0, 14), DiagnosticCode.PARSE_EMPTY_GROUP),
+    ('a b OR "" OR c', "native", (0, 14), DiagnosticCode.PARSE_EMPTY_TERM),
+    ("a b OR - OR c", "native", (0, 13), DiagnosticCode.PARSE_AMBIGUOUS_MINUS),
+    ("a b OR NOT OR c", "native", (0, 15), DiagnosticCode.PARSE_EXPECTED_TERM),
+    ("a b OR title: OR c", "native", (0, 18), DiagnosticCode.PARSE_EXPECTED_TERM),
+    ("() OR a b", "native", (0, 9), DiagnosticCode.PARSE_EMPTY_GROUP),  # the failed branch first
+    # the error inside an AND group's branch: its node's span can stop short of the failed part, so a reading
+    # would drop it (`a b () OR c` → `(a b) OR c`, `a b OR c ()` → `(a b) OR (c)`)
+    ("a b () OR c", "native", (0, 11), DiagnosticCode.PARSE_EMPTY_GROUP),
+    ("a b OR c ()", "native", (0, 11), DiagnosticCode.PARSE_EMPTY_GROUP),
+    ("a () b OR c", "native", (0, 11), DiagnosticCode.PARSE_EMPTY_GROUP),
+    # a trailing OR is part of the level
+    ("a b OR c OR", "native", (0, 11), DiagnosticCode.PARSE_EXPECTED_TERM),
+    ("a AND b OR () OR c", "scholar", (0, 18), DiagnosticCode.PARSE_EMPTY_GROUP),
+]
+
+
+@pytest.mark.parametrize(("q", "mode", "span", "error"), FAILED, ids=[f"{m}:{q}" for q, m, _, _ in FAILED])
+def test_a_mixed_level_that_does_not_parse_quotes_no_reading(
+    q: str, mode: Literal["native", "scholar"], span: tuple[int, int], error: DiagnosticCode
+) -> None:
+    result = parse(q, mode)
+    assert [e.code for e in result.errors] == [error]
+    [w] = [w for w in result.warnings if w.code is DiagnosticCode.WARN_MIXED_AND_OR]
+    want = NO_READING + (SCHOLAR_NOTE if mode == "scholar" else "")
+    assert (w.span, w.reading, w.message) == (span, None, want)
+
+
+def test_an_error_outside_the_level_keeps_its_reading() -> None:
+    """Only an error inside the level withholds the reading: `a b OR c)`'s stray `)` is not part of it."""
+    result = parse("a b OR c)")
+    assert [e.code for e in result.errors] == [DiagnosticCode.PARSE_UNBALANCED_PAREN]
     [w] = result.warnings
-    assert (w.code, w.span, w.reading) == (DiagnosticCode.WARN_MIXED_AND_OR, (0, 14), None)
+    assert (w.span, w.reading) == ((0, 8), "(a b) OR c")
 
 
 def test_the_summary_past_the_per_code_cap_has_no_reading() -> None:
@@ -216,7 +252,10 @@ def test_the_message_clips_a_long_reading_but_the_field_does_not() -> None:
 
 
 def test_mixed_warning_shows_the_reading() -> None:
-    assert "`(a b) OR c`" in parse("a b OR c").warnings[0].message
+    assert parse("a b OR c").warnings[0].message == (
+        "AND binds tighter than OR, so this is read as `(a b) OR c` — add parentheses if you meant something else."
+    )
+    assert parse("a AND b OR c", "scholar").warnings[0].message.endswith(SCHOLAR_NOTE)
     assert "`a OR (b c)`" in parse("a OR b c").warnings[0].message
 
 

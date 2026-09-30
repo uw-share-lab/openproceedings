@@ -122,10 +122,12 @@ Rules:
   in parentheses and the branches joined by ` OR ` (`a b OR c` → `(a b) OR c`; a nested level inside a
   branch is quoted as typed and keeps its own warning). Replacing the span with it gives the same
   canonical form and one warning fewer (property-tested). It is never clipped, unlike the reading the
-  message quotes (TASK-099). It is null when there is no faithful reading to offer: on a level with a
-  branch that doesn't parse (`a b OR () OR c`: the failed branch has no text in the tree, so the reading
-  would drop it), and on the "… and N more like these." summary past 20 warnings, which stands for
-  several levels.
+  message quotes (TASK-099). It is null when there is no faithful reading to offer: on a level where any
+  part doesn't parse (an error inside its span: `a b OR () OR c`, where the failed branch has no text in the
+  tree, or `a b () OR c`, where the AND group's node stops before `()`, so the reading would drop it), and
+  on the "… and N more like these." summary past 20 warnings, which stands for several levels. The message
+  never quotes a reading the field doesn't carry: on a level where part doesn't parse it quotes none, spans
+  the whole level, and says to fix the errors first, then add parentheses (TASK-140).
 - A leading `NOT` or `-` on its own (an all-negative query) is an error. There has to be something to
   subtract from.
 - **Wildcards are opt-in and suffix-only:** `benchmark*` means zero or more characters.
