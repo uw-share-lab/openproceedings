@@ -60,7 +60,7 @@ the path to the v1 release (M6) depends on it.
 - **Docs:** spec 00 (architecture, stack, milestones), spec 06's status line, spec 07 §A and §F, spec 03,
   04 and 08 where they list semantic surface, README's status, and the `embedding-engineer`,
   `near-miss-evaluator` and `specter2-embeddings` roster entries say deferred and link this record.
-- **Already merged, left as is:** a `semantic_version: null` field on search records, and `op embed` and
+- **Already merged, kept (messages updated by TASK-131):** a `semantic_version: null` field on search records, and `op embed` and
   `op eval near-miss` as stub commands (`cli.py` `PLANNED`, `PLANNED_EVALS`); TASK-131 changed their
   messages to "deferred to phase 2 (decision-017)" (`DEFERRED_TASKS`). `sort=semantic` is refused before
   any semantic code could run: over HTTP, the API's closed `Sort` Literal (`api/models.py`) rejects it with
@@ -68,8 +68,8 @@ the path to the v1 release (M6) depends on it.
   2). Only a direct engine call reaches `check_page` in `engine/tantivy_engine.py`, whose hint now says
   "semantic sort is deferred to phase 2 (decision-017)". None of this costs anything to keep.
 
-**What would bring it back** (confirmed by the project owner, 2026-09-29): a v1 release (M6) is out, and either reviewers in usability testing report
+**What would bring it back.** The condition, confirmed by the project owner on 2026-09-29: a v1 release (M6) is out, and either reviewers in usability testing report
 missing vocabulary as a real problem that the Boolean tools (wildcards, the concept-group builder, syntax
-help) don't solve, or a review team asks for query-revision suggestions. Resuming means a new decision that
+help) don't solve, or a review team asks for query-revision suggestions. The steps below are TASK-131's. Resuming means a new decision that
 supersedes this one, re-checking spec 06 against the as-built API, and starting at TASK-058. The recall@25
 rule still applies: the near-miss panel ships only if it beats the BM25-OR baseline.

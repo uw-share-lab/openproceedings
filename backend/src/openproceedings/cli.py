@@ -1178,7 +1178,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if hasattr(ns, "stub"):
         name, task = ns.stub
         print(
-            f"op {name}: not implemented yet — {_stub_status(task)} (backlog task view {task})",
+            f"op {name}: not implemented yet — {_stub_status(task)}; see `backlog task view {task}`",
             file=sys.stderr,
         )
         return 2
