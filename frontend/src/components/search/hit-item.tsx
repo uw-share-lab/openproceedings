@@ -4,7 +4,9 @@
  * One result (ui-design-system §Result item; design W5; copy RH-8–13): an `h3` title linking to
  * `/paper/<id>?q=&mode=`, the authors (the first three and "et al.", with a button for the full list), badges,
  * the abstract excerpt, the abstract's attribution ("Abstract: PMLR", linking to the paper's page there;
- * decision-018, the API's `abstract_source`) and the outbound links. Highlights are the API's spans only
+ * decision-018, the API's `abstract_source`) and the outbound links. An abstract this instance withholds at a
+ * rights holder's request (the API's `abstract_withheld`, decision-022) says so (copy RH-15), never "No abstract
+ * in the index". Highlights are the API's spans only
  * (never re-matched); the excerpt window is chosen from them (`excerpt.ts`), so it never decides what matched.
  */
 import Link from "next/link";
@@ -20,6 +22,10 @@ import type { SearchHit } from "./use-search";
 export function paperHref(id: string, q: string, mode: Mode): string {
   return `/paper/${encodeURIComponent(id)}?${new URLSearchParams({ q, mode }).toString()}`;
 }
+
+/** A withheld abstract, in place of the text (copy RH-15 and PA-8; decision-022): the record is still found by
+ * its title, and an older index may still match the query on the withheld words. */
+export const ABSTRACT_WITHHELD = "Abstract removed from this site at a rights holder's request";
 
 /** Authors shown before "et al." (ui-design-system §Result item); the rest behind "Show all n authors". */
 export const AUTHORS_SHOWN = 3;
@@ -161,7 +167,9 @@ export function HitItem({ hit, q, mode }: { hit: SearchHit; q: string; mode: Mod
         presentation={hit.presentation}
         status={hit.status}
       />
-      {hit.abstract === null ? (
+      {hit.abstract_withheld ? (
+        <p className="text-sm text-muted-foreground">{ABSTRACT_WITHHELD}</p>
+      ) : hit.abstract === null ? (
         <p className="text-sm text-muted-foreground">No abstract in the index</p>
       ) : (
         <>

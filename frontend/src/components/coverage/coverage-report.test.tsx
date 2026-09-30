@@ -199,6 +199,25 @@ describe("the header", () => {
     );
   });
 
+  it("counts abstracts removed at a rights holder's request only when there are any (TASK-136, CV-6)", () => {
+    expect(COVERAGE.totals.abstract_withheld).toBe(0);
+    render(<CoverageReport coverage={COVERAGE} />);
+    expect(document.body.textContent).not.toMatch(/rights holder|removed on request/);
+    cleanup();
+    const c = copy();
+    const vy = c.venue_years[0]!;
+    const track = vy.tracks[0]!;
+    c.totals.abstract_withheld = 2;
+    vy.abstract_withheld = 2;
+    track.abstract_withheld = 2;
+    render(<CoverageReport coverage={c} />);
+    expect(document.body.textContent).toContain(
+      "of unknown status · 2 with the abstract removed at a rights holder's request",
+    );
+    const noAbstract = [...row(vy.venue, vy.year).querySelectorAll("td")][2]!;
+    expect(noAbstract.textContent).toContain(`${count(vy.abstract_missing)}+ 2 removed on request`);
+  });
+
   it("says Crawled for a crawl and drops the citability note for a citable snapshot", () => {
     const data = copy();
     data.snapshot.crawl_dates_kind = { "*": "crawl", ris: "crawl" };

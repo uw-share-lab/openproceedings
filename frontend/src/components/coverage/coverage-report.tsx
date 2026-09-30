@@ -69,12 +69,25 @@ function Header({ coverage }: { coverage: Coverage }) {
       <p className="pt-2 tabular-nums">
         {count(totals.records)} records · {count(totals.abstract_missing)} without an abstract ·{" "}
         {count(totals.unknown_track)} of unknown track · {count(totals.unknown_status)} of unknown status
+        {totals.abstract_withheld > 0 && (
+          <>
+            {" "}
+            · {count(totals.abstract_withheld)} with the abstract removed at a rights holder&apos;s request
+          </>
+        )}
       </p>
       <p className="text-muted-foreground">
         Only titles and abstracts are indexed. A record without an abstract can be found by its title only.
       </p>
     </div>
   );
+}
+
+/** Under a "No abstract" count: the abstracts removed at a rights holders' request (decision-022; copy CV-6),
+ * which that count leaves out. Nothing when there are none. */
+function Withheld({ n }: { n: number }) {
+  if (n === 0) return null;
+  return <span className="block text-xs text-muted-foreground">+ {count(n)} removed on request</span>;
 }
 
 function Gate({ track }: { track: Track }) {
@@ -151,7 +164,10 @@ function Detail({ vy, id }: { vy: VenueYear; id: string }) {
                 );
               })}
               <td className="px-2 text-right">{count(track.records)}</td>
-              <td className="px-2 text-right">{count(track.abstract_missing)}</td>
+              <td className="px-2 text-right">
+                {count(track.abstract_missing)}
+                <Withheld n={track.abstract_withheld} />
+              </td>
               <td className="px-2 text-left">{track.sources.join(", ")}</td>
             </tr>
           ))}
@@ -284,6 +300,7 @@ export function CoverageReport({ coverage }: { coverage: Coverage }) {
                       ) : (
                         count(vy.abstract_missing)
                       )}
+                      <Withheld n={vy.abstract_withheld} />
                     </td>
                     <td className="px-2 text-right">{count(vy.unknown_track)}</td>
                     <td className="px-2 text-right">{count(vy.unknown_status)}</td>
