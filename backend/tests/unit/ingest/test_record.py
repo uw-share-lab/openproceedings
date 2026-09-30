@@ -8,7 +8,8 @@ from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
-from openproceedings.ingest.record import Claim, PaperRecord, Urls, content_hash
+from openproceedings.ingest.record import DERIVED, Claim, PaperRecord, Urls, content_hash
+from openproceedings.ingest.snapshot import record_line
 from pydantic import ValidationError
 
 FETCHED = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
@@ -97,7 +98,7 @@ def test_hash_changes_with_every_covered_field(field: str, value: Any) -> None:
 
 
 def test_a_stale_hash_is_rejected_on_load() -> None:
-    data = record().model_dump()
+    data = record().model_dump(exclude=DERIVED)
     data["title"] = "Tampered"
     with pytest.raises(ValidationError, match="content_hash"):
         PaperRecord.model_validate(data)
@@ -107,7 +108,7 @@ def test_a_stale_hash_is_rejected_on_load() -> None:
 def test_stored_data_can_never_ask_for_a_new_hash(fake: str) -> None:
     line = (
         record()
-        .model_dump_json()
+        .model_dump_json(exclude=DERIVED)
         .replace(record().content_hash, fake)
         .replace("Trust Calibration", "Tampered")
     )
@@ -121,7 +122,7 @@ def test_a_four_character_native_id_is_a_forum_id() -> None:
 
 def test_round_trips_through_json() -> None:
     r = record()
-    assert PaperRecord.model_validate_json(r.model_dump_json()) == r
+    assert PaperRecord.model_validate_json(r.model_dump_json(exclude=DERIVED)) == r
 
 
 INVALID: list[tuple[str, dict[str, Any]]] = [
@@ -184,7 +185,7 @@ def test_invalid_records_cannot_be_built(why: str, overrides: dict[str, Any]) ->
 
 
 def test_an_extra_field_is_rejected() -> None:
-    data = record().model_dump()
+    data = record().model_dump(exclude=DERIVED)
     data["source"] = "x"
     with pytest.raises(ValidationError):
         PaperRecord.model_validate(data)
@@ -206,7 +207,7 @@ def test_a_real_abstract_may_contain_an_ellipsis() -> None:
     "missing", ["id", "title", "abstract", "authors", "venue", "year", "track", "status"]
 )
 def test_every_required_field_is_required(missing: str) -> None:
-    data = record().model_dump()
+    data = record().model_dump(exclude=DERIVED)
     del data[missing]
     with pytest.raises(ValidationError) as err:
         PaperRecord.model_validate(data)
@@ -361,3 +362,73 @@ def test_urls_must_be_http_and_dois_well_formed() -> None:
     ):
         with pytest.raises(ValueError):
             Urls(**bad)  # type: ignore[arg-type]
+
+
+# TASK-112: `venue_name`, the conference's full name the paper page shows (spec 04 §Exports, venue string), pinned
+# by hand for every venue-year the corpus can hold (decision-013: every venue crawled from 2013), apart from
+# `vocab.CONFERENCES`. NeurIPS was NIPS until 2017.
+VENUE_NAMES: dict[tuple[str, int], str] = {
+    ("NeurIPS", 2013): "Conference on Neural Information Processing Systems (NIPS 2013)",
+    ("NeurIPS", 2014): "Conference on Neural Information Processing Systems (NIPS 2014)",
+    ("NeurIPS", 2015): "Conference on Neural Information Processing Systems (NIPS 2015)",
+    ("NeurIPS", 2016): "Conference on Neural Information Processing Systems (NIPS 2016)",
+    ("NeurIPS", 2017): "Conference on Neural Information Processing Systems (NIPS 2017)",
+    ("NeurIPS", 2018): "Conference on Neural Information Processing Systems (NeurIPS 2018)",
+    ("NeurIPS", 2019): "Conference on Neural Information Processing Systems (NeurIPS 2019)",
+    ("NeurIPS", 2020): "Conference on Neural Information Processing Systems (NeurIPS 2020)",
+    ("NeurIPS", 2021): "Conference on Neural Information Processing Systems (NeurIPS 2021)",
+    ("NeurIPS", 2022): "Conference on Neural Information Processing Systems (NeurIPS 2022)",
+    ("NeurIPS", 2023): "Conference on Neural Information Processing Systems (NeurIPS 2023)",
+    ("NeurIPS", 2024): "Conference on Neural Information Processing Systems (NeurIPS 2024)",
+    ("NeurIPS", 2025): "Conference on Neural Information Processing Systems (NeurIPS 2025)",
+    ("NeurIPS", 2026): "Conference on Neural Information Processing Systems (NeurIPS 2026)",
+    ("ICLR", 2013): "International Conference on Learning Representations (ICLR 2013)",
+    ("ICLR", 2014): "International Conference on Learning Representations (ICLR 2014)",
+    ("ICLR", 2015): "International Conference on Learning Representations (ICLR 2015)",
+    ("ICLR", 2016): "International Conference on Learning Representations (ICLR 2016)",
+    ("ICLR", 2017): "International Conference on Learning Representations (ICLR 2017)",
+    ("ICLR", 2018): "International Conference on Learning Representations (ICLR 2018)",
+    ("ICLR", 2019): "International Conference on Learning Representations (ICLR 2019)",
+    ("ICLR", 2020): "International Conference on Learning Representations (ICLR 2020)",
+    ("ICLR", 2021): "International Conference on Learning Representations (ICLR 2021)",
+    ("ICLR", 2022): "International Conference on Learning Representations (ICLR 2022)",
+    ("ICLR", 2023): "International Conference on Learning Representations (ICLR 2023)",
+    ("ICLR", 2024): "International Conference on Learning Representations (ICLR 2024)",
+    ("ICLR", 2025): "International Conference on Learning Representations (ICLR 2025)",
+    ("ICLR", 2026): "International Conference on Learning Representations (ICLR 2026)",
+    ("ICML", 2013): "International Conference on Machine Learning (ICML 2013)",
+    ("ICML", 2014): "International Conference on Machine Learning (ICML 2014)",
+    ("ICML", 2015): "International Conference on Machine Learning (ICML 2015)",
+    ("ICML", 2016): "International Conference on Machine Learning (ICML 2016)",
+    ("ICML", 2017): "International Conference on Machine Learning (ICML 2017)",
+    ("ICML", 2018): "International Conference on Machine Learning (ICML 2018)",
+    ("ICML", 2019): "International Conference on Machine Learning (ICML 2019)",
+    ("ICML", 2020): "International Conference on Machine Learning (ICML 2020)",
+    ("ICML", 2021): "International Conference on Machine Learning (ICML 2021)",
+    ("ICML", 2022): "International Conference on Machine Learning (ICML 2022)",
+    ("ICML", 2023): "International Conference on Machine Learning (ICML 2023)",
+    ("ICML", 2024): "International Conference on Machine Learning (ICML 2024)",
+    ("ICML", 2025): "International Conference on Machine Learning (ICML 2025)",
+    ("ICML", 2026): "International Conference on Machine Learning (ICML 2026)",
+}
+
+
+@pytest.mark.parametrize(("venue", "year"), sorted(VENUE_NAMES))
+def test_venue_name_per_venue_year(venue: str, year: int) -> None:
+    native = {"NeurIPS": "nips-" + "a" * 32, "ICML": "pmlr-v1-x", "ICLR": "iilhN2MycO"}[venue]
+    r = record(id=f"op:{venue.lower()}:{year}:{native}", venue=venue, year=year)
+    assert r.venue_name == VENUE_NAMES[venue, year]
+    assert r.model_dump(mode="json")["venue_name"] == VENUE_NAMES[venue, year]  # sent with the record
+
+
+def test_venue_name_is_derived_never_stored_or_hashed() -> None:
+    """Computed from `venue` and `year` (`DERIVED`): a snapshot line never holds it, so snapshots, their hashes and
+    the record schema version are unchanged. It is output only: stored data that names it is refused, as any
+    other extra field is, so it can never disagree with the record's venue and year."""
+    r = record()
+    assert "venue_name" not in json.loads(record_line(r))
+    assert PaperRecord.model_validate_json(record_line(r)) == r
+    assert r.model_copy(update={"title": "Other"}).venue_name == r.venue_name
+    assert "venue_name" not in PaperRecord.model_fields and frozenset({"venue_name"}) == DERIVED
+    with pytest.raises(ValidationError, match="venue_name"):
+        PaperRecord.model_validate(r.model_dump())

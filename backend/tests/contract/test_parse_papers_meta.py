@@ -16,7 +16,7 @@ from openproceedings.query.ast import FILTER_FIELDS
 from openproceedings.query.clauses import filter_clauses
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import MAX_QUERY_LENGTH, parse
-from openproceedings.vocab import STATUSES, TRACKS, VENUES
+from openproceedings.vocab import STATUSES, TRACKS, VENUES, venue_name
 
 from tests.contract.conftest import SECRET, Store, make_app
 
@@ -145,6 +145,9 @@ def test_a_paper_is_its_full_snapshot_record(client: TestClient, store: Store) -
     assert body["paper"] == snapshot[hit["id"]].model_dump(mode="json")
     assert body["paper"]["provenance"] and body["paper"]["content_hash"]
     assert body["paper"]["title"] == hit["title"]  # the record the search showed
+    # TASK-112: the conference's full name for the paper page, derived per venue-year, never stored
+    paper = body["paper"]
+    assert paper["venue_name"] == venue_name(paper["venue"], paper["year"])
 
 
 def test_every_paper_of_an_index_is_served(store: Store, data_dir: Path) -> None:

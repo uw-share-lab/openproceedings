@@ -195,7 +195,7 @@ function Paper({
       {paper.authors.length > 0 && <p className="text-sm">{paper.authors.join(", ")}</p>}
       {paper.status !== "accepted" && (
         <p className="text-sm">
-          Status: {statusWords(paper.status)} — submitted to {paper.venue} {paper.year},{" "}
+          Status: {statusWords(paper.status)} — submitted to {paper.venue_name},{" "}
           {paper.status === "unknown" ? "not known to be in its proceedings" : "not in its proceedings"}.
         </p>
       )}

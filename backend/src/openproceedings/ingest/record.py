@@ -29,6 +29,7 @@ from pydantic import (
     StrictInt,
     StrictStr,
     ValidationInfo,
+    computed_field,
     field_validator,
     model_validator,
 )
@@ -38,6 +39,9 @@ from openproceedings.vocab import Status, Track, Venue, venue_name
 
 # The record's shape (fields, native-id forms, content_hash). A change is a new snapshot format: bump it.
 RECORD_SCHEMA_VERSION = "3"
+# Sent with a record, never stored: computed from its fields, so a snapshot line never holds it (`record_line`)
+# and the shape above is unchanged (TASK-112). Output only: a dump that is validated again excludes it.
+DERIVED = frozenset({"venue_name"})
 
 Source = Literal["openreview_v2", "openreview_v1", "iclr_archive", "neurips_proceedings", "pmlr", "ris"]
 Presentation = Literal["oral", "spotlight", "poster"]
@@ -205,6 +209,15 @@ class PaperRecord(BaseModel):
     provenance: tuple[Claim, ...] = ()
     content_hash: str  # checked against the fields on every load; only build/model_copy compute it
 
+    @computed_field(  # type: ignore[prop-decorator]
+        description="The conference's full name and the acronym it went by that year, e.g. `International "
+        "Conference on Learning Representations (ICLR 2024)`: the venue string exports use as RIS `T2` and "
+        "BibTeX `booktitle`. Derived from `venue` and `year`; never stored."
+    )
+    @property
+    def venue_name(self) -> str:
+        return venue_name(self.venue, self.year)
+
     @field_validator("title")
     @classmethod
     def _title(cls, v: str) -> str:
@@ -329,7 +342,7 @@ class PaperRecord(BaseModel):
 
     def model_copy(self, *, update: Mapping[str, Any] | None = None, deep: bool = False) -> Self:
         """A validated copy: every invariant is re-checked and the hash recomputed for the new fields."""
-        data = self.model_dump()
+        data = self.model_dump(exclude={*DERIVED})
         data.update(update or {})
         data["content_hash"] = _HASH_PLACEHOLDER
         return self.model_validate(data, context={_REHASH: True})

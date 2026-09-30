@@ -46,7 +46,7 @@ from pydantic import ValidationError
 from openproceedings import __version__, storage
 from openproceedings.ingest.dedup import Attribution, Conflict, DedupResult, Merge, attribution, dedup
 from openproceedings.ingest.reconcile import crawled, reconcile
-from openproceedings.ingest.record import RECORD_SCHEMA_VERSION, PaperRecord
+from openproceedings.ingest.record import DERIVED, RECORD_SCHEMA_VERSION, PaperRecord
 from openproceedings.ingest.ris import ImportReport, import_ris
 from openproceedings.ingest.sources.common import Report, sources_manifest
 from openproceedings.ingest.status_check import UnexpectedStatus, unexpected_statuses
@@ -234,7 +234,10 @@ def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], li
 
 def record_line(record: PaperRecord) -> str:
     return json.dumps(
-        record.model_dump(mode="json"), sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        record.model_dump(mode="json", exclude={*DERIVED}),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
     )
 
 

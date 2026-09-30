@@ -379,9 +379,9 @@ Counts come from the record: identified = `total + excluded.total` and unclassif
   `/search?q=&mode=`.
 - **As built (TASK-042):** "Back to results" is always the link `/search?q=&mode=` (page 1; `/search` for a
   direct link): with `Referrer-Policy: no-referrer` the page can't tell where it was reached from. The status
-  line names the venue as `<venue> <year>` ("submitted to ICLR 2024"): the conference's full name lives in
-  the backend's `vocab.CONFERENCES` era table and isn't in the API, and the client doesn't restate it
-  (proposed: a `venue_name` field on `PaperRecord`). Provenance values that are lists are joined with `; `; a
+  line first named the venue as `<venue> <year>` ("submitted to ICLR 2024"), because the conference's full
+  name was only in the backend's `vocab.CONFERENCES` era table; since TASK-112 it reads the API's
+  `paper.venue_name`, so it is the sentence above, the RIS `N1`'s venue string. Provenance values that are lists are joined with `; `; a
   claim's `url` is a "source ▸" link after its evidence text. The query in the URL is fetched as
   `["paper", id, q, mode]`.
 

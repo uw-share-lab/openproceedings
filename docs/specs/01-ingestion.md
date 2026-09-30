@@ -26,6 +26,7 @@ build.
 | `keywords` | list[str] | Stored and displayed, **not searched** (guarantee 2). |
 | `provenance` | list[Claim] | For each field: the source, URL, fetch time and evidence (scholarmend's claim/ledger pattern). |
 | `content_hash` | str | sha256 of the canonical JSON of the searchable and filterable fields. |
+| `venue_name` | str | **Derived, never stored** (TASK-112): the venue string of spec 04 §Exports, `vocab.venue_name(venue, year)`, e.g. `International Conference on Learning Representations (ICLR 2024)`. A pydantic computed field: sent wherever the record is (`GET /papers/{id}`'s `paper`), left out of `records.jsonl` (`record.DERIVED`, `snapshot.record_line`), so snapshots, their hashes, `RECORD_SCHEMA_VERSION` and `content_hash` don't change, and stored data that names it is refused as an extra field. |
 
 ## Track taxonomy
 
