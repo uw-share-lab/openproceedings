@@ -23,7 +23,11 @@ As built (TASK-082): `GET /coverage` serves each venue-year's `statuses_indexed`
 `ingest/statuses.py`, recorded in the snapshot manifest) and its `tracks`, one per cell, with `records`,
 `indexed_accepted`, `abstract_missing`, `sources`, `official_accepted`/`official_counts`/
 `official_citation`/`official_accessed`, `delta`, `delta_pct` (unrounded percent), `gated` and
-`within_gate` (null unless gated); `snapshot.crawl_dates` has each source's own window.
+`within_gate` (null unless gated); `snapshot.crawl_dates` has each source's own window. TASK-136 adds
+`abstract_withheld` (totals, venue-year and track): abstracts withheld by a takedown (decision-022), counted
+apart from `abstract_missing`, which leaves them out. `op eval coverage` reports the snapshot's own counts and
+adds one line under its totals when the snapshot withheld any (`coverage_report.withheld_note`); the served
+`/coverage` also counts ids listed since the build, so it can move under one `index_version`: cite the report.
 
 ## The gate (M4)
 Exactly spec 07 §C: **every main-track and D&B cell for which an official accepted count exists is within

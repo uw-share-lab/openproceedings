@@ -13,6 +13,11 @@ snapshot records, computed when they were loaded (`RecordFile.attributions`, wha
 `abstract_source`): the served bundle's, or a pinned index's (`IndexState.pinned_records`). When a pinned
 index's snapshot can't be verified the same records are exported with every abstract withheld and marked so
 in the file, and `X-Abstract-Source: unavailable` (decision-021): never an abstract without attribution.
+Whatever index is exported, each record the takedown list names (as the served bundle's load read it), or that
+index's snapshot withheld, goes out without its abstract, marked so (TASK-136, decision-022; `Served.withheld_in`),
+and `X-Abstracts-Withheld` counts them before the body: for a record export, its stored ids on the list or
+withheld by that index's snapshot; for a query, those of them the index holds that the query matches (`search.highlight`, the evaluation `/papers?q=`
+uses, one per listed id: the list is short).
 
 Everything that can refuse happens before the first byte: the parameters, the parse (422 with
 diagnostics), the record's pin and replay, the pin (409 `API_INDEX_VERSION_UNAVAILABLE`), every wildcard's
@@ -40,14 +45,16 @@ from openproceedings.api.openapi import BUSY, response_header
 from openproceedings.api.records import refuse_mismatch, stored_record
 from openproceedings.api.state import IndexState, Served
 from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import EngineInternalError
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.export import Provenance, Sources, check_count, entries, header, utc_date
 from openproceedings.query import QUERY_VERSION
 from openproceedings.query.normalize import TOKENIZER_VERSION
-from openproceedings.query.parser import Mode
+from openproceedings.query.parser import Mode, ParseResult
 from openproceedings.records import RECORD_ID, ids_hash
-from openproceedings.search import expanded
+from openproceedings.search import Shown, expanded
+from openproceedings.takedowns import NONE, Withheld
 
 router = APIRouter(prefix=API_PREFIX)
 
@@ -82,15 +89,17 @@ def pinned_engine(request: Request, served: TantivyEngine, index_version: str | 
     return pinned.engine
 
 
-def sources_of(request: Request, served: Served, engine: TantivyEngine) -> Sources | None:
+def sources_of(request: Request, served: Served, engine: TantivyEngine) -> tuple[Sources | None, Withheld]:
     """Each record's abstract attribution in `engine`'s snapshot: the served bundle's when `engine` is the
     served one, else the pinned index's; None when that snapshot can't be verified, and the export then
-    withholds every abstract (decision-021: an abstract never goes out without attribution, decision-018)."""
+    withholds every abstract (decision-021: an abstract never goes out without attribution, decision-018).
+    With it, the ids whose abstracts a takedown withholds (TASK-136): the bundle's list, whatever index is
+    exported, plus the ids that index's snapshot withheld."""
     if engine is served.engine:
-        return served.records.attributions
+        return served.records.attributions, served.withheld_in(served.records)
     state: IndexState = request.app.state.index
     records = state.pinned_records(engine.index_version)
-    return None if records is None else records.attributions
+    return (None if records is None else records.attributions), served.withheld_in(records)
 
 
 def _bad(message: str) -> ApiError:
@@ -124,6 +133,11 @@ def _bad(message: str) -> ApiError:
                     "index's snapshot can't be verified on this instance, so every abstract is withheld and each "
                     "record says so (decision-021)",
                     {"type": "string", "enum": list(ABSTRACT_SOURCE_STATES)},
+                ),
+                "X-Abstracts-Withheld": response_header(
+                    "How many records of the body have their abstract withheld at a rights holder's request (a "
+                    "takedown, decision-022): each says so in the file; 0 when none",
+                    {"type": "integer", "minimum": 0},
                 ),
             },
         },
@@ -183,10 +197,11 @@ def export(
             raise ApiError(
                 DiagnosticCode.API_RECORD_MISMATCH, "This search record's stored ids don't match it."
             )
-        sources = sources_of(request, bundle, engine)  # once nothing about the record can refuse
+        sources, withheld = sources_of(request, bundle, engine)  # once nothing about the record can refuse
         # the cited set exactly: the record's stored ids, from the index it names (never a re-run query)
         canonical_hash = record.canonical_hash
         total, documents = len(ids), stored_documents(engine, ids)
+        removed = sum(i in withheld for i in ids)
         pinned_by = {"record_id": record.record_id, "searched_at": record.searched_at}  # in the provenance
         annotate(request, canonical_hash=canonical_hash)
     else:
@@ -203,15 +218,16 @@ def export(
         pinned_by = {}
         expanded(engine, ast)  # an over-cap wildcard is a located 422 before anything is compiled
         check_candidates(request, engine, ast)  # 422 API_QUERY_TOO_COSTLY before any verification
-        sources = sources_of(request, bundle, engine)  # once nothing about the query can refuse
+        sources, withheld = sources_of(request, bundle, engine)  # once nothing about the query can refuse
         total, documents = engine.documents(ast)  # the one collection; records are read as they stream
+        removed = matched_among(engine, result, withheld)
     abstract_source: AbstractSource = "unavailable" if sources is None else "attributed"
-    annotate(request, total=total, abstract_source=abstract_source)
+    annotate(request, total=total, abstract_source=abstract_source, abstracts_withheld=removed)
     provenance = Provenance(engine.index_version, canonical_hash, utc_date(), **pinned_by)
     media, ext = MEDIA[fmt]
     filename = f"openproceedings-{engine.index_version}-{canonical_hash[:12]}.{ext}"
     return StreamingResponse(
-        _body(fmt, documents, provenance, total, sources),
+        _body(fmt, documents, provenance, total, sources, withheld),
         media_type=media,
         headers={
             "X-Total": str(total),
@@ -220,8 +236,27 @@ def export(
             "X-Query-Version": QUERY_VERSION,
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Abstract-Source": abstract_source,
+            "X-Abstracts-Withheld": str(removed),
         },
     )
+
+
+def matched_among(engine: TantivyEngine, result: ParseResult, withheld: Withheld) -> int:
+    """How many of `withheld` the query `result` matches on `engine`: each listed id the index holds, judged
+    as `/papers/{id}?q=` judges it (`search.highlight`: the `Highlighter` over its display record, with the
+    query's expansions computed once), so the count is the number of records in the body a takedown
+    withholds."""
+    shown = engine.display(sorted(withheld)) if withheld else {}
+    if not shown:
+        return 0
+    if (
+        result.effective_ast is None
+    ):  # the caller's query parsed: an invariant, as `search.highlight` holds it
+        raise EngineInternalError(
+            DiagnosticCode.API_INTERNAL, "an export counted withheld records of no query"
+        )
+    lit = Highlighter(result.effective_ast, expanded(engine, result.effective_ast))
+    return sum(lit.match(Shown.of(record)) is not None for record in shown.values())
 
 
 STORED_CHUNK = 1_000  # stored ids read per index lookup while a record's export streams
@@ -246,12 +281,13 @@ def _body(
     provenance: Provenance,
     total: int,
     sources: Sources | None,
+    withheld: Withheld = NONE,
 ) -> Iterator[bytes]:
     """`header(fmt)` then every entry, UTF-8, in chunks of at most `CHUNK` characters plus one entry;
     counted against `total` at the end (a shortfall or an excess raises, after the last byte it has)."""
     first = header(fmt)
     parts, size, n = [first], len(first), 0
-    for entry in entries(fmt, documents, provenance, sources=sources):
+    for entry in entries(fmt, documents, provenance, sources=sources, withheld=withheld):
         n += 1
         parts.append(entry)
         size += len(entry)

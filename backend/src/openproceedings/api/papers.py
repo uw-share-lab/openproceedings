@@ -13,6 +13,11 @@ With `q` (and `mode`), the paper page's highlights (task-087; spec 04 §Endpoint
 `check_candidates`), so a `q` this route runs is one `/search` runs, and the spans are
 `openproceedings.search.highlight`'s, the ones `/search` gives this paper as a hit. A query that doesn't
 match the paper is `matched: false` with empty highlights, not an error.
+
+A paper whose abstract this instance withholds (a takedown, TASK-136, decision-022) comes without its abstract
+and its abstract claims (`takedowns.withhold_record`), with `abstract_withheld` true and no abstract spans.
+`matched` is still the index's answer, computed on the text the index holds: a query matching only the
+withheld text still reports `matched: true` there, as `/search` still counts the paper.
 """
 
 from __future__ import annotations
@@ -39,6 +44,7 @@ from openproceedings.ingest.record import is_paper_id
 from openproceedings.ingest.snapshot import SnapshotError
 from openproceedings.query.parser import Mode
 from openproceedings.search import highlight
+from openproceedings.takedowns import withhold_record
 
 router = APIRouter(prefix=API_PREFIX)
 
@@ -74,16 +80,26 @@ def get_paper(
         raise InternalError(
             DiagnosticCode.API_INTERNAL, "a paper the index holds is missing from its snapshot"
         )
+    withheld = id in served.withheld_in(served.records)
+    if withheld:
+        record = withhold_record(record)
     if result is None:
-        return PaperResponse(**versions(engine.index_version), paper=record, matched=None, highlights=None)
+        return PaperResponse(
+            **versions(engine.index_version),
+            paper=record,
+            matched=None,
+            highlights=None,
+            abstract_withheld=withheld,
+        )
     assert result.effective_ast is not None  # searchable refuses a query that doesn't parse
     check_candidates(request, engine, result.effective_ast)  # 422 API_QUERY_TOO_COSTLY, as /search
-    spans = highlight(engine, result, shown)
+    spans = highlight(engine, result, shown)  # on the text the index holds: `matched` is the index's answer
     return PaperResponse(
         **versions(engine.index_version),
         paper=record,
         matched=spans is not None,
         highlights=Highlights(title=[], abstract=[])
         if spans is None
-        else Highlights(title=spans["title"], abstract=spans["abstract"]),
+        else Highlights(title=spans["title"], abstract=[] if withheld else spans["abstract"]),
+        abstract_withheld=withheld,
     )

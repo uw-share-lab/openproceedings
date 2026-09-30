@@ -5,6 +5,10 @@ Transport only: `/parse` is `query.parser.parse`, `/search` is `openproceedings.
 what the facets count or what the defaults removed. Each hit's `abstract_source` (TASK-134, decision-018) is
 looked up in what the served snapshot's reader computed at load (`RecordFile.attributions`): the index's
 display record keeps no provenance.
+
+A takedown (TASK-136, decision-022) changes what a hit shows, never whether it is one: a hit whose abstract this
+instance withholds (`Served.withheld_in`) has `abstract` null, no abstract highlight spans, `abstract_source`
+null and `abstract_withheld` true. Its title spans, its score, `total` and the facets are what the index gives.
 """
 
 from __future__ import annotations
@@ -92,6 +96,7 @@ def search(
     found = run(engine, result, sort=sort, offset=offset, limit=limit, facets=True, highlight=True)
     annotate(request, total=found.total)
     sources = page_attributions(served.records, [h.id for h in found.hits])
+    hidden = served.withheld_in(served.records)  # the takedown list, as this bundle's load read it
     assert result.canonical is not None and result.canonical_hash is not None  # it parsed
     assert result.identification_query is not None and found.facets is not None
     return SearchResponse(
@@ -110,7 +115,7 @@ def search(
         identified_total=identified_total(found.total, found.excluded.total),
         unclassified_total=unclassified_total(found.excluded.track, found.excluded.status),
         facets=Facets.model_validate(found.facets),
-        hits=[_hit(h, sources[h.id]) for h in found.hits],
+        hits=[_hit(h, sources[h.id], withheld=h.id in hidden) for h in found.hits],
     )
 
 
@@ -128,13 +133,15 @@ def page_attributions(records: RecordFile, ids: list[str]) -> dict[str, Abstract
     return out
 
 
-def _hit(found: Found, abstract_source: AbstractSource | None) -> Hit:
+def _hit(found: Found, abstract_source: AbstractSource | None, *, withheld: bool) -> Hit:
+    """The API's hit; with `withheld`, without its abstract, the abstract's spans (they would say where the
+    query matched the withheld text) and its source."""
     r: Any = found.record
     assert found.highlights is not None
     return Hit(
         id=found.id,
         title=r["title"],
-        abstract=r["abstract"],
+        abstract=None if withheld else r["abstract"],
         authors=r["authors"],
         venue=r["venue"],
         year=r["year"],
@@ -142,7 +149,10 @@ def _hit(found: Found, abstract_source: AbstractSource | None) -> Hit:
         status=r["status"],
         presentation=r["presentation"],
         score=found.score,
-        highlights=Highlights(title=found.highlights["title"], abstract=found.highlights["abstract"]),
+        highlights=Highlights(
+            title=found.highlights["title"], abstract=[] if withheld else found.highlights["abstract"]
+        ),
         urls=Urls.model_validate(r["urls"]),
-        abstract_source=abstract_source,
+        abstract_source=None if withheld else abstract_source,
+        abstract_withheld=withheld,
     )

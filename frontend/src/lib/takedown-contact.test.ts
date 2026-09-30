@@ -108,6 +108,37 @@ describe("checkTakedownContactEnv (next.config.ts)", () => {
   });
 });
 
+describe("OPENPROCEEDINGS_INSTANCE (TASK-136: a public build needs a contact)", () => {
+  it("refuses a public instance without a contact, whatever the build mode", () => {
+    for (const production of [true, false]) {
+      for (const raw of [undefined, "", "  "]) {
+        expect(() => checkTakedownContactEnv(raw, production, vi.fn(), "public")).toThrow(
+          /^OPENPROCEEDINGS_INSTANCE=public needs NEXT_PUBLIC_TAKEDOWN_CONTACT/,
+        );
+      }
+    }
+  });
+
+  it("builds a public instance with a contact, and a private or undeclared one without", () => {
+    const warn = vi.fn();
+    checkTakedownContactEnv("takedown@example.org", true, warn, "public");
+    checkTakedownContactEnv("https://example.org/takedown", true, warn, " public ");
+    checkTakedownContactEnv(undefined, false, warn, "private");
+    checkTakedownContactEnv(undefined, false, warn, "");
+    expect(warn).not.toHaveBeenCalled();
+    checkTakedownContactEnv(undefined, true, warn, "private"); // still warned about in production
+    expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it("refuses any other instance kind", () => {
+    for (const kind of ["Public", "yes", "prod", "true"]) {
+      expect(() => checkTakedownContactEnv("takedown@example.org", true, vi.fn(), kind)).toThrow(
+        /OPENPROCEEDINGS_INSTANCE must be "public" or "private"/,
+      );
+    }
+  });
+});
+
 describe("next.config.ts", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -119,6 +150,16 @@ describe("next.config.ts", () => {
     vi.resetModules();
     vi.stubEnv("NEXT_PUBLIC_TAKEDOWN_CONTACT", "a@b.org?cc=evil%40x.org");
     await expect(import("../../next.config")).rejects.toThrow(/^NEXT_PUBLIC_TAKEDOWN_CONTACT /);
+  });
+
+  it("fails to load for a public instance without a contact, and loads for a private one (TASK-136)", async () => {
+    vi.resetModules();
+    vi.stubEnv("OPENPROCEEDINGS_INSTANCE", "public");
+    vi.stubEnv("NEXT_PUBLIC_TAKEDOWN_CONTACT", "");
+    await expect(import("../../next.config")).rejects.toThrow(/^OPENPROCEEDINGS_INSTANCE=public needs/);
+    vi.resetModules();
+    vi.stubEnv("OPENPROCEEDINGS_INSTANCE", "private");
+    await expect(import("../../next.config")).resolves.toBeTruthy();
   });
 
   it("warns once when a production build has no contact", async () => {

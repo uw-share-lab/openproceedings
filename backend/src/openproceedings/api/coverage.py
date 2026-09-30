@@ -6,7 +6,11 @@ The numbers are the manifest of the snapshot the served index was built from, re
 (`api/state.py`, before the swap), on the `RecordFile` the load already verified: the manifest it read
 with the records (so no second read to re-check), and the counts that one pass took of the records. Every
 cell, every venue-year's missing abstracts, and every track's missing abstracts and claim sources must equal
-the records' own count, and the records must number exactly the index's documents. Anything else fails the load (`index_load_failed` with a `reason`):
+the records' own count, as must every venue-year's and track's withheld abstracts (a takedown, TASK-136), and the
+records must number exactly the index's documents. Then the ids the takedown list names that the snapshot did
+not withhold (listed after it was built) are counted as withheld too, and no longer as missing: `/coverage`
+counts the abstracts this instance withholds when it serves (the list is re-read, and coverage recomputed, on
+every load and SIGHUP). Anything else fails the load (`index_load_failed` with a `reason`):
 503 at startup, the old index kept on SIGHUP. Coverage is never partial, never recomputed per request.
 """
 
@@ -15,6 +19,7 @@ from __future__ import annotations
 import logging
 import time
 from collections import Counter
+from typing import Any
 
 from fastapi import APIRouter
 
@@ -25,14 +30,16 @@ from openproceedings.coverage import TrackFacts, breakdown
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.ingest.snapshot import RecordFile, SnapshotError
 from openproceedings.logs import elapsed_ms
+from openproceedings.takedowns import NONE, Withheld
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix=API_PREFIX)
 
 
-def compute(engine: TantivyEngine, records: RecordFile) -> CoverageResponse:
+def compute(engine: TantivyEngine, records: RecordFile, listed: Withheld = NONE) -> CoverageResponse:
     """The coverage of `engine`'s index from its verified snapshot's manifest, checked against the records
-    and the index. SnapshotError (with a `reason`) if they disagree."""
+    and the index, with the abstracts the takedown list `listed` withholds at serve time counted as withheld.
+    SnapshotError (with a `reason`) if they disagree."""
     started = time.perf_counter()
     observed = TrackFacts(records.track_missing, records.track_sources)
     try:
@@ -67,10 +74,18 @@ def compute(engine: TantivyEngine, records: RecordFile) -> CoverageResponse:
             "the manifest's per-track missing abstracts or sources don't match the records",
             reason="track_facts_mismatch",
         )
+    withheld = {(vy["venue"], vy["year"]): vy["abstract_withheld"] for vy in data["venue_years"]}
+    if {k: n for k, n in withheld.items() if n} != dict(records.abstract_withheld) or {
+        k: t["abstract_withheld"] for k, t in per_track.items() if t["abstract_withheld"]
+    } != dict(records.track_withheld):
+        raise SnapshotError(
+            "the manifest's withheld abstracts don't count the records", reason="abstract_withheld_mismatch"
+        )
     if len(records) != len(engine.ids):  # the cells sum to record_count and to the records (checked above)
         raise SnapshotError(
             "the snapshot's records and the index's documents differ", reason="doc_count_mismatch"
         )
+    _withhold_listed(data, records, listed)
     coverage = CoverageResponse.model_validate({**versions(engine.index_version), **data})
     log.info(
         "coverage_computed",
@@ -82,6 +97,22 @@ def compute(engine: TantivyEngine, records: RecordFile) -> CoverageResponse:
         },
     )
     return coverage
+
+
+def _withhold_listed(data: dict[str, Any], records: RecordFile, listed: Withheld) -> None:
+    """Count, in `data` (a `breakdown`), each id of `listed` the snapshot holds but didn't withhold as withheld,
+    and no longer as missing if it had no abstract: one file read per such id (the list is short)."""
+    rows = {(vy["venue"], vy["year"]): vy for vy in data["venue_years"]}
+    for rid in sorted(listed - records.withheld):
+        record = records.get(rid)
+        if record is None:  # not a paper of this index
+            continue
+        vy = rows[(record.venue, record.year)]
+        [track] = [t for t in vy["tracks"] if t["track"] == record.track]
+        for row in (vy, track, data["totals"]):
+            row["abstract_withheld"] += 1
+            if record.abstract is None:
+                row["abstract_missing"] -= 1
 
 
 @router.get("/coverage", response_model=CoverageResponse)

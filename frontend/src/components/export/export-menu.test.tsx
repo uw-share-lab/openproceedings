@@ -208,6 +208,22 @@ describe("exporting (design E1, E3)", () => {
     expect(screen.queryByText(/This file has no abstracts/)).toBeNull();
   });
 
+  it("says how many papers have their abstract removed at a rights holder's request (EX-E9)", async () => {
+    let headers: Record<string, string> = { "X-Abstract-Source": "attributed", "X-Abstracts-Withheld": "2" };
+    const { trigger } = draw(() => file(headers));
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getAllByRole("menuitem")[0] as HTMLElement);
+    expect(await screen.findByText(/^Download ready\. 2 papers in this file have no abstract/)).toBeTruthy();
+    const notice = screen.getByText(/they would screen those papers on titles alone/);
+    expect(notice.textContent).toContain(
+      "2 papers in this file have no abstract: each was removed from this site at a rights holder's request",
+    );
+    headers = { "X-Abstract-Source": "attributed", "X-Abstracts-Withheld": "0" };
+    fireEvent.click(screen.getAllByRole("menuitem")[0] as HTMLElement);
+    expect(await screen.findByText("Download ready.")).toBeTruthy();
+    expect(screen.queryByText(/rights holder's request/)).toBeNull();
+  });
+
   it("downloads nothing when the index changed, and offers Search again", async () => {
     const { trigger, onSearchAgain } = draw(() => file({ "X-Index-Version": "9f8e7d6c5b4a" }));
     fireEvent.click(trigger);

@@ -57,6 +57,7 @@ def _track(track: str, records: int, accepted: int, missing: int, sources: list[
         "records": records,
         "indexed_accepted": accepted,
         "abstract_missing": missing,
+        "abstract_withheld": 0,  # TASK-136: a manifest without takedown keys withheld nothing
         "sources": sources,
         "official_accepted": None,
         "official_counts": None,
@@ -87,13 +88,20 @@ def test_the_breakdown_of_a_hand_counted_manifest() -> None:
             "crawl_dates_kind": {"*": "mixed", "ris": "scholar_query_dates"},
             "identification_citable": True,
         },
-        "totals": {"records": 12, "abstract_missing": 3, "unknown_track": 1, "unknown_status": 2},
+        "totals": {
+            "records": 12,
+            "abstract_missing": 3,
+            "abstract_withheld": 0,
+            "unknown_track": 1,
+            "unknown_status": 2,
+        },
         "venue_years": [  # by venue name, then year; cells in vocabulary order, unknown last
             {
                 "venue": "ICLR",
                 "year": 2024,
                 "records": 5,
                 "abstract_missing": 1,
+                "abstract_withheld": 0,
                 "unknown_track": 0,
                 "unknown_status": 0,
                 "cells": [
@@ -111,6 +119,7 @@ def test_the_breakdown_of_a_hand_counted_manifest() -> None:
                 "year": 2025,
                 "records": 1,
                 "abstract_missing": 0,
+                "abstract_withheld": 0,
                 "unknown_track": 0,
                 "unknown_status": 0,
                 "cells": [{"track": "workshop", "status": "accepted", "count": 1}],
@@ -122,6 +131,7 @@ def test_the_breakdown_of_a_hand_counted_manifest() -> None:
                 "year": 2024,
                 "records": 6,
                 "abstract_missing": 2,
+                "abstract_withheld": 0,
                 "unknown_track": 1,
                 "unknown_status": 2,
                 "cells": [

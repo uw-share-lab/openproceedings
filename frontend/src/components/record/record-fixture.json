@@ -2233,7 +2233,8 @@
               "proceedings": null,
               "doi": null
             },
-            "abstract_source": null
+            "abstract_source": null,
+            "abstract_withheld": false
           }
         ]
       },
@@ -2421,7 +2422,8 @@
               "proceedings": null,
               "doi": null
             },
-            "abstract_source": null
+            "abstract_source": null,
+            "abstract_withheld": false
           }
         ]
       },
@@ -2625,7 +2627,8 @@
               "proceedings": null,
               "doi": null
             },
-            "abstract_source": null
+            "abstract_source": null,
+            "abstract_withheld": false
           }
         ]
       },
@@ -2830,7 +2833,8 @@
               "proceedings": null,
               "doi": null
             },
-            "abstract_source": null
+            "abstract_source": null,
+            "abstract_withheld": false
           }
         ]
       },

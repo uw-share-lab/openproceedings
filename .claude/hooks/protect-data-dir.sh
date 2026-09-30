@@ -8,7 +8,9 @@
 #   sed -i/--in-place and >/>> redirects that target them — or that target data/, data/snapshots or
 #   data/indexes themselves (`rm -rf data` destroys every snapshot).
 # - data/ is gitignored and never committed (corpus licensing is unresolved; spec 00). `git add -f` of
-#   anything under the repo-root data/ is refused.
+#   anything under the repo-root data/ is refused. `git add` (forced or not) of any path with a `takedowns`
+#   directory in it is refused wherever it sits: the takedown list and log (TASK-136, decision-022) live in a
+#   data directory, and the log holds requesters' details.
 # - backlog/ is CLI-managed (task-hygiene skill): only the `backlog` CLI moves a task (e.g. `backlog task
 #   complete` into backlog/completed/). Bash mv / git mv / cp / rm / tee / redirects that target files
 #   under backlog/ are refused here; enforce-backlog-cli.sh covers editor writes.
@@ -50,6 +52,47 @@ def rel(path, base):
 
 def any_rel(pred, path, base):
     return any(pred(rel(p, base)) for p in expand(path, base))
+
+# the heavy trees a forced `git add <dir>` walk never enters (none holds a takedowns/ directory of ours)
+WALK_SKIP = {".git", "node_modules", ".venv", ".next", "cache", "snapshots", "indexes", "records", "embeddings"}
+
+def holds_takedowns(directory):
+    """Is there a `takedowns` directory (any case) anywhere under `directory`? The heavy trees are skipped."""
+    for _root, dirs, _files in os.walk(directory):
+        if any(d.lower() == "takedowns" for d in dirs):
+            return True
+        dirs[:] = [d for d in dirs if d not in WALK_SKIP]
+    return False
+
+def through_takedowns(path, base, forced):
+    """Would `git add [-f] path` reach a takedowns/ directory? Any path component named `takedowns` (any
+    case: APFS folds it), a glob that matches one, and, for a forced add of a directory (`.` included), a
+    `takedowns` directory anywhere under it (git -f stages ignored files too)."""
+    for p in expand(path, base) if forced else [path]:  # unforced, git leaves ignored files out of a glob
+        full = os.path.normpath(p if os.path.isabs(p) else os.path.join(base, p))
+        parts = [c.lower() for c in full.split(os.sep)]
+        if "takedowns" in parts:
+            return True
+        if forced and os.path.isdir(full) and holds_takedowns(full):
+            return True
+    # forced, a glob (`takedown[s]`, `*.jsonl`: git's `*` crosses `/`) is walked from its fixed prefix; unforced,
+    # git itself leaves ignored files out, so `git add 'src/*'` stays allowed
+    if forced and any(ch in path for ch in "*?["):
+        fixed = path.split("*")[0].split("?")[0].split("[")[0]
+        start = os.path.dirname(os.path.join(base, fixed)) or base
+        if os.path.isdir(start) and holds_takedowns(start):
+            return True
+    return False
+
+def whole_tree(args):
+    """A forced `git add` that may stage the whole work tree: no path argument (`-f`, `-fA`, and
+    `--pathspec-from-file=…`, whose paths the hook can't see) or a `:` magic pathspec (`:/`)."""
+    paths = [x for x in args if not x.startswith("-")]
+    return (
+        not paths
+        or any(x.startswith("--pathspec-from-file") for x in args)  # `=file` or a separate `file` argument
+        or any(x.startswith(":") for x in paths)
+    )
 
 def inside_immutable(r):
     return r is not None and (r.startswith("data/snapshots/") or r.startswith("data/indexes/"))
@@ -99,11 +142,16 @@ for argv, d in commands:
     head, args = argv[0], argv[1:]
     paths = [a for a in args if not a.startswith("-")]
     g = git_subcommand(argv, d)
-    if g and g[0] == "add":
+    if g and g[0] in ("add", "stage"):  # `git stage` is `git add`
         a = g[1]
         forced = any(x in ("-f", "--force") or (x.startswith("-") and not x.startswith("--") and "f" in x) for x in a)
         if forced and any((r := rel(p, g[2])) is not None and (r == "data" or r.startswith("data/")) for p in a if not p.startswith("-")):
             refuse("Blocked: data/ is never committed (corpus licensing unresolved; spec 00). Don't force-add it.")
+        if any(through_takedowns(p, g[2], forced) for p in a if not p.startswith("-")) or (
+            forced and whole_tree(a) and holds_takedowns(repo_root(g[2]))
+        ):
+            refuse("Blocked: a takedowns/ directory holds the takedown list and the operator's log, with "
+                   "requesters' details (TASK-136); it is never committed.")
         continue
     gm = git_subcommand(argv, d)
     if gm and gm[0] == "clean":

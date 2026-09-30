@@ -36,7 +36,7 @@ import time
 import unicodedata
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import astuple, dataclass, fields, replace
+from dataclasses import astuple, dataclass, field, fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -53,6 +53,7 @@ from openproceedings.ingest.status_check import UnexpectedStatus, unexpected_sta
 from openproceedings.ingest.statuses import statuses_indexed
 from openproceedings.logs import elapsed_ms
 from openproceedings.query.normalize import TOKENIZER_VERSION
+from openproceedings.takedowns import NONE, Withheld, withhold_record
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +62,9 @@ log = logging.getLogger(__name__)
 # per-track facts from the records it verified, and names no per-source window)
 FORMAT_VERSION = "2"
 READABLE_FORMATS = ("1", FORMAT_VERSION)
+# the manifest keys a takedown adds (TASK-136, decision-022), written only when a record is withheld: a snapshot
+# withholding nothing has the manifest it had before, so a format-2 reader of it sees no difference
+WITHHELD_KEYS = ("withheld", "abstract_withheld", "abstract_withheld_by_track")
 HASHED = ("title", "abstract", "venue", "year", "track", "status")  # content_hash's fields (record-schema)
 DISPLAY = ("authors", "urls", "keywords", "presentation", "venue_id_raw")  # shown, never hashed
 SHORT = 12
@@ -116,6 +120,10 @@ class BuildResult:
     # each (venue, year, status) its records hold that their sources can't supply (TASK-109): reported and
     # logged, never written into the snapshot
     unexpected_statuses: tuple[UnexpectedStatus, ...] = ()
+    # the takedown list's effect (TASK-136): ids withheld, listed ids followed to a new id, listed ids not held
+    withheld: tuple[str, ...] = ()
+    takedowns_followed: Mapping[str, str] = field(default_factory=dict)
+    takedowns_unmatched: tuple[str, ...] = ()
 
 
 def _sha256(data: bytes) -> str:
@@ -270,17 +278,28 @@ def _plain(value: dict[str, Any]) -> dict[str, Any]:
     return plain
 
 
-def _per_track(records: Iterable[PaperRecord]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    """venue → year → track → missing abstracts (0 included), → the claim sources of its records (sorted),
-    and venue → year → the statuses those sources can contain, those its records hold included
-    (`statuses.statuses_indexed`)."""
+def _by_track(records: Iterable[PaperRecord], keep: Callable[[PaperRecord], bool]) -> dict[str, Any]:
+    """venue → year → track → count of its records passing `keep` (0 included)."""
+    out: dict[str, Any] = {}
+    for r in records:
+        at = out.setdefault(r.venue, {}).setdefault(str(r.year), {})
+        at[r.track] = at.get(r.track, 0) + keep(r)
+    return _plain(out)
+
+
+def _per_track(
+    records: Iterable[PaperRecord], withheld: Withheld = NONE
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """venue → year → track → missing abstracts (0 included; a withheld one is not missing), → the claim
+    sources of its records (sorted), and venue → year → the statuses those sources can contain, those its
+    records hold included (`statuses.statuses_indexed`)."""
     missing: dict[str, Any] = {}
     sources: dict[str, Any] = {}
     present: dict[tuple[str, str], set[str]] = {}
     for r in records:
         present.setdefault((r.venue, str(r.year)), set()).add(r.status)
         at = missing.setdefault(r.venue, {}).setdefault(str(r.year), {})
-        at[r.track] = at.get(r.track, 0) + (r.abstract is None)
+        at[r.track] = at.get(r.track, 0) + (r.abstract is None and r.id not in withheld)
         sources.setdefault(r.venue, {}).setdefault(str(r.year), {}).setdefault(r.track, set()).update(
             c.source for c in r.provenance
         )
@@ -340,22 +359,107 @@ def with_crawl_conflicts(result: DedupResult, crawls: Sequence[Report]) -> Dedup
     return replace(result, conflicts=tuple(sorted({*result.conflicts, *moved})))
 
 
+WITHHELD_VALUE = "(withheld: takedown)"  # what conflicts.csv says in place of a withheld abstract's text
+
+
+@dataclass(frozen=True)
+class Withholding:
+    """What `withhold` did: the result with the abstracts withheld; `withheld`, the ids whose record lost an
+    abstract or an abstract claim (what the manifest names); `followed`, each listed id this build holds under
+    another id (merged into a survivor, or rekeyed: the same native id under a corrected venue or year) → the
+    id it withheld instead; and `unmatched`, the listed ids no record of this build has or leads to."""
+
+    result: DedupResult
+    withheld: Withheld
+    followed: Mapping[str, str]
+    unmatched: tuple[str, ...]
+
+
+def _successor(rid: str, result: DedupResult, held: set[str]) -> str | None:
+    """The id this build holds `rid`'s paper under, when it holds it under another: the survivor it merged into
+    (following merges.csv), else the one record with its native id (a rekey, the rule `diff` uses)."""
+    survivor = {m.merged_id: m.survivor_id for m in result.merges if m.merged_id != m.survivor_id}
+    native = rid.split(":", 3)[-1]
+
+    def follow(start: str) -> str:
+        seen, at = {start}, start
+        while (nxt := survivor.get(at)) is not None and nxt not in seen:
+            at = nxt
+            seen.add(at)
+        return at
+
+    if (at := follow(rid)) != rid and at in held:
+        return at
+    same = [h for h in held if h.split(":", 3)[-1] == native]
+    if len(same) == 1:
+        return same[0]
+    # rekeyed *and* merged: the one merged-away id with its native id leads to the survivor
+    merged = [m for m in survivor if m.split(":", 3)[-1] == native]
+    if not same and len(merged) == 1 and (at := follow(merged[0])) in held:
+        return at
+    return None
+
+
+def withhold(result: DedupResult, ids: Withheld) -> Withholding:
+    """`result` with the abstract of every record in `ids` (the takedown list) withheld: `abstract` null and its
+    abstract claims dropped (`takedowns.withhold_record`), and the abstract texts of its conflicts.csv rows
+    replaced by `WITHHELD_VALUE`. Applied after dedup and reconcile, so whatever the sources supply, the
+    snapshot never holds a listed abstract. A listed id this build holds under another id (merged, or rekeyed
+    by a corrected venue or year) is followed: its successor is withheld too, so the abstract never comes back
+    under a new id (the list keeps the old id, which older index versions still hold). A listed id no record
+    has or leads to is reported, never refused: a paper gone from its sources stays listed for the versions
+    that still hold it (a typo is what `op takedown check` reports)."""
+    if not ids:
+        return Withholding(result, NONE, {}, ())
+    held = {r.id for r in result.records}
+    followed = {rid: nxt for rid in sorted(ids - held) if (nxt := _successor(rid, result, held)) is not None}
+    unmatched = tuple(sorted(ids - held - followed.keys()))
+    targets = (ids & held) | set(followed.values())
+    changed = frozenset(
+        r.id for r in result.records if r.id in targets and (r.abstract is not None or r.claims("abstract"))
+    )
+    records = tuple(withhold_record(r) if r.id in changed else r for r in result.records)
+    conflicts = result.conflicts
+    if any(
+        c.id in targets and c.field == "abstract" for c in conflicts
+    ):  # else left exactly as dedup wrote it
+        conflicts = tuple(
+            sorted(
+                {  # a set: rows that differed only by their abstract texts are one row now
+                    replace(c, value_a=WITHHELD_VALUE, value_b=WITHHELD_VALUE)
+                    if c.id in targets and c.field == "abstract"
+                    else c
+                    for c in conflicts
+                }
+            )
+        )
+    return Withholding(replace(result, records=records, conflicts=conflicts), changed, followed, unmatched)
+
+
 def render(
     result: DedupResult,
     reports: Sequence[ImportReport],
     built_at: datetime,
     crawls: Sequence[Report] = (),
+    withheld: Withheld = NONE,
 ) -> dict[str, bytes]:
     """The snapshot's files. Everything but manifest.json's `built_at` is a function of the inputs.
-    `crawls` are the crawlers' reports (OpenReview v2 and v1, ICLR, NeurIPS, PMLR)."""
+    `crawls` are the crawlers' reports (OpenReview v2 and v1, ICLR, NeurIPS, PMLR). `withheld` are the ids
+    whose abstracts `withhold` took out (`Withholding.withheld`: each a record of `result` with no abstract and
+    no abstract claim left): the manifest then names them and counts them per venue-year and track, and they
+    are not counted as missing abstracts (TASK-136). A listed record that had nothing to withhold is not
+    named, so listing it leaves the snapshot byte-identical."""
     records = sorted(result.records, key=lambda r: r.id)
     if not records:
         raise SnapshotError("no records to snapshot")
     if any(not r.provenance for r in records):
         raise SnapshotError("a record has no provenance claims; every value must say where it came from")
+    by_id = {r.id: r for r in records}
+    if any(i not in by_id or by_id[i].abstract is not None or by_id[i].claims("abstract") for i in withheld):
+        raise SnapshotError("a withheld id is not a record whose abstract and abstract claims are gone")
     fetched = [c.fetched_at for r in records for c in r.provenance]
     lines = "".join(record_line(r) + "\n" for r in records).encode("utf-8")
-    missing_by_track, sources_by_track, statuses = _per_track(records)
+    missing_by_track, sources_by_track, statuses = _per_track(records, withheld)
     merges = _csv((f.name for f in fields(Merge)), (astuple(m) for m in sorted(result.merges)))
     conflicts = _csv((f.name for f in fields(Conflict)), (astuple(c) for c in sorted(result.conflicts)))
     manifest = {
@@ -369,7 +473,7 @@ def render(
         "built_at": built_at.astimezone(UTC).isoformat(),
         "record_count": len(records),
         "counts": _nested(records),
-        "abstract_missing": _nested(records, lambda r: r.abstract is None),
+        "abstract_missing": _nested(records, lambda r: r.abstract is None and r.id not in withheld),
         "unknown_track": _nested(records, lambda r: r.track == "unknown"),
         "abstract_missing_by_track": missing_by_track,
         "sources_by_track": sources_by_track,
@@ -380,6 +484,10 @@ def render(
         "files": {"merges.csv": _sha256(merges), "conflicts.csv": _sha256(conflicts)},
         "sources": _sources(reports, crawls),
     }  # fmt: skip
+    if withheld:
+        manifest["withheld"] = sorted(withheld)
+        manifest["abstract_withheld"] = _nested(records, lambda r: r.id in withheld)
+        manifest["abstract_withheld_by_track"] = _by_track(records, lambda r: r.id in withheld)
     return {
         "records.jsonl": lines,
         "manifest.json": (json.dumps(manifest, sort_keys=True, indent=1, ensure_ascii=False) + "\n").encode(
@@ -390,7 +498,9 @@ def render(
     }
 
 
-AUDITED = ("files", "tokenizer_version", "record_schema_version")  # what a rebuild must reproduce exactly
+# what a rebuild must reproduce exactly: `withheld` too, since a listed record that never had an abstract leaves
+# records.jsonl (and so the hash) as it was
+AUDITED = ("files", "tokenizer_version", "record_schema_version", "withheld")
 AUDIT_FILES = ("merges.csv", "conflicts.csv")
 
 
@@ -421,13 +531,23 @@ def _holds(snapshot: Path, snapshot_hash: str, fresh: dict[str, Any] | None = No
     )
 
 
-def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> BuildResult:
-    """Import, dedup and write a new immutable snapshot (or report the one that already has this hash)."""
+def build(
+    cache: Path, snapshots: Path, built_at: datetime | None = None, takedowns: Withheld = NONE
+) -> BuildResult:
+    """Import, dedup and write a new immutable snapshot (or report the one that already has this hash), with
+    every abstract `takedowns` lists withheld (`withhold`)."""
     began = time.monotonic()
     records, reports, crawls = load_sources(cache)
     result = with_crawl_conflicts(reconcile(dedup(records), crawled(crawls)).result, crawls)
+    withholding = withhold(result, takedowns)
+    result = withholding.result
     unexpected = tuple(unexpected_statuses(result.records))
-    files = render(result, reports, built_at or datetime.now(UTC), crawls)
+    files = render(result, reports, built_at or datetime.now(UTC), crawls, withholding.withheld)
+
+    def result_at(target: Path, created: bool) -> BuildResult:
+        return BuildResult(target, snapshot_hash, created, unexpected, tuple(sorted(withholding.withheld)),
+                           dict(withholding.followed), withholding.unmatched)  # fmt: skip
+
     manifest = json.loads(files["manifest.json"])
     snapshot_hash = manifest["snapshot_hash"]
     target = snapshots / f"{manifest['crawl_date']}-{snapshot_hash[:SHORT]}"
@@ -435,13 +555,26 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
         storage.sweep(snapshots)
         if target.exists():
             if not _holds(target, snapshot_hash, manifest):
+                if _holds(target, snapshot_hash, {**manifest, "withheld": _withheld_or_none(target)}):
+                    raise SnapshotError(
+                        f"{target.name} holds these very records but names other withheld abstracts (a listed "
+                        "record's abstract went from its sources since it was built): serve it as it is (the "
+                        "API applies the takedown list to it), or build from a cache that changes a record",
+                        reason="takedown_differs",
+                    )
                 raise SnapshotError(
                     f"{target.name} exists but isn't this snapshot in the current format; snapshots are "
                     "immutable: retire it (release-manager prune path) and build again"
                 )
             storage.lock(target)  # a crash between placing and locking left it writable
-            log.info("snapshot_exists", extra={"snapshot": target.name, "snapshot_hash": snapshot_hash})
-            return BuildResult(target, snapshot_hash, created=False, unexpected_statuses=unexpected)
+            log.info(
+                "snapshot_exists",
+                extra={"snapshot": target.name, "snapshot_hash": snapshot_hash,
+                       "abstracts_withheld": len(withholding.withheld),
+                       "takedowns_followed": len(withholding.followed),
+                       "takedowns_unmatched": len(withholding.unmatched)},
+            )  # fmt: skip
+            return result_at(target, created=False)
         with storage.staging(snapshots) as tmp:
             for name, data in files.items():
                 (tmp / name).write_bytes(data)
@@ -450,9 +583,12 @@ def build(cache: Path, snapshots: Path, built_at: datetime | None = None) -> Bui
         "snapshot_built" if created else "snapshot_exists",
         extra={"snapshot": target.name, "snapshot_hash": snapshot_hash, "records": manifest["record_count"],
                "merges": manifest["merges"]["total"], "conflicts": manifest["conflicts"]["total"],
+               "abstracts_withheld": len(withholding.withheld),
+               "takedowns_followed": len(withholding.followed),
+               "takedowns_unmatched": len(withholding.unmatched),
                "unexpected_statuses": len(unexpected), "ms": elapsed_ms(began, time.monotonic)},
     )  # fmt: skip
-    return BuildResult(target, snapshot_hash, created=created, unexpected_statuses=unexpected)
+    return result_at(target, created=created)
 
 
 class _OnePass:
@@ -554,7 +690,9 @@ class RecordFile:
     per (venue, year, track, status), the missing abstracts per (venue, year) and per (venue, year, track), and
     the claim sources per (venue, year, track), and keeps the manifest it read, so `GET /coverage` checks the
     manifest's counts against the records; and each record's abstract attribution (`attributions`, TASK-134),
-    which `GET /search` reads per hit with no file I/O. A lookup reads its one line and
+    which `GET /search` reads per hit with no file I/O. The ids the manifest names as `withheld` (a takedown,
+    TASK-136) must each be a record with no abstract and no abstract claim; they are counted per venue-year and
+    per track as withheld, never as missing. A lookup reads its one line and
     validates it as a `PaperRecord`, which re-checks its `content_hash`. Snapshots are sealed read-only, so
     the bytes can't change underneath. Thread-safe: every lookup opens the file itself."""
 
@@ -567,11 +705,22 @@ class RecordFile:
         self.track_sources: dict[tuple[str, int, str], set[str]] = {}
         # id → its abstract's attribution (TASK-134): computed here, once, so a search page is dict lookups
         self.attributions: dict[str, Attribution | None] = {}
+        # the abstracts a takedown withheld (TASK-136): (venue, year) and (venue, year, track) → withheld
+        self.abstract_withheld: Counter[tuple[str, int]] = Counter()
+        self.track_withheld: Counter[tuple[str, int, str]] = Counter()
         try:
             read = _OnePass(snapshot)
             manifest = read.manifest
             self.manifest: dict[str, Any] = manifest
             self.snapshot_hash: str = manifest["snapshot_hash"]
+            listed = manifest.get("withheld", [])
+            if not isinstance(listed, list) or not all(isinstance(i, str) for i in listed):
+                raise SnapshotError(
+                    f"{snapshot.name}'s manifest names its withheld ids other than as a list",
+                    reason="withheld_invalid",
+                )
+            self.withheld: frozenset[str] = frozenset(listed)
+            found: set[str] = set()
             self._at: dict[str, tuple[int, int]] = {}
             previous, offset = "", 0
             for n, raw in read.lines():
@@ -581,7 +730,8 @@ class RecordFile:
                     line = json.loads(raw)
                     rid = line["id"]
                     cell = (line["venue"], line["year"], line["track"], line["status"])
-                    no_abstract = line["abstract"] is None
+                    withheld = rid in self.withheld
+                    no_abstract = line["abstract"] is None and not withheld
                     claimed = {c["source"] for c in line["provenance"]}
                     if not isinstance(rid, str) or not all(isinstance(c, str) for c in claimed):
                         raise TypeError(rid)
@@ -601,6 +751,15 @@ class RecordFile:
                     ) from None
                 if out_of_order := _id_order(previous, rid):
                     raise SnapshotError(f"{snapshot.name} line {n}: {out_of_order}")
+                if withheld:
+                    if line["abstract"] is not None or about:
+                        raise SnapshotError(
+                            f"{snapshot.name} line {n}: a withheld record still holds its abstract",
+                            reason="withheld_abstract_present",
+                        )
+                    found.add(rid)
+                    self.abstract_withheld[(line["venue"], line["year"])] += 1
+                    self.track_withheld[(line["venue"], line["year"], line["track"])] += 1
                 self._at[rid] = (offset, len(raw))
                 self.attributions[rid] = credit
                 self.cells[cell] += 1
@@ -614,10 +773,17 @@ class RecordFile:
             raise SnapshotError(
                 f"{snapshot.name} is not on this instance", reason="snapshot_missing"
             ) from None
+        except SnapshotError:
+            raise
         except (OSError, ValueError, KeyError, TypeError) as e:
             raise SnapshotError(
                 f"{snapshot.name} is not a snapshot ({type(e).__name__})", reason="snapshot_unreadable"
             ) from None
+        if found != self.withheld:
+            raise SnapshotError(
+                f"{snapshot.name}'s manifest names a withheld id it has no record of",
+                reason="withheld_invalid",
+            )
         if read.hexdigest() != self.snapshot_hash:
             raise SnapshotError(
                 f"{snapshot.name}: records.jsonl doesn't match its manifest's snapshot_hash",
@@ -626,6 +792,9 @@ class RecordFile:
 
     def __len__(self) -> int:
         return len(self._at)
+
+    def __contains__(self, rid: object) -> bool:
+        return rid in self._at
 
     def get(self, rid: str) -> PaperRecord | None:
         """The record with id `rid`, or None if the snapshot has none."""
@@ -644,8 +813,11 @@ class RecordFile:
 def diff(a: Path, b: Path) -> dict[str, Any]:
     """From snapshot `a` to `b` (snapshots skill §CLI): ids added and removed; `rekeyed` ids (the same
     paper, its venue or year corrected so its id changed), with the fields that differ; `changed` ids
-    naming the hashed fields that differ; and counts of display-only and provenance-only changes."""
-    old, new = load_records(a), load_records(b)
+    naming the hashed fields that differ; counts of display-only and provenance-only changes; and
+    `abstract_withheld`, the ids whose abstract a takedown withheld in `b` but not `a` (`added`) and the reverse
+    (`lifted`), from the manifests' `withheld` (TASK-136)."""
+    old, new = load_records(a), load_records(b)  # each verified against its manifest's snapshot_hash
+    was, now = _withheld(a), _withheld(b)
     added, removed = new.keys() - old.keys(), old.keys() - new.keys()
     # a rekey only when exactly one removed and one added id share a native id: anything else (two papers
     # into one, one into two) is reported as added and removed, so a lost record is never hidden
@@ -681,4 +853,25 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
         "changed": changed,
         "display_only": display_only,
         "provenance_only": provenance_only,
+        "abstract_withheld": {"added": sorted(now - was), "lifted": sorted(was - now)},
     }
+
+
+def _withheld_or_none(snapshot: Path) -> list[str] | None:
+    """A snapshot's manifest `withheld` as written (None when it has none), for comparing with a fresh one."""
+    try:
+        listed = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8")).get("withheld")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return listed if isinstance(listed, list) else None
+
+
+def _withheld(snapshot: Path) -> frozenset[str]:
+    """The ids a snapshot's manifest names as `withheld` (none when it has no such key)."""
+    try:
+        listed = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8")).get("withheld", [])
+    except (OSError, ValueError, AttributeError):
+        raise SnapshotError(f"{snapshot.name}'s manifest is unreadable") from None
+    if not isinstance(listed, list) or not all(isinstance(i, str) for i in listed):
+        raise SnapshotError(f"{snapshot.name}'s manifest names its withheld ids other than as a list")
+    return frozenset(listed)

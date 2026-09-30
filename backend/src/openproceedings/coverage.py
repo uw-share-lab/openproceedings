@@ -14,6 +14,12 @@ missing abstracts and claim sources from the manifest's format-2 keys, beside th
 (`official_counts.py`) with its delta and ±1% gate. A format-1 manifest lacks those keys; the load passes
 the records' own per-track facts (`TrackFacts`) instead, and compares them with a format-2 manifest's.
 
+Withheld abstracts (TASK-136, decision-022): a snapshot built with a takedown list counts its withheld records
+in `abstract_withheld` (per venue-year) and `abstract_withheld_by_track`; a manifest without them withheld
+nothing. Every venue-year, track and the totals carry `abstract_withheld`, 0 included, apart from
+`abstract_missing` (a withheld record is not counted missing). The API adds the ids listed after the snapshot
+was built (`api/coverage.py::compute`), so `/coverage` counts what it withholds when it serves.
+
 Order (stable JSON): venue-years by venue name, then year; within one, cells by the vocabulary order of
 track, then of status (`vocab.py`: `main` first, `unknown` last); tracks in vocabulary order. `unknown` is never merged into another
 bucket: it is a cell of its own, and every venue-year also carries `unknown_track` and `unknown_status`,
@@ -134,8 +140,34 @@ def _per_track(
     return missing, sources, statuses
 
 
+def _withheld(manifest: Mapping[str, Any]) -> tuple[dict[tuple[str, int], int], dict[TrackKey, int]]:
+    """The manifest's withheld abstracts per venue-year and per track (TASK-136); none when it has no such
+    keys. A manifest that has one of the two keys has both."""
+    if ("abstract_withheld" in manifest) != ("abstract_withheld_by_track" in manifest):
+        raise SnapshotError(
+            "the snapshot manifest counts withheld abstracts per venue-year or per track, not both"
+        )
+    per_year: dict[tuple[str, int], int] = {}
+    per_track: dict[TrackKey, int] = {}
+    for venue, years in _map(manifest.get("abstract_withheld", {}), "abstract_withheld").items():
+        for year, n in _map(years, "abstract_withheld per venue").items():
+            per_year[(venue, _year(year))] = _count(n)
+    for venue, years in _map(
+        manifest.get("abstract_withheld_by_track", {}), "abstract_withheld_by_track"
+    ).items():
+        for year, tracks in _map(years, "abstract_withheld_by_track per venue").items():
+            for track, n in _map(tracks, "abstract_withheld_by_track per venue-year").items():
+                per_track[(venue, _year(year), track)] = _count(n)
+    return per_year, per_track
+
+
 def _track_row(
-    key: TrackKey, cells: list[dict[str, Any]], missing: int, sources: list[str], official: OfficialTable
+    key: TrackKey,
+    cells: list[dict[str, Any]],
+    missing: int,
+    sources: list[str],
+    official: OfficialTable,
+    withheld: int = 0,
 ) -> dict[str, Any]:
     """One spec 07 §C cell (venue × year × track): its indexed counts beside the official accepted count."""
     mine = [c for c in cells if c["track"] == key[2]]
@@ -147,6 +179,7 @@ def _track_row(
         "records": sum(c["count"] for c in mine),
         "indexed_accepted": accepted,
         "abstract_missing": missing,
+        "abstract_withheld": withheld,
         "sources": sources,
         "official_accepted": row.accepted if row else None,
         "official_counts": row.counts if row else None,
@@ -170,6 +203,7 @@ def breakdown(
     venue-year with its statuses indexed and its `tracks` (spec 07 §C cells, beside `official`'s counts).
     `facts` stands in for the per-track keys of a format-1 manifest (and is otherwise unused)."""
     missing_by_track, sources_by_track, statuses = _per_track(manifest, facts)
+    withheld_by_year, withheld_by_track = _withheld(manifest)
     try:
         counts = _map(manifest["counts"], "counts")
         missing = _map(manifest["abstract_missing"], "abstract_missing")
@@ -226,12 +260,22 @@ def breakdown(
             keys = [(venue, y, t) for t in TRACKS if any(c["track"] == t for c in cells)]
             if any(k not in missing_by_track or k not in sources_by_track for k in keys):
                 raise SnapshotError("a track is in the manifest's counts but not in its per-track maps")
-            rows = [_track_row(k, cells, missing_by_track[k], sources_by_track[k], official) for k in keys]
+            rows = [
+                _track_row(
+                    k, cells, missing_by_track[k], sources_by_track[k], official, withheld_by_track.get(k, 0)
+                )
+                for k in keys
+            ]
             if sum(r["abstract_missing"] for r in rows) != abstract_missing or any(
-                r["abstract_missing"] > r["records"] for r in rows
+                r["abstract_missing"] + r["abstract_withheld"] > r["records"] for r in rows
             ):
                 raise SnapshotError(
                     "the manifest's missing abstracts per track disagree with its venue-year's"
+                )
+            abstract_withheld = withheld_by_year.get((venue, y), 0)
+            if sum(r["abstract_withheld"] for r in rows) != abstract_withheld:
+                raise SnapshotError(
+                    "the manifest's withheld abstracts per track disagree with its venue-year's"
                 )
             held = (
                 statuses_indexed(
@@ -248,6 +292,7 @@ def breakdown(
                     "year": _year(year),
                     "records": records,
                     "abstract_missing": abstract_missing,
+                    "abstract_withheld": abstract_withheld,
                     "unknown_track": unknown_track,
                     "unknown_status": sum(c["count"] for c in cells if c["status"] == "unknown"),
                     "cells": cells,
@@ -267,9 +312,13 @@ def breakdown(
         or (statuses is not None and set(statuses) != {(v, y) for v, y, _t in in_cells})
     ):  # a track or venue-year only the per-track maps name
         raise SnapshotError("the snapshot manifest's per-track maps name other tracks than its counts")
+    if not set(withheld_by_track) <= in_cells or not {(v, y) for v, y in withheld_by_year} <= {
+        (v, y) for v, y, _t in in_cells
+    }:
+        raise SnapshotError("the snapshot manifest counts withheld abstracts where it holds no records")
     totals = {
         key: sum(vy[key] for vy in venue_years)
-        for key in ("records", "abstract_missing", "unknown_track", "unknown_status")
+        for key in ("records", "abstract_missing", "abstract_withheld", "unknown_track", "unknown_status")
     }
     if totals["records"] != record_count:
         raise SnapshotError("the snapshot manifest's counts don't add up to its record_count")

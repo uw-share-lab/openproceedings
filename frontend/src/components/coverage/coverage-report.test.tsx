@@ -199,6 +199,35 @@ describe("the header", () => {
     );
   });
 
+  it("counts abstracts removed at a rights holder's request only when there are any (TASK-136, CV-6)", () => {
+    expect(COVERAGE.totals.abstract_withheld).toBe(0);
+    render(<CoverageReport coverage={COVERAGE} />);
+    expect(document.body.textContent).not.toMatch(/rights holder|removed on request/);
+    cleanup();
+    const c = copy();
+    const vy = c.venue_years.find((v) => v.records > v.abstract_missing + 2)!;
+    const track = vy.tracks[0]!;
+    c.totals.abstract_withheld = 2;
+    vy.abstract_withheld = 2;
+    track.abstract_withheld = 2;
+    render(<CoverageReport coverage={c} />);
+    expect(document.body.textContent).toContain(
+      "of unknown status · 2 with the abstract removed at a rights holder's request",
+    );
+    const noAbstract = [...row(vy.venue, vy.year).querySelectorAll("td")][2]!;
+    expect(noAbstract.textContent).toContain(`${count(vy.abstract_missing)}and 2 removed on request`);
+    // a venue-year whose every record lacks a shown abstract, removed ones included, is flagged (CV-5)
+    cleanup();
+    const all = copy();
+    const flagged = all.venue_years.find((v) => v.records > v.abstract_missing)!;
+    flagged.abstract_withheld = flagged.records - flagged.abstract_missing;
+    render(<CoverageReport coverage={all} />);
+    const cell = [...row(flagged.venue, flagged.year).querySelectorAll("td")][2]!.textContent;
+    // removed abstracts may still be matched on an older index, so the flag says "shown", not "searchable"
+    expect(cell).toContain(`and ${count(flagged.abstract_withheld)} removed on request`);
+    expect(cell).toMatch(/removed on requestno abstracts shown$/);
+  });
+
   it("says Crawled for a crawl and drops the citability note for a citable snapshot", () => {
     const data = copy();
     data.snapshot.crawl_dates_kind = { "*": "crawl", ris: "crawl" };

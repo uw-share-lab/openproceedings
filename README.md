@@ -16,7 +16,7 @@ Exact, reproducible Boolean search over **NeurIPS, ICLR and ICML** titles and ab
 | M2 | RIS ingestion, snapshots, the Tantivy index, `op search` / `op export` ([spec 01](docs/specs/01-ingestion.md), [spec 03](docs/specs/03-search-engine.md)) |
 | M3 | The `/api/v1` HTTP API (`op serve`; interactive docs at `/api/v1/docs`), search records (`op record save` / `replay`), and the web UI: query editor and builder, results, paper pages, exports, the coverage page and syntax help ([spec 04](docs/specs/04-backend-api.md), [spec 05](docs/specs/05-frontend.md)) |
 | M4 | Crawlers for OpenReview (API v1 and v2), the NeurIPS proceedings, PMLR and the ICLR archive (`op ingest …`), and the coverage report with the M4 gate (`op eval coverage`, [spec 07](docs/specs/07-evaluation.md) §C). The first full crawl's report passes the gate: 43 of 44 gated cells within ±1% and one owner-accepted exception ([`docs/results/2026-09-29-coverage.md`](docs/results/2026-09-29-coverage.md)). |
-| Next | Production deployment with Docker compose (`deploy/`, M6, TASK-065) and the first tagged release, then the public v1 release. Releases follow [spec 08](docs/specs/08-ops-and-tooling.md) §Release (one semver version, decision-023); release notes are the generated [`CHANGELOG.md`](CHANGELOG.md) |
+| Next | Production deployment: the `web` image is built (`deploy/web.Dockerfile`, TASK-136); compose, the api image and TLS (TASK-065), and the first tagged release, then the public v1 release. Releases follow [spec 08](docs/specs/08-ops-and-tooling.md) §Release (one semver version, decision-023); release notes are the generated [`CHANGELOG.md`](CHANGELOG.md) |
 | Deferred | Semantic "near-miss" suggestions and re-sort (M5, [spec 06](docs/specs/06-semantic-layer.md)): phase 2, not in v1, which is Boolean search only (decision-017) |
 
 **Abstracts on a public instance.** A public deployment shows every abstract, attributed to its source
@@ -26,7 +26,12 @@ abstracts under CC0, and PMLR grants CC BY 4.0 (known from ICML 2017, v70); the 
 fair dealing alone. Consulting the University of Waterloo copyright office before launch is recommended, not a
 gate
 ([decision-018](backlog/decisions/decision-018%20-%20The-public-instance-serves-every-abstract-with-attribution-and-a-source-link-and-a-takedown-contact-on-public-instances-TASK-063.md),
-spec 08 §Deploy). This is the project's decision, not legal advice.
+spec 08 §Deploy). A takedown withholds a listed abstract from every index version the instance serves, in
+results, paper pages and exports, and marks it as removed; older versions that saved searches pin still match
+on its words, so those searches replay the same ids
+([decision-022](backlog/decisions/decision-022%20-%20A-takedown-withholds-an-abstracts-display-not-its-matching-on-every-loaded-index-version-the-takedown-list-and-log-live-in-the-data-directory-TASK-136.md);
+the list, the operator's log and `op takedown check` are in spec 08 §Deploy). This is the project's decision,
+not legal advice.
 
 Start with [`docs/specs/00-overview.md`](docs/specs/00-overview.md). Contributor workflow (branches, reviews, the
 gates the tooling enforces) is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
@@ -101,7 +106,10 @@ With `NEXT_PUBLIC_API_BASE_URL` unset, the UI calls the API on its own origin (b
 `NEXT_PUBLIC_TAKEDOWN_CONTACT` (also compiled in at build time) is the address or page the footer gives rights
 holders for removing an abstract, e.g. `NEXT_PUBLIC_TAKEDOWN_CONTACT=takedown@example.org`; a publicly reachable
 deployment must set its own; private and local ones may leave it unset (decision-018, spec 08 §Deploy). Unset, the footer links to this repository's (public) issues page; a value that is
-neither a plain email address nor an http(s) URL fails the build.
+neither a plain email address nor an http(s) URL fails the build. `OPENPROCEEDINGS_INSTANCE=public` makes a
+missing contact fail the build too, and the `web` image requires it: `docker build -f deploy/web.Dockerfile
+--build-arg OPENPROCEEDINGS_INSTANCE=public --build-arg NEXT_PUBLIC_TAKEDOWN_CONTACT=takedown@your.org .`
+(`private` for a private, local or development one).
 
 ### 7. Reports
 `uv run op eval coverage --index <index_version>` writes `docs/results/<date>-coverage.md`: indexed against

@@ -57,7 +57,18 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    `index_retire_restore_failed`, move `indexes/.retiring-<version>` back to `indexes/<version>` by hand first. Snapshots have no retire
    command yet. `protect-data-dir.sh` blocks edits; deletion is a decision record. Keep the snapshot of every
    pinned index: its exports need it to attribute abstracts, and withhold them without it (decision-021).
-6. **Record** a decision for anything that changes defaults, tokenizer or sources, and a learnings entry
+6. **Takedowns (spec 08 §Deploy "Takedown procedure", decision-022).** Log the request in
+   `<data-dir>/takedowns/log.jsonl` (operator-owned, mode 0600, never committed), add the id to
+   `<data-dir>/takedowns/withheld.txt` and SIGHUP `api` (every loaded version withholds it from then on), then
+   run `op takedown check --api http://127.0.0.1:8000` as the operator (it passes on serve-time withholding
+   before any rebuild), then promote a rebuild as in step 4 (`op snapshot build` withholds listed abstracts,
+   follows a listed id that merged or was rekeyed to its new id and says so: add the new id, log a `withheld`
+   entry for it, and keep the old one; it reports listed ids it has no record of, never refuses them; `op snapshot diff` names them under
+   `abstract_withheld`), fill in the log's `applied` and `first_index_version`, and run the check again (exit 0).
+   Every promotion runs that check too while the list names anything. Pinned versions keep matching on the
+   text (accepted, decision-022); retiring an unpinned one ends that. Lifting: append a `lifted` log entry, remove the line,
+   SIGHUP, and rebuild and promote.
+7. **Record** a decision for anything that changes defaults, tokenizer or sources, and a learnings entry
    for the release; follow `CLAUDE.md` §Closing workflow.
 
 ## Release rules

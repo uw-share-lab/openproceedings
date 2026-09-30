@@ -20,6 +20,7 @@ import { CopyButton } from "../copy-button";
 import { Highlighted } from "../highlighted";
 import { PaperBadges, statusWords } from "../paper-badges";
 import { PaperLinks } from "../paper-links";
+import { ABSTRACT_WITHHELD, WITHHELD_TERMS } from "../search/hit-item";
 import { FailureBlock } from "../search/search-states";
 
 export type PaperResponse = MethodResponse<Api, "get", "/api/v1/papers/{id}">;
@@ -216,6 +217,7 @@ function Paper({
         <p className="text-sm break-words">
           <span aria-hidden="true">✔ </span>Matches <code className="font-mono break-all">{q}</code> (
           {modeWords(mode)}): matched terms are highlighted.
+          {data.abstract_withheld && ` ${WITHHELD_TERMS}`}
         </p>
       )}
       {q !== null && dropped === null && data.matched === false && (
@@ -230,7 +232,9 @@ function Paper({
         <h2 id="abstract-h" className={h2}>
           Abstract
         </h2>
-        {paper.abstract === null ? (
+        {data.abstract_withheld ? (
+          <p className="text-sm text-muted-foreground">{ABSTRACT_WITHHELD}</p>
+        ) : paper.abstract === null ? (
           <p className="text-sm text-muted-foreground">No abstract in the index</p>
         ) : (
           <p className="text-sm break-words">

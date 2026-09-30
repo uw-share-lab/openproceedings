@@ -15,7 +15,7 @@ import { plural } from "@/editor/diagnostics";
 import { FORMATS, warningLine, warningText, type ExportSource, type FieldWarning } from "@/lib/export";
 import { Coded } from "../coded";
 import { CovidenceHelp } from "./covidence-help";
-import { button, ExportNotice, WithheldNotice } from "./export-notice";
+import { button, ExportNotice, RemovedNotice, WithheldNotice } from "./export-notice";
 import { useExport } from "./use-export";
 
 export interface ExportMenuProps {
@@ -194,6 +194,7 @@ export function ExportMenu({
             <ExportNotice result={exporter.notice} onRetry={exporter.retry} onSearchAgain={onSearchAgain} />
           )}
           {exporter.withheld && <WithheldNotice />}
+          {exporter.removed > 0 && <RemovedNotice n={exporter.removed} />}
           <ul
             id={menuId}
             role="menu"

@@ -1,7 +1,7 @@
 # openproceedings monorepo — common entry points. Standard: .claude/skills/autolint/SKILL.md
 .PHONY: help sync frontend-deps fmt lint tooling test e2e openapi changelog hooks mutate mutate-changed
 
-SHELL_FILES := $(wildcard .claude/hooks/*.sh .claude/hooks/tests/*.sh .claude/scripts/tests/*.sh scripts/*.sh .githooks/*)
+SHELL_FILES := $(wildcard .claude/hooks/*.sh .claude/hooks/tests/*.sh .claude/scripts/tests/*.sh scripts/*.sh .githooks/* deploy/*.sh)
 PY_TARGETS  := .claude $(wildcard backend)
 
 help:

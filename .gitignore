@@ -1,5 +1,7 @@
 # corpus, caches, indexes, search records — never committed (see docs/specs/01, 08)
 data/
+# the takedown list and log (TASK-136), wherever a data directory is: the log holds requesters' details
+takedowns/
 .env
 .env.*
 !.env.example

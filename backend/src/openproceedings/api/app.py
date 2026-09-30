@@ -60,6 +60,7 @@ EXPOSED_HEADERS = (
     "Retry-After",
     "Content-Disposition",
     "X-Abstract-Source",
+    "X-Abstracts-Withheld",
     "Location",
 )
 

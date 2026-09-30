@@ -787,3 +787,15 @@ def test_op_eval_coverage_lists_the_snapshots_unresolved_records(tmp_path: Path)
             "| ICLR 2014 main (gated) | withdrawn (x) | accepted (y) |"  # the real table; the test record is accepted
         ]
     )
+
+
+def test_the_totals_say_how_many_abstracts_a_takedown_withheld_and_nothing_when_none() -> None:
+    """TASK-136 (decision-022): withheld abstracts are not missing ones, so a report citing the missing count
+    names them; a snapshot that withheld nothing reads as before."""
+    from openproceedings.eval.coverage_report import withheld_note
+
+    assert withheld_note({"abstract_withheld": 0}) == [] == withheld_note({})
+    assert withheld_note({"abstract_withheld": 1})[0].startswith("1 more record has no abstract here")
+    assert withheld_note({"abstract_withheld": 1200})[0].startswith(
+        "1,200 more records have no abstract here"
+    )

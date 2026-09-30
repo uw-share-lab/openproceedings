@@ -5,6 +5,7 @@ import type { Schemas } from "@/api/client";
 import PaperPage from "@/app/paper/[id]/page";
 import { json, META, renderWithApi, type Call, type Handler } from "@/test/api-stub";
 import { fetchedText, PaperView } from "./paper-view";
+import { ABSTRACT_WITHHELD } from "../search/hit-item";
 
 afterEach(cleanup);
 
@@ -50,6 +51,7 @@ function answer(over: Partial<Paper> = {}): Paper {
     paper: PAPER,
     matched: null,
     highlights: null,
+    abstract_withheld: false,
     ...over,
   };
 }
@@ -121,6 +123,40 @@ describe("P1 matched (reached from a hit)", () => {
         "Status: rejected — submitted to International Conference on Learning Representations (ICLR 2024), not in its proceedings.",
       ),
     ).toBeTruthy();
+  });
+});
+
+describe("a withheld abstract (TASK-136, decision-022, PA-8)", () => {
+  it("says the abstract was removed, and that terms matched in it aren't shown", async () => {
+    draw(
+      "trust*",
+      api(() =>
+        json(
+          answer({
+            paper: { ...PAPER, abstract: null },
+            matched: true,
+            highlights: { title: [[2, 13]], abstract: [] },
+            abstract_withheld: true,
+          }),
+        ),
+      ),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.getByText(ABSTRACT_WITHHELD)).toBeTruthy();
+    expect(screen.queryByText("No abstract in the index")).toBeNull();
+    expect(document.body.textContent).toContain(
+      "Matches trust* (native syntax): matched terms are highlighted. Any terms it matched in the removed abstract aren't shown.",
+    );
+    expect([...document.querySelectorAll("mark")].map((m) => m.textContent)).toEqual(["Trustworthy"]);
+  });
+
+  it("says nothing about removed terms for an abstract that isn't withheld", async () => {
+    draw(
+      "trust*",
+      api(() => json(answer({ matched: true, highlights: { title: [], abstract: [] } }))),
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(document.body.textContent).not.toContain("removed abstract");
   });
 });
 

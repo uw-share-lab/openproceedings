@@ -89,6 +89,20 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
   parser's bounds (`html_budget`) names its URL, `--refresh` and its cache entry.
 
 ## API access line (INFO, exactly one per request)
+Index loads (`api/state.py`): `index_loaded` / `index_swapped` carry `abstracts_withheld` (how many ids the
+takedown list names; never the ids), `takedowns_not_in_index` (how many of them the index doesn't hold) and
+`takedowns_list` (`present`/`absent`, whether the file exists), and
+a SIGHUP that finds the same index but another list, or whose new index fails while its new list parsed, logs
+`takedowns_reloaded` (INFO, the same counts; `takedowns_reload_failed` ERROR with `index_version`, `error`,
+`ms` and any `reason`, if even that fails); a list that doesn't parse, can't be read, or has gone missing while
+a list is applied or the loaded snapshot withheld abstracts, is `index_load_failed` with `reason`
+`takedowns_invalid`, `takedowns_unreadable` or `takedowns_missing`. `abstracts_withheld` means three counts,
+each named by its event: the list's size on a load, the records a build withheld on `snapshot_built`, the
+records of the body on an export's access line (the build's JSON gives the ids themselves, `withheld_ids`). `snapshot_built` / `snapshot_exists` carry
+`abstracts_withheld`, `takedowns_followed` and `takedowns_unmatched` counts. An export's access line carries
+`abstracts_withheld` (its `X-Abstracts-Withheld`). `op takedown check` logs one `takedown_checked` (INFO, WARNING when
+it found problems) with `listed`, `index_versions` and `problems` counts: never an id's text or a requester.
+
 `request` event with: `request_id`, `method`, `route` (the template, e.g. `/api/v1/papers/{id}`, not the
 concrete path), `status`, `ms`, `index_version`, `canonical_hash` (search/export), `total`, `abstract_source`
 (export: its `X-Abstract-Source`, `unavailable` when it withheld the abstracts, decision-021), and `code` (the

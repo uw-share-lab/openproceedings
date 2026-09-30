@@ -48,7 +48,9 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
   to` sentence), so it stays additive (decision-021); refaudit's `(\w+)\s*=` reads the name and styles don't
   print it. When a pinned export's snapshot can't be verified (decision-021) there is no `abstract` and no
   `abstract_source`; instead `abstract_withheld = {Abstract withheld: … (decision-018).}` (`export.WITHHELD`), a
-  field rather than a sentence in `note`, since changing `note` is breaking and styles typeset it.
+  field rather than a sentence in `note`, since changing `note` is breaking and styles typeset it. A record
+  a takedown withholds (TASK-136, decision-022: on the takedown list, or withheld by the exported index's
+  snapshot) gets the same field with `export.TAKEDOWN`: `abstract_withheld = {Abstract withheld: removed from this site at a rights holder's request, so no abstract is exported (decision-022).}`.
 - `author`: `Last, First` joined by ` and `. Brace a name that contains the word `and` or a comma, or
   that is an organisation (`{OpenAI Team}`).
 

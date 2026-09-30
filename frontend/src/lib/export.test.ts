@@ -72,6 +72,20 @@ describe("fetchExport: pinned to what was shown (design E1)", () => {
     expect(withheld.kind === "ok" && withheld.abstractsWithheld).toBe(true);
   });
 
+  it("reads how many abstracts were removed at a rights holder's request (decision-022), 0 when unsaid", async () => {
+    for (const [header, removed] of [
+      ["2", 2],
+      ["0", 0],
+      [undefined, 0],
+      ["-1", 0],
+      ["two", 0],
+    ] as const) {
+      const headers = header === undefined ? good : { ...good, "X-Abstracts-Withheld": header };
+      const r = await run(SEARCH, () => file(headers)).result;
+      expect(r.kind === "ok" && r.removed).toBe(removed);
+    }
+  });
+
   it("exports a record by its record_id alone: never its q, never a re-run", async () => {
     const { result, calls } = run(RECORD, () => file(good));
     expect((await result).kind).toBe("ok");

@@ -19,7 +19,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   `mutate-changed` (`make help`). `CHANGELOG.md` is generated (`make changelog`; spec 08 §Release, decision-023).
 - `backend/`: the uv workspace member, Python package `openproceedings` (`cli.py` → `op`, `search.py` (one
   ranked search, which `op search` and the API search route both run), `export.py`, `logs.py`,
-  `diagnostics.py`, `vocab.py`, `storage.py`, `records.py` (search records: `ids_hash`, the append-only store, replay), `coverage.py` (the snapshot manifest's venue × year × track × status breakdown), `official_counts.py` (official accepted counts and the M4 gate), `timestamps.py` (the API's one UTC `Z` timestamp form), `query/` (`normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`,
+  `diagnostics.py`, `vocab.py`, `storage.py`, `records.py` (search records: `ids_hash`, the append-only store, replay), `coverage.py` (the snapshot manifest's venue × year × track × status breakdown), `official_counts.py` (official accepted counts and the M4 gate), `takedowns.py` (the takedown list and log, decision-022) and `takedown_check.py` (`op takedown check`), `timestamps.py` (the API's one UTC `Z` timestamp form), `query/` (`normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`,
   `ast.py`, `canonical.py`, `defaults.py`, `clauses.py` (each filter field's clause for facet clicks), `compat.py`), `engine/` (`protocol.py`, `reference.py`, `index.py`, `compile.py`, `tantivy_engine.py`, `exclusions.py`, `highlight.py`, `parity.py`), `ingest/`
   (`record.py`, `classify.py`, `urls.py`, `volumes.py` + `pmlr_volumes.toml` (the PMLR volume table), `statuses.py` (statuses indexed per source), `ris.py`, `dedup.py`, `reconcile.py` (after dedup: OpenReview acceptance the crawled proceedings don't list → `unknown`, decision-005), `snapshot.py`, `status_check.py` (statuses a venue-year's sources can't supply, reported by the build), `sources/` (crawlers:
   `http.py` (the one HTTP layer every crawler shares: transport, host allowlist, pacing, retries, atomic cache with a per-`Policy` TTL, the `SourceError` hierarchy; plus the proceedings page fetcher), `common.py` (crawl reports, markers, and `Crawls`: the one ingest loop and the one replay), `openreview_client.py` (OpenReview's policy and login on top of `http.py`), `openreview_v2.py` and `openreview_v1.py` (per-year API v1 adapters) → `op ingest openreview`; `iclr.py`, `neurips.py`, `pmlr.py`, `crawl.py` → `op ingest iclr|neurips|pmlr`, and `crawl.replay_all`, what `op snapshot build` replays)), `api/` (`app.py`
@@ -56,6 +56,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   `record-fixture.json`, real API answers kept current by `test_frontend_record_fixture.py`). Tests are Vitest + Testing Library
   (`src/**/*.test.{ts,tsx}`); `npm test --workspace frontend`. Full-stack browser, accessibility and
   visual tests live in `frontend/e2e/`, backed by `backend/tests/e2e/`; run them with `make e2e`.
+- `deploy/`: `web.Dockerfile` and `web-build-gate.sh` (the `web` image; a public build needs a takedown contact, TASK-136); compose and the api image are TASK-065.
 - `docs/specs` · `docs/{plans,results,design,usability,research}` (created as needed).
 - `backlog/`: Backlog.md, CLI only.
 - `.claude/`: agents, skills, commands, hooks and learnings, all committed. The roster is in
@@ -108,7 +109,7 @@ fixtures under `backend/tests/fixtures/`; recording them is a separate, manual `
 | `require-review.sh` | `git push` / `gh pr create` need an **APPROVE record for the exact HEAD sha**, written by `record-review.py` after `/review-gate`. `gh pr create` also needs an added or extended learnings entry. |
 | `block-ai-attribution.sh` | No `Co-Authored-By: Claude` or "Generated with Claude Code" in commits, PRs or release notes. `.claude/` is committed; authorship is not. |
 | `enforce-backlog-cli.sh` | No hand edits under `backlog/`. Use the `backlog` CLI. (Decision *bodies* may be edited, since the CLI can't write them.) |
-| `protect-data-dir.sh` | `data/snapshots/` and `data/indexes/` are immutable. `data/` is never committed. |
+| `protect-data-dir.sh` | `data/snapshots/` and `data/indexes/` are immutable. `data/` and any `takedowns/` directory are never committed. |
 | `remind-token-contract.sh` | Reminds you to bump `TOKENIZER_VERSION` and run the parity and differential suites after a tokenizer edit. |
 | `load-learnings.sh` | Every session starts with `.claude/learnings/INDEX.md` in context. |
 | `autofix.sh` | After every edit: formats and fixes the file, then reports what it couldn't fix. Never blocks. |

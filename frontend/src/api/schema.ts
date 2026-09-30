@@ -332,8 +332,16 @@ export interface components {
         };
         /** CoverageTotals */
         CoverageTotals: {
-            /** Abstract Missing */
+            /**
+             * Abstract Missing
+             * @description Of `records`, those without an abstract because their sources gave none (title-only). Abstracts withheld at a rights holder's request are counted in `abstract_withheld` instead (decision-022), including ids the takedown list names since the snapshot was built, so this can drop after a reload of the same `index_version`; `op eval coverage` reports the snapshot's own counts.
+             */
             abstract_missing: number;
+            /**
+             * Abstract Withheld
+             * @description Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.
+             */
+            abstract_withheld: number;
             /** Records */
             records: number;
             /** Unknown Status */
@@ -514,6 +522,11 @@ export interface components {
             abstract: string | null;
             /** @description Where the hit's `abstract` came from, for attribution (decision-018). `source`: the provenance claim precedence took it from (decision-005), as `GET /papers/{id}` lists it; `ris` means it came through an imported RIS file. `origin`: the site that published it, for a `ris` claim read from the claim's evidence (`scholarmend:openreview_api` → `openreview`, `scholarmend:proceedings_page` → the proceedings its `urls.proceedings` names), null when that names no known site. `url`: the paper's page at `origin` (the OpenReview forum, or the proceedings page; PMLR's CC BY 4.0 terms ask for this link), null when there is none. The whole object is null when `abstract` is null or no claim holds its text. */
             abstract_source: components["schemas"]["AbstractSource"] | null;
+            /**
+             * Abstract Withheld
+             * @description True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.
+             */
+            abstract_withheld: boolean;
             /** Authors */
             authors: string[];
             highlights: components["schemas"]["Highlights"];
@@ -704,6 +717,11 @@ export interface components {
         };
         /** PaperResponse */
         PaperResponse: {
+            /**
+             * Abstract Withheld
+             * @description True when this instance withholds the paper's abstract at a rights holder's request (a takedown, decision-018, decision-022): `abstract` is then null, `abstract_source` null and the abstract's highlight spans empty, though an older index version may still match the query on the withheld text (decision-022: a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources gave none.
+             */
+            abstract_withheld: boolean;
             /** @description With `q`: the spans `/search` gives this paper as a hit for that query, over `paper.title` and `paper.abstract` (code points over the raw text); both lists empty when `matched` is false. Null without `q`. */
             highlights: components["schemas"]["Highlights"] | null;
             /** Index Version */
@@ -713,6 +731,7 @@ export interface components {
              * @description With `q`: whether the query (default filters included) matches this paper on this index, i.e. whether `/search` would count it in `total`. Null without `q`.
              */
             matched: boolean | null;
+            /** @description The snapshot record the index was built from (spec 01), provenance included. When `abstract_withheld`, it comes without its abstract and its abstract claims, and its `content_hash` is recomputed for what it shows (decision-022). */
             paper: components["schemas"]["PaperRecord"];
             /** Query Version */
             query_version: string;
@@ -1256,9 +1275,14 @@ export interface components {
         TrackCoverage: {
             /**
              * Abstract Missing
-             * @description Of `records`, those without an abstract (title-only).
+             * @description Of `records`, those without an abstract because their sources gave none (title-only). Abstracts withheld at a rights holder's request are counted in `abstract_withheld` instead (decision-022), including ids the takedown list names since the snapshot was built, so this can drop after a reload of the same `index_version`; `op eval coverage` reports the snapshot's own counts.
              */
             abstract_missing: number;
+            /**
+             * Abstract Withheld
+             * @description Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.
+             */
+            abstract_withheld: number;
             /**
              * Delta
              * @description `indexed_accepted` − `official_accepted`; null without one.
@@ -1338,8 +1362,16 @@ export interface components {
          *     last, never folded), and its unknown and missing-abstract counts, 0 included.
          */
         VenueYearCoverage: {
-            /** Abstract Missing */
+            /**
+             * Abstract Missing
+             * @description Of `records`, those without an abstract because their sources gave none (title-only). Abstracts withheld at a rights holder's request are counted in `abstract_withheld` instead (decision-022), including ids the takedown list names since the snapshot was built, so this can drop after a reload of the same `index_version`; `op eval coverage` reports the snapshot's own counts.
+             */
             abstract_missing: number;
+            /**
+             * Abstract Withheld
+             * @description Of `records`, those whose abstract this instance withholds at a rights holder's request (a takedown, decision-022): counted here, not in `abstract_missing`.
+             */
+            abstract_withheld: number;
             /** Cells */
             cells: components["schemas"]["CoverageCell"][];
             /** Records */
@@ -1495,6 +1527,8 @@ export interface operations {
                     "Content-Disposition"?: string;
                     /** @description `attributed`: each abstract names its source (decision-018). `unavailable`: the exported index's snapshot can't be verified on this instance, so every abstract is withheld and each record says so (decision-021) */
                     "X-Abstract-Source"?: "attributed" | "unavailable";
+                    /** @description How many records of the body have their abstract withheld at a rights holder's request (a takedown, decision-022): each says so in the file; 0 when none */
+                    "X-Abstracts-Withheld"?: number;
                     /** @description The index the records were read from */
                     "X-Index-Version"?: string;
                     /** @description This code's query_version (on a `record_id` export too, whatever the record's own) */

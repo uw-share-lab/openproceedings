@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Schemas } from "@/api/client";
-import { attributionText, HitItem, shownAuthors } from "./hit-item";
+import { ABSTRACT_WITHHELD, attributionText, HitItem, shownAuthors, WITHHELD_SEARCH_TERMS } from "./hit-item";
 
 afterEach(cleanup);
 
@@ -23,6 +23,7 @@ const HIT: Hit = {
   highlights: { title: [], abstract: [] },
   urls: { forum: null, pdf: null, proceedings: PMLR_PAGE, doi: null },
   abstract_source: { source: "pmlr", origin: "pmlr", url: PMLR_PAGE },
+  abstract_withheld: false,
 };
 
 function show(over: Partial<Hit> = {}) {
@@ -154,5 +155,23 @@ describe("the abstract's attribution (decision-018, RH-12)", () => {
     const article = show({ abstract: null, abstract_source: null });
     expect(within(article).getByText("No abstract in the index")).toBeTruthy();
     expect(attribution(article)).toBeUndefined();
+  });
+});
+
+describe("a withheld abstract (TASK-136, decision-022, RH-15)", () => {
+  it("says it was removed at a rights holder's request, never that the index has none", () => {
+    const article = show({ abstract: null, abstract_source: null, abstract_withheld: true });
+    expect(within(article).getByText(`${ABSTRACT_WITHHELD}. ${WITHHELD_SEARCH_TERMS}`)).toBeTruthy();
+    expect(within(article).queryByText("No abstract in the index")).toBeNull();
+    expect(attribution(article)).toBeUndefined();
+    expect(article.querySelectorAll("mark")).toHaveLength(0);
+    // the title and the links stay: the record is still found by its title
+    expect(within(article).getByRole("heading", { level: 3 }).textContent).toBe(HIT.title);
+  });
+
+  it("shows the marker whatever text a client was sent with it", () => {
+    const article = show({ abstract_withheld: true, abstract_source: null });
+    expect(within(article).getByText(`${ABSTRACT_WITHHELD}. ${WITHHELD_SEARCH_TERMS}`)).toBeTruthy();
+    expect(article.textContent).not.toContain(HIT.abstract);
   });
 });
