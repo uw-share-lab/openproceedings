@@ -334,6 +334,60 @@ QUOTED: list[tuple[str, DiagnosticCode, tuple[int, int], str]] = [
 ]
 
 
+# A fix hint is text to type back, so it quotes the query only when `clip` shows it as typed: a hint with an
+# escape in it (`-foo\x60bar`) would search something else if copied. Then the hint says what to do instead.
+HINTS: list[tuple[str, DiagnosticCode, tuple[int, int], str]] = [
+    (
+        "trust \u2212foo`bar",
+        DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+        (6, 14),
+        "`\u2212foo\\x60bar` starts with `\u2212`, which is not an operator, so the word is searched — to exclude it, "
+        "type an ASCII hyphen `-` in its place.",
+    ),
+    (
+        "trust \u2212foo\u200bbar",
+        DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+        (6, 14),
+        "`\u2212foo\\u200bbar` starts with `\u2212`, which is not an operator, so the word is searched — to exclude "
+        "it, type an ASCII hyphen `-` in its place.",
+    ),
+    (
+        "trust \u2212foo",
+        DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+        (6, 10),
+        "`\u2212foo` starts with `\u2212`, which is not an operator, so the word is searched — to exclude it, type an "
+        "ASCII hyphen: `-foo`.",
+    ),
+    (
+        "trust \xacfoo`bar",
+        DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+        (6, 14),
+        "`\xac` in `\xacfoo\\x60bar` is searched as the word `neg`, not NOT — to exclude, type `-` in place of `\xac`.",
+    ),
+    (
+        "trust \xacfoo",
+        DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+        (6, 10),
+        "`\xac` in `\xacfoo` is searched as the word `neg`, not NOT — to exclude, write `-foo`.",
+    ),
+    (
+        "trust vis`ion-*",
+        DiagnosticCode.PARSE_WILDCARD_DETACHED,
+        (6, 15),
+        "The `*` in `vis\\x60ion-*` follows `-`, not a letter or digit, so it would match any word starting `ion` — "
+        "put it straight after the stem.",
+    ),
+    (
+        "trust vision-*",
+        DiagnosticCode.PARSE_WILDCARD_DETACHED,
+        (6, 14),
+        "The `*` in `vision-*` follows `-`, not a letter or digit, so it would match any word starting `vision` — put "
+        "it straight after the stem, e.g. `vision*`.",
+    ),
+]
+QUOTED += HINTS
+
+
 @pytest.mark.parametrize(
     ("q", "code", "span", "message"), QUOTED, ids=[ascii(q) + c for q, c, _, _ in QUOTED]
 )

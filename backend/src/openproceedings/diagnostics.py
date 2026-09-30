@@ -120,6 +120,12 @@ def _shown(c: str) -> str:
     return f"\\x{n:02x}" if n < 0x100 else f"\\u{n:04x}" if n < 0x10000 else f"\\U{n:08x}"
 
 
+def verbatim(text: str) -> bool:
+    """Whether `clip` shows `text` as typed (bar whitespace and shortening), so a fix hint may quote it for the
+    user to type back: an escaped hint (`-foo\\x60bar`) would search something else if copied."""
+    return all(c.isspace() or _shown(c) == c for c in text)
+
+
 def clip(text: str, width: int = 40) -> str:
     """User text as every message quotes it, between backticks: one line of visible characters (whitespace runs
     are one space; a backtick or an invisible character is escaped), shortened to at most `width` code points

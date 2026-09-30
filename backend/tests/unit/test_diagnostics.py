@@ -7,7 +7,14 @@ from pathlib import Path
 import pytest
 from hypothesis import example, given
 from hypothesis import strategies as st
-from openproceedings.diagnostics import Diagnostic, DiagnosticCode, OpenProceedingsError, clip, http_status
+from openproceedings.diagnostics import (
+    Diagnostic,
+    DiagnosticCode,
+    OpenProceedingsError,
+    clip,
+    http_status,
+    verbatim,
+)
 from pydantic import ValidationError
 
 SPEC = Path(__file__).resolve().parents[3] / "docs" / "specs" / "04-backend-api.md"
@@ -189,6 +196,7 @@ CLIPPED = [
     ("a\x00b", "a\\x00b"),
     ("\x1b[31mred", "\\x1b[31mred"),
     ("a\x7fb", "a\\x7fb"),
+    ("a\xadb", "a\\xadb"),  # a soft hyphen (Cf): two hex digits up to U+00FF
     ("a`b", "a\\x60b"),
     ("``", "\\x60\\x60"),
     ("\u202egnp.exe", "\\u202egnp.exe"),  # a bidi override (Cf)
@@ -230,3 +238,12 @@ def test_clip_is_one_line_of_visible_text_that_never_grows(text: str, width: int
         whole = re.sub(r"\s+", " ", text)
         back = _unescape(shown)
         assert back == whole if not shown.endswith("…") else whole.startswith(back[:-1])
+
+
+@given(st.text(max_size=30))
+@example("foo`bar")
+@example("mo\u200bdel")
+@example("a\nb")
+def test_verbatim_is_whether_clip_shows_the_text_as_typed(text: str) -> None:
+    """A fix hint quotes the query only when this holds; whitespace counts as typed (the lexer splits on any)."""
+    assert verbatim(text) == (clip(text, 1000) == re.sub(r"\s+", " ", text))

@@ -54,7 +54,7 @@ import unicodedata
 from dataclasses import dataclass
 from enum import StrEnum
 
-from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip
+from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip, verbatim
 from openproceedings.query.mathsyms import GREEK, OPERATORS
 from openproceedings.query.normalize import (
     Tail,
@@ -506,11 +506,12 @@ class _Lexer:
         # Judged on the folded pieces (spec 02, decision-008): `abcd⒈*` is `abcd1.*`, so its `*` follows `.`,
         # whatever the raw character looked like or whether a U+0338 sits on it
         elif tail.pieces:
+            fixed = self.attached(stem, toks, tail, wildcard, in_phrase=in_phrase)
             self.error(
                 DiagnosticCode.PARSE_WILDCARD_DETACHED,
                 f"The `{wildcard}` in `{clip(raw)}` follows {self.tail_name(stem, tail)}, not a letter or digit, so "
-                f"it would match any word starting `{clip(toks[-1].text)}` — put it straight after the stem, e.g. "
-                f"`{clip(self.attached(stem, toks, tail, wildcard, in_phrase=in_phrase))}`.",
+                f"it would match any word starting `{clip(toks[-1].text)}` — put it straight after the stem"
+                + (f", e.g. `{clip(fixed)}`." if verbatim(fixed) else "."),
                 start,
                 end,
             )
@@ -566,7 +567,11 @@ class _Lexer:
             self.warn(
                 DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
                 f"`{clip(raw)}` starts with `{clip(raw[0])}`, which is not an operator, so the word is searched — to exclude "
-                f"it, type an ASCII hyphen: `-{clip(raw[1:])}`.",
+                + (
+                    f"it, type an ASCII hyphen: `-{clip(raw[1:])}`."
+                    if verbatim(raw)
+                    else "it, type an ASCII hyphen `-` in its place."
+                ),
                 start,
                 end,
             )
@@ -599,7 +604,8 @@ class _Lexer:
             rest = folded.split("¬", 1)[1] or "word"
             self.warn(
                 DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
-                f"`¬` in `{clip(raw)}` is searched as the word `neg`, not NOT — to exclude, write `-{clip(rest)}`.",
+                f"`¬` in `{clip(raw)}` is searched as the word `neg`, not NOT — to exclude, "
+                + (f"write `-{clip(rest)}`." if verbatim(rest) else "type `-` in place of `¬`."),
                 start,
                 end,
             )
