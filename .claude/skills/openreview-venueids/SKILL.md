@@ -43,7 +43,7 @@ and `classify_v1_venue` maps a v1 note's exact `content.venue` string to track a
 | `ICLR.cc/<Y>/BlogPosts` (2023 v1, 2024+ v2) | `blogpost` | `accepted` in v2 only | live (spelling `BlogPosts`) |
 | `NeurIPS.cc/<Y>/Competition_Track` (2024+) | `competition` | per suffix | live (2024: 16; `LYvWVFdGZN`); TASK-094 |
 | `NeurIPS.cc/<Y>/Creative_AI_Track` | `other` | per suffix, else `unknown` | live (2025: 92; 2026: 95); `classify.is_creative_ai_venueid` names it for dedup's track rule (TASK-137) |
-| `ICLR.cc/2017/conference`, `ICLR.cc/2013/conference` (v1, lower case) | `other` (2017 puts it on workshop invitations too; track comes from `content.venue`) | never from the venueid | live; only 2017 notes carry it |
+| `ICLR.cc/2017/conference`, `ICLR.cc/2013/conference` (v1, lower case) | `other` (2017 puts it on workshop invitations too; track comes from `content.venue`, in the v1 crawler and the RIS importer: `classify.V1_TRACK_FROM_VENUE`, TASK-142) | never from the venueid | live; only 2017 notes carry it |
 | any other `<Org>.cc/<Y>/<rest>` that parses (seen: `High_School_Projects_Track`, `Education_Program`, `Education_Track`, `Competition/LMC`, `Challenge/CellSeg`) | `other` | a mapped suffix's status, else `unknown` (a bare path means `accepted` only for a form in this table) | keep `venue_id_raw` |
 | `<Org>.cc/<Y>/Workshop/<name>` whose name looks like a status (`Rejected`, `Data_Submission`) | `workshop` | `accepted` (the segment after `Workshop` is always the name) | rule |
 | anything that does not match the grammar | `unknown` | `unknown` | log, show on coverage |

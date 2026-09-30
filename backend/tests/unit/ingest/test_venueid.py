@@ -13,6 +13,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from openproceedings.ingest.classify import (
     _V1_VENUE,
+    V1_TRACK_FROM_VENUE,
     classify_proceedings,
     classify_v1_venue,
     classify_venueid,
@@ -577,3 +578,12 @@ def test_a_v1_venueid_never_gives_status(venue_year: tuple[str, int], path: str,
 def test_v1_venue_years(venue: str, year: int, v1: bool) -> None:
     """The boundary years (research doc §Hosts and API versions): ICLR 2024 and NeurIPS 2023 are v2."""
     assert is_v1(venue, year) is v1
+
+
+def test_the_v1_venueids_that_take_their_track_from_the_venue_string_name_no_track() -> None:
+    """TASK-142: only the table's lower-case `conference` forms, each a v1 venue-year's `other` venueid."""
+    assert {"ICLR.cc/2013/conference", "ICLR.cc/2017/conference"} == V1_TRACK_FROM_VENUE
+    for vid in V1_TRACK_FROM_VENUE:
+        c = classify_venueid(vid)
+        assert (c.track, c.status) == ("other", "unknown") and c.venue is not None and c.year is not None
+        assert is_v1(c.venue, c.year)

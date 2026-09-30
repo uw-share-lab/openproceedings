@@ -91,9 +91,9 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   year and track. **Enforced:** `classify_venueid` returns status `unknown` for any venueid in a v1
   venue-year (`classify.is_v1`), and the RIS importer marks such a status claim `(API v1 venue-year: not
   status evidence)` unless scholarmend's `venue_string` claim (`content.venue`, scholarmend 0.1.4) gives
-  the status through `classify_v1_venue` (TASK-098). A v1 venueid whose track is `other` (ICLR 2017's and
-  2013's lower-case `conference`) never takes status from `venue_string` today, since the string's track
-  must match the venueid's. A v1 adapter takes status from `classify_v1_venue(content.venue)` (exact
+  the status through `classify_v1_venue` (TASK-098). ICLR 2017's and 2013's lower-case `conference` venueids
+  (`classify.V1_TRACK_FROM_VENUE`) name no track (`other`), so there the string gives the track as well, if
+  it names the venueid's venue and year (TASK-142); any other `other` venueid keeps `other`. A v1 adapter takes status from `classify_v1_venue(content.venue)` (exact
   strings from the table below; an unlisted one is `unknown`), the decision note, or the withdrawn / desk-rejected
   invitation (decision-012).
 - Status per v1 year (the submission invitation lists what was **submitted**, never what was accepted):

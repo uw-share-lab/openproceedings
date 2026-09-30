@@ -163,6 +163,25 @@ v1("A Synthetic Agreeing String From Another Note", "V1Agree001", "ICLR.cc/2022/
 # two claims with the same agreeing string, only one with bad evidence: every claim must name the venueid
 v1("A Synthetic Pair With One Bad Claim", "V1OneBad01", "ICLR.cc/2022/Conference", "ICLR 2022 Poster",
    also=("ICLR 2022 Poster", "venueid=ICLR.cc/2023/Conference"))  # fmt: skip
+# ICLR 2017's lower-case `conference` venueid is on every conference note, workshop invitations included, so it
+# gives track `other` and the venue string gives track and status too (TASK-142)
+v1("A Synthetic ICLR 2017 Poster", "V1Ic17Pos1", "ICLR.cc/2017/conference", "ICLR 2017 Poster")
+v1("A Synthetic ICLR 2017 Oral", "V1Ic17Ora1", "ICLR.cc/2017/conference", "ICLR 2017 Oral")
+v1(
+    "A Synthetic ICLR 2017 Workshop Invitation",
+    "V1Ic17Wks1",
+    "ICLR.cc/2017/conference",
+    "ICLR 2017 Invite to Workshop",
+)
+v1("A Synthetic ICLR 2017 Rejection", "V1Ic17Rej1", "ICLR.cc/2017/conference", "Submitted to ICLR 2017")
+v1(
+    "A Synthetic ICLR 2017 String Of Another Year",
+    "V1Ic17Yr01",
+    "ICLR.cc/2017/conference",
+    "ICLR 2022 Poster",
+)
+# ICLR 2023 blog posts: the venueid's track is `blogpost`, and the string must name it
+v1("A Synthetic ICLR 2023 Blog Post", "V1Blog2301", "ICLR.cc/2023/BlogPosts", "Blogposts @ ICLR 2023")
 
 
 def write(rows: list[dict[str, Any]], out: Path) -> None:

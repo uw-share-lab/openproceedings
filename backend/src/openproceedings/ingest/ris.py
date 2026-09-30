@@ -10,14 +10,16 @@ never does:
   `urls.proceedings_native`); or a `pmlr_url` claim in an ICML volume
   (`pmlr-v<N>-<key>`, `volumes.py`). The id is never minted: a record that points at an in-scope venue but
   yields no id is skipped as `unresolved` (or `no_id`), and one that points nowhere is `out_of_scope`.
-- **Track**: the venueid; else scholarmend's proceedings track; else the PMLR volume table.
+- **Track**: the venueid (for ICLR 2013/2017's `other` venueid, the venue string: below); else scholarmend's
+  proceedings track; else the PMLR volume table.
 - **Status** comes from a claim only (spec 01): a venueid → its status, except that an API v1 venue-year's
   venueid (ICLR ≤2023, NeurIPS 2021–2022) is venue/year/track evidence only, since v1 puts the bare path on
   rejected papers too (TASK-095). There the status comes from scholarmend's `venue_string` claim (OpenReview's
   `content.venue` verbatim, scholarmend 0.1.4; TASK-098) through `classify_v1_venue`, used only when its
-  evidence names the record's venueid and the string names the venueid's venue, year and track; otherwise,
-  or without one, it is `unknown` and the status evidence says why. Outside v1 years the claim is ignored. A
-  proceedings listing → `accepted`. When both exist they must name the same venue, year and track (else the record is skipped as
+  evidence names the record's venueid and the string names the venueid's venue, year and track (ICLR
+  2013/2017's lower-case `conference` venueid names no track, `V1_TRACK_FROM_VENUE`: there only venue and year,
+  and the string gives the track too; TASK-142); otherwise, or without one, it is `unknown` and the status
+  evidence says why. Outside v1 years the claim is ignored. A proceedings listing → `accepted`. When both exist they must name the same venue, year and track (else the record is skipped as
   a `conflict`); the proceedings then decide acceptance (decision-005), counted in `status_overrides`.
 - **Abstract**: OpenReview's, else the proceedings page's, else `None`; never Scholar's or Semantic
   Scholar's (Scholar's is a snippet).
@@ -48,6 +50,7 @@ from urllib.parse import urlparse
 from scholarmend.parse import parse_file
 
 from openproceedings.ingest.classify import (
+    V1_TRACK_FROM_VENUE,
     Classification,
     classify_neurips_listing,
     classify_proceedings,
@@ -197,9 +200,10 @@ def _v1_status(
 ) -> tuple[Classification, tuple[str, str], bool]:
     """An API v1 venue-year's status (its venueid gives none): scholarmend's `venue_string` claim, OpenReview's
     `content.venue` verbatim (scholarmend 0.1.4), through `classify_v1_venue`. It is used only when its
-    evidence names this record's venueid and the string names the venueid's venue, year and track; otherwise
-    the status stays `unknown` and the evidence says why. Returns the classification, the status evidence and
-    whether the string was used."""
+    evidence names this record's venueid and the string names the venueid's venue, year and track (for a
+    venueid in `V1_TRACK_FROM_VENUE`, which names no track, venue and year only: the string gives the track
+    too; TASK-142); otherwise the status stays `unknown` and the evidence says why. Returns the
+    classification, the status evidence and whether the string was used."""
     base = f"venueid={vid}"
     claims = _claims(entry, "venue_string", "openreview_api")
     if not claims:
@@ -207,16 +211,17 @@ def _v1_status(
     values = {c["value"] if isinstance(c["value"], str) else "" for c in claims}
     s = values.pop() if len(values) == 1 else ""  # two different strings are no evidence either
     by = classify_v1_venue(s)
+    track = by.track if vid in V1_TRACK_FROM_VENUE else cls.track
     if any(c["evidence"] != base for c in claims):
         why = "its evidence names another venueid"
     elif not s:
         why = "not one non-empty string"  # e.g. a withdrawn v1 note's `""`
     elif not by.parsed:
         why = "not in the v1 table"  # the string itself isn't kept: it can be free text
-    elif (by.venue, by.year, by.track) != (cls.venue, cls.year, cls.track):
+    elif (by.venue, by.year, by.track) != (cls.venue, cls.year, track):
         why = f"{s} names {by.venue} {by.year} {by.track}"
     else:
-        used = Classification(cls.track, by.status, cls.venue, cls.year, vid)
+        used = Classification(track, by.status, cls.venue, cls.year, vid)
         return used, ("openreview_api", f"{base} venue_string={s}"), True
     return (
         cls,
@@ -248,7 +253,10 @@ def _identity(entry: dict[str, Any], urls: list[str]) -> _Identity | str:
         status_from = "venueid"
         if is_v1(venue, year):  # rejected papers carry the bare path too: the venueid never gives status
             cls, evidence["status"], used = _v1_status(entry, vid, cls)
-            status_from = "venue_string" if used else status_from
+            if used:
+                status_from = "venue_string"
+                if vid in V1_TRACK_FROM_VENUE:  # the venueid names no track: the string gave it
+                    evidence["track"] = evidence["status"]
         url_claims: tuple[tuple[ClaimField, str, str], ...] = (
             ("urls.forum", f"https://openreview.net/forum?id={fid}", "openreview_url"),
         )
