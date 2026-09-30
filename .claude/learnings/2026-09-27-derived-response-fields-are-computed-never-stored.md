@@ -69,3 +69,7 @@ fields lose JSON-mode coercion: 24 snapshot tests failed loading (`datetime_type
 **Decision:** derived, not stored, so no `RECORD_SCHEMA_VERSION` bump, no index rebuild and no
 `index_version` change; every index already served sends it. Reverse if a derived value ever depends on
 something outside the record (then it has to be stored, and versioned).
+
+**Propagated to:** `.claude/skills/record-schema/SKILL.md` (the `venue_name` row: derived, `DERIVED`, a dump
+validated again must exclude it; §Versions: a derived field bumps nothing); tests in
+`backend/tests/unit/ingest/test_record.py` (`test_venue_name_is_derived_never_stored_or_hashed`).
