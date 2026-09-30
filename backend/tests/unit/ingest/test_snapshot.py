@@ -580,6 +580,7 @@ def test_diff_names_every_kind_of_change(cache: Path, tmp_path: Path) -> None:
         "changed": {WORKSHOP: ["title", "status"]},
         "display_only": 1,
         "provenance_only": 1,
+        "abstract_withheld": {"added": [], "lifted": []},  # TASK-136
     }
     same = diff(a, a)
     assert (same["added"], same["removed"], same["rekeyed"], same["changed"]) == ([], [], {}, {})

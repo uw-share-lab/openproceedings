@@ -168,6 +168,12 @@ def build_parser() -> argparse.ArgumentParser:
     b = actions.add_parser("build", help="import the cache, dedup, write a new immutable snapshot (offline)")
     b.add_argument("--from", dest="cache", type=Path, help="cache directory (default <data-dir>/cache)")
     b.add_argument("--out", type=Path, help="snapshots directory (default <data-dir>/snapshots)")
+    b.add_argument(
+        "--takedowns",
+        type=Path,
+        help="the takedown list whose abstracts are withheld (default <data-dir>/takedowns/withheld.txt; "
+        "none when it doesn't exist)",
+    )
     b.set_defaults(run=_snapshot_build)
     d = actions.add_parser("diff", help="ids added, removed and changed between two snapshots")
     d.add_argument("a", type=Path)
@@ -410,10 +416,13 @@ def _ingest_crawl(ns: argparse.Namespace) -> int:
 
 
 def _snapshot_build(ns: argparse.Namespace) -> int:
+    from openproceedings import takedowns
     from openproceedings.ingest.snapshot import build
 
-    result = build(ns.cache or ns.data_dir / "cache", ns.out or ns.data_dir / "snapshots")
+    listed = takedowns.load(ns.takedowns or takedowns.list_path(ns.data_dir))  # refused before any work
+    result = build(ns.cache or ns.data_dir / "cache", ns.out or ns.data_dir / "snapshots", takedowns=listed)
     _print({"path": str(result.path), "snapshot_hash": result.snapshot_hash, "created": result.created,
+            "abstracts_withheld": len(listed),
             "unexpected_statuses": [u.to_json() for u in result.unexpected_statuses]})  # fmt: skip
     return 0
 
@@ -956,11 +965,16 @@ def _export(ns: argparse.Namespace) -> int:
     from openproceedings.engine.tantivy_engine import TantivyEngine
     from openproceedings.export import Provenance, Sources, check_count, utc_date, write
     from openproceedings.ingest.snapshot import SnapshotError
+    from openproceedings.takedowns import list_path
+    from openproceedings.takedowns import load as load_takedowns
 
     started = time.perf_counter()
     result = _parsed(ns)
     if result is None:
         return 1
+    listed = load_takedowns(
+        list_path(ns.data_dir)
+    )  # as the API withholds them (TASK-136); a bad list refuses
     ast = result.effective_ast
     assert ast is not None and result.canonical_hash is not None
     if ns.out is not None and ns.out.is_dir():
@@ -972,8 +986,10 @@ def _export(ns: argparse.Namespace) -> int:
     # each abstract's source (decision-018, TASK-138), from the verified snapshot, as the server loads it;
     # without it every abstract is withheld and each record says so (decision-021), with a warning
     sources: Sources | None
+    withheld = listed
     try:
-        sources = snapshot_records(ns.data_dir, path, engine.index_version).attributions
+        records = snapshot_records(ns.data_dir, path, engine.index_version)
+        sources, withheld = records.attributions, listed | records.withheld
     except (SnapshotError, OSError) as e:
         sources = None
         log.warning(
@@ -991,7 +1007,7 @@ def _export(ns: argparse.Namespace) -> int:
     if ns.out is None:  # UTF-8 and untranslated newlines whatever the terminal's locale (spec 04)
         out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="", write_through=True)
         try:
-            n = write(ns.format, documents, provenance, out, sources=sources)
+            n = write(ns.format, documents, provenance, out, sources=sources, withheld=withheld)
         finally:
             out.detach()  # leave sys.stdout usable
         check_count(n, total)
@@ -1003,7 +1019,7 @@ def _export(ns: argparse.Namespace) -> int:
             if ns.out.exists():
                 os.fchmod(fd, ns.out.stat().st_mode & 0o777)
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as stream:
-                n = write(ns.format, documents, provenance, stream, sources=sources)
+                n = write(ns.format, documents, provenance, stream, sources=sources, withheld=withheld)
             check_count(n, total)
             partial.replace(ns.out)
         finally:
@@ -1354,6 +1370,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from openproceedings.engine.protocol import EngineError
     from openproceedings.ingest.snapshot import SnapshotError
     from openproceedings.ingest.sources.http import FetchError, SourceError
+    from openproceedings.takedowns import TakedownError
 
     parser = build_parser()
     args = list(sys.argv[1:] if argv is None else argv)
@@ -1382,6 +1399,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     except (
         SnapshotError, IndexBuildError, EngineError, OpenProceedingsError, SourceError, ValueError, OSError,
+        TakedownError,
     ) as e:  # fmt: skip
         from openproceedings.engine.parity import ParityError
 
@@ -1397,7 +1415,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         fields: dict[str, object] = {"command": name, "error": type(e).__name__}
         if isinstance(e, OpenProceedingsError):
             fields["code"] = str(e.code)
-        if isinstance(e, SourceError | SnapshotError):
+        if isinstance(e, SourceError | SnapshotError | TakedownError):
             fields["reason"] = e.reason
         log.log(level, "cli_refused", extra=fields, exc_info=isinstance(e, InternalError))
         print(f"op {name}: {_reason(e)}", file=sys.stderr)
