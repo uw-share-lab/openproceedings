@@ -1285,5 +1285,23 @@
   "file": ".claude/hooks/enforce-backlog-cli.sh",
   "old": "os.path.join(d.get(\"cwd\") or os.getcwd(), p)",
   "new": "os.path.join(os.getcwd(), p)"
+ },
+ {
+  "label": "require-review: --tags allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "        if \"--tags\" in flags:",
+  "new": "        if False:"
+ },
+ {
+  "label": "autofix: formatter config guard ignored",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "      if [ -n \"$cfg_state\" ]; then",
+  "new": "      if false; then"
+ },
+ {
+  "label": "autofix: .prettierrc not watched",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "'frontend/.prettierrc*' ",
+  "new": ""
  }
 ]

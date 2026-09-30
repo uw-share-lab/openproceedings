@@ -419,6 +419,16 @@ if grep -q eslint "$TMP/npx.log"; then pass=$((pass+1)); echo "  ok   eslint run
 printf 'export default []\n' > "$REPO/frontend/eslint.config.js"; : > "$TMP/npx.log"
 payload_file Edit "$REPO/frontend/a.ts" | PATH="$TMP/bin:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
 if grep -q eslint "$TMP/npx.log"; then fail=$((fail+1)); echo "  FAIL eslint ran with a new untracked config"; else pass=$((pass+1)); echo "  ok   eslint skipped while its config is untracked"; fi
+# prettier loads its config's plugins (code) too: same guard (TASK-067)
+: > "$TMP/npx.log"
+payload_file Edit "$REPO/frontend/a.ts" | PATH="$TMP/bin:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
+if grep -q prettier "$TMP/npx.log"; then fail=$((fail+1)); echo "  FAIL prettier ran with an untracked eslint config"; else pass=$((pass+1)); echo "  ok   prettier skipped while a formatter config is untracked"; fi
+rm -f "$REPO/frontend/eslint.config.js"; printf '{"plugins":["./x.js"]}\n' > "$REPO/frontend/.prettierrc.json"; : > "$TMP/npx.log"
+payload_file Edit "$REPO/frontend/a.ts" | PATH="$TMP/bin:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
+if grep -q prettier "$TMP/npx.log"; then fail=$((fail+1)); echo "  FAIL prettier ran with a new untracked .prettierrc"; else pass=$((pass+1)); echo "  ok   prettier skipped while .prettierrc is untracked"; fi
+rm -f "$REPO/frontend/.prettierrc.json"; : > "$TMP/npx.log"
+payload_file Edit "$REPO/frontend/a.ts" | PATH="$TMP/bin:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
+if grep -q prettier "$TMP/npx.log"; then pass=$((pass+1)); echo "  ok   prettier runs when its config is unchanged"; else fail=$((fail+1)); echo "  FAIL prettier did not run with a clean config"; fi
 rm -rf "$REPO/node_modules" "$REPO/frontend/eslint.config.js" "$REPO/frontend/a.ts"
 
 echo "== round-4 rows (git clean precision, arithmetic, heredoc edges)"
@@ -488,6 +498,9 @@ check_hides True  'ls | xargs git add -f'
 check_hides True  'ls | xargs /usr/bin/git commit'
 check_hides False 'ls | xargs echo'
 check_hides False 'rm -f x'
+check $R block "git push --tags (every tag, unchecked)" "$(payload_bash 'git push --tags origin')"
+check $R block "git push origin mut --tags"            "$(payload_bash 'git push origin mut --tags')"
+check $R allow "--follow-tags with an approved ref"    "$(payload_bash 'git push --follow-tags origin mut')"
 # git -c config overrides and aliases: the gate must judge what git will actually push
 check $R block "-c remote.origin.push picks the ref"  "$(payload_bash 'git -c remote.origin.push=refs/heads/other2:refs/heads/other2 push origin')"
 check $R block "-c push.default, no refspec"          "$(payload_bash 'git -c push.default=matching push origin')"

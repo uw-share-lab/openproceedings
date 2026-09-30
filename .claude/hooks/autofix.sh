@@ -8,8 +8,8 @@
 # Skips data/, backlog/, generated files, and anything outside the repo (compared by real path, so a
 # symlink or `..` cannot escape it).
 # Security (review round 2): tools run straight from the workspace venv — never `uv run`, which may sync
-# and fetch/build packages an agent just added to pyproject.toml — and eslint is skipped while its config
-# or package.json differs from HEAD, because eslint executes its (JS) config. File names are passed after
+# and fetch/build packages an agent just added to pyproject.toml — and prettier and eslint are skipped
+# while a formatter config or package.json differs from HEAD, because both execute code their config names. File names are passed after
 # `--` so a name can never be read as an option.
 input=$(cat)
 file=$(printf '%s' "$input" | python3 -c 'import json,sys
@@ -42,16 +42,20 @@ case "$rel" in
   frontend/*.ts|frontend/*.tsx|frontend/*.js|frontend/*.jsx|frontend/*.json|frontend/*.css|frontend/*.md)
     if [ -d "$root/node_modules" ]; then   # npm workspace root: deps are hoisted there
       sub="${rel#frontend/}"
-      (cd "$root/frontend" && npx --no-install prettier --write -- "$sub" >/dev/null 2>&1)
-      case "$sub" in
-        *.ts|*.tsx|*.js|*.jsx)
-          cfg_state=$(git -C "$root" status --porcelain -- 'frontend/eslint.config.*' 'frontend/.eslintrc*' frontend/package.json 2>/dev/null)
-          if [ -z "$cfg_state" ]; then   # tracked AND untracked changes both count (review round 3)
-            out=$(cd "$root/frontend" && npx --no-install eslint --fix -- "$sub" 2>&1) || note "eslint still fails on $rel:"$'\n'"$out"
-          else
-            note "autofix: eslint skipped for $rel — its config or package.json has uncommitted changes (eslint runs its config as code). Run make lint after reviewing them."
-          fi ;;
-      esac
+      # prettier and eslint both run code their config names (prettier plugins, eslint's JS config), so
+      # neither runs while a config or package.json has uncommitted changes, tracked or untracked (review
+      # round 3; prettier since TASK-067).
+      cfg_state=$(git -C "$root" status --porcelain -- 'frontend/eslint.config.*' 'frontend/.eslintrc*' \
+        'frontend/.prettierrc*' 'frontend/prettier.config.*' '.prettierrc*' 'prettier.config.*' frontend/package.json package.json 2>/dev/null)
+      if [ -n "$cfg_state" ]; then
+        note "autofix: prettier and eslint skipped for $rel — a formatter config or package.json has uncommitted changes (they run code their config names). Run make lint after reviewing them."
+      else
+        (cd "$root/frontend" && npx --no-install prettier --write -- "$sub" >/dev/null 2>&1)
+        case "$sub" in
+          *.ts|*.tsx|*.js|*.jsx)
+            out=$(cd "$root/frontend" && npx --no-install eslint --fix -- "$sub" 2>&1) || note "eslint still fails on $rel:"$'\n'"$out" ;;
+        esac
+      fi
     fi
     ;;
   *.sh|.githooks/*)

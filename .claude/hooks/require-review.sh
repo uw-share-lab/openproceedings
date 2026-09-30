@@ -8,7 +8,7 @@
 #    every finding was dispositioned (fixed / task-NNN / rejected with a reason). A new commit after the
 #    review has a new sha, so it needs a new review: an older approval can never satisfy the gate.
 #    Sources checked: each refspec's source (deletions `:dst` skipped, others still checked), HEAD when
-#    no refspec is given, and every local branch for --all / --mirror; in the `--git-dir`/`GIT_DIR=` repo
+#    no refspec is given, and every local branch for --all / --mirror; `--tags` is refused outright; in the `--git-dir`/`GIT_DIR=` repo
 #    when one is named. A refspec-less push whose `git -c` settings choose what is pushed (remote.<name>.push,
 #    push.default, remote.pushDefault) is blocked. Aliases are expanded first (cmdparse).
 # 2. `gh pr create` (and its alias `gh pr new`) is blocked unless (1) holds for the PR head AND the branch
@@ -160,6 +160,10 @@ for argv, d in commands:
                 name, sha = line.rsplit(" ", 1)
                 need_review(eff, sha, f"`git push --all` (branch {name})")
             continue
+        if "--tags" in flags:
+            # every tag, whatever commit it names, and main's merge commits have no record (spec 08 §Release)
+            block(["Review gate: `git push --tags` pushes every tag without checking what it points at. Push a tag",
+                   "by name (`git push origin <tag>`, its commit needs a record), or let `gh release create` make it."])
         refspecs = push_positionals(args)[1:]
         pushed = [r.lstrip("+").split(":", 1)[0] for r in refspecs if not r.lstrip("+").startswith(":")]
         if not refspecs:
@@ -168,7 +172,7 @@ for argv, d in commands:
                 block(["Review gate: this `git push` names no refspec, and its `git -c` settings choose what is",
                        "pushed (remote.<name>.push / push.default / remote.pushDefault). Name the refspec instead."])
             pushed = ["HEAD"]
-        if not pushed and ("--tags" in flags or "--follow-tags" in flags):
+        if not pushed and "--follow-tags" in flags:
             continue
         for src in pushed:
             sha = git(eff, *repo, "rev-parse", "--verify", "--quiet", f"{src}^{{commit}}")
