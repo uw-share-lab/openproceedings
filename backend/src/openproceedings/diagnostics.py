@@ -116,7 +116,7 @@ def by_position(d: Diagnostic) -> tuple[int, int]:
 
 
 # the only codes whose Diagnostic may carry a `reading` (TASK-099): the level as it was read, parenthesised. Even
-# there it can be null: the "… and N more" summary, and a level with a branch that doesn't parse.
+# there it can be null: the "… and N more" summary, and a level that has errors (TASK-140).
 READING_CODES = frozenset({DiagnosticCode.WARN_MIXED_AND_OR})
 
 
@@ -135,8 +135,8 @@ class Diagnostic(BaseModel):
         "parentheses and the branches joined with ` OR ` (`a b OR c` → `(a b) OR c`). Replacing `span` in `q` with "
         "it gives a query with the same canonical form whose level no longer mixes `AND` and `OR`. Never "
         "shortened, unlike the reading quoted in `message`. Null on every other code, and on a "
-        '`WARN_MIXED_AND_OR` that has none to offer: the "… and N more" summary, or a level with a branch '
-        "that doesn't parse.",
+        '`WARN_MIXED_AND_OR` that has none to offer: the "… and N more" summary, or a level that has '
+        "errors (its `message` then quotes the level as typed, not a reading).",
     )
 
     @field_validator("message")

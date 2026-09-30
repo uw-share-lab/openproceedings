@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import re
+
 from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
-from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.diagnostics import DiagnosticCode, clip
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.query.ast import And, Filter, Node, Not, Or, structure
 from openproceedings.query.canonical import canonicalize, render
+from openproceedings.query.lexer import Kind, lex
 from openproceedings.query.parser import MAX_PER_CODE, MAX_QUERY_LENGTH, parse
 
 from tests.corpus import fixture_records
@@ -157,3 +160,63 @@ def test_loading_a_mixed_reading_keeps_the_query_and_clears_that_level(q: str, m
         assert after.canonical == result.canonical, (q, loaded)
         left = len(_mixed(loaded, mode))
         assert left <= len(mixed) if capped else left == len(mixed) - 1, (q, loaded)
+
+
+# Pieces that don't parse where a query term could be (TASK-140): an empty group or phrase, a lone `-`, a bare
+# `NOT`, an empty field, an unclosed group, a stray `OR`
+BROKEN = st.sampled_from(["()", '""', "-", "NOT", "title:", "(", "OR"])
+
+
+@st.composite
+def queries_with_a_broken_piece(draw: st.DrawFn) -> str:
+    words = draw(queries()).split(" ")
+    at = draw(st.integers(0, len(words)))
+    return " ".join([*words[:at], draw(BROKEN), *words[at:]])
+
+
+def _ors_spelled_out(text: str) -> str:
+    """`text` with every OR operator written `OR` (`|` is one too) and whitespace removed."""
+    out, at = [], 0
+    for lx in lex(text).lexemes:
+        if lx.kind is Kind.OR:
+            out += [text[at : lx.start], "OR"]
+            at = lx.end
+    out.append(text[at:])
+    return "".join(c for c in "".join(out) if not c.isspace())
+
+
+def _faithful(reading: str, text: str) -> bool:
+    """Whether `reading` is `text` with only parentheses added (the reading writes its own level's ORs as ` OR `,
+    whatever was typed, e.g. `|`, and quotes nested levels as typed): nothing at the span dropped."""
+    it = iter(_ors_spelled_out(text))
+    want = next(it, None)
+    for c in _ors_spelled_out(reading):
+        if c == want:
+            want = next(it, None)
+        elif c not in "()":
+            return False
+    return want is None
+
+
+@settings(deadline=None)
+@given(st.one_of(queries(), queries_with_a_broken_piece()), st.sampled_from(["native", "scholar"]))
+@example("a b OR () OR c", "native")
+@example("a b () OR c", "native")  # the AND group's node stops before `()`
+@example("a b OR c ()", "native")
+@example("a b OR c)", "native")  # an error outside the level: the reading stays
+@example("a | b c", "native")  # `|` is read as OR and written ` OR ` in the reading
+def test_the_mixed_message_quotes_only_the_reading_it_carries(q: str, mode: str) -> None:
+    """TASK-140: WARN_MIXED_AND_OR's message quotes exactly its `reading` (clipped to 120) when there is one,
+    and otherwise the level as typed (clipped the same way; nothing on the summary); a reading is never lossy (only parentheses added to the text at its
+    span), even in a query with errors elsewhere."""
+    result = parse(q, mode)  # type: ignore[arg-type]
+    for w in result.warnings:
+        if w.code is not DiagnosticCode.WARN_MIXED_AND_OR:
+            continue
+        quoted = re.findall(r"`([^`]*)`", w.message)
+        if w.reading is None:  # the level as typed (it has errors), or nothing on the "… and N more" summary
+            want = [] if w.message.startswith("…") else [clip(q[slice(*w.span)], 120)] if w.span else None
+            assert quoted == want, (q, w.message)
+            continue
+        assert quoted == [clip(w.reading, 120)], (q, w.message)
+        assert w.span is not None and _faithful(w.reading, q[slice(*w.span)]), (q, w.span, w.reading)

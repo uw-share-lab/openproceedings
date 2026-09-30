@@ -4,9 +4,9 @@
  * The diagnostics row (spec 05 §Components 1; ui-design-system §Transparency; design W3, W5–W7; copy ED-8–17).
  * Errors, then the translations ("Read as native syntax:"), then warnings, each in span order, every message
  * the server's, verbatim. A code that repeats is one line ("9 ×", the first message, "Show all 9"). Each line has
- * a Help link, and three codes carry an action: `WARN_MIXED_AND_OR` (Show how it was read, Load with
- * parentheses), `FIELD_COMPAT_ONLY` (Read as Google Scholar syntax) and `WILDCARD_TOO_MANY_EXPANSIONS` (why it
- * appeared only after Search). The row is absent when there is nothing to say.
+ * a Help link, and three codes carry an action: `WARN_MIXED_AND_OR` (Show how it was read, when the tree can
+ * render; Load with parentheses, when it has a reading), `FIELD_COMPAT_ONLY` (Read as Google Scholar syntax)
+ * and `WILDCARD_TOO_MANY_EXPANSIONS` (why it appeared only after Search). The row is absent when there is nothing to say.
  */
 import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
@@ -41,6 +41,9 @@ export interface DiagnosticsRowProps {
   readonly nativeMode: boolean;
   /** The canonical string the translations produced ("Searched as:"), when the row is the searched query's. */
   readonly searchedAs: string | null;
+  /** The query tree can render (the parse has an `effective_ast`, so no errors): only then is "Show how it was
+   * read" offered, since a query with errors has no tree to open (TASK-140). */
+  readonly treeAvailable: boolean;
   readonly onShowTree: () => void;
   readonly onLoad: (text: string) => void;
   readonly onReadAsScholar: () => void;
@@ -53,11 +56,13 @@ function Actions({ group, props }: { group: Group; props: DiagnosticsRowProps })
   const buttons: ReactNode[] = [];
   const button = "min-h-6 rounded-sm border px-1.5 text-xs hover:bg-muted";
   if (group.code === "WARN_MIXED_AND_OR") {
-    buttons.push(
-      <button key="show" type="button" className={button} onClick={props.onShowTree}>
-        Show how it was read
-      </button>,
-    );
+    if (props.treeAvailable) {
+      buttons.push(
+        <button key="show" type="button" className={button} onClick={props.onShowTree}>
+          Show how it was read
+        </button>,
+      );
+    }
     const loaded = props.textIsDraft ? withParentheses(props.text, first) : null;
     if (loaded !== null) {
       buttons.push(

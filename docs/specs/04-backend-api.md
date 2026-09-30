@@ -29,7 +29,7 @@ reviews without the UI.
   error's `diagnostics`; a stored record's `StoredDiagnostic` too). `reading` (TASK-099, additive) is only ever a
   string on `WARN_MIXED_AND_OR`: the level as it was read, parenthesised (02 §Grammar, Precedence), so a client can
   offer it without parsing `message`. It is null on every other code, on a `WARN_MIXED_AND_OR` with none to offer
-  (a level with a branch that doesn't parse; the "… and N more" summary), and on a record saved before it existed.
+  (a level that has errors, whose message then quotes the level as typed, not a reading; the "… and N more" summary), and on a record saved before it existed.
 - Errors use one shape: `{error: {code, message, diagnostics?: [Diagnostic]}}`. A query that doesn't parse
   is a `422` carrying 02's diagnostics (spans included) on every endpoint that **runs** it (`/search`,
   `/export`, `POST /records`, and `GET /papers/{id}` given a `q`). `POST /parse` **reports** a parse: any well-formed body is a `200` whose

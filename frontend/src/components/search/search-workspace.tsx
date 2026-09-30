@@ -414,6 +414,7 @@ export function SearchWorkspace({ state, refusal = null, openTree = false, resul
           textIsDraft={shown.text === draft.text}
           nativeMode={draft.mode === "native"}
           searchedAs={!shownDirty ? (shown.parsed?.canonical ?? null) : null}
+          treeAvailable={shown.parsed != null && shown.parsed.effective_ast !== null}
           onShowTree={() => {
             setTreeChoice(true);
             focusTree.current = true;

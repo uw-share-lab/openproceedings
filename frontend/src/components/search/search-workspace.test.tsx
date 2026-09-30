@@ -309,8 +309,37 @@ describe("the diagnostics row", () => {
     const { type } = setup({}, handler);
     await type("a OR b AND c");
     await pass(300);
-    expect(screen.getByRole("button", { name: "Show how it was read" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show how it was read" })).toBeTruthy(); // the tree renders
+    expect(screen.getByRole("button", { name: /How we read your query/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Load with parentheses" })).toBeNull();
+  });
+
+  it("offers no Show how it was read when the query has errors, since there is no tree to open", async () => {
+    // TASK-140: a mixed level with errors has no reading, and the parse has no effective_ast, so no tree renders
+    const warning = diag(
+      "WARN_MIXED_AND_OR",
+      "`a b OR () OR c` mixes AND and OR without parentheses",
+      [0, 14],
+    );
+    const handler = api((q) =>
+      json({
+        ...parsed(q),
+        ast: null,
+        effective_ast: null,
+        canonical: null,
+        canonical_hash: null,
+        identification_query: null,
+        errors: [diag("PARSE_EMPTY_GROUP", "`()` is an empty group", [7, 9])],
+        warnings: [warning],
+      }),
+    );
+    const { type } = setup({}, handler);
+    await type("a b OR () OR c");
+    await pass(300);
+    expect(within(screen.getByRole("list", { name: "Warnings" })).getByText(/mixes AND and OR/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show how it was read" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Load with parentheses" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /How we read your query/ })).toBeNull();
   });
 
   it("offers Read as Google Scholar syntax for FIELD_COMPAT_ONLY: it sets the select and keeps the text", async () => {

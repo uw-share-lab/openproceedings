@@ -17,8 +17,10 @@ class Diagnostic(BaseModel):  # frozen, extra="forbid"
   a per-code payload: on `WARN_MIXED_AND_OR` it is the warned level as it was read, the text at `span` with
   each `AND` group parenthesised (`a b OR c` → `(a b) OR c`), never clipped. A model validator refuses it on
   any code outside `READING_CODES`; it is **not** required there: the per-code cap's "… and N more" summary
-  (`parser._capped`, which builds every code's summary alike) and a level with a branch that doesn't parse
-  carry `reading: None` (an "always set" rule 500'd the summary; TASK-099 review). The UI's "Load with parentheses" splices it over `span`; **a client never
+  (`parser._capped`, which builds every code's summary alike) and a level that has errors (an error raised
+  while parsing the level) carry `reading: None`, and then the message quotes the level as typed, never a reading
+  (TASK-140: it
+  once quoted `(a b) OR c` for `a b OR () OR c`; a property pins message ↔ `reading`; an "always set" rule 500'd the summary, TASK-099 review). The UI's "Load with parentheses" splices it over `span`; **a client never
   parses `message`** for data. Data another code needs becomes a field the same way (a spec 04 change, additive:
   nullable, null on the other codes), never prose to extract.
 - `ParseResult.warnings`, `.errors`, `.translations` are all `list[Diagnostic]`. Non-empty `errors` ⇒ no
