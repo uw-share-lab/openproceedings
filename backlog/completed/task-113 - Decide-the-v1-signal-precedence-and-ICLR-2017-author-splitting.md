@@ -1,11 +1,11 @@
 ---
 id: TASK-113
 title: Decide the v1 signal precedence and ICLR 2017 author splitting
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-27 22:46'
-updated_date: '2026-09-30 02:20'
+updated_date: '2026-09-30 02:23'
 labels:
   - ingest
   - docs
@@ -41,4 +41,6 @@ TASK-051 leaves a field unknown when two v1 signals disagree (e.g. a withdrawn i
 - Coverage report: each unresolved row shows the record's track / status now and flags a field no longer unknown.
 - Authors: a bare `and` entry and a dangling ` and` are dropped like a leading `and `; lowercase-only separators documented; decision-019 marks the implementer's guard and adds suffixes (`, Jr.`) to "Revisit if". Refused notes are listed in the crawl report as `authors_unsplit_ids` (only when any): on the 2026-09-29 cache, ICLR 2017 `H1JBMVpdx`.
 - Real-data rerun: same snapshot 2026-09-29-9f3c65db8cf8 / index 43141d9dec4d; unresolved 2 (S1p31z-Ab, xGZG2kS5bFk, both main / unknown); ICLR 2018 main 336/336; ICLR 2021 main 859/860; authors split 34, refused 1; `op eval coverage` PASS (43/44 + ICLR 2013 exception).
+
+Review round 2 (d0164ad): approved; implementation limits in decisions 019/020 are marked 'the implementer's, adopted after review; pending owner confirmation'; the unresolved table puts a dash in 'would count in' when the record is missing. split_authors('and', 0) counting as a split is left: harmless.
 <!-- SECTION:NOTES:END -->

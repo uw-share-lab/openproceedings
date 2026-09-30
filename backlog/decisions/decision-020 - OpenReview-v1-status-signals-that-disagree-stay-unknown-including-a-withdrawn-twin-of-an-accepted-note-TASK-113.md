@@ -42,7 +42,7 @@ The project owner decided (2026-09-29): when OpenReview v1 signals disagree abou
 whose pdf a withdrawn record of the same crawl shares becomes `unknown` with an `unresolved:openreview_v1` row
 naming both signals; the twin keeps its own status.
 
-Implementation limits (the reviewer's, not the owner's words): the twin must be withdrawn (not desk-rejected: a
+Implementation limits (the implementer's, adopted after review; pending owner confirmation): the twin must be withdrawn (not desk-rejected: a
 desk rejection for a duplicate submission can leave the same pdf beside the presented copy) and in the same track
 as the accepted record (a withdrawn conference note says nothing about an accepted workshop version); a record
 with no OpenReview pdf has no twin; the row names every twin found.

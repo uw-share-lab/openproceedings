@@ -380,7 +380,7 @@ def _unresolved_row(u: Unresolved, official: OfficialTable, locate: Locate | Non
     the cell of each track a side names (its first word); each marked gated or not."""
     where = None if locate is None else locate(u.id)
     if where is None:
-        cells = now = "not in the snapshot"
+        now, cells = "not in the snapshot", "—"
     else:
         venue, year, track, status = where
         value = track if u.field == "track" else status if u.field == "status" else None

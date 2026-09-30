@@ -734,7 +734,7 @@ def test_each_unresolved_record_is_listed_with_its_state_now_and_the_cell_it_wou
         "| accepted (content.venue=Y) |",
         "| op:iclr:2014:IC2014x0002 | track | main / accepted (**track no longer unknown**) "
         "| ICLR 2014 main (gated) or ICLR 2014 workshop (not gated) | main (invitation=X) | workshop (venueid=A\\|B) |",
-        "| op:iclr:2014:NotHere2014 | status | not in the snapshot | not in the snapshot | a | b |",
+        "| op:iclr:2014:NotHere2014 | status | not in the snapshot | — | a | b |",
     ]  # fmt: skip
 
 
