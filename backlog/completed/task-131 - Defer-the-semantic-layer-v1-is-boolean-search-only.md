@@ -1,11 +1,11 @@
 ---
 id: TASK-131
 title: 'Defer the semantic layer: v1 is boolean search only'
-status: In Progress
+status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-29 23:55'
-updated_date: '2026-09-30 00:10'
+updated_date: '2026-09-30 00:18'
 labels:
   - docs
   - scope
@@ -37,4 +37,6 @@ Merged code left as is: records.py semantic_version (always None), cli.py PLANNE
 make lint, make tooling and make mutate-changed pass.
 
 Review round 1 (2026-09-29): roster descriptions use a comma (roster_index cuts at the first ";"); decision-017 separates the owner's decision (boolean-only v1; defer, not delete) from TASK-131's rationale and marks "what would bring it back" as proposed, pending owner confirmation; the refusal bullet corrected (HTTP: pydantic Sort Literal, 422 API_BAD_PARAM, no hint; CLI: argparse usage error; engine hint only on direct calls). Code: tantivy_engine.py hint now "semantic sort is deferred to phase 2 (decision-017)"; cli.py DEFERRED_TASKS makes op embed and op eval near-miss say "deferred to phase 2 (decision-017)" (tests in test_cli.py, test_rank.py). search-records, prisma-reporting, qa-auditor, property-testing, field-weighted-bm25, search-state.ts comment and spec 03 updated. make test (5327 passed, 2 skipped; vitest 2582), make lint, make tooling green.
+
+The owner confirmed decision-017's bring-back condition on 2026-09-29 (after v1 ships: usability evidence of missed vocabulary, or a review team asking for term suggestions).
 <!-- SECTION:NOTES:END -->

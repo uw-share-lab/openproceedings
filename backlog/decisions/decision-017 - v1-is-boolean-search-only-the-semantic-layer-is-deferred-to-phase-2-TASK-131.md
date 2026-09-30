@@ -68,7 +68,7 @@ the path to the v1 release (M6) depends on it.
   2). Only a direct engine call reaches `check_page` in `engine/tantivy_engine.py`, whose hint now says
   "semantic sort is deferred to phase 2 (decision-017)". None of this costs anything to keep.
 
-**What would bring it back** (proposed; pending owner confirmation): a v1 release (M6) is out, and either reviewers in usability testing report
+**What would bring it back** (confirmed by the project owner, 2026-09-29): a v1 release (M6) is out, and either reviewers in usability testing report
 missing vocabulary as a real problem that the Boolean tools (wildcards, the concept-group builder, syntax
 help) don't solve, or a review team asks for query-revision suggestions. Resuming means a new decision that
 supersedes this one, re-checking spec 06 against the as-built API, and starting at TASK-058. The recall@25
