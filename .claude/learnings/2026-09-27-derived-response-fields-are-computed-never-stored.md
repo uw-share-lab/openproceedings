@@ -3,7 +3,7 @@
 **Key lesson:** Put a count that a stored record can derive (`identified_total = total + excluded.total`) in a pydantic `computed_field` and exclude it from the stored body (`records.DERIVED`). Then every old body reads with it, no stored value can disagree with its own counts, and the OpenAPI schema still marks it required. Check each /api/v1 change with `test_openapi_additive.py` against `origin/dev`, not by reading the diff.
 
 - **Date:** 2026-09-27 · **Task:** task-090, task-091, task-112 · **Area:** api
-- **Artifacts:** `backend/src/openproceedings/records.py` (`SearchRecord.identified_total`, `DERIVED`), `backend/src/openproceedings/api/middleware.py` (`stored_read`), `backend/tests/contract/test_openapi_additive.py`, `backend/tests/contract/test_ui_additions.py`, decision-014
+- **Artifacts:** `backend/src/openproceedings/records.py` (`SearchRecord.identified_total`, `DERIVED`), `backend/src/openproceedings/api/middleware.py` (`stored_read`), `backend/tests/contract/test_openapi_additive.py`, `backend/tests/contract/test_ui_additions.py`, decision-014; TASK-112: `backend/src/openproceedings/ingest/record.py` (`PaperRecord.venue_name`, `DERIVED`), `backend/src/openproceedings/ingest/snapshot.py` (`record_line`)
 
 ## What we set out to do
 Add the fields the M3b UI design asked for (identified and unclassified counts, a save pinned to the shown
