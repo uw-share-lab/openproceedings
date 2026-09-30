@@ -1,10 +1,20 @@
 """The one Diagnostic shape and the code registry (error-diagnostics skill, spec 04 §Error handling)."""
 
 import re
+import unicodedata
 from pathlib import Path
 
 import pytest
-from openproceedings.diagnostics import Diagnostic, DiagnosticCode, OpenProceedingsError, http_status
+from hypothesis import example, given
+from hypothesis import strategies as st
+from openproceedings.diagnostics import (
+    Diagnostic,
+    DiagnosticCode,
+    OpenProceedingsError,
+    clip,
+    http_status,
+    verbatim,
+)
 from pydantic import ValidationError
 
 SPEC = Path(__file__).resolve().parents[3] / "docs" / "specs" / "04-backend-api.md"
@@ -173,3 +183,67 @@ def test_every_code_a_parse_can_return_as_an_error_is_a_422() -> None:
             assert http_status(code) == 422, code
         if code.startswith(("WARN_", "COMPAT_")):
             assert http_status(code) is None, code  # warnings and notices never fail a request
+
+
+# TASK-141: clip() is how every message quotes user text, so the quote is one line of visible characters that a
+# backtick can't end early: whitespace runs are one space, and a backtick or an invisible character (Unicode
+# Cc, Cf, Cs) is written as its Python escape. It never splits an escape when it shortens.
+CLIPPED = [
+    ("trust", "trust"),
+    ("a\nb", "a b"),
+    ("a \t\r\n b", "a b"),
+    ("a\u2028b\u2029c\x85d\u00a0e", "a b c d e"),  # every str.isspace() character, as the lexer splits on
+    ("a\x00b", "a\\x00b"),
+    ("\x1b[31mred", "\\x1b[31mred"),
+    ("a\x7fb", "a\\x7fb"),
+    ("a\xadb", "a\\xadb"),  # a soft hyphen (Cf): two hex digits up to U+00FF
+    ("a`b", "a\\x60b"),
+    ("``", "\\x60\\x60"),
+    ("\u202egnp.exe", "\\u202egnp.exe"),  # a bidi override (Cf)
+    ("mo\u200bdel", "mo\\u200bdel"),  # a zero-width space (Cf)
+    ("\U000e0041", "\\U000e0041"),  # a tag character (Cf, astral)
+    ("x\ud800y", "x\\ud800y"),  # a lone surrogate (Cs)
+    ("$\\alpha$", "$\\alpha$"),  # a backslash is not escaped: LaTeX reads as typed
+    ("é𝐱α", "é𝐱α"),
+    ("a" * 40, "a" * 40),
+    ("a" * 41, "a" * 39 + "…"),
+    ("a" * 36 + "\x00bc", "a" * 36 + "…"),  # `\x00` doesn't fit whole before the ellipsis, so it's dropped
+    ("a" * 35 + "\x00bc", "a" * 35 + "\\x00…"),
+    ("  a  ", " a "),
+]
+
+
+@pytest.mark.parametrize(("text", "want"), CLIPPED, ids=[ascii(t)[:30] for t, _ in CLIPPED])
+def test_clip_collapses_whitespace_and_escapes_what_is_invisible(text: str, want: str) -> None:
+    assert clip(text) == want
+
+
+def _unescape(shown: str) -> str:
+    return re.sub(
+        r"\\(x[0-9a-f]{2}|u[0-9a-f]{4}|U[0-9a-f]{8})", lambda m: chr(int(m.group(1)[1:], 16)), shown
+    )
+
+
+@given(st.text(), st.integers(10, 200))
+@example("a`b\n\x00", 40)
+@example("\t" * 50 + "`" * 50, 20)
+def test_clip_is_one_line_of_visible_text_that_never_grows(text: str, width: int) -> None:
+    shown = clip(text, width)
+    assert len(shown) <= width
+    assert "`" not in shown and "  " not in shown
+    for c in shown:
+        assert c == " " or not c.isspace(), ascii(shown)
+        assert unicodedata.category(c) not in ("Cc", "Cf", "Cs"), ascii(shown)
+    if "\\" not in text:  # without a typed backslash, the escapes read back to the text, whitespace collapsed
+        whole = re.sub(r"\s+", " ", text)
+        back = _unescape(shown)
+        assert back == whole if not shown.endswith("…") else whole.startswith(back[:-1])
+
+
+@given(st.text(max_size=30))
+@example("foo`bar")
+@example("mo\u200bdel")
+@example("a\nb")
+def test_verbatim_is_whether_clip_shows_the_text_as_typed(text: str) -> None:
+    """A fix hint quotes the query only when this holds; whitespace counts as typed (the lexer splits on any)."""
+    assert verbatim(text) == (clip(text, 1000) == re.sub(r"\s+", " ", text))

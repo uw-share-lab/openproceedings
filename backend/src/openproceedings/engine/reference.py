@@ -20,7 +20,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 
-from openproceedings.diagnostics import DiagnosticCode
+from openproceedings.diagnostics import DiagnosticCode, clip
 from openproceedings.engine.protocol import (
     FACET_FIELDS,
     MAX_EXPANSIONS,
@@ -89,7 +89,7 @@ class ReferenceEngine:
         if len(terms) > MAX_EXPANSIONS:
             raise EngineInputError(
                 DiagnosticCode.WILDCARD_TOO_MANY_EXPANSIONS,
-                f"`{wildcard.stem}{wildcard.op}` expands to {len(terms)} terms (more than {MAX_EXPANSIONS}) — use a "
+                f"`{clip(wildcard.stem + wildcard.op)}` expands to {len(terms)} terms (more than {MAX_EXPANSIONS}) — use a "
                 "longer stem.",
             )
         return terms

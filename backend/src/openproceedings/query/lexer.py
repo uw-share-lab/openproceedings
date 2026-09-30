@@ -54,7 +54,7 @@ import unicodedata
 from dataclasses import dataclass
 from enum import StrEnum
 
-from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip
+from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip, verbatim
 from openproceedings.query.mathsyms import GREEK, OPERATORS
 from openproceedings.query.normalize import (
     Tail,
@@ -300,7 +300,7 @@ class _Lexer:
         if not closed:
             self.error(
                 DiagnosticCode.PARSE_UNTERMINATED_PHRASE,
-                f'The phrase starting `{q[i : i + 20]}` has no closing quote — add a closing `"`.',
+                f'The phrase starting `{clip(q[i:n], 20)}` has no closing quote — add a closing `"`.',
                 i,
                 n,
             )
@@ -456,7 +456,7 @@ class _Lexer:
             s = wild[0]
             self.error(
                 DiagnosticCode.PARSE_WILDCARD_NOT_SUFFIX,
-                f"`{clip(raw)}` has a `{raw[s]}` that is neither a wildcard at the end of a word (e.g. `bench*`, "
+                f"`{clip(raw)}` has a `{clip(raw[s])}` that is neither a wildcard at the end of a word (e.g. `bench*`, "
                 "`model$`) nor closed LaTeX math (`$x$`) — search the whole word, or close the math.",
                 start + s,
                 start + s + 1,
@@ -506,11 +506,12 @@ class _Lexer:
         # Judged on the folded pieces (spec 02, decision-008): `abcd⒈*` is `abcd1.*`, so its `*` follows `.`,
         # whatever the raw character looked like or whether a U+0338 sits on it
         elif tail.pieces:
+            fixed = self.attached(stem, toks, tail, wildcard, in_phrase=in_phrase)
             self.error(
                 DiagnosticCode.PARSE_WILDCARD_DETACHED,
                 f"The `{wildcard}` in `{clip(raw)}` follows {self.tail_name(stem, tail)}, not a letter or digit, so "
-                f"it would match any word starting `{clip(toks[-1].text)}` — put it straight after the stem, e.g. "
-                f"`{clip(self.attached(stem, toks, tail, wildcard, in_phrase=in_phrase))}`.",
+                f"it would match any word starting `{clip(toks[-1].text)}` — put it straight after the stem"
+                + (f", e.g. `{clip(fixed)}`." if verbatim(fixed) else "."),
                 start,
                 end,
             )
@@ -565,8 +566,12 @@ class _Lexer:
         elif raw[0] in _LOOKALIKE_MINUS:
             self.warn(
                 DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
-                f"`{clip(raw)}` starts with `{raw[0]}`, which is not an operator, so the word is searched — to exclude "
-                f"it, type an ASCII hyphen: `-{clip(raw[1:])}`.",
+                f"`{clip(raw)}` starts with `{clip(raw[0])}`, which is not an operator, so the word is searched — to exclude "
+                + (
+                    f"it, type an ASCII hyphen: `-{clip(raw[1:])}`."
+                    if verbatim(raw)
+                    else "it, type an ASCII hyphen `-` in its place."
+                ),
                 start,
                 end,
             )
@@ -599,7 +604,8 @@ class _Lexer:
             rest = folded.split("¬", 1)[1] or "word"
             self.warn(
                 DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
-                f"`¬` in `{clip(raw)}` is searched as the word `neg`, not NOT — to exclude, write `-{clip(rest)}`.",
+                f"`¬` in `{clip(raw)}` is searched as the word `neg`, not NOT — to exclude, "
+                + (f"write `-{clip(rest)}`." if verbatim(rest) else "type `-` in place of `¬`."),
                 start,
                 end,
             )
@@ -686,7 +692,7 @@ class _Lexer:
         end = self.next_space[k]
         self.error(
             DiagnosticCode.PARSE_AMBIGUOUS_QUOTE,
-            f"The quote `{self.q[k]}` {why}, so it is unclear whether it opens or closes a phrase — "
+            f"The quote `{clip(self.q[k])}` {why}, so it is unclear whether it opens or closes a phrase — "
             + (
                 hint
                 or "put a space between them, or drop the inner quotes (a phrase cannot contain the same kind "

@@ -270,6 +270,136 @@ def test_the_message_clips_a_long_reading_but_the_field_does_not() -> None:
     assert w.reading not in w.message and "…`" in w.message
 
 
+# TASK-141: query text quoted in a message is one line of visible characters (diagnostics.clip): whitespace runs
+# are one space, and a backtick or an invisible character is written as its escape, so a backtick in the query
+# can't end the message's quoting early. The span still points at exactly what was typed.
+# (q, code, span, message)
+QUOTED: list[tuple[str, DiagnosticCode, tuple[int, int], str]] = [
+    (
+        "a b OR `c`",
+        DiagnosticCode.WARN_MIXED_AND_OR,
+        (0, 10),
+        "AND binds tighter than OR, so this is read as `(a b) OR \\x60c\\x60` — add parentheses if you meant "
+        "something else.",
+    ),
+    (
+        "a b OR `c`",
+        DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+        (7, 10),
+        '`\\x60c\\x60` starts with a single quote, which does not make a phrase — use double quotes: `"…"`.',
+    ),
+    ("a b\tOR () OR c", DiagnosticCode.WARN_MIXED_AND_OR, (0, 14), NO_READING.format("a b OR () OR c")),
+    (
+        "x\u2028y OR z w",
+        DiagnosticCode.WARN_MIXED_AND_OR,
+        (0, 10),
+        (
+            "AND binds tighter than OR, so this is read as `(x y) OR (z w)` — add parentheses if you meant something "
+            "else."
+        ),
+    ),
+    (
+        "a b OR c\u202ed",
+        DiagnosticCode.WARN_MIXED_AND_OR,
+        (0, 10),
+        (
+            "AND binds tighter than OR, so this is read as `(a b) OR c\\u202ed` — add parentheses if you meant "
+            "something else."
+        ),
+    ),
+    (
+        "(a\nb",
+        DiagnosticCode.PARSE_UNBALANCED_PAREN,
+        (0, 1),
+        "`(a b` has no closing parenthesis — add `)` where the group ends.",
+    ),
+    (
+        '"trust\x00 in\nmodels',
+        DiagnosticCode.PARSE_UNTERMINATED_PHRASE,
+        (0, 17),
+        'The phrase starting `"trust\\x00 in models` has no closing quote — add a closing `"`.',
+    ),
+    (
+        "venue:IC\x07LR",
+        DiagnosticCode.FIELD_UNKNOWN_VALUE,
+        (6, 11),
+        "`IC\\x07LR` is not a venue (values take no wildcards or quotes) — use one of `NeurIPS`, `ICLR`, `ICML`.",
+    ),
+    (
+        "trust NEAR/x`y b",
+        DiagnosticCode.PARSE_BAD_NEAR,
+        (6, 14),
+        "`NEAR/x\\x60y` needs a whole-number distance up to 100 — write e.g. `NEAR/3` (at most 3 words apart).",
+    ),
+]
+
+
+# A fix hint is text to type back, so it quotes the query only when `clip` shows it as typed: a hint with an
+# escape in it (`-foo\x60bar`) would search something else if copied. Then the hint says what to do instead.
+HINTS: list[tuple[str, DiagnosticCode, tuple[int, int], str]] = [
+    (
+        "trust \u2212foo`bar",
+        DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+        (6, 14),
+        "`\u2212foo\\x60bar` starts with `\u2212`, which is not an operator, so the word is searched — to exclude it, "
+        "type an ASCII hyphen `-` in its place.",
+    ),
+    (
+        "trust \u2212foo\u200bbar",
+        DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+        (6, 14),
+        "`\u2212foo\\u200bbar` starts with `\u2212`, which is not an operator, so the word is searched — to exclude "
+        "it, type an ASCII hyphen `-` in its place.",
+    ),
+    (
+        "trust \u2212foo",
+        DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+        (6, 10),
+        "`\u2212foo` starts with `\u2212`, which is not an operator, so the word is searched — to exclude it, type an "
+        "ASCII hyphen: `-foo`.",
+    ),
+    (
+        "trust \xacfoo`bar",
+        DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+        (6, 14),
+        "`\xac` in `\xacfoo\\x60bar` is searched as the word `neg`, not NOT — to exclude, type `-` in place of `\xac`.",
+    ),
+    (
+        "trust \xacfoo",
+        DiagnosticCode.WARN_LOOKALIKE_OPERATOR,
+        (6, 10),
+        "`\xac` in `\xacfoo` is searched as the word `neg`, not NOT — to exclude, write `-foo`.",
+    ),
+    (
+        "trust vis`ion-*",
+        DiagnosticCode.PARSE_WILDCARD_DETACHED,
+        (6, 15),
+        "The `*` in `vis\\x60ion-*` follows `-`, not a letter or digit, so it would match any word starting `ion` — "
+        "put it straight after the stem.",
+    ),
+    (
+        "trust vision-*",
+        DiagnosticCode.PARSE_WILDCARD_DETACHED,
+        (6, 14),
+        "The `*` in `vision-*` follows `-`, not a letter or digit, so it would match any word starting `vision` — put "
+        "it straight after the stem, e.g. `vision*`.",
+    ),
+]
+QUOTED += HINTS
+
+
+@pytest.mark.parametrize(
+    ("q", "code", "span", "message"), QUOTED, ids=[ascii(q) + c for q, c, _, _ in QUOTED]
+)
+def test_quoted_query_text_is_one_line_that_a_backtick_cannot_break(
+    q: str, code: DiagnosticCode, span: tuple[int, int], message: str
+) -> None:
+    result = parse(q)
+    found = [(d.span, d.message) for d in result.errors + result.warnings if d.code is code]
+    assert (span, message) in found, found
+    assert message.count("`") % 2 == 0
+
+
 def test_mixed_warning_shows_the_reading() -> None:
     assert parse("a b OR c").warnings[0].message == (
         "AND binds tighter than OR, so this is read as `(a b) OR c` — add parentheses if you meant something else."
