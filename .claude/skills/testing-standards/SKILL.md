@@ -27,7 +27,8 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
   filters and exclusion accounting are exercised, with realistic vocabulary, LaTeX and Unicode. It is
   versioned: regenerating it is a PR with its own manifest diff, and changes the fixture `index_version`.
   Real-corpus checks (tokenizer parity, task-029) run locally against the maintainer's snapshot, never in
-  CI, because abstract licensing (00 open question 1) is unresolved.
+  CI: the real corpus is never committed (decision-004). Decision-018 (00 open question 1, closed) lets a
+  public instance serve abstracts; it does not put real abstracts in git or in CI fixtures.
 - Recorded HTTP fixtures (VCR-style) for each crawler source and year schema (01 §Testing), scrubbed of
   real text (decision-004). Tests never
   hit the network, and it is **enforced**: `backend/tests/conftest.py` makes every non-loopback socket

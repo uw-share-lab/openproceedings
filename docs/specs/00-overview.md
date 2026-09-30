@@ -121,9 +121,14 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
 
 ## Open questions (decide before the milestone named)
 
-1. **Abstract redistribution (M6).** Can a public instance serve abstracts? OpenReview's terms and the
-   NeurIPS and PMLR proceedings terms differ. The code is MIT either way. The corpus is never committed
-   to git.
+1. ~~**Abstract redistribution (M6).**~~ **Closed 2026-09-29 (decision-018):** a public instance serves
+   every abstract, each record attributed to its source with a link to it, and a public instance names a
+   takedown contact (private, local and development deployments may omit it). For the 2024+ conferences
+   OpenReview's terms dedicate the abstracts under CC0; PMLR grants CC BY 4.0, known from ICML 2017 (v70);
+   the years with no licence found (NeurIPS before 2021, ICML 2013–2016, earlier OpenReview years) rest on
+   Canadian fair dealing alone. Consulting the University of Waterloo copyright office before launch is
+   recommended (TASK-135), not a gate: the owner's decision is to show the abstracts whatever the answer.
+   Not legal advice. The code is MIT either way. The corpus is never committed to git.
 2. ~~**Rejected and withdrawn ICLR submissions (M4).**~~ **Closed 2026-09-27 (decision-012):** every
    public rejected, withdrawn and desk-rejected submission is indexed with `status:rejected`,
    `status:withdrawn` or `status:desk_rejected` and excluded by the default `status:accepted`, counted
