@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 20:06'
-updated_date: '2026-10-01 12:29'
+updated_date: '2026-10-01 12:41'
 labels:
   - tests
 milestone: m-3
@@ -47,6 +47,8 @@ Finding: the rebuilt wrap_cases reached a window the old strategy rarely drew (s
 Mutation check (temporary edits to backend/src, restored), pr profile, the two properties with and without their @examples: all 5 mutants killed by generated cases alone. M1 _check_wraps treats a too-long combined wrap as every field's answer (one-wrap); M2 parser drops the all-negative check (click near misses); M3 _check_splice never checks the widest edit (click); M4 _check_wraps never checks (one-wrap); M5 a nested-only field reported with no reason (one-wrap).
 
 After, on 6352e07 (pr derandomized): one-wrap 8/68 invalid, click 18/218, all overruns, no 'gave up' line (earlier random pr runs: one-wrap 6-16% over 8 runs, click 5-12% over 5). ci: test_clauses.py 144 passed (click 182/2166 invalid, one-wrap 8/62). No health check suppressed; the one-wrap keeps its deadline=None with the reason comment from decision-024; the click property uses the profile deadline. make test: 5976 passed, 2 skipped; frontend 3052 passed. make lint, make tooling green.
+
+Overrun measurements (TASK-153 learning): real property, random pr runs: click_cases first version 72/272, 43/243, 61/261 invalid (18-27%), after own-label decisions 5-12% (5 runs). Trivial-body harness (scratchpad, 5x200 per variant): click ~26% -> ~10%; queries() ~13% -> 6%. Attribution harness: 201 overruns from mutation vs 8 from generation over 4x200 click cases; by copied label, ONE_FROM_MANY (st.lists elements) 114 of about 200. Coverage events, click property: toggleable venue/track/status about 50-60% of cases vs 60-83% on dev (scratch copy with events), non-toggleable verdicts about 45% vs 25%. Review: depth padding drawn 58..66 so the PARSE_TOO_DEEP near miss is generated; near-miss assert is exact (codes == {refused}); one-wrap asserts the spec's at most five parses and pins a too-deep wrap.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

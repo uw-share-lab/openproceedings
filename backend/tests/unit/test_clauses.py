@@ -238,26 +238,28 @@ def _parsed(case: ParseCase) -> ParseResult | None:
     event(f"source: {case.source}")
     if case.refused is not None:
         event(f"near miss: {case.refused}")
-        assert case.refused in codes and filter_clauses(case.q, result) is None, (case.q, codes)
+        assert codes == {case.refused} and filter_clauses(case.q, result) is None, (case.q, codes)
         return None
     assert result.ast is not None, (case.q, codes)
     return result
 
 
 # A near miss per refusal the strategy builds, at the length cap's boundary (1,926 code points still parse: the
-# canonical form adds the default filters); a wrap of every field too long, but not every field's own (venue
-# fits); and every field's own fits (wrap_cases found it: the cost bound once read "every field toggleable" as
-# "written together")
+# canonical form adds the default filters); a wrap of every field too long, but not every field's own (only
+# track's is); every field's own fits (wrap_cases found it: the cost bound once read "every field toggleable" as
+# "written together"); and a wrap too deep for every field
 @example(case=ParseCase("a" * 1_927, "native", "pinned", DiagnosticCode.PARSE_TOO_LONG))
 @example(case=ParseCase("a" * 1_926, "scholar", "pinned"))
 @example(case=ParseCase("a" * 1_853, "native", "pinned"))
 @example(case=ParseCase(" ".join(["trust"] * 300), "native", "pinned"))
+@example(case=ParseCase("(" * 64 + "a" + ")" * 64, "scholar", "pinned"))
 # near-cap queries (up to 2,000 code points) parsed once per filter field and wrap: no per-example deadline
 @given(case=wrap_cases())
 @settings(max_examples=60, deadline=None)
 def test_the_one_wrap_parse_answers_exactly_as_per_field_parses(case: ParseCase) -> None:
     """Old vs new: every field with no clause gets the reason its own wrap alone gives, and the cost is at
-    most one parse per typed clause plus one, or plus five when the combined wrap can't be written."""
+    most one parse per typed clause plus one, or plus one more per field with no clause (five at most, spec 02)
+    when the combined wrap can't be written."""
     q, mode = case.q, case.mode
     if _parsed(case) is None:
         return
@@ -275,6 +277,7 @@ def test_the_one_wrap_parse_answers_exactly_as_per_field_parses(case: ParseCase)
     )
     typed = len(FILTER_FIELDS) - len(wrapped)
     assert calls <= typed + (1 if together else 1 + len(wrapped))
+    assert calls <= 5  # spec 02: `/parse` adds at most five
 
 
 @pytest.mark.parametrize("depth", [62, 63, 64])

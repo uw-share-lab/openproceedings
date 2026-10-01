@@ -20,18 +20,19 @@ parseable queries, as TASK-145 did for the year edit, without testing less.
   mutator copies one span over another of the same label, then reruns with exactly the old number of choices
   (`max_choices = count`). A copy that turns a leaf into a group, or lengthens a list, runs out of choices. All
   `st.integers`/`st.booleans` draws share one class label, and every `st.lists` element shares `ONE_FROM_MANY_LABEL`.
-  The `ONE_FROM_MANY` group alone caused 114 of about 180 mutation overruns in click before the fix. Giving each such
-  decision its own `sampled_from` (a distinct element tuple gives a distinct label) took click's overruns from about
-  26% to about 10% of cases with a trivial test body, and `queries()` from about 13% to 6%.
+  Attributing each mutation to the label it copied (a second harness, 4×200 cases, after the first own-label changes),
+  the `ONE_FROM_MANY` group caused 114 of about 200 mutation overruns. Giving each such decision its own `sampled_from`
+  (a distinct element tuple gives a distinct label) took click's overruns from 18-27% to 5-12% of cases on the real
+  property (random `pr` runs), about 26% to about 10% with a trivial test body, and `queries()` from about 13% to 6%.
 - A strategy that cuts padding back to the parse limit finds edges that `assume()` hid. `wrap_cases` landed on short
-  repeated words at 1,800-1,870 code points (`trust` × 300). There the combined wrap of every field is too long but
+  repeated words at about 1,800-1,870 code points (`trust` × 300 is 1,799). There the combined wrap of every field is too long but
   each field's own wrap fits, so `filter_clauses` parses 5 times while every field is toggleable. The property's cost
   bound read "every field toggleable" as "written in one wrap" and failed. The code matches spec 02 ("at most
   five"). Evidence: the dev version of the property fails on that input as an `@example` (`assert 5 <= (0 + 1)`).
 - The near misses still see what the property must catch. In 5 temporary mutants of `clauses.py` and `parser.py`, the
   generated cases alone, without the pinned examples, killed every one: the all-negative check removed, the splice's
-  widest edit never checked, the wraps never checked or a too-long combined wrap taken for every field, and a nested
-  field reported toggleable.
+  widest edit never checked, the wraps never checked or a too-long combined wrap taken for every field, and a
+  nested-only field reported with no reason.
 
 ## Dead ends — don't repeat these
 - A trivial test body (`def t(x): pass`) gives different absolute invalid counts than the real property, in either
@@ -44,8 +45,10 @@ parseable queries, as TASK-145 did for the year edit, without testing less.
   venue/track/status clauses is toggleable per case (about 50-60% against 60-83%). Non-toggleable verdicts rose from
   about 25% to about 45%, and those are where a wrong "toggleable" is caught. If a toggleable-edit bug slips past,
   weight `_CLICK_BODIES` toward "one atom".
-- `clause_queries` was removed when its last user went. `year_edit_cases` was not given own-label decisions (its
-  invalid share stays at TASK-145's 10-20%); doing so would change TASK-145's strategy for no failing check.
+- `clause_queries` was removed when its last user went. The helpers `year_edit_cases` shares (`_group`, `_part`,
+  `filter_clause_strings`) moved to own-label decisions, so its draws changed (its tests pass, invalid share still
+  10-20%), but its own top-level `st.booleans`/`st.integers` decisions were left: changing them would rework
+  TASK-145's strategy for no failing check.
 
 ## Follow-ups
 none

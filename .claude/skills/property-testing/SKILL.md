@@ -104,9 +104,10 @@ year edit. Some cases are near misses (one step past a rule; a few percent to a 
 `test_clauses.py`, which had `assume()`d a parse: `click_cases` builds every field's clauses in every shape with the
 parser's rules in its grammar (a positive anchor, every OR branch positive, parts written together only where a
 `)` meets a `(`), `wrap_cases` is a `queries()` string or near-cap parts, and both cut padding back by parsing. They
-yield a `ParseCase`; about one case in ten is a near miss (every conjunct negated, a word written before a group,
+yield a `ParseCase`; roughly one case in ten is a near miss (every conjunct negated, a word written before a group,
 one step past the length or depth cap) that `parse` must refuse with its code. Rejections went from 27 to 32% of
-draws (`assume()`) to none, and invalid draws to 5 to 16% (all overruns).
+draws (`assume()`) to none, and invalid draws to 5 to 16% over random `pr` runs (all overruns; derandomized `pr`:
+one-wrap 8/68, click 18/218).
 
 ## Properties that must hold
 1. **Parser totality:** `parse(s)` never raises for any `str`; bad input yields `errors`.
@@ -142,14 +143,14 @@ draws (`assume()`) to none, and invalid draws to 5 to 16% (all overruns).
   `FailedHealthCheck` or silently test less. Constrain the strategy instead.
 - `--hypothesis-show-statistics` counts as invalid both rejections (`assume()`, `.filter()`; listed as "gave up
   because") and Hypothesis's own overruns ("exceeded maximum test case size" in `HYPOTHESIS_EXPERIMENTAL_OBSERVABILITY`
-  output, no "gave up" line). Recursive strategies overrun all through a run (`clause_queries()` alone: about a
-  third of cases; `year_edit_cases()`: 10 to 20%, none rejected), so read the "gave up" lines for filtering, not
+  output, no "gave up" line). Recursive strategies overrun all through a run (the since-removed `clause_queries()`
+  alone: about a third of cases; `year_edit_cases()`: 10 to 20%, none rejected), so read the "gave up" lines for filtering, not
   the invalid count (TASK-145).
 - Nearly all of those overruns are Hypothesis's mutator, not generation: after each valid case it copies a span over
   another span with the same label, gives the result exactly as many choices as it had, and a copy that makes the
   case draw more (a leaf becomes a group, a list gets longer) overruns. Every `st.integers`/`st.booleans` draw
   shares one label, and every `st.lists` element another, so a decision that changes how much is drawn after it gets
   its own `st.sampled_from` (in `strategies.py`: `_GROUP_SIZES`, `_QUERY_NODES`, the values of a clause drawn as a
-  count and a permutation, not a list). That took `click_cases`' overruns from 18 to 27% of cases to 5 to 12% at
-  `pr` (TASK-153).
+  count and a permutation, not a list). That took `click_cases`' overruns from 18 to 27% of cases to 5 to 12% over
+  random `pr` runs of the property (TASK-153).
 - A property that can't fail is not a test: mutation-check it once by breaking the code it covers.
