@@ -707,7 +707,7 @@
   "label": "profiles: pr suppresses too_slow",
   "file": "backend/tests/conftest.py",
   "old": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, derandomize=True, print_blob=True)",
-  "new": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, suppress_health_check=[HealthCheck.too_slow], print_blob=True)"
+  "new": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, derandomize=True, suppress_health_check=[HealthCheck.too_slow], print_blob=True)"
  },
  {
   "label": "profiles: ci suppresses too_slow",
@@ -725,7 +725,7 @@
   "label": "profiles: pr loses its deadline",
   "file": "backend/tests/conftest.py",
   "old": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, derandomize=True, print_blob=True)",
-  "new": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=None, print_blob=True)"
+  "new": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=None, derandomize=True, print_blob=True)"
  },
  {
   "label": "profiles: ci loses its deadline",
@@ -755,7 +755,7 @@
   "label": "profiles: pr deadline raised to 10 minutes",
   "file": "backend/tests/conftest.py",
   "old": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, derandomize=True, print_blob=True)",
-  "new": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=600_000, print_blob=True)"
+  "new": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=600_000, derandomize=True, print_blob=True)"
  },
  {
   "label": "profiles: nightly gains a 10-minute deadline",
