@@ -117,6 +117,7 @@ def _own_field(n: Node) -> str | None:
     return inner.field if isinstance(inner, Filter) else None
 
 
+# near-cap queries (1,500 to 2,000 code points), each parsed twice: no per-example deadline
 @settings(deadline=None)
 @given(near_cap_queries(), st.sampled_from(["native", "scholar"]))
 @example(" ".join(f"w{i:04d}" for i in range(284)), "native")  # 1,703 cp; canonical 2,909: refused
@@ -137,7 +138,6 @@ def _mixed(q: str, mode: str) -> list[tuple[int, int] | None]:
     return [w.span for w in parse(q, mode).warnings if w.code is DiagnosticCode.WARN_MIXED_AND_OR]  # type: ignore[arg-type]
 
 
-@settings(deadline=None)
 @given(queries(), st.sampled_from(["native", "scholar"]))
 @example("x (a b OR c) OR y z", "native")  # nested levels: each reading clears its own level only
 @example("a b   OR   c", "native")  # the reading is shorter than the span it replaces
@@ -199,7 +199,6 @@ def _faithful(reading: str, text: str) -> bool:
     return want is None
 
 
-@settings(deadline=None)
 @given(st.one_of(queries(), queries_with_a_broken_piece()), st.sampled_from(["native", "scholar"]))
 @example("a b OR () OR c", "native")
 @example("a b () OR c", "native")  # the AND group's node stops before `()`
@@ -239,7 +238,6 @@ def queries_with_hostile_characters(draw: st.DrawFn) -> str:
     return q
 
 
-@settings(deadline=None)
 @given(queries_with_hostile_characters(), st.sampled_from(["native", "scholar"]))
 @example("a b OR `c`", "native")
 @example('"trust\x00 in\nmodels', "native")

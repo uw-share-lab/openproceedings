@@ -62,7 +62,8 @@ with a comment is still allowed for an example that is long by design.
 - Changed: `backend/tests/conftest.py` (the profile and its docstring), the property-testing and
   testing-standards skills, and the per-test settings in `test_differential.py`, `test_facets_equal.py`,
   `test_highlight_speed.py` and `test_search_overlap.py`. The last one's `function_scoped_fixture` suppression
-  did nothing, since its fixture is module-scoped.
+  did nothing, since its fixture is module-scoped. Every remaining per-test `deadline=None` got a reason
+  comment, and five cheap properties (at most ~55 ms an example) went back to the profile deadline.
 - No effect on matching, `index_version` or search records.
 - Revisit if the PR runners start failing `too_slow` or deadlines without a code cause (then consider option 1
   for `pr`), or if local timing failures come back under another name.

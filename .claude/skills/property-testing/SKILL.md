@@ -31,10 +31,11 @@ Hypothesis example database (`.hypothesis/`) is gitignored; CI failures are repr
   `suppress_health_check`, `HealthCheck`, `get_profile(` or `load_profile(` outside `conftest.py`, so no test
   borrows `dev`'s suppression either. A strategy that seems to need one gets its health-check window measured
   first (below); if it really does, that is a change to this rule and to decision-024. Per test,
-  `deadline=None` is allowed for an example that is long by design (the oracle over 5k records, several
-  crawls); a new or changed one carries a comment saying why (some older ones in `test_clauses.py`,
-  `test_properties.py`, `test_highlight.py` and `test_tantivy_200.py` don't yet). It keeps `too_slow`, with a
-  30 s limit.
+  `deadline=None` is allowed, with a comment saying why, for an example that is long by design (the oracle
+  over 5k records, several crawls, near-cap queries). It keeps `too_slow`, with a 30 s limit. Every one in
+  `backend/tests` has its comment; five properties whose examples took at most ~55 ms (`test_tantivy_200.py`'s
+  combinations, the facet-click property in `test_clauses.py`, three message properties in
+  `test_properties.py`) went back to the profile deadline (TASK-146).
 - **How the checks measure.** Hypothesis times the draws of the first 10 valid examples. It fails `too_slow`
   above the larger of 1 s and 5 deadlines: 10 s at `pr` and `ci`, 30 s with no deadline (`nightly`), 2.5 s
   under the old 500 ms `dev` deadline. It fails `data_too_large` at 20 overruns before 10 valid examples.
