@@ -14,7 +14,10 @@ apply the rewrites.
 - The editor's line read "The query couldn't be checked: Too many requests from this address; try again in 3 s."
   The API's messages are whole capitalised sentences (`rate_limited` in `backend/src/openproceedings/api/middleware.py`
   builds `"{who}; try again in {seconds} s."`), so a colon before them always gives a mid-sentence capital.
-  A full stop fixes every envelope message at once, without touching the registry.
+  A full stop fixes every envelope message at once, without touching the registry. The review found the record
+  page doing the same twice ("…loaded just now: `<code>`: <message>" and the replay line); both now put the code
+  in parentheses and the message after a full stop, and the replay line's "re-running this record's search to
+  check it was refused" (read first as "to check that it was refused") now says the search "couldn't be re-run".
 - The same component's network case read "…couldn't be checked: couldn't reach the server." A clause after a
   colon needs its own subject; the record page's `CantLoad` had the same shape. Both now say "the server
   couldn't be reached. Check your connection.", which also adds the fix the pattern asks for (as ER-6 does).

@@ -207,17 +207,17 @@ function StatusBlock({
       <div className={warnBox}>
         <p>
           <span aria-hidden="true">⚠ </span>
-          {waiting ? "Replay: waiting" : "Replay: not checked"} — re-running this record&apos;s search to
-          check it
+          {waiting ? "Replay: waiting" : "Replay: not checked"} — this record&apos;s search couldn&apos;t be
+          re-run just now
           {failure.kind === "refused" ? (
             <>
               {" "}
-              was refused just now (<Code>{failure.error.code}</Code>): {failure.error.message}
+              (<Code>{failure.error.code}</Code>). {failure.error.message}
             </>
           ) : failure.kind === "no_answer" ? (
-            " got no answer from the server (busy or restarting)."
+            ": the server is busy or restarting."
           ) : (
-            " couldn't reach the server."
+            ": the server couldn't be reached. Check your connection."
           )}{" "}
           The recorded values below stand as recorded.
         </p>
@@ -328,7 +328,8 @@ function CantLoad({ failure, onRetry }: { failure: Failure; onRetry: () => void 
         The record couldn&apos;t be loaded just now
         {failure.kind === "refused" ? (
           <>
-            : <Code>{failure.error.code}</Code>: {failure.error.message}
+            {" "}
+            (<Code>{failure.error.code}</Code>). {failure.error.message}
           </>
         ) : failure.kind === "no_answer" ? (
           ": the server is busy or restarting."
