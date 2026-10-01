@@ -1102,7 +1102,9 @@ def _change_dir(head: str, words: list[str], state: dict, assigns: dict[str, str
         # a bare `cd` goes to $HOME, unlike `~` never the passwd home: with HOME unset bash stays ("HOME not set")
         # and zsh goes to the passwd home; with HOME '' both stay. So without a HOME the target is unknown
         home = (
-            builtin_vars.get("HOME") if "HOME" in builtin_vars else (None if env_empty else os.environ.get("HOME"))
+            builtin_vars.get("HOME")
+            if "HOME" in builtin_vars
+            else (None if env_empty else os.environ.get("HOME"))
         )
         target = home or None
     elif words[0] == "-":
