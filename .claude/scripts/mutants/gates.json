@@ -2816,5 +2816,11 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "    if any(t in LOOP_EXITS for t in body):\n        return None",
   "new": "    if False:\n        return None"
+ },
+ {
+  "label": "cmdparse: an env fallback variable unset in the environment is unknown",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "return \"\" if env_empty else os.environ.get(name, \"\")",
+  "new": "return \"\" if env_empty else os.environ.get(name)"
  }
 ]

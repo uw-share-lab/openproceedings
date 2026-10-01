@@ -41,6 +41,13 @@ check() {
   if [ "$got" = "$want" ]; then pass=$((pass+1)); printf '  ok   %-24s %-60s -> %s\n' "$hook" "$label" "$got"
   else fail=$((fail+1)); printf '  FAIL %-24s %-60s -> %s (want %s)\n' "$hook" "$label" "$got" "$want"; fi
 }
+# check_no_tmpdir: `check`, with TMPDIR absent from the hook's environment (CI's runner has none)
+check_no_tmpdir() {
+  local saved="${TMPDIR-}" had="${TMPDIR+x}"
+  unset TMPDIR
+  check "$@"
+  if [ -n "$had" ]; then export TMPDIR="$saved"; fi
+}
 # check_cmd <want: ok|err> <label> <cmd...>   (for scripts)
 check_cmd() {
   local want="$1" label="$2"; shift 2; local got
@@ -1040,6 +1047,9 @@ check $P allow "echo x > /tmp/… 2>&1"                    "$(payload_bash 'echo
 check $P block "frontend: cd \"\$(…--show-toplevel)\" && rm -rf data" "$(payload_at "$REPO/frontend" 'cd "$(git rev-parse --show-toplevel)" && rm -rf data')"
 # everyday commands stay allowed
 check $P allow "rm -f \"\$TMPDIR/x\""                     "$(payload_bash 'rm -f "$TMPDIR/x"')"
+# TMPDIR unset in the environment is '' in the agent's shell: `/x` is outside, `${TMPDIR}data` is data/
+check_no_tmpdir $P allow "no TMPDIR: rm -f \"\$TMPDIR/x\"" "$(payload_bash 'rm -f "$TMPDIR/x"')"
+check_no_tmpdir $P block "no TMPDIR: rm -rf \"\${TMPDIR}data\"" "$(payload_bash 'rm -rf "${TMPDIR}data"')"
 check $P allow "cd \"\$(…--show-toplevel)\" && make"      "$(payload_bash 'cd "$(git rev-parse --show-toplevel)" && make lint')"
 check $R allow "git commit -m with braces, \$ and op-reviews" "$(payload_bash 'git commit -m "fix {a,b}: \$HOME and .git/op-reviews/abc"')"
 check $R allow "gh pr create --body with braces, \$ and op-reviews" "$(payload_bash 'gh pr create --label no-learning --base dev --head mut --title t --body "{a,b} \$X .git/op-reviews/abc"')"

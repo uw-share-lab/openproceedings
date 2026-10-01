@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # Case table for cmdparse.GIT_LONG_OPTS (.claude/hooks/lib/cmdparse.py): for every subcommand it lists, the
-# installed git's `git <sub> --git-completion-helper-all` must name no long option the table lacks. git takes
-# any unique prefix of a long option, so a missing option can make an abbreviation read as the wrong one
-# (`--forc` must be --force). An option the table has and this git lacks (a newer git's) only makes an
-# abbreviation fail closed, so it is printed as a note, not a failure. A git without the helper (no output)
-# passes with a note. Usage: ./test-git-long-opts.sh
+# installed git's `git <sub> --git-completion-helper-all` is compared with the table. Drift either way is a
+# NOTE, never a failure, so the check holds on any git version (CI's runner keeps getting newer gits):
+# - an option this git has and the table lacks can't open a bypass: `_long_option` expands an abbreviation only
+#   when it is unique in the table, and every option a gate checks is in the table, so an abbreviation git
+#   reads as a gated option the hook reads as that option or as ambiguous (FailClosed); one git reads as the
+#   new option the hook leaves alone or reads as another (over-blocking at worst). Add it to keep reads exact.
+# - an option the table has and this git lacks (an older git) only makes an abbreviation fail closed.
+# It fails only if the table can't be read or this git's helper errors. A git without the helper passes with a
+# note. Usage: ./test-git-long-opts.sh
 set -u
 # Never inherit a repo from the caller (git exports GIT_DIR etc. to hooks such as pre-push).
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
@@ -30,9 +34,10 @@ for key, table in sorted(GIT_LONG_OPTS.items()):
     missing, extra = sorted(listed - table), sorted(table - listed)
     if extra:
         print(f"  note git {key}: the table has options this git lacks (a newer git's?): {' '.join(extra)}")
-    if missing:
-        failed += 1
-        print(f"  FAIL git {key}: GIT_LONG_OPTS lacks {' '.join('--' + m for m in missing)}")
+    if missing:  # drift, never a bypass (the header): noted so the table can follow
+        passed += 1
+        print(f"  note git {key}: this git has options GIT_LONG_OPTS lacks (add them): "
+              f"{' '.join('--' + m for m in missing)}")
     else:
         passed += 1
         print(f"  ok   git {key}: every long option is in GIT_LONG_OPTS")

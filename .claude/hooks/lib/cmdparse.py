@@ -334,6 +334,24 @@ GIT_LONG_OPTS: dict[str, frozenset[str]] = {
         "update-ref": "no-deref stdin create-reflog deref no-stdin no-create-reflog",
     }.items()
 }
+# The options newer gits list too (CI's runner, 2026-10-01): `test-git-long-opts.sh` notes any the table lacks.
+_PATCH_OPTS = "auto-advance no-auto-advance inter-hunk-context unified"
+_NEGOTIATION = "negotiation-include negotiation-restrict no-negotiation-include no-negotiation-restrict"
+for _key, _newer in {
+    "add": _PATCH_OPTS,
+    "checkout": _PATCH_OPTS,
+    "reset": _PATCH_OPTS,
+    "stash push": _PATCH_OPTS,
+    "stash save": _PATCH_OPTS,
+    "commit": "inter-hunk-context unified no-trailer",
+    "tag": "trailer no-trailer",
+    "fetch": _NEGOTIATION,
+    "pull": f"{_NEGOTIATION} compact-summary no-compact-summary",
+    "merge": "compact-summary no-compact-summary",
+    "update-index": "show-index-version no-show-index-version",
+    "update-ref": "batch-updates no-batch-updates",
+}.items():
+    GIT_LONG_OPTS[_key] = GIT_LONG_OPTS[_key] | frozenset(_newer.split())
 GIT_LONG_OPTS["stage"] = GIT_LONG_OPTS["add"]
 # Assignments that point git at config this parser can't read (the global or system file, settings passed
 # in the environment, or another repository's common dir: GIT_COMMON_DIR): with one, an unknown subcommand
@@ -955,7 +973,9 @@ def _variable(
     if name in shell_vars:
         return shell_vars[name]
     if name in ENV_FALLBACK:
-        return "" if env_empty else os.environ.get(name)
+        # unset in this environment is unset in the agent's shell too, and bash reads it as '' (CI's runner
+        # has no TMPDIR: `rm -f "$TMPDIR/x"` is `rm -f /x`)
+        return "" if env_empty else os.environ.get(name, "")
     return None
 
 
