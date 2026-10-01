@@ -105,11 +105,11 @@ fixtures under `backend/tests/fixtures/`; recording them is a separate, manual `
 ## Enforced gates (hooks in `.claude/hooks/`, case tables in `.claude/hooks/tests/`)
 | Hook | Enforces |
 |---|---|
-| `enforce-pr-workflow.sh` | `main` and `dev` take no direct commits (cherry-pick, revert, am and rebase included), pushes, merges or ref moves (`update-ref`, `reset`). Flow: `feature → PR → dev → PR → main`. |
-| `require-review.sh` | `git push` / `gh pr create` need an **APPROVE record for the exact HEAD sha**, written by `record-review.py` after `/review-gate`. `gh pr create` also needs an added or extended learnings entry. No record under `op-reviews/` is written by hand (Bash or a file tool). |
+| `enforce-pr-workflow.sh` | `main` and `dev` take no direct commits (cherry-pick, revert, am and rebase included), pushes (glob refspecs included), merges or ref moves (`update-ref`, `reset`, `branch -f`/`-M`/`-C`, `checkout -B`, `switch -C`, a fetch into them). Flow: `feature → PR → dev → PR → main`. |
+| `require-review.sh` | `git push` / `gh pr create` need an **APPROVE record for the exact HEAD sha**, written by `record-review.py` after `/review-gate`; `--tags` and glob refspecs are refused. `gh pr create` also needs an added or extended learnings entry. No record under `op-reviews/` is written by hand (Bash or a file tool). |
 | `block-ai-attribution.sh` | No `Co-Authored-By: Claude` or "Generated with Claude Code" in commits, PRs or release notes. `.claude/` is committed; authorship is not. |
 | `enforce-backlog-cli.sh` | No hand edits under `backlog/`. Use the `backlog` CLI. (Decision *bodies* may be edited, since the CLI can't write them.) |
-| `protect-data-dir.sh` | `data/snapshots/` and `data/indexes/` are immutable. `data/` and any `takedowns/` directory are never committed. |
+| `protect-data-dir.sh` | `data/snapshots/` and `data/indexes/` are immutable. `data/` and any `takedowns/` directory are never committed. No shell edits under `backlog/`. |
 | `remind-token-contract.sh` | Reminds you to bump `TOKENIZER_VERSION` and run the parity and differential suites after a tokenizer edit. |
 | `load-learnings.sh` | Every session starts with `.claude/learnings/INDEX.md` in context. |
 | `autofix.sh` | After every edit: formats and fixes the file, then reports what it couldn't fix. Never blocks. |
