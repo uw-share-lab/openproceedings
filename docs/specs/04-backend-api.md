@@ -36,6 +36,9 @@ reviews without the UI.
   `errors` hold those same diagnostics; only a malformed body is a `422 API_BAD_PARAM`.
 - No authentication in v1. Rate limiting is per IP (a token bucket in the app, set in config). CORS
   allowlist comes from config.
+- Every response, refusals and errors included, carries `Cache-Control: no-store` (`middleware.NoStore`,
+  TASK-067): a proxy or CDN must never keep an answer, or it could serve an abstract after the SIGHUP that
+  withholds it, or an old index's results after a promotion.
 - **Shapes, as frozen for the first `/api/v1` release** (M3a review-gate; `backend/tests/contract/test_contract_v1.py`):
   - **Every field a response sends is required** in the schema, a null or defaulted one too (response models,
     `Urls`, `PaperRecord`, `Diagnostic`, the AST nodes, a stored record: `json_schema_serialization_defaults_required`),
@@ -597,7 +600,7 @@ once released: changing one is a breaking change under `/api/v1`.
 | A request body over `max_body_bytes` (64 KiB), by `Content-Length` or by the bytes of a chunked body, refused before it is read and before any other check (task-079) | 413 | `API_BODY_TOO_LARGE` |
 | Rate limit exceeded: the client's or its network's bucket, a position-verified query's extra weight, or the record-save ceiling (its network's or the instance-wide one) | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
 | A search record can't be saved: the record store is over its size cap or its disk under the free-space floor (task-037) | 503 | `API_RECORDS_STORE_FULL` |
-| A query needs a cold position verification and every verification slot is taken (refused, never queued) | 503 | `API_BUSY` (with `Retry-After`) |
+| A query needs a cold position verification and every verification slot is taken (refused, never queued); or a pinned `index_version` (an export's, a record's replay or diff) waits longer than `pinned_open_wait_seconds` for another version's open, or another request's open of the same version (TASK-067; its access line says `busy: pinned_open`) | 503 | `API_BUSY` (with `Retry-After`) |
 | A query has more position-verified clauses than `ApiConfig.max_verified_clauses` (default 16, a backstop), refused before it compiles (decision-010; a replay over it is withheld, 200, §Search records) | 422 | `API_TOO_MANY_VERIFIED_CLAUSES` (diagnostics: one per clause, spanning it in `q`) |
 | A query's position checks would read more than `ApiConfig.max_verification_candidates` (default 300,000) candidate documents, summed over its verified clauses and their fields, refused before any is verified (decision-010; a replay over it is withheld, 200) | 422 | `API_QUERY_TOO_COSTLY` (diagnostics: one per verified clause, spanning it in `q`, with its count per field) |
 | No index loaded yet (startup, or the first load failed; a failed swap keeps serving the old index) | 503 | `API_INDEX_NOT_LOADED` |
@@ -726,7 +729,9 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     what a route adds with `deps.annotate`/`annotate_parse`: `canonical_hash`, `total`, `token_count`,
     `n_errors`, `error_codes`, `warning_codes` (at most 10 distinct codes, then `+N`), `verified_clauses`
     (the query's, a replay's too), `verification_candidates` (their candidates, summed; absent with none),
-    `verify_ms` (the wall time the request held a verification slot; absent when it held none),
+    `verify_ms` (the wall time the request held a verification slot; absent when it held none), `busy`
+    (`pinned_open` on a 503 `API_BUSY` because another version's open, or another request's open of the same
+    version, outlasted `pinned_open_wait_seconds`; TASK-067),
     `verify_cpu_ms` (the verifying thread's CPU in those holds), `verify_tokens` (what that CPU time was
     debited; absent likewise), and `code`, the error
     envelope's code, on every refusal (the body cap's 413, the rate limit's 429, a routing 404, `API_BUSY`, …)
@@ -940,7 +945,12 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     `snapshot_unreadable`, `snapshot_hash_mismatch`, `index_manifest_invalid`, `manifest_invalid`,
     `counts_mismatch`, `abstract_missing_mismatch`, `abstract_withheld_mismatch`, `track_facts_mismatch`,
     `doc_count_mismatch`, `withheld_invalid` and `withheld_abstract_present` (the snapshot's withheld ids), and
-    the takedown list's `takedowns_invalid`, `takedowns_unreadable` and `takedowns_missing`. At startup the failure is 503 `API_INDEX_NOT_LOADED`; on SIGHUP the old index and
+    the takedown list's `takedowns_invalid`, `takedowns_unreadable` and `takedowns_missing`. A snapshot whose
+    merges.csv doesn't match its manifest does not fail the load: the list applies without that snapshot's
+    merges (one ERROR `takedown_merges_unavailable` per damaged snapshot, with `snapshot`, `error` and `reason`
+    `merges_mismatch`; TASK-067). The load lines
+    (`index_loaded`, `index_swapped`, `takedowns_reloaded`) also count `takedowns_followed`, the ids withheld as a
+    listed paper under another id. At startup the failure is 503 `API_INDEX_NOT_LOADED`; on SIGHUP the old index and
     its coverage keep serving. Coverage is never partial and never recomputed per request. One
     `coverage_computed` INFO line is written per load.
 - As built (task-036, `api/export.py`; review fixes 2026-09-27):
@@ -997,8 +1007,8 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   300) or until the next reload (SIGHUP), so a broken or stale index is not re-verified per request.
   `absent`, the one refusal a client causes at will, is remembered in a map of its own (at most 256), so
   naming many absent versions never evicts a remembered `unloadable` or `tampered` one (at most 256 more).
-  Engines are held in an LRU of `ApiConfig.pinned_indexes` (default 4; size it to the versions the instance
-  holds); an open logs `pinned_index_opened` (INFO, with `ms`). A pinned export also needs that index's snapshot records, to name each abstract's
+  Engines are held in an LRU of `ApiConfig.pinned_indexes` (default 4, `op serve --pinned-indexes`; size it to
+  the versions the instance holds); an open logs `pinned_index_opened` (INFO, with `ms`). A pinned export also needs that index's snapshot records, to name each abstract's
   source (TASK-138): `IndexState.pinned_records` verifies them on first use, in the same one-at-a-time open slot,
   logs `pinned_snapshot_opened` (INFO, with `ms`), keeps them in an LRU of the same size, and remembers a
   failure (`pinned_snapshot_unavailable`, WARNING, with `reason`) as a refused pin is remembered (a waiter
@@ -1011,7 +1021,11 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   the pinned engine. The attribution of an old version comes from **today's** `attribution()` code over that
   snapshot's claims (decision-021), not the code that built the index. A cache hit takes only the short map lock,
   never a lock an open holds; **at most one pinned index opens at a time** (each re-hashes a whole index;
-  security review), and one version asked for at once is opened once. An engine dropped from the LRU stays alive while a stream still
+  security review), and one version asked for at once is opened once. A request waits for another version's
+  open, and as long for another request's open of its own version, at most `ApiConfig.pinned_open_wait_seconds`
+  each (default 2, so up to twice that in all), then gets 503 `API_BUSY` with `Retry-After:
+  busy_retry_seconds`, never a queue (TASK-067: clients rotating through more versions than the LRU holds
+  would otherwise hold every worker thread behind one multi-second open); the refusal isn't remembered. An engine dropped from the LRU stays alive while a stream still
   holds it, so memory is bounded by the LRU plus the exports in flight (each costs `export_weight` of the
   rate limit). `GET /meta`'s `index_versions` leaves out a version this code can't serve (its manifest's
   tokenizer, schema or Tantivy version, read without re-hashing) and one currently refused. If listing

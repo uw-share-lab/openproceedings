@@ -52,7 +52,7 @@ ClaimField = Literal[
 
 _ID = re.compile(r"op:(neurips|iclr|icml):([0-9]{4}):(\S+)")
 # Native ids (record-schema skill): an OpenReview forum id, or a proceedings form tied to its venue.
-_PROCEEDINGS_NATIVE = {
+PROCEEDINGS_NATIVE = {
     "pmlr": (re.compile(r"pmlr-v[0-9]+-[A-Za-z0-9_-]+"), "ICML"),
     # `-round1`/`-round2`: the 2021 D&B host, which numbers each round separately (urls.proceedings_native)
     "nips": (
@@ -264,7 +264,7 @@ class PaperRecord(BaseModel):
             raise ValueError(f"id {self.id!r} disagrees with venue {self.venue} / year {self.year}")
         venue_name(self.venue, self.year)  # a year the venue wasn't held: refused here, never mid-export
         native = m.group(3)
-        form = _PROCEEDINGS_NATIVE.get(native.split("-", 1)[0])
+        form = PROCEEDINGS_NATIVE.get(native.split("-", 1)[0])
         if form is not None:
             pattern, venue = form
             if not pattern.fullmatch(native) or venue != self.venue:
@@ -300,7 +300,7 @@ class PaperRecord(BaseModel):
     @property
     def forum_id(self) -> str | None:
         """The OpenReview forum id, if the record's native id is one (dedup merges on it first)."""
-        return None if self.native.split("-", 1)[0] in _PROCEEDINGS_NATIVE else self.native
+        return None if self.native.split("-", 1)[0] in PROCEEDINGS_NATIVE else self.native
 
     @classmethod
     def build(

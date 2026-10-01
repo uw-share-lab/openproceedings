@@ -41,8 +41,9 @@ record it as a decision.
 - **Runs tools straight from the workspace.** Ruff is `.venv/bin/ruff`, never `uv run`, which may sync and
   fetch or build packages an agent just added to `pyproject.toml`. Frontend tools run with
   `npx --no-install`.
-- **Skips eslint while its config or `frontend/package.json` differs from HEAD**, because eslint executes
-  its (JS) config; it says so, and `make lint` covers it once the change is reviewed.
+- **Skips prettier and eslint while a prettier or eslint config or a `package.json` differs from HEAD**,
+  because both execute code their config names (prettier plugins, eslint's JS config); it says so, and
+  `make lint` covers it once the change is reviewed.
 - **Compares real paths**, so a symlink or `..` cannot take it outside the repo. File names are passed
   after `--` so a name is never read as an option.
 

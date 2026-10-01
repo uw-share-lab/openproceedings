@@ -8,4 +8,8 @@ updates:
     directory: /
     schedule: { interval: weekly }
     commit-message: { prefix: "deps" }
-  # npm for /frontend is added when frontend/package.json exists (M3).
+  # the npm workspace: one package-lock.json at the root holds the frontend's dependencies (TASK-067)
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly }
+    commit-message: { prefix: "deps" }

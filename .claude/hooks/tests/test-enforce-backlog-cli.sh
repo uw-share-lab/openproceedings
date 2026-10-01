@@ -69,10 +69,27 @@ check "ordinary source file"            0 "$(payload Edit  "$REPO/backend/src/op
 check "ordinary doc"                    0 "$(payload Write "$REPO/README.md")"
 check "path merely containing 'backlog'" 0 "$(payload Edit "$REPO/docs/backlog-notes.md")"
 
+# --- the path is normalised before matching (TASK-067): //, ./, ../, relative to cwd, any case (APFS) ---
+payload_cwd() { # tool, file_path, cwd -> tool-call JSON with a cwd
+  python3 -c 'import json,sys; print(json.dumps({"tool_name": sys.argv[1], "cwd": sys.argv[3], "tool_input": {"file_path": sys.argv[2]}}))' "$1" "$2" "$3"
+}
+check "backlog//tasks/ (doubled slash)"    2 "$(payload Edit  "$REPO/backlog//tasks/t.md")"
+check "backlog/./tasks/"                   2 "$(payload Edit  "$REPO/backlog/./tasks/t.md")"
+check "docs/../backlog/tasks/"             2 "$(payload Write "$REPO/docs/../backlog/tasks/t.md")"
+check "relative backlog/tasks/ (cwd=repo)" 2 "$(payload_cwd Edit "backlog/tasks/t.md" "$REPO")"
+check "relative tasks/ (cwd=repo/backlog)" 2 "$(payload_cwd Edit "tasks/t.md" "$REPO/backlog")"
+check "Backlog/tasks/ (another case)"      2 "$(payload Edit  "$REPO/Backlog/tasks/t.md")"
+check "BACKLOG/CONFIG.YML"                 2 "$(payload Edit  "$REPO/BACKLOG/CONFIG.YML")"
+check "Write Backlog//decisions/"          2 "$(payload Write "$REPO/Backlog//decisions/decision-009 - x.md")"
+check "Edit backlog/./decisions/ (carve-out)" 0 "$(payload Edit "$REPO/backlog/./decisions/decision-009 - x.md")"
+check "relative ordinary file"             0 "$(payload_cwd Edit "docs/backlog-notes.md" "$REPO")"
+
 # --- fail-closed behaviour ---
 check "malformed JSON mentioning backlog/" 2 '{"tool_name":"Edit","tool_input":{"file_path":"/x/backlog/tasks/a.md"'
 check "malformed JSON, no backlog path"    0 '{"tool_name":"Edit","tool_input":{"file_path":"/x/src/a.py"'
 check "empty payload"                      0 ''
+# an internal error (a lone surrogate can't be encoded as a path) is refused, never a crash that lets it through
+check "lone-surrogate path (internal error)" 2 '{"tool_name":"Edit","tool_input":{"file_path":"/x/src/\ud800.py"}}'
 
 # --- $path/$tool/$parsed must not leak in from the environment on a parse failure ---
 # `parsed=1` MUST be exported too, or this test is vacuous: without it the hook exits at the fail-closed
@@ -81,7 +98,7 @@ check "empty payload"                      0 ''
 # is matched) while the real hook returns 0.
 checks=$((checks + 1))
 rc=$(printf '%s' '{"tool_name":"Edit","tool_input":{"file_path":"/x/src/a.py"' \
-     | env path="$REPO/backlog/tasks/x.md" tool=Edit parsed=1 "$HOOK" >/dev/null 2>&1; echo $?)
+     | env path="$REPO/backlog/tasks/x.md" tool=Edit parsed=1 crashed=1 "$HOOK" >/dev/null 2>&1; echo $?)
 if [[ $rc -eq 0 ]]; then
   printf "  ok   %-62s -> allow\n" "env \$path/\$tool/\$parsed don't leak in"
 else

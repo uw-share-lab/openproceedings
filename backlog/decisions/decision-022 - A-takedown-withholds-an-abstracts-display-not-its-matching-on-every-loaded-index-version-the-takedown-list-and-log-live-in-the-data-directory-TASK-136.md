@@ -104,3 +104,31 @@ spec 08's proposal and were settled in TASK-136.
 - **What would reopen it:** a request that the text must not be matched at all (then the pinned versions
   holding it must be retired, with the records that pin them marked as no longer reproducible), or a change of
   the hosting model that puts the log elsewhere.
+
+## Addendum (2026-09-30, TASK-067 security review)
+
+- **The same paper under another id.** The list names one id, but an older version may hold the paper under
+  an id it had before (a venue or year corrected later: the same native id) or as a separate duplicate a
+  later build merged. A version now withholds each of its records that is a listed paper under any id:
+  linked to a listed id by any snapshot's `merges.csv`, or sharing its native id when that native id is
+  globally unique (an OpenReview forum id, a PMLR volume key; never a NeurIPS or ICLR proceedings hash, which
+  names one paper only within its venue-year, measured: `takedowns.global_native`),
+  transitively
+  (`takedowns.same_paper`), in the API and `op export`. `op takedown check` also exports each listed paper's
+  title in every venue and year on every version, and reports a record with the same title and authors, under
+  another id, that carries an abstract. Listing the old id too (as the build's `takedowns_followed` advises)
+  stays good practice; it is no longer what keeps an older version from serving the text.
+- **A missing list fails closed.** Besides the cases above (a list already applied, the served snapshot
+  withheld one), a missing list now fails a load when `op serve` runs off loopback or behind a `--trusted-proxy` (every
+  public instance) or
+  when any snapshot on disk withheld an abstract; `op snapshot build` and `op export` refuse a missing default list
+  on the same evidence, and `op takedown check` always requires it. An empty file is how every takedown is lifted.
+- **The log checks the list, too.** An id whose latest log entry is `withheld` but that the list doesn't name
+  is a problem: a deleted line never lifts a takedown silently.
+- **Merges are read from every snapshot on disk**, older dedup rules included: a merge is the project's own
+  verdict that two records are one paper. `op takedown check` names an id a merge links to a listed paper
+  whose served title differs (a suspect merge). A merges.csv that doesn't match its manifest leaves that snapshot's
+  merges out, the others' still applying (one ERROR `takedown_merges_unavailable` per damaged snapshot), so the
+  list still applies rather than the reload failing.
+- **Caches.** Every API response says `Cache-Control: no-store`, so a proxy can't keep serving a withheld
+  abstract after the SIGHUP.

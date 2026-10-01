@@ -59,6 +59,9 @@ from openproceedings.ingest.sources.http import (
     urllib_transport,
 )
 
+# a bearer token's characters (RFC 6750 b64token), bounded: anything else is refused before it is sent
+_TOKEN = re.compile(r"[A-Za-z0-9._~+/=-]{1,4096}")
+
 log = logging.getLogger(__name__)
 
 API_V2 = "https://api2.openreview.net"
@@ -400,6 +403,13 @@ class OpenReviewClient(HttpClient[Entry]):
         if response.status == 200 and is_json(response):
             data = json.loads(response.body)
             token = data.get("token") if isinstance(data, dict) else None
+        if isinstance(token, str) and token and not _TOKEN.fullmatch(token):
+            # never sent: a CR/LF header makes http.client raise a ValueError quoting `Bearer <token>`
+            # (TASK-067); the token itself is never named
+            raise OpenReviewAuthError(
+                "OpenReview's login answered a token that can't be sent as a header; nothing was fetched",
+                reason="token_invalid",
+            )
         if not isinstance(token, str) or not token:
             raise OpenReviewAuthError(
                 f"OpenReview refused the login (HTTP {response.status}"

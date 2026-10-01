@@ -171,8 +171,8 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument(
         "--takedowns",
         type=Path,
-        help="the takedown list whose abstracts are withheld (default <data-dir>/takedowns/withheld.txt; "
-        "none when it doesn't exist)",
+        help="the takedown list whose abstracts are withheld (default <data-dir>/takedowns/withheld.txt; none "
+        "when it doesn't exist, until a snapshot has withheld an abstract: then it is required)",
     )
     b.set_defaults(run=_snapshot_build)
     d = actions.add_parser("diff", help="ids added, removed and changed between two snapshots")
@@ -292,6 +292,13 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--rate-refill", type=float, default=1.0, help="tokens per second per client")
     serve.add_argument("--export-weight", type=float, default=10.0, help="tokens one export costs")
     serve.add_argument("--no-rate-limit", action="store_true", help="turn the rate limit off (local use)")
+    serve.add_argument(
+        "--pinned-indexes",
+        type=int,
+        default=4,
+        help="older index versions held open besides the served one (default 4); size it to the versions the "
+        "instance holds, or exports and replays that rotate through more reopen (re-hash) one each time",
+    )
     serve.add_argument(
         "--max-verified-clauses",
         type=int,
@@ -431,13 +438,16 @@ def _ingest_crawl(ns: argparse.Namespace) -> int:
 
 def _snapshot_build(ns: argparse.Namespace) -> int:
     from openproceedings import takedowns
-    from openproceedings.ingest.snapshot import build
+    from openproceedings.ingest.snapshot import any_withheld, build
 
-    # refused before any work; a list named with --takedowns must exist
+    out = ns.out or ns.data_dir / "snapshots"
+    # refused before any work; a list named with --takedowns must exist, and so must the default one once a
+    # snapshot has withheld an abstract (TASK-067: a missing list never builds a withheld abstract back in)
     listed = takedowns.load(
-        ns.takedowns or takedowns.list_path(ns.data_dir), required=ns.takedowns is not None
+        ns.takedowns or takedowns.list_path(ns.data_dir),
+        required=ns.takedowns is not None or any_withheld(out) or any_withheld(ns.data_dir / "snapshots"),
     )
-    result = build(ns.cache or ns.data_dir / "cache", ns.out or ns.data_dir / "snapshots", takedowns=listed)
+    result = build(ns.cache or ns.data_dir / "cache", out, takedowns=listed)
     _print({"path": str(result.path), "snapshot_hash": result.snapshot_hash, "created": result.created,
             "withheld_ids": list(result.withheld), "takedowns_followed": dict(result.takedowns_followed),
             "takedowns_unmatched": list(result.takedowns_unmatched),
@@ -998,17 +1008,17 @@ def _export(ns: argparse.Namespace) -> int:
     from openproceedings.api.state import snapshot_records
     from openproceedings.engine.tantivy_engine import TantivyEngine
     from openproceedings.export import Provenance, Sources, check_count, utc_date, write
-    from openproceedings.ingest.snapshot import SnapshotError
-    from openproceedings.takedowns import list_path
+    from openproceedings.ingest.snapshot import SnapshotError, any_withheld, merges_on_disk
+    from openproceedings.takedowns import list_path, same_paper
     from openproceedings.takedowns import load as load_takedowns
 
     started = time.perf_counter()
     result = _parsed(ns)
     if result is None:
         return 1
-    listed = load_takedowns(
-        list_path(ns.data_dir)
-    )  # as the API withholds them (TASK-136); a bad list refuses
+    # as the API withholds them (TASK-136); a bad list refuses, and so does a missing one once a snapshot has
+    # withheld an abstract (TASK-067: an older index would otherwise export the listed abstracts)
+    listed = load_takedowns(list_path(ns.data_dir), required=any_withheld(ns.data_dir / "snapshots"))
     ast = result.effective_ast
     assert ast is not None and result.canonical_hash is not None
     if ns.out is not None and ns.out.is_dir():
@@ -1035,6 +1045,21 @@ def _export(ns: argparse.Namespace) -> int:
             "abstracts can't be attributed: every abstract is withheld and each record says so (decision-021)",
             file=sys.stderr,
         )
+    if sources is not None and listed:
+        # the listed papers under their other ids too (TASK-067), as the API's `Served.withheld_in`; a damaged
+        # merges.csv leaves that snapshot's merges out, as the API does, and says so
+        def damaged(e: SnapshotError) -> None:
+            log.error(
+                "takedown_merges_unavailable",
+                extra={"snapshot": e.snapshot, "error": type(e).__name__, "reason": e.reason},
+            )
+            print(
+                f"op export: warning: {e}; the takedown list applies without {e.snapshot}'s merges",
+                file=sys.stderr,
+            )
+
+        merges = merges_on_disk(ns.data_dir / "snapshots", on_damaged=damaged)
+        withheld |= same_paper(listed, merges, records.ids())
     total, found = engine.documents(ast)
     removed = 0  # records a takedown withholds (the API's X-Abstracts-Withheld), counted as they stream
 
@@ -1359,6 +1384,10 @@ def _serve(ns: argparse.Namespace) -> int:
             max_verification_candidates=ns.max_verification_candidates,
             max_verification_seconds=ns.max_verification_seconds,
             serve_docs=loopback if ns.docs is None else ns.docs,
+            # a public instance never starts without its takedown list (TASK-067): off loopback, or behind a
+            # proxy on the same host (a trusted proxy means clients reach it); an empty list lists nothing
+            takedown_list_required=not loopback or bool(ns.trusted_proxy),
+            pinned_indexes=ns.pinned_indexes,
         )
     except ValidationError as e:  # the operator's own flags: say which and why, as usage
         raise _usage(f"invalid serve options: {serve_errors(e)}") from None
@@ -1393,18 +1422,29 @@ def _takedown_check(ns: argparse.Namespace) -> int:
     from urllib.parse import urlsplit
 
     from openproceedings import takedowns
+    from openproceedings.ingest.snapshot import merges_on_disk
     from openproceedings.takedown_check import check, http
 
     if urlsplit(ns.api).scheme not in ("http", "https") or not urlsplit(ns.api).netloc:
         raise _usage(f"--api must be an http(s) URL, not {ns.api!r}")
-    listed = takedowns.load(ns.list or takedowns.list_path(ns.data_dir), required=ns.list is not None)
+    # required, named or not: a missing list is never "nothing to check" (TASK-067; an empty one is)
+    listed = takedowns.load(ns.list or takedowns.list_path(ns.data_dir), required=True)
     log_problems = takedowns.check_log(ns.log or takedowns.log_path(ns.data_dir), listed)
     if not listed:
         print(
             "op takedown check: the takedown list names no id, so there is nothing to check", file=sys.stderr
         )
-    report = check(http(ns.api), listed)
-    problems = [*(p.message for p in log_problems), *report.problems]
+    # every snapshot's merges, for the check that a merge withholds no other paper (TASK-067); a damaged one is
+    # a problem of its own (the API then applies the list without the merges)
+    merge_problems: list[str] = []
+    merges = merges_on_disk(
+        ns.data_dir / "snapshots",
+        on_damaged=lambda e: merge_problems.append(
+            f"{e} ({e.reason}): the API applies the list without {e.snapshot}'s merges"
+        ),
+    )
+    report = check(http(ns.api), listed, merges)
+    problems = [*(p.message for p in log_problems), *merge_problems, *report.problems]
     for line in problems:
         print(line)
     print(

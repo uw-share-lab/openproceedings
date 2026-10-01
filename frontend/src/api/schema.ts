@@ -1524,7 +1524,7 @@ export interface operations {
             /** @description The entire matched set, ordered by id. */
             200: {
                 headers: {
-                    /** @description attachment; filename="openproceedings-<index_version>-<first 12 of canonical_hash>.<ext>" */
+                    /** @description attachment; filename="openproceedings-<index_version>-<the hex of the first 12 of canonical_hash>.<ext>" */
                     "Content-Disposition"?: string;
                     /** @description `attributed`: each abstract names its source (decision-018). `unavailable`: the exported index's snapshot can't be verified on this instance, so every abstract is withheld and each record says so (decision-021) */
                     "X-Abstract-Source"?: "attributed" | "unavailable";
@@ -1569,7 +1569,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
+            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken, or another index version's open (a pinned index_version or record) outlasted the wait this instance allows; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
             503: {
                 headers: {
                     /** @description Sent with API_BUSY: whole seconds to wait before retrying */
@@ -1730,7 +1730,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
+            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken, or another index version's open (a pinned index_version or record) outlasted the wait this instance allows; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
             503: {
                 headers: {
                     /** @description Sent with API_BUSY: whole seconds to wait before retrying */
@@ -1853,7 +1853,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
+            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken, or another index version's open (a pinned index_version or record) outlasted the wait this instance allows; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
             503: {
                 headers: {
                     /** @description Sent with API_BUSY: whole seconds to wait before retrying */
@@ -1923,7 +1923,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
+            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken, or another index version's open (a pinned index_version or record) outlasted the wait this instance allows; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
             503: {
                 headers: {
                     /** @description Sent with API_BUSY: whole seconds to wait before retrying */
@@ -1993,7 +1993,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
+            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken, or another index version's open (a pinned index_version or record) outlasted the wait this instance allows; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
             503: {
                 headers: {
                     /** @description Sent with API_BUSY: whole seconds to wait before retrying */
@@ -2066,7 +2066,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
+            /** @description API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken, or another index version's open (a pinned index_version or record) outlasted the wait this instance allows; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After) */
             503: {
                 headers: {
                     /** @description Sent with API_BUSY: whole seconds to wait before retrying */

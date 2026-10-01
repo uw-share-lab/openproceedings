@@ -86,7 +86,11 @@ class ApiConfig(BaseModel):
     log_query_text: bool = False
     # pinned index_versions (an export's `index_version`, a record's replay): engines held open besides the
     # served one, least recently used dropped first; size it to the versions the instance holds
+    # (`op serve --pinned-indexes`)
     pinned_indexes: int = Field(default=4, ge=1)
+    # a missing takedown list fails the load (TASK-067): `op serve` sets it off loopback, so a public instance
+    # never serves every listed abstract because takedowns/ wasn't mounted; an empty list lists nothing
+    takedown_list_required: bool = False
     # how long a refused pin (absent, unloadable, tampered) is remembered before it is checked again; a
     # SIGHUP reload forgets every refusal at once
     pinned_refusal_seconds: float = Field(default=300.0, gt=0)
@@ -107,6 +111,9 @@ class ApiConfig(BaseModel):
     # time; a query that would need another slot is 503 API_BUSY with `Retry-After: busy_retry_seconds`
     verification_slots: int = Field(default=1, ge=1)
     busy_retry_seconds: int = Field(default=5, ge=1)
+    # how long a request waits for another version's pinned open to finish before its own (each re-hashes a
+    # whole index): past it, 503 API_BUSY with `Retry-After: busy_retry_seconds` (TASK-067)
+    pinned_open_wait_seconds: float = Field(default=2.0, gt=0)
     # a query with more position-verified clauses than this is 422 API_TOO_MANY_VERIFIED_CLAUSES, before anything
     # compiles it: a coarse backstop (16 admits every Trust-Evals string; main-2-pop has 10), the cost being
     # bounded by `max_verification_candidates` (decision-010)

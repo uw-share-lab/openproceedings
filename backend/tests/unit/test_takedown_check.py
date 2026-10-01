@@ -20,6 +20,7 @@ from openproceedings.export import CSV_COLUMNS, TAKEDOWN, WITHHELD
 RID = "op:iclr:2024:Abcd1234"
 TWIN = "op:iclr:2024:Efgh5678"  # a second listed paper of the same venue-year
 V = "abcdef123456"
+AUTHORS = ["Ada Okafor", "Lin Wei"]
 
 
 @dataclass
@@ -40,6 +41,10 @@ class FakeApi:
     sentence: str = TAKEDOWN
     reason: str = "takedown"
     export_abstract: str | None = None
+    # records of the title-only export beyond the listed ones: (id, authors, abstract) (TASK-067)
+    others: tuple[tuple[str, list[str], str | None], ...] = ()
+    titles: dict[str, str] = field(default_factory=dict)  # /papers titles by id (default "Calibrated Trust")
+    paper_status: dict[str, int] = field(default_factory=dict)  # /papers answers other than 200/404, by id
     calls: list[tuple[str, dict[str, str]]] = field(default_factory=list)
 
     def fetch(self, path: str, params: Mapping[str, str]) -> tuple[int, str]:
@@ -53,9 +58,14 @@ class FakeApi:
                     {"matched": self.matched, "highlights": {"title": [], "abstract": self.lit_spans}}
                 )
             provenance = [{"field": "title"}, *([{"field": "abstract"}] if self.claim else [])]
+            if rid in self.paper_status:
+                return self.paper_status[rid], "{}"
+            if rid not in self.ids and rid not in self.titles:
+                return 404, "{}"
             paper = {
                 "id": rid,
-                "title": "Calibrated Trust",
+                "title": self.titles.get(rid, "Calibrated Trust"),
+                "authors": AUTHORS,
                 "abstract": self.abstract,
                 "provenance": provenance,
             }
@@ -70,12 +80,22 @@ class FakeApi:
         fmt = params["format"]
         if fmt in self.export_status:
             return self.export_status[fmt], "{}"
+        if "venue:" not in params["q"]:  # the title in every venue and year: the paper under other ids
+            assert fmt == "jsonl"
+            rows = [(i, AUTHORS, None, True) for i in self.ids]
+            rows += [(i, authors, abstract, abstract is None) for i, authors, abstract in self.others]
+            return 200, "".join(
+                json.dumps({"id": i, "title": "Calibrated Trust", "authors": a, "abstract": ab,
+                            "abstract_withheld": w, "abstract_withheld_reason": "takedown" if w else None}) + "\n"
+                for i, a, ab, w in rows
+            )  # fmt: skip
         ids = [i for i in self.ids if fmt != self.drop_from]
         return 200, "".join(self.entry(fmt, i) for i in ids) if fmt != "csv" else self.csv(ids)
 
     def entry(self, fmt: str, rid: str) -> str:
         if fmt == "jsonl":
-            obj = {"id": rid, "abstract": self.export_abstract, "abstract_withheld": True,
+            obj = {"id": rid, "title": "Calibrated Trust", "authors": AUTHORS, "abstract": self.export_abstract,
+                   "abstract_withheld": True,
                    "abstract_withheld_reason": self.reason}  # fmt: skip
             return json.dumps(obj) + "\n"
         if fmt == "ris":
@@ -103,7 +123,19 @@ def test_an_instance_that_withholds_everything_passes_with_one_export_per_format
     api = FakeApi(ids=(RID, TWIN))
     report = takedown_check.check(api.fetch, frozenset(api.ids))
     assert report.problems == () and report.index_versions == (V,)
-    assert report.exports == 4  # the two ids share a venue-year: one export per format, not per id
+    # the two ids share a venue-year: one export per format, not per id; then one of each title (TASK-067)
+    assert report.exports == 4 + 2
+
+
+def test_the_paper_served_under_another_id_is_a_problem_and_another_paper_is_not() -> None:
+    """TASK-067: an id the paper had before a rekey, or a merged-away duplicate, serving the abstract; a
+    different paper with the same title (other authors), or the paper under another id withheld, is fine."""
+    old = "op:iclr:2023:Abcd1234"
+    api = FakeApi(others=((old, AUTHORS, "Leaked."), ("op:iclr:2024:Zzzz9999", ["B. Other"], "Its own.")))
+    assert problems(api) == [
+        f"{old}: the jsonl export of index {V} serves the abstract of {RID}'s paper under this id; list it too"
+    ]
+    assert problems(FakeApi(others=((old, AUTHORS, None),))) == []
 
 
 @pytest.mark.parametrize(
@@ -248,3 +280,41 @@ def test_the_http_client_waits_out_a_429_up_to_its_retries(
     finally:
         server.shutdown()
     assert (got, handler.seen) == (status, seen)
+
+
+def test_a_merge_that_withholds_another_paper_is_a_problem() -> None:
+    """TASK-067 review: the check also looks the other way. An id a snapshot's merges.csv links to a listed
+    paper is withheld as that paper; if the served index gives it another title, the merge (and so the
+    withholding) is suspect, and the check names it."""
+    other, same, gone = "op:iclr:2024:Other9999", "op:iclr:2024:Twin00001", "op:iclr:2024:Merged0001"
+    api = FakeApi(titles={other: "Something Else Entirely", same: "Calibrated trust"})
+    merges = ((RID, other), (same, RID), (RID, gone))  # `gone`: merged away, the served index 404s it
+    report = takedown_check.check(api.fetch, frozenset(api.ids), merges)
+    assert report.problems == (
+        f"{other}: withheld as {RID}'s paper (a snapshot's merges.csv links them), but its title differs; "
+        "check that merge",
+    )
+
+
+def test_a_merged_id_the_api_wont_answer_for_is_a_problem() -> None:
+    other = "op:iclr:2024:Other9999"
+    report = takedown_check.check(FakeApi(paper_status={other: 500}).fetch, frozenset({RID}), ((RID, other),))
+    assert report.problems == (f"{other}: GET /papers answered 500",)
+
+
+def test_a_listed_paper_only_a_pinned_version_holds_has_its_merges_checked() -> None:
+    """Round 3: the merge check runs after the versions, so a listed paper the served index 404s but a pinned
+    version's export holds is checked too."""
+    other = "op:iclr:2024:Other9999"
+    api = FakeApi(titles={other: "Something Else Entirely"})
+
+    def pinned_only(path: str, params: Mapping[str, str]) -> tuple[int, str]:
+        if path == f"/api/v1/papers/{RID}":
+            return 404, "{}"
+        return api.fetch(path, params)
+
+    problems = takedown_check.check(pinned_only, frozenset({RID}), ((RID, other),)).problems
+    assert (
+        f"{other}: withheld as {RID}'s paper (a snapshot's merges.csv links them), but its title differs; "
+        "check that merge" in problems
+    )

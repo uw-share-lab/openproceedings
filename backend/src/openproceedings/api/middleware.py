@@ -34,6 +34,7 @@ from collections.abc import Callable, Sequence
 from urllib.parse import parse_qs
 
 from pydantic import TypeAdapter, ValidationError
+from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from openproceedings.api.config import RateLimit as RateLimitConfig
@@ -61,6 +62,7 @@ ANNOTATIONS = (
     "total",
     "abstract_source",  # an export's `X-Abstract-Source`: `unavailable` when it withheld abstracts (decision-021)
     "abstracts_withheld",  # an export's `X-Abstracts-Withheld`: records a takedown withholds (decision-022)
+    "busy",  # `pinned_open` on a 503 API_BUSY from the bounded pinned-open wait (TASK-067)
     "token_count",
     "n_errors",
     "error_codes",
@@ -125,6 +127,27 @@ class AccessLog:
                     log.log(logging.DEBUG if template == HEALTH_PATH else logging.INFO, "request", extra=line)
                 finally:  # a failing log call must not leave this request's fields in the context
                     current_access.reset(token)
+
+
+class NoStore:
+    """`Cache-Control: no-store` on every HTTP response (TASK-067): a proxy or CDN in front of the API must
+    never keep an answer, or it could serve an abstract after the SIGHUP that withholds it (a takedown), or an
+    index_version's results after the promotion that replaced it. Outermost, so errors and refusals get it."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def stamped(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message)["Cache-Control"] = "no-store"
+            await send(message)
+
+        await self.app(scope, receive, stamped)
 
 
 class LastCatch:

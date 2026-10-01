@@ -20,10 +20,12 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           re='co-authored-by[:=].*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com'
           bad=0
-          if git log --format=%B "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" | grep -Eiq "$re"; then
+          if git log --format=%B "$BASE_SHA..$HEAD_SHA" | grep -Eiq "$re"; then
             echo "::error::a commit message carries AI attribution"; bad=1; fi
           if printf '%s\n%s' "$PR_TITLE" "$PR_BODY" | grep -Eiq "$re"; then
             echo "::error::the PR title/body carries AI attribution"; bad=1; fi
@@ -38,9 +40,12 @@ jobs:
         with: { fetch-depth: 0, persist-credentials: false }
       - name: Branch adds a .claude/learnings/ entry (or is labelled no-learning)
         if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-learning') }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # Same rule as .claude/hooks/require-review.sh: an added, modified or renamed entry that ADDS lines.
-          added=$(git diff --numstat --find-renames --diff-filter=AMR "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- .claude/learnings/ \
+          added=$(git diff --numstat --find-renames --diff-filter=AMR "$BASE_SHA...$HEAD_SHA" -- .claude/learnings/ \
                   | awk -F'\t' '$1 ~ /^[0-9]+$/ && $1 > 0 {print $3}' \
                   | sed -E 's/\{[^{}]* => ([^{}]*)\}/\1/; s/.* => //' \
                   | grep -E '^\.claude/learnings/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+\.md$' || true)

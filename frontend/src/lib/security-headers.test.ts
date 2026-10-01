@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import nextConfig from "../../next.config";
-import { contentSecurityPolicy } from "./security-headers";
+import { contentSecurityPolicy, securityHeaders } from "./security-headers";
 
 const directives = (csp: string) =>
   new Map(csp.split("; ").map((d) => [d.split(" ")[0], d.split(" ").slice(1)]));
@@ -20,7 +20,15 @@ describe("security headers", () => {
       "X-Content-Type-Options": "nosniff",
       "X-Frame-Options": "DENY",
       "Referrer-Policy": "no-referrer",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+      "Strict-Transport-Security": "max-age=63072000",
     });
+  });
+
+  it("asks for HTTPS only outside next dev (TASK-067)", () => {
+    const keys = (dev: boolean) => securityHeaders({ dev, apiBaseUrl: "" }).map((h) => h.key);
+    expect(keys(false)).toContain("Strict-Transport-Security");
+    expect(keys(true)).not.toContain("Strict-Transport-Security");
   });
 
   it("locks the CSP down to this origin, with no framing, plugins or eval in production", () => {

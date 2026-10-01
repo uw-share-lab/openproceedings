@@ -17,11 +17,13 @@ from openproceedings.ingest.snapshot import (
     WITHHELD_VALUE,
     RecordFile,
     SnapshotError,
+    any_withheld,
     build,
     diff,
     ingest_ris,
     load_records,
     load_sources,
+    merges_on_disk,
     with_crawl_conflicts,
     withhold,
 )
@@ -342,3 +344,133 @@ def test_cli_build_says_which_listed_ids_it_lacks(tmp_path: Path, capsys: pytest
     out = capsys.readouterr()
     assert json.loads(out.out)["takedowns_unmatched"] == ["op:iclr:2024:GoneAway01"]
     assert "1 listed id(s) no record of this build has: op:iclr:2024:GoneAway01" in out.err
+
+
+def test_cli_build_refuses_a_missing_list_once_a_snapshot_withheld(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """TASK-067: a snapshot on disk that withheld an abstract proves this deployment has takedowns, so a
+    missing default list (an unmounted or renamed takedowns/) never builds the abstract back in."""
+    data = tmp_path / "data"
+    assert cli.main(["--data-dir", str(data), "ingest", "ris", str(source(tmp_path))]) == 0
+    (data / "takedowns").mkdir()
+    (data / "takedowns" / "withheld.txt").write_text(f"{REJECTED}\n", encoding="utf-8")
+    assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 0
+    (data / "takedowns" / "withheld.txt").unlink()
+    capsys.readouterr()
+    assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 1
+    assert "withheld.txt is missing" in capsys.readouterr().err
+    (data / "takedowns" / "withheld.txt").write_text("", encoding="utf-8")  # emptied: lifted on purpose
+    assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 0
+
+
+def test_a_proceedings_hash_in_another_year_is_another_paper(cache: Path) -> None:
+    """TASK-067 review: a NeurIPS hash is md5 of a per-year paper number, so `op:neurips:2019:nips-H` and
+    `op:neurips:2013:nips-H` are two papers (1,281 such hashes in the 2026-09-29 snapshot). Listing one never
+    follows to the other."""
+    result = _result(cache)
+    other_year = next(r for r in result.records if r.id == NEURIPS).model_copy(
+        update={"id": NEURIPS.replace(":2025:", ":2013:"), "year": 2013}
+    )
+    rest = tuple(r for r in result.records if r.id != NEURIPS)
+    done = withhold(
+        replace(result, records=tuple(sorted((*rest, other_year), key=lambda r: r.id))), frozenset({NEURIPS})
+    )
+    assert (done.followed, done.unmatched, done.withheld) == ({}, (NEURIPS,), frozenset())
+
+
+# --- the readers behind same_paper and the missing-list rule (TASK-067) -------------------------------------------
+
+
+def _snapshots(cache: Path, tmp_path: Path, takedowns: frozenset[str] = frozenset()) -> Path:
+    build(cache, tmp_path / "snapshots", BUILT, takedowns=takedowns)
+    return tmp_path / "snapshots"
+
+
+def test_merges_on_disk_reads_every_snapshot_and_refuses_a_tampered_one(cache: Path, tmp_path: Path) -> None:
+    snapshots = _snapshots(cache, tmp_path)
+    [snapshot] = [d for d in snapshots.iterdir() if not d.name.startswith(".")]
+    (snapshots / ".tmp-half-written").mkdir()  # being written: skipped
+    (snapshots / "no-manifest").mkdir()  # not a snapshot: skipped
+    pairs = merges_on_disk(snapshots)
+    rows = (snapshot / "merges.csv").read_text(encoding="utf-8").splitlines()[1:]
+    assert len(pairs) == len({tuple(r.split(",")[:2]) for r in rows})
+    assert merges_on_disk(tmp_path / "nowhere") == ()
+    merges = snapshot / "merges.csv"
+    merges.chmod(0o644)
+    merges.write_text(merges.read_text(encoding="utf-8") + "a,b,c\n", encoding="utf-8")
+    with pytest.raises(SnapshotError) as e:
+        merges_on_disk(snapshots)
+    assert (e.value.reason, e.value.snapshot) == ("merges_mismatch", snapshot.name)
+    # with a handler, only the damaged snapshot is skipped, and each one is reported (TASK-067 round 2)
+    damaged: list[SnapshotError] = []
+    assert merges_on_disk(snapshots, on_damaged=damaged.append) == ()
+    assert [d.snapshot for d in damaged] == [snapshot.name]
+
+
+def test_a_damaged_snapshot_is_skipped_wherever_it_sorts(cache: Path, tmp_path: Path) -> None:
+    """Round 3: a damaged snapshot before or after a good one (here by an unreadable manifest; a damaged
+    merges.csv is the contract test's) is skipped alone; without a handler, it raises."""
+    snapshots = _snapshots(cache, tmp_path)
+    [good] = [d for d in snapshots.iterdir() if not d.name.startswith(".")]
+    expected = merges_on_disk(snapshots)
+    for name in ("0-first", "z-last"):
+        bad = snapshots / name
+        bad.mkdir()
+        (bad / "manifest.json").write_text("{not json", encoding="utf-8")
+    damaged: list[SnapshotError] = []
+    assert merges_on_disk(snapshots, on_damaged=damaged.append) == expected
+    assert [(d.snapshot, d.reason) for d in damaged] == [
+        ("0-first", "merges_mismatch"),
+        ("z-last", "merges_mismatch"),
+    ]
+    with pytest.raises(SnapshotError) as e:
+        merges_on_disk(snapshots)
+    assert e.value.snapshot == "0-first"
+    assert good.name not in {d.snapshot for d in damaged}
+
+
+def test_any_withheld_fails_closed_on_a_manifest_it_cant_read(cache: Path, tmp_path: Path) -> None:
+    snapshots = _snapshots(cache, tmp_path)
+    (snapshots / ".tmp-x").mkdir()
+    (snapshots / ".tmp-x" / "manifest.json").write_text('{"withheld": ["x"]}', encoding="utf-8")
+    (snapshots / "no-manifest").mkdir()
+    assert any_withheld(snapshots) is False and any_withheld(tmp_path / "nowhere") is False
+    (snapshots / "broken").mkdir()
+    (snapshots / "broken" / "manifest.json").write_text("{not json", encoding="utf-8")
+    assert any_withheld(snapshots) is True
+    (snapshots / "broken" / "manifest.json").write_text("[]", encoding="utf-8")  # not an object
+    assert any_withheld(snapshots) is True
+
+
+def test_any_withheld_sees_a_snapshot_that_withheld(cache: Path, tmp_path: Path) -> None:
+    assert any_withheld(_snapshots(cache, tmp_path, frozenset({REJECTED}))) is True
+
+
+def test_cli_build_elsewhere_still_needs_the_list_the_data_dir_proves(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--out` names another directory, but `<data-dir>/snapshots` withheld an abstract: still refused."""
+    data = tmp_path / "data"
+    assert cli.main(["--data-dir", str(data), "ingest", "ris", str(source(tmp_path))]) == 0
+    (data / "takedowns").mkdir()
+    (data / "takedowns" / "withheld.txt").write_text(f"{REJECTED}\n", encoding="utf-8")
+    assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 0
+    (data / "takedowns" / "withheld.txt").unlink()
+    capsys.readouterr()
+    assert cli.main(["--data-dir", str(data), "snapshot", "build", "--out", str(tmp_path / "elsewhere")]) == 1
+    assert "withheld.txt is missing" in capsys.readouterr().err
+
+
+def test_a_listed_proceedings_hash_never_follows_to_the_one_other_year(cache: Path) -> None:
+    """The listed `nips-` id is gone and exactly one record of another year holds the same hash: still another
+    paper, never followed (TASK-067 review round 2: with several, the old rule refused only by ambiguity)."""
+    result = _result(cache)
+    nips = [r for r in result.records if r.id.split(":", 3)[-1].startswith("nips-")]
+    keep = nips[0]
+    other_year = keep.model_copy(update={"id": keep.id.replace(f":{keep.year}:", ":2013:"), "year": 2013})
+    rest = tuple(r for r in result.records if not r.id.split(":", 3)[-1].startswith("nips-"))
+    done = withhold(
+        replace(result, records=tuple(sorted((*rest, other_year), key=lambda r: r.id))), frozenset({keep.id})
+    )
+    assert (done.followed, done.unmatched, done.withheld) == ({}, (keep.id,), frozenset())

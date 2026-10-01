@@ -53,7 +53,7 @@ from openproceedings.ingest.status_check import UnexpectedStatus, unexpected_sta
 from openproceedings.ingest.statuses import statuses_indexed
 from openproceedings.logs import elapsed_ms
 from openproceedings.query.normalize import TOKENIZER_VERSION
-from openproceedings.takedowns import NONE, Withheld, withhold_record
+from openproceedings.takedowns import NONE, Withheld, global_native, withhold_record
 from openproceedings.vocab import BOOTSTRAP_SOURCES
 
 log = logging.getLogger(__name__)
@@ -79,11 +79,15 @@ SHORT = 12
 
 class SnapshotError(Exception):
     """A snapshot or cache operation refused: the message says why and what to do (never record text).
-    `reason` is a short constant a log line may carry (never a path), e.g. `snapshot_missing`."""
+    `reason` is a short constant a log line may carry (never a path), e.g. `snapshot_missing`; `snapshot`, when
+    set, the snapshot directory's name (never a path), which a log line may carry too."""
 
-    def __init__(self, message: str, *, reason: str = "snapshot_invalid") -> None:
+    def __init__(
+        self, message: str, *, reason: str = "snapshot_invalid", snapshot: str | None = None
+    ) -> None:
         super().__init__(message)
         self.reason = reason
+        self.snapshot = snapshot
 
 
 def indexed_snapshot(data_dir: Path, index_manifest: Mapping[str, Any]) -> tuple[Path, dict[str, Any]]:
@@ -397,9 +401,10 @@ class Withholding:
 
 def _successor(rid: str, result: DedupResult, held: set[str]) -> str | None:
     """The id this build holds `rid`'s paper under, when it holds it under another: the survivor it merged into
-    (following merges.csv), else the one record with its native id (a rekey, the rule `diff` uses)."""
+    (following merges.csv), else the one record with its native id (a rekey, the rule `diff` uses) when that
+    native id is globally unique (`takedowns.global_native`)."""
     survivor = {m.merged_id: m.survivor_id for m in result.merges if m.merged_id != m.survivor_id}
-    native = rid.split(":", 3)[-1]
+    native = global_native(rid)  # None for a proceedings hash: in another year it is another paper (TASK-067)
 
     def follow(start: str) -> str:
         seen, at = {start}, start
@@ -410,11 +415,13 @@ def _successor(rid: str, result: DedupResult, held: set[str]) -> str | None:
 
     if (at := follow(rid)) != rid and at in held:
         return at
-    same = [h for h in held if h.split(":", 3)[-1] == native]
+    if native is None:
+        return None
+    same = [h for h in held if global_native(h) == native]
     if len(same) == 1:
         return same[0]
     # rekeyed *and* merged: the one merged-away id with its native id leads to the survivor
-    merged = [m for m in survivor if m.split(":", 3)[-1] == native]
+    merged = [m for m in survivor if global_native(m) == native]
     if not same and len(merged) == 1 and (at := follow(merged[0])) in held:
         return at
     return None
@@ -690,6 +697,69 @@ def iter_records(snapshot: Path) -> Iterator[PaperRecord]:
         raise SnapshotError(f"{snapshot.name}: merges.csv or conflicts.csv doesn't match its manifest")
 
 
+def merges_on_disk(
+    snapshots: Path, on_damaged: Callable[[SnapshotError], None] | None = None
+) -> tuple[tuple[str, str], ...]:
+    """Every (survivor, merged) pair the merges.csv of any snapshot under `snapshots` records, sorted: what
+    the takedown list follows to the other ids a paper has had (TASK-067, `takedowns.same_paper`). Each file
+    must hash to its manifest's `files` entry, else that snapshot is damaged (SnapshotError, reason
+    `merges_mismatch`, naming it): raised, or, given `on_damaged`, handed to it and that snapshot alone skipped,
+    so one damaged snapshot never drops the others' merges. A directory being written (a dot name: `.tmp-…`,
+    `.lock`) or with no manifest.json is not a snapshot and is skipped."""
+
+    def damaged(snapshot: Path, message: str) -> None:
+        error = SnapshotError(message, reason="merges_mismatch", snapshot=snapshot.name)
+        if on_damaged is None:
+            raise error
+        on_damaged(error)
+
+    pairs: set[tuple[str, str]] = set()
+    try:
+        dirs = sorted(d for d in snapshots.iterdir() if not d.name.startswith(".") and d.is_dir())
+    except FileNotFoundError:
+        return ()
+    for snapshot in dirs:
+        try:
+            manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError):
+            damaged(snapshot, f"{snapshot.name}'s manifest can't be read")
+            continue
+        try:
+            blob = (snapshot / "merges.csv").read_bytes()
+            if not isinstance(manifest, dict) or manifest["files"]["merges.csv"] != _sha256(blob):
+                raise KeyError("merges.csv")
+            rows = csv.DictReader(io.StringIO(blob.decode("utf-8")))
+            found = {(row["survivor_id"], row["merged_id"]) for row in rows}
+        except (OSError, ValueError, KeyError, TypeError):
+            damaged(snapshot, f"{snapshot.name}: merges.csv doesn't match its manifest")
+            continue
+        pairs |= found
+    return tuple(sorted(pairs))
+
+
+def any_withheld(snapshots: Path) -> bool:
+    """Whether any snapshot under `snapshots` withheld an abstract (its manifest names `withheld` ids): proof
+    this deployment has takedowns, so a missing takedown list is a failure, never "nothing listed" (TASK-067).
+    A manifest that can't be read counts as one that did (fail closed); a directory being written (a dot name)
+    or with no manifest.json is skipped."""
+    try:
+        dirs = [d for d in snapshots.iterdir() if not d.name.startswith(".") and d.is_dir()]
+    except FileNotFoundError:
+        return False
+    for snapshot in dirs:
+        try:
+            manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError):
+            return True
+        if not isinstance(manifest, dict) or manifest.get("withheld", []) != []:
+            return True
+    return False
+
+
 def load_records(snapshot: Path) -> dict[str, PaperRecord]:
     """A snapshot's records by id (all in memory; `iter_records` streams them)."""
     return {r.id: r for r in iter_records(snapshot)}
@@ -816,6 +886,10 @@ class RecordFile:
     def __len__(self) -> int:
         return len(self._at)
 
+    def ids(self) -> Iterable[str]:
+        """Every record id the snapshot holds, ascending."""
+        return self._at.keys()
+
     def __contains__(self, rid: object) -> bool:
         return rid in self._at
 
@@ -842,8 +916,9 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
     old, new = load_records(a), load_records(b)  # each verified against its manifest's snapshot_hash
     was, now = _withheld(a), _withheld(b)
     added, removed = new.keys() - old.keys(), old.keys() - new.keys()
-    # a rekey only when exactly one removed and one added id share a native id: anything else (two papers
-    # into one, one into two) is reported as added and removed, so a lost record is never hidden
+    # a rekey only when exactly one removed and one added id share a globally unique native id: anything else
+    # (two papers into one, one into two, a proceedings hash, which in another year is another paper; TASK-067)
+    # is reported as added and removed, so a lost record is never hidden
     gone_by_native = Counter(old[i].native for i in removed)
     new_by_native: dict[str, list[str]] = {}
     for i in added:
@@ -851,7 +926,9 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
     rekeyed = {
         i: new_by_native[old[i].native][0]
         for i in sorted(removed)
-        if gone_by_native[old[i].native] == 1 and len(new_by_native.get(old[i].native, [])) == 1
+        if global_native(i) is not None  # the one place the rule is applied: a hash never rekeys
+        and gone_by_native[old[i].native] == 1
+        and len(new_by_native.get(old[i].native, [])) == 1
     }
 
     def hashed_diff(x: PaperRecord, y: PaperRecord) -> list[str]:

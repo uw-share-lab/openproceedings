@@ -85,8 +85,9 @@ description: The openproceedings Next.js standard — App Router layout, output 
 `next.config.ts` `headers()` sends `src/lib/security-headers.ts` on every route: a static CSP
 (`'self'` everywhere, `'unsafe-inline'` for scripts and styles because the App Router's payload and the
 theme script are inline, the API origin in `connect-src` when `NEXT_PUBLIC_API_BASE_URL` is set,
-`frame-ancestors 'none'`, `'unsafe-eval'` only in dev), `nosniff`, `X-Frame-Options: DENY` and
-`Referrer-Policy: no-referrer`. The set is in spec 05 §Non-functional requirements and pinned by
+`frame-ancestors 'none'`, `'unsafe-eval'` only in dev), `nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: no-referrer`, a `Permissions-Policy` denying camera, microphone and geolocation, and HSTS
+outside dev. The set is in spec 05 §Non-functional requirements and pinned by
 `security-headers.test.ts`. Since inline scripts run, never build HTML from strings: `react/no-danger` is an
 eslint error.
 

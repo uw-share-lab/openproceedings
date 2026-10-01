@@ -32,8 +32,8 @@
  {
   "label": "absolute path not basenamed",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        rest = [base(rest[0]), *rest[1:]]",
-  "new": "        pass"
+  "old": "    name = base(rest[0]) if rest else \"\"",
+  "new": "    name = rest[0] if rest else \"\""
  },
  {
   "label": "comments not stripped",
@@ -56,8 +56,8 @@
  {
   "label": "eval not recursed",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        if head == \"eval\":\n            yield from _walk(tokenize(\" \".join(argv[1:])), state)\n            continue\n",
-  "new": ""
+  "old": "        if head == \"eval\":\n            # bash reads",
+  "new": "        if False:\n            # bash reads"
  },
  {
   "label": "gh -R value not skipped",
@@ -80,20 +80,20 @@
  {
   "label": "cd not tracked",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "            state[\"dir\"] = _resolve(argv[1], state[\"dir\"])\n",
-  "new": ""
+  "old": "            _change_dir(head, argv[1:], state, getattr(argv, \"assigns\", {}))\n            continue",
+  "new": "            continue"
  },
  {
   "label": "git -C ignored",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                eff = _resolve(argv[j + 1], eff)",
-  "new": "                pass"
+  "old": "            eff = _resolve(value, eff)",
+  "new": "            pass"
  },
  {
   "label": "bash -c not recursed",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                    yield from _walk(tokenize(argv[k + 1]), state)\n",
-  "new": ""
+  "old": "                    for inner in _walk(tokenize(argv[k + 1]), state):",
+  "new": "                    for inner in []:"
  },
  {
   "label": "-o value not skipped",
@@ -254,14 +254,14 @@
  {
   "label": "git stash --all allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "    if stash_writes and any(a in (\"-a\", \"--all\") for a in gm[1]):",
-  "new": "    if False:"
+  "old": "    if stash_writes and any(a == \"--all\" or (",
+  "new": "    if False and any(a == \"--all\" or ("
  },
  {
   "label": "-execdir not checked",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": " or \"-execdir\" in args",
-  "new": ""
+  "old": "\"-exec\", \"-execdir\", \"-ok\"",
+  "new": "\"-exec\", \"-ok\""
  },
  {
   "label": "sed -Ei cluster missed",
@@ -290,8 +290,8 @@
  {
   "label": "PR gate: git not basenamed",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "        if _base(tok) != \"git\":",
-  "new": "        if tok != \"git\":"
+  "old": "        prog = _base(w)",
+  "new": "        prog = w"
  },
  {
   "label": "record: on_base check removed",
@@ -396,13 +396,6 @@
   "new": ":"
  },
  {
-  "label": "PR gate: redirects kept as tokens (EQUIVALENT: redirect targets are never compared as refs)",
-  "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "        elif not _is_redirect(t):",
-  "new": "        else:",
-  "equivalent": true
- },
- {
   "label": "quote state reset per line (round-3 regression)",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "    for line in cmd.split(\"\\n\"):\n        if pending:",
@@ -429,19 +422,19 @@
  {
   "label": "require-review fails open on parse error",
   "file": ".claude/hooks/require-review.sh",
-  "old": "if re.search(r\"\\bgit\\b[^\\n]*\\bpush\\b|\\bgh\\b[^\\n]*\\bpr\\b\", cmd):",
-  "new": "if False:"
+  "old": "    if re.search(r\"push|\\bgh\\b|op-?rev|review\", cmd.replace(\"\\\\\\n\", \"\"), re.IGNORECASE):",
+  "new": "    if False:"
  },
  {
   "label": "protect-data-dir fails open on parse error",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "    if \"data\" in cmd or \"backlog\" in cmd:",
-  "new": "    if False:"
+  "old": "        if data_in(cwd) or os.path.isdir(os.path.join(repo_root(cwd), \"backlog\")):",
+  "new": "        if False:"
  },
  {
   "label": "PR fallback checks commit before push",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "  if [ \"$verdict\" = \"allow\" ]; then\n    case \"$input\" in\n      *\"git commit\"*|*\"git merge\"*) [ \"$on_protected\" = 1 ] && verdict=\"protected\" ;;\n    esac\n  fi",
+  "old": "  if [ \"$verdict\" = \"allow\" ]; then\n    case \"$input\" in\n      *\"git commit\"*|*\"git merge\"*|*\"git cherry-pick\"*|*\"git revert\"*|*\"git am \"*|*\"git rebase\"*|*\"git reset\"*)\n        [ \"$on_protected\" = 1 ] && verdict=\"protected\" ;;\n    esac\n  fi",
   "new": "  case \"$input\" in *\"git commit\"*|*\"git merge\"*) verdict=\"allow\" ;; esac"
  },
  {
@@ -604,8 +597,8 @@
  {
   "label": "continuation by trailing \\\\ parity ignored",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        continues = trailing % 2 == 1 and quote != \"'\" and not pending",
-  "new": "        continues = trailing >= 1 and quote != \"'\" and not pending"
+  "old": "        continues = trailing % 2 == 1 and quote not in (\"'\", \"$'\") and not pending",
+  "new": "        continues = trailing >= 1 and quote not in (\"'\", \"$'\") and not pending"
  },
  {
   "label": "continuation joined with a space",
@@ -820,8 +813,8 @@
  {
   "label": "git add of a takedowns/ path allowed",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        if any(through_takedowns(p, g[2], forced) for p in a if not p.startswith(\"-\")) or (",
-  "new": "        if False and any(through_takedowns(p, g[2], forced) for p in a if not p.startswith(\"-\")) or ("
+  "old": "        if any(through_takedowns(p, g[2], forced) for p in a if not p.startswith(\"-\")):",
+  "new": "        if False and any(through_takedowns(p, g[2], forced) for p in a if not p.startswith(\"-\")):"
  },
  {
   "label": "takedowns matched case-sensitively",
@@ -842,12 +835,6 @@
   "new": "    for p in expand(path, base):"
  },
  {
-  "label": "a forced whole-tree add not checked for takedowns/",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            forced and whole_tree(a) and holds_takedowns(repo_root(g[2]))",
-  "new": "            False and forced and whole_tree(a) and holds_takedowns(repo_root(g[2]))"
- },
- {
   "label": "git stage not read as git add",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "    if g and g[0] in (\"add\", \"stage\"):  # `git stage` is `git add`",
@@ -862,13 +849,2014 @@
  {
   "label": "a magic pathspec not read as the whole tree",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        or any(x.startswith(\":\") for x in paths)",
-  "new": "        or False"
+  "old": "    return not paths or any(x.startswith(\":\") for x in paths)",
+  "new": "    return not paths"
  },
  {
-  "label": "paths from a file not read as the whole tree",
+  "label": "xargs not flagged",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            out.via_xargs = out.via_xargs or name == \"xargs\"\n",
+  "new": ""
+ },
+ {
+  "label": "xargs flag not carried into sh -c",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                        inner[0].via_xargs = inner[0].via_xargs or argv.via_xargs\n",
+  "new": ""
+ },
+ {
+  "label": "xargs_hides_args ignores git",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    return g is not None and g[0] in XARGS_GUARDED_GIT",
+  "new": "    return False"
+ },
+ {
+  "label": "xargs_hides_args ignores rm/mv",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if argv and argv[0] in XARGS_GUARDED:\n        return True\n",
+  "new": ""
+ },
+ {
+  "label": "require-review: xargs push allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "        if xargs_hides_args(argv, d):\n",
+  "new": "        if False:\n"
+ },
+ {
+  "label": "PR gate: xargs verdict dropped",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        return \"xargs\"",
+  "new": "        pass"
+ },
+ {
+  "label": "git -c not read",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            config[key.lower()] = v if opt == \"-c\" else \"\"",
+  "new": "            pass"
+ },
+ {
+  "label": "git -c keys case-sensitive",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            config[key.lower()] = v if opt == \"-c\" else \"\"",
+  "new": "            config[key] = v if opt == \"-c\" else \"\""
+ },
+ {
+  "label": "--config-env not a value option",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "GIT_VALUE_OPTS = {\"-C\", \"-c\", \"--config-env\",",
+  "new": "GIT_VALUE_OPTS = {\"-C\", \"-c\","
+ },
+ {
+  "label": "--git-dir not read",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            gitdir = value",
+  "new": "            pass"
+ },
+ {
+  "label": "GIT_DIR= assignment ignored",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    eff, config, gitdir = directory, {}, assigns.get(\"GIT_DIR\")",
+  "new": "    eff, config, gitdir = directory, {}, None"
+ },
+ {
+  "label": "git aliases not expanded in simple_commands",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            for expanded, d in expand_git_alias(argv, state[\"dir\"], state.get(\"depth\", 0)):",
+  "new": "            for expanded, d in [(argv, state[\"dir\"])]:"
+ },
+ {
+  "label": "builtins looked up as aliases",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if j >= len(argv) or argv[j] in GIT_BUILTINS:",
+  "new": "    if j >= len(argv):"
+ },
+ {
+  "label": "-c alias ignored",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    body = config.get(f\"alias.{name}\")",
+  "new": "    body = None"
+ },
+ {
+  "label": "repo alias not looked up",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        body = git(eff, *([\"--git-dir\", gitdir] if gitdir else []), \"config\", \"--get\", f\"alias.{name}\")",
+  "new": "        body = \"\""
+ },
+ {
+  "label": "alias lookup ignores --git-dir",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        body = git(eff, *([\"--git-dir\", gitdir] if gitdir else []), \"config\"",
+  "new": "        body = git(eff, \"config\""
+ },
+ {
+  "label": "alias names case-sensitive",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    name = argv[j].lower()",
+  "new": "    name = argv[j]"
+ },
+ {
+  "label": "alias depth unbounded",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if depth >= ALIAS_DEPTH:",
+  "new": "    if False:"
+ },
+ {
+  "label": "shell alias not expanded",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if not body.startswith(\"!\"):",
+  "new": "    if True:"
+ },
+ {
+  "label": "alias drops the xargs flag",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        expanded = Argv([*argv[:j], *words, *rest], argv.via_xargs, argv.assigns)",
+  "new": "        expanded = Argv([*argv[:j], *words, *rest])"
+ },
+ {
+  "label": "shell alias drops outer -c",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        \"git_c\": outer_c,\n",
+  "new": "        \"git_c\": [],\n"
+ },
+ {
+  "label": "shell alias drops outer git dir",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        \"git_dir\": gitdir,\n    }",
+  "new": "        \"git_dir\": None,\n    }"
+ },
+ {
+  "label": "shell alias args not appended",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    text = \" \".join([body[1:], *(shlex.quote(r) for r in rest)])",
+  "new": "    text = body[1:]"
+ },
+ {
+  "label": "shell alias drops the xargs flag",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        inner.via_xargs = inner.via_xargs or argv.via_xargs\n",
+  "new": ""
+ },
+ {
+  "label": "require-review: -c push target ignored",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "            if (git_config_opaque(argv) or any(PUSH_TARGET_CONFIG.fullmatch(k) for k in git_config(argv))",
+  "new": "            if (git_config_opaque(argv)"
+ },
+ {
+  "label": "require-review: push target keys prefix-matched",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "any(PUSH_TARGET_CONFIG.fullmatch(k) for k in git_config(argv))",
+  "new": "any(PUSH_TARGET_CONFIG.match(k) for k in git_config(argv))"
+ },
+ {
+  "label": "require-review: --git-dir ignored",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "        repo = [\"--git-dir\", gd] if gd else []",
+  "new": "        repo = []"
+ },
+ {
+  "label": "PR gate: -c push target ignored",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if not refspecs and (opaque or any(PUSH_TARGET_CONFIG.fullmatch(k) for k in config)):",
+  "new": "    if not refspecs and opaque:"
+ },
+ {
+  "label": "PR gate: aliases not expanded",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "            return expand_git_alias(inner, directory)",
+  "new": "            return [(inner, directory)]"
+ },
+ {
+  "label": "PR gate: parse error allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    except ParseError:\n        return \"parse-fail\"",
+  "new": "    except ParseError:\n        return \"allow\""
+ },
+ {
+  "label": "PR gate: refs/ not stripped from a push destination",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    dst = dst.removeprefix(\"refs/\").removeprefix(\"heads/\")",
+  "new": "    dst = dst.removeprefix(\"heads/\")"
+ },
+ {
+  "label": "PR gate: heads/ not stripped from a push destination",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    dst = dst.removeprefix(\"refs/\").removeprefix(\"heads/\")",
+  "new": "    dst = dst.removeprefix(\"refs/\")"
+ },
+ {
+  "label": "PR gate: push destination compared by its last component",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    dst = dst.removeprefix(\"refs/\").removeprefix(\"heads/\")",
+  "new": "    dst = dst.rsplit(\"/\", 1)[-1]"
+ },
+ {
+  "label": "PR gate: --git-dir/GIT_DIR branch ignored",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    gitdir = git_dir(argv, directory)",
+  "new": "    gitdir = None"
+ },
+ {
+  "label": "PR gate: get_branch ignores the git dir",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "[\"git\", \"-C\", d, *([\"--git-dir\", gitdir] if gitdir else []), \"rev-parse\"",
+  "new": "[\"git\", \"-C\", d, \"rev-parse\""
+ },
+ {
+  "label": "PR gate: cherry-pick not a commit maker",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "COMMIT_MAKERS = {\"commit\", \"cherry-pick\",",
+  "new": "COMMIT_MAKERS = {\"commit\","
+ },
+ {
+  "label": "PR gate: revert not a commit maker",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "\"cherry-pick\", \"revert\", \"am\"",
+  "new": "\"cherry-pick\", \"am\""
+ },
+ {
+  "label": "PR gate: am not a commit maker",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "\"revert\", \"am\", \"rebase\"",
+  "new": "\"revert\", \"rebase\""
+ },
+ {
+  "label": "PR gate: rebase not a commit maker",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "\"am\", \"rebase\", \"commit-tree\"}",
+  "new": "\"am\", \"commit-tree\"}"
+ },
+ {
+  "label": "PR gate: commit-tree not a commit maker",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "\"rebase\", \"commit-tree\"}",
+  "new": "\"rebase\"}"
+ },
+ {
+  "label": "PR gate: reset not gated",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    elif sub == \"reset\" and on_protected and reset_moves_branch(args, branch, effective_dir):",
+  "new": "    elif False:"
+ },
+ {
+  "label": "PR gate: reset to the upstream refused",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    return target not in {\"HEAD\",",
+  "new": "    return True or target not in {\"HEAD\","
+ },
+ {
+  "label": "PR gate: reset <path> read as a commit",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if not RESET_MODES & set(args) and os.path.exists(resolve_dir(target, directory)):",
+  "new": "    if False:"
+ },
+ {
+  "label": "PR gate: reset -- not cut",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if \"--\" in args:\n        args = args[: args.index(\"--\")]\n",
+  "new": ""
+ },
+ {
+  "label": "PR gate: reset with no target read as a move",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if not positionals:\n        return False\n    target = positionals[0]",
+  "new": "    if not positionals:\n        return True\n    target = positionals[0]"
+ },
+ {
+  "label": "PR gate: pull --no-ff allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        return \"protected-merge\" if on_protected and \"--no-ff\" in args else \"allow\"",
+  "new": "        return \"allow\""
+ },
+ {
+  "label": "PR gate: update-ref not gated",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        return update_ref_verdict(args, on_protected)",
+  "new": "        return \"allow\""
+ },
+ {
+  "label": "PR gate: update-ref --stdin allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if \"--stdin\" in args:\n        return \"protected-update-ref\"",
+  "new": "    if False:\n        return \"protected-update-ref\""
+ },
+ {
+  "label": "PR gate: update-ref -m value read as the ref",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        elif a == \"-m\":\n            skip = True\n",
+  "new": ""
+ },
+ {
+  "label": "PR gate: update-ref HEAD on main allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "(ref in (\"HEAD\", \"@\") and on_protected and \"--no-deref\" not in args)",
+  "new": "False"
+ },
+ {
+  "label": "PR gate: update-ref --no-deref HEAD refused",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": " and \"--no-deref\" not in args)",
+  "new": ")"
+ },
+ {
+  "label": "record: unresolvable base not refused",
+  "file": ".claude/scripts/record-review.py",
+  "old": "        if resolves != 0:",
+  "new": "        if False:"
+ },
+ {
+  "label": "record guard: file tools not checked",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    if target and any(RECORD_WORD.search(p) for p in (os.path.normpath(full), os.path.realpath(full))):",
+  "new": "    if False:"
+ },
+ {
+  "label": "record guard: symlinks not followed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "(os.path.normpath(full), os.path.realpath(full))",
+  "new": "(os.path.normpath(full),)"
+ },
+ {
+  "label": "record guard: case-sensitive",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "RECORD_WORD = re.compile(r\"(^|/)op-reviews(/|$)\", re.IGNORECASE)",
+  "new": "RECORD_WORD = re.compile(r\"(^|/)op-reviews(/|$)\")"
+ },
+ {
+  "label": "record guard: Bash not checked",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "if touched or unread:",
+  "new": "if unread:"
+ },
+ {
+  "label": "record guard: redirects not writes",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    if writes or any(argv",
+  "new": "    if any(argv"
+ },
+ {
+  "label": "record guard: every command a reader",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "any(argv[0] not in RECORD_READERS for argv, _ in commands)",
+  "new": "False"
+ },
+ {
+  "label": "record guard: fd dup read as a write",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "\">\" in op and not (op.endswith(\"&\") and target.isdigit()) and target",
+  "new": "\">\" in op and target"
+ },
+ {
+  "label": "record guard: /dev/null read as a write",
+  "file": ".claude/hooks/require-review.sh",
+  "old": " and target != \"/dev/null\"",
+  "new": ""
+ },
+ {
+  "label": "record guard: unparseable write allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "|op-?rev|review\", cmd.replace(",
+  "new": "\", cmd.replace("
+ },
+ {
+  "label": "attribution: $(cat file) words not read",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        for m in (m for word in argv for m in SUBST_READ.finditer(word)):",
+  "new": "        for m in ():"
+ },
+ {
+  "label": "attribution: $(< file) form dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "|<\\s*([^()]*?))",
+  "new": ")"
+ },
+ {
+  "label": "attribution: backquoted cat dropped",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "|`\\s*cat\\s+([^`]*?)\\s*`\")",
+  "new": "\")"
+ },
+ {
+  "label": "backlog: path not normalised",
+  "file": ".claude/hooks/enforce-backlog-cli.sh",
+  "old": "    p = os.path.realpath(os.path.join(d.get(\"cwd\") or os.getcwd(), p)).lower()",
+  "new": "    p = p"
+ },
+ {
+  "label": "backlog: path not lower-cased",
+  "file": ".claude/hooks/enforce-backlog-cli.sh",
+  "old": "or os.getcwd(), p)).lower()",
+  "new": "or os.getcwd(), p))"
+ },
+ {
+  "label": "backlog: payload cwd ignored",
+  "file": ".claude/hooks/enforce-backlog-cli.sh",
+  "old": "os.path.join(d.get(\"cwd\") or os.getcwd(), p)",
+  "new": "os.path.join(os.getcwd(), p)"
+ },
+ {
+  "label": "require-review: --tags allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "        if \"--tags\" in flags:",
+  "new": "        if False:"
+ },
+ {
+  "label": "autofix: formatter config guard ignored",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "      if [ -n \"$cfg_state\" ]; then",
+  "new": "      if false; then"
+ },
+ {
+  "label": "autofix: .prettierrc not watched",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "'frontend/.prettierrc*' ",
+  "new": ""
+ },
+ {
+  "label": "git inside a shell alias not given the outer settings",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if state.get(\"git_c\") or state.get(\"git_dir\"):",
+  "new": "            if False:"
+ },
+ {
+  "label": "pdd: inside_immutable not case-folded",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        or any(x.startswith(\"--pathspec-from-file\") for x in args)  # `=file` or a separate `file` argument",
-  "new": "        or False"
+  "old": "(r.lower().startswith(\"data/snapshots/\") or r.lower().startswith(\"data/indexes/\"))",
+  "new": "(r.startswith(\"data/snapshots/\") or r.startswith(\"data/indexes/\"))"
+ },
+ {
+  "label": "pdd: data/ itself not case-folded",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "r.lower() in (\"data\", \"data/snapshots\", \"data/indexes\")",
+  "new": "r in (\"data\", \"data/snapshots\", \"data/indexes\")"
+ },
+ {
+  "label": "pdd: backlog not case-folded",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(r.lower() == \"backlog\" or r.lower().startswith(\"backlog/\"))",
+  "new": "(r == \"backlog\" or r.startswith(\"backlog/\"))"
+ },
+ {
+  "label": "pdd: is_data not case-folded",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(r.lower() == \"data\" or r.lower().startswith(\"data/\"))",
+  "new": "(r == \"data\" or r.startswith(\"data/\"))"
+ },
+ {
+  "label": "pdd: a target holding data/ on disk ignored",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "if is_or_contains_immutable(rel(p, base)) or holds_immutable(full):",
+  "new": "if is_or_contains_immutable(rel(p, base)):"
+ },
+ {
+  "label": "pdd: an ancestor of the repo ignored",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "if any(os.path.commonpath([full, root]) == full and holds_immutable(root) for root in roots):",
+  "new": "if False:"
+ },
+ {
+  "label": "pdd: unlink not destructive",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "\"rmdir\", \"unlink\"}",
+  "new": "\"rmdir\"}"
+ },
+ {
+  "label": "pdd: xargs clause removed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if getattr(argv, \"via_xargs\", False) and (",
+  "new": "    if False and ("
+ },
+ {
+  "label": "pdd: xargs git subcommands allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        or (g is not None and g[0] in (\"add\", \"stage\", \"rm\", \"mv\", \"update-index\"))\n",
+  "new": ""
+ },
+ {
+  "label": "pdd: xargs sed -i allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        or (head in IN_PLACE_EDITORS and in_place)\n",
+  "new": ""
+ },
+ {
+  "label": "pdd: xargs refused in any repo",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": ") and (os.path.isdir(os.path.join(root_, \"data\")) or os.path.isdir(os.path.join(root_, \"backlog\"))):",
+  "new": "):"
+ },
+ {
+  "label": "pdd: forced pathspec-from-file allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if forced and any(x.startswith(\"--pathspec-from-file\") for x in a):",
+  "new": "        if False:"
+ },
+ {
+  "label": "pdd: forced whole-tree add allowed with data/",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if forced and whole_tree(a) and os.path.isdir(os.path.join(repo_root(g[2]), \"data\")):",
+  "new": "        if False:"
+ },
+ {
+  "label": "pdd: undryable forced add allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                    if staged is None:\n                        refuse(",
+  "new": "                    if staged is None:\n                        staged = []\n                    if False:\n                        refuse("
+ },
+ {
+  "label": "pdd: dry run data/ ignored",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if any(is_data(s) for s in staged):",
+  "new": "            if False:"
+ },
+ {
+  "label": "pdd: dry run takedowns ignored",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if any(has_takedowns(s) for s in staged):",
+  "new": "            if False:"
+ },
+ {
+  "label": "pdd: dry run without --ignore-missing",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "\"--dry-run\", \"--ignore-missing\",",
+  "new": "\"--dry-run\","
+ },
+ {
+  "label": "pdd: dry run keeps -C",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "DRY_RUN_DROP = {\"-C\", ",
+  "new": "DRY_RUN_DROP = {"
+ },
+ {
+  "label": "pdd: dry run keeps -c (EQUIVALENT: the dry run's own -c core.fsmonitor=false and core.hooksPath=/dev/null come after any kept -c and win; dropping -c stays as defense in depth)",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "DRY_RUN_DROP = {\"-C\", \"-c\", ",
+  "new": "DRY_RUN_DROP = {\"-C\", ",
+  "equivalent": true
+ },
+ {
+  "label": "pdd: update-index unseen paths allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if \"--index-info\" in a or (\"--add\" in a and \"--stdin\" in a):",
+  "new": "        if False:"
+ },
+ {
+  "label": "pdd: update-index --index-info allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if \"--index-info\" in a or (\"--add\" in a and \"--stdin\" in a):",
+  "new": "        if (\"--add\" in a and \"--stdin\" in a):"
+ },
+ {
+  "label": "pdd: update-index --cacheinfo path unsplit",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "for w in (p, p.split(\",\")[-1])]",
+  "new": "for w in (p,)]"
+ },
+ {
+  "label": "pdd: update-index data/ allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if \"--add\" in a and any(any_rel(is_data, w, g[2]) for w in words):",
+  "new": "        if False:"
+ },
+ {
+  "label": "pdd: update-index takedowns allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if \"--add\" in a and any(through_takedowns(w, g[2], False) for w in words):",
+  "new": "        if False:"
+ },
+ {
+  "label": "pdd: rsync --delete above data/ allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if head == \"rsync\" and paths and any(rsync_deletes(a) for a in args) and covers_immutable(paths[-1], d):",
+  "new": "        if False:"
+ },
+ {
+  "label": "pdd: find -ok not checked",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "\"-execdir\", \"-ok\", \"-okdir\"",
+  "new": "\"-execdir\", \"-okdir\""
+ },
+ {
+  "label": "pdd: find checks only its first start",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "any(covers_immutable(p, d) for p in find_starts(args))",
+  "new": "any(covers_immutable(p, d) for p in find_starts(args)[:1])"
+ },
+ {
+  "label": "pdd: find with no start is not .",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    return starts or [\".\"]",
+  "new": "    return starts"
+ },
+ {
+  "label": "pdd: find -L read as a start",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    while k < len(args) and args[k] in (\"-H\", \"-L\", \"-P\", \"-E\", \"-X\", \"-d\", \"-s\", \"-x\"):\n        k += 1\n",
+  "new": ""
+ },
+ {
+  "label": "pdd: perl read like sed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if head == \"perl\":\n                in_place = perl_in_place(args)\n",
+  "new": "    "
+ },
+ {
+  "label": "pdd: perl -M value read as switches",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if c in valued:\n                break\n",
+  "new": ""
+ },
+ {
+  "label": "pdd: perl -i on a snapshot allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if head in IN_PLACE_EDITORS and in_place and any(any_rel(inside_immutable",
+  "new": "    if head == \"sed\" and in_place and any(any_rel(inside_immutable"
+ },
+ {
+  "label": "pdd: backlog in-place edit allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        refuse(BACKLOG_EDIT_MSG)",
+  "new": "        pass"
+ },
+ {
+  "label": "pdd: decision bodies not exempt",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "in_backlog(r) and not in_decisions(r)",
+  "new": "in_backlog(r)"
+ },
+ {
+  "label": "abbreviated long options not expanded",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        return [(normalize_git_options(argv, j), directory)]\n    if opaque:",
+  "new": "        return [(argv, directory)]\n    if opaque:"
+ },
+ {
+  "label": "exact long option not preferred over a longer one",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if name in names:\n        return name\n",
+  "new": ""
+ },
+ {
+  "label": "ambiguous long option left as typed",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        raise FailClosed(f\"--{name} is ambiguous",
+  "new": "        return None\n        raise FailClosed(f\"--{name} is ambiguous"
+ },
+ {
+  "label": "stash push/save sub-subcommand not skipped",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            key, start = f\"stash {args[0]}\", 1",
+  "new": "            key, start = \"stash\", 1"
+ },
+ {
+  "label": "git stash -<opt> not an implicit push",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            key = \"stash push\"  # `git stash -a`",
+  "new": "            key = \"stash\"  # `git stash -a`"
+ },
+ {
+  "label": "words after -- expanded as options",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        if a == \"--\":\n            break\n        if a.startswith(\"--\") and len(a) > 2:",
+  "new": "        if a.startswith(\"--\") and len(a) > 2:"
+ },
+ {
+  "label": "git-<sub> program not read as git <sub>",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if name.startswith(\"git-\") and len(name) > 4:",
+  "new": "    if False:"
+ },
+ {
+  "label": "exports not carried into later commands",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        argv.assigns = {**state.get(\"exports\", {}), **argv.assigns}\n        head = argv[0]",
+  "new": "        head = argv[0]"
+ },
+ {
+  "label": "declare -x not read as an export",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "head == \"export\" or any(o.startswith(\"-\") and \"x\" in o for o in opts)",
+  "new": "head == \"export\""
+ },
+ {
+  "label": "a bare VAR=val not kept for a later export VAR",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        for name, value in argv.assigns.items():\n            shell[name] = value\n",
+  "new": "        for name, value in argv.assigns.items():\n"
+ },
+ {
+  "label": "an unexported shell variable reaches git",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if name in exports or name in os.environ or state.get(\"allexport\"):",
+  "new": "            if True:"
+ },
+ {
+  "label": "unset does not drop an export",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        for name in words:\n            exports.pop(name, None)\n",
+  "new": "        for name in words:\n"
+ },
+ {
+  "label": "--config-env not unreadable config",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                or opt == \"--config-env\"\n",
+  "new": ""
+ },
+ {
+  "label": "-c include.path not unreadable config",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "r\"include(if\\..*)?\\.path$\"",
+  "new": "r\"$^\""
+ },
+ {
+  "label": "GIT_CONFIG_* assignments not unreadable config",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    opaque = any(OPAQUE_CONFIG_ENV.fullmatch(name) for name in assigns)",
+  "new": "    opaque = False"
+ },
+ {
+  "label": "GIT_CONFIG_PARAMETERS not unreadable config",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "_VALUE_\\d+|_PARAMETERS|",
+  "new": "_VALUE_\\d+|"
+ },
+ {
+  "label": "alias under unreadable config not refused",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if opaque:\n        # the alias may be",
+  "new": "    if False:\n        # the alias may be"
+ },
+ {
+  "label": "shell alias runs in the caller's dir, not the worktree top",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        \"dir\": repo_root(eff),",
+  "new": "        \"dir\": eff,"
+ },
+ {
+  "label": "PR gate: -c remote.<name>.mirror not a push target",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "remote\\..+\\.push|remote\\..+\\.mirror|push\\.default",
+  "new": "remote\\..+\\.push|push\\.default"
+ },
+ {
+  "label": "PR gate: refspec-less push under unreadable config allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "if not refspecs and (opaque or any(",
+  "new": "if not refspecs and (any("
+ },
+ {
+  "label": "PR gate: glob push destination not protected",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    return dst in PROTECTED or \"*\" in dst",
+  "new": "    return dst in PROTECTED"
+ },
+ {
+  "label": "PR gate: ambiguous option / unreadable alias not refused",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    except FailClosed:\n        return \"unreadable\"",
+  "new": "    except FailClosed:\n        return \"parse-fail\""
+ },
+ {
+  "label": "PR gate: git branch not gated",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if sub == \"branch\" and branch_moves_protected(args):",
+  "new": "    if False:"
+ },
+ {
+  "label": "PR gate: branch -f short flag ignored",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "            force = force or any(c in \"fMC\" for c in a[1:])",
+  "new": "            force = force or any(c in \"MC\" for c in a[1:])"
+ },
+ {
+  "label": "PR gate: branch --force ignored",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "            force = force or name == \"--force\"",
+  "new": "            force = force"
+ },
+ {
+  "label": "PR gate: branch -m/-M target read as the first name",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "positionals[-1] if move else positionals[0]",
+  "new": "positionals[0]"
+ },
+ {
+  "label": "PR gate: branch --move/--copy ignored",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "            move = move or name in (\"--move\", \"--copy\")",
+  "new": "            move = move"
+ },
+ {
+  "label": "PR gate: checkout -B not gated",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if (sub == \"checkout\" and dest_protected(",
+  "new": "    if (False and dest_protected("
+ },
+ {
+  "label": "PR gate: worktree add -B not gated",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        sub == \"worktree\" and args[:1] == [\"add\"]",
+  "new": "        False"
+ },
+ {
+  "label": "PR gate: switch -C not gated",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if sub == \"switch\" and dest_protected(",
+  "new": "    if False and dest_protected("
+ },
+ {
+  "label": "PR gate: switch --force-create not read",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "short_value(args, \"C\", \"--force-create\")",
+  "new": "short_value(args, \"C\")"
+ },
+ {
+  "label": "PR gate: attached -B<name> not read",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "            return rest or (args[k + 1]",
+  "new": "            return (args[k + 1]"
+ },
+ {
+  "label": "PR gate: fetch into a protected branch not gated",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if sub in (\"fetch\", \"pull\") and fetch_moves_protected(args):",
+  "new": "    if False:"
+ },
+ {
+  "label": "PR gate: fetch --stdin allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if \"--stdin\" in args:\n        return True\n    positionals, skip",
+  "new": "    positionals, skip"
+ },
+ {
+  "label": "PR gate: fetch option values read as the remote",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        elif a in FETCH_VALUE_OPTS:\n            skip = True\n",
+  "new": ""
+ },
+ {
+  "label": "PR gate: forced fetch +dev:dev a sync",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "and not r.startswith(\"+\") and not forced",
+  "new": "and not forced"
+ },
+ {
+  "label": "PR gate: fetch -f a sync",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    forced = \"--force\" in args or any(",
+  "new": "    forced = False and any("
+ },
+ {
+  "label": "PR gate: fetch from any remote a sync",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "(remote == \"origin\" and same",
+  "new": "(same"
+ },
+ {
+  "label": "PR gate: fetch other:dev a sync",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        if not (remote == \"origin\" and same and",
+  "new": "        if not (remote == \"origin\" and"
+ },
+ {
+  "label": "PR gate: fetch glob destination a sync",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": " and not forced and \"*\" not in dst):",
+  "new": " and not forced):"
+ },
+ {
+  "label": "PR gate: git-<sub> token skipped",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        if prog == \"git\" or (prog.startswith(\"git-\") and len(prog) > 4):",
+  "new": "        if prog == \"git\":"
+ },
+ {
+  "label": "PR gate: git-<sub> behind an unknown wrapper loses its subcommand",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "[\"git\", *([prog[4:]] if prog != \"git\" else []), *argv[k + 1 :]]",
+  "new": "[\"git\", *argv[k + 1 :]]"
+ },
+ {
+  "label": "PR fallback: cherry-pick not refused",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "*\"git cherry-pick\"*|",
+  "new": ""
+ },
+ {
+  "label": "PR fallback: revert not refused",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "*\"git revert\"*|",
+  "new": ""
+ },
+ {
+  "label": "PR fallback: am not refused",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "*\"git am \"*|",
+  "new": ""
+ },
+ {
+  "label": "PR fallback: rebase not refused",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "*\"git rebase\"*|",
+  "new": ""
+ },
+ {
+  "label": "PR fallback: reset not refused",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "|*\"git reset\"*)",
+  "new": ")"
+ },
+ {
+  "label": "require-review: -c remote.<name>.mirror not a push target",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "remote\\..+\\.push|remote\\..+\\.mirror|push\\.default",
+  "new": "remote\\..+\\.push|push\\.default"
+ },
+ {
+  "label": "require-review: -c push.followTags not a push target",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "|push\\.followtags\")",
+  "new": "\")"
+ },
+ {
+  "label": "require-review: refspec-less push under unreadable config allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "            if (git_config_opaque(argv) or any(",
+  "new": "            if (any("
+ },
+ {
+  "label": "require-review: unreadable git command allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    except FailClosed as exc:\n        block(",
+  "new": "    except FailClosed as exc:\n        sys.exit(0)\n        block("
+ },
+ {
+  "label": "require-review: glob refspec allowed (EQUIVALENT: a glob source never rev-parses, so need_review refuses it as unreviewed anyway; the check names the reason)",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "        if any(\"*\" in r for r in refspecs):",
+  "new": "        if False:",
+  "equivalent": true
+ },
+ {
+  "label": "record guard: globs not expanded",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    if any(ch in word for ch in \"*?[\"):\n        for d in dirs:",
+  "new": "    if False:\n        for d in dirs:"
+ },
+ {
+  "label": "record guard: a globbed directory's new file not seen",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "glob.glob(full) + [os.path.join(p, tail) for p in glob.glob(head)]",
+  "new": "glob.glob(full)"
+ },
+ {
+  "label": "record guard: unreadable cd target allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "targets = [words[k + 1] for k in range(len(words) - 1) if words[k] in (\"cd\", \"pushd\")]",
+  "new": "targets = []"
+ },
+ {
+  "label": "record guard: unreadable redirect target allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "targets += [t for op, t in redirects if \">\" in op]",
+  "new": "targets += []"
+ },
+ {
+  "label": "record guard: op-reviews in a variable allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    ASSIGNMENT.match(w) and PATH_SHAPED.fullmatch(",
+  "new": "    False and PATH_SHAPED.fullmatch("
+ },
+ {
+  "label": "protect-data-dir: unreadable git command allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        except FailClosed as exc:\n            refuse(",
+  "new": "        except FailClosed as exc:\n            sys.exit(0)\n            refuse("
+ },
+ {
+  "label": "protect-data-dir: attached --cacheinfo= not split",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "p.partition(\"=\")[2] if p.startswith(\"--cacheinfo=\") else p",
+  "new": "p"
+ },
+ {
+  "label": "protect-data-dir: dry run runs the repo's core.fsmonitor",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    safe = [\"-c\", \"core.fsmonitor=false\", \"-c\", \"core.hooksPath=/dev/null\", \"-c\", \"core.untrackedCache=false\"]",
+  "new": "    safe = []"
+ },
+ {
+  "label": "protect-data-dir: GIT_DIR/GIT_WORK_TREE not forwarded to the dry run",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    env = {**os.environ, **{n: v for n, v in getattr(argv, \"assigns\", {}).items() if n in DRY_RUN_ENV}}",
+  "new": "    env = dict(os.environ)"
+ },
+ {
+  "label": "protect-data-dir: perl -e's program not skipped",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if c in \"eE\":  # the program is the next word\n                k += 1\n                break\n",
+  "new": ""
+ },
+ {
+  "label": "protect-data-dir: rsync --remove-source-files from data/ allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if head == \"rsync\" and any(rsync_removes_sources(a) for a in args) and any(covers",
+  "new": "        if False and any(covers"
+ },
+ {
+  "label": "protect-data-dir: dd of=backlog/ allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if head == \"dd\" and any(a.startswith(\"of=\") and in_backlog(",
+  "new": "    if False and any(a.startswith(\"of=\") and in_backlog("
+ },
+ {
+  "label": "protect-data-dir: ruby -i not in place",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if head == \"ruby\":\n                in_place = perl_in_place(args, \"0EFICrxWKT\")\n",
+  "new": "    "
+ },
+ {
+  "label": "protect-data-dir: ruby read with perl's valued switches",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "perl_in_place(args, \"0EFICrxWKT\")",
+  "new": "perl_in_place(args)"
+ },
+ {
+  "label": "protect-data-dir: awk -i inplace not in place",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if head in (\"awk\", \"gawk\"):  # gawk -i inplace",
+  "new": "    if False:  # gawk -i inplace"
+ },
+ {
+  "label": "protect-data-dir: gawk --include=inplace not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                        *(a.partition(\"=\")[2] for a in args if a.startswith(\"--include=\")),\n",
+  "new": ""
+ },
+ {
+  "label": "protect-data-dir: awk -iinplace (attached) not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                        *(a[2:] for a in args if a.startswith(\"-i\") and len(a) > 2 and not a.startswith(\"--\"))]",
+  "new": "                        ]"
+ },
+ {
+  "label": "autofix: prettier searches for its config",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "npx --no-install prettier \"${popt[@]}\" --write",
+  "new": "npx --no-install prettier --write"
+ },
+ {
+  "label": "autofix: tracked prettier config not passed",
+  "file": ".claude/hooks/autofix.sh",
+  "old": "if [ -n \"$pcfg\" ]; then popt=(--config \"$root/$pcfg\");",
+  "new": "if false; then popt=(--config \"$root/$pcfg\");"
+ },
+ {
+  "label": "cmdparse: $'…' not decoded",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if line.startswith(\"$'\", i):",
+  "new": "            if False:"
+ },
+ {
+  "label": "cmdparse: $'…' octal escape not decoded",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif d in \"01234567\":",
+  "new": "        elif False:"
+ },
+ {
+  "label": "cmdparse: $'…' \\u escape not decoded",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "ANSI_C_NUMERIC = {\"x\": (16, 2), \"u\": (16, 4), \"U\": (16, 8)}",
+  "new": "ANSI_C_NUMERIC = {\"x\": (16, 2)}"
+ },
+ {
+  "label": "cmdparse: a NUL doesn't end a $'…' value",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "value.partition(\"\\0\")",
+  "new": "(value, \"\", \"\")"
+ },
+ {
+  "label": "cmdparse: $\"…\" not read as \"…\"",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if line.startswith('$\"', i):\n                i += 1",
+  "new": "            if False:\n                i += 1"
+ },
+ {
+  "label": "cmdparse: $(pwd) not written as ${PWD}",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if quote != \"'\" and (m := PWD_SUBST.match(line, i)):",
+  "new": "            if False and (m := PWD_SUBST.match(line, i)):"
+ },
+ {
+  "label": "cmdparse: braces not expanded",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "for w in (_brace(t) if LB in t else [t]) if w or LB not in t]",
+  "new": "for w in [t]]"
+ },
+ {
+  "label": "cmdparse: brace sequence not expanded",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif (parts := _sequence(word[s + 1 : end])) is None:",
+  "new": "        elif (parts := None) is None:"
+ },
+ {
+  "label": "cmdparse: nested brace's comma split at the top level",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "elif word[k] == CM and depth == 1:",
+  "new": "elif word[k] == CM:"
+ },
+ {
+  "label": "cmdparse: GIT_COMMON_DIR not opaque",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "|GIT_COMMON_DIR|HOME",
+  "new": "|HOME"
+ },
+ {
+  "label": "cmdparse: set -a not tracked",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    state[\"allexport\"] = words[k][0] == \"-\"\n",
+  "new": "                    pass\n"
+ },
+ {
+  "label": "cmdparse: set +a not honoured",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    state[\"allexport\"] = words[k][0] == \"-\"\n",
+  "new": "                    state[\"allexport\"] = True\n"
+ },
+ {
+  "label": "cmdparse: set -o allexport not tracked",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    if words[k] == \"allexport\":",
+  "new": "                    if False:"
+ },
+ {
+  "label": "cmdparse: allexport ignored for bare assignments",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if name in exports or name in os.environ or state.get(\"allexport\"):",
+  "new": "            if name in exports or name in os.environ:"
+ },
+ {
+  "label": "cmdparse: git after a config write not refused",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if state.get(\"config_written\"):\n                # the config",
+  "new": "            if False:\n                # the config"
+ },
+ {
+  "label": "cmdparse: config write not recorded",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                state[\"config_written\"] = state.get(\"config_written\") or config_steers_git(expanded, d)\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse: `git config set` not read as a write",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    keys = positionals[1:] if verb == \"set\" else positionals",
+  "new": "    keys = positionals"
+ },
+ {
+  "label": "cmdparse: config reads counted as writes",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if (verb is not None and verb != \"set\") or CONFIG_READS & set(opts):\n        return False",
+  "new": "    if False:\n        return False"
+ },
+ {
+  "label": "cmdparse: alias.* not a key that steers git",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    r\"alias\\..+|include",
+  "new": "    r\"include"
+ },
+ {
+  "label": "cmdparse: repo remote.<name>.push not a risk",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        if re.fullmatch(r\"remote\\..+\\.push\", key) or (",
+  "new": "        if ("
+ },
+ {
+  "label": "cmdparse: repo mirror=false read as a mirror",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "re.fullmatch(r\"remote\\..+\\.mirror\", key) and git_bool(value)",
+  "new": "re.fullmatch(r\"remote\\..+\\.mirror\", key)"
+ },
+ {
+  "label": "cmdparse: push.default=matching not a risk",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        if key == \"push.default\" and value.strip().lower() == \"matching\":",
+  "new": "        if False:"
+ },
+ {
+  "label": "cmdparse: git_bool reads false as true",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    return v in (\"\", \"true\", \"yes\", \"on\") or (",
+  "new": "    return True or ("
+ },
+ {
+  "label": "enforce: repo push config not read",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if not refspecs and repo_config is not None:",
+  "new": "    if False:"
+ },
+ {
+  "label": "enforce: push.default=upstream to a protected upstream allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        if cfg.get(\"push.default\", \"\").strip().lower() in (\"upstream\", \"tracking\") and dest_protected(",
+  "new": "        if False and dest_protected("
+ },
+ {
+  "label": "require-review: repo push config not read",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "                    or push_config_risk(repo_cfg) or git_bool(",
+  "new": "                    or git_bool("
+ },
+ {
+  "label": "require-review: repo push.followTags not read",
+  "file": ".claude/hooks/require-review.sh",
+  "old": " or git_bool(repo_cfg.get(\"push.followtags\", \"false\"))):",
+  "new": "):"
+ },
+ {
+  "label": "require-review: matching refspec ':' allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "            if any(r.lstrip(\"+\") == \":\" for r in refspecs):\n                # the matching",
+  "new": "            if False:\n                # the matching"
+ },
+ {
+  "label": "enforce: matching refspec ':' allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": " or any(r.lstrip(\"+\") == \":\" for r in refspecs):",
+  "new": ":"
+ },
+ {
+  "label": "cmdparse: cd target not resolved",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        target = expand_word(\n            words[0], None if unknown else cur, variables, None if old_unknown else old, env_empty=env_empty\n        )",
+  "new": "        target = words[0]"
+ },
+ {
+  "label": "cmdparse: pushd not tracked",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        if head in (\"cd\", \"pushd\", \"popd\"):",
+  "new": "        if head in (\"cd\", \"popd\"):"
+ },
+ {
+  "label": "cmdparse: popd doesn't pop",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            cur_new, unknown_new = stack.pop()\n            state.update(olddir=cur, olddir_unknown=unknown, dir=cur_new, dir_unknown=unknown_new)\n            return",
+  "new": "            return"
+ },
+ {
+  "label": "cmdparse: cd - not followed",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    elif words[0] == \"-\":\n        target = None if old_unknown else old",
+  "new": "    elif words[0] == \"-\":\n        target = None"
+ },
+ {
+  "label": "cmdparse: an unresolvable cd doesn't mark the dir unknown",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        state.update(olddir=cur, olddir_unknown=not same, dir_unknown=True)\n        return",
+  "new": "        state.update(olddir=cur, olddir_unknown=not same)\n        return"
+ },
+ {
+  "label": "cmdparse: ~+ not the cwd",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            home = directory  # None:",
+  "new": "            home = None  # None:"
+ },
+ {
+  "label": "cmdparse: ~ not HOME",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                home = \"\" if env_empty else os.environ[\"HOME\"]",
+  "new": "                home = None"
+ },
+ {
+  "label": "cmdparse: HOME '' pass reads ~ as the passwd home",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                home = \"\" if env_empty else os.environ[\"HOME\"]",
+  "new": "                home = _passwd_home()"
+ },
+ {
+  "label": "cmdparse: a cd's VAR=val prefix reaches its words",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            words[0], None if unknown else cur, variables, None if old_unknown else old, env_empty=env_empty",
+  "new": "            words[0], None if unknown else cur, builtin_vars, None if old_unknown else old, env_empty=env_empty"
+ },
+ {
+  "label": "cmdparse: ~- not OLDPWD",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            home = olddir or shell_vars.get(\"OLDPWD\")",
+  "new": "            home = None"
+ },
+ {
+  "label": "cmdparse: $PWD not the cwd",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if name == \"PWD\":\n        return directory",
+  "new": "    if name == \"PWD\":\n        return None"
+ },
+ {
+  "label": "cmdparse: environment variables not read",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        return \"\" if env_empty else os.environ.get(name, \"\")",
+  "new": "        return None"
+ },
+ {
+  "label": "cmdparse: shell variables not read",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if name in shell_vars:\n        return shell_vars[name]",
+  "new": "    if False:\n        return shell_vars[name]"
+ },
+ {
+  "label": "cmdparse: a variable's value not expanded again",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": " and depth < 3:",
+  "new": " and False:"
+ },
+ {
+  "label": "cmdparse: an unexpandable $ word read as a path",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    return None if \"$\" in out or \"`\" in out else out",
+  "new": "    return out"
+ },
+ {
+  "label": "protect-data-dir: redirect target not resolved",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                target = resolved_target or target",
+  "new": "                target = target"
+ },
+ {
+  "label": "protect-data-dir: words not resolved",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            argv = Argv([w if r is None else r for w, r in zip(raw, resolved) if r != \"\" or w == \"\"], raw.via_xargs,\n                        raw.assigns)",
+  "new": "            argv = raw"
+ },
+ {
+  "label": "protect-data-dir: relative path after an unknown cd trusted",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    return None if r is None or (unknown and not os.path.isabs(r)) else r",
+  "new": "    return r"
+ },
+ {
+  "label": "protect-data-dir: unresolved rm/mv/tee path allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if head in DESTROY | {\"mv\", \"tee\"}:\n                refuse_unresolved(paths)",
+  "new": "            if False:\n                refuse_unresolved(paths)"
+ },
+ {
+  "label": "protect-data-dir: unresolved path refused without data/",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        if has_data and (any(w in unresolved",
+  "new": "        if (any(w in unresolved"
+ },
+ {
+  "label": "protect-data-dir: unknown cwd ignored",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": " or (implicit_cwd and unknown)",
+  "new": ""
+ },
+ {
+  "label": "protect-data-dir: unresolved cp/rsync target allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if head in DEST_LAST:\n                refuse_unresolved(",
+  "new": "            if False:\n                refuse_unresolved("
+ },
+ {
+  "label": "protect-data-dir: unresolved dd of= allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if head == \"dd\":\n                refuse_unresolved(",
+  "new": "            if False:\n                refuse_unresolved("
+ },
+ {
+  "label": "protect-data-dir: unresolved in-place edit allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if head in IN_PLACE_EDITORS and in_place:  # not the program text",
+  "new": "    if False:  # not the program text"
+ },
+ {
+  "label": "protect-data-dir: in-place program text with $ refused",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "refuse_unresolved([p for p in paths if p[:1] in \"$~`\"], implicit_cwd=True)",
+  "new": "refuse_unresolved(paths, implicit_cwd=True)"
+ },
+ {
+  "label": "protect-data-dir: unresolved find start allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if find_deletes:\n                refuse_unresolved(",
+  "new": "            if False:\n                refuse_unresolved("
+ },
+ {
+  "label": "protect-data-dir: find's implicit . after an unknown cd allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        refuse_unresolved(find_starts(args), implicit_cwd=not any(os.path.isabs(p) for p in find_starts(args)))",
+  "new": "        refuse_unresolved(find_starts(args))"
+ },
+ {
+  "label": "protect-data-dir: unresolved git clean pathspec allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            refuse_unresolved(pathspecs, implicit_cwd=True)  # ",
+  "new": "            pass  # "
+ },
+ {
+  "label": "protect-data-dir: unresolved forced git add path allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                if forced:\n                    refuse_unresolved(",
+  "new": "                if False:\n                    refuse_unresolved("
+ },
+ {
+  "label": "protect-data-dir: unresolved update-index --add path allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                if \"--add\" in a:\n                    refuse_unresolved(values)",
+  "new": "                if False:\n                    refuse_unresolved(values)"
+ },
+ {
+  "label": "protect-data-dir: stash -a in a cluster not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "a == \"--all\" or (a.startswith(\"-\") and not a.startswith(\"--\") and \"a\" in a[1:].partition(\"m\")[0])",
+  "new": "a in (\"-a\", \"--all\")"
+ },
+ {
+  "label": "protect-data-dir: stash -m's value read as flags",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "\"a\" in a[1:].partition(\"m\")[0])",
+  "new": "\"a\" in a[1:])"
+ },
+ {
+  "label": "protect-data-dir: stash pathspecs after -- read as flags",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "for a in gm[1][: gm[1].index(\"--\") if \"--\" in gm[1] else None]",
+  "new": "for a in gm[1]"
+ },
+ {
+  "label": "require-review: a writing command's words not checked",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    (UNREAD.search(w) and RECORD_PATH_HINT.search(w)) or UNREAD_FRAGMENT.search(w) for w in written) or any(",
+  "new": "    False for w in written) or any("
+ },
+ {
+  "label": "require-review: a reader's words checked",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "written = [x for argv, d in commands if argv[0] not in RECORD_READERS",
+  "new": "written = [x for argv, d in commands if True"
+ },
+ {
+  "label": "require-review: bare `reviews` a record hint",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "RECORD_HINT = re.compile(r\"op-?rev|",
+  "new": "RECORD_HINT = re.compile(r\"op-?rev|reviews|"
+ },
+ {
+  "label": "require-review: `reviews` anywhere in a value a record part",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "RECORD_PART = re.compile(r\"op-?rev|(^|/)reviews(/|$)\"",
+  "new": "RECORD_PART = re.compile(r\"op-?rev|reviews\""
+ },
+ {
+  "label": "require-review: a non-path value read as a record part",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    ASSIGNMENT.match(w) and PATH_SHAPED.fullmatch(v := w.partition(\"=\")[2]) and",
+  "new": "    ASSIGNMENT.match(w) and (v := w.partition(\"=\")[2]) is not None and"
+ },
+ {
+  "label": "enforce: checkout/switch earlier in the command ignored",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        branch = tracked[key] if key in tracked else get_branch(effective_dir, gitdir)",
+  "new": "        branch = get_branch(effective_dir, gitdir)"
+ },
+ {
+  "label": "enforce: checkout <tree-ish> -- <paths> read as a switch",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        if sub == \"checkout\" and args[args.index(\"--\") + 1 :]:",
+  "new": "        if False:"
+ },
+ {
+  "label": "enforce: switch -c/checkout -b new branch not read",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        created = short_value(args, letter, long_name)\n",
+  "new": "        created = None\n"
+ },
+ {
+  "label": "enforce: --detach not read",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if \"--detach\" in args or (",
+  "new": "    if ("
+ },
+ {
+  "label": "enforce: checkout of a commit not a detach",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        return \"\"  # a commit: detached HEAD",
+  "new": "        return None  # a commit: detached HEAD"
+ },
+ {
+  "label": "enforce: checkout of a path read as a branch",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        return None  # a path",
+  "new": "        return name  # a path"
+ },
+ {
+  "label": "enforce: checkout HEAD read as a detach",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if target in (\"HEAD\", \"@\"):\n        return None",
+  "new": "    if False:\n        return None"
+ },
+ {
+  "label": "protect-data-dir: rsync --remove-sent-files not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(\"--remove-source-files\", \"--remove-sent-files\")",
+  "new": "(\"--remove-source-files\",)"
+ },
+ {
+  "label": "cmdparse: GIT_LONG_OPTS lacks a push option",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "porcelain force force-with-lease ",
+  "new": "porcelain force "
+ },
+ {
+  "label": "require-review: a record hint anywhere in a written word (a commit message)",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "RECORD_PATH_HINT = re.compile(r\"(^|/)[^/\\s]*(op-?rev",
+  "new": "RECORD_PATH_HINT = re.compile(r\"(op-?rev"
+ },
+ {
+  "label": "cmdparse: a $'…' string not carried across lines",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    return \"\".join(out), n, False",
+  "new": "    raise ParseError(\"a $'…' string doesn't close on its line\")"
+ },
+ {
+  "label": "cmdparse: an over-large brace expansion truncated",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                raise ParseError(f\"a brace expansion makes more than {BRACE_LIMIT} words\")",
+  "new": "                return [*out[:BRACE_LIMIT], word]"
+ },
+ {
+  "label": "cmdparse: an over-large brace expansion read only as its literal",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                raise ParseError(f\"a brace expansion makes more than {BRACE_LIMIT} words\")",
+  "new": "                return [word]"
+ },
+ {
+  "label": "cmdparse: empty words of a brace expansion kept",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": " if w or LB not in t]",
+  "new": "]"
+ },
+ {
+  "label": "cmdparse: unset doesn't leave the variable empty",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if not name.startswith(\"-\"):\n                shell[name] = \"\"",
+  "new": "            if False:\n                shell[name] = \"\""
+ },
+ {
+  "label": "cmdparse: env -u not read as empty",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    out.assigns[value] = \"\"",
+  "new": "                    pass"
+ },
+ {
+  "label": "cmdparse: any environment variable read",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if name in ENV_FALLBACK:",
+  "new": "    if True:"
+ },
+ {
+  "label": "cmdparse: env_empty not read as ''",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        return \"\" if env_empty else os.environ.get(name, \"\")",
+  "new": "        return os.environ.get(name, \"\")"
+ },
+ {
+  "label": "cmdparse: $(git rev-parse --show-toplevel) not resolved",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if quote != \"'\" and (m := TOPLEVEL_SUBST.match(line, i)):",
+  "new": "            if False and (m := TOPLEVEL_SUBST.match(line, i)):"
+ },
+ {
+  "label": "cmdparse: \"$X\"a read as $Xa",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if quote != \"'\" and (m := VAR_BEFORE_QUOTE.match(line, i)):",
+  "new": "            if False and (m := VAR_BEFORE_QUOTE.match(line, i)):"
+ },
+ {
+  "label": "cmdparse: cd -P read logically",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(os.path.realpath if physical else os.path.normpath)",
+  "new": "os.path.normpath"
+ },
+ {
+  "label": "cmdparse: cd to a missing directory trusted",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if new is None or not os.path.isdir(new):",
+  "new": "    if new is None:"
+ },
+ {
+  "label": "cmdparse: cd - to an unknown directory trusted",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        target = None if old_unknown else old",
+  "new": "        target = old"
+ },
+ {
+  "label": "cmdparse: CDPATH ignored",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            target = None  # CDPATH may send it elsewhere",
+  "new": "            pass"
+ },
+ {
+  "label": "cmdparse: assignments before bash -c dropped",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    state[\"exports\"] = dict(argv.assigns)",
+  "new": "                    state[\"exports\"] = dict(state.get(\"exports\", {}))"
+ },
+ {
+  "label": "cmdparse: a script run by a shell not yielded",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                yield _context(argv, state), state[\"dir\"], redirects\n            continue",
+  "new": "                pass\n            continue"
+ },
+ {
+  "label": "cmdparse: a git config file write not recorded",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        if writes_git_config(argv, redirects, state):\n            state[\"config_written\"] = True",
+  "new": "        if False:\n            state[\"config_written\"] = True"
+ },
+ {
+  "label": "cmdparse: tee into a git config file not a write",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if head == \"tee\" or (",
+  "new": "    if False or ("
+ },
+ {
+  "label": "cmdparse: git remote add --mirror not a config write",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        return any(a.startswith(\"--mirror\") for a in g[1])",
+  "new": "        return False"
+ },
+ {
+  "label": "cmdparse: git remote set-branches not a config write",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "g[1][:1] == [\"set-branches\"]:\n        return True",
+  "new": "g[1][:1] == [\"set-branches\"]:\n        return False"
+ },
+ {
+  "label": "cmdparse: git branch -u not a config write",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if g is not None and g[0] == \"branch\":\n        return any(",
+  "new": "    if g is not None and g[0] == \"branch\":\n        return False and any("
+ },
+ {
+  "label": "cmdparse: branch.<b>.merge not a key that steers git",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    r\"|branch\\..+\\.(merge|remote|pushremote)\",",
+  "new": "    r\"\","
+ },
+ {
+  "label": "cmdparse: git_anchored ignores an absolute -C",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        anchored = anchored or (opt in (\"-C\", \"--git-dir\") and os.path.isabs(value))",
+  "new": "        pass"
+ },
+ {
+  "label": "protect-data-dir: a target judged in the command's repo, not its own",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    root = toplevel(os.path.dirname(full) if not os.path.isdir(full) else full)",
+  "new": "    root = toplevel(os.path.realpath(base))"
+ },
+ {
+  "label": "protect-data-dir: the main worktree's data/ ignored",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "(repo_root(directory), main_worktree(directory))",
+  "new": "(repo_root(directory),)"
+ },
+ {
+  "label": "protect-data-dir: the call's own worktree not consulted for data/",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "        has_data = data_in(d) or data_in(cwd)",
+  "new": "        has_data = data_in(d)"
+ },
+ {
+  "label": "protect-data-dir: the '' reading of HOME/TMPDIR/USER not checked",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if \"$\" in cmd:\n        check(walked_or_refuse(True))",
+  "new": "    if False:\n        check(walked_or_refuse(True))"
+ },
+ {
+  "label": "protect-data-dir: a word expanding to nothing read as the cwd",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": " if r != \"\" or w == \"\"]",
+  "new": "]"
+ },
+ {
+  "label": "protect-data-dir: rsync --rem prefix not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    return len(opt) >= 5 and any(n.startswith(opt) for n in",
+  "new": "    return opt.startswith(\"--remove-s\") and any(n.startswith(opt) for n in"
+ },
+ {
+  "label": "protect-data-dir: rsync --del prefix not read",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    return opt.startswith(\"--delete\") or (len(opt) >= 5 and \"--delete\".startswith(opt))",
+  "new": "    return opt.startswith(\"--delete\")"
+ },
+ {
+  "label": "protect-data-dir: a directory above the main worktree not covered",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    roots = {os.path.realpath(r) for r in (repo_root(base), main_worktree(base)) if r}",
+  "new": "    roots = {os.path.realpath(repo_root(base))}"
+ },
+ {
+  "label": "require-review: message values read as paths",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    skip = message_values(argv)",
+  "new": "    skip = set()"
+ },
+ {
+  "label": "require-review: written words not resolved",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    return {word, expand_known(word, argv, d)}",
+  "new": "    return {word}"
+ },
+ {
+  "label": "require-review: the command word not checked",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "        return [argv.head_word or argv[0], *words,",
+  "new": "        return [*words,"
+ },
+ {
+  "label": "require-review: a push after a HEAD-moving command allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    if pushes and moved:",
+  "new": "    if False:"
+ },
+ {
+  "label": "require-review: a push after an unknown cd allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    if pushes and argv.dir_unknown and not git_anchored(argv):",
+  "new": "    if False:"
+ },
+ {
+  "label": "enforce: an unresolved push word allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if any(UNRESOLVED in p for p in positionals):\n        return \"opaque\"",
+  "new": "    if False:\n        return \"opaque\""
+ },
+ {
+  "label": "enforce: an unknown branch read as unprotected",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if not placed:\n        branch = UNKNOWN",
+  "new": "    if False:\n        branch = UNKNOWN"
+ },
+ {
+  "label": "enforce: words not resolved",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "                r = resolved(call, cd_)\n",
+  "new": "                r = call\n"
+ },
+ {
+  "label": "enforce: checkout -p read as a switch",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if sub == \"checkout\" and any(a in (\"-p\", \"--patch\") for a in args):\n        return None",
+  "new": "    if False:\n        return None"
+ },
+ {
+  "label": "enforce: checkout/switch --track not read",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    if any(a == \"--track\" or a.startswith(\"--track=\")",
+  "new": "    if False and any(a == \"--track\" or a.startswith(\"--track=\")"
+ },
+ {
+  "label": "enforce: --track keeps the remote in the branch name",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        return name.partition(\"/\")[2] or name",
+  "new": "        return name"
+ },
+ {
+  "label": "enforce: repos keyed by how they are spelled",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    key = repo_key(effective_dir, gitdir)",
+  "new": "    key = gitdir or effective_dir"
+ },
+ {
+  "label": "PR fallback: -C/cd not refused",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "*GIT_DIR*|*--git-dir*|*--work-tree*) elsewhere=1 ;;",
+  "new": "*GIT_DIR*|*--git-dir*|*--work-tree*) elsewhere=0 ;;"
+ },
+ {
+  "label": "PR gate: an opaque script wrapper not warned",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "                    warnings.append(f\"{argv[0]} {first}\")",
+  "new": "                    pass"
+ },
+ {
+  "label": "cmdparse: no cap on brace groups in one word",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if any(t.count(LB) > BRACE_GROUPS for t in tokens):",
+  "new": "    if False:"
+ },
+ {
+  "label": "cmdparse: $(git rev-parse --git-common-dir) not resolved",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if quote != \"'\" and (m := GITDIR_SUBST.match(line, i)):",
+  "new": "            if False:"
+ },
+ {
+  "label": "cmdparse: the git-dir variable resolves to nothing",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        return (git(directory, \"rev-parse\", \"--path-format=absolute\", flag) or None) if directory else None",
+  "new": "        return None"
+ },
+ {
+  "label": "cmdparse: $(mktemp) not resolved",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if quote != \"'\" and (m := MKTEMP_SUBST.match(line, i)):",
+  "new": "            if False:"
+ },
+ {
+  "label": "cmdparse: $(git rev-parse --show-toplevel) is the current directory",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        return (git(directory, \"rev-parse\", \"--show-toplevel\") or None) if directory else None",
+  "new": "        return directory"
+ },
+ {
+  "label": "cmdparse: for loops not unrolled",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        if (unrolled := _unroll_for(tokens, i, j, state)) is not None:",
+  "new": "        if False:"
+ },
+ {
+  "label": "cmdparse: a failed cd keeps OLDPWD known (round-2 behaviour)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        state.update(olddir=cur, olddir_unknown=not same, dir_unknown=True)",
+  "new": "        state.update(olddir=cur, olddir_unknown=unknown, dir_unknown=True)"
+ },
+ {
+  "label": "cmdparse: a push after an upstream-writing checkout allowed",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                if g is not None and g[0] == \"push\" and state.get(\"upstream_written\"):",
+  "new": "                if False:"
+ },
+ {
+  "label": "cmdparse: --no-track still writes an upstream",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if \"--no-track\" in opts:\n        return False\n",
+  "new": "\n"
+ },
+ {
+  "label": "cmdparse: a remote-tracking start point writes no upstream",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        or git(directory, \"rev-parse\", \"--verify\", \"--quiet\", f\"refs/remotes/{p}\") != \"\"\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse: eval words always re-tokenized (equivalent: the same words, only an eval chain's cost changes)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            plain = all(PLAIN_WORD.fullmatch(w) for w in rest)",
+  "new": "            plain = False",
+  "equivalent": true
+ },
+ {
+  "label": "protect-data-dir: worktree paths compared case-sensitively",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if not full.lower().startswith(root.lower().rstrip(\"/\") + \"/\"):",
+  "new": "    if not full.startswith(root.rstrip(\"/\") + \"/\"):"
+ },
+ {
+  "label": "protect-data-dir: an unresolved redirect target allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                if resolved_target is None and (data_in(d) or data_in(cwd)):",
+  "new": "                if False:"
+ },
+ {
+  "label": "protect-data-dir: git --output into data/snapshots allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "            if any(any_rel(inside_immutable, o, gm[2]) for o in outputs):",
+  "new": "            if False:"
+ },
+ {
+  "label": "protect-data-dir: an unresolved git --output allowed",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                if out_path is None and has_data:",
+  "new": "                if False:"
+ },
+ {
+  "label": "protect-data-dir: \"$TMPDIR\"/* globbed as /* in the '' pass",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if path in NO_GLOB or not any(",
+  "new": "    if not any("
+ },
+ {
+  "label": "protect-data-dir: a crash exits 1",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    main()\nexcept Exception as exc:",
+  "new": "    main()\nexcept ZeroDivisionError as exc:"
+ },
+ {
+  "label": "require-review: message values exempt for every command",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    if not ((g and g[0] in MESSAGE_GIT) or (h and h[0] in MESSAGE_GH[0] and h[1] in MESSAGE_GH[1])):\n        return set()\n",
+  "new": ""
+ },
+ {
+  "label": "require-review: a message value may start with -",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "            if k + 1 < len(argv) and not argv[k + 1].startswith(\"-\"):",
+  "new": "            if k + 1 < len(argv):"
+ },
+ {
+  "label": "require-review: an option's attached value not read as a path",
+  "file": ".claude/hooks/require-review.sh",
+  "old": ", *(m.group(1) for w in words if (m := OPTION_VALUE.match(w)))]",
+  "new": "]"
+ },
+ {
+  "label": "require-review: only HEAD movers before a push refused",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    return sub not in REF_SAFE_GIT",
+  "new": "    return sub in {\"commit\", \"checkout\", \"switch\", \"reset\", \"merge\", \"rebase\", \"cherry-pick\", \"am\", \"pull\", \"revert\", \"commit-tree\", \"update-ref\"}"
+ },
+ {
+  "label": "require-review: a fetch into a branch before a push allowed",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "        return \"--stdin\" in args or any(\":\" in a for a in args if not a.startswith(\"-\"))",
+  "new": "        return False"
+ },
+ {
+  "label": "require-review: a crash exits 1",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "    main()\nexcept Exception as exc:",
+  "new": "    main()\nexcept ZeroDivisionError as exc:"
+ },
+ {
+  "label": "block-ai-attribution: a crash exits 1",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "    main()\nexcept Exception as exc:",
+  "new": "    main()\nexcept ZeroDivisionError as exc:"
+ },
+ {
+  "label": "enforce-backlog-cli: an internal error allowed",
+  "file": ".claude/hooks/enforce-backlog-cli.sh",
+  "old": "if [ -n \"$crashed\" ]; then",
+  "new": "if false; then"
+ },
+ {
+  "label": "enforce: an empty word kept as a refspec",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "    words = [r for w in argv[1:] if (r := one(w)) != \"\" or w == \"\"]",
+  "new": "    words = [one(w) for w in argv[1:]]"
+ },
+ {
+  "label": "enforce: HOME/TMPDIR/USER never read as ''",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "                if v == \"allow\" and alt != r and (git_subcommand(alt, cd_) or (\"\",))[0] == \"push\":",
+  "new": "                if False:"
+ },
+ {
+  "label": "enforce: a parse failure with a git write allowed",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "  if printf '%s' \"$joined\" | grep -Eq 'git' \\\n",
+  "new": "  if false && printf '%s' \"$joined\" | grep -Eq 'git' \\\n"
+ },
+ {
+  "label": "enforce: -t inside a short cluster not read",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "or (a[:1] == \"-\" and a[1:2] != \"-\" and \"t\" in a[1:])\n           for a in args):  # `-t`",
+  "new": "or a == \"-t\"\n           for a in args):  # `-t`"
+ },
+ {
+  "label": "cmdparse: mktemp resolved whatever TMPDIR the command sets",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "return None if \"TMPDIR\" in shell_vars else MKTEMP_PATH",
+  "new": "return MKTEMP_PATH"
+ },
+ {
+  "label": "cmdparse: a for loop left early still unrolled",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if any(t in LOOP_EXITS for t in body):\n        return None",
+  "new": "    if False:\n        return None"
+ },
+ {
+  "label": "cmdparse: an env fallback variable unset in the environment is unknown",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "return \"\" if env_empty else os.environ.get(name, \"\")",
+  "new": "return \"\" if env_empty else os.environ.get(name)"
+ },
+ {
+  "label": "cmdparse: ~ with HOME absent read as ''",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                home = _passwd_home()",
+  "new": "                home = \"\""
+ },
+ {
+  "label": "cmdparse: ~ after unset HOME read as ''",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                home = shell_vars[\"HOME\"] or None",
+  "new": "                home = shell_vars[\"HOME\"]"
+ },
+ {
+  "label": "cmdparse: a bare cd with no HOME goes to the passwd home",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        target = home or None",
+  "new": "        target = home or _passwd_home()"
+ },
+ {
+  "label": "cmdparse: a cd's own VAR=val prefix ignored",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            _change_dir(head, argv[1:], state, getattr(argv, \"assigns\", {}))",
+  "new": "            _change_dir(head, argv[1:], state)"
  }
 ]
