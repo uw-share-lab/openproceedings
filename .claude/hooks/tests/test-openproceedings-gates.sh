@@ -29,6 +29,7 @@ g switch -q -c other2 && echo o > "$REPO/other.txt" && g add -A && g commit -q -
 g switch -q -c feat dev
 
 payload_bash() { python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","cwd":sys.argv[1],"tool_input":{"command":sys.argv[2]}}))' "$REPO" "$1"; }
+payload_at() { python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","cwd":sys.argv[1],"tool_input":{"command":sys.argv[2]}}))' "$1" "$2"; }
 payload_file() { python3 -c 'import json,sys; print(json.dumps({"tool_name":sys.argv[1],"cwd":sys.argv[3],"tool_input":{"file_path":sys.argv[2]}}))' "$1" "$2" "$REPO"; }
 
 # check <hook> <want: allow|block> <label> <json>
@@ -456,9 +457,10 @@ check $R allow "<<'EOF' body line 'then git push' inert" "$(payload_bash "cat <<
 then git push origin other2
 EOF")"
 # the same quoting must not crash the parser on APPROVED work (a crash fails closed and would block it)
-check $R allow "approved push after a #12 message line" "$(payload_bash 'git commit -m "fix
+check $R allow "approved push after a #12 quoted line"  "$(payload_bash 'echo "fix
 Closes #12" && git push origin mut')"
-check $R allow "approved push after \"x # y\" message" "$(payload_bash 'git commit -m "x # y" && git push origin mut')"
+check $R allow "approved push after \"x # y\" quoted"   "$(payload_bash 'echo "x # y" && git push origin mut')"
+check $R block "push after a commit in the same call"  "$(payload_bash 'git commit -m "x # y" && git push origin mut')"
 # comment rule: '#' starts a comment only at the start of a word, and never inside quotes
 check $P block "a#b is a word, not a comment"          "$(payload_bash 'echo a#b; rm -rf data')"
 check $P block "quoted \"x # y\" is not a comment"     "$(payload_bash 'echo "x # y"; rm -rf data')"
@@ -715,7 +717,8 @@ check $P block "rsync --remove-source-files data/"    "$(payload_bash 'rsync -a 
 check $P allow "rsync --remove-source-files from elsewhere" "$(payload_bash 'rsync -a --remove-source-files /tmp/y/ /tmp/x/')"
 check $P block "rm -rf \"\$PWD\" (a \$ word, repo has data/)" "$(payload_bash 'rm -rf "$PWD"')"
 check $P block "mv \"\$PWD\" away"                      "$(payload_bash 'mv "$PWD" /tmp/x')"
-check $P allow "rm -rf \"\$X\" in a repo without data/"  "$(payload_bash "cd '$TMP/wt-other' && rm -rf \"\$X\"")"
+git init -q "$TMP/nodata"   # a repo with no data/ in any worktree
+check $P allow "rm -rf \"\$X\" in a repo without data/"  "$(payload_at "$TMP/nodata" 'rm -rf "$X"')"
 check $P block "dd of=backlog/…"                      "$(payload_bash 'dd if=/dev/zero of=backlog/tasks/a.md count=1')"
 check $P block "ruby -i -pe on a backlog task"        "$(payload_bash "ruby -i -pe 'x' backlog/tasks/a.md")"
 check $P block "ruby -pi.bak -e on a snapshot"        "$(payload_bash "ruby -pi.bak -e 'x' data/snapshots/s1/records.jsonl")"
@@ -862,6 +865,88 @@ check $R allow "cat > \"\$SCRATCH/reviews-round2.md\" <<EOF" "$(payload_bash 'ca
 x
 EOF')"
 check $R block "d=reviews; cd .git; write op-\$d/abc"   "$(payload_bash 'd=reviews; cd .git && printf APPROVE > "op-$d/abc"')"
+
+echo "== round-9 rows (TASK-067 review gate round 3: fail-closed parse errors, unset, worktrees, records)"
+WTO="$TMP/wt-other"   # a linked worktree: no data/ of its own; the main worktree ($REPO) has one
+echo r > "$REPO/data/snapshots/s1/records.jsonl"
+# a multi-line $'…' string and a huge brace expansion are read, not a parse error that fails open
+check $P block "rm -rf .; printf \$'a<newline>b'"       "$(payload_bash "rm -rf .; printf \$'a
+b'")"
+check $P block "for i in {1..5000}; …; rm -rf ."        "$(payload_bash 'for i in {1..5000}; do :; done; rm -rf .')"
+check $P block "rm -rf data{,}x13 (8192 words)"        "$(payload_bash 'rm -rf data{,}{,}{,}{,}{,}{,}{,}{,}{,}{,}{,}{,}{,}')"
+check $P allow "printf \$'a<newline>b' > /tmp/…"        "$(payload_bash "printf \$'a
+b' > /tmp/op-ml.txt")"
+# a parse error left over fails closed wherever data/ or backlog/ is, whatever the text names
+check $P block "rm -rf . \" (unparseable)"              "$(payload_bash 'rm -rf . "')"
+check $P block "rm -rf . \" from a data-less worktree"  "$(payload_at "$WTO" 'rm -rf . "')"
+check $R block "gi\\\\<nl>t pu\\\\<nl>sh … \" (unparseable)" "$(payload_bash "$(printf 'gi\\\nt pu\\\nsh origin other2 "')")"
+# unset makes a variable empty; the environment is read only for HOME/TMPDIR/USER, and also as ''
+TMPDIR="$TMP/scratch" check $P block "unset TMPDIR; rm -rf \"\${TMPDIR}data\"" "$(payload_bash 'unset TMPDIR; rm -rf "${TMPDIR}data"')"
+TMPDIR="$TMP/scratch" check $P block "env -u TMPDIR bash -c 'rm -rf …data'" "$(payload_bash "env -u TMPDIR bash -c 'rm -rf \"\${TMPDIR}data\"'")"
+TMPDIR="$TMP/scratch" check $P block "unset TMPDIR; mv \"\${TMPDIR}data\" …" "$(payload_bash 'unset TMPDIR; mv "${TMPDIR}data" /tmp/op-x')"
+TMPDIR="$TMP/scratch" check $P block "unset TMPDIR; > \"\${TMPDIR}data/snapshots/…\"" "$(payload_bash 'unset TMPDIR; echo x > "${TMPDIR}data/snapshots/s1/x"')"
+TMPDIR="$TMP/scratch" check $P block "rm -rf \"\${TMPDIR}data\" (TMPDIR may be '')" "$(payload_bash 'rm -rf "${TMPDIR}data"')"
+OP_ENVVAR="$TMP/scratch" check $P block "rm -rf \"\$OP_ENVVAR/x\" (not an allowed env var)" "$(payload_bash 'rm -rf "$OP_ENVVAR/x"')"
+TMPDIR="$TMP/scratch" check $P allow "rm -f \"\$TMPDIR/x\" (both readings outside)" "$(payload_bash 'rm -f "$TMPDIR/x"')"
+# an unresolved path from a worktree is judged against the MAIN worktree's data/
+check $P block "wt: cd \"\$(…--git-common-dir)/../data\" && rm -rf snapshots" "$(payload_at "$WTO" 'cd "$(git rev-parse --git-common-dir)/../data" && rm -rf snapshots')"
+check $P block "wt: cd \"\$(…--git-common-dir)/..\" && find . -delete" "$(payload_at "$WTO" 'cd "$(git rev-parse --git-common-dir)/.." && find . -delete')"
+check $P block "wt: rm -rf \$(…--git-common-dir)/../data/snapshots" "$(payload_at "$WTO" 'rm -rf $(git rev-parse --git-common-dir)/../data/snapshots')"
+check $P allow "wt: rm -rf build"                      "$(payload_at "$WTO" 'rm -rf build')"
+# a target is judged against the repo that contains it, not the one the command runs in
+check $P block "wt: rm -rf <main>/data/snapshots"      "$(payload_at "$WTO" "rm -rf '$REPO/data/snapshots'")"
+check $P block "wt: rm -rf ../<main>/data/snapshots"   "$(payload_at "$WTO" "rm -rf '../R&D repo/data/snapshots'")"
+check $P block "wt: mv <main>/data/snapshots/… away"   "$(payload_at "$WTO" "mv '$REPO/data/snapshots/s1/records.jsonl' /tmp/op-x")"
+check $P block "wt: mv … into <main>/data/snapshots/"  "$(payload_at "$WTO" "mv /tmp/op-x '$REPO/data/snapshots/s1/y'")"
+check $P block "wt: > <main>/data/snapshots/…"         "$(payload_at "$WTO" "echo x > '$REPO/data/snapshots/s1/x'")"
+check $P allow "wt: rm -rf <main>/frontend/x"          "$(payload_at "$WTO" "rm -rf '$REPO/frontend/x'")"
+check $P allow "rm -rf /tmp/data (outside any repo)"   "$(payload_bash 'rm -rf /tmp/op-none/data')"
+# openrsync takes any unique prefix: --rem is --remove-source-files
+check $P block "rsync -a --rem data/snapshots/ …"      "$(payload_bash 'rsync -a --rem data/snapshots/ /tmp/x')"
+check $P block "rsync -a --remove-so data/snapshots/ …" "$(payload_bash 'rsync -a --remove-so data/snapshots/ /tmp/x')"
+check $P allow "rsync -a --re… is not --remove (ambiguous)" "$(payload_bash 'rsync -a --relative data/snapshots/ /tmp/x')"
+# cd: -P is physical, a missing target leaves the shell where it was, cd - carries an unknown dir, CDPATH
+ln -s "$REPO/frontend" "$TMP/lnk"
+check $P block "cd -P <symlink>/.. && rm -rf data"      "$(payload_bash "cd -P '$TMP/lnk/..' && rm -rf data")"
+check $P allow "cd <symlink>/.. && rm -rf data (logical)" "$(payload_bash "cd '$TMP/lnk/..' && rm -rf data")"
+check $P block "cd /nonexistent; rm -rf data"          "$(payload_bash 'cd /op-nonexistent; rm -rf data')"
+check $P block "cd \"\$(echo data)\" && cd /tmp && cd - && rm -rf snapshots" "$(payload_bash 'cd "$(echo data)" && cd /tmp && cd - && rm -rf snapshots')"
+mkdir -p "$REPO/snapshots"
+check $P block "CDPATH=<data>; cd snapshots && rm -rf s1" "$(payload_bash "CDPATH='$REPO/data'; cd snapshots && rm -rf s1")"
+check $P allow "cd snapshots && rm -rf s1 (no CDPATH)"   "$(payload_bash 'cd snapshots && rm -rf s1')"
+rmdir "$REPO/snapshots"
+# $(git rev-parse --show-toplevel) is the repo root, like $(pwd)
+check $P allow "cd \"\$(…--show-toplevel)\" && rm -rf build" "$(payload_bash 'cd "$(git rev-parse --show-toplevel)" && rm -rf build')"
+check $P allow "cd \"\$(…--show-toplevel)/frontend\" && rm -rf build" "$(payload_bash 'cd "$(git rev-parse --show-toplevel)/frontend" && rm -rf build')"
+check $P block "cd \"\$(…--show-toplevel)\" && rm -rf data" "$(payload_bash 'cd "$(git rev-parse --show-toplevel)" && rm -rf data')"
+check $P allow "cd \"\$(…--show-toplevel)\" && rm -rf build (wt)" "$(payload_at "$WTO" 'cd "$(git rev-parse --show-toplevel)" && rm -rf build')"
+check $P allow "echo {1..5000} > /tmp/… (a big brace, no parse error)" "$(payload_bash 'echo {1..5000} > /tmp/op-x')"
+check $P block "X=frontend; unset X; rm -rf \"\${X}data\"" "$(payload_bash 'X=frontend; unset X; rm -rf "${X}data"')"
+check $P block "export X=frontend; env -u X bash -c 'rm -rf …'" "$(payload_bash "X=frontend; export X; env -u X bash -c 'rm -rf \"\${X}data\"'")"
+TMPDIR="$TMP/scratch" check $P allow "rm -rf \"\$TMPDIR\" (empty when unset: no path)" "$(payload_bash 'rm -rf "$TMPDIR"')"
+check $P block "rsync -a --del … ./ (--del: --delete-during)" "$(payload_bash 'rsync -a --del /tmp/op-empty/ ./')"
+check $P block "wt: rm -rf .. (above the main worktree)" "$(payload_at "$WTO" 'rm -rf ..')"
+check $R block "cd \"\$UNSET\" && git push origin mut"  "$(payload_bash 'cd "$OP_UNSET_DIR" && git push origin mut')"
+# a quote right after $NAME ends the name: "$X"a is ${X}a
+check $P block "Xa=frontend; X=dat; rm -rf \"\$X\"a"     "$(payload_bash 'Xa=frontend; X=dat; rm -rf "$X"a')"
+check $P allow "X=build; rm -rf \"\$X\"a"               "$(payload_bash 'X=build; rm -rf "$X"a')"
+# require-review: a push after a command that moves HEAD pushes a HEAD this hook didn't read
+check $R block "git commit … && git push origin HEAD"  "$(payload_bash 'git commit -m x && git push origin HEAD')"
+check $R block "git checkout other2 && git push origin HEAD" "$(payload_bash 'git checkout other2 && git push origin HEAD')"
+check $R block "git reset --hard X && git push -f origin HEAD" "$(payload_bash 'git reset --hard other2 && git push -f origin HEAD')"
+check $R allow "git status && git push origin mut"     "$(payload_bash 'git status && git push origin mut')"
+# record checks: message values are text, not paths; written words are resolved; $(…)… stays one word
+check $R allow "commit -m \"the \$G/op-revie?s case\""  "$(payload_bash 'git commit -m "the $G/op-revie?s case"')"
+check $R allow "commit -m \"… .git/op-reviews/<sha> …\"" "$(payload_bash 'git commit -m "write .git/op-reviews/abc only via record-review"')"
+check $R allow "gh pr create --body \"… op-reviews/<sha>\"" "$(payload_bash 'gh pr create --label no-learning --title t --body "records live in .git/op-reviews/abc"')"
+check $R block "G=…; d=op-; tee \"\$G/\${d}reviews/abc\"" "$(payload_bash 'G=$(git rev-parse --git-common-dir); d=op-; echo APPROVE | tee "$G/${d}reviews/abc"')"
+check $R block "tee \"\$G/\${e}reviews/abc\" (unset e)"  "$(payload_bash 'echo APPROVE | tee "$G/${e}reviews/abc"')"
+check $R block "cp … \$(…)/op-revie?s/<sha> (unquoted)" "$(payload_bash 'cp /tmp/x $(git rev-parse --git-common-dir)/op-revie?s/abc')"
+check $R block "cp … \$(…)/op-revie[w]s/<sha>"          "$(payload_bash 'cp /tmp/x $(git rev-parse --git-common-dir)/op-revie[w]s/abc')"
+check $R block "printf APPROVE > \$(…)/op-revie?s/<sha>" "$(payload_bash 'printf APPROVE > $(git rev-parse --git-common-dir)/op-revie?s/abc')"
+# config written by other means than `git config`, then a git command that reads it
+check $R block "echo [alias] >> .git/config; git p …"   "$(payload_bash 'echo "[alias] p = push" >> .git/config; git p origin other2')"
+check $R block "GIT_CONFIG_GLOBAL=… bash -c 'git push origin'" "$(payload_bash "GIT_CONFIG_GLOBAL=/tmp/op-g bash -c 'git push origin'")"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")

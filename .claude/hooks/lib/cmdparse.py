@@ -5,9 +5,11 @@ matter to a gate:
   * `preprocess` makes ONE pass over the whole text: quote state carries across lines (a multi-line quoted
     message is one word), an unquoted `#` at the start of a word starts a comment, and an unquoted
     `<<DELIM` / `<<'DELIM'` / `<<-"DELIM"` starts a heredoc whose body is dropped unread (never `<<<`);
-    `$'…'` is decoded and `$"…"` read as "…" anywhere in a word, and `$(pwd)` is written as ${PWD};
+    `$'…'` is decoded (over several lines too) and `$"…"` read as "…" anywhere in a word, `$(pwd)` is written
+    as ${PWD} and `$(git rev-parse --show-toplevel)` as a variable `expand_word` resolves, and `"$X"a` as ${X}a;
   * `tokenize` brace-expands each word as bash does (`d{e,}v` is `dev dv`, `{a..c}`, nesting; quoted or
-    escaped braces and `${…}` stay literal);
+    escaped braces and `${…}` stay literal; empty words dropped; past BRACE_LIMIT words, the first ones and
+    the word itself, literal);
   * separators split with or without spaces: `;` `&&` `||` `|` `&` `(` `)`, newlines, `<(`/`>(`;
   * leading reserved words (`if`/`then`/`do`/`{`/`!` …), `VAR=val`, and wrappers (`env`, `sudo`, `nice`,
     `timeout`, `xargs`, `stdbuf`, `watch`, `exec`, `time`, `nohup`, `command`, `builtin`) are stripped, each
@@ -15,16 +17,22 @@ matter to a gate:
     the argv comes back as an `Argv` that records the `VAR=val` words and whether xargs runs it;
   * command names compare by basename (`/usr/bin/git` is `git`);
   * redirections leave argv as (operator, target) pairs (`redirect_targets`);
-  * `cd`, `pushd` and `popd` are tracked (targets through `expand_word`; one it can't resolve marks the
-    directory unknown) and `bash -c "…"` / `eval "…"` are recursed into;
-  * `expand_word` resolves `~`, `~+`, `~-`, `$PWD`, `$HOME` and other variables a command's path names;
+  * `cd`, `pushd` and `popd` are tracked (targets through `expand_word`, `-P` physically; one it can't resolve,
+    one that doesn't exist, a relative one under CDPATH, or `cd -` back to an unknown one marks the directory
+    unknown) and `bash -c "…"` (with the assignments before it exported to it) / `eval "…"` are recursed into;
+    `bash script.sh` is yielded as itself;
+  * `expand_word` resolves `~`, `~+`, `~-`, `$PWD`, `$HOME` and other variables a command's path names: set
+    (or `unset`, or `env -u`: empty) earlier in the command, else only HOME/TMPDIR/USER from this hook's
+    environment, which a gate also reads as '' (`walk(env_empty=True)`);
   * a git alias (`-c alias.<name>=…` or the repo's config; `!shell` ones too) becomes what git runs for it;
   * a `git-<sub>` program (`$(git --exec-path)/git-push`) is `git <sub>`;
   * an abbreviated long option (`--forc`, `--al`) becomes the option git reads it as (`normalize_git_options`);
   * `export`/`declare -x` assignments, and every assignment under `set -a`, reach every later command's
     `Argv.assigns` (`note_exports`);
-  * a git command after a `git config` that writes an alias, an include or a push target in the same command
-    line raises FailClosed (`config_steers_git`): this parser read the config before it was written;
+  * a git command after a `git config` that writes an alias, an include, a push target or an upstream, a `git
+    remote add --mirror` / `remote set-branches` / `branch -u`, or a redirect, tee, sed -i, cp/mv/ln into a git
+    config file, in the same command line raises FailClosed (`config_steers_git`, `writes_git_config`): this
+    parser read the config before it was written;
   * `push_config` reads the repo config a refspec-less push uses.
 A command that cannot be parsed raises ParseError; every gate treats that as a reason to BLOCK a command
 that looks like what it guards (fail closed), never to allow it. A git command that parses but can't be
@@ -359,6 +367,10 @@ class Argv(list):
     shell_vars: dict[str, str]
     olddir: str | None = None
     dir_unknown: bool = False
+    # `env_empty`: the walk reads HOME/TMPDIR/USER from the environment as '' (`walk`); `head_word`: the command
+    # word as written, before it was basenamed (`/op-revie?s/x` after an unquoted `$(…)` split the word)
+    env_empty: bool = False
+    head_word: str = ""
 
     def __init__(self, words: list[str], via_xargs: bool = False, assigns: dict[str, str] | None = None):
         super().__init__(words)
@@ -397,7 +409,8 @@ def preprocess(cmd: str) -> str:
     - a `<<` inside quotes is text (the usual `-m "$(cat <<'EOF' …)"` stays inside its quoted argument).
     """
     out_lines: list[str] = []
-    quote: str | None = None
+    quote: str | None = None  # "'", '"', or "$'" (ANSI-C, decoded as it is read; review gate round 3)
+    ansi_dead = False  # a NUL ended the current $'…' value: the rest of it is dropped
     pending: list[tuple[str, bool]] = []  # (delimiter, dash)
     arith = 0  # depth of $(( … )) / (( … )) arithmetic, where << is a shift
     inner = 0  # plain ( ) nesting inside the current arithmetic
@@ -413,10 +426,30 @@ def preprocess(cmd: str) -> str:
         i, n = 0, len(line)
         while i < n:
             c = line[i]
+            if quote == "$'":
+                value, i, closed = _ansi_c(line, i)
+                if not ansi_dead:
+                    head, nul, _ = value.partition("\0")
+                    kept.append(head.replace("'", "'\\''"))
+                    ansi_dead = bool(nul)
+                if closed:
+                    kept.append("'")
+                    quote, ansi_dead = None, False
+                continue
             if quote != "'" and (m := PWD_SUBST.match(line, i)):
                 # `$(pwd)` / `pwd` is the shell's current directory (TASK-067 review gate)
                 kept.append("${PWD}")
                 i = m.end()
+                continue
+            if quote != "'" and (m := TOPLEVEL_SUBST.match(line, i)):
+                # `$(git rev-parse --show-toplevel)` is the top of the worktree (review gate round 3)
+                kept.append("${" + TOPLEVEL_VAR + "}")
+                i = m.end()
+                continue
+            if quote != "'" and (m := VAR_BEFORE_QUOTE.match(line, i)):
+                # `"$X"a` is ${X}a, not $Xa: the quote that ends the name goes once shlex has read it
+                kept.append("${" + m.group(1) + "}")
+                i = m.end(1)
                 continue
             if quote:
                 kept.append(c)
@@ -429,9 +462,11 @@ def preprocess(cmd: str) -> str:
                 i += 1
                 continue
             if line.startswith("$'", i):
-                # ANSI-C quoting, anywhere in a word: decoded here, re-quoted as a plain '…' literal
-                value, i = _ansi_c(line, i + 2)
-                kept.append("'" + value.replace("'", "'\\''") + "'")
+                # ANSI-C quoting, anywhere in a word: decoded as it is read (above), re-quoted as a plain '…'
+                # literal; like any quote it may run on over several lines (review gate round 3)
+                kept.append("'")
+                quote = "$'"
+                i += 2
                 continue
             if line.startswith('$"', i):
                 i += 1  # $"…" (locale translation) is a "…" string
@@ -501,7 +536,7 @@ def preprocess(cmd: str) -> str:
         text = "".join(kept)
         # line continuation: a trailing unescaped backslash outside single quotes, not starting a heredoc
         trailing = len(text) - len(text.rstrip("\\"))
-        continues = trailing % 2 == 1 and quote != "'" and not pending
+        continues = trailing % 2 == 1 and quote not in ("'", "$'") and not pending
         if continues:
             text = text[:-1]
         if joining and out_lines:
@@ -537,17 +572,18 @@ ANSI_C_SIMPLE = {
 ANSI_C_NUMERIC = {"x": (16, 2), "u": (16, 4), "U": (16, 8)}  # \xHH, \uHHHH, \UHHHHHHHH
 
 
-def _ansi_c(line: str, i: int) -> tuple[str, int]:
-    """Decode the body of a `$'…'` string starting at `line[i]` (just after `$'`) as bash does: \\n \\t \\e …,
-    \\nnn octal, \\xHH, \\uHHHH, \\UHHHHHHHH, \\cX; an unknown escape keeps its backslash; a NUL ends the
-    value. Returns (value, index after the closing quote). Raises ParseError when the quote doesn't close
-    on this line (TASK-067 review gate: `git push origin HEAD:$'\\x64ev'` pushed dev)."""
+def _ansi_c(line: str, i: int) -> tuple[str, int, bool]:
+    """Decode the body of a `$'…'` string from `line[i]` (just after `$'`, or the start of a line it runs on
+    to) as bash does: \\n \\t \\e …, \\nnn octal, \\xHH, \\uHHHH, \\UHHHHHHHH, \\cX; an unknown escape keeps its
+    backslash (TASK-067 review gate: `git push origin HEAD:$'\\x64ev'` pushed dev). Returns (value, index after
+    the closing quote or the end of the line, whether the quote closed); a NUL in the value ends it, which
+    `preprocess` applies (the rest up to the closing quote is dropped)."""
     out: list[str] = []
     n = len(line)
     while i < n:
         c = line[i]
         if c == "'":
-            return "".join(out).split("\0")[0], i + 1
+            return "".join(out), i + 1, True
         if c != "\\" or i + 1 >= n:
             out.append(c)
             i += 1
@@ -571,30 +607,39 @@ def _ansi_c(line: str, i: int) -> tuple[str, int]:
         else:
             out.append("\\" + d)
             i += 2
-    raise ParseError("a $'…' string doesn't close on its line")
+    return "".join(out), n, False
 
 
 # `$(pwd)` and `pwd` in backquotes name the shell's current directory: `preprocess` writes them as ${PWD}
 PWD_SUBST = re.compile(r"\$\(\s*pwd(\s+-[LP])?\s*\)|`\s*pwd(\s+-[LP])?\s*`")
+# ... and `$(git rev-parse --show-toplevel)` the top of its worktree: `preprocess` writes it as this variable,
+# which `expand_word` resolves from the directory the command runs in (review gate round 3)
+TOPLEVEL_SUBST = re.compile(
+    r"\$\(\s*git\s+rev-parse\s+--show-toplevel\s*\)|`\s*git\s+rev-parse\s+--show-toplevel\s*`"
+)
+TOPLEVEL_VAR = "OP_SHOW_TOPLEVEL__"
+# `$NAME` with a quote right after it: written ${NAME}, so the word after the quote can't join the name
+VAR_BEFORE_QUOTE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)(?=[\"'])")
 # Brace expansion: `preprocess` marks each unquoted, unescaped `{` `}` `,` with a private-use character, so
 # `tokenize` can expand `d{e,}v` (bash: dev dv) while a quoted "d{e,}v" stays literal (TASK-067 review gate).
 BRACE_MARK = {"{": "\ue000", "}": "\ue001", ",": "\ue002"}
 LB, RB, CM = BRACE_MARK["{"], BRACE_MARK["}"], BRACE_MARK[","]
 UNMARK = str.maketrans({v: k for k, v in BRACE_MARK.items()})
-BRACE_LIMIT = 4096  # words one brace expression may become; more fails closed (ParseError)
+# Words one brace expression is read as: past it, the first BRACE_LIMIT words and the word itself, literal (a
+# ParseError here failed open in a gate that refuses one only by its text: review gate round 3)
+BRACE_LIMIT = 4096
 
 
 def _sequence(body: str) -> list[str] | None:
     """The words of a `{x..y[..incr]}` sequence body (integers, zero-padded as bash pads them, or single
-    letters), or None if `body` isn't one."""
+    letters), at most BRACE_LIMIT + 1 of them, or None if `body` isn't one."""
     if m := re.fullmatch(r"(-?\d+)\.\.(-?\d+)(?:\.\.(-?\d+))?", body):
         a, b = int(m.group(1)), int(m.group(2))
         step = abs(int(m.group(3) or 1)) or 1
-        if abs(b - a) // step >= BRACE_LIMIT:
-            raise ParseError(f"brace sequence {{{body}}} is too long to check")
         pad = any(re.fullmatch(r"-?0\d+", g) for g in m.group(1, 2))
         width = max(len(m.group(1)), len(m.group(2))) if pad else 0
-        return [f"{v:0{width}d}" for v in range(a, b + (1 if b >= a else -1), step if b >= a else -step)]
+        values = range(a, b + (1 if b >= a else -1), step if b >= a else -step)
+        return [f"{v:0{width}d}" for v in values[: BRACE_LIMIT + 1]]
     if m := re.fullmatch(r"([A-Za-z])\.\.([A-Za-z])(?:\.\.(-?\d+))?", body):
         a, b = ord(m.group(1)), ord(m.group(2))
         step = abs(int(m.group(3) or 1)) or 1
@@ -605,7 +650,8 @@ def _sequence(body: str) -> list[str] | None:
 def _brace(word: str) -> list[str]:
     """Brace-expand a word whose expandable braces and commas are marked (`BRACE_MARK`), as bash does: the
     leftmost `{…}` with a top-level comma, or a sequence body, becomes one word per alternative, each
-    expanded again; a `{` with no match, or a `{…}` that is neither, stays literal."""
+    expanded again; a `{` with no match, or a `{…}` that is neither, stays literal. Past BRACE_LIMIT words: the
+    first BRACE_LIMIT, then `word` itself (literal once `tokenize` unmarks it)."""
     start = 0
     while (s := word.find(LB, start)) >= 0:
         depth, commas, end = 0, [], -1
@@ -632,13 +678,14 @@ def _brace(word: str) -> list[str]:
         for part in parts:
             out += _brace(word[:s] + part + word[end + 1 :])
             if len(out) > BRACE_LIMIT:
-                raise ParseError("a brace expansion makes too many words to check")
+                return [*out[:BRACE_LIMIT], word]
         return out
     return [word]
 
 
 def tokenize(cmd: str) -> list[str]:
-    """The words and operators of `cmd` (`preprocess`ed), each word brace-expanded the way bash does."""
+    """The words and operators of `cmd` (`preprocess`ed), each word brace-expanded the way bash does (an empty
+    word a brace expansion makes is dropped, as bash drops it: `git push origin {,}` names no refspec)."""
     text = preprocess(cmd)
     lex = shlex.shlex(text, posix=True, punctuation_chars=PUNCT)
     lex.whitespace = " \t\r"
@@ -648,7 +695,7 @@ def tokenize(cmd: str) -> list[str]:
         tokens = list(lex)
     except ValueError as exc:
         raise ParseError(str(exc)) from exc
-    return [w.translate(UNMARK) for t in tokens for w in (_brace(t) if LB in t else [t])]
+    return [w.translate(UNMARK) for t in tokens for w in (_brace(t) if LB in t else [t]) if w or LB not in t]
 
 
 def is_separator(tok: str) -> bool:
@@ -696,6 +743,8 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
                 value = attached if eq else (argv[i + 1] if takes_value and i + 1 < len(argv) else None)
                 if name == "env" and opt in ("-S", "--split-string") and value is not None:
                     return _strip_prefixes([*tokenize(value), *argv[i + (1 if eq else 2) :]], state, out)
+                if name == "env" and opt in ("-u", "--unset") and value is not None:
+                    out.assigns[value] = ""  # unset for what it runs: known empty (review gate round 3)
                 if (
                     state is not None
                     and value is not None
@@ -711,6 +760,7 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
         else:
             break
     rest = argv[i:]
+    out.head_word = rest[0] if rest else ""
     name = base(rest[0]) if rest else ""
     if name.startswith("git-") and len(name) > 4:  # `$(git --exec-path)/git-push` is `git push` (TASK-067)
         out[:] = ["git", name[4:], *rest[1:]]
@@ -724,8 +774,9 @@ def note_exports(argv: Argv, state: dict) -> bool:
     `export GIT_DIR=<main>/.git; git commit` reached the main worktree unseen). `VAR=val` alone sets a shell
     variable (exported only once `export VAR` or `declare -x VAR` names it, or if already exported, or while
     `set -a` / `set -o allexport` is on: TASK-067 review gate); `export`, `declare`/`typeset`/`local -x`
-    export; `export -n` and `unset` drop. True when `argv` was one of these, or `set`, which run nothing a
-    gate checks."""
+    export; `export -n` and `unset` drop; `unset` also leaves the variable known to be empty, so `expand_word`
+    never falls back to this hook's environment for it (review gate round 3). True when `argv` was one of
+    these, or `set`, which run nothing a gate checks."""
     exports, shell = state.setdefault("exports", {}), state.setdefault("vars", {})
     if not argv:
         for name, value in argv.assigns.items():
@@ -749,7 +800,8 @@ def note_exports(argv: Argv, state: dict) -> bool:
     if head == "unset":
         for name in words:
             exports.pop(name, None)
-            shell.pop(name, None)
+            if not name.startswith("-"):
+                shell[name] = ""
         return True
     if head not in EXPORTERS:
         return False
@@ -823,13 +875,37 @@ def redirect_targets(cmd: str, cwd: str) -> Iterator[tuple[str, str, str]]:
             yield op, target, d
 
 
-def walk(cmd: str, cwd: str) -> Iterator[tuple[Argv, str, list[tuple[str, str]]]]:
+def walk(cmd: str, cwd: str, env_empty: bool = False) -> Iterator[tuple[Argv, str, list[tuple[str, str]]]]:
     """Yield (argv, directory, redirections) for every simple command in `cmd`, in order; argv is empty for a
-    command that only redirects (`> file`) or only assigns. Each argv carries what `expand_word` needs."""
-    yield from _walk(tokenize(cmd), {"dir": cwd})
+    command that only redirects (`> file`) or only assigns. Each argv carries what `expand_word` needs.
+    `env_empty`: read HOME/TMPDIR/USER as '' wherever the command doesn't set them (`ENV_FALLBACK`): a gate
+    walks both ways when a path decides its check."""
+    yield from _walk(tokenize(cmd), {"dir": cwd, "env_empty": env_empty})
 
 
 VAR_REF = re.compile(r"\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?P<bare>[A-Za-z_][A-Za-z0-9_]*))")
+# The only variables read from this hook's environment when the command doesn't set them: the agent's shell has
+# the same ones. Any other is unknown (review gate round 3: `unset TMPDIR; rm -rf "${TMPDIR}data"` was judged
+# with the hook's TMPDIR), and each of these is also read as '' (`walk(env_empty=True)`), which the gates
+# check too: the agent's shell may not have it.
+ENV_FALLBACK = ("HOME", "TMPDIR", "USER")
+
+
+def _variable(
+    name: str, directory: str | None, shell_vars: dict[str, str], olddir: str | None, env_empty: bool
+) -> str | None:
+    """The value of `$name` when the command runs, or None when it can't be told here."""
+    if name == "PWD":
+        return directory
+    if name == "OLDPWD":
+        return olddir or shell_vars.get("OLDPWD")
+    if name == TOPLEVEL_VAR:
+        return (git(directory, "rev-parse", "--show-toplevel") or None) if directory else None
+    if name in shell_vars:
+        return shell_vars[name]
+    if name in ENV_FALLBACK:
+        return "" if env_empty else os.environ.get(name)
+    return None
 
 
 def expand_word(
@@ -838,19 +914,21 @@ def expand_word(
     shell_vars: dict[str, str] | None = None,
     olddir: str | None = None,
     depth: int = 0,
+    env_empty: bool = False,
 ) -> str | None:
     """The text bash makes of `word` by tilde and variable expansion, or None when it can't be told here.
     `~`, `~/…` and `$HOME` are the home directory; `~+` and `$PWD` (and `$(pwd)`, which `preprocess` writes as
-    ${PWD}) are `directory`; `~-` and `$OLDPWD` are `olddir`; any other `$NAME` / `${NAME}` is a shell variable
-    set earlier in the command (`shell_vars`) or one in this hook's environment (TASK-067 review gate:
-    `rm -rf ~+/data`, `cd "$PWD" && rm -rf data`). A variable set nowhere, `${…}` with an operator, `$1`,
-    `$(…)` or a backquote is None: the caller fails closed. `directory` None: a `cd` before it couldn't be
-    followed, so `~+` and `$PWD` are unknown too."""
+    ${PWD}) are `directory`; `$(git rev-parse --show-toplevel)` is the top of its worktree; `~-` and `$OLDPWD`
+    are `olddir`; any other `$NAME` / `${NAME}` is a shell variable set (or `unset`: '') earlier in the command
+    (`shell_vars`), else, for HOME/TMPDIR/USER only, this hook's environment ('' with `env_empty`). TASK-067
+    review gate: `rm -rf ~+/data`, `cd "$PWD" && rm -rf data`. A variable set nowhere, `${…}` with an operator,
+    `$1`, `$(…)` or a backquote is None: the caller fails closed. `directory` None: a `cd` before it couldn't
+    be followed, so `~+` and `$PWD` are unknown too."""
     shell_vars = shell_vars or {}
     if word.startswith("~"):
         user, sep, rest = word[1:].partition("/")
         if user == "":
-            home = shell_vars.get("HOME") or os.environ.get("HOME")
+            home = _variable("HOME", directory, shell_vars, olddir, env_empty)
         elif user == "+":
             home = directory  # None: a `cd` this parser couldn't follow
         elif user == "-":
@@ -863,14 +941,10 @@ def expand_word(
 
     def value(m: re.Match[str]) -> str:
         name = m.group("braced") or m.group("bare")
-        if name == "PWD":
-            found = directory
-        elif name == "OLDPWD":
-            found = olddir or shell_vars.get("OLDPWD")
-        else:
-            found = shell_vars.get(name, os.environ.get(name))
+        found = _variable(name, directory, shell_vars, olddir, env_empty)
         if found is not None and ("$" in found or "`" in found) and depth < 3:
-            found = expand_word(found, directory, shell_vars, olddir, depth + 1)  # `f=$TMPDIR/x; rm "$f"`
+            # `f=$TMPDIR/x; rm "$f"`
+            found = expand_word(found, directory, shell_vars, olddir, depth + 1, env_empty)
         if found is None:
             raise LookupError(name)
         return found
@@ -882,46 +956,85 @@ def expand_word(
     return None if "$" in out or "`" in out else out
 
 
+def expand_known(word: str, argv: Argv, directory: str | None) -> str:
+    """`word` with every variable `expand_word` can tell replaced, the rest left as written (`$G/${d}reviews`
+    with d=op- is `$G/op-reviews`): what a gate searches for a path it must not let be written."""
+
+    def value(m: re.Match[str]) -> str:
+        found = _variable(
+            m.group("braced") or m.group("bare"),
+            None if argv.dir_unknown else directory,
+            argv.shell_vars,
+            argv.olddir,
+            argv.env_empty,
+        )
+        return m.group(0) if found is None else found
+
+    for _ in range(3):  # a value may name another variable
+        word = VAR_REF.sub(value, word)
+    return word
+
+
 def _change_dir(head: str, words: list[str], state: dict) -> None:
-    """Follow `cd`/`pushd`/`popd` in `state`: "dir" is the new directory, "olddir" the one before, "dirstack"
-    pushd's stack; a target this parser can't resolve (an unset variable, `pushd +1`, an empty stack) keeps
-    "dir" but sets "dir_unknown" until an absolute `cd` (TASK-067 review gate: `pushd data; rm -rf
-    snapshots` was read from the old directory)."""
-    words = [w for w in words if not (len(w) > 1 and w[0] == "-" and w[1] in "LPen@")]  # cd -P, pushd -n
+    """Follow `cd`/`pushd`/`popd` in `state`: "dir" is the new directory, "olddir" the one before (with
+    "olddir_unknown"), "dirstack" pushd's stack; a target this parser can't resolve (an unset variable, `pushd
+    +1`, an empty stack) keeps "dir" but sets "dir_unknown" until an absolute `cd` (TASK-067 review gate:
+    `pushd data; rm -rf snapshots` was read from the old directory). Review gate round 3: `cd -P` resolves
+    symlinks; a target that doesn't exist leaves the directory unknown (the `cd` fails and the shell stays,
+    or `&&` stops: this parser can't tell which); with CDPATH set a relative target is unknown; `cd -` to an
+    unknown directory is unknown."""
+    opts = [w for w in words if len(w) > 1 and w[0] == "-" and w[1] in "LPen@"]  # cd -P, pushd -n
+    words = [w for w in words if w not in opts]
+    physical = any("P" in o for o in opts)
     cur, unknown = state["dir"], state.get("dir_unknown", False)
+    old, old_unknown = state.get("olddir"), state.get("olddir_unknown", False)
     stack: list[tuple[str, bool]] = state.setdefault("dirstack", [])
+    variables = state.get("vars", {})
+    env_empty = state.get("env_empty", False)
     target: str | None = None
     if head == "popd":
         if stack and not words:
             cur_new, unknown_new = stack.pop()
-            state.update(olddir=cur, dir=cur_new, dir_unknown=unknown_new)
+            state.update(olddir=cur, olddir_unknown=unknown, dir=cur_new, dir_unknown=unknown_new)
             return
     elif head == "pushd" and not words:
         if stack:  # swaps the top two
             cur_new, unknown_new = stack[-1]
             stack[-1] = (cur, unknown)
-            state.update(olddir=cur, dir=cur_new, dir_unknown=unknown_new)
+            state.update(olddir=cur, olddir_unknown=unknown, dir=cur_new, dir_unknown=unknown_new)
             return
     elif head == "pushd" and words[0][:1] in ("+", "-"):
         pass  # a stack rotation: unknown
     elif not words:
-        target = expand_word("~", cur, state.get("vars"))
+        target = expand_word("~", cur, variables, env_empty=env_empty)
     elif words[0] == "-":
-        target = state.get("olddir")
+        target = None if old_unknown else old
     else:
-        target = expand_word(words[0], None if unknown else cur, state.get("vars"), state.get("olddir"))
+        target = expand_word(
+            words[0], None if unknown else cur, variables, None if old_unknown else old, env_empty=env_empty
+        )
+        cdpath = variables["CDPATH"] if "CDPATH" in variables else os.environ.get("CDPATH", "")
+        if target is not None and cdpath and not re.match(r"(/|\.\.?(/|$))", target):
+            target = None  # CDPATH may send it elsewhere
     if head == "pushd" and target is not None:
         stack.append((cur, unknown))
-    if target is None:
-        state.update(olddir=cur, dir_unknown=True)
+    new = None
+    if target is not None:  # -P: symlinks resolved first; else logical, where `x/..` drops x
+        new = (os.path.realpath if physical else os.path.normpath)(_resolve(target, cur))
+    if new is None or not os.path.isdir(new):
+        state.update(olddir=cur, olddir_unknown=unknown, dir_unknown=True)
         return
-    state.update(olddir=cur, dir=_resolve(target, cur), dir_unknown=unknown and not os.path.isabs(target))
+    state.update(
+        olddir=cur, olddir_unknown=unknown, dir=new, dir_unknown=unknown and not os.path.isabs(target or "")
+    )
 
 
 # `git config` keys that change what a later git command in the same command line runs or pushes: an alias,
-# an include, or a push target (TASK-067 review gate: `git config alias.p push && git p origin HEAD:dev`)
+# an include, a push target, or a branch's upstream, which push.default=upstream pushes to (TASK-067 review
+# gate: `git config alias.p push && git p origin HEAD:dev`; round 3: `git config branch.<b>.merge …`)
 CONFIG_STEERS_GIT = re.compile(
-    r"alias\..+|include(if\..+)?\.path|remote\..+\.(push|mirror)|push\.(default|followtags)|remote\.pushdefault",
+    r"alias\..+|include(if\..+)?\.path|remote\..+\.(push|mirror)|push\.(default|followtags)|remote\.pushdefault"
+    r"|branch\..+\.(merge|remote|pushremote)",
     re.IGNORECASE,
 )
 CONFIG_READS = {
@@ -947,8 +1060,20 @@ CONFIG_VALUE_OPTS = {"-f", "--file", "--blob", "--type", "-t", "--default", "--c
 def config_steers_git(argv: list[str], directory: str) -> bool:
     """Does this `git config …` write a `CONFIG_STEERS_GIT` key (`git config [--add|--replace-all] alias.p
     push`, `git config set …`), or open the file in an editor or rename a section (`--edit`,
-    `--rename-section`)?"""
+    `--rename-section`)? Or does another git command write such config (review gate round 3): `git remote add
+    --mirror…` (a mirror remote), `git remote set-branches`, `git branch -u/--set-upstream-to/-t/--track` (an
+    upstream)."""
     g = git_subcommand(argv, directory)
+    if g is not None and g[0] == "remote" and g[1][:1] == ["add"]:
+        return any(a.startswith("--mirror") for a in g[1])
+    if g is not None and g[0] == "remote" and g[1][:1] == ["set-branches"]:
+        return True
+    if g is not None and g[0] == "branch":
+        return any(
+            a.startswith(("--set-upstream", "--track"))
+            or (a.startswith("-") and not a.startswith("--") and ("u" in a[1:] or "t" in a[1:]))
+            for a in g[1]
+        )
     if g is None or g[0] != "config":
         return False
     positionals, opts, skip = [], [], False
@@ -975,11 +1100,63 @@ def config_steers_git(argv: list[str], directory: str) -> bool:
 
 
 def _context(argv: Argv, state: dict) -> Argv:
-    """`argv` with what the walk knows when it runs (`Argv.shell_vars`, `.olddir`, `.dir_unknown`)."""
+    """`argv` with what the walk knows when it runs (`Argv.shell_vars`, `.olddir`, `.dir_unknown`,
+    `.env_empty`)."""
     argv.shell_vars = dict(state.get("vars", {}))
-    argv.olddir = state.get("olddir")
+    argv.olddir = None if state.get("olddir_unknown") else state.get("olddir")
     argv.dir_unknown = state.get("dir_unknown", False)
+    argv.env_empty = state.get("env_empty", False)
     return argv
+
+
+FILE_WRITERS_LAST = {"cp", "mv", "ln", "install"}  # the last path word is written
+
+
+def is_git_config_file(word: str, resolved: str | None) -> bool:
+    """Is this written path a git config file: `.git/config`, `.git/config.worktree`, `.git/worktrees/<w>/config*`,
+    `~/.gitconfig`, `$XDG_CONFIG_HOME/git/config`? `resolved` is the path as `expand_word` reads it (None when it
+    can't), when only the word is known, a `config` file under a directory it can't read counts too."""
+    parts = (resolved if resolved is not None else word).replace("\\", "/").rstrip("/").lower().split("/")
+    name = parts[-1]
+    if name == ".gitconfig" or (len(parts) >= 3 and parts[-3] == "worktrees" and name.startswith("config")):
+        return True
+    if name not in ("config", "config.worktree"):
+        return False
+    return resolved is None or (len(parts) >= 2 and parts[-2] in (".git", "git"))
+
+
+def writes_git_config(argv: Argv, redirects: list[tuple[str, str]], state: dict) -> bool:
+    """Does this command write a git config file (`>`/`>>`, tee, sed/perl -i, cp/mv/ln/install, dd of=)? Then
+    config a later git command reads was written after this parser read it (review gate round 3: `echo
+    "[alias] p = push" >> .git/config; git p origin HEAD:dev`)."""
+    targets = [t for op, t in redirects if ">" in op and not (op.endswith("&") and t.isdigit())]
+    words = [w for w in argv[1:] if not w.startswith("-")]
+    head = argv[0] if argv else ""
+    if head == "tee" or (head in ("sed", "perl") and any(w.startswith("-") and "i" in w for w in argv[1:])):
+        targets += words
+    elif head in FILE_WRITERS_LAST and words:
+        targets.append(words[-1])
+    elif head == "dd":
+        targets += [w[3:] for w in argv[1:] if w.startswith("of=")]
+    d = None if state.get("dir_unknown") else state["dir"]
+    for t in targets:
+        r = expand_word(t, d, state.get("vars"), env_empty=state.get("env_empty", False))
+        if is_git_config_file(t, None if r is None else os.path.join(d or "", r)):
+            return True
+    return False
+
+
+# what a `bash -c` child shell changes without changing its caller's
+SUBSHELL_STATE = (
+    "exports",
+    "vars",
+    "dir",
+    "dir_unknown",
+    "olddir",
+    "olddir_unknown",
+    "dirstack",
+    "allexport",
+)
 
 
 def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tuple[str, str]]]]:
@@ -991,6 +1168,8 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
         raw, i = tokens[i:j], j + 1
         args, redirects = split_redirects(raw)
         argv = strip_prefixes(args, state)
+        if writes_git_config(argv, redirects, state):
+            state["config_written"] = True
         if note_exports(argv, state) or not argv:
             if redirects:
                 yield _context(Argv([]), state), state["dir"], redirects
@@ -1022,11 +1201,26 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
         if head in SHELLS:
             for k, a in enumerate(argv[1:], start=1):
                 if a.startswith("-") and not a.startswith("--") and "c" in a and k + 1 < len(argv):
-                    for inner in _walk(tokenize(argv[k + 1]), state):
-                        # `xargs sh -c 'git push origin "$0"'`: the words still come from xargs
-                        inner[0].via_xargs = inner[0].via_xargs or argv.via_xargs
-                        yield inner
+                    # a child shell: it starts with the caller's exports plus the assignments before it
+                    # (`GIT_DIR=… bash -c 'git commit'`: review gate round 3), and what it sets or `cd`s to
+                    # stays inside it
+                    saved = {key: state[key] for key in SUBSHELL_STATE if key in state}
+                    state["exports"] = dict(argv.assigns)
+                    state["vars"] = {**state.get("vars", {}), **argv.assigns}
+                    state["dirstack"] = list(state.get("dirstack", []))
+                    try:
+                        for inner in _walk(tokenize(argv[k + 1]), state):
+                            # `xargs sh -c 'git push origin "$0"'`: the words still come from xargs
+                            inner[0].via_xargs = inner[0].via_xargs or argv.via_xargs
+                            yield inner
+                    finally:
+                        for key in SUBSHELL_STATE:
+                            state.pop(key, None)
+                        state.update(saved)
                     break
+            else:
+                # `bash script.sh`: a script this parser can't read; a gate may want to know it ran
+                yield _context(argv, state), state["dir"], redirects
             continue
         if head == "eval":
             yield from _walk(tokenize(" ".join(argv[1:])), state)
@@ -1075,6 +1269,25 @@ def git_subcommand(argv: list[str], directory: str) -> tuple[str, list[str], str
     if j >= len(argv):
         return None
     return argv[j], argv[j + 1 :], eff
+
+
+def git_anchored(argv: list[str]) -> bool:
+    """Does this `git ...` argv name its repository absolutely (an absolute `-C`, `--git-dir` or `GIT_DIR=`), so
+    that a `cd` before it that this parser couldn't follow doesn't matter?"""
+    if not argv or argv[0] != "git":
+        return False
+    gitdir = getattr(argv, "assigns", {}).get("GIT_DIR") or ""
+    anchored = os.path.isabs(gitdir)
+    j = 1
+    while j < len(argv) and argv[j].startswith("-"):
+        opt, eq, attached = argv[j].partition("=") if argv[j].startswith("--") else (argv[j], "", "")
+        if opt not in GIT_VALUE_OPTS:
+            j += 1
+            continue
+        value = attached if eq else (argv[j + 1] if j + 1 < len(argv) else "")
+        j += 1 if eq else 2
+        anchored = anchored or (opt in ("-C", "--git-dir") and os.path.isabs(value))
+    return anchored
 
 
 def git_config(argv: list[str]) -> dict[str, str]:

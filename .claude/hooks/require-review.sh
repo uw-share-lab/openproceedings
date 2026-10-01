@@ -16,8 +16,11 @@
 #    read with `git config --get-regexp`), or under config this gate can't read (--config-env, -c
 #    include.path, GIT_CONFIG_*, GIT_COMMON_DIR, HOME), is blocked. Aliases are expanded, braces and `$'…'`
 #    decoded, and abbreviated options written out first (cmdparse); an alias under unreadable config, a git
-#    command after a `git config` that writes an alias/include/push key in the same command, or an
-#    ambiguous abbreviation, is blocked.
+#    command after a `git config` (or a write into a git config file) that sets an alias/include/push key or an
+#    upstream in the same command, or an ambiguous abbreviation, is blocked. So is a push (or `gh pr create`)
+#    after a git command in the same call that moves HEAD (commit, checkout, switch, reset, merge, rebase,
+#    cherry-pick, am, pull, revert, commit-tree, update-ref): it pushes a HEAD this gate didn't read. A remote
+#    or refspec word it can't resolve (`$UNSET`, `$(…)`), or a push after a `cd` it couldn't follow, is blocked.
 # 2. `gh pr create` (and its alias `gh pr new`) is blocked unless (1) holds for the PR head AND the branch
 #    adds or extends a `.claude/learnings/` entry relative to the PR base (default: the repo default
 #    branch, `dev`). Opt out only for a PR that genuinely taught nothing by passing `--label no-learning`;
@@ -35,10 +38,14 @@
 #    (`op-rev…`, `.git`, git-dir), or a word of a writing command does in one of its path components (`tee
 #    "$(git rev-parse --git-common-dir)"/op-review?/<sha>`; not a commit message that mentions op-reviews),
 #    or a variable is set to a path-shaped part of one (`d=op-reviews`, `d=reviews`; not
-#    `f=$SCRATCH/x-reviews.md`).
+#    `f=$SCRATCH/x-reviews.md`). Written words are read with the variables this gate can resolve put in
+#    (`d=op-; tee "$G/${d}reviews/x"`), a component mixing an unresolvable `$` with `op-`/`rev` is refused, and
+#    the tail of an unquoted `$(…)/op-revie?s/x` counts. Inline message values (-m/--message/--trailer for git,
+#    --body/--title/--notes for gh) are text, not paths: a commit message may mention `.git/op-reviews/<sha>`.
 #
-# An unparseable command that looks like a push or a PR is blocked (fail closed), and so is a push run by
-# xargs, whose appended refspecs this gate can't see (TASK-067).
+# An unparseable command that mentions a push, gh, or a review record is blocked (fail closed; line
+# continuations joined first), and so is a push run by xargs, whose appended refspecs this gate can't see
+# (TASK-067).
 #
 # Writing/deleting main or dev directly is enforce-pr-workflow.sh's job; this gate adds the review
 # requirement on top. Guardrail, not a security boundary (see lib/cmdparse.py). Exit 2 blocks.
@@ -47,9 +54,9 @@ input=$(cat)
 HOOK_INPUT="$input" python3 - "$HOOK_DIR" <<'PY'
 import glob, json, os, re, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import (ASSIGNMENT, FailClosed, ParseError, gh_subcommand, git, git_bool, git_config, git_config_opaque,
-                      git_dir, git_subcommand, opt_value, opt_values, push_config, push_config_risk,
-                      read_payload, redirect_targets, simple_commands, tokenize, xargs_hides_args)
+from cmdparse import (ASSIGNMENT, FailClosed, ParseError, expand_known, expand_word, gh_subcommand, git, git_anchored,
+                      git_bool, git_config, git_config_opaque, git_dir, git_subcommand, opt_value, opt_values,
+                      push_config, push_config_risk, read_payload, tokenize, walk, xargs_hides_args)
 
 ENTRY_NAME = re.compile(r"^\.claude/learnings/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$")  # same rule as learnings_index.py
 PUSH_VALUE_OPTS = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
@@ -130,6 +137,29 @@ RECORD_PART = re.compile(r"op-?rev|(^|/)reviews(/|$)", re.IGNORECASE)
 # whitespace): `"$G"/op-revie?s/x` does, a `-m "$(cat <<'EOF' … the op-reviews gate …)"` message doesn't
 RECORD_PATH_HINT = re.compile(r"(^|/)[^/\s]*(op-?rev|\.git\b|git-(common-)?dir|GIT_(COMMON_)?DIR)", re.IGNORECASE)
 PATH_SHAPED = re.compile(r"[^\s{}()]*")
+# a path component that mixes a `$` this gate can't resolve with a record-name fragment (`${e}reviews`, `op-$x`):
+# what it writes can't be told, and it may be a record (review gate round 3)
+UNREAD_FRAGMENT = re.compile(r"(^|/)[^/\s]*(\$[^/\s]*(op-|rev)|(op-|rev)[^/\s]*\$)", re.IGNORECASE)
+# inline text values (a commit message, a PR body) are text, not paths: `git commit -m "… .git/op-reviews/<sha> …"`
+MESSAGE_OPTS = {"git": ("-m", "--message", "--trailer"), "gh": ("--body", "-b", "--title", "-t", "--notes", "-n")}
+# git commands that move HEAD (or make a commit HEAD may become): a push after one in the same call pushes a HEAD
+# this gate didn't read (review gate round 3: `git commit … && git push origin HEAD`)
+HEAD_MOVERS = {"commit", "checkout", "switch", "reset", "merge", "rebase", "cherry-pick", "am", "pull", "revert",
+               "commit-tree", "update-ref"}
+
+def message_values(argv):
+    """The indices in `argv` of words that are the inline value of a message option (-m, --message, --trailer for
+    git; --body/-b, --title/-t, --notes/-n for gh), attached (`-mx`, `--body=x`, `-qm x`'s next word) or not."""
+    opts = MESSAGE_OPTS.get(argv[0] if argv else "", ())
+    out = set()
+    for k, a in enumerate(argv[1:], start=1):
+        if a in opts or (argv[0] == "git" and re.fullmatch(r"-[A-Za-z]*m", a)):
+            out.add(k + 1)
+        elif any(a.startswith(o + "=") for o in opts if o.startswith("--")) or (
+                any(a.startswith(o) for o in opts if not o.startswith("--")) and len(a) > 2
+                and not a.startswith("--")) or (argv[0] == "git" and re.fullmatch(r"-[A-Za-z]*m.+", a)):
+            out.add(k)
+    return out
 
 def named_paths(word, dirs):
     """The word, and every path it names with its globs expanded against each directory: the whole word, and
@@ -164,38 +194,65 @@ cmd, cwd = read_payload()
 if not cmd:  # no raw-text prefilter: `gi\<newline>t push` only becomes `git` after parsing (review round 6)
     sys.exit(0)
 try:
-    commands = list(simple_commands(cmd, cwd))
+    walked = list(walk(cmd, cwd))
 except FailClosed as exc:
     block([f"Review gate: this git command can't be read reliably ({exc}). Write abbreviated options out in",
            "full, and run the git subcommand by its own name rather than an alias set by --config-env,",
-           "-c include.path or GIT_CONFIG_*; refusing rather than guessing what it pushes."])
+           "-c include.path or GIT_CONFIG_*, and run `git config` (or an edit of a git config file) in its",
+           "own call; refusing rather than guessing what it pushes."])
 except ParseError:
-    # Fail CLOSED (review round 3): a command the parser can't read may still be a push or a PR.
-    if re.search(r"\bgit\b[^\n]*\bpush\b|\bgh\b[^\n]*\bpr\b|op-reviews", cmd, re.IGNORECASE):
-        block(["Review gate: this command could not be parsed (unbalanced quotes?) and appears to push, open",
-               "a PR or touch a review record — refusing rather than letting it through unexamined. Fix the",
-               "quoting and retry."])
+    # Fail CLOSED (review round 3): a command the parser can't read may still be a push or a PR; the text is
+    # searched with its line continuations joined (`gi\<newline>t pu\<newline>sh`: review gate round 3)
+    if re.search(r"push|\bgh\b|op-?rev|review", cmd.replace("\\\n", ""), re.IGNORECASE):
+        block(["Review gate: this command could not be parsed (unbalanced quotes?) and may push, open a PR or",
+               "touch a review record — refusing rather than letting it through unexamined. Fix the quoting, or",
+               "write the command more plainly, and retry."])
     sys.exit(0)
+commands = [(argv, d) for argv, d, _ in walked if argv]
+
+def text_words(argv):
+    """The words of `argv` that may name a path: the command word as written, then every argument but an inline
+    message (`message_values`)."""
+    skip = message_values(argv)
+    return [argv.head_word or argv[0], *(w for k, w in enumerate(argv[1:], start=1) if k not in skip)]
+
+def readings(word, argv, d):
+    """`word` as written and with the variables this gate can resolve put in (`d=op-; "$G/${d}reviews"`)."""
+    return {word, expand_known(word, argv, d)}
 
 words = tokenize(cmd)
-redirects = list(redirect_targets(cmd, cwd))
 dirs = {cwd, *(d for _, d in commands)}
-touched = any(RECORD_WORD.search(p) for w in words for p in named_paths(w, dirs))
+touched = any(RECORD_WORD.search(p) for argv, d in commands for w in text_words(argv)
+              for x in readings(w, argv, d) for p in named_paths(x, dirs))
 targets = [words[k + 1] for k in range(len(words) - 1) if words[k] in ("cd", "pushd")]
-targets += [t for op, t, _ in redirects if ">" in op]
-# and every word of a writing command: `tee "$(git rev-parse --git-common-dir)"/op-revie?s/<sha>`
-written = [w for argv, _ in commands if argv and argv[0] not in RECORD_READERS for w in argv[1:]]
+redirects = [(op, x) for argv, d, rs in walked for op, t in rs for x in readings(t, argv, d)]
+targets += [t for op, t in redirects if ">" in op]
+touched = touched or any(RECORD_WORD.search(t) for t in targets)
+# and every word of a writing command (`tee "$(git rev-parse --git-common-dir)"/op-revie?s/<sha>`), the command
+# word too: an unquoted `$(…)/op-revie?s/<sha>` is split by the parser, and its tail read as a command
+written = [x for argv, d in commands if argv[0] not in RECORD_READERS
+           for w in text_words(argv) for x in readings(w, argv, d)]
 unread = any(UNREAD.search(t) and RECORD_HINT.search(t) for t in targets) or any(
-    UNREAD.search(w) and RECORD_PATH_HINT.search(w) for w in written) or any(
+    (UNREAD.search(w) and RECORD_PATH_HINT.search(w)) or UNREAD_FRAGMENT.search(w) for w in written) or any(
     ASSIGNMENT.match(w) and PATH_SHAPED.fullmatch(v := w.partition("=")[2]) and RECORD_PART.search(v) for w in words)
 if touched or unread:
     writes = any(">" in op and not (op.endswith("&") and target.isdigit()) and target != "/dev/null"
-                 for op, target, _ in redirects)
-    if writes or any(argv and argv[0] not in RECORD_READERS for argv, _ in commands):
+                 for op, target in redirects)
+    if writes or any(argv[0] not in RECORD_READERS for argv, _ in commands):
         forged_record_block()
 
+moved = None  # a HEAD-moving git command earlier in this call
 for argv, d in commands:
     g = git_subcommand(argv, d)
+    pushes = (g and g[0] == "push") or ((h := gh_subcommand(argv)) and h[:2] == ("pr", "create"))
+    if pushes and moved:
+        block([f"Review gate: this call runs `git {moved}` and then pushes or opens a PR: the commit pushed is",
+               "not the HEAD this gate checked. Run the push (or `gh pr create`) in its own call."])
+    if g and g[0] in HEAD_MOVERS:
+        moved = g[0]
+    if pushes and argv.dir_unknown and not git_anchored(argv):
+        block(["Review gate: a `cd`/`pushd` before this push or PR went somewhere this gate can't tell, so it",
+               "can't tell which commit is pushed. Run it from the repository, or with `git -C <absolute path>`."])
     if g and g[0] == "push":
         _, args, eff = g
         gd = git_dir(argv, d)  # `git --git-dir=<other>/.git push origin HEAD` pushes the other worktree's HEAD
@@ -216,7 +273,11 @@ for argv, d in commands:
             # every tag, whatever commit it names, and main's merge commits have no record (spec 08 §Release)
             block(["Review gate: `git push --tags` pushes every tag without checking what it points at. Push a tag",
                    "by name (`git push origin <tag>`, its commit needs a record), or let `gh release create` make it."])
-        refspecs = push_positionals(args)[1:]
+        positionals = [expand_word(w, d, argv.shell_vars, argv.olddir) for w in push_positionals(args)]
+        if None in positionals:
+            block(["Review gate: this `git push` names a remote or refspec this gate can't resolve (a `$…` or",
+                   "`$(…)` word), so it can't tell what is pushed. Write the refspec out."])
+        refspecs = positionals[1:]
         if any(r.lstrip("+") == ":" for r in refspecs):
             # the matching refspec: every branch that exists on both sides, like --all (TASK-067 review gate)
             block(["Review gate: the refspec `:` pushes every local branch that also exists on the remote,",
