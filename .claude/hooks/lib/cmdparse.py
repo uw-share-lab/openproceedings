@@ -1064,21 +1064,22 @@ def expand_known(word: str, argv: Argv, directory: str | None) -> str:
     return word
 
 
-def _change_dir(head: str, words: list[str], state: dict) -> None:
+def _change_dir(head: str, words: list[str], state: dict, assigns: dict[str, str] | None = None) -> None:
     """Follow `cd`/`pushd`/`popd` in `state`: "dir" is the new directory, "olddir" the one before (with
     "olddir_unknown"), "dirstack" pushd's stack; a target this parser can't resolve (an unset variable, `pushd
     +1`, an empty stack) keeps "dir" but sets "dir_unknown" until an absolute `cd` (TASK-067 review gate:
     `pushd data; rm -rf snapshots` was read from the old directory). Review gate round 3: `cd -P` resolves
     symlinks; a target that doesn't exist leaves the directory unknown (the `cd` fails and the shell stays,
     or `&&` stops: this parser can't tell which), and so is the directory before it unless it was already the
-    current one; with CDPATH set a relative target is unknown; `cd -` to an unknown directory is unknown."""
+    current one; with CDPATH set a relative target is unknown; `cd -` to an unknown directory is unknown.
+    `assigns`, the command's own `VAR=val` prefix (`HOME=data cd`), counts first: the shell reads it."""
     opts = [w for w in words if len(w) > 1 and w[0] == "-" and w[1] in "LPen@"]  # cd -P, pushd -n
     words = [w for w in words if w not in opts]
     physical = any("P" in o for o in opts)
     cur, unknown = state["dir"], state.get("dir_unknown", False)
     old, old_unknown = state.get("olddir"), state.get("olddir_unknown", False)
     stack: list[tuple[str, bool]] = state.setdefault("dirstack", [])
-    variables = state.get("vars", {})
+    variables = {**state.get("vars", {}), **(assigns or {})}
     env_empty = state.get("env_empty", False)
     target: str | None = None
     if head == "popd":
@@ -1095,8 +1096,8 @@ def _change_dir(head: str, words: list[str], state: dict) -> None:
     elif head == "pushd" and words[0][:1] in ("+", "-"):
         pass  # a stack rotation: unknown
     elif not words:
-        # a bare `cd` goes to $HOME, unlike `~` never the passwd home: with HOME unset (or '') bash says "HOME not
-        # set" and stays, zsh goes home, so the target is unknown (CI fix re-check)
+        # a bare `cd` goes to $HOME, unlike `~` never the passwd home: with HOME unset bash stays ("HOME not set")
+        # and zsh goes to the passwd home; with HOME '' both stay. So without a HOME the target is unknown
         home = (
             variables.get("HOME") if "HOME" in variables else (None if env_empty else os.environ.get("HOME"))
         )
@@ -1413,7 +1414,7 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
                 yield _context(expanded, state), d, redirects
             continue
         if head in ("cd", "pushd", "popd"):
-            _change_dir(head, argv[1:], state)
+            _change_dir(head, argv[1:], state, getattr(argv, "assigns", {}))
             continue
         if head in SHELLS:
             for k, a in enumerate(argv[1:], start=1):

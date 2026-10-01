@@ -1067,6 +1067,12 @@ check_no_home $P allow "no HOME: rm -f ~/op-not-a-repo-file" "$(payload_bash 'rm
 # a bare `cd` with no HOME: bash stays put, so `data` is still the repo's (unknown target: refused)
 check_no_home $P block "no HOME: cd; rm -rf data" "$(payload_bash 'cd; rm -rf data')"
 check $P block "HOME=; cd; rm -rf data" "$(payload_bash 'HOME=; cd; rm -rf data')"
+# a HOME prefixed to the cd itself is the one it reads (bash and zsh)
+check $P block "HOME=data cd; rm -rf snapshots" "$(payload_bash 'HOME=data cd; rm -rf snapshots')"
+check $P block "HOME=/nonexistent cd; rm -rf data" "$(payload_bash 'HOME=/nonexistent cd; rm -rf data')"
+# deliberate: the pass that reads HOME as '' leaves a bare cd unknown, so with a \$ in the command a relative
+# write after it is refused where data/ exists
+check $P block "cd; rm -rf build; echo \$PATH (deliberate)" "$(payload_bash 'cd; rm -rf build; echo $PATH')"
 # the bypass the '' reading had: `cd ~` to the passwd home, then back to the repo's data/ by a relative path
 FROM_HOME=$(python3 -c 'import os,pwd,sys; print(os.path.relpath(sys.argv[1], pwd.getpwuid(os.getuid()).pw_dir))' "$REPO")
 check_no_home $P block "no HOME: cd ~ && rm -rf <repo rel>/data" "$(payload_bash "cd ~ && rm -rf '$FROM_HOME'/data")"

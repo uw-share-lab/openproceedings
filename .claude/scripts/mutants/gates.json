@@ -2840,5 +2840,11 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "        target = home or None",
   "new": "        target = home or _passwd_home()"
+ },
+ {
+  "label": "cmdparse: a cd's own VAR=val prefix ignored",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            _change_dir(head, argv[1:], state, getattr(argv, \"assigns\", {}))",
+  "new": "            _change_dir(head, argv[1:], state)"
  }
 ]
