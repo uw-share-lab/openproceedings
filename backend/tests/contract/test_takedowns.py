@@ -725,3 +725,70 @@ def test_no_response_may_be_stored_by_a_cache(client: TestClient, store: Store) 
         ("/api/v1/nowhere", {}),
     ]:
         assert client.get(path, params=params).headers["cache-control"] == "no-store", path
+
+
+def test_coverage_counts_a_listed_paper_held_under_other_ids(aliased: Aliased) -> None:
+    """`prev` holds the listed paper twice, under its pre-rekey id and as a duplicate: both are withheld, so
+    both are counted withheld (TASK-067 review)."""
+    data, prev, *_ = aliased
+    point_current(data, prev)
+    with TestClient(make_app(data)) as c:
+        totals = c.get("/api/v1/coverage").json()["totals"]
+    assert totals["abstract_withheld"] == 2
+
+
+def test_a_damaged_merges_file_never_stops_the_list(logs: Logs, aliased: Aliased) -> None:
+    """One old snapshot whose merges.csv doesn't match its manifest: the load still applies the list (the
+    listed id, and its native-id rekey) without any merges, and says so once, naming the snapshot."""
+    data, prev, _, paper, rekeyed, dup = aliased
+    merges = data / "snapshots" / "new" / "merges.csv"
+    merges.chmod(0o644)
+    merges.write_text(merges.read_text(encoding="utf-8") + "x,y,z\n", encoding="utf-8")
+    with TestClient(make_app(data)) as c:
+        assert c.get(f"/api/v1/papers/{paper.id}").json()["abstract_withheld"] is True
+        text = exported(c, "jsonl", q=_title(paper), index_version=prev)
+    assert withheld_in_export("jsonl", text, rekeyed.id)  # the native id still links
+    assert not withheld_in_export("jsonl", text, dup.id)  # the merge is what was lost
+    [line] = [x for x in logs() if x["event"] == "takedown_merges_unavailable"]
+    assert (line["snapshot"], line["reason"], line["level"]) == ("new", "merges_mismatch", "ERROR")
+
+
+def test_a_pinned_export_waiting_past_the_bound_is_busy(data_dir: Path, store: Store) -> None:
+    """TASK-067 review: the bounded wait covers the pinned snapshot's verification (`pinned_records`) as well
+    as the engine's open, over HTTP: 503 API_BUSY with Retry-After, never a queue."""
+    _, old, new, _, word = store
+    point_current(data_dir, new)
+    with TestClient(make_app(data_dir, pinned_open_wait_seconds=0.05, busy_retry_seconds=3)) as c:
+        state: IndexState = c.app.state.index  # type: ignore[attr-defined]
+        assert state.pinned(old).reason == "ok"  # the engine is cached: only the records must wait
+        assert state._open_slot.acquire(timeout=5)
+        try:
+            r = c.get(EXPORT, params={"format": "jsonl", "q": f"abstract:{word}", "index_version": old})
+        finally:
+            state._open_slot.release()
+        assert r.status_code == 503 and r.json()["error"]["code"] == "API_BUSY"
+        assert r.headers["retry-after"] == "3" and r.headers["cache-control"] == "no-store"
+        r = c.get(EXPORT, params={"format": "jsonl", "q": f"abstract:{word}", "index_version": old})
+        assert r.status_code == 200  # not remembered
+
+
+def test_op_serve_behind_a_trusted_proxy_requires_the_list(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """On loopback but with a trusted proxy, clients reach it through that proxy: a public instance."""
+    served: list[Any] = []
+    monkeypatch.setattr(api_server, "serve", lambda config, *a: served.append(config))
+    assert cli.main(["--data-dir", str(tmp_path), "serve", "--trusted-proxy", "127.0.0.1"]) == 0
+    assert served[0].takedown_list_required is True
+
+
+def test_op_export_refuses_a_missing_list_once_a_snapshot_withheld(
+    data_dir: Path, store: Store, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`new`'s snapshot withheld an abstract; with the list gone, exporting `old` (from before the takedown)
+    would hand the listed abstract out, so op export refuses as the API does (TASK-067 review)."""
+    _, old, _, _, word = store
+    unlisted(data_dir)
+    argv = ["--data-dir", str(data_dir), "export", f"abstract:{word}", "--index", old, "--format", "jsonl"]
+    assert cli.main(argv) == 1
+    assert "withheld.txt is missing" in capsys.readouterr().err

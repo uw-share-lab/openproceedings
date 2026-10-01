@@ -508,8 +508,8 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
             buf = []
 
     n = len(text)
-    # The run of combining marks last found (TASK-067): it ends at `run_end` and its last slash is before
-    # `run_slash`. A mark inside a run reuses them, so a run is scanned once, not once per mark (quadratic: a
+    # The run of combining marks last found (TASK-067): it ends at `run_end`, and `run_slash` is one past its
+    # last slash (the run's start if it has none). A mark inside a run reuses them, so a run is scanned once, not once per mark (quadratic: a
     # `q` or an abstract of a few thousand marks cost seconds).
     run_end = run_slash = 0
     i = 0

@@ -445,7 +445,7 @@ def _snapshot_build(ns: argparse.Namespace) -> int:
     # snapshot has withheld an abstract (TASK-067: a missing list never builds a withheld abstract back in)
     listed = takedowns.load(
         ns.takedowns or takedowns.list_path(ns.data_dir),
-        required=ns.takedowns is not None or any_withheld(out),
+        required=ns.takedowns is not None or any_withheld(out) or any_withheld(ns.data_dir / "snapshots"),
     )
     result = build(ns.cache or ns.data_dir / "cache", out, takedowns=listed)
     _print({"path": str(result.path), "snapshot_hash": result.snapshot_hash, "created": result.created,
@@ -1008,7 +1008,7 @@ def _export(ns: argparse.Namespace) -> int:
     from openproceedings.api.state import snapshot_records
     from openproceedings.engine.tantivy_engine import TantivyEngine
     from openproceedings.export import Provenance, Sources, check_count, utc_date, write
-    from openproceedings.ingest.snapshot import SnapshotError, merges_on_disk
+    from openproceedings.ingest.snapshot import SnapshotError, any_withheld, merges_on_disk
     from openproceedings.takedowns import list_path, same_paper
     from openproceedings.takedowns import load as load_takedowns
 
@@ -1016,9 +1016,9 @@ def _export(ns: argparse.Namespace) -> int:
     result = _parsed(ns)
     if result is None:
         return 1
-    listed = load_takedowns(
-        list_path(ns.data_dir)
-    )  # as the API withholds them (TASK-136); a bad list refuses
+    # as the API withholds them (TASK-136); a bad list refuses, and so does a missing one once a snapshot has
+    # withheld an abstract (TASK-067: an older index would otherwise export the listed abstracts)
+    listed = load_takedowns(list_path(ns.data_dir), required=any_withheld(ns.data_dir / "snapshots"))
     ast = result.effective_ast
     assert ast is not None and result.canonical_hash is not None
     if ns.out is not None and ns.out.is_dir():
@@ -1033,10 +1033,7 @@ def _export(ns: argparse.Namespace) -> int:
     withheld = listed
     try:
         records = snapshot_records(ns.data_dir, path, engine.index_version)
-        # the listed papers under their other ids too (TASK-067), as the API's `Served.withheld_in`
-        merges = merges_on_disk(ns.data_dir / "snapshots") if listed else ()
-        aliases = same_paper(listed, merges, records.ids())
-        sources, withheld = records.attributions, listed | aliases | records.withheld
+        sources, withheld = records.attributions, listed | records.withheld
     except (SnapshotError, OSError) as e:
         sources = None
         log.warning(
@@ -1048,6 +1045,19 @@ def _export(ns: argparse.Namespace) -> int:
             "abstracts can't be attributed: every abstract is withheld and each record says so (decision-021)",
             file=sys.stderr,
         )
+    if sources is not None and listed:
+        # the listed papers under their other ids too (TASK-067), as the API's `Served.withheld_in`; a damaged
+        # merges.csv leaves the merges out, as the API does, and says so
+        merges: tuple[tuple[str, str], ...] = ()
+        try:
+            merges = merges_on_disk(ns.data_dir / "snapshots")
+        except SnapshotError as e:
+            log.error("takedown_merges_unavailable", extra={"snapshot": e.snapshot, "reason": e.reason})
+            print(
+                f"op export: warning: {e}; the takedown list applies without any snapshot's merges",
+                file=sys.stderr,
+            )
+        withheld |= same_paper(listed, merges, records.ids())
     total, found = engine.documents(ast)
     removed = 0  # records a takedown withholds (the API's X-Abstracts-Withheld), counted as they stream
 
@@ -1372,8 +1382,9 @@ def _serve(ns: argparse.Namespace) -> int:
             max_verification_candidates=ns.max_verification_candidates,
             max_verification_seconds=ns.max_verification_seconds,
             serve_docs=loopback if ns.docs is None else ns.docs,
-            # a public instance never starts without its takedown list (TASK-067); an empty one lists nothing
-            takedown_list_required=not loopback,
+            # a public instance never starts without its takedown list (TASK-067): off loopback, or behind a
+            # proxy on the same host (a trusted proxy means clients reach it); an empty list lists nothing
+            takedown_list_required=not loopback or bool(ns.trusted_proxy),
             pinned_indexes=ns.pinned_indexes,
         )
     except ValidationError as e:  # the operator's own flags: say which and why, as usage
@@ -1409,6 +1420,7 @@ def _takedown_check(ns: argparse.Namespace) -> int:
     from urllib.parse import urlsplit
 
     from openproceedings import takedowns
+    from openproceedings.ingest.snapshot import SnapshotError, merges_on_disk
     from openproceedings.takedown_check import check, http
 
     if urlsplit(ns.api).scheme not in ("http", "https") or not urlsplit(ns.api).netloc:
@@ -1420,8 +1432,16 @@ def _takedown_check(ns: argparse.Namespace) -> int:
         print(
             "op takedown check: the takedown list names no id, so there is nothing to check", file=sys.stderr
         )
-    report = check(http(ns.api), listed)
-    problems = [*(p.message for p in log_problems), *report.problems]
+    # every snapshot's merges, for the check that a merge withholds no other paper (TASK-067); a damaged one is
+    # a problem of its own (the API then applies the list without the merges)
+    merges: tuple[tuple[str, str], ...] = ()
+    merge_problems: list[str] = []
+    try:
+        merges = merges_on_disk(ns.data_dir / "snapshots")
+    except SnapshotError as e:
+        merge_problems.append(f"{e} ({e.reason}): the API applies the list without any snapshot's merges")
+    report = check(http(ns.api), listed, merges)
+    problems = [*(p.message for p in log_problems), *merge_problems, *report.problems]
     for line in problems:
         print(line)
     print(

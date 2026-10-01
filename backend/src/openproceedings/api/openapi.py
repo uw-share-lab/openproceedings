@@ -74,7 +74,8 @@ BUSY: dict[int | str, dict[str, Any]] = {
         "model": ErrorEnvelope,
         "description": (
             "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot "
-            "is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records "
+            "is taken, or another index version's open (a pinned index_version or record) outlasted the wait "
+            "this instance allows; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records "
             "API_RECORDS_STORE_FULL (neither sends Retry-After)"
         ),
         "headers": {

@@ -29,7 +29,6 @@ from __future__ import annotations
 import json
 import os
 import stat
-import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -72,8 +71,9 @@ def parse(text: str, *, name: str = "withheld.txt") -> Withheld:
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
-        # an invisible character (U+200B, a BOM mid-file) would make an id that matches nothing (TASK-067)
-        if not is_paper_id(line) or any(unicodedata.category(ch) in ("Cc", "Cf") for ch in line):
+        # every record id is printable ASCII: an invisible character (U+200B, U+3164, a BOM mid-file) would make
+        # an id that matches nothing (TASK-067)
+        if not is_paper_id(line) or not (line.isascii() and line.isprintable()):
             raise TakedownError(
                 f"{name} line {n}: {clip(line, 40)!r} is not a record id (op:<venue>:<year>:<native>); "
                 "write one id per line, with notes after a `#`"

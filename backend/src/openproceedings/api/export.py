@@ -127,7 +127,7 @@ def _bad(message: str) -> ApiError:
                     "This code's query_version (on a `record_id` export too, whatever the record's own)"
                 ),
                 "Content-Disposition": response_header(
-                    'attachment; filename="openproceedings-<index_version>-<first 12 of canonical_hash>.<ext>"'
+                    'attachment; filename="openproceedings-<index_version>-<the hex of the first 12 of canonical_hash>.<ext>"'
                 ),
                 "X-Abstract-Source": response_header(
                     "`attributed`: each abstract names its source (decision-018). `unavailable`: the exported "

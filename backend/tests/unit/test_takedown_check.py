@@ -43,6 +43,7 @@ class FakeApi:
     export_abstract: str | None = None
     # records of the title-only export beyond the listed ones: (id, authors, abstract) (TASK-067)
     others: tuple[tuple[str, list[str], str | None], ...] = ()
+    titles: dict[str, str] = field(default_factory=dict)  # /papers titles by id (default "Calibrated Trust")
     calls: list[tuple[str, dict[str, str]]] = field(default_factory=list)
 
     def fetch(self, path: str, params: Mapping[str, str]) -> tuple[int, str]:
@@ -56,9 +57,11 @@ class FakeApi:
                     {"matched": self.matched, "highlights": {"title": [], "abstract": self.lit_spans}}
                 )
             provenance = [{"field": "title"}, *([{"field": "abstract"}] if self.claim else [])]
+            if rid not in self.ids and rid not in self.titles:
+                return 404, "{}"
             paper = {
                 "id": rid,
-                "title": "Calibrated Trust",
+                "title": self.titles.get(rid, "Calibrated Trust"),
                 "authors": AUTHORS,
                 "abstract": self.abstract,
                 "provenance": provenance,
@@ -274,3 +277,17 @@ def test_the_http_client_waits_out_a_429_up_to_its_retries(
     finally:
         server.shutdown()
     assert (got, handler.seen) == (status, seen)
+
+
+def test_a_merge_that_withholds_another_paper_is_a_problem() -> None:
+    """TASK-067 review: the check also looks the other way. An id a snapshot's merges.csv links to a listed
+    paper is withheld as that paper; if the served index gives it another title, the merge (and so the
+    withholding) is suspect, and the check names it."""
+    other, same = "op:iclr:2024:Other9999", "op:iclr:2024:Twin00001"
+    api = FakeApi(titles={other: "Something Else Entirely", same: "Calibrated trust"})
+    merges = ((RID, other), (same, RID))
+    report = takedown_check.check(api.fetch, frozenset(api.ids), merges)
+    assert report.problems == (
+        f"{other}: withheld as {RID}'s paper (a snapshot's merges.csv links them), but its title differs; "
+        "check that merge",
+    )

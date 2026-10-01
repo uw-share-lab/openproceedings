@@ -30,7 +30,7 @@ class Diagnostic(BaseModel):  # frozen, extra="forbid"
   endpoint that runs it, carrying 02's diagnostics with spans; `POST /parse` returns them as values in a 200), 422 `API_BAD_PARAM`, 404 `API_PAPER_NOT_FOUND` /
   `API_RECORD_NOT_FOUND`, 409 `API_INDEX_VERSION_UNAVAILABLE`, 409 `API_RECORD_MISMATCH` (export of a
   `mismatch` record), 429 `API_RATE_LIMITED` (with `Retry-After`), 503 `API_INDEX_NOT_LOADED`, 503 `API_RECORDS_STORE_FULL`, 413
-  `API_BODY_TOO_LARGE` (a body over the cap), 503 `API_BUSY` (with `Retry-After`: verification slots taken), 422
+  `API_BODY_TOO_LARGE` (a body over the cap), 503 `API_BUSY` (with `Retry-After`: verification slots taken, or another index version's open outlasted `pinned_open_wait_seconds`, TASK-067), 422
   `API_TOO_MANY_VERIFIED_CLAUSES` (more position-verified clauses than the instance runs; carries one located
   diagnostic per clause, decision-010), 422 `API_QUERY_TOO_COSTLY` (the clauses' position checks would read
   more candidate documents than the instance allows one query; one located diagnostic per clause with its

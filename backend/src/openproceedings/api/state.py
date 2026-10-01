@@ -312,19 +312,28 @@ class IndexState:
         self._slow_verification_ms = slow_verification_seconds * 1000
         self._max_verification_seconds = max_verification_seconds
 
+    def _open_busy(self) -> ApiError:
+        """The 503 `API_BUSY` a request gets when another version's open outlasts `open_wait_seconds`; its access
+        line says `busy: pinned_open` (TASK-067), so an operator tells it from a full verification slot and
+        knows to raise `--pinned-indexes`."""
+        fields = current_access.get()
+        if fields is not None:
+            fields["busy"] = "pinned_open"
+        return ApiError(
+            DiagnosticCode.API_BUSY,
+            "Another index version is being opened, and this request's version must wait its turn. Try "
+            f"again in {self._busy_retry_seconds} s.",
+            headers={"Retry-After": str(self._busy_retry_seconds)},
+        )
+
     @contextmanager
     def _open_turn(self) -> Iterator[None]:
         """Hold the one pinned-open slot for the block, waiting at most `open_wait_seconds` for it, else 503
-        `API_BUSY` with `Retry-After` (TASK-067: an unbounded wait let clients rotating through more versions
-        than the LRU holds queue every worker thread behind one multi-second open). The refusal is not
-        remembered: the version is opened on a later request."""
+        `API_BUSY` with `Retry-After` (`_open_busy`; TASK-067: an unbounded wait let clients rotating through
+        more versions than the LRU holds queue every worker thread behind one multi-second open). The refusal
+        is not remembered: the version is opened on a later request."""
         if not self._open_slot.acquire(timeout=self._open_wait_seconds):
-            raise ApiError(
-                DiagnosticCode.API_BUSY,
-                "Another index version is being opened, and this request's version must wait its turn. Try "
-                f"again in {self._busy_retry_seconds} s.",
-                headers={"Retry-After": str(self._busy_retry_seconds)},
-            )
+            raise self._open_busy()
         try:
             yield
         finally:
@@ -457,6 +466,7 @@ class IndexState:
                         "index_version": kept,
                         "abstracts_withheld": len(listed),
                         "takedowns_not_in_index": _not_in(listed, served.records),
+                        "takedowns_followed": _followed(self._served),
                         "ms": elapsed_ms(started),
                     },
                 )
@@ -499,6 +509,7 @@ class IndexState:
                 "previous_index_version": kept,
                 "abstracts_withheld": len(listed),
                 "takedowns_not_in_index": _not_in(listed, records),
+                "takedowns_followed": _followed(bundle),
                 "takedowns_list": "present" if present else "absent",
                 "ms": elapsed_ms(started),
             },
@@ -506,10 +517,21 @@ class IndexState:
         return True
 
     def _bundle(self, engine: TantivyEngine, records: RecordFile, listed: Withheld) -> Served:
-        """What a load serves: with a list, every snapshot's merges read beside it (a snapshot whose merges.csv
-        doesn't match its manifest fails the load: SnapshotError), and the coverage counted with every id the
-        list withholds from `records`, under the listed id or another."""
-        merges = merges_on_disk(self._data_dir / "snapshots") if listed else ()
+        """What a load serves: with a list, every snapshot's merges read beside it, and the coverage counted
+        with every id the list withholds from `records`, under the listed id or another. A snapshot whose
+        merges.csv doesn't match its manifest leaves the merges out (ERROR `takedown_merges_unavailable`, with
+        the snapshot's name and reason) rather than failing the load: the list itself still applies, so one
+        damaged old snapshot never stops a new takedown (TASK-067 review); `op takedown check` reports what the
+        merges would have withheld."""
+        merges: tuple[tuple[str, str], ...] = ()
+        if listed:
+            try:
+                merges = merges_on_disk(self._data_dir / "snapshots")
+            except SnapshotError as e:
+                log.error(
+                    "takedown_merges_unavailable",
+                    extra={"snapshot": e.snapshot, "reason": e.reason, "index_version": engine.index_version},
+                )
         aliases = takedowns.same_paper(listed, merges, records.ids())
         served = Served(engine, records, coverage_of(engine, records, listed | aliases), listed, merges)
         served._aliases[records] = aliases
@@ -538,6 +560,7 @@ class IndexState:
                 "index_version": served.engine.index_version,
                 "abstracts_withheld": len(listed),
                 "takedowns_not_in_index": _not_in(listed, served.records),
+                "takedowns_followed": _followed(bundle),
                 "ms": elapsed_ms(started),
             },
         )
@@ -592,14 +615,19 @@ class IndexState:
             return cached
         with self._cache_lock:
             opening = self._opening.setdefault(version, threading.Lock())
-        with opening:  # one open of this version at a time; others wait, then find it cached
+        # one open of this version at a time; others wait (as long as for the open slot), then find it cached
+        if not opening.acquire(timeout=self._open_wait_seconds):
+            raise self._open_busy()
+        try:
             cached = self._cached(version)
             if cached is None:
                 cached = self._resolve_and_open(version)
                 with self._cache_lock:
                     self._remember(version, cached)
-        with self._cache_lock:
-            self._opening.pop(version, None)
+        finally:
+            opening.release()
+            with self._cache_lock:
+                self._opening.pop(version, None)
         return cached
 
     def pinned_records(self, version: str) -> RecordFile | None:
@@ -694,9 +722,18 @@ class IndexState:
 
 
 def _not_in(listed: Withheld, records: RecordFile) -> int:
-    """How many listed ids the index's records don't hold (a count for the log, never the ids): a paper since
-    rekeyed, or gone, or a typo (`op takedown check` names them)."""
+    """How many listed ids the index's records don't hold under that id (a count for the log, never the ids): a
+    paper since rekeyed or merged (then counted in `_followed` too), or gone, or a typo (`op takedown check`
+    names them)."""
     return sum(i not in records for i in listed)
+
+
+def _followed(served: Served | None) -> int:
+    """How many ids the served index withholds as a listed paper under another id (`takedowns.same_paper`,
+    TASK-067): a count for the load and reload lines."""
+    if served is None:
+        return 0
+    return len(served.withheld_in(served.records) - served.listed - served.records.withheld)
 
 
 def install_sighup(state: IndexState) -> Callable[[], None]:

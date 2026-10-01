@@ -3662,7 +3662,7 @@
             "description": "The entire matched set, ordered by id.",
             "headers": {
               "Content-Disposition": {
-                "description": "attachment; filename=\"openproceedings-<index_version>-<first 12 of canonical_hash>.<ext>\"",
+                "description": "attachment; filename=\"openproceedings-<index_version>-<the hex of the first 12 of canonical_hash>.<ext>\"",
                 "schema": {
                   "type": "string"
                 }
@@ -3756,7 +3756,7 @@
                 }
               }
             },
-            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken, or another index version's open (a pinned index_version or record) outlasted the wait this instance allows; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
             "headers": {
               "Retry-After": {
                 "description": "Sent with API_BUSY: whole seconds to wait before retrying",
@@ -4001,7 +4001,7 @@
                 }
               }
             },
-            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken, or another index version's open (a pinned index_version or record) outlasted the wait this instance allows; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
             "headers": {
               "Retry-After": {
                 "description": "Sent with API_BUSY: whole seconds to wait before retrying",
@@ -4180,7 +4180,7 @@
                 }
               }
             },
-            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken, or another index version's open (a pinned index_version or record) outlasted the wait this instance allows; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
             "headers": {
               "Retry-After": {
                 "description": "Sent with API_BUSY: whole seconds to wait before retrying",
@@ -4310,7 +4310,7 @@
                 }
               }
             },
-            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken, or another index version's open (a pinned index_version or record) outlasted the wait this instance allows; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
             "headers": {
               "Retry-After": {
                 "description": "Sent with API_BUSY: whole seconds to wait before retrying",
@@ -4436,7 +4436,7 @@
                 }
               }
             },
-            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken, or another index version's open (a pinned index_version or record) outlasted the wait this instance allows; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
             "headers": {
               "Retry-After": {
                 "description": "Sent with API_BUSY: whole seconds to wait before retrying",
@@ -4595,7 +4595,7 @@
                 }
               }
             },
-            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
+            "description": "API_BUSY (with Retry-After): the query needs a slow position check and every verification slot is taken, or another index version's open (a pinned index_version or record) outlasted the wait this instance allows; or API_INDEX_NOT_LOADED (no index loaded yet), or on POST /records API_RECORDS_STORE_FULL (neither sends Retry-After)",
             "headers": {
               "Retry-After": {
                 "description": "Sent with API_BUSY: whole seconds to wait before retrying",

@@ -18,6 +18,9 @@ CI, deploy, dependencies and the frontend. Then fix every Must and Should.
   The fix finds each run's end once, and tokens are unchanged: the frozen `tokenize_before` differential now also
   draws mark-heavy text. The existing `test_script_join_is_linear` pattern (CPU time, best of 9, a 4x input
   must cost under 8x) caught the regression at once.
+- **An identity rule needs checking against the real corpus.** Linking ids by shared native part withheld
+  unrelated NeurIPS papers until it was restricted to globally unique native ids (`takedowns.global_native`);
+  the same assumption sat in `snapshot._successor` and `diff`'s rekey since TASK-136 and was fixed with it.
 - **A list keyed by id misses the same thing stored under another id.** The takedown list withheld the exact
   id on every version. An older version that held the paper under its pre-rekey id, or as a duplicate a later
   build merged, served the abstract, and `op takedown check` passed because it looked only for the listed id.
@@ -43,9 +46,12 @@ CI, deploy, dependencies and the frontend. Then fix every Must and Should.
   mutation in the foreground and report after it.
 
 ## Decisions (and what would change them)
-- Native ids are treated as one paper across venues and years (OpenReview forum ids, PMLR volume keys, NeurIPS
-  hashes are the sources' own). Two different papers sharing a native id would over-withhold one abstract, the
-  safe direction. A source whose native ids repeat across papers would reverse this.
+- Only globally unique native ids (OpenReview forum ids, PMLR volume keys) link two ids. The first version also
+  linked NeurIPS and ICLR proceedings hashes, assuming native ids never repeat; the review gate measured the
+  real snapshot and found 1,281 NeurIPS hashes naming two to four different papers in different years (md5 of
+  a per-year paper number). Over-withholding is not "the safe direction" here: it marks unrelated papers as
+  taken down in a screener's export. Check an identity assumption against the real corpus before building a
+  closure on it.
 - `op takedown check` flags another id only when title *and* authors match, so a different paper with the same
   title is not a permanent false failure.
 - The pinned-open wait is bounded at 2 s, then 503 with Retry-After. It is a refusal, not a queue. A deployment

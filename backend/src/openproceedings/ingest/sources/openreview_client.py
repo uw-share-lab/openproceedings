@@ -403,7 +403,7 @@ class OpenReviewClient(HttpClient[Entry]):
         if response.status == 200 and is_json(response):
             data = json.loads(response.body)
             token = data.get("token") if isinstance(data, dict) else None
-        if isinstance(token, str) and not _TOKEN.fullmatch(token):
+        if isinstance(token, str) and token and not _TOKEN.fullmatch(token):
             # never sent: a CR/LF header makes http.client raise a ValueError quoting `Bearer <token>`
             # (TASK-067); the token itself is never named
             raise OpenReviewAuthError(

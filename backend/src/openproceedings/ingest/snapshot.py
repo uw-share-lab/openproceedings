@@ -79,11 +79,15 @@ SHORT = 12
 
 class SnapshotError(Exception):
     """A snapshot or cache operation refused: the message says why and what to do (never record text).
-    `reason` is a short constant a log line may carry (never a path), e.g. `snapshot_missing`."""
+    `reason` is a short constant a log line may carry (never a path), e.g. `snapshot_missing`; `snapshot`, when
+    set, the snapshot directory's name (never a path), which a log line may carry too."""
 
-    def __init__(self, message: str, *, reason: str = "snapshot_invalid") -> None:
+    def __init__(
+        self, message: str, *, reason: str = "snapshot_invalid", snapshot: str | None = None
+    ) -> None:
         super().__init__(message)
         self.reason = reason
+        self.snapshot = snapshot
 
 
 def indexed_snapshot(data_dir: Path, index_manifest: Mapping[str, Any]) -> tuple[Path, dict[str, Any]]:
@@ -711,7 +715,7 @@ def merges_on_disk(snapshots: Path) -> tuple[tuple[str, str], ...]:
             continue
         except (OSError, ValueError):
             raise SnapshotError(
-                f"{snapshot.name}'s manifest can't be read", reason="merges_mismatch"
+                f"{snapshot.name}'s manifest can't be read", reason="merges_mismatch", snapshot=snapshot.name
             ) from None
         try:
             blob = (snapshot / "merges.csv").read_bytes()
@@ -721,7 +725,9 @@ def merges_on_disk(snapshots: Path) -> tuple[tuple[str, str], ...]:
             pairs.update((row["survivor_id"], row["merged_id"]) for row in rows)
         except (OSError, ValueError, KeyError, TypeError):
             raise SnapshotError(
-                f"{snapshot.name}: merges.csv doesn't match its manifest", reason="merges_mismatch"
+                f"{snapshot.name}: merges.csv doesn't match its manifest",
+                reason="merges_mismatch",
+                snapshot=snapshot.name,
             ) from None
     return tuple(sorted(pairs))
 

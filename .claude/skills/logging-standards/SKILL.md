@@ -90,13 +90,17 @@ nothing private in them. A log is not a debugger, a progress bar or a data dump.
 
 ## API access line (INFO, exactly one per request)
 Index loads (`api/state.py`): `index_loaded` / `index_swapped` carry `abstracts_withheld` (how many ids the
-takedown list names; never the ids), `takedowns_not_in_index` (how many of them the index doesn't hold) and
+takedown list names; never the ids), `takedowns_not_in_index` (how many of them the index doesn't hold under that id), `takedowns_followed` (how
+many ids it withholds as a listed paper under another id, TASK-067) and
 `takedowns_list` (`present`/`absent`, whether the file exists), and
 a SIGHUP that finds the same index but another list, or whose new index fails while its new list parsed, logs
 `takedowns_reloaded` (INFO, the same counts; `takedowns_reload_failed` ERROR with `index_version`, `error`,
-`ms` and any `reason`, if even that fails); a list that doesn't parse, can't be read, or has gone missing while
-a list is applied or the loaded snapshot withheld abstracts, is `index_load_failed` with `reason`
-`takedowns_invalid`, `takedowns_unreadable` or `takedowns_missing`. `abstracts_withheld` means three counts,
+`ms` and any `reason`, if even that fails); a list that doesn't parse, can't be read, or is missing while
+it is required (`op serve` off loopback or behind a trusted proxy), a list is applied, or any snapshot on disk
+withheld abstracts, is `index_load_failed` with `reason` `takedowns_invalid`, `takedowns_unreadable` or
+`takedowns_missing`. A snapshot whose merges.csv doesn't match its manifest is one ERROR
+`takedown_merges_unavailable` (`snapshot`, its directory name; `reason`), and the list applies without merges.
+A 503 `API_BUSY` from the bounded pinned-open wait puts `busy: pinned_open` on the access line (TASK-067). `abstracts_withheld` means three counts,
 each named by its event: the list's size on a load, the records a build withheld on `snapshot_built`, the
 records of the body on an export's access line (the build's JSON gives the ids themselves, `withheld_ids`). `snapshot_built` / `snapshot_exists` carry
 `abstracts_withheld`, `takedowns_followed` and `takedowns_unmatched` counts. An export's access line carries

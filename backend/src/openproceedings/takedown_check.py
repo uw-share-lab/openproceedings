@@ -43,13 +43,13 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from openproceedings.export import FORMATS, TAKEDOWN
 from openproceedings.query.normalize import normalize
-from openproceedings.takedowns import Withheld
+from openproceedings.takedowns import Withheld, same_paper
 from openproceedings.vocab import STATUSES, TRACKS, VENUES
 
 API = "/api/v1"
@@ -89,8 +89,9 @@ def title_query(title: str, rid: str | None) -> str | None:
     return f'title:"{" ".join(words)}" {EVERY if rid is None else cell_query(rid)}'
 
 
-def check(fetch: Fetch, listed: Withheld) -> Report:
-    """Every problem with how the instance behind `fetch` serves the ids `listed` (module docstring)."""
+def check(fetch: Fetch, listed: Withheld, merges: Iterable[tuple[str, str]] = ()) -> Report:
+    """Every problem with how the instance behind `fetch` serves the ids `listed` (module docstring); `merges`
+    are every snapshot's (survivor, merged) pairs (`snapshot.merges_on_disk`), for the over-withholding check."""
     problems: list[str] = []
     status, body = fetch(f"{API}/meta", {})
     if status != 200:
@@ -101,6 +102,7 @@ def check(fetch: Fetch, listed: Withheld) -> Report:
     # each listed paper's title and authors, from the served index or any version's export of it
     papers = {rid: paper for rid in sorted(listed) if (paper := _served(fetch, rid, problems)) is not None}
     found = set(papers)
+    _merged_elsewhere(fetch, papers, tuple(merges), problems)
     cells: dict[str, list[str]] = {}
     for rid in sorted(listed):
         cells.setdefault(cell_query(rid), []).append(rid)
@@ -141,6 +143,27 @@ def check(fetch: Fetch, listed: Withheld) -> Report:
         for rid in sorted(listed - found)
     ]
     return Report(tuple(problems), len(listed), versions, exports)
+
+
+def _merged_elsewhere(
+    fetch: Fetch,
+    papers: Mapping[str, Mapping[str, Any]],
+    merges: tuple[tuple[str, str], ...],
+    problems: list[str],
+) -> None:
+    """The other direction (TASK-067 review): each id a snapshot's merges.csv links to a listed paper is withheld
+    as that paper (`takedowns.same_paper`). One the served index holds under another title is a suspect merge,
+    and its abstract is withheld for nobody: a problem naming the id (never a title)."""
+    nodes = {rid for pair in merges for rid in pair}
+    for rid, paper in sorted(papers.items()):
+        title = normalize(paper["title"])
+        for other in sorted(same_paper(frozenset({rid}), merges, nodes) - {rid}):
+            status, body = fetch(f"{API}/papers/{urllib.parse.quote(other, safe=':')}", {})
+            if status == 200 and normalize(json.loads(body)["paper"]["title"]) != title:
+                problems.append(
+                    f"{other}: withheld as {rid}'s paper (a snapshot's merges.csv links them), but its title "
+                    "differs; check that merge"
+                )
 
 
 def _other_ids(

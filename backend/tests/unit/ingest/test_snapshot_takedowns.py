@@ -17,11 +17,13 @@ from openproceedings.ingest.snapshot import (
     WITHHELD_VALUE,
     RecordFile,
     SnapshotError,
+    any_withheld,
     build,
     diff,
     ingest_ris,
     load_records,
     load_sources,
+    merges_on_disk,
     with_crawl_conflicts,
     withhold,
 )
@@ -375,3 +377,60 @@ def test_a_proceedings_hash_in_another_year_is_another_paper(cache: Path) -> Non
         replace(result, records=tuple(sorted((*rest, other_year), key=lambda r: r.id))), frozenset({NEURIPS})
     )
     assert (done.followed, done.unmatched, done.withheld) == ({}, (NEURIPS,), frozenset())
+
+
+# --- the readers behind same_paper and the missing-list rule (TASK-067) -------------------------------------------
+
+
+def _snapshots(cache: Path, tmp_path: Path, takedowns: frozenset[str] = frozenset()) -> Path:
+    build(cache, tmp_path / "snapshots", BUILT, takedowns=takedowns)
+    return tmp_path / "snapshots"
+
+
+def test_merges_on_disk_reads_every_snapshot_and_refuses_a_tampered_one(cache: Path, tmp_path: Path) -> None:
+    snapshots = _snapshots(cache, tmp_path)
+    [snapshot] = [d for d in snapshots.iterdir() if not d.name.startswith(".")]
+    (snapshots / ".tmp-half-written").mkdir()  # being written: skipped
+    (snapshots / "no-manifest").mkdir()  # not a snapshot: skipped
+    pairs = merges_on_disk(snapshots)
+    rows = (snapshot / "merges.csv").read_text(encoding="utf-8").splitlines()[1:]
+    assert len(pairs) == len({tuple(r.split(",")[:2]) for r in rows})
+    assert merges_on_disk(tmp_path / "nowhere") == ()
+    merges = snapshot / "merges.csv"
+    merges.chmod(0o644)
+    merges.write_text(merges.read_text(encoding="utf-8") + "a,b,c\n", encoding="utf-8")
+    with pytest.raises(SnapshotError) as e:
+        merges_on_disk(snapshots)
+    assert (e.value.reason, e.value.snapshot) == ("merges_mismatch", snapshot.name)
+
+
+def test_any_withheld_fails_closed_on_a_manifest_it_cant_read(cache: Path, tmp_path: Path) -> None:
+    snapshots = _snapshots(cache, tmp_path)
+    (snapshots / ".tmp-x").mkdir()
+    (snapshots / ".tmp-x" / "manifest.json").write_text('{"withheld": ["x"]}', encoding="utf-8")
+    (snapshots / "no-manifest").mkdir()
+    assert any_withheld(snapshots) is False and any_withheld(tmp_path / "nowhere") is False
+    (snapshots / "broken").mkdir()
+    (snapshots / "broken" / "manifest.json").write_text("{not json", encoding="utf-8")
+    assert any_withheld(snapshots) is True
+    (snapshots / "broken" / "manifest.json").write_text("[]", encoding="utf-8")  # not an object
+    assert any_withheld(snapshots) is True
+
+
+def test_any_withheld_sees_a_snapshot_that_withheld(cache: Path, tmp_path: Path) -> None:
+    assert any_withheld(_snapshots(cache, tmp_path, frozenset({REJECTED}))) is True
+
+
+def test_cli_build_elsewhere_still_needs_the_list_the_data_dir_proves(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--out` names another directory, but `<data-dir>/snapshots` withheld an abstract: still refused."""
+    data = tmp_path / "data"
+    assert cli.main(["--data-dir", str(data), "ingest", "ris", str(source(tmp_path))]) == 0
+    (data / "takedowns").mkdir()
+    (data / "takedowns" / "withheld.txt").write_text(f"{REJECTED}\n", encoding="utf-8")
+    assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 0
+    (data / "takedowns" / "withheld.txt").unlink()
+    capsys.readouterr()
+    assert cli.main(["--data-dir", str(data), "snapshot", "build", "--out", str(tmp_path / "elsewhere")]) == 1
+    assert "withheld.txt is missing" in capsys.readouterr().err
