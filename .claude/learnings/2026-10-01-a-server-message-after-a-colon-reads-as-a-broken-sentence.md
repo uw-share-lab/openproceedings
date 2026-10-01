@@ -3,7 +3,7 @@
 **Key lesson:** When a frontend line wraps an API envelope's `message`, end the frontend's own clause with a full stop and let the message stand as its own sentence; and keep "excluded" for default filters only, even in builder controls.
 
 - **Date:** 2026-10-01 · **Task:** task-100 · **Area:** frontend
-- **Artifacts:** `frontend/src/components/search/search-workspace.tsx` (`Unchecked`), `frontend/src/builder/concept-builder.tsx`, `docs/design/2026-09-27-copy-deck.md` (ED-18, BD-10, the TASK-100 before/after table)
+- **Artifacts:** `frontend/src/components/search/search-workspace.tsx` (`Unchecked`), `frontend/src/builder/concept-builder.tsx`, `frontend/src/components/record/record-view.tsx` (`CantLoad`, the replay line), `docs/design/2026-09-27-copy-deck.md` (ED-18, BD-10, the TASK-100 before/after table)
 
 ## What we set out to do
 Review the strings TASK-041–044 added after the copy deck was handed off ("The query couldn't be checked: …",

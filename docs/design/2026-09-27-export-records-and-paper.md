@@ -345,8 +345,8 @@ Counts come from the record: identified = `total + excluded.total` and unclassif
   says they couldn't be separated.
 - **Strings added here that the copy deck didn't have** (reviewed by the ux-writer in TASK-100 and now in the copy deck as EX-E10, SV-10–11 and RC-16–19): "Checking the query's filters…",
   "Nothing was downloaded." (announcement), "Checking the record: re-running its search on this instance…",
-  "Replay: waiting / not checked — re-running this record's search to check it was refused just now (…): … The
-  recorded values below stand as recorded.", "Writing the methods text…", "Loading the search record…", "The
+  "Replay: waiting / not checked — this record's search couldn't be re-run just now (…). … The
+  recorded values below stand as recorded." (RC-18, reworded in TASK-100), "Writing the methods text…", "Loading the search record…", "The
   record couldn't be loaded just now: …", "Loading the differences…", "None on this page.", the save's
   index-moved and 422 messages, the Default filters row's "Not separated from the canonical query here …", and
   the methods-text variants listed in spec 05 §Components 8 *As built*.
