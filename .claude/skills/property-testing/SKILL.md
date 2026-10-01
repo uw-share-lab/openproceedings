@@ -69,6 +69,11 @@ year edit. Some cases are near misses (one step past a rule; a few percent to a 
   property. (2) Add a golden case in `backend/tests/golden/` with the minimal query and the expected ID set
   taken from `ReferenceEngine` (checked by hand). (3) Then fix. `differential-tester` minimizes; the golden
   case outlives any strategy change.
+- **The counterexample may be the oracle's fault.** Before triaging, print the shrunk input and the values the
+  assertion compared; the failure text can mislead (a strategy constant made an ICLR input read as NeurIPS). If the
+  code matches another documented invariant the oracle contradicts, decide which one wins before touching the code.
+  Code that recomputes derived rows from the final state breaks "nothing is removed". Write the oracle as "only X may
+  change, and nothing it named is lost" (TASK-154).
 
 ## Gotchas
 - Build the fixture index once per session (`scope="session"` fixture), not per example — otherwise the
