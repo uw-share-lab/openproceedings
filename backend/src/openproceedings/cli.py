@@ -1127,8 +1127,13 @@ def _record_lines(record: SearchRecord) -> list[str]:
         "mixed_utc": "crawl and Scholar searches",
     }.get(kind or "", "crawl")
     dates = f"{window.from_[:10]} to {window.to[:10]}" if window is not None else "unknown"
-    if kind in ("scholar_query_dates", "mixed") and window is not None:
-        dates += " (Scholar dates in local time)" if kind == "mixed" else " (local time)"
+    if window is not None:  # Scholar dates say their zone: local when the offset wasn't recorded (TASK-077)
+        dates += {
+            "scholar_query_dates": " (local time)",
+            "scholar_query_dates_utc": " (UTC)",
+            "mixed": " (Scholar dates in local time)",
+            "mixed_utc": " (UTC)",
+        }.get(kind or "", "")
     lines = [
         f"searched {record.searched_at} · index {record.index_version} · tokenizer {record.tokenizer_version} "
         f"· query {record.query_version}",

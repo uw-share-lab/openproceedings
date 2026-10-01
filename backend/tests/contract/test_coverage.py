@@ -286,6 +286,7 @@ def _move_a_missing_abstract(manifest: dict[str, Any]) -> None:
         ("fold_unknown", "manifest_invalid"),  # the unknown_track map disagrees with the cells
         ("record_count", "manifest_invalid"),
         ("track_outside_vocabulary", "manifest_invalid"),
+        ("query_dates", "manifest_invalid"),  # TASK-077: neither `utc` nor `local`
         ("hash", "snapshot_hash_mismatch"),  # the manifest names another snapshot
     ],
 )
@@ -324,6 +325,8 @@ def test_a_manifest_that_doesnt_describe_the_index_fails_the_load(
         manifest["record_count"] += 1
     elif tamper == "track_outside_vocabulary":
         cell["plenary"] = cell.pop(next(iter(cell)))
+    elif tamper == "query_dates":
+        manifest["query_dates"] = {"ris": "UTC"}
     else:
         manifest["snapshot_hash"] = "0" * 64
     path.write_text(json.dumps(manifest))

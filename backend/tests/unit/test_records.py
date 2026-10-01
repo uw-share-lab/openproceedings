@@ -558,8 +558,9 @@ def test_converted_query_dates_are_scholar_query_dates_utc_like_coverage(data_di
     local = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
     assert local.crawl_dates_kind == {"*": "mixed", "openreview_v2": "crawl"}
     edit(path, query_dates={"ris": "UTC"})
-    with pytest.raises(InternalError):
+    with pytest.raises(InternalError) as refused:
         snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+    assert refused.value.code == DiagnosticCode.API_INTERNAL
 
 
 def test_a_source_with_its_own_crawl_window_gets_its_own_key(data_dir: Path) -> None:
@@ -792,3 +793,21 @@ def test_query_dates_partly_converted_read_as_local(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(vocab, "BOOTSTRAP_SOURCES", frozenset({"ris", "other"}))
     assert vocab.window_kind(["ris", "other"], ["ris"]) == "scholar_query_dates"
     assert vocab.window_kind(["ris", "other", "openreview_v2"], ["ris"]) == "mixed"
+
+
+@pytest.mark.parametrize(
+    ("kind", "line"),
+    [
+        ("crawl", "crawl 2026-01-01 to 2026-01-02"),
+        ("scholar_query_dates", "Scholar searches run 2026-01-01 to 2026-01-02 (local time)"),
+        ("scholar_query_dates_utc", "Scholar searches run 2026-01-01 to 2026-01-02 (UTC)"),
+        ("mixed", "crawl and Scholar searches 2026-01-01 to 2026-01-02 (Scholar dates in local time)"),
+        ("mixed_utc", "crawl and Scholar searches 2026-01-01 to 2026-01-02 (UTC)"),
+    ],
+)
+def test_the_cli_says_the_scholar_dates_zone(store: RecordStore, kind: str, line: str) -> None:
+    """`op record`'s window line (TASK-077): Scholar dates name their zone, local when no offset was recorded."""
+    from openproceedings.cli import _record_lines
+
+    saved = store.insert(fields(crawl_dates_kind={"*": kind}), IDS)
+    assert _record_lines(saved)[1] == f"{line} · sources openreview_v2"

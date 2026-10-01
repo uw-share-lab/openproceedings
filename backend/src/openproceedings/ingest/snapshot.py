@@ -54,6 +54,7 @@ from openproceedings.ingest.statuses import statuses_indexed
 from openproceedings.logs import elapsed_ms
 from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.takedowns import NONE, Withheld, withhold_record
+from openproceedings.vocab import BOOTSTRAP_SOURCES
 
 log = logging.getLogger(__name__)
 
@@ -326,7 +327,11 @@ def utc_query_sources(manifest: Mapping[str, Any]) -> frozenset[str]:
     """The bootstrap sources whose query dates the manifest says were converted to UTC (`query_dates`); none
     for a manifest without the key, whose RIS dates are local wall time."""
     zones = manifest.get("query_dates", {})
-    if not isinstance(zones, Mapping) or not all(v in (UTC_QUERY_DATES, LOCAL) for v in zones.values()):
+    if (
+        not isinstance(zones, Mapping)
+        or not set(zones) <= BOOTSTRAP_SOURCES
+        or not all(v in (UTC_QUERY_DATES, LOCAL) for v in zones.values())
+    ):
         raise SnapshotError("the snapshot manifest's query_dates is malformed")
     return frozenset(s for s, v in zones.items() if v == UTC_QUERY_DATES)
 
@@ -499,9 +504,8 @@ def render(
         "files": {"merges.csv": _sha256(merges), "conflicts.csv": _sha256(conflicts)},
         "sources": _sources(reports, crawls),
     }  # fmt: skip
-    if (
-        reports
-    ):  # what the RIS window's ends are (TASK-077, decision-025): converted to UTC, or local wall time
+    # what the RIS window's ends are (TASK-077, decision-025): converted to UTC, or (any entry) local wall time
+    if reports:
         manifest["query_dates"] = {"ris": UTC_QUERY_DATES if all(r.utc_offset for r in reports) else LOCAL}
     if withheld:
         manifest["withheld"] = sorted(withheld)

@@ -1077,7 +1077,8 @@ export interface components {
          *     Body version 2 adds `sources` (the snapshot manifest's source names, sorted), `identification_citable`
          *     (false when every source is a bootstrap one, `vocab.bootstrap_only`: the corpus is an earlier search's
          *     output, so `total` is not a PRISMA identification number) and `crawl_dates_kind` (per `crawl_dates` key:
-         *     `crawl`, `scholar_query_dates`, `scholar_query_dates_utc`, `mixed` or `mixed_utc`), and `dedup`'s two other not-merged counts. A v1 body has
+         *     `crawl`, `scholar_query_dates`, `scholar_query_dates_utc`, `mixed` or `mixed_utc`), and `dedup`'s two
+         *     other not-merged counts. A v1 body has
          *     none of them: they read as None ("not recorded"), never as a guess.
          */
         SearchRecord: {

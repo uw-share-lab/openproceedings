@@ -312,7 +312,7 @@ be PRISMA identification numbers". Both strings are the CLI's (spec 05, prisma-r
 Generated only when `identification_citable === true` and `status !== "mismatch"`, from the **recorded**
 fields, following spec 05 §Components 8 verbatim (change it only by spec PR):
 1. The full `index_version`, never a prefix. Search date = `searched_at`'s UTC date; crawl clause from
-   `crawl_dates["*"]` from–to by kind (`crawl`, `scholar_query_dates`, `mixed`), never one date.
+   `crawl_dates["*"]` from–to by kind (`crawl`, `scholar_query_dates`, `mixed`, and since TASK-077 `scholar_query_dates_utc` and `mixed_utc`; spec 05 §Components 8), never one date.
 2. The string: `identification_query`; `""` → "all indexed records"; all-negative (the page asks `POST /parse`
    for it and gets `PARSE_ALL_NEGATIVE`) → cite `canonical` and describe the set as "`<canonical>` without its
    default filters".

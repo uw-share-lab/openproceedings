@@ -468,7 +468,7 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   sent in the one timestamp form (§Conventions; a stored `…+00:00` reads back as `…Z`).
   `crawl_dates_kind` has the same keys: a source in `vocab.BOOTSTRAP_SOURCES` (`ris`) gives
   `scholar_query_dates_utc` when the manifest's `query_dates` says its dates were converted to UTC (TASK-077,
-  decision-025) and `scholar_query_dates` (local time, offset unknown) otherwise, including a manifest built
+  decision-025) and `scholar_query_dates` (at least one of its query dates is local time, offset unknown) otherwise, including a manifest built
   before the key existed; any other source gives `crawl`; and `*` is the one kind of all the manifest's sources,
   or `mixed` (`mixed_utc` when none of its query dates is local).
   `sources` is the manifest's `sources` keys, sorted; `identification_citable` is `not

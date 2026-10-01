@@ -99,9 +99,10 @@ test("the home coverage line states /coverage's facts in its words", async ({ pa
   const built = await page.getByText(/^Built /).innerText();
   const window = built.split(" · ")[1];
   expect(window).toMatch(
-    /^(Crawled|Google Scholar searches run|Collected) (on \d{4}-\d{2}-\d{2}|\d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2})$/,
+    // then the zone of Scholar dates (TASK-077): local time when their offset wasn't recorded, else UTC
+    /^(Crawled|Google Scholar searches run|Collected) (on \d{4}-\d{2}-\d{2}|\d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2})( \((local time|UTC|Scholar dates in local time)\))?$/,
   );
-  const range = (window ?? "").match(/(\d{4}-\d{2}-\d{2}) to (\d{4}-\d{2}-\d{2})$/);
+  const range = (window ?? "").match(/(\d{4}-\d{2}-\d{2}) to (\d{4}-\d{2}-\d{2})( \(.*\))?$/);
   if (range) expect(range[1]).not.toBe(range[2]); // a same-day window reads "on <day>"
   const records = (await page.getByText(/ records · /).innerText()).split(" ")[0];
 

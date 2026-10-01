@@ -126,7 +126,9 @@ safe direction.
 - The **union** of all claims is kept, one per (field, source). When one source claims a field twice
   (the same paper in both searches), the newest `fetched_at` wins and every other value that source gave,
   for any field, is a `newest:<source>` row; an exact fetch-time tie is a `tie:<source>` row (the kept
-  value is then only a deterministic pick, by the value's exact JSON form, so a reviewer must look). Superseded same-source claims are
+  value is then only a deterministic pick, by the value's exact JSON form, so a reviewer must look). For RIS the
+  times are Publish or Perish query dates: UTC for entries `ris_offsets.toml` lists, local wall time otherwise
+  (decision-025), so "newest" across a listed and an unlisted entry can be wrong within the offset. Superseded same-source claims are
   not kept in the record; merges.csv (`native_id`/`forum_id` rows) records that both inputs had the
   paper. Field values are re-resolved with the precedence table (`PRECEDENCE`, held as data), never
   "whichever record came first". So every input must already equal what its own claims resolve to;

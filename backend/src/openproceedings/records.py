@@ -156,7 +156,8 @@ class SearchRecord(_Stored):
     Body version 2 adds `sources` (the snapshot manifest's source names, sorted), `identification_citable`
     (false when every source is a bootstrap one, `vocab.bootstrap_only`: the corpus is an earlier search's
     output, so `total` is not a PRISMA identification number) and `crawl_dates_kind` (per `crawl_dates` key:
-    `crawl`, `scholar_query_dates`, `scholar_query_dates_utc`, `mixed` or `mixed_utc`), and `dedup`'s two other not-merged counts. A v1 body has
+    `crawl`, `scholar_query_dates`, `scholar_query_dates_utc`, `mixed` or `mixed_utc`), and `dedup`'s two
+    other not-merged counts. A v1 body has
     none of them: they read as None ("not recorded"), never as a guess."""
 
     body_version: int
@@ -186,13 +187,14 @@ class SearchRecord(_Stored):
     sources: list[str] | None = None  # v2: the snapshot manifest's source names, sorted
     identification_citable: bool | None = None  # v2: not bootstrap_only(sources)
     # v2, per crawl_dates key: "crawl" (fetch times, UTC), "scholar_query_dates" (Publish or Perish's query
-    # dates: local wall time stored labelled UTC, so an end can be a day off), "scholar_query_dates_utc" (query
-    # dates converted with a recorded offset, TASK-077), or "mixed" / "mixed_utc" (`*` over both; `mixed`
-    # while some query date is local). A record stored before TASK-077 keeps the kind it was saved with
+    # dates: local wall time stored labelled UTC, so an end can be a day off), "scholar_query_dates_utc"
+    # (query dates converted with a recorded offset, TASK-077), or "mixed" / "mixed_utc" (`*` over both;
+    # `mixed` while some query date is local). A record stored before TASK-077 keeps the kind it was saved with
     crawl_dates_kind: dict[str, str] | None = Field(
         default=None,
         description="Per `crawl_dates` key, what its window's ends are: `crawl`, `scholar_query_dates` (local "
-        "time, offset unknown), `scholar_query_dates_utc`, `mixed` or `mixed_utc` today. Open set: new values may be added within /api/v1; handle a value you don't know.",
+        "time, offset unknown), `scholar_query_dates_utc`, `mixed` or `mixed_utc` today. Open set: new "
+        "values may be added within /api/v1; handle a value you don't know.",
     )
 
     # Derived at read time from `total` and `excluded` (TASK-090), never stored (`DERIVED`), so every body
@@ -283,9 +285,9 @@ def snapshot_facts(data_dir: Path, inputs: Mapping[str, Any]) -> SnapshotFacts:
     corpus-wide window is key `*`; each claim source with a window of its own adds a key (a format-2 manifest's
     `crawl_windows`, else a source entry that carries its own `crawl_window`; the claim window wins, TASK-122),
     as `/coverage` does (`coverage.crawl_dates`; a test compares the two). A bootstrap source's window (RIS:
-    when the Scholar searches were run) is `scholar_query_dates`, not a crawl, or `scholar_query_dates_utc` when
-    the manifest's `query_dates` says they were converted (TASK-077); `*` over bootstrap sources alone is too,
-    over both is `mixed` (`mixed_utc` with no local dates)."""
+    when the Scholar searches were run) is `scholar_query_dates`, not a crawl, or `scholar_query_dates_utc`
+    when the manifest's `query_dates` says they were converted (TASK-077); `*` over bootstrap sources alone is
+    too, over both is `mixed` (`mixed_utc` with no local dates)."""
     try:
         _path, manifest = indexed_snapshot(data_dir, inputs)  # the name and hash rule of the API's load
         sources = sorted(manifest["sources"])  # required: no sources named is not "a crawl, citable"

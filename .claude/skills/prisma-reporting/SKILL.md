@@ -56,10 +56,10 @@ names) and `identification_citable: false`, from the same `vocab.bootstrap_only`
 its "note: bootstrap corpus" line. Its window is not a crawl: `crawl_dates_kind["*"]` is
 `scholar_query_dates_utc` (Publish or Perish's query dates, converted to UTC with the offset
 `ingest/ris_offsets.toml` records, decision-025) or `scholar_query_dates` (an entry with no recorded offset:
-local time labelled UTC, so an end can be a day off, worded with "(local time)"), and must be worded "Scholar
-searches run <from> to <to>", never "a crawl"; a `mixed` window (real crawls plus a bootstrap source, from M4)
-reads "crawls and Scholar searches run <from> to <to> (Scholar dates in local time)", and a `mixed_utc` one
-the same without the parenthesis (spec 05 §Save search record). The record page shows the CLI's caution and **no methods
+local time labelled UTC, so an end can be a day off), and must be worded "Scholar searches run <from> to
+<to>" plus its zone, "(UTC)" or "(local time)", never "a crawl"; a `mixed` window (real crawls plus a
+bootstrap source, from M4) reads "crawls and Scholar searches run <from> to <to> (Scholar dates in local
+time)", and a `mixed_utc` one "… (UTC)" (spec 05 §Save search record). The record page shows the CLI's caution and **no methods
 text** when `identification_citable` is false; a v1 record (null: not recorded) shows the caution "not
 recorded whether this index is a bootstrap corpus: these counts may not be PRISMA identification numbers"
 and no methods text either.

@@ -17,8 +17,12 @@ the RIS importer stored labelled UTC, or else mark those dates local.
   1790180170 = 2026-09-23T16:16:10Z vs `2026-09-23 12:16:10`). File creation times only bracket the offset;
   the epoch match fixes it.
 - `fetched_at` is outside `content_hash` but inside `records.jsonl`, so the conversion changes `snapshot_hash`
-  and `index_version` on rebuild. Old search records then replay `drifted` while membership-identical. That
-  belongs in the decision record, not as a surprise for whoever rebuilds.
+  and `index_version` on rebuild. An old search record still replays `reproduced` on its own index while that
+  index is kept, and `drifted` (membership-identical) where only the rebuilt index is served. That belongs
+  in the decision record, not as a surprise for whoever rebuilds.
+- Dropping "(local time)" for converted dates isn't enough: a reviewer compares Scholar dates with a local
+  protocol log, so converted ones say "(UTC)" (the ux review). /coverage had never marked local dates; it now
+  names the zone too.
 - `crawl_dates_kind` is an open set (decision-009). Adding `_utc` kinds, and keeping the old values' local
   meaning, keeps every stored record correct with no body-version bump.
 - `ingest_ris` checks each file in a random temporary directory. Any per-entry lookup has to be passed the

@@ -121,11 +121,11 @@ describe("reproduced (design R1)", () => {
     r.crawl_dates_kind = { "*": "scholar_query_dates" };
     expect(windowRow(r)).toEqual({ label: "Scholar searches run", value: `${span} (local time)` });
     r.crawl_dates_kind = { "*": "scholar_query_dates_utc" };
-    expect(windowRow(r)).toEqual({ label: "Scholar searches run", value: span });
+    expect(windowRow(r)).toEqual({ label: "Scholar searches run", value: `${span} (UTC)` });
     r.crawl_dates_kind = { "*": "mixed" };
     expect(windowRow(r)?.value).toBe(`${span} (Scholar dates in local time)`);
     r.crawl_dates_kind = { "*": "mixed_utc" };
-    expect(windowRow(r)).toEqual({ label: "Crawls and Scholar searches run", value: span });
+    expect(windowRow(r)).toEqual({ label: "Crawls and Scholar searches run", value: `${span} (UTC)` });
   });
 
   it("shows the methods text the record generates, every number the record's, and a Copy button", async () => {

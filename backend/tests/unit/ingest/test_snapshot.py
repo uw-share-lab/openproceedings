@@ -297,6 +297,29 @@ def test_query_dates_say_whether_the_ris_window_was_converted(tmp_path: Path) ->
     assert [r["utc_offset"] for r in manifest["sources"]["ris"]] == ["-04:00", None]
 
 
+def test_converting_query_dates_changes_only_fetched_at(tmp_path: Path) -> None:
+    """decision-025: the same two searches, converted or not, give the same records, merges and conflicts;
+    every RIS claim's `fetched_at` is 4 hours later, and so the snapshot hash differs."""
+
+    def snap(root: Path, names: tuple[str, str]) -> tuple[Path, list[dict[str, Any]]]:
+        ingest_ris([source(root / "1", names[0]), source(root / "2", names[1])], root / "cache")
+        path = build(root / "cache", root / "snapshots", BUILT).path
+        return path, [json.loads(line) for line in (path / "records.jsonl").read_text().splitlines()]
+
+    local, before = snap(tmp_path / "local", ("a-search", "b-search"))
+    converted, after = snap(tmp_path / "utc", ("out-covidence", "out-covidence-2020-2024"))
+    for name in ("merges.csv", "conflicts.csv"):
+        assert (local / name).read_bytes() == (converted / name).read_bytes()
+    assert len(before) == len(after) > 0
+    for old, new in zip(before, after, strict=True):
+        shifted = [datetime.fromisoformat(c["fetched_at"]) + timedelta(hours=4) for c in old["provenance"]]
+        assert [datetime.fromisoformat(c["fetched_at"]) for c in new["provenance"]] == shifted
+        for c in (*old["provenance"], *new["provenance"]):
+            del c["fetched_at"]
+        assert old == new  # ids, content_hash, track, status, every other claim field
+    assert local.name != converted.name
+
+
 def test_built_at_is_stored_in_utc(cache: Path, tmp_path: Path) -> None:
     result = build(cache, tmp_path / "s", datetime(2026, 9, 26, 7, 0, tzinfo=timezone(timedelta(hours=-5))))
     assert json.loads((result.path / "manifest.json").read_text())["built_at"] == "2026-09-26T12:00:00+00:00"

@@ -3,16 +3,7 @@
 import { Fragment, useState } from "react";
 import type { Schemas } from "@/api/client";
 import { CopyButton } from "./copy-button";
-import {
-  ALL_SOURCES,
-  corpusWindow,
-  count,
-  minuteUtc,
-  percent,
-  signed,
-  windowText,
-  windowVerb,
-} from "./format";
+import { ALL_SOURCES, corpusWindow, kindWindowText, count, minuteUtc, percent, signed } from "./format";
 
 type Coverage = Schemas["CoverageResponse"];
 type VenueYear = Schemas["VenueYearCoverage"];
@@ -56,7 +47,7 @@ function Header({ coverage }: { coverage: Coverage }) {
           <Fragment key={source}>
             {" · "}
             <code className="font-mono">{source}</code>:{" "}
-            {windowText(windowVerb(snapshot.crawl_dates_kind[source]), window)}
+            {kindWindowText(snapshot.crawl_dates_kind[source], window)}
           </Fragment>
         ))}
       </p>
