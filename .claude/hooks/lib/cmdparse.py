@@ -653,6 +653,7 @@ MKTEMP_SUBST = re.compile(
     r"|`\s*mktemp(?:\s+-[dqu]+)*(?:\s+-t\s+[\w.-]+)?(?:\s+-[dqu]+)*\s*`"
 )
 MKTEMP_VAR = "OP_MKTEMP__"
+LOOP_EXITS = frozenset({"break", "continue", "return", "exit"})  # a for loop with one of these isn't unrolled
 MKTEMP_PATH = "/tmp/op-mktemp.XXXXXXXX"
 # `$NAME` with a quote right after it: written ${NAME}, so the word after the quote can't join the name
 VAR_BEFORE_QUOTE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)(?=[\"'])")
@@ -947,7 +948,9 @@ def _variable(
         flag = "--git-common-dir" if name == GITDIR_VARS["git-common-dir"] else "--absolute-git-dir"
         return (git(directory, "rev-parse", "--path-format=absolute", flag) or None) if directory else None
     if name == MKTEMP_VAR:
-        return MKTEMP_PATH
+        # mktemp creates under $TMPDIR: a command that sets (or unsets) it decides where (confirmation pass:
+        # `TMPDIR=$PWD/data; t=$(mktemp -d); rm -rf "$t/../snapshots"`), so then the path is unknown
+        return None if "TMPDIR" in shell_vars else MKTEMP_PATH
     if name in shell_vars:
         return shell_vars[name]
     if name in ENV_FALLBACK:
@@ -1307,6 +1310,8 @@ def _unroll_for(tokens: list[str], i: int, j: int, state: dict) -> list[str] | N
     if end < 0 or tokens[p : p + 1] != ["do"]:
         return None
     body = tokens[p:end]
+    if any(t in LOOP_EXITS for t in body):
+        return None  # a loop left early leaves NAME at an earlier word than the last: unknown (confirmation pass)
     state["unrolled"] = state.get("unrolled", 0) + len(words) * (len(body) + 3)
     if state["unrolled"] > LOOP_BUDGET:
         return None

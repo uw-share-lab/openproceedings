@@ -2804,5 +2804,17 @@
   "file": ".claude/hooks/enforce-pr-workflow.sh",
   "old": "or (a[:1] == \"-\" and a[1:2] != \"-\" and \"t\" in a[1:])\n           for a in args):  # `-t`",
   "new": "or a == \"-t\"\n           for a in args):  # `-t`"
+ },
+ {
+  "label": "cmdparse: mktemp resolved whatever TMPDIR the command sets",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "return None if \"TMPDIR\" in shell_vars else MKTEMP_PATH",
+  "new": "return MKTEMP_PATH"
+ },
+ {
+  "label": "cmdparse: a for loop left early still unrolled",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if any(t in LOOP_EXITS for t in body):\n        return None",
+  "new": "    if False:\n        return None"
  }
 ]
