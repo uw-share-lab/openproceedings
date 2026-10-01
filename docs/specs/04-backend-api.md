@@ -600,7 +600,7 @@ once released: changing one is a breaking change under `/api/v1`.
 | A request body over `max_body_bytes` (64 KiB), by `Content-Length` or by the bytes of a chunked body, refused before it is read and before any other check (task-079) | 413 | `API_BODY_TOO_LARGE` |
 | Rate limit exceeded: the client's or its network's bucket, a position-verified query's extra weight, or the record-save ceiling (its network's or the instance-wide one) | 429 | `API_RATE_LIMITED` (with `Retry-After`) |
 | A search record can't be saved: the record store is over its size cap or its disk under the free-space floor (task-037) | 503 | `API_RECORDS_STORE_FULL` |
-| A query needs a cold position verification and every verification slot is taken (refused, never queued); or a pinned `index_version` (an export's, a record's replay or diff) waits longer than `pinned_open_wait_seconds` for another version's open (TASK-067; its access line says `busy: pinned_open`) | 503 | `API_BUSY` (with `Retry-After`) |
+| A query needs a cold position verification and every verification slot is taken (refused, never queued); or a pinned `index_version` (an export's, a record's replay or diff) waits longer than `pinned_open_wait_seconds` for another version's open, or another request's open of the same version (TASK-067; its access line says `busy: pinned_open`) | 503 | `API_BUSY` (with `Retry-After`) |
 | A query has more position-verified clauses than `ApiConfig.max_verified_clauses` (default 16, a backstop), refused before it compiles (decision-010; a replay over it is withheld, 200, §Search records) | 422 | `API_TOO_MANY_VERIFIED_CLAUSES` (diagnostics: one per clause, spanning it in `q`) |
 | A query's position checks would read more than `ApiConfig.max_verification_candidates` (default 300,000) candidate documents, summed over its verified clauses and their fields, refused before any is verified (decision-010; a replay over it is withheld, 200) | 422 | `API_QUERY_TOO_COSTLY` (diagnostics: one per verified clause, spanning it in `q`, with its count per field) |
 | No index loaded yet (startup, or the first load failed; a failed swap keeps serving the old index) | 503 | `API_INDEX_NOT_LOADED` |
@@ -730,8 +730,8 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     `n_errors`, `error_codes`, `warning_codes` (at most 10 distinct codes, then `+N`), `verified_clauses`
     (the query's, a replay's too), `verification_candidates` (their candidates, summed; absent with none),
     `verify_ms` (the wall time the request held a verification slot; absent when it held none), `busy`
-    (`pinned_open` on a 503 `API_BUSY` because another index version's open outlasted
-    `pinned_open_wait_seconds`; TASK-067),
+    (`pinned_open` on a 503 `API_BUSY` because another version's open, or another request's open of the same
+    version, outlasted `pinned_open_wait_seconds`; TASK-067),
     `verify_cpu_ms` (the verifying thread's CPU in those holds), `verify_tokens` (what that CPU time was
     debited; absent likewise), and `code`, the error
     envelope's code, on every refusal (the body cap's 413, the rate limit's 429, a routing 404, `API_BUSY`, …)

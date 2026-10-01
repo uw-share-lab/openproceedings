@@ -313,15 +313,15 @@ class IndexState:
         self._max_verification_seconds = max_verification_seconds
 
     def _open_busy(self) -> ApiError:
-        """The 503 `API_BUSY` a request gets when another version's open outlasts `open_wait_seconds`; its access
-        line says `busy: pinned_open` (TASK-067), so an operator tells it from a full verification slot and
-        knows to raise `--pinned-indexes`."""
+        """The 503 `API_BUSY` a request gets when an open (another version's, or another request's of its own
+        version) outlasts `open_wait_seconds`; its access line says `busy: pinned_open` (TASK-067), so an operator
+        tells it from a full verification slot and knows to raise `--pinned-indexes`."""
         fields = current_access.get()
         if fields is not None:
             fields["busy"] = "pinned_open"
         return ApiError(
             DiagnosticCode.API_BUSY,
-            "Another index version is being opened, and this request's version must wait its turn. Try "
+            "An index version is being opened, and this request must wait its turn. Try "
             f"again in {self._busy_retry_seconds} s.",
             headers={"Retry-After": str(self._busy_retry_seconds)},
         )

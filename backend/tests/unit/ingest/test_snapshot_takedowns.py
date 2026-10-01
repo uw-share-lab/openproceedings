@@ -408,6 +408,28 @@ def test_merges_on_disk_reads_every_snapshot_and_refuses_a_tampered_one(cache: P
     assert [d.snapshot for d in damaged] == [snapshot.name]
 
 
+def test_a_damaged_snapshot_is_skipped_wherever_it_sorts(cache: Path, tmp_path: Path) -> None:
+    """Round 3: a damaged snapshot before or after a good one, by its merges or by an unreadable manifest, is
+    skipped alone; without a handler, it raises."""
+    snapshots = _snapshots(cache, tmp_path)
+    [good] = [d for d in snapshots.iterdir() if not d.name.startswith(".")]
+    expected = merges_on_disk(snapshots)
+    for name in ("0-first", "z-last"):
+        bad = snapshots / name
+        bad.mkdir()
+        (bad / "manifest.json").write_text("{not json", encoding="utf-8")
+    damaged: list[SnapshotError] = []
+    assert merges_on_disk(snapshots, on_damaged=damaged.append) == expected
+    assert [(d.snapshot, d.reason) for d in damaged] == [
+        ("0-first", "merges_mismatch"),
+        ("z-last", "merges_mismatch"),
+    ]
+    with pytest.raises(SnapshotError) as e:
+        merges_on_disk(snapshots)
+    assert e.value.snapshot == "0-first"
+    assert good.name not in {d.snapshot for d in damaged}
+
+
 def test_any_withheld_fails_closed_on_a_manifest_it_cant_read(cache: Path, tmp_path: Path) -> None:
     snapshots = _snapshots(cache, tmp_path)
     (snapshots / ".tmp-x").mkdir()

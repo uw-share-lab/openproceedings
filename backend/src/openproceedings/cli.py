@@ -1047,7 +1047,7 @@ def _export(ns: argparse.Namespace) -> int:
         )
     if sources is not None and listed:
         # the listed papers under their other ids too (TASK-067), as the API's `Served.withheld_in`; a damaged
-        # merges.csv leaves the merges out, as the API does, and says so
+        # merges.csv leaves that snapshot's merges out, as the API does, and says so
         def damaged(e: SnapshotError) -> None:
             log.error(
                 "takedown_merges_unavailable",

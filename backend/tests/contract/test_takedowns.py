@@ -802,7 +802,7 @@ def test_op_export_refuses_a_missing_list_once_a_snapshot_withheld(
 def test_a_damaged_snapshot_drops_only_its_own_merges(logs: Logs, aliased: Aliased) -> None:
     """Another snapshot's merges.csv is damaged: `new`'s merge is still followed (TASK-067 review round 2)."""
     data, prev, _, paper, _, dup = aliased
-    other = data / "snapshots" / "other"
+    other = data / "snapshots" / "aaa-other"  # sorts before `new`: a skip, never a stop (round 3)
     shutil.copytree(data / "snapshots" / "new", other)
     (other / "merges.csv").chmod(0o644)
     (other / "merges.csv").write_text("survivor_id,merged_id\nx,y\n", encoding="utf-8")
@@ -810,7 +810,7 @@ def test_a_damaged_snapshot_drops_only_its_own_merges(logs: Logs, aliased: Alias
         text = exported(c, "jsonl", q=_title(paper), index_version=prev)
     assert withheld_in_export("jsonl", text, dup.id)
     [line] = [x for x in logs() if x["event"] == "takedown_merges_unavailable"]
-    assert (line["snapshot"], line["error"]) == ("other", "SnapshotError")
+    assert (line["snapshot"], line["error"]) == ("aaa-other", "SnapshotError")
 
 
 def test_op_export_applies_the_list_without_a_damaged_snapshots_merges(
@@ -861,3 +861,21 @@ def test_op_takedown_check_reports_a_damaged_merges_file_and_a_suspect_merge(
         merges.write_text(merges.read_text(encoding="utf-8") + "x,y,z\n", encoding="utf-8")
         assert cli.main(argv) == 1
         assert "the API applies the list without new's merges" in capsys.readouterr().out
+
+
+def test_the_reload_lines_count_the_ids_followed(logs: Logs, aliased: Aliased) -> None:
+    """`takedowns_reloaded` counts followed ids on both paths: the same index with a new list, and a failed
+    promotion that still applies the new list (TASK-067 review round 3)."""
+    data, prev, _, paper, _, _ = aliased
+    point_current(data, prev)
+    listing(data)
+    with TestClient(make_app(data)) as client:
+        listing(data, paper.id)
+        assert reload(client)  # the same index, another list
+        listing(data, paper.id, "op:iclr:2024:NotInThisIndex")
+        current = data / "indexes" / "current"
+        current.unlink()
+        current.symlink_to("does-not-exist")
+        assert reload(client) is False  # the promotion fails; the new list still applies
+    lines = [x for x in logs() if x["event"] == "takedowns_reloaded"]
+    assert [x["takedowns_followed"] for x in lines] == [2, 2]

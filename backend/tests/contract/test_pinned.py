@@ -465,3 +465,20 @@ def test_a_second_request_for_a_version_being_opened_waits_only_the_bound(indexe
         opener.gate["aaaa01"].set()
         assert first.result(10).reason == "ok"
     assert opener.opened == ["aaaa01"] and s._opening == {}
+
+
+def test_an_open_drops_only_its_own_lock(indexes: Path) -> None:
+    """Round 3: an open that finishes never drops another open's per-version lock."""
+    opener = Opener()
+    opener.gate["aaaa01"] = threading.Event()
+    s = IndexState(indexes, "current", opener, keep_pinned=1)
+    with ThreadPoolExecutor(1) as pool:
+        first = pool.submit(s.pinned, "aaaa01")
+        deadline = time.monotonic() + 10
+        while "aaaa01" not in opener.opened:
+            assert time.monotonic() < deadline and not first.done(), first
+            time.sleep(0.001)
+        s._opening["aaaa01"] = other = threading.Lock()  # a newer open's lock
+        opener.gate["aaaa01"].set()
+        assert first.result(10).reason == "ok"
+    assert s._opening["aaaa01"] is other

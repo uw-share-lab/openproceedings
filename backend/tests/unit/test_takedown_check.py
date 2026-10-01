@@ -300,3 +300,21 @@ def test_a_merged_id_the_api_wont_answer_for_is_a_problem() -> None:
     other = "op:iclr:2024:Other9999"
     report = takedown_check.check(FakeApi(paper_status={other: 500}).fetch, frozenset({RID}), ((RID, other),))
     assert report.problems == (f"{other}: GET /papers answered 500",)
+
+
+def test_a_listed_paper_only_a_pinned_version_holds_has_its_merges_checked() -> None:
+    """Round 3: the merge check runs after the versions, so a listed paper the served index 404s but a pinned
+    version's export holds is checked too."""
+    other = "op:iclr:2024:Other9999"
+    api = FakeApi(titles={other: "Something Else Entirely"})
+
+    def pinned_only(path: str, params: Mapping[str, str]) -> tuple[int, str]:
+        if path == f"/api/v1/papers/{RID}":
+            return 404, "{}"
+        return api.fetch(path, params)
+
+    problems = takedown_check.check(pinned_only, frozenset({RID}), ((RID, other),)).problems
+    assert (
+        f"{other}: withheld as {RID}'s paper (a snapshot's merges.csv links them), but its title differs; "
+        "check that merge" in problems
+    )
