@@ -351,7 +351,10 @@ describe("could not be re-run (design R3)", () => {
         }),
       ),
     );
-    expect(await screen.findByText(/Replay: waiting/)).toBeTruthy();
+    expect((await screen.findByText(/Replay: waiting/)).textContent).toBe(
+      "⚠ Replay: waiting — this record's search couldn't be re-run just now (API_RATE_LIMITED). Too many " +
+        "requests. The recorded values below stand as recorded.",
+    );
     expect(await screen.findByRole("region", { name: "Methods text to cite" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^RIS/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Retry" }).getAttribute("aria-disabled")).toBe("true");
@@ -382,5 +385,23 @@ describe("not found and can't load", () => {
     fail = false;
     fireEvent.click(retry);
     await waitFor(() => expect(screen.getByText(/^Reproduced on /)).toBeTruthy());
+  });
+
+  it("names the code, then the server's message as its own sentence, when the stored read is refused", async () => {
+    renderWithApi(<RecordView id={ID} />, () =>
+      json({ error: { code: "API_INDEX_NOT_LOADED", message: "No index is loaded yet." } }, 503),
+    );
+    await screen.findByRole("button", { name: "Retry" });
+    expect(within(screen.getByRole("alert")).getByText(/^The record couldn't be loaded/).textContent).toBe(
+      "The record couldn't be loaded just now (API_INDEX_NOT_LOADED). No index is loaded yet.",
+    );
+  });
+
+  it("says the server couldn't be reached when the stored read never answers", async () => {
+    renderWithApi(<RecordView id={ID} />, () => Promise.reject(new TypeError("Failed to fetch")));
+    await screen.findByRole("button", { name: "Retry" });
+    expect(within(screen.getByRole("alert")).getByText(/^The record couldn't be loaded/).textContent).toBe(
+      "The record couldn't be loaded just now: the server couldn't be reached. Check your connection.",
+    );
   });
 });

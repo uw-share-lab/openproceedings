@@ -343,10 +343,10 @@ Counts come from the record: identified = `total + excluded.total` and unclassif
   methods text and exports, with Retry. The diff opens on request (it costs a replay). Default filters on the
   page come from the same `/parse(canonical)` report as the methods text; under another query version the row
   says they couldn't be separated.
-- **Strings added here that the copy deck doesn't have** (for the ux-writer): "Checking the query's filters…",
+- **Strings added here that the copy deck didn't have** (reviewed by the ux-writer in TASK-100 and now in the copy deck as EX-E10, SV-10–11 and RC-16–19): "Checking the query's filters…",
   "Nothing was downloaded." (announcement), "Checking the record: re-running its search on this instance…",
-  "Replay: waiting / not checked — re-running this record's search to check it was refused just now (…): … The
-  recorded values below stand as recorded.", "Writing the methods text…", "Loading the search record…", "The
+  "Replay: waiting / not checked — this record's search couldn't be re-run just now (…). … The
+  recorded values below stand as recorded." (RC-18, reworded in TASK-100), "Writing the methods text…", "Loading the search record…", "The
   record couldn't be loaded just now: …", "Loading the differences…", "None on this page.", the save's
   index-moved and 422 messages, the Default filters row's "Not separated from the canonical query here …", and
   the methods-text variants listed in spec 05 §Components 8 *As built*.

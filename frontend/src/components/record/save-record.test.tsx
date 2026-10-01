@@ -588,7 +588,8 @@ describe("refused (design S3)", () => {
     fireEvent.click(within(openConfirm()).getByRole("button", { name: "Save" }));
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain(
-      `Index ${R.index_version} is no longer served here, so the search wasn't saved`,
+      `Index ${R.index_version} is no longer served here, so the search wasn't saved: the record would cite ` +
+        "a different index from the one whose counts you saw. Search again to see the current results, then save.",
     );
     expect(calls.filter((c) => c.method === "GET")).toHaveLength(0);
   });

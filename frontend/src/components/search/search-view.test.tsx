@@ -547,6 +547,7 @@ describe("year (TASK-092 actions)", () => {
     const all = within(group).getByRole("button", { name: "All years" });
     expect(all.getAttribute("aria-disabled")).toBe("true");
     expect(description(all)).toContain("Every year is already included");
+    expect(within(group).getByText("Every year.")).toBeTruthy();
     expect((within(group).getByRole("textbox", { name: "From year" }) as HTMLInputElement).value).toBe(
       "2023",
     );
@@ -568,6 +569,9 @@ describe("year (TASK-092 actions)", () => {
           json(parsed(text, { filters: { ...unrestricted(text), year: year([6, 21], 2020, 2022) } })),
       }),
     );
+    expect(
+      within(screen.getByRole("group", { name: "Year" })).getByText("Includes 2020..2022."),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "All years" }));
     expect(nav.push).toHaveBeenCalledWith(searchHref(stateOf({ q: "trust year:(1000..9999)" })));
     fireEvent.click(screen.getByRole("button", { name: /Edit year: in the query/ }));

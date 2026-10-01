@@ -331,7 +331,7 @@ Component rules:
     **TASK-042 built the control on them** (Open questions 2): the year facet as checkboxes with counts,
     newest first, checked when the clause's ranges admit the year (a tick is `yearAdd`/`yearRemove` of that
     one year); a "From year / To year / Set years" pair (`yearSet`); "All years" (`yearClear`); and a line
-    saying what the clause admits ("Every year." / "Admits 2020..2022."). Each is disabled with
+    saying what the clause admits ("Every year." / "Includes 2020..2022."; "Admits" until TASK-100). Each is disabled with
     `whyBlocked`'s reason like the other fields (`TOO_MANY_RANGES` past four ranges). "Edit `year:` in the
     query ▸" stays: if the searched `q` has a `year:` clause with a span (`filters.year`), it selects that
     clause in the editor; otherwise it appends ` year:2020..2026` to the draft with the range selected, so
