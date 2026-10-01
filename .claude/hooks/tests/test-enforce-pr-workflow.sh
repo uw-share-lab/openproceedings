@@ -245,6 +245,81 @@ check feature/x block 'git update-ref -m msg refs/heads/dev HEAD'
 check feature/x block 'git update-ref --stdin'                     # refs read from stdin: refuse to guess
 check feature/x allow 'git update-ref refs/heads/feature/x HEAD'
 
+echo "abbreviated long options are what git reads them as (TASK-067 review gate):"
+check feature/x block 'git push --al origin'                       # --all
+check feature/x block 'git push --mirr origin'                     # --mirror
+check feature/x block 'git push --a origin'                        # ambiguous (--all, --atomic): fail closed
+check main      allow 'git push --dele origin feature/x'           # --delete of a feature ref
+check feature/x allow 'git push --force origin feat'               # an exact name wins over its longer siblings
+check main      allow 'git merge --ff-o origin/main'               # --ff-only
+check main      block 'git merge --ff-o --no-f feat'               # --no-ff overrides it
+check main      block 'git pull --no-f'                            # ambiguous (--no-ff, --no-force): fail closed
+
+echo "config this gate can't read: an alias or a refspec-less push fails closed (TASK-067 review gate):"
+printf '[alias]\n\tp = push\n' > "$REPO/.git/inc.cfg"
+check feature/x block 'P=push git --config-env alias.p=P p origin HEAD:dev'
+check feature/x block 'P=push git --config-env=alias.p=P p origin HEAD:dev'
+check feature/x block "git -c include.path=$REPO/.git/inc.cfg p origin HEAD:dev"
+check feature/x block "git -c includeIf.gitdir:/.path=$REPO/.git/inc.cfg p origin HEAD:dev"
+check feature/x block 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push git p origin HEAD:dev'
+check feature/x block "GIT_CONFIG_PARAMETERS=\"'alias.p'='push'\" git p origin HEAD:dev"
+check feature/x block "GIT_CONFIG_GLOBAL=$REPO/.git/inc.cfg git p origin HEAD:dev"
+check feature/x block 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0=HEAD:refs/heads/dev git push origin'
+check feature/x allow "git -c include.path=$REPO/.git/inc.cfg status"   # a builtin: no alias to hide
+check feature/x allow 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=color.ui GIT_CONFIG_VALUE_0=never git push origin feat'
+check feature/x block 'git -c remote.origin.mirror=true push origin'    # mirror: every ref, protected ones too
+
+echo "glob refspecs can name a protected branch (TASK-067 review gate):"
+check feature/x block "git push origin 'refs/heads/*:refs/heads/*'"
+check feature/x block "git push origin '*:*'"
+check feature/x allow "git push origin 'refs/heads/feature/x:refs/heads/feature/x'"
+
+echo "a protected local branch moved without update-ref (TASK-067 review gate):"
+check feature/x block 'git branch -f main HEAD'
+check feature/x block 'git branch --force dev HEAD'
+check feature/x block 'git branch -fq main HEAD'
+check feature/x block 'git branch -M x main'
+check feature/x block 'git branch -C x dev'
+check feature/x block 'git branch --move --force x main'
+check feature/x allow 'git branch -f feature/y HEAD'
+check feature/x allow 'git branch -c main backup'                  # copies main elsewhere; main unmoved
+check feature/x allow 'git branch -u origin/main feature/x'        # -u takes a value
+check feature/x allow 'git branch --list main'
+check main      block 'git checkout -B main feature/x'
+check feature/x block 'git checkout -B dev feature/x'
+check feature/x block 'git checkout -Bdev feature/x'
+check feature/x allow 'git checkout -B feature/y'
+check feature/x block 'git switch -C main feature/x'
+check feature/x block 'git switch --force-create=dev feature/x'
+check feature/x block 'git switch --force-c dev feature/x'          # abbreviated --force-create
+check feature/x allow 'git switch -C feature/y'
+check feature/x block 'git worktree add -B main /tmp/wt-x'
+check feature/x block 'git fetch . feature/x:dev'
+check feature/x block 'git fetch origin feature/x:refs/heads/main'
+check feature/x block 'git fetch origin +dev:dev'                  # forced: not a sync
+check feature/x block "git fetch origin 'refs/heads/*:refs/heads/*'"
+check feature/x block 'git fetch --stdin origin'                   # refspecs from stdin: refuse to guess
+check feature/x allow 'git fetch origin dev:dev'                   # fast-forwards local dev from origin's dev
+check feature/x allow 'git fetch origin'
+check feature/x allow 'git fetch --depth 5 origin dev:dev'           # --depth takes a value: origin is the remote
+check feature/x block 'git fetch upstream dev:dev'                 # another remote's dev is not a sync
+check feature/x block 'git fetch -f origin dev:dev'
+check feature/x allow 'git fetch . feature/x:feature/y'
+
+echo "git-<sub> programs are git <sub> (TASK-067 review gate):"
+check feature/x block '$(git --exec-path)/git-push origin HEAD:dev'
+check main      block '/usr/libexec/git-core/git-commit -m x'
+check feature/x allow '/usr/libexec/git-core/git-push origin feat'
+check feature/x block 'caffeinate -i /usr/libexec/git-core/git-push origin HEAD:dev'   # behind a wrapper cmdparse doesn't know
+
+echo "the no-python fallback still refuses commit makers on a protected branch (unparseable commands):"
+check main      block 'git cherry-pick x "'
+check main      block 'git revert x "'
+check main      block 'git am x "'
+check main      block 'git rebase x "'
+check main      block 'git reset --hard x "'
+check feature/x allow 'git cherry-pick x "'
+
 echo "eval re-parses its argument:"
 check main       block 'eval "git push origin main"'
 check main       block 'eval "git commit -m x"'
@@ -294,6 +369,12 @@ check_cwd main "$WT" block "git --git-dir \"$REPO/.git\" cherry-pick x"
 check_cwd main "$WT" block "env GIT_DIR=\"$REPO/.git\" git merge x"
 check_cwd main "$WT" allow "GIT_DIR=\"$WT/.git\" git commit -m x"            # positive control: its own gitfile
 check_cwd main "$REPO" allow "git --git-dir=\"$WT/.git\" commit -m x"        # ... and the other way round
+check_cwd main "$WT" block "export GIT_DIR=\"$REPO/.git\"; git commit -m x"  # exported for every later command
+check_cwd main "$WT" block "GIT_DIR=\"$REPO/.git\"; export GIT_DIR; git commit -m x"
+check_cwd main "$WT" block "declare -x GIT_DIR=\"$REPO/.git\" && git commit -m x"
+check_cwd main "$WT" allow "GIT_DIR=\"$REPO/.git\"; git commit -m x"         # a shell variable git never sees
+check_cwd main "$WT" allow "export GIT_DIR=\"$REPO/.git\"; unset GIT_DIR; git commit -m x"
+check_cwd main "$WT" block "GIT_DIR=\"$REPO/.git\" git branch -f main HEAD"  # moves the main worktree's branch
 
 echo "multiple -C flags chain like real git (defect 1 -- HIGH bypass fix):"
 # ambient/json cwd is an unrelated dir (the OTHER worktree/repo); the chain, not the cwd, decides.
