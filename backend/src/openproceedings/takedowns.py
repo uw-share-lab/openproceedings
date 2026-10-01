@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from openproceedings.diagnostics import clip
-from openproceedings.ingest.record import PaperRecord, is_paper_id
+from openproceedings.ingest.record import PROCEEDINGS_NATIVE, PaperRecord, is_paper_id
 
 LIST = Path("takedowns") / "withheld.txt"  # relative to the data directory
 LOG = Path("takedowns") / "log.jsonl"
@@ -103,15 +103,18 @@ def load(path: Path, *, required: bool = False) -> Withheld:
 
 
 # native ids unique only within their venue-year: a proceedings hash is md5 of a per-year paper number
-_LOCAL_NATIVE = ("nips-", "iclr-")
+# the proceedings hash forms (`record.PROCEEDINGS_NATIVE` but PMLR's, whose key names its volume)
+_LOCAL_NATIVE = tuple(f"{prefix}-" for prefix in PROCEEDINGS_NATIVE if prefix != "pmlr")
 
 
 def global_native(rid: str) -> str | None:
     """A record id's native part (`op:<venue>:<year>:<native>`) when it names one paper in every venue and year,
     so a corrected venue or year leaves the paper recognisable by it: an OpenReview forum id or a PMLR volume
-    and key. None for a NeurIPS or ICLR proceedings hash (`nips-…`, `iclr-…`): md5 of a paper number that
-    repeats across years, so the same hash in another year is another paper (TASK-067 review: 1,281 NeurIPS
-    hashes name two to four papers each in the 2026-09-29 snapshot)."""
+    and key. None for a proceedings hash (`nips-…`, `iclr-…`), which names one paper only within its
+    venue-year (TASK-067 review, measured): a NeurIPS hash is md5 of a per-year paper number, and 1,281 of them
+    name two to five papers each in the 2026-09-29 snapshot; ICLR proceedings hashes collided across years too
+    (5 in the 2026-09-23 snapshot). The 2014-2016 ICLR archive's `iclr-<sha256(target)>` ids are unique but share
+    the form, so they lose the rekey link too (a merge still links them)."""
     native = rid.split(":", 3)[-1]
     return None if native.startswith(_LOCAL_NATIVE) else native
 

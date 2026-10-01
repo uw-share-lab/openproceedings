@@ -73,7 +73,8 @@ abstract on the takedown list (`--takedowns`, default `<data-dir>/takedowns/with
 after dedup and reconcile (`snapshot.withhold`: `abstract` null, the abstract claims dropped, those records'
 abstract `conflicts.csv` values replaced by `(withheld: takedown)`, repeated rows collapsed), so
 `snapshot_hash` covers the effect and a recrawl can't restore one. A listed id the build holds under another id
-(merged: `merges.csv`; rekeyed: the one record with its native id) is followed, its successor withheld too
+(merged: `merges.csv`; rekeyed: the one record with its native id, when that native id is globally unique, a
+forum id or PMLR key: `takedowns.global_native`; a `nips-`/`iclr-` hash never rekeys, TASK-067) is followed, its successor withheld too
 (`takedowns_followed`); a listed id with no record at all is reported (`takedowns_unmatched`), never refused
 (both on stderr and in the build's JSON). When something is withheld the manifest adds `withheld` (the sorted
 ids whose record lost an abstract or an abstract claim: listing a record with none changes nothing),
@@ -141,8 +142,9 @@ marked crawl) is refused.
   written. `unexpected_statuses` (TASK-109, `ingest/status_check.py`) lists each (venue, year, status) whose
   records hold a status none of the venue-year's claim sources can supply, with the record ids: a
   classification error to chase, never written into the snapshot.
-- `op snapshot diff <a> <b>` prints (JSON) the ids **added**, **removed**, **rekeyed** (the same native
-  id under a new venue or year, with the fields that differ) and **changed** (where `content_hash`
+- `op snapshot diff <a> <b>` prints (JSON) the ids **added**, **removed**, **rekeyed** (the same globally
+  unique native id, a forum id or PMLR key, under a new venue or year, with the fields that differ; a
+  `nips-`/`iclr-` hash never rekeys: in another year it is another paper, TASK-067) and **changed** (where `content_hash`
   differs, with the changed fields named), plus separate counts of **display-only** changes (`authors`,
   `urls`, `keywords`, `presentation` or `venue_id_raw` differ but the hash doesn't) and provenance-only
   changes, and `abstract_withheld` (`added`: ids the second withholds and the first didn't; `lifted`: the

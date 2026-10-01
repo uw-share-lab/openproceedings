@@ -697,12 +697,22 @@ def iter_records(snapshot: Path) -> Iterator[PaperRecord]:
         raise SnapshotError(f"{snapshot.name}: merges.csv or conflicts.csv doesn't match its manifest")
 
 
-def merges_on_disk(snapshots: Path) -> tuple[tuple[str, str], ...]:
+def merges_on_disk(
+    snapshots: Path, on_damaged: Callable[[SnapshotError], None] | None = None
+) -> tuple[tuple[str, str], ...]:
     """Every (survivor, merged) pair the merges.csv of any snapshot under `snapshots` records, sorted: what
     the takedown list follows to the other ids a paper has had (TASK-067, `takedowns.same_paper`). Each file
-    must hash to its manifest's `files` entry: SnapshotError otherwise (reason `merges_mismatch`), so a
-    tampered or half-copied snapshot fails a load rather than hiding a link. A directory being written (a dot
-    name: `.tmp-…`, `.lock`) or with no manifest.json is not a snapshot and is skipped."""
+    must hash to its manifest's `files` entry, else that snapshot is damaged (SnapshotError, reason
+    `merges_mismatch`, naming it): raised, or, given `on_damaged`, handed to it and that snapshot alone skipped,
+    so one damaged snapshot never drops the others' merges. A directory being written (a dot name: `.tmp-…`,
+    `.lock`) or with no manifest.json is not a snapshot and is skipped."""
+
+    def damaged(snapshot: Path, message: str) -> None:
+        error = SnapshotError(message, reason="merges_mismatch", snapshot=snapshot.name)
+        if on_damaged is None:
+            raise error
+        on_damaged(error)
+
     pairs: set[tuple[str, str]] = set()
     try:
         dirs = sorted(d for d in snapshots.iterdir() if not d.name.startswith(".") and d.is_dir())
@@ -714,21 +724,18 @@ def merges_on_disk(snapshots: Path) -> tuple[tuple[str, str], ...]:
         except FileNotFoundError:
             continue
         except (OSError, ValueError):
-            raise SnapshotError(
-                f"{snapshot.name}'s manifest can't be read", reason="merges_mismatch", snapshot=snapshot.name
-            ) from None
+            damaged(snapshot, f"{snapshot.name}'s manifest can't be read")
+            continue
         try:
             blob = (snapshot / "merges.csv").read_bytes()
             if not isinstance(manifest, dict) or manifest["files"]["merges.csv"] != _sha256(blob):
                 raise KeyError("merges.csv")
             rows = csv.DictReader(io.StringIO(blob.decode("utf-8")))
-            pairs.update((row["survivor_id"], row["merged_id"]) for row in rows)
+            found = {(row["survivor_id"], row["merged_id"]) for row in rows}
         except (OSError, ValueError, KeyError, TypeError):
-            raise SnapshotError(
-                f"{snapshot.name}: merges.csv doesn't match its manifest",
-                reason="merges_mismatch",
-                snapshot=snapshot.name,
-            ) from None
+            damaged(snapshot, f"{snapshot.name}: merges.csv doesn't match its manifest")
+            continue
+        pairs |= found
     return tuple(sorted(pairs))
 
 
@@ -912,17 +919,16 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
     # a rekey only when exactly one removed and one added id share a globally unique native id: anything else
     # (two papers into one, one into two, a proceedings hash, which in another year is another paper; TASK-067)
     # is reported as added and removed, so a lost record is never hidden
-    gone_by_native = Counter(n for i in removed if (n := global_native(i)) is not None)
+    gone_by_native = Counter(old[i].native for i in removed)
     new_by_native: dict[str, list[str]] = {}
     for i in added:
-        if (n := global_native(i)) is not None:
-            new_by_native.setdefault(n, []).append(i)
+        new_by_native.setdefault(new[i].native, []).append(i)
     rekeyed = {
-        i: new_by_native[n][0]
+        i: new_by_native[old[i].native][0]
         for i in sorted(removed)
-        if (n := global_native(i)) is not None
-        and gone_by_native[n] == 1
-        and len(new_by_native.get(n, [])) == 1
+        if global_native(i) is not None  # the one place the rule is applied: a hash never rekeys
+        and gone_by_native[old[i].native] == 1
+        and len(new_by_native.get(old[i].native, [])) == 1
     }
 
     def hashed_diff(x: PaperRecord, y: PaperRecord) -> list[str]:

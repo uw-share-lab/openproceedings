@@ -946,8 +946,9 @@ shows SV-9 and never retries that request (spec 05 §Error states).
     `counts_mismatch`, `abstract_missing_mismatch`, `abstract_withheld_mismatch`, `track_facts_mismatch`,
     `doc_count_mismatch`, `withheld_invalid` and `withheld_abstract_present` (the snapshot's withheld ids), and
     the takedown list's `takedowns_invalid`, `takedowns_unreadable` and `takedowns_missing`. A snapshot whose
-    merges.csv doesn't match its manifest does not fail the load: the list applies without the merges (ERROR
-    `takedown_merges_unavailable`, with `snapshot` and `reason` `merges_mismatch`; TASK-067). The load lines
+    merges.csv doesn't match its manifest does not fail the load: the list applies without that snapshot's
+    merges (one ERROR `takedown_merges_unavailable` per damaged snapshot, with `snapshot`, `error` and `reason`
+    `merges_mismatch`; TASK-067). The load lines
     (`index_loaded`, `index_swapped`, `takedowns_reloaded`) also count `takedowns_followed`, the ids withheld as a
     listed paper under another id. At startup the failure is 503 `API_INDEX_NOT_LOADED`; on SIGHUP the old index and
     its coverage keep serving. Coverage is never partial and never recomputed per request. One
@@ -1021,7 +1022,8 @@ shows SV-9 and never retries that request (spec 05 §Error states).
   snapshot's claims (decision-021), not the code that built the index. A cache hit takes only the short map lock,
   never a lock an open holds; **at most one pinned index opens at a time** (each re-hashes a whole index;
   security review), and one version asked for at once is opened once. A request waits for another version's
-  open at most `ApiConfig.pinned_open_wait_seconds` (default 2), then gets 503 `API_BUSY` with `Retry-After:
+  open, and as long for another request's open of its own version, at most `ApiConfig.pinned_open_wait_seconds`
+  each (default 2, so up to twice that in all), then gets 503 `API_BUSY` with `Retry-After:
   busy_retry_seconds`, never a queue (TASK-067: clients rotating through more versions than the LRU holds
   would otherwise hold every worker thread behind one multi-second open); the refusal isn't remembered. An engine dropped from the LRU stays alive while a stream still
   holds it, so memory is bounded by the LRU plus the exports in flight (each costs `export_weight` of the

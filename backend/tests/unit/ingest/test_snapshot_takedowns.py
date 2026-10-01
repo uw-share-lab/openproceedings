@@ -402,6 +402,10 @@ def test_merges_on_disk_reads_every_snapshot_and_refuses_a_tampered_one(cache: P
     with pytest.raises(SnapshotError) as e:
         merges_on_disk(snapshots)
     assert (e.value.reason, e.value.snapshot) == ("merges_mismatch", snapshot.name)
+    # with a handler, only the damaged snapshot is skipped, and each one is reported (TASK-067 round 2)
+    damaged: list[SnapshotError] = []
+    assert merges_on_disk(snapshots, on_damaged=damaged.append) == ()
+    assert [d.snapshot for d in damaged] == [snapshot.name]
 
 
 def test_any_withheld_fails_closed_on_a_manifest_it_cant_read(cache: Path, tmp_path: Path) -> None:
@@ -434,3 +438,17 @@ def test_cli_build_elsewhere_still_needs_the_list_the_data_dir_proves(
     capsys.readouterr()
     assert cli.main(["--data-dir", str(data), "snapshot", "build", "--out", str(tmp_path / "elsewhere")]) == 1
     assert "withheld.txt is missing" in capsys.readouterr().err
+
+
+def test_a_listed_proceedings_hash_never_follows_to_the_one_other_year(cache: Path) -> None:
+    """The listed `nips-` id is gone and exactly one record of another year holds the same hash: still another
+    paper, never followed (TASK-067 review round 2: with several, the old rule refused only by ambiguity)."""
+    result = _result(cache)
+    nips = [r for r in result.records if r.id.split(":", 3)[-1].startswith("nips-")]
+    keep = nips[0]
+    other_year = keep.model_copy(update={"id": keep.id.replace(f":{keep.year}:", ":2013:"), "year": 2013})
+    rest = tuple(r for r in result.records if not r.id.split(":", 3)[-1].startswith("nips-"))
+    done = withhold(
+        replace(result, records=tuple(sorted((*rest, other_year), key=lambda r: r.id))), frozenset({keep.id})
+    )
+    assert (done.followed, done.unmatched, done.withheld) == ({}, (keep.id,), frozenset())

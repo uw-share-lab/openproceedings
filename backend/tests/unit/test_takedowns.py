@@ -201,7 +201,8 @@ def test_an_id_the_log_withholds_but_the_list_dropped_is_a_problem(tmp_path: Pat
 def test_a_byte_order_mark_is_read_and_an_invisible_character_is_refused(tmp_path: Path) -> None:
     (tmp_path / "withheld.txt").write_text(f"\ufeff{A}\n", encoding="utf-8")
     assert load(tmp_path / "withheld.txt") == {A}
-    for invisible in ("\u200b", "\u3164", "\u034f", "\u2800"):  # format, letter, mark and symbol classes
+    # format, letter, mark and symbol classes, and the ASCII controls `\S` admits
+    for invisible in ("\u200b", "\u3164", "\u034f", "\u2800", "\x7f", "\x00"):
         with pytest.raises(TakedownError, match=r"line 1: .* is not a record id"):
             parse(f"{A}{invisible}\n")
 

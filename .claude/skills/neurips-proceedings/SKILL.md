@@ -42,7 +42,7 @@ evidence rule with a fixture.
   Crawl from it, not from search.
 - `<sha>` is md5 of the paper's number. On `proceedings.neurips.cc` that number never repeats **within a
   year**, so the native id is `nips-<sha>` (spec 01 §Record schema), and `op:neurips:<year>:nips-<sha>` is
-  unique. Across years it does repeat: the 2026-09-29 snapshot has 1,281 hashes naming two to four papers in
+  unique. Across years it does repeat: the 2026-09-29 snapshot has 1,281 hashes naming two to five papers in
   different years (TASK-067). So a `nips-` native never links two ids across years (`takedowns.global_native`:
   no rekey follow, no `diff` rekey). **The 2021 D&B host numbers round 1, round 2 and the
   main track separately**: its live page (2026-09-29) had 27 hashes in both rounds and 27 shared with 2021

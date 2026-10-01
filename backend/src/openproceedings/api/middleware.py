@@ -62,6 +62,7 @@ ANNOTATIONS = (
     "total",
     "abstract_source",  # an export's `X-Abstract-Source`: `unavailable` when it withheld abstracts (decision-021)
     "abstracts_withheld",  # an export's `X-Abstracts-Withheld`: records a takedown withholds (decision-022)
+    "busy",  # `pinned_open` on a 503 API_BUSY from the bounded pinned-open wait (TASK-067)
     "token_count",
     "n_errors",
     "error_codes",

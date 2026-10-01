@@ -519,19 +519,23 @@ class IndexState:
     def _bundle(self, engine: TantivyEngine, records: RecordFile, listed: Withheld) -> Served:
         """What a load serves: with a list, every snapshot's merges read beside it, and the coverage counted
         with every id the list withholds from `records`, under the listed id or another. A snapshot whose
-        merges.csv doesn't match its manifest leaves the merges out (ERROR `takedown_merges_unavailable`, with
-        the snapshot's name and reason) rather than failing the load: the list itself still applies, so one
-        damaged old snapshot never stops a new takedown (TASK-067 review); `op takedown check` reports what the
-        merges would have withheld."""
-        merges: tuple[tuple[str, str], ...] = ()
-        if listed:
-            try:
-                merges = merges_on_disk(self._data_dir / "snapshots")
-            except SnapshotError as e:
-                log.error(
-                    "takedown_merges_unavailable",
-                    extra={"snapshot": e.snapshot, "reason": e.reason, "index_version": engine.index_version},
-                )
+        merges.csv doesn't match its manifest leaves its own merges out (one ERROR `takedown_merges_unavailable`
+        per damaged snapshot, with its name and reason) rather than failing the load: the list and every other
+        snapshot's merges still apply, so one damaged old snapshot never stops a new takedown (TASK-067 review);
+        `op takedown check` reports the damage."""
+
+        def damaged(e: SnapshotError) -> None:
+            log.error(
+                "takedown_merges_unavailable",
+                extra={
+                    "snapshot": e.snapshot,
+                    "error": type(e).__name__,
+                    "reason": e.reason,
+                    "index_version": engine.index_version,
+                },
+            )
+
+        merges = merges_on_disk(self._data_dir / "snapshots", on_damaged=damaged) if listed else ()
         aliases = takedowns.same_paper(listed, merges, records.ids())
         served = Served(engine, records, coverage_of(engine, records, listed | aliases), listed, merges)
         served._aliases[records] = aliases
@@ -627,7 +631,8 @@ class IndexState:
         finally:
             opening.release()
             with self._cache_lock:
-                self._opening.pop(version, None)
+                if self._opening.get(version) is opening:  # never a newer open's lock
+                    del self._opening[version]
         return cached
 
     def pinned_records(self, version: str) -> RecordFile | None:

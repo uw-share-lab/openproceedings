@@ -36,12 +36,14 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | PMLR only | `pmlr-v<N>-<key>` (ICML volumes only, `ingest/volumes.py`) |
 | NeurIPS proceedings only | `nips-<hash>`, the 32-hex hash from the paper_files path; on the 2021 D&B host `nips-<hash>-round1`/`-round2` (its hash is md5 of a per-round paper number, so rounds and the main track reuse hashes; a D&B link without a round gets no id). One function, `urls.proceedings_native`, makes it for the miner, the RIS importer and dedup |
 | ICLR proceedings / archive | `iclr-<hash>` from a proceedings path; for the official 2014–2016 archive, an OpenReview target keeps its forum id and any other target is `iclr-<sha256(canonical-target)[:32]>` |
+| RIS import | a venueid plus its forum id → the forum id; else the proceedings or PMLR form above, from scholarmend's `proceedings_url` / `pmlr_url` claim (`ingest/urls.py`). A record with neither is skipped and counted (`unresolved` / `no_id`), never given a minted id. |
 
 A forum id and a PMLR `pmlr-v<N>-<key>` name one paper in every venue and year; a `nips-` or `iclr-` hash names
-one only within its venue-year (the paper number it hashes repeats across years: TASK-067). Only the first two
-link two ids by their native part (`takedowns.global_native`: the rekey rule of `snapshot.withhold` and
-`snapshot.diff`, and the takedown list's `same_paper`).
-| RIS import | a venueid plus its forum id → the forum id; else the proceedings or PMLR form above, from scholarmend's `proceedings_url` / `pmlr_url` claim (`ingest/urls.py`). A record with neither is skipped and counted (`unresolved` / `no_id`), never given a minted id. |
+one only within its venue-year (TASK-067, measured: a NeurIPS hash is md5 of a per-year paper number, and
+1,281 name two to five papers each in the 2026-09-29 snapshot; ICLR proceedings hashes collided across years
+in the 2026-09-23 one; the 2014–2016 archive's sha256 ids share the form, so they are treated the same). Only
+the first two link two ids by their native part (`takedowns.global_native`: the rekey rule of
+`snapshot.withhold` and `snapshot.diff`, and the takedown list's `same_paper`).
 
 When records merge (`.claude/skills/dedup-rules/SKILL.md`), the surviving id uses the OpenReview forum id
 if either side has one. A proceedings record's `urls.forum` claim (PMLR v235's link) is identity evidence

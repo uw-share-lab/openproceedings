@@ -102,7 +102,6 @@ def check(fetch: Fetch, listed: Withheld, merges: Iterable[tuple[str, str]] = ()
     # each listed paper's title and authors, from the served index or any version's export of it
     papers = {rid: paper for rid in sorted(listed) if (paper := _served(fetch, rid, problems)) is not None}
     found = set(papers)
-    _merged_elsewhere(fetch, papers, tuple(merges), problems)
     cells: dict[str, list[str]] = {}
     for rid in sorted(listed):
         cells.setdefault(cell_query(rid), []).append(rid)
@@ -138,6 +137,8 @@ def check(fetch: Fetch, listed: Withheld, merges: Iterable[tuple[str, str]] = ()
                     if fmt in answered and fmt not in formats
                 ]
         exports += _other_ids(fetch, version, papers, problems)
+    # after the versions: a listed paper only a pinned version holds is checked too
+    _merged_elsewhere(fetch, papers, tuple(merges), problems)
     problems += [
         f"{rid}: no index this instance loads holds it; check the id on the list"
         for rid in sorted(listed - found)
@@ -153,13 +154,16 @@ def _merged_elsewhere(
 ) -> None:
     """The other direction (TASK-067 review): each id a snapshot's merges.csv links to a listed paper is withheld
     as that paper (`takedowns.same_paper`). One the served index holds under another title is a suspect merge,
-    and its abstract is withheld for nobody: a problem naming the id (never a title)."""
+    its abstract withheld though no takedown names it: a problem naming the id (never a title). One the served
+    index doesn't hold (404, a merged-away id) is skipped; any other answer is a problem."""
     nodes = {rid for pair in merges for rid in pair}
     for rid, paper in sorted(papers.items()):
         title = normalize(paper["title"])
         for other in sorted(same_paper(frozenset({rid}), merges, nodes) - {rid}):
             status, body = fetch(f"{API}/papers/{urllib.parse.quote(other, safe=':')}", {})
-            if status == 200 and normalize(json.loads(body)["paper"]["title"]) != title:
+            if status not in (200, 404):
+                problems.append(f"{other}: GET /papers answered {status}")
+            elif status == 200 and normalize(json.loads(body)["paper"]["title"]) != title:
                 problems.append(
                     f"{other}: withheld as {rid}'s paper (a snapshot's merges.csv links them), but its title "
                     "differs; check that merge"

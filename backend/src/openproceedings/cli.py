@@ -171,8 +171,8 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument(
         "--takedowns",
         type=Path,
-        help="the takedown list whose abstracts are withheld (default <data-dir>/takedowns/withheld.txt; "
-        "none when it doesn't exist)",
+        help="the takedown list whose abstracts are withheld (default <data-dir>/takedowns/withheld.txt; none "
+        "when it doesn't exist, until a snapshot has withheld an abstract: then it is required)",
     )
     b.set_defaults(run=_snapshot_build)
     d = actions.add_parser("diff", help="ids added, removed and changed between two snapshots")
@@ -1048,15 +1048,17 @@ def _export(ns: argparse.Namespace) -> int:
     if sources is not None and listed:
         # the listed papers under their other ids too (TASK-067), as the API's `Served.withheld_in`; a damaged
         # merges.csv leaves the merges out, as the API does, and says so
-        merges: tuple[tuple[str, str], ...] = ()
-        try:
-            merges = merges_on_disk(ns.data_dir / "snapshots")
-        except SnapshotError as e:
-            log.error("takedown_merges_unavailable", extra={"snapshot": e.snapshot, "reason": e.reason})
+        def damaged(e: SnapshotError) -> None:
+            log.error(
+                "takedown_merges_unavailable",
+                extra={"snapshot": e.snapshot, "error": type(e).__name__, "reason": e.reason},
+            )
             print(
-                f"op export: warning: {e}; the takedown list applies without any snapshot's merges",
+                f"op export: warning: {e}; the takedown list applies without {e.snapshot}'s merges",
                 file=sys.stderr,
             )
+
+        merges = merges_on_disk(ns.data_dir / "snapshots", on_damaged=damaged)
         withheld |= same_paper(listed, merges, records.ids())
     total, found = engine.documents(ast)
     removed = 0  # records a takedown withholds (the API's X-Abstracts-Withheld), counted as they stream
@@ -1420,7 +1422,7 @@ def _takedown_check(ns: argparse.Namespace) -> int:
     from urllib.parse import urlsplit
 
     from openproceedings import takedowns
-    from openproceedings.ingest.snapshot import SnapshotError, merges_on_disk
+    from openproceedings.ingest.snapshot import merges_on_disk
     from openproceedings.takedown_check import check, http
 
     if urlsplit(ns.api).scheme not in ("http", "https") or not urlsplit(ns.api).netloc:
@@ -1434,12 +1436,13 @@ def _takedown_check(ns: argparse.Namespace) -> int:
         )
     # every snapshot's merges, for the check that a merge withholds no other paper (TASK-067); a damaged one is
     # a problem of its own (the API then applies the list without the merges)
-    merges: tuple[tuple[str, str], ...] = ()
     merge_problems: list[str] = []
-    try:
-        merges = merges_on_disk(ns.data_dir / "snapshots")
-    except SnapshotError as e:
-        merge_problems.append(f"{e} ({e.reason}): the API applies the list without any snapshot's merges")
+    merges = merges_on_disk(
+        ns.data_dir / "snapshots",
+        on_damaged=lambda e: merge_problems.append(
+            f"{e} ({e.reason}): the API applies the list without {e.snapshot}'s merges"
+        ),
+    )
     report = check(http(ns.api), listed, merges)
     problems = [*(p.message for p in log_problems), *merge_problems, *report.problems]
     for line in problems:

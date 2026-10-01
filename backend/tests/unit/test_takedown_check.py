@@ -44,6 +44,7 @@ class FakeApi:
     # records of the title-only export beyond the listed ones: (id, authors, abstract) (TASK-067)
     others: tuple[tuple[str, list[str], str | None], ...] = ()
     titles: dict[str, str] = field(default_factory=dict)  # /papers titles by id (default "Calibrated Trust")
+    paper_status: dict[str, int] = field(default_factory=dict)  # /papers answers other than 200/404, by id
     calls: list[tuple[str, dict[str, str]]] = field(default_factory=list)
 
     def fetch(self, path: str, params: Mapping[str, str]) -> tuple[int, str]:
@@ -57,6 +58,8 @@ class FakeApi:
                     {"matched": self.matched, "highlights": {"title": [], "abstract": self.lit_spans}}
                 )
             provenance = [{"field": "title"}, *([{"field": "abstract"}] if self.claim else [])]
+            if rid in self.paper_status:
+                return self.paper_status[rid], "{}"
             if rid not in self.ids and rid not in self.titles:
                 return 404, "{}"
             paper = {
@@ -283,11 +286,17 @@ def test_a_merge_that_withholds_another_paper_is_a_problem() -> None:
     """TASK-067 review: the check also looks the other way. An id a snapshot's merges.csv links to a listed
     paper is withheld as that paper; if the served index gives it another title, the merge (and so the
     withholding) is suspect, and the check names it."""
-    other, same = "op:iclr:2024:Other9999", "op:iclr:2024:Twin00001"
+    other, same, gone = "op:iclr:2024:Other9999", "op:iclr:2024:Twin00001", "op:iclr:2024:Merged0001"
     api = FakeApi(titles={other: "Something Else Entirely", same: "Calibrated trust"})
-    merges = ((RID, other), (same, RID))
+    merges = ((RID, other), (same, RID), (RID, gone))  # `gone`: merged away, the served index 404s it
     report = takedown_check.check(api.fetch, frozenset(api.ids), merges)
     assert report.problems == (
         f"{other}: withheld as {RID}'s paper (a snapshot's merges.csv links them), but its title differs; "
         "check that merge",
     )
+
+
+def test_a_merged_id_the_api_wont_answer_for_is_a_problem() -> None:
+    other = "op:iclr:2024:Other9999"
+    report = takedown_check.check(FakeApi(paper_status={other: 500}).fetch, frozenset({RID}), ((RID, other),))
+    assert report.problems == (f"{other}: GET /papers answered 500",)

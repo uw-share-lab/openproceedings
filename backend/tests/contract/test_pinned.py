@@ -444,3 +444,24 @@ def test_an_export_filename_is_only_ever_hex(tmp_path: Path) -> None:
         == "openproceedings-0019ed0fd2ad-9a8a63bd309f.csv"
     )
     assert filename("0019ed0fd2ad", 'ab"\r\nX: y', "ris") == "openproceedings-0019ed0fd2ad-ab.ris"
+
+
+def test_a_second_request_for_a_version_being_opened_waits_only_the_bound(indexes: Path) -> None:
+    """TASK-067 review round 2: a request for the version already opening waits on that version's own lock,
+    for at most `open_wait_seconds`, then 503 API_BUSY; and the lock is dropped afterwards."""
+    opener = Opener()
+    opener.gate["aaaa01"] = threading.Event()
+    s = IndexState(indexes, "current", opener, keep_pinned=1, open_wait_seconds=0.05, busy_retry_seconds=7)
+    with ThreadPoolExecutor(1) as pool:
+        first = pool.submit(s.pinned, "aaaa01")
+        deadline = time.monotonic() + 10
+        while "aaaa01" not in opener.opened:
+            assert time.monotonic() < deadline and not first.done(), first
+            time.sleep(0.001)
+        started = time.monotonic()
+        with pytest.raises(ApiError) as e:
+            s.pinned("aaaa01")
+        assert time.monotonic() - started < 5 and e.value.code is DiagnosticCode.API_BUSY
+        opener.gate["aaaa01"].set()
+        assert first.result(10).reason == "ok"
+    assert opener.opened == ["aaaa01"] and s._opening == {}

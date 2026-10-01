@@ -99,7 +99,8 @@ a SIGHUP that finds the same index but another list, or whose new index fails wh
 it is required (`op serve` off loopback or behind a trusted proxy), a list is applied, or any snapshot on disk
 withheld abstracts, is `index_load_failed` with `reason` `takedowns_invalid`, `takedowns_unreadable` or
 `takedowns_missing`. A snapshot whose merges.csv doesn't match its manifest is one ERROR
-`takedown_merges_unavailable` (`snapshot`, its directory name; `reason`), and the list applies without merges.
+`takedown_merges_unavailable` per damaged snapshot (`snapshot`, its directory name; `error`; `reason`), and the
+list applies without that snapshot's merges (in the API and `op export`).
 A 503 `API_BUSY` from the bounded pinned-open wait puts `busy: pinned_open` on the access line (TASK-067). `abstracts_withheld` means three counts,
 each named by its event: the list's size on a load, the records a build withheld on `snapshot_built`, the
 records of the body on an export's access line (the build's JSON gives the ids themselves, `withheld_ids`). `snapshot_built` / `snapshot_exists` carry

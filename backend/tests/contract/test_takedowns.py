@@ -27,6 +27,7 @@ from openproceedings.api import search as search_route
 from openproceedings.api import server as api_server
 from openproceedings.api.state import IndexState, Served
 from openproceedings.engine.index import build_index
+from openproceedings.ingest import snapshot as snapshot_module
 from openproceedings.ingest.dedup import DedupResult, Merge
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import render, withhold
@@ -727,14 +728,16 @@ def test_no_response_may_be_stored_by_a_cache(client: TestClient, store: Store) 
         assert client.get(path, params=params).headers["cache-control"] == "no-store", path
 
 
-def test_coverage_counts_a_listed_paper_held_under_other_ids(aliased: Aliased) -> None:
+def test_coverage_counts_a_listed_paper_held_under_other_ids(logs: Logs, aliased: Aliased) -> None:
     """`prev` holds the listed paper twice, under its pre-rekey id and as a duplicate: both are withheld, so
-    both are counted withheld (TASK-067 review)."""
+    both are counted withheld, and the load line counts them followed (TASK-067 review)."""
     data, prev, *_ = aliased
     point_current(data, prev)
     with TestClient(make_app(data)) as c:
         totals = c.get("/api/v1/coverage").json()["totals"]
     assert totals["abstract_withheld"] == 2
+    [loaded] = [x for x in logs() if x["event"] == "index_loaded"]
+    assert (loaded["takedowns_followed"], loaded["takedowns_not_in_index"]) == (2, 1)
 
 
 def test_a_damaged_merges_file_never_stops_the_list(logs: Logs, aliased: Aliased) -> None:
@@ -753,7 +756,7 @@ def test_a_damaged_merges_file_never_stops_the_list(logs: Logs, aliased: Aliased
     assert (line["snapshot"], line["reason"], line["level"]) == ("new", "merges_mismatch", "ERROR")
 
 
-def test_a_pinned_export_waiting_past_the_bound_is_busy(data_dir: Path, store: Store) -> None:
+def test_a_pinned_export_waiting_past_the_bound_is_busy(logs: Logs, data_dir: Path, store: Store) -> None:
     """TASK-067 review: the bounded wait covers the pinned snapshot's verification (`pinned_records`) as well
     as the engine's open, over HTTP: 503 API_BUSY with Retry-After, never a queue."""
     _, old, new, _, word = store
@@ -768,6 +771,8 @@ def test_a_pinned_export_waiting_past_the_bound_is_busy(data_dir: Path, store: S
             state._open_slot.release()
         assert r.status_code == 503 and r.json()["error"]["code"] == "API_BUSY"
         assert r.headers["retry-after"] == "3" and r.headers["cache-control"] == "no-store"
+        [line] = [x for x in logs() if x["event"] == "request" and x.get("code") == "API_BUSY"]
+        assert line["busy"] == "pinned_open"  # told apart from a full verification slot
         r = c.get(EXPORT, params={"format": "jsonl", "q": f"abstract:{word}", "index_version": old})
         assert r.status_code == 200  # not remembered
 
@@ -792,3 +797,67 @@ def test_op_export_refuses_a_missing_list_once_a_snapshot_withheld(
     argv = ["--data-dir", str(data_dir), "export", f"abstract:{word}", "--index", old, "--format", "jsonl"]
     assert cli.main(argv) == 1
     assert "withheld.txt is missing" in capsys.readouterr().err
+
+
+def test_a_damaged_snapshot_drops_only_its_own_merges(logs: Logs, aliased: Aliased) -> None:
+    """Another snapshot's merges.csv is damaged: `new`'s merge is still followed (TASK-067 review round 2)."""
+    data, prev, _, paper, _, dup = aliased
+    other = data / "snapshots" / "other"
+    shutil.copytree(data / "snapshots" / "new", other)
+    (other / "merges.csv").chmod(0o644)
+    (other / "merges.csv").write_text("survivor_id,merged_id\nx,y\n", encoding="utf-8")
+    with TestClient(make_app(data)) as c:
+        text = exported(c, "jsonl", q=_title(paper), index_version=prev)
+    assert withheld_in_export("jsonl", text, dup.id)
+    [line] = [x for x in logs() if x["event"] == "takedown_merges_unavailable"]
+    assert (line["snapshot"], line["error"]) == ("other", "SnapshotError")
+
+
+def test_op_export_applies_the_list_without_a_damaged_snapshots_merges(
+    aliased: Aliased, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data, prev, _, paper, rekeyed, dup = aliased
+    merges = data / "snapshots" / "new" / "merges.csv"
+    merges.chmod(0o644)
+    merges.write_text(merges.read_text(encoding="utf-8") + "x,y,z\n", encoding="utf-8")
+    argv = ["--data-dir", str(data), "export", _title(paper), "--index", prev, "--format", "jsonl"]
+    assert cli.main(argv) == 0
+    out = capsys.readouterr()
+    assert withheld_in_export("jsonl", out.out, rekeyed.id) and not withheld_in_export(
+        "jsonl", out.out, dup.id
+    )
+    assert "the takedown list applies without new's merges" in out.err
+
+
+def test_op_takedown_check_reports_a_damaged_merges_file_and_a_suspect_merge(
+    aliased: Aliased, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Through the CLI (TASK-067 review round 2): a damaged merges.csv is a problem of its own, and a merge to a
+    paper the served index holds under another title is a suspect merge."""
+    data, _, _, paper, _, _ = aliased
+    log = data / "takedowns" / "log.jsonl"
+    log.write_text(json.dumps({
+        "record_id": paper.id, "received": "2026-09-30", "requester": "R", "basis": "b",
+        "decision": "withheld", "applied": None, "first_index_version": None,
+    }) + "\n", encoding="utf-8")  # fmt: skip
+    log.chmod(0o600)
+    argv = ["--data-dir", str(data), "takedown", "check", "--api", "http://127.0.0.1:8000"]
+    with TestClient(make_app(data)) as c:
+        monkeypatch.setattr(takedown_check, "http", lambda base: fetcher(c))
+        assert cli.main(argv) == 0, capsys.readouterr().out  # the fixture's own merge: the same title
+        stranger = next(
+            p.id for p in [attributed(r) for r in list(records())[:300]] if p.title != paper.title
+        )
+        monkeypatch.setattr(
+            snapshot_module, "merges_on_disk", lambda snapshots, on_damaged=None: ((paper.id, stranger),)
+        )
+        capsys.readouterr()
+        assert cli.main(argv) == 1
+        assert f"{stranger}: withheld as {paper.id}'s paper" in capsys.readouterr().out
+        monkeypatch.undo()
+        monkeypatch.setattr(takedown_check, "http", lambda base: fetcher(c))
+        merges = data / "snapshots" / "new" / "merges.csv"
+        merges.chmod(0o644)
+        merges.write_text(merges.read_text(encoding="utf-8") + "x,y,z\n", encoding="utf-8")
+        assert cli.main(argv) == 1
+        assert "the API applies the list without new's merges" in capsys.readouterr().out

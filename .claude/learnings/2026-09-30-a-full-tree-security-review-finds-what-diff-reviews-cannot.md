@@ -48,7 +48,7 @@ CI, deploy, dependencies and the frontend. Then fix every Must and Should.
 ## Decisions (and what would change them)
 - Only globally unique native ids (OpenReview forum ids, PMLR volume keys) link two ids. The first version also
   linked NeurIPS and ICLR proceedings hashes, assuming native ids never repeat; the review gate measured the
-  real snapshot and found 1,281 NeurIPS hashes naming two to four different papers in different years (md5 of
+  real snapshot and found 1,281 NeurIPS hashes naming two to five different papers in different years (md5 of
   a per-year paper number). Over-withholding is not "the safe direction" here: it marks unrelated papers as
   taken down in a screener's export. Check an identity assumption against the real corpus before building a
   closure on it.
