@@ -293,6 +293,11 @@ describe("the crawl window and the citability caution", () => {
     expect(builtFrom(r)).toBe(`a crawl run ${span}`);
     r.crawl_dates_kind = { "*": "mixed" };
     expect(builtFrom(r)).toBe(`crawls and Scholar searches run ${span} (Scholar dates in local time)`);
+    // converted with a recorded offset (TASK-077): UTC dates, so no local-time caveat
+    r.crawl_dates_kind = { "*": "scholar_query_dates_utc" };
+    expect(builtFrom(r)).toBe(`Scholar searches run ${span}`);
+    r.crawl_dates_kind = { "*": "mixed_utc" };
+    expect(builtFrom(r)).toBe(`crawls and Scholar searches run ${span}`);
     r.crawl_dates_kind = null;
     expect(builtFrom(r)).toBe(`records collected ${span}`);
     r.crawl_dates = {};

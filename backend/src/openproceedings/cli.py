@@ -1120,10 +1120,15 @@ def _record_lines(record: SearchRecord) -> list[str]:
 
     window = record.crawl_dates.get("*")
     kind = (record.crawl_dates_kind or {}).get("*")
-    label = {"scholar_query_dates": "Scholar searches run", "mixed": "crawl and Scholar searches"}.get(
-        kind or "", "crawl"
-    )
+    label = {
+        "scholar_query_dates": "Scholar searches run",
+        "scholar_query_dates_utc": "Scholar searches run",
+        "mixed": "crawl and Scholar searches",
+        "mixed_utc": "crawl and Scholar searches",
+    }.get(kind or "", "crawl")
     dates = f"{window.from_[:10]} to {window.to[:10]}" if window is not None else "unknown"
+    if kind in ("scholar_query_dates", "mixed") and window is not None:
+        dates += " (Scholar dates in local time)" if kind == "mixed" else " (local time)"
     lines = [
         f"searched {record.searched_at} · index {record.index_version} · tokenizer {record.tokenizer_version} "
         f"· query {record.query_version}",

@@ -65,6 +65,12 @@ READABLE_FORMATS = ("1", FORMAT_VERSION)
 # the manifest keys a takedown adds (TASK-136, decision-022), written only when a record is withheld: a snapshot
 # withholding nothing has the manifest it had before, so a format-2 reader of it sees no difference
 WITHHELD_KEYS = ("withheld", "abstract_withheld", "abstract_withheld_by_track")
+# manifest `query_dates` (TASK-077, decision-025): per bootstrap source, whether its window's ends (Publish or
+# Perish query dates) were converted to UTC with a recorded offset, or are local wall time with no known offset.
+# Written with any RIS report; a manifest without it (built before TASK-077) holds local times. Additive, like
+# WITHHELD_KEYS: no format bump
+UTC_QUERY_DATES = "utc"
+LOCAL = "local"
 HASHED = ("title", "abstract", "venue", "year", "track", "status")  # content_hash's fields (record-schema)
 DISPLAY = ("authors", "urls", "keywords", "presentation", "venue_id_raw")  # shown, never hashed
 SHORT = 12
@@ -178,7 +184,7 @@ def ingest_ris(mended: Sequence[Path], cache: Path) -> list[ImportReport]:
                 for fname, blob in data.items():
                     (tmp / fname).write_bytes(blob)
                 # what is checked is what gets cached; reports and errors name the cache entry
-                _, report = import_ris(tmp / "mended.ris", name=f"{name}/mended.ris")
+                _, report = import_ris(tmp / "mended.ris", name=f"{name}/mended.ris", cache_entry=name)
                 staged.append((tmp, root / name, data, report))
             for _, target, data, _ in staged:  # refuse before placing anything: all or none
                 if target.exists() and not _same_files(data)(target):
@@ -314,6 +320,15 @@ def _per_track(
         v: {y: {t: sorted(s) for t, s in ts.items()} for y, ts in ys.items()} for v, ys in sources.items()
     }
     return _plain(missing), _plain(named), _plain(statuses)
+
+
+def utc_query_sources(manifest: Mapping[str, Any]) -> frozenset[str]:
+    """The bootstrap sources whose query dates the manifest says were converted to UTC (`query_dates`); none
+    for a manifest without the key, whose RIS dates are local wall time."""
+    zones = manifest.get("query_dates", {})
+    if not isinstance(zones, Mapping) or not all(v in (UTC_QUERY_DATES, LOCAL) for v in zones.values()):
+        raise SnapshotError("the snapshot manifest's query_dates is malformed")
+    return frozenset(s for s, v in zones.items() if v == UTC_QUERY_DATES)
 
 
 def _windows(records: Iterable[PaperRecord]) -> dict[str, dict[str, str]]:
@@ -484,6 +499,10 @@ def render(
         "files": {"merges.csv": _sha256(merges), "conflicts.csv": _sha256(conflicts)},
         "sources": _sources(reports, crawls),
     }  # fmt: skip
+    if (
+        reports
+    ):  # what the RIS window's ends are (TASK-077, decision-025): converted to UTC, or local wall time
+        manifest["query_dates"] = {"ris": UTC_QUERY_DATES if all(r.utc_offset for r in reports) else LOCAL}
     if withheld:
         manifest["withheld"] = sorted(withheld)
         manifest["abstract_withheld"] = _nested(records, lambda r: r.id in withheld)

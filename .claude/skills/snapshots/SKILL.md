@@ -44,7 +44,9 @@ track, 0 included), `sources_by_track` (venue → year → track → the claim s
 `statuses_indexed` (venue → year → the statuses its sources can contain, from `ingest/statuses.py`, plus any
 its records hold) and `crawl_windows` (per claim source, its first and last `fetched_at`: the window
 `crawl_dates` uses, and narrower than the source's own `crawl_window`, which spans every response fetched,
-records or not; TASK-122); `merges` (a `total` plus a count per rule) and `conflicts` (a `total` plus one count
+records or not; TASK-122); `query_dates` (with any RIS report, TASK-077, decision-025: `{"ris": "utc"}` when every
+RIS report's `utc_offset` converted its Publish or Perish query dates, else `{"ris": "local"}`; absent in a
+manifest built before it, which reads as local; additive, no format bump); `merges` (a `total` plus a count per rule) and `conflicts` (a `total` plus one count
 per resolution kind present, the part before any `:`: `precedence`, `newest`, `tie`, `ambiguous_not_merged`,
 `track_not_merged`, `venue_year_not_merged`, `unresolved`; an absent kind means 0; spec 01 §Pipeline 5); `files` (the sha256 of `merges.csv` and `conflicts.csv`, which `snapshot_hash` doesn't
 cover); and `sources` — for RIS, one `ImportReport.to_manifest()` per cached file (both inputs' sha256,

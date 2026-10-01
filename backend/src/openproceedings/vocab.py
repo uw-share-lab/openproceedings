@@ -51,26 +51,50 @@ def bootstrap_only(sources: Iterable[str]) -> bool:
     return bool(named) and named <= BOOTSTRAP_SOURCES
 
 
-# What a crawl window's ends are (a search record's and `/coverage`'s `crawl_dates_kind`, spec 04): fetch times
-# (UTC), a bootstrap source's Publish or Perish query dates (local wall time stored labelled UTC, so an end
-# can be a day off), or the corpus-wide window over both kinds
+# What a crawl window's ends are (a search record's and `/coverage`'s `crawl_dates_kind`, spec 04; an open set,
+# decision-009): fetch times (UTC); a bootstrap source's Publish or Perish query dates, either local wall time
+# stored labelled UTC because the offset isn't recorded (so an end can be a day off), or converted to UTC with
+# the offset `ingest/ris_offsets.toml` records (TASK-077, decision-025); or the corpus-wide window over a crawl
+# and query dates, `mixed` while any of those query dates is local
 CRAWL = "crawl"
 SCHOLAR_QUERY_DATES = "scholar_query_dates"
+SCHOLAR_QUERY_DATES_UTC = "scholar_query_dates_utc"
 MIXED = "mixed"
+MIXED_UTC = "mixed_utc"
 
 
-def window_kind(sources: Iterable[str]) -> str:
-    """The kind of the crawl window over `sources`: one kind if they share it, else `mixed` (none: `crawl`)."""
-    kinds = {SCHOLAR_QUERY_DATES if s in BOOTSTRAP_SOURCES else CRAWL for s in sources}
-    return kinds.pop() if len(kinds) == 1 else MIXED if kinds else CRAWL
+def window_kind(sources: Iterable[str], utc: Iterable[str] = ()) -> str:
+    """The kind of the crawl window over `sources`: one kind if they share it, else `mixed` (`mixed_utc` when
+    no query date in it is local; none: `crawl`). `utc` are the bootstrap sources whose query dates were
+    converted to UTC."""
+    converted = set(utc)
+    kinds = {
+        (SCHOLAR_QUERY_DATES_UTC if s in converted else SCHOLAR_QUERY_DATES)
+        if s in BOOTSTRAP_SOURCES
+        else CRAWL
+        for s in sources
+    }
+    if len(kinds) == 1:
+        return kinds.pop()
+    if not kinds:
+        return CRAWL
+    if kinds == {SCHOLAR_QUERY_DATES, SCHOLAR_QUERY_DATES_UTC}:
+        return (
+            SCHOLAR_QUERY_DATES  # all query dates, some local: the window is as uncertain as its local part
+        )
+    return MIXED if SCHOLAR_QUERY_DATES in kinds else MIXED_UTC
 
 
-def crawl_dates_kind(windows: Iterable[str], sources: Iterable[str], everything: str = "*") -> dict[str, str]:
+def crawl_dates_kind(
+    windows: Iterable[str], sources: Iterable[str], everything: str = "*", utc: Iterable[str] = ()
+) -> dict[str, str]:
     """Per `crawl_dates` key (`windows`), its window's kind: `everything` (`*`, the corpus-wide window) over
-    every one of `sources`, any other key over that source alone. The one derivation a search record and
-    `/coverage` share (TASK-091)."""
+    every one of `sources`, any other key over that source alone; `utc` are the bootstrap sources whose query
+    dates are UTC (the manifest's `query_dates`). The one derivation a search record and `/coverage` share
+    (TASK-091)."""
     named = list(sources)
-    return {k: window_kind(named if k == everything else [k]) for k in windows}
+    converted = list(utc)
+    return {k: window_kind(named if k == everything else [k], converted) for k in windows}
 
 
 # The venue string, RIS `T2` and BibTeX `booktitle` (spec 04 §Exports, task-004, which cites the sources):

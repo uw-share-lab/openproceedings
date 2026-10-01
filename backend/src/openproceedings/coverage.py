@@ -32,7 +32,7 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from openproceedings.ingest.snapshot import SnapshotError
+from openproceedings.ingest.snapshot import SnapshotError, utc_query_sources
 from openproceedings.ingest.statuses import statuses_indexed
 from openproceedings.official_counts import GATED_TRACKS, OFFICIAL_ACCEPTED, OfficialTable, within_gate
 from openproceedings.vocab import STATUSES, TRACKS, VENUES, bootstrap_only, crawl_dates_kind
@@ -218,7 +218,7 @@ def breakdown(
             "built_at": manifest["built_at"],
             "sources": sources,
             # derived exactly as a search record's (TASK-091; `records.snapshot_facts`)
-            "crawl_dates_kind": crawl_dates_kind(windows, sources, ALL_SOURCES),
+            "crawl_dates_kind": crawl_dates_kind(windows, sources, ALL_SOURCES, utc_query_sources(manifest)),
             "identification_citable": not bootstrap_only(sources),
         }
         record_count = _count(manifest["record_count"])

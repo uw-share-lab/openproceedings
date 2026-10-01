@@ -26,7 +26,13 @@ from typing import Any
 
 import pytest
 from openproceedings.ingest.record import PaperRecord
-from openproceedings.ingest.ris import SKIP_REASONS, ImportReport, import_ris
+from openproceedings.ingest.ris import (
+    QUERY_DATE_OFFSETS,
+    SKIP_REASONS,
+    ImportReport,
+    import_ris,
+    load_offsets,
+)
 from openproceedings.ingest.volumes import ICML_PMLR_VOLUMES
 
 FIXTURE = Path(__file__).parents[2] / "fixtures" / "ris"
@@ -142,6 +148,68 @@ def test_authors_drop_the_truncation_marker(imported: Imported) -> None:
     by_id, _ = imported
     assert by_id[NEURIPS].authors == ("Doe, J", "Roe, R")
     assert by_id[PMLR].authors == ("Smith, A", "Jones, B")
+
+
+def test_an_entry_missing_from_the_offset_table_keeps_local_wall_time(imported: Imported) -> None:
+    """TASK-077: the fixture's directory isn't in `ris_offsets.toml`, so its query dates stay as written,
+    labelled UTC, and its report says the offset is unknown."""
+    _, report = imported
+    assert report.utc_offset is None and report.to_manifest()["utc_offset"] is None
+
+
+@pytest.mark.parametrize(
+    ("offset", "fetched"),
+    [
+        ("-04:00", datetime(2026, 9, 18, 14, 3, 5, tzinfo=UTC)),
+        ("+05:30", datetime(2026, 9, 18, 4, 33, 5, tzinfo=UTC)),
+        ("+00:00", datetime(2026, 9, 18, 10, 3, 5, tzinfo=UTC)),
+        ("-09:30", datetime(2026, 9, 18, 19, 33, 5, tzinfo=UTC)),
+        ("+14:00", datetime(2026, 9, 17, 20, 3, 5, tzinfo=UTC)),  # the date moves back a day
+    ],
+)
+def test_a_listed_entry_converts_its_query_dates_to_utc(offset: str, fetched: datetime) -> None:
+    """The workshop record's `Query date: 2026-09-18 10:03:05` is local time at `offset` (TASK-077)."""
+    records, report = import_ris(FIXTURE / "mended.ris", cache_entry="search", offsets={"search": offset})
+    [r] = [r for r in records if r.id == WORKSHOP]
+    assert {c.fetched_at for c in r.provenance} == {fetched}
+    assert report.utc_offset == offset
+    unlisted, other = import_ris(FIXTURE / "mended.ris", cache_entry="other", offsets={"search": offset})
+    assert other.utc_offset is None and {
+        c.fetched_at for r in unlisted if r.id == WORKSHOP for c in r.provenance
+    } == {datetime(2026, 9, 18, 10, 3, 5, tzinfo=UTC)}
+
+
+def test_the_offset_table_holds_both_trust_evals_searches() -> None:
+    """decision-025: both Publish or Perish searches ran at UTC−04:00, read from PoP's own query records."""
+    assert dict(QUERY_DATE_OFFSETS) == {"out-covidence": "-04:00", "out-covidence-2020-2024": "-04:00"}
+
+
+@pytest.mark.parametrize(
+    ("row", "error"),
+    [
+        ('utc_offset = "-04:00"\nevidence = "x"', "exactly"),
+        ('utc_offset = "-04:00"\nevidence = "x"\nverified = 2026-10-01\nextra = 1', "exactly"),
+        ('utc_offset = "-4:00"\nevidence = "x"\nverified = 2026-10-01', r"\+HH:MM"),
+        ('utc_offset = "EDT"\nevidence = "x"\nverified = 2026-10-01', r"\+HH:MM"),
+        ('utc_offset = -4\nevidence = "x"\nverified = 2026-10-01', r"\+HH:MM"),
+        ('utc_offset = "+04:60"\nevidence = "x"\nverified = 2026-10-01', "real offset"),
+        ('utc_offset = "+14:01"\nevidence = "x"\nverified = 2026-10-01', "real offset"),
+        ('utc_offset = "-04:00"\nevidence = " "\nverified = 2026-10-01', "evidence"),
+        ('utc_offset = "-04:00"\nevidence = "x"\nverified = "2026-10-01"', "date"),
+        ('utc_offset = "-04:00"\nevidence = "x"\nverified = 2026-10-01T00:00:00', "date"),
+    ],
+)
+def test_a_malformed_offset_row_is_an_error(row: str, error: str) -> None:
+    with pytest.raises(ValueError, match=error):
+        load_offsets(f"[entry]\n{row}\n")
+
+
+def test_offsets_at_the_limits_load() -> None:
+    rows = "".join(
+        f'[e{i}]\nutc_offset = "{o}"\nevidence = "x"\nverified = 2026-10-01\n'
+        for i, o in enumerate(("+14:00", "-14:00", "+00:00", "-00:59"))
+    )
+    assert sorted(load_offsets(rows).values()) == ["+00:00", "+14:00", "-00:59", "-14:00"]
 
 
 def test_claims_record_where_each_value_came_from(imported: Imported) -> None:

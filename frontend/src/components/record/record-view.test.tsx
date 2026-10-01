@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { json, renderWithApi, type Call, type Handler } from "@/test/api-stub";
 import { copy, RECORDS, type RecordCase } from "@/test/record-fixture";
 import { methodsText, type RecordResponse } from "@/lib/methods-text";
-import { RecordView } from "./record-view";
+import { RecordView, windowRow } from "./record-view";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }), usePathname: () => "/record/x" }));
 
@@ -112,6 +112,20 @@ describe("reproduced (design R1)", () => {
     ).toBeTruthy();
     expect(screen.getAllByText(r.index_version).length).toBeGreaterThan(0);
     expect(screen.getByText("Crawl run")).toBeTruthy();
+  });
+
+  it("says local time (RC-9) only when the Scholar dates' offset wasn't recorded (TASK-077)", () => {
+    const r = copy(RECORDS.limits.stored.record);
+    r.crawl_dates = { "*": { from: "2026-09-19T04:54:21Z", to: "2026-09-23T16:16:10Z" } };
+    const span = "2026-09-19 to 2026-09-23";
+    r.crawl_dates_kind = { "*": "scholar_query_dates" };
+    expect(windowRow(r)).toEqual({ label: "Scholar searches run", value: `${span} (local time)` });
+    r.crawl_dates_kind = { "*": "scholar_query_dates_utc" };
+    expect(windowRow(r)).toEqual({ label: "Scholar searches run", value: span });
+    r.crawl_dates_kind = { "*": "mixed" };
+    expect(windowRow(r)?.value).toBe(`${span} (Scholar dates in local time)`);
+    r.crawl_dates_kind = { "*": "mixed_utc" };
+    expect(windowRow(r)).toEqual({ label: "Crawls and Scholar searches run", value: span });
   });
 
   it("shows the methods text the record generates, every number the record's, and a Copy button", async () => {

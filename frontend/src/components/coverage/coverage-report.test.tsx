@@ -238,6 +238,15 @@ describe("the header", () => {
     expect(text).not.toContain("PRISMA identification numbers");
   });
 
+  it("calls converted Scholar dates Scholar searches too, never a crawl (TASK-077)", () => {
+    const data = copy();
+    data.snapshot.crawl_dates_kind = { "*": "scholar_query_dates_utc", ris: "scholar_query_dates_utc" };
+    render(<CoverageReport coverage={data} />);
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("ris: Google Scholar searches run");
+    expect(text).not.toContain("Crawled");
+  });
+
   it("writes a window over several days from its start to its end", () => {
     const data = copy();
     const window = { from: "2026-09-20T08:14:03Z", to: "2026-09-26T23:59:00Z" };

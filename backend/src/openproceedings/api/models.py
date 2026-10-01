@@ -446,7 +446,9 @@ class SnapshotInfo(Model):
     crawl_dates_kind: dict[str, str] = Field(  # TASK-091: additive, a search record's derivation
         description="Per `crawl_dates` key, what its window's ends are, derived as a search record's: `crawl` "
         "(fetch times, UTC), `scholar_query_dates` (a bootstrap source's window: when its Scholar searches "
-        "were run) or `mixed` (`*` over both). Open set: new values may be added within /api/v1; handle a "
+        "were run, in local time with no recorded offset), `scholar_query_dates_utc` (the same, converted to "
+        "UTC with a recorded offset), or `mixed` / `mixed_utc` (`*` over both; `mixed` while some of its "
+        "Scholar dates are local). Open set: new values may be added within /api/v1; handle a "
         "value you don't know."
     )
     identification_citable: bool = Field(

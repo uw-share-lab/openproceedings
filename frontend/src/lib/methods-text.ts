@@ -37,10 +37,14 @@ export function builtFrom(record: SearchRecord): string | null {
   switch (record.crawl_dates_kind?.["*"]) {
     case "crawl":
       return `a crawl run ${from} to ${to}`;
-    case "scholar_query_dates":
+    case "scholar_query_dates": // local wall time: the offset wasn't recorded (TASK-077)
       return `Scholar searches run ${from} to ${to} (local time)`;
+    case "scholar_query_dates_utc":
+      return `Scholar searches run ${from} to ${to}`;
     case "mixed":
       return `crawls and Scholar searches run ${from} to ${to} (Scholar dates in local time)`;
+    case "mixed_utc":
+      return `crawls and Scholar searches run ${from} to ${to}`;
     default:
       // a kind this code doesn't know, or a v1 record (not recorded): the dates, and no claim about them
       return `records collected ${from} to ${to}`;

@@ -395,7 +395,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
 |---|---|
 | `input`, `mode`, `canonical`, `canonical_hash`, `identification_query` | what was searched, and the string that reproduces "identified" |
 | `index_version`, `tokenizer_version`, `query_version`, `snapshot_hash`, `crawl_dates` (the corpus-wide `*` from–to summary plus each claim source's own manifest window when available) | the database version and when its contents were collected |
-| `crawl_dates_kind` (per `crawl_dates` key: `crawl`, `scholar_query_dates` or `mixed`) | what those dates are: a bootstrap source's window is when its Scholar searches were run (Publish or Perish's local time, stored labelled UTC), not a crawl |
+| `crawl_dates_kind` (per `crawl_dates` key: `crawl`, `scholar_query_dates`, `scholar_query_dates_utc`, `mixed` or `mixed_utc`; an open set) | what those dates are: a bootstrap source's window is when its Scholar searches were run, `scholar_query_dates_utc` when converted to UTC with a recorded offset (TASK-077, decision-025), else `scholar_query_dates` (Publish or Perish's local time, stored labelled UTC), not a crawl |
 | `sources` (the manifest's source names) and `identification_citable` | whether `total` can be cited as a PRISMA identification number: `false` when every source is a bootstrap one (`vocab.bootstrap_only`, the test `op search`'s "bootstrap corpus" note uses), since the corpus is then an earlier search's output, not a database |
 | `searched_at` (UTC) | the search date, which is separate from the crawl date |
 | `total`, `excluded` (with `unknown` itemised) | the counts cited in PRISMA |
@@ -467,7 +467,10 @@ transport, `IndexState.pinned` in `api/state.py` loads older indexes):
   checked to be an ISO 8601 date-time and is
   sent in the one timestamp form (§Conventions; a stored `…+00:00` reads back as `…Z`).
   `crawl_dates_kind` has the same keys: a source in `vocab.BOOTSTRAP_SOURCES` (`ris`) gives
-  `scholar_query_dates`, any other `crawl`, and `*` is the one kind of all the manifest's sources, or `mixed`.
+  `scholar_query_dates_utc` when the manifest's `query_dates` says its dates were converted to UTC (TASK-077,
+  decision-025) and `scholar_query_dates` (local time, offset unknown) otherwise, including a manifest built
+  before the key existed; any other source gives `crawl`; and `*` is the one kind of all the manifest's sources,
+  or `mixed` (`mixed_utc` when none of its query dates is local).
   `sources` is the manifest's `sources` keys, sorted; `identification_citable` is `not
   bootstrap_only(sources)` (false for today's RIS-only corpus; the record page then shows the CLI's caution
   and no methods text, 05). `dedup` is `{merged: manifest merges.total, ambiguous_not_merged,

@@ -539,6 +539,29 @@ def test_a_ris_only_snapshot_is_not_citable_and_its_window_is_scholar_query_date
     assert facts.crawl_dates_kind == {"*": "scholar_query_dates", "ris": "scholar_query_dates"}
 
 
+def test_converted_query_dates_are_scholar_query_dates_utc_like_coverage(data_dir: Path) -> None:
+    """TASK-077: a manifest whose `query_dates` says the RIS dates were converted gives the `_utc` kinds, the
+    same derivation as `/coverage`; `local` (or no key, a manifest built before TASK-077) keeps the old ones."""
+    from openproceedings.coverage import breakdown
+
+    path = data_dir / "snapshots" / "snap" / "manifest.json"
+    edit(path, query_dates={"ris": "utc"})
+    facts = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+    assert facts.crawl_dates_kind == {"*": "scholar_query_dates_utc", "ris": "scholar_query_dates_utc"}
+    manifest = json.loads(path.read_text())
+    assert breakdown(manifest, "snap", official={})["snapshot"]["crawl_dates_kind"] == facts.crawl_dates_kind
+    own = {"from": "2026-03-01T00:00:00+00:00", "to": "2026-03-02T00:00:00+00:00"}
+    edit(path, sources={"ris": [], "openreview_v2": {"crawl_window": own}}, crawl_windows={})
+    mixed = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+    assert mixed.crawl_dates_kind == {"*": "mixed_utc", "openreview_v2": "crawl"}
+    edit(path, query_dates={"ris": "local"})
+    local = snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+    assert local.crawl_dates_kind == {"*": "mixed", "openreview_v2": "crawl"}
+    edit(path, query_dates={"ris": "UTC"})
+    with pytest.raises(InternalError):
+        snapshot_facts(data_dir, index_inputs(data_dir, the_version(data_dir)))
+
+
 def test_a_source_with_its_own_crawl_window_gets_its_own_key(data_dir: Path) -> None:
     path = data_dir / "snapshots" / "snap" / "manifest.json"
     own = {"from": "2026-03-01T00:00:00+00:00", "to": "2026-03-02T00:00:00+00:00"}
@@ -739,3 +762,33 @@ def test_freeze_refuses_an_index_built_with_another_tokenizer(data_dir: Path) ->
     engine: Any = NoEngine(old)
     with pytest.raises(InternalError):
         records.freeze(engine, parse("trust"), "trust", data_dir)
+
+
+@pytest.mark.parametrize(
+    ("sources", "utc", "kind"),
+    [
+        ([], [], "crawl"),
+        (["openreview_v2"], [], "crawl"),
+        (["ris"], [], "scholar_query_dates"),
+        (["ris"], ["ris"], "scholar_query_dates_utc"),
+        (["ris", "openreview_v2"], [], "mixed"),
+        (["ris", "openreview_v2"], ["ris"], "mixed_utc"),
+        (["openreview_v2"], ["ris"], "crawl"),  # `utc` names only bootstrap sources that are present
+    ],
+)
+def test_a_window_is_local_only_while_its_query_dates_are(
+    sources: list[str], utc: list[str], kind: str
+) -> None:
+    """TASK-077: `window_kind` over sources, given which bootstrap sources' query dates were converted."""
+    from openproceedings import vocab
+
+    assert vocab.window_kind(sources, utc) == kind
+
+
+def test_query_dates_partly_converted_read_as_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two bootstrap sources, one converted: the window is as uncertain as its local part, never `mixed`."""
+    from openproceedings import vocab
+
+    monkeypatch.setattr(vocab, "BOOTSTRAP_SOURCES", frozenset({"ris", "other"}))
+    assert vocab.window_kind(["ris", "other"], ["ris"]) == "scholar_query_dates"
+    assert vocab.window_kind(["ris", "other", "openreview_v2"], ["ris"]) == "mixed"

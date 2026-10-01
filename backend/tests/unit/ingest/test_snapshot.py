@@ -273,9 +273,28 @@ def test_build_writes_the_layout(cache: Path, tmp_path: Path) -> None:
         assert manifest["files"][name] == hashlib.sha256((result.path / name).read_bytes()).hexdigest()
     [report] = manifest["sources"]["ris"]
     assert (report["file"], report["imported"], report["read"]) == ("search-a/mended.ris", 6, 12)
+    assert report["utc_offset"] is None and manifest["query_dates"] == {"ris": "local"}  # not in the table
     assert manifest["built_at"] == "2026-09-26T12:00:00+00:00"
     assert (result.path / "merges.csv").read_text() == "survivor_id,merged_id,rule,key,venue,year,sources\n"
     assert not list((tmp_path / "snapshots").glob(".tmp-*"))
+
+
+def test_query_dates_say_whether_the_ris_window_was_converted(tmp_path: Path) -> None:
+    """TASK-077: an entry listed in `ris_offsets.toml` has its query dates converted, and the manifest says
+    `utc`; with any entry unlisted the RIS window is `local` (offset unknown)."""
+    [listed] = ingest_ris([source(tmp_path, "out-covidence")], tmp_path / "cache")
+    assert listed.utc_offset == "-04:00"  # the check ran under the cache entry's name, not its temp dir's
+    converted = build(tmp_path / "cache", tmp_path / "one", BUILT)
+    manifest = json.loads((converted.path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["query_dates"] == {"ris": "utc"}
+    assert [r["utc_offset"] for r in manifest["sources"]["ris"]] == ["-04:00"]
+    # the fixture's latest imported query date, 2026-09-20 08:00:00 local, is 12:00:00 UTC
+    assert manifest["crawl_window"]["to"] == "2026-09-20T12:00:00+00:00"
+    ingest_ris([source(tmp_path / "2", "search-a")], tmp_path / "cache")
+    both = build(tmp_path / "cache", tmp_path / "two", BUILT)
+    manifest = json.loads((both.path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["query_dates"] == {"ris": "local"}
+    assert [r["utc_offset"] for r in manifest["sources"]["ris"]] == ["-04:00", None]
 
 
 def test_built_at_is_stored_in_utc(cache: Path, tmp_path: Path) -> None:

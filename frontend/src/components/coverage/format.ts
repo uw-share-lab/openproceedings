@@ -26,13 +26,15 @@ export function minuteUtc(timestamp: string): string {
 /**
  * What a window's ends are, in words (`snapshot.crawl_dates_kind`): a crawl's fetch times, or the dates a
  * bootstrap source's Google Scholar searches were run, which the page must never call a crawl
- * (prisma-reporting). A kind this page doesn't know, `mixed` included, reads as the neutral "Collected".
+ * (prisma-reporting), whether or not their offset was recorded (TASK-077). A kind this page doesn't know,
+ * `mixed` and `mixed_utc` included, reads as the neutral "Collected".
  */
 export function windowVerb(kind: string | undefined): string {
   switch (kind) {
     case "crawl":
       return "Crawled";
     case "scholar_query_dates":
+    case "scholar_query_dates_utc":
       return "Google Scholar searches run";
     default:
       return "Collected";
