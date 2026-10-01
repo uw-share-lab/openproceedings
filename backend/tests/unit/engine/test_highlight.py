@@ -187,7 +187,7 @@ def covered(ast: Node, r: Rec, expansions: dict[tuple[str, str], frozenset[str]]
     return {f: {i for s, e in spans.get(f, set()) for i in range(s, e)} for f in ("title", "abstract")}  # type: ignore[call-overload]
 
 
-# four match sets (each branch, their OR, their AND), every matched record highlighted: no per-example deadline
+# four match sets (each branch, their OR, their AND), each matched record highlighted: no per-example deadline
 @settings(deadline=None)
 @given(asts(), asts())
 def test_an_or_lights_exactly_its_matching_branches_and_an_and_all_of_them(a: Node, b: Node) -> None:

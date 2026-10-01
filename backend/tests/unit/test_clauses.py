@@ -520,9 +520,9 @@ _WIDEST = list(clauses.WIDEST_YEAR)
     case=YearEditCase("year:2021 (year:2023 OR x) NOT (year:2017 a)", "native", "pinned"), ranges=_WIDEST
 )
 @example(case=YearEditCase("x (year:2021 OR year:2020..2022)", "scholar", "pinned"), ranges=_WIDEST)
-# queries padded toward the length and depth caps, parsed with each year edit: no per-example deadline
 @example(case=YearEditCase("a" * 1_862, "scholar", "pinned"), ranges=_WIDEST)
 @given(case=year_edit_cases(), ranges=_RANGES)
+# queries padded toward the length and depth caps, parsed with each year edit: no per-example deadline
 @settings(deadline=None)
 def test_every_year_edit_on_a_toggleable_clause_parses_and_edits_only_that_clause(
     case: YearEditCase, ranges: list[YearRange]
