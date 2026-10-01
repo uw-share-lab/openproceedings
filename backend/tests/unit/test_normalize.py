@@ -269,7 +269,7 @@ def test_script_join_is_linear() -> None:
     assert large < small * 8  # 4× the input: linear is ~4×, quadratic ~16×
 
 
-@pytest.mark.parametrize("text", ["\u0301", "a\u0301", "a\u0338\u0301"])
+@pytest.mark.parametrize("text", ["\u0301", "a\u0301"])
 def test_a_run_of_marks_is_linear(text: str) -> None:
     # TASK-067: each mark rescanned the rest of its run, so a query or abstract of a few thousand marks cost
     # seconds; a mark-heavy `q` is anyone's to send

@@ -348,7 +348,9 @@ def test_a_wait_for_the_open_slot_past_its_bound_is_refused_busy(indexes: Path) 
     s = IndexState(indexes, "current", opener, keep_pinned=1, open_wait_seconds=0.05, busy_retry_seconds=7)
     with ThreadPoolExecutor(1) as pool:
         first = pool.submit(s.pinned, "aaaa01")
-        while "aaaa01" not in opener.opened:
+        deadline = time.monotonic() + 10
+        while "aaaa01" not in opener.opened:  # bounded: a first thread that died fails here, never hangs
+            assert time.monotonic() < deadline and not first.done(), first
             time.sleep(0.001)
         started = time.monotonic()
         with pytest.raises(ApiError) as e:

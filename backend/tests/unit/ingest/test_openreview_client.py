@@ -556,6 +556,14 @@ def test_a_token_that_cant_be_a_header_is_refused_without_echoing_it(
     assert token not in str(e.value) and token not in caplog.text and "abc" not in str(e.value)
 
 
+def test_an_empty_token_is_a_refused_login(tmp_path: Path) -> None:
+    def server(request: Request, timeout: float = 60.0) -> Response:
+        return json_response({"token": ""}, headers=JSON)
+
+    with pytest.raises(OpenReviewAuthError, match="refused the login"):
+        client(tmp_path, server).get("/notes", PARAMS)  # type: ignore[arg-type]
+
+
 def test_the_transport_never_echoes_a_header_value_it_cant_send() -> None:
     with pytest.raises(TransportError) as e:
         urllib_transport(
