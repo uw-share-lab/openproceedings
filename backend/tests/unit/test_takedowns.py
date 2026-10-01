@@ -168,7 +168,7 @@ def test_retry_after_reads_whole_seconds_only(header: str | None, seconds: float
 # --- the same paper under another id (TASK-067) ------------------------------------------------------------------
 
 OLD, NEW = "op:icml:2023:Abcd1234", "op:icml:2024:Abcd1234"  # one native id: a rekey (a corrected year)
-DUP = "op:icml:2024:v235-smith24a"  # a duplicate some build merged into NEW
+DUP = "op:icml:2024:pmlr-v235-smith24a"  # a duplicate some build merged into NEW (PMLR's native id form)
 
 
 def test_a_listed_paper_is_withheld_under_its_other_ids_in_any_version() -> None:
@@ -184,7 +184,7 @@ def test_a_listed_paper_is_withheld_under_its_other_ids_in_any_version() -> None
 
 
 def test_merges_chain_and_other_papers_are_left_alone() -> None:
-    far = "op:icml:2024:v235-jones24b"
+    far = "op:icml:2024:pmlr-v235-jones24b"
     merges = [(NEW, DUP), (DUP, far), (A, "op:iclr:2024:Other-99")]
     assert takedowns.same_paper(frozenset({far}), merges, [NEW, OLD, A, B]) == {NEW, OLD}
 
@@ -203,3 +203,33 @@ def test_a_byte_order_mark_is_read_and_an_invisible_character_is_refused(tmp_pat
     assert load(tmp_path / "withheld.txt") == {A}
     with pytest.raises(TakedownError, match=r"line 1: .* is not a record id"):
         parse(f"{A}​\n")
+
+
+H = "nips-0266e33d3f546cb5436a10798e657d97"
+
+
+def test_a_proceedings_hash_links_no_two_years() -> None:
+    """TASK-067 review: a NeurIPS or ICLR proceedings hash is md5 of a per-year paper number, so the same hash in
+    two years is two papers (one NeurIPS hash names four, 2013 to 2019, in the 2026-09-29 snapshot). Only
+    globally unique native ids (OpenReview forum ids, PMLR volume keys) link ids; a merge still does."""
+    listed = f"op:neurips:2019:{H}"
+    others = [f"op:neurips:{y}:{H}" for y in (2013, 2015, 2016)]
+    assert takedowns.same_paper(frozenset({listed}), (), [listed, *others]) == {listed}
+    # nor through a merge: the listed forum id's merged listing shares a hash with another year's listing
+    forum, survivor = "op:neurips:2022:-3Pg7QNIF1S", "op:neurips:2024:h0rbjHyWoa"
+    merges = [(forum, f"op:neurips:2022:{H}"), (survivor, f"op:neurips:2024:{H}")]
+    held = [forum, f"op:neurips:2022:{H}", survivor, f"op:neurips:2024:{H}"]
+    assert takedowns.same_paper(frozenset({forum}), merges, held) == {forum, f"op:neurips:2022:{H}"}
+    iclr = "iclr-0123456789abcdef0123456789abcdef"
+    assert (
+        takedowns.same_paper(frozenset({f"op:iclr:2024:{iclr}"}), (), [f"op:iclr:2026:{iclr}"]) == frozenset()
+    )
+
+
+@pytest.mark.parametrize(
+    ("rid", "linked"),
+    [("op:iclr:2024:Abcd1234", True), ("op:icml:2024:pmlr-v235-smith24a", True), (f"op:neurips:2019:{H}", False),
+     (f"op:neurips:2021:{H}-round1", False), ("op:iclr:2015:iclr-0123456789abcdef0123456789abcdef", False)],
+)  # fmt: skip
+def test_only_globally_unique_native_ids_link(rid: str, linked: bool) -> None:
+    assert (takedowns.global_native(rid) is not None) is linked

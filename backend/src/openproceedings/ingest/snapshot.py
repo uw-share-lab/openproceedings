@@ -53,7 +53,7 @@ from openproceedings.ingest.status_check import UnexpectedStatus, unexpected_sta
 from openproceedings.ingest.statuses import statuses_indexed
 from openproceedings.logs import elapsed_ms
 from openproceedings.query.normalize import TOKENIZER_VERSION
-from openproceedings.takedowns import NONE, Withheld, withhold_record
+from openproceedings.takedowns import NONE, Withheld, global_native, withhold_record
 from openproceedings.vocab import BOOTSTRAP_SOURCES
 
 log = logging.getLogger(__name__)
@@ -397,9 +397,10 @@ class Withholding:
 
 def _successor(rid: str, result: DedupResult, held: set[str]) -> str | None:
     """The id this build holds `rid`'s paper under, when it holds it under another: the survivor it merged into
-    (following merges.csv), else the one record with its native id (a rekey, the rule `diff` uses)."""
+    (following merges.csv), else the one record with its native id (a rekey, the rule `diff` uses) when that
+    native id is globally unique (`takedowns.global_native`)."""
     survivor = {m.merged_id: m.survivor_id for m in result.merges if m.merged_id != m.survivor_id}
-    native = rid.split(":", 3)[-1]
+    native = global_native(rid)  # None for a proceedings hash: in another year it is another paper (TASK-067)
 
     def follow(start: str) -> str:
         seen, at = {start}, start
@@ -410,11 +411,13 @@ def _successor(rid: str, result: DedupResult, held: set[str]) -> str | None:
 
     if (at := follow(rid)) != rid and at in held:
         return at
-    same = [h for h in held if h.split(":", 3)[-1] == native]
+    if native is None:
+        return None
+    same = [h for h in held if global_native(h) == native]
     if len(same) == 1:
         return same[0]
     # rekeyed *and* merged: the one merged-away id with its native id leads to the survivor
-    merged = [m for m in survivor if m.split(":", 3)[-1] == native]
+    merged = [m for m in survivor if global_native(m) == native]
     if not same and len(merged) == 1 and (at := follow(merged[0])) in held:
         return at
     return None
@@ -900,16 +903,20 @@ def diff(a: Path, b: Path) -> dict[str, Any]:
     old, new = load_records(a), load_records(b)  # each verified against its manifest's snapshot_hash
     was, now = _withheld(a), _withheld(b)
     added, removed = new.keys() - old.keys(), old.keys() - new.keys()
-    # a rekey only when exactly one removed and one added id share a native id: anything else (two papers
-    # into one, one into two) is reported as added and removed, so a lost record is never hidden
-    gone_by_native = Counter(old[i].native for i in removed)
+    # a rekey only when exactly one removed and one added id share a globally unique native id: anything else
+    # (two papers into one, one into two, a proceedings hash, which in another year is another paper; TASK-067)
+    # is reported as added and removed, so a lost record is never hidden
+    gone_by_native = Counter(n for i in removed if (n := global_native(i)) is not None)
     new_by_native: dict[str, list[str]] = {}
     for i in added:
-        new_by_native.setdefault(new[i].native, []).append(i)
+        if (n := global_native(i)) is not None:
+            new_by_native.setdefault(n, []).append(i)
     rekeyed = {
-        i: new_by_native[old[i].native][0]
+        i: new_by_native[n][0]
         for i in sorted(removed)
-        if gone_by_native[old[i].native] == 1 and len(new_by_native.get(old[i].native, [])) == 1
+        if (n := global_native(i)) is not None
+        and gone_by_native[n] == 1
+        and len(new_by_native.get(n, [])) == 1
     }
 
     def hashed_diff(x: PaperRecord, y: PaperRecord) -> list[str]:

@@ -360,3 +360,18 @@ def test_cli_build_refuses_a_missing_list_once_a_snapshot_withheld(
     assert "withheld.txt is missing" in capsys.readouterr().err
     (data / "takedowns" / "withheld.txt").write_text("", encoding="utf-8")  # emptied: lifted on purpose
     assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 0
+
+
+def test_a_proceedings_hash_in_another_year_is_another_paper(cache: Path) -> None:
+    """TASK-067 review: a NeurIPS hash is md5 of a per-year paper number, so `op:neurips:2019:nips-H` and
+    `op:neurips:2013:nips-H` are two papers (1,281 such hashes in the 2026-09-29 snapshot). Listing one never
+    follows to the other."""
+    result = _result(cache)
+    other_year = next(r for r in result.records if r.id == NEURIPS).model_copy(
+        update={"id": NEURIPS.replace(":2025:", ":2013:"), "year": 2013}
+    )
+    rest = tuple(r for r in result.records if r.id != NEURIPS)
+    done = withhold(
+        replace(result, records=tuple(sorted((*rest, other_year), key=lambda r: r.id))), frozenset({NEURIPS})
+    )
+    assert (done.followed, done.unmatched, done.withheld) == ({}, (NEURIPS,), frozenset())

@@ -634,6 +634,20 @@ def test_diff_names_every_kind_of_change(cache: Path, tmp_path: Path) -> None:
     assert (same["added"], same["removed"], same["rekeyed"], same["changed"]) == ([], [], {}, {})
 
 
+def test_diff_never_reads_a_proceedings_hash_in_another_year_as_a_rekey(cache: Path, tmp_path: Path) -> None:
+    """TASK-067 review: a NeurIPS hash is md5 of a per-year paper number, so the same hash in another year is
+    another paper: one removed and one added are reported as such, never as one paper rekeyed."""
+    a = build(cache, tmp_path / "snapshots", BUILT).path
+    other = NEURIPS.replace(":2025:", ":2013:")
+
+    def edit(rs: dict[str, PaperRecord]) -> None:
+        moved = rs.pop(NEURIPS).model_copy(update={"id": other, "year": 2013})
+        rs[moved.id] = moved
+
+    result = diff(a, rewrite(a, tmp_path / "b", edit))
+    assert (result["added"], result["removed"], result["rekeyed"]) == ([other], [NEURIPS], {})
+
+
 @pytest.mark.parametrize("field", DISPLAY)
 def test_every_display_field_is_a_display_only_change(cache: Path, tmp_path: Path, field: str) -> None:
     a = build(cache, tmp_path / "snapshots", BUILT).path

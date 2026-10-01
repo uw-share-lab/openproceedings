@@ -102,33 +102,43 @@ def load(path: Path, *, required: bool = False) -> Withheld:
     return parse(text, name=path.name)
 
 
-def native(rid: str) -> str:
-    """A record id's native part (`op:<venue>:<year>:<native>`): the source's own id for the paper, which a
-    corrected venue or year leaves as it was (the rekey rule `snapshot.diff` and `snapshot.withhold` use)."""
-    return rid.split(":", 3)[-1]
+# native ids unique only within their venue-year: a proceedings hash is md5 of a per-year paper number
+_LOCAL_NATIVE = ("nips-", "iclr-")
+
+
+def global_native(rid: str) -> str | None:
+    """A record id's native part (`op:<venue>:<year>:<native>`) when it names one paper in every venue and year,
+    so a corrected venue or year leaves the paper recognisable by it: an OpenReview forum id or a PMLR volume
+    and key. None for a NeurIPS or ICLR proceedings hash (`nips-…`, `iclr-…`): md5 of a paper number that
+    repeats across years, so the same hash in another year is another paper (TASK-067 review: 1,281 NeurIPS
+    hashes name two to four papers each in the 2026-09-29 snapshot)."""
+    native = rid.split(":", 3)[-1]
+    return None if native.startswith(_LOCAL_NATIVE) else native
 
 
 def same_paper(listed: Withheld, merges: Iterable[tuple[str, str]], ids: Iterable[str]) -> Withheld:
     """Which of `ids` (one index version's records) are a listed paper, under its listed id or any other
     (TASK-067): linked to a listed id by `merges` ((survivor, merged) pairs, from any build: the same paper
-    found twice), or holding its native id (the same paper rekeyed by a corrected venue or year), transitively.
-    The list names one id; an older version may hold the paper under an id it had before, or as a duplicate a
-    later build merged, and a newer one under the id it has now: each is withheld. Native ids are the sources'
-    own (an OpenReview forum id, a PMLR volume and key, a NeurIPS hash), never shared by two papers."""
-    held = list(ids)
+    found twice), or holding its globally unique native id (`global_native`: the same paper rekeyed by a
+    corrected venue or year), transitively. The list names one id; an older version may hold the paper under
+    an id it had before, or as a duplicate a later build merged, and a newer one under the id it has now: each
+    is withheld. A proceedings hash links nothing by itself: in another year it is another paper."""
     if not listed:
         return NONE
+    held = list(ids)
     linked: dict[str, set[str]] = {}
     for survivor, merged in merges:
         linked.setdefault(survivor, set()).add(merged)
         linked.setdefault(merged, set()).add(survivor)
     by_native: dict[str, set[str]] = {}
     for rid in (*held, *linked, *listed):
-        by_native.setdefault(native(rid), set()).add(rid)
+        if (native := global_native(rid)) is not None:
+            by_native.setdefault(native, set()).add(rid)
     found, todo = set(listed), list(listed)
     while todo:
         at = todo.pop()
-        for rid in linked.get(at, set()) | by_native[native(at)]:
+        native = global_native(at)
+        for rid in linked.get(at, set()) | (by_native[native] if native is not None else set()):
             if rid not in found:
                 found.add(rid)
                 todo.append(rid)
