@@ -98,6 +98,17 @@ def test_422_names_a_few_problems_and_counts_the_rest(client: TestClient) -> Non
     assert error["message"] == f"Check the request's parameters — {named}; 2 more."
 
 
+def test_422_message_is_bounded_whatever_the_key_or_text() -> None:
+    """A long key is clipped to 30 code points and pydantic's text to 200 (escaped too), and exactly
+    `MAX_NAMED_PARAMS` problems are all named, with no count."""
+    long = {"loc": ("body", "k" * 500), "msg": "m`\n" + "x" * 300}
+    assert bad_param_message([long]) == (
+        f"Check the request's parameters — `body.{'k' * 29}…`: m\\x60 {'x' * 193}…."
+    )
+    exact = [{"loc": ("body", f"k{i}"), "msg": EXTRA} for i in range(MAX_NAMED_PARAMS)]
+    assert "more" not in bad_param_message(exact)
+
+
 @given(st.dictionaries(st.text(), st.integers(), min_size=1, max_size=8))
 def test_422_message_is_one_visible_line_whatever_the_keys(extra: dict[str, int]) -> None:
     """Over arbitrary JSON keys: the message's backticks pair up (a key's own backtick is escaped), and it holds

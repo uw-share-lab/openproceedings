@@ -75,7 +75,7 @@ async def strict_query(request: Request) -> None:
     repeated = sorted(k for k, n in counts.items() if k in allowed and n > 1)
     problems = [
         *(f"unknown parameter `{clip(k, 30)}`" for k in unknown),
-        *(f"`{k}` given more than once" for k in repeated),
+        *(f"`{clip(k, 30)}` given more than once" for k in repeated),
     ]
     if problems:
         shown = problems[:MAX_NAMED_PARAMS] + (

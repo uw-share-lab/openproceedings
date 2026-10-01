@@ -185,9 +185,10 @@ async def _api_error(request: Request, exc: Exception) -> JSONResponse:
 
 
 async def _validation(request: Request, exc: Exception) -> JSONResponse:
-    """A malformed parameter or body: 422 `API_BAD_PARAM`, naming each bad location and what is wrong
-    (pydantic's own text). The offending *value* is left out, but a location can name a key the client
-    sent (an unexpected body key). The message goes to that client only; the log gets the code alone."""
+    """A malformed parameter or body: 422 `API_BAD_PARAM`, naming the bad locations and what is wrong
+    (pydantic's own text), clipped and capped by `bad_param_message`. The offending *value* is left out, but
+    a location can name a key the client sent (an unexpected body key). The message goes to that client
+    only; the log gets the code alone."""
     assert isinstance(exc, RequestValidationError)
     refused(request.scope, DiagnosticCode.API_BAD_PARAM)
     return error_response(DiagnosticCode.API_BAD_PARAM, bad_param_message(exc.errors()))
