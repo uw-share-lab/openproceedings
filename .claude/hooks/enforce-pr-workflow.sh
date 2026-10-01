@@ -128,8 +128,8 @@ FETCH_VALUE_OPTS = {"--upload-pack", "--depth", "--shallow-since", "--shallow-ex
 _branch_cache = {}
 # A word this gate can't resolve (`$UNSET`, `$(…)`) is kept with this mark in front, and a branch it can't tell
 # (a `cd` it couldn't follow, a checkout of such a word) is UNKNOWN: either fails closed as "opaque".
-UNRESOLVED = "\0"
-UNKNOWN = "\0unknown"
+UNRESOLVED = "\ue010"  # a private-use character: never in a word bash makes (a NUL can be: `$'dev\0x'` is cut)
+UNKNOWN = UNRESOLVED + "unknown"
 
 
 def get_branch(directory, gitdir=None):
@@ -579,7 +579,7 @@ case "$verdict" in
   protected)
     echo "Review gate: protected branches (main, dev) take no direct commits/pushes/merges. Open a PR:" >&2
     echo "  git switch -c <branch>" >&2
-    echo "  git commit ...   &&   git push -u origin <branch>" >&2
+    echo "  git commit ...   then, in its own call:   git push -u origin <branch>" >&2
     echo "  gh pr create --base dev --fill   &&   gh pr merge --squash --delete-branch   # feature -> dev" >&2
     echo "  (promote to prod separately: gh pr create --base main --head dev)" >&2
     echo "Review is not required (you may merge your own PR once checks pass) — but the PR is mandatory." >&2
@@ -593,7 +593,7 @@ case "$verdict" in
     echo "  git merge --ff-only <ref>        (or: git pull)" >&2
     echo "For an actual change, open a pull request instead:" >&2
     echo "  git switch -c <branch>" >&2
-    echo "  git commit ...   &&   git push -u origin <branch>" >&2
+    echo "  git commit ...   then, in its own call:   git push -u origin <branch>" >&2
     echo "  gh pr create --base dev --fill   &&   gh pr merge --squash --delete-branch" >&2
     exit 2
     ;;

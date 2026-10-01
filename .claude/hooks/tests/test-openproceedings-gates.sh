@@ -927,6 +927,13 @@ TMPDIR="$TMP/scratch" check $P allow "rm -rf \"\$TMPDIR\" (empty when unset: no 
 check $P block "rsync -a --del … ./ (--del: --delete-during)" "$(payload_bash 'rsync -a --del /tmp/op-empty/ ./')"
 check $P block "wt: rm -rf .. (above the main worktree)" "$(payload_at "$WTO" 'rm -rf ..')"
 check $R block "cd \"\$UNSET\" && git push origin mut"  "$(payload_bash 'cd "$OP_UNSET_DIR" && git push origin mut')"
+check $P allow "rm -rf \$'build' (decoded, not a \$ word)" "$(payload_bash "rm -rf \$'build'")"
+check $P allow "rm -rf \$\"build\" (a plain string)"   "$(payload_bash 'rm -rf $"build"')"
+mkdir -p "$TMP/nodata/backlog"
+check $P block "xargs sh -c 'rm \"\$@\"' in a repo with backlog/" "$(payload_at "$TMP/nodata" "echo backlog/x | xargs sh -c 'rm \"\$@\"' sh")"
+check $R block "export D=.git/op-reviews; an opaque program" "$(payload_bash 'export D=.git/op-reviews; python3 tool.py')"
+check $R block "a=op-r; b=eviews; tee \"\$G/\$a\$b/abc\"" "$(payload_bash 'a=op-r; b=eviews; echo APPROVE | tee "$G/$a$b/abc"')"
+check $R allow "gh api -f body=\"the \$G op-review step\"" "$(payload_bash 'gh api repos/o/r/issues/1/comments -f body="the $G op-review step"')"
 # a quote right after $NAME ends the name: "$X"a is ${X}a
 check $P block "Xa=frontend; X=dat; rm -rf \"\$X\"a"     "$(payload_bash 'Xa=frontend; X=dat; rm -rf "$X"a')"
 check $P allow "X=build; rm -rf \"\$X\"a"               "$(payload_bash 'X=build; rm -rf "$X"a')"
