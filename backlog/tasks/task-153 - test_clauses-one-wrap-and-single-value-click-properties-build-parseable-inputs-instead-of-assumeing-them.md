@@ -3,11 +3,11 @@ id: TASK-153
 title: >-
   test_clauses one-wrap and single-value-click properties build parseable inputs
   instead of assume()ing them
-status: To Do
+status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 20:06'
-updated_date: '2026-09-30 20:10'
+updated_date: '2026-10-01 09:02'
 labels:
   - tests
 milestone: m-3
@@ -34,3 +34,15 @@ Source: a TASK-145 (PR #56) deferral. TASK-145 rebuilt `test_every_year_edit_on_
 - [ ] #3 Where a strategy is rebuilt, near misses (inputs that do not parse) are still generated and asserted to be refused for the right reason, so the property can still see a wrongly accepted input
 - [ ] #4 No health check is suppressed for either property, and both pass at the `ci` profile
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Baseline on dev (49fd6e0), pr profile, --hypothesis-show-statistics, 3 runs each:
+- one-wrap (max_examples=60): 41/101, 55/115, 44/104 invalid; all assume() (gave up 29.7%, 27.8%, 26.9%).
+- single-value-click (200): 293/493, 365/565, 316/516 invalid (59%, 65%, 61%); assume() gave up 31.2%, 32.4%, 30.4% of all draws, the rest Hypothesis overruns.
+
+Finding: the rebuilt wrap_cases reached a window the old strategy rarely drew (short words, ~1,800-1,870 code points, e.g. 'trust' x 300): the combined wrap is too long but every field's own fits, so filter_clauses parses 5 times (as spec 02 says) while every field is toggleable. The old cost bound read 'every field toggleable' as 'written together' and failed there (confirmed: the dev version of the property fails with this input as an @example, 'assert 5 <= (0 + 1)'). Test bug, not a code bug: the bound now asks clauses._check_wrap for the combined wrap; the input is pinned.
+
+Mutation check (temporary edits to backend/src, restored), pr profile, the two properties with and without their @examples: all 5 mutants killed by generated cases alone. M1 _check_wraps treats a too-long combined wrap as every field's answer (one-wrap); M2 parser drops the all-negative check (click near misses); M3 _check_splice never checks the widest edit (click); M4 _check_wraps never checks (one-wrap); M5 a nested-only field reported with no reason (one-wrap).
+<!-- SECTION:NOTES:END -->
