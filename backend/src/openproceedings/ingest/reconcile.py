@@ -20,13 +20,14 @@ alone: it needs to know which listings were crawled, and whether completely. So 
   and no forum id with one. A record that shares one but stayed apart (an ambiguous title) may be the
   listed paper: it keeps its status, and dedup's not-merged row already names it.
 
-An unlisted record gains one claim per crawled source: `status=unknown` from that source, its evidence starting
-`not listed:` (`dedup.is_absence`; the prefix is reserved for it), its listing as the URL, that listing's
-index-page fetch as `fetched_at`, and the evidence. `resolve` then gives the
-record `unknown` (the proceedings outrank OpenReview for status) and the `precedence:<source>` conflicts.csv
-row; the OpenReview claim is kept. The record still equals what its claims resolve to, and an absence claim
-gives it no proceedings source, so dedup run again changes nothing; this step strips absence claims before
-it judges, so it is idempotent too.
+An unlisted record gains one claim per crawled source: `status=unknown` from that source, its evidence
+starting `not listed:` (`dedup.is_absence`; the prefix is reserved for it), its listing as the URL, that
+listing's index-page fetch as `fetched_at`, and the evidence. `resolve` then gives the record `unknown` (the
+proceedings outrank OpenReview for status) and its `precedence:<source>` conflicts.csv rows, one per
+OpenReview source whose status claim differs; they replace the record's earlier `precedence:` status rows (a
+v2-over-v1 row, say), as dedup run again would write them. The OpenReview claims are kept. The record still
+equals what its claims resolve to, and an absence claim gives it no proceedings source, so dedup run again
+changes nothing; this step strips absence claims before it judges, so it is idempotent too.
 """
 
 from __future__ import annotations
@@ -172,7 +173,8 @@ class Reconciled:
 
 def reconcile(result: DedupResult, crawls: Mapping[Key, Crawl]) -> Reconciled:
     """`result` with every unlisted OpenReview-accepted record set to `unknown` by an absence claim (module
-    doc). Merges are unchanged; conflicts gain each such record's `precedence:<source>` status row."""
+    doc). Merges are unchanged. A record this step changes has its `precedence:` status rows replaced by the ones
+    its claims now resolve to; every other row is kept."""
     bare = [_without_absence(r) for r in result.records]
     covered = _covered(bare, crawls)
     listed: dict[tuple[str, int], set[tuple[str, str]]] = defaultdict(set)  # (venue, year) → listings' names

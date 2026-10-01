@@ -168,12 +168,15 @@ it needs to know which listings were crawled, and whether completely.
 - An unlisted record gains an **absence claim** per crawled source: `status=unknown` from that proceedings
   source, the listing that holds the track as `url`, that listing's index-page fetch as `fetched_at`
   (`ListingReport.fetched[0]`), evidence starting `not listed:` (`dedup.is_absence`; the prefix is reserved, see
-  the record-schema skill). The proceedings outrank OpenReview for status, so `resolve` gives `unknown` and the
-  `precedence:<source>` conflicts.csv row; the OpenReview claim stays. An absence claim is **not a listing**:
-  dedup leaves it out of a cluster's sources (and merges.csv's `sources`), so the record never looks listed and
-  a second dedup changes nothing. Reconcile strips absence claims before it judges, so it is idempotent, and a
-  claim a later crawl no longer supports disappears.
-- Merges are never changed; conflicts only gain the reconciled records' status rows.
+  the record-schema skill). The proceedings outrank OpenReview for status, so `resolve` gives `unknown` and its
+  `precedence:<source>` conflicts.csv rows, one per OpenReview source whose status claim differs; the OpenReview
+  claims stay. An absence claim is **not a listing**: dedup leaves it out of a cluster's sources (and
+  merges.csv's `sources`), so the record never looks listed and a second dedup changes nothing. Reconcile strips
+  absence claims before it judges, so it is idempotent, and a claim a later crawl no longer supports disappears.
+- Merges are never changed. Conflicts gain the reconciled records' status rows, and a reconciled record's
+  earlier `precedence:` status rows give way to the ones its claims now resolve to, as dedup run again would
+  write them: a note whose v2 said `accepted` and v1 `rejected` loses its v2-over-v1 row and has `unknown` over
+  each instead, so every value it had is still named (TASK-154). No other row moves.
 - Reconcile reads dedup's own rules, never copies: `dedup.PROCEEDINGS_SOURCES`, `dedup.PROCEEDINGS_TRACKS` and
   `dedup.is_listing`. Creative AI is not a covered track (`other` is not in `PROCEEDINGS_TRACKS`; TASK-137): an
   unlisted Creative AI note is never judged, and OpenReview gives its bare path status `unknown` anyway.
@@ -185,7 +188,9 @@ it needs to know which listings were crawled, and whether completely.
 - Properties (`backend/tests/unit/ingest/test_reconcile.py`): every reconciled record is what its claims
   resolve to; dedup on the output changes no record, merge or row; reconcile is idempotent; only unlisted
   OpenReview acceptances change, only to `unknown`, only by adding absence claims, only where a complete crawl
-  covers the venue-year.
+  covers the venue-year; rows only appear, except a changed record's superseded `precedence:` status rows, whose
+  non-`unknown` values its new rows still name. The nightly counterexample that pinned that exception is an
+  `@example` (TASK-154).
 
 ## Audit files (in the snapshot directory)
 `merges.csv`: `survivor_id,merged_id,rule,key,venue,year,sources`, where `rule` is `forum_id`,
@@ -199,7 +204,7 @@ following the `forum_link` and `title_venue_year` rows from any `merged_id` reac
 
 `conflicts.csv`: `id,field,value_a,source_a,value_b,source_b,resolution`, where `resolution` is
 `precedence:<source>` (the winner is `value_a`; a reconciled record's is `status`, `unknown` from the proceedings
-source against OpenReview's `accepted`), `newest:<source>` or `tie:<source>` (one source, two
+source against each OpenReview status value), `newest:<source>` or `tie:<source>` (one source, two
 values; the kept one is `value_a`), `ambiguous_not_merged`, `track_not_merged`,
 `venue_year_not_merged`, or `unresolved:openreview_v1` (not dedup's: a v1 crawl found one note's own evidence
 disagreeing, such as a withdrawn invitation and an accepted `content.venue`, or an accepted note whose pdf a

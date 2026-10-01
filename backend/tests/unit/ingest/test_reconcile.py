@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from hypothesis import event, given
+from hypothesis import event, example, given
 from hypothesis import strategies as st
 from openproceedings.ingest.dedup import DedupResult, dedup, is_absence, resolve
 from openproceedings.ingest.reconcile import Crawl, Key, Listing, crawled, reconcile
@@ -204,6 +204,47 @@ def test_an_absence_claim_that_no_longer_holds_is_dropped() -> None:
     assert not any(c.id == NOTE and c.field == "status" for c in again.result.conflicts)
 
 
+def test_a_note_whose_openreview_sources_disagree_has_each_value_against_unknown() -> None:
+    """TASK-154: v2 says accepted, v1 rejected; v2 wins, so the note is judged. Its status rows are then the ones its
+    claims resolve to, as dedup run again would write them: the v2-over-v1 row gives way to unknown over each."""
+    xs = [
+        *LISTED,
+        paper("AbCd1234", "Not listed"),
+        paper("AbCd1234", source="openreview_v1", status="rejected"),
+    ]
+
+    def rows(result: DedupResult) -> list[tuple[str, str, str, str, str]]:
+        return [(c.value_a, c.source_a, c.value_b, c.source_b, c.resolution)
+                for c in result.conflicts if c.id == NOTE and c.field == "status"]  # fmt: skip
+
+    assert rows(dedup(xs)) == [
+        ("accepted", "openreview_v2", "rejected", "openreview_v1", "precedence:openreview_v2")
+    ]
+    once = run(xs, crawl())
+    assert by_id(once)[NOTE].status == "unknown"
+    assert rows(once) == [
+        ("unknown", "neurips_proceedings", "accepted", "openreview_v2", "precedence:neurips_proceedings"),
+        ("unknown", "neurips_proceedings", "rejected", "openreview_v1", "precedence:neurips_proceedings"),
+    ]
+    assert rows(dedup(once.records)) == rows(once)
+    assert {c for c in once.conflicts if c.id != NOTE} == {c for c in dedup(xs).conflicts if c.id != NOTE}
+
+
+def test_a_demoted_note_keeps_its_newest_row() -> None:
+    """Only `precedence:` status rows give way: a `newest:` row is the one record of a source's older value, since
+    the record keeps only the newest claim per source (TASK-154 review)."""
+    xs = [
+        *LISTED,
+        paper("AbCd1234", "Not listed", fetched=T1),
+        paper("AbCd1234", "Not listed", status="rejected"),
+    ]
+    newest = [c for c in dedup(xs).conflicts if c.id == NOTE and c.resolution.startswith("newest:")]
+    assert [(c.field, c.value_a, c.value_b) for c in newest] == [("status", "accepted", "rejected")]
+    once = run(xs, crawl())
+    assert by_id(once)[NOTE].status == "unknown"
+    assert set(newest) <= set(once.conflicts)
+
+
 def test_iclr_2016_main_keeps_its_archive_track_and_status_through_reconcile() -> None:
     # decision-005 §Track, per track (TASK-130): OpenReview holds only ICLR 2016's workshop track
     ws = dict(venue="ICLR", year=2016, source="openreview_v1", track="workshop", status="unknown")
@@ -293,7 +334,23 @@ def stable(result: DedupResult) -> tuple[tuple[PaperRecord, ...], list[object]]:
     return result.records, [c for c in result.conflicts if not c.resolution.startswith(("newest:", "tie:"))]
 
 
+# TASK-154 (nightly, 2026-09-30): a note whose OpenReview sources disagree (v2 accepted, v1 rejected) is made
+# unknown; its v2-over-v1 status row gives way to the rows its claims now resolve to
+NIGHTLY_154 = (
+    [
+        paper("AbCd1234", "Listed paper", venue="ICLR"),
+        paper(f"iclr-{H[1]}", "Listed paper", source="iclr_archive", venue="ICLR"),
+        paper("IjKl9012", "Unlisted paper", venue="ICLR"),
+        paper(f"iclr-{H[1]}", source="iclr_archive", venue="ICLR", year=2023,
+              urls_forum="https://openreview.net/forum?id=AbCd1234"),
+        paper("IjKl9012", source="openreview_v1", venue="ICLR", status="rejected"),
+    ],
+    crawl(source="iclr_archive", venue="ICLR", tracks=("main",)),
+)  # fmt: skip
+
+
 @given(shapes)
+@example(NIGHTLY_154)
 def test_dedup_and_reconcile_again_change_nothing(shape: tuple[list[PaperRecord], dict[Key, Crawl]]) -> None:
     xs, crawls = shape
     once = run(xs, crawls)
@@ -306,6 +363,7 @@ def test_dedup_and_reconcile_again_change_nothing(shape: tuple[list[PaperRecord]
 
 
 @given(shapes)
+@example(NIGHTLY_154)
 def test_only_unlisted_openreview_acceptances_change_and_only_to_unknown(
     shape: tuple[list[PaperRecord], dict[Key, Crawl]],
 ) -> None:
@@ -314,10 +372,12 @@ def test_only_unlisted_openreview_acceptances_change_and_only_to_unknown(
     event(f"records made unknown: {sum(r != b for r, b in zip(once.records, base.records, strict=True))}")
     assert once.merges == base.merges
     before = by_id(base)
+    changed: set[str] = set()
     for r in once.records:
         b = before[r.id]
         if r == b:
             continue
+        changed.add(r.id)
         added = set(r.provenance) - set(b.provenance)
         assert added and all(is_absence(c) for c in added) and set(b.provenance) <= set(r.provenance)
         assert (b.status, r.status) == ("accepted", "unknown")
@@ -326,4 +386,14 @@ def test_only_unlisted_openreview_acceptances_change_and_only_to_unknown(
         assert not {c.source for c in b.provenance} & {"iclr_archive", "neurips_proceedings", "pmlr"}
         assert any(k[1:] == (r.venue, r.year) and c.complete for k, c in crawls.items())
         assert any(c.id == r.id and c.field == "status" and c.value_a == "unknown" for c in once.conflicts)
-    assert set(base.conflicts) <= set(once.conflicts)  # rows are only added
+    # rows are only added, except a changed record's status rows: they become the rows its claims now resolve to
+    # (dedup run on the output writes the same), and every status value they named is still named against `unknown`
+    for d in set(base.conflicts) - set(once.conflicts):
+        assert d.id in changed and d.field == "status" and d.resolution.startswith("precedence:")
+        against = {
+            (c.value_b, c.source_b) for c in once.conflicts
+            if c.id == d.id and c.field == "status" and c.value_a == "unknown" and c.resolution.startswith("precedence:")
+        }  # fmt: skip
+        assert {
+            (v, src) for v, src in ((d.value_a, d.source_a), (d.value_b, d.source_b)) if v != "unknown"
+        } <= against
