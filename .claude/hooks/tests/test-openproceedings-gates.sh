@@ -35,7 +35,9 @@ payload_file() { python3 -c 'import json,sys; print(json.dumps({"tool_name":sys.
 # check <hook> <want: allow|block> <label> <json>
 check() {
   local hook="$1" want="$2" label="$3" json="$4" got
-  if printf '%s' "$json" | "$HOOKS/$hook" >/dev/null 2>&1; then got=allow; else got=block; fi
+  # a block is exit 2 exactly: any other non-zero exit is a crash, which Claude Code lets through (fail open)
+  printf '%s' "$json" | "$HOOKS/$hook" >/dev/null 2>&1; local rc=$?
+  case $rc in 0) got=allow ;; 2) got=block ;; *) got="crash(rc=$rc)" ;; esac
   if [ "$got" = "$want" ]; then pass=$((pass+1)); printf '  ok   %-24s %-60s -> %s\n' "$hook" "$label" "$got"
   else fail=$((fail+1)); printf '  FAIL %-24s %-60s -> %s (want %s)\n' "$hook" "$label" "$got" "$want"; fi
 }

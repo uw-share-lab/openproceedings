@@ -28,14 +28,15 @@ check() {
   local json
   json=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]}}))' "$cmd")
 
-  if (cd "$REPO" && printf '%s' "$json" | "$HOOK" >/dev/null 2>&1); then got=allow; else got=block; fi
+  (cd "$REPO" && printf '%s' "$json" | "$HOOK" >/dev/null 2>&1); local rc=$?
+  case $rc in 0) got=allow ;; 2) got=block ;; *) got="crash(rc=$rc)" ;; esac  # only exit 2 blocks
 
   if [ "$got" = "$expect" ]; then
     pass=$((pass + 1))
-    printf '  ok   [%s] %-52s -> %s\n' "$on_branch" "$cmd" "$got"
+    printf '  ok   [%s] %-52.160s -> %s\n' "$on_branch" "$cmd" "$got"
   else
     fail=$((fail + 1))
-    printf '  FAIL [%s] %-52s -> %s (want %s)\n' "$on_branch" "$cmd" "$got" "$expect"
+    printf '  FAIL [%s] %-52.160s -> %s (want %s)\n' "$on_branch" "$cmd" "$got" "$expect"
   fi
 }
 
@@ -50,7 +51,8 @@ check_cwd() {
   local json
   json=$(python3 -c 'import json,sys; print(json.dumps({"cwd": sys.argv[1], "tool_input":{"command":sys.argv[2]}}))' "$json_cwd" "$cmd")
 
-  if (cd "$REPO" && printf '%s' "$json" | "$HOOK" >/dev/null 2>&1); then got=allow; else got=block; fi
+  (cd "$REPO" && printf '%s' "$json" | "$HOOK" >/dev/null 2>&1); local rc=$?
+  case $rc in 0) got=allow ;; 2) got=block ;; *) got="crash(rc=$rc)" ;; esac  # only exit 2 blocks
 
   if [ "$got" = "$expect" ]; then
     pass=$((pass + 1))
@@ -70,7 +72,7 @@ check_warn() {
   json=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]}}))' "$cmd")
 
   out=$(cd "$REPO" && printf '%s' "$json" | "$HOOK" 2>&1); local rc=$?
-  [ "$rc" -eq 0 ] && got=allow || got=block
+  case $rc in 0) got=allow ;; 2) got=block ;; *) got="crash(rc=$rc)" ;; esac
   case "$out" in *"Review gate warning"*) warned=yes ;; *) warned=no ;; esac
 
   if [ "$got" = "allow" ] && [ "$warned" = "yes" ]; then
