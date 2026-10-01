@@ -19,7 +19,9 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from openproceedings import cli
 from openproceedings.ingest import snapshot as snap
+from openproceedings.ingest.dedup import dedup
 from openproceedings.ingest.record import PaperRecord, Urls
+from openproceedings.ingest.ris import import_ris
 from openproceedings.ingest.sources import openreview_v1 as v1
 from openproceedings.ingest.sources import openreview_v2 as orv2
 from openproceedings.ingest.sources.http import CacheMiss as OpenReviewCacheMiss
@@ -178,6 +180,150 @@ def test_iclr_2017_status_and_track_from_content_venue_never_the_venueid(tmp_pat
     # early 2017 notes give `authors` as one string: split only as far as the email count allows (decision-019)
     assert got[rejected["id"]].authors == ("Synthetic Author 4",)
     assert (crawl.report.authors_split, crawl.report.authors_unsplit) == (1, 0)
+
+
+WORKSHOP_COPY = "iclr-2017/note-workshop-submitted-to-iclr-live.json"
+
+
+def test_a_main_track_outcome_on_a_workshop_listing_note_is_its_twins_not_its_own(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """TASK-152: ICLR 2017's workshop listing holds 18 copies of rejected conference papers (the recorded one's
+    real `_bibtex` names its conference twin, `ryh_8f9lg`) that say `Submitted to ICLR 2017`, the twin's outcome. The
+    note keeps its listing's track, and nothing states the workshop submission's status. The same string on the
+    conference listing is still a main-track rejection, and a workshop invitation there still moves the track."""
+    copy = v1_note(WORKSHOP_COPY)
+    rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
+    invited = v1_note("iclr-2017/note-invite-to-workshop.json")
+    assert (copy["content"]["venue"], copy["content"]["venueid"]) == (
+        "Submitted to ICLR 2017",
+        "ICLR.cc/2017/conference",
+    )
+    server = FakeOpenReviewV1(
+        {
+            "ICLR.cc/2017/conference/-/submission": [rejected, invited],
+            "ICLR.cc/2017/workshop/-/submission": [copy],
+        }
+    )
+    with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
+        crawl = run(server, tmp_path, "ICLR", 2017)
+    got = by_forum(crawl)
+    [line] = [r for r in caplog.records if r.getMessage() == "openreview_v1_twin_outcome"]
+    assert (line.levelno, line.__dict__["forum"]) == (logging.DEBUG, copy["id"])
+    assert outcome(got[copy["id"]]) == ("workshop", "unknown", None)
+    assert claim(got[copy["id"]], "track").evidence == "invitation=ICLR.cc/2017/workshop/-/submission"
+    assert claim(got[copy["id"]], "status").evidence == (
+        "content.venue=Submitted to ICLR 2017 (the main track's outcome, not this workshop submission's)"
+    )
+    assert outcome(got[rejected["id"]]) == ("main", "rejected", None)
+    assert outcome(got[invited["id"]]) == ("workshop", "unknown", None)
+    report = crawl.report.to_manifest()
+    assert report["track_status"] == {"main": {"rejected": 1}, "workshop": {"unknown": 2}}
+    assert (report["unmapped"], report["conflicts"], report["twin_outcome"]) == ({}, 0, 1)
+
+
+@pytest.mark.parametrize(
+    "venueid",
+    # no venueid, ICLR 2017's lower-case `conference` (`other`), an in-scope path that doesn't parse (`unknown`)
+    [None, "ICLR.cc/2017/conference", "ICLR.cc/2017/workshop/-/submission"],
+)
+def test_a_main_track_outcome_is_the_twins_wherever_the_venueid_names_no_track(
+    tmp_path: Path, venueid: str | None
+) -> None:
+    note = v1_clone(v1_note(WORKSHOP_COPY), "WsNoTrack1", venueid=venueid)
+    crawl = run(FakeOpenReviewV1({"ICLR.cc/2017/workshop/-/submission": [note]}), tmp_path, "ICLR", 2017)
+    assert outcome(by_forum(crawl)["WsNoTrack1"]) == ("workshop", "unknown", None)
+    report = crawl.report.to_manifest()
+    assert (report["twin_outcome"], report["conflicts"]) == (1, 0)
+
+
+def test_a_main_track_outcome_on_another_tracks_listing_is_the_twins_for_any_track(tmp_path: Path) -> None:
+    """The rule is the listing's track, not ICLR 2017's workshop: a Tiny Papers note saying `Submitted to ICLR
+    2023` (unseen live) would be a copy too, so it keeps `tiny_papers` with an unknown status."""
+    note = v1_clone(v1_note(WORKSHOP_COPY), "TinyCopy01", venue="Submitted to ICLR 2023", venueid=None)
+    crawl = run(
+        FakeOpenReviewV1({"ICLR.cc/2023/TinyPapers/-/Blind_Submission": [note]}), tmp_path, "ICLR", 2023
+    )
+    assert outcome(by_forum(crawl)["TinyCopy01"]) == ("tiny_papers", "unknown", None)
+    assert crawl.report.to_manifest()["twin_outcome"] == 1
+
+
+@pytest.mark.parametrize(
+    ("year", "invitation", "venue", "expected"),
+    [
+        (
+            2023,
+            "ICLR.cc/2023/BlogPosts/-/Blind_Submission",
+            "Blogposts @ ICLR 2023",
+            ("blogpost", "accepted", None),
+        ),
+        (
+            2017,
+            "ICLR.cc/2017/workshop/-/submission",
+            "ICLR 2017 Invite to Workshop",
+            ("workshop", "unknown", None),
+        ),
+    ],
+)
+def test_a_non_main_outcome_on_a_non_main_listing_is_the_notes_own(
+    tmp_path: Path, year: int, invitation: str, venue: str, expected: tuple[str, str, None]
+) -> None:
+    """Only a `main` outcome is read as the twin's: a string naming the listing's own track keeps its status."""
+    note = v1_clone(v1_note(WORKSHOP_COPY), "OwnTrack01", venue=venue, venueid=None)
+    crawl = run(FakeOpenReviewV1({invitation: [note]}), tmp_path, "ICLR", year)
+    assert outcome(by_forum(crawl)["OwnTrack01"]) == expected
+    assert "twin_outcome" not in crawl.report.to_manifest()
+
+
+def test_a_main_track_outcome_against_a_venueid_naming_the_listings_track_stays_a_conflict(
+    tmp_path: Path,
+) -> None:
+    """The twin reading is only for a venueid that names no track (ICLR 2017's `conference`). A venueid naming a
+    track is checked against the string's as before (rule 2): the track is `unknown`, with a conflict row."""
+    note = v1_clone(v1_note(WORKSHOP_COPY), "WsVenueId1", venueid="ICLR.cc/2017/workshop")
+    crawl = run(FakeOpenReviewV1({"ICLR.cc/2017/workshop/-/submission": [note]}), tmp_path, "ICLR", 2017)
+    assert outcome(by_forum(crawl)["WsVenueId1"]) == ("unknown", "rejected", None)
+    report = crawl.report.to_manifest()
+    assert report["conflicts"] == 1 and "twin_outcome" not in report
+
+
+def ris_record_of(tmp_path: Path, row: int, forum: str) -> PaperRecord:
+    """The RIS v1 fixture's `row`, as scholarmend would resolve it for `forum`: the same claims, that forum id."""
+    fixture = Path(__file__).parents[2] / "fixtures" / "ris" / "v1"
+    entries = json.loads((fixture / "resolved.json").read_text(encoding="utf-8"))
+    [fid] = [c for c in entries[row]["claims"] if c["field"] == "forum_id"]
+    fid["value"], fid["evidence"] = forum, f"https://openreview.net/pdf?id={forum}"
+    tmp_path.mkdir()
+    (tmp_path / "mended.ris").write_bytes((fixture / "mended.ris").read_bytes())
+    (tmp_path / "resolved.json").write_text(json.dumps(entries), encoding="utf-8")
+    records, _ = import_ris(tmp_path / "mended.ris")
+    [record] = [r for r in records if r.native == forum]
+    return record
+
+
+def test_a_workshop_copy_the_ris_importer_reads_as_main_is_workshop_once_merged_with_the_crawl(
+    tmp_path: Path,
+) -> None:
+    """TASK-152 (the lead's decision, 2026-10-01): scholarmend gives the RIS importer a note's venueid and
+    `content.venue`, never its listing, so a workshop copy's claims equal a main-track rejection's and the importer
+    reads it as `main`/`rejected` (row 12, `Submitted to ICLR 2017`). In a snapshot it merges with the crawl's
+    record by forum id, and the crawl's track and status win (decision-005), each with a conflicts row."""
+    copy = v1_note(WORKSHOP_COPY)
+    crawl = run(FakeOpenReviewV1({"ICLR.cc/2017/workshop/-/submission": [copy]}), tmp_path, "ICLR", 2017)
+    ris = ris_record_of(tmp_path / "ris", 12, copy["id"])
+    assert (ris.id, ris.track, ris.status) == (crawl.records[0].id, "main", "rejected")
+    result = dedup([*crawl.records, ris])
+    [merged] = result.records
+    assert [(m.rule, m.key) for m in result.merges] == [("forum_id", copy["id"])]  # not a title merge
+    assert dedup(result.records).records == result.records  # a second run changes nothing
+    assert (merged.track, merged.status) == ("workshop", "unknown")
+    # (the synthetic fixtures' titles differ too: a title row, not this task's)
+    assert {
+        (c.field, c.value_a, c.value_b, c.resolution) for c in result.conflicts if c.field != "title"
+    } == {
+        ("track", "workshop", "main", "precedence:openreview_v1"),
+        ("status", "unknown", "rejected", "precedence:openreview_v1"),
+    }
 
 
 def test_iclr_2017_notes_with_a_null_nonreaders_are_public_and_imported(tmp_path: Path) -> None:

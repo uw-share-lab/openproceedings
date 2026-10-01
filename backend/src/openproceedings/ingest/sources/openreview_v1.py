@@ -6,8 +6,12 @@ with its own schema, so each venue-year has its own `Adapter` in `ADAPTERS`. An 
 
 - **Listings**: the exact invitations whose notes are that year's submissions (`?invitation=<inv>`, 1,000 a page,
   `count` checked against the rows and distinct ids), each with the track it was submitted to and its role.
-  The submission invitation means "submitted", nothing more. The withdrawn and desk-rejected invitations are
-  crawled explicitly (decision-012); a note listed there is `withdrawn` / `desk_rejected`.
+  The submission invitation means "submitted", nothing more. Status evidence naming the main track on a note of a
+  non-main listing is its conference twin's outcome (ICLR 2017's 18 workshop copies of rejected papers say
+  `Submitted to ICLR 2017`), where the venueid names no track, so the note keeps its listing's track and its status
+  is `unknown`, counted in the report's `twin_outcome` (TASK-152). The
+  withdrawn and desk-rejected invitations are crawled explicitly (decision-012); a note listed there is
+  `withdrawn` / `desk_rejected`.
 - **Where status comes from** (`status_from`), per the research run (docs/research/2026-09-27-…-facts.md):
   `decision_field` (ICLR 2013: `content.decision` on the submission, track too), `none` (ICLR 2014 and 2016:
   no decisions on OpenReview, so `unknown`), `venue` (`content.venue` through `classify.classify_v1_venue`:
@@ -72,7 +76,7 @@ import re
 import time
 from collections import Counter, defaultdict
 from collections.abc import Callable, Mapping, Sequence, Set
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -339,6 +343,7 @@ class CrawlReport(Report):
     withdrawn_by_twin: int = (
         0  # undecided notes the twin rule made `withdrawn`, no longer in `unmapped` (TASK-139)
     )
+    twin_outcome: int = 0  # notes whose main-track outcome was their conference twin's: `unknown` (TASK-152)
     track_status: dict[str, Counter[str]] = field(default_factory=dict)
     gaps: tuple[str, ...] = ()
     conflicts: list[Conflict] = field(default_factory=list)
@@ -372,6 +377,7 @@ class CrawlReport(Report):
                 else {}
             ),
             **({"withdrawn_by_twin": self.withdrawn_by_twin} if self.withdrawn_by_twin else {}),
+            **({"twin_outcome": self.twin_outcome} if self.twin_outcome else {}),
             "conflicts": len(self.conflicts),
             "track_status": {t: dict(sorted(s.items())) for t, s in sorted(self.track_status.items())},
             "coverage_gaps": list(self.gaps),
@@ -417,6 +423,7 @@ class Verdict:
         tuple[str, str, str], ...
     ] = ()  # (field, value_a with its evidence, value_b with its evidence)
     unmapped: str | None = None  # the evidence kind whose string isn't in a table
+    twin_outcome: bool = False  # a main-track outcome read as the note's conference twin's (TASK-152)
 
 
 ForumReader = Callable[[str], tuple[Page, list[Mapping[str, Any]]] | None]
@@ -511,6 +518,7 @@ def judge(ad: Adapter, listing: Listing, note: Mapping[str, Any], listing_page: 
 
     listed = f"invitation={listing.invitation}"
     conflicts: list[tuple[str, str, str]] = []
+    twin_outcome = False
     if listing.role != "submission":  # the withdrawn / desk-rejected invitation (decision-012)
         found = _Found((None, listing.role, None), listed)
         if by_venue is not None and by_venue.parsed and by_venue.status == "accepted":
@@ -522,6 +530,20 @@ def judge(ad: Adapter, listing: Listing, note: Mapping[str, Any], listing_page: 
     else:
         found = _submission_evidence(ad, content, by_venue, note, read_forum)
         conflicts += found.conflicts
+        twin_outcome = (
+            found.outcome is not None
+            and found.outcome[0] == "main"
+            and listing.track != "main"
+            # only where the venueid names no track (ICLR 2017's `conference`): one that names a track keeps the
+            # agreement check below, its disagreement a conflict row
+            and (by_id is None or not by_id.parsed or by_id.track in _NOT_A_TRACK)
+        )
+        if twin_outcome:
+            # a main-track outcome on a note submitted to another track is its conference twin's, not its own
+            # (ICLR 2017's workshop copies of rejected papers say `Submitted to ICLR 2017`; TASK-152)
+            found = replace(found, outcome=(None, "unknown", None),
+                            evidence=f"{found.evidence} (the main track's outcome, not this {listing.track} "
+                            "submission's)")  # fmt: skip
     status_page = found.page or listing_page
     named_track, status, presentation = found.outcome or (None, "unknown", None)
     if named_track is None:
@@ -538,7 +560,7 @@ def judge(ad: Adapter, listing: Listing, note: Mapping[str, Any], listing_page: 
             None,
         )
     return Verdict(track, status, presentation, track_ev, found.evidence, track_page, status_page,
-                   tuple(conflicts), found.unmapped)  # fmt: skip
+                   tuple(conflicts), found.unmapped, twin_outcome)  # fmt: skip
 
 
 # --- notes → records ---------------------------------------------------------------------------------------------
@@ -691,6 +713,9 @@ def note_record(
         if authors_how == "refused":
             report.authors_unsplit_ids.append(nid)
             log.debug("openreview_v1_authors_unsplit", extra={"forum": nid})
+        if verdict.twin_outcome:
+            report.twin_outcome += 1
+            log.debug("openreview_v1_twin_outcome", extra={"forum": nid})
         if verdict.unmapped is not None:
             report.unmapped[verdict.unmapped] += 1
             log.debug("openreview_v1_unmapped", extra={"forum": nid, "evidence": verdict.unmapped})

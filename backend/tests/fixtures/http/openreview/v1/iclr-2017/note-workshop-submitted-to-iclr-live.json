@@ -1,0 +1,61 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "TASK-152: trimmed from the 2026-09-29 crawl cache (fetched 2026-09-29T09:04:25.786906+00:00), scrubbed by backend/tests/fixtures/http/scrub.py",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing page trimmed from 161 to 1 note (rkB_5hEKe, one of the 18 workshop copies of rejected papers; `count` is the page's)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2017/workshop/-/submission&limit=1000&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "count": 161,
+   "notes": [
+    {
+     "content": {
+      "TL;DR": "Synthetic tl;dr text 1.",
+      "_bibtex": "Synthetic bibtex text 2.",
+      "abstract": "Synthetic abstract text 3.",
+      "authorids": [
+       "synthetic.person4@example.org",
+       "synthetic.person5@example.org",
+       "synthetic.person6@example.org",
+       "synthetic.person7@example.org"
+      ],
+      "authors": [
+       "Synthetic Author 8",
+       "Synthetic Author 9",
+       "Synthetic Author 10",
+       "Synthetic Author 11"
+      ],
+      "conflicts": [
+       "Synthetic conflicts text 12.",
+       "Synthetic conflicts text 13."
+      ],
+      "keywords": [],
+      "paperhash": "synthetic|synthetic_title_14",
+      "pdf": "/pdf/42f831b5c0312620c4d9d8e25846be04692ba7f4.pdf",
+      "title": "Synthetic title text 15.",
+      "venue": "Submitted to ICLR 2017",
+      "venueid": "ICLR.cc/2017/conference"
+     },
+     "forum": "rkB_5hEKe",
+     "id": "rkB_5hEKe",
+     "invitation": "ICLR.cc/2017/workshop/-/submission",
+     "number": 104,
+     "readers": [
+      "everyone"
+     ],
+     "replyto": null
+    }
+   ]
+  }
+ }
+}

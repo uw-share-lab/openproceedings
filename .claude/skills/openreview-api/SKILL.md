@@ -95,7 +95,11 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   (`classify.V1_TRACK_FROM_VENUE`) name no track (`other`), so there the string gives the track as well, if
   it names the venueid's venue and year (TASK-142); any other `other` venueid keeps `other`. A v1 adapter
   takes status from `classify_v1_venue(content.venue)` (exact strings from the table below; an unlisted one
-  is `unknown`), the decision note, or the withdrawn / desk-rejected invitation (decision-012).
+  is `unknown`), the decision note, or the withdrawn / desk-rejected invitation (decision-012). Status
+  evidence naming the main track on a note of a non-main listing, where the venueid names no track, is its
+  conference twin's outcome, not the note's: the note keeps its listing's track and its status is `unknown`
+  (`judge`, counted in the report's `twin_outcome`; the 18 ICLR 2017 workshop copies of rejected papers that say
+  `Submitted to ICLR 2017`, TASK-152).
 - Status per v1 year (the submission invitation lists what was **submitted**, never what was accepted):
 
 | Year | Submissions | Status from |
@@ -103,7 +107,7 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
 | ICLR 2013 | `ICLR.cc/2013/conference/-/submission` | `content.decision` on the submission: `conference{Oral,Poster}-iclr2013-{conference,workshop}`, `reject` (track too) |
 | ICLR 2014 | `ICLR.cc/2014/{conference,workshop}/-/submission` | none: `submitted, no decision` → `unknown` |
 | ICLR 2016 | `ICLR.cc/2016/workshop/-/submission` | none → `unknown` (workshop track) |
-| ICLR 2017 | `ICLR.cc/2017/{conference,workshop}/-/submission` | `content.venue`: `ICLR 2017 {Oral,Poster}`, `ICLR 2017 Invite to Workshop`, `Submitted to ICLR 2017` |
+| ICLR 2017 | `ICLR.cc/2017/{conference,workshop}/-/submission` | `content.venue`: `ICLR 2017 {Oral,Poster}`, `ICLR 2017 Invite to Workshop`, `Submitted to ICLR 2017` (on a workshop-listing note: its conference twin's, so `workshop`/`unknown`, TASK-152) |
 | ICLR 2018 | `ICLR.cc/2018/Conference/-/Blind_Submission` | decision note `ICLR.cc/2018/Conference/-/Acceptance_Decision`, `content.decision` (`Accept (Oral)`, `Accept (Poster)`, `Invite to Workshop Track`, `Reject`) |
 | ICLR 2019 | `…/2019/Conference/-/Blind_Submission` | meta-review `ICLR.cc/2019/Conference/-/Paper<N>/Meta_Review`, `content.recommendation` |
 | ICLR 2020–2021 | `…/-/Blind_Submission` | `ICLR.cc/<Y>/Conference/Paper<N>/-/Decision`, `content.decision`: 2020 has `Accept (Poster)`, `Accept (Spotlight)`, `Accept (Talk)` (an oral) and `Reject` (the full crawl's tally, TASK-123); 2021 decides from `venue`/`venueid` first and reads a decision note only for a forum `venue` leaves open, so the crawl's tally sees only those (`Reject`); `Accept (Poster)` is verified on paper 2910, and other 2021 accept forms are unseen |
@@ -235,7 +239,8 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
 "text"}}`. They cover each v2 status suffix, D&B, position, competition, Creative AI, Tiny Papers,
 Blogposts, workshop and city-workshop forms, a group's venueid block, the `count`/`offset` shape, the
 `limit` error, the cross-host 404, the anonymous challenge page and a public v1 note with `nonreaders: null`
-(`v1/iclr-2017/note-workshop-null-nonreaders-live.json`, TASK-119); and each v1 year's status carrier
+(`v1/iclr-2017/note-workshop-null-nonreaders-live.json`, TASK-119) and a 2017 workshop-listing copy of a rejected
+paper (`v1/iclr-2017/note-workshop-submitted-to-iclr-live.json`, TASK-152); and each v1 year's status carrier
 above, including one invitation listing per v1 venue-year with a group; and (TASK-113, trimmed from the
 2026-09-29 crawl cache) ELMo's accepted blind note, withdrawn twin and forum (`v1/iclr-2018/*withdrawn-twin*`)
 and the v1 author shapes (`v1/iclr-20{17,18,20,21}/notes-*-authors-*.json`). `backend/tests/fixtures/http/scrub.py` turns a raw capture into a fixture (titles, abstracts,
