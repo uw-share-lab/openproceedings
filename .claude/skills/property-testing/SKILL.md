@@ -16,6 +16,14 @@ Register in `backend/tests/conftest.py`:
 Every profile sets `print_blob=True` (so a CI failure prints a `@reproduce_failure` blob). The
 Hypothesis example database (`.hypothesis/`) is gitignored; CI failures are reproduced from the blob.
 
+**Every profile's parent is Hypothesis's `default` profile** (`BASE` in conftest), never the loaded one. Where the
+`CI` environment variable is set, as on GitHub Actions, Hypothesis loads its own built-in `ci` profile at import:
+`derandomize=True`, `database=None`, `deadline=None` and `too_slow` suppressed. A profile registered without a
+parent copies whatever is loaded, so until TASK-146 the `pr`, `ci` and `nightly` runs in CI were derandomized
+(the same examples on every run) and suppressed `too_slow`, unlike the same profiles locally. The case table
+`test-hypothesis-profiles.sh` runs the profile tests with `CI` unset and with `CI=true`; a local run doesn't
+show the difference otherwise.
+
 ## Health checks and deadlines (decision-024, TASK-146)
 - **Wall-clock checks are gates only on CI runners.** A deadline and the `too_slow` health check time the
   machine as well as the code. Locally, `make test` shares 8 CPUs with other worktrees' runs (load 90 to 340

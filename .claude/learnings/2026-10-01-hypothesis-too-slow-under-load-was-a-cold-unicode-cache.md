@@ -29,3 +29,12 @@ Stop property tests from failing on a loaded machine (`too_slow`, deadlines) wit
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/property-testing/SKILL.md` (§Health checks and deadlines, with the load recipe), `.claude/skills/testing-standards/SKILL.md` (rule 5)
 - Test or hook added? — `backend/tests/unit/test_hypothesis_profiles.py`, case table `.claude/scripts/tests/test-hypothesis-profiles.sh`, and 12 `profiles:` mutants in `.claude/scripts/mutants/gates.json`
+
+## Addendum — 2026-10-01: the profiles inherited Hypothesis's built-in `ci` profile on CI runners
+**Key lesson:** Register every Hypothesis profile with an explicit parent (`settings.get_profile("default")`), and test the profiles with `CI=true` as well, because GitHub Actions sets `CI` and Hypothesis then loads its built-in `ci` profile at import, which a parentless `register_profile` copies.
+- The PR's first CI run failed: `get_profile("pr").suppress_health_check` was `[too_slow]` on the runner and `[]` locally. Reproduced with `CI=true uv run pytest backend/tests/unit/test_hypothesis_profiles.py`.
+- Built-in `ci` (Hypothesis 6.168): `derandomize=True`, `database=None`, `deadline=None`, `too_slow` suppressed. So since the profiles were written, CI's `pr`, `ci` and `nightly` were derandomized, ran the same examples every run, and couldn't fail `too_slow`.
+- Dead end: tracing conftest double imports, xdist workers and `testpaths` collection. All were fine; the difference was one environment variable.
+- `make tooling` hid the failure: the case table sent pytest's output to `/dev/null`, so CI printed nothing but `Error 1`. It now prints pytest's report on failure.
+- Propagated: conftest `BASE`, the case table's `CI=true` run, 2 more `profiles:` mutants (14 in all), the property-testing skill and decision-024.
+

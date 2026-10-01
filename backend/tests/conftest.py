@@ -15,7 +15,9 @@ Wall-clock checks run only on CI runners (decision-024, TASK-146): `dev` has no 
 checks then time the machine, not the code. `pr`, `ci` and `nightly` keep the deadline (`nightly`: none, so
 `too_slow` allows 30 s) and every health check, so a slow strategy or example still fails the PR's `test` job.
 Checks that don't depend on load (`data_too_large`, `filter_too_much`, `large_base_example`, ...) are on in
-every profile. On a quiet machine, `HYPOTHESIS_PROFILE=pr` reproduces the PR gate's timing locally.
+every profile. On a quiet machine, `HYPOTHESIS_PROFILE=pr` reproduces the PR gate's timing locally. Each
+profile's parent is Hypothesis's `default`, so `CI` being set (which loads Hypothesis's built-in `ci` profile)
+changes nothing.
 """
 
 import logging
@@ -27,15 +29,24 @@ from typing import Any
 import pytest
 from hypothesis import HealthCheck, settings
 
+# Every profile's parent is Hypothesis's own `default`, not whichever profile is loaded: where CI is set (GitHub
+# Actions), Hypothesis loads its built-in `ci` profile at import (too_slow suppressed, derandomized, no database),
+# and a profile registered without a parent inherits all of it (TASK-146)
+BASE = settings.get_profile("default")
 # dev: no wall-clock checks; they fail under local load and pr's are the gate (decision-024)
 settings.register_profile(
-    "dev", max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow], print_blob=True
+    "dev",
+    BASE,
+    max_examples=200,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
+    print_blob=True,
 )
 # pr: the dev example count with the ci deadline, so a slow example on a shared runner under pytest-xdist
 # doesn't fail the required check (TASK-127)
-settings.register_profile("pr", max_examples=200, deadline=2_000, print_blob=True)
-settings.register_profile("ci", max_examples=2_000, deadline=2_000, print_blob=True)
-settings.register_profile("nightly", max_examples=50_000, deadline=None, print_blob=True)
+settings.register_profile("pr", BASE, max_examples=200, deadline=2_000, print_blob=True)
+settings.register_profile("ci", BASE, max_examples=2_000, deadline=2_000, print_blob=True)
+settings.register_profile("nightly", BASE, max_examples=50_000, deadline=None, print_blob=True)
 settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 
 
