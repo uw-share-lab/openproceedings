@@ -1,0 +1,60 @@
+{
+ "_recorded": {
+  "date": "2026-09-29",
+  "run": "authenticated OpenReview crawl (TASK-054), one note of the ICLR 2017 workshop listing page; extracted for TASK-152",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real (the _bibtex url names the note's conference-listing twin, ryh_8f9lg)"
+ },
+ "request": {
+  "method": "GET",
+  "url": "https://api.openreview.net/notes?invitation=ICLR.cc/2017/workshop/-/submission&limit=1000&offset=0",
+  "authenticated": true
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8"
+  },
+  "json": {
+   "notes": [
+    {
+     "content": {
+      "TL;DR": "Synthetic tl;dr text 2.",
+      "_bibtex": "@misc{\nsynthetic2017,\ntitle={Synthetic title text},\nauthor={Synthetic Author},\nyear={2017},\nurl={https://openreview.net/forum?id=ryh_8f9lg}\n}",
+      "abstract": "Synthetic abstract text 3.",
+      "authorids": [
+       "synthetic.person8@example.org",
+       "synthetic.person9@example.org",
+       "synthetic.person10@example.org",
+       "synthetic.person11@example.org"
+      ],
+      "authors": [
+       "Synthetic Author 4",
+       "Synthetic Author 5",
+       "Synthetic Author 6",
+       "Synthetic Author 7"
+      ],
+      "conflicts": [
+       "Synthetic conflicts text 12.",
+       "Synthetic conflicts text 13."
+      ],
+      "keywords": [],
+      "paperhash": "synthetic|synthetic_title_14",
+      "pdf": "/pdf/42f831b5c0312620c4d9d8e25846be04692ba7f4.pdf",
+      "title": "Synthetic title text 15.",
+      "venue": "Submitted to ICLR 2017",
+      "venueid": "ICLR.cc/2017/conference"
+     },
+     "forum": "rkB_5hEKe",
+     "id": "rkB_5hEKe",
+     "invitation": "ICLR.cc/2017/workshop/-/submission",
+     "number": 104,
+     "readers": [
+      "everyone"
+     ],
+     "replyto": null
+    }
+   ],
+   "count": 1
+  }
+ }
+}

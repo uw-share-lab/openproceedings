@@ -404,6 +404,9 @@ V1_NOTES: list[tuple[str, str, str, str]] = [
     ("v1/iclr-2017/note-workshop-invitation-live.json", "other", "workshop", "unknown"),
     ("v1/iclr-2017/notes-conference-listing.json", "other", "main", "accepted"),
     ("v1/iclr-2017/notes-conference-authors-string.json", "other", "main", "rejected"),  # TASK-113
+    # a workshop-listing copy of a rejected paper: the string reads main/rejected, but the v1 crawler gives the note
+    # its listing's track and `unknown` (its conference twin's outcome, TASK-152)
+    ("v1/iclr-2017/note-workshop-submitted-to-iclr-live.json", "other", "main", "rejected"),
     ("v1/iclr-2021/note-accepted.json", "main", "main", "accepted"),
     ("v1/iclr-2021/forum-accepted.json", "main", "main", "accepted"),
     # the venue string alone says accepted; the withdrawn invitation disagrees: the v1 adapter makes it unknown + a conflict row

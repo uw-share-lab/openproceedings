@@ -29,3 +29,30 @@ Let the RIS importer take track and status from scholarmend's `venue_string` cla
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/openreview-venueids/SKILL.md` (2017 row), `.claude/skills/openreview-api/SKILL.md`, `.claude/skills/record-schema/SKILL.md`, `.claude/agents/ris-importer.md`, `docs/specs/01-ingestion.md` (RIS importer row)
 - Test or hook added? — `backend/tests/unit/ingest/test_ris.py` (the TASK-142 tests), `backend/tests/unit/ingest/test_venueid.py` (`test_the_v1_venueids_that_take_their_track_from_the_venue_string_name_no_track`)
+
+## Addendum — 2026-10-01 (TASK-152)
+
+**Key lesson:** A v1 note's `content.venue` can be another note's outcome: before a status string overrides a
+note's listing track, tally every listing's strings against its track on the crawl cache, and where a string
+names the main track on a non-main listing, read it as the conference twin's (track from the listing, status
+`unknown`).
+
+- ICLR 2017's workshop listing holds 18 notes saying `Submitted to ICLR 2017`; each shares its title with a
+  rejected conference-listing note, and its `_bibtex` url names that note's forum (`rkB_5hEKe` → `ryh_8f9lg`).
+  Reading the string as the note's own outcome counted those 18 rejections twice (ICLR 2017 main/rejected 262,
+  not 244). Evidence: `op snapshot diff` before/after changes exactly those 18 records' track and status;
+  manifest main/rejected 262 → 244, workshop/unknown 190 → 208, accepted 198 unchanged.
+- The tally that scoped the fix: across every v1 listing in the cache, only two groups carry a string whose track
+  differs from the listing's, these 18 and 47 `Invite to Workshop` notes on the conference listing, which are
+  the note's own outcome and stay as they were. So the rule in `openreview_v1.judge` is one-directional (a
+  `main` outcome on a non-main listing), not "the listing always wins".
+- The RIS importer can't apply it: scholarmend's claims (venueid, forum id, `venue_string`) carry no listing, and
+  a copy's claims equal a real rejection's. The lead decided (2026-10-01) to leave RIS as is: in a snapshot the
+  record merges with the crawl's by forum id and the crawl's claims win (decision-005). A fix needs scholarmend
+  to emit the v1 note's invitation (deferred; the lead files the task).
+
+Propagated to: `.claude/skills/openreview-venueids/SKILL.md` (2013/2017 row), `.claude/skills/openreview-api/SKILL.md`,
+`.claude/skills/record-schema/SKILL.md`, `.claude/agents/ris-importer.md`, `docs/specs/01-ingestion.md`; tests
+`test_a_main_track_outcome_on_a_workshop_listing_note_is_its_twins_not_its_own` and
+`test_a_workshop_copy_the_ris_importer_reads_as_main_is_workshop_once_merged_with_the_crawl`
+(`backend/tests/unit/ingest/test_openreview_v1.py`).

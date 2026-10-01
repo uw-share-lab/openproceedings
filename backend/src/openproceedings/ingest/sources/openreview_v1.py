@@ -6,8 +6,11 @@ with its own schema, so each venue-year has its own `Adapter` in `ADAPTERS`. An 
 
 - **Listings**: the exact invitations whose notes are that year's submissions (`?invitation=<inv>`, 1,000 a page,
   `count` checked against the rows and distinct ids), each with the track it was submitted to and its role.
-  The submission invitation means "submitted", nothing more. The withdrawn and desk-rejected invitations are
-  crawled explicitly (decision-012); a note listed there is `withdrawn` / `desk_rejected`.
+  The submission invitation means "submitted", nothing more. Status evidence naming the main track on a note of a
+  non-main listing is its conference twin's outcome (ICLR 2017's 18 workshop copies of rejected papers say
+  `Submitted to ICLR 2017`), so the note keeps its listing's track and its status is `unknown` (TASK-152). The
+  withdrawn and desk-rejected invitations are crawled explicitly (decision-012); a note listed there is
+  `withdrawn` / `desk_rejected`.
 - **Where status comes from** (`status_from`), per the research run (docs/research/2026-09-27-…-facts.md):
   `decision_field` (ICLR 2013: `content.decision` on the submission, track too), `none` (ICLR 2014 and 2016:
   no decisions on OpenReview, so `unknown`), `venue` (`content.venue` through `classify.classify_v1_venue`:
@@ -522,6 +525,11 @@ def judge(ad: Adapter, listing: Listing, note: Mapping[str, Any], listing_page: 
     else:
         found = _submission_evidence(ad, content, by_venue, note, read_forum)
         conflicts += found.conflicts
+        if found.outcome is not None and found.outcome[0] == "main" != listing.track:
+            # a main-track outcome on a note submitted to another track is its conference twin's, not its own
+            # (ICLR 2017's workshop copies of rejected papers say `Submitted to ICLR 2017`; TASK-152)
+            found = _Found((None, "unknown", None), f"{found.evidence} (the main track's outcome, not this "
+                           f"{listing.track} submission's)")  # fmt: skip
     status_page = found.page or listing_page
     named_track, status, presentation = found.outcome or (None, "unknown", None)
     if named_track is None:
