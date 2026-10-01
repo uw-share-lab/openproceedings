@@ -35,8 +35,8 @@ The code is `backend/src/openproceedings/ingest/ris.py`; its module docstring is
    (`V1_TRACK_FROM_VENUE`, TASK-142; a 2017 workshop-invitation copy's `Submitted to ICLR 2017` still reads
    `main`/`rejected`, since no claim names the submission invitation: in a snapshot with the ICLR 2017 v1
    crawl the crawl's `workshop`/`unknown` wins once merged, an RIS-only one keeps it, TASK-152); else
-   `unknown`, with the reason in the evidence); else the proceedings track claim; else the volume table (`unknown` for volumes that mix main and position
-   papers). A proceedings listing means `accepted` and overrides an agreeing venueid (decision-005;
+   `unknown`, with the reason in the evidence); else the proceedings track claim; else the volume table
+   (`unknown` for volumes that mix main and position papers). A proceedings listing means `accepted` and overrides an agreeing venueid (decision-005;
    counted in `status_overrides`). Nothing else ever sets `accepted`. Never infer anything from `JF`,
    since that's Scholar's venue string.
 4. **Abstract.** OpenReview's, else the proceedings page's, else `null` (counted). Never Scholar's `AB`

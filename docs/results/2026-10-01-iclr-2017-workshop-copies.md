@@ -53,9 +53,33 @@ twin's outcome. Nothing in the data states the workshop submission's own decisio
 Main/rejected ends at 244, not 245, because one of the conference listing's 245 `Submitted to ICLR 2017` notes,
 `SJUdkecgx`, is skipped for its empty title (`skipped.no_title: 1`).
 
-**Which listings the rule can touch.** A second script scanned every v1 listing page in the cache. For each listing
-in `openreview_v1.ADAPTERS`, it took every submission note whose `content.venue` parses through `classify_v1_venue`
-and counted the notes whose string names a track other than the listing's. Only two groups turn up:
+**Which listings the rule can touch.** `scan.py` checks every v1 listing page in the cache. For each listing in
+`openreview_v1.ADAPTERS`, it takes every submission note whose `content.venue` parses through `classify_v1_venue`
+and counts the notes whose string names a track other than the listing's:
+
+```python
+import collections, glob, json, sys
+from openproceedings.ingest.classify import classify_v1_venue
+from openproceedings.ingest.sources.openreview_v1 import ADAPTERS
+listings = {l.invitation: l for ad in ADAPTERS.values() for l in ad.listings}
+c = collections.Counter()
+for f in glob.glob(f"{sys.argv[1]}/openreview/v1/http/*/*.json"):
+    d = json.load(open(f))
+    inv = d["key"].split("invitation=")[1].split("&")[0] if "invitation=" in d["key"] else None
+    if inv not in listings:
+        continue
+    l = listings[inv]
+    for n in d["payload"]["json"].get("notes", []):
+        v = (n.get("content") or {}).get("venue")
+        if n.get("id") == n.get("forum") and isinstance(v, str) and v:
+            b = classify_v1_venue(v)
+            if b.parsed and b.track != l.track:
+                c[(inv, l.role, l.track, v, b.track, b.status)] += 1
+for k, v in sorted(c.items()):
+    print(v, k)
+```
+
+`uv run --frozen python scan.py <cache>` finds only two groups:
 
 ```
 47 ('ICLR.cc/2017/conference/-/submission', 'submission', 'main', 'ICLR 2017 Invite to Workshop', 'workshop', 'unknown')
@@ -68,7 +92,8 @@ each note's own outcome and stay `workshop`/`unknown`.
 ## What was run
 The cache was cloned (`cp -c`) into a scratch directory, `<scratch>/cache`.
 
-- **Before:** `origin/dev` at bfa59e4. The build ran in the branch's worktree with the module swapped in:
+- **Before:** `origin/dev` at bfa59e4 (`backend/src` is unchanged between bfa59e4 and d905416, the base the branch
+  was rebased onto). The build ran in the branch's worktree with the module swapped in:
   `git show origin/dev:backend/src/openproceedings/ingest/sources/openreview_v1.py > <that file>`.
 - **After:** the branch at 2cea31f, rebuilt at 17ebe82 after review round 1.
 
@@ -131,19 +156,31 @@ uv run --frozen op search --index <scratch>/idx-<before|after>/<version> --ids "
 | screened | 16 | 16 |
 | `--ids` sha1 | `775269789905a06873f21cba5468f3a7c250f873` | `775269789905a06873f21cba5468f3a7c250f873` |
 
-## Non-default filters
-Spec 03 §Exclusion accounting checks track first, then status. Under the default filters, a copy that used to be
-removed as `status: rejected` is now removed as `track: workshop`, so the total is the same.
+## What a search sees
+Spec 03 §Exclusion accounting checks track first, then status. Every case below assumes the query matches at least
+one copy.
 
-A user-written track filter that keeps workshop papers, such as `track:(main OR workshop)`, behaves differently.
-Such a query still has the `status:accepted` default, so its result set doesn't change. But a matched copy now
-leaves through `status: unknown` instead of `status: rejected`, so `unclassified_total` (the "unclassified records"
-the banner and methods text report) can rise by up to 18. A saved search record with such a filter replays as
-`drifted` on the new index, with `excluded_match: false`.
+**Default filters.** The result set, `identified` and `excluded.total` are unchanged, but the buckets shift: a copy
+that was removed as `status: rejected` is now removed as `track: workshop`. A stored search record whose matches
+include a copy replays with `ids_match: true` and `excluded_match: false`, since `excluded_match` compares the whole
+`excluded` block, buckets included. On a new index every record replays as `drifted` anyway.
 
-A query that also drops the status default, for example one that writes its own `status:` clause including
-`rejected` or `unknown`, can change membership. The copies now match `status:unknown` and `track:workshop`, and no
-longer match `status:rejected` or `track:main`.
+**A user-written `track:` clause naming both main and workshop**, such as `track:(main OR workshop)`. The status
+default stays, so the result set doesn't change. A matched copy now leaves through `status: unknown` instead of
+`status: rejected`, so `unclassified_total` (the "unclassified records" the banner and methods text report) can rise
+by up to 18.
+
+**A user-written `track:` clause naming only one of them.** That clause stays in the identification query, so the
+copies move in or out of "identified":
+- With `track:workshop`, `identified` and `excluded.total` can each rise by up to 18. The copies are removed as
+  `status: unknown`, which also raises `unclassified_total`.
+- With `track:main`, both counts can fall by up to 18.
+
+The result set is still unchanged, because no copy is accepted.
+
+**Membership** changes only when the status default is dropped as well, for example by a query that writes its own
+`status:` clause including `rejected` or `unknown`. The copies now match `status:unknown` and `track:workshop`, and
+no longer match `status:rejected` or `track:main`.
 
 ## Duplicates within the ICLR 2017 crawl (unchanged by this task)
 The copies are separate OpenReview notes with their own forum ids, so they stay separate records from their
@@ -158,6 +195,8 @@ The RIS importer is unchanged, by the lead's decision of 2026-10-01. PR #47's me
 listing pages as above and runs this on each such note `n`:
 
 ```python
+from openproceedings.ingest import ris
+vid = n["content"]["venueid"]
 ev = f"venueid={vid}"
 claims = [{"field": "venue_id", "value": vid, "source": "openreview_api", "evidence": ev},
           {"field": "forum_id", "value": n["id"], "source": "openreview_url",

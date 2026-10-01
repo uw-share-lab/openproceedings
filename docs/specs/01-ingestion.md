@@ -286,10 +286,9 @@ present only when non-zero: 18 for ICLR 2017, its workshop copies of rejected pa
 2017`; TASK-152, `docs/results/2026-10-01-iclr-2017-workshop-copies.md`); a venueid that names a track is still
 checked against the string's, a disagreement a conflict; ICLR 2014 and 2016 have no decisions (`unknown`), and ICLR
 2015 has nothing to crawl. What OpenReview can't answer for a year is listed in the report's `coverage_gaps`, never
-raised. A note whose own evidence
-disagrees (the withdrawn ICLR 2021 note `xGZG2kS5bFk` says `ICLR 2021 Poster`; two decision notes that disagree;
-a venueid naming another track) gets `unknown` for that field and an `unresolved:openreview_v1` row in
-`conflicts.csv` (counted as `unresolved` in the manifest's `conflicts`). No signal outranks another
+raised. A note whose own evidence disagrees (the withdrawn ICLR 2021 note `xGZG2kS5bFk` says `ICLR 2021 Poster`;
+two decision notes that disagree; a venueid naming another track) gets `unknown` for that field and an
+`unresolved:openreview_v1` row in `conflicts.csv` (counted as `unresolved` in the manifest's `conflicts`). No signal outranks another
 (decision-020): `xGZG2kS5bFk` was withdrawn yet presented at ICLR 2021, while ICLR 2018's `S1p31z-Ab` was
 accepted by its decision note yet withdrawn and not presented, so any fixed ranking is wrong for one of them.
 The same holds across two notes of one paper: an accepted record whose pdf a withdrawn record of the same
