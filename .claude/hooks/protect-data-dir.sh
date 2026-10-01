@@ -5,7 +5,9 @@
 #   reproducibility claim is only as good as the bytes under its index_version. Build a new one
 #   (`op snapshot build`, `op index build`); never edit, overwrite, move or delete an existing one.
 #   Blocked: editor writes into them; and in Bash, rm/unlink/mv/cp/tee/dd/rsync/truncate/shred/find -delete|
-#   -exec|-ok/sed -i/perl -i and >/>> redirects that target them — or that target data/, data/snapshots or
+#   -exec|-ok/sed -i/perl -i/ruby -i/awk -i inplace and >/>> redirects that target them, `rsync
+#   --remove-source-files` from them, an rm/mv of a `$` word (`rm -rf "$PWD"`) in a repo with data/ — or that
+#   target data/, data/snapshots or
 #   data/indexes themselves (`rm -rf data` destroys every snapshot), or a directory above them (`rm -rf .`,
 #   `rm -rf ../<repo>`, `find . -delete`, `rsync --delete … ./`: anything with a data/snapshots or data/indexes
 #   under it, or an ancestor of the repo). Repo paths compare case-blind: APFS folds `Data` into data/.
@@ -17,9 +19,13 @@
 #   (forced or not) of any path with a `takedowns` directory in it is refused wherever it sits: the takedown
 #   list and log (TASK-136, decision-022) live in a data directory, and the log holds requesters' details.
 #   `git update-index --add` (it ignores .gitignore) of those paths, `--add --stdin` and `--index-info` too.
+#   The dry run runs with core.fsmonitor, core.hooksPath and the untracked cache off: the repo it reads may be
+#   one the command names, and its config must not start a program inside this hook. Abbreviated options
+#   (`--forc`, `stash --al`) are read as git reads them (cmdparse); an ambiguous one, or a git alias under
+#   config the parser can't read (--config-env, include.path, GIT_CONFIG_*), is refused.
 # - backlog/ is CLI-managed (task-hygiene skill): only the `backlog` CLI moves a task (e.g. `backlog task
-#   complete` into backlog/completed/). Bash mv / git mv / cp / rm / unlink / tee / redirects that target files
-#   under backlog/, and sed -i / perl -i edits of them (decision bodies excepted, as in
+#   complete` into backlog/completed/). Bash mv / git mv / cp / rm / unlink / tee / dd of= / redirects that target
+#   files under backlog/, and sed -i / perl -i / ruby -i / awk -i inplace edits of them (decision bodies excepted, as in
 #   enforce-backlog-cli.sh), are refused here; enforce-backlog-cli.sh covers editor writes.
 # - `git clean -x/-X` (unless a dry run, `-e data`, or pathspecs outside data/) and `git stash push|save --all`
 #   are refused: they remove gitignored files, which is all of data/.
@@ -33,7 +39,8 @@ input=$(cat)
 HOOK_INPUT="$input" python3 - "$HOOK_DIR" <<'PY'
 import glob, json, os, subprocess, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import GIT_VALUE_OPTS, ParseError, git_subcommand, read_payload, redirect_targets, repo_root, simple_commands
+from cmdparse import (GIT_VALUE_OPTS, FailClosed, ParseError, git_subcommand, read_payload, redirect_targets, repo_root,
+                      simple_commands)
 
 try:
     payload = json.loads(os.environ.get("HOOK_INPUT") or "{}")
@@ -157,8 +164,11 @@ def dry_run_add(argv, sub_args, directory):
             keep += argv[k : k + (2 if takes else 1)]
         k += 2 if takes else 1
     env = {**os.environ, **{n: v for n, v in getattr(argv, "assigns", {}).items() if n in DRY_RUN_ENV}}
+    # `add` refreshes the index, which starts the repo's core.fsmonitor program (the repo may be one the command
+    # names: --git-dir, GIT_DIR): never run it, nor a hook or the untracked cache, inside this hook
+    safe = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "core.untrackedCache=false"]
     try:
-        r = subprocess.run(["git", *keep, "-c", "core.quotepath=false", "add", "--dry-run", "--ignore-missing",
+        r = subprocess.run(["git", *keep, *safe, "-c", "core.quotepath=false", "add", "--dry-run", "--ignore-missing",
                             *sub_args], cwd=directory, env=env, capture_output=True, text=True, timeout=30)
     except Exception:
         return None
@@ -176,15 +186,15 @@ def find_starts(args):
         starts.append(args[k]); k += 1
     return starts or ["."]
 
-def perl_in_place(args):
-    """perl -i / -pi / -i.bak: `i` in a switch cluster, before a switch whose value is the rest of the cluster
-    (`-Mstrict` is -M strict, not -i)."""
+def perl_in_place(args, valued="MmIxdDCFl0"):
+    """perl -i / -pi / -i.bak (and ruby's, whose switches with a value are `valued="0EFICrxWKT"`): `i` in a
+    switch cluster, before a switch whose value is the rest of the cluster (`-Mstrict` is -M strict, not -i)."""
     k = 0
     while k < len(args) and args[k].startswith("-") and args[k] != "--":
         for c in args[k][1:]:
             if c == "i":
                 return True
-            if c in "MmIxdDCFl0":
+            if c in valued:
                 break
             if c in "eE":  # the program is the next word
                 k += 1
@@ -192,7 +202,7 @@ def perl_in_place(args):
         k += 1
     return False
 
-BACKLOG_EDIT_MSG = ("Blocked: backlog/ files are CLI-managed — don't edit them in place with sed/perl. "
+BACKLOG_EDIT_MSG = ("Blocked: backlog/ files are CLI-managed — don't edit them in place with sed/perl/ruby/awk. "
                     "Use `backlog task edit <id>` (decision bodies are the exception and may be edited).")
 DATA_MSG = "Blocked: data/ is never committed (corpus licensing unresolved; spec 00). Don't force-add it."
 TAKEDOWNS_MSG = ("Blocked: a takedowns/ directory holds the takedown list and the operator's log, with "
@@ -217,6 +227,9 @@ cmd, cwd = read_payload()
 try:
     commands = list(simple_commands(cmd, cwd))
     redirects = list(redirect_targets(cmd, cwd))
+except FailClosed as exc:
+    refuse(f"Blocked: this git command can't be read reliably ({exc}), so what it does to data/ or backlog/ "
+           "can't be checked. Write abbreviated options out in full and run the git subcommand by its own name.")
 except ParseError:
     # Fail CLOSED (review round 3): an unparseable command that names data/ or backlog/ is refused.
     if "data" in cmd.lower() or "backlog" in cmd.lower():
@@ -231,6 +244,7 @@ for op, target, d in redirects:
 
 DESTROY = {"rm", "shred", "truncate", "rmdir", "unlink"}          # every path arg is a target
 DEST_LAST = {"cp", "rsync", "install", "ln"}          # last path arg is the target
+IN_PLACE_EDITORS = ("sed", "perl", "ruby", "awk", "gawk")
 for argv, d in commands:
     if not argv:
         continue
@@ -240,11 +254,18 @@ for argv, d in commands:
     in_place = any(a.startswith("--in-place") or (a.startswith("-") and not a.startswith("--") and "i" in a) for a in args)
     if head == "perl":
         in_place = perl_in_place(args)
+    if head == "ruby":
+        in_place = perl_in_place(args, "0EFICrxWKT")
+    if head in ("awk", "gawk"):  # gawk -i inplace / --include=inplace edits each file
+        in_place = any(v.startswith("inplace") for v in
+                       [*(args[k + 1] for k in range(len(args) - 1) if args[k] in ("-i", "--include")),
+                        *(a.partition("=")[2] for a in args if a.startswith("--include=")),
+                        *(a[2:] for a in args if a.startswith("-i") and len(a) > 2 and not a.startswith("--"))])
     # xargs appends words read from stdin that the hook never sees: refuse what they would decide (TASK-067)
     root_ = repo_root(d)
     if getattr(argv, "via_xargs", False) and (
         head in DESTROY | DEST_LAST | {"mv", "tee"}
-        or (head in ("sed", "perl") and in_place)
+        or (head in IN_PLACE_EDITORS and in_place)
         or (g is not None and g[0] in ("add", "stage", "rm", "mv", "update-index"))
     ) and (os.path.isdir(os.path.join(root_, "data")) or os.path.isdir(os.path.join(root_, "backlog"))):
         refuse("Blocked: xargs appends paths this guard can't see, and this repo has data/ or backlog/. "
@@ -277,7 +298,9 @@ for argv, d in commands:
         if "--index-info" in a or ("--add" in a and "--stdin" in a):
             refuse("Blocked: `git update-index --index-info` / `--add --stdin` stage paths this guard can't see; "
                    "data/ and takedowns/ are never committed.")
-        words = [w for p in a if not p.startswith("-") for w in (p, p.split(",")[-1])]  # --cacheinfo m,sha,path
+        # --cacheinfo m,sha,path (and the attached --cacheinfo=m,sha,path: TASK-067 review gate)
+        values = [p.partition("=")[2] if p.startswith("--cacheinfo=") else p for p in a]
+        words = [w for p in values if not p.startswith("-") for w in (p, p.split(",")[-1])]
         if "--add" in a and any(any_rel(is_data, w, g[2]) for w in words):
             refuse(DATA_MSG)
         if "--add" in a and any(through_takedowns(w, g[2], False) for w in words):
@@ -331,6 +354,9 @@ for argv, d in commands:
         refuse(BACKLOG_MSG)
     if head in DEST_LAST and paths and any_rel(in_backlog, paths[-1], d):  # copying OUT of backlog/ is fine
         refuse(BACKLOG_MSG)
+    # a `$`/backquote word is a path only the shell knows (`rm -rf "$PWD"` is the repo): refuse where data/ is
+    if head in DESTROY | {"mv"} and any(ch in p for p in paths for ch in "$`") and os.path.isdir(os.path.join(root_, "data")):
+        refuse(IMMUTABLE_MSG + " (A `$` word names a path this guard can't see; write the path out.)")
     if head in DESTROY and any(covers_immutable(p, d) for p in paths):
         refuse(IMMUTABLE_MSG + " To retire an old version use `op index retire <index_version>` (it refuses while a search record pins it).")
     if head == "mv" and paths and (any(covers_immutable(p, d) for p in paths[:-1]) or any_rel(inside_immutable, paths[-1], d)):
@@ -339,17 +365,21 @@ for argv, d in commands:
         refuse(IMMUTABLE_MSG)
     if head == "rsync" and paths and any(a.startswith("--delete") for a in args) and covers_immutable(paths[-1], d):
         refuse(IMMUTABLE_MSG)
+    if head == "rsync" and "--remove-source-files" in args and any(covers_immutable(p, d) for p in paths[:-1]):
+        refuse(IMMUTABLE_MSG)  # it deletes each source file it copied
     if head == "tee" and any(any_rel(inside_immutable, p, d) for p in paths):
         refuse(IMMUTABLE_MSG)
     if head == "dd" and any(a.startswith("of=") and inside_immutable(rel(a[3:], d)) for a in args):
         refuse(IMMUTABLE_MSG)
+    if head == "dd" and any(a.startswith("of=") and in_backlog(rel(a[3:], d)) for a in args):
+        refuse(BACKLOG_MSG)
     # every start path counts, `.` when none is named; a start ABOVE data/ deletes inside it (conservative:
     # `find . -name '*.pyc' -delete` from a root with data/snapshots is refused too)
     if head == "find" and ("-delete" in args or "-exec" in args or "-execdir" in args or "-ok" in args or "-okdir" in args) and any(covers_immutable(p, d) for p in find_starts(args)):
         refuse(IMMUTABLE_MSG)
-    if head in ("sed", "perl") and in_place and any(any_rel(inside_immutable, p, d) for p in paths):
+    if head in IN_PLACE_EDITORS and in_place and any(any_rel(inside_immutable, p, d) for p in paths):
         refuse(IMMUTABLE_MSG)
-    if head in ("sed", "perl") and in_place and any(any_rel(lambda r: in_backlog(r) and not in_decisions(r), p, d) for p in paths):
+    if head in IN_PLACE_EDITORS and in_place and any(any_rel(lambda r: in_backlog(r) and not in_decisions(r), p, d) for p in paths):
         refuse(BACKLOG_EDIT_MSG)
 sys.exit(0)
 PY

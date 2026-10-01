@@ -654,6 +654,89 @@ ln -s "$REPO/.git/op-reviews" "$TMP/revlink"
 check $R block "Write through a symlink to op-reviews/" "$(payload_file Write "$TMP/revlink/x")"
 check $R allow "Write to an ordinary file"            "$(payload_file Write "$REPO/README.md")"
 
+echo "== round-7 rows (TASK-067 review gate: abbreviations, unreadable config, globs, exports, git-<sub>)"
+g switch -q mut
+approve                                    # HEAD (mut) approved, other2 never reviewed: each row isolates one check
+# git reads any unique prefix of a long option
+check $R block "git push --al (--all: other2 unreviewed)" "$(payload_bash 'git push --al origin')"
+check $R block "git push --mirr"                      "$(payload_bash 'git push --mirr origin')"
+check $R block "git push --tag (--tags)"              "$(payload_bash 'git push --tag origin')"
+check $R allow "--push-o takes its value (--push-option)" "$(payload_bash 'git push --push-o ci.skip origin mut')"
+check $R allow "--force is exact, not ambiguous"      "$(payload_bash 'git push --force origin mut')"
+check $R allow "--dele deletes (--delete)"            "$(payload_bash 'git push --dele origin other2')"
+check $A block "git commit --fil <file with trailer>" "$(payload_bash "git commit --fil '$TMP/msg.txt'")"
+# config git reads from a source this parser can't: an alias or a refspec-less push fails closed
+printf '[alias]\n\tp = push\n\tfa = add -f -A\n' > "$TMP/inc.cfg"
+check $R block "--config-env alias.p=P p"             "$(payload_bash 'P=push git --config-env alias.p=P p origin other2')"
+check $R block "--config-env=alias.p=P p"             "$(payload_bash 'P=push git --config-env=alias.p=P p origin other2')"
+check $R block "-c include.path=<file> p"             "$(payload_bash "git -c include.path='$TMP/inc.cfg' p origin other2")"
+check $R block "GIT_CONFIG_COUNT/KEY/VALUE alias"     "$(payload_bash 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push git p origin other2')"
+check $R block "GIT_CONFIG_PARAMETERS alias"          "$(payload_bash "GIT_CONFIG_PARAMETERS=\"'alias.p'='push'\" git p origin other2")"
+check $R block "GIT_CONFIG_* push target, no refspec" "$(payload_bash 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0=other2:other2 git push origin')"
+check $R allow "GIT_CONFIG_* with a named refspec"    "$(payload_bash 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=color.ui GIT_CONFIG_VALUE_0=never git push origin mut')"
+check $R block "-c remote.origin.mirror=true, no refspec" "$(payload_bash 'git -c remote.origin.mirror=true push origin')"
+check $R block "-c push.followTags=true, no refspec"  "$(payload_bash 'git -c push.followTags=true push origin')"
+check $P block "-c include.path alias: add -f -A"     "$(payload_bash "git -c include.path='$TMP/inc.cfg' fa")"
+check $R block "glob refspec refs/heads/*"            "$(payload_bash "git push origin 'refs/heads/*:refs/heads/*'")"
+# export / declare -x reach every later command
+check $R block "export GIT_DIR=<other>; git push HEAD" "$(payload_bash "export GIT_DIR='$TMP/wt-other/.git'; git push origin HEAD")"
+check $R block "GIT_DIR=…; export GIT_DIR; git push"  "$(payload_bash "GIT_DIR='$TMP/wt-other/.git'; export GIT_DIR; git push origin HEAD")"
+check $R block "declare -x GIT_DIR=…; git push"       "$(payload_bash "declare -x GIT_DIR='$TMP/wt-other/.git'; git push origin HEAD")"
+check $R allow "GIT_DIR=… unexported: git never sees it" "$(payload_bash "GIT_DIR='$TMP/wt-other/.git'; git push origin HEAD")"
+# a git-<sub> program is git <sub>
+check $R block "\$(git --exec-path)/git-push"          "$(payload_bash '$(git --exec-path)/git-push origin other2')"
+# forged review records through globs and variables
+check $R block "cp into a globbed op-revie*/ dir"     "$(payload_bash 'cp /tmp/r .git/op-revie*/abc')"
+check $R block "cd .git/op-revie* && write"           "$(payload_bash 'cd .git/op-revie* && printf APPROVE > abc')"
+check $R block "cd \$(…)/op-review? && write"          "$(payload_bash 'cd "$(git rev-parse --git-common-dir)"/op-review? && printf APPROVE > abc')"
+check $R block "d=op-reviews; write .git/\$d/abc"      "$(payload_bash 'd=op-reviews; printf APPROVE > ".git/$d/abc"')"
+check $R block "d=op-reviews; cp to .git/\$d/abc"      "$(payload_bash 'd=op-reviews; cp /tmp/r ".git/$d/abc"')"
+check $R block "> \"\$(…)/\$(echo op-reviews)/abc\""   "$(payload_bash 'printf APPROVE > "$(git rev-parse --git-common-dir)/$(echo op-reviews)/abc"')"
+check $R allow "ls .git/op-revie* (a reader)"         "$(payload_bash 'ls .git/op-revie*')"
+check $R allow "cd \$(toplevel) && make > log"         "$(payload_bash 'cd "$(git rev-parse --show-toplevel)" && make lint > /tmp/lint.log')"
+# a shell alias runs at the top of the worktree, wherever it was called from
+check $P block "cd frontend && shell alias rm -rf data" "$(payload_bash "cd frontend && git -c 'alias.x=!rm -rf data' x")"
+# protect-data-dir: abbreviations, attached values, the dry run's config, and the nits
+mkdir -p "$REPO/backend" && echo b > "$REPO/backend/a.py"
+echo r > "$REPO/data/snapshots/s1/records.jsonl"; echo s > "$REPO/data/secret.jsonl"
+check $P block "git add --forc data/snapshots/s1/…"   "$(payload_bash 'git add --forc data/snapshots/s1/records.jsonl')"
+check $P block "git add --forc . (dry run sees data/)" "$(payload_bash 'git add --forc .')"
+check $P block "git add --forc -A"                    "$(payload_bash 'git add --forc -A')"
+check $P block "git stash push --al"                  "$(payload_bash 'git stash push --al')"
+check $P block "git stash --al (an implicit push)"    "$(payload_bash 'git stash --al')"
+check $P allow "git stash push -- --al (a pathspec)"  "$(payload_bash 'git stash push -- --al')"
+check $P block "update-index --add --cacheinfo=…,data/x" "$(payload_bash 'git update-index --add --cacheinfo=100644,e69de29bb2d1d6434b8b29ae775ad8c2e48c5391,data/x')"
+check $P block "GIT_DIR=<repo> add -f from a data-less tree" "$(payload_bash "cd '$TMP/wt-other' && GIT_DIR='$REPO/.git' GIT_WORK_TREE='$REPO' git add -f '*.jsonl'")"
+g config core.fsmonitor "touch '$TMP/FSMON2'"
+check $P allow "git add -f backend, repo core.fsmonitor set" "$(payload_bash 'git add -f backend')"
+g config --unset core.fsmonitor
+if [ -e "$TMP/FSMON2" ]; then fail=$((fail+1)); echo "  FAIL the dry run ran the repo's core.fsmonitor program"; else pass=$((pass+1)); echo "  ok   the dry run never runs the repo's core.fsmonitor program"; fi
+check $P block "rsync --remove-source-files data/"    "$(payload_bash 'rsync -a --remove-source-files data/ /tmp/x/')"
+check $P allow "rsync --remove-source-files from elsewhere" "$(payload_bash 'rsync -a --remove-source-files /tmp/y/ /tmp/x/')"
+check $P block "rm -rf \"\$PWD\" (a \$ word, repo has data/)" "$(payload_bash 'rm -rf "$PWD"')"
+check $P block "mv \"\$PWD\" away"                      "$(payload_bash 'mv "$PWD" /tmp/x')"
+check $P allow "rm -rf \"\$X\" in a repo without data/"  "$(payload_bash "cd '$TMP/wt-other' && rm -rf \"\$X\"")"
+check $P block "dd of=backlog/…"                      "$(payload_bash 'dd if=/dev/zero of=backlog/tasks/a.md count=1')"
+check $P block "ruby -i -pe on a backlog task"        "$(payload_bash "ruby -i -pe 'x' backlog/tasks/a.md")"
+check $P block "ruby -pi.bak -e on a snapshot"        "$(payload_bash "ruby -pi.bak -e 'x' data/snapshots/s1/records.jsonl")"
+check $P allow "ruby -rdigest -ne (r's value has an i)" "$(payload_bash "ruby -rdigest -ne 'print' backlog/tasks/a.md")"
+check $P block "awk -i inplace on a backlog task"     "$(payload_bash "awk -i inplace '{print}' backlog/tasks/a.md")"
+check $P block "gawk --include=inplace on a snapshot" "$(payload_bash "gawk --include=inplace '{print}' data/snapshots/s1/records.jsonl")"
+check $P block "awk -iinplace (attached) on a task"    "$(payload_bash "awk -iinplace '{print}' backlog/tasks/a.md")"
+check $P allow "awk -F, on a backlog task (read)"     "$(payload_bash "awk -F, '{print}' backlog/tasks/a.md")"
+check $P block "perl -pe … -i (a switch after -e's program)" "$(payload_bash "perl -pe 's/a/b/' -i backlog/tasks/a.md")"
+rm -rf "$REPO/backend" "$REPO/data/secret.jsonl" "$REPO/data/snapshots/s1/records.jsonl"
+# autofix: prettier reads only the tracked config (an untracked nested one names code to run)
+mkdir -p "$TMP/bin" "$REPO/frontend/src" "$REPO/node_modules"
+printf '#!/bin/sh\necho "$@" >> "%s/npx.log"\n' "$TMP" > "$TMP/bin/npx"; chmod +x "$TMP/bin/npx"
+printf 'x\n' > "$REPO/frontend/src/a.ts"; printf 'module.exports = {plugins: ["./x.js"]}\n' > "$REPO/frontend/src/.prettierrc.cjs"; : > "$TMP/npx.log"
+payload_file Edit "$REPO/frontend/src/a.ts" | PATH="$TMP/bin:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
+if grep prettier "$TMP/npx.log" | grep -q -e '--no-config' -e '--config '; then pass=$((pass+1)); echo "  ok   prettier gets its config explicitly (no search upward from the file)"; else fail=$((fail+1)); echo "  FAIL prettier searched for its config: $(cat "$TMP/npx.log")"; fi
+printf '{}\n' > "$REPO/frontend/.prettierrc.json"; g add frontend/.prettierrc.json; g commit -qm prettierrc; : > "$TMP/npx.log"
+payload_file Edit "$REPO/frontend/src/a.ts" | PATH="$TMP/bin:$PATH" CLAUDE_PROJECT_DIR="$REPO" "$HOOKS/autofix.sh" >/dev/null 2>&1
+if grep prettier "$TMP/npx.log" | grep -q -e '--config .*/frontend/\.prettierrc\.json'; then pass=$((pass+1)); echo "  ok   prettier gets the tracked frontend/.prettierrc.json"; else fail=$((fail+1)); echo "  FAIL prettier not given the tracked config: $(cat "$TMP/npx.log")"; fi
+rm -rf "$REPO/node_modules" "$REPO/frontend/src/a.ts" "$REPO/frontend/src/.prettierrc.cjs"
+
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")
 case "$out" in *TOKENIZER_VERSION*) pass=$((pass+1)); echo "  ok   reminder on normalize.py";; *) fail=$((fail+1)); echo "  FAIL no reminder on normalize.py";; esac

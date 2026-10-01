@@ -9,7 +9,8 @@
 # symlink or `..` cannot escape it).
 # Security (review round 2): tools run straight from the workspace venv — never `uv run`, which may sync
 # and fetch/build packages an agent just added to pyproject.toml — and prettier and eslint are skipped
-# while a formatter config or package.json differs from HEAD, because both execute code their config names. File names are passed after
+# while a formatter config or package.json differs from HEAD, because both execute code their config names;
+# prettier is also handed its tracked config file explicitly, so it never finds an untracked nested one. File names are passed after
 # `--` so a name can never be read as an option.
 input=$(cat)
 file=$(printf '%s' "$input" | python3 -c 'import json,sys
@@ -50,7 +51,11 @@ case "$rel" in
       if [ -n "$cfg_state" ]; then
         note "autofix: prettier and eslint skipped for $rel — a formatter config or package.json has uncommitted changes (they run code their config names). Run make lint after reviewing them."
       else
-        (cd "$root/frontend" && npx --no-install prettier --write -- "$sub" >/dev/null 2>&1)
+        # prettier searches upward from each file for a config (an untracked frontend/src/.prettierrc.cjs, or a
+        # nested package.json's "prettier" key, names code to run): hand it the tracked one, or none (TASK-067)
+        pcfg=$(git -C "$root" ls-files -- 'frontend/.prettierrc*' 'frontend/prettier.config.*' 2>/dev/null | head -1)
+        if [ -n "$pcfg" ]; then popt=(--config "$root/$pcfg"); else popt=(--no-config); fi
+        (cd "$root/frontend" && npx --no-install prettier "${popt[@]}" --write -- "$sub" >/dev/null 2>&1)
         case "$sub" in
           *.ts|*.tsx|*.js|*.jsx)
             out=$(cd "$root/frontend" && npx --no-install eslint --fix -- "$sub" 2>&1) || note "eslint still fails on $rel:"$'\n'"$out" ;;

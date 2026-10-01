@@ -8,9 +8,12 @@
 #    every finding was dispositioned (fixed / task-NNN / rejected with a reason). A new commit after the
 #    review has a new sha, so it needs a new review: an older approval can never satisfy the gate.
 #    Sources checked: each refspec's source (deletions `:dst` skipped, others still checked), HEAD when
-#    no refspec is given, and every local branch for --all / --mirror; `--tags` is refused outright; in the `--git-dir`/`GIT_DIR=` repo
-#    when one is named. A refspec-less push whose `git -c` settings choose what is pushed (remote.<name>.push,
-#    push.default, remote.pushDefault) is blocked. Aliases are expanded first (cmdparse).
+#    no refspec is given, and every local branch for --all / --mirror; `--tags` and glob refspecs are refused
+#    outright; in the `--git-dir`/`GIT_DIR=` repo (an `export`ed one too) when one is named. A refspec-less push
+#    whose `git -c` settings choose what is pushed (remote.<name>.push or .mirror, push.default,
+#    remote.pushDefault, push.followTags), or under config this gate can't read (--config-env, -c include.path,
+#    GIT_CONFIG_*, HOME), is blocked. Aliases are expanded and abbreviated options written out first (cmdparse);
+#    an alias under unreadable config, or an ambiguous abbreviation, is blocked.
 # 2. `gh pr create` (and its alias `gh pr new`) is blocked unless (1) holds for the PR head AND the branch
 #    adds or extends a `.claude/learnings/` entry relative to the PR base (default: the repo default
 #    branch, `dev`). Opt out only for a PR that genuinely taught nothing by passing `--label no-learning`;
@@ -23,7 +26,9 @@
 #    output redirect, or any command but a reader such as cat/ls), and a Write/Edit/MultiEdit/NotebookEdit
 #    whose path (symlinks followed) is inside op-reviews/, are blocked (TASK-067: `printf 'APPROVE\n' >
 #    "$(git rev-parse --git-common-dir)/op-reviews/<sha>"` forged an approval). record-review.py writes
-#    the file itself, so running it names no such path.
+#    the file itself, so running it names no such path. Globs are expanded first (`cd .git/op-revie*`), and a
+#    write is blocked when a `cd` or redirect target this gate can't read (`$…`, a glob) hints at a record
+#    (`"$(git rev-parse --git-common-dir)"/op-review?`), or a variable holds part of one (`d=op-reviews`).
 #
 # An unparseable command that looks like a push or a PR is blocked (fail closed), and so is a push run by
 # xargs, whose appended refspecs this gate can't see (TASK-067).
@@ -33,15 +38,16 @@
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 input=$(cat)
 HOOK_INPUT="$input" python3 - "$HOOK_DIR" <<'PY'
-import json, os, re, sys
+import glob, json, os, re, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import (ParseError, gh_subcommand, git, git_config, git_dir, git_subcommand, opt_value, opt_values,
-                      read_payload, redirect_targets, simple_commands, tokenize, xargs_hides_args)
+from cmdparse import (ASSIGNMENT, FailClosed, ParseError, gh_subcommand, git, git_config, git_config_opaque, git_dir,
+                      git_subcommand, opt_value, opt_values, read_payload, redirect_targets, simple_commands, tokenize,
+                      xargs_hides_args)
 
 ENTRY_NAME = re.compile(r"^\.claude/learnings/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$")  # same rule as learnings_index.py
 PUSH_VALUE_OPTS = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
 # `git -c` keys (lower-cased) that decide what a refspec-less `git push` sends and where
-PUSH_TARGET_CONFIG = re.compile(r"remote\..+\.push|push\.default|remote\.pushdefault")
+PUSH_TARGET_CONFIG = re.compile(r"remote\..+\.push|remote\..+\.mirror|push\.default|remote\.pushdefault|push\.followtags")
 
 def review_status(directory, sha):
     common = git(directory, "rev-parse", "--path-format=absolute", "--git-common-dir")
@@ -104,6 +110,23 @@ def safe_branch(name, what):
 RECORD_WORD = re.compile(r"(^|/)op-reviews(/|$)", re.IGNORECASE)
 RECORD_READERS = {"cat", "ls", "head", "tail", "less", "more", "grep", "wc", "stat", "file", "test", "["}
 FILE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
+# A `cd` or redirect target this gate can't read (`$…`, a glob) that hints at a record's directory, and a
+# variable set to part of one (TASK-067 review gate: `cd "$(git rev-parse --git-common-dir)"/op-review? && …`,
+# `d=op-reviews; printf APPROVE > ".git/$d/abc"`).
+UNREAD = re.compile(r"[$`*?\[]")
+RECORD_HINT = re.compile(r"op-?rev|reviews|\.git\b|git-(common-)?dir|GIT_(COMMON_)?DIR", re.IGNORECASE)
+RECORD_PART = re.compile(r"op-?rev|reviews", re.IGNORECASE)
+
+def named_paths(word, dirs):
+    """The word, and every path it names with its globs expanded against each directory: the whole word, and
+    its directory part (`.git/op-revie*/abc` writes a new file into a globbed directory)."""
+    out = [word]
+    if any(ch in word for ch in "*?["):
+        for d in dirs:
+            full = word if os.path.isabs(word) else os.path.join(d, word)
+            head, tail = os.path.split(full)
+            out += glob.glob(full) + [os.path.join(p, tail) for p in glob.glob(head)]
+    return out
 
 def forged_record_block():
     block(["Review gate: review records (<git-common-dir>/op-reviews/) are written only by",
@@ -128,6 +151,10 @@ if not cmd:  # no raw-text prefilter: `gi\<newline>t push` only becomes `git` af
     sys.exit(0)
 try:
     commands = list(simple_commands(cmd, cwd))
+except FailClosed as exc:
+    block([f"Review gate: this git command can't be read reliably ({exc}). Write abbreviated options out in",
+           "full, and run the git subcommand by its own name rather than an alias set by --config-env,",
+           "-c include.path or GIT_CONFIG_*; refusing rather than guessing what it pushes."])
 except ParseError:
     # Fail CLOSED (review round 3): a command the parser can't read may still be a push or a PR.
     if re.search(r"\bgit\b[^\n]*\bpush\b|\bgh\b[^\n]*\bpr\b|op-reviews", cmd, re.IGNORECASE):
@@ -136,9 +163,17 @@ except ParseError:
                "quoting and retry."])
     sys.exit(0)
 
-if any(RECORD_WORD.search(w) for w in tokenize(cmd)):
+words = tokenize(cmd)
+redirects = list(redirect_targets(cmd, cwd))
+dirs = {cwd, *(d for _, d in commands)}
+touched = any(RECORD_WORD.search(p) for w in words for p in named_paths(w, dirs))
+targets = [words[k + 1] for k in range(len(words) - 1) if words[k] in ("cd", "pushd")]
+targets += [t for op, t, _ in redirects if ">" in op]
+unread = any(UNREAD.search(t) and RECORD_HINT.search(t) for t in targets) or any(
+    ASSIGNMENT.match(w) and RECORD_PART.search(w.partition("=")[2]) for w in words)
+if touched or unread:
     writes = any(">" in op and not (op.endswith("&") and target.isdigit()) and target != "/dev/null"
-                 for op, target, _ in redirect_targets(cmd, cwd))
+                 for op, target, _ in redirects)
     if writes or any(argv and argv[0] not in RECORD_READERS for argv, _ in commands):
         forged_record_block()
 
@@ -166,11 +201,15 @@ for argv, d in commands:
                    "by name (`git push origin <tag>`, its commit needs a record), or let `gh release create` make it."])
         refspecs = push_positionals(args)[1:]
         pushed = [r.lstrip("+").split(":", 1)[0] for r in refspecs if not r.lstrip("+").startswith(":")]
+        if any("*" in r for r in refspecs):
+            block(["Review gate: a glob refspec (`refs/heads/*:refs/heads/*`) pushes every branch it matches,",
+                   "unchecked. Push each reviewed branch by name."])
         if not refspecs:
-            if any(PUSH_TARGET_CONFIG.fullmatch(k) for k in git_config(argv)):
+            if git_config_opaque(argv) or any(PUSH_TARGET_CONFIG.fullmatch(k) for k in git_config(argv)):
                 # `git -c remote.origin.push=other:other push origin` pushes `other`, not HEAD (TASK-067)
-                block(["Review gate: this `git push` names no refspec, and its `git -c` settings choose what is",
-                       "pushed (remote.<name>.push / push.default / remote.pushDefault). Name the refspec instead."])
+                block(["Review gate: this `git push` names no refspec, and its config chooses what is pushed",
+                       "(remote.<name>.push / .mirror, push.default, remote.pushDefault, push.followTags, or",
+                       "settings this gate can't read: GIT_CONFIG_*, --config-env, include.path). Name the refspec."])
             pushed = ["HEAD"]
         if not pushed and "--follow-tags" in flags:
             continue
