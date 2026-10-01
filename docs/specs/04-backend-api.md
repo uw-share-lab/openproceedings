@@ -593,7 +593,7 @@ once released: changing one is a breaking change under `/api/v1`.
 | Situation | HTTP | `code` |
 |---|---|---|
 | Query does not parse, uses an unknown field or value, or has a bad wildcard (incl. more than 200 expansions) (on endpoints that run the query) | 422 | `PARSE_*`, `FIELD_*`, `WILDCARD_*` (diagnostics carry the spans); a query over 2,000 code points is `PARSE_TOO_LONG`, rejected before parsing, and so is one whose canonical form is over 2,000 code points, refused after canonicalising (decision-008) |
-| A parameter is invalid (bad `sort`, `limit` > 200, unknown `format`, a malformed paper or record id), unknown to the route, or given twice; or a body is malformed | 422 | `API_BAD_PARAM` |
+| A parameter is invalid (bad `sort`, `limit` > 200, unknown `format`, a malformed paper or record id), unknown to the route, or given twice; or a body is malformed. The message names at most 5 locations (more are counted) and never the value; each location is quoted between backticks through `diagnostics.clip`, since a parameter name or body key is the client's own text (TASK-143) | 422 | `API_BAD_PARAM` |
 | Paper or search record not found (a well-formed id) | 404 | `API_PAPER_NOT_FOUND` / `API_RECORD_NOT_FOUND` |
 | A pinned `index_version` is not available on this instance (an export's; a record save's `index_version` that is not the served index, TASK-091) | 409 | `API_INDEX_VERSION_UNAVAILABLE` |
 | Export requested for a record whose replay status is `mismatch` | 409 | `API_RECORD_MISMATCH` |

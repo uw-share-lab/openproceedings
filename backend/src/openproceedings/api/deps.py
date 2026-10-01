@@ -21,7 +21,7 @@ from fastapi import Depends, Request
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 
-from openproceedings.api.errors import ACCESS, ApiError
+from openproceedings.api.errors import ACCESS, MAX_NAMED_PARAMS, ApiError
 from openproceedings.api.middleware import charge
 from openproceedings.api.state import Served
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode, clip
@@ -37,7 +37,6 @@ if TYPE_CHECKING:
 
 type AbstractSource = Literal["attributed", "unavailable"]  # an export's `X-Abstract-Source` (decision-021)
 MAX_LOGGED_CODES = 10  # distinct diagnostic codes on one access line; more are counted, not listed
-MAX_NAMED_PARAMS = 5  # unknown or repeated parameters a refusal names; more are counted
 # a route's query parameter names are cached on the route itself (it lives and dies with them): a global
 # map keyed by `id(route)` handed a new app's route the names of a collected one that had its id (M3a round 2)
 DECLARED_ATTR = "_openproceedings_declared_query"
