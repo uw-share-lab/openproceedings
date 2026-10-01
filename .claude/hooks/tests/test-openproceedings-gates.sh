@@ -719,7 +719,7 @@ check $P allow "rm -rf \"\$X\" in a repo without data/"  "$(payload_bash "cd '$T
 check $P block "dd of=backlog/…"                      "$(payload_bash 'dd if=/dev/zero of=backlog/tasks/a.md count=1')"
 check $P block "ruby -i -pe on a backlog task"        "$(payload_bash "ruby -i -pe 'x' backlog/tasks/a.md")"
 check $P block "ruby -pi.bak -e on a snapshot"        "$(payload_bash "ruby -pi.bak -e 'x' data/snapshots/s1/records.jsonl")"
-check $P allow "ruby -rdigest -ne (r's value has an i)" "$(payload_bash "ruby -rdigest -ne 'print' backlog/tasks/a.md")"
+check $P allow "ruby -rtime -ne (r's value has an i)"   "$(payload_bash "ruby -rtime -ne 'print' backlog/tasks/a.md")"
 check $P block "awk -i inplace on a backlog task"     "$(payload_bash "awk -i inplace '{print}' backlog/tasks/a.md")"
 check $P block "gawk --include=inplace on a snapshot" "$(payload_bash "gawk --include=inplace '{print}' data/snapshots/s1/records.jsonl")"
 check $P block "awk -iinplace (attached) on a task"    "$(payload_bash "awk -iinplace '{print}' backlog/tasks/a.md")"

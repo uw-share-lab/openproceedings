@@ -1413,10 +1413,11 @@
   "new": "DRY_RUN_DROP = {"
  },
  {
-  "label": "pdd: dry run keeps -c",
+  "label": "pdd: dry run keeps -c (EQUIVALENT: the dry run's own -c core.fsmonitor=false and core.hooksPath=/dev/null come after any kept -c and win; dropping -c stays as defense in depth)",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "DRY_RUN_DROP = {\"-C\", \"-c\", ",
-  "new": "DRY_RUN_DROP = {\"-C\", "
+  "new": "DRY_RUN_DROP = {\"-C\", ",
+  "equivalent": true
  },
  {
   "label": "pdd: update-index unseen paths allowed",
