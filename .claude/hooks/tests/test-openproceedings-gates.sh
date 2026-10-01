@@ -997,6 +997,7 @@ check $R block "cd \$(…--git-common-dir)/op-* && cp …"   "$(payload_bash 'cd
 check $R block "> \$(…--git-common-dir)/op-*/abc"        "$(payload_bash 'printf APPROVE > $(git rev-parse --git-common-dir)/op-*/abc')"
 check $R block "G=\$(…--git-common-dir); cp … \$G/op-*"   "$(payload_bash 'G=$(git rev-parse --git-common-dir); cp /tmp/abc $G/op-*')"
 check $R block "cp … \"\$(…--absolute-git-dir)\"/op-*"   "$(payload_bash 'cp /tmp/abc "$(git rev-parse --absolute-git-dir)"/op-*')"
+check $R block "cp … \$(echo .git)/op-revie?s/abc (tail split off)" "$(payload_bash 'cp /tmp/abc $(echo .git)/op-revie?s/abc')"
 check $R allow "ls \$(…--git-common-dir)/op-*/ (a reader)" "$(payload_bash 'ls $(git rev-parse --git-common-dir)/op-*/')"
 check $P allow "rm -rf \"\$(…--git-common-dir)/op-scratch\"" "$(payload_bash 'rm -rf "$(git rev-parse --git-common-dir)/op-scratch"')"
 check $P block "wt: rm -rf \"\$(…--git-dir)/../../../data\"" "$(payload_at "$WTO" 'rm -rf "$(git rev-parse --git-dir)/../../../data"')"

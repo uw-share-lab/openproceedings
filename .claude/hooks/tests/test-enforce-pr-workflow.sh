@@ -314,13 +314,38 @@ check main      block '/usr/libexec/git-core/git-commit -m x'
 check feature/x allow '/usr/libexec/git-core/git-push origin feat'
 check feature/x block 'caffeinate -i /usr/libexec/git-core/git-push origin HEAD:dev'   # behind a wrapper cmdparse doesn't know
 
-echo "the no-python fallback still refuses commit makers on a protected branch (unparseable commands):"
+echo "an unparseable command with a git write word is refused (TASK-067 final review gate):"
 check main      block 'git cherry-pick x "'
 check main      block 'git revert x "'
 check main      block 'git am x "'
 check main      block 'git rebase x "'
 check main      block 'git reset --hard x "'
 check feature/x block 'git cherry-pick x "'   # unparseable with a git write word: refused on any branch (final review gate)
+
+echo "without python3, the text fallback still refuses commit makers on a protected branch, push first:"
+NOPY="$(mktemp -d)"
+for tool in bash git cat dirname; do ln -s "$(command -v "$tool")" "$NOPY/$tool"; done
+# check_nopy <branch> <expect> <command>: the hook run with a PATH that has no python3
+check_nopy() {
+  local on_branch="$1" expect="$2" cmd="$3" json got
+  git -C "$REPO" checkout -q "$on_branch" 2>/dev/null || git -C "$REPO" checkout -q -b "$on_branch"
+  json=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]}}))' "$cmd")
+  (cd "$REPO" && printf '%s' "$json" | PATH="$NOPY" "$HOOK" >/dev/null 2>&1); local rc=$?
+  case $rc in 0) got=allow ;; 2) got=block ;; *) got="crash(rc=$rc)" ;; esac
+  if [ "$got" = "$expect" ]; then pass=$((pass + 1)); printf '  ok   [%s, no python3] %-40s -> %s\n' "$on_branch" "$cmd" "$got"
+  else fail=$((fail + 1)); printf '  FAIL [%s, no python3] %-40s -> %s (want %s)\n' "$on_branch" "$cmd" "$got" "$expect"; fi
+}
+check_nopy main      block 'git cherry-pick x'
+check_nopy main      block 'git revert x'
+check_nopy main      block 'git am x'
+check_nopy main      block 'git rebase x'
+check_nopy main      block 'git reset --hard x'
+check_nopy main      block 'git commit -m x'
+check_nopy main      allow 'git status'
+check_nopy feature/x allow 'git commit -m x'
+check_nopy feature/x block 'git commit -m x; git push origin HEAD:dev'   # push is checked first
+check_nopy feature/x block 'git -C ../other commit -m x'                 # -C: the branch can't be placed
+rm -rf "$NOPY"
 
 echo "eval re-parses its argument:"
 check main       block 'eval "git push origin main"'
@@ -590,6 +615,7 @@ check feature/x block 'unset E; git push origin $E'
 check feature/x block 'git push origin $TMPDIR'
 check feature/x block 'git push origin "$TMPDIR"'
 check feature/x allow 'E=feat; git push origin $E'
+check feature/x block 'B=main; git checkout $B && git commit -m x'          # a checkout target is resolved too
 check feature/x allow 'cd "$HOME" && cd - && git commit -m x'          # only a push is read with HOME ''
 git -C "$REPO" config --unset remote.origin.push
 

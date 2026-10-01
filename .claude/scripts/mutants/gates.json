@@ -2691,10 +2691,11 @@
   "new": ""
  },
  {
-  "label": "cmdparse: eval words always re-tokenized",
+  "label": "cmdparse: eval words always re-tokenized (equivalent: the same words, only an eval chain's cost changes)",
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "            plain = all(PLAIN_WORD.fullmatch(w) for w in rest)",
-  "new": "            plain = False"
+  "new": "            plain = False",
+  "equivalent": true
  },
  {
   "label": "protect-data-dir: worktree paths compared case-sensitively",
