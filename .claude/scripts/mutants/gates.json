@@ -2822,5 +2822,17 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "return \"\" if env_empty else os.environ.get(name, \"\")",
   "new": "return \"\" if env_empty else os.environ.get(name)"
+ },
+ {
+  "label": "cmdparse: ~ with HOME absent read as ''",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                home = _passwd_home()",
+  "new": "                home = \"\""
+ },
+ {
+  "label": "cmdparse: ~ after unset HOME read as ''",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                home = shell_vars[\"HOME\"] or None",
+  "new": "                home = shell_vars[\"HOME\"]"
  }
 ]

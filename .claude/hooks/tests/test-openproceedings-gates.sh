@@ -48,6 +48,13 @@ check_no_tmpdir() {
   check "$@"
   if [ -n "$had" ]; then export TMPDIR="$saved"; fi
 }
+# check_no_home: `check`, with HOME absent from the hook's environment (bash's `~` is then the passwd home)
+check_no_home() {
+  local saved="${HOME-}" had="${HOME+x}"
+  unset HOME
+  check "$@"
+  if [ -n "$had" ]; then export HOME="$saved"; fi
+}
 # check_cmd <want: ok|err> <label> <cmd...>   (for scripts)
 check_cmd() {
   local want="$1" label="$2"; shift 2; local got
@@ -1050,6 +1057,13 @@ check $P allow "rm -f \"\$TMPDIR/x\""                     "$(payload_bash 'rm -f
 # TMPDIR unset in the environment is '' in the agent's shell: `/x` is outside, `${TMPDIR}data` is data/
 check_no_tmpdir $P allow "no TMPDIR: rm -f \"\$TMPDIR/x\"" "$(payload_bash 'rm -f "$TMPDIR/x"')"
 check_no_tmpdir $P block "no TMPDIR: rm -rf \"\${TMPDIR}data\"" "$(payload_bash 'rm -rf "${TMPDIR}data"')"
+# `~` with HOME unset is the passwd home, never '' (CI fix re-check). Read as '', `~/<repo path>/data` would be the
+# repo's data/; read as the passwd home it is a path under it that holds no repo: allowed. And `unset HOME` in
+# the command can't be told from `HOME=`, so its `~` is unknown and refused where data/ exists.
+NO_SLASH="${REPO#/}"
+check_no_home $P allow "no HOME: rm -rf ~/<repo path>/data/snapshots (passwd home)" "$(payload_bash "rm -rf ~/'$NO_SLASH'/data/snapshots")"
+check $P block "unset HOME; rm -f ~/op-x (unknown)" "$(payload_bash 'unset HOME; rm -f ~/op-x')"
+check_no_home $P allow "no HOME: rm -f ~/op-not-a-repo-file" "$(payload_bash 'rm -f ~/op-not-a-repo-file')"
 check $P allow "cd \"\$(…--show-toplevel)\" && make"      "$(payload_bash 'cd "$(git rev-parse --show-toplevel)" && make lint')"
 check $R allow "git commit -m with braces, \$ and op-reviews" "$(payload_bash 'git commit -m "fix {a,b}: \$HOME and .git/op-reviews/abc"')"
 check $R allow "gh pr create --body with braces, \$ and op-reviews" "$(payload_bash 'gh pr create --label no-learning --base dev --head mut --title t --body "{a,b} \$X .git/op-reviews/abc"')"

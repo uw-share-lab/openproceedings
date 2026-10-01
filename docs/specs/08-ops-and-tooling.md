@@ -550,7 +550,8 @@ them:
   it sets kept inside it) and `eval`; a `cd` target goes through `expand_word` (`~`, `~+`, `~-`, `$PWD`,
   `$(pwd)`, `$(git rev-parse --show-toplevel)`, `$(git rev-parse --git-common-dir|--git-dir|--absolute-git-dir)`,
   `$(mktemp [-d] [-t prefix])` (a path in the temp dir; unknown when the command sets or unsets `TMPDIR`), `$HOME`, variables: set or `unset` earlier in the command, else
-  only HOME, TMPDIR and USER from the hook's environment (unset there: ''), which a gate also reads as ''), `cd -P` resolves
+  only HOME, TMPDIR and USER from the hook's environment (unset there: ''), which a gate also reads as '';
+  `~` is $HOME when set, else the passwd home, as bash reads it, and unknown after `HOME=`/`unset HOME`), `cd -P` resolves
   symlinks, and a target it can't resolve, one that doesn't exist, a relative one under CDPATH, or `cd -` back
   to an unknown directory marks the directory unknown (and, after such a `cd`, the one `cd -` returns to, unless
   it was already the current one: a failed `cd` keeps OLDPWD);
@@ -570,9 +571,10 @@ them:
   --al` is `--all`), from a table of every long option of the subcommands the gates read (`GIT_LONG_OPTS`,
   from `git <sub> --git-completion-helper-all`, git 2.42 plus the options CI's newer git lists); an ambiguous
   one (`git push --a`) raises `FailClosed`. `.claude/scripts/tests/test-git-long-opts.sh` compares the table
-  with the installed git and notes drift either way without failing, so it holds on any git version: an
-  abbreviation is expanded only when unique in the table, and every option a gate checks is in it, so an
-  option the table lacks can at worst over-block, never let a gated option through.
+  with the installed git and notes drift either way, so it holds on any git version: an abbreviation is
+  expanded only when unique in the table, and every option a gate checks is in it, so an option the table
+  lacks can at worst over-block, never let a gated option through. It fails only when that premise breaks: a
+  `--option` a gate hook names, which this git lists for a tabled subcommand, missing from the table.
 
 `enforce-pr-workflow.sh` uses the same walk. A command the parser cannot read is **blocked**, never
 allowed, when it looks like what a gate guards (fail closed); protect-data-dir refuses every one in a repo

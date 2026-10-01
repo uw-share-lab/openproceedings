@@ -979,6 +979,16 @@ def _variable(
     return None
 
 
+def _passwd_home() -> str | None:
+    """The account's home directory from the passwd database, as bash's `~` reads it when HOME is unset."""
+    try:
+        import pwd
+
+        return pwd.getpwuid(os.getuid()).pw_dir or None
+    except (ImportError, KeyError, OSError):
+        return None
+
+
 def expand_word(
     word: str,
     directory: str | None,
@@ -999,7 +1009,15 @@ def expand_word(
     if word.startswith("~"):
         user, sep, rest = word[1:].partition("/")
         if user == "":
-            home = _variable("HOME", directory, shell_vars, olddir, env_empty)
+            # bash's `~` is $HOME when HOME is set, else the passwd home (never '': `env -u HOME` or `unset
+            # HOME` and `~/x` is <passwd home>/x); a HOME set to '' in the command (`HOME=`) can't be told from
+            # `unset HOME` here, so that `~` is unknown (TASK-067 CI fix re-check)
+            if "HOME" in shell_vars:
+                home = shell_vars["HOME"] or None
+            elif env_empty or "HOME" not in os.environ:
+                home = _passwd_home()
+            else:
+                home = os.environ["HOME"]
         elif user == "+":
             home = directory  # None: a `cd` this parser couldn't follow
         elif user == "-":
