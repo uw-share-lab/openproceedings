@@ -13,9 +13,14 @@ matter to a gate:
   * command names compare by basename (`/usr/bin/git` is `git`);
   * redirections leave argv as (operator, target) pairs (`redirect_targets`);
   * `cd <dir>` is tracked and `bash -c "…"` / `eval "…"` are recursed into;
-  * a git alias (`-c alias.<name>=…` or the repo's config; `!shell` ones too) becomes what git runs for it.
+  * a git alias (`-c alias.<name>=…` or the repo's config; `!shell` ones too) becomes what git runs for it;
+  * a `git-<sub>` program (`$(git --exec-path)/git-push`) is `git <sub>`;
+  * an abbreviated long option (`--forc`, `--al`) becomes the option git reads it as (`normalize_git_options`);
+  * `export`/`declare -x` assignments reach every later command's `Argv.assigns` (`note_exports`).
 A command that cannot be parsed raises ParseError; every gate treats that as a reason to BLOCK a command
-that looks like what it guards (fail closed), never to allow it.
+that looks like what it guards (fail closed), never to allow it. A git command that parses but can't be
+classified (an ambiguous abbreviated option; config git reads from a source this parser can't, deciding an
+alias) raises FailClosed, a ParseError every gate refuses whatever the text looks like.
 
 Threat model (same as enforce-pr-workflow.sh): a guardrail against honest mistakes, not an adversarial
 control. `$(...)`, variables and script files are opaque to a static parser.
@@ -177,6 +182,144 @@ GIT_BUILTINS = frozenset(
 )
 ALIAS_DEPTH = 8  # git itself refuses a non-shell alias loop; this bounds shell aliases calling git aliases
 GH_VALUE_OPTS = {"-R", "--repo"}
+# Every long option (negations included) of the git subcommands a gate reads options of, as `git <sub>
+# --git-completion-helper-all` lists them (git 2.42). git takes any unique prefix of one (`--forc` is
+# --force: TASK-067 review gate), so `normalize_git_options` writes each out in full before a gate looks.
+GIT_LONG_OPTS: dict[str, frozenset[str]] = {
+    k: frozenset(v.split())
+    for k, v in {
+        "add": (
+            "dry-run verbose interactive patch edit force update renormalize intent-to-add all "
+            "ignore-removal refresh ignore-errors ignore-missing sparse chmod warn-embedded-repo "
+            "pathspec-from-file pathspec-file-nul no-dry-run no-verbose no-interactive no-patch no-edit "
+            "no-force no-update no-renormalize no-intent-to-add no-all no-ignore-removal no-refresh "
+            "no-ignore-errors no-ignore-missing no-sparse no-chmod no-warn-embedded-repo "
+            "no-pathspec-from-file no-pathspec-file-nul"
+        ),
+        "branch": (
+            "verbose quiet track set-upstream set-upstream-to unset-upstream color remotes contains "
+            "no-contains with without abbrev all delete move omit-empty copy list show-current "
+            "create-reflog edit-description force merged no-merged column sort points-at ignore-case "
+            "recurse-submodules format no-verbose no-quiet no-track no-set-upstream no-set-upstream-to "
+            "no-unset-upstream no-color no-abbrev no-delete no-move no-omit-empty no-copy no-list "
+            "no-show-current no-create-reflog no-edit-description no-force no-column no-sort no-points-at "
+            "no-ignore-case no-recurse-submodules no-format"
+        ),
+        "checkout": (
+            "guess overlay quiet recurse-submodules progress merge conflict detach track force orphan "
+            "overwrite-ignore ignore-other-worktrees ours theirs patch ignore-skip-worktree-bits "
+            "pathspec-from-file pathspec-file-nul no-guess no-overlay no-quiet no-recurse-submodules "
+            "no-progress no-merge no-conflict no-detach no-track no-force no-orphan no-overwrite-ignore "
+            "no-ignore-other-worktrees no-patch no-ignore-skip-worktree-bits no-pathspec-from-file "
+            "no-pathspec-file-nul"
+        ),
+        "clean": "quiet dry-run force interactive exclude no-quiet no-dry-run no-force no-interactive",
+        "commit": (
+            "quiet verbose file author date message reedit-message reuse-message fixup squash "
+            "reset-author trailer signoff template edit cleanup status gpg-sign all include interactive "
+            "patch only no-verify dry-run short branch ahead-behind porcelain long null amend "
+            "no-post-rewrite untracked-files pathspec-from-file pathspec-file-nul allow-empty "
+            "allow-empty-message verify post-rewrite no-quiet no-verbose no-file no-author no-date "
+            "no-message no-reedit-message no-reuse-message no-fixup no-squash no-reset-author no-signoff "
+            "no-template no-edit no-cleanup no-status no-gpg-sign no-all no-include no-interactive "
+            "no-patch no-only no-dry-run no-short no-branch no-ahead-behind no-porcelain no-long no-null "
+            "no-amend no-untracked-files no-pathspec-from-file no-pathspec-file-nul no-allow-empty "
+            "no-allow-empty-message"
+        ),
+        "fetch": (
+            "verbose quiet all set-upstream append atomic upload-pack force multiple tags jobs prefetch "
+            "prune prune-tags recurse-submodules dry-run porcelain write-fetch-head keep update-head-ok "
+            "progress depth shallow-since shallow-exclude deepen unshallow refetch submodule-prefix "
+            "recurse-submodules-default update-shallow refmap server-option ipv4 ipv6 negotiation-tip "
+            "negotiate-only filter auto-maintenance auto-gc show-forced-updates write-commit-graph stdin "
+            "no-verbose no-quiet no-all no-set-upstream no-append no-atomic no-upload-pack no-force "
+            "no-multiple no-tags no-jobs no-prefetch no-prune no-prune-tags no-recurse-submodules "
+            "no-dry-run no-porcelain no-write-fetch-head no-keep no-update-head-ok no-progress no-depth "
+            "no-shallow-since no-shallow-exclude no-deepen no-submodule-prefix "
+            "no-recurse-submodules-default no-update-shallow no-server-option no-negotiation-tip "
+            "no-negotiate-only no-filter no-auto-maintenance no-auto-gc no-show-forced-updates "
+            "no-write-commit-graph no-stdin"
+        ),
+        "merge": (
+            "stat summary log squash commit edit cleanup ff ff-only rerere-autoupdate verify-signatures "
+            "strategy strategy-option message file into-name verbose quiet abort quit continue "
+            "allow-unrelated-histories progress gpg-sign autostash overwrite-ignore signoff no-verify "
+            "verify no-stat no-summary no-log no-squash no-commit no-edit no-cleanup no-ff "
+            "no-rerere-autoupdate no-verify-signatures no-strategy no-strategy-option no-message "
+            "no-into-name no-verbose no-quiet no-abort no-quit no-continue no-allow-unrelated-histories "
+            "no-progress no-gpg-sign no-autostash no-overwrite-ignore no-signoff"
+        ),
+        "pull": (
+            "verbose quiet progress recurse-submodules rebase stat summary log signoff squash commit edit "
+            "cleanup ff ff-only verify verify-signatures autostash strategy strategy-option gpg-sign "
+            "allow-unrelated-histories all append upload-pack force tags prune jobs dry-run keep depth "
+            "shallow-since shallow-exclude deepen unshallow update-shallow refmap server-option ipv4 ipv6 "
+            "negotiation-tip show-forced-updates set-upstream no-verbose no-quiet no-progress "
+            "no-recurse-submodules no-rebase no-stat no-summary no-log no-signoff no-squash no-commit "
+            "no-edit no-cleanup no-ff no-verify no-verify-signatures no-autostash no-strategy "
+            "no-strategy-option no-gpg-sign no-allow-unrelated-histories no-all no-append no-upload-pack "
+            "no-force no-tags no-prune no-jobs no-dry-run no-keep no-depth no-shallow-since "
+            "no-shallow-exclude no-deepen no-update-shallow no-server-option no-ipv4 no-ipv6 "
+            "no-negotiation-tip no-show-forced-updates no-set-upstream"
+        ),
+        "push": (
+            "verbose quiet repo all branches mirror delete tags dry-run porcelain force force-with-lease "
+            "force-if-includes recurse-submodules thin receive-pack exec set-upstream progress prune "
+            "no-verify follow-tags signed atomic push-option ipv4 ipv6 verify no-verbose no-quiet no-repo "
+            "no-all no-branches no-mirror no-delete no-tags no-dry-run no-porcelain no-force "
+            "no-force-with-lease no-force-if-includes no-recurse-submodules no-thin no-receive-pack "
+            "no-exec no-set-upstream no-progress no-prune no-follow-tags no-signed no-atomic "
+            "no-push-option"
+        ),
+        "reset": (
+            "quiet no-refresh mixed soft hard merge keep recurse-submodules patch intent-to-add "
+            "pathspec-from-file pathspec-file-nul refresh no-quiet no-recurse-submodules no-patch "
+            "no-intent-to-add no-pathspec-from-file no-pathspec-file-nul"
+        ),
+        "stash push": (
+            "keep-index staged patch quiet include-untracked all message pathspec-from-file "
+            "pathspec-file-nul no-keep-index no-staged no-patch no-quiet no-include-untracked no-all "
+            "no-message no-pathspec-from-file no-pathspec-file-nul"
+        ),
+        "stash save": (
+            "keep-index staged patch quiet include-untracked all message no-keep-index no-staged no-patch "
+            "no-quiet no-include-untracked no-all no-message"
+        ),
+        "switch": (
+            "create force-create guess discard-changes quiet recurse-submodules progress merge conflict "
+            "detach track force orphan overwrite-ignore ignore-other-worktrees no-create no-force-create "
+            "no-guess no-discard-changes no-quiet no-recurse-submodules no-progress no-merge no-conflict "
+            "no-detach no-track no-force no-orphan no-overwrite-ignore no-ignore-other-worktrees"
+        ),
+        "tag": (
+            "list delete verify annotate message file edit sign cleanup local-user force create-reflog "
+            "column contains no-contains with without merged no-merged omit-empty sort points-at format "
+            "color ignore-case no-annotate no-file no-edit no-sign no-cleanup no-local-user no-force "
+            "no-create-reflog no-column no-omit-empty no-sort no-points-at no-format no-color "
+            "no-ignore-case"
+        ),
+        "update-index": (
+            "ignore-submodules add replace remove unmerged refresh really-refresh cacheinfo chmod "
+            "assume-unchanged no-assume-unchanged skip-worktree no-skip-worktree "
+            "ignore-skip-worktree-entries info-only force-remove stdin index-info unresolve again "
+            "ignore-missing verbose clear-resolve-undo index-version split-index untracked-cache "
+            "test-untracked-cache force-untracked-cache force-write-index fsmonitor fsmonitor-valid "
+            "no-fsmonitor-valid no-ignore-submodules no-add no-replace no-remove no-unmerged "
+            "no-ignore-skip-worktree-entries no-info-only no-force-remove no-ignore-missing no-verbose "
+            "no-index-version no-split-index no-untracked-cache no-test-untracked-cache "
+            "no-force-untracked-cache no-force-write-index no-fsmonitor"
+        ),
+        "update-ref": "no-deref stdin create-reflog deref no-stdin no-create-reflog",
+    }.items()
+}
+GIT_LONG_OPTS["stage"] = GIT_LONG_OPTS["add"]
+# Assignments that point git at config this parser can't read (the global or system file, or settings
+# passed in the environment): with one, an unknown subcommand may be an alias, and a refspec-less push may
+# go anywhere (TASK-067 review gate).
+OPAQUE_CONFIG_ENV = re.compile(
+    r"GIT_CONFIG(_COUNT|_KEY_\d+|_VALUE_\d+|_PARAMETERS|_GLOBAL|_SYSTEM)?|HOME|XDG_CONFIG_HOME"
+)
+EXPORTERS = {"export", "declare", "typeset", "local"}
 HEREDOC = re.compile(r"<<(?P<dash>-?)[ \t]*\\?(?P<q>['\"]?)(?P<delim>[A-Za-z_][\w-]*)(?P=q)")
 
 
@@ -185,6 +328,12 @@ ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 class ParseError(ValueError):
     pass
+
+
+class FailClosed(ParseError):
+    """A git command that parses but can't be classified: an ambiguous abbreviated option (`git push --a`),
+    or a subcommand that may be an alias defined where this parser can't read it (`--config-env`, `-c
+    include.path`, `GIT_CONFIG_*`). Every gate refuses it, whatever the rest of the text looks like."""
 
 
 class Argv(list):
@@ -397,8 +546,49 @@ def _strip_prefixes(argv: list[str], state: dict | None, out: Argv) -> Argv:
         else:
             break
     rest = argv[i:]
-    out[:] = [base(rest[0]), *rest[1:]] if rest else []
+    name = base(rest[0]) if rest else ""
+    if name.startswith("git-") and len(name) > 4:  # `$(git --exec-path)/git-push` is `git push` (TASK-067)
+        out[:] = ["git", name[4:], *rest[1:]]
+    else:
+        out[:] = [name, *rest[1:]] if rest else []
     return out
+
+
+def note_exports(argv: Argv, state: dict) -> bool:
+    """Record what `argv` exports for the commands after it, in `state["exports"]` (TASK-067 review gate:
+    `export GIT_DIR=<main>/.git; git commit` reached the main worktree unseen). `VAR=val` alone sets a shell
+    variable (exported only once `export VAR` or `declare -x VAR` names it, or if already exported);
+    `export`, `declare`/`typeset`/`local -x` export; `export -n` and `unset` drop. True when `argv` was one of
+    these, which run nothing a gate checks."""
+    exports, shell = state.setdefault("exports", {}), state.setdefault("vars", {})
+    if not argv:
+        for name, value in argv.assigns.items():
+            shell[name] = value
+            if name in exports or name in os.environ:
+                exports[name] = value
+        return bool(argv.assigns)
+    head, words = argv[0], argv[1:]
+    if head == "unset":
+        for name in words:
+            exports.pop(name, None)
+            shell.pop(name, None)
+        return True
+    if head not in EXPORTERS:
+        return False
+    opts = [w for w in words if w[:1] in ("-", "+")]
+    unexport = head == "export" and "-n" in opts
+    exporting = not unexport and (head == "export" or any(o.startswith("-") and "x" in o for o in opts))
+    for word in words:
+        name, eq, value = word.partition("=")
+        if word in opts or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            continue
+        if eq:
+            shell[name] = value
+        if unexport:
+            exports.pop(name, None)
+        elif (exporting or name in exports) and name in shell:
+            exports[name] = shell[name]
+    return True
 
 
 def xargs_hides_args(argv: list[str], directory: str) -> bool:
@@ -463,10 +653,11 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[list[str], str, list
         raw, i = tokens[i:j], j + 1
         args, redirects = split_redirects(raw)
         argv = strip_prefixes(args, state)
-        if not argv:
+        if note_exports(argv, state) or not argv:
             if redirects:
                 yield [], state["dir"], redirects
             continue
+        argv.assigns = {**state.get("exports", {}), **argv.assigns}
         head = argv[0]
         if head == "git":
             if state.get("git_c") or state.get("git_dir"):
@@ -498,11 +689,15 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[list[str], str, list
         yield argv, state["dir"], redirects
 
 
-def _git_options(argv: list[str], directory: str) -> tuple[int, str, dict[str, str], str | None]:
+def _git_options(argv: list[str], directory: str) -> tuple[int, str, dict[str, str], str | None, bool]:
     """Read git's global options: (index of the subcommand, effective dir after chained -C, the `-c` /
     `--config-env` settings with lower-cased keys (a `--config-env` value is unknown: ''), the git dir from
-    `--git-dir` or a `GIT_DIR=` before the command, resolved against the effective dir, or None)."""
-    eff, config, gitdir = directory, {}, getattr(argv, "assigns", {}).get("GIT_DIR")
+    `--git-dir` or a `GIT_DIR=` before the command, resolved against the effective dir, or None, and whether
+    git also reads config this parser can't: a `--config-env` value, a `-c include.path` / `includeIf.*`
+    file, or an `OPAQUE_CONFIG_ENV` assignment)."""
+    assigns = getattr(argv, "assigns", {})
+    eff, config, gitdir = directory, {}, assigns.get("GIT_DIR")
+    opaque = any(OPAQUE_CONFIG_ENV.fullmatch(name) for name in assigns)
     j = 1
     while j < len(argv) and argv[j].startswith("-"):
         opt, eq, attached = argv[j].partition("=") if argv[j].startswith("--") else (argv[j], "", "")
@@ -516,9 +711,14 @@ def _git_options(argv: list[str], directory: str) -> tuple[int, str, dict[str, s
         elif opt in ("-c", "--config-env"):
             key, _, v = value.partition("=")
             config[key.lower()] = v if opt == "-c" else ""
+            opaque = (
+                opaque
+                or opt == "--config-env"
+                or re.match(r"include(if\..*)?\.path$", key.lower()) is not None
+            )
         elif opt == "--git-dir":
             gitdir = value
-    return j, eff, config, (_resolve(gitdir, eff) if gitdir else None)
+    return j, eff, config, (_resolve(gitdir, eff) if gitdir else None), opaque
 
 
 def git_subcommand(argv: list[str], directory: str) -> tuple[str, list[str], str] | None:
@@ -526,7 +726,7 @@ def git_subcommand(argv: list[str], directory: str) -> tuple[str, list[str], str
     Aliases are already expanded by `simple_commands` (`expand_git_alias`)."""
     if not argv or argv[0] != "git":
         return None
-    j, eff, _, _ = _git_options(argv, directory)
+    j, eff, _, _, _ = _git_options(argv, directory)
     if j >= len(argv):
         return None
     return argv[j], argv[j + 1 :], eff
@@ -535,6 +735,12 @@ def git_subcommand(argv: list[str], directory: str) -> tuple[str, list[str], str
 def git_config(argv: list[str]) -> dict[str, str]:
     """The `-c key=value` / `--config-env key=…` settings on a `git ...` argv, keys lower-cased."""
     return _git_options(argv, ".")[2] if argv and argv[0] == "git" else {}
+
+
+def git_config_opaque(argv: list[str]) -> bool:
+    """Does git read config for this `git ...` argv that this parser can't (`_git_options`)? Then a
+    refspec-less push may go anywhere, and a gate refuses it (TASK-067 review gate)."""
+    return _git_options(argv, ".")[4] if argv and argv[0] == "git" else False
 
 
 def git_dir(argv: list[str], directory: str) -> str | None:
@@ -548,15 +754,21 @@ def expand_git_alias(argv: Argv, directory: str, depth: int = 0) -> list[tuple[A
     config (`git config --get alias.<name>`) is replaced by its words, and a `!shell` alias by the commands
     in its text (run from the top of the worktree, the outer `-c` settings passed on, as git does). Anything
     else comes back unchanged as [(argv, directory)]. Raises ParseError on an unreadable or looping alias."""
-    j, eff, config, gitdir = _git_options(argv, directory)
+    j, eff, config, gitdir, opaque = _git_options(argv, directory)
     if j >= len(argv) or argv[j] in GIT_BUILTINS:
-        return [(argv, directory)]
+        return [(normalize_git_options(argv, j), directory)]
+    if opaque:
+        # the alias may be defined where this parser can't read it (TASK-067 review gate: `P=push git
+        # --config-env alias.p=P p origin HEAD:dev`)
+        raise FailClosed(
+            f"git {argv[j]!r} may be an alias set by --config-env, include.path or GIT_CONFIG_*, unreadable here"
+        )
     name = argv[j].lower()
     body = config.get(f"alias.{name}")
     if body is None:
         body = git(eff, *(["--git-dir", gitdir] if gitdir else []), "config", "--get", f"alias.{name}")
     if not body:
-        return [(argv, directory)]  # not an alias: a git-<name> program, or a typo git rejects
+        return [(normalize_git_options(argv, j), directory)]  # not an alias: a git-<name> program, or a typo
     if depth >= ALIAS_DEPTH:
         raise ParseError(f"git alias {name!r} nests too deep (a loop?)")
     rest = argv[j + 1 :]
@@ -571,12 +783,56 @@ def expand_git_alias(argv: Argv, directory: str, depth: int = 0) -> list[tuple[A
     # the outer -c settings (GIT_CONFIG_PARAMETERS) and git dir (GIT_DIR).
     outer_c = [w for k, v in config.items() for w in ("-c", f"{k}={v}")]
     text = " ".join([body[1:], *(shlex.quote(r) for r in rest)])
-    inner_state = {"dir": repo_root(eff), "depth": depth + 1, "git_c": outer_c, "git_dir": gitdir}
+    inner_state = {
+        "dir": repo_root(eff),
+        "depth": depth + 1,
+        "git_c": outer_c,
+        "git_dir": gitdir,
+    }
     out = []
     for inner, d, _ in _walk(tokenize(text), inner_state):
         inner.via_xargs = inner.via_xargs or argv.via_xargs
         out.append((inner, d))
     return out
+
+
+def _long_option(name: str, names: frozenset[str]) -> str | None:
+    """The long option git reads `--<name>` as: an exact name, else the one option it is a prefix of
+    (negations are names too: `no-f` is `no-ff` for merge). None if it names none; FailClosed if several
+    (git refuses it as ambiguous, and this parser won't guess)."""
+    if name in names:
+        return name
+    candidates = sorted(o for o in names if o.startswith(name))
+    if len(candidates) > 1:
+        raise FailClosed(f"--{name} is ambiguous: {', '.join('--' + c for c in candidates[:4])}")
+    return candidates[0] if candidates else None
+
+
+def normalize_git_options(argv: Argv, j: int) -> Argv:
+    """`argv` with every abbreviated long option of its subcommand (`argv[j]`) written out in full, as git
+    reads it: `git add --forc .` is `git add --force .`, `git stash --al` is `git stash --all` (TASK-067
+    review gate). Words after `--`, and subcommands without a `GIT_LONG_OPTS` table, are left alone."""
+    if j >= len(argv):
+        return argv
+    args, start, key = list(argv[j + 1 :]), 0, argv[j]
+    if key == "stash":
+        if args and args[0] in ("push", "save"):
+            key, start = f"stash {args[0]}", 1
+        elif args and args[0].startswith("-"):
+            key = "stash push"  # `git stash -a` is `git stash push -a`
+    names = GIT_LONG_OPTS.get(key)
+    if names is None:
+        return argv
+    for k in range(start, len(args)):
+        a = args[k]
+        if a == "--":
+            break
+        if a.startswith("--") and len(a) > 2:
+            name, eq, value = a[2:].partition("=")
+            full = _long_option(name, names)
+            if full is not None:
+                args[k] = f"--{full}{eq}{value}"
+    return Argv([*argv[: j + 1], *args], getattr(argv, "via_xargs", False), getattr(argv, "assigns", {}))
 
 
 def gh_subcommand(argv: list[str]) -> tuple[str, str, list[str]] | None:
