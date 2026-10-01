@@ -58,7 +58,11 @@ names the main track on a non-main listing, read it as the conference twin's (tr
   are taken on that branch; listed as open in the PR body).
 
 Propagated to: `.claude/skills/openreview-venueids/SKILL.md` (2013/2017 row), `.claude/skills/openreview-api/SKILL.md`,
-`.claude/skills/record-schema/SKILL.md`, `.claude/agents/ris-importer.md`, `docs/specs/01-ingestion.md`; tests
-`test_a_main_track_outcome_on_a_workshop_listing_note_is_its_twins_not_its_own` and
+`.claude/skills/record-schema/SKILL.md`, `.claude/skills/snapshots/SKILL.md` and `.claude/skills/logging-standards/SKILL.md`
+(`twin_outcome` and its DEBUG event), `.claude/agents/ris-importer.md`, `docs/specs/01-ingestion.md`; tests
+`test_a_main_track_outcome_on_a_workshop_listing_note_is_its_twins_not_its_own`,
+`test_a_main_track_outcome_is_the_twins_wherever_the_venueid_names_no_track`,
+`test_a_main_track_outcome_against_a_venueid_naming_the_listings_track_stays_a_conflict`,
+`test_a_non_main_outcome_on_a_non_main_listing_is_the_notes_own` and
 `test_a_workshop_copy_the_ris_importer_reads_as_main_is_workshop_once_merged_with_the_crawl`
 (`backend/tests/unit/ingest/test_openreview_v1.py`).
