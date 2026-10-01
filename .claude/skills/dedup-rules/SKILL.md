@@ -188,8 +188,8 @@ it needs to know which listings were crawled, and whether completely.
 - Properties (`backend/tests/unit/ingest/test_reconcile.py`): every reconciled record is what its claims
   resolve to; dedup on the output changes no record, merge or row; reconcile is idempotent; only unlisted
   OpenReview acceptances change, only to `unknown`, only by adding absence claims, only where a complete crawl
-  covers the venue-year; rows only appear, except a changed record's superseded status rows, whose values its new
-  rows still name. The nightly counterexample that pinned that exception is an `@example` (TASK-154).
+  covers the venue-year; rows only appear, except a changed record's superseded `precedence:` status rows, whose
+  non-`unknown` values its new rows still name. The nightly counterexample that pinned that exception is an `@example` (TASK-154).
 
 ## Audit files (in the snapshot directory)
 `merges.csv`: `survivor_id,merged_id,rule,key,venue,year,sources`, where `rule` is `forum_id`,
