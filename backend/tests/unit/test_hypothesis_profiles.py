@@ -2,8 +2,8 @@
 
 `dev` has no deadline and suppresses only `too_slow`, so local load can't fail a property; `pr`, `ci` and
 `nightly` suppress nothing, so a slow strategy still fails on a CI runner (shown below with a strategy that
-sleeps), and no test suppresses a health check itself. Case table: `.claude/scripts/tests/test-hypothesis-profiles.sh`
-(mutants in `mutants/gates.json`).
+sleeps), and no test suppresses a health check itself. Case table:
+`.claude/scripts/tests/test-hypothesis-profiles.sh` (mutants in `mutants/gates.json`).
 """
 
 from __future__ import annotations
@@ -57,12 +57,16 @@ def test_the_ci_profiles_keep_their_deadlines(profile: str, deadline: timedelta 
 
 
 def test_no_test_suppresses_a_health_check_itself() -> None:
+    # nor borrows dev's suppression by loading or deriving from a profile itself
     tests = Path(__file__).resolve().parents[1]
     found = [
         str(f.relative_to(tests))
         for f in sorted(tests.rglob("*.py"))
         if f not in (tests / "conftest.py", Path(__file__).resolve())
-        and "suppress_health_check" in f.read_text()
+        and any(
+            s in f.read_text()
+            for s in ("suppress_health_check", "HealthCheck", "get_profile(", "load_profile(")
+        )
     ]
     assert found == []
 

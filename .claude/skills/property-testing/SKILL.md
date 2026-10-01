@@ -20,17 +20,21 @@ Hypothesis example database (`.hypothesis/`) is gitignored; CI failures are repr
 - **Wall-clock checks are gates only on CI runners.** A deadline and the `too_slow` health check time the
   machine as well as the code. Locally, `make test` shares 8 CPUs with other worktrees' runs (load 90 to 340
   measured on 2026-09-30), so `dev` has no deadline and suppresses `too_slow`. `pr` (every PR), `ci` and
-  `nightly` keep their deadline (`nightly` has none) and suppress no health check, so a slow strategy or example still fails the
-  PR's required `test` job. `backend/tests/unit/test_hypothesis_profiles.py` shows a sleeping strategy failing
-  `pr` and passing `dev`; its mutants are in `.claude/scripts/mutants/gates.json` (`profiles:`).
+  `nightly` keep their deadline (`nightly` has none) and suppress no health check, so a slow strategy or
+  example still fails the PR's required `test` job. `backend/tests/unit/test_hypothesis_profiles.py` shows a
+  sleeping strategy failing `pr` and passing `dev`; its mutants are in `.claude/scripts/mutants/gates.json`
+  (`profiles:`).
 - **Every other health check is on in every profile.** `data_too_large`, `filter_too_much` and
   `large_base_example` depend only on the strategy and the seed, not on load. Fix the strategy instead of
   suppressing them (TASK-145 for `filter_too_much`).
 - **No test suppresses a health check itself.** `test_no_test_suppresses_a_health_check_itself` fails on any
-  `suppress_health_check` outside `conftest.py`. A strategy that seems to need one gets its health-check window
-  measured first (below); if it really does, that is a change to this rule and to decision-024. Per test,
-  `deadline=None` is allowed, with a comment, for an example that is long by design (the oracle over 5k
-  records, several crawls). It keeps `too_slow`, with a 30 s limit.
+  `suppress_health_check`, `HealthCheck`, `get_profile(` or `load_profile(` outside `conftest.py`, so no test
+  borrows `dev`'s suppression either. A strategy that seems to need one gets its health-check window measured
+  first (below); if it really does, that is a change to this rule and to decision-024. Per test,
+  `deadline=None` is allowed for an example that is long by design (the oracle over 5k records, several
+  crawls); a new or changed one carries a comment saying why (some older ones in `test_clauses.py`,
+  `test_properties.py`, `test_highlight.py` and `test_tantivy_200.py` don't yet). It keeps `too_slow`, with a
+  30 s limit.
 - **How the checks measure.** Hypothesis times the draws of the first 10 valid examples. It fails `too_slow`
   above the larger of 1 s and 5 deadlines: 10 s at `pr` and `ci`, 30 s with no deadline (`nightly`), 2.5 s
   under the old 500 ms `dev` deadline. It fails `data_too_large` at 20 overruns before 10 valid examples.

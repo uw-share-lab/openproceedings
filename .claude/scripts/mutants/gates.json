@@ -764,6 +764,18 @@
   "new": "settings.register_profile(\"nightly\", max_examples=50_000, deadline=600_000, print_blob=True)"
  },
  {
+  "label": "profiles: a test suppresses too_slow itself",
+  "file": "backend/tests/unit/test_search_overlap.py",
+  "old": "@settings(max_examples=150, deadline=None)",
+  "new": "@settings(max_examples=150, deadline=None, suppress_health_check=[HealthCheck.too_slow])"
+ },
+ {
+  "label": "profiles: a test borrows the dev profile",
+  "file": "backend/tests/unit/test_search_overlap.py",
+  "old": "@settings(max_examples=150, deadline=None)",
+  "new": "@settings(settings.get_profile(\"dev\"), max_examples=150, deadline=None)"
+ },
+ {
   "label": "lint_tooling lints agent worktrees",
   "file": ".claude/scripts/lint_tooling.py",
   "old": "dirs[:] = [d for d in dirs if d != \"worktrees\"]",
