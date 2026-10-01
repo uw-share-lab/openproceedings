@@ -161,14 +161,15 @@ Spec 03 §Exclusion accounting checks track first, then status. Every case below
 one copy.
 
 **Default filters.** The result set, `identified` and `excluded.total` are unchanged, but the buckets shift: a copy
-that was removed as `status: rejected` is now removed as `track: workshop`. A stored search record whose matches
-include a copy replays with `ids_match: true` and `excluded_match: false`, since `excluded_match` compares the whole
-`excluded` block, buckets included. On a new index every record replays as `drifted` anyway.
+that was removed as `status: rejected` is now removed as `track: workshop`. A stored search record whose query matches a copy
+(so the copy is among its identified records) reproduces on its own pinned index. Replayed on the rebuilt index, it
+gives `ids_match: true` and `excluded_match: false`, since `excluded_match` compares the whole `excluded` block,
+buckets included; its status is `drifted`, as for every record on a new index.
 
 **A user-written `track:` clause naming both main and workshop**, such as `track:(main OR workshop)`. The status
 default stays, so the result set doesn't change. A matched copy now leaves through `status: unknown` instead of
 `status: rejected`, so `unclassified_total` (the "unclassified records" the banner and methods text report) can rise
-by up to 18.
+by up to 18. A stored record with such a filter likewise replays with `excluded_match: false`.
 
 **A user-written `track:` clause naming only one of them.** That clause stays in the identification query, so the
 copies move in or out of "identified":
