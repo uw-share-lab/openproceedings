@@ -6,8 +6,7 @@
 #   (`op snapshot build`, `op index build`); never edit, overwrite, move or delete an existing one.
 #   Blocked: editor writes into them; and in Bash, rm/unlink/mv/cp/tee/dd/rsync/truncate/shred/find -delete|
 #   -exec|-ok/sed -i/perl -i/ruby -i/awk -i inplace and >/>> redirects that target them, `rsync
-#   --remove-source-files` from them, an rm/mv of a `$` word (`rm -rf "$PWD"`) in a repo with data/ — or that
-#   target data/, data/snapshots or
+#   --remove-s…` (`--remove-source-files`, `--remove-sent-files`) from them — or that target data/, data/snapshots or
 #   data/indexes themselves (`rm -rf data` destroys every snapshot), or a directory above them (`rm -rf .`,
 #   `rm -rf ../<repo>`, `find . -delete`, `rsync --delete … ./`: anything with a data/snapshots or data/indexes
 #   under it, or an ancestor of the repo). Repo paths compare case-blind: APFS folds `Data` into data/.
@@ -28,10 +27,15 @@
 #   files under backlog/, and sed -i / perl -i / ruby -i / awk -i inplace edits of them (decision bodies excepted, as in
 #   enforce-backlog-cli.sh), are refused here; enforce-backlog-cli.sh covers editor writes.
 # - `git clean -x/-X` (unless a dry run, `-e data`, or pathspecs outside data/) and `git stash push|save --all`
-#   are refused: they remove gitignored files, which is all of data/.
+#   (`-a` in any short cluster: `-qa`, `-ua`) are refused: they remove gitignored files, which is all of data/.
+# - Every path word is resolved first (cmdparse.expand_word): `~`, `~+`, `~-`, `$PWD`, `$(pwd)`, `$HOME`, and
+#   variables set earlier in the command or in this hook's environment (`rm -f "$TMPDIR/x"` is judged as the
+#   path it names); `cd`/`pushd`/`popd` are followed. A path that decides a check and can't be resolved (an
+#   unset variable, a relative path after a `cd` that couldn't be followed) is refused in a repo with data/.
 # - xargs appends words this guard can't see: rm/unlink/mv/cp/…, sed -i/perl -i and git add/rm/mv/update-index
 #   run through xargs are refused in a repo with data/ or backlog/ (cmdparse's `Argv.via_xargs`).
-# Globs are expanded against the filesystem (`rm -rf data*`, `*`, `../*`). An unparseable command that names
+# Globs are expanded against the filesystem (`rm -rf data*`, `*`, `../*`), braces and `$'…'` decoded as bash
+# does (`rm -rf data{,}`, cmdparse). An unparseable command that names
 # data/ or backlog/ (any case) is refused (fail closed). Paths are resolved against the repo root, so
 # frontend/src/data/… is unaffected. Exit 2 blocks.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -39,8 +43,8 @@ input=$(cat)
 HOOK_INPUT="$input" python3 - "$HOOK_DIR" <<'PY'
 import glob, json, os, subprocess, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import (GIT_VALUE_OPTS, FailClosed, ParseError, git_subcommand, read_payload, redirect_targets, repo_root,
-                      simple_commands)
+from cmdparse import (GIT_VALUE_OPTS, Argv, FailClosed, ParseError, expand_word, git_subcommand, read_payload, repo_root,
+                      walk)
 
 try:
     payload = json.loads(os.environ.get("HOOK_INPUT") or "{}")
@@ -68,6 +72,14 @@ def rel(path, base):
 
 def any_rel(pred, path, base):
     return any(pred(rel(p, base)) for p in expand(path, base))
+
+def resolve(word, argv, d):
+    """The path a shell word names (cmdparse.expand_word: `~`, `~+`, `~-`, `$PWD`, `$(pwd)`, `$HOME`, variables
+    set earlier in the command or in this hook's environment), or None when it can't be told: a variable this
+    hook can't see, or a relative path after a `cd`/`pushd`/`popd` it couldn't follow (TASK-067 review gate)."""
+    unknown = getattr(argv, "dir_unknown", False)
+    r = expand_word(word, None if unknown else d, getattr(argv, "shell_vars", {}), getattr(argv, "olddir", None))
+    return None if r is None or (unknown and not os.path.isabs(r)) else r
 
 # the heavy trees a forced `git add <dir>` walk never enters (none holds a takedowns/ directory of ours)
 WALK_SKIP = {".git", "node_modules", ".venv", ".next", "cache", "snapshots", "indexes", "records", "embeddings"}
@@ -225,8 +237,7 @@ if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
 
 cmd, cwd = read_payload()
 try:
-    commands = list(simple_commands(cmd, cwd))
-    redirects = list(redirect_targets(cmd, cwd))
+    walked = list(walk(cmd, cwd))
 except FailClosed as exc:
     refuse(f"Blocked: this git command can't be read reliably ({exc}), so what it does to data/ or backlog/ "
            "can't be checked. Write abbreviated options out in full and run the git subcommand by its own name.")
@@ -236,18 +247,27 @@ except ParseError:
         refuse("Blocked: this command could not be parsed (unbalanced quotes?) and mentions data/ or backlog/ — "
                "refusing rather than letting it through unexamined. Fix the quoting and retry.")
     sys.exit(0)
-for op, target, d in redirects:
-    if ">" in op and inside_immutable(rel(target, d)):
-        refuse(IMMUTABLE_MSG)
-    if ">" in op and in_backlog(rel(target, d)):
-        refuse(BACKLOG_MSG)
+commands = [(argv, d) for argv, d, _ in walked if argv]
+for argv, d, redirects in walked:
+    for op, target in redirects:
+        target = resolve(target, argv, d) or target  # `> "$PWD/data/snapshots/x"`
+        if ">" in op and inside_immutable(rel(target, d)):
+            refuse(IMMUTABLE_MSG)
+        if ">" in op and in_backlog(rel(target, d)):
+            refuse(BACKLOG_MSG)
 
 DESTROY = {"rm", "shred", "truncate", "rmdir", "unlink"}          # every path arg is a target
 DEST_LAST = {"cp", "rsync", "install", "ln"}          # last path arg is the target
 IN_PLACE_EDITORS = ("sed", "perl", "ruby", "awk", "gawk")
-for argv, d in commands:
-    if not argv:
-        continue
+UNRESOLVED_MSG = (IMMUTABLE_MSG + " (A `$` word, `~` or `cd`/`pushd` target names a path this guard can't resolve, "
+                  "in a repo with data/; write the path out.)")
+for raw, d in commands:
+    # every word through cmdparse.expand_word: `"$PWD"/data`, `~+/data`, `$(pwd)`; `unresolved` keeps the words
+    # it can't tell, which are refused below where they would decide a check (TASK-067 review gate)
+    resolved = [raw[0], *(w if w.startswith("-") else resolve(w, raw, d) for w in raw[1:])]
+    unresolved = {w for w, r in zip(raw, resolved) if r is None}
+    unknown = raw.dir_unknown  # a `cd` before it went somewhere this guard can't tell
+    argv = Argv([w if r is None else r for w, r in zip(raw, resolved)], raw.via_xargs, raw.assigns)
     head, args = argv[0], argv[1:]
     paths = [a for a in args if not a.startswith("-")]
     g = git_subcommand(argv, d)
@@ -263,6 +283,12 @@ for argv, d in commands:
                         *(a[2:] for a in args if a.startswith("-i") and len(a) > 2 and not a.startswith("--"))])
     # xargs appends words read from stdin that the hook never sees: refuse what they would decide (TASK-067)
     root_ = repo_root(d)
+    has_data = os.path.isdir(os.path.join(root_, "data"))
+    def refuse_unresolved(words_, implicit_cwd=False):
+        """Refuse (in a repo with data/) when a path that decides a check can't be resolved, or the command
+        works on the current directory itself and a `cd` before it couldn't be followed."""
+        if has_data and (any(w in unresolved for w in words_) or (implicit_cwd and unknown)):
+            refuse(UNRESOLVED_MSG)
     if getattr(argv, "via_xargs", False) and (
         head in DESTROY | DEST_LAST | {"mv", "tee"}
         or (head in IN_PLACE_EDITORS and in_place)
@@ -273,6 +299,8 @@ for argv, d in commands:
     if g and g[0] in ("add", "stage"):  # `git stage` is `git add`
         a = g[1]
         forced = any(x in ("-f", "--force") or (x.startswith("-") and not x.startswith("--") and "f" in x) for x in a)
+        if forced:
+            refuse_unresolved([p for p in a if not p.startswith("-")], implicit_cwd=True)
         if forced and any(is_data(rel(p, g[2])) for p in a if not p.startswith("-")):
             refuse(DATA_MSG)
         if any(through_takedowns(p, g[2], forced) for p in a if not p.startswith("-")):
@@ -301,6 +329,8 @@ for argv, d in commands:
         # --cacheinfo m,sha,path (and the attached --cacheinfo=m,sha,path: TASK-067 review gate)
         values = [p.partition("=")[2] if p.startswith("--cacheinfo=") else p for p in a]
         words = [w for p in values if not p.startswith("-") for w in (p, p.split(",")[-1])]
+        if "--add" in a:
+            refuse_unresolved(values)
         if "--add" in a and any(any_rel(is_data, w, g[2]) for w in words):
             refuse(DATA_MSG)
         if "--add" in a and any(through_takedowns(w, g[2], False) for w in words):
@@ -341,12 +371,16 @@ for argv, d in commands:
         excluded = not only_ignored and any(v.strip("/") == "data" for v in excludes)
         def covers_data(p):
             return p.startswith(":") or any_rel(lambda r: r is not None and (r == "data" or r.startswith("data/") or r == "."), p, gm[2])
+        if ignored and not dry and not excluded:
+            refuse_unresolved(pathspecs, implicit_cwd=True)  # `cd "$X" && git clean -fdx`, `git clean -fdx "$Y"`
         outside = bool(pathspecs) and not any(covers_data(p) for p in pathspecs)
         if ignored and not dry and not excluded and not outside:
             refuse("Blocked: `git clean -x/-X` deletes gitignored files — that is all of data/ (snapshots, indexes, "
                    "search records). Clean specific paths outside data/, or use -x (not -X) with -e data.")
     stash_writes = gm and gm[0] == "stash" and (not gm[1] or gm[1][0] in ("push", "save") or gm[1][0].startswith("-"))
-    if stash_writes and any(a in ("-a", "--all") for a in gm[1]):
+    # -a alone or in a short cluster (`-qa`, `-ua`, `-au`), but not inside -m's attached message (`-qmall`)
+    if stash_writes and any(a == "--all" or (a.startswith("-") and not a.startswith("--") and "a" in a[1:].partition("m")[0])
+                            for a in gm[1][: gm[1].index("--") if "--" in gm[1] else None]):
         refuse("Blocked: `git stash --all` stashes (and removes) gitignored files, including data/.")
     if gm and gm[0] in ("mv", "rm") and any(in_backlog(rel(p, gm[2])) for p in gm[1] if not p.startswith("-")):
         refuse(BACKLOG_MSG)
@@ -354,9 +388,16 @@ for argv, d in commands:
         refuse(BACKLOG_MSG)
     if head in DEST_LAST and paths and any_rel(in_backlog, paths[-1], d):  # copying OUT of backlog/ is fine
         refuse(BACKLOG_MSG)
-    # a `$`/backquote word is a path only the shell knows (`rm -rf "$PWD"` is the repo): refuse where data/ is
-    if head in DESTROY | {"mv"} and any(ch in p for p in paths for ch in "$`") and os.path.isdir(os.path.join(root_, "data")):
-        refuse(IMMUTABLE_MSG + " (A `$` word names a path this guard can't see; write the path out.)")
+    # a word expand_word couldn't resolve is a path only the shell knows (`rm -rf "$UNSET/x"`): refuse where
+    # data/ is, for every path that decides a check below
+    if head in DESTROY | {"mv", "tee"}:
+        refuse_unresolved(paths)
+    if head in DEST_LAST:
+        refuse_unresolved(paths if head == "rsync" and any(a.startswith("--remove-s") for a in args) else paths[-1:])
+    if head == "dd":
+        refuse_unresolved([a for a in raw[1:] if a.startswith("of=")])
+    if head in IN_PLACE_EDITORS and in_place:  # not the program text (`sed -i "s/$x/y/" f`): words naming a path root
+        refuse_unresolved([p for p in paths if p[:1] in "$~`"], implicit_cwd=True)
     if head in DESTROY and any(covers_immutable(p, d) for p in paths):
         refuse(IMMUTABLE_MSG + " To retire an old version use `op index retire <index_version>` (it refuses while a search record pins it).")
     if head == "mv" and paths and (any(covers_immutable(p, d) for p in paths[:-1]) or any_rel(inside_immutable, paths[-1], d)):
@@ -365,7 +406,7 @@ for argv, d in commands:
         refuse(IMMUTABLE_MSG)
     if head == "rsync" and paths and any(a.startswith("--delete") for a in args) and covers_immutable(paths[-1], d):
         refuse(IMMUTABLE_MSG)
-    if head == "rsync" and "--remove-source-files" in args and any(covers_immutable(p, d) for p in paths[:-1]):
+    if head == "rsync" and any(a.startswith("--remove-s") for a in args) and any(covers_immutable(p, d) for p in paths[:-1]):
         refuse(IMMUTABLE_MSG)  # it deletes each source file it copied
     if head == "tee" and any(any_rel(inside_immutable, p, d) for p in paths):
         refuse(IMMUTABLE_MSG)
@@ -375,7 +416,10 @@ for argv, d in commands:
         refuse(BACKLOG_MSG)
     # every start path counts, `.` when none is named; a start ABOVE data/ deletes inside it (conservative:
     # `find . -name '*.pyc' -delete` from a root with data/snapshots is refused too)
-    if head == "find" and ("-delete" in args or "-exec" in args or "-execdir" in args or "-ok" in args or "-okdir" in args) and any(covers_immutable(p, d) for p in find_starts(args)):
+    find_deletes = head == "find" and any(a in args for a in ("-delete", "-exec", "-execdir", "-ok", "-okdir"))
+    if find_deletes:
+        refuse_unresolved(find_starts(args), implicit_cwd=not any(os.path.isabs(p) for p in find_starts(args)))
+    if find_deletes and any(covers_immutable(p, d) for p in find_starts(args)):
         refuse(IMMUTABLE_MSG)
     if head in IN_PLACE_EDITORS and in_place and any(any_rel(inside_immutable, p, d) for p in paths):
         refuse(IMMUTABLE_MSG)

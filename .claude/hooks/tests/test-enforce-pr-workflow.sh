@@ -401,6 +401,90 @@ else
   fail=$((fail + 1)); printf '  FAIL [main] %-52s -> unexpected warn/block\n' 'bash'
 fi
 
+echo "review gate round 2: brace expansion and ANSI-C quoting are what bash runs (TASK-067):"
+check feature/x block 'git push origin HEAD:d{e,}v'                # bash: HEAD:dev HEAD:dv
+check feature/x block 'git push origin HEAD:{feat,dev}'
+check feature/x block 'git push origin HEAD:{d..e}ev'               # a letter sequence: dev eev
+check feature/x block 'git push origin HEAD:d{x,{e,y}}v'            # nested
+check feature/x block "git push origin HEAD:\$'\\x64ev'"            # \$'\x64ev' is dev
+check feature/x block "git push origin \$'HEAD:\\144ev'"            # octal escape
+check feature/x block "git push origin HEAD:d\$'\\u0065'v"          # mid-word, \u escape
+check feature/x block "git push origin HEAD:\$\"dev\""              # \$\"…\" is a plain quoted string
+check feature/x block "git push origin HEAD:\$'dev\\0x'"           # a NUL ends the \$'…' value: dev
+check feature/x block 'git branch -f d{e,}v HEAD'
+check feature/x allow 'git push origin "HEAD:d{e,}v"'               # quoted: no expansion, a literal ref
+check feature/x allow 'git push origin HEAD:feature/{a,b}'          # positive control
+check feature/x allow 'echo {a,b} ${HOME} @{u} && git push origin feat'
+check main      block '{ git commit -m x; }'                         # `{` alone is still a reserved word
+
+echo "review gate round 2: GIT_COMMON_DIR points git at another repo's config (TASK-067):"
+mkdir -p "$REPO/evil" && printf '[alias]\n\tp = push\n' > "$REPO/evil/config"
+check feature/x block "GIT_COMMON_DIR=\"$REPO/evil\" git p origin HEAD:dev"
+check feature/x block "export GIT_COMMON_DIR=\"$REPO/evil\"; git p origin HEAD:dev"
+check feature/x block "GIT_COMMON_DIR=\"$REPO/evil\" git push origin"   # refspec-less: config decides
+check feature/x allow "GIT_COMMON_DIR=\"$REPO/evil\" git status"        # a builtin: no alias to hide
+
+echo "review gate round 2: set -a / set -o allexport export every later assignment (TASK-067):"
+check feature/x block 'set -a; GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push; git p origin HEAD:dev'
+check feature/x block 'set -o allexport; GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push; git p origin HEAD:dev'
+check feature/x block 'set -euax; GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push; git p origin HEAD:dev'
+check feature/x allow 'set -a; set +a; GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push; git p origin HEAD:dev'
+check feature/x allow 'set -o allexport; set +o allexport; GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push; git p origin HEAD:dev'
+check feature/x allow 'set -euo pipefail; GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push; git p origin HEAD:dev'
+
+echo "review gate round 2: a refspec-less push reads the repo's push config (TASK-067):"
+check feature/x allow 'git push origin'                              # no push config: the branch itself
+check feature/x block 'git config remote.origin.push HEAD:refs/heads/dev; git push origin'
+check feature/x block 'git config alias.p push && git p origin HEAD:dev'   # the alias is written mid-command
+check feature/x block 'git config --add include.path /tmp/x.cfg; git p origin HEAD:dev'
+check feature/x allow 'git config user.name t && git commit -m x'   # an unrelated key
+check feature/x allow 'git config --get-regexp alias.p push; git status'   # reading config writes nothing
+git -C "$REPO" config remote.origin.push HEAD:refs/heads/dev
+check feature/x block 'git push origin'                              # ... set by an earlier call
+check feature/x allow 'git push origin feat'                         # a refspec named: config unused
+git -C "$REPO" config --unset remote.origin.push
+git -C "$REPO" config remote.origin.mirror true
+check feature/x block 'git push origin'
+git -C "$REPO" config remote.origin.mirror false
+check feature/x allow 'git push origin'                              # mirror=false: not a mirror
+git -C "$REPO" config --unset remote.origin.mirror
+git -C "$REPO" config push.default matching
+check feature/x block 'git push origin'                              # every branch with a same-named remote one
+git -C "$REPO" config push.default upstream
+git -C "$REPO" config branch.feature/x.remote origin
+git -C "$REPO" config branch.feature/x.merge refs/heads/dev
+check feature/x block 'git push'                                     # upstream: pushes feature/x to dev
+git -C "$REPO" config branch.feature/x.merge refs/heads/feature/x
+check feature/x allow 'git push'                                     # its upstream is itself
+git -C "$REPO" config push.default current
+check feature/x allow 'git push origin'
+git -C "$REPO" config --unset push.default
+git -C "$REPO" config --remove-section branch.feature/x
+
+echo "review gate round 2: the matching refspec ':' pushes every same-named branch (TASK-067):"
+check feature/x block 'git push origin :'
+check feature/x block 'git push -f origin :'
+check feature/x block 'git push origin +:'
+check feature/x allow 'git push origin :feature/old'                 # positive control: a deletion
+
+echo "review gate round 2: a checkout/switch earlier in the command decides the branch (TASK-067):"
+check feature/x block 'git checkout main && git commit -m x'
+check feature/x block 'git switch main; git merge feature'
+check feature/x block 'git switch dev && git cherry-pick x'
+check feature/x block 'git checkout -q main && git reset --hard feature/x'
+check feature/x allow 'git checkout main && git checkout feature/x && git commit -m x'
+check feature/x allow 'git checkout main -- README && git commit -m x'   # restores a file, stays put
+check main      allow 'git switch -c feature/y && git commit -m x'   # off main before the commit
+check main      allow 'git checkout -b feature/z && git commit -m x'
+check main      allow 'git switch --detach && git commit -m x'
+check main      allow "git checkout $(git -C "$REPO" rev-parse HEAD) && git commit -m x"   # a commit: detached
+check main      block 'git checkout HEAD && git commit -m x'          # HEAD: still on main
+check main      block 'git checkout notes.txt && git commit -m x'     # a path: still on main
+
+echo "review gate round 2: set -a reaches GIT_DIR too (TASK-067):"
+check_cwd main "$WT" block "set -a; GIT_DIR=\"$REPO/.git\"; git commit -m x"
+check_cwd main "$WT" allow "set -a; set +a; GIT_DIR=\"$REPO/.git\"; git commit -m x"
+
 echo
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]

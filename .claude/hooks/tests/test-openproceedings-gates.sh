@@ -737,6 +737,132 @@ payload_file Edit "$REPO/frontend/src/a.ts" | PATH="$TMP/bin:$PATH" CLAUDE_PROJE
 if grep prettier "$TMP/npx.log" | grep -q -e '--config .*/frontend/\.prettierrc\.json'; then pass=$((pass+1)); echo "  ok   prettier gets the tracked frontend/.prettierrc.json"; else fail=$((fail+1)); echo "  FAIL prettier not given the tracked config: $(cat "$TMP/npx.log")"; fi
 rm -rf "$REPO/node_modules" "$REPO/frontend/src/a.ts" "$REPO/frontend/src/.prettierrc.cjs"
 
+echo "== round-8 rows (TASK-067 review gate round 2: braces, ANSI-C quotes, push config, \$ words, pushd)"
+g switch -q mut
+approve                                    # HEAD (mut) approved, other2 never reviewed: each row isolates one check
+# brace expansion and $'…' / $"…" quoting are decoded the way bash runs them
+check $R block "tee .git/op-revie{w,}s/<sha> (braces)"  "$(payload_bash 'echo APPROVE | tee .git/op-revie{w,}s/abc')"
+check $R block "tee .git/\$'op-review\\x73'/<sha>"     "$(payload_bash "echo APPROVE | tee .git/\$'op-review\\x73'/abc")"
+check $R allow "echo {a,b} before an approved push"    "$(payload_bash 'echo {a,b} && git push origin mut')"
+check $R block "unterminated \$'… fails closed"         "$(payload_bash "git push origin \$'other2")"
+mkdir -p "$REPO/backend" && echo b > "$REPO/backend/a.py" && echo s > "$REPO/data/secret.jsonl"
+check $P block "git add -f dat{a,}"                    "$(payload_bash 'git add -f dat{a,}')"
+check $P block "git add -f \$'dat\\x61'"                "$(payload_bash "git add -f \$'dat\\x61'")"
+check $P block "git add -f \$\"data\""                  "$(payload_bash "git add -f \$\"data\"")"
+check $P block "rm -rf data{,}"                        "$(payload_bash 'rm -rf data{,}')"
+check $P block "rm -rf data/{cache,snapshots}"         "$(payload_bash 'rm -rf data/{cache,snapshots}')"
+check $P block "rm -rf da{t..t}a (a sequence)"          "$(payload_bash 'rm -rf da{t..t}a')"
+check $P allow "rm -rf data/cache/{a,b}"               "$(payload_bash 'rm -rf data/cache/{a,b}')"
+check $P allow "rm -rf 'data{,}' (quoted: a literal)"  "$(payload_bash "rm -rf 'data{,}'")"
+check $P allow "find frontend -name x -exec rm {} +"   "$(payload_bash 'find frontend -name x -exec rm {} +')"
+# GIT_COMMON_DIR points git at another repo's config: an alias there is unreadable here
+mkdir -p "$TMP/evil" && printf '[alias]\n\tp = push\n' > "$TMP/evil/config"
+check $R block "GIT_COMMON_DIR=<evil> git p (alias there)" "$(payload_bash "GIT_COMMON_DIR='$TMP/evil' git p origin other2")"
+check $R block "GIT_COMMON_DIR=<evil>, refspec-less push" "$(payload_bash "GIT_COMMON_DIR='$TMP/evil' git push origin")"
+# set -a / set -o allexport export every later assignment
+check $R block "set -a; GIT_DIR=<other>; git push HEAD" "$(payload_bash "set -a; GIT_DIR='$TMP/wt-other/.git'; git push origin HEAD")"
+check $R block "set -o allexport; GIT_CONFIG_* alias"   "$(payload_bash 'set -o allexport; GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push; git p origin other2')"
+check $R allow "set -a; set +a; GIT_DIR=…; git push"    "$(payload_bash "set -a; set +a; GIT_DIR='$TMP/wt-other/.git'; git push origin HEAD")"
+# a refspec-less push reads the repo's push config; config written mid-command is refused
+check $R allow "git push origin (no push config)"     "$(payload_bash 'git push origin')"
+check $R block "git config remote.origin.push …; git push origin" "$(payload_bash 'git config remote.origin.push other2:refs/heads/other2; git push origin')"
+check $R block "git config alias.p push && git p"     "$(payload_bash 'git config alias.p push && git p origin other2')"
+check $R block "git config set alias.p push; git p"   "$(payload_bash 'git config set alias.p push; git p origin other2')"
+check $R allow "git config user.email … && approved push" "$(payload_bash 'git config user.email t@t && git push origin mut')"
+g config remote.origin.push refs/heads/other2:refs/heads/other2
+check $R block "remote.origin.push set by an earlier call" "$(payload_bash 'git push origin')"
+check $R allow "… a named refspec doesn't read it"     "$(payload_bash 'git push origin mut')"
+g config --unset remote.origin.push
+g config remote.origin.mirror true
+check $R block "remote.origin.mirror set by an earlier call" "$(payload_bash 'git push origin')"
+g config --unset remote.origin.mirror
+g config push.default matching
+check $R block "push.default=matching in the repo"    "$(payload_bash 'git push origin')"
+g config --unset push.default
+g config push.followTags true
+check $R block "push.followTags in the repo"          "$(payload_bash 'git push origin')"
+g config --unset push.followTags
+# the matching refspec ':' pushes every branch that exists on both sides
+check $R block "git push origin : (matching)"          "$(payload_bash 'git push origin :')"
+check $R block "git push origin +: (forced matching)"  "$(payload_bash 'git push origin +:')"
+# a $ word, ~ and $(pwd) are resolved (cwd, os.environ, earlier assignments); unresolvable ones fail closed
+check $P block "git clean -fdx \"\$PWD\""               "$(payload_bash 'git clean -fdx "$PWD"')"
+check $P block "find \"\$PWD\" -delete"                 "$(payload_bash 'find "$PWD" -name x -delete')"
+check $P block "rsync --delete … \"\$PWD\"/"            "$(payload_bash 'rsync -a --delete /tmp/empty/ "$PWD"/')"
+check $P block "cp onto \"\$PWD\"/data/snapshots/…"     "$(payload_bash 'cp /tmp/x "$PWD"/data/snapshots/s1/records.jsonl')"
+check $P block "tee \"\$PWD\"/data/snapshots/…"         "$(payload_bash 'echo x | tee "$PWD"/data/snapshots/s1/x')"
+check $P block "sed -i on \"\${PWD}\"/data/snapshots/…" "$(payload_bash 'sed -i s/a/b/ "${PWD}"/data/snapshots/s1/records.jsonl')"
+check $P block "> \"\$PWD/data/snapshots/…\""           "$(payload_bash 'echo x > "$PWD/data/snapshots/s1/x"')"
+check $P block "git add -f \"\$PWD/data/secret.jsonl\"" "$(payload_bash 'git add -f "$PWD/data/secret.jsonl"')"
+check $P block "cd \"\$PWD\" && rm -rf data"            "$(payload_bash 'cd "$PWD" && rm -rf data')"
+check $P block "cd \$(pwd)/data && rm -rf snapshots"    "$(payload_bash 'cd $(pwd)/data && rm -rf snapshots')"
+check $P block "cd \"\$(pwd)/data\" && rm -rf snapshots" "$(payload_bash 'cd "$(pwd)/data" && rm -rf snapshots')"
+check $P block "cd \`pwd\`/data && rm -rf indexes"      "$(payload_bash 'cd `pwd`/data && rm -rf indexes')"
+check $P block "pushd data; rm -rf snapshots"          "$(payload_bash 'pushd data; rm -rf snapshots')"
+check $P block "pushd frontend; popd; rm -rf data"     "$(payload_bash 'pushd frontend; popd; rm -rf data')"
+check $P allow "pushd data; popd; rm -rf snapshots"    "$(payload_bash 'pushd data; popd; rm -rf snapshots')"
+check $P block "cd frontend; cd -; rm -rf data"        "$(payload_bash 'cd frontend; cd -; rm -rf data')"
+check $P block "rm -rf ~+/data"                        "$(payload_bash 'rm -rf ~+/data')"
+check $P block "cd frontend && rm -rf ~-/data"         "$(payload_bash 'cd frontend && rm -rf ~-/data')"
+HOME="$TMP" check $P block "rm -rf ~ (HOME above the repo)" "$(payload_bash 'rm -rf ~')"
+HOME="$TMP" check $P block "rm -rf \"\$HOME\""         "$(payload_bash 'rm -rf "$HOME"')"
+HOME="$TMP" check $P allow "rm -rf ~/elsewhere"        "$(payload_bash 'rm -rf ~/elsewhere')"
+TMPDIR="$TMP/scratch" check $P allow "rm -f \"\$TMPDIR/x\" (set, outside the repo)" "$(payload_bash 'rm -f "$TMPDIR/x"')"
+TMPDIR="$TMP/scratch" check $P allow "rm -rf \"\${TMPDIR}\"/build" "$(payload_bash 'rm -rf "${TMPDIR}"/build')"
+check $P allow "f=<outside>; rm -f \"\$f\""             "$(payload_bash "f='$TMP/scratch/y'; rm -f \"\$f\"")"
+check $P block "f=data; rm -rf \"\$f\""                 "$(payload_bash 'f=data; rm -rf "$f"')"
+check $P allow "rm -rf \"\$PWD/frontend/x\""            "$(payload_bash 'rm -rf "$PWD/frontend/x"')"
+check $P block "rm -rf \"\$OP_UNSET_VAR/x\" (unresolvable)" "$(payload_bash 'rm -rf "$OP_UNSET_VAR/x"')"
+check $P block "cd \"\$OP_UNSET_VAR\" && rm -rf data"   "$(payload_bash 'cd "$OP_UNSET_VAR" && rm -rf data')"
+check $P allow "sed -i \"s/\$x/y/\" a non-data file"    "$(payload_bash 'sed -i "s/$x/y/" frontend/a.txt')"
+check $P allow "cd data; cd -; rm -rf snapshots"       "$(payload_bash 'cd data; cd -; rm -rf snapshots')"
+check $P block "cd frontend && cd \"\$UNSET\" && rm -rf data" "$(payload_bash 'cd frontend && cd "$OP_UNSET_VAR" && rm -rf data')"
+check $P block "cd frontend && cd \"\$UNSET\" && find -delete" "$(payload_bash 'cd frontend && cd "$OP_UNSET_VAR" && find -name x -delete')"
+check $P block "cp onto \"\$UNSET/y\""                 "$(payload_bash 'cp /tmp/x "$OP_UNSET_VAR/y"')"
+check $P block "dd of=\"\$UNSET/x\""                   "$(payload_bash 'dd if=/dev/zero of="$OP_UNSET_VAR/x" count=1')"
+check $P block "sed -i on \"\$UNSET/x\""               "$(payload_bash 'sed -i s/a/b/ "$OP_UNSET_VAR/x"')"
+check $P block "find \"\$UNSET\" -delete"              "$(payload_bash 'find "$OP_UNSET_VAR" -name x -delete')"
+check $P block "git clean -fdx \"\$UNSET\""            "$(payload_bash 'git clean -fdx "$OP_UNSET_VAR"')"
+check $P block "git add -f \"\$UNSET\""                "$(payload_bash 'git add -f "$OP_UNSET_VAR"')"
+check $P block "git update-index --add \"\$UNSET\""    "$(payload_bash 'git update-index --add "$OP_UNSET_VAR"')"
+check $P block "rm -rf \"\${OP_X:-data}\" (an operator)" "$(payload_bash 'rm -rf "${OP_X:-data}"')"
+check $P allow "rm -rf ~+/frontend/x"                  "$(payload_bash 'rm -rf ~+/frontend/x')"
+check $P allow "cd frontend && rm -rf ~-/frontend/x"   "$(payload_bash 'cd frontend && rm -rf ~-/frontend/x')"
+TMPDIR="$TMP/scratch" check $P allow "f=\"\$TMPDIR/y\"; rm -f \"\$f\"" "$(payload_bash 'f="$TMPDIR/y"; rm -f "$f"')"
+# bundled short flags of git stash push
+check $P block "git stash push -qa"                    "$(payload_bash 'git stash push -qa')"
+check $P block "git stash push -ua"                    "$(payload_bash 'git stash push -ua')"
+check $P block "git stash -au (an implicit push)"      "$(payload_bash 'git stash -au')"
+check $P allow "git stash push -qmall (m's value)"     "$(payload_bash 'git stash push -qmall')"
+check $P allow "git stash push -u"                     "$(payload_bash 'git stash push -u')"
+check $P allow "git stash push -- -qa (a pathspec)"    "$(payload_bash 'git stash push -- -qa')"
+# rsync takes any --remove-s… spelling
+check $P block "rsync --remove-source-file data/"     "$(payload_bash 'rsync -a --remove-source-file data/ /tmp/x/')"
+check $P block "rsync --remove-sent-files data/"      "$(payload_bash 'rsync -a --remove-sent-files data/ /tmp/x/')"
+rm -rf "$REPO/backend" "$REPO/data/secret.jsonl"
+# a writing command's every word is checked for an unreadable record path
+check $R block "tee \"\$(git rev-parse --git-common-dir)\"/op-revie?s/…" "$(payload_bash 'echo APPROVE | tee "$(git rev-parse --git-common-dir)"/op-revie?s/abc')"
+check $R block "G=…; tee \"\$G\"/op-revie?s/…"         "$(payload_bash 'G=$(git rev-parse --git-common-dir); echo APPROVE | tee "$G"/op-revie?s/abc')"
+check $R block "tee \"\$PWD\"/.git/op-revie?s/…"        "$(payload_bash 'echo APPROVE | tee "$PWD"/.git/op-revie?s/abc')"
+check $R allow "cat \"\$(git rev-parse --git-dir)\"/HEAD" "$(payload_bash 'cat "$(git rev-parse --git-dir)"/HEAD')"
+check $R allow "cat \"\$G\"/op-revie?s/abc > /tmp/… (a reader)" "$(payload_bash 'cat "$G"/op-revie?s/abc > /tmp/rec.txt')"
+check $R allow "cat \"\$(…--git-dir)/HEAD\" > /tmp/…"  "$(payload_bash 'cat "$(git rev-parse --git-dir)/HEAD" > /tmp/head.txt')"
+check $R allow "commit -m \"\$(cat <<EOF … op-reviews …)\"" "$(payload_bash "git commit -m \"\$(cat <<'EOF'
+Fix the op-reviews gate in .git hooks
+EOF
+)\"")"
+check $R block "cd .git && cp … o?-reviews/abc (glob)"  "$(payload_bash 'cd .git && cp /tmp/r o?-reviews/abc')"
+check $R allow "git push origin mut -- --al (a refspec)" "$(payload_bash 'git push origin mut -- --al')"
+check $P allow "cd \$(pwd)/frontend && rm -rf x"        "$(payload_bash 'cd $(pwd)/frontend && rm -rf x')"
+check $R allow "gh api -f body=\"… op-review …\""      "$(payload_bash 'gh api repos/o/r/issues/1/comments -f body="notes on the op-review process"')"
+# … without refusing commands that merely mention reviews
+check $R allow "gh api graphql query with reviews(…)"   "$(payload_bash 'gh api graphql -f query="{ repository(owner: \"o\", name: \"r\") { pullRequest(number: 1) { reviews(first: 5) { nodes { state } } } } }"')"
+check $R allow "f=\$SCRATCH/…-reviews.md; record-review.py \"\$f\"" "$(payload_bash 'f=$SCRATCH/task067-reviews.md; python3 .claude/scripts/record-review.py APPROVE "$f"')"
+check $R allow "cat > \"\$SCRATCH/reviews-round2.md\" <<EOF" "$(payload_bash 'cat > "$SCRATCH/reviews-round2.md" <<EOF
+x
+EOF')"
+check $R block "d=reviews; cd .git; write op-\$d/abc"   "$(payload_bash 'd=reviews; cd .git && printf APPROVE > "op-$d/abc"')"
+
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")
 case "$out" in *TOKENIZER_VERSION*) pass=$((pass+1)); echo "  ok   reminder on normalize.py";; *) fail=$((fail+1)); echo "  FAIL no reminder on normalize.py";; esac

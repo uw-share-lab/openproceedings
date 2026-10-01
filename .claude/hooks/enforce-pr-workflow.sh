@@ -8,7 +8,9 @@
 # `fetch origin dev:dev`), and blocks `git commit` (and the other ways to
 # make a commit: cherry-pick, revert, am, rebase, commit-tree), `git merge`, `git pull --no-ff`, a
 # `git reset` to anything but HEAD or the upstream, and non-deletion `git push` while checked out on a
-# protected branch — the branch of the `--git-dir`/`GIT_DIR=` repository when the command names one.
+# protected branch — the branch of the `--git-dir`/`GIT_DIR=` repository when the command names one, and the
+# one a `git checkout`/`git switch` earlier in the same command left checked out (`git checkout main && git
+# commit`). The matching refspec `:` / `+:` is refused like `--all`.
 # Deleting a remote *feature* branch is allowed (it cannot rewrite a protected
 # branch's history); read-only plumbing that merely contains "merge"/"push" as a substring (e.g.
 # `git merge-base`) is allowed. Everywhere below, "main" in the older prose means "a protected branch".
@@ -31,10 +33,13 @@
 # not substring-match the raw text — and it recurses into `bash -c "..."`/`sh -lc '...'` wrappers
 # and `eval "..."`. Git aliases are expanded first (cmdparse.expand_git_alias), abbreviated long options are
 # written out in full (`--al` is --all), `git-<sub>` programs are `git <sub>`, and `export`ed variables reach
-# later commands. A refspec-less push whose `git -c` settings choose the destination (remote.<name>.push or
-# .mirror, push.default, remote.pushDefault) is refused, and so is one, or an alias, under config this gate
-# can't read (--config-env, -c include.path, GIT_CONFIG_*, HOME), and an ambiguous abbreviated option. Exit 2
-# blocks the call and feeds stderr back to the agent.
+# later commands (every assignment while `set -a` is on); braces and `$'…'` are decoded as bash does. A
+# refspec-less push whose `git -c` settings choose the destination (remote.<name>.push or .mirror,
+# push.default, remote.pushDefault) is refused, and so is one whose repo config does (any remote.<name>.push,
+# a true .mirror, push.default=matching, or push.default=upstream to a protected upstream), one or an alias
+# under config this gate can't read (--config-env, -c include.path, GIT_CONFIG_*, GIT_COMMON_DIR, HOME), a git
+# command after a `git config` that writes an alias, include or push key in the same command, and an
+# ambiguous abbreviated option. Exit 2 blocks the call and feeds stderr back to the agent.
 #
 # Branch/worktree awareness: the "current branch" is resolved against the ACTUAL target of the git
 # operation, not a bare `git rev-parse` in the hook subprocess's own ambient CWD. That ambient CWD is
@@ -87,8 +92,9 @@ import json, os, re, shlex, subprocess, sys
 # `git push origin HEAD:dev;` read `dev;` as the ref), and compare command names by basename
 # (`/usr/bin/git`).
 sys.path.insert(0, os.environ.get("HOOK_LIB", ""))
-from cmdparse import (Argv, FailClosed, ParseError, base as _base, expand_git_alias, git_config, git_config_opaque,
-                      git_dir, git_subcommand, is_redirect as _is_redirect, is_separator as _is_sep, note_exports,
+from cmdparse import (Argv, FailClosed, ParseError, base as _base, config_steers_git, expand_git_alias, git as _git,
+                      git_config, git_config_opaque, git_dir, git_subcommand, is_redirect as _is_redirect,
+                      is_separator as _is_sep, note_exports, push_config, push_config_risk, repo_root,
                       strip_prefixes, tokenize as _tokenize, xargs_hides_args)
 
 def _split(text):
@@ -131,7 +137,7 @@ def get_branch(directory, gitdir=None):
     repository when the git command names one (`--git-dir`, `GIT_DIR=`; TASK-067). Returns ''
     (never matches a protected branch) if the directory doesn't exist or isn't inside a git worktree — in
     that case the git call being analyzed would itself fail at runtime, so under-blocking here is
-    harmless."""
+    harmless. (HEAD is per worktree, in the git dir: a `GIT_COMMON_DIR=` doesn't change it.)"""
     d = directory or HOOK_CWD
     key = (d, gitdir)
     if key not in _branch_cache:
@@ -167,21 +173,34 @@ def dest_protected(refspec):
     return dst in PROTECTED or "*" in dst
 
 
-def push_verdict(args, directory, config, gitdir=None, opaque=False):
-    """Classify the args following `git push`, using the branch checked out in `directory` (or `gitdir`)
-    and the `git -c` settings in `config`; `opaque`: git also reads config this gate can't (cmdparse)."""
+def push_verdict(args, directory, config, gitdir=None, opaque=False, branch="", repo_config=None):
+    """Classify the args following `git push`, using `branch`, the one checked out in `directory` (or
+    `gitdir`), the `git -c` settings in `config`, and `repo_config()`, the repo's push config (cmdparse
+    `push_config`, read only for a refspec-less push); `opaque`: git also reads config this gate can't."""
     flags = [a for a in args if a.startswith("-")]
     positionals = [a for a in args if not a.startswith("-")]
     refspecs = positionals[1:]  # positionals[0] is the remote
 
-    # --mirror/--all can create or delete a protected branch without ever naming it.
-    if any(f in ("--mirror", "--all") for f in flags):
+    # --mirror/--all can create or delete a protected branch without ever naming it; so can the matching
+    # refspec `:` / `+:` (every branch that exists on both sides: TASK-067 review gate round 2).
+    if any(f in ("--mirror", "--all") for f in flags) or any(r.lstrip("+") == ":" for r in refspecs):
         return "protected-ref"
     # With no refspec, `-c remote.<name>.push` / `.mirror` / `push.default` / `remote.pushDefault` decide what
     # is pushed where (`git -c remote.origin.push=HEAD:refs/heads/dev push origin`), and so may config this
-    # gate can't read (`GIT_CONFIG_*`, `--config-env`, `include.path`): refuse to guess.
+    # gate can't read (`GIT_CONFIG_*`, `--config-env`, `include.path`, `GIT_COMMON_DIR`): refuse to guess.
     if not refspecs and (opaque or any(PUSH_TARGET_CONFIG.fullmatch(k) for k in config)):
         return "protected-ref"
+    # ... and so does the repo's own config (review gate round 2: `git config remote.origin.push
+    # HEAD:refs/heads/dev`, then `git push origin`): any remote.<name>.push, a true .mirror,
+    # push.default=matching; push.default=upstream sends the branch to its upstream, which may be protected.
+    if not refspecs and repo_config is not None:
+        cfg = repo_config()
+        if push_config_risk(cfg):
+            return "protected-ref"
+        if cfg.get("push.default", "").strip().lower() in ("upstream", "tracking") and dest_protected(
+            _git(directory, *(["--git-dir", gitdir] if gitdir else []), "config", "--get", f"branch.{branch}.merge")
+        ):
+            return "protected-ref"
 
     # Any refspec whose destination is protected — update OR delete — is refused from anywhere.
     if any(dest_protected(r) for r in refspecs):
@@ -195,13 +214,14 @@ def push_verdict(args, directory, config, gitdir=None, opaque=False):
         return "protected-ref"  # `--delete` with no ref named: refuse to guess
     if deletion:
         return "allow"     # deleting a remote feature ref — cannot touch a protected branch
-    if get_branch(directory, gitdir) in PROTECTED:
+    if branch in PROTECTED:
         return "protected"  # ordinary push while standing on a protected branch
     return "allow"
 
 
-def git_verdict(argv, directory):
-    """Classify one `git …` argv (aliases already expanded), run from `directory`."""
+def git_verdict(argv, directory, state=None):
+    """Classify one `git …` argv (aliases already expanded), run from `directory`. `state["branches"]` holds
+    the branch a `git checkout`/`git switch` earlier in the command left checked out, per repository."""
     # git_subcommand skips git's global options to reach the subcommand, CHAINING every `-C <dir>` the
     # way git itself does (git's own semantics, and this takes priority over any `cd`): multiple `-C`
     # flags compose left-to-right — each relative `-C` is resolved against the directory the
@@ -213,13 +233,18 @@ def git_verdict(argv, directory):
         return "allow"
     sub, args, effective_dir = g
     gitdir = git_dir(argv, directory)
-    branch = get_branch(effective_dir, gitdir)
+    # `git checkout main && git commit` commits on main: the branch is the one an earlier checkout/switch in
+    # this command left, else the repository's own (TASK-067 review gate round 2)
+    tracked = state.setdefault("branches", {}) if state is not None else {}
+    repo_key = gitdir or repo_root(effective_dir)
+    branch = tracked[repo_key] if repo_key in tracked else get_branch(effective_dir, gitdir)
     on_protected = branch in PROTECTED
 
     if xargs_hides_args(argv, effective_dir):
         return "xargs"  # it appends refspecs/paths from stdin that this gate cannot see
     if sub == "push":
-        return push_verdict(args, effective_dir, git_config(argv), gitdir, git_config_opaque(argv))
+        return push_verdict(args, effective_dir, git_config(argv), gitdir, git_config_opaque(argv), branch,
+                            lambda: push_config(argv, directory))
     if sub == "update-ref":
         return update_ref_verdict(args, on_protected)
     # A protected local branch moved without update-ref (TASK-067 review gate): `branch -f main`, `-M x main`,
@@ -232,6 +257,11 @@ def git_verdict(argv, directory):
         return "protected-update-ref"
     if sub == "switch" and dest_protected(short_value(args, "C", "--force-create") or ""):
         return "protected-update-ref"
+    if sub in ("checkout", "switch") and state is not None:
+        now = switched_to(sub, args, effective_dir, gitdir, state.setdefault("previous", {}).get(repo_key))
+        if now is not None:
+            state["previous"][repo_key] = branch
+            tracked[repo_key] = now
     if sub in ("fetch", "pull") and fetch_moves_protected(args):
         return "protected-update-ref"
     if sub == "pull":
@@ -251,6 +281,54 @@ def git_verdict(argv, directory):
     elif sub == "reset" and on_protected and reset_moves_branch(args, branch, effective_dir):
         return "protected"
     return "allow"
+
+
+SWITCH_VALUE_OPTS = {"-c", "-C", "-b", "-B", "--create", "--force-create", "--orphan", "--conflict"}
+
+
+def switched_to(sub, args, directory, gitdir, previous):
+    """The branch a `git switch`/`git checkout` leaves checked out ('' when it detaches HEAD), or None when it
+    changes no branch (`checkout <tree-ish> -- <paths>`, a path) or can't be told. `previous`: the branch an
+    earlier switch in the command left (`git switch -`)."""
+    if "--" in args:
+        if sub == "checkout":
+            return None  # `checkout [<tree-ish>] -- <paths>` restores files
+        args = args[: args.index("--")]
+    for letter, long_name in (("c", "--create"), ("C", "--force-create")) if sub == "switch" else (("b", None), ("B", None)):
+        created = short_value(args, letter, long_name)
+        if created:
+            return created.removeprefix("refs/").removeprefix("heads/")
+    for k, a in enumerate(args):  # `--orphan <new>`: a new, unborn branch
+        if a == "--orphan" and k + 1 < len(args):
+            return args[k + 1]
+        if a.startswith("--orphan="):
+            return a.partition("=")[2]
+    if "--detach" in args or (sub == "switch" and any(a.startswith("-") and not a.startswith("--") and "d" in a for a in args)):
+        return ""
+    positionals, skip = [], False
+    for a in args:
+        if skip:
+            skip = False
+        elif a in SWITCH_VALUE_OPTS:
+            skip = True
+        elif a == "-" or not a.startswith("-"):
+            positionals.append(a)
+    if not positionals or (sub == "checkout" and len(positionals) > 1):
+        return None  # `git checkout` alone changes nothing; `checkout <tree-ish> <paths>` restores files
+    target = positionals[0]
+    repo = ["--git-dir", gitdir] if gitdir else []
+    if target in ("-", "@{-1}"):
+        return previous if previous is not None else (_git(directory, *repo, "rev-parse", "--abbrev-ref", "@{-1}") or None)
+    if target in ("HEAD", "@"):
+        return None  # stays on the branch
+    name = target.removeprefix("refs/").removeprefix("heads/")
+    if sub == "switch" or _git(directory, *repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}"):
+        return name
+    if _git(directory, *repo, "rev-parse", "--verify", "--quiet", f"{target}^{{commit}}"):
+        return ""  # a commit: detached HEAD
+    if os.path.exists(resolve_dir(target, directory)):
+        return None  # a path
+    return name  # no such branch here: git creates it from origin/<name>
 
 
 def update_ref_verdict(args, on_protected):
@@ -472,6 +550,8 @@ def analyze(tokens, state):
         argv.assigns = {**state.get("exports", {}), **argv.assigns}
         i = k
 
+        if state.get("config_written"):
+            return "unreadable"  # an earlier `git config` in this command set an alias/include/push target
         try:
             calls = expand_git_alias(argv, local["dir"])  # `git -c alias.p=push p …` → what git runs
         except FailClosed:
@@ -479,9 +559,11 @@ def analyze(tokens, state):
         except ParseError:
             return "parse-fail"
         for call, d in calls:
-            v = git_verdict(call, d)
+            v = git_verdict(call, d, state)
             if v != "allow":
                 return v
+            # what it writes is read only after this hook has run (cmdparse.config_steers_git)
+            state["config_written"] = state.get("config_written") or config_steers_git(call, d)
 
     return "allow"
 
@@ -559,8 +641,10 @@ case "$verdict" in
     ;;
   unreadable)
     echo "Refusing: this git command can't be read reliably: an abbreviated option that is ambiguous (write it" >&2
-    echo "out in full), or a subcommand that may be an alias set where this gate can't read it (--config-env," >&2
-    echo "-c include.path, GIT_CONFIG_*, HOME). Run the git subcommand itself, by its own name." >&2
+    echo "out in full), a subcommand that may be an alias set where this gate can't read it (--config-env," >&2
+    echo "-c include.path, GIT_CONFIG_*, GIT_COMMON_DIR, HOME), or one after a \`git config\` that sets an alias," >&2
+    echo "include or push target in the same command. Run the git subcommand itself, by its own name, and" >&2
+    echo "run \`git config\` in its own call." >&2
     exit 2
     ;;
   protected-ref)
