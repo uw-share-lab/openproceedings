@@ -493,9 +493,10 @@ def _near_miss_year(draw: st.DrawFn, clause: str) -> tuple[str, ClauseReason]:
 @st.composite
 def year_edit_cases(draw: st.DrawFn) -> YearEditCase:
     """A query whose year clause is toggleable, in either mode: none at all (a year edit writes it out as
-    `(q) AND year:(…)`) or one top-level clause. A filter-clause query shape (`_group`/`_part`), sometimes padded toward the length or
-    depth cap, or a few near-cap parts (year filters left out) padded with filler toward the length cap. Some
-    are near misses instead (`YearEditCase.reason`): a few percent to a quarter of cases, varying by run."""
+    `(q) AND year:(…)`) or one top-level clause. A filter-clause query shape (`_group`/`_part`), sometimes padded
+    toward the length or depth cap, or a few near-cap parts (year filters left out) padded with filler toward the
+    length cap. Some are near misses instead (`YearEditCase.reason`): a few percent to a quarter of cases, varying
+    by run."""
     mode: Mode = draw(st.sampled_from(["native", "scholar"]))
     year = draw(st.sampled_from(_POSITIVE_PREFIXES)) + draw(_YEAR_SHAPES) if draw(st.booleans()) else None
     if draw(st.booleans()):
@@ -629,9 +630,9 @@ def click_cases(draw: st.DrawFn) -> ParseCase:
     """A filter-clause query that parses, in either mode: one atom or a `_group` of every field's clauses in every
     shape, written negated, twice, nested or in an OR with another field's, so a venue, track or status clause is
     toggleable or not for each reason; sometimes padded toward the length or depth cap, cut back until it parses.
-    Some are near misses (`ParseCase.refused`): roughly one case in ten (`_CLICK_SHAPES`; more in practice, as Hypothesis doesn't draw uniformly) written past a
-    rule `_group` keeps, and one
-    padded case in five one step past the cap."""
+    Some are near misses (`ParseCase.refused`): roughly one case in ten (`_CLICK_SHAPES`; more in practice, as
+    Hypothesis doesn't draw uniformly) written past a rule `_group` keeps, and one padded case in five one step
+    past the cap."""
     mode = draw(_MODES)
     if draw(_CLICK_SHAPES) == "near miss":
         q, code = draw(_near_miss_parse())

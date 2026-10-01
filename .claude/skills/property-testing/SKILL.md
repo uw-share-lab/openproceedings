@@ -144,8 +144,8 @@ one-wrap 8/68, click 18/218).
 - `--hypothesis-show-statistics` counts as invalid both rejections (`assume()`, `.filter()`; listed as "gave up
   because") and Hypothesis's own overruns ("exceeded maximum test case size" in `HYPOTHESIS_EXPERIMENTAL_OBSERVABILITY`
   output, no "gave up" line). Recursive strategies overrun all through a run (the since-removed `clause_queries()`
-  alone: about a third of cases; `year_edit_cases()`: 10 to 20%, none rejected), so read the "gave up" lines for filtering, not
-  the invalid count (TASK-145).
+  alone: about a third of cases; `year_edit_cases()`: 10 to 20%, none rejected), so read the "gave up" lines for
+  filtering, not the invalid count (TASK-145).
 - Nearly all of those overruns are Hypothesis's mutator, not generation: after each valid case it copies a span over
   another span with the same label, gives the result exactly as many choices as it had, and a copy that makes the
   case draw more (a leaf becomes a group, a list gets longer) overruns. Every `st.integers`/`st.booleans` draw
