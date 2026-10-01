@@ -435,7 +435,7 @@
  {
   "label": "protect-data-dir fails open on parse error",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "    if \"data\" in cmd or \"backlog\" in cmd:",
+  "old": "    if \"data\" in cmd.lower() or \"backlog\" in cmd.lower():",
   "new": "    if False:"
  },
  {
@@ -842,12 +842,6 @@
   "new": "    for p in expand(path, base):"
  },
  {
-  "label": "a forced whole-tree add not checked for takedowns/",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "            forced and whole_tree(a) and holds_takedowns(repo_root(g[2]))",
-  "new": "            False and forced and whole_tree(a) and holds_takedowns(repo_root(g[2]))"
- },
- {
   "label": "git stage not read as git add",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "    if g and g[0] in (\"add\", \"stage\"):  # `git stage` is `git add`",
@@ -863,12 +857,6 @@
   "label": "a magic pathspec not read as the whole tree",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "        or any(x.startswith(\":\") for x in paths)",
-  "new": "        or False"
- },
- {
-  "label": "paths from a file not read as the whole tree",
-  "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "        or any(x.startswith(\"--pathspec-from-file\") for x in args)  # `=file` or a separate `file` argument",
   "new": "        or False"
  },
  {

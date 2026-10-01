@@ -94,14 +94,10 @@ def through_takedowns(path, base, forced):
     return False
 
 def whole_tree(args):
-    """A forced `git add` that may stage the whole work tree: no path argument (`-f`, `-fA`, and
-    `--pathspec-from-file=…`, whose paths the hook can't see) or a `:` magic pathspec (`:/`)."""
+    """A forced `git add` that may stage the whole work tree: no path argument (`-f`, `-fA`) or a `:` magic
+    pathspec (`:/`). A forced `--pathspec-from-file` is refused before this is asked."""
     paths = [x for x in args if not x.startswith("-")]
-    return (
-        not paths
-        or any(x.startswith("--pathspec-from-file") for x in args)  # `=file` or a separate `file` argument
-        or any(x.startswith(":") for x in paths)
-    )
+    return not paths or any(x.startswith(":") for x in paths)
 
 # Repo-relative paths are compared lower-cased: APFS folds case, so `Data/Snapshots` IS data/snapshots
 # (TASK-067 security review).
@@ -258,10 +254,8 @@ for argv, d in commands:
         forced = any(x in ("-f", "--force") or (x.startswith("-") and not x.startswith("--") and "f" in x) for x in a)
         if forced and any(is_data(rel(p, g[2])) for p in a if not p.startswith("-")):
             refuse(DATA_MSG)
-        if any(through_takedowns(p, g[2], forced) for p in a if not p.startswith("-")) or (
-            forced and whole_tree(a) and holds_takedowns(repo_root(g[2]))
-        ):
-            refuse(TAKEDOWNS_MSG)
+        if any(through_takedowns(p, g[2], forced) for p in a if not p.startswith("-")):
+            refuse(TAKEDOWNS_MSG)  # a forced whole-tree add reaches takedowns/ through the dry run below
         if forced and any(x.startswith("--pathspec-from-file") for x in a):
             refuse("Blocked: a forced `git add --pathspec-from-file` stages paths this guard can't see; data/ and "
                    "takedowns/ are never committed. Name the paths on the command line.")

@@ -418,6 +418,7 @@ check $P allow "git clean -fd (no ignored files)"     "$(payload_bash 'git clean
 check $P block "git stash --all"                      "$(payload_bash 'git stash --all')"
 check $P block "dd of= into an index"                 "$(payload_bash 'dd if=/dev/zero of=data/indexes/abc/x bs=1 count=1')"
 check $P block "rsync --delete onto data/indexes/"    "$(payload_bash 'rsync -a --delete empty/ data/indexes/')"
+check $P block "rsync into data/snapshots/, no --delete" "$(payload_bash 'rsync -a empty/x data/snapshots/s1/x')"
 check $P block "cp into data/indexes/ (the dir)"      "$(payload_bash 'cp x data/indexes/')"
 check $P block "truncate a snapshot"                  "$(payload_bash 'truncate -s0 data/snapshots/s1/records.jsonl')"
 check $P block "find -execdir rm in snapshots"        "$(payload_bash 'find data/snapshots -name x -execdir rm {} \;')"
