@@ -29,8 +29,9 @@
 # - `git clean -x/-X` (unless a dry run, `-e data`, or pathspecs outside data/) and `git stash push|save --all`
 #   (`-a` in any short cluster: `-qa`, `-ua`) are refused: they remove gitignored files, which is all of data/.
 # - Every path word is resolved first (cmdparse.expand_word): `~`, `~+`, `~-`, `$PWD`, `$(pwd)`, `$(git rev-parse
-#   --show-toplevel|--git-common-dir|--git-dir)`, `$(mktemp [-d] [-t p])` (a path in the temp dir), a `for v in …`
-#   loop's `$v` (each of its words), `$HOME`, and variables set (or `unset`: empty) earlier in the command, else
+#   --show-toplevel|--git-common-dir|--git-dir)`, `$(mktemp [-d] [-t p])` (a path in the temp dir; unknown when the
+#   command sets or unsets TMPDIR), a `for v in …` loop's `$v` (each of its words; unknown when the body can
+#   exit early), `$HOME`, and variables set (or `unset`: empty) earlier in the command, else
 #   HOME, TMPDIR or USER from this hook's environment, each checked both as set and as '' (`rm -f "$TMPDIR/x"` is
 #   allowed, `rm -rf "${TMPDIR}data"` is not; read as '', `"$TMPDIR"/*` is not globbed as `/*`); `cd`/`pushd`/
 #   `popd` are followed. A `git log`/`diff`/`format-patch` `--output <file>` is a write like a redirect. A path that decides a check and can't be

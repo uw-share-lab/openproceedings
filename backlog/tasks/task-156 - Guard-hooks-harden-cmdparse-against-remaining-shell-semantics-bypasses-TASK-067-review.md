@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-01 19:36'
-updated_date: '2026-10-01 20:21'
+updated_date: '2026-10-01 20:28'
 labels:
   - security
   - tooling
@@ -37,4 +37,6 @@ Source: TASK-067 review gate (final security-reviewer and qa-auditor pass, 2026-
 
 <!-- SECTION:NOTES:BEGIN -->
 Deferred from the TASK-067 review gate by the main session's cap after four rounds. Cases are listed in the acceptance criteria; each was reproduced against origin/dev's hooks by the reviewers.
+
+AC#5 and AC#6 came from the TASK-067 confirmation pass (after the final pass), checked against origin/dev's hooks. The deferral itself is the main session's cap decision for the TASK-067 review gate (2026-10-01): fix every Must and every regression in TASK-067, send pre-existing Should-level shell-semantics bypasses here.
 <!-- SECTION:NOTES:END -->

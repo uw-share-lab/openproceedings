@@ -12,7 +12,8 @@ matter to a gate:
     escaped braces and `${…}` stay literal; empty words dropped; past BRACE_LIMIT words or BRACE_GROUPS
     groups in one word, a ParseError);
   * separators split with or without spaces: `;` `&&` `||` `|` `&` `(` `)`, newlines, `<(`/`>(`;
-  * `for v in <words>; do …; done` is read once per word with `v` set to it (`_unroll_for`);
+  * `for v in <words>; do …; done` is read once per word with `v` set to it (`_unroll_for`; not when the body
+    can leave the loop early); `$(mktemp)` is unknown when the command sets or unsets TMPDIR;
   * leading reserved words (`if`/`then`/`do`/`{`/`!` …), `VAR=val`, and wrappers (`env`, `sudo`, `nice`,
     `timeout`, `xargs`, `stdbuf`, `watch`, `exec`, `time`, `nohup`, `command`, `builtin`) are stripped, each
     wrapper with its own table of value-taking options; `env -S '…'` is split, `env -C`/`sudo -D` move dir;
@@ -1275,7 +1276,8 @@ SUBSHELL_STATE = (
 
 
 # A `for v in <words>; do …; done` is read as `v=<word>; …` once per word (`_unroll_for`), up to LOOP_WORDS words
-# and LOOP_BUDGET tokens of unrolled body per command; past either it is left as written, and `$v` stays unknown.
+# and LOOP_BUDGET tokens of unrolled body per command; past either, or with a LOOP_EXITS word in the body (the
+# loop may stop at an earlier word), it is left as written, and `$v` stays unknown.
 LOOP_WORDS = 64
 LOOP_BUDGET = 20000
 NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -1285,7 +1287,8 @@ def _unroll_for(tokens: list[str], i: int, j: int, state: dict) -> list[str] | N
     """`tokens` with the `for NAME in WORDS` loop whose header is `tokens[i:j]` written out: `NAME=<word> ;
     <body> ;` for each word, so `$NAME` is each word in turn (TASK-067 final review gate: `for f in /tmp/a /tmp/b;
     do rm -f "$f"; done` was refused). None when `tokens[i:j]` is no such loop header, or it can't be unrolled
-    (no `in`, too many words, no matching `done`): the loop is then read as written and `$NAME` stays unknown."""
+    (no `in`, too many words, no matching `done`, a body that can leave the loop early, or past LOOP_BUDGET):
+    the loop is then read as written and `$NAME` stays unknown."""
     k = i
     while k < j and tokens[k] in RESERVED:
         k += 1
