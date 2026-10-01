@@ -64,7 +64,7 @@ def notes(draw: st.DrawFn) -> dict[str, list[dict[str, Any]]]:
 
 
 def crawl(listings: dict[str, list[dict[str, Any]]]) -> v1.Crawl:
-    # the cache's F_FULLFSYNC is most of a crawl's time and varies with disk load, which the 500 ms dev deadline
+    # the cache's F_FULLFSYNC is most of a crawl's time and varies with disk load, which a deadline
     # measures; a throwaway cache needs no durability
     with tempfile.TemporaryDirectory() as tmp, mock.patch.object(storage, "fsync"):
         client = v1.make_client(Path(tmp), credentials=Credentials(USERNAME, PASSWORD),

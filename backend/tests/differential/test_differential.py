@@ -19,7 +19,7 @@ import json
 from pathlib import Path
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import given, settings
 from openproceedings.engine.exclusions import excluded
 from openproceedings.engine.protocol import FACET_FIELDS, EngineInputError
 from openproceedings.engine.reference import ReferenceEngine, _conjuncts, _own_field
@@ -142,7 +142,7 @@ def expected_facets(
     return out
 
 
-@settings(deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large])
+@settings(deadline=None)
 @given(ast=engine_asts(vocab()))
 def test_tantivy_agrees_with_the_oracle(engines: tuple[ReferenceEngine, TantivyEngine], ast: Node) -> None:
     agree(engines, ast)

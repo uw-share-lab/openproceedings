@@ -9,13 +9,45 @@ description: How openproceedings uses Hypothesis — strategies for tokens, quer
 Register in `backend/tests/conftest.py`:
 | Profile | `max_examples` | Deadline | Used by |
 |---|---|---|---|
-| `dev` | 200 | 500 ms | local loop (default), `make test` under pytest-xdist |
+| `dev` | 200 | `None`, and `too_slow` suppressed | local loop (default), `make test` under pytest-xdist: no wall-clock checks (decision-024, below) |
 | `pr` | 200 | 2 s | `test` workflow on every PR, under pytest-xdist: the dev count with the ci deadline, so a slow example on a shared runner doesn't fail the required check (TASK-127) |
 | `ci` | **2,000** | 2 s | `nightly` workflow's `suite-ci` job: the whole backend suite, under pytest-xdist (differential@2k) |
 | `nightly` | **50,000** | `None` | `nightly` workflow's property jobs (differential@50k: task-057) |
-Also set `print_blob=True` (so a CI failure prints a `@reproduce_failure` blob) and
-`suppress_health_check=[HealthCheck.too_slow]` only for the differential suite, with a comment. The
+Every profile sets `print_blob=True` (so a CI failure prints a `@reproduce_failure` blob). The
 Hypothesis example database (`.hypothesis/`) is gitignored; CI failures are reproduced from the blob.
+
+## Health checks and deadlines (decision-024, TASK-146)
+- **Wall-clock checks are gates only on CI runners.** A deadline and the `too_slow` health check time the
+  machine as well as the code. Locally, `make test` shares 8 CPUs with other worktrees' runs (load 90 to 340
+  measured on 2026-09-30), so `dev` has no deadline and suppresses `too_slow`. `pr` (every PR), `ci` and
+  `nightly` keep their deadline and suppress no health check, so a slow strategy or example still fails the
+  PR's required `test` job. `backend/tests/unit/test_hypothesis_profiles.py` shows a sleeping strategy failing
+  `pr` and passing `dev`; its mutants are in `.claude/scripts/mutants/gates.json` (`profiles:`).
+- **Every other health check is on in every profile.** `data_too_large`, `filter_too_much` and
+  `large_base_example` depend only on the strategy and the seed, not on load. Fix the strategy instead of
+  suppressing them (TASK-145 for `filter_too_much`).
+- **No per-test `too_slow` or `data_too_large` suppression.** Per test, `deadline=None` is allowed, with a
+  comment, for an example that is long by design (the oracle over 5k records, several crawls). It keeps
+  `too_slow`, with a 30 s limit. A strategy that really needs a suppression gets its health-check window
+  measured first, and the numbers go in the comment.
+- **How the checks measure.** Hypothesis times the draws of the first 10 valid examples. It fails `too_slow`
+  above the larger of 1 s and 5 deadlines: 10 s at `pr` and `ci`, 30 s with no deadline (`nightly`), 2.5 s
+  under the old 500 ms `dev` deadline. It fails `data_too_large` at 20 overruns before 10 valid examples.
+  Measured on 2026-10-01 at `pr`: every property's window was at most 0.75 s. Over 300 seeds,
+  `engine_asts(vocab())` and the facets test's `filtered_asts()` took at most 0.84 s and overran at most once.
+  So the per-test `too_slow` and `data_too_large` suppressions in the differential, facets and highlight-speed
+  tests were removed. So was search-overlap's `function_scoped_fixture` suppression, which did nothing because
+  its fixture is module-scoped.
+- **The case behind the rule.** `test_a_split_always_has_the_id_count` failed `too_slow` at load ~90. In a fresh
+  worktree, `.hypothesis/unicode_data` is empty, and the first `st.text()` draw builds it, which takes ~0.85 s
+  of draw time. Three times slower, that passed the old 2.5 s `dev` limit. On a CI runner it is ~9% of the
+  10 s limit.
+- **Check timing locally** on a quiet machine with `HYPOTHESIS_PROFILE=pr uv run pytest <file>`, which is
+  what the PR gate runs.
+- **Load recipe** (to show a check depends on load): start `yes > /dev/null &` four times per CPU, wait ~45 s
+  for the load average to climb, run the test with `rm -rf .hypothesis` before each run, record `uptime`, then
+  kill those PIDs only. On 2026-10-01, at load 76 to 123, the old `dev` profile failed the authors property
+  `too_slow` 5 times out of 5 and the new `dev` passed 5 times out of 5.
 
 ## Strategies (`backend/tests/strategies.py`, one shared module)
 - **Tokens:** draw mostly from the fixture's **actual term dictionary** (so queries hit documents), mixed
@@ -79,7 +111,8 @@ year edit. Some cases are near misses (one step past a rule; a few percent to a 
 - Build the fixture index once per session (`scope="session"` fixture), not per example — otherwise the
   deadline measures index build.
 - `@settings(deadline=...)` flakes on shared CI runners; prefer the profile deadline and raise it rather
-  than disabling it in `ci`.
+  than disabling it in `ci`. A deadline or `too_slow` failure seen only locally under load is not a finding
+  (`dev` no longer has either); one in CI is.
 - Don't `assume()` away large parts of the space (e.g. `assume(no wildcards)`); Hypothesis will report
   `FailedHealthCheck` or silently test less. Constrain the strategy instead.
 - `--hypothesis-show-statistics` counts as invalid both rejections (`assume()`, `.filter()`; listed as "gave up

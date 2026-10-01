@@ -704,6 +704,54 @@
   "new": "    if True:\n        return _real_getnameinfo(sockaddr, flags)"
  },
  {
+  "label": "profiles: pr suppresses too_slow",
+  "file": "backend/tests/conftest.py",
+  "old": "settings.register_profile(\"pr\", max_examples=200, deadline=2_000, print_blob=True)",
+  "new": "settings.register_profile(\"pr\", max_examples=200, deadline=2_000, suppress_health_check=[HealthCheck.too_slow], print_blob=True)"
+ },
+ {
+  "label": "profiles: ci suppresses too_slow",
+  "file": "backend/tests/conftest.py",
+  "old": "settings.register_profile(\"ci\", max_examples=2_000, deadline=2_000, print_blob=True)",
+  "new": "settings.register_profile(\"ci\", max_examples=2_000, deadline=2_000, suppress_health_check=[HealthCheck.too_slow], print_blob=True)"
+ },
+ {
+  "label": "profiles: nightly suppresses too_slow",
+  "file": "backend/tests/conftest.py",
+  "old": "settings.register_profile(\"nightly\", max_examples=50_000, deadline=None, print_blob=True)",
+  "new": "settings.register_profile(\"nightly\", max_examples=50_000, deadline=None, suppress_health_check=[HealthCheck.too_slow], print_blob=True)"
+ },
+ {
+  "label": "profiles: pr loses its deadline",
+  "file": "backend/tests/conftest.py",
+  "old": "settings.register_profile(\"pr\", max_examples=200, deadline=2_000, print_blob=True)",
+  "new": "settings.register_profile(\"pr\", max_examples=200, deadline=None, print_blob=True)"
+ },
+ {
+  "label": "profiles: ci loses its deadline",
+  "file": "backend/tests/conftest.py",
+  "old": "settings.register_profile(\"ci\", max_examples=2_000, deadline=2_000, print_blob=True)",
+  "new": "settings.register_profile(\"ci\", max_examples=2_000, deadline=None, print_blob=True)"
+ },
+ {
+  "label": "profiles: dev keeps too_slow",
+  "file": "backend/tests/conftest.py",
+  "old": "\"dev\", max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow], print_blob=True",
+  "new": "\"dev\", max_examples=200, deadline=None, print_blob=True"
+ },
+ {
+  "label": "profiles: dev keeps a deadline",
+  "file": "backend/tests/conftest.py",
+  "old": "\"dev\", max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow], print_blob=True",
+  "new": "\"dev\", max_examples=200, deadline=500, suppress_health_check=[HealthCheck.too_slow], print_blob=True"
+ },
+ {
+  "label": "profiles: dev also suppresses data_too_large",
+  "file": "backend/tests/conftest.py",
+  "old": "\"dev\", max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow], print_blob=True",
+  "new": "\"dev\", max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large], print_blob=True"
+ },
+ {
   "label": "lint_tooling lints agent worktrees",
   "file": ".claude/scripts/lint_tooling.py",
   "old": "dirs[:] = [d for d in dirs if d != \"worktrees\"]",
