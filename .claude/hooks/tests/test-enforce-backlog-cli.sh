@@ -88,6 +88,8 @@ check "relative ordinary file"             0 "$(payload_cwd Edit "docs/backlog-n
 check "malformed JSON mentioning backlog/" 2 '{"tool_name":"Edit","tool_input":{"file_path":"/x/backlog/tasks/a.md"'
 check "malformed JSON, no backlog path"    0 '{"tool_name":"Edit","tool_input":{"file_path":"/x/src/a.py"'
 check "empty payload"                      0 ''
+# an internal error (a lone surrogate can't be encoded as a path) is refused, never a crash that lets it through
+check "lone-surrogate path (internal error)" 2 '{"tool_name":"Edit","tool_input":{"file_path":"/x/src/\ud800.py"}}'
 
 # --- $path/$tool/$parsed must not leak in from the environment on a parse failure ---
 # `parsed=1` MUST be exported too, or this test is vacuous: without it the hook exits at the fail-closed
@@ -96,7 +98,7 @@ check "empty payload"                      0 ''
 # is matched) while the real hook returns 0.
 checks=$((checks + 1))
 rc=$(printf '%s' '{"tool_name":"Edit","tool_input":{"file_path":"/x/src/a.py"' \
-     | env path="$REPO/backlog/tasks/x.md" tool=Edit parsed=1 "$HOOK" >/dev/null 2>&1; echo $?)
+     | env path="$REPO/backlog/tasks/x.md" tool=Edit parsed=1 crashed=1 "$HOOK" >/dev/null 2>&1; echo $?)
 if [[ $rc -eq 0 ]]; then
   printf "  ok   %-62s -> allow\n" "env \$path/\$tool/\$parsed don't leak in"
 else

@@ -9,23 +9,39 @@
 # records as empty stubs. So for backlog/decisions/ ONLY:
 #   Write            -> still blocked  (files must be created by `backlog decision create`, which assigns id/date/status)
 #   Edit / MultiEdit -> allowed        (the body has no other author)
+# A path this guard can't read (an internal error, such as one that can't be encoded) is refused: exit 2, never a
+# crash, which Claude Code would let through.
 input=$(cat)
-# Initialize explicitly: `eval` assigns nothing if the parse fails, which would otherwise let $path/$tool
+# Initialize explicitly: `eval` assigns nothing if the parse fails, which would otherwise let $path/$tool/$crashed
 # inherit same-named vars from the environment.
 path=''
 tool=''
 parsed=''
+crashed=''
 # shellcheck disable=SC2016  # single quotes are deliberate: this is Python source, not shell
 eval "$(printf '%s' "$input" | python3 -c 'import json,os,sys,shlex
-# Emit nothing on failure -> `parsed` stays empty -> the guard below fails closed.
-d = json.load(sys.stdin)
-p = d.get("tool_input", {}).get("file_path", "") or ""
-t = d.get("tool_name", "") or ""
-# Normalise before matching (TASK-067): relative to the call'"'"'s cwd, `//`, `./`, `..` and symlinks resolved,
-# lower-cased because APFS folds case (`Backlog/tasks/` is `backlog/tasks/`).
-if p:
-    p = os.path.realpath(os.path.join(d.get("cwd") or os.getcwd(), p)).lower()
-print(f"path={shlex.quote(p)}; tool={shlex.quote(t)}; parsed=1")' 2>/dev/null)"
+# Malformed JSON: emit nothing -> `parsed` stays empty -> the guard below fails closed for a backlog/ path. Any
+# other error (a path that can'"'"'t be encoded) prints `crashed=1`, which is refused outright (TASK-067 final review).
+try:
+    d = json.load(sys.stdin)
+except ValueError:
+    sys.exit(0)
+try:
+    p = d.get("tool_input", {}).get("file_path", "") or ""
+    t = d.get("tool_name", "") or ""
+    # Normalise before matching (TASK-067): relative to the call'"'"'s cwd, `//`, `./`, `..` and symlinks resolved,
+    # lower-cased because APFS folds case (`Backlog/tasks/` is `backlog/tasks/`).
+    if p:
+        p = os.path.realpath(os.path.join(d.get("cwd") or os.getcwd(), p)).lower()
+    print(f"path={shlex.quote(p)}; tool={shlex.quote(t)}; parsed=1")
+except Exception:
+    print("crashed=1")' 2>/dev/null)"
+
+if [ -n "$crashed" ]; then
+  echo "Backlog guard could not check this tool call (an internal error reading its path) — refusing." >&2
+  echo "Use a plain path, or make the change with the 'backlog' CLI." >&2
+  exit 2
+fi
 
 # Fail CLOSED — but only for calls that could plausibly touch backlog/. If we cannot parse the tool call
 # (no python3, malformed JSON) we can't tell a permitted decision-body Edit from a forbidden task Edit, so we

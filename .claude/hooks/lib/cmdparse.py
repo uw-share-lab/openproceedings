@@ -6,11 +6,13 @@ matter to a gate:
     message is one word), an unquoted `#` at the start of a word starts a comment, and an unquoted
     `<<DELIM` / `<<'DELIM'` / `<<-"DELIM"` starts a heredoc whose body is dropped unread (never `<<<`);
     `$'…'` is decoded (over several lines too) and `$"…"` read as "…" anywhere in a word, `$(pwd)` is written
-    as ${PWD} and `$(git rev-parse --show-toplevel)` as a variable `expand_word` resolves, and `"$X"a` as ${X}a;
+    as ${PWD}, `$(git rev-parse --show-toplevel)`, `$(git rev-parse --git-common-dir|--git-dir|--absolute-git-dir)`
+    and `$(mktemp [-d] [-t prefix])` as variables `expand_word` resolves, and `"$X"a` as ${X}a;
   * `tokenize` brace-expands each word as bash does (`d{e,}v` is `dev dv`, `{a..c}`, nesting; quoted or
-    escaped braces and `${…}` stay literal; empty words dropped; past BRACE_LIMIT words, the first ones and
-    the word itself, literal);
+    escaped braces and `${…}` stay literal; empty words dropped; past BRACE_LIMIT words or BRACE_GROUPS
+    groups in one word, a ParseError);
   * separators split with or without spaces: `;` `&&` `||` `|` `&` `(` `)`, newlines, `<(`/`>(`;
+  * `for v in <words>; do …; done` is read once per word with `v` set to it (`_unroll_for`);
   * leading reserved words (`if`/`then`/`do`/`{`/`!` …), `VAR=val`, and wrappers (`env`, `sudo`, `nice`,
     `timeout`, `xargs`, `stdbuf`, `watch`, `exec`, `time`, `nohup`, `command`, `builtin`) are stripped, each
     wrapper with its own table of value-taking options; `env -S '…'` is split, `env -C`/`sudo -D` move dir;
@@ -32,7 +34,8 @@ matter to a gate:
   * a git command after a `git config` that writes an alias, an include, a push target or an upstream, a `git
     remote add --mirror` / `remote set-branches` / `branch -u`, or a redirect, tee, sed -i, cp/mv/ln into a git
     config file, in the same command line raises FailClosed (`config_steers_git`, `writes_git_config`): this
-    parser read the config before it was written;
+    parser read the config before it was written; so does a `git push` after a checkout/switch/worktree add
+    that creates a branch with an upstream (`-t`, a remote-tracking start point: `creates_with_upstream`);
   * `push_config` reads the repo config a refspec-less push uses.
 A command that cannot be parsed raises ParseError; every gate treats that as a reason to BLOCK a command
 that looks like what it guards (fail closed), never to allow it. A git command that parses but can't be
@@ -446,6 +449,17 @@ def preprocess(cmd: str) -> str:
                 kept.append("${" + TOPLEVEL_VAR + "}")
                 i = m.end()
                 continue
+            if quote != "'" and (m := GITDIR_SUBST.match(line, i)):
+                # `$(git rev-parse --git-common-dir|--git-dir|--absolute-git-dir)`: the repository's git dir, so a
+                # glob after it (`…/op-*`) expands as bash expands it (TASK-067 final review gate)
+                kept.append("${" + GITDIR_VARS[m.group("which") or m.group("which2")] + "}")
+                i = m.end()
+                continue
+            if quote != "'" and (m := MKTEMP_SUBST.match(line, i)):
+                # `$(mktemp [-d] [-t prefix])`: a new path in the temp dir, outside any repository
+                kept.append("${" + MKTEMP_VAR + "}")
+                i = m.end()
+                continue
             if quote != "'" and (m := VAR_BEFORE_QUOTE.match(line, i)):
                 # `"$X"a` is ${X}a, not $Xa: the quote that ends the name goes once shlex has read it
                 kept.append("${" + m.group(1) + "}")
@@ -618,6 +632,28 @@ TOPLEVEL_SUBST = re.compile(
     r"\$\(\s*git\s+rev-parse\s+--show-toplevel\s*\)|`\s*git\s+rev-parse\s+--show-toplevel\s*`"
 )
 TOPLEVEL_VAR = "OP_SHOW_TOPLEVEL__"
+# ... and `$(git rev-parse --git-common-dir)` / `--git-dir` / `--absolute-git-dir` the repository's git dirs (absolute;
+# bash gets a relative one, the same directory), so a glob after one expands (TASK-067 final review gate: `cp x
+# $(git rev-parse --git-common-dir)/op-*` wrote a review record)
+_GITDIR = (
+    r"git\s+rev-parse\s+(?:--path-format=(?:absolute|relative)\s+)?"
+    r"--(?P<which{n}>git-common-dir|git-dir|absolute-git-dir)"
+)
+GITDIR_SUBST = re.compile(r"\$\(\s*" + _GITDIR.format(n="") + r"\s*\)|`\s*" + _GITDIR.format(n="2") + r"\s*`")
+GITDIR_VARS = {
+    "git-common-dir": "OP_GIT_COMMON_DIR__",
+    "git-dir": "OP_GIT_DIR__",
+    "absolute-git-dir": "OP_GIT_DIR__",
+}
+# ... and `$(mktemp)` with only -d/-q/-u and an optional `-t <prefix>` (no template path: one would be relative to
+# the current directory) a new path in the temp dir, outside any repository: MKTEMP_PATH (TASK-067 final review gate:
+# `tmp=$(mktemp -d) && … && rm -rf "$tmp"` was refused in every repo with data/)
+MKTEMP_SUBST = re.compile(
+    r"\$\(\s*mktemp(?:\s+-[dqu]+)*(?:\s+-t\s+[\w.-]+)?(?:\s+-[dqu]+)*\s*\)"
+    r"|`\s*mktemp(?:\s+-[dqu]+)*(?:\s+-t\s+[\w.-]+)?(?:\s+-[dqu]+)*\s*`"
+)
+MKTEMP_VAR = "OP_MKTEMP__"
+MKTEMP_PATH = "/tmp/op-mktemp.XXXXXXXX"
 # `$NAME` with a quote right after it: written ${NAME}, so the word after the quote can't join the name
 VAR_BEFORE_QUOTE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)(?=[\"'])")
 # Brace expansion: `preprocess` marks each unquoted, unescaped `{` `}` `,` with a private-use character, so
@@ -625,9 +661,11 @@ VAR_BEFORE_QUOTE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)(?=[\"'])")
 BRACE_MARK = {"{": "\ue000", "}": "\ue001", ",": "\ue002"}
 LB, RB, CM = BRACE_MARK["{"], BRACE_MARK["}"], BRACE_MARK[","]
 UNMARK = str.maketrans({v: k for k, v in BRACE_MARK.items()})
-# Words one brace expression is read as: past it, the first BRACE_LIMIT words and the word itself, literal (a
-# ParseError here failed open in a gate that refuses one only by its text: review gate round 3)
+# Words one brace expression is read as, and expandable `{` one word may hold: past either, a ParseError, which
+# every gate refuses (a truncated list let `rm -rf {x{1..4096},data/snapshots}` through, and deep nesting
+# overflowed the recursion and crashed the hook, which fails open: TASK-067 final review gate)
 BRACE_LIMIT = 4096
+BRACE_GROUPS = 256
 
 
 def _sequence(body: str) -> list[str] | None:
@@ -650,8 +688,8 @@ def _sequence(body: str) -> list[str] | None:
 def _brace(word: str) -> list[str]:
     """Brace-expand a word whose expandable braces and commas are marked (`BRACE_MARK`), as bash does: the
     leftmost `{…}` with a top-level comma, or a sequence body, becomes one word per alternative, each
-    expanded again; a `{` with no match, or a `{…}` that is neither, stays literal. Past BRACE_LIMIT words: the
-    first BRACE_LIMIT, then `word` itself (literal once `tokenize` unmarks it)."""
+    expanded again; a `{` with no match, or a `{…}` that is neither, stays literal. Past BRACE_LIMIT words:
+    ParseError."""
     start = 0
     while (s := word.find(LB, start)) >= 0:
         depth, commas, end = 0, [], -1
@@ -678,14 +716,15 @@ def _brace(word: str) -> list[str]:
         for part in parts:
             out += _brace(word[:s] + part + word[end + 1 :])
             if len(out) > BRACE_LIMIT:
-                return [*out[:BRACE_LIMIT], word]
+                raise ParseError(f"a brace expansion makes more than {BRACE_LIMIT} words")
         return out
     return [word]
 
 
 def tokenize(cmd: str) -> list[str]:
     """The words and operators of `cmd` (`preprocess`ed), each word brace-expanded the way bash does (an empty
-    word a brace expansion makes is dropped, as bash drops it: `git push origin {,}` names no refspec)."""
+    word a brace expansion makes is dropped, as bash drops it: `git push origin {,}` names no refspec). A word with
+    more than BRACE_GROUPS expandable `{`, or one that expands past BRACE_LIMIT words, raises ParseError."""
     text = preprocess(cmd)
     lex = shlex.shlex(text, posix=True, punctuation_chars=PUNCT)
     lex.whitespace = " \t\r"
@@ -695,6 +734,8 @@ def tokenize(cmd: str) -> list[str]:
         tokens = list(lex)
     except ValueError as exc:
         raise ParseError(str(exc)) from exc
+    if any(t.count(LB) > BRACE_GROUPS for t in tokens):
+        raise ParseError(f"a word with more than {BRACE_GROUPS} brace groups")
     return [w.translate(UNMARK) for t in tokens for w in (_brace(t) if LB in t else [t]) if w or LB not in t]
 
 
@@ -879,7 +920,8 @@ def walk(cmd: str, cwd: str, env_empty: bool = False) -> Iterator[tuple[Argv, st
     """Yield (argv, directory, redirections) for every simple command in `cmd`, in order; argv is empty for a
     command that only redirects (`> file`) or only assigns. Each argv carries what `expand_word` needs.
     `env_empty`: read HOME/TMPDIR/USER as '' wherever the command doesn't set them (`ENV_FALLBACK`): a gate
-    walks both ways when a path decides its check."""
+    walks both ways when a path decides its check. (Nesting too deep for Python, `eval eval … git push`, raises
+    RecursionError: every gate refuses an exception it doesn't expect.)"""
     yield from _walk(tokenize(cmd), {"dir": cwd, "env_empty": env_empty})
 
 
@@ -901,6 +943,11 @@ def _variable(
         return olddir or shell_vars.get("OLDPWD")
     if name == TOPLEVEL_VAR:
         return (git(directory, "rev-parse", "--show-toplevel") or None) if directory else None
+    if name in GITDIR_VARS.values():
+        flag = "--git-common-dir" if name == GITDIR_VARS["git-common-dir"] else "--absolute-git-dir"
+        return (git(directory, "rev-parse", "--path-format=absolute", flag) or None) if directory else None
+    if name == MKTEMP_VAR:
+        return MKTEMP_PATH
     if name in shell_vars:
         return shell_vars[name]
     if name in ENV_FALLBACK:
@@ -981,8 +1028,8 @@ def _change_dir(head: str, words: list[str], state: dict) -> None:
     +1`, an empty stack) keeps "dir" but sets "dir_unknown" until an absolute `cd` (TASK-067 review gate:
     `pushd data; rm -rf snapshots` was read from the old directory). Review gate round 3: `cd -P` resolves
     symlinks; a target that doesn't exist leaves the directory unknown (the `cd` fails and the shell stays,
-    or `&&` stops: this parser can't tell which); with CDPATH set a relative target is unknown; `cd -` to an
-    unknown directory is unknown."""
+    or `&&` stops: this parser can't tell which), and so is the directory before it unless it was already the
+    current one; with CDPATH set a relative target is unknown; `cd -` to an unknown directory is unknown."""
     opts = [w for w in words if len(w) > 1 and w[0] == "-" and w[1] in "LPen@"]  # cd -P, pushd -n
     words = [w for w in words if w not in opts]
     physical = any("P" in o for o in opts)
@@ -1022,7 +1069,10 @@ def _change_dir(head: str, words: list[str], state: dict) -> None:
     if target is not None:  # -P: symlinks resolved first; else logical, where `x/..` drops x
         new = (os.path.realpath if physical else os.path.normpath)(_resolve(target, cur))
     if new is None or not os.path.isdir(new):
-        state.update(olddir=cur, olddir_unknown=unknown, dir_unknown=True)
+        # the cd may fail (bash keeps OLDPWD) or succeed (OLDPWD becomes cur): known only when both are the same
+        # (TASK-067 final review gate: `cd /tmp; cd /nonexistent; cd -; rm -rf data`)
+        same = not unknown and not old_unknown and old is not None and old == cur
+        state.update(olddir=cur, olddir_unknown=not same, dir_unknown=True)
         return
     state.update(
         olddir=cur, olddir_unknown=unknown, dir=new, dir_unknown=unknown and not os.path.isabs(target or "")
@@ -1062,7 +1112,7 @@ def config_steers_git(argv: list[str], directory: str) -> bool:
     push`, `git config set …`), or open the file in an editor or rename a section (`--edit`,
     `--rename-section`)? Or does another git command write such config (review gate round 3): `git remote add
     --mirror…` (a mirror remote), `git remote set-branches`, `git branch -u/--set-upstream-to/-t/--track` (an
-    upstream)."""
+    upstream). (A `checkout`/`switch`/`worktree add` that writes an upstream is `creates_with_upstream`.)"""
     g = git_subcommand(argv, directory)
     if g is not None and g[0] == "remote" and g[1][:1] == ["add"]:
         return any(a.startswith("--mirror") for a in g[1])
@@ -1097,6 +1147,65 @@ def config_steers_git(argv: list[str], directory: str) -> bool:
         return False
     keys = positionals[1:] if verb == "set" else positionals
     return len(keys) >= 2 and CONFIG_STEERS_GIT.fullmatch(keys[0]) is not None  # <name> <value>
+
+
+# options of checkout/switch/worktree add whose value is the next word (so it is no start point)
+BRANCH_CREATE_VALUE_OPTS = {
+    "-b",
+    "-B",
+    "-c",
+    "-C",
+    "--create",
+    "--force-create",
+    "--orphan",
+    "--conflict",
+    "--reason",
+}
+
+
+def creates_with_upstream(sub: str, args: list[str], directory: str) -> bool:
+    """Does this `git checkout`/`switch`/`worktree add` write a new branch's upstream (`branch.<b>.merge`), which
+    push.default=upstream pushes to? `-t`/`--track` (alone or in a short cluster: `-qt`), or a new branch (`-b`,
+    `-B`, `-c`, `-C`) from a remote-tracking start point (branch.autoSetupMerge's default), unless `--no-track`
+    (TASK-067 final review gate: `git checkout -b x -t origin/dev && git push`)."""
+    if sub == "worktree":
+        if args[:1] != ["add"]:
+            return False
+        args = args[1:]
+    opts = args[: args.index("--")] if "--" in args else args
+    if "--no-track" in opts:
+        return False
+    if any(
+        a == "--track" or a.startswith("--track=") or (a[:1] == "-" and a[1:2] != "-" and "t" in a[1:])
+        for a in opts
+    ):
+        return True
+    creates = any(
+        a in ("--create", "--force-create")
+        or a.startswith(("--create=", "--force-create="))
+        or (a[:1] == "-" and a[1:2] != "-" and any(c in "bBcC" for c in a[1:]))
+        for a in opts
+    )
+    if not creates:
+        return False
+    positionals, skip = [], False
+    for a in opts:
+        if skip:
+            skip = False
+        elif a in BRANCH_CREATE_VALUE_OPTS:
+            skip = True
+        elif a[:1] == "-" and a[1:2] != "-" and a[-1:] in "bBcC":
+            skip = True  # `-qb <new>`: the cluster ends in a value-taking letter
+        elif not a.startswith("-"):
+            positionals.append(a)
+    # checkout/switch: [<start>]; worktree add: <path> [<start>]
+    start = positionals[1:2] if sub == "worktree" else positionals[:1]
+    return any(
+        "$" in p
+        or p.startswith(("refs/remotes/", "remotes/"))
+        or git(directory, "rev-parse", "--verify", "--quiet", f"refs/remotes/{p}") != ""
+        for p in start
+    )
 
 
 def _context(argv: Argv, state: dict) -> Argv:
@@ -1146,6 +1255,9 @@ def writes_git_config(argv: Argv, redirects: list[tuple[str, str]], state: dict)
     return False
 
 
+# a word `eval` would read again as the same one word
+PLAIN_WORD = re.compile(r"[\w./:@%+=-]+")
+
 # what a `bash -c` child shell changes without changing its caller's
 SUBSHELL_STATE = (
     "exports",
@@ -1159,12 +1271,58 @@ SUBSHELL_STATE = (
 )
 
 
+# A `for v in <words>; do …; done` is read as `v=<word>; …` once per word (`_unroll_for`), up to LOOP_WORDS words
+# and LOOP_BUDGET tokens of unrolled body per command; past either it is left as written, and `$v` stays unknown.
+LOOP_WORDS = 64
+LOOP_BUDGET = 20000
+NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _unroll_for(tokens: list[str], i: int, j: int, state: dict) -> list[str] | None:
+    """`tokens` with the `for NAME in WORDS` loop whose header is `tokens[i:j]` written out: `NAME=<word> ;
+    <body> ;` for each word, so `$NAME` is each word in turn (TASK-067 final review gate: `for f in /tmp/a /tmp/b;
+    do rm -f "$f"; done` was refused). None when `tokens[i:j]` is no such loop header, or it can't be unrolled
+    (no `in`, too many words, no matching `done`): the loop is then read as written and `$NAME` stays unknown."""
+    k = i
+    while k < j and tokens[k] in RESERVED:
+        k += 1
+    if k + 2 >= j or tokens[k] != "for" or not NAME.fullmatch(tokens[k + 1]) or tokens[k + 2] != "in":
+        return None
+    words = tokens[k + 3 : j]
+    if len(words) > LOOP_WORDS:
+        return None
+    p = j + 1
+    while p < len(tokens) and is_separator(tokens[p]):
+        p += 1
+    depth, end = 0, -1
+    for q in range(p, len(tokens)):
+        at_start = q == p or is_separator(tokens[q - 1]) or tokens[q - 1] in RESERVED
+        if at_start and tokens[q] == "do":
+            depth += 1
+        elif at_start and tokens[q] == "done":
+            depth -= 1
+            if depth == 0:
+                end = q
+                break
+    if end < 0 or tokens[p : p + 1] != ["do"]:
+        return None
+    body = tokens[p:end]
+    state["unrolled"] = state.get("unrolled", 0) + len(words) * (len(body) + 3)
+    if state["unrolled"] > LOOP_BUDGET:
+        return None
+    out = [t for w in words for t in (f"{tokens[k + 1]}={w}", ";", *body, ";")]
+    return [*tokens[:i], *out, *tokens[end + 1 :]]
+
+
 def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tuple[str, str]]]]:
     i = 0
     while i < len(tokens):
         j = i
         while j < len(tokens) and not is_separator(tokens[j]):
             j += 1
+        if (unrolled := _unroll_for(tokens, i, j, state)) is not None:
+            tokens = unrolled
+            continue
         raw, i = tokens[i:j], j + 1
         args, redirects = split_redirects(raw)
         argv = strip_prefixes(args, state)
@@ -1193,6 +1351,14 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
             # an alias is replaced by what git runs for it (TASK-067: `git -c alias.p=push p origin x`)
             for expanded, d in expand_git_alias(argv, state["dir"], state.get("depth", 0)):
                 state["config_written"] = state.get("config_written") or config_steers_git(expanded, d)
+                g = git_subcommand(expanded, d)
+                if g is not None and g[0] == "push" and state.get("upstream_written"):
+                    # push.default=upstream pushes to the upstream an earlier command wrote (TASK-067 final review)
+                    raise FailClosed(
+                        "an earlier checkout/switch/worktree add in this command sets an upstream"
+                    )
+                if g is not None and g[0] in ("checkout", "switch", "worktree"):
+                    state["upstream_written"] = state.get("upstream_written") or creates_with_upstream(*g)
                 yield _context(expanded, state), d, redirects
             continue
         if head in ("cd", "pushd", "popd"):
@@ -1223,7 +1389,11 @@ def _walk(tokens: list[str], state: dict) -> Iterator[tuple[Argv, str, list[tupl
                 yield _context(argv, state), state["dir"], redirects
             continue
         if head == "eval":
-            yield from _walk(tokenize(" ".join(argv[1:])), state)
+            # bash reads the joined words again; words with nothing in them to re-read are taken as they are (an
+            # `eval eval … git push` chain stays linear)
+            rest = argv[1:]
+            plain = all(PLAIN_WORD.fullmatch(w) for w in rest)
+            yield from _walk(rest if plain else tokenize(" ".join(rest)), state)
             continue
         yield _context(argv, state), state["dir"], redirects
 

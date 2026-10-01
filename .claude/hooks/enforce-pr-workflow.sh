@@ -44,8 +44,12 @@
 # push.default, remote.pushDefault) is refused, and so is one whose repo config does (any remote.<name>.push,
 # a true .mirror, push.default=matching, or push.default=upstream to a protected upstream), one or an alias
 # under config this gate can't read (--config-env, -c include.path, GIT_CONFIG_*, GIT_COMMON_DIR, HOME), a git
-# command after a `git config` that writes an alias, include or push key in the same command, and an
-# ambiguous abbreviated option. Exit 2 blocks the call and feeds stderr back to the agent.
+# command after a `git config` that writes an alias, include or push key in the same command, a push after a
+# checkout/switch/worktree add that creates a branch with an upstream (`-t`, a remote-tracking start point), and
+# an ambiguous abbreviated option. A word that expands to nothing is dropped (`E=; git push origin $E` names no
+# refspec), and a push is read a second time with HOME/TMPDIR/USER empty (`git push origin $TMPDIR`).
+# `checkout -qt origin/dev` and `checkout main --` switch branches. Exit 2 blocks the call and feeds stderr back
+# to the agent.
 #
 # Branch/worktree awareness: the "current branch" is resolved against the ACTUAL target of the git
 # operation, not a bare `git rev-parse` in the hook subprocess's own ambient CWD. That ambient CWD is
@@ -73,10 +77,11 @@
 # command-string parser. Do not mistake this hook for a hard security boundary; it exists to catch
 # accidental/automated main-mutations, not to stop someone who deliberately routes around it.
 # (A git push/add/commit/rm/mv run by `xargs` is refused outright: the words it appends are unseen.)
-# If python3 is unavailable, or the command can't be parsed, the fail-closed fallback below still catches the
-# plain-text `git push`/`commit`/`merge` forms (using the same cwd-aware branch resolution, best-effort), and
-# refuses any of them in a command with `-C`, `cd`, `pushd`, `--git-dir`/`GIT_DIR` or `--work-tree`, whose
-# branch it can't place.
+# If the command can't be parsed, or the parser crashes, it is refused when its text has `git` and a write word
+# (push, commit, merge, reset, rebase, cherry-pick, revert, am, branch, update-ref, checkout, switch, worktree,
+# fetch, pull). If python3 is unavailable, the fallback below still catches the plain-text `git push`/`commit`/
+# `merge` forms (using the same cwd-aware branch resolution, best-effort), and refuses any of them in a command
+# with `-C`, `cd`, `pushd`, `--git-dir`/`GIT_DIR` or `--work-tree`, whose branch it can't place.
 input=$(cat)
 
 # The tool call's own working directory, as reported in the hook's JSON payload — NOT necessarily
@@ -323,8 +328,8 @@ def switched_to(sub, args, directory, gitdir, previous):
     changes no branch (`checkout <tree-ish> -- <paths>`, `checkout -p`, a path) or can't be told. `previous`: the
     branch an earlier switch in the command left (`git switch -`). UNKNOWN for a target this gate can't resolve."""
     if "--" in args:
-        if sub == "checkout":
-            return None  # `checkout [<tree-ish>] -- <paths>` restores files
+        if sub == "checkout" and args[args.index("--") + 1 :]:
+            return None  # `checkout [<tree-ish>] -- <paths>` restores files; `checkout main --` switches
         args = args[: args.index("--")]
     if sub == "checkout" and any(a in ("-p", "--patch") for a in args):
         return None  # patches files in; HEAD stays (review gate round 3)
@@ -352,7 +357,8 @@ def switched_to(sub, args, directory, gitdir, previous):
     target = positionals[0]
     if UNRESOLVED in target:
         return UNKNOWN
-    if any(a in ("-t", "--track") or a.startswith("--track=") for a in args):
+    if any(a == "--track" or a.startswith("--track=") or (a[:1] == "-" and a[1:2] != "-" and "t" in a[1:])
+           for a in args):  # `-t`, or in a short cluster: `-qt` (TASK-067 final review gate)
         # `--track origin/main` (no -b/-c) makes and checks out `main`: the name less refs/remotes/ and the remote
         # (review gate round 3)
         name = target.removeprefix("refs/").removeprefix("remotes/")
@@ -473,16 +479,20 @@ def reset_moves_branch(args, branch, directory):
 warnings = []  # opaque-script wrappers seen along the way; only surfaced if nothing else blocks
 
 
-def resolved(argv, directory):
+def resolved(argv, directory, env_empty=False):
     """`argv` with each word, and each assignment before it, through cmdparse.expand_word (`B=dev; git push origin
-    HEAD:$B`); a word it can't resolve is kept with UNRESOLVED in front (review gate round 3)."""
+    HEAD:$B`); a word it can't resolve is kept with UNRESOLVED in front (review gate round 3), and one that expands
+    to nothing is dropped, as bash drops an unquoted one (`E=; git push origin $E` names no refspec: TASK-067 final
+    review gate; a quoted empty word is dropped too, the stricter reading). `env_empty`: HOME/TMPDIR/USER read as
+    '' (the agent's shell may not set them)."""
     d = None if argv.dir_unknown else directory
 
     def one(w):
-        r = expand_word(w, d, argv.shell_vars, argv.olddir)
+        r = expand_word(w, d, argv.shell_vars, argv.olddir, env_empty=env_empty)
         return UNRESOLVED + w if r is None else r
 
-    out = Argv([argv[0], *(one(w) for w in argv[1:])], argv.via_xargs, {n: one(v) for n, v in argv.assigns.items()})
+    words = [r for w in argv[1:] if (r := one(w)) != "" or w == ""]
+    out = Argv([argv[0], *words], argv.via_xargs, {n: one(v) for n, v in argv.assigns.items()})
     out.shell_vars, out.olddir, out.dir_unknown = argv.shell_vars, argv.olddir, argv.dir_unknown
     return out
 
@@ -515,16 +525,25 @@ def analyze(cmd, cwd):
                 # inside. Only worth flagging where a hidden commit/push/merge would matter.
                 if get_branch(d) in PROTECTED:
                     first = next(a for a in argv[1:] if not a.startswith("-"))
-                    warnings.append(f"{argv[0]} {first}")
+                    if f"{argv[0]} {first}" not in warnings:
+                        warnings.append(f"{argv[0]} {first}")
                 continue
             for call, cd_ in git_calls(argv, d):
-                v = git_verdict(resolved(call, cd_), cd_, state)
+                r = resolved(call, cd_)
+                v = git_verdict(r, cd_, state)
+                # a push word that is empty when HOME/TMPDIR/USER are unset may name no refspec at all (`git push
+                # origin $TMPDIR`): the push is read that way too (TASK-067 final review gate)
+                alt = resolved(call, cd_, env_empty=True)
+                if v == "allow" and alt != r and (git_subcommand(alt, cd_) or ("",))[0] == "push":
+                    v = git_verdict(alt, cd_, state)
                 if v != "allow":
                     return v
     except FailClosed:
         return "unreadable"  # an ambiguous option, an alias set where this gate can't read it, a config write
     except ParseError:
         return "parse-fail"
+    except Exception:
+        return "parse-fail"  # a crash prints nothing, which the fallback below reads as a parse failure too
     return "allow"
 
 
@@ -539,11 +558,22 @@ else:
 PY
 )
 
-# Fail closed: if python3 is unavailable or the parse failed, fall back to the old conservative
-# substring check rather than allowing the command through unexamined. This intentionally
-# over-blocks in degraded mode (e.g. `git push origin feature/main-fix`, `git merge-base`) — the
-# normal python path allows those; the fallback only runs when the parser cannot.
-if [ -z "$verdict" ] || [ "$verdict" = "parse-fail" ]; then
+# Fail closed: if the command can't be parsed (or the parser crashed), refuse any command whose text has git and
+# a write word in it (TASK-067 final review gate: `git push origin HEAD:d''ev <<EOF`, an unclosed heredoc bash
+# still runs, passed a plain-text match); line continuations are joined first.
+if [ "$verdict" = "parse-fail" ] || { [ -z "$verdict" ] && command -v python3 >/dev/null 2>&1; }; then
+  joined=$(printf '%s' "$input" | python3 -c 'import json, sys
+print((json.load(sys.stdin).get("tool_input") or {}).get("command", "").replace("\\\n", ""))' 2>/dev/null) || joined=$input
+  if printf '%s' "$joined" | grep -Eq 'git' \
+     && printf '%s' "$joined" | grep -Eq 'push|commit|merge|reset|rebase|cherry-pick|revert|[^a-z]am[^a-z]|branch|update-ref|checkout|switch|worktree|fetch|pull'; then
+    verdict="opaque"
+  else
+    verdict="allow"
+  fi
+fi
+# If python3 is unavailable, fall back to the old conservative substring check rather than allowing the command
+# through unexamined. This intentionally over-blocks in degraded mode (e.g. `git push origin feature/main-fix`).
+if [ -z "$verdict" ]; then
   case "$branch" in main|dev) on_protected=1 ;; *) on_protected=0 ;; esac
   # A `-C`, `cd`, `pushd`/`popd`, `--git-dir`/`GIT_DIR` or `--work-tree` may run git in another worktree, whose
   # branch this text check can't place (review gate round 3: `git -C ../<main> commit -m …` fell through).

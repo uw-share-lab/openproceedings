@@ -320,7 +320,7 @@ check main      block 'git revert x "'
 check main      block 'git am x "'
 check main      block 'git rebase x "'
 check main      block 'git reset --hard x "'
-check feature/x allow 'git cherry-pick x "'
+check feature/x block 'git cherry-pick x "'   # unparseable with a git write word: refused on any branch (final review gate)
 
 echo "eval re-parses its argument:"
 check main       block 'eval "git push origin main"'
@@ -553,6 +553,44 @@ git -C "$REPO" config remote.origin.push HEAD:refs/heads/dev
 check feature/x block 'git push origin {,}'
 check feature/x block 'git push origin $OP_UNSET_REF'
 check feature/x allow 'git push origin feat{,}'                          # one word: feat feat
+git -C "$REPO" config --unset remote.origin.push
+
+echo "final review gate: crashes and parse failures fail closed (TASK-067):"
+BR="echo $(python3 -c 'print("{x," * 1100 + "x" + "}" * 1100)')"
+check feature/x block "$BR; git push origin HEAD:d''ev"                 # deep braces: no crash (exit 1 is a pass)
+check feature/x block "git push origin HEAD:d''ev <<EOF"                # unclosed heredoc: bash still runs the push
+check feature/x block "git commit -m x <<EOF"
+check feature/x allow 'echo "unbalanced'                                # a parse failure with no git write in it
+check feature/x block 'git push origin {x{1..4096},HEAD:dev}'          # past the brace limit: a parse error
+
+echo "final review gate: bundled -t and a trailing -- still switch branches (TASK-067):"
+check feature/x block 'git checkout -qt origin/dev && git commit -m x'
+check feature/x block 'git checkout main -- && git commit -m x'
+check feature/x block 'git checkout -t origin/dev -- && git commit -m x'
+check feature/x allow 'git checkout main -- README && git commit -m x'   # restores a file; stays put
+
+echo "final review gate: branch creation that writes an upstream, then a push (TASK-067):"
+git -C "$REPO" config push.default upstream
+git -C "$REPO" update-ref refs/remotes/origin/dev HEAD               # a remote-tracking start point
+check feature/x block 'git checkout -b x9 -t origin/dev && git push'
+check feature/x block 'git checkout -b feature/q origin/dev && git push'   # branch.autoSetupMerge's default
+check feature/x allow 'git checkout -b x9 main && git push origin x9'      # a local start point: no upstream
+check feature/x block 'git switch -c x9 --track origin/dev && git push'
+check feature/x block 'git checkout -qb x9 --track=direct origin/dev && git push'
+check feature/x block 'git worktree add -b x9 /tmp/op-wt-x9 origin/dev && git push'
+check feature/x allow 'git switch -c x9 && git push origin x9'           # no start point: no upstream
+check feature/x allow 'git checkout --no-track -b x9 origin/dev && git push origin x9'
+git -C "$REPO" config --unset push.default
+git -C "$REPO" update-ref -d refs/remotes/origin/dev
+
+echo "final review gate: a word that expands to nothing is no refspec (TASK-067):"
+git -C "$REPO" config remote.origin.push HEAD:refs/heads/dev
+check feature/x block 'E=; git push origin $E'
+check feature/x block 'unset E; git push origin $E'
+check feature/x block 'git push origin $TMPDIR'
+check feature/x block 'git push origin "$TMPDIR"'
+check feature/x allow 'E=feat; git push origin $E'
+check feature/x allow 'cd "$HOME" && cd - && git commit -m x'          # only a push is read with HOME ''
 git -C "$REPO" config --unset remote.origin.push
 
 echo

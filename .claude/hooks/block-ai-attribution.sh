@@ -11,6 +11,7 @@
 # `$(cat file)`, `$(< file)` or backquoted `cat` in the command reads. `git commit` with no message opens
 # an editor; that path is covered by .githooks/commit-msg (scripts/setup-dev.sh installs it) and CI
 # (pr-gates.yml).
+# A command it can't parse is scanned as raw text; one it can't check at all (an internal error) is blocked.
 # Exit 2 blocks the call and feeds stderr back to the agent.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 input=$(cat)
@@ -49,44 +50,52 @@ def blocked():
     print("(.claude/ tooling is committed; authorship is not. See CLAUDE.md → 'Authorship'.)", file=sys.stderr)
     sys.exit(2)
 
-cmd, cwd = read_payload()
-if not cmd:  # no raw-text prefilter: `gi\<newline>t push` only becomes `git` after parsing (review round 6)
-    sys.exit(0)
-try:
-    commands = list(simple_commands(cmd, cwd))
-except ParseError:
-    if PATTERN.search(cmd):  # unbalanced quotes: bash won't run it, but don't let it look approved
+def main():
+    cmd, cwd = read_payload()
+    if not cmd:  # no raw-text prefilter: `gi\<newline>t push` only becomes `git` after parsing (review round 6)
+        sys.exit(0)
+    try:
+        commands = list(simple_commands(cmd, cwd))
+    except ParseError:
+        if PATTERN.search(cmd):  # unbalanced quotes: bash won't run it, but don't let it look approved
+            blocked()
+        sys.exit(0)
+
+    texts, relevant = [], False
+    for argv, d in commands:
+        g = git_subcommand(argv, d)
+        if g and g[0] in GIT_MSG:
+            relevant = True
+            texts += [file_text(f, g[2]) for f in opt_values(g[1], "-F", "--file")]
+        h = gh_subcommand(argv)
+        if h and h[0] == "pr" and h[1] in GH_PR_WRITE:
+            relevant = True
+            texts += [file_text(f, d) for f in opt_values(h[2], "--body-file", "-F")]
+        if h and h[0] == "release" and h[1] in GH_RELEASE_WRITE:
+            relevant = True
+            texts += [file_text(f, d) for f in opt_values(h[2], "--notes-file", "-F")]
+    if relevant:
+        # A message fed on stdin: `git commit -F - < msg.txt` (input redirect) or `cat msg.txt | git commit -F -`.
+        for op, target, d in redirect_targets(cmd, cwd):
+            if "<" in op and target:
+                texts.append(file_text(target, d))
+        for argv, d in commands:
+            if argv and argv[0] == "cat":
+                texts += [file_text(a, d) for a in argv[1:] if not a.startswith("-")]
+            for m in (m for word in argv for m in SUBST_READ.finditer(word)):
+                try:
+                    names = shlex.split(next(g for g in m.groups() if g is not None))
+                except ValueError:
+                    continue
+                texts += [file_text(a, d) for a in names if not a.startswith("-")]
+    if relevant and (PATTERN.search(cmd) or any(PATTERN.search(t) for t in texts)):
         blocked()
     sys.exit(0)
 
-texts, relevant = [], False
-for argv, d in commands:
-    g = git_subcommand(argv, d)
-    if g and g[0] in GIT_MSG:
-        relevant = True
-        texts += [file_text(f, g[2]) for f in opt_values(g[1], "-F", "--file")]
-    h = gh_subcommand(argv)
-    if h and h[0] == "pr" and h[1] in GH_PR_WRITE:
-        relevant = True
-        texts += [file_text(f, d) for f in opt_values(h[2], "--body-file", "-F")]
-    if h and h[0] == "release" and h[1] in GH_RELEASE_WRITE:
-        relevant = True
-        texts += [file_text(f, d) for f in opt_values(h[2], "--notes-file", "-F")]
-if relevant:
-    # A message fed on stdin: `git commit -F - < msg.txt` (input redirect) or `cat msg.txt | git commit -F -`.
-    for op, target, d in redirect_targets(cmd, cwd):
-        if "<" in op and target:
-            texts.append(file_text(target, d))
-    for argv, d in commands:
-        if argv and argv[0] == "cat":
-            texts += [file_text(a, d) for a in argv[1:] if not a.startswith("-")]
-        for m in (m for word in argv for m in SUBST_READ.finditer(word)):
-            try:
-                names = shlex.split(next(g for g in m.groups() if g is not None))
-            except ValueError:
-                continue
-            texts += [file_text(a, d) for a in names if not a.startswith("-")]
-if relevant and (PATTERN.search(cmd) or any(PATTERN.search(t) for t in texts)):
-    blocked()
-sys.exit(0)
+try:
+    main()
+except Exception as exc:  # a crash exits 1, which Claude Code lets through: block instead (TASK-067 final review gate)
+    print(f"Blocked: block-ai-attribution.sh could not check this command ({type(exc).__name__}). Write it more "
+          "plainly and retry.", file=sys.stderr)
+    sys.exit(2)
 PY

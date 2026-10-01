@@ -922,7 +922,8 @@ check $P allow "cd \"\$(…--show-toplevel)\" && rm -rf build" "$(payload_bash '
 check $P allow "cd \"\$(…--show-toplevel)/frontend\" && rm -rf build" "$(payload_bash 'cd "$(git rev-parse --show-toplevel)/frontend" && rm -rf build')"
 check $P block "cd \"\$(…--show-toplevel)\" && rm -rf data" "$(payload_bash 'cd "$(git rev-parse --show-toplevel)" && rm -rf data')"
 check $P allow "cd \"\$(…--show-toplevel)\" && rm -rf build (wt)" "$(payload_at "$WTO" 'cd "$(git rev-parse --show-toplevel)" && rm -rf build')"
-check $P allow "echo {1..5000} > /tmp/… (a big brace, no parse error)" "$(payload_bash 'echo {1..5000} > /tmp/op-x')"
+check $P block "echo {1..5000} > /tmp/… (past BRACE_LIMIT: fails closed)" "$(payload_bash 'echo {1..5000} > /tmp/op-x')"
+check $P allow "echo {1..4096} > /tmp/… (at BRACE_LIMIT)" "$(payload_bash 'echo {1..4096} > /tmp/op-x')"
 check $P block "X=frontend; unset X; rm -rf \"\${X}data\"" "$(payload_bash 'X=frontend; unset X; rm -rf "${X}data"')"
 check $P block "export X=frontend; env -u X bash -c 'rm -rf …'" "$(payload_bash "X=frontend; export X; env -u X bash -c 'rm -rf \"\${X}data\"'")"
 TMPDIR="$TMP/scratch" check $P allow "rm -rf \"\$TMPDIR\" (empty when unset: no path)" "$(payload_bash 'rm -rf "$TMPDIR"')"
@@ -956,6 +957,88 @@ check $R block "printf APPROVE > \$(…)/op-revie?s/<sha>" "$(payload_bash 'prin
 # config written by other means than `git config`, then a git command that reads it
 check $R block "echo [alias] >> .git/config; git p …"   "$(payload_bash 'echo "[alias] p = push" >> .git/config; git p origin other2')"
 check $R block "GIT_CONFIG_GLOBAL=… bash -c 'git push origin'" "$(payload_bash "GIT_CONFIG_GLOBAL=/tmp/op-g bash -c 'git push origin'")"
+
+echo "== round-10 rows (TASK-067 final review gate: crashes fail closed, brace limits, records, worktrees)"
+# a hook that crashes exits 1, which Claude Code lets through: deep brace nesting, a lone surrogate
+BR="echo $(python3 -c 'print("{x," * 1100 + "x" + "}" * 1100)')"
+check $P block "1100 nested braces; rm -rf data/snapshots" "$(payload_bash "$BR; rm -rf data/snapshots")"
+check $R block "1100 nested braces; git push origin other2" "$(payload_bash "$BR; git push origin other2")"
+check $A block "1100 nested braces; commit with a trailer" "$(payload_bash "$BR; git commit -m \"x $TRAILER\"")"
+check $P block "rm -rf \$'\\ud800' data/snapshots (lone surrogate)" "$(payload_bash "rm -rf \$'\\ud800' data/snapshots")"
+check $P allow "echo {a,{b,c}} > /tmp/… (shallow nesting)" "$(payload_bash 'echo {a,{b,c}} > /tmp/op-x')"
+check $A allow "1100 nested braces; clean commit (a parse error: text scanned)" "$(payload_bash "$BR; git commit -m x")"
+EV="$(python3 -c 'print("eval " * 1100)')"   # nests deeper than Python recurses: an internal error, refused
+check $R block "eval ×1100 git push origin mut (approved)" "$(payload_bash "${EV}git push origin mut")"
+check $A block "eval ×1100 git commit -m x"              "$(payload_bash "${EV}git commit -m x")"
+check $P block "eval ×1100 rm -rf build"                 "$(payload_bash "${EV}rm -rf build")"
+# past BRACE_LIMIT words a brace expression is a parse error (fail closed), not a truncated list
+check $P block "rm -rf {x{1..4096},data/snapshots}"      "$(payload_bash 'rm -rf {x{1..4096},data/snapshots}')"
+check $P block "git add -f {x{1..4096},data}"            "$(payload_bash 'git add -f {x{1..4096},data}')"
+# an inline message is text only for a command that takes one; --output writes a file
+check $R block "git log -m --output=.git/op-reviews/<sha>" "$(payload_bash 'git log -m --output=.git/op-reviews/abc --format=tformat:APPROVE -1 abc')"
+check $R block "git log --output .git/op-reviews/<sha>"  "$(payload_bash 'git log --output .git/op-reviews/abc -1')"
+check $R block "git commit -m --output=.git/op-reviews/x" "$(payload_bash 'git commit -m --output=.git/op-reviews/abc')"
+check $R allow "git tag -m \"… op-reviews/<sha> …\""      "$(payload_bash 'git tag -a v1 -m "records live in .git/op-reviews/abc"')"
+check $R block "git log -m <record path> (log takes no message)" "$(payload_bash 'git log -m .git/op-reviews/abc -1')"
+check $R block "(in .git) git log --output=op-reviews/<sha>" "$(payload_at "$REPO/.git" 'git log --output=op-reviews/abc -1')"
+check $P block "git log --output=data/snapshots/s1/x"    "$(payload_bash 'git log --output=data/snapshots/s1/x -1')"
+check $P block "git diff --output data/snapshots/s1/x"   "$(payload_bash 'git diff --output data/snapshots/s1/x')"
+check $P block "git log --output=\"\$UNSET/x\""           "$(payload_bash 'git log --output="$OP_UNSET_DIR/x" -1')"
+check $P allow "git diff --output=/tmp/op-x.diff"        "$(payload_bash 'git diff --output=/tmp/op-x.diff')"
+# after a cd whose outcome is unknown, `cd -` / `~-` are unknown too (a failed cd keeps OLDPWD)
+check $P block "cd /tmp; cd /nonexistent; cd -; rm -rf data" "$(payload_bash 'cd /tmp; cd /op-nonexistent; cd - ; rm -rf data')"
+check $P block "cd /tmp && cd \"\$(echo x)\"; rm -rf ~-/data" "$(payload_bash 'cd /tmp && cd "$(echo x)"; rm -rf ~-/data')"
+check $P allow "cd /tmp && cd - && rm -rf build"         "$(payload_bash 'cd /tmp && cd - && rm -rf build')"
+# $(git rev-parse --git-common-dir|--git-dir|--absolute-git-dir) is resolved, so a glob after it expands
+check $R block "cp … \$(…--git-common-dir)/op-*"         "$(payload_bash 'cp /tmp/abc $(git rev-parse --git-common-dir)/op-*')"
+check $R block "cp … \$(…--git-common-dir)/*reviews"     "$(payload_bash 'cp /tmp/abc $(git rev-parse --git-common-dir)/*reviews')"
+check $R block "cp -t \$(…--git-common-dir)/op-* …"      "$(payload_bash 'cp -t $(git rev-parse --git-common-dir)/op-* /tmp/abc')"
+check $R block "cd \$(…--git-common-dir)/op-* && cp …"   "$(payload_bash 'cd $(git rev-parse --git-common-dir)/op-* && cp /tmp/abc .')"
+check $R block "> \$(…--git-common-dir)/op-*/abc"        "$(payload_bash 'printf APPROVE > $(git rev-parse --git-common-dir)/op-*/abc')"
+check $R block "G=\$(…--git-common-dir); cp … \$G/op-*"   "$(payload_bash 'G=$(git rev-parse --git-common-dir); cp /tmp/abc $G/op-*')"
+check $R block "cp … \"\$(…--absolute-git-dir)\"/op-*"   "$(payload_bash 'cp /tmp/abc "$(git rev-parse --absolute-git-dir)"/op-*')"
+check $R allow "ls \$(…--git-common-dir)/op-*/ (a reader)" "$(payload_bash 'ls $(git rev-parse --git-common-dir)/op-*/')"
+check $P allow "rm -rf \"\$(…--git-common-dir)/op-scratch\"" "$(payload_bash 'rm -rf "$(git rev-parse --git-common-dir)/op-scratch"')"
+check $P block "wt: rm -rf \"\$(…--git-dir)/../../../data\"" "$(payload_at "$WTO" 'rm -rf "$(git rev-parse --git-dir)/../../../data"')"
+# a push in the same call only after read-only git commands: any other may move the ref it pushes
+check $R block "git branch -f mut other2; git push origin mut" "$(payload_bash 'git branch -f mut other2; git push origin mut')"
+check $R block "git fetch . +other2:mut; git push origin mut" "$(payload_bash 'git fetch . +other2:mut; git push origin mut')"
+check $R block "git worktree add … -B mut; git push origin mut" "$(payload_bash 'git worktree add ../q other2 -B mut; git push origin mut')"
+check $R allow "git fetch origin && git push origin mut" "$(payload_bash 'git fetch origin && git push origin mut')"
+check $R allow "git log -1 && git diff && git push origin mut" "$(payload_bash 'git log -1 && git diff --stat && git push origin mut')"
+# a path in another worktree is compared case-blind (APFS folds case)
+if [ -d "$TMP/R&D REPO" ]; then
+  check $P block "wt: rm -rf ../<MAIN>/data/snapshots"   "$(payload_at "$WTO" "rm -rf '../R&D REPO/data/snapshots'")"
+  check $P block "wt: cd ../<MAIN> && rm -rf data"        "$(payload_at "$WTO" "cd '../R&D REPO' && rm -rf data")"
+  check $P block "wt: mv ../<MAIN>/data /tmp/x"          "$(payload_at "$WTO" "mv '../R&D REPO/data' /tmp/op-x")"
+else
+  pass=$((pass+3)); echo "  skip case-folding rows: \$TMP is on a case-sensitive volume"
+fi
+# a data-less worktree: mktemp and for-loop variables are known paths
+check $P allow "wt: tmp=\$(mktemp -d) && … && rm -rf \"\$tmp\"" "$(payload_at "$WTO" 'tmp=$(mktemp -d) && echo x > "$tmp/a" && rm -rf "$tmp"')"
+check $P allow "wt: for f in /tmp/a /tmp/b; do rm -f \"\$f\"; done" "$(payload_at "$WTO" 'for f in /tmp/op-a /tmp/op-b; do rm -f "$f"; done')"
+check $P allow "wt: OUT=\$(mktemp); cp out.txt \"\$OUT\""   "$(payload_at "$WTO" 'OUT=$(mktemp); cp out.txt "$OUT"')"
+TMPDIR="$TMP/scratch" check $P allow "wt: rm -rf \"\$TMPDIR\"/*" "$(payload_at "$WTO" 'rm -rf "$TMPDIR"/*')"
+check $P allow "rm -rf \"\$(mktemp -d -t op)\"/x"          "$(payload_bash 'rm -rf "$(mktemp -d -t op)"/x')"
+check $P block "for f in /tmp/a data; do rm -rf \"\$f\"; done" "$(payload_bash 'for f in /tmp/op-a data; do rm -rf "$f"; done')"
+check $P block "for f in \$UNSET; do rm -rf \"\$f\"; done" "$(payload_bash 'for f in $OP_UNSET_DIR; do rm -rf "$f"; done')"
+check $P block "t=\$(mktemp -d data/x.XXXX); rm -rf \"\$t\"/.." "$(payload_bash 't=$(mktemp -d data/x.XXXX); rm -rf "$t"/..')"
+check $P block "for d in snapshots; do rm -rf \"data/\$d\"; done" "$(payload_bash 'for d in snapshots; do rm -rf "data/$d"; done')"
+# a redirect target this guard can't resolve is refused where data/ is
+check $P block "echo x > \"\$(echo data)/snapshots/…\""   "$(payload_bash 'echo x > "$(echo data)/snapshots/s1/records.jsonl"')"
+check $P block "echo x >> \"\$(echo data)/snapshots/…\""  "$(payload_bash 'echo x >> "$(echo data)/snapshots/s1/records.jsonl"')"
+check $P block "echo x > \"\`echo data\`/snapshots/…\""   "$(payload_bash 'echo x > "`echo data`/snapshots/s1/records.jsonl"')"
+check $P allow "echo x > /tmp/… 2>&1"                    "$(payload_bash 'echo x > /tmp/op-x 2>&1')"
+# $(git rev-parse --show-toplevel) is the worktree top, not the directory the command runs in
+check $P block "frontend: cd \"\$(…--show-toplevel)\" && rm -rf data" "$(payload_at "$REPO/frontend" 'cd "$(git rev-parse --show-toplevel)" && rm -rf data')"
+# everyday commands stay allowed
+check $P allow "rm -f \"\$TMPDIR/x\""                     "$(payload_bash 'rm -f "$TMPDIR/x"')"
+check $P allow "cd \"\$(…--show-toplevel)\" && make"      "$(payload_bash 'cd "$(git rev-parse --show-toplevel)" && make lint')"
+check $R allow "git commit -m with braces, \$ and op-reviews" "$(payload_bash 'git commit -m "fix {a,b}: \$HOME and .git/op-reviews/abc"')"
+check $R allow "gh pr create --body with braces, \$ and op-reviews" "$(payload_bash 'gh pr create --label no-learning --base dev --head mut --title t --body "{a,b} \$X .git/op-reviews/abc"')"
+check $A allow "git commit -F - <<EOF (clean heredoc)"   "$(payload_bash "git commit -F - <<'EOF'
+fix: {a,b} \$X op-reviews
+EOF")"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")
