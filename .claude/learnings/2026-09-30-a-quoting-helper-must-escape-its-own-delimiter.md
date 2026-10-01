@@ -46,3 +46,15 @@ backtick in the query unable to end the message's backtick quoting.
   through `clip`; what it escapes; message text is not contract); `docs/specs/02-query-language.md`.
 - Test or hook added? — the property and goldens above; no hook (the property catches a bypass that a
   generated query reaches).
+
+## Addendum — 2026-10-01 (TASK-143)
+- The rule covers every quote of client text, not just query text: the 422 handler joined pydantic's `loc`
+  raw, and a `loc` can be a body key the client sent (`{"a\nb": 1}` put a newline in the message). Evidence:
+  `test_errors.py::test_422_quotes_each_body_key_through_clip` failed before `api/errors.py::bad_param_message`.
+- A second unbounded input hid in the same line: pydantic reports every unexpected key, so a body of many keys
+  gave a message as long as the body. The fix names `MAX_NAMED_PARAMS` and counts the rest, as
+  `deps.strict_query` already did for query parameters.
+- The property was cheapest as real pydantic errors (`ParseRequest.model_validate` over arbitrary keys) fed to
+  the pure message builder, not a `TestClient` per example (function-scoped fixtures and Hypothesis don't mix).
+- Propagated to: `.claude/skills/error-diagnostics/SKILL.md` §Message style (request locations too) and the
+  spec 04 `API_BAD_PARAM` row.
