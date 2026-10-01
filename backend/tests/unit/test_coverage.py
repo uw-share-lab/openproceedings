@@ -211,6 +211,9 @@ WINDOW = {"from": "2026-09-20T10:00:00+00:00", "to": "2026-09-21T09:00:00+00:00"
         _set(("crawl_windows", "*"), WINDOW),  # no source is named `*`
         _set(("sources", "*"), {"crawl_window": WINDOW}),  # in either map (TASK-122)
         _set(("crawl_windows", "ris"), {"from": "x"}),
+        _set(("query_dates",), {"ris": "UTC"}),  # TASK-077: `utc` or `local` only
+        _set(("query_dates",), {"openreview_v2": "utc"}),  # a crawl's dates are always UTC: not a key
+        _set(("query_dates",), ["ris"]),
     ],
 )
 def test_an_inconsistent_manifest_is_refused_never_guessed(edit: Callable[[dict[str, Any]], None]) -> None:

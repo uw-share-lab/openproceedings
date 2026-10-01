@@ -57,7 +57,7 @@ Only titles and abstracts are indexed. A record without an abstract can be found
 - Rows are ordered venue (A–Z), then year (newest first); the table has a caption naming the snapshot, `<th
   scope>` headers, and `tabular-nums`.
 - The window follows `snapshot.crawl_dates_kind["*"]`: "Crawled", "Google Scholar searches run", or the
-  mixed wording. The `*` entry is the corpus-wide summary; per-source windows remain available in the API.
+  mixed wording, then the zone of Scholar dates ("(local time)" or "(UTC)", CV-1, TASK-077). The `*` entry is the corpus-wide summary; per-source windows remain available in the API.
   The page never calls Scholar search dates a crawl (prisma-reporting).
 - No chart in M3b: the table is what a methods section cites. A chart can come with the research-dataviz work.
 

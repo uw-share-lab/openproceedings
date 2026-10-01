@@ -1,0 +1,27 @@
+# Publish or Perish query-date offsets (spec 01 §Sources, RIS row; snapshots skill; ris-importer agent;
+# TASK-077, decision-025).
+# Data, not code: `ingest/ris.py` loads and checks it, and no other module holds an offset.
+#
+# PoP writes each record's `M1  - Query date: YYYY-MM-DD HH:MM:SS` in the local wall time of the machine that
+# ran the search, with no zone. A cache entry listed here has its query dates converted to UTC with its
+# offset; an entry missing from the table keeps the local wall time, stored labelled UTC and marked
+# "local, offset unknown" in the snapshot manifest (`query_dates`).
+#
+# One offset per entry: a row holds only while all of the entry's query dates fall on the same side of a
+# daylight-saving change; an entry that spans one is split into separate searches, or left out (local).
+#
+# Keys are cache entry names (`data/cache/ris/<name>/`, the scholarmend output directory's name).
+# Columns
+#   utc_offset  the local time's offset from UTC when the search ran, `+HH:MM` or `-HH:MM`
+#   evidence    where the offset was read, so a reviewer can check it
+#   verified    the date the row was checked
+
+[out-covidence]
+utc_offset = "-04:00"
+evidence = "PoP's own query record holds epoch 1789826585 (2026-09-19T14:03:05Z) for the search whose RIS reads Query date: 2026-09-19 10:03:05"
+verified = 2026-10-01
+
+[out-covidence-2020-2024]
+utc_offset = "-04:00"
+evidence = "PoP's own query record holds epoch 1790180170 (2026-09-23T16:16:10Z) for the search whose RIS reads Query date: 2026-09-23 12:16:10"
+verified = 2026-10-01

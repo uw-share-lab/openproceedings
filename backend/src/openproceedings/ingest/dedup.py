@@ -248,7 +248,10 @@ def attribution(
 def _one_per_field_and_source(record_id: str, claims: Iterable[Claim]) -> tuple[list[Claim], list[Conflict]]:
     """The newest claim for each (field, source). Any other value that source gave is a conflicts.csv row:
     `newest:<source>` when it is older, `tie:<source>` when it was fetched at the same moment (then the
-    kept value is only the deterministic pick, so a reviewer must look)."""
+    kept value is only the deterministic pick, so a reviewer must look). For RIS, "newest" compares Publish or
+    Perish query dates, which are true UTC only for cache entries `ris_offsets.toml` lists (decision-025): two
+    entries on different bases (one listed, one local) can be ordered wrongly when run within the offset of
+    each other, which the manifest's `query_dates: local` flags."""
     groups: dict[tuple[str, str], set[Claim]] = defaultdict(set)
     for c in claims:
         groups[(c.field, c.source)].add(c)

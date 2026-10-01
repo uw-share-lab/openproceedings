@@ -188,7 +188,9 @@ describe("the header", () => {
     // a window within one day is written once, with "on"
     expect(s.crawl_dates["*"]!.from.slice(0, 10)).toBe(s.crawl_dates["*"]!.to.slice(0, 10));
     expect(text).toContain(`Google Scholar searches run on ${s.crawl_dates["*"]!.from.slice(0, 10)}`);
-    expect(text).toContain(`ris: Google Scholar searches run on ${s.crawl_dates.ris!.from.slice(0, 10)}`);
+    expect(text).toContain(
+      `ris: Google Scholar searches run on ${s.crawl_dates.ris!.from.slice(0, 10)} (local time)`,
+    ); // no offset recorded for the fixture's entry (TASK-077)
     expect(text).not.toMatch(/Crawled/);
     expect(text).toContain(`Sources: ${s.sources.join(", ")}`);
     expect(text).toContain("its counts are not PRISMA identification numbers");
@@ -236,6 +238,31 @@ describe("the header", () => {
     const text = document.body.textContent ?? "";
     expect(text).toContain("Crawled ");
     expect(text).not.toContain("PRISMA identification numbers");
+  });
+
+  it("calls converted Scholar dates Scholar searches too, never a crawl (TASK-077)", () => {
+    const data = copy();
+    data.snapshot.crawl_dates_kind = { "*": "scholar_query_dates_utc", ris: "scholar_query_dates_utc" };
+    render(<CoverageReport coverage={data} />);
+    const text = document.body.textContent ?? "";
+    const day = data.snapshot.crawl_dates.ris!.from.slice(0, 10);
+    expect(text).toContain(`ris: Google Scholar searches run on ${day} (UTC)`);
+    expect(text).not.toContain("Crawled");
+    expect(text).not.toContain("local time");
+  });
+
+  it("marks the Scholar dates of a mixed window as local until their offset is recorded (TASK-077)", () => {
+    const data = copy();
+    data.snapshot.crawl_dates_kind = { "*": "mixed", ris: "scholar_query_dates" };
+    render(<CoverageReport coverage={data} />);
+    const day = data.snapshot.crawl_dates["*"]!.from.slice(0, 10);
+    expect(screen.getByText(/^Built /).textContent).toContain(
+      ` · Collected on ${day} (Scholar dates in local time)`,
+    );
+    data.snapshot.crawl_dates_kind = { "*": "mixed_utc", ris: "scholar_query_dates_utc" };
+    cleanup();
+    render(<CoverageReport coverage={data} />);
+    expect(screen.getByText(/^Built /).textContent).toContain(` · Collected on ${day} (UTC)`);
   });
 
   it("writes a window over several days from its start to its end", () => {

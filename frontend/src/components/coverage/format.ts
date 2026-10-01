@@ -26,13 +26,15 @@ export function minuteUtc(timestamp: string): string {
 /**
  * What a window's ends are, in words (`snapshot.crawl_dates_kind`): a crawl's fetch times, or the dates a
  * bootstrap source's Google Scholar searches were run, which the page must never call a crawl
- * (prisma-reporting). A kind this page doesn't know, `mixed` included, reads as the neutral "Collected".
+ * (prisma-reporting), whether or not their offset was recorded (TASK-077). A kind this page doesn't know,
+ * `mixed` and `mixed_utc` included, reads as the neutral "Collected".
  */
 export function windowVerb(kind: string | undefined): string {
   switch (kind) {
     case "crawl":
       return "Crawled";
     case "scholar_query_dates":
+    case "scholar_query_dates_utc":
       return "Google Scholar searches run";
     default:
       return "Collected";
@@ -50,12 +52,35 @@ export function windowText(label: string, window: Schemas["CrawlWindow"]): strin
 }
 
 /**
- * The corpus-wide window in words (`Google Scholar searches run on 2026-09-26`), the one sentence
+ * The zone a window's Scholar dates are in, after its dates (TASK-077, decision-025): local time when their
+ * offset wasn't recorded, UTC when it was; nothing for a crawl's fetch times or a kind this page doesn't know.
+ */
+export function windowZone(kind: string | undefined): string {
+  switch (kind) {
+    case "scholar_query_dates":
+      return " (local time)";
+    case "mixed":
+      return " (Scholar dates in local time)";
+    case "scholar_query_dates_utc":
+    case "mixed_utc":
+      return " (UTC)";
+    default:
+      return "";
+  }
+}
+
+/** A window of `kind` in words: its verb, its days and the zone of its Scholar dates. */
+export function kindWindowText(kind: string | undefined, window: Schemas["CrawlWindow"]): string {
+  return windowText(windowVerb(kind), window) + windowZone(kind);
+}
+
+/**
+ * The corpus-wide window in words (`Google Scholar searches run on 2026-09-26 (local time)`), the one sentence
  * `/coverage` and the home line both show; `null` when the snapshot has no `*` window, which is left out.
  */
 export function corpusWindow(snapshot: Schemas["SnapshotInfo"]): string | null {
   const window = snapshot.crawl_dates[ALL_SOURCES];
-  return window ? windowText(windowVerb(snapshot.crawl_dates_kind[ALL_SOURCES]), window) : null;
+  return window ? kindWindowText(snapshot.crawl_dates_kind[ALL_SOURCES], window) : null;
 }
 
 /** `+1.3%`, `−0.4%`, `0.0%`: the API's unrounded `delta_pct` to one decimal (coverage-reporting §Report shape). */

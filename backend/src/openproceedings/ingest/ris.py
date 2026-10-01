@@ -27,8 +27,10 @@ never does:
 
 Every claim has `source="ris"`; `evidence` names where it came from (`scholarmend:<source> <evidence>`, or
 `mended.ris:TI` for the RIS text); `fetched_at` is the RIS `M1  - Query date:`. PoP writes that as local
-wall time with no zone; it is stored labelled UTC (provenance only, never hashed). A record in both files
-is returned twice; dedup merges them (task-021).
+wall time with no zone. A cache entry listed in `ris_offsets.toml` has it converted to UTC with the entry's
+recorded offset; any other keeps the wall time, stored labelled UTC, and its report's `utc_offset` is null
+("local, offset unknown"; TASK-077, decision-025). It is provenance only: never in `content_hash`, though it
+is in the snapshot's bytes. A record in both files is returned twice; dedup merges them (task-021).
 """
 
 from __future__ import annotations
@@ -37,11 +39,13 @@ import hashlib
 import json
 import logging
 import re
+import tomllib
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from importlib.metadata import version
+from importlib.resources import files
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -71,6 +75,42 @@ _QUERY_DATE = re.compile(r"Query date: ([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9
 _TRUNCATED = "..."  # Scholar's marker for a cut author list
 _ABSTRACT_SOURCES = ("openreview_api", "proceedings_page")  # decision-005 order; Scholar/S2 never
 SKIP_REASONS = ("out_of_scope", "unresolved", "no_id", "ambiguous", "conflict", "no_query_date")
+_OFFSET = re.compile(r"([+-])([0-9]{2}):([0-9]{2})")
+
+
+def load_offsets(text: str) -> Mapping[str, str]:
+    """`ris_offsets.toml` (cache entry name → `±HH:MM`), checked: every row has exactly `utc_offset`,
+    `evidence` and `verified`, and an offset within ±14:00 on a whole minute. A bad row is an import error."""
+    table: dict[str, str] = {}
+    for name, row in tomllib.loads(text).items():
+        where = f"ris_offsets.toml entry {name!r}"
+        if not isinstance(row, dict) or set(row) != {"utc_offset", "evidence", "verified"}:
+            raise ValueError(f"{where}: needs exactly utc_offset, evidence and verified")
+        offset, evidence = row["utc_offset"], row["evidence"]
+        if not isinstance(offset, str) or not (m := _OFFSET.fullmatch(offset)):
+            raise ValueError(f"{where}: utc_offset must be +HH:MM or -HH:MM")
+        if int(m.group(3)) >= 60 or int(m.group(2)) * 60 + int(m.group(3)) > 14 * 60:
+            raise ValueError(f"{where}: utc_offset is not a real offset")
+        if not isinstance(evidence, str) or not evidence.strip():
+            raise ValueError(f"{where}: evidence is empty")
+        if type(row["verified"]) is not date:
+            raise ValueError(f"{where}: verified must be a date")
+        table[name] = offset
+    return MappingProxyType(dict(sorted(table.items())))
+
+
+def _zone(offset: str) -> timezone:
+    m = _OFFSET.fullmatch(offset)
+    if m is None:
+        raise ValueError(f"utc_offset {offset!r} must be +HH:MM or -HH:MM")
+    minutes = int(m.group(2)) * 60 + int(m.group(3))
+    return timezone(timedelta(minutes=-minutes if m.group(1) == "-" else minutes))
+
+
+# The recorded offset of each cache entry's Publish or Perish searches (TASK-077, decision-025)
+QUERY_DATE_OFFSETS: Mapping[str, str] = load_offsets(
+    files("openproceedings.ingest").joinpath("ris_offsets.toml").read_text(encoding="utf-8")
+)
 
 
 @dataclass(frozen=True)
@@ -88,6 +128,8 @@ class ImportReport:
     unknown_track: int
     status_overrides: int  # venueid status replaced by a proceedings listing
     track_status: Mapping[str, Mapping[str, int]]  # track → status → count (read-only)
+    # the offset its query dates were converted with (`ris_offsets.toml`); None: local, offset unknown
+    utc_offset: str | None = None
 
     def __post_init__(self) -> None:
         if set(self.skipped) != set(SKIP_REASONS):
@@ -359,12 +401,20 @@ def _check_shape(name: str, entries: object) -> list[dict[str, Any]]:
 
 
 def import_ris(
-    mended: Path, resolved: Path | None = None, name: str | None = None
+    mended: Path,
+    resolved: Path | None = None,
+    name: str | None = None,
+    cache_entry: str | None = None,
+    offsets: Mapping[str, str] = QUERY_DATE_OFFSETS,
 ) -> tuple[list[PaperRecord], ImportReport]:
     """Records and counts from one scholarmend output (`mended.ris` + its `resolved.json`). `name` is how
-    reports and errors refer to it (default `<its directory>/mended.ris`)."""
+    reports and errors refer to it (default `<its directory>/mended.ris`). `cache_entry` is its cache entry name
+    (default its directory's name), which picks its query dates' offset from `offsets`: listed, each
+    `fetched_at` is the query date converted to UTC; not listed, the wall time labelled UTC."""
     resolved = resolved or mended.with_name("resolved.json")
     name = name or f"{mended.parent.name}/{mended.name}"
+    utc_offset = offsets.get(cache_entry if cache_entry is not None else mended.parent.name)
+    zone = UTC if utc_offset is None else _zone(utc_offset)
     ris = parse_file(mended)
     resolved_bytes = resolved.read_bytes()
     try:
@@ -390,9 +440,8 @@ def import_ris(
             skipped["no_query_date"] += 1
             log.debug("ris_skip", extra={"file": name, "index": i, "reason": "no_query_date"})
             continue
-        r = _record(
-            entry, rec.fields, ident, datetime.strptime(dates[0], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
-        )
+        queried = datetime.strptime(dates[0], "%Y-%m-%d %H:%M:%S").replace(tzinfo=zone).astimezone(UTC)
+        r = _record(entry, rec.fields, ident, queried)
         records.append(r)
         overrides += ident.status_override
         track_status.setdefault(r.track, Counter())[r.status] += 1
@@ -408,6 +457,7 @@ def import_ris(
         unknown_track=sum(r.track == "unknown" for r in records),
         status_overrides=overrides,
         track_status={t: dict(c) for t, c in track_status.items()},
+        utc_offset=utc_offset,
     )
     counts = {k: v for k, v in report.to_manifest().items() if k not in ("track_status",)}
     log.info("ris_import", extra=counts)

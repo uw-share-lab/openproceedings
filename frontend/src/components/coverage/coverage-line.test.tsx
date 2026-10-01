@@ -29,7 +29,7 @@ describe("CoverageLine", () => {
   it("writes the fixture's GET /coverage answer", async () => {
     expect(await line(serve(COVERAGE))).toBe(
       "Index c60faee23898 · 39 records indexed · ICLR, ICML, NeurIPS · " +
-        "Google Scholar searches run on 2026-09-26 · Coverage ▸",
+        "Google Scholar searches run on 2026-09-26 (local time) · Coverage ▸",
     );
     expect(screen.getByRole("link", { name: "Coverage ▸" }).getAttribute("href")).toBe("/coverage");
   });

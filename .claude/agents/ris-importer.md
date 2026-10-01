@@ -41,7 +41,9 @@ The code is `backend/src/openproceedings/ingest/ris.py`; its module docstring is
    or Semantic Scholar's.
 5. **Provenance.** Every field gets a `source="ris"` claim whose `evidence` names scholarmend's source
    and evidence (`scholarmend:<source> <evidence>`) or `mended.ris:TI`/`AU`, with `fetched_at` from the
-   RIS `M1  - Query date:` line (PoP local time, labelled UTC).
+   RIS `M1  - Query date:` line (PoP local time), converted to UTC with the cache entry's offset in
+   `ingest/ris_offsets.toml`, or kept as local time labelled UTC, report `utc_offset` null, when the entry has
+   no row (decision-025). A new PoP search needs a row, with evidence, before its snapshot.
 6. **Fixtures and tests.** `backend/tests/fixtures/ris/` is synthetic (decision-004), written by its
    `generate.py`; add a row there and a test in `backend/tests/unit/ingest/test_ris.py`. Real corpus runs
    are local only and never committed.

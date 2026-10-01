@@ -55,8 +55,12 @@ export function windowRow(record: SearchRecord): { label: string; value: string 
       return { label: "Crawl run", value: span };
     case "scholar_query_dates":
       return { label: "Scholar searches run", value: `${span} (local time)` };
+    case "scholar_query_dates_utc":
+      return { label: "Scholar searches run", value: `${span} (UTC)` };
     case "mixed":
       return { label: "Crawls and Scholar searches run", value: `${span} (Scholar dates in local time)` };
+    case "mixed_utc":
+      return { label: "Crawls and Scholar searches run", value: `${span} (UTC)` };
     default:
       return { label: "Collected", value: span };
   }

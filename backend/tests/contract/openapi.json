@@ -2566,7 +2566,7 @@
         "type": "object"
       },
       "SearchRecord": {
-        "description": "Every field of spec 04 §Search records, plus `body_version`, `schema_version` and `ranking_params`\n(the index's other two inputs, so a drifted replay can name a method change after the pinned index is\ngone). `ids` is None when the caller didn't ask for them.\n\nBody version 2 adds `sources` (the snapshot manifest's source names, sorted), `identification_citable`\n(false when every source is a bootstrap one, `vocab.bootstrap_only`: the corpus is an earlier search's\noutput, so `total` is not a PRISMA identification number) and `crawl_dates_kind` (per `crawl_dates` key:\n`crawl`, `scholar_query_dates` or `mixed`), and `dedup`'s two other not-merged counts. A v1 body has\nnone of them: they read as None (\"not recorded\"), never as a guess.",
+        "description": "Every field of spec 04 §Search records, plus `body_version`, `schema_version` and `ranking_params`\n(the index's other two inputs, so a drifted replay can name a method change after the pinned index is\ngone). `ids` is None when the caller didn't ask for them.\n\nBody version 2 adds `sources` (the snapshot manifest's source names, sorted), `identification_citable`\n(false when every source is a bootstrap one, `vocab.bootstrap_only`: the corpus is an earlier search's\noutput, so `total` is not a PRISMA identification number) and `crawl_dates_kind` (per `crawl_dates` key:\n`crawl`, `scholar_query_dates`, `scholar_query_dates_utc`, `mixed` or `mixed_utc`), and `dedup`'s two\nother not-merged counts. A v1 body has\nnone of them: they read as None (\"not recorded\"), never as a guess.",
         "properties": {
           "body_version": {
             "title": "Body Version",
@@ -2599,7 +2599,7 @@
                 "type": "null"
               }
             ],
-            "description": "Per `crawl_dates` key, what its window's ends are: `crawl`, `scholar_query_dates` or `mixed` today. Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "description": "Per `crawl_dates` key, what its window's ends are: `crawl`, `scholar_query_dates` (local time, offset unknown), `scholar_query_dates_utc`, `mixed` or `mixed_utc` today. Open set: new values may be added within /api/v1; handle a value you don't know.",
             "title": "Crawl Dates Kind"
           },
           "dedup": {
@@ -2873,7 +2873,7 @@
             "additionalProperties": {
               "type": "string"
             },
-            "description": "Per `crawl_dates` key, what its window's ends are, derived as a search record's: `crawl` (fetch times, UTC), `scholar_query_dates` (a bootstrap source's window: when its Scholar searches were run) or `mixed` (`*` over both). Open set: new values may be added within /api/v1; handle a value you don't know.",
+            "description": "Per `crawl_dates` key, what its window's ends are, derived as a search record's: `crawl` (fetch times, UTC), `scholar_query_dates` (a bootstrap source's window: when its Scholar searches were run, in local time with no recorded offset), `scholar_query_dates_utc` (the same, converted to UTC with a recorded offset), or `mixed` / `mixed_utc` (`*` over both; `mixed` while some of its Scholar dates are local). Open set: new values may be added within /api/v1; handle a value you don't know.",
             "title": "Crawl Dates Kind",
             "type": "object"
           },
