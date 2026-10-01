@@ -171,8 +171,8 @@ it needs to know which listings were crawled, and whether completely.
   the record-schema skill). The proceedings outrank OpenReview for status, so `resolve` gives `unknown` and its
   `precedence:<source>` conflicts.csv rows, one per OpenReview source whose status claim differs; the OpenReview
   claims stay. An absence claim is **not a listing**: dedup leaves it out of a cluster's sources (and
-  merges.csv's `sources`), so the record never looks listed and a second dedup changes nothing. Reconcile strips absence claims before it judges, so it is idempotent, and a
-  claim a later crawl no longer supports disappears.
+  merges.csv's `sources`), so the record never looks listed and a second dedup changes nothing. Reconcile strips
+  absence claims before it judges, so it is idempotent, and a claim a later crawl no longer supports disappears.
 - Merges are never changed. Conflicts gain the reconciled records' status rows, and a reconciled record's
   earlier `precedence:` status rows give way to the ones its claims now resolve to, as dedup run again would
   write them: a note whose v2 said `accepted` and v1 `rejected` loses its v2-over-v1 row and has `unknown` over

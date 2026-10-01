@@ -213,10 +213,10 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    `precedence:<source>` `conflicts.csv` rows, one per OpenReview source whose status claim differs, which
    replace the record's earlier `precedence:` status rows as dedup run again would write them (TASK-154). The
    OpenReview claims are kept. An absence claim never makes a record a listing, so dedup run again changes
-   nothing, and reconcile is idempotent. A venue-year with an
-   incomplete listing, a track no listing holds, and a record sharing a title or forum with a listing it
-   didn't merge with (ambiguous: it may be the listed paper) are left alone. The check on the 2026-09-29 crawl
-   is `docs/results/2026-09-29-reconcile-real-data.md`.
+   nothing, and reconcile is idempotent. A venue-year with an incomplete listing, a track no listing holds,
+   and a record sharing a title or forum with a listing it didn't merge with (ambiguous: it may be the listed
+   paper) are left alone. The check on the 2026-09-29 crawl is
+   `docs/results/2026-09-29-reconcile-real-data.md`.
 5. **Snapshot.** Write `data/snapshots/<date>-<shorthash>/records.jsonl` (sorted by `id`) and
    `manifest.json`. The manifest holds counts per venue × year × track × status, source versions,
    the crawl date and the snapshot hash. Snapshots are immutable. `data/` is gitignored. Since manifest
