@@ -68,8 +68,10 @@ with a comment is still allowed for an example that is long by design.
   loads its built-in `ci` profile at import (derandomized, no database, `too_slow` suppressed), and profiles
   registered without a parent inherited it. Found when this PR's first CI run failed: before it, CI's `pr`,
   `ci` and `nightly` runs were derandomized, running the same examples every time, and suppressed `too_slow`.
-  Now CI explores new examples on every run, as the property-testing skill always assumed, and a failure is
-  reproduced from its `@reproduce_failure` blob.
+  Now `pr` is derandomized on purpose (`derandomize=True`): the required check runs the same examples on
+  every PR, as it in effect did before, so it never fails a PR for a counterexample in code the PR didn't
+  touch. `ci` and `nightly` explore new examples every night, and a failure there is reproduced from its
+  `@reproduce_failure` blob. `too_slow` now applies in CI for the first time.
 - No effect on matching, `index_version` or search records.
 - Revisit if the PR runners start failing `too_slow` or deadlines without a code cause (then consider option 1
   for `pr`), or if local timing failures come back under another name.

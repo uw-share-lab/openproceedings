@@ -706,7 +706,7 @@
  {
   "label": "profiles: pr suppresses too_slow",
   "file": "backend/tests/conftest.py",
-  "old": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, print_blob=True)",
+  "old": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, derandomize=True, print_blob=True)",
   "new": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, suppress_health_check=[HealthCheck.too_slow], print_blob=True)"
  },
  {
@@ -724,7 +724,7 @@
  {
   "label": "profiles: pr loses its deadline",
   "file": "backend/tests/conftest.py",
-  "old": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, print_blob=True)",
+  "old": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, derandomize=True, print_blob=True)",
   "new": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=None, print_blob=True)"
  },
  {
@@ -754,7 +754,7 @@
  {
   "label": "profiles: pr deadline raised to 10 minutes",
   "file": "backend/tests/conftest.py",
-  "old": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, print_blob=True)",
+  "old": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, derandomize=True, print_blob=True)",
   "new": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=600_000, print_blob=True)"
  },
  {
@@ -778,14 +778,26 @@
  {
   "label": "profiles: pr inherits whichever profile is loaded",
   "file": "backend/tests/conftest.py",
-  "old": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, print_blob=True)",
-  "new": "settings.register_profile(\"pr\", max_examples=200, deadline=2_000, print_blob=True)"
+  "old": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, derandomize=True, print_blob=True)",
+  "new": "settings.register_profile(\"pr\", max_examples=200, deadline=2_000, derandomize=True, print_blob=True)"
  },
  {
   "label": "profiles: the base is the loaded profile",
   "file": "backend/tests/conftest.py",
   "old": "BASE = settings.get_profile(\"default\")",
   "new": "BASE = settings.default"
+ },
+ {
+  "label": "profiles: pr is randomized",
+  "file": "backend/tests/conftest.py",
+  "old": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, derandomize=True, print_blob=True)",
+  "new": "settings.register_profile(\"pr\", BASE, max_examples=200, deadline=2_000, print_blob=True)"
+ },
+ {
+  "label": "profiles: ci is derandomized",
+  "file": "backend/tests/conftest.py",
+  "old": "settings.register_profile(\"ci\", BASE, max_examples=2_000, deadline=2_000, print_blob=True)",
+  "new": "settings.register_profile(\"ci\", BASE, max_examples=2_000, deadline=2_000, derandomize=True, print_blob=True)"
  },
  {
   "label": "lint_tooling lints agent worktrees",

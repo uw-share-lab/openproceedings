@@ -36,5 +36,5 @@ Stop property tests from failing on a loaded machine (`too_slow`, deadlines) wit
 - Built-in `ci` (Hypothesis 6.168): `derandomize=True`, `database=None`, `deadline=None`, `too_slow` suppressed. So since the profiles were written, CI's `pr`, `ci` and `nightly` were derandomized, ran the same examples every run, and couldn't fail `too_slow`.
 - Dead end: tracing conftest double imports, xdist workers and `testpaths` collection. All were fine; the difference was one environment variable.
 - `make tooling` hid the failure: the case table sent pytest's output to `/dev/null`, so CI printed nothing but `Error 1`. It now prints pytest's report on failure.
-- Propagated: conftest `BASE`, the case table's `CI=true` run, 2 more `profiles:` mutants (14 in all), the property-testing skill and decision-024.
+- Propagated: conftest `BASE`, the case table's `CI=true` run, 4 more `profiles:` mutants (16 in all), `pr` derandomized on purpose (the PR gate stays deterministic; `ci` and `nightly` explore), the property-testing skill and decision-024.
 

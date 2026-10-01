@@ -56,11 +56,14 @@ def test_the_ci_profiles_keep_their_deadlines(profile: str, deadline: timedelta 
     assert settings.get_profile(profile).deadline == deadline
 
 
-@pytest.mark.parametrize("profile", ["dev", "pr", "ci", "nightly"])
-def test_no_profile_takes_hypothesis_s_ci_defaults(profile: str) -> None:
-    # with CI set, Hypothesis loads its built-in `ci` profile (derandomized, too_slow suppressed); the case table
-    # also runs this file with CI=true, where a profile registered without its parent would inherit that
-    assert settings.get_profile(profile).derandomize is False
+@pytest.mark.parametrize(
+    ("profile", "derandomized"), [("dev", False), ("pr", True), ("ci", False), ("nightly", False)]
+)
+def test_only_the_pr_gate_is_derandomized(profile: str, derandomized: bool) -> None:
+    # pr runs the same examples on every PR; the others explore. With CI set, Hypothesis loads its built-in `ci`
+    # profile (derandomized, too_slow suppressed); the case table also runs this file with CI=true, where a
+    # profile registered without its parent would inherit that
+    assert settings.get_profile(profile).derandomize is derandomized
 
 
 def test_no_test_suppresses_a_health_check_itself() -> None:

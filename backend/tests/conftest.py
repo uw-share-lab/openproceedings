@@ -43,8 +43,9 @@ settings.register_profile(
     print_blob=True,
 )
 # pr: the dev example count with the ci deadline, so a slow example on a shared runner under pytest-xdist
-# doesn't fail the required check (TASK-127)
-settings.register_profile("pr", BASE, max_examples=200, deadline=2_000, print_blob=True)
+# doesn't fail the required check (TASK-127); derandomized, so the required check runs the same examples on every
+# PR and never fails a PR for a counterexample in code it didn't touch; ci and nightly explore (decision-024)
+settings.register_profile("pr", BASE, max_examples=200, deadline=2_000, derandomize=True, print_blob=True)
 settings.register_profile("ci", BASE, max_examples=2_000, deadline=2_000, print_blob=True)
 settings.register_profile("nightly", BASE, max_examples=50_000, deadline=None, print_blob=True)
 settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))

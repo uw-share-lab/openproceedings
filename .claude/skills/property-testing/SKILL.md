@@ -10,7 +10,7 @@ Register in `backend/tests/conftest.py`:
 | Profile | `max_examples` | Deadline | Used by |
 |---|---|---|---|
 | `dev` | 200 | `None`, and `too_slow` suppressed | local loop (default), `make test` under pytest-xdist: no wall-clock checks (decision-024, below) |
-| `pr` | 200 | 2 s | `test` workflow on every PR, under pytest-xdist: the dev count with the ci deadline, so a slow example on a shared runner doesn't fail the required check (TASK-127) |
+| `pr` | 200 | 2 s | `test` workflow on every PR, under pytest-xdist: the dev count with the ci deadline, so a slow example on a shared runner doesn't fail the required check (TASK-127); `derandomize=True` (decision-024) |
 | `ci` | **2,000** | 2 s | `nightly` workflow's `suite-ci` job: the whole backend suite, under pytest-xdist (differential@2k) |
 | `nightly` | **50,000** | `None` | `nightly` workflow's property jobs (differential@50k: task-057) |
 Every profile sets `print_blob=True` (so a CI failure prints a `@reproduce_failure` blob). The
@@ -22,7 +22,8 @@ Hypothesis example database (`.hypothesis/`) is gitignored; CI failures are repr
 parent copies whatever is loaded, so until TASK-146 the `pr`, `ci` and `nightly` runs in CI were derandomized
 (the same examples on every run) and suppressed `too_slow`, unlike the same profiles locally. The case table
 `test-hypothesis-profiles.sh` runs the profile tests with `CI` unset and with `CI=true`; a local run doesn't
-show the difference otherwise.
+show the difference otherwise. Only `pr` is derandomized, on purpose: the required check runs the same examples
+on every PR, so a PR never fails for a counterexample in code it didn't touch; `ci` and `nightly` explore.
 
 ## Health checks and deadlines (decision-024, TASK-146)
 - **Wall-clock checks are gates only on CI runners.** A deadline and the `too_slow` health check time the
