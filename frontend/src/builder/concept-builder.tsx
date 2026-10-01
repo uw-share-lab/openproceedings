@@ -331,7 +331,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
     const say =
       was?.text === "" && term !== undefined
         ? key === "exclude"
-          ? `Term ${termWritten(term)} added to the excluded terms.`
+          ? `Term ${termWritten(term)} added to the leave-out terms.`
           : `Term ${termWritten(term)} added to group ${key + 1}.`
         : undefined;
     if (then === "next") {
@@ -353,7 +353,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
     else if (moveFocus) focus(`term:${last}`);
     apply(
       next,
-      `${ids.length} terms added to ${key === "exclude" ? "the excluded terms" : `group ${key + 1}`}.`,
+      `${ids.length} terms added to ${key === "exclude" ? "the leave-out terms" : `group ${key + 1}`}.`,
     );
   };
 
@@ -555,10 +555,10 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
                 onClick={() => {
                   focus("add-group");
                   setEditing(null);
-                  apply(removeExclude(model), "Excluded terms removed.");
+                  apply(removeExclude(model), "Leave-out terms removed.");
                 }}
               >
-                Remove excluded terms
+                Remove leave-out terms
               </button>
             }
           >
@@ -573,7 +573,7 @@ export function ConceptBuilder(props: ConceptBuilderProps) {
         </button>
         {model.exclude === null && (
           <button type="button" className={BUTTON} onClick={newExclude}>
-            + Exclude terms
+            + Leave out terms
           </button>
         )}
       </div>

@@ -151,19 +151,20 @@ function TooLarge({
 }
 
 function Unchecked({ outcome, onRetry }: { outcome: ParseOutcome; onRetry: () => void }) {
+  // the server's own message is a whole sentence, so it follows a full stop rather than a colon
   const why =
     outcome.kind === "refused"
-      ? outcome.error.message
+      ? `. ${outcome.error.message}`
       : outcome.kind === "no_answer"
-        ? `the server is busy or restarting (${outcome.status === null ? "" : `HTTP ${outcome.status}, `}not from the search service).`
-        : "couldn't reach the server.";
+        ? `: the server is busy or restarting (${outcome.status === null ? "" : `HTTP ${outcome.status}, `}not from the search service).`
+        : ": the server couldn't be reached. Check your connection.";
   return (
     <p className="break-words">
       <span aria-hidden="true" className="mr-1.5 font-bold text-diag-info">
         ⓘ
       </span>
       <span className="sr-only">Note: </span>
-      The query couldn&apos;t be checked: {why}{" "}
+      The query couldn&apos;t be checked{why}{" "}
       <button
         type="button"
         onClick={onRetry}

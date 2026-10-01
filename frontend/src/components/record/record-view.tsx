@@ -333,7 +333,7 @@ function CantLoad({ failure, onRetry }: { failure: Failure; onRetry: () => void 
         ) : failure.kind === "no_answer" ? (
           ": the server is busy or restarting."
         ) : (
-          ": couldn't reach the server. Check your connection."
+          ": the server couldn't be reached. Check your connection."
         )}
       </p>
       {waiting && failure.kind === "refused" ? (

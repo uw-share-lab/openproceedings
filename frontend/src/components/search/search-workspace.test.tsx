@@ -482,7 +482,7 @@ describe("/parse answers that aren't a parse", () => {
     expect(
       within(screen.getByRole("region", { name: "Diagnostics" })).getByText(/couldn't be checked/)
         .textContent,
-    ).toContain("The query couldn't be checked: Too many requests; try again in 3 s.");
+    ).toContain("The query couldn't be checked. Too many requests; try again in 3 s.");
     expect(summaryOf(view).textContent).toBe("The query couldn't be checked — not searched yet");
     busy = false;
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
@@ -512,11 +512,13 @@ describe("/parse answers that aren't a parse", () => {
     expect(
       within(screen.getByRole("region", { name: "Diagnostics" })).getByText(/couldn't be checked/)
         .textContent,
-    ).toContain("the server is busy or restarting (HTTP 502, not from the search service).");
+    ).toContain(
+      "The query couldn't be checked: the server is busy or restarting (HTTP 502, not from the search service).",
+    );
     expect(squiggles()).toEqual([]);
   });
 
-  it("a fetch that never answers: couldn't reach the server", async () => {
+  it("a fetch that never answers: the server couldn't be reached", async () => {
     const handler = api(() => Promise.reject(new TypeError("Failed to fetch")));
     const { type } = setup({}, handler);
     await type("trust");
@@ -524,7 +526,7 @@ describe("/parse answers that aren't a parse", () => {
     expect(
       within(screen.getByRole("region", { name: "Diagnostics" })).getByText(/couldn't be checked/)
         .textContent,
-    ).toContain("couldn't reach the server.");
+    ).toContain("The query couldn't be checked: the server couldn't be reached. Check your connection.");
   });
 });
 

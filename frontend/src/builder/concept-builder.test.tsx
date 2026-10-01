@@ -290,12 +290,17 @@ describe("the editable builder (design B1)", () => {
   it("adds an Exclude row, written last as NOT", async () => {
     const { toBuilder, doc } = setup({ q: "trust" });
     await toBuilder();
-    fireEvent.click(screen.getByRole("button", { name: "+ Exclude terms" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Leave out terms" }));
     await pass(10);
     expect(screen.getByText("Leave out papers with any of:")).toBeTruthy();
     expect(screen.getByLabelText("Term to leave out")).toBe(document.activeElement);
     await typeTerm("bias");
     expect(doc()).toBe("trust AND NOT bias");
+    expect(screen.getByText("Term bias added to the leave-out terms.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove leave-out terms" }));
+    await pass(10);
+    expect(doc()).toBe("trust");
+    expect(screen.getByText("Leave-out terms removed.")).toBeTruthy();
   });
 
   it("shows a diagnostic under the term its span hits", async () => {

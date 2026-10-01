@@ -383,4 +383,12 @@ describe("not found and can't load", () => {
     fireEvent.click(retry);
     await waitFor(() => expect(screen.getByText(/^Reproduced on /)).toBeTruthy());
   });
+
+  it("says the server couldn't be reached when the stored read never answers", async () => {
+    renderWithApi(<RecordView id={ID} />, () => Promise.reject(new TypeError("Failed to fetch")));
+    await screen.findByRole("button", { name: "Retry" });
+    expect(within(screen.getByRole("alert")).getByText(/^The record couldn't be loaded/).textContent).toBe(
+      "The record couldn't be loaded just now: the server couldn't be reached. Check your connection.",
+    );
+  });
 });

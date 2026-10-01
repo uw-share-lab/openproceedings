@@ -99,7 +99,7 @@ original text.
 │ AND                                                                                          │
 │ Group 3  of 3                                          [↑] [↓] [Remove group]                │
 │  [benchmark ×] [+ term]                                                                      │
-│ [+ Add group]   [+ Exclude terms]                                                            │
+│ [+ Add group]   [+ Leave out terms]                                                          │
 │                                                                                              │
 │ Limits:  venue:ICLR   (search first to edit them in Filters, or edit them in Text)            │
 │                                                                                              │
