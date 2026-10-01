@@ -2834,5 +2834,11 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "                home = shell_vars[\"HOME\"] or None",
   "new": "                home = shell_vars[\"HOME\"]"
+ },
+ {
+  "label": "cmdparse: a bare cd with no HOME goes to the passwd home",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        target = home or None",
+  "new": "        target = home or _passwd_home()"
  }
 ]

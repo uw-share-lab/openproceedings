@@ -1064,6 +1064,12 @@ NO_SLASH="${REPO#/}"
 check_no_home $P allow "no HOME: rm -rf ~/<repo path>/data/snapshots (passwd home)" "$(payload_bash "rm -rf ~/'$NO_SLASH'/data/snapshots")"
 check $P block "unset HOME; rm -f ~/op-x (unknown)" "$(payload_bash 'unset HOME; rm -f ~/op-x')"
 check_no_home $P allow "no HOME: rm -f ~/op-not-a-repo-file" "$(payload_bash 'rm -f ~/op-not-a-repo-file')"
+# a bare `cd` with no HOME: bash stays put, so `data` is still the repo's (unknown target: refused)
+check_no_home $P block "no HOME: cd; rm -rf data" "$(payload_bash 'cd; rm -rf data')"
+check $P block "HOME=; cd; rm -rf data" "$(payload_bash 'HOME=; cd; rm -rf data')"
+# the bypass the '' reading had: `cd ~` to the passwd home, then back to the repo's data/ by a relative path
+FROM_HOME=$(python3 -c 'import os,pwd,sys; print(os.path.relpath(sys.argv[1], pwd.getpwuid(os.getuid()).pw_dir))' "$REPO")
+check_no_home $P block "no HOME: cd ~ && rm -rf <repo rel>/data" "$(payload_bash "cd ~ && rm -rf '$FROM_HOME'/data")"
 check $P allow "cd \"\$(…--show-toplevel)\" && make"      "$(payload_bash 'cd "$(git rev-parse --show-toplevel)" && make lint')"
 check $R allow "git commit -m with braces, \$ and op-reviews" "$(payload_bash 'git commit -m "fix {a,b}: \$HOME and .git/op-reviews/abc"')"
 check $R allow "gh pr create --body with braces, \$ and op-reviews" "$(payload_bash 'gh pr create --label no-learning --base dev --head mut --title t --body "{a,b} \$X .git/op-reviews/abc"')"

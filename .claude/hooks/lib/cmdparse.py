@@ -1095,7 +1095,12 @@ def _change_dir(head: str, words: list[str], state: dict) -> None:
     elif head == "pushd" and words[0][:1] in ("+", "-"):
         pass  # a stack rotation: unknown
     elif not words:
-        target = expand_word("~", cur, variables, env_empty=env_empty)
+        # a bare `cd` goes to $HOME, unlike `~` never the passwd home: with HOME unset (or '') bash says "HOME not
+        # set" and stays, zsh goes home, so the target is unknown (CI fix re-check)
+        home = (
+            variables.get("HOME") if "HOME" in variables else (None if env_empty else os.environ.get("HOME"))
+        )
+        target = home or None
     elif words[0] == "-":
         target = None if old_unknown else old
     else:

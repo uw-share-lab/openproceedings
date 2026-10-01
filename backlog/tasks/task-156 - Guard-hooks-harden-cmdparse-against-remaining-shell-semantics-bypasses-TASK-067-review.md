@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-01 19:36'
-updated_date: '2026-10-01 21:58'
+updated_date: '2026-10-01 22:16'
 labels:
   - security
   - tooling
@@ -41,4 +41,6 @@ Deferred from the TASK-067 review gate by the main session's cap after four roun
 AC#5 and AC#6 came from the TASK-067 confirmation pass (after the final pass), checked against origin/dev's hooks. The deferral itself is the main session's cap decision for the TASK-067 review gate (2026-10-01): fix every Must and every regression in TASK-067, send pre-existing Should-level shell-semantics bypasses here.
 
 2026-10-01 (PR #64 CI fix): `~` with HOME absent from the hook's environment now reads as the passwd home (as bash does), and `~` after `unset HOME` or `HOME=` in the command is unknown (fail closed). AC#3 remains only for a HOME present but set to '' in the hook's environment.
+
+Correction to the note above: a HOME set to '' in the hook's environment is handled (`~` reads as ''), and a bare `cd` with HOME unset or '' is unknown (bash stays, zsh goes home). What remains of AC#3 is the reverse: HOME set in the hook's environment but '' in the agent's shell. The env_empty pass now reads `~` as the passwd home (right for an unset HOME), so a '' HOME is no longer tried there; check `~` both ways in that pass.
 <!-- SECTION:NOTES:END -->
