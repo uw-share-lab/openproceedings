@@ -1062,6 +1062,10 @@ check_no_tmpdir $P block "no TMPDIR: rm -rf \"\${TMPDIR}data\"" "$(payload_bash 
 # the command can't be told from `HOME=`, so its `~` is unknown and refused where data/ exists.
 NO_SLASH="${REPO#/}"
 check_no_home $P allow "no HOME: rm -rf ~/<repo path>/data/snapshots (passwd home)" "$(payload_bash "rm -rf ~/'$NO_SLASH'/data/snapshots")"
+# TASK-067 final re-check: a cd's own VAR=val prefix never reaches its words (bash runs `cd ""` and stays put)
+check $P block "X=/tmp cd \"\$X\"; rm -rf data" "$(payload_bash 'X=/tmp cd "$X"; rm -rf data')"
+# TASK-067 final re-check: with HOME set, the HOME-'' pass reads ~ as '' (not the passwd home), as $HOME is
+check $P block "HOME '' pass: rm -rf ~/<repo path>/data/snapshots" "$(payload_bash "rm -rf ~/'$NO_SLASH'/data/snapshots; echo \$PATH")"
 check $P block "unset HOME; rm -f ~/op-x (unknown)" "$(payload_bash 'unset HOME; rm -f ~/op-x')"
 check_no_home $P allow "no HOME: rm -f ~/op-not-a-repo-file" "$(payload_bash 'rm -f ~/op-not-a-repo-file')"
 # a bare `cd` with no HOME: bash stays put, so `data` is still the repo's (unknown target: refused)

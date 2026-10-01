@@ -1014,10 +1014,10 @@ def expand_word(
             # `unset HOME` here, so that `~` is unknown (TASK-067 CI fix re-check)
             if "HOME" in shell_vars:
                 home = shell_vars["HOME"] or None
-            elif env_empty or "HOME" not in os.environ:
+            elif "HOME" not in os.environ:
                 home = _passwd_home()
             else:
-                home = os.environ["HOME"]
+                home = "" if env_empty else os.environ["HOME"]
         elif user == "+":
             home = directory  # None: a `cd` this parser couldn't follow
         elif user == "-":
@@ -1079,7 +1079,10 @@ def _change_dir(head: str, words: list[str], state: dict, assigns: dict[str, str
     cur, unknown = state["dir"], state.get("dir_unknown", False)
     old, old_unknown = state.get("olddir"), state.get("olddir_unknown", False)
     stack: list[tuple[str, bool]] = state.setdefault("dirstack", [])
-    variables = {**state.get("vars", {}), **(assigns or {})}
+    variables = state.get("vars", {})
+    # the command's own `VAR=val` prefix is seen by cd itself (HOME, CDPATH), never by its words: bash expands
+    # `X=/tmp cd "$X"` to `cd ""` before the prefix applies (TASK-067 final re-check)
+    builtin_vars = {**variables, **(assigns or {})}
     env_empty = state.get("env_empty", False)
     target: str | None = None
     if head == "popd":
@@ -1099,7 +1102,7 @@ def _change_dir(head: str, words: list[str], state: dict, assigns: dict[str, str
         # a bare `cd` goes to $HOME, unlike `~` never the passwd home: with HOME unset bash stays ("HOME not set")
         # and zsh goes to the passwd home; with HOME '' both stay. So without a HOME the target is unknown
         home = (
-            variables.get("HOME") if "HOME" in variables else (None if env_empty else os.environ.get("HOME"))
+            builtin_vars.get("HOME") if "HOME" in builtin_vars else (None if env_empty else os.environ.get("HOME"))
         )
         target = home or None
     elif words[0] == "-":
@@ -1108,7 +1111,7 @@ def _change_dir(head: str, words: list[str], state: dict, assigns: dict[str, str
         target = expand_word(
             words[0], None if unknown else cur, variables, None if old_unknown else old, env_empty=env_empty
         )
-        cdpath = variables["CDPATH"] if "CDPATH" in variables else os.environ.get("CDPATH", "")
+        cdpath = builtin_vars["CDPATH"] if "CDPATH" in builtin_vars else os.environ.get("CDPATH", "")
         if target is not None and cdpath and not re.match(r"(/|\.\.?(/|$))", target):
             target = None  # CDPATH may send it elsewhere
     if head == "pushd" and target is not None:
