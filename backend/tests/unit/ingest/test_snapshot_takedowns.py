@@ -409,8 +409,8 @@ def test_merges_on_disk_reads_every_snapshot_and_refuses_a_tampered_one(cache: P
 
 
 def test_a_damaged_snapshot_is_skipped_wherever_it_sorts(cache: Path, tmp_path: Path) -> None:
-    """Round 3: a damaged snapshot before or after a good one, by its merges or by an unreadable manifest, is
-    skipped alone; without a handler, it raises."""
+    """Round 3: a damaged snapshot before or after a good one (here by an unreadable manifest; a damaged
+    merges.csv is the contract test's) is skipped alone; without a handler, it raises."""
     snapshots = _snapshots(cache, tmp_path)
     [good] = [d for d in snapshots.iterdir() if not d.name.startswith(".")]
     expected = merges_on_disk(snapshots)

@@ -872,10 +872,10 @@ def test_the_reload_lines_count_the_ids_followed(logs: Logs, aliased: Aliased) -
     with TestClient(make_app(data)) as client:
         listing(data, paper.id)
         assert reload(client)  # the same index, another list
-        listing(data, paper.id, "op:iclr:2024:NotInThisIndex")
+        listing(data, "op:iclr:2024:NotInThisIndex")  # the paper lifted: nothing followed any more
         current = data / "indexes" / "current"
         current.unlink()
         current.symlink_to("does-not-exist")
         assert reload(client) is False  # the promotion fails; the new list still applies
     lines = [x for x in logs() if x["event"] == "takedowns_reloaded"]
-    assert [x["takedowns_followed"] for x in lines] == [2, 2]
+    assert [x["takedowns_followed"] for x in lines] == [2, 0]  # the new bundle's count, not the old one's
