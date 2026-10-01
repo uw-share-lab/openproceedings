@@ -66,6 +66,7 @@ def outcome(f: Any, *args: Any) -> Any:
         return ("refused", e.code)
 
 
+# each example runs facets three ways over the 5k corpus, the oracle among them: no per-example deadline
 @settings(max_examples=150, deadline=None)
 @given(ast=filtered_asts())
 def test_facets_equal_the_per_kept_set_collections_and_the_oracle(engines: Engines, ast: Node) -> None:
@@ -81,6 +82,7 @@ def test_facets_equal_the_per_kept_set_collections_and_the_oracle(engines: Engin
             assert tantivy.facets(ast, (f,)) == {f: got[f]}, q
 
 
+# exclusion accounting three ways over the 5k corpus: no per-example deadline
 @settings(max_examples=100, deadline=None)
 @given(ast=filtered_asts())
 def test_exclusion_counts_equal_the_per_kept_set_collections_and_the_oracle(

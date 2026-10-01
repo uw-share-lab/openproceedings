@@ -28,4 +28,4 @@ Stop property tests from failing on a loaded machine (`too_slow`, deadlines) wit
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/property-testing/SKILL.md` (§Health checks and deadlines, with the load recipe), `.claude/skills/testing-standards/SKILL.md` (rule 5)
-- Test or hook added? — `backend/tests/unit/test_hypothesis_profiles.py`, case table `.claude/scripts/tests/test-hypothesis-profiles.sh`, and 8 `profiles:` mutants in `.claude/scripts/mutants/gates.json`
+- Test or hook added? — `backend/tests/unit/test_hypothesis_profiles.py`, case table `.claude/scripts/tests/test-hypothesis-profiles.sh`, and 10 `profiles:` mutants in `.claude/scripts/mutants/gates.json`

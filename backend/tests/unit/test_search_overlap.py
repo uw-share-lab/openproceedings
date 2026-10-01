@@ -88,6 +88,7 @@ def test_the_trust_evals_strings_give_the_sequential_search(
         assert got.facets is not None
 
 
+# the overlapped and the sequential search, at two offsets, over the 5k corpus: no per-example deadline
 @settings(max_examples=150, deadline=None)
 @given(q=queries())
 def test_random_queries_give_the_sequential_search(pair: tuple[TantivyEngine, TantivyEngine], q: str) -> None:

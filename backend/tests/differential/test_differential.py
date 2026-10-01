@@ -142,6 +142,7 @@ def expected_facets(
     return out
 
 
+# the oracle over 5k records, every sort and the facets per example: no per-example deadline
 @settings(deadline=None)
 @given(ast=engine_asts(vocab()))
 def test_tantivy_agrees_with_the_oracle(engines: tuple[ReferenceEngine, TantivyEngine], ast: Node) -> None:

@@ -11,7 +11,7 @@ the `nightly` workflow's property jobs). `print_blob=True` so a CI failure print
 `@reproduce_failure` blob; the example database (`.hypothesis/`) is gitignored.
 
 Wall-clock checks run only on CI runners (decision-024, TASK-146): `dev` has no deadline and suppresses
-`too_slow`, because local runs share the machine with parallel worktrees (load 90-340 on 8 CPUs) and those
+`too_slow`, because local runs share the machine with parallel worktrees (load 90 to 340 on 8 CPUs) and those
 checks then time the machine, not the code. `pr`, `ci` and `nightly` keep the deadline (`nightly`: none, so
 `too_slow` allows 30 s) and every health check, so a slow strategy or example still fails the PR's `test` job.
 Checks that don't depend on load (`data_too_large`, `filter_too_much`, `large_base_example`, ...) are on in
