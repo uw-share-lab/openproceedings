@@ -29,9 +29,15 @@
 # no such flag) does not and cannot flip a push verdict — push is classified by `push_verdict()`,
 # which never inspects `--ff-only`.
 #
-# The decision tokenizes the command and parses each git subcommand and its push refspecs — it does
-# not substring-match the raw text — and it recurses into `bash -c "..."`/`sh -lc '...'` wrappers
-# and `eval "..."`. Git aliases are expanded first (cmdparse.expand_git_alias), abbreviated long options are
+# The decision reads the command with the shared cmdparse walk and parses each git subcommand and its push
+# refspecs — it does not substring-match the raw text — and it recurses into `bash -c "..."`/`sh -lc '...'`
+# wrappers (with the assignments before them) and `eval "..."`; `cd`/`pushd`/`popd` are followed as the other
+# gates follow them, and every word is resolved (`B=dev; git push origin HEAD:$B`). A commit, merge, reset or
+# push whose directory, -C, --git-dir/GIT_DIR, refspec or checked-out branch can't be resolved (a `cd "$X"`,
+# a `$UNSET` refspec, a `cd` to a directory that doesn't exist) is refused as "opaque". A checkout/switch
+# earlier in the command is read with its redirects apart, `--track <remote>/<b>` checks out <b>, `checkout
+# -p` stays put, and repositories are told apart by their absolute git dir (`GIT_DIR=.git git checkout main`).
+# Git aliases are expanded first (cmdparse.expand_git_alias), abbreviated long options are
 # written out in full (`--al` is --all), `git-<sub>` programs are `git <sub>`, and `export`ed variables reach
 # later commands (every assignment while `set -a` is on); braces and `$'…'` are decoded as bash does. A
 # refspec-less push whose `git -c` settings choose the destination (remote.<name>.push or .mirror,
@@ -67,8 +73,10 @@
 # command-string parser. Do not mistake this hook for a hard security boundary; it exists to catch
 # accidental/automated main-mutations, not to stop someone who deliberately routes around it.
 # (A git push/add/commit/rm/mv run by `xargs` is refused outright: the words it appends are unseen.)
-# If python3 is unavailable the fail-closed fallback below still catches the plain-text
-# `git push`/`commit`/`merge` forms (using the same cwd-aware branch resolution, best-effort).
+# If python3 is unavailable, or the command can't be parsed, the fail-closed fallback below still catches the
+# plain-text `git push`/`commit`/`merge` forms (using the same cwd-aware branch resolution, best-effort), and
+# refuses any of them in a command with `-C`, `cd`, `pushd`, `--git-dir`/`GIT_DIR` or `--work-tree`, whose
+# branch it can't place.
 input=$(cat)
 
 # The tool call's own working directory, as reported in the hook's JSON payload — NOT necessarily
@@ -87,25 +95,14 @@ branch=$(git -C "$hook_cwd" rev-parse --abbrev-ref HEAD 2>/dev/null)
 verdict=$(HOOK_INPUT="$input" HOOK_CWD="$hook_cwd" HOOK_LIB="$(cd "$(dirname "$0")" && pwd)/lib" python3 <<'PY' 2>/dev/null
 import json, os, re, shlex, subprocess, sys
 
-# openproceedings: tokenize with the shared cmdparse tokenizer so unspaced `;`/`&&`, newlines, `(`/`)` and
-# redirects are separate tokens (security review round 2: `if true; then git push origin HEAD:dev; fi` and
-# `git push origin HEAD:dev;` read `dev;` as the ref), and compare command names by basename
-# (`/usr/bin/git`).
+# openproceedings: the command is read by the shared cmdparse walk, as the other gates read it (review gate round
+# 3): separators with or without spaces, redirects apart from the words (`git checkout main 2>/dev/null`),
+# `cd`/`pushd`/`popd` (a target it can't resolve leaves the directory unknown), `$` words, exports and the
+# assignments before `bash -c`, `bash -c`/`eval`, git aliases, and command names by basename (`/usr/bin/git`).
 sys.path.insert(0, os.environ.get("HOOK_LIB", ""))
-from cmdparse import (Argv, FailClosed, ParseError, base as _base, config_steers_git, expand_git_alias, git as _git,
-                      git_config, git_config_opaque, git_dir, git_subcommand, is_redirect as _is_redirect,
-                      is_separator as _is_sep, note_exports, push_config, push_config_risk, repo_root,
-                      strip_prefixes, tokenize as _tokenize, xargs_hides_args)
-
-def _split(text):
-    """Punctuation-aware tokens; separators normalised into SEPARATORS, redirect operators dropped."""
-    out = []
-    for t in _tokenize(text):
-        if _is_sep(t):
-            out.append(";")
-        elif not _is_redirect(t):
-            out.append(t)
-    return out
+from cmdparse import (Argv, FailClosed, ParseError, base as _base, expand_git_alias, expand_word, git as _git,
+                      git_anchored, git_config, git_config_opaque, git_dir, git_subcommand, push_config,
+                      push_config_risk, walk, xargs_hides_args)
 
 HOOK_CWD = os.environ.get("HOOK_CWD") or os.getcwd()
 
@@ -114,7 +111,6 @@ try:
 except Exception:
     cmd = ""
 
-SEPARATORS = {"&&", "||", ";", "|", "&"}  # _split() maps every separator (incl. newline, parens) to ";"
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 SOURCE_CMDS = {".", "source"}  # always run a file; no -c-string form exists for these
 PROTECTED = {"main", "dev"}    # branches that only a merged PR may write; extend here to add more
@@ -130,6 +126,10 @@ FETCH_VALUE_OPTS = {"--upload-pack", "--depth", "--shallow-since", "--shallow-ex
                     "--strategy-option"}
 
 _branch_cache = {}
+# A word this gate can't resolve (`$UNSET`, `$(…)`) is kept with this mark in front, and a branch it can't tell
+# (a `cd` it couldn't follow, a checkout of such a word) is UNKNOWN: either fails closed as "opaque".
+UNRESOLVED = "\0"
+UNKNOWN = "\0unknown"
 
 
 def get_branch(directory, gitdir=None):
@@ -158,9 +158,18 @@ def resolve_dir(candidate, base):
     return candidate if os.path.isabs(candidate) else os.path.normpath(os.path.join(base, candidate))
 
 
-def unwrap(tok):
-    """`$(git ...)` and backticks still invoke git; best-effort de-quote of a bare token."""
-    return tok.strip("$(){}`\"'")
+_gitdir_cache = {}
+
+
+def repo_key(directory, gitdir):
+    """The absolute git dir a command in `directory` (with `gitdir`, from --git-dir/GIT_DIR) runs against: one
+    key per repository however it is spelled (review gate round 3: `GIT_DIR=.git git checkout main && git commit`
+    named the same repo two ways)."""
+    key = (directory, gitdir)
+    if key not in _gitdir_cache:
+        found = _git(directory, *(["--git-dir", gitdir] if gitdir else []), "rev-parse", "--absolute-git-dir")
+        _gitdir_cache[key] = os.path.realpath(found) if found else (gitdir or directory)
+    return _gitdir_cache[key]
 
 
 def dest_protected(refspec):
@@ -180,6 +189,8 @@ def push_verdict(args, directory, config, gitdir=None, opaque=False, branch="", 
     flags = [a for a in args if a.startswith("-")]
     positionals = [a for a in args if not a.startswith("-")]
     refspecs = positionals[1:]  # positionals[0] is the remote
+    if any(UNRESOLVED in p for p in positionals):
+        return "opaque"  # `git push origin HEAD:$B`, `git push origin $UNSET`: what and where can't be told
 
     # --mirror/--all can create or delete a protected branch without ever naming it; so can the matching
     # refspec `:` / `+:` (every branch that exists on both sides: TASK-067 review gate round 2).
@@ -214,12 +225,21 @@ def push_verdict(args, directory, config, gitdir=None, opaque=False, branch="", 
         return "protected-ref"  # `--delete` with no ref named: refuse to guess
     if deletion:
         return "allow"     # deleting a remote feature ref — cannot touch a protected branch
-    if branch in PROTECTED:
-        return "protected"  # ordinary push while standing on a protected branch
+    if branch in PROTECTED or branch == UNKNOWN:
+        return "protected"  # ordinary push while standing on a protected branch (or one this gate can't tell)
     return "allow"
 
 
 def git_verdict(argv, directory, state=None):
+    """`classify`, with a verdict that rests on a branch this gate couldn't tell made "opaque"."""
+    tracked = state.setdefault("branches", {}) if state is not None else {}
+    v, branch = classify(argv, directory, state, tracked)
+    if branch == UNKNOWN and v in ("protected", "protected-merge"):
+        return "opaque"
+    return v
+
+
+def classify(argv, directory, state, tracked):
     """Classify one `git …` argv (aliases already expanded), run from `directory`. `state["branches"]` holds
     the branch a `git checkout`/`git switch` earlier in the command left checked out, per repository."""
     # git_subcommand skips git's global options to reach the subcommand, CHAINING every `-C <dir>` the
@@ -230,21 +250,33 @@ def git_verdict(argv, directory, state=None):
     # main-worktree target slip through. The chain starts at `state["dir"]` (the `cd`/cwd base).
     g = git_subcommand(argv, directory)
     if g is None:
-        return "allow"
+        return "allow", ""
     sub, args, effective_dir = g
     gitdir = git_dir(argv, directory)
     # `git checkout main && git commit` commits on main: the branch is the one an earlier checkout/switch in
-    # this command left, else the repository's own (TASK-067 review gate round 2)
-    tracked = state.setdefault("branches", {}) if state is not None else {}
-    repo_key = gitdir or repo_root(effective_dir)
-    branch = tracked[repo_key] if repo_key in tracked else get_branch(effective_dir, gitdir)
-    on_protected = branch in PROTECTED
+    # this command left, else the repository's own (TASK-067 review gate round 2). Where it runs can't be told
+    # after a `cd` this gate couldn't follow (unless git is pointed somewhere absolute), or when -C, --git-dir or
+    # GIT_DIR= is a word it can't resolve: UNKNOWN (review gate round 3).
+    placed = not (getattr(argv, "dir_unknown", False) and not git_anchored(argv)) and UNRESOLVED not in (
+        effective_dir + (gitdir or ""))
+    key = repo_key(effective_dir, gitdir)
+    if not placed:
+        branch = UNKNOWN
+    else:
+        branch = tracked[key] if key in tracked else get_branch(effective_dir, gitdir)
+    on_protected = branch in PROTECTED or branch == UNKNOWN
 
     if xargs_hides_args(argv, effective_dir):
-        return "xargs"  # it appends refspecs/paths from stdin that this gate cannot see
+        return "xargs", branch  # it appends refspecs/paths from stdin that this gate cannot see
     if sub == "push":
         return push_verdict(args, effective_dir, git_config(argv), gitdir, git_config_opaque(argv), branch,
-                            lambda: push_config(argv, directory))
+                            lambda: push_config(argv, directory)), branch
+    v = other_verdict(sub, args, argv, effective_dir, gitdir, state, tracked, key, branch, on_protected)
+    return v, branch
+
+
+def other_verdict(sub, args, argv, effective_dir, gitdir, state, tracked, repo_key, branch, on_protected):
+    """The verdict on a git subcommand other than push (`classify`)."""
     if sub == "update-ref":
         return update_ref_verdict(args, on_protected)
     # A protected local branch moved without update-ref (TASK-067 review gate): `branch -f main`, `-M x main`,
@@ -288,16 +320,18 @@ SWITCH_VALUE_OPTS = {"-c", "-C", "-b", "-B", "--create", "--force-create", "--or
 
 def switched_to(sub, args, directory, gitdir, previous):
     """The branch a `git switch`/`git checkout` leaves checked out ('' when it detaches HEAD), or None when it
-    changes no branch (`checkout <tree-ish> -- <paths>`, a path) or can't be told. `previous`: the branch an
-    earlier switch in the command left (`git switch -`)."""
+    changes no branch (`checkout <tree-ish> -- <paths>`, `checkout -p`, a path) or can't be told. `previous`: the
+    branch an earlier switch in the command left (`git switch -`). UNKNOWN for a target this gate can't resolve."""
     if "--" in args:
         if sub == "checkout":
             return None  # `checkout [<tree-ish>] -- <paths>` restores files
         args = args[: args.index("--")]
+    if sub == "checkout" and any(a in ("-p", "--patch") for a in args):
+        return None  # patches files in; HEAD stays (review gate round 3)
     for letter, long_name in (("c", "--create"), ("C", "--force-create")) if sub == "switch" else (("b", None), ("B", None)):
         created = short_value(args, letter, long_name)
         if created:
-            return created.removeprefix("refs/").removeprefix("heads/")
+            return UNKNOWN if UNRESOLVED in created else created.removeprefix("refs/").removeprefix("heads/")
     for k, a in enumerate(args):  # `--orphan <new>`: a new, unborn branch
         if a == "--orphan" and k + 1 < len(args):
             return args[k + 1]
@@ -316,6 +350,13 @@ def switched_to(sub, args, directory, gitdir, previous):
     if not positionals or (sub == "checkout" and len(positionals) > 1):
         return None  # `git checkout` alone changes nothing; `checkout <tree-ish> <paths>` restores files
     target = positionals[0]
+    if UNRESOLVED in target:
+        return UNKNOWN
+    if any(a in ("-t", "--track") or a.startswith("--track=") for a in args):
+        # `--track origin/main` (no -b/-c) makes and checks out `main`: the name less refs/remotes/ and the remote
+        # (review gate round 3)
+        name = target.removeprefix("refs/").removeprefix("remotes/")
+        return name.partition("/")[2] or name
     repo = ["--git-dir", gitdir] if gitdir else []
     if target in ("-", "@{-1}"):
         return previous if previous is not None else (_git(directory, *repo, "rev-parse", "--abbrev-ref", "@{-1}") or None)
@@ -432,157 +473,69 @@ def reset_moves_branch(args, branch, directory):
 warnings = []  # opaque-script wrappers seen along the way; only surfaced if nothing else blocks
 
 
-def segment(tokens, i):
-    """Bounds [s, k) of the simple command holding tokens[i]: back to the previous separator, on to the next."""
-    s = i
-    while s > 0 and tokens[s - 1] not in SEPARATORS:
-        s -= 1
-    k = i
-    while k < len(tokens) and tokens[k] not in SEPARATORS:
-        k += 1
-    return s, k
+def resolved(argv, directory):
+    """`argv` with each word, and each assignment before it, through cmdparse.expand_word (`B=dev; git push origin
+    HEAD:$B`); a word it can't resolve is kept with UNRESOLVED in front (review gate round 3)."""
+    d = None if argv.dir_unknown else directory
+
+    def one(w):
+        r = expand_word(w, d, argv.shell_vars, argv.olddir)
+        return UNRESOLVED + w if r is None else r
+
+    out = Argv([argv[0], *(one(w) for w in argv[1:])], argv.via_xargs, {n: one(v) for n, v in argv.assigns.items()})
+    out.shell_vars, out.olddir, out.dir_unknown = argv.shell_vars, argv.olddir, argv.dir_unknown
+    return out
 
 
-def analyze(tokens, state):
-    """Walk tokens; return the first blocking verdict, else 'allow'. Recurses into shell wrappers.
-    `state["dir"]` tracks the working directory implied by any `cd <dir>` seen so far in this
-    (sub)command — shared across recursive calls so a `cd` before a wrapper still applies inside it."""
-    i = 0
-    while i < len(tokens):
-        tok = unwrap(tokens[i])
+def git_calls(argv, directory):
+    """The git commands `argv` runs: itself (aliases already expanded by the walk), or, for any other command, a
+    `git`/`git-<sub>` word inside it read as git from there on (`caffeinate -i git-push …`, behind a wrapper the
+    walk doesn't know; `echo git commit` is read as git too: over-blocking a lookalike is the safe side)."""
+    if argv[0] == "git":
+        return [(argv, directory)]
+    for k, w in enumerate(argv[1:], start=1):
+        prog = _base(w)
+        if prog == "git" or (prog.startswith("git-") and len(prog) > 4):
+            inner = Argv(["git", *([prog[4:]] if prog != "git" else []), *argv[k + 1 :]], argv.via_xargs,
+                         argv.assigns)
+            inner.shell_vars, inner.olddir, inner.dir_unknown = argv.shell_vars, argv.olddir, argv.dir_unknown
+            return expand_git_alias(inner, directory)
+    return []
 
-        if i == 0 or tokens[i - 1] in SEPARATORS:
-            # `export GIT_DIR=…` / `declare -x` / a bare `VAR=val`: the environment of every later command
-            # (TASK-067 review gate); cmdparse.note_exports keeps it in state["exports"]
-            s, k = segment(tokens, i)
-            if note_exports(strip_prefixes(tokens[s:k]), state):
-                i = k
+
+def analyze(cmd, cwd):
+    """Walk the command (cmdparse.walk); return the first blocking verdict, else 'allow'."""
+    state = {}
+    try:
+        for argv, d, _ in walk(cmd, cwd):
+            if not argv:
                 continue
-
-        if tok == "cd" and (i == 0 or tokens[i - 1] in SEPARATORS):
-            j = i + 1
-            if j < len(tokens) and tokens[j] not in SEPARATORS and not tokens[j].startswith("-"):
-                state["dir"] = resolve_dir(unwrap(tokens[j]), state["dir"])
-            while j < len(tokens) and tokens[j] not in SEPARATORS:
-                j += 1
-            i = j
-            continue
-
-        if _base(tok) in SHELLS or tok in SOURCE_CMDS:  # bash -c "..." / sh -lc '...' / . file / source file
-            supports_c = _base(tok) in SHELLS
-            j = i + 1
-            found_c = False
-            first_positional = None
-            while j < len(tokens) and tokens[j] not in SEPARATORS:
-                # The `-c` command flag can sit anywhere in a single-dash short cluster
-                # (-c, -lc, -cl, -ic, -cx, -lic, -icl ...): all four shells run the next word as
-                # the command. `c` is the only single-letter option that does this, so any
-                # single-dash flag containing 'c' is the command flag. Long options that merely
-                # contain 'c' (--norc, --rcfile, --noprofile) are NOT — the `--` guard excludes
-                # them so the loop skips past to the real -c.
-                short_c = supports_c and (
-                    tokens[j] == "-c" or (
-                        tokens[j].startswith("-")
-                        and not tokens[j].startswith("--")
-                        and "c" in tokens[j]
-                    )
-                )
-                if short_c:
-                    found_c = True
-                    if j + 1 < len(tokens):
-                        try:
-                            inner = _split(tokens[j + 1])
-                        except ValueError:
-                            return "parse-fail"
-                        # `xargs sh -c 'git push "$@"' sh`: the inner command's words still come from xargs
-                        outer = state.get("xargs", False)
-                        s, k = segment(tokens, i)
-                        state["xargs"] = outer or strip_prefixes(tokens[s:k]).via_xargs
-                        v = analyze(inner, state)
-                        state["xargs"] = outer
-                        if v != "allow":
-                            return v
-                    break
-                if not tokens[j].startswith("-") and first_positional is None:
-                    first_positional = unwrap(tokens[j])
-                j += 1
-
-            if not found_c and first_positional:
-                # bash/sh/zsh/dash/ksh/./source <file ...>: an opaque script this parser cannot
-                # see inside. Only worth flagging where a hidden commit/push/merge would matter.
-                if get_branch(state["dir"]) in PROTECTED:
-                    warnings.append(f"{tok} {first_positional}")
-
-            i += 1
-            continue
-
-        if tok == "eval":  # eval joins its args and re-parses them as a command
-            parts = []
-            j = i + 1
-            while j < len(tokens) and tokens[j] not in SEPARATORS:
-                parts.append(tokens[j])
-                j += 1
-            try:
-                inner = _split(" ".join(parts))
-            except ValueError:
-                return "parse-fail"
-            v = analyze(inner, state)
-            if v != "allow":
-                return v
-            i = j
-            continue
-
-        prog = _base(tok)
-        if prog != "git" and not (prog.startswith("git-") and len(prog) > 4):  # `git-push` is `git push`
-            i += 1
-            continue
-
-        # The simple command this `git` belongs to: back to the previous separator and on to the next. Its
-        # prefixes (reserved words, wrappers, VAR=val) go through the shared cmdparse.strip_prefixes, so
-        # `xargs` and `GIT_DIR=` are seen (TASK-067). A `git` that isn't the command itself (`echo git
-        # commit`) is still read as git, as before: over-blocking a lookalike is the safe side.
-        s, k = segment(tokens, i)
-        local = {"dir": state["dir"]}  # `env -C dir` / `sudo -D dir` move this one command only
-        argv = strip_prefixes(tokens[s:k], local)
-        if not argv or argv[0] != "git":
-            argv = Argv(["git", *([prog[4:]] if prog != "git" else []), *tokens[i + 1 : k]])
-        argv.via_xargs = argv.via_xargs or state.get("xargs", False)
-        argv.assigns = {**state.get("exports", {}), **argv.assigns}
-        i = k
-
-        if state.get("config_written"):
-            return "unreadable"  # an earlier `git config` in this command set an alias/include/push target
-        try:
-            calls = expand_git_alias(argv, local["dir"])  # `git -c alias.p=push p …` → what git runs
-        except FailClosed:
-            return "unreadable"  # an ambiguous option, or an alias set where this gate can't read it
-        except ParseError:
-            return "parse-fail"
-        for call, d in calls:
-            v = git_verdict(call, d, state)
-            if v != "allow":
-                return v
-            # what it writes is read only after this hook has run (cmdparse.config_steers_git)
-            state["config_written"] = state.get("config_written") or config_steers_git(call, d)
-
+            if (_base(argv[0]) in SHELLS or argv[0] in SOURCE_CMDS) and any(not a.startswith("-") for a in argv[1:]):
+                # bash/sh/zsh/dash/ksh/./source <file ...> (no -c): an opaque script this parser cannot see
+                # inside. Only worth flagging where a hidden commit/push/merge would matter.
+                if get_branch(d) in PROTECTED:
+                    first = next(a for a in argv[1:] if not a.startswith("-"))
+                    warnings.append(f"{argv[0]} {first}")
+                continue
+            for call, cd_ in git_calls(argv, d):
+                v = git_verdict(resolved(call, cd_), cd_, state)
+                if v != "allow":
+                    return v
+    except FailClosed:
+        return "unreadable"  # an ambiguous option, an alias set where this gate can't read it, a config write
+    except ParseError:
+        return "parse-fail"
     return "allow"
 
 
 if not cmd:
     print("allow")
 else:
-    try:
-        tokens = _split(cmd)
-    except Exception:
-        # Unbalanced quotes — bash rejects the same syntax before running, so nothing executes,
-        # but hand it to the conservative shell-level fallback rather than silently allowing.
-        print("parse-fail")
+    result = analyze(cmd, HOOK_CWD)
+    if result == "allow" and warnings:
+        print("warn:" + "|".join(warnings))
     else:
-        result = analyze(tokens, {"dir": HOOK_CWD})
-        if result == "allow" and warnings:
-            print("warn:" + "|".join(warnings))
-        else:
-            print(result)
+        print(result)
 PY
 )
 
@@ -592,6 +545,12 @@ PY
 # normal python path allows those; the fallback only runs when the parser cannot.
 if [ -z "$verdict" ] || [ "$verdict" = "parse-fail" ]; then
   case "$branch" in main|dev) on_protected=1 ;; *) on_protected=0 ;; esac
+  # A `-C`, `cd`, `pushd`/`popd`, `--git-dir`/`GIT_DIR` or `--work-tree` may run git in another worktree, whose
+  # branch this text check can't place (review gate round 3: `git -C ../<main> commit -m …` fell through).
+  case "$input" in
+    *"-C "*|*"cd "*|*pushd*|*popd*|*GIT_DIR*|*--git-dir*|*--work-tree*) elsewhere=1 ;;
+    *) elsewhere=0 ;;
+  esac
   # Evaluate push FIRST and independently of commit/merge (review round 3: `git commit …; git push origin
   # HEAD:dev` matched the commit arm and was allowed).
   verdict="allow"
@@ -606,6 +565,12 @@ if [ -z "$verdict" ] || [ "$verdict" = "parse-fail" ]; then
     case "$input" in
       *"git commit"*|*"git merge"*|*"git cherry-pick"*|*"git revert"*|*"git am "*|*"git rebase"*|*"git reset"*)
         [ "$on_protected" = 1 ] && verdict="protected" ;;
+    esac
+  fi
+  if [ "$verdict" = "allow" ] && [ "$elsewhere" = 1 ]; then
+    case "$input" in
+      *git*commit*|*git*merge*|*git*cherry-pick*|*git*revert*|*git*" am "*|*git*rebase*|*git*reset*|*git*push*)
+        verdict="opaque" ;;
     esac
   fi
 fi
@@ -650,6 +615,13 @@ case "$verdict" in
   protected-ref)
     echo "Refusing: this command would write or delete a protected remote ref (main/dev) directly." >&2
     echo "Changes reach a protected branch only through a merged pull request (gh pr merge)." >&2
+    exit 2
+    ;;
+  opaque)
+    echo "Refusing: this commit, merge, reset or push runs somewhere, or names a ref, this gate can't resolve:" >&2
+    echo "a \`cd\`/\`pushd\`/\`git -C\` to a \`\$…\`/\`\$(…)\` path, a directory that doesn't exist, a \`\$VAR\` refspec or" >&2
+    echo "branch it can't read, or a command it couldn't parse. Write the path and the refs out plainly (an" >&2
+    echo "absolute \`git -C <dir>\` works), or run the \`cd\` in its own call." >&2
     exit 2
     ;;
   xargs)

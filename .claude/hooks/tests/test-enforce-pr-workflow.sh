@@ -485,6 +485,74 @@ echo "review gate round 2: set -a reaches GIT_DIR too (TASK-067):"
 check_cwd main "$WT" block "set -a; GIT_DIR=\"$REPO/.git\"; git commit -m x"
 check_cwd main "$WT" allow "set -a; set +a; GIT_DIR=\"$REPO/.git\"; git commit -m x"
 
+echo "review gate round 3: a multi-line \$'…' message is read, and a leftover parse error fails closed (TASK-067):"
+check_cwd main "$WT" block "git -C \"$WT_TO_REPO\" commit -m \$'feat: x\n\nbody'"
+check_cwd main "$WT" block "git -C \"$WT_TO_REPO\" commit -m \$'feat: x
+
+body'"
+check_cwd main "$WT" block "cd \"$WT_TO_REPO\" && git commit -m \$'feat: x
+
+body'"
+check_cwd main "$WT" allow "git commit -m \$'feat: x
+
+body'"                                                                  # the worktree's own feature branch
+check_cwd main "$WT" block "git -C \"$WT_TO_REPO\" commit -m \"x"       # unparseable: the fallback can't place -C
+check_cwd main "$WT" block "cd \"$WT_TO_REPO\" && git commit -m \"x"
+check_cwd main "$WT" block "git -C \"$WT_TO_REPO\" push origin feature/wt-branch \""
+
+echo "review gate round 3: the gate follows cd/pushd like the other gates, and resolves \$ words (TASK-067):"
+check_cwd main "$WT" block "pushd \"$WT_TO_REPO\" && git commit -m x"
+check_cwd main "$WT" block "W=\"$WT_TO_REPO\"; cd \$W && git commit -m x"
+check_cwd main "$WT" block "cd \"\$PWD/$WT_TO_REPO\" && git commit -m x"
+check_cwd main "$WT" block "cd ~+/\"$WT_TO_REPO\" && git commit -m x"
+check_cwd main "$WT" block 'cd "$OP_UNSET_DIR" && git commit -m x'      # a directory this gate can't tell
+check_cwd main "$WT" allow "pushd \"$WT_TO_REPO\" && popd && git commit -m x"
+check_cwd main "$WT" allow "cd \"\$OP_UNSET_DIR\" && git -C \"$WT\" commit -m x"   # an absolute -C places it
+check feature/x block 'caffeinate git -c alias.p=push p origin HEAD:dev'   # an alias behind an unknown wrapper
+check feature/x block 'B=dev; git push origin HEAD:$B'
+check feature/x block 'git push origin HEAD:$OP_UNSET_REF'                # a destination this gate can't tell
+check feature/x allow 'B=feat; git push origin HEAD:$B'
+
+echo "review gate round 3: assignments before a shell wrapper reach the commands inside it (TASK-067):"
+check_cwd main "$WT" block "GIT_DIR=\"$REPO/.git\" bash -c 'git commit -m x'"
+check feature/x block "GIT_CONFIG_GLOBAL=/tmp/op-g bash -c 'git push'"
+check feature/x allow "X=1 bash -c 'git push origin feat'"
+
+echo "review gate round 3: checkout/switch with redirects, --track, -p, and a GIT_DIR= spelling (TASK-067):"
+check feature/x block 'git checkout main 2>/dev/null && git commit -m x'
+check feature/x block 'git checkout main >/dev/null && git commit -m x'
+check feature/x block 'git checkout main &>/dev/null && git commit -m x'
+check feature/x block 'git checkout main 2>/dev/null && git push origin HEAD'
+check feature/x block 'git checkout --track origin/main && git commit -m x'
+check feature/x block 'git checkout -t origin/dev && git commit -m x'
+check feature/x block 'git switch --track origin/main && git commit -m x'
+check feature/x block 'git switch -t origin/main && git commit -m x'
+check feature/x block 'git checkout --track refs/remotes/origin/dev && git commit -m x'
+check feature/x allow 'git checkout --no-track -b feature/q origin/main && git commit -m x'
+check feature/x allow 'git checkout -p main && git commit -m x'        # patches files; stays on feature/x
+check feature/x allow 'git checkout --patch main && git commit -m x'
+check feature/x block 'GIT_DIR=.git git checkout main && git commit -m x'
+
+echo "review gate round 3: config written other than by git config, then a push (TASK-067):"
+check feature/x block 'git remote add --mirror=push o3 /tmp/op-o3.git && git push o3'
+check feature/x block "echo '[alias] p = push' >> .git/config; git p origin HEAD:dev"
+check feature/x block "printf '[remote \"origin\"]\\n\\tpush = HEAD:refs/heads/dev\\n' >> .git/config; git push"
+check feature/x block 'echo x | tee -a .git/config && git push origin'
+check feature/x block 'git remote set-branches origin dev && git push origin'
+check feature/x allow 'echo x >> notes.txt; git push origin feat'
+git -C "$REPO" config push.default upstream
+check feature/x block 'git branch -u origin/dev && git push origin'
+check feature/x block 'git branch --set-upstream-to=origin/dev && git push origin'
+check feature/x block 'git config branch.feature/x.merge refs/heads/dev && git push origin'
+git -C "$REPO" config --unset push.default
+
+echo "review gate round 3: an empty or unresolvable refspec word leaves a refspec-less push (TASK-067):"
+git -C "$REPO" config remote.origin.push HEAD:refs/heads/dev
+check feature/x block 'git push origin {,}'
+check feature/x block 'git push origin $OP_UNSET_REF'
+check feature/x allow 'git push origin feat{,}'                          # one word: feat feat
+git -C "$REPO" config --unset remote.origin.push
+
 echo
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
