@@ -11,7 +11,7 @@ Cut the ~25-minute backend step of the required `test` check. The first idea was
 ## What we learned
 - `pytest --durations=40 --hypothesis-profile=ci`: 5,224 tests in 1,650 s; the slowest 25, all Hypothesis properties, took 1,432 s. The slowest single tests were a clause-edit property (331 s) and the Tantivy-vs-oracle differential (308 s).
 - 200 examples per PR under pytest-xdist ran in ~3 min locally against ~9.5 min serial; nightly's new `suite-ci` job keeps every property at 2,000.
-- The `dev` profile also carries a 500 ms deadline, which a loaded shared runner could trip under xdist: PR CI uses a `pr` profile (200 examples, the 2 s ci deadline). A profile is example count *and* deadline; changing which one CI uses changes both.
+- The `dev` profile also carries a 500 ms deadline (superseded: `dev` has no deadline since decision-024), which a loaded shared runner could trip under xdist: PR CI uses a `pr` profile (200 examples, the 2 s ci deadline). A profile is example count *and* deadline; changing which one CI uses changes both.
 
 ## Dead ends — don't repeat these
 - A `timeout 900 uv run pytest …` profiling run hung past its limit: `timeout` signalled `uv`, not the Python child. Call `.venv/bin/pytest` directly when a run needs a time limit.

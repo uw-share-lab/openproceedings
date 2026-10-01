@@ -228,6 +228,7 @@ def test_filter_clauses_cost_is_bounded(q: str, most: int, monkeypatch: pytest.M
     assert calls == most
 
 
+# near-cap queries (up to 2,000 code points) parsed once per filter field and wrap: no per-example deadline
 @given(q=st.one_of(queries(), near_cap_queries(1_800, 2_000)), mode=st.sampled_from(["native", "scholar"]))
 @settings(max_examples=60, deadline=None)
 def test_the_one_wrap_parse_answers_exactly_as_per_field_parses(q: str, mode: Mode) -> None:
@@ -277,7 +278,6 @@ def _rest(ast: Node | None, field: str) -> Counter[str]:
 
 
 @given(q=clause_queries(), mode=st.sampled_from(["native", "scholar"]))
-@settings(deadline=None)
 def test_every_single_value_click_on_a_toggleable_clause_parses_and_edits_only_that_clause(
     q: str, mode: Mode
 ) -> None:
@@ -522,6 +522,7 @@ _WIDEST = list(clauses.WIDEST_YEAR)
 @example(case=YearEditCase("x (year:2021 OR year:2020..2022)", "scholar", "pinned"), ranges=_WIDEST)
 @example(case=YearEditCase("a" * 1_862, "scholar", "pinned"), ranges=_WIDEST)
 @given(case=year_edit_cases(), ranges=_RANGES)
+# queries padded toward the length and depth caps, parsed with each year edit: no per-example deadline
 @settings(deadline=None)
 def test_every_year_edit_on_a_toggleable_clause_parses_and_edits_only_that_clause(
     case: YearEditCase, ranges: list[YearRange]
@@ -534,7 +535,7 @@ def test_every_year_edit_on_a_toggleable_clause_parses_and_edits_only_that_claus
 
 
 # 200 at every profile: the health check runs on the first draws, and the property's own run above is the one
-# that scales with the profile
+# that scales with the profile; no per-example deadline, as above
 @seed(_FILTER_TOO_MUCH_SEED)
 @given(case=year_edit_cases(), ranges=_RANGES)
 @settings(deadline=None, max_examples=200)

@@ -128,6 +128,7 @@ def allowed(n: Node, expansions: dict[tuple[str, str], frozenset[str]]) -> set[s
     return set().union(*(allowed(c, expansions) for c in getattr(n, "children", ())))
 
 
+# the oracle's match set, then every matched fixture record highlighted and tokenized: no per-example deadline
 @settings(deadline=None)
 @given(asts())
 def test_every_lit_token_is_one_a_positive_leaf_can_match(ast: Node) -> None:
@@ -186,6 +187,7 @@ def covered(ast: Node, r: Rec, expansions: dict[tuple[str, str], frozenset[str]]
     return {f: {i for s, e in spans.get(f, set()) for i in range(s, e)} for f in ("title", "abstract")}  # type: ignore[call-overload]
 
 
+# four match sets (each branch, their OR, their AND), each matched record highlighted: no per-example deadline
 @settings(deadline=None)
 @given(asts(), asts())
 def test_an_or_lights_exactly_its_matching_branches_and_an_and_all_of_them(a: Node, b: Node) -> None:

@@ -51,7 +51,8 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
    reason in the commit message and routes to `exactness-guardian`.
 4. **Sets, not samples.** Assert full ID sets and exact `total`/`excluded`, not "first hit is X".
 5. **Determinism.** No wall clock, randomness or network in tests (network is blocked by conftest); Hypothesis runs under a named profile
-   (`property-testing`).
+   (`property-testing`). Its wall-clock checks (deadline, `too_slow`) are gates only on CI runners: the local
+   `dev` profile turns them off, and `pr`, `ci` and `nightly` keep them (decision-024).
 6. **Claim only what you ran.** Report the command and its summary line (`412 passed in 9.1s`).
 
 ## Commands

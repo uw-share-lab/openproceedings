@@ -5,10 +5,19 @@ than a Unix socket or loopback, and every non-loopback name lookup, fails with N
 whole test session (limits: `pytest_configure`). Crawler tests use recorded HTTP fixtures (01 §Testing); there is no opt-out marker.
 
 
-Select with HYPOTHESIS_PROFILE or `--hypothesis-profile`: `dev` (200 examples, 500 ms deadline: the local
+Select with HYPOTHESIS_PROFILE or `--hypothesis-profile`: `dev` (200 examples, no wall-clock checks: the local
 default), `pr` (200 examples, 2 s deadline: the `test` workflow under pytest-xdist), `ci` (2,000, the `nightly` workflow's whole-suite job) and `nightly` (50,000,
 the `nightly` workflow's property jobs). `print_blob=True` so a CI failure prints a
 `@reproduce_failure` blob; the example database (`.hypothesis/`) is gitignored.
+
+Wall-clock checks run only on CI runners (decision-024, TASK-146): `dev` has no deadline and suppresses
+`too_slow`, because local runs share the machine with parallel worktrees (load 90 to 340 on 8 CPUs) and those
+checks then time the machine, not the code. `pr`, `ci` and `nightly` keep the deadline (`nightly`: none, so
+`too_slow` allows 30 s) and every health check, so a slow strategy or example still fails the PR's `test` job.
+Checks that don't depend on load (`data_too_large`, `filter_too_much`, `large_base_example`, ...) are on in
+every profile. On a quiet machine, `HYPOTHESIS_PROFILE=pr` reproduces the PR gate's timing locally. Each
+profile's parent is Hypothesis's `default`, so `CI` being set (which loads Hypothesis's built-in `ci` profile)
+changes nothing.
 """
 
 import logging
@@ -18,14 +27,27 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from hypothesis import settings
+from hypothesis import HealthCheck, settings
 
-settings.register_profile("dev", max_examples=200, deadline=500, print_blob=True)
+# Every profile's parent is Hypothesis's own `default`, not whichever profile is loaded: where CI is set (GitHub
+# Actions), Hypothesis loads its built-in `ci` profile at import (too_slow suppressed, derandomized, no database),
+# and a profile registered without a parent inherits all of it (TASK-146)
+BASE = settings.get_profile("default")
+# dev: no wall-clock checks; they fail under local load and pr's are the gate (decision-024)
+settings.register_profile(
+    "dev",
+    BASE,
+    max_examples=200,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
+    print_blob=True,
+)
 # pr: the dev example count with the ci deadline, so a slow example on a shared runner under pytest-xdist
-# doesn't fail the required check (TASK-127)
-settings.register_profile("pr", max_examples=200, deadline=2_000, print_blob=True)
-settings.register_profile("ci", max_examples=2_000, deadline=2_000, print_blob=True)
-settings.register_profile("nightly", max_examples=50_000, deadline=None, print_blob=True)
+# doesn't fail the required check (TASK-127); derandomized, so the required check runs the same examples on every
+# PR and never fails a PR for a counterexample in code it didn't touch; ci and nightly explore (decision-024)
+settings.register_profile("pr", BASE, max_examples=200, deadline=2_000, derandomize=True, print_blob=True)
+settings.register_profile("ci", BASE, max_examples=2_000, deadline=2_000, print_blob=True)
+settings.register_profile("nightly", BASE, max_examples=50_000, deadline=None, print_blob=True)
 settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 
 

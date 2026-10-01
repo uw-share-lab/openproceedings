@@ -16,7 +16,7 @@ import json
 from pathlib import Path
 
 import pytest
-from hypothesis import HealthCheck, example, given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from openproceedings.engine import highlight
 from openproceedings.engine.highlight import Highlighter, highlights
@@ -135,11 +135,7 @@ def test_generated_trees_light_the_same_spans_on_every_fixture_record(ast: Node)
 # the old highlighter tokenizes each hit with the old tokenizer: slow on thousands of hits, so the first 20;
 # and a tenth of the profile's examples, at most 500 (20 per PR, 200 in nightly suite-ci, 500 at 50k): each one runs the oracle over
 # 5k records, up to ~1 s an example
-@settings(
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
-    max_examples=min(max(10, settings().max_examples // 10), 500),
-)
+@settings(deadline=None, max_examples=min(max(10, settings().max_examples // 10), 500))
 @given(engine_asts(vocab()))
 def test_generated_trees_light_the_same_spans_on_the_5k_corpus(ast: Node) -> None:
     same_spans(ast, SYNTHETIC_REFERENCE, SYNTHETIC, limit=20)

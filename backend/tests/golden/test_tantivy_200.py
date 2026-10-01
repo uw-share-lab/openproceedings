@@ -68,7 +68,7 @@ def combined(parts: list[str], op: str) -> str:
     return op.join(f"({p})" for p in parts) if op != " NEAR/2 " else op.join(parts)
 
 
-@settings(max_examples=150, deadline=None)
+@settings(max_examples=150)
 @given(
     st.tuples(
         st.lists(st.sampled_from([c["q"] for c in GOLDEN]), min_size=1, max_size=3),
