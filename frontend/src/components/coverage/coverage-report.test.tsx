@@ -251,6 +251,20 @@ describe("the header", () => {
     expect(text).not.toContain("local time");
   });
 
+  it("marks the Scholar dates of a mixed window as local until their offset is recorded (TASK-077)", () => {
+    const data = copy();
+    data.snapshot.crawl_dates_kind = { "*": "mixed", ris: "scholar_query_dates" };
+    render(<CoverageReport coverage={data} />);
+    const day = data.snapshot.crawl_dates["*"]!.from.slice(0, 10);
+    expect(screen.getByText(/^Built /).textContent).toContain(
+      ` · Collected on ${day} (Scholar dates in local time)`,
+    );
+    data.snapshot.crawl_dates_kind = { "*": "mixed_utc", ris: "scholar_query_dates_utc" };
+    cleanup();
+    render(<CoverageReport coverage={data} />);
+    expect(screen.getByText(/^Built /).textContent).toContain(` · Collected on ${day} (UTC)`);
+  });
+
   it("writes a window over several days from its start to its end", () => {
     const data = copy();
     const window = { from: "2026-09-20T08:14:03Z", to: "2026-09-26T23:59:00Z" };

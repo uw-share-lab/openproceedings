@@ -75,7 +75,7 @@ export function kindWindowText(kind: string | undefined, window: Schemas["CrawlW
 }
 
 /**
- * The corpus-wide window in words (`Google Scholar searches run on 2026-09-26`), the one sentence
+ * The corpus-wide window in words (`Google Scholar searches run on 2026-09-26 (local time)`), the one sentence
  * `/coverage` and the home line both show; `null` when the snapshot has no `*` window, which is left out.
  */
 export function corpusWindow(snapshot: Schemas["SnapshotInfo"]): string | null {

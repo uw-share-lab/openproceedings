@@ -42,5 +42,5 @@ the RIS importer stored labelled UTC, or else mark those dates local.
 - None in the backlog. The owner rebuilds the snapshot after merge (decision-025 §Consequences).
 
 ## Propagated to
-- Skill / agent / CLAUDE.md updated? — `.claude/skills/snapshots/SKILL.md` (`query_dates`), `.claude/skills/search-records/SKILL.md`, `.claude/skills/prisma-reporting/SKILL.md`, `.claude/agents/ris-importer.md` (a new PoP search needs a table row), `CLAUDE.md` layout.
-- Test or hook added? — `test_ris.py` (conversion, unlisted entry, table loader), `test_snapshot.py` (`query_dates`, the `cache_entry` check), `test_records.py` (`window_kind`, the record and `/coverage` derivations agree).
+- Skill / agent / CLAUDE.md updated? — `.claude/skills/snapshots/SKILL.md` (`query_dates`), `.claude/skills/search-records/SKILL.md`, `.claude/skills/prisma-reporting/SKILL.md`, `.claude/skills/dedup-rules/SKILL.md` (newest across time bases), `.claude/agents/ris-importer.md` (a new PoP search needs a table row), `CLAUDE.md` layout; specs 01, 04, 05; the copy deck (RC-9, CV-1).
+- Test or hook added? — `test_ris.py` (conversion, unlisted entry, table loader), `test_snapshot.py` (`query_dates`, the `cache_entry` check, conversion changes only `fetched_at`), `test_records.py` (`window_kind`, the CLI line, the record and `/coverage` derivations agree), `test_coverage.py` and contract `test_coverage.py` (malformed `query_dates`); frontend `record-view`, `methods-text`, `coverage-report`, `coverage-line` tests and e2e `spec05.spec.ts`.

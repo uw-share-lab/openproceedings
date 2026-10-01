@@ -301,8 +301,13 @@ def test_converting_query_dates_changes_only_fetched_at(tmp_path: Path) -> None:
     """decision-025: the same two searches, converted or not, give the same records, merges and conflicts;
     every RIS claim's `fetched_at` is 4 hours later, and so the snapshot hash differs."""
 
+    def later(text: str) -> str:  # the second search a day later, with one author written differently
+        return text.replace("2026-09-19 01:06:30", "2026-09-20 01:06:30").replace(
+            "AU  - Doe, J", "AU  - Doe, Jane"
+        )
+
     def snap(root: Path, names: tuple[str, str]) -> tuple[Path, list[dict[str, Any]]]:
-        ingest_ris([source(root / "1", names[0]), source(root / "2", names[1])], root / "cache")
+        ingest_ris([source(root / "1", names[0]), source(root / "2", names[1], later)], root / "cache")
         path = build(root / "cache", root / "snapshots", BUILT).path
         return path, [json.loads(line) for line in (path / "records.jsonl").read_text().splitlines()]
 
@@ -310,6 +315,7 @@ def test_converting_query_dates_changes_only_fetched_at(tmp_path: Path) -> None:
     converted, after = snap(tmp_path / "utc", ("out-covidence", "out-covidence-2020-2024"))
     for name in ("merges.csv", "conflicts.csv"):
         assert (local / name).read_bytes() == (converted / name).read_bytes()
+    assert "newest:ris" in (converted / "conflicts.csv").read_text()  # the later search's value still wins
     assert len(before) == len(after) > 0
     for old, new in zip(before, after, strict=True):
         shifted = [datetime.fromisoformat(c["fetched_at"]) + timedelta(hours=4) for c in old["provenance"]]
