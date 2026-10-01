@@ -40,16 +40,22 @@ names the main track on a non-main listing, read it as the conference twin's (tr
 - ICLR 2017's workshop listing holds 18 notes saying `Submitted to ICLR 2017`; each shares its title with a
   rejected conference-listing note, and its `_bibtex` url names that note's forum (`rkB_5hEKe` → `ryh_8f9lg`).
   Reading the string as the note's own outcome counted those 18 rejections twice (ICLR 2017 main/rejected 262,
-  not 244). Evidence: `op snapshot diff` before/after changes exactly those 18 records' track and status;
-  manifest main/rejected 262 → 244, workshop/unknown 190 → 208, accepted 198 unchanged.
+  not 244: the conference listing's 245 rejections less `SJUdkecgx`, skipped for its empty title). Evidence
+  (`docs/results/2026-10-01-iclr-2017-workshop-copies.md`): `op snapshot diff` before/after changes exactly those
+  18 records' track and status; manifest main/rejected 262 → 244, workshop/unknown 190 → 208, accepted 198
+  unchanged.
 - The tally that scoped the fix: across every v1 listing in the cache, only two groups carry a string whose track
   differs from the listing's, these 18 and 47 `Invite to Workshop` notes on the conference listing, which are
   the note's own outcome and stay as they were. So the rule in `openreview_v1.judge` is one-directional (a
-  `main` outcome on a non-main listing), not "the listing always wins".
+  `main` outcome on a non-main listing), not "the listing always wins", and (from review) only where the venueid
+  names no track, so a venueid naming a track still meets rule 2's agreement check and its conflict row. It is
+  counted in the crawl report's `twin_outcome` (18 for ICLR 2017), since it moves notes out of a status without
+  touching `unmapped`.
 - The RIS importer can't apply it: scholarmend's claims (venueid, forum id, `venue_string`) carry no listing, and
   a copy's claims equal a real rejection's. The lead decided (2026-10-01) to leave RIS as is: in a snapshot the
   record merges with the crawl's by forum id and the crawl's claims win (decision-005). A fix needs scholarmend
-  to emit the v1 note's invitation (deferred; the lead files the task).
+  to emit the v1 note's invitation (deferred: the lead files the task after TASK-067 merges, since ids 155/156
+  are taken on that branch; listed as open in the PR body).
 
 Propagated to: `.claude/skills/openreview-venueids/SKILL.md` (2013/2017 row), `.claude/skills/openreview-api/SKILL.md`,
 `.claude/skills/record-schema/SKILL.md`, `.claude/agents/ris-importer.md`, `docs/specs/01-ingestion.md`; tests

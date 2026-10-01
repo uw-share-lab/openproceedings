@@ -32,9 +32,9 @@ The code is `backend/src/openproceedings/ingest/ris.py`; its module docstring is
    scholarmend's `venue_string` claim through `classify_v1_venue`, only when the claim's evidence names the
    record's venueid and the string names its venue, year and track, or only its venue and year for ICLR
    2013/2017's lower-case `conference` venueid, which names no track and so takes the string's track too
-   (`V1_TRACK_FROM_VENUE`, TASK-142; a 2017 workshop-listing copy's `Submitted to ICLR 2017` still reads
-   `main`/`rejected`, since no claim names the listing: the crawl's `workshop`/`unknown` wins once merged,
-   TASK-152); else `unknown`, with the reason in the evidence); else the
+   (`V1_TRACK_FROM_VENUE`, TASK-142; a 2017 workshop-invitation copy's `Submitted to ICLR 2017` still reads
+   `main`/`rejected`, since no claim names the submission invitation: in a snapshot with the ICLR 2017 v1
+   crawl the crawl's `workshop`/`unknown` wins once merged, an RIS-only one keeps it, TASK-152); else `unknown`, with the reason in the evidence); else the
    proceedings track claim; else the volume table (`unknown` for volumes that mix main and position
    papers). A proceedings listing means `accepted` and overrides an agreeing venueid (decision-005;
    counted in `status_overrides`). Nothing else ever sets `accepted`. Never infer anything from `JF`,

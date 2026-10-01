@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 20:05'
-updated_date: '2026-10-01 15:31'
+updated_date: '2026-10-01 15:53'
 labels:
   - ingest
 milestone: m-4
@@ -52,6 +52,8 @@ RIS importer: unchanged, by the lead's decision (2026-10-01, option i). scholarm
 Real data (a clone of the main checkout's data/cache; snapshots and indexes in scratch). `op snapshot build` on origin/dev code vs the branch: 2026-09-29-333bf918c9b3 -> 2026-09-29-97b5096959c6. `op snapshot diff`: added [], removed [], rekeyed {}, display_only 0, provenance_only 0; changed: exactly the 18 (op:iclr:2017:B1lyFkBKx, Bk9mxlSFx, BkDDM04Ke, BkL7bONFe, Bkv9FyHYx, By1eEXVFg, HJ4-rAVtl, Hk6dkJQFx, HyhbYrGYe, S1AtgaPug, S1dJ1smFg, SJOQPR7Yl, r1IvyjVYl, r1QXQkSYg, rJV7l2VFg, rkB_5hEKe, rkndY2VYx, rySCp-1Yg), each [track, status]. Manifest: counts ICLR 2017 main/rejected 262 -> 244, workshop/unknown 190 -> 208, main/accepted 198 unchanged (= official_counts); the ICLR 2017 crawl report's track_status and unknown_status (190 -> 208) the same; every other manifest value except the hash and build time identical. RIS path re-check (PR #47's method: the 543 notes with ICLR.cc/2017/conference fed to ris._identity as scholarmend claims): 198 main/accepted, 263 main/rejected (245 conference listing + 18 workshop copies), 82 workshop/unknown, unchanged by design.
 
 AC #3 query, `year:2017 AND (classless OR "combinatorial optimization" OR "confident output" OR "domain adaptation" OR "auxiliary classifier")`, `op search` on indexes built from each snapshot (6508b8cf66ff before, fd572dbf394c after): identified 29 both, screened 16 both, the 16 ids identical (sha1 of `--ids` output equal), removed by default filters 13 both; breakdown before track.workshop 2 / status.rejected 11, after track.workshop 7 / status.rejected 6 (5 of the 18 moved, from status.rejected to track.workshop only).
+
+Review round 1 (2026-10-01): the rule fires only where the venueid names no track (classify other/unknown, i.e. ICLR 2017 lower-case conference), so a venueid naming a track keeps rule 2 agreement check and conflict row (test_a_main_track_outcome_against_a_venueid_naming_the_listings_track_stays_a_conflict). It is counted in the crawl report key twin_outcome (manifest key only when non-zero, 18 for ICLR 2017) with a DEBUG openreview_v1_twin_outcome line; a Tiny Papers case pins that it is per listing track. The fixture was regenerated with backend/tests/fixtures/http/scrub.py (count 161, one note kept). Rebuilt after the fixes, records.jsonl is byte-identical and the snapshot hash is the same (2026-09-29-97b5096959c6); the manifest adds twin_outcome: 18. Main/rejected is 244 not 245: the conference listing has 245 rejections including SJUdkecgx, skipped for its empty title. All measured numbers and commands: docs/results/2026-10-01-iclr-2017-workshop-copies.md.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

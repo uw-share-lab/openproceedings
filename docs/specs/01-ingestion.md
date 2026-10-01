@@ -279,9 +279,11 @@ per venue-year schema): it lists the year's exact submission, withdrawn and desk
 (`?invitation=`, 1,000 a page, `count` checked), takes status from `content.decision` (ICLR 2013), `content.venue`
 (`classify_v1_venue`: ICLR 2017, 2022, 2023, NeurIPS), the decision note fetched per forum (`?forum=`; ICLR
 2018–2020, and 2021 notes without a venue string) or the withdrawn / desk-rejected invitation, never the v1
-venueid; status evidence naming the main track on a note of a non-main listing is its conference twin's outcome,
-so the note keeps its listing's track and its status is `unknown` (the 18 ICLR 2017 workshop copies of rejected
-papers that say `Submitted to ICLR 2017`, TASK-152); ICLR 2014 and 2016 have no decisions (`unknown`), and ICLR
+venueid; status evidence naming the main track on a note of a non-main listing, where the venueid names no track,
+is its conference twin's outcome, so the note keeps its listing's track and its status is `unknown`, counted in the
+report's `twin_outcome` (a manifest key present only when non-zero: 18 for ICLR 2017, its workshop copies of
+rejected papers that say `Submitted to ICLR 2017`; TASK-152); a venueid that names a track is still checked against
+the string's, a disagreement a conflict; ICLR 2014 and 2016 have no decisions (`unknown`), and ICLR
 2015 has nothing to crawl. What OpenReview
 can't answer for a year is listed in the report's `coverage_gaps`, never raised. A note whose own evidence
 disagrees (the withdrawn ICLR 2021 note `xGZG2kS5bFk` says `ICLR 2021 Poster`; two decision notes that disagree;

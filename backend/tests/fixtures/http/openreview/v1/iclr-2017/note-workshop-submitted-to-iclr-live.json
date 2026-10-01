@@ -1,8 +1,9 @@
 {
  "_recorded": {
   "date": "2026-09-29",
-  "run": "authenticated OpenReview crawl (TASK-054), one note of the ICLR 2017 workshop listing page; extracted for TASK-152",
-  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real (the _bibtex url names the note's conference-listing twin, ryh_8f9lg)"
+  "run": "TASK-152: trimmed from the 2026-09-29 crawl cache (fetched 2026-09-29T09:04:25.786906+00:00), scrubbed by backend/tests/fixtures/http/scrub.py",
+  "scrubbed": "decision-004: free text synthetic; ids, venueids, venue strings, invitations, dates, headers real",
+  "trimmed": "listing page trimmed from 161 to 1 note (rkB_5hEKe, one of the 18 workshop copies of rejected papers; `count` is the page's)"
  },
  "request": {
   "method": "GET",
@@ -15,23 +16,24 @@
    "content-type": "application/json; charset=utf-8"
   },
   "json": {
+   "count": 161,
    "notes": [
     {
      "content": {
-      "TL;DR": "Synthetic tl;dr text 2.",
-      "_bibtex": "@misc{\nsynthetic2017,\ntitle={Synthetic title text},\nauthor={Synthetic Author},\nyear={2017},\nurl={https://openreview.net/forum?id=ryh_8f9lg}\n}",
+      "TL;DR": "Synthetic tl;dr text 1.",
+      "_bibtex": "Synthetic bibtex text 2.",
       "abstract": "Synthetic abstract text 3.",
       "authorids": [
-       "synthetic.person8@example.org",
-       "synthetic.person9@example.org",
-       "synthetic.person10@example.org",
-       "synthetic.person11@example.org"
+       "synthetic.person4@example.org",
+       "synthetic.person5@example.org",
+       "synthetic.person6@example.org",
+       "synthetic.person7@example.org"
       ],
       "authors": [
-       "Synthetic Author 4",
-       "Synthetic Author 5",
-       "Synthetic Author 6",
-       "Synthetic Author 7"
+       "Synthetic Author 8",
+       "Synthetic Author 9",
+       "Synthetic Author 10",
+       "Synthetic Author 11"
       ],
       "conflicts": [
        "Synthetic conflicts text 12.",
@@ -53,8 +55,7 @@
      ],
      "replyto": null
     }
-   ],
-   "count": 1
+   ]
   }
  }
 }

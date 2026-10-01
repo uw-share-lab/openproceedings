@@ -96,9 +96,10 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   it names the venueid's venue and year (TASK-142); any other `other` venueid keeps `other`. A v1 adapter
   takes status from `classify_v1_venue(content.venue)` (exact strings from the table below; an unlisted one
   is `unknown`), the decision note, or the withdrawn / desk-rejected invitation (decision-012). Status
-  evidence naming the main track on a note of a non-main listing is its conference twin's outcome, not the
-  note's: the note keeps its listing's track and its status is `unknown` (`judge`; the 18 ICLR 2017 workshop
-  copies of rejected papers that say `Submitted to ICLR 2017`, TASK-152).
+  evidence naming the main track on a note of a non-main listing, where the venueid names no track, is its
+  conference twin's outcome, not the note's: the note keeps its listing's track and its status is `unknown`
+  (`judge`, counted in the report's `twin_outcome`; the 18 ICLR 2017 workshop copies of rejected papers that say
+  `Submitted to ICLR 2017`, TASK-152).
 - Status per v1 year (the submission invitation lists what was **submitted**, never what was accepted):
 
 | Year | Submissions | Status from |
@@ -238,7 +239,8 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
 "text"}}`. They cover each v2 status suffix, D&B, position, competition, Creative AI, Tiny Papers,
 Blogposts, workshop and city-workshop forms, a group's venueid block, the `count`/`offset` shape, the
 `limit` error, the cross-host 404, the anonymous challenge page and a public v1 note with `nonreaders: null`
-(`v1/iclr-2017/note-workshop-null-nonreaders-live.json`, TASK-119); and each v1 year's status carrier
+(`v1/iclr-2017/note-workshop-null-nonreaders-live.json`, TASK-119) and a 2017 workshop-listing copy of a rejected
+paper (`v1/iclr-2017/note-workshop-submitted-to-iclr-live.json`, TASK-152); and each v1 year's status carrier
 above, including one invitation listing per v1 venue-year with a group; and (TASK-113, trimmed from the
 2026-09-29 crawl cache) ELMo's accepted blind note, withdrawn twin and forum (`v1/iclr-2018/*withdrawn-twin*`)
 and the v1 author shapes (`v1/iclr-20{17,18,20,21}/notes-*-authors-*.json`). `backend/tests/fixtures/http/scrub.py` turns a raw capture into a fixture (titles, abstracts,
