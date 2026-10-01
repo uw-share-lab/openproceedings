@@ -169,10 +169,9 @@ it needs to know which listings were crawled, and whether completely.
   source, the listing that holds the track as `url`, that listing's index-page fetch as `fetched_at`
   (`ListingReport.fetched[0]`), evidence starting `not listed:` (`dedup.is_absence`; the prefix is reserved, see
   the record-schema skill). The proceedings outrank OpenReview for status, so `resolve` gives `unknown` and its
-  `precedence:<source>` conflicts.csv rows, one per OpenReview status value it outranks; the OpenReview claims
-  stay. An absence claim is **not a listing**:
-  dedup leaves it out of a cluster's sources (and merges.csv's `sources`), so the record never looks listed and
-  a second dedup changes nothing. Reconcile strips absence claims before it judges, so it is idempotent, and a
+  `precedence:<source>` conflicts.csv rows, one per OpenReview source whose status claim differs; the OpenReview
+  claims stay. An absence claim is **not a listing**: dedup leaves it out of a cluster's sources (and
+  merges.csv's `sources`), so the record never looks listed and a second dedup changes nothing. Reconcile strips absence claims before it judges, so it is idempotent, and a
   claim a later crawl no longer supports disappears.
 - Merges are never changed. Conflicts gain the reconciled records' status rows, and a reconciled record's
   earlier `precedence:` status rows give way to the ones its claims now resolve to, as dedup run again would

@@ -210,10 +210,10 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    listing and shares no title key or forum id with one gets `status=unknown`: an absence claim from the
    proceedings source (`status=unknown`, the listing's URL, its index-page fetch, evidence `not listed: …`)
    that outranks OpenReview, so the record still equals what its claims resolve to, and its
-   `precedence:<source>` `conflicts.csv` rows, one per OpenReview status value it outranks, which replace the
-   record's earlier `precedence:` status rows as dedup run again would write them (TASK-154). The OpenReview
-   claims are kept. An absence claim never makes a
-   record a listing, so dedup run again changes nothing, and reconcile is idempotent. A venue-year with an
+   `precedence:<source>` `conflicts.csv` rows, one per OpenReview source whose status claim differs, which
+   replace the record's earlier `precedence:` status rows as dedup run again would write them (TASK-154). The
+   OpenReview claims are kept. An absence claim never makes a record a listing, so dedup run again changes
+   nothing, and reconcile is idempotent. A venue-year with an
    incomplete listing, a track no listing holds, and a record sharing a title or forum with a listing it
    didn't merge with (ambiguous: it may be the listed paper) are left alone. The check on the 2026-09-29 crawl
    is `docs/results/2026-09-29-reconcile-real-data.md`.
