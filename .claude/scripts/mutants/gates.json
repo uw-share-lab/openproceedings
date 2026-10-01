@@ -80,7 +80,7 @@
  {
   "label": "cd not tracked",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "            _change_dir(head, argv[1:], state)\n            continue",
+  "old": "            _change_dir(head, argv[1:], state, getattr(argv, \"assigns\", {}))\n            continue",
   "new": "            continue"
  },
  {
@@ -2123,8 +2123,20 @@
  {
   "label": "cmdparse: ~ not HOME",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "            home = _variable(\"HOME\", directory, shell_vars, olddir, env_empty)",
-  "new": "            home = None"
+  "old": "                home = \"\" if env_empty else os.environ[\"HOME\"]",
+  "new": "                home = None"
+ },
+ {
+  "label": "cmdparse: HOME '' pass reads ~ as the passwd home",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                home = \"\" if env_empty else os.environ[\"HOME\"]",
+  "new": "                home = _passwd_home()"
+ },
+ {
+  "label": "cmdparse: a cd's VAR=val prefix reaches its words",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            words[0], None if unknown else cur, variables, None if old_unknown else old, env_empty=env_empty",
+  "new": "            words[0], None if unknown else cur, builtin_vars, None if old_unknown else old, env_empty=env_empty"
  },
  {
   "label": "cmdparse: ~- not OLDPWD",
@@ -2141,7 +2153,7 @@
  {
   "label": "cmdparse: environment variables not read",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        return \"\" if env_empty else os.environ.get(name)",
+  "old": "        return \"\" if env_empty else os.environ.get(name, \"\")",
   "new": "        return None"
  },
  {
@@ -2405,8 +2417,8 @@
  {
   "label": "cmdparse: env_empty not read as ''",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        return \"\" if env_empty else os.environ.get(name)",
-  "new": "        return os.environ.get(name)"
+  "old": "        return \"\" if env_empty else os.environ.get(name, \"\")",
+  "new": "        return os.environ.get(name, \"\")"
  },
  {
   "label": "cmdparse: $(git rev-parse --show-toplevel) not resolved",
