@@ -22,8 +22,10 @@ Hypothesis example database (`.hypothesis/`) is gitignored; CI failures are repr
 parent copies whatever is loaded, so until TASK-146 the `pr`, `ci` and `nightly` runs in CI were derandomized
 (the same examples on every run) and suppressed `too_slow`, unlike the same profiles locally. The case table
 `test-hypothesis-profiles.sh` runs the profile tests with `CI` unset and with `CI=true`; a local run doesn't
-show the difference otherwise. Only `pr` is derandomized, on purpose: the required check runs the same examples
-on every PR, so a PR never fails for a counterexample in code it didn't touch; `ci` and `nightly` explore.
+show the difference otherwise. Only `pr` is derandomized, on purpose (decision-024): the required gate must be
+deterministic, running the same examples on every PR, so a PR never fails for a counterexample in code it didn't
+touch. It still keeps every health check, `too_slow` included. Exploration belongs to `ci` and `nightly`; a
+nightly failure is triaged into a Backlog task carrying its `@reproduce_failure` blob.
 
 ## Health checks and deadlines (decision-024, TASK-146)
 - **Wall-clock checks are gates only on CI runners.** A deadline and the `too_slow` health check time the

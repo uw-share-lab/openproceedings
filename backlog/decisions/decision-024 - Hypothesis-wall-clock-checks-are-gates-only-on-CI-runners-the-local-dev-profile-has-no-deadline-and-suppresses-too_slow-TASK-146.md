@@ -70,8 +70,10 @@ with a comment is still allowed for an example that is long by design.
   `ci` and `nightly` runs were derandomized, running the same examples every time, and suppressed `too_slow`.
   Now `pr` is derandomized on purpose (`derandomize=True`): the required check runs the same examples on
   every PR, as it in effect did before, so it never fails a PR for a counterexample in code the PR didn't
-  touch. `ci` and `nightly` explore new examples every night, and a failure there is reproduced from its
-  `@reproduce_failure` blob. `too_slow` now applies in CI for the first time.
+  touch. Only the randomness is fixed: `pr` keeps every health check, `too_slow` included. The required gate
+  must be deterministic; exploration belongs to `ci` and `nightly`, which run new examples every night, and a
+  nightly failure is triaged into a Backlog task carrying its `@reproduce_failure` blob. `too_slow` now
+  applies in CI for the first time.
 - No effect on matching, `index_version` or search records.
 - Revisit if the PR runners start failing `too_slow` or deadlines without a code cause (then consider option 1
   for `pr`), or if local timing failures come back under another name.
