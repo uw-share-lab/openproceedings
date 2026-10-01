@@ -17,6 +17,13 @@ The span is the quoted text. The UI underlines it, and the message quotes it so 
 (screen readers, logs, copied text). Unknown values list the valid ones from `/meta`. Warnings describe
 how the query **was read**. They never claim to have fixed it.
 
+A frontend line that wraps a server message (`error.message` from the envelope) puts it after a full stop,
+never after a colon: the message is a capitalised sentence with its own retry time ("The query couldn't be
+checked. Too many requests from this address; try again in 3 s."). Only a clause the frontend writes itself
+follows a colon, and it keeps a subject ("the server couldn't be reached", not "couldn't reach the server").
+An error code goes in parentheses before that full stop: "The record couldn't be loaded just now
+(`API_INDEX_NOT_LOADED`). No index is loaded yet (…)."
+
 ## Worked examples (spec 02 §Error handling and §Compatibility. Codes per `error-diagnostics`)
 | Code | Message |
 |---|---|
@@ -42,7 +49,7 @@ These are drafts. The registry holds the shipped text, and golden tests pin it (
 | index version | `index_version`, the searched snapshot | database version, build |
 | papers / records | "papers" for hits in the UI. "records" in PRISMA and methods text | results, items, documents |
 | match / matched | contains the exact normalized token | relevant, similar, related |
-| excluded | removed by a **default** filter (track/status), counted in the banner | hidden, filtered out, dropped |
+| excluded | removed by a **default** filter (track/status), counted in the banner | hidden, filtered out, dropped; never for `NOT` / `-word` terms (those are "left out": the builder's "leave-out terms") |
 | limit | a filter the user wrote (`year:`, `venue:`). Not an exclusion | filter (ambiguous) |
 | default filter | a clause added when the query has none (`track:`, `status:`) | preset, smart filter |
 | expansion | the terms a wildcard matched | variants, suggestions, synonyms |

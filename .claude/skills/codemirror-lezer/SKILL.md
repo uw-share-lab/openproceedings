@@ -75,7 +75,7 @@ Colours come from `ui-design-system` tokens so both themes pass contrast.
   (`src/api/spans.ts`, `.claude/skills/nextjs-conventions/SKILL.md`), never a second conversion. Clamp to
   doc length; a zero-width span gets width 1 (one code point) so it is visible.
 - A `/parse` that doesn't parse (429, 503, a non-JSON 5xx, no answer) draws no squiggle and puts one line in
-  the row, "The query couldn't be checked: …", with Check again: never silence, never a client-side guess. A
+  the row, "The query couldn't be checked" and why (copy deck ED-18), with Check again: never silence, never a client-side guess. A
   413 is the design's ED-11 error line.
 
 ## Autocomplete (`@codemirror/autocomplete`)

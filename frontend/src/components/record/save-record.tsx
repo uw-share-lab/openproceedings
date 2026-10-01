@@ -443,8 +443,8 @@ function SaveRecordInner({
           <p className="break-words">
             <span aria-hidden="true">✖ </span>Index{" "}
             <code className="font-mono break-all">{visibleTerminal.request.indexVersion}</code> is no longer
-            served here, so the search wasn&apos;t saved: it would have been frozen on another index than the
-            one whose counts you saw. Search again to see the current results, then save.
+            served here, so the search wasn&apos;t saved: the record would cite a different index from the one
+            whose counts you saw. Search again to see the current results, then save.
           </p>
         </div>
       )}

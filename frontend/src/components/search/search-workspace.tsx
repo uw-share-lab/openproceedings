@@ -136,7 +136,7 @@ function TooLarge({
   const refused =
     bytes !== undefined
       ? `the server refused a request over ${bytes} bytes`
-      : `the server refused it: ${outcome.message}`;
+      : "the server refused it as too large";
   return (
     <p className="break-words">
       <span aria-hidden="true" className="mr-1.5 font-bold text-diag-error">
@@ -150,20 +150,23 @@ function TooLarge({
   );
 }
 
-function Unchecked({ outcome, onRetry }: { outcome: ParseOutcome; onRetry: () => void }) {
+type UncheckedOutcome = Extract<ParseOutcome, { kind: "refused" | "no_answer" | "unreachable" }>;
+
+function Unchecked({ outcome, onRetry }: { outcome: UncheckedOutcome; onRetry: () => void }) {
+  // the server's own message is a whole sentence, so it follows a full stop rather than a colon
   const why =
     outcome.kind === "refused"
-      ? outcome.error.message
+      ? `. ${outcome.error.message}`
       : outcome.kind === "no_answer"
-        ? `the server is busy or restarting (${outcome.status === null ? "" : `HTTP ${outcome.status}, `}not from the search service).`
-        : "couldn't reach the server.";
+        ? `: the server is busy or restarting (${outcome.status === null ? "" : `HTTP ${outcome.status}, `}not from the search service).`
+        : ": the server couldn't be reached. Check your connection.";
   return (
     <p className="break-words">
       <span aria-hidden="true" className="mr-1.5 font-bold text-diag-info">
         ⓘ
       </span>
       <span className="sr-only">Note: </span>
-      The query couldn&apos;t be checked: {why}{" "}
+      The query couldn&apos;t be checked{why}{" "}
       <button
         type="button"
         onClick={onRetry}
@@ -415,7 +418,10 @@ export function SearchWorkspace({
                 outcome={shown.outcome}
                 maxLength={meta?.limits.max_query_length ?? DEFAULT_LIMITS.max_query_length}
               />
-            ) : shown.notice === "unchecked" && shown.outcome !== null ? (
+            ) : shown.notice === "unchecked" &&
+              shown.outcome !== null &&
+              shown.outcome.kind !== "parsed" &&
+              shown.outcome.kind !== "too_large" ? (
               <Unchecked outcome={shown.outcome} onRetry={refetch} />
             ) : null
           }

@@ -359,7 +359,7 @@ function YearFieldset({
         <p className="text-xs text-muted-foreground">
           {ranges.length === 1 && ranges[0]?.lo === EVERY_YEAR.lo && ranges[0]?.hi === EVERY_YEAR.hi
             ? "Every year."
-            : `${report.negated ? "Leaves out" : "Admits"} ${ranges.map(formatYearRange).join(", ")}.`}
+            : `${report.negated ? "Leaves out" : "Includes"} ${ranges.map(formatYearRange).join(", ")}.`}
         </p>
       )}
       <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-sm">

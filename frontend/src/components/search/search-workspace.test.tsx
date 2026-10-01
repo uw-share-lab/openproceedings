@@ -465,6 +465,17 @@ describe("/parse answers that aren't a parse", () => {
     expect(summaryOf(view).textContent).toBe("1 error — not searched yet");
   });
 
+  it("413 whose message gives no byte limit still says the server refused it", async () => {
+    const handler = api(() => json({ error: { code: "API_BODY_TOO_LARGE", message: "Too large." } }, 413));
+    const { type } = setup({}, handler);
+    await type("x".repeat(2_001));
+    await pass(300);
+    expect(screen.getByText(/far too long to send/).textContent).toBe(
+      "✖Error: The query is far too long to send (the server refused it as too large). A valid " +
+        "query is at most 2,000 characters; this one is 2,001. Shorten it.",
+    );
+  });
+
   it("429: couldn't be checked, the server's message, and Check again asks again", async () => {
     let busy = true;
     const handler = api((q) =>
@@ -482,7 +493,7 @@ describe("/parse answers that aren't a parse", () => {
     expect(
       within(screen.getByRole("region", { name: "Diagnostics" })).getByText(/couldn't be checked/)
         .textContent,
-    ).toContain("The query couldn't be checked: Too many requests; try again in 3 s.");
+    ).toContain("The query couldn't be checked. Too many requests; try again in 3 s.");
     expect(summaryOf(view).textContent).toBe("The query couldn't be checked — not searched yet");
     busy = false;
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
@@ -512,11 +523,26 @@ describe("/parse answers that aren't a parse", () => {
     expect(
       within(screen.getByRole("region", { name: "Diagnostics" })).getByText(/couldn't be checked/)
         .textContent,
-    ).toContain("the server is busy or restarting (HTTP 502, not from the search service).");
+    ).toContain(
+      "The query couldn't be checked: the server is busy or restarting (HTTP 502, not from the search service).",
+    );
     expect(squiggles()).toEqual([]);
   });
 
-  it("a fetch that never answers: couldn't reach the server", async () => {
+  it("a 2xx body that isn't JSON is 'busy' with no status", async () => {
+    const handler = api(() => new Response("<html>ok</html>", { status: 200 }));
+    const { type } = setup({}, handler);
+    await type("trust");
+    await pass(300);
+    expect(
+      within(screen.getByRole("region", { name: "Diagnostics" })).getByText(/couldn't be checked/)
+        .textContent,
+    ).toContain(
+      "The query couldn't be checked: the server is busy or restarting (not from the search service).",
+    );
+  });
+
+  it("a fetch that never answers: the server couldn't be reached", async () => {
     const handler = api(() => Promise.reject(new TypeError("Failed to fetch")));
     const { type } = setup({}, handler);
     await type("trust");
@@ -524,7 +550,7 @@ describe("/parse answers that aren't a parse", () => {
     expect(
       within(screen.getByRole("region", { name: "Diagnostics" })).getByText(/couldn't be checked/)
         .textContent,
-    ).toContain("couldn't reach the server.");
+    ).toContain("The query couldn't be checked: the server couldn't be reached. Check your connection.");
   });
 });
 

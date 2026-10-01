@@ -14,8 +14,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from hypothesis import assume, event, example, given, seed, settings
+from hypothesis import event, example, given, seed, settings
 from hypothesis import strategies as st
+from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.query import clauses
 from openproceedings.query.ast import (
     FILTER_FIELDS,
@@ -39,7 +40,7 @@ from openproceedings.query.clauses import (
 from openproceedings.query.parser import MAX_QUERY_LENGTH, Mode, ParseResult, parse
 from pydantic import ValidationError
 
-from tests.strategies import YearEditCase, clause_queries, near_cap_queries, queries, year_edit_cases
+from tests.strategies import ParseCase, YearEditCase, click_cases, wrap_cases, year_edit_cases
 
 ROOT = Path(__file__).resolve().parents[3]
 GOLDEN: list[dict[str, Any]] = json.loads(
@@ -228,21 +229,55 @@ def test_filter_clauses_cost_is_bounded(q: str, most: int, monkeypatch: pytest.M
     assert calls == most
 
 
+def _parsed(case: ParseCase) -> ParseResult | None:
+    """`case.q` parsed, or None for a near miss, once it is checked: parse refuses it with the code it was built
+    to give, so filter_clauses reports nothing for it (the strategies build every other case to parse)."""
+    result = parse(case.q, case.mode)
+    codes = {e.code for e in result.errors}
+    event(f"mode: {case.mode}")
+    event(f"source: {case.source}")
+    if case.refused is not None:
+        event(f"near miss: {case.refused}")
+        assert codes == {case.refused} and filter_clauses(case.q, result) is None, (case.q, codes)
+        return None
+    assert result.ast is not None, (case.q, codes)
+    return result
+
+
+# A near miss per refusal the strategy builds, at the length cap's boundary (1,926 code points still parse: the
+# canonical form adds the default filters); a wrap of every field too long, but not every field's own (only
+# track's is); every field's own fits (wrap_cases found it: the cost bound once read "every field toggleable" as
+# "written together"); and a wrap too deep for every field
+@example(case=ParseCase("a" * 1_927, "native", "pinned", DiagnosticCode.PARSE_TOO_LONG))
+@example(case=ParseCase("a" * 1_926, "scholar", "pinned"))
+@example(case=ParseCase("a" * 1_853, "native", "pinned"))
+@example(case=ParseCase(" ".join(["trust"] * 300), "native", "pinned"))
+@example(case=ParseCase("(" * 64 + "a" + ")" * 64, "scholar", "pinned"))
 # near-cap queries (up to 2,000 code points) parsed once per filter field and wrap: no per-example deadline
-@given(q=st.one_of(queries(), near_cap_queries(1_800, 2_000)), mode=st.sampled_from(["native", "scholar"]))
+@given(case=wrap_cases())
 @settings(max_examples=60, deadline=None)
-def test_the_one_wrap_parse_answers_exactly_as_per_field_parses(q: str, mode: Mode) -> None:
+def test_the_one_wrap_parse_answers_exactly_as_per_field_parses(case: ParseCase) -> None:
     """Old vs new: every field with no clause gets the reason its own wrap alone gives, and the cost is at
-    most one parse per typed clause plus one, or plus five when the combined wrap can't be written."""
-    result = parse(q, mode)
-    assume(result.ast is not None)
+    most one parse per typed clause plus one, or plus one more per field with no clause (five at most, spec 02)
+    when the combined wrap can't be written."""
+    q, mode = case.q, case.mode
+    if _parsed(case) is None:
+        return
     with pytest.MonkeyPatch.context() as m:
         calls, got = _parses(q, m, mode)
     wrapped = [f for f in FILTER_FIELDS if got[f]["span"] == [len(q), len(q)] and not got[f]["negated"]]
     for field in wrapped:
         assert got[field]["reason"] == clauses._check_wrap(q, mode, (field,)), field
+    # One parse when the combined wrap can be written (or is too deep, as each field's is), else one more per
+    # field. Not "every field toggleable": each field's own wrap can fit when all of them together don't
+    together = clauses._check_wrap(q, mode, tuple(wrapped)) in (None, "too_deep") if wrapped else True
+    alone = "" if together else ", some fit" if any(got[f]["toggleable"] for f in wrapped) else ", none fits"
+    event(
+        f"wraps: {'none' if not wrapped else 'written together' if together else 'each field alone'}{alone}"
+    )
     typed = len(FILTER_FIELDS) - len(wrapped)
-    assert calls <= typed + (1 if all(got[f]["toggleable"] for f in wrapped) else 1 + len(wrapped))
+    assert calls <= typed + (1 if together else 1 + len(wrapped))
+    assert calls <= 5  # spec 02: `/parse` adds at most five
 
 
 @pytest.mark.parametrize("depth", [62, 63, 64])
@@ -277,20 +312,37 @@ def _rest(ast: Node | None, field: str) -> Counter[str]:
     return Counter(json.dumps(structure(c), sort_keys=True) for c in _top(ast) if _field_of(c) != field)
 
 
-@given(q=clause_queries(), mode=st.sampled_from(["native", "scholar"]))
+# A near miss per refusal the strategy builds; a typed clause at the depth limit
+@example(case=ParseCase("NOT track:main", "native", "pinned", DiagnosticCode.PARSE_ALL_NEGATIVE))
+@example(case=ParseCase("x OR -venue:ICLR", "scholar", "pinned", DiagnosticCode.PARSE_ALL_NEGATIVE))
+@example(
+    case=ParseCase(
+        "trust status:accepted(x OR y)", "native", "pinned", DiagnosticCode.PARSE_PAREN_TOUCHES_WORD
+    )
+)
+@example(case=ParseCase("track:main " + "a" * 1_964, "scholar", "pinned", DiagnosticCode.PARSE_TOO_LONG))
+@example(
+    case=ParseCase("(" * 65 + "a track:main" + ")" * 65, "native", "pinned", DiagnosticCode.PARSE_TOO_DEEP)
+)
+@example(case=ParseCase("(" * 64 + "a track:main" + ")" * 64, "scholar", "pinned"))
+@given(case=click_cases())
 def test_every_single_value_click_on_a_toggleable_clause_parses_and_edits_only_that_clause(
-    q: str, mode: Mode
+    case: ParseCase,
 ) -> None:
     """Guarantee 3 for facet clicks (query-semantics review): every toggle and include a toggleable clause
     offers (each vocabulary value added or removed, never the last one) gives a query that parses, within the
     cap, whose top-level clause of the field admits exactly the new values, and whose every other effective
-    conjunct is unchanged. The widest-edit check is sound for every edit because every edit is grouped."""
-    before = parse(q, mode)
-    assume(before.ast is not None)
+    conjunct is unchanged. The widest-edit check is sound for every edit because every edit is grouped. And the
+    near misses `click_cases` builds are refused by parse, with the code they were built to give."""
+    q, mode = case.q, case.mode
+    before = _parsed(case)
+    if before is None:
+        return
     filters = filter_clauses(q, before)
     assert filters is not None
     for field in ("venue", "track", "status"):
         clause = getattr(filters, field)
+        event(f"{field}: {'toggleable' if clause.toggleable else clause.reason}")
         if not clause.toggleable:
             continue
         for value in VOCABULARY[field]:
