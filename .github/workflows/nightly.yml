@@ -44,8 +44,10 @@ jobs:
           status=0
           timeout --signal=INT --kill-after=2m 140m uv run --locked pytest -v -n auto --hypothesis-profile=nightly \
             backend/tests/unit/test_properties.py backend/tests/golden/test_reference_200.py || status=$?
-          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+          if [ "$status" -eq 124 ]; then
             echo "::error::ran past 140 min: the test that started above with no result overran"
+          elif [ "$status" -eq 137 ]; then
+            echo "::error::killed (exit 137): past 140 min plus the 2 min grace, or out of memory"
           fi
           exit "$status"
   properties:
@@ -63,11 +65,13 @@ jobs:
       - name: Every other property at 50,000 examples (parallel)
         run: |
           status=0
-          timeout --signal=INT --kill-after=2m 135m uv run --locked pytest -v -n auto --hypothesis-profile=nightly \
+          timeout --signal=INT --kill-after=2m 130m uv run --locked pytest -v -n auto --hypothesis-profile=nightly \
             -k "not exhaustive" --ignore=backend/tests/unit/test_properties.py \
             --ignore=backend/tests/golden/test_reference_200.py --ignore=backend/tests/differential || status=$?
-          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
-            echo "::error::ran past 135 min: the test that started above with no result overran"
+          if [ "$status" -eq 124 ]; then
+            echo "::error::ran past 130 min: the test that started above with no result overran"
+          elif [ "$status" -eq 137 ]; then
+            echo "::error::killed (exit 137): past 130 min plus the 2 min grace, or out of memory"
           fi
           exit "$status"
   # Differential@50k (spec 07 §A): one Hypothesis property, which pytest-xdist can't split, so the 50,000
@@ -95,8 +99,10 @@ jobs:
           status=0
           timeout --signal=INT --kill-after=2m 110m uv run --locked pytest -v --hypothesis-profile=nightly \
             --hypothesis-seed="$SEED" --hypothesis-show-statistics backend/tests/differential || status=$?
-          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+          if [ "$status" -eq 124 ]; then
             echo "::error::ran past 110 min: the test that started above with no result overran"
+          elif [ "$status" -eq 137 ]; then
+            echo "::error::killed (exit 137): past 110 min plus the 2 min grace, or out of memory"
           fi
           exit "$status"
   # Spec 03 budgets on the 5k fixture index (each benchmark asserts its p95; no base to compare with, so not

@@ -177,6 +177,8 @@ def test_the_cap_stems_sit_at_the_cap(engines: tuple[ReferenceEngine, TantivyEng
             assert (len(got) if isinstance(got, list) else got) == (n if n <= MAX_EXPANSIONS else REFUSED), (
                 stem
             )
+            # `$`: the stem's 26 words one letter longer
+            assert len(engine.expand(Wildcard(span=(0, 0), stem=stem, op="$"))) == 26, stem
         assert outcome(engine.expand, Wildcard(span=(0, 0), stem="qc", op="*")) == REFUSED
 
 

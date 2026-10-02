@@ -142,9 +142,8 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
     engine = TantivyEngine(built)
     started_load = os.getloadavg()
 
-    over: list[
-        str
-    ] = []  # budgeted numbers past their spec 03 budget: flagged, never failed (a report, not a gate)
+    # budgeted numbers past their spec 03 budget: flagged, never failed (a report, not a gate)
+    over: list[str] = []
 
     def check(label: str, seconds: float, budget: float) -> None:
         if seconds > budget:
