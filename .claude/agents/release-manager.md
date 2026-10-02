@@ -42,9 +42,11 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
 4. **Index promotion (runbook, spec 08 §Deploy).** Offline: `op snapshot build`, `op snapshot diff <old>
    <new>`, `op index build --snapshot <new>` → `data/indexes/<index_version>/`. Verify on that version:
    golden + contract suites, tokenizer parity (`op index parity --index <index_version>`), `op eval coverage --index <index_version> --check` (the M4 gate as its exit status), and replay of a sample of stored search
-   records. Then atomically repoint `data/indexes/current` (`ln -sfn` to a temp link + `mv -T`), send
-   SIGHUP to `api`, and check `/api/v1/meta` and `/healthz` report the new version. Rollback = repoint to
-   the previous version and SIGHUP.
+   records. Then, under compose, give the API read access (`deploy/index-permissions.sh`, or the reload fails
+   `index_load_failed`), atomically repoint `data/indexes/current` (`ln -sfn` to a temp link + `mv -T`; a
+   relative target), send SIGHUP to `api`, and check `/api/v1/meta` and `/healthz` report the new version.
+   Rollback = repoint to the previous version and SIGHUP. The compose commands are in `deploy/README.md`
+   §Promoting an index and §Deploying a release.
 5. **Retention.** Never delete an index or snapshot that any row in `data/records/records.sqlite` references;
    list referenced versions before pruning. Retire an index only with `op index retire <index_version>`,
    in this order: repoint `current`, SIGHUP `api`, confirm `/api/v1/meta` reports the new version (the API
@@ -55,14 +57,17 @@ search can be re-run. A release is code *and* an `index_version`; you treat both
    It refuses, reporting the count, while any search record pins the version, and refuses a version
    `current` (or any other symlink in `indexes/`) points at. It can't see an instance started with
    `op serve --index <that version>`: check what each running instance serves. If it logs ERROR
-   `index_retire_restore_failed`, move `indexes/.retiring-<version>` back to `indexes/<version>` by hand first. Snapshots have no retire
+   `index_retire_restore_failed`, move `indexes/.retiring-<version>` back to `indexes/<version>` by hand first.
+   Under compose, retire runs only in the `ops` service (`deploy/README.md` §Retiring an index); on the host
+   the API's record store is unreadable and retire refuses. Snapshots have no retire
    command yet. `protect-data-dir.sh` blocks edits; deletion is a decision record. Keep the snapshot of every
    pinned index: its exports need it to attribute abstracts, and withhold them without it (decision-021).
-6. **Takedowns (spec 08 §Deploy "Takedown procedure", decision-022).** Log the request in
-   `<data-dir>/takedowns/log.jsonl` (operator-owned, mode 0600, never committed), add the id to
+6. **Takedowns (spec 08 §Deploy "Takedown procedure", decision-022).** Log the request in the takedown log
+   (operator-owned, mode 0600, never committed: `<data-dir>/takedowns/log.jsonl`, or under compose its own
+   directory outside the data directory, decision-022's 2026-10-02 addendum), add the id to
    `<data-dir>/takedowns/withheld.txt` and SIGHUP `api` (every loaded version withholds it from then on), then
-   run `op takedown check --api http://127.0.0.1:8000` as the operator (it passes on serve-time withholding
-   before any rebuild), then promote a rebuild as in step 4 (`op snapshot build` withholds listed abstracts,
+   run `op takedown check --api http://127.0.0.1:8000` as the operator (under compose: the `takedown-check`
+   service, `deploy/README.md` §Takedowns; it passes on serve-time withholding before any rebuild), then promote a rebuild as in step 4 (`op snapshot build` withholds listed abstracts,
    follows a listed id that merged or was rekeyed to its new id and says so: add the new id, log a `withheld`
    entry for it, and keep the old one; it reports listed ids it has no record of, never refuses them; `op snapshot diff` names them under
    `abstract_withheld`), fill in the log's `applied` and `first_index_version`, and run the check again (exit 0).

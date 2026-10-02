@@ -10,7 +10,7 @@ papers into the results, and its results drift. Neither can OpenReview, which ha
 Every part of the system is held to six guarantees ([spec 00](docs/specs/00-overview.md) §Guarantees is
 authoritative):
 
-1. **Exact.** A term matches only its exact normalized token: case-folded, NFKC, accents folded, split on
+1. **Exact.** A term matches only its exact normalized token: case-folded, NFKC, marks (accents) folded, split on
    punctuation. No stemming, synonyms, stopwords or fuzziness. `benchmarking` doesn't match `benchmark`, and
    suffixes match only through a wildcard you write (`benchmark*`, `model$`).
 2. **Title and abstract only.** No other text is searched. Metadata is reached only through filter fields
@@ -32,10 +32,13 @@ authoritative):
 - **Scholar and Publish or Perish syntax** (`mode=scholar`, `op search --mode scholar`): `|`, `source:`
   (mapped to `venue:`) and PoP's `$` are accepted. Each rewrite is reported, so an existing review string runs
   unchanged or comes back with a precise explanation.
-- **Default filters with exclusion accounting**: a query with no `track:` or `status:` clause gets
-  `track:(main OR datasets_benchmarks OR position)` and `status:accepted`, written out in the canonical
-  string. Every search reports how many records each default removed. That is the PRISMA "removed before
-  screening" count ([skill](.claude/skills/prisma-reporting/SKILL.md)).
+- **Default filters with exclusion accounting**: workshop, competition and rejected papers are indexed too.
+  A query without a `track:` clause gets `track:(main OR datasets_benchmarks OR position)`, and one without a
+  `status:` clause gets `status:accepted`, both written out in the canonical string; write your own clause to
+  include the others. Every search reports what the defaults removed, each record counted once: the ineligible
+  records are PRISMA's "removed before screening: marked ineligible by automation tools", and the
+  unclassified ones (track or status `unknown`) are reported apart, under "other reasons"
+  ([skill](.claude/skills/prisma-reporting/SKILL.md)).
 - **Search records and replay** ([spec 04](docs/specs/04-backend-api.md) §Search records): saving a search
   freezes its canonical query, `index_version` and sorted ids into an immutable record with its own page.
   Replaying it later reports `reproduced`, `drifted` (with what changed and the ids added or removed) or
@@ -49,7 +52,7 @@ authoritative):
   exports, and marked as removed. `op takedown check` verifies a running instance.
 - **One CLI, `op`**, runs the same functions as the API: `op ingest`, `op snapshot build|diff`,
   `op index build|parity|retire`, `op search`, `op export`, `op record save|replay`, `op serve`,
-  `op eval coverage` and `op takedown check` ([spec 08](docs/specs/08-ops-and-tooling.md) §CLI).
+  `op eval coverage`, `op takedown check` and `op openapi` ([spec 08](docs/specs/08-ops-and-tooling.md) §CLI).
 
 **Abstracts on a public instance.** A public deployment shows every abstract, attributed to its source
 (OpenReview, the NeurIPS proceedings or PMLR) with a link to it, and names a takedown contact. Private, local
@@ -120,7 +123,7 @@ cd data/indexes && ln -sfn <index_version> current && cd -   # make it the serve
 ```
 Check it from the command line: `uv run op search "trust AND calibration"` (add `--ids` or `--explain`), and
 export the whole matched set with `uv run op export "trust AND calibration" --format ris --out results.ris`.
-On the 2013 NeurIPS crawl alone that query matches nothing; `"neural AND network"` matches 12 papers.
+On the 2013 NeurIPS crawl alone that query matches nothing; try `"neural AND network"`.
 
 ### 5. Run the API
 ```bash
@@ -160,11 +163,12 @@ exit status).
 
 `deploy/compose.yml` runs the API, the web app and Caddy (TLS) over a data directory you have built (step 4
 above). The services run as non-root users with read-only root filesystems, and the API has no route out. The
-API runs as uid 10001, so first give it read access to the index and create the takedown list (empty is fine;
-behind the proxy the API won't load without it):
+API runs as uid 10001, so first give it read access to the index, create its record store, and create the
+takedown list (empty is fine; behind the proxy the API won't load without it):
 
 ```bash
-deploy/index-permissions.sh data/indexes <index_version>   # Linux: as root or a gid-10001 member (Docker Desktop: skip)
+sudo deploy/index-permissions.sh data/indexes <index_version>   # Linux only; Docker Desktop: skip
+sudo install -d -o 10001 -g 10001 -m 0700 data/records          # Docker Desktop: mkdir -m 0700 data/records
 mkdir -p data/takedowns && touch data/takedowns/withheld.txt
 OP_DATA_HOST=$PWD/data OP_INSTANCE=private docker compose -f deploy/compose.yml up -d --build --wait
 ```
@@ -222,7 +226,9 @@ the suite at 2,000 examples, every property and the differential (Tantivy agains
 ## Citing
 
 If you use openproceedings in a review, cite it with [`CITATION.cff`](CITATION.cff) (GitHub's "Cite this
-repository" button renders it), and report the `index_version` your searches ran on, or link the saved search
-record.
+repository" button renders it). Save each search as a search record, and report the record's link and its
+`index_version` (records and exports name it). A saved record keeps its index from being retired, so the
+search can be replayed on that instance. A version no record pins may be retired, and a later release that
+changes the tokenizer or schema replays older records as `drifted`, saying what changed.
 
 MIT © SHARE Lab, University of Waterloo

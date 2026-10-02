@@ -2,8 +2,9 @@
 #   docker build -f deploy/api.Dockerfile -t openproceedings-api .
 # deploy/compose.yml builds it and runs it behind Caddy. The image holds the backend package and its locked
 # dependencies only: no data, no tests, no dev tools. Its user, op-api (uid and gid 10001), is neither root nor
-# the operator's account that owns the takedown log (TASK-065 AC #3); `<data-dir>/records`, its one writable
-# directory, is created here 0700 and owned by it, so a fresh named volume mounted there takes that owner.
+# the operator's account that owns the takedown log (TASK-065 AC #3). `/data/records`, where compose mounts the
+# record store (its one writable directory, a host directory 0700 owned by uid 10001), is created here with the
+# same owner and mode.
 # Base images are pinned by the digest of their multi-arch index, the tag kept for readers (TASK-149;
 # .claude/scripts/check_digest_pins.py checks it, Dependabot's `docker` entry bumps the FROM digests).
 

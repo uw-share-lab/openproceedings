@@ -5,8 +5,9 @@
 #   OP_DATA_HOST=/srv/openproceedings/data OP_INSTANCE=private docker compose -f deploy/compose.yml up -d --build
 #
 # Settings (environment, or an `.env` file beside this one; deploy/README.md §Settings):
-#   OP_DATA_HOST          required: the host's data directory, holding indexes/ (with `current`), snapshots/
-#                         and takedowns/withheld.txt (and nothing else in takedowns/: the log lives elsewhere)
+#   OP_DATA_HOST          required: the host's data directory, holding indexes/ (with `current`), snapshots/,
+#                         records/ (0700, owned by uid 10001) and takedowns/withheld.txt (and nothing else in
+#                         takedowns/: the log lives elsewhere)
 #   OP_INSTANCE           required: public | private (the web image's build gate; public needs a contact)
 #   OP_TAKEDOWN_CONTACT   the takedown contact, compiled into the web image (required when public)
 #   OP_DOMAIN             the site's name (default localhost: Caddy's local CA; a real name: ACME)
@@ -16,6 +17,10 @@
 #                         web are given addresses from, and Caddy's fixed address outside that part (defaults
 #                         172.30.80.0/24, 172.30.80.128/25 and 172.30.80.2): the one address the API believes
 #                         X-Forwarded-For from
+#   OP_IMAGE_TAG          the tag of the three images built here (default local); smoke-test.sh uses its own
+#
+# Needs Docker Engine 26.0.0 or later (or 25.0.4 / 23.0.11): before those, the embedded DNS forwarded lookups
+# from an `internal` network to outside resolvers (CVE-2024-29018), a way out of the no-egress network below.
 name: openproceedings
 
 x-hardened: &hardened
@@ -31,7 +36,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/api.Dockerfile
-    image: openproceedings-api:local
+    image: openproceedings-api:${OP_IMAGE_TAG:-local}
     # neither root nor the operator's account: the image's op-api (uid and gid 10001; TASK-065 AC #3)
     user: "10001:10001"
     command:
@@ -51,7 +56,15 @@ services:
       # a directory holding only withheld.txt, never the takedown log, and never the file alone (an editor
       # that saves by rename would leave the container reading the old list across SIGHUP; TASK-065 AC #3)
       - ${OP_DATA_HOST}/takedowns:/data/takedowns:ro
-      - records:/data/records # search records: the API's one writable place (0700, op-api)
+      # search records, the API's one writable place: a host directory (0700, uid 10001), not a named volume,
+      # so it sits in the data directory as spec 08 lays it out, and `op index retire` run on the host as the
+      # operator can't read it and refuses (`records_unreadable`) rather than counting no pins in an absent
+      # store. It is the only copy of every saved search: back it up (deploy/README.md §Backups)
+      - type: bind
+        source: ${OP_DATA_HOST}/records
+        target: /data/records
+        bind:
+          create_host_path: false # never a root-owned directory the API can't write
     tmpfs:
       - /tmp
     networks:
@@ -75,7 +88,7 @@ services:
         OPENPROCEEDINGS_INSTANCE: ${OP_INSTANCE:?set OP_INSTANCE to public or private}
         NEXT_PUBLIC_TAKEDOWN_CONTACT: ${OP_TAKEDOWN_CONTACT:-}
         NEXT_PUBLIC_API_BASE_URL: "" # the API is on the web app's own origin, behind Caddy
-    image: openproceedings-web:local
+    image: openproceedings-web:${OP_IMAGE_TAG:-local}
     tmpfs:
       - /tmp
       - /app/frontend/.next/cache:uid=1000,gid=1000,mode=0700
@@ -87,7 +100,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/caddy.Dockerfile
-    image: openproceedings-caddy:local
+    image: openproceedings-caddy:${OP_IMAGE_TAG:-local}
     environment:
       OP_DOMAIN: ${OP_DOMAIN:-localhost}
       OP_HSTS: ${OP_HSTS:-max-age=63072000}
@@ -112,13 +125,15 @@ services:
 
   # One-off operator commands that need the record store and write access to indexes/ (`op index retire`):
   # `docker compose -f deploy/compose.yml run --rm ops index retire <index_version>`. Never started by `up`.
-  # It runs as root so it can remove an index directory the operator's account owns. The record store is
+  # It runs as root so it can remove an index directory the operator's account owns. Never run retire on the
+  # host instead: there the record store is the API's and unreadable, so it refuses. The record store is
   # mounted read-write: SQLite opens even a read-only connection's -shm and -wal files for writing, and a
   # read-only mount makes it refuse the store (retire then refuses, `records_unreadable`). CHOWN is kept
   # because SQLite, running as root, gives each -shm or -wal file it creates the database file's owner
   # (op-api); without it they stay root's and the API can no longer open its store (checked, TASK-065).
   ops:
-    image: openproceedings-api:local
+    image: openproceedings-api:${OP_IMAGE_TAG:-local}
+    pull_policy: never # a local build only, never a registry image of the same name
     profiles: [ops]
     user: "0:0"
     read_only: true
@@ -129,7 +144,11 @@ services:
     volumes:
       - ${OP_DATA_HOST:?set OP_DATA_HOST to the data directory}/indexes:/data/indexes
       - ${OP_DATA_HOST}/snapshots:/data/snapshots:ro
-      - records:/data/records
+      - type: bind
+        source: ${OP_DATA_HOST}/records
+        target: /data/records
+        bind:
+          create_host_path: false
     tmpfs:
       - /tmp
 
@@ -139,7 +158,8 @@ services:
   # api never mounts. Run it with the operator's uid and gid, so the log's owner check passes:
   #   docker compose -f deploy/compose.yml run --rm --user "$(id -u):$(id -g)" takedown-check
   takedown-check:
-    image: openproceedings-api:local
+    image: openproceedings-api:${OP_IMAGE_TAG:-local}
+    pull_policy: never
     profiles: [ops]
     read_only: true
     security_opt: ["no-new-privileges:true"]
@@ -177,6 +197,5 @@ networks:
   edge: {} # caddy's published ports and its ACME requests
 
 volumes:
-  records:
   caddy-data:
   caddy-config:

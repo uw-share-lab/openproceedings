@@ -29,7 +29,7 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `backend/src/openproceedings/coverage.py` | The snapshot manifest's venue × year × track × status breakdown | Never recounts |
 | `backend/src/openproceedings/timestamps.py` | The API's one timestamp form (UTC RFC 3339, `Z`) | |
 | `backend/src/openproceedings/cli.py` | `op` entry point | Thin: calls the same functions as the API |
-| `backend/tests/{unit,golden,differential,bench,contract,e2e,fixtures}/` | Tests by kind (`testing-standards`); `e2e/fixture_server.py` serves the temporary 5k browser fixture | |
+| `backend/tests/{unit,golden,differential,bench,contract,e2e,deploy,fixtures}/` | Tests by kind (`testing-standards`); `e2e/fixture_server.py` serves the temporary 5k browser fixture; `deploy/fixture_data.py` writes the deploy smoke test's data directory | |
 | `frontend/` (M3) | 05: Next.js app, an npm workspace | `frontend/src/api/schema.ts` is generated |
 | `frontend/e2e/` | Playwright full-stack, accessibility and visual tests; platform-specific baselines in `__screenshots__/` | Run with `make e2e` |
 | `CHANGELOG.md` (root) | Release notes, generated from merged PRs by `.claude/scripts/changelog.py` (`make changelog`) | Spec 08 §Release, decision-023 |

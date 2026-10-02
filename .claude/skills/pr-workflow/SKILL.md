@@ -49,7 +49,7 @@ break. `make lint` and `make tooling` always run (the pre-push hook runs them to
 | `.claude/hooks/**`, `.claude/scripts/**`, `.githooks/**`, `.github/**`, `Makefile` | `make tooling` and `make mutate-changed` |
 | `deploy/**` (Docker isn't assumed locally: CI's advisory `web-image` job builds the web image, so confirm it green on the PR) | `npx vitest run --root frontend src/lib/web-image.test.ts` (it reads `web.Dockerfile` and runs `web-build-gate.sh`), and `make tooling` (the digest-pin check); for `compose.yml`, `Caddyfile`, `api.Dockerfile`, `caddy.Dockerfile` or the scripts, also `deploy/smoke-test.sh` where Docker is available (no CI job runs it), and say in the PR which ran |
 | `docs/specs/**`, `docs/results/**`, `backlog/**` (tests on both sides read them: the syntax-help golden, diagnostics, official counts, the Covidence fixture, the backlog check, decision records, and the methods text reads spec 05) | `make test` (both suites) |
-| other docs: `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `docs/{design,research,plans,usability}/**`, `.claude/` markdown | nothing beyond `make lint` and `make tooling` |
+| other docs: `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `CITATION.cff`, `docs/README.md`, `docs/{design,research,plans,usability}/**`, `.claude/` markdown | nothing beyond `make lint` and `make tooling` |
 | anything the rows above don't name | `make test` (unlisted means full: the table fails safe) |
 
 A diff that spans rows runs the union. When in doubt, run `make test`. The PR's **Tests** section says exactly

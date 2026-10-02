@@ -16,8 +16,8 @@ indexes=$1
 version=$2
 gid=${3:-10001}
 case "$version" in
-  *[!0-9a-f]* | "")
-    echo "$0: $version is not an index_version (hexadecimal)" >&2
+  *[!0-9a-f-]* | -* | "")
+    echo "$0: $version is not an index_version name (0-9, a-f and -)" >&2
     exit 2
     ;;
 esac
@@ -26,11 +26,16 @@ if [ ! -d "$dir" ] || [ -L "$dir" ]; then
   echo "$0: $dir is not an index directory" >&2
   exit 1
 fi
-chgrp -R "$gid" "$dir"
+# run as root, so never follow a symlink: one planted in the directory would point chgrp or chmod elsewhere
+if [ -n "$(find "$dir" -mindepth 1 -type l -print -quit)" ]; then
+  echo "$0: $dir holds a symlink; an index holds none: check it before serving it" >&2
+  exit 1
+fi
+chgrp -R -h "$gid" "$dir"
 chmod 0750 "$dir"
 for lock in "$dir/.tantivy-meta.lock" "$dir/.tantivy-writer.lock"; do
   [ -f "$lock" ] || : >"$lock"
-  chgrp "$gid" "$lock"
+  chgrp -h "$gid" "$lock"
   chmod 0660 "$lock"
 done
 echo "$dir: group $gid, directory 0750, lock files 0660"

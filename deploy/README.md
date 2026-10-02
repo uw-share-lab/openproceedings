@@ -3,22 +3,27 @@
 Docker Compose runs three services: `api` (`op serve`), `web` (the Next.js standalone server) and `caddy`
 (TLS, the timeouts and body cap, and log filters that drop the query). Nothing here names a host or a provider:
 that is TASK-064's decision. The requirements behind each setting are in
-[spec 08](../docs/specs/08-ops-and-tooling.md) §Deploy.
-This file is the operator's runbook (TASK-065).
+[spec 08](../docs/specs/08-ops-and-tooling.md) §Deploy and §Release. This file is the operator's runbook
+(TASK-065). Every command runs from the repository root, as the operator's account, unless it says otherwise.
 
 | File | What it is |
 |---|---|
 | `compose.yml` | the stack, plus two one-off services under the `ops` profile: `ops` (index retire) and `takedown-check` |
 | `Caddyfile` | the proxy: site name from `OP_DOMAIN`, Caddy's local CA for `localhost`, ACME for a real name |
 | `api.Dockerfile` | the `api` image: the backend package and its locked dependencies, user `op-api` (uid and gid 10001) |
-| `web.Dockerfile`, `web-build-gate.sh` | the `web` image; a public build needs a takedown contact (decision-018) |
+| `web.Dockerfile`, `web-build-gate.sh` | the `web` image; a public build needs a takedown contact (decision-018, TASK-136) |
 | `caddy.Dockerfile` | Caddy with the Caddyfile, as user `caddy` (uid 10002) |
 | `index-permissions.sh` | gives `op-api` read access to one index version (§Permissions) |
-| `smoke-test.sh` | the whole stack over a throwaway fixture: TLS, users and mounts, promotion, retire, a takedown, logs |
+| `smoke-test.sh` | the whole stack over a throwaway fixture (§Trying it locally) |
 
 Every base image is pinned by digest (`make tooling` checks it, and Dependabot bumps it). Every container
 has a read-only root filesystem, drops all capabilities and sets `no-new-privileges`. `api` and `web` sit on
-an internal network that has no route out, and only `caddy` publishes ports.
+an internal network with no route out, and only `caddy` publishes ports. Use **Docker Engine 26.0.0 or
+later** (or 25.0.4 / 23.0.11): older engines forward DNS lookups out of an internal network
+(CVE-2024-29018).
+
+In the commands below, `dc` stands for `docker compose -f deploy/compose.yml`. Define it with
+`alias dc='docker compose -f deploy/compose.yml'`, or type the whole thing.
 
 ## Settings
 
@@ -27,40 +32,49 @@ gitignored, like every `.env`).
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OP_DATA_HOST` | required | the host's data directory: `indexes/` (with `current`), `snapshots/`, `takedowns/` |
+| `OP_DATA_HOST` | required | the host's data directory (§The host's data directory) |
 | `OP_INSTANCE` | required | `public` or `private`, the web image's build gate (decision-018) |
 | `OP_TAKEDOWN_CONTACT` | empty | the takedown contact compiled into the web image; required when `public` |
 | `OP_DOMAIN` | `localhost` | the site's name; `localhost` uses Caddy's local CA, a real name uses Let's Encrypt (DNS must point here, and ports 80 and 443 must be reachable) |
 | `OP_HSTS` | `max-age=63072000` | the `Strict-Transport-Security` value. Leave `includeSubDomains` out until TASK-064 decides the domain (`Caddyfile`) |
 | `OP_HTTP_PORT`, `OP_HTTPS_PORT` | `80`, `443` | the host ports |
 | `OP_TAKEDOWN_LOG_HOST` | none | the directory that holds the takedown log, used only by `takedown-check` |
-| `OP_INTERNAL_SUBNET`, `OP_INTERNAL_IP_RANGE`, `OP_PROXY_ADDRESS` | `172.30.80.0/24`, `172.30.80.128/25`, `172.30.80.2` | the internal network, and Caddy's fixed address on it, which is the one address `op serve --trusted-proxy` believes `X-Forwarded-For` from. Change them only if the subnet clashes with the host's |
+| `OP_IMAGE_TAG` | `local` | the tag of the images compose builds (`smoke-test.sh` uses its own, so it never replaces these) |
+| `OP_INTERNAL_SUBNET`, `OP_INTERNAL_IP_RANGE`, `OP_PROXY_ADDRESS` | `172.30.80.0/24`, `172.30.80.128/25`, `172.30.80.2` | the internal network, the part of it `api` and `web` get addresses from, and Caddy's fixed address outside that part: the one address `op serve --trusted-proxy` believes `X-Forwarded-For` from. Change them only if the subnet clashes with the host's |
 
 ## The host's data directory
 
 ```
 $OP_DATA_HOST/
-├── indexes/      current -> <index_version>, and one directory per version   (mounted read-write; see §Permissions)
+├── indexes/      current -> <index_version>, and one directory per version   (read-write mount, closed by modes: §Permissions)
 ├── snapshots/    the snapshot of every index kept                            (read-only)
+├── records/      records.sqlite: every saved search                          (read-write; 0700, uid 10001)
 └── takedowns/    withheld.txt and nothing else                               (read-only)
 ```
 
 - **`takedowns/` holds only `withheld.txt`.** The `api` container mounts the directory, never the file alone,
   because an editor that saves by renaming would otherwise leave the container reading the old list after a
-  SIGHUP. It must never contain the log. Keep the takedown log (decision-022) in its own directory outside
-  the data directory, for example `/srv/openproceedings/takedown-log/log.jsonl`, with the directory 0700 and
-  the file 0600, both owned by the operator's account. Name it with `OP_TAKEDOWN_LOG_HOST`. On a fresh
-  instance `withheld.txt` is an empty file. It must exist, because `op serve` behind the proxy refuses to load
-  without it (`takedowns_missing`). Give it mode 0644 and the directory 0755.
-- **Search records** live in the `records` volume, which belongs to `op-api` (0700, and 0600 for the database).
-  Read or write them only as that user, through the `api` container: `docker compose exec api op record replay
-  <id>`. A store written by another user is one the API can't open (spec 08 §Deploy).
-- `cache/` (the crawl cache) is not mounted. Build snapshots and indexes on the host from a checkout, as the
-  operator (§Promoting an index).
+  SIGHUP. It must never contain the log. Keep the takedown log (decision-022 and its 2026-10-02 addendum) in
+  its own directory outside the data directory, for example `/srv/openproceedings/takedown-log/log.jsonl`,
+  with the directory 0700 and the file 0600, both owned by the operator's account. Name the directory with
+  `OP_TAKEDOWN_LOG_HOST`. On a fresh instance `withheld.txt` is an empty file. It must exist, because
+  `op serve` behind the proxy refuses to load without it (`takedowns_missing`). Give it mode 0644 and the
+  directory 0755.
+- **`records/` is the only copy of every saved search.** It belongs to `op-api`: create it once with
+  `sudo install -d -o 10001 -g 10001 -m 0700 "$OP_DATA_HOST/records"` (compose refuses to start without it,
+  rather than create one the API can't write). Read or write records only as that user, through the `api`
+  container (`dc exec api op record replay <id> --json`): a store written by another user is one the API
+  can't open. Because the operator can't read it, an `op index retire` run on the host refuses
+  (`records_unreadable`) instead of counting no pins; run retire only in the `ops` container
+  (§Retiring an index). Back it up (§Backups).
+- **Snapshots stay** while any kept index was built from them: there is no snapshot retire command, and a
+  pinned index's exports need its snapshot to attribute each abstract (decision-021).
+- `cache/` (the crawl cache) is not mounted. Build snapshots and indexes on the host from a checkout of the
+  release the images run, as the operator (§Promoting an index).
 
 ## Permissions
 
-Run `api` as `op-api` (uid 10001), which is neither root nor the operator's account that owns the log
+`api` runs as `op-api` (uid 10001), which is neither root nor the operator's account that owns the log
 (TASK-065 AC #3). Tantivy can't open an index without writing its lock file, `.tantivy-meta.lock`, so the
 `indexes/` mount can't be read-only. Plain file modes keep the API from changing the index instead:
 
@@ -69,18 +83,20 @@ Run `api` as `op-api` (uid 10001), which is neither root nor the operator's acco
   them, and only its two `.tantivy-*.lock` files are group-writable (0660).
 
 `op index build` leaves a new version directory 0700 and owned by the operator. Before serving it, run
-`deploy/index-permissions.sh $OP_DATA_HOST/indexes <index_version>` as root, or as an account in a host group
-with gid 10001. This was checked on a Linux volume: `op-api` can open the index and can't create, delete or
-rename anything in it. `smoke-test.sh` checks the same on a Linux host. Snapshots and the takedown list are
-readable as built: the snapshot files are 0444 in 0555 directories.
+`sudo deploy/index-permissions.sh "$OP_DATA_HOST/indexes" <index_version>` (or run it as an account in a host
+group with gid 10001). The script refuses a version directory that holds a symlink. Snapshots and the takedown
+list are readable as built: the snapshot files are 0444 in 0555 directories. `smoke-test.sh` checks all of
+this on a Linux host: `op-api` can open the index and can't create, delete or rename anything in it.
 
 ## First start
 
-1. Put the data in place: an index and its snapshot, `indexes/current` pointing at it, and
-   `takedowns/withheld.txt` (empty is fine). Then run `deploy/index-permissions.sh` for the version.
-2. From the repository root:
+1. Put the data in place: an index and its snapshot, `indexes/current` pointing at it (a relative link, a
+   bare `<index_version>`: an absolute host path doesn't resolve inside the containers), `records/` (above)
+   and `takedowns/withheld.txt`. Run `deploy/index-permissions.sh` for the version.
+2. With the settings in place (`OP_DATA_HOST`, `OP_INSTANCE`, and for a public instance `OP_DOMAIN`,
+   `OP_TAKEDOWN_CONTACT`):
    ```bash
-   docker compose -f deploy/compose.yml up -d --build --wait
+   dc up -d --build --wait
    ```
 3. Check over TLS. On a real domain:
    ```bash
@@ -88,94 +104,173 @@ readable as built: the snapshot files are 0444 in 0555 directories.
    ```
    On `localhost`, trust Caddy's local CA for that one request:
    ```bash
-   docker compose -f deploy/compose.yml cp caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.crt
+   dc cp caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.crt
    curl -sS --cacert caddy-root.crt https://localhost/api/v1/healthz
    ```
    The first load re-hashes every index file, and `/healthz` reports `"index_loaded": false` until it is
    done. The healthcheck gives it 120 s.
-4. On a public instance, also run `op takedown check` (§Takedowns), and check the rate limit and CORS on the
-   live instance (TASK-067 AC #2).
+4. Check that Caddy sees real client addresses: its access log's `client_ip` must be each client's own, IPv6
+   clients included. The API's rate limit is keyed on it; one shared address would put every client in one
+   bucket. Docker's userland proxy hands IPv6 clients to Caddy as the bridge's gateway when the `edge` network
+   has no IPv6 (turn on `enable_ipv6` there, or set `"userland-proxy": false` in the daemon), and a provider's
+   load balancer in front needs Caddy's `trusted_proxies` naming its range.
+5. On a public instance, also run `takedown-check` (§Takedowns), and check the rate limit and CORS on the
+   live instance (TASK-067 AC #2). Compose passes no `--cors-origin` (the web app is on the API's origin), so a
+   foreign `Origin` gets no `access-control-allow-origin`.
 
 The API's Swagger UI is off, because `op serve` turns it on only on loopback. Logs are JSON on each
-container's stdout (`docker compose logs`). No log line holds a query: the API never logs one, and Caddy
-deletes the URI and the Referer from its access and error logs.
+container's stdout (`dc logs`). No log line holds a query: the API never logs one, and Caddy deletes the URI
+and the Referer from its access and error logs.
+
+**Never run `dc down -v`.** It deletes the `caddy-data` volume (the ACME account, the certificates and the
+local CA). `dc down` without `-v` keeps it. The record store is a host directory and survives either way, but
+back it up before any change to the host (§Backups).
+
+## Deploying a release
+
+Code and data ship separately (spec 08 §Release): a code release never changes which `index_version` is
+served, and promoting an index is its own procedure (next section).
+
+1. `git fetch --tags && git checkout vX.Y.Z`, then `dc up -d --build --wait`. Compose rebuilds the images
+   from that checkout and replaces the containers. The API reloads `current`.
+2. Confirm `/api/v1/healthz` and `/api/v1/meta` (the same `index_version` as before) over TLS.
+3. **A release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy** can't serve an index built by
+   older code (`unservable`). Build and verify the new index first, with that release's checkout
+   (§Promoting an index, steps 1 to 3). Then switch `current` to it and deploy the code in one step:
+   `ln -sfn` as in step 4 below, then `dc up -d --build --wait`. Keep the older indexes that records pin: the
+   release each was saved under still serves them (spec 08 §Release, step 8).
+4. **Rollback:** check out the previous tag and `dc up -d --build --wait`. If the release also changed
+   `current`, point it back first.
+
+Build snapshots and indexes on the host from the same checkout the images run, or the API may refuse the
+index.
 
 ## Promoting an index
 
-Code and data ship separately (spec 08 §Release): promoting an index is this procedure, run on its own.
-
-1. **Build**, on the host from a checkout, as the operator, with `OP_DATA_DIR=$OP_DATA_HOST`:
-   `uv run op snapshot build`, then `uv run op snapshot diff <old snapshot> <new snapshot>` and read the diff, then
-   `uv run op index build --snapshot <new snapshot>`, then `uv run op index parity --index <new_version>`.
-   The build applies `takedowns/withheld.txt`. Report what it says about `takedowns_followed` and
-   `takedowns_unmatched` in the takedown log (spec 08 §Deploy, step 3).
-2. **Permissions:** `deploy/index-permissions.sh $OP_DATA_HOST/indexes <new_version>`.
-3. **Switch `current` and reload:**
+1. **Build**, on the host, as the operator, with `export OP_DATA_DIR=$OP_DATA_HOST`:
+   `uv run op snapshot build` (read its `takedowns_followed` and `takedowns_unmatched`: step 6), then
+   `uv run op snapshot diff <old snapshot> <new snapshot>` and read the diff, then
+   `uv run op index build --snapshot <new snapshot>`.
+2. **Verify** on the new version, with the code the images run (spec 08 §Release, step 3):
+   - `uv run pytest backend/tests/golden backend/tests/contract`;
+   - `uv run op index parity --index <new_version>`;
+   - `uv run op eval coverage --index <new_version> --check --out "$(mktemp -d)"` (the M4 gate; no report
+     lands in the tree);
+   - replay a sample of saved searches on the API's own store:
+     `dc exec api op record replay <id> --index <new_version> --json`. A record whose own index is kept
+     replays on it (`reproduced`, unless the code changed); `mismatch` (exit 3) blocks the promotion.
+3. **Permissions:** `sudo deploy/index-permissions.sh "$OP_DATA_HOST/indexes" <new_version>`.
+4. **Switch `current` atomically and reload:**
    ```bash
-   ln -sfn <new_version> "$OP_DATA_HOST/indexes/current"
-   docker compose -f deploy/compose.yml kill -s HUP api
+   cd "$OP_DATA_HOST/indexes" && ln -sfn <new_version> current.tmp && mv -T current.tmp current && cd -
+   dc kill -s HUP api
    ```
-   The `init` process forwards SIGHUP to `op serve`. The API loads the new version in the background and keeps
-   serving the old one until the new one is ready.
-4. **Confirm:** `/api/v1/meta` reports `<new_version>` (`curl -sS https://<OP_DOMAIN>/api/v1/meta`). The log has
+   The link is relative (a bare version name). `mv -T` (GNU) renames over the old link in one step. The
+   `init` process forwards SIGHUP to `op serve`, which loads the new version in the background and serves the
+   old one until the new one is ready.
+5. **Confirm:** `/api/v1/meta` and `/api/v1/healthz` report `<new_version>`. The API's log has
    `index_swapped`, or `index_load_failed` with the old version kept.
-5. **Takedowns:** if the list names anything, run `op takedown check` (§Takedowns) and record
-   `first_index_version` in the log.
-6. **Rollback:** point `current` back at the old version and send SIGHUP again. Keep the old version until
+6. **Takedowns,** while the list names anything: for each id in `takedowns_followed` (a listed paper the
+   build holds under a new id), add the new id to `withheld.txt`, log a `withheld` entry for it (the same
+   requester and basis), **keep the old id**, and SIGHUP. Keep every id in `takedowns_unmatched` listed while
+   any loaded version holds it. Then run `takedown-check` (§Takedowns), and fill in `first_index_version` in
+   the log for the requests this version is the first to withhold.
+7. **Rollback:** point `current` back at the old version (step 4) and SIGHUP. Keep the old version until
    the new one has been served for a while.
 
 ## Retiring an index
 
-`op index retire` (TASK-085) deletes a version that no search record pins and that nothing serves. It runs
-in the `ops` container, which has the record store and write access to `indexes/`:
+`op index retire` (TASK-085) deletes a version that no search record pins and that nothing serves. Run it
+only in the `ops` container, which has the record store and write access to `indexes/`. On the host it
+refuses, since the operator can't read the store.
 
-```bash
-docker compose -f deploy/compose.yml run --rm ops index retire <old_version> --dry-run   # the checks only
-docker compose -f deploy/compose.yml run --rm ops index retire <old_version>
-```
+1. Confirm the new version is served (§Promoting an index, step 5), and that no other instance serves the
+   old one by name (`op serve --index <v>`): retire can't see that.
+2. `grep -rn <old_version> docs/results data/embeddings`: a version a committed report cites is a decision
+   to retire, not a default.
+3. Retire:
+   ```bash
+   dc run --rm ops index retire <old_version> --dry-run   # the checks only
+   dc run --rm ops index retire <old_version>
+   ```
 
-The command refuses, deleting nothing, when `current` points at the version, when a search record pins it,
-or when the record store can't be read. It can't see an instance that serves the version by name, so run it
-only after step 4 above has confirmed the new version. The `ops` container runs as root and keeps
-`CAP_CHOWN`: SQLite then gives any `-shm` or `-wal` file it creates in the store to `op-api`, the database's
-owner. Without that capability those files stay root's, and the API's next save fails. `smoke-test.sh`
-checks the store's owners after a retire.
+It refuses, deleting nothing, when `current` or any other symlink in `indexes/` points at the version, when
+a search record pins it, or when the record store can't be read. If it logs ERROR
+`index_retire_restore_failed`, move the directory back by hand,
+`sudo mv "$OP_DATA_HOST/indexes/.retiring-<v>" "$OP_DATA_HOST/indexes/<v>"`, before serving, building or
+retiring again. The `ops` container runs as root and keeps `CAP_CHOWN`: SQLite then gives any `-shm` or `-wal`
+file it creates in the store to `op-api`, the database's owner. Without that capability those files stay
+root's, and the API's next save fails. `smoke-test.sh` checks the store's owners after a retire.
 
 ## Takedowns
 
-The procedure is spec 08 §Deploy ("Takedown procedure"), with the log kept outside the data directory as
-described above. In this deployment:
+The procedure is spec 08 §Deploy ("Takedown procedure"; decision-022). In this deployment the log lives
+outside the data directory, at `$OP_TAKEDOWN_LOG_HOST/log.jsonl`.
 
-- **Withhold:** append the id to `$OP_DATA_HOST/takedowns/withheld.txt`, log the request, then
-  `docker compose -f deploy/compose.yml kill -s HUP api`. Look for `takedowns_reloaded` in the API's log.
-- **Check**, as the operator's account, against the API itself (on the internal network, not through the
-  proxy):
-  ```bash
-  OP_TAKEDOWN_LOG_HOST=/srv/openproceedings/takedown-log \
-    docker compose -f deploy/compose.yml run --rm --user "$(id -u):$(id -g)" takedown-check
-  ```
-  It exits 0 when no loaded version serves a listed abstract and the log agrees with the list. Run it after
-  every promotion while the list names anything.
+1. **Log** the request in the log (one JSON object: `record_id`, `received`, `requester`, `basis`,
+   `decision`, `applied`, `first_index_version`).
+2. **Withhold:** add the id to `$OP_DATA_HOST/takedowns/withheld.txt`, then `dc kill -s HUP api`. Every
+   loaded version withholds the abstract from that reload on. Look for `takedowns_reloaded` in the API's log.
+3. **Check**, as the operator's account, against the API itself (on the internal network, not through the
+   proxy):
+   ```bash
+   dc run --rm --user "$(id -u):$(id -g)" takedown-check
+   ```
+   It exits 0 when no loaded version serves a listed abstract and the log agrees with the list.
+4. **Rebuild and promote** (§Promoting an index): the new snapshot no longer holds the abstract. Fill in the
+   entry's `applied` and `first_index_version`.
+5. **Check again** (step 3), and after every promotion while the list names anything.
+
+**Lifting a takedown:** append a `lifted` entry (with its `applied` date), remove the line from
+`withheld.txt`, and SIGHUP. Versions that still hold the text show it again. A snapshot built while the id
+was listed keeps it withheld until a rebuild without the id is promoted.
+
+## Backups
+
+`$OP_DATA_HOST/records/records.sqlite` holds the only copy of every saved search. Losing it also unpins
+every index, so they could be retired. Make a consistent copy through SQLite's backup API, as `op-api`,
+streamed out of the container:
+
+```bash
+dc exec -T api python -c "
+import sqlite3, sys, tempfile
+with tempfile.NamedTemporaryFile(dir='/tmp') as f:
+    sqlite3.connect('/data/records/records.sqlite').backup(sqlite3.connect(f.name))
+    sys.stdout.buffer.write(open(f.name, 'rb').read())
+" > records-backup-$(date +%F).sqlite
+```
+
+The temporary copy is deleted inside the container. Keep the backups somewhere only the operator can read:
+they hold every saved query. Back up the snapshots and indexes that records pin, too. They are immutable, so
+a copy taken once is enough.
 
 ## Trying it locally
 
-`deploy/smoke-test.sh` builds the images and starts the stack over a fixture data directory in a temporary
-directory. It uses its own Compose project, `openproceedings-smoke`, so it never touches a running stack.
-It checks everything this runbook claims: healthz and the web root over https://localhost, the API's user
-and read-only mounts, a promotion, refused and successful retires, a withheld abstract with `op takedown
-check` passing, and no query text in any log. It cleans up after itself. It needs Docker and uv, and ports
-80 and 443 (or `OP_HTTP_PORT`/`OP_HTTPS_PORT`). Docker Desktop keeps a host file's owner on bind mounts, so
-there the ownership checks (§Permissions) are skipped and say so. They run on a Linux host.
+`deploy/smoke-test.sh` builds the images under its own tag and starts the stack over a fixture data
+directory in a temporary directory. It uses its own Compose project, `openproceedings-smoke`, so it never
+touches a running stack or its images. It checks what this runbook claims:
+
+- healthz and the web root over https://localhost;
+- the API's user, its read-only mounts, and a takedown directory holding only `withheld.txt`;
+- a promotion;
+- retires: refused for the served version and for a pinned one, refused on the host, and done for an
+  unpinned one, with the record store still the API's and a backup that opens;
+- a withheld abstract next to a served one, with `takedown-check` passing;
+- no query text in any log.
+
+It removes everything it created on exit. It needs Docker and uv, and ports 80 and 443 (or
+`OP_HTTP_PORT`/`OP_HTTPS_PORT`). Docker Desktop keeps a host file's owner on bind mounts, so there the
+ownership steps and checks (§Permissions, and the host-side retire) are skipped and say so. They run on a
+Linux host. No CI job runs it.
 
 ## What remains for a real host (TASK-064, then TASK-065)
 
 - Choose the host and the domain (TASK-064). Point DNS at the host, and open ports 80 and 443.
+- Install Docker Engine 26.0.0 or later.
 - Set `OP_DOMAIN`, `OP_INSTANCE=public`, `OP_TAKEDOWN_CONTACT` and `OP_TAKEDOWN_LOG_HOST`. Once the domain is
   known, decide about `includeSubDomains` in `OP_HSTS`.
-- Set up the host's accounts: the operator's account, and a host group with gid 10001 for
-  `index-permissions.sh`, or run it with sudo.
-- Do the first start and the checks above on the host, including the rate limit and CORS (TASK-067 AC #2).
-- Back up the `records` volume, which holds the only copy of every saved search. Make a consistent copy
-  through SQLite's backup API, as `op-api`:
-  `docker compose exec -T api python -c "import sqlite3; sqlite3.connect('/data/records/records.sqlite').backup(sqlite3.connect('/tmp/records-backup.sqlite'))"`,
-  then `docker compose cp api:/tmp/records-backup.sqlite <backup dir>/`.
+- Set up the host's accounts: the operator's account, and sudo (or a host group with gid 10001) for
+  `index-permissions.sh` and `records/`.
+- Do the first start and its checks on the host: client addresses (First start, step 4), and the rate limit
+  and CORS (TASK-067 AC #2).
+- Schedule the record-store backup (§Backups).

@@ -34,12 +34,12 @@ openproceedings/
 │   │   ├── takedowns.py         # the takedown list and log (TASK-136, decision-022)
 │   │   ├── takedown_check.py    # `op takedown check`: does a running API serve a listed abstract?
 │   │   └── cli.py               # `op` entry point
-│   └── tests/{unit,golden,differential,bench,contract,e2e,fixtures}/
+│   └── tests/{unit,golden,differential,bench,contract,e2e,deploy,fixtures}/
 ├── frontend/                    # npm workspace member: Next.js App Router, output standalone (spec 05; skeleton TASK-039)
 ├── docs/{specs,plans,results,design,usability,research}/   # created as needed; docs/README.md: the index; docs/releases.toml: each release's data (§Release)
 ├── backlog/                     # Backlog.md: tasks, completed, docs, decisions — CLI only
-├── deploy/                      # compose.yml, Caddyfile, api/web/caddy Dockerfiles, index-permissions.sh, smoke-test.sh, README.md (the runbook) (TASK-065); web-build-gate.sh (TASK-136)
-└── data/                        # gitignored: cache/, snapshots/, indexes/, embeddings/, research/, records/ (records.sqlite), takedowns/ (list and log)
+├── deploy/                      # compose.yml, Caddyfile, api.Dockerfile, caddy.Dockerfile, index-permissions.sh, smoke-test.sh, README.md (the runbook) (TASK-065); web.Dockerfile, web-build-gate.sh (TASK-136)
+└── data/                        # gitignored: cache/, snapshots/, indexes/, embeddings/, research/, records/ (records.sqlite), takedowns/ (list and log; under compose the list only, the log elsewhere: §Deploy)
 ```
 
 **Environment:** uv for all Python. `uv sync` at the root installs every workspace member and the dev tools
@@ -280,22 +280,26 @@ is refused, as is `--no-rate-limit` with a non-loopback `--host`. Off loopback, 
 `<data-dir>/takedowns/withheld.txt` must exist before the first start (an empty file on a fresh instance), or
 the load fails `takedowns_missing` (TASK-067). Swagger UI (`/api/v1/docs`, scripts from a
 CDN) is off on a non-loopback `--host` unless `--docs` is passed; leave it off in production. `api` mounts `snapshots/` and `takedowns/` read-only, the
-search records as the `records` volume (`records/records.sqlite` and the WAL files SQLite writes beside it; spec 04
-§Search records), and `indexes/` read-write but closed by file modes: Tantivy opens an index only after taking
+search records' directory `records/` read-write (a host directory, 0700 and owned by uid 10001; `records.sqlite` and
+the WAL files SQLite writes beside it; spec 04 §Search records), and `indexes/` read-write but closed by file modes: Tantivy opens an index only after taking
 `.tantivy-meta.lock` for writing (so a `:ro` index mount fails to load), so each version directory is 0750 with
 group `op-api` and only its two lock files group-writable (`deploy/index-permissions.sh`, run after each `op index
 build`), and `indexes/` itself stays the operator's, 0755: the API can open an index and can't add, remove or
-repoint anything. It holds each served index's snapshot beside it (`/papers/{id}` reads provenance from it). Run
+repoint anything. `snapshots/` holds each served index's snapshot (`/papers/{id}` reads provenance from it). Run
 `op record save` and `op record replay` as the API's service user (`docker compose exec api op record …`, or
 `sudo -u <api user> op record …` outside compose): the store's directory is 0700 and `records.sqlite` 0600, so a record
 saved as another user leaves a store (and WAL files) the API can't write, or can't read at all. Refreshing the index
 means building a new `index_version` offline, switching the `current` symlink, and sending SIGHUP; an old
 version no record pins can then be deleted with `op index retire <index_version>`, once `/api/v1/meta` reports
-the new version (the API serves the old one until its reload; §CLI). In compose, retire runs in the `ops` service
-(root, with the record store and `indexes/`); it keeps `CAP_CHOWN` because SQLite, run as root, gives each `-shm`
+the new version (the API serves the old one until its reload; §CLI). In compose, retire runs only in the `ops`
+service (root, with the record store and `indexes/`). On the host the operator can't read the API's store, so a
+retire there refuses (`records_unreadable`): a store it can't read is never taken for "no pins", while a missing
+one would be (`RecordStore.pinned`), which is why the store is a directory in the data directory rather than a
+volume a host-side retire wouldn't see. `ops` keeps `CAP_CHOWN` because SQLite, run as root, gives each `-shm`
 or `-wal` file it creates the database's owner, and without the capability leaves them root's, after which the
-API can't save a record (reproduced, TASK-065); `smoke-test.sh` checks the store's owners after a retire. Hosting
-is still open (00, question 5).
+API can't save a record (reproduced, TASK-065); `smoke-test.sh` checks the store's owners after a retire.
+**`records/` is the only copy of every search record**, and losing it also unpins every index: back it up
+(`deploy/README.md` §Backups, SQLite's backup API as the API's user). Hosting is still open (00, question 5).
 
 **What a public instance serves (decision-018; not legal advice).** Every abstract in the index, in results,
 on paper pages and in exports. Before a deployment is public: (1) each record names the source of its abstract
@@ -426,7 +430,8 @@ documents both variables.
   pinned version keeps matching on the text it holds, so replaying a saved search there returns the same ids
   (guarantee 4): the paper is still a hit, and `/papers?q=` still says `matched: true`, but no word, span or
   excerpt of the text is shown. A version no record pins can be retired to end even that.
-- **The takedown log,** `<data-dir>/takedowns/log.jsonl`, on the deployment host, outside the repository (owner,
+- **The takedown log** (default `<data-dir>/takedowns/log.jsonl`; under compose outside the data directory, as
+  the end of this bullet says), on the deployment host, outside the repository (owner,
   2026-09-30): owned by the operator's account (not the API's service user), mode 0600, never committed, and
   kept out of image build contexts (`.dockerignore`), since it holds requesters' details. One JSON object per
   request, exactly these keys: `record_id`, `received` (date), `requester` (name and contact), `basis` (what

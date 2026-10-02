@@ -1,8 +1,8 @@
 cff-version: 1.2.0
 message: >-
-  If you use openproceedings in a systematic review or other research, please cite it as below, and report
-  the index_version your searches ran on (each search record and export names it) so others can reproduce
-  them.
+  If you use openproceedings in a systematic review or other research, please cite it as below. Save each
+  search as a search record and report the record's link, its index_version and the openproceedings release
+  (`op --version`): a saved record keeps its index from being retired, so the search can be replayed.
 type: software
 title: "openproceedings: exact, reproducible Boolean search over NeurIPS, ICLR and ICML titles and abstracts"
 abstract: >-
@@ -10,12 +10,11 @@ abstract: >-
   ICML papers, built for systematic reviews. A query matches only on exact normalized tokens (no stemming or
   synonyms), filters live in the query string, default track and status filters report how many records they
   exclude, and every result set is pinned to an immutable index_version, so a saved search record replays to
-  the same ids. Exports (RIS, CSV, BibTeX, JSONL) name each abstract's source.
+  the same ids while its pinned index is served. Exports (RIS, CSV, BibTeX, JSONL) name each abstract's source.
 authors:
   - given-names: Jeevan
     family-names: Parmar
     affiliation: "SHARE Lab, University of Waterloo"
-  - name: "PLACEHOLDER: remaining authors to be confirmed"
 repository-code: "https://github.com/uw-share-lab/openproceedings"
 license: MIT
 keywords:
