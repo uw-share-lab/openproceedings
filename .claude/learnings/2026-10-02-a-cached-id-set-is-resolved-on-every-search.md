@@ -1,6 +1,6 @@
 # A cached verified clause still cost its whole id list on every search
 
-**Key lesson:** A memoised Tantivy query is not memoised work: Tantivy resolves a term set's terms on every search, so a filter of N ids costs ~0.5 µs × N per search; when the ids are most of a known superset, name the few that fail as a `MUST_NOT` instead, which matches and scores identically.
+**Key lesson:** A memoised Tantivy query is not memoised work: Tantivy resolves a term set's terms on every search, so a filter of N ids costs ~0.5–1.3 µs × N per search; when the ids are most of a known superset, name the few that fail as a `MUST_NOT` instead, which matches and scores identically.
 
 - **Date:** 2026-10-02 · **Task:** TASK-076 · **Area:** engine
 - **Artifacts:** `backend/src/openproceedings/engine/compile.py` (`Compiler.exact`, `id_set`),
@@ -14,7 +14,7 @@ and p99 under 100 ms at 80k.
 
 ## What we learned
 - The compiled query was already memoised per tree (M2 gate), yet a warm search was 25–45 ms. Timing the
-  query's parts with `searcher.search(q, 1, count=True)` showed the id term sets alone at about 0.5 µs an id:
+  query's parts with `searcher.search(q, 1, count=True)` showed the id term sets alone at about 0.5–1.3 µs an id:
   10.7 ms of 24.5 ms for one 20,752-id clause (synthetic), 15.1 ms for 11,378 ids (real) (evidence:
   `docs/results/2026-10-02-wildcard-phrases.md` §Where a warm search went).
 - A verified clause's ids are a subset of its candidates, so `candidates AND NOT failed` is exactly the ids,

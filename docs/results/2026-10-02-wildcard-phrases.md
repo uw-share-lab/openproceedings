@@ -2,25 +2,25 @@
 
 Spec 03 §Performance budgets: a 50-hit search, p95 under 100 ms. task-031 found `main-2-pop` (wildcard phrases
 such as `"large language model$"`, every clause position-verified and cached) searching warm at p95 95 ms and
-p99 148 ms in a 200-run probe on the synthetic 80k corpus; TASK-076 asks for p95 under 50 ms and p99 under
+p99 148 ms in a 200-run probe on the synthetic 80k corpus (task-031's probe, not in docs/results); TASK-076 asks for p95 under 50 ms and p99 under
 100 ms over 200 warm rounds in `report_80k`, on a quiet machine, with no change to any id set or score.
 
-- Machine: macOS-15.6.1-arm64, 8 CPUs; Python 3.12.9, tantivy 0.26.2. Code: `01e8632` (the branch before its
-  rebase onto dev, which brought TASK-088's tokenizer and no engine change; the engine code timed is the
-  branch's).
+- Machine: macOS-15.6.1-arm64, 8 CPUs; Python 3.12.9, tantivy 0.26.2. Code: the alternating runs timed
+  `01e8632`, the branch before its rebase onto dev; its engine and bench code are the branch's `8f47903` (a
+  formatting-only reflow apart), and the rebase brought TASK-088's tokenizer, no engine change. `report_80k`
+  was rerun at `66a50d3` (the review's test and comment fixes; its `-dirty` is the report file itself).
 - Indexes: the synthetic 80k corpus (`report_80k` builds its own in a scratch directory; the alternating runs
   used a scratch build of the same corpus, index `27659e65468c`), and the real M4 corpus, index
   `05a0541717f6` (95,877 records), opened read-only in the main checkout's `data/indexes/`.
-- Quiet: no `pytest` or mutation process ran on the machine during any run below; the 1-minute load average
-  was 3.7–4.0 for the alternating runs and 10.1 → 3.5 over the `report_80k` run (Spotlight indexing at its
-  start). Other agents were active but idle.
+- No `pytest` or mutation process ran on the machine during any run below; the 1-minute load average was
+  3.7–4.0 for the alternating runs and 5.7–5.9 for `report_80k` (5-minute average 9–10.5). Other agents were active but idle.
 
 ## Where a warm search went
 Profiled warm (the compiled query and every verified clause cached): nearly all of a `main-2-pop` search is
 Tantivy's own collection (0.78 s of 0.90 s over 30 searches, cProfile), and timing its parts showed why. A
 verified clause compiles to its candidate query (every item present in the field) AND a constant-0 term set
 on `id` of the ids that held the position check, and Tantivy resolves an id term set afresh on every search,
-about 0.5 µs an id: on the synthetic corpus the abstract clause `"AI agent$"` holds 20,752 ids (10.7 ms of a
+about 0.5–1.3 µs an id: on the synthetic corpus the abstract clause `"AI agent$"` holds 20,752 ids (10.7 ms of a
 24.5 ms search), and on the real corpus `"large language model$"` holds 11,378 of its 13,935 candidates
 (15.1 ms). Compiling once per tree (task-076's first option) was already done at the M2 gate; the remaining cost
 is per search.
@@ -30,8 +30,8 @@ is per search.
 its candidate query with the failures excluded (`MUST_NOT` a term set of their ids); when none failed, the
 candidate query alone. The candidates are a superset of the verified ids, so either form matches exactly the
 verified ids; the exclusion adds no score, as the constant-0 term set added 0.0, so each match scores as its
-candidate query alone, the same float. Finding the failures costs one collection of the candidate query when
-the clause compiles (memoised per tree), and only when the count says they are fewer. The compiled memo charges
+candidate query alone, the same float. Choosing costs one count of the candidate query per verified clause when the tree compiles (memoised per
+tree), plus one collection of it when the count says the failures are fewer. The compiled memo charges
 each clause's ids once for the Python list and once for whichever list the Tantivy query holds.
 
 On the real corpus this cuts `main-2-pop`'s id sets from 21,762 ids to 7,547. On the synthetic corpus the big
@@ -39,10 +39,14 @@ clause has more failures (53,620) than passes, so it keeps its ids and nothing c
 
 ## Proof that no id set or score changed
 - `tests/unit/engine/test_verified_exclusion.py`: on a crafted corpus, each form is chosen when it should be
-  (the failures, the ids, or no id set) and matches the reference engine; and on the 5k corpus, every tree the
-  differential suite draws (`engine_asts`) gives the same ids and the same float scores compiled with and
-  without the exclusion form. Hand mutants (the exclusion as `MUST`, excluding every candidate, never naming
-  the failures, the comparison reversed) each fail it.
+  (the failures, the ids, or no id set), alone and inside AND, OR and NOT trees, and matches the reference
+  engine with the same float scores as the old form; on the 5k corpus, a case of each form (asserted by which
+  id list the compile builds) and a nested one give the same ids and scores, and so does every tree the
+  differential suite draws (`engine_asts`; drawn trees rarely reach the exclusion form, hence the cases).
+  Hand mutants (the exclusion as `MUST` or `SHOULD`, excluding every candidate, never naming the failures,
+  the comparison reversed) each fail it.
+- `differential-regressions.json` gains a 5k tree of each new form (failures excluded; no failure), so the
+  oracle replay catches a dropped or widened exclusion (the `SHOULD` mutant fails it).
 - The differential suite, `test_compile.py`, `test_rank.py` (determinism, scores), `test_memo_budget.py`,
   `test_search_overlap.py` and the facet tests pass.
 - Every alternating run below compared the old and new engine's whole ranked order (ids and exact float
@@ -50,9 +54,13 @@ clause has more failures (53,620) than passes, so it keeps its ids and nothing c
 
 ## `report_80k` (synthetic 80k, `docs/results/2026-10-02-bench.md`, new code only)
 
-`main-2-pop`: warm search **p95 27.8 ms, p99 31.7 ms** over 200 runs (AC: under 50 ms and 100 ms). Every
-non-empty string's warm p95 is 19.1–35.9 ms and p99 31.7–55.6 ms; cold `main-2-pop` is 9.7 s to search and
-10.8 s for `match_ids` + exclusions, the spec 03 exception as before.
+`main-2-pop`: warm search **p95 28.8 ms, p99 48.0 ms** over 200 runs (AC: under 50 ms and 100 ms). Every
+non-empty string's warm p95 is 19.3–36.3 ms and p99 38.7–63.3 ms. Load 5.9 → 5.7 (1 min), but 10.5 → 9.0 over
+5 minutes: the run's cold columns swing with it (`main-2-pop` 10.9 s to search, and 19.0 s for `match_ids` +
+exclusions where the first run of this change, at `01e8632`, read 10.8 s; `main-3-sources`' exclusions 103 ms
+against 37 ms), so read its warm p99s as upper bounds. The first run read `main-2-pop` warm p95 27.8 ms and
+p99 31.7 ms (load 10.1 → 3.5; the task's notes cite it). The highlight and `/search` columns of this report
+include TASK-088's tokenizer.
 
 ## Old vs new compile, 200 warm rounds each, interleaved (`backend/tests/bench/warm_verified.py`)
 
