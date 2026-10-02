@@ -14,7 +14,7 @@ Backlog.md, and branch protection on `dev` and `main`.
 - **A `python3 - <<'PY'` heredoc replaces the hook's stdin.** The first draft of `block-ai-attribution.sh`
   called `json.load(sys.stdin)` inside the heredoc script, so it would have read its own source, never the
   tool payload, and allowed everything. Kreate's `enforce-pr-workflow.sh` avoids this with
-  `input=$(cat)` + `HOOK_INPUT="$input"`. `cmdparse.read_payload()` now reads `$HOOK_INPUT` first (superseded for the Python gates: see the
+  `input=$(cat)` + `HOOK_INPUT="$input"`. `cmdparse.read_payload()` then read `$HOOK_INPUT` first (superseded for the Python gates: see the
   2026-10-02 addendum).
   (Evidence: caught while reviewing the code, before the first run. All 39 cases in
   `test-openproceedings-gates.sh` now pass.)
@@ -56,6 +56,6 @@ Backlog.md, and branch protection on `dev` and `main`.
 exec returns E2BIG, bash exits 126, and Claude Code lets any exit but 2 through (reproduced: the 1.1 MB rows in
 `test-openproceedings-gates.sh` gave `crash(rc=126)` on origin/dev). block-ai-attribution, require-review and
 protect-data-dir now read the program into `PROG` with `IFS= read -r -d '' PROG <<'PY'`, run `python3 -c "$PROG"`
-with the payload on the hook's own stdin (`cmdparse.payload()`), and exit 2 on any status but 0 (no python3 is
+with the payload on the hook's own stdin (`cmdparse.payload()`: stdin only; an inherited HOOK_INPUT is ignored), and exit 2 on any status but 0 (no python3 is
 127). enforce-pr-workflow still uses `HOOK_INPUT`; its text fallback refuses a git write word when the verdict is
 empty.

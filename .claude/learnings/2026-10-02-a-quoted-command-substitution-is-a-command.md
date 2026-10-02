@@ -34,6 +34,10 @@ a trailer split by quoting, `~` with HOME '' outside a push, a payload past ARG_
   real arithmetic reads as harmless words. Only a `case` in command position counts (`echo use case` is a word:
   review round 2), and `bash -c`/`eval`/nested bodies share the walk's `subs` list (a mutant that dropped it
   survived every row until the round-2 rows).
+- **Counting `case`/`esac` needs the paren depth too** (review round 3): `$( (case y in y) :;; esac); rm -rf data )`
+  ended at the subshell's `)`. Each `case` remembers the depth it opened at, and only a `)` at that depth is a
+  pattern. And real arithmetic must not be walked (`"$((1<<n))"` read `<<n` as a heredoc): a `$((…))` whose
+  inner `(` closes at its very end is arithmetic; `$((cmd) )` and `$((cmd)|cat)` are not.
 
 ## Dead ends — don't repeat these
 - **A reviewer probing hooks with an inline heredoc ran the probes for real.** A qa-auditor piped its test
@@ -53,7 +57,9 @@ a trailer split by quoting, `~` with HOME '' outside a push, a payload past ARG_
   text fallback: the repo needs python3 (uv) anyway.
 
 ## Follow-ups
-- None.
+- Deferred (reported to the team lead, no task yet): a probe helper for the hook tables that only ever takes a
+  payload from a file or argv and runs the hook in a mktemp sandbox (HOME and cwd set to it), so a reviewer's
+  hostile command strings can't reach a shell.
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — CLAUDE.md §Enforced gates; spec 08 §Hooks and §cmdparse; the

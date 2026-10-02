@@ -3174,7 +3174,7 @@
  {
   "label": "cmdparse: a case pattern's ) ends a substitution body (TASK-156)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "        elif c == \")\" and depth == 0 and cases:",
+  "old": "        elif c == \")\" and cases and cases[-1] == depth:",
   "new": "        elif False:"
  },
  {
@@ -3242,5 +3242,17 @@
   "file": ".claude/hooks/block-ai-attribution.sh",
   "old": "        if PATTERN.search(re.sub(r\"[\\\"'\\\\]\", \"\", cmd)):",
   "new": "        if False:"
+ },
+ {
+  "label": "cmdparse: a case pattern's ) inside a subshell ends the body (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "elif c == \")\" and cases and cases[-1] == depth:",
+  "new": "elif c == \")\" and cases and depth == 0:"
+ },
+ {
+  "label": "cmdparse: quoted arithmetic walked as a substitution body (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "if c == \"$\" and _is_arithmetic(written[2:-1]):",
+  "new": "if False:"
  }
 ]

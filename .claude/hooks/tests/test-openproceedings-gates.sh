@@ -1103,6 +1103,8 @@ check $A block "A=Cl; -m \"Co-Authored-By: \${A}aude …\""   "$(payload_bash 'A
 check $A block "git config alias.ci commit; -m '…Cl''aude…' (unclassifiable)" "$(payload_bash "git config alias.ci commit; git commit -m 'Co-Authored-By: Cl''aude <noreply@anthr''opic.com>'")"
 HOOK_INPUT='{}' check $P block "an inherited HOOK_INPUT is not read: rm -rf data/snapshots" "$(payload_bash 'rm -rf data/snapshots')"
 check $R allow "git commit -m '… \`git push origin other2\`' (single quotes: text)" "$(payload_bash "git commit -m 'docs: \`git push origin other2\`'")"
+check $R block "x=\"\$( (case y in y) :;; esac); git push origin other2 )\"" "$(payload_bash 'x="$( (case y in y) :;; esac); git push origin other2 )"')"
+check $P allow "echo \"\$((1<<n))\" (arithmetic, not a body)"  "$(payload_bash 'echo "$((1<<n))"')"
 check $P allow "git commit -m \"\$(echo use case)\" (case as a word)" "$(payload_bash 'git commit -m "$(echo use case)"')"
 check $R block "bash -c 'x=\"\$(git push origin other2)\"'"  "$(payload_bash "bash -c 'x=\"\$(git push origin other2)\"'")"
 check $R block "eval 'x=\"\$(git push origin other2)\"'"     "$(payload_bash "eval 'x=\"\$(git push origin other2)\"'")"

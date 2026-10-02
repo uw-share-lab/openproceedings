@@ -533,6 +533,10 @@ def preprocess(cmd: str, subs: list[tuple[list[str], str]] | None = None) -> str
                 at = starts[li] + i
                 end = _substitution_end(cmd, at + (2 if c == "$" else 1), ")" if c == "$" else "`")
                 written = cmd[at:end]
+                if c == "$" and _is_arithmetic(written[2:-1]):
+                    kept.append(c)  # `"$((1<<n))"`: arithmetic, read on as text
+                    i += 1
+                    continue
                 inside = written[2:-1] if c == "$" else _unescape_backquoted(written[1:-1], quote == '"')
                 kept.append(_mark(subs, [inside], written))
                 end_line = bisect.bisect_right(starts, end - 1) - 1  # the line holding the closing ) or `
@@ -730,7 +734,8 @@ def _substitution_end(text: str, k: int, closer: str) -> int:
     """The index just past the `)` (closer ")") or backquote (closer "`") that ends the command substitution
     whose body starts at `text[k]`, read as bash reads the body: quotes, escapes, nested substitutions, comments
     and heredoc bodies don't end it. ParseError if nothing does."""
-    n, depth, heredocs, cases, start = len(text), 0, [], 0, k
+    n, depth, heredocs, start = len(text), 0, [], k
+    cases: list[int] = []  # the paren depth each open `case` statement started at
     while k < n:
         c = text[k]
         at_word = k == start or text[k - 1] in " \t\n;&|()"
@@ -782,12 +787,15 @@ def _substitution_end(text: str, k: int, closer: str) -> int:
         elif (
             at_word and (m := CASE_WORD.match(text, k)) and (m.group(2) or _command_position(text, start, k))
         ):
-            # a `case` statement's patterns end in `)`, which doesn't end the body; its `esac` ends the case (TASK-156
+            # a `case` statement's patterns end in `)`, which closes nothing; its `esac` ends the case (TASK-156
             # review); a `case` that is only an argument (`echo use case`) is a word
-            cases += 1 if m.group(1) else -1 if cases else 0
+            if m.group(1):
+                cases.append(depth)
+            elif cases:
+                cases.pop()
             k = m.end()
-        elif c == ")" and depth == 0 and cases:
-            k += 1
+        elif c == ")" and cases and cases[-1] == depth:
+            k += 1  # a pattern's `)`, at the depth its case started (`( case y in y) :;; esac )` too)
         elif c == ")" and depth == 0:
             return k + 1
         else:
@@ -800,6 +808,19 @@ def _substitution_end(text: str, k: int, closer: str) -> int:
 CASE_WORD = re.compile(r"(case)(?=\s)|(esac)(?=[\s;&|()]|$)")
 # words after which the next word is a command name
 COMMAND_LEADERS = frozenset({"then", "do", "else", "elif", "if", "while", "until", "!", "{", "time"})
+
+
+def _is_arithmetic(inside: str) -> bool:
+    """Is a `$(…)` whose text inside the outer parentheses is `inside` really `$((…))` arithmetic: does the `(` it
+    starts with close at its very end? `$((cmd) )` and `$((cmd)|cat)` are a subshell in a substitution."""
+    if not inside.startswith("("):
+        return False
+    depth = 0
+    for k, c in enumerate(inside):
+        depth += 1 if c == "(" else -1 if c == ")" else 0
+        if depth == 0:
+            return k == len(inside) - 1
+    return False
 
 
 def _command_position(text: str, start: int, k: int) -> bool:
@@ -846,8 +867,11 @@ def _heredoc_substitutions(body: str) -> list[str]:
             k += 2
         elif body.startswith("$(", k):
             end = _substitution_end(body, k + 2, ")")
-            out.append(body[k + 2 : end - 1])
-            k = end
+            if _is_arithmetic(body[k + 2 : end - 1]):
+                k += 3  # arithmetic: a substitution inside it is still read
+            else:
+                out.append(body[k + 2 : end - 1])
+                k = end
         elif body[k] == "`":
             end = _substitution_end(body, k + 1, "`")
             out.append(_unescape_backquoted(body[k + 1 : end - 1], False))
