@@ -35,6 +35,7 @@ import {
   type SearchStateErrorCode,
 } from "./search-state";
 import { codePointLength } from "@/api/spans";
+import { HOSTILE, quotedSafely } from "@/test/hostile";
 import { clip } from "./clip";
 import clauseGolden from "./filter-clause-golden.json";
 import defaultLimits from "./default-limits.json";
@@ -1045,23 +1046,6 @@ describe("toSearchRequest", () => {
 describe("refusals quote values they did not write through clip (TASK-144)", () => {
   // A value holding a backtick would shift every later code span `Coded` draws; a control or bidi character
   // would reach the page as is. Each is quoted the way the backend's `diagnostics.clip` quotes it.
-  const HOSTILE: readonly (readonly [string, string])[] = [
-    ["a`b", "a\\x60b"],
-    ["a\nb", "a b"],
-    ["a\x00b", "a\\x00b"],
-    ["a\x1bb", "a\\x1bb"],
-    [`a${String.fromCodePoint(0x202e)}b`, "a\\u202eb"],
-  ];
-
-  /** Every backtick pairs up, and the message is one line of visible characters. */
-  function quotedSafely(message: string): void {
-    expect(message.split("`").length % 2, message).toBe(1);
-    for (const c of message) {
-      expect(c === " " || !/\s/u.test(c), message).toBe(true);
-      expect(/[\p{Cc}\p{Cf}\p{Cs}]/u.test(c), message).toBe(false);
-    }
-  }
-
   const year = (source: string, field = "year"): YearClause =>
     ({ field, negated: false, source, mode: "native", span: [5, 5], ranges: [EVERY_YEAR] }) as YearClause;
 

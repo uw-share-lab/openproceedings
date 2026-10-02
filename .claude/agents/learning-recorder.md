@@ -30,7 +30,8 @@ covered. Assume the substantive work is done; you are distilling it.
 5. **Make it stick.** If the lesson should change future work, fold it into the owning skill, agent or
    `CLAUDE.md` in the same branch, and record that under "Propagated to". A lesson that lives only in the
    journal is remembered; one that lives in a skill is *enforced*.
-6. **Every follow-up is a Backlog task** (`backlog task create …`). Put its id in the entry.
+6. **Every follow-up becomes a Backlog task.** List it in the entry and the task's notes; it is created last,
+   after rebasing onto `dev` (task-hygiene §Ids), and its id then goes in the entry in the same commit.
 7. Regenerate the index: `python3 .claude/scripts/learnings_index.py`, then confirm
    `python3 .claude/scripts/learnings_index.py --check` exits 0. The check also rejects non-dates,
    leftover template `<placeholders>` in the title or key lesson, and files in subfolders.
@@ -41,5 +42,5 @@ personal data, and people's names (use roles: "the second reviewer").
 
 ## Output
 The entry path (or the entry you extended), the key-lesson line verbatim, what you propagated where, and
-any follow-up task ids. Remind the caller that the new entry must be committed **before** `/review-gate`,
+any follow-ups (filed as tasks later, after rebasing onto `dev`: task-hygiene §Ids). Remind the caller that the new entry must be committed **before** `/review-gate`,
 because approvals are per-commit.

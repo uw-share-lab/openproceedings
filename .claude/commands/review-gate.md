@@ -26,7 +26,8 @@ Extra reviewers requested: $ARGUMENTS
    that genuinely can't be done yet becomes a `task-NNN`, with the reason stated. Commit, and re-run **only
    the reviewers whose paths the fixes touched** plus `code-reviewer` and `docs-reviewer`. Repeat until no Must or Should is open.
 6. **Disposition everything.** Write the dispositions file (outside the repo, e.g. the scratchpad):
-   every finding → `fixed <sha>` | `task-NNN` (create with `backlog task create`) | `rejected: <reason>`.
+   every finding → `fixed <sha>` | `task-NNN` (create with `backlog task create` after rebasing onto `dev`, in
+   its own commit: task-hygiene §Ids) | `rejected: <reason>`.
 7. **Record.** `python3 .claude/scripts/record-review.py APPROVE <dispositions.md>` — add `--attest` if the
    PR already exists. If the script refuses, fix what it names; never hand-write a record.
 8. Report: reviewers run, findings by severity with dispositions, the recorded sha, and the next command

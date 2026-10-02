@@ -55,15 +55,107 @@ fresh; printf '# t\n\n**Key lesson:** k\n' > "$L/2026-09-26-new.md"
 expect err "new entry not yet in INDEX.md (stale)"                      learnings_index.py --check
 
 echo "== check_backlog.py"
+B="$TMP/r/backlog"
+# expect_msg <label> <ERE> — exits 1 AND prints a `backlog: ` line matching <ERE>, so an unrelated failure
+# (a traceback, another problem) can't pass the row
+expect_msg() {
+  local label="$1" re="$2" got
+  if python3 "$TMP/r/.claude/scripts/check_backlog.py" 2>&1 >/dev/null | grep -Eq "^backlog: $re"; then got=match; else got=none; fi
+  if [ "$got" = match ]; then pass=$((pass+1)); printf '  ok   %-22s %-58s -> %s\n' check_backlog.py "$label" "$got"
+  else fail=$((fail+1)); printf '  FAIL %-22s %-58s -> %s (want: %s)\n' check_backlog.py "$label" "$got" "$re"; fi
+}
+expect_clash() { expect_msg "$1" "$2 is used by 2 files"; }  # <label> <id as printed, e.g. task-75>
+task() { printf -- '---\nid: %s\nstatus: To Do\n---\n' "$2" > "$B/$1"; }
+dec() { mkdir -p "$B/decisions"; printf -- '---\nid: %s\nstatus: accepted\n---\n' "$2" > "$B/decisions/$1"; }
 fresh; expect ok  "no tasks at all"                                     check_backlog.py
-fresh; printf -- '---\nid: task-1\nstatus: In Progress\n---\n' > "$TMP/r/backlog/tasks/task-1 - x.md"
+fresh; printf -- '---\nid: task-1\nstatus: In Progress\n---\n' > "$B/tasks/task-1 - x.md"
 expect ok  "an In Progress task"                                        check_backlog.py
-fresh; printf -- '---\nid: task-1\nstatus: Done\n---\n' > "$TMP/r/backlog/tasks/task-1 - x.md"
-expect err "a Done task left in tasks/"                                 check_backlog.py
-fresh; printf -- "---\nid: task-1\nstatus: 'Done'\n---\n" > "$TMP/r/backlog/tasks/task-1 - x.md"
-expect err "a quoted 'Done' status"                                     check_backlog.py
-fresh; printf -- '---\nid: task-1\nstatus: Done\n---\n' > "$TMP/r/backlog/completed/task-1 - x.md"
+fresh; printf -- '---\nid: task-1\nstatus: Done\n---\n' > "$B/tasks/task-1 - x.md"
+expect_msg "a Done task left in tasks/"                                 "'task-1 - x.md' is Done but still in backlog/tasks/"
+fresh; printf -- "---\nid: task-1\nstatus: 'Done'\n---\n" > "$B/tasks/task-1 - x.md"
+expect_msg "a quoted 'Done' status"                                     "'task-1 - x.md' is Done"
+fresh; printf -- '---\nid: task-1\nstatus: Done\n---\n' > "$B/completed/task-1 - x.md"
 expect ok  "a Done task in completed/"                                  check_backlog.py
+fresh; rm -rf "$B/completed"
+expect_msg "a missing completed/ fails (not 0 files)"                   "backlog/completed/ is missing"
+fresh; rm -rf "$B/tasks"
+expect_msg "a missing tasks/ fails (not 0 files)"                       "backlog/tasks/ is missing"
+# duplicate ids (decision-027: the queue merges two PRs that each created task-N under different filenames)
+fresh; task "tasks/task-1 - a.md" TASK-1; task "tasks/task-2 - b.md" TASK-2; task "completed/task-3 - c.md" TASK-3
+expect ok  "distinct ids across tasks/ and completed/"                  check_backlog.py
+fresh; task "tasks/task-1 - a.md" TASK-1; task "tasks/task-1 - b.md" TASK-1
+expect_clash "one id twice in tasks/"                                   task-1
+fresh; task "tasks/task-7 - a.md" TASK-7; task "completed/task-7 - b.md" TASK-7
+expect_clash "one id in tasks/ and completed/"                          task-7
+fresh; task "tasks/task-75 - a.md" task-75; task "completed/task-075 - b.md" TASK-075
+expect_clash "TASK-075 and task-75 are one id"                          task-75
+fresh; task "tasks/task-8 - a.md" "'TASK-8'"; task "tasks/task-8 - b.md" '"task-8"'
+expect_clash "quoted ids are read"                                      task-8
+fresh; printf -- '---\nstatus: To Do\n---\n' > "$B/tasks/task-4 - a.md"; printf -- '---\ntitle: b\n---\n' > "$B/completed/task-4 - b.md"
+expect_clash "no id field: the filename prefix is the id"               task-4
+fresh; printf -- '---\nstatus: To Do\n---\n' > "$B/tasks/task-4 - a.md"
+expect_msg "no id field fails (Backlog.md lists it as TASK-)"           "'tasks/task-4 - a.md' has no frontmatter .id:."
+fresh; printf -- '---\ndescription: |\n  id: TASK-3\ntitle: nested\n---\n' > "$B/tasks/task-3 - a.md"
+expect_msg "an indented id: is nested, not the task's id"               "'tasks/task-3 - a.md' has no frontmatter .id:."
+fresh; task "tasks/x - a.md" TASK-3; task "tasks/y - b.md" TASK-3
+expect_clash "no filename prefix: the frontmatter id is the id"         task-3
+fresh; printf -- '---\nid: TASK-5\n---\nid: TASK-7\n' > "$B/tasks/task-5 - a.md"; printf -- '---\nid: TASK-6\n---\nid: TASK-7\n' > "$B/tasks/task-6 - b.md"
+expect ok  "an id: line below the frontmatter is body text"             check_backlog.py
+fresh; printf -- '---\r\nid: TASK-9\r\nstatus: To Do\r\n---\r\n' > "$B/tasks/x - a.md"; task "tasks/y - b.md" TASK-9
+expect_clash "CRLF frontmatter is read"                                 task-9
+fresh; printf '\357\273\277---\nid: TASK-9\nstatus: To Do\n---\n' > "$B/tasks/x - a.md"; task "tasks/y - b.md" TASK-9
+expect_clash "a byte-order mark does not hide the frontmatter id"       task-9
+fresh; printf -- '--- \nid: TASK-9\nstatus: To Do\n--- \n' > "$B/tasks/x - a.md"; task "tasks/y - b.md" TASK-9
+expect_clash "trailing spaces on the --- lines"                         task-9
+fresh; printf -- '---\n"id" : TASK-9\nstatus: To Do\n---\n' > "$B/tasks/x - a.md"; task "tasks/y - b.md" TASK-9
+expect_clash "a quoted id key with a space before the colon"            task-9
+fresh; task "tasks/task-12 - a.md" TASK-12; task "tasks/task-12.1 - b.md" TASK-12.1
+expect ok  "a subtask 12.1 is not task 12"                              check_backlog.py
+# a hand-edited file fails closed rather than hiding its id
+fresh; task "tasks/task-6 - b.md" TASK-5; task "tasks/task-5 - a.md" TASK-5
+expect_msg "frontmatter id and filename disagree"                       "'tasks/task-6 - b.md' has a frontmatter .id:. that disagrees"
+fresh; printf -- '---\nid: TASK-6\nid: TASK-5\n---\n' > "$B/tasks/task-6 - b.md"
+expect_msg "two id: fields in one frontmatter"                          "'tasks/task-6 - b.md' has 2 .id:. fields"
+fresh; task "tasks/task-3 - a.md" TASK-3-old
+expect_msg "an id with trailing junk fails closed"                      "'tasks/task-3 - a.md' has no readable task id in its frontmatter"
+fresh; task "tasks/task-5 - a.md" TASK-5; task "tasks/task-6 - b.md" "'TASK-5' # moved"
+expect_msg "a quoted id with a trailing comment fails closed"           "'tasks/task-6 - b.md' has no readable task id in its frontmatter"
+fresh; task "tasks/task-5 - a.md" TASK-5; printf -- '---\n{id: TASK-5, status: To Do}\n---\n' > "$B/tasks/task-6 - b.md"
+expect_msg "a flow-mapping frontmatter fails closed"                    "'tasks/task-6 - b.md' has frontmatter this check can't read"
+fresh; task "tasks/task-5 - a.md" TASK-5; printf -- '---\n? id\n: TASK-5\n---\n' > "$B/tasks/task-6 - b.md"
+expect_msg "an explicit ? key fails closed"                             "'tasks/task-6 - b.md' has frontmatter this check can't read"
+fresh; task "tasks/task-5 - a.md" TASK-5; printf -- '---\n"i\\x64": TASK-5\n---\n' > "$B/tasks/task-6 - b.md"
+expect_msg "an escaped quoted key fails closed"                         "'tasks/task-6 - b.md' has frontmatter this check can't read"
+fresh; task "tasks/task-5 - a.md" TASK-5; printf -- '---\n<<: {id: TASK-5}\n---\n' > "$B/tasks/task-6 - b.md"
+expect_msg "a << merge key fails closed"                                "'tasks/task-6 - b.md' has frontmatter this check can't read"
+fresh; task "tasks/task-5 - a.md" TASK-5; printf -- '---\nx: &a {id: TASK-5}\n<<: *a\n---\n' > "$B/tasks/task-6 - b.md"
+expect_msg "an anchor merged through an alias fails closed"             "'tasks/task-6 - b.md' has frontmatter this check can't read"
+fresh; printf -- '---\n  id: TASK-6\n---\n' > "$B/tasks/task-6 - b.md"
+expect_msg "an indented first frontmatter line fails closed"            "'tasks/task-6 - b.md' has frontmatter this check can't read"
+fresh; task "tasks/task-5 - a.md" TASK-5; printf -- '---\n# c\n  "i\\x64": TASK-5\n  title: hidden\n---\n' > "$B/tasks/task-6 - b.md"
+expect_msg "a comment, then an indented mapping, fails closed"          "'tasks/task-6 - b.md' has frontmatter this check can't read"
+fresh; printf -- '---\nid: TASK-6\ntitle: >-\n  Read every file when the\n  {frontmatter} holds ?odd values\nlabels:\n- a\n  - b\n# a comment\nstatus: To Do\n---\n' > "$B/tasks/task-6 - b.md"
+expect ok  "CLI-shaped frontmatter: {/? on folded lines, lists, comment" check_backlog.py
+fresh; printf '\n---\nid: TASK-5\n---\n' > "$B/tasks/task-6 - b.md"
+expect_msg "no frontmatter at the top fails closed"                     "'tasks/task-6 - b.md' has no frontmatter"
+fresh; task "tasks/notes.md" "some note"
+expect_msg "a file with no readable id fails closed"                    "'tasks/notes.md' has no readable task id in its frontmatter"
+fresh; printf -- '---\ntitle: x\n---\n' > "$B/tasks/task-12abc.md"
+expect_msg "a filename prefix glued to letters is not an id"            "'tasks/task-12abc.md' has no readable task id \(frontmatter"
+fresh; task "tasks/task-12 - a.md" TASK-12; printf -- '---\ntitle: x\n---\n' > "$B/tasks/task-12.1x.md"
+expect_msg "task-12.1x is not read back as task-12"                     "'tasks/task-12.1x.md' has no readable task id \(frontmatter"
+fresh; task "tasks/task-3 - a.md" decision-3
+expect_msg "a decision id in tasks/ fails closed"                       "'tasks/task-3 - a.md' has no readable task id"
+fresh; printf -- '---\nid: TASK-1\n---\n\377\376\n' > "$B/tasks/task-1 - a.md"
+expect_msg "a file that isn't UTF-8 is named, not a traceback"          "'tasks/task-1 - a.md' can't be read as UTF-8"
+fresh; mkdir -p "$B/archive/tasks"; task "archive/tasks/task-2 - a.md" TASK-2; task "tasks/task-2 - b.md" TASK-2
+expect ok  "backlog/archive/ is not compared (the CLI reuses its ids)"  check_backlog.py
+fresh; dec "decision-1 - a.md" decision-1; dec "decision-2 - b.md" decision-2; task "tasks/task-1 - c.md" TASK-1
+expect ok  "distinct decisions; task-1 and decision-1 don't clash"      check_backlog.py
+fresh; dec "decision-29 - a.md" decision-29; dec "decision-029 - b.md" decision-029
+expect_clash "one decision id twice"                                    decision-29
+fresh; dec "x - a.md" decision-5; dec "y - b.md" decision-5
+expect_clash "decision clash read from the frontmatter"                 decision-5
 
 echo "== check_digest_pins.py"
 W="$TMP/r/deploy/web.Dockerfile"

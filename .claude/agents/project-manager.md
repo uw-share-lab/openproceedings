@@ -35,10 +35,12 @@ is marked Done that is not merged. You never hand-write files under `backlog/` �
    questions in 00, e.g. rejected-ICLR indexing, earliest year, hosting) → `backlog decision create
    "<title>"`, then Edit the created file's Context / Decision / Consequences body.
 6. **Status hygiene** (`.claude/skills/task-hygiene/SKILL.md`). Tick each AC with `--check-ac <n>` as it
-   is met, not at the end; keep ACs matching the real scope. Create a follow-up task the moment one is
-   found, never "noted for later". `backlog task edit <id> -s "In Progress"|"Done" --notes "…"`. When a
-   task is Done (final summary written), run **`backlog task complete <id>`** so it moves to
-   `backlog/completed/`; CI's `check_backlog.py` fails on a Done task left in `backlog/tasks/`. Blockers go
+   is met, not at the end; keep ACs matching the real scope. Record a follow-up the moment one is found
+   and file it as a task before the final `/review-gate`, never "noted for later" (new ids are created
+   last, after rebasing onto `dev`: `task-hygiene` §Ids).
+   `backlog task edit <id> -s "In Progress"|"Done" --notes "…"`. When a task is Done (final summary
+   written), run **`backlog task complete <id>`** so it moves to `backlog/completed/`; CI's
+   `check_backlog.py` fails on a Done task left in `backlog/tasks/` and on an id used twice. Blockers go
    in `--comment`.
 
 ## Output

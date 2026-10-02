@@ -80,9 +80,10 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 ## Keep everything current (rule, 2026-09-25; `.claude/skills/task-hygiene/SKILL.md`)
 - **Backlog tasks, docs, specs, READMEs and every `.md` are updated continuously**, in the same commit as
   the change they describe. Never in a later catch-up PR.
-- Tick acceptance criteria as you meet them. Create follow-up tasks when you find them.
+- Tick acceptance criteria as you meet them. Note follow-ups when you find them and file them as tasks
+  at the end of the branch, after rebasing onto `dev` (new ids are created last: `task-hygiene` §Ids).
 - **When a task is Done, run `backlog task complete <id>`**, which moves it to `backlog/completed/`. CI fails
-  on a Done task left in `backlog/tasks/`.
+  on a Done task left in `backlog/tasks/`, and on two tasks or two decisions that share an id.
 - `docs-reviewer` runs on every diff.
 
 ## Tests never call real APIs (rule, 2026-09-25)
@@ -137,7 +138,9 @@ testing).
 5. **`/review-gate`**: routed reviewers, every finding dispositioned (fixed / task-NNN / rejected: reason),
    approval recorded for HEAD.
 6. **Push, then `/open-pr`** into `dev`. CI must pass: `lint`, `test`, `claude-tooling`, `attribution`,
-   `learnings`, `review-attested`.
+   `learnings`, `review-attested`. Once `dev`'s merge queue is active, a green PR goes into the queue
+   (`gh pr merge <n> --auto`); it is not rebased just because `dev` moved. Until then, it is rebased onto
+   `dev` and merged with `--merge` (`pr-workflow` skill §Merge method).
 7. **After it merges**, remove the PR's worktree (`git worktree remove`) and local branch. A worktree with
    uncommitted work is archived as a patch first, never deleted blind.
 

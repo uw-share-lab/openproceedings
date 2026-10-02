@@ -393,6 +393,8 @@ def full(tokens: list[Token]) -> list[tuple[str, int, int, bool]]:
         ("bench\\-", 7, ""),  # markup that joins the word is not
         ("abcé", 5, ""),  # nor is a mark that folds away
         ("abc⁡", 3, " "),  # an invisible math operator separates
+        ("\u0ce2", 1, ""),  # a lone vowel sign: no token and no piece
+        ("abcd-\u0ce2", 4, "-"),  # the vowel sign after `-` is not a piece: the tail is still `-`
         ("", 0, ""),
         ("...", 0, "..."),
     ],
@@ -412,9 +414,13 @@ def test_tail_is_the_folded_pieces_after_the_last_word(text: str, start: int, pi
 )
 @example("abcd⒈̸")
 @example("abcd⑴")
+@example("\u0ce2")  # nightly: a lone vowel sign makes no token, but `x` after it joins it (U+0CE2 then `x`)
+@example("abcd-\u0ce2")
+@example("abc-\u0301")
 def test_tail_says_whether_a_letter_after_the_text_joins_its_last_word(text: str) -> None:
     """Independent of how the tail is tracked: a letter written after a text with a tail is a word of its
-    own; after a text that ends on a word piece it extends that word."""
+    own; after a text that ends on a word piece it extends that word. A word of its own may start with the
+    marks-only run the text ends with (a lone vowel sign, combining class 0): alone it made no token."""
     tokens, tail = tokenize_with_tail(text)
     assert full(tokens) == full(tokenize(text))
     assert 0 <= tail.start <= len(text) and (tail.pieces or tail.start == len(text))
@@ -422,7 +428,13 @@ def test_tail_says_whether_a_letter_after_the_text_joins_its_last_word(text: str
         return  # an appended letter can change what LaTeX means (`\cmd` + x, a math closer before x)
     after = normalize(text + "x")
     if tail.pieces or not tokens or tokens[-1].op:
-        assert after == [t.text for t in tokens] + ["x"], (text, tail)
+        assert after and after[:-1] == [t.text for t in tokens], (text, tail)
+        head, last = after[-1][:-1], after[-1][-1]
+        assert last == "x" and all(unicodedata.category(c).startswith("M") for c in head), (text, tail)
+        # it starts on a mark of class 0: a stray combining mark (`abc-` + U+0301) is dropped, never kept
+        assert not head or (
+            unicodedata.category(head[0]) in ("Mn", "Mc") and not unicodedata.combining(head[0])
+        ), (text, tail)
     else:
         assert after == [t.text for t in tokens[:-1]] + [tokens[-1].text + "x"], (text, tail)
 

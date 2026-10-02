@@ -78,8 +78,14 @@ character as its Python escape, whitespace runs as one space, at most 40 code po
 error, as the backend's parser messages), so `Coded` still pairs the backticks and the message stays one visible
 line (TASK-144). An empty value or parameter name is written `""`, and two repeated URL values that clip alike are each shown from a
 little before where they first differ (`…ration OR appropriate)`; values that differ only in whitespace still
-read alike). Clipping changes only the message: `q`, the URL
-and a saved record are never clipped.
+read alike). The other messages `Coded` draws quote what the API sent through `clip` too, bare or in backticks:
+each include button's description, its value bare and in its clause (`exclusions.ts`), and the record page's
+replay lines (`replay-status.ts`: the refusal code and both index and query versions). The banner's plain-text
+strings clip the same values: the PRISMA disclosure's default clauses (`clauseText`, `defaultsText`), line 1's
+bucket names, each include label and accessible name, and the include announcement (`includedText`). A field
+name the client writes itself stays as it is (TASK-160). `frontend/src/lib/clip-golden.json`, generated from
+the backend's `diagnostics.clip` by `test_frontend_clip_golden.py`, pins the two implementations together.
+Clipping changes only the message: `q`, the URL, an include click's value and a saved record are never clipped.
 
 **Year** has its own actions (TASK-092), since a year clause is ranges, not values:
 `yearClauseFromParse(filters.year, q, mode)` narrows `/parse`'s `ParsedYearClause` as `clauseFromParse` does,

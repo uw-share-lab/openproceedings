@@ -20,7 +20,7 @@ What wasted time or produced misleading results, and how you'd recognise the tra
 - Decision → rationale → what would reverse it.
 
 ## Follow-ups
-- [ ] task-NNN — <open item> (every follow-up is a Backlog task; chat is not a record)
+- [ ] task-NNN — <open item> (every follow-up is a Backlog task, created last, after rebasing: task-hygiene §Ids; chat is not a record)
 
 ## Propagated to
 Where this lesson now lives so it is enforced, not just remembered. If nowhere, say why.

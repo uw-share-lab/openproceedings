@@ -50,7 +50,10 @@ safe direction.
   claims, `ingest/urls.py`). That's ambiguous: write a `conflicts.csv` row and keep them all separate.
   The same holds when two keys chain clusters that must not share a record: every cluster in the chain
   stays separate (`field = title_key_chain`).
-  Dedup never decides that two OpenReview notes are one paper. The one case where they are, API v1's NeurIPS
+  Dedup never decides that two OpenReview notes are one paper. A v1 workshop copy and its conference twin (ICLR
+  2017: 53 copies) are not one: they stay two records, each with a `twin` claim naming the other, added by the
+  crawler (`openreview_v1.link_twins`, TASK-159, decision-029). Dedup keeps the claim in provenance and never
+  merges on it. The one case where two notes are one paper, API v1's NeurIPS
   2021 notes that repeat a paper under a second id and number with identical content (300 main-track papers on
   the 2026-09-29 crawl), is collapsed by the crawler before records reach dedup
   (`openreview_v1.collapse_duplicate_submissions`, TASK-125; openreview-api skill), so the survivor merges

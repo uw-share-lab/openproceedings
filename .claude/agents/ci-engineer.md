@@ -27,7 +27,8 @@ tempted to bypass it.
    `deploy/web.Dockerfile`, behind a `paths` filter, so it can't become required as is) exist today. The
    **six required checks** are the job names `lint`, `test`, `claude-tooling`, `attribution`, `learnings` and `review-attested` (`pr-gates` is a workflow holding the last three jobs, not a check).
    **Never rename a required job** without updating branch protection in the same change and saying so in
-   the PR.
+   the PR. A workflow that produces a required check must also trigger on `merge_group`, or the merge
+   queue waits forever for a check that never starts (spec 08 §Merge queue, decision-027).
 2. **Python jobs:** `astral-sh/setup-uv` with its cache keyed on `uv.lock`; `uv sync --locked` at the root
    (the uv workspace); then `make lint` (ruff format/check, `mypy --strict backend/src` once it exists,
    shellcheck, frontend checks) followed by `actionlint`. `test` runs
@@ -41,12 +42,16 @@ tempted to bypass it.
    each Playwright run. There is no persistent fixture-index cache; add one only with a key covering the
    fixture manifest, `TOKENIZER_VERSION` and `SCHEMA_VERSION`.
 5. **claude-tooling:** `make tooling` — roster lint, `.claude/README.md` and learnings `INDEX.md`
-   freshness (`--check`), `check_backlog.py` (no Done task left in `backlog/tasks/`), and every hook case
-   table.
+   freshness (`--check`), `check_backlog.py` (no Done task left in `backlog/tasks/`, no task or decision
+   id used twice), and every hook case table.
 6. **pr-gates** (three jobs): `attribution` scans every commit message in `base..head` and the PR
    title/body; `learnings` needs an added or extended `YYYY-MM-DD-<slug>.md` entry directly in
    `.claude/learnings/` unless labelled `no-learning`; `review-attested` compares `<!-- op-review: <sha>
-   APPROVE -->` with the head sha. Same-repo `dev → main` promotions are exempt from the last two.
+   APPROVE -->` with the head sha. Same-repo `dev → main` promotions are exempt from the last two. On
+   `merge_group` the three jobs run `.claude/scripts/merge_group_gate.py`. It resolves every PR in the
+   queue's group from its merge commits and runs the same check on each one, failing closed. Change it
+   together with its case table (`.claude/scripts/tests/test-merge-group-gate.sh`) and its mutants
+   (`.claude/scripts/mutants/merge-group.json`).
 7. **Verify locally** before pushing: `make lint` and `make tooling` (what `.githooks/pre-push` runs),
    `actionlint`, and each changed job's commands in a clean shell. Test a gate by making it fail once (a throwaway branch commit) and pasting the red run.
 8. **Close out** per `CLAUDE.md` §Closing workflow. `/review-gate` will route `.github/**` to

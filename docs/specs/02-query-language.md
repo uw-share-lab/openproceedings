@@ -20,8 +20,11 @@ The query side and the index side run the **same** normalization function (`norm
    follow their script: IPA `ɓ` is Latin and folds; Coptic `ϣ` does not.) So `naïve` ≡ `naive`, `ά` ≡ `α`, and Hebrew and Arabic vowel points fold (`שָׁלוֹם` ≡ `שלום`). Marks
    that spell a *different letter* are kept: Cyrillic breve (`мой` ≠ `мои`), Arabic hamza (`سؤال`), Thai
    tone marks (`ป่า` "forest" ≠ `ปา` "throw"), kana voicing (`が` ≠ `か`), and Indic viramas and vowel
-   signs. A stray mark with no base letter is dropped, and a run made only of marks (a lone vowel sign) is not a
-   token.
+   signs. A stray combining mark (class ≠ 0) with no base (a letter, digit or class-0 mark before it) is
+   dropped. After NFKC, a class-0 Mn/Mc mark that step 4 doesn't make invisible is a word character (e.g.
+   U+0CE2 KANNADA VOWEL SIGN VOCALIC L), so a run made only of marks (a lone vowel sign) is not a token on its
+   own, but a letter written after it joins it (U+0CE2 + `x` is one word); marks NFKC decomposes into
+   combining marks are stray.
 3. LaTeX, by classifying characters (so raw offsets survive):
    - `\cmd{X}` → `X`; a bare `\cmd` outside math is dropped.
    - Math regions are `$…$` (Pandoc's rule: the opening `$` is followed by a non-space, the closing `$` is
@@ -154,7 +157,18 @@ Rules:
     punctuation (`"trust 「in」 AI"` is one phrase). A quote touching a letter or digit on the outside
     (`"trust in "AI"`, `a"b c"`, a possessive `"GPT-4"'s`, a decomposed accent `cafe\u0301"x"`) is
     `PARSE_AMBIGUOUS_QUOTE` (its span covers the rest of the glued text: one mistake, one error), and a parenthesis glued to a word or phrase
-    (`model(s)`, `"a"(b)`) is `PARSE_PAREN_TOUCHES_WORD`: both would otherwise silently split a query.
+    (`model(s)`, `"a"(b)`) is `PARSE_PAREN_TOUCHES_WORD`: both would otherwise silently split a query. A filter
+    value is no exception, whatever its form or place: `year:2021(x)`, `venue:iclr(x)`, the range
+    `year:2020..2022(x)` and a value inside its group (`year:(2021(x))`, one error) are all refused, and the
+    message names the field and says to put a space before the `(`, or, inside the group, to close the group
+    first (decision-028); a text field's word
+    (`title:model(s)`) keeps the plural hint. A `)` glued to a
+    following field prefix (`(x)year:2021`) and a group glued to a group (`year:(2021)(x)`, `(a)(b)`) split no
+    word or value and are accepted, as they must be: a facet click splices `field:(…)` over a clause that may
+    follow a `)` directly. A glued value is still checked as a value (`year:..2022(x)` is also
+    `FIELD_UNKNOWN_VALUE`). A filter value (bare, negated or in its group) is never searched as text, so it gets
+    none of the warnings about how text is searched (`WARN_SYMBOLS_DROPPED`, `WARN_CJK_RUN`, `WARN_SPELLED_GREEK`,
+    a logic sign's `WARN_LOOKALIKE_OPERATOR`): `year:..2022` is `FIELD_UNKNOWN_VALUE` only.
     A backslash keeps the next character in the word
     (`G\"odel`). Characters whose NFKC form is a syntax character (full-width `（ ）｜：－＊＂`, …) act as
     it, because the tokenizer applies NFKC too; super/subscript parentheses are notation, not grouping.
@@ -301,7 +315,8 @@ A nested clause beside a single top-level one doesn't block it (`track:main (tra
 **The caps.** A click always writes the grouped form, `field:(v1 OR …)`, even for one value (`field:(v)`;
 the same canonical form and hash as `field:v`), so its `)` ends every edit and no edit can touch a group
 that follows the clause (`track:(main OR workshop)(x OR y)` → `track:(workshop)(x OR y)`, where a bare
-`track:workshop(x OR y)` would be `PARSE_PAREN_TOUCHES_WORD`). A toggleable clause is checked by making the
+`track:workshop(x OR y)` would be `PARSE_PAREN_TOUCHES_WORD`, as would any value glued to a `(`, a full year range
+included; decision-028). A toggleable clause is checked by making the
 widest edit a click can make and parsing it in the query's mode: every vocabulary value (for year,
 `MAX_YEAR_RANGES` = 4 disjoint `dddd..dddd` ranges, the most a year action writes; see below), spliced over
 the span or wrapped around `q`, exactly as the reducer writes it. Every narrower edit is then sound too: a
@@ -393,7 +408,8 @@ keep their written order; a bare term that a sibling filter's field could read a
 (`title:(a OR b)` → `(title:a OR title:b)`). `gpt-4*` prints as `"gpt 4*"` (in a phrase the earlier
 words count toward a wildcard's stem). Semantically equal spellings
 (`trust venue:ICLR`, `venue:iclr Trust`) therefore share one hash. `QUERY_VERSION`
-(`openproceedings.query`) is `"2"` (decision-008: canonical overflow and folded-piece wildcard detachment).
+(`openproceedings.query`) is `"2"` (decision-008: canonical overflow and folded-piece wildcard detachment; decision-028 left it at
+`"2"`, since refusing a range glued to `(` changes no canonical string).
 
 ## Error handling
 
@@ -403,8 +419,8 @@ with a bad operand, a missing operand (`a OR`), a word or phrase with no letters
 nested text field, a malformed filter group, nesting deeper than 64, an ambiguous `-`, a stray `:`, a
 detached or mid-word wildcard, `source:` outside Scholar mode, an unknown field, an unknown filter value
 (listing the valid ones), a range with start > end, an all-negative query, a quote or parenthesis glued
-to a word (`"trust in "AI"`, `model(s)`), or a query longer than 2,000 code points (`PARSE_TOO_LONG`,
-checked before any other work). The canonical string is capped too: a query whose canonical form (the
+to a word (`"trust in "AI"`, `model(s)`) or a `(` glued to a filter value (`year:2020..2022(x)`), or a query
+longer than 2,000 code points (`PARSE_TOO_LONG`, checked before any other work). The canonical string is capped too: a query whose canonical form (the
 defaults explicit, ` AND ` for juxtaposition, a field prefix on every leaf, parentheses) is over 2,000 code
 points is `PARSE_TOO_LONG`, spanning the whole input and saying how much the canonical form adds
 (decision-008), since a search record keeps that string and replay re-parses it. So every accepted query's

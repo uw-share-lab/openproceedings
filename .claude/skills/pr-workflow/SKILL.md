@@ -16,7 +16,8 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
 - Feature PRs target `dev`. `main` is only updated by a `dev → main` promotion PR (`release-manager`,
   spec 08 §Release), which needs **a second person's approving review** (branch protection) on top of green
   checks, and `dev` up to date with `main`: after each promotion, `main` is merged back into `dev`.
-- Branch protection: both `dev` and `main` accept only PRs whose required checks are green.
+- Branch protection: both `dev` and `main` accept only PRs whose required checks are green. `dev` merges
+  through a **merge queue** (TASK-161, decision-027; §Merge method).
 
 ## Closing order (CLAUDE.md §Closing workflow — approvals are per-commit)
 1. Tests and lint green locally, **scaled by risk** (§Local test runs). Paste the command and the result,
@@ -27,9 +28,10 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
 4. `/record-learnings` → commit the entry and regenerated `INDEX.md`.
 5. `/review-gate` → routed reviewers, every finding dispositioned, `record-review.py APPROVE` for HEAD.
 6. `git push -u origin <branch>`, then `/open-pr` (writes the body, creates the PR, `--attest`s it).
-7. Once the PR merges: `git worktree remove <its worktree>` and `git branch -d <branch>` (GitHub deletes the
-   remote branch). A worktree left behind goes stale; one with uncommitted work is archived as a patch before
-   it is removed, never deleted blind.
+7. Once its checks are green, the PR goes into the merge queue (§Merge method). Once it merges:
+   `git worktree remove <its worktree>` and `git branch -d <branch>` (GitHub deletes the remote branch). A
+   worktree left behind goes stale; one with uncommitted work is archived as a patch before it is removed,
+   never deleted blind.
 
 ## Local test runs (by risk; owner's rule, 2026-09-29, TASK-121)
 CI's required `test` job runs the full backend and frontend suite on every PR (backend under pytest-xdist, properties
@@ -77,10 +79,15 @@ sha. Any commit after an approval — a typo fix, a rebase, an amend — produce
 |---|---|
 | `lint` (`lint.yml`) | `make lint`: ruff format/check, mypy --strict (once `backend/src` exists), shellcheck; prettier, eslint, tsc; then actionlint |
 | `test` (`test.yml`) | pytest unit/golden/differential/contract under pytest-xdist, properties at the `pr` profile (200 examples, 2 s deadline); vitest; OpenAPI→TS freshness |
-| `claude-tooling` (`claude-tooling.yml`) | `make tooling`: roster lint, `.claude/README.md` + learnings index freshness, backlog hygiene, every hook case table |
+| `claude-tooling` (`claude-tooling.yml`) | `make tooling`: roster lint, `.claude/README.md` + learnings index freshness, backlog hygiene (no Done task in `tasks/`, no id used twice), every hook case table |
 | `attribution` (`pr-gates.yml`) | no AI attribution in any commit message or the PR title/body |
 | `learnings` (`pr-gates.yml`) | the branch adds or extends a learnings entry, or is labelled `no-learning` |
 | `review-attested` (`pr-gates.yml`) | the PR body attests APPROVE for the head sha |
+
+All six also run on the merge queue's builds (`merge_group`). There, `merge_group_gate.py` runs
+`attribution`, `learnings` and `review-attested` on **each** PR in the group. Each PR's current body must
+attest APPROVE for the head the queue merged, and the PR must still be open (or already merged by this
+group's own queue commit), target `dev` and have that head. Anything the script can't resolve fails the build (spec 08 §Merge queue).
 
 The advisory `e2e`, `bench` and `web-image` checks (`web-image` runs only when a PR touches the paths spec 08
 §CI lists: `deploy/`, the frontend, the npm manifests, `.dockerignore` or the workflow) should also be green before merge; `nightly` is scheduled rather
@@ -105,7 +112,18 @@ severity, dispositions) · **Learnings** (entry path + key lesson). No attributi
   or by calling git through another wrapper.
 
 ## Merge method
-Merge PRs into `dev` with a **merge commit** (`gh pr merge <n> --merge --delete-branch`), not a squash:
-review dispositions and learnings entries cite branch commit SHAs, and a squash would leave those references
-pointing at commits that aren't on `dev`. To change a PR body, use `gh api -X PATCH repos/{owner}/{repo}/pulls/<n>`;
+PRs go into `dev` as **merge commits**, not squashes: review dispositions and learnings entries cite branch
+commit SHAs, and a squash would leave those references pointing at commits that aren't on `dev`.
+
+**With the merge queue** (once the `dev: merge queue` ruleset is applied; spec 08 §Branch protection), add a
+green PR to the queue with `gh pr merge <n> --auto`. That needs the repository's "Allow auto-merge" setting;
+spec 08 §Git and PR rules gives the GraphQL `enqueuePullRequest` call that works without it. The queue's
+MERGE method makes the merge commit, and GitHub deletes the branch. Don't rebase a PR because `dev` moved. Its review record and attestation cover
+its head, and the queue tests that head on top of `dev` plus the PRs ahead of it. Several PRs can wait in
+the queue at once. Rebase only when the queue drops a PR, either for a conflict or for a red queue build.
+Then fix the cause, run the review round on the new head, `--attest` it, and queue it again. A push to a
+queued PR also drops it from the queue. Before the ruleset is applied, `dev` still requires up-to-date
+branches: merge with `gh pr merge <n> --merge --delete-branch`, rebasing each PR after the previous merge.
+
+To change a PR body, use `gh api -X PATCH repos/{owner}/{repo}/pulls/<n>`;
 `gh pr edit` fails here on the retired Projects (classic) API.

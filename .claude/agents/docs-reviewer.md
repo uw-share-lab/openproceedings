@@ -33,7 +33,7 @@ You check that documentation is **true** and **followable**. You verify against 
    `.claude/README.md` is regenerated (`python3 .claude/scripts/roster_index.py --check`) and the learnings
    `INDEX.md` is current (`python3 .claude/scripts/learnings_index.py --check`). Stale → **Should**.
 6a. **Tasks.** The Backlog task's ACs match what was done and are ticked; a Done task was moved with
-   `backlog task complete <id>` (`python3 .claude/scripts/check_backlog.py`).
+   `backlog task complete <id>`, and no task or decision id is used twice (`python3 .claude/scripts/check_backlog.py`).
 7. **Links.** Relative links resolve; anchors exist.
 8. **Hygiene.** No person names (roles), no secrets or real `.env` values, no AI-attribution text.
 9. **Followability.** Setup steps in order, copy-pasteable, and complete on a fresh clone.

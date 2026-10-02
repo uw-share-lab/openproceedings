@@ -60,6 +60,15 @@ V1 = {
     "2017_rejected": "op:iclr:2017:V1Ic17Rej1",
     "2017_another_year": "op:iclr:2017:V1Ic17Yr01",
     "2023_blogpost": "op:iclr:2023:V1Blog2301",
+    # scholarmend 0.1.5's `invitation` claim (TASK-157)
+    "2017_workshop_copy": "op:iclr:2017:rkB_5hEKe",
+    "2017_rejected_invitation": "op:iclr:2017:V1Ic17Inv1",
+    "2017_invitation_of_another_note": "op:iclr:2017:V1Ic17Inv2",
+    "2017_unlisted_invitation": "op:iclr:2017:V1Ic17Inv3",
+    "2017_poster_on_workshop": "op:iclr:2017:V1Ic17Inv4",
+    "v2_invitation": "op:iclr:2024:V2Invite01",
+    "2017_two_invitations": "op:iclr:2017:V1Ic17Inv5",
+    "2017_empty_invitation": "op:iclr:2017:V1Ic17Inv6",
 }
 
 Entries = list[dict[str, Any]]
@@ -579,7 +588,7 @@ def test_report_is_consistent_and_manifest_ready(imported: Imported) -> None:
     _, report = imported
     manifest = report.to_manifest()
     assert list(manifest) == sorted(manifest) and list(manifest["skipped"]) == sorted(manifest["skipped"])
-    assert manifest["parser_version"] == "0.1.4" and len(manifest["mended_sha256"]) == 64
+    assert manifest["parser_version"] == "0.1.5" and len(manifest["mended_sha256"]) == 64
     json.dumps(manifest)  # plain values only
     with pytest.raises(ValueError, match="read"):
         ImportReport(**{**report.__dict__, "imported": report.imported + 1})
@@ -741,10 +750,10 @@ def v1_imported() -> Imported:
 
 def test_v1_fixture_counts(v1_imported: Imported) -> None:
     by_id, report = v1_imported
-    assert set(by_id) == set(V1.values()) and (report.read, report.imported) == (15, 15)
+    assert set(by_id) == set(V1.values()) and (report.read, report.imported) == (23, 23)
     assert report.track_status == {
-        "main": {"accepted": 4, "rejected": 3, "unknown": 5},
-        "workshop": {"unknown": 1},
+        "main": {"accepted": 4, "rejected": 9, "unknown": 5},
+        "workshop": {"unknown": 3},
         "other": {"unknown": 1},
         "blogpost": {"accepted": 1},
     }
@@ -1015,3 +1024,57 @@ def test_a_listing_meets_the_track_an_other_venueid_takes_from_its_venue_string(
     [ev] = [c.evidence for c in r.claims("status")]
     assert ev is not None and ev.startswith("scholarmend:proceedings_url https://proceedings.iclr.cc/")
     assert ev.endswith(" (overrides venue_string status rejected)") is override
+
+
+INVITED = "(the main track's outcome, not this workshop submission's)"
+
+
+@pytest.mark.parametrize(
+    ("row", "track", "status", "evidence", "invitation"),
+    [
+        # the recorded workshop copy: its claims equal a real rejection's but for the invitation (TASK-157)
+        ("2017_workshop_copy", "workshop", "unknown",
+         "venueid=ICLR.cc/2017/conference venue_string=Submitted to ICLR 2017 "
+         f"invitation=ICLR.cc/2017/workshop/-/submission {INVITED}", "ICLR.cc/2017/workshop/-/submission"),
+        ("2017_rejected_invitation", "main", "rejected",
+         "venueid=ICLR.cc/2017/conference venue_string=Submitted to ICLR 2017",
+         "ICLR.cc/2017/conference/-/submission"),
+        # a main-track outcome of any kind on the workshop listing is the twin's, as in the crawler's judge
+        ("2017_poster_on_workshop", "workshop", "unknown",
+         "venueid=ICLR.cc/2017/conference venue_string=ICLR 2017 Poster "
+         f"invitation=ICLR.cc/2017/workshop/-/submission {INVITED}", "ICLR.cc/2017/workshop/-/submission"),
+        # an invitation no adapter lists says nothing about the listing: kept, not used
+        ("2017_unlisted_invitation", "main", "rejected",
+         "venueid=ICLR.cc/2017/conference venue_string=Submitted to ICLR 2017", "ICLR.cc/2017/workshop/-/Synthetic"),
+        # an invitation claim whose evidence names another venueid is not this note's: ignored, not recorded
+        ("2017_invitation_of_another_note", "main", "rejected",
+         "venueid=ICLR.cc/2017/conference venue_string=Submitted to ICLR 2017", None),
+        # an entry scholarmend cached before 0.1.5 has no invitation claim: today's reading
+        ("2017_rejected", "main", "rejected",
+         "venueid=ICLR.cc/2017/conference venue_string=Submitted to ICLR 2017", None),
+        # two different invitations, or an empty one, say nothing: neither used nor kept
+        ("2017_two_invitations", "main", "rejected",
+         "venueid=ICLR.cc/2017/conference venue_string=Submitted to ICLR 2017", None),
+        ("2017_empty_invitation", "main", "rejected",
+         "venueid=ICLR.cc/2017/conference venue_string=Submitted to ICLR 2017", None),
+    ],
+)  # fmt: skip
+def test_a_v1_invitation_tells_a_workshop_copy_from_a_main_track_rejection(
+    v1_imported: Imported, row: str, track: str, status: str, evidence: str, invitation: str | None
+) -> None:
+    r = v1_imported[0][V1[row]]
+    assert (r.track, r.status) == (track, status)
+    assert [c.evidence for c in r.claims("status")] == [f"scholarmend:openreview_api {evidence}"]
+    assert [c.evidence for c in r.claims("track")] == [f"scholarmend:openreview_api {evidence}"]
+    assert [(c.value, c.source, c.evidence) for c in r.claims("invitation")] == (
+        []
+        if invitation is None
+        else [(invitation, "ris", "scholarmend:openreview_api venueid=ICLR.cc/2017/conference")]
+    )
+
+
+def test_an_invitation_outside_the_v1_years_is_ignored(v1_imported: Imported) -> None:
+    """TASK-157 (review round 1): only an API v1 venue-year reads the claim; a v2 record keeps its venueid's
+    reading and no `invitation` claim, as the `venue_string` row beside it does."""
+    r = v1_imported[0][V1["v2_invitation"]]
+    assert (r.track, r.status) == ("main", "rejected") and r.claims("invitation") == ()

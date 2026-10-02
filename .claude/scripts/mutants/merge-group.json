@@ -1,0 +1,332 @@
+[
+ {
+  "label": "merge group: any base branch's queue ref accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "QUEUE_REF = re.compile(r\"refs/heads/gh-readonly-queue/dev/pr-",
+  "new": "QUEUE_REF = re.compile(r\"refs/heads/gh-readonly-queue/[a-z]+/pr-"
+ },
+ {
+  "label": "merge group: queue ref prefix-matched, not full",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "ref = QUEUE_REF.fullmatch(head_ref)",
+  "new": "ref = QUEUE_REF.match(head_ref)"
+ },
+ {
+  "label": "merge group: base/head shas not validated",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if not (SHA.fullmatch(base) and SHA.fullmatch(head)):",
+  "new": "if False:"
+ },
+ {
+  "label": "merge group: octopus merge accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if len(parents) != 2:",
+  "new": "if len(parents) < 2:"
+ },
+ {
+  "label": "merge group: non-merge commit accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if len(parents) != 2:",
+  "new": "if len(parents) > 2:"
+ },
+ {
+  "label": "merge group: chain not anchored at base",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if parents[0] != prev:",
+  "new": "if False:"
+ },
+ {
+  "label": "merge group: duplicate PR allowed",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if len(set(numbers)) != len(numbers):",
+  "new": "if False:"
+ },
+ {
+  "label": "merge group: head ref PR number not cross-checked",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if numbers[-1] != int(ref.group(1)):",
+  "new": "if False:"
+ },
+ {
+  "label": "merge group: merge subject ignored (always looked up)",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    if m := MERGE_SUBJECT.match(subject):\n        return int(m.group(1))\n",
+  "new": ""
+ },
+ {
+  "label": "merge group: lookup takes closed PRs",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "        and p.get(\"state\") == \"open\"\n        and (p.get(\"base\") or {}).get(\"ref\") == \"dev\"",
+  "new": "        and (p.get(\"base\") or {}).get(\"ref\") == \"dev\""
+ },
+ {
+  "label": "merge group: lookup takes any base",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "        and (p.get(\"base\") or {}).get(\"ref\") == \"dev\"\n        and (p.get(\"head\") or {}).get(\"sha\") == pr_head",
+  "new": "        and (p.get(\"head\") or {}).get(\"sha\") == pr_head"
+ },
+ {
+  "label": "merge group: lookup result type unchecked",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    if not isinstance(pulls, list):\n        raise GateError",
+  "new": "    if False:\n        raise GateError"
+ },
+ {
+  "label": "merge group: PR into main accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if (p.get(\"base\") or {}).get(\"ref\") != \"dev\":",
+  "new": "if False:"
+ },
+ {
+  "label": "merge group: moved PR head accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if (p.get(\"head\") or {}).get(\"sha\") != e.pr_head:",
+  "new": "if False:"
+ },
+ {
+  "label": "merge group: review checks only the head ref's PR",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    for e in group:\n        if f\"<!-- op-review:",
+  "new": "    for e in group[-1:]:\n        if f\"<!-- op-review:"
+ },
+ {
+  "label": "merge group: review marker loses APPROVE",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "f\"<!-- op-review: {e.pr_head} APPROVE -->\"",
+  "new": "f\"<!-- op-review: {e.pr_head}\""
+ },
+ {
+  "label": "merge group: review marker sha prefix",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "f\"<!-- op-review: {e.pr_head} APPROVE -->\"",
+  "new": "f\"<!-- op-review: {e.pr_head[:12]}\""
+ },
+ {
+  "label": "merge group: learnings label substring",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "lb.get(\"name\") == \"no-learning\"",
+  "new": "\"no-learning\" in str(lb.get(\"name\"))"
+ },
+ {
+  "label": "merge group: learnings labels type unchecked",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "        if not isinstance(labels, list):\n            raise GateError",
+  "new": "        if False:\n            raise GateError"
+ },
+ {
+  "label": "merge group: learnings counts removed-only lines",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if added.isdigit() and int(added) > 0 and LEARNING.fullmatch(path):",
+  "new": "if added.isdigit() and LEARNING.fullmatch(path):"
+ },
+ {
+  "label": "merge group: learnings name prefix-matched",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "and LEARNING.fullmatch(path):",
+  "new": "and LEARNING.match(path):"
+ },
+ {
+  "label": "merge group: learnings rename reads the old path",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "path, i = fields[i + 2], i + 3",
+  "new": "path, i = fields[i + 1], i + 3"
+ },
+ {
+  "label": "merge group: learnings checks only the head ref's PR",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    for e in group:\n        labels = pull(repo, e)",
+  "new": "    for e in group[-1:]:\n        labels = pull(repo, e)"
+ },
+ {
+  "label": "merge group: attribution skips commits",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "git(\"log\", \"--format=%B\", f\"{base}..{head}\")",
+  "new": "git(\"log\", \"--format=%B\", f\"{head}..{head}\")"
+ },
+ {
+  "label": "merge group: attribution skips titles",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "f\"{text(p, 'title')}\\n{text(p, 'body')}\"",
+  "new": "text(p, 'body')"
+ },
+ {
+  "label": "merge group: attribution skips bodies",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "f\"{text(p, 'title')}\\n{text(p, 'body')}\"",
+  "new": "text(p, 'title')"
+ },
+ {
+  "label": "merge group: attribution case-sensitive",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    re.IGNORECASE,\n)",
+  "new": ")"
+ },
+ {
+  "label": "merge group: attribution checks only the head ref's PR",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    for e in group:\n        p = pull(repo, e)",
+  "new": "    for e in group[-1:]:\n        p = pull(repo, e)"
+ },
+ {
+  "label": "merge group: non-string body accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "        raise GateError(f\"#{p.get('number')}: {key} isn't a string\")",
+  "new": "        return str(v)"
+ },
+ {
+  "label": "merge group: PR JSON type unchecked",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    if not isinstance(p, dict):\n        raise GateError(f\"#{e.number}: the PR isn't a JSON object\")",
+  "new": "    if False:\n        pass"
+ },
+ {
+  "label": "merge group: errors don't fail the gate",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    sys.exit(1 if bad else 0)",
+  "new": "    sys.exit(0)"
+ },
+ {
+  "label": "merge group: gh failure ignored",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    if r.returncode != 0:\n        raise GateError(f\"gh api",
+  "new": "    if False:\n        raise GateError(f\"gh api"
+ },
+ {
+  "label": "merge group: closed PR accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    if p.get(\"state\") != \"open\" and not merged_here:",
+  "new": "    if False:"
+ },
+ {
+  "label": "merge group: any merged PR accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "merged_here = p.get(\"merged\") is True and p.get(\"merge_commit_sha\") == e.merge",
+  "new": "merged_here = p.get(\"merged\") is True"
+ },
+ {
+  "label": "merge group: merged flag ignored",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "merged_here = p.get(\"merged\") is True and p.get(\"merge_commit_sha\") == e.merge",
+  "new": "merged_here = p.get(\"merge_commit_sha\") == e.merge"
+ },
+ {
+  "label": "merge group: lookup PR number type unchecked",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if len(hits) != 1 or type(hits[0]) is not int:",
+  "new": "if len(hits) != 1:"
+ },
+ {
+  "label": "merge group: error path exits 0",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "        print(f\"::error::{a.gate}: {e}\")\n        sys.exit(1)",
+  "new": "        print(f\"::error::{a.gate}: {e}\")\n        sys.exit(0)"
+ },
+ {
+  "label": "merge group: merge subject searched, not prefix-matched",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if m := MERGE_SUBJECT.match(subject):",
+  "new": "if m := MERGE_SUBJECT.search(subject):"
+ },
+ {
+  "label": "merge group: learnings counts binary entries",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if added.isdigit() and int(added) > 0",
+  "new": "if int(added) > 0"
+ },
+ {
+  "label": "merge group: learnings two-dot diff (not the PR's own)",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "f\"{e.parent}...{e.pr_head}\"",
+  "new": "f\"{e.parent}..{e.pr_head}\""
+ },
+ {
+  "label": "pr-gates: first job's event guard dropped",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "run: echo \"::error::pr-gates has no check for the $EVENT event\" && exit 1",
+  "new": "run: echo \"pr-gates: $EVENT\""
+ },
+ {
+  "label": "pr-gates: review job runs the learnings gate",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "merge_group_gate.py review --base",
+  "new": "merge_group_gate.py learnings --base"
+ },
+ {
+  "label": "pr-gates: merge_group step loses its event condition",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "        if: github.event_name == 'merge_group'\n        env:\n          GH_TOKEN",
+  "new": "        env:\n          GH_TOKEN"
+ },
+ {
+  "label": "pr-gates: pull_request step runs on merge_group",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "        if: github.event_name == 'pull_request'\n        env:\n          PR_BODY",
+  "new": "        env:\n          PR_BODY"
+ },
+ {
+  "label": "pr-gates: merge_group trigger dropped",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "  merge_group:\n    types: [checks_requested]\n",
+  "new": ""
+ },
+ {
+  "label": "pr-gates: head ref not passed",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "--head-ref \"$HEAD_REF\" --repo \"$REPO\"\n",
+  "new": "--head-ref \"refs/heads/x\" --repo \"$REPO\"\n"
+ },
+ {
+  "label": "pr-gates: pull-requests read dropped",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "    permissions: { contents: read, pull-requests: read }\n",
+  "new": "    permissions: { contents: read }\n"
+ },
+ {
+  "label": "lint: merge_group trigger dropped",
+  "file": ".github/workflows/lint.yml",
+  "old": "  merge_group:  # the merge queue's builds must report this required check too (decision-027)\n    types: [checks_requested]\n",
+  "new": ""
+ },
+ {
+  "label": "test: no merge_group OpenAPI base",
+  "file": ".github/workflows/test.yml",
+  "old": " || github.event.merge_group.base_sha",
+  "new": ""
+ },
+ {
+  "label": "merge group: lookup takes the first of several PRs",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if len(hits) != 1 or type(hits[0]) is not int:",
+  "new": "if len(hits) < 1 or type(hits[0]) is not int:"
+ },
+ {
+  "label": "pr-gates: learnings job skipped on merge_group by a job-level if",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "    if: ${{ !(github.head_ref == 'dev' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) }}",
+  "new": "    if: ${{ github.event_name == 'pull_request' }}"
+ },
+ {
+  "label": "pr-gates: review gate step continues on error",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "        run: python3 .claude/scripts/merge_group_gate.py review",
+  "new": "        continue-on-error: true\n        run: python3 .claude/scripts/merge_group_gate.py review"
+ },
+ {
+  "label": "pr-gates: merge_group step if: weakened",
+  "file": ".github/workflows/pr-gates.yml",
+  "old": "        if: github.event_name == 'merge_group'\n        env:\n          GH_TOKEN",
+  "new": "        if: github.event_name == 'merge_group' && false\n        env:\n          GH_TOKEN"
+ },
+ {
+  "label": "merge group: missing git/gh not caught",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    except OSError as e:  # git or gh missing",
+  "new": "    except ValueError as e:  # git or gh missing"
+ },
+ {
+  "label": "merge group: attribution pattern drifts from pr-gates.yml",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "generated with \\[?claude|",
+  "new": "generated by \\[?claude|"
+ }
+]

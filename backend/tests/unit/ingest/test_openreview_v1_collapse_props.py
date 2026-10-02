@@ -81,6 +81,11 @@ def no_collapse() -> Iterator[None]:
         yield
 
 
+def untwinned(record: PaperRecord) -> PaperRecord:
+    """`record` without its `twin` claim (rule 6, TASK-159), which links a copy only once the collapse has run."""
+    return record.model_copy(update={"provenance": tuple(c for c in record.provenance if c.field != "twin")})
+
+
 def silent_note(listings: dict[str, list[dict[str, Any]]], record: PaperRecord) -> bool:
     """Whether the record's note was on a submission listing with neither a venue nor a venueid key."""
     return any(
@@ -140,7 +145,16 @@ def test_a_collapse_never_folds_two_papers_or_loses_an_acceptance(
 
     # conservation: every note is a record or a counted duplicate, and a kept record is exactly as built
     assert got.report.imported + got.report.skipped["duplicate_submission"] == len(every)
-    assert all(every[rid] == r for rid, r in kept.items())
+    # (rule 6's `twin` claims are left out: which copies link depends on which notes the collapse keeps, TASK-159)
+    assert all(untwinned(every[rid]) == untwinned(r) for rid, r in kept.items())
+    # and the twin claims the collapsed crawl does carry are sound: each names kept records only, of the same venue
+    # and year, and each link goes both ways
+    for rid, r in kept.items():
+        for c in r.claims("twin"):
+            assert isinstance(c.value, tuple) and c.value and rid not in c.value
+            for t in c.value:
+                assert t in kept and (kept[t].venue, kept[t].year) == (r.venue, r.year)
+                assert any(isinstance(o.value, tuple) and rid in o.value for o in kept[t].claims("twin"))
 
     for rid in every.keys() - kept.keys():
         gone = every[rid]

@@ -148,6 +148,13 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ("パ ハ", ["パ", "ハ"]),  # half-voiced kana kept
     ("नमस्ते", ["नमस्ते"]),  # Devanagari signs kept
     ("\u0301abc", ["abc"]),  # a stray mark with no base letter is dropped
+    # a vowel sign of combining class 0 (U+0CE2) is a non-combining mark, so a word character even with no
+    # base: alone it is a marks-only run and makes no token, but a letter after it joins it (nightly property)
+    ("\u0ce2", []),
+    ("\u0ce2x", ["\u0ce2x"]),
+    ("abcd-\u0ce2x", ["abcd", "\u0ce2x"]),
+    ("-\ufe0fx", ["x"]),  # but a variation selector is invisible (step 5), not a word character
+    ("-\u0f73x", ["x"]),  # and NFKC decomposes U+0F73 into combining marks: stray, dropped
     # --- CJK: no word segmentation, so a run is one token (spec 02 §Known limits)
     ("信頼性", ["信頼性"]),  # does NOT contain the token 信頼
     # --- currency dollar is not math (spec 02 §Token semantics step 3)

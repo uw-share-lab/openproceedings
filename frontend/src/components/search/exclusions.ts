@@ -5,6 +5,7 @@
  * server's `/parse` report sliced from `q`, never a parse of `q`.
  */
 import { codePointSpanToUtf16 } from "@/api/spans";
+import { clip } from "@/lib/clip";
 import type { ParsedFilters } from "@/lib/search-state";
 import type { SearchResponse } from "./use-search";
 
@@ -15,14 +16,38 @@ type Facets = SearchResponse["facets"];
 export const DEFAULT_FIELDS = ["track", "status"] as const;
 export type DefaultField = (typeof DEFAULT_FIELDS)[number];
 
-/** A clause as the query writes it: `status:accepted`, `track:(datasets_benchmarks OR main OR position)`. */
+/**
+ * A clause as the query writes it, for a message `Coded` draws: `status:accepted`,
+ * `track:(datasets_benchmarks OR main OR position)`. `field` is the client's own literal; each value is the
+ * API's (`/parse`'s report, sliced from `q`), so it goes through `clip`: a backtick in it would shift every
+ * later code span, and a control or bidi character would reach the page (TASK-160).
+ */
 export function clauseText(field: string, values: readonly string[]): string {
-  return values.length === 1 ? `${field}:${values[0] ?? ""}` : `${field}:(${values.join(" OR ")})`;
+  const shown = values.map((v) => clip(v));
+  return shown.length === 1 ? `${field}:${shown[0] ?? ""}` : `${field}:(${shown.join(" OR ")})`;
 }
 
-/** A bucket's value as the banner names it: `unknown` says which map it is from. */
+/**
+ * The PRISMA disclosure's subject (BN-4): the default clauses, each between backticks, or the words alone when
+ * `/parse` hasn't reported them. The clauses are `clauseText`s, so their values are already clipped.
+ */
+export function defaultsText(defaultClauses: readonly string[]): string {
+  return defaultClauses.length === 0
+    ? "The default filters"
+    : `The default filters ${defaultClauses.map((c) => `\`${c}\``).join(" and ")}`;
+}
+
+/**
+ * A bucket's value as the banner names it: `unknown` says which map it is from. The value is the API's, so it is
+ * clipped: one line of visible characters in the label, its accessible name and the excluded line.
+ */
 export function bucketName(field: DefaultField, value: string): string {
-  return value === "unknown" ? `${field} unknown` : value;
+  return value === "unknown" ? `${field} unknown` : clip(value);
+}
+
+/** What an include click announces (`Track: workshop included.`), the API's value clipped. */
+export function includedText(field: DefaultField, value: string): string {
+  return `${field === "track" ? "Track" : "Status"}: ${clip(value)} included.`;
 }
 
 export interface IncludeButton {
@@ -70,7 +95,7 @@ export function bannerOf(
   const parts: string[] = [];
   for (const f of DEFAULT_FIELDS) {
     for (const [value, n] of Object.entries(excluded[f])) {
-      if (value !== "unknown" && n > 0) parts.push(`${n.toLocaleString("en-US")} ${value}`);
+      if (value !== "unknown" && n > 0) parts.push(`${n.toLocaleString("en-US")} ${clip(value)}`);
     }
   }
   const limitParts = limitFields.map((f) => `${f}: your limit applies (see Limits you wrote)`);
@@ -95,8 +120,9 @@ export function bannerOf(
       if (bucket <= 0) continue;
       const adds = facets[f][value] ?? 0;
       const name = bucketName(f, value);
+      const shown = clip(value); // the API's bucket name, bare and in the clause, for `Coded` (TASK-160)
       const description =
-        `Adds ${value} to the ${f} filter, \`${f}:(… OR ${value})\`; ` +
+        `Adds ${shown} to the ${f} filter, \`${f}:(… OR ${shown})\`; ` +
         `the ${f} filter then becomes a limit you wrote.`;
       if (adds === 0) {
         const fails = otherValues === null ? "another filter" : `\`${clauseText(other, otherValues)}\``;

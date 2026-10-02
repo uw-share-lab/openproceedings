@@ -10,7 +10,7 @@ import { useId, useRef, useState } from "react";
 import { clauseFromParse } from "@/lib/search-state";
 import { Coded } from "../coded";
 import { blockOf, useShowStale, type Controls } from "./controls";
-import { bannerOf, type IncludeButton } from "./exclusions";
+import { bannerOf, defaultsText, includedText, type IncludeButton } from "./exclusions";
 import type { SearchResponse } from "./use-search";
 
 function Include({
@@ -42,8 +42,7 @@ function Include({
         aria-describedby={descId}
         onClick={() => {
           if (block !== null) return;
-          const field = button.field === "track" ? "Track" : "Status";
-          controls.act(action, `${field}: ${button.value} included.`);
+          controls.act(action, includedText(button.field, button.value));
           onIncluded();
         }}
         className={`min-h-6 rounded-sm border border-excluded-border px-1.5 text-left text-xs hover:bg-muted ${block !== null && !stale ? "opacity-60" : ""}`}
@@ -85,10 +84,7 @@ export function ExclusionBanner({
   const [open, setOpen] = useState(false);
   const aboutId = useId();
   const aboutButton = useRef<HTMLButtonElement>(null);
-  const defaults =
-    banner.defaultClauses.length === 0
-      ? "The default filters"
-      : `The default filters ${banner.defaultClauses.map((c) => `\`${c}\``).join(" and ")}`;
+  const defaults = defaultsText(banner.defaultClauses);
   return (
     <section
       aria-label="Exclusions"
