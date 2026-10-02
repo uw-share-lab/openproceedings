@@ -8,8 +8,8 @@ import golden from "./clip-golden.json";
 const CASES = golden.cases.map((c) => ({ ...c, input: String.fromCodePoint(...c.input) }));
 
 describe("clip (the frontend twin of diagnostics.clip)", () => {
-  it("has the backend's cases", () => {
-    expect(CASES.length).toBeGreaterThan(20);
+  it("has the backend's cases, the call sites' hostile value among them", () => {
+    expect(CASES.map((c) => c.input)).toContain(`main\`\n\x00\x1b${String.fromCodePoint(0x202e)}`);
   });
 
   it.each(CASES)("quotes $input (width $width) as the backend does", ({ input, width, output }) => {

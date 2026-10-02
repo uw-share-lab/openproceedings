@@ -26,8 +26,11 @@ values the remaining `Coded` messages quote (TASK-160).
   golden that must carry one stores code points.
 
 ## Dead ends — don't repeat these
-- Writing escapes like `‮` in a file through the Write tool produced the literal characters in the
-  source; re-escape non-ASCII with a script and check with `grep -P '[^\x00-\x7f]'`.
+- Writing a Python escape such as backslash-u-202e through the Write tool put the literal character (a
+  right-to-left override) in the source, and the same slip reached this entry's first draft; re-escape
+  non-ASCII with a script and check with `grep -P '[^\x00-\x7f]'` (or a Cc/Cf scan) before committing.
+- The first field-value message fired after any field, so `title:model(s)` lost its plural hint (review
+  round 1): a "field's value" test must use the filter-field set, not `Kind.FIELD`.
 
 ## Decisions (and what would change them)
 - Decision-027: refuse a value glued to a following `(`, keep `)field:` and `)(` accepted, QUERY_VERSION stays

@@ -97,9 +97,10 @@ use them exactly as named there.
   `frontend/src/lib/clip.ts`, the twin of `diagnostics.clip` with the same escapes and widths; its cases
   (`clip-golden.json`, read by `clip.test.ts`) are generated from the backend's own `clip` by
   `backend/tests/contract/test_frontend_clip_golden.py`, which fails while the file is stale (TASK-160). Every
-  other message `Coded` draws from API values quotes them through it too: the banner's default clauses and include descriptions
-  (`exclusions.ts`, `clauseText`, `defaultsText`) and the replay lines (`replay-status.ts`), each value bare or
-  in backticks, checked with `src/test/hostile.ts`'s values and `quotedSafely` (TASK-160). `search-state.test.ts` checks every reducer call site (each
+  other message `Coded` draws from API values quotes them through it too: the include descriptions
+  (`exclusions.ts`) and the replay lines (`replay-status.ts`), each value bare or in backticks; so do the
+  banner's plain-text strings (the PRISMA disclosure's default clauses via `clauseText`/`defaultsText`, bucket
+  names, include labels and the include announcement, `includedText`), checked with `src/test/hostile.ts`'s values and `quotedSafely` (TASK-160). `search-state.test.ts` checks every reducer call site (each
   refusal code that quotes a value or a field, the span bounds and error, and each notice) with hostile values
   (TASK-144).
 - Message text is prose, not contract: codes, spans and `reading` are what clients use (they never parse

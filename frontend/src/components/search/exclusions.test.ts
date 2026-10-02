@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ParsedFilters } from "@/lib/search-state";
 import { HOSTILE, quotedSafely } from "@/test/hostile";
-import { bannerOf, clauseText, defaultsText, limitsOf } from "./exclusions";
+import { bannerOf, clauseText, defaultsText, includedText, limitsOf } from "./exclusions";
 
 const clause = (
   field: "venue" | "track" | "status",
@@ -206,8 +206,21 @@ describe("values the API sent are clipped wherever a message quotes them (TASK-1
       );
       quotedSafely(description);
       expect(b.includes[0]?.value).toBe(value); // the click still writes the value itself
+      // the plain-text places name it clipped too: line 1, the label, its accessible name, the announcement
+      expect(b.excluded).toBe(`excluded: 5 ${shown}`);
+      expect(b.includes[0]?.label).toBe(`include 3 ${shown}`);
+      expect(b.includes[0]?.name).toBe(`Include 3 ${shown} papers`);
+      expect(includedText("track", value)).toBe(`Track: ${shown} included.`);
+      for (const text of [b.excluded, b.includes[0]?.label ?? "", b.includes[0]?.name ?? ""]) {
+        quotedSafely(text);
+      }
     },
   );
+
+  it("announces an ordinary include as before", () => {
+    expect(includedText("track", "workshop")).toBe("Track: workshop included.");
+    expect(includedText("status", "unknown")).toBe("Status: unknown included.");
+  });
 
   it.each(HOSTILE)("an include that adds 0 names the other default's value %j as %j", (value, shown) => {
     const b = bannerOf(

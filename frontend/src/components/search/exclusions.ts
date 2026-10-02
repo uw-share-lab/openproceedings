@@ -37,9 +37,17 @@ export function defaultsText(defaultClauses: readonly string[]): string {
     : `The default filters ${defaultClauses.map((c) => `\`${c}\``).join(" and ")}`;
 }
 
-/** A bucket's value as the banner names it: `unknown` says which map it is from. */
+/**
+ * A bucket's value as the banner names it: `unknown` says which map it is from. The value is the API's, so it is
+ * clipped: one line of visible characters in the label, its accessible name and the excluded line.
+ */
 export function bucketName(field: DefaultField, value: string): string {
-  return value === "unknown" ? `${field} unknown` : value;
+  return value === "unknown" ? `${field} unknown` : clip(value);
+}
+
+/** What an include click announces (`Track: workshop included.`), the API's value clipped. */
+export function includedText(field: DefaultField, value: string): string {
+  return `${field === "track" ? "Track" : "Status"}: ${clip(value)} included.`;
 }
 
 export interface IncludeButton {
@@ -87,7 +95,7 @@ export function bannerOf(
   const parts: string[] = [];
   for (const f of DEFAULT_FIELDS) {
     for (const [value, n] of Object.entries(excluded[f])) {
-      if (value !== "unknown" && n > 0) parts.push(`${n.toLocaleString("en-US")} ${value}`);
+      if (value !== "unknown" && n > 0) parts.push(`${n.toLocaleString("en-US")} ${clip(value)}`);
     }
   }
   const limitParts = limitFields.map((f) => `${f}: your limit applies (see Limits you wrote)`);

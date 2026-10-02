@@ -43,8 +43,10 @@ something to the tokenizer (`C++` → `c`, `.NET` → `net`, a bare `\\epsilon` 
 math: WARN_SYMBOLS_DROPPED); CJK text, which is not split into words (WARN_CJK_RUN); a logic sign (`∨`,
 `∧`, `¬`), which is searched as its word, not as an operator (WARN_LOOKALIKE_OPERATOR); a spelled Greek
 name (`alpha`), which finds only the word since abstracts' `$\\alpha$` and `α` are indexed as `α`
-(WARN_SPELLED_GREEK; not for wildcards or when the query already has the letter). A filter field's value, bare
-or in its group, is never text, so it gets neither text warning (`year:..2022`, `venue:(pi)`). A
+(WARN_SPELLED_GREEK; not for wildcards or when the query already has the letter). A filter field's value, bare,
+negated or in its group, is never searched as text, so it gets none of the warnings about how text is searched
+(WARN_SYMBOLS_DROPPED, WARN_CJK_RUN, WARN_SPELLED_GREEK, a logic sign's WARN_LOOKALIKE_OPERATOR: `year:..2022`,
+`venue:(pi)`); its own value check refuses it. A
 wildcard straight after an operator (`vision×*`, `$\\le$*`) is PARSE_WILDCARD_DETACHED (decision-006).
 Bad input is a diagnostic, never an exception.
 """
@@ -244,7 +246,10 @@ class _Lexer:
         self.out: list[Lexeme] = []
         self.errors: list[Diagnostic] = []
         self.warnings: list[Diagnostic] = []
-        self.groups: list[bool] = []  # per open `(`: whether it holds a filter field's values (`year:(…)`)
+        self.groups: list[
+            str | None
+        ] = []  # per open `(`: the filter field whose values it holds (`year:(…)`)
+        self.filter_values: dict[int, str] = {}  # index in `out` of each filter value → its field
 
     def error(self, code: DiagnosticCode, message: str, start: int, end: int) -> None:
         self.errors.append(_diag(code, message, start, end))
@@ -256,12 +261,13 @@ class _Lexer:
         q, n, i = self.q, len(self.q), 0
         while i < n:
             c = q[i]
+            field, emitted = self.filter_field(), len(self.out)
             if c.isspace():
                 i += 1
             elif c in _BREAKS:
                 kind = Kind.LPAREN if c in LPARENS else Kind.RPAREN if c in RPARENS else Kind.OR
                 if kind is Kind.LPAREN:
-                    self.groups.append(self.filter_value_next())
+                    self.groups.append(field)
                 elif kind is Kind.RPAREN and self.groups:
                     self.groups.pop()
                 self.out.append(Lexeme(kind, i, i + 1, c))
@@ -278,15 +284,23 @@ class _Lexer:
                 i = m.end()
             else:
                 i = self.word_or_operator(i)
+            if field is not None:
+                for k in range(emitted, len(self.out)):
+                    if self.out[k].kind in _BEFORE_LPAREN:
+                        self.filter_values[k] = field
         self.after_pass()
 
-    def filter_value_next(self) -> bool:
-        """Whether a word lexed now is a filter field's value (`year:..2022`, `venue:(pi OR x)`), which is
-        never searched as text, so the text warnings about it don't apply."""
-        prev = self.out[-1] if self.out else None
-        if prev is not None and prev.kind is Kind.FIELD:
-            return prev.field in _FILTER_FIELDS
-        return bool(self.groups) and self.groups[-1]
+    def filter_field(self) -> str | None:
+        """The filter field whose value a word lexed now would be (`year:..2022`, `year:-..2022`,
+        `venue:(pi OR x)`), else None. A filter value is never searched as text, so the warnings about how
+        text is searched don't apply to it."""
+        before = self.out[-2:]
+        if before and before[-1].kind is Kind.NOT:
+            before = before[:-1]  # `year:-x`: the value is still the field's
+        if before and before[-1].kind is Kind.FIELD:
+            field = before[-1].field
+            return field if field in _FILTER_FIELDS else None
+        return self.groups[-1] if self.groups else None
 
     def negates(self, i: int) -> bool:
         """Whether the `-` at `i` is NOT: at a primary's start, directly followed by what it excludes."""
@@ -483,7 +497,8 @@ class _Lexer:
             )
         elif wildcard:
             self.check_stem(raw, stem, wildcard, start, end, before, in_phrase=in_phrase)
-        if not wildcard and any(_is_cjk(c) for c in stem):
+        # a filter value is never searched as text, so how text is searched doesn't apply (its own check refuses it)
+        if not wildcard and any(_is_cjk(c) for c in stem) and not self.filter_field():
             self.warn(
                 DiagnosticCode.WARN_CJK_RUN,
                 f"`{clip(raw)}`: Chinese, Japanese and Korean text is not split into words, so this matches only "
@@ -607,7 +622,10 @@ class _Lexer:
     def check_math_words(self, raw: str, stem: str, wildcard: str | None, start: int, end: int) -> None:
         """A logic sign looks like an operator but is searched as a word (decision-006); a spelled Greek
         name finds only the word, since abstracts' `$\\alpha$` and `α` are indexed as `α`. Both are read
-        after NFKC (`￢` is `¬`, `ａｌｐｈａ` is `alpha`)."""
+        after NFKC (`￢` is `¬`, `ａｌｐｈａ` is `alpha`). Neither applies to a filter value (`venue:pi`,
+        `track:(a∨b)`), which is never searched as text."""
+        if self.filter_field():
+            return
         folded = unicodedata.normalize("NFKC", stem)
         prev = self.out[-1] if self.out else None
         if any(c in "∨∧" for c in folded):
@@ -630,8 +648,6 @@ class _Lexer:
                 end,
             )
         elif wildcard is None and folded.casefold() in _GREEK_NAMES:
-            if self.filter_value_next():
-                return  # a filter value (`venue:pi`, `venue:(pi)`) is never searched as text
             name = folded.casefold()
             letter = GREEK[name]
             if letter in unicodedata.normalize("NFKC", self.q).casefold():
@@ -652,7 +668,7 @@ class _Lexer:
         symbols = stem.endswith(("+", "#")) or stem.startswith((".", "#", "+", "@"))
         if not symbols and not _COMMAND.search(stem):
             return  # the common case: no tokenizing at all (it is a full LaTeX scan)
-        if self.filter_value_next():
+        if self.filter_field():
             return  # a filter value (`year:..2022`) is never searched as text: its own check refuses it
         toks = tokenize(stem)
         if not toks:
@@ -733,23 +749,25 @@ class _Lexer:
             if x.end != y.start:
                 continue
             if x.kind in _BEFORE_LPAREN and y.kind is Kind.LPAREN and x.text[0] not in MINUSES:
-                clause = k > 0 and self.out[k - 1].kind is Kind.FIELD  # x is a field's value
+                field = self.filter_values.get(k)  # x is a filter field's value
             elif x.kind is Kind.RPAREN and y.kind in _AFTER_RPAREN and y.text[0] not in MINUSES:
-                clause = False
+                field = None
             else:
                 continue
             glued = self.q[x.start : y.end]
-            self.error(
-                DiagnosticCode.PARSE_PAREN_TOUCHES_WORD,
-                f"`{clip(glued)}`: a parenthesis touching a field's value would be read as AND (`year:2021(x)` means "
-                "`year:2021 AND x`) — put a space before the `(`; for several values write a group, "
-                "`year:(2021 OR 2022)`."
-                if clause
-                else f"`{clip(glued)}`: a parenthesis touching a word would be read as AND (`model(s)` means `model "
-                "AND s`) — for a plural write `model$`, for a group put a space: `model (s)`.",
-                x.start,
-                y.end,
-            )
+            if field is None:
+                message = (
+                    f"`{clip(glued)}`: a parenthesis touching a word would be read as AND (`model(s)` means `model "
+                    "AND s`) — for a plural write `model$`, for a group put a space: `model (s)`."
+                )
+            else:
+                value = x.text if verbatim(x.text) and len(x.text) <= 40 else "…"
+                message = (
+                    f"`{clip(glued)}`: a parenthesis touching a `{field}:` value would be read as AND — if you "
+                    f"meant `{field}:{value} AND (…)`, put a space before the `(`; for several values "
+                    f"write a group, `{field}:({value} OR …)`."
+                )
+            self.error(DiagnosticCode.PARSE_PAREN_TOUCHES_WORD, message, x.start, y.end)
         for x in self.out:
             if x.kind is Kind.WORD and unicodedata.normalize("NFKC", x.text) == "NEAR":
                 self.error(

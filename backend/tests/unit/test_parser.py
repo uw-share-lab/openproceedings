@@ -1012,6 +1012,9 @@ GLUED_CLAUSES: list[tuple[str, str | list[tuple[DiagnosticCode, tuple[int, int]]
     ("year:..2022(x)", [(_V, (5, 11)), (_P, (5, 12))]),
     ("year:2020..(x)", [(_V, (5, 11)), (_P, (5, 12))]),
     ("(x)year:..2022", [(_V, (8, 14))]),
+    # a value glued inside its filter group is one mistake, not also a malformed group
+    ("year:(2021(x))", [(_P, (6, 11))]),
+    ("year:(2020..2022(x))", [(_P, (6, 17))]),
 ]
 
 
@@ -1041,13 +1044,34 @@ def test_a_spaced_or_accepted_glued_clause_has_a_canonical_string_that_replays(q
     assert again.errors == [] and again.canonical == result.canonical
 
 
+@pytest.mark.parametrize("mode", ["native", "scholar"])
+def test_a_glued_source_value_is_still_checked_as_a_value(mode: Literal["native", "scholar"]) -> None:
+    """`source:` (Scholar mode) goes through its own value check, which a glued `(` doesn't silence."""
+    errors = [(e.code, e.span) for e in parse("source:foo(x)", mode).errors]
+    if mode == "scholar":
+        assert errors == [(_V, (7, 10)), (_P, (7, 11))]
+        assert [(e.code, e.span) for e in parse("(x)source:foo", mode).errors] == [(_V, (10, 13))]
+    else:
+        assert errors == [(DiagnosticCode.FIELD_COMPAT_ONLY, (0, 7)), (_P, (7, 11))]
+
+
+def test_a_glued_word_error_still_stops_a_second_error_on_the_word() -> None:
+    """Only a filter value's own check looks past the glue error; `~` (no letters) is said once."""
+    assert [(e.code, e.span) for e in parse("~(x)").errors] == [(_P, (0, 2))]
+
+
 def test_a_glued_value_message_says_where_the_space_goes() -> None:
     message = parse("year:2020..2022(x)").errors[0].message
-    assert (
-        message.startswith("`2020..2022(`: a parenthesis touching a field's value")
-        and "before the `(`" in message
+    assert message == (
+        "`2020..2022(`: a parenthesis touching a `year:` value would be read as AND — if you meant "
+        "`year:2020..2022 AND (…)`, put a space before the `(`; for several values write a group, "
+        "`year:(2020..2022 OR …)`."
     )
-    assert "`model(s)`" in parse("model(s)").errors[0].message  # a text word keeps its own hint
+    assert "`venue:iclr AND (…)`" in parse("venue:iclr(x)").errors[0].message  # the field as written
+    assert "a `year:` value" in parse("year:(2021(x))").errors[0].message  # inside its group too
+    # a text word, a text field's word and a word after `)` keep the plural hint
+    for q in ("model(s)", "trust model(s)", "title:model(s)", "(a)b"):
+        assert "`model$`" in parse(q).errors[0].message, q
     bare = [
         e.message for e in parse("2020..2022(x)").errors if e.code is DiagnosticCode.PARSE_PAREN_TOUCHES_WORD
     ]

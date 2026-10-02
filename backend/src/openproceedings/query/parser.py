@@ -598,7 +598,8 @@ class _Parser:
                 self.unclosed(lp, len(self.q))
                 return None
             if v.kind not in (Kind.WORD, Kind.PHRASE, Kind.RANGE):
-                self.error(DiagnosticCode.FIELD_FILTER_SYNTAX, syntax, v.start, v.end)
+                if not self.reported(v.start, v.end):  # `year:(2021((x)))`: the glued `(` is already said
+                    self.error(DiagnosticCode.FIELD_FILTER_SYNTAX, syntax, v.start, v.end)
                 self.skip_group()
                 return None
             value = self.value(name, self.advance())
@@ -612,7 +613,8 @@ class _Parser:
                 end = self.advance().end
                 break
             if nxt.kind is not Kind.OR:
-                self.error(DiagnosticCode.FIELD_FILTER_SYNTAX, syntax, nxt.start, nxt.end)
+                if not self.reported(nxt.start, nxt.end):  # `year:(2021(x))`: one mistake, the glued `(`
+                    self.error(DiagnosticCode.FIELD_FILTER_SYNTAX, syntax, nxt.start, nxt.end)
                 self.skip_group()
                 return None
             self.advance()

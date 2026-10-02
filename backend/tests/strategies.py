@@ -603,7 +603,8 @@ _BEFORE_A_GROUP = st.sampled_from(
         *(f"{f}:{v}" for f, values in CLAUSE_VALUES.items() for v in values),
         "year:2021",
         "year:2020..2022",
-        *(w for w in _CLAUSE_WORDS if not w.endswith(")")),
+        # not a `$` word: `model$(model$)` opens LaTeX math at `$(`, so it is no glued parenthesis
+        *(w for w in _CLAUSE_WORDS if not w.endswith((")", "$"))),
     ]
 )
 
