@@ -55,12 +55,12 @@ _ACCEPTANCE: tuple[Source, ...] = (
 # Track is decided per track (owner, 2026-09-29; TASK-130): an OpenReview track claim is the note's own
 # content.venueid, so a record carrying one is on a track OpenReview holds, and that claim wins; a record with
 # none takes its listing's track, whether OpenReview doesn't hold the track (ICLR 2016 main) or holds it but the
-# paper's note didn't merge (the owner's second answer, 2026-09-29). The OpenReview crawlers claim no proceedings
-# URL, so a note alone is never a listing (a same-id RIS row naming a proceedings paper can make its cluster one,
-# and `_family` still reads its `unknown` as the note's: TASK-174), and `_mergeable`'s track rule keeps a note
-# apart from every listing unless both are on `PROCEEDINGS_TRACKS` or both are NeurIPS Creative AI (TASK-137): in
-# a merged record OpenReview's track is in `PROCEEDINGS_TRACKS`, or is `other` on a Creative AI record whose
-# listing says `other` too.
+# paper's note didn't merge (the owner's second answer, 2026-09-29). The OpenReview crawlers claim no
+# `urls.proceedings`, but a note's `urls.pdf` (its `content.pdf`), or a same-id RIS row, can name a proceedings
+# paper and make its cluster a listing; `_family` still reads that cluster's `unknown` as the note's (TASK-174).
+# `_mergeable`'s track rule keeps a note apart from every listing unless both are on `PROCEEDINGS_TRACKS` or both
+# are NeurIPS Creative AI (TASK-137): in a merged record OpenReview's track is in `PROCEEDINGS_TRACKS`, or is
+# `other` on a Creative AI record whose listing says `other` too.
 PRECEDENCE: dict[ClaimField, tuple[Source, ...]] = {
     **dict.fromkeys(
         ("title", "abstract", "authors", "keywords", "presentation", "venue", "year", "track", "venue_id_raw"),
@@ -452,7 +452,7 @@ def _family(c: _Cluster) -> str | None:
         return "creative_ai"
     if c.summary.track in PROCEEDINGS_TRACKS:
         return "proceedings"
-    if c.listed and c.summary.track == "unknown" and not OPENREVIEW_SOURCES & c.sources:
+    if c.listed and c.summary.track == "unknown" and c.sources.isdisjoint(OPENREVIEW_SOURCES):
         return "proceedings"
     return None
 

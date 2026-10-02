@@ -217,7 +217,8 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    never merged** (the API v1 crawl has already collapsed two notes of one identical paper, TASK-125, and a silent twin into its accepted note, TASK-132), nor a listing linking one forum with a note of another: a main-track paper and its same-year workshop version can share a title. Title
    matching only links records *across* sources (OpenReview ↔ proceedings ↔ RIS), never joins two different
    proceedings papers, and never breaks the **track rule**: a merge that involves a proceedings listing holds
-   only `main`, `datasets_benchmarks` and `position` records (a mixed PMLR volume's own `unknown` included, never an `unknown` an OpenReview claim gives, TASK-174), or
+   only `main`, `datasets_benchmarks` and `position` records (a mixed PMLR volume's own `unknown` included,
+   never an `unknown` an OpenReview claim gives, TASK-174), or
    only NeurIPS Creative AI records (TASK-137). The NeurIPS proceedings host Creative AI, which the taxonomy
    files under `other`; a record counts as Creative AI only when every source claiming its track claims `other`
    and backs it with the `NeurIPS.cc/<Y>/Creative_AI_Track` venueid (any status suffix) or a

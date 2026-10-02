@@ -317,6 +317,11 @@ RIS_BRIDGE = [
     paper("AbCd1234", source="ris", urls_pdf=f"https://papers.nips.cc/paper/2021/file/{H[2]}-Paper.pdf"),
     paper(f"nips-{H[2]}", source="neurips_proceedings"),
 ]
+# the same where the note itself names the listed paper (a `content.pdf` on the proceedings site)
+NOTE_BRIDGE = [
+    paper("AbCd1234", source="openreview_v2", track="unknown", urls_proceedings=nips(2)),
+    paper(f"nips-{H[2]}", source="neurips_proceedings"),
+]
 
 
 @given(pools)
@@ -328,6 +333,7 @@ RIS_BRIDGE = [
 @example(LINK_AGAINST_TITLE)
 @example(ICLR_2016)
 @example(RIS_BRIDGE)
+@example(NOTE_BRIDGE)
 def test_idempotent(xs: list[PaperRecord]) -> None:
     once = dedup(xs)
     note(once)
@@ -450,6 +456,7 @@ OPENREVIEW, OFFICIAL = ("openreview_v2", "openreview_v1"), ("iclr_archive", "neu
 @example(ICLR_2016)
 @example(LINK_OTHER_TITLE)
 @example(RIS_BRIDGE)
+@example(NOTE_BRIDGE)
 def test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings(xs: list[PaperRecord]) -> None:
     """decision-005 §Track, per track (owner, 2026-09-29; TASK-130): a record carrying an OpenReview track claim
     is on a track OpenReview holds, and takes it; one without takes the proceedings' track; RIS only alone."""

@@ -10,7 +10,7 @@ Triage a nightly property failure in `test_track_is_openreview_where_it_holds_th
 
 ## What we learned
 - The track rule's exemption for "a listing's own `unknown`" (a mixed PMLR volume, v235/v267) was written as `c.listed and c.summary.track == "unknown"`. An OpenReview v1 note (track `unknown`) and a RIS row with the same id merge in step 1 whatever their tracks. The RIS row's `urls.pdf` names `nips-<hash>`, so the cluster is `listed`, and its track resolves to OpenReview's `unknown` (OpenReview ranks first). `_family` then called it `proceedings`, and step 2 merged it with the `nips-<hash>` listing by title (evidence: the blob reproduces with `pytest -n 0` before the fix and passes after).
-- The same hole had a second shape the nightly never drew, and review found it: a note whose own `urls.pdf`/`urls.proceedings` names the paper is a listing too. The property skipped exactly that case (`not proceedings_ids(note_urls)`), so its oracle now checks every record with both an OpenReview and an official track claim. The rule is now "no OpenReview source in the cluster" (`OPENREVIEW_SOURCES & c.sources`), which covers both shapes.
+- The oracle had a blind spot next to the bug: a note whose own `urls.pdf`/`urls.proceedings` names the paper is a listing too, and the property skipped exactly that case (`not proceedings_ids(note_urls)`). The first fix already kept such a note apart, but nothing would have caught a regression there. The oracle now checks every record with both an OpenReview and an official track claim, and `NOTE_BRIDGE` pins the shape. The rule is restated as "no OpenReview source in the cluster" (`c.sources.isdisjoint(OPENREVIEW_SOURCES)`), which is equivalent because every record claims a track and OpenReview ranks first.
 - The oracle was right. decision-005 §Track says an OpenReview `unknown` never overrules a listing's track, and the dedup-rules skill says the exemption is only the listing's *own* `unknown`. The fix grants it only when no OpenReview track claim is present.
 - Real data never had the shape. No record in snapshot `2026-09-29-d552baa07aed` is a listing with an OpenReview `unknown` track claim. Scratch builds from origin/dev and from the fix (both rounds) over one cloned cache all hash `8adf9327771a`.
 
@@ -25,4 +25,4 @@ Triage a nightly property failure in `test_track_is_openreview_where_it_holds_th
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/dedup-rules/SKILL.md` (track-rule exemption), decision-005 §Track
-- Test or hook added? — the unit test and `RIS_BRIDGE` example above
+- Test or hook added? — the unit tests and the `RIS_BRIDGE`/`NOTE_BRIDGE` examples above; spec 01 §Dedup names the limit too
