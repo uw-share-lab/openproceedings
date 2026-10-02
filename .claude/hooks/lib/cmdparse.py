@@ -784,19 +784,21 @@ def _substitution_end(text: str, k: int, closer: str) -> int:
         elif c == "#" and (k == 0 or text[k - 1] in " \t\n;&|()"):
             e = text.find("\n", k)
             k = e if e >= 0 else n
-        elif (
-            at_word and (m := CASE_WORD.match(text, k)) and (m.group(2) or _command_position(text, start, k))
-        ):
+        elif at_word and (m := CASE_WORD.match(text, k)) and _command_position(text, start, k):
             # a `case` statement's patterns end in `)`, which closes nothing; its `esac` ends the case (TASK-156
             # review); a `case` that is only an argument (`echo use case`) is a word
             if m.group(1):
                 cases.append(depth)
             elif cases:
                 cases.pop()
+            else:
+                raise ParseError("an `esac` with no `case` in a command substitution")
             k = m.end()
         elif c == ")" and cases and cases[-1] == depth:
             k += 1  # a pattern's `)`, at the depth its case started (`( case y in y) :;; esac )` too)
         elif c == ")" and depth == 0:
+            if cases:
+                raise ParseError("a `case` with no `esac` in a command substitution")
             return k + 1
         else:
             depth += 1 if c == "(" else -1 if c == ")" else 0
@@ -826,7 +828,7 @@ def _is_arithmetic(inside: str) -> bool:
 def _command_position(text: str, start: int, k: int) -> bool:
     """Is `text[k]` where a command name goes: the start of the body, or after a separator or a reserved word?"""
     before = text[start:k].rstrip(" \t")
-    if not before or before[-1] in ";&|(\n":
+    if not before or before[-1] in ";&|()\n":  # `)`: after a case pattern
         return True
     return before.split()[-1] in COMMAND_LEADERS
 

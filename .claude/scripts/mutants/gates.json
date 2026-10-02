@@ -3216,7 +3216,7 @@
  {
   "label": "cmdparse: any word case counted as a case statement (TASK-156)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": " and (m.group(2) or _command_position(text, start, k))",
+  "old": " and _command_position(text, start, k)",
   "new": ""
  },
  {
@@ -3254,5 +3254,11 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "if c == \"$\" and _is_arithmetic(written[2:-1]):",
   "new": "if False:"
+ },
+ {
+  "label": "cmdparse: a case right after a pattern's ) not counted (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if not before or before[-1] in \";&|()\\n\":",
+  "new": "    if not before or before[-1] in \";&|(\\n\":"
  }
 ]
