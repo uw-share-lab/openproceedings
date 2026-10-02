@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanparmar'
 created_date: '2026-10-02 10:33'
-updated_date: '2026-10-02 20:53'
+updated_date: '2026-10-02 20:56'
 labels:
   - security
   - tooling
@@ -46,4 +46,6 @@ Preserve recovered implementation; reproduce regressions, scan sed script files,
 Five sed script-file recovery rows failed before fix. reader_files now scans separate/attached -f and --file arguments; unknown script file values refuse. Added variable, attached unknown, and clean script allow rows. Initial tooling839/0; changed mutation verification pending.
 
 Safe JSON probe found clustered -nfFILE script bypass. Fixed bundled short-option consumption through first e/f, with i backup suffix treated separately and unknown bundles refused. Added12 rows and8 mutants;11 focused safe JSON probes pass. Cancelled prior validation runners before changing code; restarted stable tooling/lint/changed mutations.413 changed mutants selected,0 stale patterns.
+
+Round1 reviewer confirmed -- termination bypass for cat/head/tail and sed:4 safe red JSON probes allowed banned leading-dash files. Added end-options state, literal filenames afterward and preserved implicit sed expression.15 focused green JSON probes pass;15 gate rows and4 mutants added; final full checks pending.
 <!-- SECTION:NOTES:END -->

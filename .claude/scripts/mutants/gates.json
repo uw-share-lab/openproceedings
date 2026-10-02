@@ -3738,5 +3738,29 @@
   "file": ".claude/hooks/block-ai-attribution.sh",
   "old": "                if flag not in \"nErsuz\":",
   "new": "                if False:"
+ },
+ {
+  "label": "block-ai: reader -- ignored (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if a == \"--\" and not end_options:",
+  "new": "        if False:"
+ },
+ {
+  "label": "block-ai: reader -- does not end option parsing (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            end_options = True",
+  "new": "            end_options = False"
+ },
+ {
+  "label": "block-ai: reader filenames after -- not collected (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if end_options:",
+  "new": "        if False:"
+ },
+ {
+  "label": "block-ai: sed implicit expression after -- read as filename (TASK-170)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            if script:\n                script = False  # sed still",
+  "new": "            if False:\n                script = False  # sed still"
  }
 ]

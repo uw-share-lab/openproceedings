@@ -75,8 +75,20 @@ def file_text(word, argv, d):
 def reader_files(argv):
     """The words a cat, head, tail or sed in `argv` reads as files."""
     words, k, script = [], 1, argv[0] == "sed"
+    end_options = False
     while k < len(argv):
         a = argv[k]
+        if a == "--" and not end_options:
+            end_options = True
+            k += 1
+            continue
+        if end_options:
+            if script:
+                script = False  # sed still needs its implicit expression if no -e/-f supplied one
+            else:
+                words.append(a)  # even -message or --file=message is now a literal input filename
+            k += 1
+            continue
         if argv[0] == "sed" and a.startswith("-") and not a.startswith("--") and len(a) > 2 and a[1] not in "ef":
             # sed accepts bundles: -nfFILE / -nf FILE / -neSCRIPT. The first e/f consumes the remaining
             # bundle (or the next word), so letters in its value are never interpreted as more options.
