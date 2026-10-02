@@ -157,7 +157,8 @@ Rules:
     (`model(s)`, `"a"(b)`) is `PARSE_PAREN_TOUCHES_WORD`: both would otherwise silently split a query. A filter
     value is no exception, whatever its form or place: `year:2021(x)`, `venue:iclr(x)`, the range
     `year:2020..2022(x)` and a value inside its group (`year:(2021(x))`, one error) are all refused, and the
-    message names the field and says to put a space before the `(` (decision-027); a text field's word
+    message names the field and says to put a space before the `(`, or, inside the group, to close the group
+    first (decision-027); a text field's word
     (`title:model(s)`) keeps the plural hint. A `)` glued to a
     following field prefix (`(x)year:2021`) and a group glued to a group (`year:(2021)(x)`, `(a)(b)`) split no
     word or value and are accepted, as they must be: a facet click splices `field:(…)` over a clause that may

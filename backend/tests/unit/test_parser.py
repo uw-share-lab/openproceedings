@@ -1068,7 +1068,18 @@ def test_a_glued_value_message_says_where_the_space_goes() -> None:
         "`year:(2020..2022 OR …)`."
     )
     assert "`venue:iclr AND (…)`" in parse("venue:iclr(x)").errors[0].message  # the field as written
-    assert "a `year:` value" in parse("year:(2021(x))").errors[0].message  # inside its group too
+    # inside its group a space would leave a malformed group, so the fix is to close it
+    assert parse("year:(2021 OR 2022(x))").errors[0].message == (
+        "`2022(`: a parenthesis touching a `year:` value would be read as AND, and a `year:(…)` group takes only "
+        "values joined by OR (`year:(… OR …)`) — end the group with `)` before the `(`."
+    )
+    # a negated value gets no rewrite that would drop its `-`; a NOT further back is not this value's
+    for q in ("-year:2021(x)", "year:-2021(x)"):
+        message = next(e.message for e in parse(q).errors if e.code is _P)
+        assert message.endswith(
+            "— put a space before the `(`; for several values write a group, `year:(… OR …)`."
+        )
+    assert "`year:2021 AND (…)`" in parse("NOT a year:2021(x)").errors[0].message
     # a text word, a text field's word and a word after `)` keep the plural hint
     for q in ("model(s)", "trust model(s)", "title:model(s)", "(a)b"):
         assert "`model$`" in parse(q).errors[0].message, q

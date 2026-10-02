@@ -34,7 +34,10 @@ see.
 (b). A `(` glued to a preceding word, phrase or range is `PARSE_PAREN_TOUCHES_WORD`, so every filter value is
 treated alike (`year:2020..2022(x)` is refused like `year:2021(x)`, and so is a value inside its group,
 `year:(2021(x))`, with one error, not also `FIELD_FILTER_SYNTAX`). When the glued term is a filter field's
-value the message names the field and value and how to fix it (a space before the `(`, or a group of values);
+value the message names the field and value and how to fix it with a query that parses: a space before the
+`(` or a group of values for a bare value (without rewriting the clause of a negated one, which would drop
+its `-`), and closing the group first for a value inside `field:(…)`, where a space would leave a malformed
+group;
 a text field's word (`title:model(s)`) keeps the plural hint. A `)` glued to a
 following field prefix stays accepted: a field name ends at its `:`, so nothing is split, and `(x)year:2021`
 can only mean `x AND year:2021`. A group glued to a group (`year:(2021)(x)`, `(a)(b)`) splits no value either

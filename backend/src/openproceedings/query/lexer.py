@@ -741,6 +741,31 @@ class _Lexer:
             max(end, k + 1),
         )
 
+    def glued_value_message(self, k: int, field: str, glued: str) -> str:
+        """PARSE_PAREN_TOUCHES_WORD for the filter value `out[k]` glued to a `(`, with a fix that parses: a bare
+        value gets its clause rewritten (`year:2021 AND (…)`), a negated one only where the space goes, and one
+        inside its group (`year:(2021(x))`) is told to close the group first, since a group takes only values
+        joined by OR."""
+        before = [t.kind for t in self.out[max(k - 3, 0) : k]]
+        bare = before[-1:] == [Kind.FIELD] or before[-2:] == [Kind.FIELD, Kind.NOT]
+        lead = f"`{clip(glued)}`: a parenthesis touching a `{field}:` value would be read as AND"
+        if not bare:
+            return (
+                f"{lead}, and a `{field}:(…)` group takes only values joined by OR (`{field}:(… OR …)`) — end the "
+                "group with `)` before the `(`."
+            )
+        # `-year:2021(x)`, `year:-2021(x)`: a rewrite would drop the `-`
+        negated = before[-2:] in ([Kind.FIELD, Kind.NOT], [Kind.NOT, Kind.FIELD])
+        x = self.out[k]
+        if negated or not verbatim(x.text) or len(x.text) > 40:
+            return (
+                f"{lead} — put a space before the `(`; for several values write a group, `{field}:(… OR …)`."
+            )
+        return (
+            f"{lead} — if you meant `{field}:{x.text} AND (…)`, put a space before the `(`; for several values "
+            f"write a group, `{field}:({x.text} OR …)`."
+        )
+
     def after_pass(self) -> None:
         """Diagnostics that depend on the neighbouring lexemes: words that look like operators, and a
         parenthesis glued to a word, which would silently mean AND (`model(s)` → `model AND s`), or a `(` to a
@@ -761,12 +786,7 @@ class _Lexer:
                     "AND s`) — for a plural write `model$`, for a group put a space: `model (s)`."
                 )
             else:
-                value = x.text if verbatim(x.text) and len(x.text) <= 40 else "…"
-                message = (
-                    f"`{clip(glued)}`: a parenthesis touching a `{field}:` value would be read as AND — if you "
-                    f"meant `{field}:{value} AND (…)`, put a space before the `(`; for several values "
-                    f"write a group, `{field}:({value} OR …)`."
-                )
+                message = self.glued_value_message(k, field, glued)
             self.error(DiagnosticCode.PARSE_PAREN_TOUCHES_WORD, message, x.start, y.end)
         for x in self.out:
             if x.kind is Kind.WORD and unicodedata.normalize("NFKC", x.text) == "NEAR":
