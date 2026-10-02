@@ -17,11 +17,13 @@ so a run split only by them reaches NFC whole. A run split by a space or punctua
 as one, which real text never needs: its longest run is 1. So no word the tokenizer forms holds more than
 `MAX_MARKS` consecutive non-starters, and its NFC is linear.
 
-A run within the cap is left as it is. One over it is rewritten in its NFKD form (`_trimmed`), keeping its
-first `MAX_MARKS` non-starters in canonical order. So every form of the same text (NFC, NFD, marks stored in
-another order) trims to the same characters, and two sources whose titles shared a dedup key still share it. An
-abstract past its cap is cut there, then stripped of trailing whitespace and `…` (a record's abstract ends in
-neither).
+A run within the cap is left as it is. One over it has its base (NFD) and its marks (NFKD) decomposed and put
+in canonical order (`_decomposed`), and keeps its first `MAX_MARKS` non-starters (`_trimmed`). Every other
+character is kept as it was. So every form of the same text (NFC, NFD, marks stored in another order) trims to
+the same characters, and two sources whose titles shared a dedup key still share it. Trimmed text is then made
+one a record accepts (`_tidy`): dropping marks can leave two spaces together, or a space or `…` at an end. A
+title is whitespace-collapsed, and an abstract is stripped of whitespace and `…` at both ends. An abstract past
+its cap is cut there and tidied the same way.
 
 Nothing is trimmed silently: each claim whose value changed says what and why in its evidence (`TRIMMED`, shown
 on the paper page), and the snapshot manifest names the records (`trimmed`). Text within both caps is returned
@@ -58,12 +60,6 @@ def is_mark(ch: str) -> bool:
 
 
 @lru_cache(maxsize=4096)
-def _marks_in(ch: str) -> int:
-    """How many non-starters `ch` brings to its run (its NFKD form's, so a precomposed `ệ` brings 2)."""
-    return sum(unicodedata.combining(c) != 0 for c in _nfkd(ch))
-
-
-@lru_cache(maxsize=4096)
 def is_base(ch: str) -> bool:
     """Does `ch` start a new run: a letter or digit that is not a mark? Nothing else does, because the tokenizer
     joins a word across the characters it drops (zero-width joiners, variation selectors, the grapheme joiner,
@@ -81,25 +77,38 @@ def _segments(text: str) -> list[str]:
     return [text[i:j] for i, j in zip([0, *cuts], [*cuts, len(text)], strict=True)]
 
 
-def _trimmed(segment: str) -> str:
-    """A segment over the cap in its one NFKD form (each character decomposed, each run of non-starters stably
-    sorted by combining class, as NFKD does), keeping its first `MAX_MARKS` non-starters. Every form of the same
-    text (NFC, NFD, marks in another order) trims to the same characters, so two sources that agreed before the
-    cap still agree after it (their dedup title keys too)."""
-    chars = [c for ch in segment for c in _nfkd(ch)]
+def _decomposed(segment: str) -> list[str]:
+    """The characters of `segment` that make its run, decomposed: the base in NFD (a precomposed `ệ` brings its 2
+    marks; its canonical form, so `ﬁ` stays `ﬁ`) and each mark in NFKD (so U+FF9E and U+0F73 are the marks NFKC
+    makes of them). Every other character, such as a space, punctuation or an invisible one, is kept as it is
+    and holds no mark here: a spacing accent such as `´` is a space and a mark to NFKC, but a starter comes
+    first, so it begins no run. Each run of non-starters is stably sorted by combining class, as canonical
+    ordering does, so every form of the same text decomposes alike."""
     out: list[str] = []
     run: list[str] = []
-    for c in [*chars, ""]:
-        if c and unicodedata.combining(c):
-            run.append(c)
+    for i, ch in enumerate(segment):
+        if is_mark(ch):
+            run += _nfkd(ch)
             continue
         out += sorted(run, key=unicodedata.combining)
         run = []
-        out.append(c)
+        if i == 0 and is_base(ch):
+            base = unicodedata.normalize("NFD", ch)
+            out.append(base[0])
+            run = list(base[1:])
+        else:
+            out.append(ch)
+    return out + sorted(run, key=unicodedata.combining)
+
+
+def _trimmed(chars: list[str]) -> str:
+    """A run over the cap (`_decomposed`), keeping its first `MAX_MARKS` non-starters. The rest is as it was, so
+    every form of the same text trims to the same characters, and two sources whose titles shared a dedup key
+    still share it."""
     kept: list[str] = []
     marks = 0
-    for c in out:
-        if c and unicodedata.combining(c):
+    for c in chars:
+        if unicodedata.combining(c):
             marks += 1
             if marks > MAX_MARKS:
                 continue
@@ -108,36 +117,45 @@ def _trimmed(segment: str) -> str:
 
 
 def cap_marks(text: str) -> tuple[str, int]:
-    """`text` with each run of marks cut to `MAX_MARKS` non-starters (counted in NFKD, the base's own included),
-    and how many were dropped (`text` itself when none was). A run within the cap is left as it is; one over it
-    is rewritten by `_trimmed`."""
+    """`text` with each run of marks cut to `MAX_MARKS` non-starters (the base's own included), and how many
+    were dropped (`text` itself when none was). A run within the cap is left as it is; one over it is
+    decomposed and trimmed (`_decomposed`, `_trimmed`)."""
     if text.isascii():  # most text: no marks at all
         return text, 0
     pieces: list[str] = []
     dropped = 0
     for segment in _segments(text):
-        marks = sum(_marks_in(ch) for ch in segment)
+        if not any(map(is_mark, segment)):  # a base brings at most a few marks of its own
+            pieces.append(segment)
+            continue
+        chars = _decomposed(segment)
+        marks = sum(unicodedata.combining(c) != 0 for c in chars)
         if marks > MAX_MARKS:
-            segment = _trimmed(segment)
+            segment = _trimmed(chars)
             dropped += marks - MAX_MARKS
         pieces.append(segment)
     return ("".join(pieces), dropped) if dropped else (text, 0)
 
 
-def _cut(text: str) -> str:
-    """`text` cut to `MAX_ABSTRACT`, with no trailing whitespace or `…` left (a record would refuse either)."""
-    out = text[:MAX_ABSTRACT]
-    while out != (stripped := out.rstrip().rstrip("…")):
-        out = stripped
-    return out
+def _tidy(field: str, text: str) -> str:
+    """Trimmed `text` as a record accepts it. Dropping marks can leave two spaces together or a space or `…` at an
+    end (the marks after them are gone), and a cut abstract can end in either: a title is whitespace-collapsed,
+    an abstract has no whitespace or `…` at either end (`PaperRecord`)."""
+    if field == "title":
+        return " ".join(text.split())
+    while text != (stripped := text.strip().strip("…")):
+        text = stripped
+    return text
 
 
 def cap(field: str, text: str) -> tuple[str, str | None]:
     """`text` as a record's `field` may hold it, and the note saying what was trimmed (None: `text` itself)."""
     capped, dropped = cap_marks(text)
     notes = [f"{dropped} combining marks dropped past {MAX_MARKS} in a run"] if dropped else []
+    if dropped:
+        capped = _tidy(field, capped)
     if field == "abstract" and len(capped) > MAX_ABSTRACT:
-        cut = _cut(capped)
+        cut = _tidy(field, capped[:MAX_ABSTRACT])
         notes.append(f"cut from {len(capped):,} to {len(cut):,} characters")
         capped = cut
     return (capped, f"{TRIMMED} {'; '.join(notes)}") if notes else (text, None)

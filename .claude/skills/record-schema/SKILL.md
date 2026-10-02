@@ -127,7 +127,9 @@ canonical reordering is superlinear in a long run of marks with alternating comb
     and across LaTeX markup (`\-`, the letter of an accent macro such as `\H{…}`). So none of those may reset
     the count.
   - A run is counted in NFKD non-starters, the base's own included.
-  - A run over the cap is rewritten in its NFKD form, with its marks in canonical order, then keeps its first 8.
+  - A run over the cap has its base (NFD) and marks (NFKD) decomposed in canonical order, then keeps its first 8.
+    Every other character stays as it was: in NFKD, `´` would be a space plus a mark, and the record would refuse
+    the double space. Trimmed text is then tidied (title collapsed, abstract stripped of whitespace and `…`).
     So every Unicode form of the same text trims alike, and dedup title keys stay equal.
   - This keeps every token's run of non-starters within 8.
 - **Length.** An abstract keeps at most 20,000 code points. A cut one is stripped of trailing whitespace and

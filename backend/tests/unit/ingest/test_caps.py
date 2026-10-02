@@ -150,6 +150,32 @@ def test_no_token_from_capped_text_holds_a_run_past_the_cap(text: str, field: st
         assert longest <= MAX_MARKS
 
 
+_SPACING = ["\u00b4", "\u00a8", "\u02d8", "\u00af", "\u00b8", "\u1fed", "\u2026", "\uff01", "\u2103", " "]
+
+
+@given(st.lists(st.one_of(_PIECE, st.sampled_from(_SPACING)), min_size=20, max_size=200).map("".join))
+def test_a_capped_title_or_abstract_is_still_one_a_record_accepts(text: str) -> None:
+    # TASK-155 security round 3: decomposing every character of a trimmed run in NFKD turned a spacing accent
+    # (`´` is a space and a mark to NFKD) into two spaces, which the record refuses, aborting the build
+    title = " ".join(text.split())
+    abstract = title.strip("…").strip()
+    if not title or not abstract:
+        return
+    capped_title, capped_abstract = cap("title", title)[0], cap("abstract", abstract)[0]
+    built = record(
+        title=capped_title, abstract=capped_abstract
+    )  # validated: collapsed title, stripped abstract
+    assert built.title == capped_title and built.abstract == capped_abstract
+
+
+@pytest.mark.parametrize("accent", ["\u00b4", "\u00a8", "\u2026", "\u2103", "\uff01"])
+def test_a_trimmed_run_keeps_every_character_but_its_marks_as_it_was(accent: str) -> None:
+    title = "\u0e01" + "\u0316\u0301" * 5 + f" {accent} title"
+    capped, note = cap("title", title)
+    assert capped == "\u0e01" + "\u0316" * 5 + "\u0301" * 3 + f" {accent} title"
+    assert note == f"{TRIMMED} 2 combining marks dropped past 8 in a run"
+
+
 def test_an_accent_macro_doesnt_end_a_run() -> None:
     # the round-2 security probe: `\H{` + an invisible character + `}` is markup the tokenizer joins across, so
     # its letter is no base; uncapped, 4,000 of these made one word with a run of 32,000 marks

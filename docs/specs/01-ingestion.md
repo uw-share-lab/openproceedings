@@ -183,7 +183,10 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
      - Any other character neither counts nor ends a run, because the tokenizer joins a word across the
        invisible characters and the LaTeX markup it drops (zero-width joiner, soft hyphen, `\-`, the letter of
        an accent macro such as `\H{…}`).
-     - A run over the cap is rewritten in its NFKD form, its marks in canonical order, and keeps its first 8.
+     - A run over the cap has its base (NFD) and marks (NFKD) decomposed in canonical order, and keeps its first
+       8. Every other character is kept as it was. Trimmed text is then tidied: a title is
+       whitespace-collapsed, and an abstract is stripped of whitespace and `…` at both ends, as the record
+       requires.
        So every Unicode form of the same text trims alike, and dedup title keys that matched still match.
      - No token holds more than 8 consecutive non-starters, so NFC stays linear.
    - **Length.** An abstract keeps its first 20,000 characters (code points), then trailing whitespace and `…`

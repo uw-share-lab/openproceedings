@@ -38,6 +38,10 @@ Bound the tokenizer's superlinear NFKC reordering on stored text (TASK-067's sec
   the cap almost never formed: 300 random draws passed the broken rule. Weight the marks (half the draws),
   include whole macros as pieces, and require long texts (`min_size=100`). The property then failed the old
   rule on every run.
+- Rewriting a whole trimmed segment in NFKD. Spacing accents (`´`, `¨`, `˘`, …) are a space plus a mark in
+  NFKD, so a title came out with two spaces. `PaperRecord` refuses that, and one hostile title aborted
+  `op snapshot build`. Decompose only the marks and the base, then tidy what dropping marks exposes. A property
+  should build the real record from every capped title and abstract.
 - Benchmarking the worst case with a Latin base and U+0338. Latin marks fold away and the slash takes the
   short cluster path, so it measures nearly the cheapest input. Use a base whose marks are kept (Thai) and
   classes 220/230.

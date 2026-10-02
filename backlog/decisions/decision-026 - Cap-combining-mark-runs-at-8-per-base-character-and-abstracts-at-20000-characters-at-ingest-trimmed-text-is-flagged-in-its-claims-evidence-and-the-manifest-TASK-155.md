@@ -67,15 +67,22 @@ Details:
   With this rule, no word the tokenizer forms holds more than 8 consecutive non-starters after NFD, so its NFC
   is linear. A Hypothesis property over random mixes of bases, marks, invisible characters and LaTeX macros
   tests this.
-- **How a run over the cap is trimmed.** It is rewritten in its NFKD form: each character decomposed, and each
-  run of non-starters put in canonical order. Then its first 8 non-starters are kept. A run within the cap is
+- **How a run over the cap is trimmed.** Its base is decomposed in NFD and its marks in NFKD, and each run of
+  non-starters is put in canonical order. Then its first 8 non-starters are kept. Every other character in it
+  is kept as it was. A run within the cap is
   left as it is. So every form of the same text trims to the same characters, whether NFC, NFD or marks stored
   in another order. Two sources whose titles shared a dedup title key still share it after the cap.
   - **Why.** The dedup and track-classifier reviews found that keeping the first 8 marks in stored order split
     such keys. For example, 276 of 500 random marked titles split against their NFD form. That stops dedup
     merging the two records, or reconcile matching a listing, which would turn the record `unknown`.
-  - **Cost of the rewrite.** It changes the trimmed run's form, along with any compatibility character in it.
-    It applies only to text that is already flagged.
+  - **Only the marks and the base change form.** Round 3 of the security review found that decomposing every
+    character in NFKD turned a spacing accent (`´`, `¨`, which NFKD makes a space and a mark) into two spaces.
+    The record refuses those, which aborted the whole build, and `…` became `...` under a note that named only
+    marks.
+- **Tidied.** Dropping marks can leave two spaces together, or a space or `…` at an end, where the marks after
+  them are gone. A trimmed title is therefore whitespace-collapsed, and a trimmed abstract is stripped of
+  whitespace and `…` at both ends. A Hypothesis property checks that the record accepts every capped title and
+  abstract.
 - **Equal after the cap.** Two sources' texts that differ only past a cap (after the 8th mark, or after
   character 20,000) compare equal once trimmed. So their `conflicts.csv` row is gone. Their claims still carry
   the note, and the manifest names the record.
