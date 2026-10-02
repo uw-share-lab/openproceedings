@@ -110,8 +110,53 @@ uv run op ingest pmlr --year 2013-2025                     # ICML via PMLR (14,2
 uv run op ingest iclr --year 2014-2016                     # the ICLR archive years
 uv run op ingest openreview --venue ICLR --years 2013-2025 # also NeurIPS 2021-2025, ICML 2023-2025
 ```
-A scholarmend RIS export can be imported too: `uv run op ingest ris path/to/mended.ris` (with its `resolved.json`
-beside it).
+#### Import an existing Google Scholar RIS collection
+
+If you already have Scholar exports, you can start with those papers instead of crawling whole venues.
+OpenProceedings imports scholarmend's **`mended.ris` and the matching `resolved.json` beside it**. Keep both
+files together: the JSON supplies the identity, venue, track and status evidence the importer needs.
+
+For raw `.ris` exports, first prepare a single file or a directory of files with
+[scholarmend](https://github.com/uw-share-lab/scholarmend):
+
+```bash
+uv tool run --from scholarmend==0.1.5 scholarmend --input /path/to/scholar-exports --out /path/to/mended --abstracts
+```
+
+This preparation can fetch metadata; see scholarmend's README for credentials, caching and `--offline`.
+If you already have its outputs, skip preparation. Then, from the OpenProceedings checkout:
+
+```bash
+# A separate data directory keeps this collection separate from any proceedings crawls.
+export OP_DATA_DIR="$PWD/data/scholar-collection"
+uv run op ingest ris /path/to/mended/mended.ris
+# Multiple prepared exports are accepted; each needs its own matching resolved.json.
+# uv run op ingest ris /path/to/first/mended.ris /path/to/second/mended.ris
+```
+
+Read the import report before continuing. Only identifiable, in-scope records are imported; unresolved,
+ambiguous, conflicting or out-of-scope entries are counted as skipped. Imported counts can therefore be
+lower than the original Scholar count, and snapshot deduplication can reduce them further. Keep the original
+exports and scholarmend's report for your review audit. This importer currently covers ICLR, NeurIPS and ICML;
+it does not index arbitrary RIS records from other venues.
+
+For the local Trust-Evals workspace, the raw exports are in `../Trust-Evals-LitReview/corpus/`.
+The existing combined prepared collection is `../scholarmend/out-covidence-2020-2026/mended.ris` with its
+adjacent `resolved.json`; it contains 1,833 RIS entries. These are local inputs, not files distributed with
+OpenProceedings. To use that collection, replace `/path/to/mended/mended.ris` above with that path.
+
+Continue with steps 4–6 below, keeping `OP_DATA_DIR` set in each terminal that builds or serves this collection.
+After building the index, filter and export, for example:
+
+```bash
+uv run op search 'trust AND calibration AND year:2020..2026'
+uv run op export 'trust AND calibration AND year:2020..2026' --format ris --out screened-scholar.ris
+```
+
+The query searches the imported collection. Default filters retain accepted main, datasets/benchmarks and
+position papers; use explicit `track:` and `status:` clauses when your review includes other categories.
+The UI exposes the same filters and exports. With this separate data directory, the export stays within your
+Scholar-derived collection. `source:` is a Scholar-compatible venue alias, not a filter for import provenance.
 
 ### 4. Build a snapshot and an index
 Both are immutable and named by their content. Each command prints JSON: pass the snapshot's `path` (or its
@@ -119,7 +164,7 @@ directory name) to the index build, and the index's `index_version` to the `curr
 ```bash
 uv run op snapshot build                            # replays the cache into data/snapshots/<name>
 uv run op index build --snapshot <snapshot path>    # builds data/indexes/<index_version>
-cd data/indexes && ln -sfn <index_version> current && cd -   # make it the served index (-fn replaces an old link)
+cd "${OP_DATA_DIR:-data}/indexes" && ln -sfn <index_version> current && cd - # serve this index (-fn replaces an old link)
 ```
 Check it from the command line: `uv run op search "trust AND calibration"` (add `--ids` or `--explain`), and
 export the whole matched set with `uv run op export "trust AND calibration" --format ris --out results.ris`.
