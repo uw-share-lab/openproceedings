@@ -36,7 +36,7 @@ openproceedings/
 │   │   └── cli.py               # `op` entry point
 │   └── tests/{unit,golden,differential,bench,contract,e2e,fixtures}/
 ├── frontend/                    # npm workspace member: Next.js App Router, output standalone (spec 05; skeleton TASK-039)
-├── docs/{specs,plans,results,design,usability,research}/   # created as needed; docs/releases.toml: each release's data (§Release)
+├── docs/{specs,plans,results,design,usability,research}/   # created as needed; docs/README.md: the index; docs/releases.toml: each release's data (§Release)
 ├── backlog/                     # Backlog.md: tasks, completed, docs, decisions — CLI only
 ├── deploy/                      # compose.yml, Caddyfile, api/web/caddy Dockerfiles, index-permissions.sh, smoke-test.sh, README.md (the runbook) (TASK-065); web-build-gate.sh (TASK-136)
 └── data/                        # gitignored: cache/, snapshots/, indexes/, embeddings/, research/, records/ (records.sqlite), takedowns/ (list and log)

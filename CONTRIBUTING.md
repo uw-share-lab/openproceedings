@@ -31,6 +31,10 @@ Put OpenReview credentials in `.env` (gitignored) as `OPENREVIEW_USERNAME` and `
 names `setup-dev.sh` writes; scholarmend's `SCHOLARMEND_OPENREVIEW_*` names are not read). Without them the
 API answers every request with an HTML browser-check page instead of JSON (checked 2026-09-27).
 
+Where things are: the specs, results and design docs are indexed in [`docs/README.md`](docs/README.md),
+decisions and tasks are in `backlog/` (CLI only), and deployment is [`deploy/README.md`](deploy/README.md). A
+change under `deploy/` is checked with `deploy/smoke-test.sh` wherever Docker is available. No CI job runs it.
+
 ## Flow: `feature → PR → dev → PR → main`
 1. Pick or create a task: `backlog task list --plain`, `backlog task create "…" --ac "…"`, on a freshly
    pulled `dev`. Never hand-edit files under `backlog/`. Follow-up tasks and decisions found during the work
@@ -51,8 +55,7 @@ API answers every request with an HTML browser-check page instead of JSON (check
    Once it's green, add it to `dev`'s merge queue yourself: `gh pr merge <n> --auto`. The queue re-runs the
    checks on `dev` plus your PR and merges it, so you don't rebase when `dev` moves (spec 08 §Merge queue),
    except before creating a new task or decision id, or to renumber one after a clash (task-hygiene §Ids).
-   Until a maintainer has turned the queue on (spec 08 §Branch protection), rebase onto `dev` and merge with
-   `gh pr merge <n> --merge --delete-branch`.
+   The queue has been active since 2026-10-02 (decision-027, spec 08 §Branch protection).
 6. Promote `dev → main` with a PR (`--base main --head dev`). It needs a second person's approval. A release
    (version bump, generated `CHANGELOG.md`, tag) follows the checklist in spec 08 §Release (decision-023).
 

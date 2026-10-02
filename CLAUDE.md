@@ -57,7 +57,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   (`src/**/*.test.{ts,tsx}`); `npm test --workspace frontend`. Full-stack browser, accessibility and
   visual tests live in `frontend/e2e/`, backed by `backend/tests/e2e/`; run them with `make e2e`.
 - `deploy/`: `compose.yml` (api + web + Caddy, plus the `ops` and `takedown-check` one-offs), `Caddyfile`, `api.Dockerfile`, `caddy.Dockerfile`, `index-permissions.sh`, `smoke-test.sh` (the stack over a fixture, by hand) and `README.md` (the operator's runbook), TASK-065; `web.Dockerfile` and `web-build-gate.sh` (the `web` image; a public build needs a takedown contact, TASK-136; built by CI's advisory `web-image` workflow, TASK-148); every base image digest-pinned (TASK-149). `backend/tests/deploy/fixture_data.py` writes the smoke test's data directory.
-- `docs/specs` · `docs/{plans,results,design,usability,research}` (created as needed).
+- `docs/specs` · `docs/{plans,results,design,usability,research}` (created as needed); `docs/README.md` indexes them.
 - `backlog/`: Backlog.md, CLI only.
 - `.claude/`: agents, skills, commands, hooks and learnings, all committed. The roster is in
   `.claude/README.md`.
