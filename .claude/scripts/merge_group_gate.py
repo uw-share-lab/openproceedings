@@ -11,8 +11,9 @@ one two-parent merge commit per queued PR, oldest first: parent 1 is the previou
 one's is `base`), parent 2 is that PR's head. This script resolves every PR in the group from those commits
 and runs, for EACH of them, the check the `pull_request` job runs for one PR:
 
-  review       the PR is open, targets dev, its head is still that parent 2, and its CURRENT body (read from
-               the API, so no stale event snapshot) carries `<!-- op-review: <parent 2> APPROVE -->`;
+  review       the PR is open (or already merged by this very queue commit, when an earlier entry merged first),
+               targets dev, its head is still that parent 2, and its CURRENT body (read from the API, so no
+               stale event snapshot) carries `<!-- op-review: <parent 2> APPROVE -->`;
   learnings    the PR's own diff (merge-base(parent 1, parent 2)...parent 2) adds or extends a
                `.claude/learnings/YYYY-MM-DD-<slug>.md` entry, unless the PR is labelled `no-learning`;
   attribution  no commit in `base..head` (queue merges included) and no PR title or body carries AI attribution.
@@ -55,15 +56,22 @@ class Entry:
     pr_head: str  # parent 2: the PR's head as queued
 
 
+def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True)
+    except OSError as e:  # git or gh missing: an error, never a traceback
+        raise GateError(f"could not run {cmd[0]}: {e}") from e
+
+
 def git(*args: str) -> str:
-    r = subprocess.run(["git", *args], capture_output=True, text=True)
+    r = run(["git", *args])
     if r.returncode != 0:
         raise GateError(f"git {' '.join(args)} failed: {r.stderr.strip()}")
     return r.stdout
 
 
 def gh_json(path: str) -> Any:
-    r = subprocess.run(["gh", "api", path], capture_output=True, text=True)
+    r = run(["gh", "api", path])
     if r.returncode != 0:
         raise GateError(f"gh api {path} failed: {(r.stderr or r.stdout).strip()}")
     try:
@@ -81,14 +89,14 @@ def pr_for_commit(repo: str, merge: str, pr_head: str) -> int:
     if not isinstance(pulls, list):
         raise GateError(f"the pulls for {pr_head[:10]} aren't a list")
     hits = [
-        p["number"]
+        p.get("number")
         for p in pulls
         if isinstance(p, dict)
         and p.get("state") == "open"
         and (p.get("base") or {}).get("ref") == "dev"
         and (p.get("head") or {}).get("sha") == pr_head
     ]
-    if len(hits) != 1 or not isinstance(hits[0], int):
+    if len(hits) != 1 or type(hits[0]) is not int:
         raise GateError(
             f"queue commit {merge[:10]} names no PR, and {len(hits)} open dev PRs have head {pr_head[:10]}"
         )
@@ -136,8 +144,11 @@ def pull(repo: str, e: Entry) -> dict[str, Any]:
     p = gh_json(f"repos/{repo}/pulls/{e.number}")
     if not isinstance(p, dict):
         raise GateError(f"#{e.number}: the PR isn't a JSON object")
-    if p.get("state") != "open":
-        raise GateError(f"#{e.number} is {p.get('state')!r}, not open")
+    # An entry ahead in the queue can merge before this build's jobs run (or are re-run): GitHub then fast-forwards
+    # dev to that entry's queue commit, which is this group's merge for it, so accept exactly that merge.
+    merged_here = p.get("merged") is True and p.get("merge_commit_sha") == e.merge
+    if p.get("state") != "open" and not merged_here:
+        raise GateError(f"#{e.number} is {p.get('state')!r} and wasn't merged by queue commit {e.merge[:10]}")
     if (p.get("base") or {}).get("ref") != "dev":
         raise GateError(f"#{e.number} targets {(p.get('base') or {}).get('ref')!r}, not dev")
     if (p.get("head") or {}).get("sha") != e.pr_head:
@@ -180,7 +191,10 @@ def added_learnings(e: Entry) -> list[str]:
         "--",
         ".claude/learnings/",
     )
-    fields, found, i = raw.split("\0"), [], 0
+    # -z numstat: "added\tdeleted\tpath\0", or for a rename "added\tdeleted\t\0old\0new\0"
+    fields = raw.split("\0")
+    found: list[str] = []
+    i = 0
     while i < len(fields) and fields[i]:
         added, _deleted, path = fields[i].split("\t", 2)
         if path == "":  # a rename: the old and new paths follow as their own fields
@@ -209,11 +223,11 @@ def check_learnings(repo: str, group: list[Entry]) -> list[str]:
 
 def check_attribution(repo: str, group: list[Entry], base: str, head: str) -> list[str]:
     bad = []
-    if any(ATTRIBUTION.search(ln) for ln in git("log", "--format=%B", f"{base}..{head}").splitlines()):
+    if any(ATTRIBUTION.search(ln) for ln in git("log", "--format=%B", f"{base}..{head}").split("\n")):
         bad.append("a commit message in the group carries AI attribution")
     for e in group:
         p = pull(repo, e)
-        if any(ATTRIBUTION.search(ln) for ln in f"{text(p, 'title')}\n{text(p, 'body')}".splitlines()):
+        if any(ATTRIBUTION.search(ln) for ln in f"{text(p, 'title')}\n{text(p, 'body')}".split("\n")):
             bad.append(f"#{e.number}: the PR title/body carries AI attribution")
     return bad
 
