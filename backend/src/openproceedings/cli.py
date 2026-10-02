@@ -451,6 +451,7 @@ def _snapshot_build(ns: argparse.Namespace) -> int:
     _print({"path": str(result.path), "snapshot_hash": result.snapshot_hash, "created": result.created,
             "withheld_ids": list(result.withheld), "takedowns_followed": dict(result.takedowns_followed),
             "takedowns_unmatched": list(result.takedowns_unmatched),
+            "takedowns_twins": dict(result.takedowns_twins),
             "unexpected_statuses": [u.to_json() for u in result.unexpected_statuses]})  # fmt: skip
     for old, new in sorted(result.takedowns_followed.items()):
         taken = (
@@ -463,6 +464,13 @@ def _snapshot_build(ns: argparse.Namespace) -> int:
         )
         print(f"op snapshot build: {old} is {new} in this build: {taken}; {todo}keep {old} listed (older index "
               "versions hold it)", file=sys.stderr)  # fmt: skip
+    for twin, of in sorted(result.takedowns_twins.items()):
+        taken = "its abstract was withheld too" if twin in result.withheld else "it has no abstract here"
+        todo = (
+            "" if twin in listed else f"; add {twin} to the takedown list and log a `withheld` entry for it"
+        )
+        print(f"op snapshot build: {twin} is {of}'s twin (decision-029, the same paper): {taken}{todo}",
+              file=sys.stderr)  # fmt: skip
     if result.takedowns_unmatched:
         print(f"op snapshot build: {len(result.takedowns_unmatched)} listed id(s) no record of this build has: "
               f"{', '.join(result.takedowns_unmatched)}; keep them listed while an index version holds them. If "
@@ -697,6 +705,29 @@ def _parsed(ns: argparse.Namespace) -> ParseResult | None:
         )  # user input: DEBUG at most
         return None
     return result
+
+
+def _current_twin_pairs(data_dir: Path, exported: Path) -> list[tuple[str, str]]:
+    """The (record, twin) pairs of the `current` index's snapshot when `exported` is another index, for an
+    export's takedowns (TASK-163, as the API's `Served.withheld_in`); none when there is no current index, and
+    none with a warning when its snapshot can't be verified (the exported snapshot's own still apply)."""
+    from openproceedings.api.state import snapshot_records
+    from openproceedings.ingest.snapshot import SnapshotError
+
+    current = data_dir / "indexes" / "current"
+    if not current.exists() or current.resolve() == exported.resolve():
+        return []
+    try:
+        version = json.loads((current / "manifest.json").read_text(encoding="utf-8"))["index_version"]
+        return list(snapshot_records(data_dir, current, str(version)).twin_pairs())
+    except (OSError, ValueError, KeyError, TypeError, SnapshotError) as e:
+        log.warning("takedown_twins_unavailable", extra={"error": type(e).__name__})
+        print(
+            "op export: warning: the current index's snapshot can't be read, so the takedown list follows only "
+            "the exported snapshot's twin links",
+            file=sys.stderr,
+        )
+        return []
 
 
 def _index_path(ns: argparse.Namespace) -> Path:
@@ -1007,7 +1038,7 @@ def _export(ns: argparse.Namespace) -> int:
     from openproceedings.api.errors import reason_of
     from openproceedings.api.state import snapshot_records
     from openproceedings.engine.tantivy_engine import TantivyEngine
-    from openproceedings.export import Provenance, Sources, check_count, utc_date, write
+    from openproceedings.export import Provenance, Sources, Twins, check_count, utc_date, write
     from openproceedings.ingest.snapshot import SnapshotError, any_withheld, merges_on_disk
     from openproceedings.takedowns import list_path, same_paper
     from openproceedings.takedowns import load as load_takedowns
@@ -1030,10 +1061,11 @@ def _export(ns: argparse.Namespace) -> int:
     # each abstract's source (decision-018, TASK-138), from the verified snapshot, as the server loads it;
     # without it every abstract is withheld and each record says so (decision-021), with a warning
     sources: Sources | None
+    twins: Twins | None = None  # each record's twins (TASK-162), from the same verified snapshot
     withheld = listed
     try:
         records = snapshot_records(ns.data_dir, path, engine.index_version)
-        sources, withheld = records.attributions, listed | records.withheld
+        sources, withheld, twins = records.attributions, listed | records.withheld, records.twins
     except (SnapshotError, OSError) as e:
         sources = None
         log.warning(
@@ -1059,7 +1091,10 @@ def _export(ns: argparse.Namespace) -> int:
             )
 
         merges = merges_on_disk(ns.data_dir / "snapshots", on_damaged=damaged)
-        withheld |= same_paper(listed, merges, records.ids())
+        # and their twins (TASK-163): by this snapshot's `twin` claims and, as the API reads them from the
+        # snapshot it serves, by the current index's (an older snapshot may predate the claims)
+        pairs = [*records.twin_pairs(), *_current_twin_pairs(ns.data_dir, path)]
+        withheld |= same_paper(listed, merges, records.ids(), twins=pairs)
     total, found = engine.documents(ast)
     removed = 0  # records a takedown withholds (the API's X-Abstracts-Withheld), counted as they stream
 
@@ -1075,7 +1110,7 @@ def _export(ns: argparse.Namespace) -> int:
     if ns.out is None:  # UTF-8 and untranslated newlines whatever the terminal's locale (spec 04)
         out = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="", write_through=True)
         try:
-            n = write(ns.format, documents, provenance, out, sources=sources, withheld=withheld)
+            n = write(ns.format, documents, provenance, out, sources=sources, withheld=withheld, twins=twins)
         finally:
             out.detach()  # leave sys.stdout usable
         check_count(n, total)
@@ -1087,7 +1122,9 @@ def _export(ns: argparse.Namespace) -> int:
             if ns.out.exists():
                 os.fchmod(fd, ns.out.stat().st_mode & 0o777)
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as stream:
-                n = write(ns.format, documents, provenance, stream, sources=sources, withheld=withheld)
+                n = write(
+                    ns.format, documents, provenance, stream, sources=sources, withheld=withheld, twins=twins
+                )
             check_count(n, total)
             partial.replace(ns.out)
         finally:

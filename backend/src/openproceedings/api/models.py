@@ -153,6 +153,12 @@ ABSTRACT_WITHHELD_DOC = (
     "a saved search's ids never change). False otherwise: a null `abstract` with this false means the sources "
     "gave none."
 )
+TWINS_DOC = (
+    "The ids of this paper's twins (decision-029): another record of the same paper that the index keeps "
+    "separate, never merged, such as an ICLR 2017 workshop-listing copy and its conference submission. Each is "
+    "a paper on this same index (`GET /papers/{id}`), and each record keeps matching on its own text, so both "
+    "can be hits. Usually empty; one or two ids otherwise, sorted."
+)
 MISSING_COUNT_DOC = (
     "Of `records`, those without an abstract because their sources gave none (title-only). Abstracts withheld at "
     "a rights holder's request are counted in `abstract_withheld` instead (decision-022), including ids the "
@@ -186,6 +192,7 @@ class Hit(Model):
     urls: Urls
     abstract_source: AbstractSource | None = Field(description=ABSTRACT_SOURCE_DOC)  # TASK-134: additive
     abstract_withheld: bool = Field(description=ABSTRACT_WITHHELD_DOC)  # TASK-136: additive
+    twins: list[str] = Field(description=TWINS_DOC)  # TASK-162: additive
 
 
 IDENTIFIED_DOC = (
@@ -233,6 +240,7 @@ class PaperResponse(Versioned):
         "`matched` is false. Null without `q`."
     )
     abstract_withheld: bool = Field(description=ABSTRACT_WITHHELD_DOC)  # TASK-136: additive
+    twins: list[str] = Field(description=TWINS_DOC)  # TASK-162: additive
 
 
 # --- /records (task-037; spec 04 §Search records) -----------------------------------------------------

@@ -3,9 +3,10 @@ id: TASK-162
 title: >-
   Show a visible see-also link to a record's twins in the results, on the paper
   page and in exports (decision-029 deferral)
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-02 09:27'
+updated_date: '2026-10-02 18:12'
 labels:
   - frontend
   - export

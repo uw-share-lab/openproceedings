@@ -54,7 +54,7 @@ from openproceedings.ingest.status_check import UnexpectedStatus, unexpected_sta
 from openproceedings.ingest.statuses import statuses_indexed
 from openproceedings.logs import elapsed_ms
 from openproceedings.query.normalize import TOKENIZER_VERSION
-from openproceedings.takedowns import NONE, Withheld, global_native, withhold_record
+from openproceedings.takedowns import NONE, Withheld, global_native, twin_ids, withhold_record
 from openproceedings.vocab import BOOTSTRAP_SOURCES
 
 log = logging.getLogger(__name__)
@@ -136,6 +136,9 @@ class BuildResult:
     withheld: tuple[str, ...] = ()
     takedowns_followed: Mapping[str, str] = field(default_factory=dict)
     takedowns_unmatched: tuple[str, ...] = ()
+    takedowns_twins: Mapping[str, str] = field(
+        default_factory=dict
+    )  # twin withheld → its listed twin (TASK-163)
 
 
 def _sha256(data: bytes) -> str:
@@ -393,12 +396,15 @@ class Withholding:
     """What `withhold` did: the result with the abstracts withheld; `withheld`, the ids whose record lost an
     abstract or an abstract claim (what the manifest names); `followed`, each listed id this build holds under
     another id (merged into a survivor, or rekeyed: the same native id under a corrected venue or year) → the
-    id it withheld instead; and `unmatched`, the listed ids no record of this build has or leads to."""
+    id it withheld instead; `unmatched`, the listed ids no record of this build has or leads to; and `twins`,
+    each id withheld as its twin's paper (decision-029: a `twin` claim links them, TASK-163) → the listed or
+    followed id it is the twin of."""
 
     result: DedupResult
     withheld: Withheld
     followed: Mapping[str, str]
     unmatched: tuple[str, ...]
+    twins: Mapping[str, str] = field(default_factory=dict)
 
 
 def _successor(rid: str, result: DedupResult, held: set[str]) -> str | None:
@@ -437,13 +443,16 @@ def withhold(result: DedupResult, ids: Withheld) -> Withholding:
     by a corrected venue or year) is followed: its successor is withheld too, so the abstract never comes back
     under a new id (the list keeps the old id, which older index versions still hold). A listed id no record
     has or leads to is reported, never refused: a paper gone from its sources stays listed for the versions
-    that still hold it (a typo is what `op takedown check` reports)."""
+    that still hold it (a typo is what `op takedown check` reports). A twin of a withheld record (its `twin`
+    claim, decision-029: the same paper listed twice, never merged) is withheld too and reported (`twins`), so
+    a takedown of either ICLR 2017 copy withholds both (TASK-163)."""
     if not ids:
         return Withholding(result, NONE, {}, ())
     held = {r.id for r in result.records}
     followed = {rid: nxt for rid in sorted(ids - held) if (nxt := _successor(rid, result, held)) is not None}
     unmatched = tuple(sorted(ids - held - followed.keys()))
-    targets = (ids & held) | set(followed.values())
+    twins = _twinned((ids & held) | set(followed.values()), result)
+    targets = (ids & held) | set(followed.values()) | twins.keys()
     changed = frozenset(
         r.id for r in result.records if r.id in targets and (r.abstract is not None or r.claims("abstract"))
     )
@@ -462,7 +471,30 @@ def withhold(result: DedupResult, ids: Withheld) -> Withholding:
                 }
             )
         )
-    return Withholding(replace(result, records=records, conflicts=conflicts), changed, followed, unmatched)
+    return Withholding(
+        replace(result, records=records, conflicts=conflicts), changed, followed, unmatched, twins
+    )
+
+
+def _twinned(targets: frozenset[str] | set[str], result: DedupResult) -> dict[str, str]:
+    """Each record that is a twin of a target (its `twin` claims, either way, transitively; decision-029), not
+    itself a target → the target it was reached from first (in id order), so the build can say why it
+    withheld it (TASK-163)."""
+    linked: dict[str, set[str]] = {}
+    for r in result.records:
+        for t in twin_ids(r):
+            linked.setdefault(r.id, set()).add(t)
+            linked.setdefault(t, set()).add(r.id)
+    found: dict[str, str] = {}
+    for start in sorted(targets):
+        todo = [start]
+        while todo:
+            at = todo.pop()
+            for t in sorted(linked.get(at, ())):
+                if t not in targets and t not in found:
+                    found[t] = start
+                    todo.append(t)
+    return found
 
 
 def render(
@@ -586,7 +618,8 @@ def build(
 
     def result_at(target: Path, created: bool) -> BuildResult:
         return BuildResult(target, snapshot_hash, created, unexpected, tuple(sorted(withholding.withheld)),
-                           dict(withholding.followed), withholding.unmatched)  # fmt: skip
+                           dict(withholding.followed), withholding.unmatched,
+                           dict(withholding.twins))  # fmt: skip
 
     manifest = json.loads(files["manifest.json"])
     snapshot_hash = manifest["snapshot_hash"]
@@ -615,7 +648,8 @@ def build(
                 extra={"snapshot": target.name, "snapshot_hash": snapshot_hash, "trimmed": trimmed,
                        "abstracts_withheld": len(withholding.withheld),
                        "takedowns_followed": len(withholding.followed),
-                       "takedowns_unmatched": len(withholding.unmatched)},
+                       "takedowns_unmatched": len(withholding.unmatched),
+                       "takedowns_twins": len(withholding.twins)},
             )  # fmt: skip
             return result_at(target, created=False)
         with storage.staging(snapshots) as tmp:
@@ -629,9 +663,17 @@ def build(
                "trimmed": trimmed, "abstracts_withheld": len(withholding.withheld),
                "takedowns_followed": len(withholding.followed),
                "takedowns_unmatched": len(withholding.unmatched),
+               "takedowns_twins": len(withholding.twins),
                "unexpected_statuses": len(unexpected), "ms": elapsed_ms(began, time.monotonic)},
     )  # fmt: skip
     return result_at(target, created=created)
+
+
+def _id_list(value: object) -> list[str]:
+    """A `twin` claim's value as `records.jsonl` holds it, a list of ids; TypeError (an invalid line) else."""
+    if not isinstance(value, list) or not all(isinstance(t, str) for t in value):
+        raise TypeError(value)
+    return value
 
 
 class _OnePass:
@@ -796,7 +838,8 @@ class RecordFile:
     per (venue, year, track, status), the missing abstracts per (venue, year) and per (venue, year, track), and
     the claim sources per (venue, year, track), and keeps the manifest it read, so `GET /coverage` checks the
     manifest's counts against the records; and each record's abstract attribution (`attributions`, TASK-134),
-    which `GET /search` reads per hit with no file I/O. The ids the manifest names as `withheld` (a takedown,
+    which `GET /search` reads per hit with no file I/O; likewise each record's twin ids (`twins`, the ids its
+    `twin` claims name: decision-029, TASK-162). The ids the manifest names as `withheld` (a takedown,
     TASK-136) must each be a record with no abstract and no abstract claim; they are counted per venue-year and
     per track as withheld, never as missing. A lookup reads its one line and
     validates it as a `PaperRecord`, which re-checks its `content_hash`. Snapshots are sealed read-only, so
@@ -814,6 +857,8 @@ class RecordFile:
         # the abstracts a takedown withheld (TASK-136): (venue, year) and (venue, year, track) → withheld
         self.abstract_withheld: Counter[tuple[str, int]] = Counter()
         self.track_withheld: Counter[tuple[str, int, str]] = Counter()
+        # id → the ids its `twin` claims name (decision-029; TASK-162, TASK-163), only for a record that has one
+        self.twins: dict[str, tuple[str, ...]] = {}
         try:
             read = _OnePass(snapshot)
             manifest = read.manifest
@@ -843,6 +888,8 @@ class RecordFile:
                         raise TypeError(rid)
                     about = [_Claim(c["source"], c["value"], c.get("url"), c.get("evidence"))
                              for c in line["provenance"] if c["field"] == "abstract"]  # fmt: skip
+                    twins = sorted({t for c in line["provenance"] if c["field"] == "twin"
+                                    for t in _id_list(c["value"])} - {rid})  # fmt: skip
                     urls = line["urls"]
                     credit = attribution(
                         line["abstract"],
@@ -868,6 +915,8 @@ class RecordFile:
                     self.track_withheld[(line["venue"], line["year"], line["track"])] += 1
                 self._at[rid] = (offset, len(raw))
                 self.attributions[rid] = credit
+                if twins:
+                    self.twins[rid] = tuple(twins)
                 self.cells[cell] += 1
                 track = (line["venue"], line["year"], line["track"])
                 self.track_missing[track] += no_abstract
@@ -905,6 +954,10 @@ class RecordFile:
 
     def __contains__(self, rid: object) -> bool:
         return rid in self._at
+
+    def twin_pairs(self) -> Iterator[tuple[str, str]]:
+        """Each (record, twin) pair the snapshot's `twin` claims name, for `takedowns.same_paper` (TASK-163)."""
+        return ((rid, t) for rid, twins in self.twins.items() for t in twins)
 
     def get(self, rid: str) -> PaperRecord | None:
         """The record with id `rid`, or None if the snapshot has none."""

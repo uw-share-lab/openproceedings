@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * `/paper/[id]` (spec 05 §Pages; design P1–P5; copy PA-1–7): the full record, with the query in the link
+ * `/paper/[id]` (spec 05 §Pages; design P1–P5; copy PA-1–10): the full record, its twins as links (PA-10,
+ * decision-029), with the query in the link
  * (`?q=&mode=`) drawn as `GET /papers/{id}?q=&mode=` returns it: `matched` and `highlights`, the API's spans
  * only (never re-matched). Without `q` (a direct link) the record alone. A `q` the API refuses (422, 429, 503
  * `API_BUSY`) is dropped: the paper is fetched without it and a one-line notice says why. 404 and 422
@@ -20,7 +21,7 @@ import { CopyButton } from "../copy-button";
 import { Highlighted } from "../highlighted";
 import { PaperBadges, statusWords } from "../paper-badges";
 import { PaperLinks } from "../paper-links";
-import { ABSTRACT_WITHHELD, WITHHELD_TERMS } from "../search/hit-item";
+import { ABSTRACT_WITHHELD, TwinLinks, WITHHELD_TERMS } from "../search/hit-item";
 import { FailureBlock } from "../search/search-states";
 
 export type PaperResponse = MethodResponse<Api, "get", "/api/v1/papers/{id}">;
@@ -200,6 +201,7 @@ function Paper({
           {paper.status === "unknown" ? "not known to be in its proceedings" : "not in its proceedings"}.
         </p>
       )}
+      <TwinLinks twins={data.twins} q={q} mode={mode} />
       {q !== null && dropped !== null && (
         <p role="status" className="text-sm">
           <span aria-hidden="true">ⓘ </span>

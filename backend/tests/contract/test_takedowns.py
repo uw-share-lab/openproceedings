@@ -537,8 +537,8 @@ def test_the_check_catches_a_hit_that_keeps_its_source_or_loses_its_marker(
     _, old, _, paper, _ = store
     real = search_route._hit
 
-    def leaky(found: Any, source: Any, *, withheld: bool) -> Any:
-        hit = real(found, source, withheld=withheld)
+    def leaky(found: Any, source: Any, *, withheld: bool, twins: tuple[str, ...]) -> Any:
+        hit = real(found, source, withheld=withheld, twins=twins)
         update = {"abstract_source": source} if leak == "abstract_source" else {"abstract_withheld": False}
         return hit.model_copy(update=update) if withheld else hit
 
@@ -650,7 +650,9 @@ def test_the_check_catches_an_older_id_left_served(aliased: Aliased, monkeypatch
     with TestClient(make_app(data)) as c:
         c.get(EXPORT, params={"format": "jsonl", "q": "agents", "index_version": prev})
         assert takedown_check.check(fetcher(c), frozenset({paper.id})).problems == ()
-    monkeypatch.setattr(takedowns, "same_paper", lambda listed, merges, ids: listed & frozenset(ids))
+    monkeypatch.setattr(
+        takedowns, "same_paper", lambda listed, merges, ids, twins=(): listed & frozenset(ids)
+    )
     with TestClient(make_app(data)) as c:
         problems = takedown_check.check(fetcher(c), frozenset({paper.id})).problems
     assert sorted(problems) == sorted(

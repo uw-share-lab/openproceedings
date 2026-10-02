@@ -18,6 +18,9 @@ A paper whose abstract this instance withholds (a takedown, TASK-136, decision-0
 and its abstract claims (`takedowns.withhold_record`), with `abstract_withheld` true and no abstract spans.
 `matched` is still the index's answer, computed on the text the index holds: a query matching only the
 withheld text still reports `matched: true` there, as `/search` still counts the paper.
+
+`twins` (TASK-162, decision-029) names the paper's other records the index keeps separate (`RecordFile.twins`, the
+ids its `twin` claims name), each a paper of this same index.
 """
 
 from __future__ import annotations
@@ -83,6 +86,7 @@ def get_paper(
     withheld = id in served.withheld_in(served.records)
     if withheld:
         record = withhold_record(record)
+    twins = list(served.records.twins.get(id, ()))  # its `twin` claims' ids (TASK-162)
     if result is None:
         return PaperResponse(
             **versions(engine.index_version),
@@ -90,6 +94,7 @@ def get_paper(
             matched=None,
             highlights=None,
             abstract_withheld=withheld,
+            twins=twins,
         )
     assert result.effective_ast is not None  # searchable refuses a query that doesn't parse
     check_candidates(request, engine, result.effective_ast)  # 422 API_QUERY_TOO_COSTLY, as /search
@@ -102,4 +107,5 @@ def get_paper(
         if spans is None
         else Highlights(title=spans["title"], abstract=[] if withheld else spans["abstract"]),
         abstract_withheld=withheld,
+        twins=twins,
     )

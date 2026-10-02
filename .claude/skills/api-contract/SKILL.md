@@ -112,7 +112,11 @@ takedown withholds (TASK-136, decision-022) is exported without its abstract on 
 same way; CSV appends `abstract_withheld_reason` (`takedown`, `source_unavailable` or empty) after
 `abstract_withheld`, and JSONL has the same key; the response counts those records in `X-Abstracts-Withheld`
 (an integer header, declared, exposed to CORS, on the access line as `abstracts_withheld`). `/search` hits and `/papers/{id}` carry `abstract_withheld`
-(a boolean, additive) and `/coverage` an `abstract_withheld` count beside `abstract_missing`.
+(a boolean, additive) and `/coverage` an `abstract_withheld` count beside `abstract_missing`. `/search` hits and
+`/papers/{id}` also carry `twins` (TASK-162, additive; decision-029): the sorted ids of the record's twins (its
+`twin` claims, `RecordFile.twins`), usually `[]`; every export names them (RIS `N1  - See also: …`, BibTeX
+`openproceedings_twins`, a last CSV column `twins`, a JSONL `twins` list only on a record with one), and a
+record without one exports byte for byte as before except CSV's one more empty cell.
 
 ## Versioning rules
 Allowed within `v1` (additive): a new endpoint, a new response field (always sent, so required in the

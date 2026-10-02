@@ -955,6 +955,14 @@
             "title": "Track",
             "type": "string"
           },
+          "twins": {
+            "description": "The ids of this paper's twins (decision-029): another record of the same paper that the index keeps separate, never merged, such as an ICLR 2017 workshop-listing copy and its conference submission. Each is a paper on this same index (`GET /papers/{id}`), and each record keeps matching on its own text, so both can be hits. Usually empty; one or two ids otherwise, sorted.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Twins",
+            "type": "array"
+          },
           "urls": {
             "$ref": "#/components/schemas/Urls"
           },
@@ -988,7 +996,8 @@
           "highlights",
           "urls",
           "abstract_source",
-          "abstract_withheld"
+          "abstract_withheld",
+          "twins"
         ],
         "title": "Hit",
         "type": "object"
@@ -1508,6 +1517,14 @@
           "tokenizer_version": {
             "title": "Tokenizer Version",
             "type": "string"
+          },
+          "twins": {
+            "description": "The ids of this paper's twins (decision-029): another record of the same paper that the index keeps separate, never merged, such as an ICLR 2017 workshop-listing copy and its conference submission. Each is a paper on this same index (`GET /papers/{id}`), and each record keeps matching on its own text, so both can be hits. Usually empty; one or two ids otherwise, sorted.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Twins",
+            "type": "array"
           }
         },
         "required": [
@@ -1517,7 +1534,8 @@
           "paper",
           "matched",
           "highlights",
-          "abstract_withheld"
+          "abstract_withheld",
+          "twins"
         ],
         "title": "PaperResponse",
         "type": "object"

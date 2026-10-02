@@ -40,6 +40,10 @@ description: The openproceedings BibTeX export standard — @inproceedings entri
 - `openproceedings_id = {<id>}` is on **every** entry (spec 04 §Exports), so a round-trip recovers the id
   of every record, proceedings-only ones (PMLR, NeurIPS `nips-<hash>`) included, which have no forum `url`
   to parse. refaudit's field regex `(\w+)\s*=` accepts the underscore.
+- `openproceedings_twins = {<id>; <id>}` after it, only on an entry whose record has twins (TASK-162,
+  decision-029: an ICLR 2017 workshop copy and its conference submission, kept as two records): the ids its
+  `twin` claims name, sorted, joined by `; ` (`RecordFile.twins`). An entry without one is byte for byte what it
+  was. The round-trip test reads it back with `refaudit` (`tests/contract/test_twins.py`).
 - `abstract_source = {<site> <url>}` after `abstract`, when the abstract has an attribution (TASK-138,
   decision-018; spec 04 §Exports): the same words as RIS's `N1  - Abstract source:` line (the results list's
   site name, ` (via RIS import)` for a `ris` claim, the url when there is one), from the snapshot's

@@ -26,7 +26,7 @@ fixtures. The reference parser strips values, so it reads either ending.
 | `DO` | DOI, only if present | |
 | `ID` | the openproceedings paper `id` | So exports round-trip (spec 04 §Exports). Exactly one line. |
 | `KW` | two lines: the `track` value (`main`, `datasets_benchmarks`, …), then `status:<status>` | Track from `.claude/skills/track-taxonomy/SKILL.md`. The status line is meant to show a Covidence screener that a paper was rejected or withdrawn, since `T2` names the conference it was submitted to (spec 04 §Exports). Covidence shows neither `KW` nor `N1` to screeners (hand check, `docs/results/2026-09-27-covidence-check.md`), so a Covidence review must exclude by status before import (default `status:accepted`); Zotero and EndNote show both. |
-| `N1` | for a paper not `accepted`, first `Submitted to <venue string>; status: <status in words> (not in its proceedings).` (`unknown`: "not known to be in its proceedings"); then, when the abstract has a source, `Abstract source: <site> <url>` (below); then, on every record, `openproceedings <index_version> · query <canonical_hash> · exported <UTC date>`, plus ` · record <record_id> · searched <UTC date>` when the export is pinned by a search record | Exactly one provenance line, always the last `N1`. `·` is U+00B7. Dates are `YYYY-MM-DD` UTC. The status sentence is what a screener reads in Notes; `TY` stays `CPAPER` and `T2` the venue string whatever the status (spec 04 §Exports). |
+| `N1` | for a paper not `accepted`, first `Submitted to <venue string>; status: <status in words> (not in its proceedings).` (`unknown`: "not known to be in its proceedings"); then, for a record with twins, `See also: <ids> (…)` (below); then, when the abstract has a source, `Abstract source: <site> <url>` (below); then, on every record, `openproceedings <index_version> · query <canonical_hash> · exported <UTC date>`, plus ` · record <record_id> · searched <UTC date>` when the export is pinned by a search record | Exactly one provenance line, always the last `N1`. `·` is U+00B7. Dates are `YYYY-MM-DD` UTC. The status sentence is what a screener reads in Notes; `TY` stays `CPAPER` and `T2` the venue string whatever the status (spec 04 §Exports). |
 | `ER` | empty | |
 
 **Abstract source (TASK-138, decision-018; spec 04 §Exports).** One `N1  - Abstract source: <site> <url>`
@@ -55,6 +55,13 @@ warn on `unavailable` (spec 05), and spec 04 §Exports tells reviewers to check 
 by the exported index's snapshot) has no `AB` and no `Abstract source:` line; instead `N1  - Abstract withheld: removed from this site at a rights holder's request, so no abstract is exported (decision-022).`
 (`export.TAKEDOWN`), in the same place, before the provenance line. Only that record: `X-Abstract-Source` stays
 `attributed`. The same Covidence caveat applies.
+
+**Twins (TASK-162, decision-029).** A record with twins (an ICLR 2017 workshop copy and its conference
+submission, two records of one paper) has one more `N1`, after the status sentence and before the abstract's
+line: `N1  - See also: <id>; <id> (this paper's other records on OpenReview, decision-029).` (`other record` for
+one; `export.see_also`). So the provenance line stays last and the abstract source or withheld line just before
+it. A record without twins is byte for byte what it was. The ids are notes for a screener, not an id carrier: the
+record's own id stays in `ID`.
 
 **Id carrier:** the round-trip test reads the openproceedings `id` back from the `ID` tag, for every
 record including PMLR-only ones. Never overload `N1` or recover ids from `UR`.

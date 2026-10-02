@@ -287,9 +287,39 @@ def test_cli_build_reads_the_list_from_the_data_dir(
     assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 0
     built = json.loads(capsys.readouterr().out)
     assert built["withheld_ids"] == [REJECTED]
-    assert (built["takedowns_followed"], built["takedowns_unmatched"]) == ({}, [])
+    assert (built["takedowns_followed"], built["takedowns_unmatched"], built["takedowns_twins"]) == (
+        {},
+        [],
+        {},
+    )
     assert load_records(Path(built["path"]))[REJECTED].abstract is None
     assert stat.S_IMODE(Path(built["path"]).stat().st_mode) == 0o555
+
+
+def test_cli_build_names_each_twin_it_withheld_and_asks_for_it_to_be_listed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TASK-163: a twin withheld with a listed paper is named, with what to do when the list lacks it."""
+    from openproceedings.ingest import snapshot as snapshot_module
+
+    conf, copy, listed_copy = "op:iclr:2017:Hy-Conf01", "op:iclr:2017:Hy-Copy01", "op:iclr:2017:Hy-Copy02"
+    data = tmp_path / "data"
+    (data / "takedowns").mkdir(parents=True)
+    (data / "takedowns" / "withheld.txt").write_text(f"{conf}\n{listed_copy}\n", encoding="utf-8")
+    result = snapshot_module.BuildResult(
+        tmp_path / "s", "0" * 64, True, withheld=(conf, copy, listed_copy),
+        takedowns_twins={copy: conf, listed_copy: conf},
+    )  # fmt: skip
+    monkeypatch.setattr(snapshot_module, "build", lambda *_a, **_k: result)
+    assert cli.main(["--data-dir", str(data), "snapshot", "build"]) == 0
+    out, err = capsys.readouterr()
+    assert json.loads(out)["takedowns_twins"] == {copy: conf, listed_copy: conf}
+    assert err.splitlines() == [
+        f"op snapshot build: {copy} is {conf}'s twin (decision-029, the same paper): its abstract was withheld "
+        f"too; add {copy} to the takedown list and log a `withheld` entry for it",
+        f"op snapshot build: {listed_copy} is {conf}'s twin (decision-029, the same paper): its abstract was "
+        "withheld too",
+    ]
 
 
 def test_cli_build_refuses_a_malformed_list(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

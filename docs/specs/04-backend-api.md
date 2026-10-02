@@ -139,6 +139,14 @@ text: what matches is never changed, guarantee 4). False means a null `abstract`
 its abstract and its abstract claims (`content_hash` recomputed for what it shows) and with no abstract spans;
 its `matched` is still the index's answer.
 
+`twins` (TASK-162, additive; decision-029) lists, sorted, the ids of the hit's twins: other records of the same
+paper that the index keeps apart, never merged (an ICLR 2017 workshop-listing copy and its conference
+submission), read from the record's `twin` claims. Each is a paper of the same index (a snapshot build refuses
+a dangling twin claim). Usually empty; one or two ids otherwise. Each twin keeps matching on its own text, so
+`twins` never changes what matches (guarantee 5). `GET /papers/{id}` carries the same `twins` at its top level
+(the claims are in `paper.provenance` too). A takedown of a paper withholds its twins' abstracts as well
+(TASK-163, spec 08 §Deploy).
+
 `abstract_source` (TASK-134, additive; decision-018) names where a hit's `abstract` came from so the result list
 can attribute it:
 - `source`: the provenance claim precedence took the abstract from (decision-005; the open `Source` set, as
@@ -274,6 +282,14 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   `abstract_withheld_reason`, appended after `abstract_withheld` (`takedown`, `source_unavailable`, or empty
   when nothing is withheld), and a JSONL key of the same name (null when nothing is withheld): additive under
   decision-021. A record both listed and in an unattributable export says `takedown`.
+  **Twins** (TASK-162, decision-029): a record with twins names their ids, sorted and joined by `; `: an RIS
+  `N1  - See also: <ids> (this paper's other record on OpenReview, decision-029).` (`other records` for two;
+  after the status sentence, before the abstract's line, so the provenance line stays last and the
+  abstract or withheld line just before it; `export.see_also`), a BibTeX `openproceedings_twins = {<ids>}`
+  after `openproceedings_id`, a CSV column `twins` appended last (empty for a record without one), and a JSONL
+  `twins` list. Additive under decision-021: a record without a twin exports byte for byte as before in RIS,
+  BibTeX and JSONL (the JSONL key is left out, not null); CSV, whose columns are fixed, gains the one empty
+  cell. An export whose snapshot can't be verified (decision-021) names no twins.
 - **`TY` is `CPAPER`, not `JOUR`** (task-004). Every exported paper is a conference paper. Zotero's RIS
   translator (`RIS.js`, 2026-01-05) imports `CPAPER` as `conferencePaper` and puts `T2` in its
   `conferenceName`; a `JOUR` would become a `journalArticle` with the conference in `publicationTitle`.
@@ -325,7 +341,8 @@ rewrites the query (guarantee 3). No hidden facet state exists.
   pinned by a search record; JSONL has the same five fields, null when not pinned), then the abstract-source
   columns `abstract_source`, `abstract_origin`, `abstract_url` and `abstract_withheld` (TASK-138, above;
   JSONL: an `abstract_source` object and `abstract_withheld`), then `abstract_withheld_reason` (TASK-136;
-  JSONL the same key), UTF-8 with a BOM (so Excel opens it correctly).
+  JSONL the same key), then `twins` (TASK-162; JSONL a list, only on a record with a twin), UTF-8 with a BOM
+  (so Excel opens it correctly).
 - **BibTeX:** `@inproceedings` for an `accepted` paper, with `booktitle` = the venue string. Any other status
   (`rejected`, `withdrawn`, `desk_rejected`, `unknown`) is `@unpublished`, BibTeX's type for a paper with an
   author and title that was not formally published, and has **no `booktitle`**. Its `note` starts
@@ -357,7 +374,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
     provenance columns `index_version`, `canonical_hash`, `exported_at` (the UTC date), `record_id` and
   `searched_at` (empty unless pinned by a record), then `abstract_source`, `abstract_origin` and
   `abstract_url` (empty when the abstract names no source), then `abstract_withheld` (`true`/`false`), then
-  `abstract_withheld_reason` (`takedown`, `source_unavailable` or empty; TASK-136). Two fields of
+  `abstract_withheld_reason` (`takedown`, `source_unavailable` or empty; TASK-136), then `twins` (TASK-162). Two fields of
     spec 01 are left out: `provenance` (per-field claims, a nested list) and `content_hash`. Both stay in the
     snapshot that `index_version` pins. Lists are joined with "; " (ambiguous if a value holds one; JSONL
     keeps lists). A text cell starting, after leading spaces, with `=`, `+`, `-` or `@` (full-width forms
@@ -373,7 +390,7 @@ rewrites the query (guarantee 3). No hidden facet state exists.
     an odd backslash run before it loses one backslash). A value never ends on a backslash. An
     author name holding a standalone `and`, or `others`, is braced, so it isn't split or read as et al.
   - **JSONL:** one object per record, with `index_version`, `canonical_hash`, `exported_at`, `record_id` and
-    `searched_at` (null unless pinned by a record), `abstract_source` (`{source, origin, url}` or null), `abstract_withheld` and `abstract_withheld_reason`: the lossless
+    `searched_at` (null unless pinned by a record), `abstract_source` (`{source, origin, url}` or null), `abstract_withheld` and `abstract_withheld_reason`, and `twins` on a record with a twin: the lossless
     format (CSV's formula guard adds a `'` to some cells). U+2028, U+2029 and U+0085 are escaped, so a record
     stays one line for every reader.
 

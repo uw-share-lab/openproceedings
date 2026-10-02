@@ -3,9 +3,10 @@ id: TASK-163
 title: >-
   Decide: should a takedown treat a decision-029 twin as the same paper, so the
   twin's abstract is withheld too? (decision-029 deferral)
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-02 09:27'
+updated_date: '2026-10-02 18:12'
 labels:
   - decision
   - ops

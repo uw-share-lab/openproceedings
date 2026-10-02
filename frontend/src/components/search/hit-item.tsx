@@ -6,11 +6,12 @@
  * the abstract excerpt, the abstract's attribution ("Abstract: PMLR", linking to the paper's page there;
  * decision-018, the API's `abstract_source`) and the outbound links. An abstract this instance withholds at a
  * rights holder's request (the API's `abstract_withheld`, decision-022) says so (copy RH-15), never "No abstract
- * in the index". Highlights are the API's spans only
+ * in the index". A record with twins (the API's `twins`, decision-029) names each, a link to its paper page (copy
+ * RH-18). Highlights are the API's spans only
  * (never re-matched); the excerpt window is chosen from them (`excerpt.ts`), so it never decides what matched.
  */
 import Link from "next/link";
-import { useId, useState } from "react";
+import { Fragment, useId, useState } from "react";
 import { excerpt, utf16Spans } from "@/lib/excerpt";
 import type { Mode } from "@/lib/search-state";
 import { Highlighted } from "../highlighted";
@@ -30,6 +31,34 @@ export const ABSTRACT_WITHHELD = "Abstract removed from this site at a rights ho
 export const WITHHELD_TERMS = "Any terms it matched in the removed abstract aren't shown.";
 /** The same on a result, where nothing names the search first. */
 export const WITHHELD_SEARCH_TERMS = "Any terms your search matched in the removed abstract aren't shown.";
+
+/** The lead-in before a record's twins (copy RH-18, PA-10; decision-029): the same paper, listed again as
+ * another record the index keeps (an ICLR 2017 workshop copy and its conference submission). */
+export function seeAlsoLead(n: number): string {
+  return n === 1 ? "See also (the same paper's other record):" : "See also (the same paper's other records):";
+}
+
+/** A record's twins, each id a link to its paper page; with a query, the query rides along as it does from a
+ * result's title (`paperHref`), so the twin's page shows the same highlights. Nothing when it has none. */
+export function TwinLinks({ twins, q, mode }: { twins: readonly string[]; q: string | null; mode: Mode }) {
+  if (twins.length === 0) return null;
+  return (
+    <p className="text-sm break-words">
+      {seeAlsoLead(twins.length)}{" "}
+      {twins.map((id, i) => (
+        <Fragment key={id}>
+          {i > 0 && ", "}
+          <Link
+            href={q === null ? `/paper/${encodeURIComponent(id)}` : paperHref(id, q, mode)}
+            className="inline-flex min-h-6 items-center font-mono break-all underline underline-offset-4"
+          >
+            {id}
+          </Link>
+        </Fragment>
+      ))}
+    </p>
+  );
+}
 
 /** Authors shown before "et al." (ui-design-system §Result item); the rest behind "Show all n authors". */
 export const AUTHORS_SHOWN = 3;
@@ -183,6 +212,7 @@ export function HitItem({ hit, q, mode }: { hit: SearchHit; q: string; mode: Mod
           {hit.abstract_source !== null && <AbstractSource from={hit.abstract_source} title={hit.title} />}
         </>
       )}
+      <TwinLinks twins={hit.twins} q={q} mode={mode} />
       <PaperLinks urls={hit.urls} label={`Links for ${hit.title}`} />
     </article>
   );
