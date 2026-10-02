@@ -67,3 +67,6 @@ cap to the wildcard strategies.
   past 90 min unfinished. A single property that never finishes needs the differential's treatment (seeded shards
   through an env var), not a bigger bucket. Under xdist `-v`, a running test's node id has no newline until it
   ends, so GitHub's log shows it only when the interrupt flushes it: the test is named, but its start time isn't.
+- Proof run 3 (37017691575): no overruns; the slowest job was oracle-near-cap at 89 min of 150. Three proof runs
+  found three real bugs the PR gate's derandomized 200 examples never reached (U+0CE2 and U+102B in the tokenizer
+  oracle, #86; a dedup bridge, TASK-174): nightly exploration earns its runner time.
