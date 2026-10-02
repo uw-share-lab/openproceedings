@@ -5,13 +5,23 @@ the claim's evidence and the snapshot manifest, never silently."""
 from __future__ import annotations
 
 import json
+import logging
 import sys
 import time
 import unicodedata
 from pathlib import Path
 
 import pytest
-from openproceedings.ingest.caps import MAX_ABSTRACT, MAX_MARKS, TRIMMED, cap, cap_marks, cap_records, is_mark
+from openproceedings.ingest.caps import (
+    MAX_ABSTRACT,
+    MAX_MARKS,
+    TRIMMED,
+    cap,
+    cap_marks,
+    cap_records,
+    is_mark,
+    is_trimmed,
+)
 from openproceedings.ingest.dedup import attribution
 from openproceedings.ingest.snapshot import build, ingest_ris, load_records
 from openproceedings.query.normalize import tokenize
@@ -53,6 +63,34 @@ def test_a_run_at_the_start_of_the_text_is_capped_too() -> None:
     assert cap_marks(ACUTE * 12 + "x") == (ACUTE * 8 + "x", 4)
 
 
+@pytest.mark.parametrize(
+    "sep",
+    ["\u200d", "\ufe00", "\u034f", "\u00ad", "\u20dd", "\\-", " ", "-"],
+    ids=["zwj", "variation-selector", "grapheme-joiner", "soft-hyphen", "enclosing-mark", "latex-hyphen", "space",
+         "hyphen"],
+)  # fmt: skip
+def test_only_a_letter_or_digit_ends_a_run(sep: str) -> None:
+    # the tokenizer joins a word across the invisible characters and `\-`, so marks on both sides reach NFC as
+    # one run (TASK-155 security review): only a base a word restarts on, a letter or digit, ends a run
+    marks = "\u0316\u0301" * 4  # 8 marks, combining classes 220 and 230 alternating
+    out, dropped = cap_marks("\u0e01" + (marks + sep) * 3)
+    assert dropped == 16 and out == "\u0e01" + marks + sep * 3
+    assert cap_marks("\u0e01" + marks + sep + "\u0e02" + marks)[1] == 0  # a letter after it: a new run
+
+
+def test_no_word_the_tokenizer_forms_from_capped_text_holds_a_long_run() -> None:
+    # the invariant that keeps NFC linear: a bounded run of non-starters in every token, whatever separates them
+    marks = "\u0316\u0301" * 50
+    for sep in ("\u200d", "\ufe00", "\u034f", "\u00ad", "\u20dd", "\\-", ""):
+        capped, _ = cap("abstract", ("\u0e01" + marks + sep) * 200)
+        for token in tokenize(capped):
+            run = longest = 0
+            for ch in unicodedata.normalize("NFD", token.text):
+                run = run + 1 if unicodedata.combining(ch) else 0
+                longest = max(longest, run)
+            assert longest <= 2 * MAX_MARKS + 2
+
+
 def test_ordinary_text_is_returned_as_it_is() -> None:
     for text in ("Trust in LLMs", "Gödel, Erdős and Đặng", "ป่า ภาษา", "がぎ", "x₁, …, x_n", "a" + ACUTE * 8):
         out, dropped = cap_marks(text)
@@ -71,14 +109,16 @@ def test_a_long_abstract_is_cut_and_noted() -> None:
     text = "word " * 5_000 + "end"  # 25,003 characters
     out, note = cap("abstract", text)
     assert len(out) <= MAX_ABSTRACT and text.startswith(out) and out == out.strip()
-    assert note == f"{TRIMMED} cut from 25,003 to 20,000 characters"
+    assert len(out) == 19_999  # the cut ends on a space, which is stripped
+    assert note == f"{TRIMMED} cut from 25,003 to 19,999 characters"  # the length kept, not the cap
 
 
 def test_a_cut_abstract_never_ends_in_whitespace_or_an_ellipsis() -> None:
     # a record refuses either: whitespace is stripped by importers, a trailing `…` reads as a Scholar snippet
     text = "x" * (MAX_ABSTRACT - 3) + " … …" + "y" * 10
     out, note = cap("abstract", text)
-    assert out == "x" * (MAX_ABSTRACT - 3) and note is not None
+    assert out == "x" * (MAX_ABSTRACT - 3)
+    assert note == f"{TRIMMED} cut from 20,011 to 19,997 characters"
 
 
 def test_a_title_has_no_length_cap() -> None:
@@ -89,7 +129,7 @@ def test_a_title_has_no_length_cap() -> None:
 def test_both_caps_are_noted_together() -> None:
     _, note = cap("abstract", HOSTILE + " x" * MAX_ABSTRACT)
     assert note == (
-        f"{TRIMMED} 92 combining marks dropped past 8 per base character; cut from 40,009 to 20,000 characters"
+        f"{TRIMMED} 92 combining marks dropped past 8 per base character; cut from 40,009 to 19,999 characters"
     )
 
 
@@ -111,7 +151,7 @@ def test_a_record_and_its_claims_are_trimmed_alike_and_flagged() -> None:
     [abstract] = out.claims("abstract")
     assert title.value == out.title and abstract.value == out.abstract
     assert title.evidence == f"content.title ({TRIMMED} 92 combining marks dropped past 8 per base character)"
-    assert abstract.evidence == f"{TRIMMED} cut from 39,999 to 20,000 characters"
+    assert abstract.evidence == f"{TRIMMED} cut from 39,999 to 19,999 characters"
     assert out.claims("status") == r.claims("status")  # nothing else changes
     assert out.content_hash != r.content_hash  # rehashed for the trimmed text
     # the abstract's attribution still finds the claim that holds its text
@@ -120,7 +160,39 @@ def test_a_record_and_its_claims_are_trimmed_alike_and_flagged() -> None:
 
 def test_a_record_under_both_caps_is_the_same_object() -> None:
     r = record()
-    assert cap_records([r])[0] is r
+    assert cap_records([r])[0] is r and not is_trimmed(r)
+
+
+def test_a_claim_over_the_cap_is_trimmed_when_the_records_own_text_is_not() -> None:
+    # another source's title claim lost to precedence: still trimmed and flagged, the record's title unchanged
+    r = record(
+        title="Plain",
+        provenance=(
+            claim("title", "Plain", evidence="content.title"),
+            claim("title", "Plain " + HOSTILE, source="pmlr", evidence="title"),
+        ),
+    )
+    [out] = cap_records([r])
+    assert out is not r and out.title == "Plain" and is_trimmed(out)
+    kept, trimmed = sorted(out.claims("title"), key=lambda c: c.source != "openreview_v2")
+    assert kept.evidence == "content.title" and kept.value == "Plain"
+    assert trimmed.value == "Plain a" + (ACUTE + SLASH) * 4 and trimmed.evidence is not None
+    assert trimmed.evidence.startswith(f"title ({TRIMMED}")
+
+
+@pytest.mark.parametrize(
+    ("evidence", "flagged"),
+    [
+        (f"{TRIMMED} 3 combining marks dropped past 8 per base character", True),
+        (f"content.abstract ({TRIMMED} cut from 25,003 to 19,999 characters)", True),
+        (f"scholarmend:proceedings_page {TRIMMED} 3 forged", False),  # mid-evidence, not the note's form
+        (f"content.abstract ({TRIMMED} 3 marks) and more", False),  # not at the end
+        ("content.abstract", False),
+    ],
+)
+def test_only_the_notes_own_form_flags_a_record(evidence: str, flagged: bool) -> None:
+    r = record(provenance=(claim("abstract", "We study trust.", evidence=evidence),))
+    assert is_trimmed(r) is flagged
 
 
 def test_a_proceedings_page_evidence_keeps_its_url_first() -> None:
@@ -142,8 +214,9 @@ def hostile_cache(tmp_path: Path) -> Path:
 
 
 def test_a_snapshot_trims_a_hostile_abstract_and_names_its_record(
-    hostile_cache: Path, tmp_path: Path
+    hostile_cache: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
+    caplog.set_level(logging.INFO, logger="openproceedings.ingest.snapshot")
     result = build(hostile_cache, tmp_path / "snapshots", BUILT)
     records = load_records(result.path)  # re-validated, content_hash included
     trimmed = records[REJECTED]
@@ -155,6 +228,14 @@ def test_a_snapshot_trims_a_hostile_abstract_and_names_its_record(
     assert HOSTILE not in (result.path / "records.jsonl").read_text(encoding="utf-8")
     manifest = json.loads((result.path / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["trimmed"] == [REJECTED]
+    # the build says so once, as a count (never the ids), on the built path and the already-built one
+    build(hostile_cache, tmp_path / "snapshots", BUILT)
+    logged = [(r.message, r.levelname, getattr(r, "trimmed", None)) for r in caplog.records]
+    assert [x for x in logged if x[0].startswith("snapshot_")] == [
+        ("snapshot_trimmed", "WARNING", 1), ("snapshot_built", "INFO", 1),
+        ("snapshot_trimmed", "WARNING", 1), ("snapshot_exists", "INFO", 1),
+    ]  # fmt: skip
+    assert not any(REJECTED in str(r.__dict__) for r in caplog.records)
 
 
 def test_a_snapshot_with_nothing_to_trim_has_no_trimmed_key(tmp_path: Path) -> None:
@@ -165,11 +246,12 @@ def test_a_snapshot_with_nothing_to_trim_has_no_trimmed_key(tmp_path: Path) -> N
 
 
 def test_tokenizing_the_largest_capped_abstract_stays_linear() -> None:
-    # TASK-155 AC #3: the worst text the caps allow (8 alternating marks on every base, 20,000 characters)
-    # costs about what plain text of that length does, while the uncapped run it came from is superlinear
-    worst = ("a" + (ACUTE + SLASH) * 4) * (MAX_ABSTRACT // 9)
+    # TASK-155 AC #3: the worst text the caps allow, 20,000 characters of a base whose marks the fold keeps (Thai)
+    # and 8 alternating marks (classes 220 and 230, no slash cluster), all one word, tokenizes within 20x plain
+    # text of that length and under half a second; the same marks uncapped grow superlinearly
+    worst = ("\u0e01" + "\u0316\u0301" * 4) * (MAX_ABSTRACT // 9)
     assert cap("abstract", worst) == (worst, None)
-    plain = "a" * len(worst)
+    plain = "\u0e01" * len(worst)
 
     def secs(text: str) -> float:
         t = time.thread_time()

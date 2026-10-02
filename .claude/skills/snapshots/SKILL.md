@@ -69,11 +69,13 @@ OpenReview v2, v1, NeurIPS, PMLR, in that order; every source's reports share `c
 times make each `crawl_window`; `op ingest` writes each source's markers through the same `Crawls.ingest`, so a
 marker lands where the replay reads it), and adds the conflicts a v1 crawl found inside one source to
 `conflicts.csv` (`with_crawl_conflicts`). **Ingest caps** (TASK-155, decision-026): `load_sources` runs every
-record through `caps.cap_records` before dedup. A run of combining marks in a title or abstract keeps 8 per base
-character, and an abstract keeps 20,000 characters. Each trimmed claim's evidence ends with `trimmed at ingest
-(decision-026): …`, and the manifest's `trimmed` lists those ids, sorted. The key is written only when there is
-one, so a corpus within the caps has the manifest and `records.jsonl` it had. The build log's `trimmed` counts
-them. **Takedowns** (TASK-136, decision-022): `build` withholds every
+record through `caps.cap_records` before dedup. A run of combining marks in a title or abstract keeps 8 marks
+(only a letter or digit ends a run), and an abstract keeps 20,000 characters. Each trimmed claim's evidence
+carries the note `trimmed at ingest (decision-026): …`, after any source evidence in parentheses. The manifest's
+`trimmed` lists, sorted, the records with any trimmed title or abstract claim left after withholding. The key is
+written only when there is one, so a corpus within the caps has the manifest and `records.jsonl` it had.
+`snapshot_built` / `snapshot_exists` carry the `trimmed` count, and a non-zero count adds one WARNING
+`snapshot_trimmed`. **Takedowns** (TASK-136, decision-022): `build` withholds every
 abstract on the takedown list (`--takedowns`, default `<data-dir>/takedowns/withheld.txt`; `takedowns.py`)
 after dedup and reconcile (`snapshot.withhold`: `abstract` null, the abstract claims dropped, those records'
 abstract `conflicts.csv` values replaced by `(withheld: takedown)`, repeated rows collapsed), so

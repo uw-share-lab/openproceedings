@@ -233,8 +233,9 @@ def load_cache(cache: Path) -> tuple[list[PaperRecord], list[ImportReport]]:
 def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], list[Report]]:
     """Every cached source, with no network: the RIS imports, then every finished crawl of every crawler
     (OpenReview API v2 and v1, ICLR, NeurIPS, PMLR) re-run from its cache (`sources/crawl.replay_all`). Returns the
-    records (under the ingest caps, `caps.cap_records`), the RIS reports and the crawl reports. Refuses an empty cache, and a crawl that can't be replayed
-    (a `SourceError`: a marked crawl whose responses are gone, an unreadable cache entry or marker)."""
+    records (under the ingest caps, `caps.cap_records`), the RIS reports and the crawl reports. Refuses an empty
+    cache, and a crawl that can't be replayed (a `SourceError`: a marked crawl whose responses are gone, an
+    unreadable cache entry or marker)."""
     from openproceedings.ingest.sources.crawl import replay_all
     from openproceedings.ingest.sources.http import SourceError
 
@@ -586,6 +587,9 @@ def build(
     manifest = json.loads(files["manifest.json"])
     snapshot_hash = manifest["snapshot_hash"]
     target = snapshots / f"{manifest['crawl_date']}-{snapshot_hash[:SHORT]}"
+    trimmed = len(manifest.get("trimmed", ()))
+    if trimmed:  # the build changed source text (decision-026): worth a look, once per build, never the ids
+        log.warning("snapshot_trimmed", extra={"snapshot": target.name, "trimmed": trimmed})
     with storage.exclusive(snapshots):
         storage.sweep(snapshots)
         if target.exists():
@@ -604,7 +608,7 @@ def build(
             storage.lock(target)  # a crash between placing and locking left it writable
             log.info(
                 "snapshot_exists",
-                extra={"snapshot": target.name, "snapshot_hash": snapshot_hash,
+                extra={"snapshot": target.name, "snapshot_hash": snapshot_hash, "trimmed": trimmed,
                        "abstracts_withheld": len(withholding.withheld),
                        "takedowns_followed": len(withholding.followed),
                        "takedowns_unmatched": len(withholding.unmatched)},
@@ -618,7 +622,7 @@ def build(
         "snapshot_built" if created else "snapshot_exists",
         extra={"snapshot": target.name, "snapshot_hash": snapshot_hash, "records": manifest["record_count"],
                "merges": manifest["merges"]["total"], "conflicts": manifest["conflicts"]["total"],
-               "trimmed": len(manifest.get("trimmed", ())), "abstracts_withheld": len(withholding.withheld),
+               "trimmed": trimmed, "abstracts_withheld": len(withholding.withheld),
                "takedowns_followed": len(withholding.followed),
                "takedowns_unmatched": len(withholding.unmatched),
                "unexpected_statuses": len(unexpected), "ms": elapsed_ms(began, time.monotonic)},
