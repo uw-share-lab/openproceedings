@@ -142,7 +142,7 @@ it does not index arbitrary RIS records from other venues.
 
 For the local Trust-Evals workspace, the raw exports are in `../Trust-Evals-LitReview/corpus/`.
 The existing combined prepared collection is `../scholarmend/out-covidence-2020-2026/mended.ris` with its
-adjacent `resolved.json`; it contains 1,833 RIS entries. These are local inputs, not files distributed with
+adjacent `resolved.json`. These are local inputs, not files distributed with
 OpenProceedings. To use that collection, replace `/path/to/mended/mended.ris` above with that path.
 
 Continue with steps 4–6 below, keeping `OP_DATA_DIR` set in each terminal that builds or serves this collection.
