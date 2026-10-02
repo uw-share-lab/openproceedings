@@ -9,8 +9,8 @@
 Document how an existing Scholar collection becomes a searchable, filtered RIS export without requiring a whole-venue crawl.
 
 ## What we learned
-- The importer consumes a scholarmend output pair, rather than an arbitrary raw RIS file. `ris.import_file` reads the adjacent `resolved.json`, checks record counts and alignment, and derives identity and metadata evidence from its claims. The README now starts with preparation using scholarmend 0.1.5 and tells readers to retain both outputs and the original exports.
-- Corpus membership comes from the selected data directory. `cli.data_dir` uses `OP_DATA_DIR`; the parser translates Scholar-compatible `source:` values to venues. A query over mixed crawl and RIS data cannot recover the original Scholar collection merely by adding `source:`.
+- The importer consumes a scholarmend output pair, rather than an arbitrary raw RIS file. `ris.import_ris` reads the adjacent `resolved.json`, checks record counts and alignment, and derives identity and metadata evidence from its claims. The README now starts with preparation using scholarmend 0.1.5 and tells readers to retain both outputs and the original exports.
+- Corpus membership comes from the selected data directory. `cli.default_data_dir` uses `OP_DATA_DIR`; the parser translates Scholar-compatible `source:` values to venues. A query over mixed crawl and RIS data cannot recover the original Scholar collection merely by adding `source:`.
 - A later shell command can break an otherwise correct isolated workflow: the README's index-promotion step previously hard-coded `data/indexes`. It now uses `${OP_DATA_DIR:-data}/indexes`, and the import instructions carry the environment variable through building and serving.
 - The README identifies the existing local prepared collection and distinguishes its input entries from imported or deduplicated papers. The documented import report reports skipped unresolved, ambiguous, conflicting and out-of-scope records. Source inputs were inspected without modification during this documentation task.
 
