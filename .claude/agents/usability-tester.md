@@ -38,9 +38,9 @@ participants did, not from your opinion.
 6. **Synthesize.** Map each observed problem to the task, how many participants hit it, and a severity
    0–4. Put metrics in a table with n. For small samples, give completion as a count and an adjusted-Wald
    interval, not a bare percentage.
-7. **File work.** Each finding of severity ≥2 becomes a Backlog task (`backlog task create …`) with the
-   evidence. Design-level findings go to `.claude/agents/ux-designer.md`. Wording findings go to
-   `.claude/agents/ux-writer.md`.
+7. **File work.** Each finding of severity ≥2 becomes a Backlog task (`backlog task create …`, after
+   rebasing onto `dev`: task-hygiene §Ids) with the evidence. Design-level findings go to
+   `.claude/agents/ux-designer.md`. Wording findings go to `.claude/agents/ux-writer.md`.
 
 ## Output
 `docs/usability/<date>-<flow>/plan.md` (and `report.md` after sessions): the plan's ethics status, tasks

@@ -154,9 +154,23 @@ closing an interactive terminal:
   live check of that shape. Its run log should be read for the `merge group …: #N @ …` line, to see whether
   `base_sha` is `dev`'s tip (several PRs listed) or the previous entry (one PR). Once it merges, confirm
   that its `merge_commit_sha` (`gh api repos/<owner>/<name>/pulls/<n> --jq .merge_commit_sha`) is its
-  `gh-readonly-queue` commit, which the merged-ahead exception assumes. Record both answers here.
+  `gh-readonly-queue` commit, which the merged-ahead exception assumes. The answers are in §Verified live.
 - Every queue entry runs the full `test` job again on the combined result. That doubles CI minutes per PR,
   which is the price of never merging an untested combination.
 - Release promotions (`dev → main`) and back-merges keep their existing procedure (spec 08 §Release). The
   back-merge PR into `dev` goes through the queue like any other PR, under the same `no-learning` label rule.
+- Two PRs that each create a task or decision on the same `dev` get one id under two filenames, with no git
+  conflict, so the queue could merge both. `check_backlog.py` (in `claude-tooling`, so in every queue build)
+  fails on a task or decision id used twice, and new ids are created last, after rebasing (spec 08 §Merge
+  queue; skill `task-hygiene`, §Ids).
+
+## Verified live
+
+- The first queued PR, #81 (2026-10-02), passed the `merge_group` gate: `review-attested`, `learnings` and
+  `attribution`. The run log line was `merge group 8980b290a1: #81 @ 4d9b3722f8`.
+- For a single queue entry, `base_sha` was `dev`'s tip (`0bcc9e8`), the queue commit's parent 1.
+- The PR's `merge_commit_sha` equals the `gh-readonly-queue` head sha (`8980b29`), and that commit is on
+  `dev`'s first-parent history. What merged is exactly what was tested, as the merged-ahead exception assumes.
+- Still unverified: `base_sha` for a second entry queued at the same time (`dev`'s tip, or the previous
+  entry's queue commit). Read the log of the next build that holds two PRs.
 

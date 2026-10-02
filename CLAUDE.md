@@ -80,9 +80,10 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
 ## Keep everything current (rule, 2026-09-25; `.claude/skills/task-hygiene/SKILL.md`)
 - **Backlog tasks, docs, specs, READMEs and every `.md` are updated continuously**, in the same commit as
   the change they describe. Never in a later catch-up PR.
-- Tick acceptance criteria as you meet them. Create follow-up tasks when you find them.
+- Tick acceptance criteria as you meet them. Note follow-ups when you find them and file them as tasks
+  at the end of the branch, after rebasing onto `dev` (new ids are created last: `task-hygiene` §Ids).
 - **When a task is Done, run `backlog task complete <id>`**, which moves it to `backlog/completed/`. CI fails
-  on a Done task left in `backlog/tasks/`.
+  on a Done task left in `backlog/tasks/`, and on two tasks or two decisions that share an id.
 - `docs-reviewer` runs on every diff.
 
 ## Tests never call real APIs (rule, 2026-09-25)
