@@ -106,7 +106,13 @@ def test_422_message_is_bounded_whatever_the_key_or_text() -> None:
         f"Check the request's parameters — `body.{'k' * 29}…`: m\\x60 {'x' * 193}…."
     )
     exact = [{"loc": ("body", f"k{i}"), "msg": EXTRA} for i in range(MAX_NAMED_PARAMS)]
-    assert "more" not in bad_param_message(exact)
+    named = "; ".join(f"`body.k{i}`: {EXTRA}" for i in range(MAX_NAMED_PARAMS))
+    assert bad_param_message(exact) == f"Check the request's parameters — {named}."
+
+
+def test_422_unknown_query_parameter_is_quoted_through_clip(client: TestClient) -> None:
+    error = envelope(client.get("/api/v1/search?q=trust&a%0Ab%60=1"), "API_BAD_PARAM")
+    assert error["message"].startswith("Check the request's parameters — unknown parameter `a b\\x60`.")
 
 
 @given(st.dictionaries(st.text(), st.integers(), min_size=1, max_size=8))
