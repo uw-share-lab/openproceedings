@@ -91,8 +91,8 @@ digits, Thai, kana, CJK). Import it as `from tests.strategies import …`. Prope
 the oracle, all-negative rejection, Scholar mode reads canonical strings identically). PR CI runs the `pr`
 profile (200) in parallel; the nightly workflow runs the whole suite at `ci` (2,000) and every property at
 `nightly` (50,000), the latter as a 5-part matrix under pytest-xdist split by measured time per test (the near-cap
-replay property alone, the other oracle-backed ones, `unit/engine`, `unit/ingest`, the rest), and the
-differential's own 8-way split. Those steps set `OP_EARLY_FAILURES=1` (`conftest.py`): a failure's falsifying
+replay property alone, the other oracle-backed ones, `unit/engine`, `unit/ingest`, the rest), the year-edit
+property's 4-way split (`OP_YEAR_EDIT_SHARDS`, a `year-edits` job), and the differential's own 8-way split. Those steps set `OP_EARLY_FAILURES=1` (`conftest.py`): a failure's falsifying
 example and blob are printed when it fails, so a step later interrupted at its time limit still shows them
 (`backend/tests/unit/test_early_failures.py`, case table `.claude/scripts/tests/test-early-failures.sh`, mutants in
 `gates.json`). Counterexamples found so

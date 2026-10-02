@@ -63,3 +63,7 @@ cap to the wildcard strategies.
   prints nothing). A step that pipes needs `shell: bash` (`-eo pipefail`).
 - Propagated to: `backend/tests/conftest.py` (`_EarlyFailures`), spec 08 §CI and §Mutation testing.
 - Test added: `backend/tests/unit/test_early_failures.py` (case table `test-early-failures.sh`, 4 gates.json mutants).
+- Proof run 2 (36993177724): the 5-part split left test_clauses' year-edit property in `rest`, where it again ran
+  past 90 min unfinished. A single property that never finishes needs the differential's treatment (seeded shards
+  through an env var), not a bigger bucket. Under xdist `-v`, a running test's node id has no newline until it
+  ends, so GitHub's log shows it only when the interrupt flushes it: the test is named, but its start time isn't.

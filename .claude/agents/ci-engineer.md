@@ -36,7 +36,8 @@ tempted to bypass it.
    Nightly's jobs, each bounded (TASK-057): the whole backend suite but the differential at the `ci` profile
    (2,000) under xdist; every property at 50k as a 5-part `properties` matrix under xdist (the near-cap replay
    property alone, the other oracle-backed ones, `unit/engine`, `unit/ingest`, and the rest with the exhaustive
-   tokenizer check), split by the measured time per test; `differential`, 8 matrix jobs of 6,250 examples with their own `--hypothesis-seed`
+   tokenizer check), split by the measured time per test, and the year-edit property as 4 seeded `year-edits` jobs
+   (`OP_YEAR_EDIT_SHARDS`); `differential`, 8 matrix jobs of 6,250 examples with their own `--hypothesis-seed`
    (`OP_DIFFERENTIAL_SHARDS`); `benchmarks` (5k budgets asserted, then the ~80k report into the run summary and a
    `bench-80k` artifact); and `mutate.py`, time-boxed to 140 min (a surviving or stale mutant fails; a cut-off run with none passes with a "partial run" warning, since the full run is past the 6 h job cap until it is sharded). Long pytest steps set `OP_EARLY_FAILURES=1` (a failure's report and blob are printed when it fails) and run `-v` inside `timeout --signal=INT` a few
    minutes short of the job limit, so an overrun is an `::error::` with the unfinished test in the log.

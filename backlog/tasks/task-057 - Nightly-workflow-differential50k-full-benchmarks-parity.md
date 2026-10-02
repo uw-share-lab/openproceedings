@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-02 08:58'
+updated_date: '2026-10-02 13:57'
 labels:
   - ops
 milestone: m-4
@@ -38,4 +38,6 @@ Nightly (TASK-057): new differential job (8 matrix shards x 6,250 examples at th
 Review round 1 fixes: job renamed benchmarks (bench is bench.yml's PR check); report_80k lists budgeted numbers past their budget (Over budget section; ::warning:: in GitHub Actions; position-verified strings exempt when cold); the report step has a 45-min step limit and runs/uploads unless cancelled or the sync failed; cap words include one-letter-longer forms so $ on a cap stem expands too; CAP_STEMS ordered with the exact cap first; cap_records hash-pinned (CAP_HASH). AC #4's ~1 h estimate: measured ~0.15 CPU-s per example locally, ~2 h CPU at 50k, hence 8 shards.
 
 Proof run 36972065571 (15bd468): suite-ci 14 min; differential 8 shards 10-20 min each, all green; benchmarks 20 min (5k 30 s, 80k report 19.5 min, nothing over budget); properties-oracle 133 min green (one 100-min test); properties overran 130 min (test_clauses year-edit property unfinished) and showed a real falsifying example in test_normalize tail (text U+0CE2, blob AEEAg+Czog==, reported to the team lead, not fixed here); mutate cancelled at 45 min after 63 of 548 mutants (full run ~6.5 h on 4 CPUs, over the 6 h cap: sharding mutate.py is a deferral). Fix: properties is a 5-part matrix split by measured time per test; long steps set OP_EARLY_FAILURES=1 so a failure's report and blob print when it fails.
+
+Proof run 2 (36993177724, d1ce4774): properties (rest) failed on U+102B (oracle bug class of U+0CE2, fixed on dev by #86; reported early with its blob by OP_EARLY_FAILURES) and also overran 130 min on test_clauses' year-edit property (unfinished after 90+ min, as in run 1). Fix: the year-edit property is its own year-edits job of 4 seeded shards of 12,500 (OP_YEAR_EDIT_SHARDS), deselected from rest. AC #1 waits for run 3. Mutate sharding: TASK-171.
 <!-- SECTION:NOTES:END -->
