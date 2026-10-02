@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-02 19:33'
+updated_date: '2026-10-02 19:41'
 labels:
   - ops
 milestone: m-6
@@ -32,11 +32,11 @@ Spec 08 §Deploy (release-manager).
 
 <!-- SECTION:PLAN:BEGIN -->
 Host-agnostic: nothing names a host (TASK-064 decides).
-1. deploy/api.Dockerfile (uv, locked, no dev; user op-api 10001), deploy/caddy.Dockerfile (unprivileged, file capability removed), deploy/Caddyfile (spec 08 directives; OP_DOMAIN with local CA for localhost, ACME otherwise; OP_HSTS without includeSubDomains by default), deploy/compose.yml (api, web, caddy; ops and takedown-check one-offs; internal network; read-only root fs, cap_drop ALL, no-new-privileges).
-2. Mounts (AC#3): takedowns/ read-only holding only withheld.txt; indexes/ closed by modes (deploy/index-permissions.sh), since Tantivy needs the lock file; records in a named volume owned by op-api.
-3. Runbook deploy/README.md: settings, first start, promotion, retire, takedowns, what remains for the host (AC#2).
-4. deploy/smoke-test.sh over a fixture (backend/tests/deploy/fixture_data.py): TLS, users and mounts, promotion, retire, takedown, logs. Run it on Docker Desktop and on Linux (docker-in-docker).
-5. Spec 08 §Deploy, decision-022 addendum (log location under compose), CLAUDE.md as-built.
+1. Images: deploy/api.Dockerfile (uv, locked, no dev tools; user op-api, uid and gid 10001 by default via OP_API_UID/OP_API_GID) and deploy/caddy.Dockerfile (unprivileged, file capability removed). deploy/Caddyfile follows spec 08: OP_DOMAIN uses the local CA for localhost and ACME otherwise; OP_HSTS has no includeSubDomains by default. deploy/compose.yml runs api, web and caddy, plus the ops and takedown-check one-offs, on an internal network, with a read-only root filesystem, cap_drop ALL and no-new-privileges.
+2. Mounts (AC#3): takedowns/ read-only, holding only withheld.txt. indexes/ closed by file modes (deploy/index-permissions.sh, with the gid a required argument), since Tantivy writes its lock file. records/ a host directory, 0700, owned by OP_API_UID.
+3. Runbook deploy/README.md (AC#2): settings, first start, release deploy, promotion, retire, takedowns, backups, and what remains for the host.
+4. deploy/smoke-test.sh over a fixture (backend/tests/deploy/fixture_data.py): TLS, users and mounts, promotion, retire, takedown, logs. Run on Docker Desktop and on Linux (docker-in-docker).
+5. Spec 08 §Deploy, the decision-022 addendum (where the log lives under compose) and CLAUDE.md, as built.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes

@@ -69,14 +69,14 @@ $OP_DATA_HOST/
   install -d -m 0700 /srv/openproceedings/takedown-log
   (umask 077 && touch /srv/openproceedings/takedown-log/log.jsonl)   # 0600
   ```
-  Name the directory with `OP_TAKEDOWN_LOG_HOST`. On a fresh instance `withheld.txt` is an empty file. It must exist, because
-  `op serve` behind the proxy refuses to load without it (`takedowns_missing`). Give it mode 0644 and the
-  directory 0755.
-- **`records/` is the only copy of every saved search.** It belongs to `op-api`: create it once with
-  `sudo install -d -o "$OP_API_UID" -g "$OP_API_GID" -m 0700 "$OP_DATA_HOST/records"` (compose refuses to
-  start without it, rather than create one the API can't write). Read or write records only as that user, through the `api`
-  container (`dc exec api op record replay <id> --json`): a store written by another user is one the API
-  can't open. Because the operator can't read it, an `op index retire` run on the host refuses
+  Name the directory with `OP_TAKEDOWN_LOG_HOST`. On a fresh instance `withheld.txt` is an empty file. It must
+  exist, because `op serve` behind the proxy refuses to load without it (`takedowns_missing`). Give it mode 0644
+  and the directory 0755.
+- **`records/` is the only copy of every saved search.** It belongs to `op-api`. Create it once with
+  `sudo install -d -o "$OP_API_UID" -g "$OP_API_GID" -m 0700 "$OP_DATA_HOST/records"`. Compose refuses to
+  start without it, rather than create one the API can't write. Read or write records only as that user,
+  through the `api` container (`dc exec api op record replay <id> --json`): a store written by another user
+  is one the API can't open. Because the operator can't read it, an `op index retire` run on the host refuses
   (`records_unreadable`) instead of counting no pins; run retire only in the `ops` container
   (§Retiring an index). Back it up (§Backups).
 - **Snapshots stay** while any kept index was built from them: there is no snapshot retire command, and a
@@ -104,10 +104,11 @@ can't be read-only. Plain file modes keep the API from changing the index instea
   them, and only its two `.tantivy-*.lock` files are group-writable (0660).
 
 `op index build` leaves a new version directory 0700 and owned by the operator. Before serving it, run
-`sudo deploy/index-permissions.sh "$OP_DATA_HOST/indexes" <index_version> "$OP_API_GID"` (or run it as an
-account in the host group with that gid). The gid is a required argument, never a default. The script refuses a version directory that holds a symlink. Snapshots and the takedown
-list are readable as built: the snapshot files are 0444 in 0555 directories. `smoke-test.sh` checks all of
-this on a Linux host: `op-api` can open the index and can't create, delete or rename anything in it.
+`sudo deploy/index-permissions.sh "$OP_DATA_HOST/indexes" <index_version> "$OP_API_GID"`, or run it as an
+account in the host group with that gid. The gid is a required argument, never a default. The script refuses a
+version directory that holds a symlink. Snapshots and the takedown list are readable as built: the snapshot
+files are 0444 in 0555 directories. `smoke-test.sh` checks all of this on a Linux host: `op-api` can open the
+index and can't create, delete or rename anything in it.
 
 ## First start
 
@@ -182,8 +183,8 @@ index.
    For a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy, run all of these from the
    release's checkout on the host: the running images can't serve the new index.
 3. **Permissions:** `sudo deploy/index-permissions.sh "$OP_DATA_HOST/indexes" <new_version> "$OP_API_GID"`.
-   Then replay a sample of saved searches on the API's own store,
-   `dc exec api op record replay <id> --json`. This checks the running code, not the new index: a record replays on its own index whenever that index is kept, so
+   Then replay a sample of saved searches on the API's own store, `dc exec api op record replay <id> --json`. This
+   checks the running code, not the new index: a record replays on its own index whenever that index is kept, so
    every sampled record whose index is kept must report `reproduced`, and `mismatch` (exit 3) blocks the
    promotion. `--index <new_version>` applies only to a record whose own index is gone.
 4. **Switch `current` atomically and reload:**
@@ -212,8 +213,8 @@ refuses, since the operator can't read the store.
 
 1. Confirm the new version is served (§Promoting an index, step 5), and that no other instance serves the
    old one by name (`op serve --index <v>`): retire can't see that.
-2. `grep -rn <old_version> docs/results "$OP_DATA_HOST/embeddings"` (from a checkout): a version a committed report cites is a decision
-   to retire, not a default.
+2. `grep -rn <old_version> docs/results "$OP_DATA_HOST/embeddings"` (from a checkout): a version a committed report
+   cites is a decision to retire, not a default.
 3. Retire:
    ```bash
    dc run --rm ops index retire <old_version> --dry-run   # the checks only
