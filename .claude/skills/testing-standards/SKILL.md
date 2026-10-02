@@ -16,7 +16,7 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 | Frontend unit | `frontend/**/*.test.ts(x)` (Vitest) | mocked API from generated types | builder↔AST, URL reducer |
 | e2e | Playwright | `backend/tests/e2e/fixture_server.py` builds/serves the temporary 5k index; production frontend build | the 05 §Testing flow end to end |
 | Bench | pytest-benchmark | fixture index (`bench` workflow, advisory), 80k report (`report_80k.py`) | >20% regression of the minimum fails the `bench` check |
-| Nightly | property/golden fixtures and exhaustive Unicode inputs | no full corpus | the whole backend suite at the `ci` profile (2,000), every property at 50k as a 5-part `properties` matrix, the year-edit property as 4 seeded `year-edits` jobs, exhaustive tokenizer check, differential@50k (8 parallel jobs), spec 03 benchmarks with their budgets plus the ~80k report (`benchmarks` job), gate/tooling mutation run time-boxed to 140 min, a warned partial run until it can be sharded (TASK-057) |
+| Nightly | property/golden fixtures and exhaustive Unicode inputs | no full corpus | the whole backend suite at the `ci` profile (2,000), every property at 50k as a 5-part `properties` matrix, the year-edit property as 4 seeded `year-edits` jobs, exhaustive tokenizer check, differential@50k (8 parallel jobs), spec 03 benchmarks with their budgets plus the ~80k report (`benchmarks` job), gate/tooling mutation run of every mutant as 8 `mutate` shards (`mutate.py --shard i/8`; TASK-057, TASK-171) |
 
 ## Fixtures (`backend/tests/fixtures/`)
 - **Golden 200:** hand-built records whose text is written to be tricky (benchmark/benchmarking,

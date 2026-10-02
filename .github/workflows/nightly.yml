@@ -180,22 +180,30 @@ jobs:
           path: ${{ runner.temp }}/bench-80k.md
           if-no-files-found: warn  # the report step failed, and said why
           retention-days: 30
-  # make mutate, time-boxed: the full run (548 mutants) needs ~6.5 h on a 4-CPU runner, past GitHub's 6 h job cap (63
-  # in 45 min in 36972065571), until mutate.py can be sharded across jobs (TASK-171). mutate.py runs mutants in a
-  # fixed order, so until then only about the first 190 of 548 are checked each night; the rest only by reviews'
-  # `make mutate-changed`. A surviving or stale mutant still fails the job; a run cut off at 140 min with none is a
-  # pass with a "partial run" warning giving about how many mutants it checked. A first step checks every mutant's
-  # pattern still exists, so a stale mutant past the time-box is still reported each night.
+  # make mutate as 8 jobs (TASK-171): `mutate.py --shard i/8` runs every 8th mutant from the i-th, so the 8 shards
+  # check every mutant every night. The whole run needs ~8.5 h of one 4-CPU runner (188 mutants in 140 min in
+  # 37017691575, when there were 642; the first step prints tonight's count), so each shard needs ~65 min of
+  # its 140; past that, raise SHARDS (here and in the matrix). A surviving or stale mutant fails its shard, and so
+  # does a shard cut off at 140 min (its unchecked mutants would go unchecked). The first step, in shard 1 only,
+  # checks every mutant's pattern still exists, so a stale mutant is reported once, in seconds.
   mutate:
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    name: mutate (${{ matrix.shard }}/8)
+    env:
+      SHARD: ${{ matrix.shard }}/8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
         run: uv sync --locked
-      - name: Every mutant's pattern still exists (all of them, in seconds; the time-box below reaches only about the first 190)
+      - name: Every mutant's pattern still exists (all of them, in seconds)
+        if: matrix.shard == 1
         run: |
           python3 -c '
           import glob, json, pathlib, sys
@@ -206,25 +214,21 @@ jobs:
           print(f"{len(ms)} mutants, {len(stale)} stale")
           sys.exit(1 if stale else 0)
           '
-      - name: mutate.py (make mutate), time-boxed to 140 min (every mutant checked killed, or documented as equivalent)
+      - name: mutate.py --shard (every mutant in this shard killed, or documented as equivalent; 140 min limit)
         if: ${{ !cancelled() }}  # a stale mutant above doesn't hide tonight's survivors
         shell: bash  # -eo pipefail, so the pipe through tee keeps mutate.py's status (the default bash -e has no pipefail)
         run: |
           git config --global user.email ci@example.invalid
           git config --global user.name ci
+          echo "rerun: python3 .claude/scripts/mutate.py --shard $SHARD"
           log="$RUNNER_TEMP/mutate.log"
           status=0
-          timeout --signal=INT --kill-after=2m 140m python3 .claude/scripts/mutate.py 2>&1 | tee "$log" \
+          timeout --signal=INT --kill-after=2m 140m python3 .claude/scripts/mutate.py --shard "$SHARD" 2>&1 | tee "$log" \
             || status=${PIPESTATUS[0]}
           if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
-            if grep -q '^  FAIL ' "$log"; then
-              echo "::error::a mutant survived or is stale (FAIL above); the run was then cut off at 140 min"
-              exit 1
-            fi
             checked=$(grep -cE '^  (ok  |FAIL) ' "$log" || true)
-            total=$(python3 -c 'import glob, json; print(sum(len(json.load(open(f))) for f in glob.glob(".claude/scripts/mutants/*.json")))')
             # "about": a table interrupted by the time limit can report the mutant it was testing as killed
-            echo "::warning::partial run: about $checked of $total mutants checked in 140 min, every one killed or documented"
-            exit 0
+            echo "::error::shard $SHARD ran past 140 min after about $checked of its mutants: raise the shard count"
+            exit 1
           fi
           exit "$status"

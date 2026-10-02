@@ -1,0 +1,80 @@
+[
+ {
+  "label": "mutate shard: off by one (shard i starts at the i+1-th mutant)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "return mutants[i - 1 :: n]",
+  "new": "return mutants[i::n]"
+ },
+ {
+  "label": "mutate shard: wrong stride (shards overlap or leave gaps)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "return mutants[i - 1 :: n]",
+  "new": "return mutants[i - 1 :: n + 1]"
+ },
+ {
+  "label": "mutate shard: contiguous blocks, not every n-th",
+  "file": ".claude/scripts/mutate.py",
+  "old": "return mutants[i - 1 :: n]",
+  "new": "return mutants[(i - 1) * len(mutants) // n : i * len(mutants) // n]"
+ },
+ {
+  "label": "mutate shard: not applied",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        mutants = shard(mutants, i, n)\n",
+  "new": "        shard(mutants, i, n)\n"
+ },
+ {
+  "label": "mutate shard: split before --match",
+  "file": ".claude/scripts/mutate.py",
+  "old": "    if a.match:\n        mutants = [m for m in mutants if a.match.lower() in m[\"label\"].lower()]\n",
+  "new": "    if a.shard is not None:\n        mutants = shard(mutants, *parse_shard(a.shard))\n    if a.match:\n        mutants = [m for m in mutants if a.match.lower() in m[\"label\"].lower()]\n"
+ },
+ {
+  "label": "mutate shard: i and n read swapped",
+  "file": ".claude/scripts/mutate.py",
+  "old": "i, n = int(parts[0]), int(parts[1])",
+  "new": "n, i = int(parts[0]), int(parts[1])"
+ },
+ {
+  "label": "mutate shard: i past n accepted",
+  "file": ".claude/scripts/mutate.py",
+  "old": "if not 1 <= i <= n:",
+  "new": "if not 1 <= i:"
+ },
+ {
+  "label": "mutate shard: i = 0 accepted",
+  "file": ".claude/scripts/mutate.py",
+  "old": "if not 1 <= i <= n:",
+  "new": "if not 0 <= i <= n:"
+ },
+ {
+  "label": "mutate shard: extra slash-separated parts accepted",
+  "file": ".claude/scripts/mutate.py",
+  "old": "if len(parts) != 2 or",
+  "new": "if len(parts) < 2 or"
+ },
+ {
+  "label": "mutate shard: non-digits reach int() (a traceback, not the message)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "not all(p.isascii() and p.isdigit() for p in parts)",
+  "new": "not all(parts)"
+ },
+ {
+  "label": "mutate shard: non-ASCII digits reach int()",
+  "file": ".claude/scripts/mutate.py",
+  "old": "not all(p.isascii() and p.isdigit() for p in parts)",
+  "new": "not all(p.isdigit() for p in parts)"
+ },
+ {
+  "label": "mutate shard: an empty --shard ignored (a full run)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "if a.shard is not None:",
+  "new": "if a.shard:"
+ },
+ {
+  "label": "mutate shard: --list output carries the shard header",
+  "file": ".claude/scripts/mutate.py",
+  "old": "        if not a.list:\n            print(f\"shard",
+  "new": "        if True:\n            print(f\"shard"
+ }
+]
