@@ -120,11 +120,12 @@ the highlighter to a frozen copy of the old one, span for span (`tests/unit/engi
 TASK-088 made the loop, which every other text takes (one with a non-ASCII character, a `\` or a `$`),
 faster in three exact ways, again with no bump: a text with no `\` and no `$` skips the LaTeX mask (it would
 be all KEEP); a stretch of ASCII characters with no markup in it and no mark after it is taken word by word
-from a regular expression instead of character by character; and a non-ASCII character whose fold doesn't
+from a regular expression instead of character by character; and a raw character whose fold doesn't
 depend on the letter before it (nearly all of them: the fold is compared after one base of each class the
 mark rule tells apart) is folded once per process, in a bounded table. The loop and its `Tail` are pinned to
 a frozen copy of the loop before it (`tests/unit/tokenize_before_088.py`).
-Nothing is precomputed at build and nothing is cached across requests. Measured in
+Nothing is precomputed at build and nothing is cached across requests but that table of character folds
+(`_FOLDED`, a pure function of the character, holding no record or query). Measured in
 `docs/results/2026-09-27-highlights.md`: highlighting a 50-hit page costs about 5–7× less (real local corpus,
 5k fixture, synthetic 80k), and a 50-hit search with its display records and highlights is inside the 100 ms
 budget at 80k (exclusion accounting keeps its own 300 ms budget). The `/search` endpoint as a whole (with
@@ -223,16 +224,17 @@ as "current" and can load a pinned older version to replay a search record.
   34 ms, the facet collection 37 ms (now overlapped), highlighting 50 hits 33 ms (the tokenizer's slow path:
   the synthetic text is about half non-ASCII, real abstracts about a quarter), counting 3 ms, display 1 ms.
   `report_80k` reports both pages as wall p95 over 200 runs, and the first page's CPU per request.
-- Measured, the `/search` endpoint after TASK-088's tokenizer work (`docs/results/2026-10-01-tokenizer-fast-path.md`;
-  the old and new tokenizer alternated round by round in one process, 200 rounds each, load 15–31, no other
-  test suite running). On the real M4 corpus (index `05a0541717f6`, 95,877 records): **first page, wall p95
-  3–75 ms for every Trust-Evals string** (`main-2-pop` 74.8 ms, every other string under 25 ms; a later page
-  2–62 ms), CPU per request 3–112 ms; the new tokenizer cuts median first-page CPU by 0.6–8 ms (`main-1` 36.3 →
-  28.3 ms p95). The real corpus matches far fewer records per string than the synthetic one (50 for `main-1`,
-  88 for `main-2-pop`), and `main-2-pop`'s cost there is its wildcard phrases, not highlighting (task-076). On
-  the synthetic 80k corpus: median first-page CPU 11–13 ms lower for every non-empty string (`main-1` p50 104.6 →
-  92.6 ms), wall p95 49–99 ms. The tokenizer alone is 1.3× faster over real titles and abstracts (1.8× over
-  those that leave the whole-text ASCII path) and 1.7× over the synthetic ones.
+- Measured, the `/search` endpoint after TASK-088's tokenizer work (`docs/results/2026-10-01-tokenizer-fast-path.md`,
+  made with `tests/bench/alternate.py`; load 4–8, no other test run). Old and new tokenizer alternated round by
+  round in one process, 200 rounds each: median first-page CPU 0.6–8.1 ms lower on the real M4 corpus (index
+  `05a0541717f6`, 95,877 records; `main-1` 35.5 → 27.4 ms) and 11.5–12.7 ms lower on the synthetic 80k
+  (`main-1` 104.4 → 92.2 ms); new first-page wall p95 3.0–70.5 ms (real) and 44.8–64.4 ms (synthetic).
+  `report_80k`'s `/search` columns on the real corpus, new code: **first page, wall p95 2.9–73.4 ms for every
+  Trust-Evals string, within budget** (`main-2-pop` 73.4 ms, the rest under 46 ms), a later page 1.4–64.6 ms,
+  CPU per request 3.2–112.5 ms. The real corpus matches far fewer records per string than the synthetic one
+  (50 for `main-1`, 88 for `main-2-pop`), and `main-2-pop`'s cost there is mostly collecting its page and its
+  facets, not highlighting (task-076). The tokenizer alone takes 74% of its old CPU over real titles and
+  abstracts (56% over those that leave the whole-text ASCII path) and 59% over the synthetic ones.
 - Each hit's `abstract_source` (TASK-134, decision-018) costs the request a dict lookup per hit and one small
   response object: `RecordFile` computes every record's attribution once, in the load pass it already makes
   over the snapshot (spec 04 §SearchResponse). Measured on the served snapshot (1,805 records): about 95 µs
