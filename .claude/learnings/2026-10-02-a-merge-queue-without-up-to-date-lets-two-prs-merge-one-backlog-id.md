@@ -23,7 +23,8 @@ renumber its record to decision-029 by hand (commit 26f660d1 on `dev`).
   too). Every err row greps for its own `backlog: …` line, so each one proves its own path; with exit-only
   rows, two mutants (the BOM strip and `fullmatch` → `match`) survived.
 - Backlog.md 1.53 reads no id from the filename: a file without `id:` lists as `TASK-` and `backlog task
-  view <n>` can't find it, so a missing `id:` fails the check (the filename prefix is still compared).
+  view <n>` can't find it, so a missing top-level `id:` fails the check (the filename prefix is still
+  compared); an indented `id:` is a nested key or block text, which Backlog.md doesn't read either.
 - "Frontmatter id, else filename" alone lets a hand edit hide a duplicate: a file named `task-6` with an
   `id:` the regex misses (`"id": TASK-5`, `--- ` with a trailing space, two `id:` lines) falls back to 6.
   Reading the key leniently, checking the value in Python (so `'TASK-5' # moved` fails instead of skipping
@@ -51,4 +52,4 @@ renumber its record to decision-029 by hand (commit 26f660d1 on `dev`).
 
 ## Propagated to
 - Skill / agent / CLAUDE.md updated? — `task-hygiene` §Ids, CLAUDE.md §Keep everything current, CONTRIBUTING.md §Flow, spec 08 §Merge queue and §Git and PR rules, `/review-gate` and `/record-learnings`, `project-manager`, `learning-recorder`, `docs-reviewer`, `ci-engineer`, `pr-workflow`
-- Test or hook added? — 38 new rows in `.claude/scripts/tests/test-tooling-scripts.sh`, 34 mutants in `.claude/scripts/mutants/backlog.json`
+- Test or hook added? — 39 new rows in `.claude/scripts/tests/test-tooling-scripts.sh`, 35 mutants in `.claude/scripts/mutants/backlog.json`

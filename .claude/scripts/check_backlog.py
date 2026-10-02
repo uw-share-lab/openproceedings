@@ -28,9 +28,10 @@ from pathlib import Path
 BACKLOG = Path(__file__).resolve().parents[2] / "backlog"
 STATUS = re.compile(r"""^[ \t]*['"]?status['"]?[ \t]*:\s*['"]?([^'"\n]+)""", re.MULTILINE)
 FRONTMATTER = re.compile(r"\A---[ \t]*\n(.*?)\n---[ \t]*(?:\n|\Z)", re.DOTALL)
-# an `id` key, however a hand edit spells it: quoted ("id"), or with a space before the colon (id :); the
-# value is checked in read_id, so a value of any other shape fails instead of hiding the line
-ID_FIELD = re.compile(r"""^[ \t]*['"]?id['"]?[ \t]*:(.*)$""", re.MULTILINE)
+# a top-level `id` key, however a hand edit spells it: quoted ("id"), or with a space before the colon (id :);
+# an indented `id:` is a nested key or block-scalar text, which Backlog.md doesn't read either. The value is
+# checked in read_id, so a value of any other shape fails instead of hiding the line
+ID_FIELD = re.compile(r"""^['"]?id['"]?[ \t]*:(.*)$""", re.MULTILINE)
 # what a top-level (column 0) frontmatter line may be: a plain `key:`, a `- ` list item, or a comment. Anything
 # else ({id: …}, `? id`, `<<: …`, a tag, an anchor or alias, an escaped "i\x64" key) can give YAML an `id` that
 # ID_FIELD doesn't see; indented lines are list items, nested keys or folded-scalar continuations

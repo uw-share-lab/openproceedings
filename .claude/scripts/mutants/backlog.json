@@ -116,13 +116,13 @@
   {
     "label": "backlog: id value of another shape skips the line",
     "file": ".claude/scripts/check_backlog.py",
-    "old": "ID_FIELD = re.compile(r\"\"\"^[ \\t]*['\"]?id['\"]?[ \\t]*:(.*)$",
+    "old": "ID_FIELD = re.compile(r\"\"\"^['\"]?id['\"]?[ \\t]*:(.*)$",
     "new": "ID_FIELD = re.compile(r\"\"\"^[ \\t]*['\"]?id['\"]?[ \\t]*:[ \\t]*['\"]?(TASK-[0-9]+|task-[0-9]+|decision-[0-9]+)['\"]?[ \\t]*$"
   },
   {
     "label": "backlog: quoted or spaced id key not read",
     "file": ".claude/scripts/check_backlog.py",
-    "old": "^[ \\t]*['\"]?id['\"]?[ \\t]*:(.*)$",
+    "old": "^['\"]?id['\"]?[ \\t]*:(.*)$",
     "new": "^id:(.*)$"
   },
   {
@@ -202,5 +202,11 @@
     "file": ".claude/scripts/check_backlog.py",
     "old": "                if why:\n                    problems.append",
     "new": "                if False:\n                    problems.append"
+  },
+  {
+    "label": "backlog: indented id: read as the task's id",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "^['\"]?id['\"]?[ \\t]*:(.*)$\"\"\", re.MULTILINE)",
+    "new": "^[ \\t]*['\"]?id['\"]?[ \\t]*:(.*)$\"\"\", re.MULTILINE)"
   }
 ]

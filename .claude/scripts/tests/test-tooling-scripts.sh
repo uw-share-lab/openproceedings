@@ -95,6 +95,8 @@ fresh; printf -- '---\nstatus: To Do\n---\n' > "$B/tasks/task-4 - a.md"; printf 
 expect_clash "no id field: the filename prefix is the id"               task-4
 fresh; printf -- '---\nstatus: To Do\n---\n' > "$B/tasks/task-4 - a.md"
 expect_msg "no id field fails (Backlog.md lists it as TASK-)"           "'tasks/task-4 - a.md' has no frontmatter .id:."
+fresh; printf -- '---\ndescription: |\n  id: TASK-3\ntitle: nested\n---\n' > "$B/tasks/task-3 - a.md"
+expect_msg "an indented id: is nested, not the task's id"               "'tasks/task-3 - a.md' has no frontmatter .id:."
 fresh; task "tasks/x - a.md" TASK-3; task "tasks/y - b.md" TASK-3
 expect_clash "no filename prefix: the frontmatter id is the id"         task-3
 fresh; printf -- '---\nid: TASK-5\n---\nid: TASK-7\n' > "$B/tasks/task-5 - a.md"; printf -- '---\nid: TASK-6\n---\nid: TASK-7\n' > "$B/tasks/task-6 - b.md"
