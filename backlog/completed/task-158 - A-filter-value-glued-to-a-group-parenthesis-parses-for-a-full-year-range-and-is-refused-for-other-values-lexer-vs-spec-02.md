@@ -6,7 +6,7 @@ title: >-
 status: Done
 assignee: []
 created_date: '2026-10-02 00:40'
-updated_date: '2026-10-02 04:19'
+updated_date: '2026-10-02 06:09'
 labels:
   - query
 milestone: m-3
@@ -44,10 +44,12 @@ Refuse a ( glued to any filter value (RANGE joins WORD/PHRASE); keep ) before a 
 
 <!-- SECTION:NOTES:BEGIN -->
 Decision-027 (decision-026 is taken by TASK-155's branch). First tried refusing a ) glued to a field prefix too: test_clauses failed on the Trust-Evals strings (…)(source:ICLR OR …) → the venue splice writes …)venue:(ICLR)) and on year:(2019)status:accepted, so that side stays accepted. Newly refused: a typed full range glued to ( (year:2020..2022(x)). No canonical string writes a value before ( (clauses joined by ' AND '), so stored canonical and identification_query strings re-parse unchanged and QUERY_VERSION stays 2. Verified: test_lexer, test_parser (new GLUED_CLAUSES table, both modes), test_clauses, test_properties, the lexer golden (regenerated) and frontend src/editor + src/builder vitest (2,274 passed).
+
+Review rounds 1-2: the field-value message fires only for filter-field values (tracked per lexeme: bare, negated, or inside the filter group) and names the field and value; title:model(s) keeps the plural hint. A bare value's fix rewrites the clause (year:2021 AND (…)) unless it is negated (the rewrite would drop the -); a value inside its group (year:(2021 OR 2022(x))) is told to close the group first, and gives one error, not also FIELD_FILTER_SYNTAX (parser skips it when the glue already covers the token). Filter values skip all four text warnings: WARN_SYMBOLS_DROPPED, WARN_CJK_RUN, WARN_SPELLED_GREEK and the logic-sign WARN_LOOKALIKE_OPERATOR. decision-027 also notes that a pre-change record's quoted input may be refused if pasted back.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-A ( glued to any filter value is now PARSE_PAREN_TOUCHES_WORD, a full year range included (year:2020..2022(x) used to parse as x AND year:2020..2022), with a message naming the field's value and where the space goes. A ) glued to a field prefix stays accepted, since it splits nothing and facet clicks splice field:(…) after a ) on real Trust-Evals strings. A glued value is still checked as a value (year:..2022(x) is also FIELD_UNKNOWN_VALUE), and filter values (bare or in their group) get no text warnings (year:..2022 no longer WARN_SYMBOLS_DROPPED). Decision-027: QUERY_VERSION stays 2, as no canonical string writes a glued form. Spec 02, lexer docstring and query-grammar skill updated; lexer golden regenerated. Verified with test_lexer, test_parser (GLUED_CLAUSES, both modes), test_clauses, test_properties, frontend editor/builder vitest.
+A ( glued to any filter value is now PARSE_PAREN_TOUCHES_WORD, a full year range included (year:2020..2022(x) used to parse as x AND year:2020..2022), and so is a value inside its group (year:(2021(x)), one error, not also FIELD_FILTER_SYNTAX). The message names the field and value and gives a fix that parses: a space before the ( for a bare value (no clause rewrite for a negated one), closing the group first for a value inside it; a text field's word (title:model(s)) keeps the plural hint. A ) glued to a field prefix stays accepted, since it splits nothing and facet clicks splice field:(…) after a ) on real Trust-Evals strings. A glued value is still checked as a value (year:..2022(x) is also FIELD_UNKNOWN_VALUE). Filter values (bare, negated or in their group) get none of the four text warnings (WARN_SYMBOLS_DROPPED, WARN_CJK_RUN, WARN_SPELLED_GREEK, logic-sign WARN_LOOKALIKE_OPERATOR). Decision-027: QUERY_VERSION stays 2, as no canonical string writes a glued form. Spec 02, the copy deck, lexer docstring and query-grammar skill updated; lexer golden regenerated. Verified with test_lexer, test_parser (GLUED_CLAUSES in both modes, exact message tests), test_clauses, test_properties, frontend editor/builder vitest, and a base-vs-HEAD parse differential.
 <!-- SECTION:FINAL_SUMMARY:END -->

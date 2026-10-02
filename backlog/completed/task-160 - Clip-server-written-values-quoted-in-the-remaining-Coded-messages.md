@@ -4,7 +4,7 @@ title: Clip server-written values quoted in the remaining Coded messages
 status: Done
 assignee: []
 created_date: '2026-10-02 00:59'
-updated_date: '2026-10-02 04:19'
+updated_date: '2026-10-02 06:09'
 labels:
   - frontend
   - bug
@@ -38,17 +38,17 @@ Source: a TASK-144 (PR #72) deferral (PR #72 body, Deferral). TASK-144 adds `fro
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-Generate clip.test.ts's cases from the backend clip (clip-golden.json + contract test); clip each API value in exclusions.ts (description bare and in clause, clauseText per value), move the banner's backtick join into exclusions.ts (defaultsText); clip refused and both index/query versions in replay-status.ts; hostile-value tests per call site with a shared src/test/hostile.ts.
+Generate clip.test.ts's cases from the backend clip (clip-golden.json + contract test); clip each API value in exclusions.ts and replay-status.ts; move the banner's backtick join into exclusions.ts (defaultsText); hostile-value tests per call site with a shared src/test/hostile.ts.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-clip-golden.json stores each input as code points: Vite's JSON loader rejects a lone surrogate escape (\ud800). clauseText clips each value, not the whole clause, so the ordinary default clause track:(datasets_benchmarks OR main OR position) (47 code points) reads exactly as before. An include click still writes the raw value; only the description is clipped. The PRISMA disclosure stays plain text (not Coded), as before; its join is now exclusions.ts::defaultsText and unit-tested. Verified: vitest src/lib + src/components/search (469 passed, existing exclusions/replay-status/search-view tests unchanged), test_frontend_clip_golden, eslint, tsc.
+clip-golden.json stores each input as code points: Vite's JSON loader rejects a lone surrogate escape. clauseText clips each value, not the whole clause, so the 47-code-point default track clause reads exactly as before. An include click still writes the raw value. The PRISMA disclosure stays plain text (not Coded), as before; its join is exclusions.ts::defaultsText. Review round 1 added clipping to the banner's other plain-text places (line 1, include label, accessible name, and the include announcement via includedText). Verified: vitest src/lib + src/components/search, test_frontend_clip_golden, eslint, tsc.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Every API value a Coded message quotes in exclusions.ts (include description bare and in its clause, clauseText per value, the banner's default clauses via the new defaultsText) and replay-status.ts (refused, both index versions, both query versions) goes through clip; field names the client writes stay as written. clip.test.ts now reads clip-golden.json, generated from the backend diagnostics.clip by test_frontend_clip_golden.py (fails when stale). Hostile-value tests (backtick, newline, NUL, ESC, U+202E; shared src/test/hostile.ts) pin each call site's exact text and that backticks pair with nothing invisible left. Spec 05 and the error-diagnostics skill updated.
+Every API value a Coded message quotes goes through clip, bare or in backticks: each include description's value and clause (exclusions.ts, clauseText per value) and the record replay lines (replay-status.ts: refused, both index versions, both query versions). The banner's plain-text strings clip the same values: the PRISMA disclosure's default clauses (clauseText, defaultsText), line 1's bucket names, each include label and accessible name, and the include announcement (includedText). Field names the client writes stay as written; ordinary text reads exactly as before. clip.test.ts reads clip-golden.json, generated from the backend diagnostics.clip by test_frontend_clip_golden.py (fails when stale). Hostile-value tests (backtick, newline, NUL, ESC, U+202E; shared src/test/hostile.ts) pin each call site's exact text and that backticks pair with nothing invisible left. Spec 05, the error-diagnostics skill and the copy deck updated.
 <!-- SECTION:FINAL_SUMMARY:END -->
