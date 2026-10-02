@@ -159,7 +159,8 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
         run: uv sync --locked
-      - name: make mutate, time-boxed to 140 min (every mutant checked must be killed, or documented as equivalent)
+      - name: mutate.py (make mutate), time-boxed to 140 min (every mutant checked killed, or documented as equivalent)
+        shell: bash  # -eo pipefail, so the pipe through tee keeps mutate.py's status (the default bash -e has no pipefail)
         run: |
           git config --global user.email ci@example.invalid
           git config --global user.name ci

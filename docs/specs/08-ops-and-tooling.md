@@ -690,7 +690,7 @@ deliberate evasion.
 `.claude/scripts/mutate.py` (`make mutate`, `make mutate-changed`, `--match <text>`) proves the case tables
 have teeth. Each mutant in `.claude/scripts/mutants/*.json` breaks one piece of gate or tooling logic, and at
 least one table must fail. Survivors are either fixed with a new row or documented as `equivalent`, with
-the reason. Mutants run in parallel, each against a copy of every case table: the full set (548 on 2026-10-02) takes hours (63 in 45 min on a 4-CPU runner), and `--changed` only the mutants of the files a diff touches. Reviews run
+the reason. Mutants run in parallel, each against a copy of every case table: the full set (548 on 2026-10-02) takes hours (63 in 45 min on a 4-CPU runner, nightly run 36972065571), and `--changed` only the mutants of the files a diff touches. Reviews run
 `make mutate-changed`; the nightly workflow runs as many as fit in 140 min (a partial run, warned, until the run can be sharded; §CI). Never hand-roll a serial loop.
 
 ### Branch protection (GitHub)

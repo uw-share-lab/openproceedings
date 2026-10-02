@@ -58,3 +58,7 @@ cap to the wildcard strategies.
   `OP_EARLY_FAILURES=1` (conftest `_EarlyFailures`, on the xdist controller) prints each failure's report and
   blob as it happens.
 - `make mutate` reached 63 of 548 mutants in 45 min: the full run no longer fits one job.
+- GitHub runs a `run:` step with no `shell:` as `bash -e {0}`, without pipefail: `cmd | tee log || status=...`
+  never sees `cmd` fail (docs-reviewer caught it in the mutate step; `bash -e -c '(exit 1) | tee log || echo hit'`
+  prints nothing). A step that pipes needs `shell: bash` (`-eo pipefail`).
+- Propagated to: `backend/tests/conftest.py` (`_EarlyFailures`), spec 08 §CI and §Mutation testing.
