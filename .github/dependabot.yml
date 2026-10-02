@@ -40,6 +40,8 @@ updates:
   # deploy/*.Dockerfile base images, pinned name:tag@sha256:<index digest> (TASK-149): Dependabot bumps the
   # digest when the tag moves (a digest bump is not a major). A new Node major (22-… → 24-…) moves with
   # .nvmrc and CI, so it is done by hand.
+  # The group is for symmetry: a major-only tag like 22-bookworm-slim moves only by a major (ignored), so the
+  # updates expected here are digest bumps, each its own PR.
   - package-ecosystem: docker
     directories: ["/deploy", "/deploy/**"]
     schedule: { interval: weekly }

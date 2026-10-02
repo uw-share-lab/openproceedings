@@ -124,12 +124,14 @@ can edit the PR body could paste the marker. The access control is branch protec
 checks the head repo, so a fork branch named `dev` cannot use it.
 
 **Dependabot** (`.github/dependabot.yml`, weekly) watches `github-actions` (prefix `ci`), `uv` and `npm` (prefix
-`deps`) and the `docker` base images in `deploy/` (prefix `build`). For each, minor and patch updates arrive as
-one grouped PR per ecosystem, and semver-major updates are ignored (`dependency-name: "*"`,
+`deps`) and the `docker` base images in `deploy/` (prefix `build`). For each, minor and patch version updates
+are grouped into one PR per ecosystem (a docker digest bump is not a version change and comes as its own PR),
+and semver-major updates are ignored (`dependency-name: "*"`,
 `version-update:semver-major`), so a major upgrade is a deliberate, hand-made PR; adopted 2026-10-01, after the
 npm entry's first run opened six PRs, majors among them. The `uv` entry also ignores `tantivy` entirely
 (§Release, "Upgrading Tantivy"), and the `docker` entry still bumps the base-image digests, which are not majors
-(§Deploy).
+(§Deploy). GitHub applies `ignore` to security updates too, so a vulnerability whose fix is a major, or any
+Tantivy fix, shows up as a Dependabot alert and is fixed by a hand-made PR.
 
 ## Git and PR rules
 
@@ -397,8 +399,8 @@ hosted (00, question 5). The first release is tagged once TASK-065 (deploy) is d
 - **PATCH:** fixes that change none of those four.
 - The first tag is `v0.1.0`. Versions stay `0.y.z` until the owner declares the v1 release (M6), `1.0.0`.
 
-**Upgrading Tantivy (TASK-150).** Dependabot's `uv` entry in `.github/dependabot.yml` has `ignore:
-[{dependency-name: tantivy}]`, so it never opens a PR that bumps the pin on its own: merged alone, such a PR
+**Upgrading Tantivy (TASK-150).** Dependabot's `uv` entry in `.github/dependabot.yml` has an `ignore` entry
+`{dependency-name: tantivy}` with no `update-types`, so it never opens a PR that bumps the pin on its own: merged alone, such a PR
 would leave `dev` unable to serve the current index (`unservable`, `tantivy_version_mismatch`) or to build a new
 `index_version` for it, and only `changelog.py --release` would notice, at release time. An `ignore` was chosen
 over a CI check that compares `uv.lock`'s Tantivy with `SCHEMA_VERSION`: it closes the gap with no new gate to
