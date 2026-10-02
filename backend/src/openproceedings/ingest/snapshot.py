@@ -44,6 +44,7 @@ from typing import Any, NamedTuple
 from pydantic import ValidationError
 
 from openproceedings import __version__, storage
+from openproceedings.ingest.caps import cap_records, is_trimmed
 from openproceedings.ingest.dedup import Attribution, Conflict, DedupResult, Merge, attribution, dedup
 from openproceedings.ingest.reconcile import crawled, reconcile
 from openproceedings.ingest.record import DERIVED, RECORD_SCHEMA_VERSION, PaperRecord
@@ -232,7 +233,7 @@ def load_cache(cache: Path) -> tuple[list[PaperRecord], list[ImportReport]]:
 def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], list[Report]]:
     """Every cached source, with no network: the RIS imports, then every finished crawl of every crawler
     (OpenReview API v2 and v1, ICLR, NeurIPS, PMLR) re-run from its cache (`sources/crawl.replay_all`). Returns the
-    records, the RIS reports and the crawl reports. Refuses an empty cache, and a crawl that can't be replayed
+    records (under the ingest caps, `caps.cap_records`), the RIS reports and the crawl reports. Refuses an empty cache, and a crawl that can't be replayed
     (a `SourceError`: a marked crawl whose responses are gone, an unreadable cache entry or marker)."""
     from openproceedings.ingest.sources.crawl import replay_all
     from openproceedings.ingest.sources.http import SourceError
@@ -242,7 +243,7 @@ def load_sources(cache: Path) -> tuple[list[PaperRecord], list[ImportReport], li
         mined, crawls = replay_all(cache)
     except SourceError as e:
         raise SnapshotError(f"the crawl cache can't be replayed: {e}", reason=e.reason) from e
-    records += mined
+    records = cap_records([*records, *mined])  # the ingest caps, before dedup (decision-026)
     if not reports and not crawls:
         raise SnapshotError(
             f"nothing cached under {cache.name}; run `op ingest ris <mended.ris>...`, "
@@ -514,6 +515,10 @@ def render(
     # what the RIS window's ends are (TASK-077, decision-025): converted to UTC, or (any entry) local wall time
     if reports:
         manifest["query_dates"] = {"ris": UTC_QUERY_DATES if all(r.utc_offset for r in reports) else LOCAL}
+    # the records whose title or abstract the ingest caps trimmed (decision-026), written only when there are
+    # any: a snapshot trimming nothing has the manifest it had before. Additive, like WITHHELD_KEYS
+    if trimmed := [r.id for r in records if is_trimmed(r)]:
+        manifest["trimmed"] = trimmed
     if withheld:
         manifest["withheld"] = sorted(withheld)
         manifest["abstract_withheld"] = _nested(records, lambda r: r.id in withheld)
@@ -613,7 +618,7 @@ def build(
         "snapshot_built" if created else "snapshot_exists",
         extra={"snapshot": target.name, "snapshot_hash": snapshot_hash, "records": manifest["record_count"],
                "merges": manifest["merges"]["total"], "conflicts": manifest["conflicts"]["total"],
-               "abstracts_withheld": len(withholding.withheld),
+               "trimmed": len(manifest.get("trimmed", ())), "abstracts_withheld": len(withholding.withheld),
                "takedowns_followed": len(withholding.followed),
                "takedowns_unmatched": len(withholding.unmatched),
                "unexpected_statuses": len(unexpected), "ms": elapsed_ms(began, time.monotonic)},

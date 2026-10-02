@@ -68,7 +68,12 @@ finished crawl offline through one mechanism (`sources/crawl.replay_all` over ea
 OpenReview v2, v1, NeurIPS, PMLR, in that order; every source's reports share `common.Report`, whose fetch
 times make each `crawl_window`; `op ingest` writes each source's markers through the same `Crawls.ingest`, so a
 marker lands where the replay reads it), and adds the conflicts a v1 crawl found inside one source to
-`conflicts.csv` (`with_crawl_conflicts`). **Takedowns** (TASK-136, decision-022): `build` withholds every
+`conflicts.csv` (`with_crawl_conflicts`). **Ingest caps** (TASK-155, decision-026): `load_sources` runs every
+record through `caps.cap_records` before dedup. A run of combining marks in a title or abstract keeps 8 per base
+character, and an abstract keeps 20,000 characters. Each trimmed claim's evidence ends with `trimmed at ingest
+(decision-026): …`, and the manifest's `trimmed` lists those ids, sorted. The key is written only when there is
+one, so a corpus within the caps has the manifest and `records.jsonl` it had. The build log's `trimmed` counts
+them. **Takedowns** (TASK-136, decision-022): `build` withholds every
 abstract on the takedown list (`--takedowns`, default `<data-dir>/takedowns/withheld.txt`; `takedowns.py`)
 after dedup and reconcile (`snapshot.withhold`: `abstract` null, the abstract claims dropped, those records'
 abstract `conflicts.csv` values replaced by `(withheld: takedown)`, repeated rows collapsed), so
