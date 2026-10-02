@@ -59,7 +59,7 @@ tempted to bypass it.
 - Pinning: every action is pinned to a full commit SHA with a `# vX.Y.Z` version comment, and must stay
   that way. Dependabot (`.github/dependabot.yml`) bumps `github-actions`, `uv`, `npm` and the `docker` base-image
   digests in `deploy/` weekly; review its PRs like any other. Its `uv` entry ignores `tantivy`, whose upgrade
-  must bump `SCHEMA_VERSION` by hand (spec 08 §Release), and every `FROM` in `deploy/` stays digest-pinned
+  must bump `SCHEMA_VERSION` by hand (spec 08 §Release), and every image a `deploy/` build pulls stays digest-pinned
   (`check_digest_pins.py`, spec 08 §Deploy).
 - Secrets: CI never needs OpenReview credentials — tests use recorded HTTP fixtures. No `data/` in
   artifacts.

@@ -2910,8 +2910,8 @@
  {
   "label": "pins: any name counts as a stage",
   "file": ".claude/scripts/check_digest_pins.py",
-  "old": "if image.lower() not in stages and",
-  "new": "if False and image.lower() not in stages and"
+  "old": "if image.lower() not in known and",
+  "new": "if False and image.lower() not in known and"
  },
  {
   "label": "pins: stage names never recorded",
@@ -2928,7 +2928,7 @@
  {
   "label": "pins: stage indexes never recorded",
   "file": ".claude/scripts/check_digest_pins.py",
-  "old": "            stages.add(str(count))  # a stage is also named by its index\n",
+  "old": "            indexes.add(str(count))\n",
   "new": ""
  },
  {
@@ -2936,6 +2936,12 @@
   "file": ".claude/scripts/check_digest_pins.py",
   "old": "            count += 1\n",
   "new": ""
+ },
+ {
+  "label": "pins: FROM accepts a stage index",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "\"FROM\", stages)",
+  "new": "\"FROM\", stages | indexes)"
  },
  {
   "label": "pins: subdirectories skipped",
@@ -2962,10 +2968,22 @@
   "new": "sys.exit(0)"
  },
  {
+  "label": "pins: BOM kept",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "encoding=\"utf-8-sig\"",
+  "new": "encoding=\"utf-8\""
+ },
+ {
   "label": "pins: continuations not joined",
   "file": ".claude/scripts/check_digest_pins.py",
-  "old": "        if stripped.endswith(escape):",
-  "new": "        if False:"
+  "old": "if (body := line.rstrip()).endswith(escape):",
+  "new": "if False and (body := line.rstrip()).endswith(escape):"
+ },
+ {
+  "label": "pins: continuations joined with a space",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "if joined := \"\".join(parts).strip():\n            out",
+  "new": "if joined := \" \".join(parts).strip():\n            out"
  },
  {
   "label": "pins: comments inside a continuation kept",
@@ -2976,20 +2994,26 @@
  {
   "label": "pins: escape directive ignored",
   "file": ".claude/scripts/check_digest_pins.py",
-  "old": "escape = directives.get(\"escape\", \"\\\\\")",
+  "old": "escape = directives.get(\"escape\", (0, \"\\\\\"))[1]",
   "new": "escape = \"\\\\\""
  },
  {
   "label": "pins: syntax directive unchecked",
   "file": ".claude/scripts/check_digest_pins.py",
-  "old": "    if \"syntax\" in directives and not PINNED.match(directives[\"syntax\"]):",
-  "new": "    if False:"
+  "old": "if \"syntax\" in directives and not PINNED.match(",
+  "new": "if False and \"syntax\" in directives and not PINNED.match("
  },
  {
   "label": "pins: directives read past a comment",
   "file": ".claude/scripts/check_digest_pins.py",
-  "old": "    while i < len(lines) and (m := DIRECTIVE.match(lines[i])):",
-  "new": "    while i < len(lines) and (m := DIRECTIVE.match(lines[i]) or re.match(r\"^#\", lines[i])):"
+  "old": "(m := DIRECTIVE.match(lines[i])) and m.group(1).lower() in KNOWN:",
+  "new": "(m := DIRECTIVE.match(lines[i]) or re.match(r\"^#( )()\", lines[i])) and (m.group(1).lower() in KNOWN or m.group(1) == \" \"):"
+ },
+ {
+  "label": "pins: directives read past an unknown one",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "and m.group(1).lower() in KNOWN:",
+  "new": ":"
  },
  {
   "label": "pins: COPY --from unchecked",

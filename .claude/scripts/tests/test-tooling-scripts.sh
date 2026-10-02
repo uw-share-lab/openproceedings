@@ -125,6 +125,14 @@ deploy; printf 'FROM node:22@%s AS a\nRUN --mount=type=bind,from=a,target=/a --m
 expect err "a second RUN --mount from an unpinned image"                check_digest_pins.py
 deploy; printf 'FROM node:22@%s\nRUN --mount=type=cache,target=/c true\n' "$D" > "$W"
 expect ok  "a RUN --mount with no from="                                check_digest_pins.py
+deploy; printf '\357\273\277FROM node:22\n' > "$W"
+expect err "a byte-order mark does not hide an unpinned FROM"           check_digest_pins.py
+deploy; printf 'FROM node:22@%s AS build\nCOPY --from=build\\\ner /a /b\n' "$D" > "$W"
+expect err "a continuation glues --from=build + er into builder"        check_digest_pins.py
+deploy; printf 'FROM node:22@%s\nFROM 0\n' "$D" > "$W"
+expect err "FROM names a stage by name only, never by index"            check_digest_pins.py
+deploy; printf '# foo=bar\n# syntax=docker/dockerfile:1\nFROM node:22@%s\n' "$D" > "$W"
+expect ok  "an unknown directive ends the directives (syntax= a comment)" check_digest_pins.py
 deploy; mkdir -p "$TMP/r/deploy/api"; printf 'FROM python:3.12-slim\n' > "$TMP/r/deploy/api/Dockerfile"
 expect err "a Dockerfile in a subdirectory of deploy/"                  check_digest_pins.py
 deploy; printf 'FROM python:3.12-slim\n' > "$TMP/r/deploy/api.dockerfile"

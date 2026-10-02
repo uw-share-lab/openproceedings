@@ -23,8 +23,10 @@ Dependabot from bumping the exact `tantivy==` pin, and record the `v*` tag rules
   Dockerfile that uses nothing beyond the built-in frontend can drop it rather than pin it.
 - A `FROM`-only pin check is not enough: a `# syntax=` directive, `COPY --from=<image>` and
   `RUN --mount=…,from=<image>` pull images too, and a wrapped `FROM \` line must be joined before it is read
-  (review round 1, security-reviewer and code-reviewer; `check_digest_pins.py` now reads instructions as
-  Docker does).
+  (review round 1, security-reviewer and code-reviewer). Reading "as Docker does" also means BuildKit's
+  details: a leading BOM is dropped, a continuation is glued to the next line with no separator
+  (`--from=build\` + `er` is `builder`), `FROM` names a stage by name only (an index is for `--from`), and
+  directive reading stops at an unknown directive (review round 2). Dependabot bumps only `FROM` digests.
 - Dependabot's `directory: /deploy` does not look in subdirectories; `directories: ["/deploy", "/deploy/**"]`
   matches a check that searches `deploy/` recursively.
 - In a mutation table where every failure path exits 1, a mutant that turns one refusal into a different

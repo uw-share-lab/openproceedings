@@ -252,10 +252,11 @@ platform's manifest), so a rebuild uses the image that was reviewed; a `FROM` na
 `scratch`, needs none. The same holds for every other image a build pulls: a `# syntax=` parser directive
 (the BuildKit frontend; `web.Dockerfile` has none, so the builder's built-in one is used), `COPY --from=` and
 `RUN --mount=…,from=`. `.claude/scripts/check_digest_pins.py` (`make tooling`, CI `claude-tooling`; case rows
-in `test-tooling-scripts.sh`) reads every `*Dockerfile*` or `*Containerfile*` under `deploy/` as Docker does
-(continuation lines joined, the `escape` directive honoured) and fails on any of those images without a digest,
-or with an `ARG` in its name. Dependabot's `docker` entry for `/deploy` and its subdirectories (weekly, prefix
-`build`) bumps the digests; a new Node major (`22-…` → `24-…`) is
+in `test-tooling-scripts.sh`) reads every `*Dockerfile*` or `*Containerfile*` under `deploy/` as BuildKit does
+(a BOM dropped, continuation lines glued, the `escape` directive honoured) and fails on any of those images
+without a digest, or with an `ARG` in its name. Dependabot's `docker` entry for `/deploy` and its
+subdirectories (weekly, prefix `build`) bumps the `FROM` digests; it reads no other line, so a pinned `syntax`,
+`COPY --from` or `RUN --mount` image (none today) is bumped by hand; a new Node major (`22-…` → `24-…`) is
 ignored there, since it moves with `.nvmrc` and CI and is done by hand. A digest is resolved from the registry,
 e.g. `docker buildx imagetools inspect node:22-bookworm-slim` (its top-level `Digest:`, with media type
 `…image.index…`), which needs no running daemon.
