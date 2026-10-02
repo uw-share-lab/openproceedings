@@ -23,6 +23,8 @@ cd "$(git rev-parse --show-toplevel)"
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/openproceedings-smoke.XXXXXX")
 export OP_DATA_HOST="$work/data" OP_INSTANCE=private OP_DOMAIN=localhost OP_IMAGE_TAG="smoke-$$"
+# the API's ids, pinned here (the shell's environment wins over a deploy/.env compose would otherwise read)
+export OP_API_UID=10001 OP_API_GID=10001
 export OP_HTTP_PORT="${OP_HTTP_PORT:-80}" OP_HTTPS_PORT="${OP_HTTPS_PORT:-443}"
 dc=(docker compose -p openproceedings-smoke -f deploy/compose.yml)
 api_image="openproceedings-api:$OP_IMAGE_TAG"
@@ -98,10 +100,10 @@ step "build the images ($OP_IMAGE_TAG)"
 step "host setup: the record store and index permissions (as root, as an operator would with sudo)"
 if $linux; then
   # shellcheck disable=SC2016 # "$1" expands inside the container's sh, on purpose
-  as_root 'install -d -o 10001 -g 10001 -m 0700 "$1"' "$OP_DATA_HOST/records"
+  as_root 'install -d -o "$2" -g "$3" -m 0700 "$1"' "$OP_DATA_HOST/records" "$OP_API_UID" "$OP_API_GID"
   for v in "$big" "$small" "$spare"; do
     # shellcheck disable=SC2016 # "$1" expands inside the container's sh, on purpose
-    as_root '/index-permissions.sh "$1" "$2"' "$OP_DATA_HOST/indexes" "$v"
+    as_root '/index-permissions.sh "$1" "$2" "$3"' "$OP_DATA_HOST/indexes" "$v" "$OP_API_GID"
   done
 else
   mkdir -m 0700 "$OP_DATA_HOST/records"
@@ -131,7 +133,7 @@ echo "GET / -> $status"
 
 step "2. the api's user and mounts"
 "${dc[@]}" exec -T api id
-[ "$("${dc[@]}" exec -T api id -u)" = 10001 ] || fail "api is not uid 10001"
+[ "$("${dc[@]}" exec -T api id -u)" = "$OP_API_UID" ] || fail "api is not uid $OP_API_UID"
 # each write must be refused for its own reason: a missing mount or directory would fail differently
 refused() { # <target> <expected error>
   local err
@@ -194,7 +196,7 @@ echo "record $record on its pinned $big replays: $replay"
 if $linux; then
   owners=$("${dc[@]}" exec -T api sh -c 'stat -c "%u %n" /data/records/*')
   echo "$owners"
-  if grep -qv '^10001 ' <<<"$owners"; then
+  if grep -qv "^$OP_API_UID " <<<"$owners"; then
     fail "a file in the record store is not op-api's after retire"
   fi
 fi

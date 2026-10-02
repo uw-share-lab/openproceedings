@@ -22,8 +22,14 @@ an internal network with no route out, and only `caddy` publishes ports. Use **D
 later** (or 25.0.4 / 23.0.11): older engines forward DNS lookups out of an internal network
 (CVE-2024-29018).
 
-In the commands below, `dc` stands for `docker compose -f deploy/compose.yml`. Define it with
-`alias dc='docker compose -f deploy/compose.yml'`, or type the whole thing.
+In the commands below, `dc` stands for `docker compose -f deploy/compose.yml`, and `$OP_API_UID` and
+`$OP_API_GID` are the API's ids (§Permissions). Set all three in the operator's shell profile:
+```bash
+alias dc='docker compose -f deploy/compose.yml'
+export OP_API_UID=10001 OP_API_GID=10001   # or your ids; keep deploy/.env the same
+```
+Compose reads `deploy/.env`, but the shell, `sudo` and the scripts here don't: the commands pass the ids
+explicitly.
 
 ## Settings
 
@@ -49,7 +55,7 @@ gitignored, like every `.env`).
 $OP_DATA_HOST/
 ├── indexes/      current -> <index_version>, and one directory per version   (read-write mount, closed by modes: §Permissions)
 ├── snapshots/    the snapshot of every index kept                            (read-only)
-├── records/      records.sqlite: every saved search                          (read-write; 0700, uid 10001)
+├── records/      records.sqlite: every saved search                          (read-write; 0700, $OP_API_UID)
 └── takedowns/    withheld.txt and nothing else                               (read-only)
 ```
 
@@ -67,7 +73,7 @@ $OP_DATA_HOST/
   `op serve` behind the proxy refuses to load without it (`takedowns_missing`). Give it mode 0644 and the
   directory 0755.
 - **`records/` is the only copy of every saved search.** It belongs to `op-api`: create it once with
-  `sudo install -d -o 10001 -g 10001 -m 0700 "$OP_DATA_HOST/records"` (compose refuses to start without it,
+  `sudo install -d -o "$OP_API_UID" -g "$OP_API_GID" -m 0700 "$OP_DATA_HOST/records"` (compose refuses to start without it,
   rather than create one the API can't write). Read or write records only as that user, through the `api`
   container (`dc exec api op record replay <id> --json`): a store written by another user is one the API
   can't open. Because the operator can't read it, an `op index retire` run on the host refuses
@@ -87,17 +93,19 @@ already have them**: one that did could read the record store and open the index
 getent passwd 10001; getent group 10001   # nothing, or a reserved nologin system account for the API
 ```
 If either belongs to a person (the operator included) or another service, pick free ids, set `OP_API_UID` and
-`OP_API_GID` (in `deploy/.env`, so every command sees them), rebuild (`dc build`), and use those ids below in
-place of 10001. `index-permissions.sh` reads `OP_API_GID` for its default gid. Tantivy can't open an index without writing its lock file, `.tantivy-meta.lock`, so the
-`indexes/` mount can't be read-only. Plain file modes keep the API from changing the index instead:
+`OP_API_GID` both in `deploy/.env` (for compose) and in the shell (for the commands below), and rebuild
+(`dc build`).
+
+Tantivy can't open an index without writing its lock file, `.tantivy-meta.lock`, so the `indexes/` mount
+can't be read-only. Plain file modes keep the API from changing the index instead:
 
 - `indexes/` itself: owned by the operator, mode 0755. The API can't add, remove or repoint anything there.
-- each version directory: group `op-api` (gid 10001), mode 0750. Its files stay 0444, as the build left
+- each version directory: group `op-api` (`$OP_API_GID`), mode 0750. Its files stay 0444, as the build left
   them, and only its two `.tantivy-*.lock` files are group-writable (0660).
 
 `op index build` leaves a new version directory 0700 and owned by the operator. Before serving it, run
-`sudo deploy/index-permissions.sh "$OP_DATA_HOST/indexes" <index_version>` (or run it as an account in a host
-group with gid 10001). The script refuses a version directory that holds a symlink. Snapshots and the takedown
+`sudo deploy/index-permissions.sh "$OP_DATA_HOST/indexes" <index_version> "$OP_API_GID"` (or run it as an
+account in the host group with that gid). The gid is a required argument, never a default. The script refuses a version directory that holds a symlink. Snapshots and the takedown
 list are readable as built: the snapshot files are 0444 in 0555 directories. `smoke-test.sh` checks all of
 this on a Linux host: `op-api` can open the index and can't create, delete or rename anything in it.
 
@@ -173,8 +181,8 @@ index.
      lands in the tree).
    For a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy, run all of these from the
    release's checkout on the host: the running images can't serve the new index.
-3. **Permissions:** `sudo deploy/index-permissions.sh "$OP_DATA_HOST/indexes" <new_version>`. Then replay a
-   sample of saved searches on the API's own store, `dc exec api op record replay <id> --json`. This checks
+3. **Permissions:** `sudo deploy/index-permissions.sh "$OP_DATA_HOST/indexes" <new_version> "$OP_API_GID"`.
+   Then replay a sample of saved searches on the API's own store, `dc exec api op record replay <id> --json`. This checks
    the running code, not the new index: a record replays on its own index whenever that index is kept, so
    every sampled record whose index is kept must report `reproduced`, and `mismatch` (exit 3) blocks the
    promotion. `--index <new_version>` applies only to a record whose own index is gone.
@@ -288,9 +296,10 @@ Linux host. No CI job runs it.
 - Install Docker Engine 26.0.0 or later.
 - Set `OP_DOMAIN`, `OP_INSTANCE=public`, `OP_TAKEDOWN_CONTACT` and `OP_TAKEDOWN_LOG_HOST`. Once the domain is
   known, decide about `includeSubDomains` in `OP_HSTS`.
-- Set up the host's accounts: the operator's account, and sudo (or a host group with gid 10001) for
+- Set up the host's accounts: the operator's account, and sudo (or a host group with `$OP_API_GID`) for
   `index-permissions.sh` and `records/`. Check that uid and gid 10001 are unused on the host, or a reserved
-  nologin account for the API; if not, set `OP_API_UID`/`OP_API_GID` and rebuild (§Permissions).
+  nologin account for the API; if not, set `OP_API_UID`/`OP_API_GID` in `deploy/.env` and the shell, and
+  rebuild (§Permissions).
 - Do the first start and its checks on the host: client addresses (First start, step 4), and the rate limit
   and CORS (TASK-067 AC #2).
 - Schedule the record-store backup (§Backups).
