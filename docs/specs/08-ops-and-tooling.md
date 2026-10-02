@@ -123,6 +123,14 @@ can edit the PR body could paste the marker. The access control is branch protec
 `main`. A same-repo `dev → main` promotion is exempt from `learnings` and `review-attested`. The exemption
 checks the head repo, so a fork branch named `dev` cannot use it.
 
+**Dependabot** (`.github/dependabot.yml`, weekly) watches `github-actions` (prefix `ci`), `uv` and `npm` (prefix
+`deps`) and the `docker` base images in `deploy/` (prefix `build`). For each, minor and patch updates arrive as
+one grouped PR per ecosystem, and semver-major updates are ignored (`dependency-name: "*"`,
+`version-update:semver-major`), so a major upgrade is a deliberate, hand-made PR; adopted 2026-10-01, after the
+npm entry's first run opened six PRs, majors among them. The `uv` entry also ignores `tantivy` entirely
+(§Release, "Upgrading Tantivy"), and the `docker` entry still bumps the base-image digests, which are not majors
+(§Deploy).
+
 ## Git and PR rules
 
 - `feature → PR → dev → PR → main`. No direct commits, pushes or merges on `dev` or `main`
@@ -255,9 +263,9 @@ platform's manifest), so a rebuild uses the image that was reviewed; a `FROM` na
 in `test-tooling-scripts.sh`) reads every `*Dockerfile*` or `*Containerfile*` under `deploy/` as BuildKit does
 (a BOM dropped, continuation lines glued, the `escape` directive honoured) and fails on any of those images
 without a digest, or with an `ARG` in its name. Dependabot's `docker` entry for `/deploy` and its
-subdirectories (weekly, prefix `build`) bumps the `FROM` digests; it reads no other line, so a pinned `syntax`,
+subdirectories (weekly, prefix `build`; §CI, "Dependabot") bumps the `FROM` digests; it reads no other line, so a pinned `syntax`,
 `COPY --from` or `RUN --mount` image (none today) is bumped by hand; a new Node major (`22-…` → `24-…`) is
-ignored there, since it moves with `.nvmrc` and CI and is done by hand. A digest is resolved from the registry,
+ignored there, like every semver-major update (§CI), and done by hand along with `.nvmrc` and CI. A digest is resolved from the registry,
 e.g. `docker buildx imagetools inspect node:22-bookworm-slim` (its top-level `Digest:`, with media type
 `…image.index…`), which needs no running daemon.
 

@@ -43,6 +43,10 @@ Dependabot from bumping the exact `tantivy==` pin, and record the `v*` tag rules
 - Tantivy: Dependabot `ignore` over a CI check → no new gate to maintain for a rare, hand-verified upgrade →
   revisit if a tantivy bump ever reaches `dev` another way.
 
+- Dependabot: minor and patch grouped into one PR per ecosystem, every semver-major ignored (owner's scope
+  addition, 2026-10-01) → a new npm entry's first run opened six separate PRs, majors among them (eslint 10,
+  jsdom 30, @types/node 26) → revisit if grouped PRs get too big to review or majors go stale unnoticed.
+
 ## Follow-ups
 - [ ] none: the deferrals are listed in the PR body.
 

@@ -1,29 +1,52 @@
 version: 2
+# Every ecosystem: minor and patch updates arrive as one grouped PR per ecosystem, and semver-major updates
+# are ignored, so a major upgrade is a deliberate, hand-made change (spec 08 §CI, "Dependabot").
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
     commit-message: { prefix: "ci" }
+    groups:
+      github-actions-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: uv
     directory: /
     schedule: { interval: weekly }
     commit-message: { prefix: "deps" }
-    # A Tantivy upgrade must bump SCHEMA_VERSION in the same change (decision-023; spec 08 §Release): the engine
-    # refuses an index another Tantivy built, so a bump merged alone leaves dev unable to serve or build one.
-    # The exact tantivy== pin is upgraded by hand (index-versioning skill), never by Dependabot (TASK-150).
+    groups:
+      uv-minor-patch:
+        update-types: [minor, patch]
     ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # A Tantivy upgrade must bump SCHEMA_VERSION in the same change (decision-023; spec 08 §Release): the
+      # engine refuses an index another Tantivy built, so a bump merged alone leaves dev unable to serve or
+      # build one. The exact tantivy== pin is upgraded by hand (index-versioning skill), never here (TASK-150).
       - dependency-name: tantivy
   # the npm workspace: one package-lock.json at the root holds the frontend's dependencies (TASK-067)
   - package-ecosystem: npm
     directory: /
     schedule: { interval: weekly }
     commit-message: { prefix: "deps" }
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   # deploy/*.Dockerfile base images, pinned name:tag@sha256:<index digest> (TASK-149): Dependabot bumps the
-  # digest when the tag moves. A new Node major (22-… → 24-…) moves with .nvmrc and CI, so it is done by hand.
+  # digest when the tag moves (a digest bump is not a major). A new Node major (22-… → 24-…) moves with
+  # .nvmrc and CI, so it is done by hand.
   - package-ecosystem: docker
     directories: ["/deploy", "/deploy/**"]
     schedule: { interval: weekly }
     commit-message: { prefix: "build" }
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
     ignore:
-      - dependency-name: node
+      - dependency-name: "*"
         update-types: ["version-update:semver-major"]
