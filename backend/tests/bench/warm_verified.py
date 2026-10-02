@@ -7,7 +7,8 @@ Two engines over the index: one compiles as before TASK-076 (a verified clause a
 it), one as now (it names the candidates that don't, when they are fewer). For every Trust-Evals string each
 engine searches once cold (verifying its clauses), the two whole orders are compared with `==` (ids and exact
 float scores), then `search(limit=50)` is timed ROUNDS times on each (200 by default), the order flipping
-every round: wall p50, p95 and p99, and CPU (process time) p50, in milliseconds. Prints the 1-minute load
+every round: wall p50, p95 and p99, and CPU (process time) p50 and p99, in milliseconds (a wall
+spike with no CPU spike is the machine, not the search). Prints the 1-minute load
 average at the start and end. A report, not a gate.
 """
 
@@ -32,9 +33,9 @@ def main() -> None:
     engines["old"].ids_of = None  # type: ignore[assignment,method-assign]  # compile's `members`: the old form
     print(f"load at start: {os.getloadavg()[0]:.1f}", flush=True)
     print(
-        "| String | Matches | Wall p50: old | new | Wall p95: old | new | Wall p99: old | new | CPU p50: old | new |"
+        "| String | Matches | Wall p50: old | new | Wall p95: old | new | Wall p99: old | new | CPU p50: old | new | CPU p99: old | new |"
     )
-    print("|---|---|---|---|---|---|---|---|---|---|")
+    print("|---|---|---|---|---|---|---|---|---|---|---|---|")
     for name in STRINGS:
         ast = trust_evals(name).effective_ast
         assert ast is not None
@@ -50,7 +51,7 @@ def main() -> None:
         total = engines["new"].search(ast, limit=0).total
         cells = [
             ms(quantile(d[k], q))
-            for d, q in ((wall, 0.5), (wall, 0.95), (wall, 0.99), (cpu, 0.5))
+            for d, q in ((wall, 0.5), (wall, 0.95), (wall, 0.99), (cpu, 0.5), (cpu, 0.99))
             for k in wall
         ]
         print(f"| {name} | {total:,} | " + " | ".join(cells) + " |", flush=True)
