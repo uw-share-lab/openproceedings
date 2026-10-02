@@ -1,3 +1,7 @@
+import { syntaxTree } from "@codemirror/language";
+import { EditorState } from "@codemirror/state";
+import { query } from "./index";
+import goldenV2 from "./lexer-v2-golden.json";
 import { TreeFragment, type Tree } from "@lezer/common";
 import { buildParserFile } from "@lezer/generator";
 import { readFileSync } from "node:fs";
@@ -109,5 +113,12 @@ describe("incremental reparsing after an edit gives the same tokens as a fresh p
       { fromA: from, toA: to, fromB: from, toB: from + insert.length },
     ]);
     expect(tokens(parser.parse(after, fragments))).toEqual(tokens(parser.parse(after)));
+  });
+});
+
+describe("the tokenizer 2 Lezer language has the server's token spans", () => {
+  it.each(goldenV2.cases.map((c) => [JSON.stringify(c.q).slice(0, 80), c] as const))("%s", (_name, c) => {
+    const state = EditorState.create({ doc: c.q, extensions: [query("2")] });
+    expect(tokens(syntaxTree(state))).toEqual(expected(c.q, c.tokens));
   });
 });

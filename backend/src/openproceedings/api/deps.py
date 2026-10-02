@@ -187,22 +187,6 @@ def searchable(request: Request, q: str, mode: Mode, tokenizer: str) -> ParseRes
     return result
 
 
-def searchable_on(
-    request: Request, result: ParseResult, q: str, mode: Mode, engine: TantivyEngine
-) -> ParseResult:
-    """`result`, a `searchable` parse of `q` for the served index, as the query reads on `engine` (an export's
-    pinned index): itself when `engine`'s index was built with the tokenizer it was parsed with, else `q`
-    parsed again with `engine`'s and refused as `searchable` refuses. Charged once, by `searchable`, for the
-    larger of the two counts of verified clauses (and capped on the second)."""
-    if result.tokenizer_version == engine.tokenizer_version:
-        return result
-    again = parse(q, mode, engine.tokenizer_version)
-    _refuse_errors(again)
-    assert result.effective_ast is not None and again.effective_ast is not None  # both parsed
-    charge_verified(request, again.effective_ast, already=len(verified_clauses(result.effective_ast)))
-    return again
-
-
 def _refuse_errors(result: ParseResult) -> None:
     if result.effective_ast is None:
         first = result.errors[0]
@@ -227,22 +211,23 @@ def too_many_verified(clauses: Sequence[Phrase | Near], cap: int) -> ApiError:
     return ApiError(DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES, message, diagnostics=diagnostics)
 
 
-def charge_verified(request: Request, ast: Node | None, already: int = 0) -> None:
+def charge_verified(request: Request, ast: Node | None) -> None:
     """A query's position-verified clauses (spec 03), counted from the AST before anything compiles it: more
     than `ApiConfig.max_verified_clauses` is 422 `API_TOO_MANY_VERIFIED_CLAUSES` (each is a cold
     verification holding a slot for seconds, so one request could otherwise hold the slots for a minute);
-    otherwise the query costs `ApiConfig.verified_cost` per clause: the rest is charged now, or 429
+    otherwise the query costs `ApiConfig.verified_cost` per clause (including its route weight):
+    the rest is charged now, or 429
     `API_RATE_LIMITED` (spec 04 §Rate limit). Every route that runs the client's query calls this, through
-    `searchable`, and then `check_candidates` once it has its engine; a replay calls `admit_replay`. `already`:
-    clauses this request was charged for already (`searchable_on`'s second parse), not charged again."""
+    `searchable`, using the selected index's tokenizer, and then `check_candidates`; a replay calls
+    `admit_replay`. Each query is charged once."""
     clauses = verified_clauses(ast)
     access_fields(request)["verified_clauses"] = len(clauses)
-    if len(clauses) <= already:
+    if not clauses:
         return
     config = request.app.state.config
     if len(clauses) > config.max_verified_clauses:
         raise too_many_verified(clauses, config.max_verified_clauses)
-    _charge(request, len(clauses) - already)
+    _charge(request, len(clauses))
 
 
 def _charge(request: Request, clauses: int) -> None:

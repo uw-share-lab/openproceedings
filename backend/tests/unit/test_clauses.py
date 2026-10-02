@@ -197,9 +197,9 @@ class _CountingParse:
     def __init__(self) -> None:
         self.calls = 0
 
-    def __call__(self, q: str, mode: Mode = "native") -> ParseResult:
+    def __call__(self, q: str, mode: Mode = "native", tokenizer: str = "3") -> ParseResult:
         self.calls += 1
-        return parse(q, mode)
+        return parse(q, mode, tokenizer)
 
 
 def _parses(q: str, monkeypatch: pytest.MonkeyPatch, mode: Mode = "native") -> tuple[int, dict[str, Any]]:

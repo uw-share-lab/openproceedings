@@ -5,7 +5,7 @@
  * This decides nothing about the query. It reports no error and no warning, never normalises a term and never
  * says whether the query parses: `POST /parse` does all of that. It exists so that a colour always sits on the
  * same characters as the server's lexeme, which `grammar.test.ts` checks against every backend golden input
- * (`lexer-golden.json`, generated from `lexer.py`, so the two cannot drift silently). The character classes are
+ * (`lexer-golden.json` and `lexer-v2-golden.json`, generated from `lexer.py`). The character classes are
  * imported from `lexer-tables.json`, generated from the same module. The concept-group builder uses the same
  * boundaries to write each term as exactly one lexeme (`src/builder/terms.ts`, `write.ts`); the meaning is
  * still the server's.
@@ -34,7 +34,10 @@ export type LexemeKind =
   | "WORD";
 
 /** The text, one code point per position; `at(k)` is `undefined` past the end and before the start. */
+export type TokenizerVersion = "2" | "3";
+
 export interface Source {
+  readonly tokenizer?: TokenizerVersion;
   at(k: number): string | undefined;
 }
 
@@ -84,9 +87,10 @@ const combining = (c: string): number => COMBINING.get(c.codePointAt(0)!) ?? 0;
 
 /**
  * `_Lexer.scan`: `q` with each LaTeX look-alike as the `$` or `\` the tokenizer reads it as (tokenizer 3 reads the
- * NFKC form: `＄x＄` is math). The same positions, so every test for LaTeX syntax reads it.
+ * NFKC form: `＄x＄` is math); tokenizer 2 reads only raw LaTeX syntax. The same positions, so every test for LaTeX syntax reads it.
  */
 function latexSource(q: Source): Source {
+  if (q.tokenizer === "2") return q;
   return {
     at: (k) => {
       const c = q.at(k);
@@ -96,15 +100,15 @@ function latexSource(q: Source): Source {
 }
 
 /** `_Lexer.space`: a space as the math rule reads it, the first (or `last`) character of the NFKC form. */
-function mathSpace(c: string | undefined, last = false): boolean {
-  if (c === undefined || isAscii(c)) return isSpace(c);
+function mathSpace(c: string | undefined, last = false, tokenizer: TokenizerVersion = "3"): boolean {
+  if (tokenizer === "2" || c === undefined || isAscii(c)) return isSpace(c);
   const folded = Array.from(c.normalize("NFKC"));
   return isSpace(last ? folded[folded.length - 1] : folded[0]);
 }
 
 /** `_Lexer.digit`: a digit as the math rule reads it, the first character of the NFKC form (`½` is `1⁄2`). */
-function mathDigit(c: string | undefined): boolean {
-  if (c === undefined || isAscii(c)) return isDigit(c);
+function mathDigit(c: string | undefined, tokenizer: TokenizerVersion = "3"): boolean {
+  if (tokenizer === "2" || c === undefined || isAscii(c)) return isDigit(c);
   return isDigit(Array.from(c.normalize("NFKC"))[0]);
 }
 
@@ -265,6 +269,7 @@ function owners(segment: string[], at: number, nfkc: string): [number, number][]
  * mapped back to raw positions.
  */
 export function mathRegions(q: Source, from: number, to: number): [number, number][] {
+  if (q.tokenizer === "2") return rawMathRegions(q, from, to);
   const view = nfkcView(slice(q, from, to));
   if (view === null) return rawMathRegions(q, from, to);
   const norm = stringSource(view.norm.join(""));
@@ -381,7 +386,7 @@ function mathRun(q: Source, i: number, limit: number): number {
     if (region === undefined) return -1;
     end = region[1];
   } else {
-    if (i + 1 >= limit || mathSpace(q.at(i + 1))) return -1;
+    if (i + 1 >= limit || mathSpace(q.at(i + 1), false, q.tokenizer)) return -1;
     // the first unescaped `$` after `i` that ends an inline-math scan (`dollar_stops`)
     end = -1;
     let backslashes = 0;
@@ -390,7 +395,7 @@ function mathRun(q: Source, i: number, limit: number): number {
       if (c === "$" && backslashes % 2 === 0) {
         const next = scan.at(k + 1);
         if (next === "$") return -1; // `$$` inside inline math stops it without closing
-        if (!mathSpace(q.at(k - 1), true) && !mathDigit(next)) {
+        if (!mathSpace(q.at(k - 1), true, q.tokenizer) && !mathDigit(next, q.tokenizer)) {
           end = k + 1;
           break;
         }
@@ -515,15 +520,18 @@ export function lexemeAt(q: Source, i: number): { kind: LexemeKind; end: number 
 
 export { isSpace };
 
-/** A string as a `Source` (code points). */
-export function stringSource(text: string): Source & { readonly length: number } {
+/** A string as a `Source` (code points), with the index's tokenizer version. */
+export function stringSource(
+  text: string,
+  tokenizer: TokenizerVersion = "3",
+): Source & { readonly length: number } {
   const cps = Array.from(text);
-  return { at: (k) => (k >= 0 ? cps[k] : undefined), length: cps.length };
+  return { tokenizer, at: (k) => (k >= 0 ? cps[k] : undefined), length: cps.length };
 }
 
 /** Every lexeme of `text`, as `[kind, start, end]` in code points (the shape of `lexer-golden.json`). */
-export function lexemes(text: string): [LexemeKind, number, number][] {
-  const q = stringSource(text);
+export function lexemes(text: string, tokenizer: TokenizerVersion = "3"): [LexemeKind, number, number][] {
+  const q = stringSource(text, tokenizer);
   const out: [LexemeKind, number, number][] = [];
   let i = 0;
   while (i < q.length) {

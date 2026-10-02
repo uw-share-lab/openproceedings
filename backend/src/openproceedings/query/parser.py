@@ -368,10 +368,9 @@ class _Parser:
                 )
             )
 
-    @staticmethod
-    def is_source(tok: Lexeme) -> bool:
+    def is_source(self, tok: Lexeme) -> bool:
         text = " ".join(p.text for p in tok.parts) if tok.kind is Kind.PHRASE else tok.text
-        return source_key(text) in SOURCE_ALIASES
+        return source_key(text, self.tokenizer) in SOURCE_ALIASES
 
     def and_expr(self, field: TextField | None) -> tuple[Node | None, bool]:
         children = [self.not_expr(field)]
@@ -637,7 +636,7 @@ class _Parser:
             if v.kind is Kind.WORD
             else ""
         )
-        key = source_key(text) if v.wildcard is None else ""
+        key = source_key(text, self.tokenizer) if v.wildcard is None else ""
         venue = SOURCE_ALIASES.get(key)
         if venue is None:
             if not self.reported(v.start, v.end, glue=False):

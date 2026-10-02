@@ -191,6 +191,12 @@ rewrites the query (guarantee 3). No hidden facet state exists.
 
 ## Exports (built to be imported into Covidence)
 
+Query exports check the raw query-length cap before opening a pin, then validate semantics with the
+selected index's tokenizer and charge its position-verified clauses once. An unavailable target is
+therefore reported before a semantic query error: a query rejected by tokenizer 3 may be valid on a
+pinned tokenizer-2 index (`＼alpha`, for example). Mode and basic parameter validation still precede
+route execution.
+
 - **RIS:** `TY  - CPAPER`, `TI`, `AB` (full), `AU` (one line each), `PY`, `T2` (the venue string below), `UR` (forum, then pdf, then proceedings; each only if present), `DO` if present, `ID` (the openproceedings paper id, so exports round-trip), two `KW`
   lines (the track, then `status:<status>`), and the provenance `N1` = `openproceedings <index_version> · query
   <canonical_hash> · exported <UTC date>` (for an export pinned by a search record, `/export?record_id=`,

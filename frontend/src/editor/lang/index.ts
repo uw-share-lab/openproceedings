@@ -6,23 +6,31 @@
 import { HighlightStyle, LanguageSupport, LRLanguage, syntaxHighlighting } from "@codemirror/language";
 import { styleTags, tags as t } from "@lezer/highlight";
 import { parser } from "./parser";
+import { queryTokens, queryTokensV2 } from "./tokens";
+import type { TokenizerVersion } from "./lex";
 
-export const queryLanguage = LRLanguage.define({
-  name: "openproceedings-query",
-  parser: parser.configure({
-    props: [
-      styleTags({
-        "And Or Not Near Pipe Minus": t.logicOperator,
-        Field: t.propertyName,
-        Phrase: t.string,
-        Wildcard: t.special(t.variableName),
-        Range: t.number,
-        "LParen RParen": t.paren,
-        // Word, UnknownField and BadNear are left plain: the server's diagnostic says what is wrong with them.
-      }),
-    ],
-  }),
-});
+function language(tokenizer: TokenizerVersion): LRLanguage {
+  return LRLanguage.define({
+    name: `openproceedings-query-${tokenizer}`,
+    parser: parser.configure({
+      tokenizers: tokenizer === "2" ? [{ from: queryTokens, to: queryTokensV2 }] : [],
+      props: [
+        styleTags({
+          "And Or Not Near Pipe Minus": t.logicOperator,
+          Field: t.propertyName,
+          Phrase: t.string,
+          Wildcard: t.special(t.variableName),
+          Range: t.number,
+          "LParen RParen": t.paren,
+          // Word, UnknownField and BadNear are left plain: the server's diagnostic says what is wrong with them.
+        }),
+      ],
+    }),
+  });
+}
+
+export const queryLanguage = language("3");
+const queryLanguageV2 = language("2");
 
 export const queryHighlightStyle = HighlightStyle.define([
   { tag: t.logicOperator, color: "var(--syn-operator)", fontWeight: "700" },
@@ -38,6 +46,8 @@ export const queryHighlightStyle = HighlightStyle.define([
   { tag: t.paren, fontWeight: "700" },
 ]);
 
-export function query(): LanguageSupport {
-  return new LanguageSupport(queryLanguage, [syntaxHighlighting(queryHighlightStyle)]);
+export function query(tokenizer: TokenizerVersion = "3"): LanguageSupport {
+  return new LanguageSupport(tokenizer === "2" ? queryLanguageV2 : queryLanguage, [
+    syntaxHighlighting(queryHighlightStyle),
+  ]);
 }

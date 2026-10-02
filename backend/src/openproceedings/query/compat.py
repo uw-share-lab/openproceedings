@@ -32,9 +32,9 @@ SOURCE_ALIASES = {
 PARTIAL_SOURCES = frozenset({"pmlr", "proceedings of machine learning research"})
 
 
-def source_key(text: str) -> str:
+def source_key(text: str, tokenizer: str = TOKENIZER_VERSION) -> str:
     """A `source:` value as the alias table keys it: the token contract, tokens joined by one space."""
-    return " ".join(normalize(text))
+    return " ".join(normalize(text, tokenizer))
 
 
 def _joins(x: Lexeme, tokenizer: str) -> bool:

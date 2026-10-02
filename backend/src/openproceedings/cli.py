@@ -691,18 +691,27 @@ def _command(ns: argparse.Namespace) -> str:
     return " ".join(filter(None, (ns.command, getattr(ns, "source", None), getattr(ns, "action", None))))
 
 
-def _parsed(ns: argparse.Namespace) -> ParseResult | None:
-    """The query's parse, its diagnostics printed to stderr as user output (never logged: they quote the
-    query); None when it doesn't parse."""
+def _query_within_cap(ns: argparse.Namespace) -> bool:
+    """Check raw length before index I/O; only the selected tokenizer can validate query semantics."""
+    from openproceedings.query.parser import too_long
+
+    over = too_long(ns.query)
+    if over is not None:
+        print(f"{over.code}: {over.message}", file=sys.stderr)
+        log.debug("cli_refused", extra={"command": _command(ns), "error": "parse"})
+        return False
+    return True
+
+
+def _parsed(ns: argparse.Namespace, tokenizer: str) -> ParseResult | None:
+    """The selected index's parse, with diagnostics printed to stderr as user output (never logged)."""
     from openproceedings.query.parser import parse
 
-    result = parse(ns.query, ns.mode)
+    result = parse(ns.query, ns.mode, tokenizer)
     for d in [*result.errors, *result.warnings, *result.translations]:
         print(f"{d.code}: {d.message}", file=sys.stderr)
     if result.effective_ast is None:
-        log.debug(
-            "cli_refused", extra={"command": _command(ns), "error": "parse"}
-        )  # user input: DEBUG at most
+        log.debug("cli_refused", extra={"command": _command(ns), "error": "parse"})
         return None
     return result
 
@@ -734,25 +743,6 @@ def _current_twin_pairs(data_dir: Path, exported: Path) -> list[tuple[str, str]]
             file=sys.stderr,
         )
         return []
-
-
-def _parsed_for(ns: argparse.Namespace, result: ParseResult, engine: TantivyEngine) -> ParseResult | None:
-    """`result` (`_parsed`, with this code's tokenizer) as the query reads on `engine`: itself, or parsed again
-    with the older served tokenizer `engine`'s index was built with, its errors printed as `_parsed` prints
-    them; None when it doesn't parse there."""
-    from openproceedings.query.parser import parse
-
-    if result.tokenizer_version == engine.tokenizer_version:
-        return result
-    again = parse(ns.query, ns.mode, engine.tokenizer_version)
-    if again.effective_ast is None:
-        for d in again.errors:
-            print(f"{d.code}: {d.message}", file=sys.stderr)
-        log.debug(
-            "cli_refused", extra={"command": _command(ns), "error": "parse"}
-        )  # user input: DEBUG at most
-        return None
-    return again
 
 
 def _index_path(ns: argparse.Namespace) -> Path:
@@ -905,8 +895,7 @@ def _search(ns: argparse.Namespace) -> int:
 
     started = time.perf_counter()
     _utf8_stdout()
-    first = _parsed(ns)  # a bad query is reported first, whatever the index
-    if first is None:
+    if not _query_within_cap(ns):
         return 1
     if ns.engine == "reference" and not ns.ids:
         raise _usage("--engine reference needs --ids: the oracle has no ranking and no compiled query")
@@ -914,7 +903,7 @@ def _search(ns: argparse.Namespace) -> int:
         raise _usage("--limit must be ≥ 0")
     path = _index_path(ns)
     engine = TantivyEngine(path)
-    result = _parsed_for(ns, first, engine)
+    result = _parsed(ns, engine.tokenizer_version)
     if result is None:
         return 1
     ast = result.effective_ast
@@ -1073,8 +1062,7 @@ def _export(ns: argparse.Namespace) -> int:
     from openproceedings.takedowns import load as load_takedowns
 
     started = time.perf_counter()
-    first = _parsed(ns)
-    if first is None:
+    if not _query_within_cap(ns):
         return 1
     # as the API withholds them (TASK-136); a bad list refuses, and so does a missing one once a snapshot has
     # withheld an abstract (TASK-067: an older index would otherwise export the listed abstracts)
@@ -1085,7 +1073,7 @@ def _export(ns: argparse.Namespace) -> int:
         raise _usage(f"--out {ns.out}: no directory {ns.out.parent}")
     path = _index_path(ns)
     engine = TantivyEngine(path)
-    result = _parsed_for(ns, first, engine)
+    result = _parsed(ns, engine.tokenizer_version)
     if result is None:
         return 1
     ast = result.effective_ast
@@ -1258,13 +1246,12 @@ def _record_save(ns: argparse.Namespace) -> int:
 
     started = time.perf_counter()
     _utf8_stdout()
-    first = _parsed(ns)  # refused as POST /records refuses it (the parse checks the length cap first)
-    if first is None:
+    if not _query_within_cap(ns):
         return 1
     engine = _selected_index(
         ns, ns.index or "current", "pass --index current or an index_version under <data-dir>/indexes"
     )
-    result = _parsed_for(ns, first, engine)
+    result = _parsed(ns, engine.tokenizer_version)
     if result is None:
         return 1
     fields, found = freeze(engine, result, ns.query, ns.data_dir)

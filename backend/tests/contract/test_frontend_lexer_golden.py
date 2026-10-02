@@ -24,7 +24,7 @@ from typing import Any
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.query import lexer
 from openproceedings.query.lexer import Kind, lex
-from openproceedings.query.normalize import ACCENT_LETTERS, ACCENT_SYMBOLS
+from openproceedings.query.normalize import ACCENT_LETTERS, ACCENT_SYMBOLS, TOKENIZER_VERSION
 
 from tests.unit import test_lexer, test_parser
 
@@ -32,6 +32,7 @@ ROOT = Path(__file__).resolve().parents[3]
 LANG = ROOT / "frontend" / "src" / "editor" / "lang"
 GOLDEN = LANG / "lexer-golden.json"
 TABLES = LANG / "lexer-tables.json"
+GOLDEN_V2 = LANG / "lexer-v2-golden.json"
 FIXTURES = ROOT / "backend" / "tests" / "fixtures" / "queries"
 
 # Inputs no backend list has yet, aimed at the highlighter's harder paths (math, escapes, look-alikes, astral).
@@ -97,10 +98,10 @@ def _kind(q: str, x: lexer.Lexeme) -> str:
     return x.kind.value
 
 
-def tokens(q: str) -> list[list[Any]]:
+def tokens(q: str, tokenizer: str = TOKENIZER_VERSION) -> list[list[Any]]:
     """The lexemes as `[kind, start, end]`, plus `BAD_NEAR` where the lexer dropped a malformed `NEAR/…`
     (it emits no lexeme there, only PARSE_BAD_NEAR), so every non-space character is covered."""
-    result = lex(q)
+    result = lex(q, tokenizer)
     out: list[list[Any]] = [[_kind(q, x), x.start, x.end] for x in result.lexemes]
     covered = {(x.start, x.end) for x in result.lexemes}
     for e in result.errors:
@@ -173,8 +174,8 @@ def build_tables() -> dict[str, Any]:
     }
 
 
-def build_golden() -> dict[str, Any]:
-    return {"_generated": GENERATED, "cases": [{"q": q, "tokens": tokens(q)} for q in _queries()]}
+def build_golden(tokenizer: str = TOKENIZER_VERSION) -> dict[str, Any]:
+    return {"_generated": GENERATED, "cases": [{"q": q, "tokens": tokens(q, tokenizer)} for q in _queries()]}
 
 
 def render(data: dict[str, Any]) -> str:
@@ -182,7 +183,7 @@ def render(data: dict[str, Any]) -> str:
 
 
 def test_the_frontend_lexer_files_are_current() -> None:
-    for path, data in ((TABLES, build_tables()), (GOLDEN, build_golden())):
+    for path, data in ((TABLES, build_tables()), (GOLDEN, build_golden()), (GOLDEN_V2, build_golden("2"))):
         assert path.read_text(encoding="utf-8") == render(data), (
             f"{path.relative_to(ROOT)} is stale: run "
             "`(cd backend && uv run python -m tests.contract.test_frontend_lexer_golden --write)` and commit it"
@@ -205,6 +206,6 @@ def test_every_case_covers_each_non_space_character() -> None:
 if __name__ == "__main__":
     if sys.argv[1:] != ["--write"]:
         sys.exit("usage: test_frontend_lexer_golden.py --write")
-    for path, data in ((TABLES, build_tables()), (GOLDEN, build_golden())):
+    for path, data in ((TABLES, build_tables()), (GOLDEN, build_golden()), (GOLDEN_V2, build_golden("2"))):
         path.write_text(render(data), encoding="utf-8")
         print(f"wrote {path.relative_to(ROOT)}")

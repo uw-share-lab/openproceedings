@@ -42,8 +42,8 @@ from openproceedings.api.deps import (
     ServedDep,
     annotate,
     check_candidates,
+    checked_query,
     searchable,
-    searchable_on,
 )
 from openproceedings.api.errors import ApiError
 from openproceedings.api.middleware import API_PREFIX
@@ -223,9 +223,9 @@ def export(
     else:
         if q is None:
             raise _bad("Pass q (the query to export) or record_id (a saved search record).")
-        result = searchable(request, q, mode, served.tokenizer_version)
+        checked_query(q)  # raw length cap before opening a pin; semantic validation needs its tokenizer
         engine = pinned_engine(request, served, index_version)
-        result = searchable_on(request, result, q, mode, engine)  # as the pinned index's tokenizer reads it
+        result = searchable(request, q, mode, engine.tokenizer_version)
         ast = result.effective_ast
         if ast is None or result.canonical_hash is None:  # searchable refuses a query that didn't parse
             raise EngineInternalError(

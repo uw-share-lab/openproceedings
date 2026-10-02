@@ -158,6 +158,12 @@ warnings, the save's index check), the design doc says so; its open questions li
    decides. A `WARN_MIXED_AND_OR` line offers **Load with parentheses**, which splices the warning's
    `reading` field over its span in the draft (never searching); with no `reading` it isn't offered. The
    client never parses a diagnostic's `message` (TASK-099).
+
+   The highlighting lexer selects tokenizer 2 or 3 from `/meta.tokenizer_version`, using 3 while metadata
+   is absent (or names an unsupported version). A language compartment reconfigures when the served version
+   changes, preserving the editor document, selection and undo history. Both versions are checked against
+   independently generated server lexer goldens, including full-width math delimiters and raw spans.
+
 2. **"How we read your query."** A collapsible tree view of the AST, with the default filters shown in grey
    as explicit clauses.
 3. **Query builder.** Mirrors how the review's strings are structured: **concept groups** (rows). Terms
