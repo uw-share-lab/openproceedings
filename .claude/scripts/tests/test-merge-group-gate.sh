@@ -51,12 +51,14 @@ PY
 att() { printf 'Summary\n\n<!-- op-review: %s APPROVE -->' "$1"; }   # an attested body for <sha>
 
 # expect <ok|err:<regex>> <label> <gate> <base> <head> [head ref]
-#   err:<regex> also needs an ::error:: line matching <regex> (grep -E); the ref defaults to the queue ref for $LAST
+#   err:<regex> also needs an ::error:: line matching <regex> (grep -E); the ref defaults to the queue ref for $LAST;
+#   EXPECT_PATH replaces PATH for one row (python3 is run by its absolute path, $PY3)
+PY3="$(command -v python3)"
 expect() {
   local want="$1" label="$2" gate="$3" base="$4" head="$5" ref="${6:-}" got rx=""
   case $want in err:*) rx="${want#err:}"; want=err ;; esac
   [ -n "$ref" ] || ref="refs/heads/gh-readonly-queue/dev/pr-$LAST-$base"
-  if (cd "$R" && PATH="$TMP/bin:$PATH" FAKE_GH="$TMP/gh" python3 "$GATE" "$gate" --base "$base" --head "$head" \
+  if (cd "$R" && PATH="${EXPECT_PATH:-$TMP/bin:$PATH}" FAKE_GH="$TMP/gh" "$PY3" "$GATE" "$gate" --base "$base" --head "$head" \
         --head-ref "$ref" --repo o/r) > "$TMP/out" 2>&1; then got=ok; else got=err; fi
   if [ "$got" = err ] && [ -n "$rx" ] && ! grep -Eq "::error::.*$rx" "$TMP/out"; then got="err (other reason)"; fi
   if [ "$got" = "$want" ] && ! grep -q Traceback "$TMP/out"; then
@@ -262,14 +264,9 @@ reset_prs; pr 11 "$A" "Summary"; setpr 11 'body=["x"]'
 expect err:"body isn't a string" "a body that isn't a string"                attribution "$BASE" "$Q1"
 reset_prs
 expect err:"gh api repos/o/r/pulls/11 failed" "gh can't read the PR"         attribution "$BASE" "$Q1"
-# No gh on PATH at all: an ::error::, not a traceback (git only, by symlink; python3 by absolute path).
+# No gh on PATH at all: an ::error::, not a traceback (git only, by symlink).
 mkdir -p "$TMP/nogh" && ln -sf "$(command -v git)" "$TMP/nogh/git"
-PY3="$(command -v python3)"
-if (cd "$R" && PATH="$TMP/nogh" "$PY3" "$GATE" attribution --base "$BASE" --head "$Q1" \
-      --head-ref "refs/heads/gh-readonly-queue/dev/pr-11-$BASE" --repo o/r) > "$TMP/out" 2>&1; then got=ok; else got=err; fi
-if [ "$got" = err ] && grep -q "::error::.*could not run gh" "$TMP/out" && ! grep -q Traceback "$TMP/out"; then
-  pass=$((pass+1)); printf '  ok   %-12s %-66s -> %s\n' attribution "gh missing from PATH" err
-else fail=$((fail+1)); printf '  FAIL %-12s %-66s -> %s\n' attribution "gh missing from PATH" "$got"; sed 's/^/       /' "$TMP/out"; fi
+LAST=11; EXPECT_PATH="$TMP/nogh" expect err:"could not run gh" "gh missing from PATH" attribution "$BASE" "$Q1"
 
 echo "== pr-gates.yml and test.yml wiring"
 # The workflow side of the gate, read as text (no YAML parser on the runner's python3): each pr-gates job refuses
@@ -297,7 +294,9 @@ for job, gate in (("attribution", "attribution"), ("learnings", "learnings"), ("
     if len(runs) != 1 or f"merge_group_gate.py {gate} " not in runs[0]:
         errs.append(f"{job}: not exactly one step running merge_group_gate.py {gate}")
     for s in runs:
-        for need in ("if: github.event_name == 'merge_group'", "GH_TOKEN: ${{ github.token }}",
+        if not re.search(r"^        if: github\.event_name == 'merge_group'$", s, re.M):
+            errs.append(f"{job}: the merge_group step's if: is not exactly event_name == 'merge_group'")
+        for need in ("GH_TOKEN: ${{ github.token }}",
                      "BASE_SHA: ${{ github.event.merge_group.base_sha }}", "HEAD_SHA: ${{ github.event.merge_group.head_sha }}",
                      "HEAD_REF: ${{ github.event.merge_group.head_ref }}",
                      '--base "$BASE_SHA" --head "$HEAD_SHA" --head-ref "$HEAD_REF" --repo "$REPO"'):
@@ -311,8 +310,16 @@ for job, gate in (("attribution", "attribution"), ("learnings", "learnings"), ("
     exempt = "${{ !(github.head_ref == 'dev' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) }}"
     if any(cond != exempt for cond in job_if):
         errs.append(f"{job}: a job-level if: other than the promotion exemption")
+    if "continue-on-error" in (jobs.get(job) or ""):
+        errs.append(f"{job}: continue-on-error lets a failing gate pass")
     if "pull-requests: read" not in (jobs.get(job) or ""):
         errs.append(f"{job}: no pull-requests: read")
+# The inline pull_request attribution step and the script must match the same pattern.
+sys.path.insert(0, str(wf.parents[1] / ".claude" / "scripts"))
+from merge_group_gate import ATTRIBUTION  # noqa: E402
+inline = re.search(r"^          re='(.*)'$", text, re.M)
+if not inline or inline.group(1) != ATTRIBUTION.pattern:
+    errs.append("pr-gates.yml's attribution pattern differs from merge_group_gate.py's")
 print("\n".join(errs))
 sys.exit(1 if errs else 0)
 PY
