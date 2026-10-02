@@ -13,11 +13,11 @@ a trailer split by quoting, `~` with HOME '' outside a push, a payload past ARG_
 
 ## What we learned
 - **shlex's output can't tell a single-quoted `$(…)` from a double-quoted one**, so walking every `$(` in a word
-  would have refused `git commit -m 'docs: `git push`'`. The double-quote and backquote cases are found in
+  would have refused ``git commit -m 'docs: `git push`'``. The double-quote and backquote cases are found in
   `preprocess`, which tracks quotes; each becomes a private-use mark plus an index into a `subs` list, so brace
   expansion and loop unrolling carry it, and `_walk` walks the body as a subshell (state saved and restored as
   for `bash -c`) before the command that holds it. (Evidence: rows `x="$(git push origin other2)"` block and
-  `git commit -m '… \`git push origin other2\`'` allow.)
+  ``git commit -m '… `git push origin other2`'`` allow.)
 - **The body has to be read as bash reads it, quotes and heredocs included.** Before, preprocess kept its outer
   quote state through `"$(echo "a b")"` and split it into `$(echo a` and `b)`; `_substitution_end` reads nested
   quotes, `$(`, backquotes, comments and heredoc bodies, so the canonical `-m "$(cat <<'EOF' … a) b … EOF)"`
@@ -28,15 +28,25 @@ a trailer split by quoting, `~` with HOME '' outside a push, a payload past ARG_
 - **Scanning the parsed words catches what the raw text hides**: `'Cl''aude'` and `$'\x43laude'` are one word
   once read; `expand_known` also puts in variables set earlier in the command.
 
+- **Two bash shapes end a body somewhere a paren count doesn't**: a `case` pattern's `)` and `"$((cmd) )"`,
+  which bash runs as a subshell inside a substitution, not arithmetic (review round 1: both let
+  `git push origin HEAD:dev` through). The scanner counts `case`/`esac`, and a quoted `$((` is walked like `$(`:
+  real arithmetic reads as harmless words.
+
 ## Dead ends — don't repeat these
+- **A reviewer probing hooks with an inline heredoc ran the probes for real.** A qa-auditor piped its test
+  commands through `<<EOF`, one test held an `EOF` line, the heredoc closed early and every later line ran in
+  zsh (`cd ~ && rm -rf data` in the home folder). Write probe payloads to files with a tool, never into a shell
+  heredoc, and tell every reviewer that touches hooks so.
 - Walking substitution bodies after the whole command, with the caller's final state: a later `cd` or variable
   change would be applied to an earlier substitution (fail open). Walk them in place.
 - Marking unquoted `$(…)` too: its parentheses already split it into commands, so it would be walked twice.
 
 ## Decisions (and what would change them)
 - A command with `~` or `$` is read both ways in every gate, so `cd ~/x && rm -rf build` is refused where data/
-  exists (in the HOME '' reading `/x` doesn't exist and the directory is unknown). Fail closed is the rule; if it
-  bites in practice, write absolute paths.
+  exists, and `cd ~/x && git commit` by enforce-pr-workflow (in the HOME '' reading `/x` doesn't exist and the
+  directory is unknown; bash's `&&` would stop there, but the walk doesn't model a failed `cd`). Fail closed is
+  the rule; if it bites in practice, write absolute paths, or teach the walk that a failed `cd` ends its `&&` chain.
 - Without python3 the three Python gates refuse every Bash call (exit 127 → 2), unlike enforce-pr-workflow's
   text fallback: the repo needs python3 (uv) anyway.
 
@@ -44,6 +54,8 @@ a trailer split by quoting, `~` with HOME '' outside a push, a payload past ARG_
 - None.
 
 ## Propagated to
-- Skill / agent / CLAUDE.md updated? — CLAUDE.md §Enforced gates; the hooks' headers; cmdparse's docstring
+- Skill / agent / CLAUDE.md updated? — CLAUDE.md §Enforced gates; spec 08 §Hooks and §cmdparse; the
+  no-ai-attribution skill; the hooks' headers; cmdparse's docstring; qa-auditor.md and security-reviewer.md (probe
+  hooks with payloads in files, never a shell heredoc)
 - Test or hook added? — `.claude/hooks/tests/test-openproceedings-gates.sh` and `test-enforce-pr-workflow.sh`
   TASK-156 rows; mutants in `.claude/scripts/mutants/gates.json`

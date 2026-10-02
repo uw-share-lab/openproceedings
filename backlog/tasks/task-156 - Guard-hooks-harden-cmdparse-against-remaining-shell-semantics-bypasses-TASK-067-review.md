@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-01 19:36'
-updated_date: '2026-10-02 04:46'
+updated_date: '2026-10-02 05:01'
 labels:
   - security
   - tooling
@@ -43,4 +43,6 @@ AC#5 and AC#6 came from the TASK-067 confirmation pass (after the final pass), c
 2026-10-01 (PR #64 CI fix): `~` with HOME absent from the hook's environment now reads as the passwd home (as bash does), and `~` after `unset HOME` or `HOME=` in the command is unknown (fail closed). AC#3 remains only for a HOME present but set to '' in the hook's environment.
 
 Correction to the note above: a HOME set to '' in the hook's environment is handled (`~` reads as ''), and a bare `cd` with HOME unset or '' is unknown (bash stays, zsh goes home). What remains of AC#3 is the reverse: HOME set in the hook's environment but '' in the agent's shell. The env_empty pass now reads `~` as the passwd home (right for an unset HOME), so a '' HOME is no longer tried there; check `~` both ways in that pass.
+
+2026-10-02 (TASK-156): AC#3 closed. Every gate (protect-data-dir, require-review, block-ai-attribution, enforce-pr-workflow) now walks a command with `~` or `$` a second time with HOME/TMPDIR/USER read as '', so `cd ~` with HOME '' stays put (rows: `cd ~ && rm -rf data`, `cd ~ && git commit -m x` on dev, `cd ~ && git commit -F op-msg.txt`).
 <!-- SECTION:NOTES:END -->

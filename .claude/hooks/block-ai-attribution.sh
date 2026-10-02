@@ -21,7 +21,8 @@ HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 IFS= read -r -d '' PROG <<'PY' || true
 import os, re, shlex, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import ParseError, expand_known, gh_subcommand, git_subcommand, opt_values, read_payload, walk
+from cmdparse import (ParseError, expand_known, gh_subcommand, git_subcommand, opt_values, read_payload, tokenize,
+                      walk)
 
 PATTERN = re.compile(
     r"co-authored-by[:=][^\n]*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com",
@@ -65,6 +66,11 @@ def main():
     except ParseError:
         if PATTERN.search(cmd):  # unbalanced quotes: bash won't run it, but don't let it look approved
             blocked()
+        try:  # a git command it can't classify (FailClosed) still has words: `'Cl''aude'` (TASK-156 review)
+            if PATTERN.search(" ".join(tokenize(cmd))):
+                blocked()
+        except ParseError:
+            pass
         sys.exit(0)
 
     commands = [(argv, d) for argv, d, _ in walked if argv]

@@ -115,9 +115,11 @@ fixtures under `backend/tests/fixtures/`; recording them is a separate, manual `
 | `autofix.sh` | After every edit: formats and fixes the file, then reports what it couldn't fix. Never blocks. |
 
 Every gate fails closed: a command it can't parse is refused where it matters, and an internal error exits 2
-(a crash would exit 1, which Claude Code lets through); so does a Python check that couldn't run (no python3),
-and the payload goes to Python on stdin, so a command past ARG_MAX is still read. A command inside a `"$(…)"`,
-backquotes or an unquoted heredoc body is checked like any other (TASK-156). The case tables count only exit 2 as a block.
+(a crash would exit 1, which Claude Code lets through). block-ai-attribution, require-review and protect-data-dir
+also exit 2 when Python can't run (no python3), and read the payload on stdin, so a command past ARG_MAX is still
+read; enforce-pr-workflow falls back to its text check (a git write word is refused). A command inside a `"$(…)"`,
+backquotes or an unquoted heredoc body is checked like any other, and one with `~` or `$` is read again with
+HOME/TMPDIR/USER as '' in every gate, so `cd ~/x && git commit` is refused when the HOME '' reading of the path doesn't exist (TASK-156). The case tables count only exit 2 as a block.
 
 After editing any hook or tooling script, run `make tooling`. It runs every case table in
 `.claude/hooks/tests/` and `.claude/scripts/tests/`, in parallel, in about 15 seconds. Then run

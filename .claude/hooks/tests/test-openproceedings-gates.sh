@@ -1096,6 +1096,12 @@ check $P block "echo \`rm -rf data/snapshots\`"             "$(payload_bash 'ech
 check $P block "cat <<EOF with \$(rm -rf data/snapshots) in the body" "$(payload_bash 'cat <<EOF
 $(rm -rf data/snapshots)
 EOF')"
+check $R block "x=\"\$(case y in y) git push origin other2;; esac)\"" "$(payload_bash 'x="$(case y in y) git push origin other2;; esac)"')"
+check $P block "x=\"\$((rm -rf data/snapshots) )\" (a subshell, not arithmetic)" "$(payload_bash 'x="$((rm -rf data/snapshots) )"')"
+check $A block "-m \$'Co-Authored-By: \\x43laude …'"        "$(payload_bash "git commit -m \$'Co-Authored-By: \\x43laude <x@y>'")"
+check $A block "A=Cl; -m \"Co-Authored-By: \${A}aude …\""   "$(payload_bash 'A=Cl; git commit -m "Co-Authored-By: ${A}aude <x@y>"')"
+check $A block "git config alias.ci commit; -m '…Cl''aude…' (unclassifiable)" "$(payload_bash "git config alias.ci commit; git commit -m 'Co-Authored-By: Cl''aude <noreply@anthr''opic.com>'")"
+HOOK_INPUT='{}' check $P block "an inherited HOOK_INPUT is not read: rm -rf data/snapshots" "$(payload_bash 'rm -rf data/snapshots')"
 check $R allow "git commit -m '… \`git push origin other2\`' (single quotes: text)" "$(payload_bash "git commit -m 'docs: \`git push origin other2\`'")"
 check $P block "x=\"\$(cd /tmp)\"; rm -rf data (a subshell's cd stays in it)" "$(payload_bash 'x="$(cd /tmp)"; rm -rf data')"
 # a body ends where bash ends it: not at a `)` in its heredoc or in its own quotes
@@ -1127,7 +1133,9 @@ check $P block "git format-patch -o data/snapshots -1"      "$(payload_bash 'git
 check $P block "git format-patch --output-dir=data/indexes/abc -1" "$(payload_bash 'git format-patch --output-dir=data/indexes/abc -1')"
 check $P block "git -c format.outputDirectory=data/snapshots format-patch -1" "$(payload_bash 'git -c format.outputDirectory=data/snapshots format-patch -1')"
 check $P block "git -C data/snapshots format-patch -1"      "$(payload_bash 'git -C data/snapshots format-patch -1')"
-check $P allow "git format-patch -o /tmp/op-patches -1"     "$(payload_bash 'git format-patch -o /tmp/op-patches -1')"
+check $P block "GIT_CONFIG_* … git format-patch -1 (unreadable config)" "$(payload_bash 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=format.outputDirectory GIT_CONFIG_VALUE_0=data/snapshots git format-patch -1')"
+check $P block "git config format.outputDirectory …; git format-patch -1" "$(payload_bash 'git config format.outputDirectory data/snapshots; git format-patch -1')"
+check $P allow "git format-patch -o /tmp/op-patches -1"    "$(payload_bash 'git format-patch -o /tmp/op-patches -1')"
 
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")

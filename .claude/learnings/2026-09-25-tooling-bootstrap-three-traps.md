@@ -14,7 +14,8 @@ Backlog.md, and branch protection on `dev` and `main`.
 - **A `python3 - <<'PY'` heredoc replaces the hook's stdin.** The first draft of `block-ai-attribution.sh`
   called `json.load(sys.stdin)` inside the heredoc script, so it would have read its own source, never the
   tool payload, and allowed everything. Kreate's `enforce-pr-workflow.sh` avoids this with
-  `input=$(cat)` + `HOOK_INPUT="$input"`. `cmdparse.read_payload()` now reads `$HOOK_INPUT` first.
+  `input=$(cat)` + `HOOK_INPUT="$input"`. `cmdparse.read_payload()` now reads `$HOOK_INPUT` first (superseded for the Python gates: see the
+  2026-10-02 addendum).
   (Evidence: caught while reviewing the code, before the first run. All 39 cases in
   `test-openproceedings-gates.sh` now pass.)
 - **GitHub free-plan orgs cannot protect branches on private repos.**
@@ -58,4 +59,3 @@ protect-data-dir now read the program into `PROG` with `IFS= read -r -d '' PROG 
 with the payload on the hook's own stdin (`cmdparse.payload()`), and exit 2 on any status but 0 (no python3 is
 127). enforce-pr-workflow still uses `HOOK_INPUT`; its text fallback refuses a git write word when the verdict is
 empty.
-

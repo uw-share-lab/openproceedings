@@ -2501,8 +2501,8 @@
  {
   "label": "cmdparse: branch.<b>.merge not a key that steers git",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    r\"|branch\\..+\\.(merge|remote|pushremote)\",",
-  "new": "    r\"\","
+  "old": "    r\"|branch\\..+\\.(merge|remote|pushremote)|format\\.outputdirectory\",",
+  "new": "    r\"|format\\.outputdirectory\","
  },
  {
   "label": "cmdparse: git_anchored ignores an absolute -C",
@@ -3030,14 +3030,14 @@
  {
   "label": "cmdparse: a $(…) in double quotes not read (TASK-156)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "(quote == '\"' and line.startswith(\"$(\", i) and not line.startswith(\"$((\", i))",
-  "new": "False"
+  "old": "                (quote == '\"' and line.startswith(\"$(\", i)) or (quote in (None, '\"') and c == \"`\")",
+  "new": "                False or (quote in (None, '\"') and c == \"`\")"
  },
  {
   "label": "cmdparse: backquotes not read (TASK-156)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                or (quote in (None, '\"') and c == \"`\")",
-  "new": "                or False"
+  "old": "                (quote == '\"' and line.startswith(\"$(\", i)) or (quote in (None, '\"') and c == \"`\")",
+  "new": "                (quote == '\"' and line.startswith(\"$(\", i)) or False"
  },
  {
   "label": "cmdparse: backquotes read inside single quotes (TASK-156)",
@@ -3170,5 +3170,41 @@
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "[ \"$rc\" -eq 0 ] || exit 2",
   "new": "exit \"$rc\""
+ },
+ {
+  "label": "cmdparse: a case pattern's ) ends a substitution body (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif c == \")\" and depth == 0 and cases:",
+  "new": "        elif False:"
+ },
+ {
+  "label": "cmdparse: a quoted $(( read as arithmetic only (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                (quote == '\"' and line.startswith(\"$(\", i)) or (quote in (None, '\"') and c == \"`\")",
+  "new": "                (quote == '\"' and line.startswith(\"$(\", i) and not line.startswith(\"$((\", i)) or (quote in (None, '\"') and c == \"`\")"
+ },
+ {
+  "label": "cmdparse: an inherited HOOK_INPUT read in place of stdin (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        data = json.load(sys.stdin)",
+  "new": "        data = json.loads(os.environ[\"HOOK_INPUT\"]) if \"HOOK_INPUT\" in os.environ else json.load(sys.stdin)"
+ },
+ {
+  "label": "cmdparse: a git config write of format.outputDirectory not refused (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "|format\\.outputdirectory\"",
+  "new": "\""
+ },
+ {
+  "label": "block-ai: an unclassifiable git command's words not scanned (TASK-156)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            if PATTERN.search(\" \".join(tokenize(cmd))):",
+  "new": "            if False:"
+ },
+ {
+  "label": "protect-data-dir: format-patch under unreadable config not refused (TASK-156)",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                if not out_dirs and git_config_opaque(argv) and has_data:",
+  "new": "                if False:"
  }
 ]

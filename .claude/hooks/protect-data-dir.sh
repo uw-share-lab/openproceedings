@@ -35,8 +35,8 @@
 #   HOME, TMPDIR or USER from this hook's environment (unset there: ''; `~` with HOME unset is the passwd
 #   home, as in bash, and unknown after `unset HOME`), each checked both as set and as '' (`rm -f "$TMPDIR/x"` is
 #   allowed, `rm -rf "${TMPDIR}data"` is not; read as '', `"$TMPDIR"/*` is not globbed as `/*`); `cd`/`pushd`/
-#   `popd` are followed, and a command with `~` but no `$` is read that second way too (`cd ~` with HOME '' stays
-#   put: TASK-156). A `git log`/`diff`/`format-patch` `--output <file>` is a write like a redirect, and so is each
+#   `popd` are followed, and a command with `~` or `$` is read both ways (`cd ~` with HOME '' stays put:
+#   TASK-156). A `git log`/`diff`/`format-patch` `--output <file>` is a write like a redirect, and so is each
 #   patch `git format-patch` writes into `-o`/`--output-directory`, format.outputDirectory or the directory it
 #   runs in (TASK-156). A command substitution's body (`x="$(rm -rf …)"`, backquotes) is checked like any
 #   command (cmdparse). A path that decides a check and can't be
@@ -59,8 +59,8 @@ HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 IFS= read -r -d '' PROG <<'PY' || true
 import functools, glob, os, re, subprocess, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import (GIT_VALUE_OPTS, Argv, FailClosed, ParseError, expand_word, git, git_config, git_subcommand,
-                      read_payload, repo_root, walk)
+from cmdparse import (GIT_VALUE_OPTS, Argv, FailClosed, ParseError, expand_word, git, git_config, git_config_opaque,
+                      git_subcommand, read_payload, repo_root, walk)
 from cmdparse import payload as hook_payload
 
 payload = hook_payload()
@@ -448,6 +448,10 @@ def main():
                         out_dirs.append(attached if eq else following)
                     elif a_.startswith("-") and not a_.startswith("--") and "o" in a_[1:]:
                         out_dirs.append(a_[a_.index("o", 1) + 1 :] or following)  # `-o<dir>`, `-ko <dir>`
+                if not out_dirs and git_config_opaque(argv) and has_data:
+                    # format.outputDirectory may come from config this guard can't read (GIT_CONFIG_*, --config-env)
+                    refuse(IMMUTABLE_MSG + " (`git format-patch` without -o reads format.outputDirectory from config this "
+                           "guard can't read, in a repo with data/; pass -o <dir> or --stdout.)")
                 if not out_dirs:
                     out_dirs = [git_config(argv).get("format.outputdirectory")
                                 or git(gm[2], "config", "--get", "format.outputDirectory") or "."]
