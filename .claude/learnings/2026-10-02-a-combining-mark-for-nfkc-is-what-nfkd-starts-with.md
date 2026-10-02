@@ -1,6 +1,6 @@
 # A cap on combining marks must count what NFKD starts with, not only combining characters
 
-**Key lesson:** To bound what NFKC's canonical reordering can cost, call a character a mark when its NFKD form starts with a non-zero combining class (all 922 combining characters in Unicode 15.0 plus U+0F73, U+0F75, U+0F81, U+FF9E, U+FF9F), and flag any trim by appending to the claim's evidence after what the source wrote, since `dedup.attribution` reads an RIS route and url from the evidence's first tokens.
+**Key lesson:** To bound what NFKC's canonical reordering can cost, call a character a mark when its NFKD form starts with a non-zero combining class (all 922 combining characters in Unicode 15.0 plus U+0F73, U+0F75, U+0F81, U+FF9E, U+FF9F), end a run only at a letter or digit (the tokenizer joins words across invisible characters), trim a run over the cap in its NFKD canonical order so every Unicode form of a title trims alike, and flag any trim by appending to the claim's evidence after what the source wrote, since `dedup.attribution` reads an RIS route and url from the evidence's first tokens.
 
 - **Date:** 2026-10-02 · **Task:** task-155 · **Area:** ingest
 - **Artifacts:** `backend/src/openproceedings/ingest/caps.py`, `backend/tests/unit/ingest/test_caps.py`, decision-026, spec 01 §Pipeline 2
@@ -28,13 +28,19 @@ Bound the tokenizer's superlinear NFKC reordering on stored text (TASK-067's sec
 - Ending a run at every non-mark character. The tokenizer drops invisible characters and LaTeX `\-` and joins
   the word across them, so 8-mark runs split by U+200D, U+FE00, U+034F, U+00AD, U+20DD or `\-` reach NFC as
   one run. The security review measured 1.3 s for a 72k title, growing about 4x per doubling. A run must end
-  only at a letter or digit. Test the invariant on the tokens (no token holds more than 2 × 8 + 2
+  only at a letter or digit. Test the invariant on the tokens (no token holds more than 8
   non-starters), not on the raw text.
 - Benchmarking the worst case with a Latin base and U+0338. Latin marks fold away and the slash takes the
   short cluster path, so it measures nearly the cheapest input. Use a base whose marks are kept (Thai) and
   classes 220/230.
 - Prefixing the note to the evidence. An RIS abstract's evidence is `scholarmend:proceedings_page <url> …`, and
   `attribution` takes the page from the token after the route. The note goes last, in parentheses.
+
+- Keeping a run's first 8 marks in stored order. Two sources can store one title in different Unicode forms
+  (NFC against NFD, or marks in another order) and share a dedup title key. Cut in stored order, 276 of 500
+  random marked titles split against their NFD form, which can stop a merge or a reconcile match. Count the run
+  in NFKD and trim it in canonical order, so every form trims alike. A cap that runs before dedup must be a
+  function of the text's equivalence class, not its bytes.
 
 ## Decisions (and what would change them)
 - A run ends only at a letter or digit, so marks after a space or punctuation are capped with the run before.

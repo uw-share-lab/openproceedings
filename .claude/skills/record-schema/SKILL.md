@@ -14,8 +14,8 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | Field | Rule |
 |---|---|
 | `id` | `op:<venue>:<year>:<native>`, with venue lower-cased: `op:iclr:2024:iilhN2MycO`. Never changes once a snapshot has shipped it. |
-| `title` | Raw, whitespace-collapsed. **No** search normalization here (spec 03 owns it). Capped by the snapshot build at 8 combining marks per base character (the ingest caps, below); the model doesn't check it. |
-| `abstract` | Raw text or `null` (never an empty or whitespace-only string). Reject a value that starts or ends with `…`: that's a Scholar snippet. An ellipsis inside a real abstract (`x₁, …, x_n`) is allowed. HTML stripped, LaTeX kept verbatim. Capped by the snapshot build at 20,000 characters and 8 combining marks per base character (the ingest caps, below); the model doesn't check it. |
+| `title` | Raw, whitespace-collapsed. **No** search normalization here (spec 03 owns it). Capped by the snapshot build at 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
+| `abstract` | Raw text or `null` (never an empty or whitespace-only string). Reject a value that starts or ends with `…`: that's a Scholar snippet. An ellipsis inside a real abstract (`x₁, …, x_n`) is allowed. HTML stripped, LaTeX kept verbatim. Capped by the snapshot build at 20,000 characters and 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
 | `authors` | Display order, as the source gives them. |
 | `venue` | `NeurIPS` \| `ICLR` \| `ICML` (enum; extensible later). |
 | `year` | Conference year. Never the arXiv or PDF year. Required: a record with no year is not a valid `PaperRecord`, nor is one for a year its venue was not held under its name (NeurIPS before 1987, ICLR before 2013, ICML before 1988; `vocab.CONFERENCES`, spec 04 §Exports). |
@@ -124,7 +124,10 @@ canonical reordering is superlinear in a long run of marks with alternating comb
   - A run ends only at a base, meaning a letter or digit that is not a mark. The tokenizer joins a word across
     the invisible characters it drops (ZWJ, soft hyphen, variation selectors, LaTeX `\-`), so those must not
     reset the count.
-  - This keeps every token's run of non-starters within 2 × 8 + 2.
+  - A run is counted in NFKD non-starters, the base's own included.
+  - A run over the cap is rewritten in its NFKD form, with its marks in canonical order, then keeps its first 8.
+    So every Unicode form of the same text trims alike, and dedup title keys stay equal.
+  - This keeps every token's run of non-starters within 8.
 - **Length.** An abstract keeps at most 20,000 code points. A cut one is stripped of trailing whitespace and
   `…`.
 - **Where.** The caps run once, in `snapshot.load_sources`, before dedup, on the record's field and on every

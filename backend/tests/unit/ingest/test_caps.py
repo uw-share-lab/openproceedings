@@ -1,11 +1,12 @@
 """The ingest caps on indexed text (TASK-155, decision-026; spec 01 §Pipeline 2): a run of combining marks keeps
-at most 8 marks per base character, an abstract at most 20,000 characters, and whatever is trimmed is flagged in
+at most 8 marks, an abstract at most 20,000 characters, and whatever is trimmed is flagged in
 the claim's evidence and the snapshot manifest, never silently."""
 
 from __future__ import annotations
 
 import json
 import logging
+import random
 import sys
 import time
 import unicodedata
@@ -22,7 +23,7 @@ from openproceedings.ingest.caps import (
     is_mark,
     is_trimmed,
 )
-from openproceedings.ingest.dedup import attribution
+from openproceedings.ingest.dedup import attribution, title_key
 from openproceedings.ingest.snapshot import build, ingest_ris, load_records
 from openproceedings.query.normalize import tokenize
 
@@ -50,7 +51,7 @@ def test_every_combining_character_is_a_mark() -> None:
 
 
 def test_a_run_keeps_its_first_eight_marks() -> None:
-    assert cap_marks(HOSTILE) == ("a" + (ACUTE + SLASH) * 4, 92)
+    assert cap_marks(HOSTILE) == ("a" + SLASH * 8, 92)  # in NFKD order: the slashes (class 1) sort first
 
 
 def test_each_base_starts_a_new_run() -> None:
@@ -74,8 +75,49 @@ def test_only_a_letter_or_digit_ends_a_run(sep: str) -> None:
     # one run (TASK-155 security review): only a base a word restarts on, a letter or digit, ends a run
     marks = "\u0316\u0301" * 4  # 8 marks, combining classes 220 and 230 alternating
     out, dropped = cap_marks("\u0e01" + (marks + sep) * 3)
-    assert dropped == 16 and out == "\u0e01" + marks + sep * 3
+    assert dropped == 16 and out == "\u0e01" + "\u0316" * 4 + "\u0301" * 4 + sep * 3
     assert cap_marks("\u0e01" + marks + sep + "\u0e02" + marks)[1] == 0  # a letter after it: a new run
+
+
+def test_a_precomposed_base_brings_its_own_marks_to_the_run() -> None:
+    # counted in NFKD, so the same text precomposed or decomposed is over the cap alike: `ệ` brings 2
+    assert cap_marks("\u1ec7" + ACUTE * 6) == ("\u1ec7" + ACUTE * 6, 0)
+    assert (
+        cap_marks("\u1ec7" + ACUTE * 7)
+        == cap_marks("e\u0323\u0302" + ACUTE * 7)
+        == ("e\u0323\u0302" + ACUTE * 6, 1)
+    )
+
+
+@pytest.mark.parametrize(
+    ("one", "other"),
+    [
+        ("\u0915" + "\u0301\u0323" * 5, "\u0915" + "\u0323" * 5 + "\u0301" * 5),  # marks in another order
+        ("\u0958" + ACUTE * 9, "\u0915\u093c" + ACUTE * 9),  # precomposed against decomposed (dedup review)
+        ("o" + "\u0f73" * 3 + "\u0f71\u0f72" * 9, "o" + "\u0f71\u0f72" * 12),  # Tibetan, kept by the fold
+    ],
+)
+def test_every_form_of_the_same_text_trims_alike(one: str, other: str) -> None:
+    # two sources holding one title in different Unicode forms share a dedup title key; the cap must not split
+    # them (TASK-155 dedup and track-classifier reviews), so a run over the cap is trimmed in its NFKD form
+    assert title_key(one) == title_key(other)
+    assert cap_marks(one) == cap_marks(other)
+    assert title_key(cap_marks(one)[0]) == title_key(cap_marks(other)[0])
+
+
+def test_a_stored_order_and_its_canonical_order_keep_one_title_key_after_the_cap() -> None:
+    # the track-classifier review's check: one title stored with its marks in another order than NFD's shares a
+    # title key with the canonical form, and keeping the first 8 marks in stored order split 276 of these 500
+    rng = random.Random(155)
+    marks = "\u0f71\u0f72\u0f73\u0f74\u05b0\u05b4\u0591\u093c\u0301\u0323\u0327\u0338"
+    for _ in range(500):
+        text = "".join(
+            rng.choice("\u0f40\u05d0\u0915o") + "".join(rng.choice(marks) for _ in range(rng.randint(6, 14)))
+            for _ in range(rng.randint(1, 3))
+        )
+        canonical = unicodedata.normalize("NFD", text)
+        assert title_key(text) == title_key(canonical)
+        assert title_key(cap_marks(text)[0]) == title_key(cap_marks(canonical)[0])
 
 
 def test_no_word_the_tokenizer_forms_from_capped_text_holds_a_long_run() -> None:
@@ -88,7 +130,7 @@ def test_no_word_the_tokenizer_forms_from_capped_text_holds_a_long_run() -> None
             for ch in unicodedata.normalize("NFD", token.text):
                 run = run + 1 if unicodedata.combining(ch) else 0
                 longest = max(longest, run)
-            assert longest <= 2 * MAX_MARKS + 2
+            assert longest <= MAX_MARKS
 
 
 def test_ordinary_text_is_returned_as_it_is() -> None:
@@ -100,8 +142,8 @@ def test_ordinary_text_is_returned_as_it_is() -> None:
 
 def test_cap_notes_the_marks_it_dropped() -> None:
     assert cap("title", HOSTILE) == (
-        "a" + (ACUTE + SLASH) * 4,
-        f"{TRIMMED} 92 combining marks dropped past 8 per base character",
+        "a" + SLASH * 8,
+        f"{TRIMMED} 92 combining marks dropped past 8 in a run",
     )
 
 
@@ -129,7 +171,7 @@ def test_a_title_has_no_length_cap() -> None:
 def test_both_caps_are_noted_together() -> None:
     _, note = cap("abstract", HOSTILE + " x" * MAX_ABSTRACT)
     assert note == (
-        f"{TRIMMED} 92 combining marks dropped past 8 per base character; cut from 40,009 to 19,999 characters"
+        f"{TRIMMED} 92 combining marks dropped past 8 in a run; cut from 40,009 to 19,999 characters"
     )
 
 
@@ -145,12 +187,12 @@ def test_a_record_and_its_claims_are_trimmed_alike_and_flagged() -> None:
         ),
     )
     [out] = cap_records([r])
-    assert out.title == "Trust a" + (ACUTE + SLASH) * 4
+    assert out.title == "Trust a" + SLASH * 8
     assert out.abstract is not None and len(out.abstract) <= MAX_ABSTRACT
     [title] = out.claims("title")
     [abstract] = out.claims("abstract")
     assert title.value == out.title and abstract.value == out.abstract
-    assert title.evidence == f"content.title ({TRIMMED} 92 combining marks dropped past 8 per base character)"
+    assert title.evidence == f"content.title ({TRIMMED} 92 combining marks dropped past 8 in a run)"
     assert abstract.evidence == f"{TRIMMED} cut from 39,999 to 19,999 characters"
     assert out.claims("status") == r.claims("status")  # nothing else changes
     assert out.content_hash != r.content_hash  # rehashed for the trimmed text
@@ -176,14 +218,14 @@ def test_a_claim_over_the_cap_is_trimmed_when_the_records_own_text_is_not() -> N
     assert out is not r and out.title == "Plain" and is_trimmed(out)
     kept, trimmed = sorted(out.claims("title"), key=lambda c: c.source != "openreview_v2")
     assert kept.evidence == "content.title" and kept.value == "Plain"
-    assert trimmed.value == "Plain a" + (ACUTE + SLASH) * 4 and trimmed.evidence is not None
+    assert trimmed.value == "Plain a" + SLASH * 8 and trimmed.evidence is not None
     assert trimmed.evidence.startswith(f"title ({TRIMMED}")
 
 
 @pytest.mark.parametrize(
     ("evidence", "flagged"),
     [
-        (f"{TRIMMED} 3 combining marks dropped past 8 per base character", True),
+        (f"{TRIMMED} 3 combining marks dropped past 8 in a run", True),
         (f"content.abstract ({TRIMMED} cut from 25,003 to 19,999 characters)", True),
         (f"scholarmend:proceedings_page {TRIMMED} 3 forged", False),  # mid-evidence, not the note's form
         (f"content.abstract ({TRIMMED} 3 marks) and more", False),  # not at the end
@@ -202,7 +244,7 @@ def test_a_proceedings_page_evidence_keeps_its_url_first() -> None:
     [out] = cap_records([r])
     assert (
         out.claims("abstract")[0].evidence
-        == f"{ev} ({TRIMMED} 92 combining marks dropped past 8 per base character)"
+        == f"{ev} ({TRIMMED} 92 combining marks dropped past 8 in a run)"
     )
 
 

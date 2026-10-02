@@ -13,8 +13,8 @@ build.
 | Field | Type | Notes |
 |---|---|---|
 | `id` | str | Stable ID `op:<venue>:<year>:<native>`, e.g. `op:iclr:2024:iilhN2MycO`. `native` is the OpenReview forum ID, or `pmlr-v202-<key>` (ICML) / `nips-<hash>` (NeurIPS; `nips-<hash>-round1`/`-round2` on the 2021 Datasets and Benchmarks host: the suffix is the link's round token, because that host numbers each round and the main track separately, so its hash alone can name three papers; a D&B link without a round, or dated other than 2021, gets no id (miner `no_round`, RIS `unresolved`), never a bare `nips-<hash>`; `urls.proceedings_native` is the one rule) / `iclr-<hash>` (ICLR) for proceedings-only papers. |
-| `title` | str | Raw, whitespace-collapsed. Normalization for search happens in 03, not here. The snapshot build caps it at 8 combining marks per base character (§Pipeline 2, decision-026); the model doesn't check this. |
-| `abstract` | str \| null | Raw. `null` if no source has it. Never a Scholar snippet (reject values that start or end with `…`; an ellipsis inside is allowed). Never an empty string. The snapshot build caps it at 20,000 characters and 8 combining marks per base character (§Pipeline 2, decision-026); the model doesn't check this. |
+| `title` | str | Raw, whitespace-collapsed. Normalization for search happens in 03, not here. The snapshot build caps it at 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
+| `abstract` | str \| null | Raw. `null` if no source has it. Never a Scholar snippet (reject values that start or end with `…`; an ellipsis inside is allowed). Never an empty string. The snapshot build caps it at 20,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
 | `authors` | list[str] | Display order. |
 | `venue` | enum | `NeurIPS` \| `ICLR` \| `ICML`. Extensible. |
 | `year` | int | Conference year, not the arXiv year. A year before the venue was held under its name (NeurIPS 1987, ICLR 2013, ICML 1988; `vocab.CONFERENCES`) is refused. |
@@ -174,12 +174,15 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    how it is tokenized). Then the **ingest caps** (`ingest/caps.py`, decision-026, TASK-155), applied once to
    every source's records before dedup (`snapshot.load_sources`), bound what the tokenizer's NFKC reordering
    can cost. That cost is superlinear in a long run of marks with alternating combining classes.
-   - **Marks.** A run of combining marks in a title or abstract keeps its first 8 marks, and the rest are
-     dropped. A mark is a character whose NFKD form starts with a non-zero canonical combining class. A run is
-     the marks after one base character (a letter or digit that is not a mark), or at the start of the text.
-     Any other character neither counts nor ends a run: the tokenizer joins a word across the invisible
-     characters it drops (zero-width joiner, soft hyphen, LaTeX `\-`, …). So no token holds more than 2 × 8 +
-     2 consecutive non-starters, and NFC stays linear.
+   - **Marks.** A run of combining marks in a title or abstract keeps 8 marks, and the rest are dropped.
+     - A mark is a character whose NFKD form starts with a non-zero canonical combining class.
+     - A run is the marks after one base character (a letter or digit that is not a mark), or at the start of
+       the text. It is counted in NFKD non-starters, the base's own included.
+     - Any other character neither counts nor ends a run, because the tokenizer joins a word across the
+       invisible characters it drops (zero-width joiner, soft hyphen, LaTeX `\-`, …).
+     - A run over the cap is rewritten in its NFKD form, its marks in canonical order, and keeps its first 8.
+       So every Unicode form of the same text trims alike, and dedup title keys that matched still match.
+     - No token holds more than 8 consecutive non-starters, so NFC stays linear.
    - **Length.** An abstract keeps its first 20,000 characters (code points), then trailing whitespace and `…`
      are stripped.
 
@@ -188,7 +191,9 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    note is the whole evidence when the source gave none, or follows the source's evidence in parentheses. The
    manifest names the records (`trimmed`, §5), and the build logs a `snapshot_trimmed` warning with the count.
    Text within both caps is unchanged. Snapshot 2026-09-29-d552baa07aed has none over them (decision-026): its
-   longest abstract is 4,995 characters and its longest run of marks is 1. It rebuilds byte-identically.
+   longest abstract is 4,995 characters and its longest run of marks is 1. It rebuilds byte-identically. Two
+   sources' texts that differ only past a cap compare equal once trimmed, so they get no `conflicts.csv` row;
+   their claims still carry the note.
 3. **Classify.** Derive `track`, `status` and `presentation` using the rules above. Every classification
    records its evidence claim.
 4. **Deduplicate.** The same paper appears on OpenReview and in the proceedings (NeurIPS, ICML 2023+).

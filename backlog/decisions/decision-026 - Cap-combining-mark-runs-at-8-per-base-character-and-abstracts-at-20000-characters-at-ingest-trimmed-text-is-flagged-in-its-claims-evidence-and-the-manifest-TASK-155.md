@@ -36,7 +36,7 @@ The owner decided both caps on 2026-10-01:
 
 Both trims are flagged, never silent:
 - **In the record.** Each claim whose value was trimmed carries a note in its `evidence`:
-  `trimmed at ingest (decision-026): <n> combining marks dropped past 8 per base character; cut from <n> to
+  `trimmed at ingest (decision-026): <n> combining marks dropped past 8 in a run; cut from <n> to
   <kept> characters`. It is the whole evidence when the source gave none. Otherwise it follows the source's
   evidence in parentheses. The paper page shows it in the provenance table.
 - **In the snapshot manifest.** A `trimmed` key lists the ids of the records with any trimmed title or abstract
@@ -49,7 +49,9 @@ Details:
   combining class. That is every combining character (922 in Unicode 15.0), plus five that decompose to one
   (U+0F73, U+0F75, U+0F81, U+FF9E, U+FF9F).
 - **What a run is.** The marks after one base character, or at the start of the text. A base character is a
-  letter or digit that is not a mark. Any other character neither counts nor ends a run:
+  letter or digit that is not a mark. The run is counted in NFKD non-starters, the base's own included: a
+  precomposed `ệ` brings 2, so the same text precomposed or decomposed is over the cap alike. Any other
+  character neither counts nor ends a run:
   - **Invisible characters** (zero-width joiner, variation selector, grapheme joiner, soft hyphen, enclosing
     mark, LaTeX `\-`). The tokenizer drops these and joins the word across them, so marks on both sides reach
     NFC as one run. The review measured a title of 8-mark runs split by zero-width joiners at 1.3 s for 72k
@@ -57,8 +59,20 @@ Details:
   - **Spaces and punctuation.** Marks after them are capped with the run before. Real text never needs this,
     since its longest run is 1.
 
-  With this rule, no word the tokenizer forms holds more than 2 × 8 + 2 consecutive non-starters after NFD
-  (tested), so its NFC is linear.
+  With this rule, no word the tokenizer forms holds more than 8 consecutive non-starters after NFD (tested),
+  so its NFC is linear.
+- **How a run over the cap is trimmed.** It is rewritten in its NFKD form: each character decomposed, and each
+  run of non-starters put in canonical order. Then its first 8 non-starters are kept. A run within the cap is
+  left as it is. So every form of the same text trims to the same characters, whether NFC, NFD or marks stored
+  in another order. Two sources whose titles shared a dedup title key still share it after the cap.
+  - **Why.** The dedup and track-classifier reviews found that keeping the first 8 marks in stored order split
+    such keys. For example, 276 of 500 random marked titles split against their NFD form. That stops dedup
+    merging the two records, or reconcile matching a listing, which would turn the record `unknown`.
+  - **Cost of the rewrite.** It changes the trimmed run's form, along with any compatibility character in it.
+    It applies only to text that is already flagged.
+- **Equal after the cap.** Two sources' texts that differ only past a cap (after the 8th mark, or after
+  character 20,000) compare equal once trimmed. So their `conflicts.csv` row is gone. Their claims still carry
+  the note, and the manifest names the record.
 - **Cut ends.** A cut abstract is stripped of trailing whitespace and `…`, since a record refuses either. The
   note gives the length kept.
 - **Titles.** They get the mark cap only, which makes their cost linear. A title length cap would only add a
