@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 20:04'
-updated_date: '2026-10-02 00:03'
+updated_date: '2026-10-02 00:27'
 labels:
   - ops
   - ci
@@ -37,11 +37,25 @@ Source: a TASK-136 (PR #55) review nit, rejected there as deploy-time work (PR #
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Digest resolved 2026-10-01 two ways, which agree: `docker buildx imagetools inspect node:22-bookworm-slim` (no daemon needed; MediaType application/vnd.oci.image.index.v1+json, Digest sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c) and the Docker Hub registry API (anonymous pull token from auth.docker.io, then HEAD /v2/library/node/manifests/22-bookworm-slim with Accept: the OCI index and Docker manifest-list types; Docker-Content-Digest is the same sha256:43ac6c60…772c, content-type the OCI index). Both stages of deploy/web.Dockerfile now name node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c. The unpinned `# syntax=docker/dockerfile:1` directive (a BuildKit frontend image pulled at build time) was dropped: the Dockerfile uses no syntax beyond the built-in frontend's, so nothing is pulled unpinned. Dependabot: a docker entry for /deploy, weekly, prefix build (changelog Internal). Its docker fetcher matches /dockerfile|containerfile/i (dependabot-core docker/file_fetcher.rb), so web.Dockerfile is found; Node semver-major updates are ignored there because the major moves with .nvmrc and CI. Check: .claude/scripts/check_digest_pins.py in make tooling (CI claude-tooling), 16 rows in .claude/scripts/tests/test-tooling-scripts.sh, 12 mutants in gates.json all killed (mutate.py --match 'pins:'). Shown failing on an unpinned FROM (a copy of the script over deploy/web.Dockerfile with both FROMs unpinned): 'digest pins: web.Dockerfile:1: node:22-bookworm-slim is not pinned as name:tag@sha256:<digest> (spec 08 §Deploy)', the same for line 2, '1 Dockerfile(s) under deploy/, 2 unpinned FROM', exit=1.
+Digest resolved 2026-10-01 two ways, which agree: `docker buildx imagetools inspect node:22-bookworm-slim` (no daemon needed; MediaType application/vnd.oci.image.index.v1+json, Digest sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c) and the Docker Hub registry API (anonymous pull token from auth.docker.io, then HEAD /v2/library/node/manifests/22-bookworm-slim with Accept: the OCI index and Docker manifest-list types; Docker-Content-Digest is the same sha256:43ac6c60…772c, content-type the OCI index). Both stages of deploy/web.Dockerfile now name node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c.
+
+The unpinned `# syntax=docker/dockerfile:1` directive (a BuildKit frontend image pulled at build time) was dropped: the Dockerfile uses nothing beyond the built-in frontend.
+
+Dependabot: a docker entry for /deploy and /deploy/** (weekly, prefix build, which changelog.py groups under Internal). Its docker fetcher matches /dockerfile|containerfile/i (dependabot-core docker/lib/dependabot/docker/file_fetcher.rb), so web.Dockerfile is found; Node semver-major updates are ignored there because the major moves with .nvmrc and CI.
+
+Check: .claude/scripts/check_digest_pins.py in make tooling (CI claude-tooling). It covers every FROM, a # syntax= directive, COPY --from= and RUN --mount=…,from= in any *Dockerfile*/*Containerfile* under deploy/, reading continuation lines and the escape directive as Docker does (review round 1: security-reviewer and code-reviewer). Case rows in .claude/scripts/tests/test-tooling-scripts.sh; its mutants in .claude/scripts/mutants/gates.json, all killed (mutate.py --match 'pins:').
+
+Shown failing on an unpinned FROM: a copy of the script run over deploy/web.Dockerfile with both digests removed printed, verbatim:
+```
+digest pins: deploy/web.Dockerfile:14: FROM 'node:22-bookworm-slim' is not pinned as name:tag@sha256:<digest> (spec 08 §Deploy)
+digest pins: deploy/web.Dockerfile:31: FROM 'node:22-bookworm-slim' is not pinned as name:tag@sha256:<digest> (spec 08 §Deploy)
+digest pins: 1 Dockerfile(s) under deploy/, 2 unpinned image(s)
+```
+exit=1.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Both FROMs in deploy/web.Dockerfile pinned to node:22-bookworm-slim@sha256:43ac6c60… (the multi-arch OCI index digest, resolved with docker buildx imagetools inspect and the registry API); Dependabot docker entry for /deploy (weekly, prefix build, Node majors by hand); check_digest_pins.py in make tooling with case rows and killed mutants; spec 08 §Deploy and the repo-conventions skill state the rule.
+Both FROMs in deploy/web.Dockerfile pinned to node:22-bookworm-slim@sha256:43ac6c60… (the multi-arch OCI index digest, resolved with docker buildx imagetools inspect and the registry API); Dependabot docker entry for /deploy and its subdirectories (weekly, prefix build, Node majors by hand); check_digest_pins.py in make tooling covers FROM, syntax directives, COPY --from and RUN --mount from, with case rows and killed mutants; spec 08 §Deploy and the repo-conventions skill state the rule.
 <!-- SECTION:FINAL_SUMMARY:END -->

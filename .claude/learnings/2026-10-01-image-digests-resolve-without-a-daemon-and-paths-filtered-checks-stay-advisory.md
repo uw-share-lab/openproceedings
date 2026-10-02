@@ -21,9 +21,15 @@ Dependabot from bumping the exact `tantivy==` pin, and record the `v*` tag rules
   Node major; ignoring `version-update:semver-major` for `node` leaves exactly the digest refreshes.
 - A `# syntax=docker/dockerfile:1` line is itself an image BuildKit pulls at build time, unpinned; a
   Dockerfile that uses nothing beyond the built-in frontend can drop it rather than pin it.
+- A `FROM`-only pin check is not enough: a `# syntax=` directive, `COPY --from=<image>` and
+  `RUN --mount=…,from=<image>` pull images too, and a wrapped `FROM \` line must be joined before it is read
+  (review round 1, security-reviewer and code-reviewer; `check_digest_pins.py` now reads instructions as
+  Docker does).
+- Dependabot's `directory: /deploy` does not look in subdirectories; `directories: ["/deploy", "/deploy/**"]`
+  matches a check that searches `deploy/` recursively.
 - In a mutation table where every failure path exits 1, a mutant that turns one refusal into a different
   refusal survives: kill it with an `ok` row that only the correct code accepts (here a pinned image after
-  `--platform`, which the flag-less mutant reads as unpinned; evidence: `mutate.py --match 'pins:'`, 12 killed).
+  `--platform`, which the flag-less mutant reads as unpinned; evidence: `mutate.py --match 'pins:'`, every mutant killed).
 
 ## Dead ends — don't repeat these
 - A first mutant set had "unreadable FROM passes" surviving: no row had a `FROM` the regex couldn't parse.

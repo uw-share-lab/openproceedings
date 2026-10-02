@@ -242,16 +242,20 @@ docker build -f deploy/web.Dockerfile --build-arg OPENPROCEEDINGS_INSTANCE=publi
 ```
 
 `.dockerignore` sends only what the image copies (never `data/`, a `takedowns/` directory or a `.env` file).
-CI's advisory `web-image` workflow builds the image on every PR that touches it, the frontend or the lockfile
-(§CI): the private build, a public build with a placeholder contact, and a public build with no contact that
+CI's advisory `web-image` workflow builds the image on every PR into, and push to, `dev` and `main` that
+touches the paths §CI lists (`deploy/`, the frontend, the npm manifests, `.dockerignore`, the workflow): the private build, a public build with a placeholder contact, and a public build with no contact that
 must fail at `web-build-gate.sh` (TASK-148).
 
 **Base images are digest-pinned (TASK-149).** Every `FROM` in `deploy/` names its base image as
 `name:tag@sha256:<digest>`, the tag kept for readers and the digest that of the multi-arch index (not of one
 platform's manifest), so a rebuild uses the image that was reviewed; a `FROM` naming an earlier build stage, or
-`scratch`, needs none. `.claude/scripts/check_digest_pins.py` (`make tooling`, CI `claude-tooling`; case rows
-in `test-tooling-scripts.sh`) fails on a `FROM` without one, or with an `ARG` in the image name. Dependabot's
-`docker` entry for `/deploy` (weekly, prefix `build`) bumps the digests; a new Node major (`22-…` → `24-…`) is
+`scratch`, needs none. The same holds for every other image a build pulls: a `# syntax=` parser directive
+(the BuildKit frontend; `web.Dockerfile` has none, so the builder's built-in one is used), `COPY --from=` and
+`RUN --mount=…,from=`. `.claude/scripts/check_digest_pins.py` (`make tooling`, CI `claude-tooling`; case rows
+in `test-tooling-scripts.sh`) reads every `*Dockerfile*` or `*Containerfile*` under `deploy/` as Docker does
+(continuation lines joined, the `escape` directive honoured) and fails on any of those images without a digest,
+or with an `ARG` in its name. Dependabot's `docker` entry for `/deploy` and its subdirectories (weekly, prefix
+`build`) bumps the digests; a new Node major (`22-…` → `24-…`) is
 ignored there, since it moves with `.nvmrc` and CI and is done by hand. A digest is resolved from the registry,
 e.g. `docker buildx imagetools inspect node:22-bookworm-slim` (its top-level `Digest:`, with media type
 `…image.index…`), which needs no running daemon.
@@ -438,8 +442,8 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
   Unreleased section lags `dev`; any PR may refresh it.
 
 **Checklist** (`release-manager`; paste each command's result into the promotion PR):
-1. **Readiness on `dev`.** The required checks are green on its head, and so are `e2e`, `bench` and a
-   `nightly` run from the last day. `backlog task list --plain` shows no open Must finding. The latest
+1. **Readiness on `dev`.** The required checks are green on its head, and so are `e2e`, `bench`, the
+   latest `web-image` run on `dev` and a `nightly` run from the last day. `backlog task list --plain` shows no open Must finding. The latest
    `docs/results/*-coverage.md` passes the M4 gate.
 2. **Security gate.** `security-reviewer` (`/security-review`) over `origin/main...origin/dev`, every finding
    dispositioned as in `/review-gate`. Before the first release a public instance serves, TASK-067 (the
@@ -469,16 +473,17 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    `learnings` and `review-attested`). `main`'s branch protection needs one approving review from a second
    person (never self-approved, never bypassed; admins included) and `dev` up to date with `main` (step 7).
    Merge with a merge commit.
-6. **Tag and notes.** `git fetch origin` and check out `origin/main`; `python3 .claude/scripts/changelog.py
+6. **Tag and notes.** First, the `v*` tag rulesets (§Branch protection; applied 2026-10-01) must be in place:
+   `gh api repos/<owner>/<name>/rulesets --jq '.[] | select(.target == "tag") | .name'` lists them, one name
+   per line and possibly more than one (today `Release tags: immutable` and `Release tags: maintainers only
+   create`); paste the output into the back-merge PR (step 7), since the promotion PR has merged. Then `git
+   fetch origin` and check out `origin/main`; `python3 .claude/scripts/changelog.py
    --check --release X.Y.Z` passes (the promotion holds exactly the PRs the file lists; with `OP_DATA_DIR` or
    `--data-dir` naming step 3's data dir when this checkout doesn't hold `data/`); `python3 .claude/scripts/changelog.py --release X.Y.Z
    --notes X.Y.Z > notes.md` (the same `--data-dir`); `gh release create vX.Y.Z --target
    "$(git rev-parse origin/main)" --title X.Y.Z --notes-file notes.md`, which creates the tag on GitHub
    (`require-review.sh` blocks an agent's `git push` of a tag, since `main`'s merge commit has no per-sha
-   record; `block-ai-attribution.sh` scans the notes). The `v*` tag rulesets (§Branch protection; applied
-   2026-10-01) must be in place: `gh api repos/<owner>/<name>/rulesets --jq '.[] | select(.target == "tag")
-   | .name'` lists them, one name per line and possibly more than one (today `Release tags: immutable` and
-   `Release tags: maintainers only create`); paste the output into the promotion PR. No assets. Then `git fetch origin --tags` and check that
+   record; `block-ai-attribution.sh` scans the notes). No assets. Then `git fetch origin --tags` and check that
    `git rev-parse vX.Y.Z^{commit}` is that sha.
 7. **Back-merge.** `main` now holds the promotion's merge commit, which `dev` lacks, and the next promotion
    can't merge until `dev` has it. `git switch -c release/X.Y.Z-back-merge origin/dev && git merge --no-ff

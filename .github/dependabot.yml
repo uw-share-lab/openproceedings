@@ -21,7 +21,7 @@ updates:
   # deploy/*.Dockerfile base images, pinned name:tag@sha256:<index digest> (TASK-149): Dependabot bumps the
   # digest when the tag moves. A new Node major (22-… → 24-…) moves with .nvmrc and CI, so it is done by hand.
   - package-ecosystem: docker
-    directory: /deploy
+    directories: ["/deploy", "/deploy/**"]
     schedule: { interval: weekly }
     commit-message: { prefix: "build" }
     ignore:

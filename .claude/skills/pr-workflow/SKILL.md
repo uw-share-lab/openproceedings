@@ -82,8 +82,8 @@ sha. Any commit after an approval — a typo fix, a rebase, an amend — produce
 | `learnings` (`pr-gates.yml`) | the branch adds or extends a learnings entry, or is labelled `no-learning` |
 | `review-attested` (`pr-gates.yml`) | the PR body attests APPROVE for the head sha |
 
-The advisory `e2e`, `bench` and `web-image` checks (`web-image` runs only when a PR touches `deploy/`, the
-frontend or the lockfile; spec 08 §CI) should also be green before merge; `nightly` is scheduled rather
+The advisory `e2e`, `bench` and `web-image` checks (`web-image` runs only when a PR touches the paths spec 08
+§CI lists: `deploy/`, the frontend, the npm manifests, `.dockerignore` or the workflow) should also be green before merge; `nightly` is scheduled rather
 than a PR check (spec 08 §CI); its `suite-ci` job reruns the whole backend suite at the `ci` profile (2,000
 examples), so a property failure that needs more than 200 examples surfaces within a day (TASK-127).
 

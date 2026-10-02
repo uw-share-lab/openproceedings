@@ -2862,14 +2862,20 @@
  {
   "label": "pins: digest not required",
   "file": ".claude/scripts/check_digest_pins.py",
-  "old": "PINNED = re.compile(r\"^[^@\\s$]+:[^@\\s$]+@sha256:[0-9a-f]{64}$\")",
-  "new": "PINNED = re.compile(r\"^[^@\\s$]+:[^@\\s$]+\")"
+  "old": "PINNED = re.compile(r\"^[^@\\s$]+:[^@\\s$/:]+@sha256:[0-9a-f]{64}$\")",
+  "new": "PINNED = re.compile(r\"^[^@\\s$]+:[^@\\s$/:]+\")"
  },
  {
   "label": "pins: tag not required",
   "file": ".claude/scripts/check_digest_pins.py",
-  "old": "PINNED = re.compile(r\"^[^@\\s$]+:[^@\\s$]+@sha256:[0-9a-f]{64}$\")",
+  "old": "PINNED = re.compile(r\"^[^@\\s$]+:[^@\\s$/:]+@sha256:[0-9a-f]{64}$\")",
   "new": "PINNED = re.compile(r\"^[^\\s$]+@sha256:[0-9a-f]{64}$\")"
+ },
+ {
+  "label": "pins: a registry port counts as a tag",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "PINNED = re.compile(r\"^[^@\\s$]+:[^@\\s$/:]+@sha256:[0-9a-f]{64}$\")",
+  "new": "PINNED = re.compile(r\"^[^@\\s$]+:[^@\\s$]+@sha256:[0-9a-f]{64}$\")"
  },
  {
   "label": "pins: digest length not anchored",
@@ -2880,25 +2886,25 @@
  {
   "label": "pins: ARG image allowed",
   "file": ".claude/scripts/check_digest_pins.py",
-  "old": "PINNED = re.compile(r\"^[^@\\s$]+:[^@\\s$]+@",
-  "new": "PINNED = re.compile(r\"^[^@\\s]+:[^@\\s]+@"
+  "old": "PINNED = re.compile(r\"^[^@\\s$]+:[^@\\s$/:]+@",
+  "new": "PINNED = re.compile(r\"^[^@\\s]+:[^@\\s/:]+@"
  },
  {
   "label": "pins: FROM case-sensitive",
   "file": ".claude/scripts/check_digest_pins.py",
-  "old": "if not re.match(r\"^\\s*FROM\\s\", line, re.IGNORECASE):",
-  "new": "if not re.match(r\"^\\s*FROM\\s\", line):"
+  "old": "if re.match(r\"^FROM\\s\", inst, re.IGNORECASE):",
+  "new": "if re.match(r\"^FROM\\s\", inst):"
  },
  {
   "label": "pins: --platform hides the image",
   "file": ".claude/scripts/check_digest_pins.py",
-  "old": "FROM = re.compile(r\"^\\s*FROM\\s+(?:--\\S+\\s+)*(\\S+)",
-  "new": "FROM = re.compile(r\"^\\s*FROM\\s+(\\S+)"
+  "old": "FROM = re.compile(r\"^FROM\\s+(?:--\\S+\\s+)*(\\S+)",
+  "new": "FROM = re.compile(r\"^FROM\\s+(\\S+)"
  },
  {
   "label": "pins: unreadable FROM passes",
   "file": ".claude/scripts/check_digest_pins.py",
-  "old": "            bad.append(f\"{path.name}:{n}: can't read this FROM: {line.strip()}\")\n",
+  "old": "                bad.append(f\"{name}:{n}: can't read this FROM: {inst}\")\n",
   "new": ""
  },
  {
@@ -2908,9 +2914,27 @@
   "new": "if False and image.lower() not in stages and"
  },
  {
-  "label": "pins: stages recorded before the check",
+  "label": "pins: stage names never recorded",
   "file": ".claude/scripts/check_digest_pins.py",
-  "old": "        if stage:\n            stages.add(stage.lower())\n",
+  "old": "                stages.add(m.group(2).lower())\n",
+  "new": "                pass\n"
+ },
+ {
+  "label": "pins: stage names case-sensitive",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "stages.add(m.group(2).lower())",
+  "new": "stages.add(m.group(2))"
+ },
+ {
+  "label": "pins: stage indexes never recorded",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "            stages.add(str(count))  # a stage is also named by its index\n",
+  "new": ""
+ },
+ {
+  "label": "pins: stage index off by one",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "            count += 1\n",
   "new": ""
  },
  {
@@ -2922,13 +2946,67 @@
  {
   "label": "pins: file name case-sensitive",
   "file": ".claude/scripts/check_digest_pins.py",
-  "old": "\"dockerfile\" in p.name.lower()",
-  "new": "\"Dockerfile\" in p.name"
+  "old": "p.name, re.IGNORECASE)",
+  "new": "p.name)"
+ },
+ {
+  "label": "pins: Containerfile skipped",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "r\"dockerfile|containerfile\"",
+  "new": "r\"dockerfile\""
  },
  {
   "label": "pins: always exits 0",
   "file": ".claude/scripts/check_digest_pins.py",
   "old": "sys.exit(1 if bad else 0)",
   "new": "sys.exit(0)"
+ },
+ {
+  "label": "pins: continuations not joined",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "        if stripped.endswith(escape):",
+  "new": "        if False:"
+ },
+ {
+  "label": "pins: comments inside a continuation kept",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "        if stripped.startswith(\"#\") or (parts and not stripped):",
+  "new": "        if not parts and (stripped.startswith(\"#\") or not stripped):"
+ },
+ {
+  "label": "pins: escape directive ignored",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "escape = directives.get(\"escape\", \"\\\\\")",
+  "new": "escape = \"\\\\\""
+ },
+ {
+  "label": "pins: syntax directive unchecked",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "    if \"syntax\" in directives and not PINNED.match(directives[\"syntax\"]):",
+  "new": "    if False:"
+ },
+ {
+  "label": "pins: directives read past a comment",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "    while i < len(lines) and (m := DIRECTIVE.match(lines[i])):",
+  "new": "    while i < len(lines) and (m := DIRECTIVE.match(lines[i]) or re.match(r\"^#\", lines[i])):"
+ },
+ {
+  "label": "pins: COPY --from unchecked",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "        elif m := COPY_FROM.match(inst):",
+  "new": "        elif False and (m := COPY_FROM.match(inst)):"
+ },
+ {
+  "label": "pins: only the first --mount from checked",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "            for m in MOUNT_FROM.finditer(inst):",
+  "new": "            for m in list(MOUNT_FROM.finditer(inst))[:1]:"
+ },
+ {
+  "label": "pins: --mount from unchecked",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "        elif re.match(r\"^RUN\\s\", inst, re.IGNORECASE):",
+  "new": "        elif False:"
  }
 ]

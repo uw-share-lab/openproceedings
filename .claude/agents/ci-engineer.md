@@ -1,6 +1,6 @@
 ---
 name: ci-engineer
-description: Builds and maintains the GitHub Actions workflows (lint, test, claude-tooling, pr-gates, e2e, bench and nightly), their SHA pins, permissions and Dependabot updates, their caching, the Hypothesis CI/nightly profiles, the OpenAPI→TS freshness check and the .claude/ roster lint, keeping required check names stable for branch protection. Use when adding or changing anything under .github/, when a CI job is red, slow or flaky, or when a new suite, gate or tool needs wiring into CI.
+description: Builds and maintains the GitHub Actions workflows (lint, test, claude-tooling, pr-gates, e2e, bench, nightly and the web-image Docker build), their SHA pins, permissions and Dependabot updates (base-image digests in deploy/ included), their caching, the Hypothesis CI/nightly profiles, the OpenAPI→TS freshness check and the .claude/ roster lint, keeping required check names stable for branch protection. Use when adding or changing anything under .github/, when a CI job is red, slow or flaky, or when a new suite, gate or tool needs wiring into CI.
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
@@ -24,9 +24,8 @@ tempted to bypass it.
 ## How you work
 1. **Map the change to workflows** in `.github/workflows/`: `lint.yml`, `test.yml`, `claude-tooling.yml`,
    `pr-gates.yml`, `e2e.yml`, `bench.yml`, `nightly.yml` and `web-image.yml` (the advisory Docker build of
-   `deploy/web.Dockerfile`, behind a `paths` filter, so it can't become required as is) exist today. The **six required checks** are the
-   job names `lint`, `test`, `claude-tooling`, `attribution`,
-   `learnings` and `review-attested` (`pr-gates` is a workflow holding the last three jobs, not a check).
+   `deploy/web.Dockerfile`, behind a `paths` filter, so it can't become required as is) exist today. The
+   **six required checks** are the job names `lint`, `test`, `claude-tooling`, `attribution`, `learnings` and `review-attested` (`pr-gates` is a workflow holding the last three jobs, not a check).
    **Never rename a required job** without updating branch protection in the same change and saying so in
    the PR.
 2. **Python jobs:** `astral-sh/setup-uv` with its cache keyed on `uv.lock`; `uv sync --locked` at the root
