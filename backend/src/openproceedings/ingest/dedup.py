@@ -36,6 +36,7 @@ only on the set of inputs (sorted ids, set-based decisions).
 from __future__ import annotations
 
 import json
+import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -121,8 +122,12 @@ class DedupResult:
 
 
 def title_key(title: str) -> str:
-    """The token-contract normalisation joined by single spaces: dedup and search agree on 'same title'."""
-    return " ".join(normalize(title))
+    """The token-contract normalisation of the title's NFC form, joined by single spaces: dedup and search agree
+    on 'same title', and every canonically equivalent spelling of it (NFC, NFD, marks stored in another order)
+    gets one key (TASK-168). `normalize` reads LaTeX before its per-character NFKC, so a backslash before a
+    decomposed letter starts a command: NFD `Caf\\e\u0301` lost its `e` (`caf`) where NFC `Caf\\é` keeps it
+    (`caf e`), and `Erd\\H{o\u030b}s` was no accent macro (`erd o s`, not `erdos`)."""
+    return " ".join(normalize(unicodedata.normalize("NFC", title)))
 
 
 def _text(v: object) -> str:

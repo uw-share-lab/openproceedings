@@ -211,7 +211,7 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
    same proceedings id), then (a′) the forum link (TASK-105): records naming the same OpenReview forum id,
    as their id or in a `urls.forum` claim (PMLR's index links the forum from ICML 2023), merge in the same
    venue and year whatever their titles say; a link across venue-years, against the track rule below, or
-   shared by two listings is a `conflicts.csv` row, never a merge. Then (b) a normalized title (the token contract) with the same venue and year. Two
+   shared by two listings is a `conflicts.csv` row, never a merge. Then (b) a normalized title (the token contract over the title's NFC form, so every canonically equivalent spelling, NFC, NFD or marks stored in another order, has one key: TASK-168) with the same venue and year. Two
    records are merged **only** when venue and year agree. That lesson comes from venuetriage: records
    with no year must never merge on `(title, "")`. **Two OpenReview records with different forum IDs are
    never merged** (the API v1 crawl has already collapsed two notes of one identical paper, TASK-125, and a silent twin into its accepted note, TASK-132), nor a listing linking one forum with a note of another: a main-track paper and its same-year workshop version can share a title. Title
@@ -393,12 +393,17 @@ run this rule. **A copy and its main-track twin are two linked records** (TASK-1
   `Invite to Workshop`, 1 with no venue) link to 51 conference notes, 104 records in all.
 - **Effect on records.** Tracks, statuses, hashes and counts are unchanged; the claim is provenance only
   (`docs/results/2026-10-02-iclr-2017-twins.md`).
-- **Shown.** The paper page shows the link in its provenance table. A visible "see also" in the results and the
-  exports is deferred.
+- **Shown** (TASK-162). Each result and the paper page say "See also (the same paper's other record): `<id>`",
+  each id a link to its paper page; the API sends the ids as `twins` and every export names them (spec 04
+  §Exports: an RIS `N1`, BibTeX `openproceedings_twins`, a CSV column, a JSONL list). The provenance table still
+  shows the claim.
+- **Taken down together** (TASK-163, owner decision 2026-10-02). A takedown follows a twin link: listing either
+  copy withholds both abstracts, at serve time and in a snapshot build, and the operator lists and logs both ids
+  (spec 08 §Deploy).
 - **Checked.** A snapshot refuses a `twin` claim naming a record it doesn't hold.
 - **Reporting.** Linked twins are two records identified, as before. The tool removes neither before screening.
-  Until the deferred "see also" ships, exports carry both with nothing linking them, so a reviewer's own
-  duplicate step may drop one of a same-title pair; that belongs in the review's own "duplicates removed" count.
+  Exports carry both, each naming the other (TASK-162), so a reviewer's own duplicate step can see why a
+  same-title pair is there; one it drops belongs in the review's own "duplicates removed" count.
 
 Responses are cached under
 `<data-dir>/cache/openreview/{v2,v1}/http/` (the shared `{key, payload}` cache contains only a versioned,

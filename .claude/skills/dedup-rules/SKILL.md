@@ -26,8 +26,11 @@ over-merge silently deletes a paper from someone's systematic review.
    rule below fails (`track_not_merged`, e.g. a workshop note linked from a proceedings volume). One
    source on both sides doesn't block a link: the id, not the title, says which paper it is.
 2. **Same dedup title key, same `venue`, same `year`.** Build the key from the token-contract
-   `normalize()` output joined by single spaces (`.claude/skills/token-contract/SKILL.md`), so dedup and
-   search agree on what counts as the same title. Never write a second normaliser.
+   `normalize()` output of the title's NFC form, joined by single spaces (`.claude/skills/token-contract/SKILL.md`), so dedup and
+   search agree on what counts as the same title. Never write a second normaliser. The NFC step (TASK-168) makes
+   the key form-independent: `normalize` reads LaTeX before its per-character NFKC, so before it an NFD `Caf\e\u0301`
+   lost its `e` to a `\e` command and `Erd\H{o\u030b}s` was no accent macro. `test_every_canonically_equivalent_title_has_one_key`
+   pins `title_key(NFC(t)) == title_key(NFD(t)) == title_key(t)`. The real corpus held no non-NFC title (2026-09-29).
 
 Step 2 only runs **across sources**: the clusters' provenance source sets must be disjoint
 (OpenReview ↔ proceedings ↔ RIS). Two OpenReview notes with different forum ids are different submissions
