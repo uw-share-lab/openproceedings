@@ -84,8 +84,11 @@ Details:
   - **Why.** The track-classifier review found that a cut counted in code points as stored fell at a different
     place in each form: 900 of 900 random over-length pairs split their dedup key. Cutting the NFC form still
     split 24, because U+0F73 and U+0958 never recompose.
-- **Limit.** One remains, for hostile text only. A source that sends NFKD text has already split each spacing
-  accent into a space and a mark, so its marks can trim differently from the composed form (dedup-auditor).
+- **Limit.** One remains, for hostile text only. A source that sends NFKC or NFKD text has already split each
+  spacing accent (`´`, `¨`) into a space and a mark. Only a letter or digit ends a run, so 9 or more such accents
+  with only spaces or punctuation between them make one run there, and the composed form has none. The two forms
+  can then trim differently and get different dedup keys (dedup-auditor: 81 of 600 random titles with spaced-out
+  accents).
   Real titles are at most 192 characters, with runs of 1.
   - **Why.** The dedup and track-classifier reviews found that keeping the first 8 marks in stored order split
     such keys. For example, 276 of 500 random marked titles split against their NFD form. That stops dedup

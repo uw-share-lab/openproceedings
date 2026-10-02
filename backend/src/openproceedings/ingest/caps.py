@@ -22,9 +22,10 @@ in canonical order (`_decomposed`), and keeps its first `MAX_MARKS` non-starters
 character is kept as it was. So every canonical form of the same text (NFC, NFD, marks stored in another order)
 trims to the same characters, and two sources whose titles shared a dedup key still share it. The length caps count
 the NFKD length and cut before the last space that fits (`_cut`), so every form keeps the same words. One limit
-holds, for hostile
-text only: an NFKD source, whose spacing accents are already a space and a mark, can trim differently from its
-composed form (`_decomposed` keeps canonical forms alike, NFC and NFD). Trimmed text is then made
+holds: an NFKC or NFKD source, whose spacing accents (`´`) are already a space and a mark, can trim differently
+from its composed form, since only a letter or digit ends a run, so 9 or more spaced-out accents with only
+spaces or punctuation between them make one run there (`_decomposed` keeps canonical forms alike, NFC and NFD).
+Real text never has 9 spacing accents in a row. Trimmed text is then made
 one a record accepts (`_tidy`): dropping marks can leave two spaces together, or a space or `…` at an end. A
 title is whitespace-collapsed, and an abstract is stripped of whitespace and `…` at both ends. A title or
 abstract past its length cap is cut first (before the mark cap) and tidied the same way. The title cap (the owner, 2026-10-02) bounds
@@ -86,7 +87,7 @@ def _segments(text: str) -> list[str]:
 
 def _decomposed(segment: str) -> list[str]:
     """The characters of `segment` that make its run, decomposed, alike for its canonical forms (NFC, NFD; not an
-    NFKD source's split spacing accents): the base in NFD (a precomposed `ệ` brings its 2
+    NFKC or NFKD source's split spacing accents): the base in NFD (a precomposed `ệ` brings its 2
     marks; its canonical form, so `ﬁ` stays `ﬁ`) and each mark in NFKD (so U+FF9E and U+0F73 are the marks NFKC
     makes of them). Every other character, such as a space, punctuation or an invisible one, is kept as it is
     and holds no mark here: a spacing accent such as `´` is a space and a mark to NFKC, but a starter comes
