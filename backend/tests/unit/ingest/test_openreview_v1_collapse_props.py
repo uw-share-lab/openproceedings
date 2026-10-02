@@ -147,6 +147,14 @@ def test_a_collapse_never_folds_two_papers_or_loses_an_acceptance(
     assert got.report.imported + got.report.skipped["duplicate_submission"] == len(every)
     # (rule 6's `twin` claims are left out: which copies link depends on which notes the collapse keeps, TASK-159)
     assert all(untwinned(every[rid]) == untwinned(r) for rid, r in kept.items())
+    # and the twin claims the collapsed crawl does carry are sound: each names kept records only, of the same venue
+    # and year, and each link goes both ways
+    for rid, r in kept.items():
+        for c in r.claims("twin"):
+            assert isinstance(c.value, tuple) and c.value and rid not in c.value
+            for t in c.value:
+                assert t in kept and (kept[t].venue, kept[t].year) == (r.venue, r.year)
+                assert any(isinstance(o.value, tuple) and rid in o.value for o in kept[t].claims("twin"))
 
     for rid in every.keys() - kept.keys():
         gone = every[rid]
