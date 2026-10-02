@@ -1,0 +1,56 @@
+name: web-image
+# Builds deploy/web.Dockerfile (spec 08 §Deploy, TASK-148): the only place the image is built before a deploy.
+# Advisory, not a required check: the workflow-level `paths` filter skips it on a PR that touches none of these
+# paths, and a required check that never starts would stay pending forever. Nothing is pushed or published.
+on:
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - deploy/**
+      - frontend/**
+      - package.json
+      - package-lock.json
+      - .dockerignore
+      - .github/workflows/web-image.yml
+  push:
+    branches: [dev, main]
+    paths:
+      - deploy/**
+      - frontend/**
+      - package.json
+      - package-lock.json
+      - .dockerignore
+      - .github/workflows/web-image.yml
+permissions:
+  contents: read
+
+jobs:
+  web-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Private build
+        run: |
+          docker build --progress=plain -f deploy/web.Dockerfile \
+            --build-arg OPENPROCEEDINGS_INSTANCE=private -t openproceedings-web:private .
+      - name: Public build with a placeholder takedown contact
+        run: |
+          docker build --progress=plain -f deploy/web.Dockerfile \
+            --build-arg OPENPROCEEDINGS_INSTANCE=public \
+            --build-arg NEXT_PUBLIC_TAKEDOWN_CONTACT=takedown@example.org -t openproceedings-web:public .
+      - name: Public build with no takedown contact fails at web-build-gate.sh
+        run: |
+          set +e
+          docker build --progress=plain -f deploy/web.Dockerfile \
+            --build-arg OPENPROCEEDINGS_INSTANCE=public -t openproceedings-web:refused . > build.log 2>&1
+          rc=$?
+          set -e
+          cat build.log
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::a public build with no takedown contact succeeded; web-build-gate.sh must refuse it"; exit 1; fi
+          if ! grep -q 'RUN sh deploy/web-build-gate.sh' build.log \
+             || ! grep -q 'OPENPROCEEDINGS_INSTANCE=public needs NEXT_PUBLIC_TAKEDOWN_CONTACT' build.log; then
+            echo "::error::the build failed, but not at web-build-gate.sh"; exit 1; fi
+          echo "refused at web-build-gate.sh, as it should be"

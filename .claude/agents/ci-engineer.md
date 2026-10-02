@@ -1,6 +1,6 @@
 ---
 name: ci-engineer
-description: Builds and maintains the GitHub Actions workflows (lint, test, claude-tooling, pr-gates, e2e, bench and nightly), their SHA pins, permissions and Dependabot updates, their caching, the Hypothesis CI/nightly profiles, the OpenAPI→TS freshness check and the .claude/ roster lint, keeping required check names stable for branch protection. Use when adding or changing anything under .github/, when a CI job is red, slow or flaky, or when a new suite, gate or tool needs wiring into CI.
+description: Builds and maintains the GitHub Actions workflows (lint, test, claude-tooling, pr-gates, e2e, bench, nightly and the web-image Docker build), their SHA pins, permissions and Dependabot updates (base-image digests in deploy/ included), their caching, the Hypothesis CI/nightly profiles, the OpenAPI→TS freshness check and the .claude/ roster lint, keeping required check names stable for branch protection. Use when adding or changing anything under .github/, when a CI job is red, slow or flaky, or when a new suite, gate or tool needs wiring into CI.
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
@@ -23,9 +23,9 @@ tempted to bypass it.
 
 ## How you work
 1. **Map the change to workflows** in `.github/workflows/`: `lint.yml`, `test.yml`, `claude-tooling.yml`,
-   `pr-gates.yml`, `e2e.yml`, `bench.yml` and `nightly.yml` exist today. The **six required checks** are the
-   job names `lint`, `test`, `claude-tooling`, `attribution`,
-   `learnings` and `review-attested` (`pr-gates` is a workflow holding the last three jobs, not a check).
+   `pr-gates.yml`, `e2e.yml`, `bench.yml`, `nightly.yml` and `web-image.yml` (the advisory Docker build of
+   `deploy/web.Dockerfile`, behind a `paths` filter, so it can't become required as is) exist today. The
+   **six required checks** are the job names `lint`, `test`, `claude-tooling`, `attribution`, `learnings` and `review-attested` (`pr-gates` is a workflow holding the last three jobs, not a check).
    **Never rename a required job** without updating branch protection in the same change and saying so in
    the PR.
 2. **Python jobs:** `astral-sh/setup-uv` with its cache keyed on `uv.lock`; `uv sync --locked` at the root
@@ -57,8 +57,11 @@ tempted to bypass it.
 - Least privilege: every workflow declares `permissions: contents: read` today, and must keep doing so;
   widen a single job only with a reason in the PR. No `pull_request_target` with checkout of PR code.
 - Pinning: every action is pinned to a full commit SHA with a `# vX.Y.Z` version comment, and must stay
-  that way. Dependabot (`.github/dependabot.yml`) bumps `github-actions` weekly; review its PRs like any
-  other.
+  that way. Dependabot (`.github/dependabot.yml`) bumps `github-actions`, `uv`, `npm` and the `docker`
+  base-image digests in `deploy/` weekly, minor and patch grouped into one PR per ecosystem and semver-majors
+  ignored (a major is a deliberate, hand-made PR; spec 08 §CI); review its PRs like any other. Its `uv` entry
+  ignores `tantivy`, whose upgrade must bump `SCHEMA_VERSION` by hand (spec 08 §Release), and every image a
+  `deploy/` build pulls stays digest-pinned (`check_digest_pins.py`, spec 08 §Deploy).
 - Secrets: CI never needs OpenReview credentials — tests use recorded HTTP fixtures. No `data/` in
   artifacts.
 - Flakes are bugs: fix the cause (deadline, ordering, network) — never `continue-on-error`, retries on a

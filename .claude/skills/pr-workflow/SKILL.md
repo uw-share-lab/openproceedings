@@ -45,6 +45,7 @@ break. `make lint` and `make tooling` always run (the pre-push hook runs them to
 | shared test code: any `conftest.py`, `backend/tests/{strategies,corpus}.py`, `backend/tests/fixtures/**`, or any `backend/tests` module another test imports (`grep -rn "<module name>" backend/tests --include='*.py'` finds both `from tests.x.<module> import …` and `from tests.x import <module>`) | `make test` (both suites: a frontend test reads `backend/tests/fixtures/queries/`) |
 | other tests only | the changed test files; for a changed data file (e.g. `backend/tests/differential/*.json`, `backend/tests/golden/*.json`), the tests that read it (`grep -rln "<file name>" backend/tests frontend/src`) |
 | `.claude/hooks/**`, `.claude/scripts/**`, `.githooks/**`, `.github/**`, `Makefile` | `make tooling` and `make mutate-changed` |
+| `deploy/**` (Docker isn't assumed locally: CI's advisory `web-image` job builds the image, so confirm it green on the PR) | `npx vitest run --root frontend src/lib/web-image.test.ts` (it reads `web.Dockerfile` and runs `web-build-gate.sh`), and `make tooling` (the digest-pin check) |
 | `docs/specs/**`, `docs/results/**`, `backlog/**` (tests on both sides read them: the syntax-help golden, diagnostics, official counts, the Covidence fixture, the backlog check, decision records, and the methods text reads spec 05) | `make test` (both suites) |
 | other docs: `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `docs/{design,research,plans,usability}/**`, `.claude/` markdown | nothing beyond `make lint` and `make tooling` |
 | anything the rows above don't name | `make test` (unlisted means full: the table fails safe) |
@@ -81,7 +82,8 @@ sha. Any commit after an approval — a typo fix, a rebase, an amend — produce
 | `learnings` (`pr-gates.yml`) | the branch adds or extends a learnings entry, or is labelled `no-learning` |
 | `review-attested` (`pr-gates.yml`) | the PR body attests APPROVE for the head sha |
 
-The advisory `e2e` and `bench` checks should also be green before merge; `nightly` is scheduled rather
+The advisory `e2e`, `bench` and `web-image` checks (`web-image` runs only when a PR touches the paths spec 08
+§CI lists: `deploy/`, the frontend, the npm manifests, `.dockerignore` or the workflow) should also be green before merge; `nightly` is scheduled rather
 than a PR check (spec 08 §CI); its `suite-ci` job reruns the whole backend suite at the `ci` profile (2,000
 examples), so a property failure that needs more than 200 examples surfaces within a day (TASK-127).
 

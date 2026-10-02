@@ -274,5 +274,5 @@ live in [`CLAUDE.md`](../CLAUDE.md); the review routing table in
 
 | Agent | What it's for |
 |---|---|
-| [`ci-engineer`](agents/ci-engineer.md) | Builds and maintains the GitHub Actions workflows (lint, test, claude-tooling, pr-gates, e2e, bench and nightly), their SHA pins, permissions and Dependabot updates, their caching, the Hypothesis CI/nightly profiles, the OpenAPI→TS freshness check and the .claude/ roster lint, keeping required check names stable for branch protection. |
+| [`ci-engineer`](agents/ci-engineer.md) | Builds and maintains the GitHub Actions workflows (lint, test, claude-tooling, pr-gates, e2e, bench, nightly and the web-image Docker build), their SHA pins, permissions and Dependabot updates (base-image digests in deploy/ included), their caching, the Hypothesis CI/nightly profiles, the OpenAPI→TS freshness check and the .claude/ roster lint, keeping required check names stable for branch protection. |
 | [`release-manager`](agents/release-manager.md) | Runs releases and data promotions |

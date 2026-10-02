@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016  # commands under test are single-quoted on purpose: $(…), $(( )) and backticks must reach the hooks unexpanded
-# Case table for the CI tooling scripts: learnings_index.py, check_backlog.py, lint_tooling.py and
-# roster_index.py. Each case copies the real .claude/ (and CLAUDE.md / CONTRIBUTING.md) into a throwaway
+# Case table for the CI tooling scripts: learnings_index.py, check_backlog.py, check_digest_pins.py,
+# lint_tooling.py and roster_index.py. Each case copies the real .claude/ (and CLAUDE.md / CONTRIBUTING.md) into a throwaway
 # tree, confirms the script passes on it, then breaks exactly one thing and confirms the script fails —
 # so a regression in a check can't hide behind the repo's own content being clean (review round 2).
 # Usage: ./test-tooling-scripts.sh
@@ -64,6 +64,81 @@ fresh; printf -- "---\nid: task-1\nstatus: 'Done'\n---\n" > "$TMP/r/backlog/task
 expect err "a quoted 'Done' status"                                     check_backlog.py
 fresh; printf -- '---\nid: task-1\nstatus: Done\n---\n' > "$TMP/r/backlog/completed/task-1 - x.md"
 expect ok  "a Done task in completed/"                                  check_backlog.py
+
+echo "== check_digest_pins.py"
+W="$TMP/r/deploy/web.Dockerfile"
+D="sha256:$(printf 'a%.0s' $(seq 1 64))"
+deploy() { fresh; cp -R "$SRC/deploy" "$TMP/r/deploy"; }
+fresh; expect ok  "no deploy/ directory"                                check_digest_pins.py
+deploy; expect ok  "the repo's own deploy/ passes"                      check_digest_pins.py
+deploy; printf 'FROM node:22-bookworm-slim\n' > "$W"
+expect err "a FROM with only a tag"                                     check_digest_pins.py
+deploy; printf 'FROM node@%s\n' "$D" > "$W"
+expect err "a digest with no tag (the tag is kept for readers)"         check_digest_pins.py
+deploy; printf 'FROM registry:5000/node@%s\n' "$D" > "$W"
+expect err "a registry port is not a tag"                               check_digest_pins.py
+deploy; printf 'FROM registry:5000/node:22@%s\n' "$D" > "$W"
+expect ok  "a registry port and a tag"                                  check_digest_pins.py
+deploy; printf 'FROM node:22@sha256:abc\n' > "$W"
+expect err "a truncated digest"                                         check_digest_pins.py
+deploy; printf 'from node:22 as build\n' > "$W"
+expect err "lowercase from is still checked"                            check_digest_pins.py
+deploy; printf 'FROM --platform=linux/amd64 node:22\n' > "$W"
+expect err "a --platform flag does not hide the image"                  check_digest_pins.py
+deploy; printf 'FROM --platform=linux/amd64 node:22@%s\n' "$D" > "$W"
+expect ok  "a pinned image after a --platform flag"                     check_digest_pins.py
+deploy; printf 'ARG BASE=node:22\nFROM ${BASE}\n' > "$W"
+expect err "an ARG-named image"                                         check_digest_pins.py
+deploy; printf 'ARG TAG=22\nFROM node:${TAG}@%s\n' "$D" > "$W"
+expect err "an ARG-named tag, even with a digest"                       check_digest_pins.py
+deploy; printf 'FROM node:22@%s AS build extra\n' "$D" > "$W"
+expect err "a FROM it can't read (trailing words) is refused"           check_digest_pins.py
+deploy; printf 'FROM node:22@%s AS build\nFROM build\nFROM node:22\n' "$D" > "$W"
+expect err "a pinned image, a stage reference, then an unpinned image"  check_digest_pins.py
+deploy; printf 'FROM node:22@%s AS Build\nFROM build\nFROM scratch\n' "$D" > "$W"
+expect ok  "an earlier stage (any case) and scratch need no digest"     check_digest_pins.py
+deploy; printf 'FROM build\nFROM node:22@%s AS build\n' "$D" > "$W"
+expect err "a stage named before it is defined is an image"             check_digest_pins.py
+deploy; printf 'FROM \\\n  node:22@%s \\\n  AS build\n' "$D" > "$W"
+expect ok  "a pinned FROM wrapped over continuation lines"              check_digest_pins.py
+deploy; printf 'FROM \\\n# a comment inside the continuation\n  node:22@%s\n' "$D" > "$W"
+expect ok  "a pinned FROM wrapped around a comment"                     check_digest_pins.py
+deploy; printf 'FROM node:22@%s\nRUN echo \\\n  FROM node:22\n' "$D" > "$W"
+expect ok  "FROM inside a RUN continuation is not an instruction"       check_digest_pins.py
+deploy; printf '# escape=`\nFROM node:22@%s\nRUN echo `\n  FROM node:22\n' "$D" > "$W"
+expect ok  "an escape directive changes the continuation character"     check_digest_pins.py
+deploy; printf '# syntax=docker/dockerfile:1\nFROM node:22@%s\n' "$D" > "$W"
+expect err "an unpinned syntax directive"                               check_digest_pins.py
+deploy; printf '# syntax=docker/dockerfile:1@%s\nFROM node:22@%s\n' "$D" "$D" > "$W"
+expect ok  "a pinned syntax directive"                                  check_digest_pins.py
+deploy; printf '# a comment\n# syntax=docker/dockerfile:1\nFROM node:22@%s\n' "$D" > "$W"
+expect ok  "syntax= after a comment is a comment, not a directive"      check_digest_pins.py
+deploy; printf 'FROM node:22@%s\nCOPY --from=nginx:latest /a /b\n' "$D" > "$W"
+expect err "COPY --from an unpinned image"                              check_digest_pins.py
+deploy; printf 'FROM node:22@%s AS build\nCOPY --chown=node --from=Build /a /b\nCOPY --from=0 /a /b\n' "$D" > "$W"
+expect ok  "COPY --from an earlier stage, by name or by index"          check_digest_pins.py
+deploy; printf 'FROM node:22@%s\nCOPY --from=1 /a /b\n' "$D" > "$W"
+expect err "COPY --from a stage index that doesn't exist yet"           check_digest_pins.py
+deploy; printf 'FROM node:22@%s\nFROM node:22@%s\nFROM scratch\nCOPY --from=1 /a /b\n' "$D" "$D" > "$W"
+expect ok  "COPY --from the second stage by its index"                  check_digest_pins.py
+deploy; printf 'FROM node:22@%s AS a\nRUN --mount=type=bind,from=a,target=/a --mount=type=bind,from=busybox:1,target=/b true\n' "$D" > "$W"
+expect err "a second RUN --mount from an unpinned image"                check_digest_pins.py
+deploy; printf 'FROM node:22@%s\nRUN --mount=type=cache,target=/c true\n' "$D" > "$W"
+expect ok  "a RUN --mount with no from="                                check_digest_pins.py
+deploy; printf '\357\273\277FROM node:22\n' > "$W"
+expect err "a byte-order mark does not hide an unpinned FROM"           check_digest_pins.py
+deploy; printf 'FROM node:22@%s AS build\nCOPY --from=build\\\ner /a /b\n' "$D" > "$W"
+expect err "a continuation glues --from=build + er into builder"        check_digest_pins.py
+deploy; printf 'FROM node:22@%s\nFROM 0\n' "$D" > "$W"
+expect err "FROM names a stage by name only, never by index"            check_digest_pins.py
+deploy; printf '# foo=bar\n# syntax=docker/dockerfile:1\nFROM node:22@%s\n' "$D" > "$W"
+expect ok  "an unknown directive ends the directives (syntax= a comment)" check_digest_pins.py
+deploy; mkdir -p "$TMP/r/deploy/api"; printf 'FROM python:3.12-slim\n' > "$TMP/r/deploy/api/Dockerfile"
+expect err "a Dockerfile in a subdirectory of deploy/"                  check_digest_pins.py
+deploy; printf 'FROM python:3.12-slim\n' > "$TMP/r/deploy/api.dockerfile"
+expect err "a lowercase .dockerfile name"                               check_digest_pins.py
+deploy; printf 'FROM python:3.12-slim\n' > "$TMP/r/deploy/Containerfile"
+expect err "a Containerfile (Dependabot reads those too)"               check_digest_pins.py
 
 echo "== lint_tooling.py"
 C="$TMP/r/.claude"
