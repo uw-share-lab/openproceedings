@@ -92,7 +92,7 @@ The evaluation suite ([07](07-evaluation.md)) checks every layer. Operations and
 | Index | **Tantivy** via `tantivy-py` | Rust speed, positional index, phrase/slop/regex queries, BM25, and custom tokenizers with no stemmer. |
 | Frontend | **Next.js (App Router) + TypeScript** | The lab already has Next.js experience. Hosting doesn't depend on Vercel. |
 | Semantic (deferred: phase 2, decision-017) | SPECTER2 + a flat in-memory vector index | Built for scientific papers. About 80k vectors fit in RAM, so no vector database is needed. Not in v1. |
-| Packaging | Docker Compose (`api`, `web`, read-only data volume) | Hosting location is undecided. The index is read-only files, so it can run anywhere. |
+| Packaging | Docker Compose (`api`, `web`, `caddy` for TLS; one-off `ops` and `takedown-check`): data read-only but for the search records and the index lock files (`deploy/`, spec 08 §Deploy) | Hosting location is undecided. The index is read-only files, so it can run anywhere. |
 
 ## Parts and specs
 

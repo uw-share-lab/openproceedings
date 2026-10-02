@@ -3,6 +3,12 @@
 # .env files (credentials), never local builds or node_modules.
 *
 !deploy/web-build-gate.sh
+!deploy/Caddyfile
+!pyproject.toml
+!uv.lock
+!backend/pyproject.toml
+!backend/LICENSE
+!backend/src/
 !package.json
 !package-lock.json
 !frontend/
@@ -15,3 +21,4 @@ frontend/playwright-report
 **/data
 **/takedowns
 frontend/tsconfig.tsbuildinfo
+**/__pycache__

@@ -68,9 +68,11 @@ Positions are mandatory on `title`/`abstract` (phrases, NEAR, highlights). Any c
    writable), and verify it: `verify_index` recomputes the id from the manifest's four inputs (it must
    equal the manifest's and the resolved directory's name, so `current` → `<v>` verifies), re-hashes every
    file and re-reads the doc count. A build
-   that finds its version already present verifies and re-seals it instead of rebuilding. The directory
-   must be writable to open (Tantivy's reader lock), so an index can't be served from a read-only mount
-   (task-065). Moving `current` is a
+   that finds its version already present verifies and re-seals it instead of rebuilding. Opening needs
+   write access to `.tantivy-meta.lock` (Tantivy's reader lock), so an index can't be served from a
+   read-only mount; the directory itself needn't be writable once the build has left both lock files. The
+   compose deployment makes the version directory 0750 with the API's group and only the two lock files
+   group-writable (`deploy/index-permissions.sh`; spec 08 §Deploy, TASK-065). Moving `current` is a
    separate release step. `TantivyEngine` opens only a verified index, and refuses (`API_INTERNAL`, "build a
    new index") one whose `schema_version`, `tokenizer_version` or `tantivy_version` differs from the running
    code, or whose bm25 isn't Tantivy's (field-weighted-bm25 skill).

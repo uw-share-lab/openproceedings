@@ -112,6 +112,6 @@ flash. A 422 is data, not an exception: render its `diagnostics` (spec 04 error 
 - Dependencies are hoisted to the repo-root `node_modules`, so `next.config.ts` sets
   `outputFileTracingRoot` and `turbopack.root` to the workspace root; the standalone server is
   `.next/standalone/frontend/server.js` and needs `.next/static` copied beside it (`npm start` does this;
-  the Docker image in TASK-065 must too).
+  so does `deploy/web.Dockerfile`, TASK-136).
 - No `next/font/google`: it fetches at build time, and the image must build offline. System font stacks
   are set in `globals.css`.

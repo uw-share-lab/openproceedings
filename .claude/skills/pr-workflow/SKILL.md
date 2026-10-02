@@ -47,9 +47,9 @@ break. `make lint` and `make tooling` always run (the pre-push hook runs them to
 | shared test code: any `conftest.py`, `backend/tests/{strategies,corpus}.py`, `backend/tests/fixtures/**`, or any `backend/tests` module another test imports (`grep -rn "<module name>" backend/tests --include='*.py'` finds both `from tests.x.<module> import …` and `from tests.x import <module>`) | `make test` (both suites: a frontend test reads `backend/tests/fixtures/queries/`) |
 | other tests only | the changed test files; for a changed data file (e.g. `backend/tests/differential/*.json`, `backend/tests/golden/*.json`), the tests that read it (`grep -rln "<file name>" backend/tests frontend/src`) |
 | `.claude/hooks/**`, `.claude/scripts/**`, `.githooks/**`, `.github/**`, `Makefile` | `make tooling` and `make mutate-changed` |
-| `deploy/**` (Docker isn't assumed locally: CI's advisory `web-image` job builds the image, so confirm it green on the PR) | `npx vitest run --root frontend src/lib/web-image.test.ts` (it reads `web.Dockerfile` and runs `web-build-gate.sh`), and `make tooling` (the digest-pin check) |
+| `deploy/**` (Docker isn't assumed locally: CI's advisory `web-image` job builds the web image, so confirm it green on the PR) | `npx vitest run --root frontend src/lib/web-image.test.ts` (it reads `web.Dockerfile` and runs `web-build-gate.sh`), and `make tooling` (the digest-pin check); for `compose.yml`, `Caddyfile`, `api.Dockerfile`, `caddy.Dockerfile` or the scripts, also `deploy/smoke-test.sh` where Docker is available (no CI job runs it), and say in the PR which ran |
 | `docs/specs/**`, `docs/results/**`, `backlog/**` (tests on both sides read them: the syntax-help golden, diagnostics, official counts, the Covidence fixture, the backlog check, decision records, and the methods text reads spec 05) | `make test` (both suites) |
-| other docs: `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `docs/{design,research,plans,usability}/**`, `.claude/` markdown | nothing beyond `make lint` and `make tooling` |
+| other docs: `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `CITATION.cff`, `docs/README.md`, `docs/{design,research,plans,usability}/**`, `.claude/` markdown | nothing beyond `make lint` and `make tooling` |
 | anything the rows above don't name | `make test` (unlisted means full: the table fails safe) |
 
 A diff that spans rows runs the union. When in doubt, run `make test`. The PR's **Tests** section says exactly
@@ -115,15 +115,14 @@ severity, dispositions) · **Learnings** (entry path + key lesson). No attributi
 PRs go into `dev` as **merge commits**, not squashes: review dispositions and learnings entries cite branch
 commit SHAs, and a squash would leave those references pointing at commits that aren't on `dev`.
 
-**With the merge queue** (once the `dev: merge queue` ruleset is applied; spec 08 §Branch protection), add a
+**With the merge queue** (the `dev: merge queue` ruleset, applied 2026-10-02; spec 08 §Branch protection), add a
 green PR to the queue with `gh pr merge <n> --auto`. That needs the repository's "Allow auto-merge" setting;
 spec 08 §Git and PR rules gives the GraphQL `enqueuePullRequest` call that works without it. The queue's
 MERGE method makes the merge commit, and GitHub deletes the branch. Don't rebase a PR because `dev` moved. Its review record and attestation cover
 its head, and the queue tests that head on top of `dev` plus the PRs ahead of it. Several PRs can wait in
 the queue at once. Rebase only when the queue drops a PR, either for a conflict or for a red queue build.
 Then fix the cause, run the review round on the new head, `--attest` it, and queue it again. A push to a
-queued PR also drops it from the queue. Before the ruleset is applied, `dev` still requires up-to-date
-branches: merge with `gh pr merge <n> --merge --delete-branch`, rebasing each PR after the previous merge.
+queued PR also drops it from the queue.
 
 To change a PR body, use `gh api -X PATCH repos/{owner}/{repo}/pulls/<n>`;
 `gh pr edit` fails here on the retired Projects (classic) API.

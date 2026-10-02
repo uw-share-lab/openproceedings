@@ -4,7 +4,7 @@ title: 'Release process, versioning and changelog'
 status: In Progress
 assignee: []
 created_date: '2026-09-26 01:06'
-updated_date: '2026-09-30 16:18'
+updated_date: '2026-10-02 19:21'
 labels:
   - ops
 milestone: m-6
@@ -45,4 +45,6 @@ Done without a deployed instance or a hosting choice; nothing names a host.
 - AC#1 (a tagged release from main) waits on TASK-065 (deploy), which waits on the hosting decision TASK-064; the task stays In Progress until then. No tag, GitHub release or promotion was made.
 
 Left for the release itself (not tasks; the main session decides): the first release v0.1.0 after TASK-065; a maintainer adds the v* tag ruleset (spec 08 §Branch protection) before it.
+
+2026-10-02 (TASK-065, host-agnostic part built): §Release step 9 now runs through deploy/README.md. Its §Deploying a release covers: checking out the tag and running docker compose up --build; a TOKENIZER/SCHEMA/Tantivy release built and verified first, then deployed together with its index; rollback. AC#1 (the first tag) still waits on TASK-065 being Done, which now waits only on the host items TASK-065's notes list (TASK-064 and the checks on the host).
 <!-- SECTION:NOTES:END -->

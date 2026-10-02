@@ -56,8 +56,8 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   `record-fixture.json`, real API answers kept current by `test_frontend_record_fixture.py`). Tests are Vitest + Testing Library
   (`src/**/*.test.{ts,tsx}`); `npm test --workspace frontend`. Full-stack browser, accessibility and
   visual tests live in `frontend/e2e/`, backed by `backend/tests/e2e/`; run them with `make e2e`.
-- `deploy/`: `web.Dockerfile` and `web-build-gate.sh` (the `web` image; a public build needs a takedown contact, TASK-136; base images digest-pinned, TASK-149; built by CI's advisory `web-image` workflow, TASK-148); compose and the api image are TASK-065.
-- `docs/specs` · `docs/{plans,results,design,usability,research}` (created as needed).
+- `deploy/`: `compose.yml` (api + web + Caddy, plus the `ops` and `takedown-check` one-offs), `Caddyfile`, `api.Dockerfile`, `caddy.Dockerfile`, `index-permissions.sh`, `smoke-test.sh` (the stack over a fixture, by hand) and `README.md` (the operator's runbook), TASK-065; `web.Dockerfile` and `web-build-gate.sh` (the `web` image; a public build needs a takedown contact, TASK-136; built by CI's advisory `web-image` workflow, TASK-148); every base image digest-pinned (TASK-149). `backend/tests/deploy/fixture_data.py` writes the smoke test's data directory.
+- `docs/specs` · `docs/{plans,results,design,usability,research}` (created as needed); `docs/README.md` indexes them.
 - `backlog/`: Backlog.md, CLI only.
 - `.claude/`: agents, skills, commands, hooks and learnings, all committed. The roster is in
   `.claude/README.md`.
@@ -138,9 +138,8 @@ testing).
 5. **`/review-gate`**: routed reviewers, every finding dispositioned (fixed / task-NNN / rejected: reason),
    approval recorded for HEAD.
 6. **Push, then `/open-pr`** into `dev`. CI must pass: `lint`, `test`, `claude-tooling`, `attribution`,
-   `learnings`, `review-attested`. Once `dev`'s merge queue is active, a green PR goes into the queue
-   (`gh pr merge <n> --auto`); it is not rebased just because `dev` moved. Until then, it is rebased onto
-   `dev` and merged with `--merge` (`pr-workflow` skill §Merge method).
+   `learnings`, `review-attested`. A green PR goes into `dev`'s merge queue (`gh pr merge <n> --auto`; active
+   since 2026-10-02, decision-027); it is not rebased just because `dev` moved (`pr-workflow` skill §Merge method).
 7. **After it merges**, remove the PR's worktree (`git worktree remove`) and local branch. A worktree with
    uncommitted work is archived as a patch first, never deleted blind.
 
