@@ -90,8 +90,10 @@ digits, Thai, kana, CJK). Import it as `from tests.strategies import …`. Prope
 `tests/unit/test_properties.py` (round-trip without printing-caused warnings, match-set preservation by
 the oracle, all-negative rejection, Scholar mode reads canonical strings identically). PR CI runs the `pr`
 profile (200) in parallel; the nightly workflow runs the whole suite at `ci` (2,000) and every property at
-`nightly` (50,000), the latter split into an
-oracle-backed job and the rest, each under pytest-xdist, and the differential's own 8-way split. Counterexamples found so
+`nightly` (50,000), the latter as a 5-part matrix under pytest-xdist split by measured time per test (the near-cap
+replay property alone, the other oracle-backed ones, `unit/engine`, `unit/ingest`, the rest), and the
+differential's own 8-way split. Those steps set `OP_EARLY_FAILURES=1` (`conftest.py`): a failure's falsifying
+example and blob are printed when it fails, so a step later interrupted at its time limit still shows them. Counterexamples found so
 far are golden rows (`("0", "0")` in test_canonical.py; `trust (trust OR track:main)` in test_defaults.py).
 Stems at the 200-expansion cap: the 5k corpus's stems jump from 117 terms to 278, so `synthetic_5k.cap_records()`
 adds 20 records whose words make `qca*` expand to 199 terms, `qcb*` to 200 and `qcc*` to 201 (refused), and

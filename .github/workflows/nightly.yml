@@ -28,46 +28,54 @@ jobs:
         run: uv sync --locked
       - name: Backend suite with properties at 2,000 examples (parallel)
         run: uv run --locked pytest -q -n auto --hypothesis-profile=ci --ignore=backend/tests/differential
-  # Property jobs, each with its own limit, across the runner's CPUs (run serially they overran 120 and 150 minutes
-  # every night from 2026-09-28 to 2026-10-01, TASK-057).
-  properties-oracle:
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-      - name: Sync workspace
-        run: uv sync --locked
-      - name: Oracle-backed properties at 50,000 examples (parallel)
-        run: |
-          status=0
-          timeout --signal=INT --kill-after=2m 140m uv run --locked pytest -v -n auto --hypothesis-profile=nightly \
-            backend/tests/unit/test_properties.py backend/tests/golden/test_reference_200.py || status=$?
-          if [ "$status" -eq 124 ]; then
-            echo "::error::ran past 140 min: the test that started above with no result overran"
-          elif [ "$status" -eq 137 ]; then
-            echo "::error::killed (exit 137): past 140 min plus the 2 min grace, or out of memory"
-          fi
-          exit "$status"
+  # Every property at 50,000 examples, as 5 parallel jobs across each runner's CPUs (TASK-057). Run serially, the
+  # property jobs overran 120 and 150 minutes every night from 2026-09-28 to 2026-10-01; as two xdist jobs the
+  # first proof run (36972065571) took 133 min for the oracle-backed half, bounded by one 100-min test, and the
+  # rest overran 130 min. The parts, by that run's CPU time per test: the near-cap replay property alone
+  # (~100 min); the other oracle-backed properties (~215 CPU-min); engine/ (~155 CPU-min, its slowest test
+  # ~75 min); ingest/ (~130 CPU-min); and everything else with the exhaustive tokenizer check.
   properties:
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: oracle-near-cap
+            args: backend/tests/unit/test_properties.py::test_an_accepted_query_near_the_cap_replays_from_its_canonical_string
+          - part: oracle
+            args: >-
+              backend/tests/unit/test_properties.py backend/tests/golden/test_reference_200.py
+              --deselect=backend/tests/unit/test_properties.py::test_an_accepted_query_near_the_cap_replays_from_its_canonical_string
+          - part: engine
+            args: backend/tests/unit/engine
+          - part: ingest
+            args: backend/tests/unit/ingest
+          - part: rest
+            args: >-
+              --ignore=backend/tests/unit/test_properties.py --ignore=backend/tests/golden/test_reference_200.py
+              --ignore=backend/tests/unit/engine --ignore=backend/tests/unit/ingest
+              --ignore=backend/tests/unit/test_normalize_exhaustive.py --ignore=backend/tests/differential
+    name: properties (${{ matrix.part }})
+    env:
+      ARGS: ${{ matrix.args }}
+      OP_EARLY_FAILURES: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
         run: uv sync --locked
-      - name: Exhaustive tokenizer check (every Unicode code point, 8 contexts; ~2 min)
+      - name: Exhaustive tokenizer check (every Unicode code point, 8 contexts; ~2.5 min)
+        if: matrix.part == 'rest'
         timeout-minutes: 10
         run: OP_EXHAUSTIVE=1 uv run --locked pytest -q backend/tests/unit/test_normalize_exhaustive.py
-      - name: Every other property at 50,000 examples (parallel)
+      - name: Properties at 50,000 examples (parallel)
         run: |
           status=0
+          # shellcheck disable=SC2086  # ARGS is a list of paths and options, split on spaces
           timeout --signal=INT --kill-after=2m 130m uv run --locked pytest -v -n auto --hypothesis-profile=nightly \
-            -k "not exhaustive" --ignore=backend/tests/unit/test_properties.py \
-            --ignore=backend/tests/golden/test_reference_200.py --ignore=backend/tests/differential || status=$?
+            $ARGS || status=$?
           if [ "$status" -eq 124 ]; then
             echo "::error::ran past 130 min: the test that started above with no result overran"
           elif [ "$status" -eq 137 ]; then
@@ -85,6 +93,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7]
     env:
+      OP_EARLY_FAILURES: "1"
       OP_DIFFERENTIAL_SHARDS: "8"
       SEED: ${{ github.run_id }}${{ matrix.shard }}
     steps:
@@ -93,7 +102,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
         run: uv sync --locked
-      - name: Differential suite, 1/8 of 50,000 examples
+      - name: Differential suite, 1/8 of 50,000 examples (10-20 min a shard in 36972065571)
         run: |
           echo "rerun: OP_DIFFERENTIAL_SHARDS=$OP_DIFFERENTIAL_SHARDS uv run --locked pytest -v --hypothesis-profile=nightly --hypothesis-seed=$SEED backend/tests/differential"
           status=0
@@ -123,7 +132,7 @@ jobs:
       - name: Benchmarks on the 5k fixture index, budgets asserted (~30 s)
         timeout-minutes: 10
         run: uv run --locked pytest -v backend/tests/bench --benchmark-enable --benchmark-only
-      - name: The ~80k benchmark report
+      - name: The ~80k benchmark report (~20 min in 36972065571)
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         timeout-minutes: 45
         working-directory: backend
@@ -137,17 +146,35 @@ jobs:
           path: ${{ runner.temp }}/bench-80k.md
           if-no-files-found: warn  # the report step failed, and said why
           retention-days: 30
+  # make mutate, time-boxed: the full run (548 mutants) needs ~6.5 h on a 4-CPU runner, past GitHub's 6 h job
+  # cap (63 in 45 min in 36972065571), until mutate.py can be sharded across jobs (deferred, TASK-057). A
+  # surviving or stale mutant still fails the job at once; a run cut off at 140 min with none is a pass with a
+  # "partial run" warning naming how many mutants it checked. Reviews run `make mutate-changed` in full.
   mutate:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
         run: uv sync --locked
-      - name: make mutate (every mutant must be killed, or documented as equivalent)
+      - name: make mutate, time-boxed to 140 min (every mutant checked must be killed, or documented as equivalent)
         run: |
           git config --global user.email ci@example.invalid
           git config --global user.name ci
-          make mutate
+          log="$RUNNER_TEMP/mutate.log"
+          status=0
+          timeout --signal=INT --kill-after=2m 140m python3 .claude/scripts/mutate.py 2>&1 | tee "$log" \
+            || status=${PIPESTATUS[0]}
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+            if grep -q '^  FAIL ' "$log"; then
+              echo "::error::a mutant survived or is stale (FAIL above); the run was then cut off at 140 min"
+              exit 1
+            fi
+            checked=$(grep -cE '^  (ok  |FAIL) ' "$log" || true)
+            total=$(python3 -c 'import glob, json; print(sum(len(json.load(open(f))) for f in glob.glob(".claude/scripts/mutants/*.json")))')
+            echo "::warning::partial run: $checked of $total mutants checked in 140 min, every one killed or documented"
+            exit 0
+          fi
+          exit "$status"

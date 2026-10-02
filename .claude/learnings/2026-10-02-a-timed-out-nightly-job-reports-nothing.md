@@ -47,3 +47,14 @@ cap to the wildcard strategies.
 - Skill / agent / CLAUDE.md updated? — `.claude/skills/property-testing/SKILL.md`,
   `.claude/skills/testing-standards/SKILL.md`, `.claude/agents/differential-tester.md`, spec 07 §A/§E, spec 08 CI table
 - Test or hook added? — `test_the_cap_stems_sit_at_the_cap` pins the cap edges in both engines
+
+## Addendum — 2026-10-02 (proof run 36972065571)
+- Two xdist jobs weren't enough: `properties` overran 130 min (one unfinished property, test_clauses' year
+  edits) and properties-oracle took 133 of 150 min, bounded by one 100-min test. Per-test times come straight
+  from the `-v` start and result lines, so the split into 5 matrix parts was made from measured CPU time, not
+  guesses; the slowest single test (75-100 min) is the floor for any part.
+- An interrupt at the time limit also drops pytest's end-of-session FAILURES section, so a real falsifying
+  example earlier in the same step (test_normalize's tail property, U+0CE2) showed only as a FAILED line.
+  `OP_EARLY_FAILURES=1` (conftest `_EarlyFailures`, on the xdist controller) prints each failure's report and
+  blob as it happens.
+- `make mutate` reached 63 of 548 mutants in 45 min: the full run no longer fits one job.
