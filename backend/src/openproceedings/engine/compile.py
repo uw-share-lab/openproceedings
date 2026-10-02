@@ -264,7 +264,11 @@ class Compiler:
         every id it matched. The ids are a subset of the candidates, so the candidates less those that failed
         the check are exactly the ids; the exclusion adds no score and the term set adds 0.0, so either form
         scores each match as its candidate query alone."""
-        if self.count is not None and self.members is not None and self.count(candidates) - len(ids) < len(ids):
+        if (
+            self.count is not None
+            and self.members is not None
+            and self.count(candidates) - len(ids) < len(ids)
+        ):
             failed = sorted(self.members(candidates).difference(ids))
             self.out.held += len(failed)
             if not failed:

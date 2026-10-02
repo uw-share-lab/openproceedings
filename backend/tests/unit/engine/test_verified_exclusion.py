@@ -82,11 +82,15 @@ def test_a_clause_every_candidate_holds_needs_no_id_set(
     assert id_sets(small, '"small model*"', monkeypatch) == []
 
 
-@pytest.mark.parametrize("q", ['"large language model*"', '"large model*"', '"small model*"', '"lang* large"'])
+@pytest.mark.parametrize(
+    "q", ['"large language model*"', '"large model*"', '"small model*"', '"lang* large"']
+)
 def test_each_form_matches_and_scores_as_the_term_set_did(small: TantivyEngine, q: str) -> None:
     ast = parse(q).ast
     assert ast is not None
-    assert {i for i, _ in collected(small, ast, members=True)} == ReferenceEngine([as_paper(r) for r in CORPUS]).match_ids(ast)
+    assert {i for i, _ in collected(small, ast, members=True)} == ReferenceEngine(
+        [as_paper(r) for r in CORPUS]
+    ).match_ids(ast)
     assert collected(small, ast, members=True) == collected(small, ast, members=False)
 
 

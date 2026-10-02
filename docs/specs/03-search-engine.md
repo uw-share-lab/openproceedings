@@ -205,6 +205,12 @@ as "current" and can load a pinned older version to replay a search record.
   exclusions is within budget, except `main-2-pop` (wildcard phrases) when cold: 10.1 s to search and 10.5 s
   for `match_ids` + exclusions, the exception above. Warm (the engine's verified-clause cache and compiled-
   query memo), its search is 27 ms p95 over 200 runs.
+- Measured, warm searches over wildcard phrases (TASK-076, `docs/results/2026-10-02-wildcard-phrases.md`; quiet
+  machine). Tantivy resolves a verified clause's id set on every search (about 0.5 µs an id), so a clause names
+  the shorter list: its verified ids, or the candidates that failed, excluded (§AST → Tantivy compilation, the `Near` row).
+  `report_80k` (`docs/results/2026-10-02-bench.md`): `main-2-pop` warm **p95 27.8 ms, p99 31.7 ms** over 200
+  runs on the synthetic 80k. On the real M4 corpus its warm search went from p95 46.8 ms to 27.3 ms (old and new
+  compile alternated, 200 rounds each; `tests/bench/warm_verified.py`); no other string changed.
 - Measured, the `/search` endpoint (M3a review gate; `search.run(limit=50, facets=True, highlight=True)`,
   synthetic 80k). A first page collects the text query twice: the page, and once without its top-level
   filters for every facet and both exclusion buckets (task-086: counts per (venue, year, track, status) from
