@@ -187,7 +187,7 @@ index_version = sha256( snapshot_hash, TOKENIZER_VERSION, SCHEMA_VERSION, rankin
 Indexes live at `data/indexes/<index_version>/`, are immutable, and several can be kept. The API serves one
 as "current" and can load a pinned older version to replay a search record.
 
-## Performance budgets (CI-benchmarked on the M4 corpus, about 80k docs)
+## Performance budgets (for the M4 corpus, about 80k docs; CI benchmarks the 5k fixture and nightly reports a synthetic 80k, 07 §E)
 
 - Index build: under 2 minutes. Index size: under 500 MB.
 - p95 latency: under 100 ms for a search returning the first 50 hits, and under 300 ms for `match_ids`
@@ -251,8 +251,8 @@ as "current" and can load a pinned older version to replay a search record.
 
 - Differential testing (a CI gate): Hypothesis generates random ASTs over the corpus vocabulary (including
   rare terms, phrases, NEAR, wildcards and filters). Assert that
-  `TantivyEngine.match_ids == ReferenceEngine.match_ids` on a synthetic 5k-record fixture snapshot
-  (decision-004).
+  `TantivyEngine.match_ids == ReferenceEngine.match_ids` on a synthetic 5k-record fixture snapshot, plus 20
+  records at the 200-expansion cap's edge (decision-004; 07 §A).
 - Golden fixtures from 02 run end to end through both engines.
 - Determinism: the same query and `index_version` give identical order and scores.
 - A tokenizer-parity test over the full corpus.

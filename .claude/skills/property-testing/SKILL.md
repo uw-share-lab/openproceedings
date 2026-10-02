@@ -12,7 +12,7 @@ Register in `backend/tests/conftest.py`:
 | `dev` | 200 | `None`, and `too_slow` suppressed | local loop (default), `make test` under pytest-xdist: no wall-clock checks (decision-024, below) |
 | `pr` | 200 | 2 s | `test` workflow on every PR, under pytest-xdist: the dev count with the ci deadline, so a slow example on a shared runner doesn't fail the required check (TASK-127); `derandomize=True` (decision-024) |
 | `ci` | **2,000** | 2 s | `nightly` workflow's `suite-ci` job: the whole backend suite but the differential, under pytest-xdist |
-| `nightly` | **50,000** | `None` | `nightly` workflow's property jobs, under pytest-xdist, and its `differential` job: 8 parallel jobs of 6,250 examples each (`OP_DIFFERENTIAL_SHARDS=8`, each with its own `--hypothesis-seed`; TASK-057) |
+| `nightly` | **50,000** | `None` | `nightly` workflow's property jobs, under pytest-xdist, and its `differential` job: 50,000 in total, 8 independent parallel runs of 6,250 (`OP_DIFFERENTIAL_SHARDS=8`, each with its own `--hypothesis-seed`; TASK-057) |
 Every profile sets `print_blob=True` (so a CI failure prints a `@reproduce_failure` blob). The
 Hypothesis example database (`.hypothesis/`) is gitignored; CI failures are reproduced from the blob.
 

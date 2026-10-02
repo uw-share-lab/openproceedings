@@ -124,6 +124,6 @@ make e2e     # full-stack browser, accessibility and visual tests
 make help    # every entry point
 ```
 CI's `test` job runs the backend suite in parallel with Hypothesis properties at 200 examples; the nightly
-workflow reruns it at 2,000 and every property at 50,000.
+workflow reruns it at 2,000 and every property, the differential included, at 50,000.
 
 MIT © SHARE Lab, University of Waterloo

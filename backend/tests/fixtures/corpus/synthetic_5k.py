@@ -10,7 +10,7 @@ track × status combination occurs, and some records have no abstract.
 
 `vocab()` is the corpus's own term dictionary as a strategy vocabulary (`tests.strategies.Vocab`): rare terms
 (df 1-3), a few absent terms, and stems past the 200-term cap are weighted in. `cap_records()` and `cap_vocab()`
-add stems at the cap's edge (199, 200 and 201 terms) for the differential suite.
+add stems at the cap's edge (200, 201 and 199 terms) for the differential suite.
 """
 
 from __future__ import annotations
@@ -93,15 +93,22 @@ def _text(rng: random.Random, words: list[str], cumulative: list[float], lo: int
 
 # Stems at the 200-expansion cap (TASK-057): the corpus's own stems jump from 117 terms to 278, so none sits near
 # it, and regenerating the corpus would move every fixture built from it. `cap_records()` adds 20 records whose
-# words give each stem exactly its count; `qc*` itself expands to 600 and is refused.
-CAP_STEMS = {"qca": 199, "qcb": 200, "qcc": 201}
+# words give each stem exactly its count; `qc*` itself expands to 600 and is refused. The exact cap first:
+# `sampled_from` favours the first entries.
+CAP_STEMS = {"qcb": 200, "qcc": 201, "qca": 199}
 
 
 @cache
 def cap_records() -> tuple[Rec, ...]:
-    """The cap stems' words, 30 to a record (5 in the title), across venues, years, tracks and statuses."""
+    """The cap stems' words, 30 to a record (5 in the title), across venues, years, tracks and statuses. Each
+    stem's first 26 words are one letter longer than it (so `qcb$` expands to 26 terms; the stem itself
+    is not a word), the rest two letters."""
     letters = "abcdefghijklmnopqrstuvwxyz"
-    words = [stem + letters[i // 26] + letters[i % 26] for stem, n in CAP_STEMS.items() for i in range(n)]
+    words = [
+        stem + (letters[i] if i < 26 else letters[i // 26 - 1] + letters[i % 26])
+        for stem, n in CAP_STEMS.items()
+        for i in range(n)
+    ]
     combos = list(itertools.product(VENUES, YEARS, TRACKS, STATUSES))
     out = []
     for k in range(20):
@@ -113,7 +120,8 @@ def cap_records() -> tuple[Rec, ...]:
 
 @cache
 def cap_vocab() -> Vocab:
-    """`vocab()` with the cap stems drawn one stem in ten, for engines over `records()` + `cap_records()`."""
+    """`vocab()` with the cap stems drawn about one stem in ten (`*` or `$`), for engines over `records()` +
+    `cap_records()`."""
     return dataclasses.replace(vocab(), cap=tuple(CAP_STEMS))
 
 

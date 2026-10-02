@@ -126,7 +126,7 @@ testing).
 ## Closing workflow (required, in this order; approvals are per-commit)
 1. **Tests and lint green** locally, scaled by risk: the runs the `pr-workflow` skill §Local test runs table gives
    for what the diff touches (often the full `make test`), and always `make lint` and `make tooling`; CI's `test`
-   job runs the full suite on every PR (pytest-xdist, properties at 200 examples; nightly reruns it at 2,000). Never claim a pass you didn't run.
+   job runs the full suite on every PR (pytest-xdist, properties at 200 examples; nightly reruns it at 2,000, the differential at 50,000). Never claim a pass you didn't run.
 2. **Backlog current**: acceptance criteria checked and a final summary written. For finished tasks, run
    `backlog task complete <id>`.
 3. **Docs as-built** in the same branch: specs, READMEs, skills and `.claude/README.md` (`docs-writer`).

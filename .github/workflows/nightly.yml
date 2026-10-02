@@ -44,7 +44,9 @@ jobs:
           status=0
           timeout --signal=INT --kill-after=2m 140m uv run --locked pytest -v -n auto --hypothesis-profile=nightly \
             backend/tests/unit/test_properties.py backend/tests/golden/test_reference_200.py || status=$?
-          if [ "$status" -eq 124 ]; then echo "::error::ran past 140 min: the test that started above with no result overran"; fi
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+            echo "::error::ran past 140 min: the test that started above with no result overran"
+          fi
           exit "$status"
   properties:
     runs-on: ubuntu-latest
@@ -55,7 +57,8 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
         run: uv sync --locked
-      - name: Exhaustive tokenizer check (every Unicode code point, 8 contexts)
+      - name: Exhaustive tokenizer check (every Unicode code point, 8 contexts; ~2 min)
+        timeout-minutes: 10
         run: OP_EXHAUSTIVE=1 uv run --locked pytest -q backend/tests/unit/test_normalize_exhaustive.py
       - name: Every other property at 50,000 examples (parallel)
         run: |
@@ -63,7 +66,9 @@ jobs:
           timeout --signal=INT --kill-after=2m 135m uv run --locked pytest -v -n auto --hypothesis-profile=nightly \
             -k "not exhaustive" --ignore=backend/tests/unit/test_properties.py \
             --ignore=backend/tests/golden/test_reference_200.py --ignore=backend/tests/differential || status=$?
-          if [ "$status" -eq 124 ]; then echo "::error::ran past 135 min: the test that started above with no result overran"; fi
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+            echo "::error::ran past 135 min: the test that started above with no result overran"
+          fi
           exit "$status"
   # Differential@50k (spec 07 §A): one Hypothesis property, which pytest-xdist can't split, so the 50,000
   # examples are split across SHARDS jobs, each with its own seed (OP_DIFFERENTIAL_SHARDS, test_differential.py).
@@ -86,15 +91,20 @@ jobs:
         run: uv sync --locked
       - name: Differential suite, 1/8 of 50,000 examples
         run: |
-          echo "rerun: OP_DIFFERENTIAL_SHARDS=$OP_DIFFERENTIAL_SHARDS uv run pytest --hypothesis-profile=nightly --hypothesis-seed=$SEED backend/tests/differential"
+          echo "rerun: OP_DIFFERENTIAL_SHARDS=$OP_DIFFERENTIAL_SHARDS uv run --locked pytest -v --hypothesis-profile=nightly --hypothesis-seed=$SEED backend/tests/differential"
           status=0
           timeout --signal=INT --kill-after=2m 110m uv run --locked pytest -v --hypothesis-profile=nightly \
-            --hypothesis-seed="$SEED" backend/tests/differential || status=$?
-          if [ "$status" -eq 124 ]; then echo "::error::ran past 110 min: the test that started above with no result overran"; fi
+            --hypothesis-seed="$SEED" --hypothesis-show-statistics backend/tests/differential || status=$?
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+            echo "::error::ran past 110 min: the test that started above with no result overran"
+          fi
           exit "$status"
-  # Spec 03 budgets on the 5k fixture index (each benchmark asserts its p95), then the ~80k report (spec 07 §E;
-  # a report, not a gate) into the run summary and an artifact. The real corpus is local only (decision-004).
-  bench:
+  # Spec 03 budgets on the 5k fixture index (each benchmark asserts its p95; no base to compare with, so not
+  # bench.yml's 20% check, and a name of its own so the two checks never share one), then the ~80k report
+  # (spec 07 §E; a report, not a gate: a number past its budget is a warning annotation) into the run summary
+  # and an artifact, kept for inspection; a citable number is a committed docs/results report. The real corpus
+  # is local only (decision-004).
+  benchmarks:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -102,21 +112,24 @@ jobs:
         with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
+        id: sync
         run: uv sync --locked
-      - name: Benchmarks on the 5k fixture index, budgets asserted
-        run: uv run --locked pytest -q backend/tests/bench --benchmark-enable --benchmark-only
+      - name: Benchmarks on the 5k fixture index, budgets asserted (~30 s)
+        timeout-minutes: 10
+        run: uv run --locked pytest -v backend/tests/bench --benchmark-enable --benchmark-only
       - name: The ~80k benchmark report
-        if: success() || failure()
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        timeout-minutes: 45
         working-directory: backend
         run: |
           uv run --locked python -m tests.bench.report_80k "$RUNNER_TEMP/bench-80k.md"
           cat "$RUNNER_TEMP/bench-80k.md" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: success() || failure()
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         with:
           name: bench-80k
           path: ${{ runner.temp }}/bench-80k.md
-          if-no-files-found: error
+          if-no-files-found: warn  # the report step failed, and said why
           retention-days: 30
   mutate:
     runs-on: ubuntu-latest

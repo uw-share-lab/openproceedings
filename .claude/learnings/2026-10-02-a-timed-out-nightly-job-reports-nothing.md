@@ -5,7 +5,7 @@
 - **Date:** 2026-10-02 · **Task:** task-057 · **Area:** ops
 - **Artifacts:** `.github/workflows/nightly.yml`, `backend/tests/differential/test_differential.py`,
   `backend/tests/fixtures/corpus/synthetic_5k.py` (`cap_records`, `cap_vocab`), `backend/tests/strategies.py`
-  (`Vocab.cap`)
+  (`Vocab.cap`), `backend/tests/bench/report_80k.py` (its "Over budget" section)
 
 ## What we set out to do
 Add differential@50k, the full benchmarks and parity to the nightly workflow, and stems near the 200-expansion
@@ -22,7 +22,8 @@ cap to the wildcard strategies.
   with a sleeping test).
 - One Hypothesis property can't be split by pytest-xdist. The differential's 50,000 examples run as 8 matrix
   jobs of 6,250, each with its own `--hypothesis-seed` (`OP_DIFFERENTIAL_SHARDS`), at about 0.15 CPU-seconds
-  an example locally (200 examples: 37.5 s of user CPU, load average 80-190).
+  an example locally (200 examples: 37.5 s of user CPU, about 7 s of it imports and building the two engines;
+  load average 80-190).
 - The 5k corpus has no wildcard stem between 117 and 278 terms (2-letter roots give ~280-290 or ~900, 3-letter
   stems at most 117), so "stems near the cap" could not be drawn from it. Regenerating the corpus would move
   `CORPUS_HASH` and every contract, e2e and bench fixture built from it; 20 added records (`qca*` 199, `qcb*`

@@ -33,9 +33,12 @@ tempted to bypass it.
    (the uv workspace); then `make lint` (ruff format/check, `mypy --strict backend/src` once it exists,
    shellcheck, frontend checks) followed by `actionlint`. `test` runs
    `uv run --locked pytest -q -n auto --hypothesis-profile=pr` (pytest-xdist, 200 examples, 2 s deadline; TASK-127).
-   Nightly has four bounded jobs: the whole backend suite at the `ci` profile (2,000) under xdist,
-   oracle-backed properties at 50k, exhaustive tokenizer plus the remaining properties at 50k, and
-   `make mutate`.
+   Nightly's jobs, each bounded (TASK-057): the whole backend suite but the differential at the `ci` profile
+   (2,000) under xdist; oracle-backed properties at 50k and exhaustive tokenizer plus the remaining properties at
+   50k, both under xdist; `differential`, 8 matrix jobs of 6,250 examples with their own `--hypothesis-seed`
+   (`OP_DIFFERENTIAL_SHARDS`); `benchmarks` (5k budgets asserted, then the ~80k report into the run summary and a
+   `bench-80k` artifact); and `make mutate`. Long pytest steps run `-v` inside `timeout --signal=INT` a few
+   minutes short of the job limit, so an overrun is an `::error::` with the unfinished test in the log.
 3. **Frontend jobs:** `actions/setup-node` with npm cache on `package-lock.json`; `npm ci --ignore-scripts`; eslint, `tsc
    --noEmit`, prettier, vitest; `make openapi` and `git diff --exit-code` the snapshot and `frontend/src/api/schema.ts`.
 4. **Fixture index:** the E2E fixture server builds the deterministic 5k index in a temporary directory for

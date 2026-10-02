@@ -4,8 +4,9 @@ the same wildcard expansions (or the same refusal), the same disjunctive facets,
 sort (and, for `year_asc`, the (year, id) order), and, for trees that parse, the same exclusion counts as a
 brute-force count. Trees draw on the corpus's own term dictionary (`synthetic_5k.vocab()`), rare terms
 weighted up, and stems at the 200-expansion cap's edge (`cap_records()`, 20 records added to the corpus the
-engines search: `qca*` expands to 199 terms, `qcb*` to 200, `qcc*` to 201 and is refused; TASK-057). 200
-examples per PR (`pr` profile); 50,000 in the nightly workflow's own `differential` job (`nightly`; TASK-057).
+engines search, 5,020 in all, both parts hash-pinned: `qca*` expands to 199 terms, `qcb*` to 200, `qcc*` to 201
+and is refused; TASK-057). 200 examples per PR (`pr` profile); 50,000 in total in the nightly workflow's own
+`differential` job (`nightly`: 8 independent runs of 6,250, each with its own seed; TASK-057).
 
 Saving a counterexample: every failure message ends with `regression: <the shrunk AST as JSON>`. Add
 `{"ast": <that JSON>, "note": "<what broke>"}` to `differential-regressions.json`, which
@@ -34,6 +35,7 @@ from openproceedings.query.defaults import DEFAULT_CLAUSES
 from openproceedings.query.parser import ParseResult, parse
 from pydantic import TypeAdapter
 
+from tests.corpus import Rec
 from tests.fixtures.corpus.synthetic_5k import CAP_STEMS, cap_records, cap_vocab, records
 from tests.golden.test_tantivy_200 import as_paper
 from tests.strategies import engine_asts
@@ -45,6 +47,7 @@ RECORDS = [*records(), *cap_records()]
 BACK = {as_paper(r).id: r.id for r in RECORDS}
 BY_ID = {r.id: r for r in RECORDS}
 CORPUS_HASH = "c401aedfa0b5149d"
+CAP_HASH = "ef8e7afc95483953"  # the 20 cap-edge records the engines also search
 REFUSED = ("refused", DiagnosticCode.WILDCARD_TOO_MANY_EXPANSIONS)
 
 
@@ -184,9 +187,15 @@ def test_the_corpus_covers_every_filter_combination() -> None:
 
     corpus_5k = records()
     seen = {(r.venue, r.year, r.track, r.status) for r in corpus_5k}
-    corpus = json.dumps([dataclasses.asdict(r) for r in corpus_5k], ensure_ascii=False)
-    # pinned: a change here (to the generator, the golden fixture's n-grams or normalize()) is deliberate,
-    # and saved regressions must be re-checked against the new corpus
-    assert hashlib.sha256(corpus.encode()).hexdigest()[:16] == CORPUS_HASH
+
+    def digest(rs: tuple[Rec, ...]) -> str:
+        return hashlib.sha256(
+            json.dumps([dataclasses.asdict(r) for r in rs], ensure_ascii=False).encode()
+        ).hexdigest()
+
+    # pinned: a change here (to the generator, the golden fixture's n-grams, normalize() or the cap records) is
+    # deliberate, and saved regressions must be re-checked against the new corpus
+    assert digest(corpus_5k)[:16] == CORPUS_HASH
+    assert digest(cap_records())[:16] == CAP_HASH
     assert len(seen) == len(VENUES) * len(YEARS) * len(TRACKS) * len(STATUSES)
     assert len(corpus_5k) == 5_000 and any(r.abstract is None for r in corpus_5k)
