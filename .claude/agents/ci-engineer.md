@@ -23,7 +23,8 @@ tempted to bypass it.
 
 ## How you work
 1. **Map the change to workflows** in `.github/workflows/`: `lint.yml`, `test.yml`, `claude-tooling.yml`,
-   `pr-gates.yml`, `e2e.yml`, `bench.yml` and `nightly.yml` exist today. The **six required checks** are the
+   `pr-gates.yml`, `e2e.yml`, `bench.yml`, `nightly.yml` and `web-image.yml` (the advisory Docker build of
+   `deploy/web.Dockerfile`, behind a `paths` filter, so it can't become required as is) exist today. The **six required checks** are the
    job names `lint`, `test`, `claude-tooling`, `attribution`,
    `learnings` and `review-attested` (`pr-gates` is a workflow holding the last three jobs, not a check).
    **Never rename a required job** without updating branch protection in the same change and saying so in
@@ -57,8 +58,10 @@ tempted to bypass it.
 - Least privilege: every workflow declares `permissions: contents: read` today, and must keep doing so;
   widen a single job only with a reason in the PR. No `pull_request_target` with checkout of PR code.
 - Pinning: every action is pinned to a full commit SHA with a `# vX.Y.Z` version comment, and must stay
-  that way. Dependabot (`.github/dependabot.yml`) bumps `github-actions` weekly; review its PRs like any
-  other.
+  that way. Dependabot (`.github/dependabot.yml`) bumps `github-actions`, `uv`, `npm` and the `docker` base-image
+  digests in `deploy/` weekly; review its PRs like any other. Its `uv` entry ignores `tantivy`, whose upgrade
+  must bump `SCHEMA_VERSION` by hand (spec 08 §Release), and every `FROM` in `deploy/` stays digest-pinned
+  (`check_digest_pins.py`, spec 08 §Deploy).
 - Secrets: CI never needs OpenReview credentials — tests use recorded HTTP fixtures. No `data/` in
   artifacts.
 - Flakes are bugs: fix the cause (deadline, ordering, network) — never `continue-on-error`, retries on a

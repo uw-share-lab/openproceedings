@@ -2858,5 +2858,77 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "            _change_dir(head, argv[1:], state, getattr(argv, \"assigns\", {}))",
   "new": "            _change_dir(head, argv[1:], state)"
+ },
+ {
+  "label": "pins: digest not required",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "PINNED = re.compile(r\"^[^@\\s$]+:[^@\\s$]+@sha256:[0-9a-f]{64}$\")",
+  "new": "PINNED = re.compile(r\"^[^@\\s$]+:[^@\\s$]+\")"
+ },
+ {
+  "label": "pins: tag not required",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "PINNED = re.compile(r\"^[^@\\s$]+:[^@\\s$]+@sha256:[0-9a-f]{64}$\")",
+  "new": "PINNED = re.compile(r\"^[^\\s$]+@sha256:[0-9a-f]{64}$\")"
+ },
+ {
+  "label": "pins: digest length not anchored",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "[0-9a-f]{64}$\")",
+  "new": "[0-9a-f]+\")"
+ },
+ {
+  "label": "pins: ARG image allowed",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "PINNED = re.compile(r\"^[^@\\s$]+:[^@\\s$]+@",
+  "new": "PINNED = re.compile(r\"^[^@\\s]+:[^@\\s]+@"
+ },
+ {
+  "label": "pins: FROM case-sensitive",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "if not re.match(r\"^\\s*FROM\\s\", line, re.IGNORECASE):",
+  "new": "if not re.match(r\"^\\s*FROM\\s\", line):"
+ },
+ {
+  "label": "pins: --platform hides the image",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "FROM = re.compile(r\"^\\s*FROM\\s+(?:--\\S+\\s+)*(\\S+)",
+  "new": "FROM = re.compile(r\"^\\s*FROM\\s+(\\S+)"
+ },
+ {
+  "label": "pins: unreadable FROM passes",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "            bad.append(f\"{path.name}:{n}: can't read this FROM: {line.strip()}\")\n",
+  "new": ""
+ },
+ {
+  "label": "pins: any name counts as a stage",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "if image.lower() not in stages and",
+  "new": "if False and image.lower() not in stages and"
+ },
+ {
+  "label": "pins: stages recorded before the check",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "        if stage:\n            stages.add(stage.lower())\n",
+  "new": ""
+ },
+ {
+  "label": "pins: subdirectories skipped",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "DEPLOY.rglob(\"*\")",
+  "new": "DEPLOY.glob(\"*\")"
+ },
+ {
+  "label": "pins: file name case-sensitive",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "\"dockerfile\" in p.name.lower()",
+  "new": "\"Dockerfile\" in p.name"
+ },
+ {
+  "label": "pins: always exits 0",
+  "file": ".claude/scripts/check_digest_pins.py",
+  "old": "sys.exit(1 if bad else 0)",
+  "new": "sys.exit(0)"
  }
 ]

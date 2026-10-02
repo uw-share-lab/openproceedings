@@ -11,7 +11,7 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `pyproject.toml`, `uv.lock` (root) | The **uv workspace** root: repo-wide ruff config, dev group (ruff, mypy), one lock | `uv sync` at the root; members join via `[tool.uv.workspace] members` |
 | `Makefile` | `sync`, `fmt`, `lint`, `tooling`, `test`, `e2e`, `openapi`, `changelog`, `hooks`, `mutate`, `mutate-changed` | `make lint` is exactly CI's `lint` job; pre-push runs `make lint` + `make tooling` |
 | `.githooks/` | `commit-msg` (attribution), `pre-push` (`make lint` + `make tooling`) | Installed by `scripts/setup-dev.sh` |
-| `.github/` | Workflows, `dependabot.yml` | Actions pinned by SHA |
+| `.github/` | Workflows, `dependabot.yml` | Actions pinned by SHA; Dependabot never bumps `tantivy` (spec 08 §Release) |
 | `backend/` (M1) | The uv workspace member, package `openproceedings` (`backend/pyproject.toml`) | |
 | `backend/src/openproceedings/ingest/` | 01: `record.py`, `classify.py`, `urls.py`, `volumes.py` (+ `pmlr_volumes.toml`, the PMLR volume table), `ris.py`, `dedup.py`, `snapshot.py`; `sources/` (M4 crawlers: `http.py` the one HTTP layer, `common.py`, `openreview_client.py`, `openreview_v2.py`, `openreview_v1.py`, `neurips.py`, `pmlr.py`, `crawl.py`) | Only place that makes network calls (`sources/http.py`, for every crawler) |
 | `backend/src/openproceedings/query/` | 02: `normalize.py`, `mathsyms.py`, `lexer.py`, `parser.py`, `ast.py`, `canonical.py`, `defaults.py`, `compat.py` | Pure; no I/O |
@@ -40,7 +40,7 @@ description: Where things live in the openproceedings monorepo and the naming ru
 | `docs/results/` | Dated reports, `YYYY-MM-DD-<slug>.md`, plus `coverage-sources.md` | Numbers live here, never in learnings |
 | `backlog/` | Backlog.md store: tasks, completed, docs, decisions | CLI only (`decision-records`) |
 | `.claude/` | Agents, skills, commands, hooks, learnings | Committed; linted by `lint_tooling.py`; roster in the generated `.claude/README.md` |
-| `deploy/` | Dockerfiles, `compose.yml` | |
+| `deploy/` | Dockerfiles, `compose.yml` | Every `FROM` is `name:tag@sha256:<multi-arch index digest>` (spec 08 §Deploy; `check_digest_pins.py` in `make tooling`); Dependabot's `docker` entry bumps the digests |
 | `data/` | `cache/`, `snapshots/`, `indexes/`, `embeddings/`, `research/`, `records/` (`records.sqlite`) | **Gitignored. Never committed.** Snapshots and indexes are immutable |
 
 ## Never committed

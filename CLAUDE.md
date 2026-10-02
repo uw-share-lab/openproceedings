@@ -56,7 +56,7 @@ everything here. Human-facing overview: `README.md`. Contributor walkthrough: `C
   `record-fixture.json`, real API answers kept current by `test_frontend_record_fixture.py`). Tests are Vitest + Testing Library
   (`src/**/*.test.{ts,tsx}`); `npm test --workspace frontend`. Full-stack browser, accessibility and
   visual tests live in `frontend/e2e/`, backed by `backend/tests/e2e/`; run them with `make e2e`.
-- `deploy/`: `web.Dockerfile` and `web-build-gate.sh` (the `web` image; a public build needs a takedown contact, TASK-136); compose and the api image are TASK-065.
+- `deploy/`: `web.Dockerfile` and `web-build-gate.sh` (the `web` image; a public build needs a takedown contact, TASK-136; base images digest-pinned, TASK-149; built by CI's advisory `web-image` workflow, TASK-148); compose and the api image are TASK-065.
 - `docs/specs` · `docs/{plans,results,design,usability,research}` (created as needed).
 - `backlog/`: Backlog.md, CLI only.
 - `.claude/`: agents, skills, commands, hooks and learnings, all committed. The roster is in

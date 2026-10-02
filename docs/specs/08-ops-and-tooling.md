@@ -80,7 +80,8 @@ The CLI and the API call the same functions, so the CLI alone is enough to run a
 - Every hook has a case table under `.claude/hooks/tests/`, and every tooling script one under
   `.claude/scripts/tests/` (the CI scripts, the network guard, `changelog.py`); `make tooling` and CI
   `claude-tooling` run them all.
-- `make tooling` also runs the roster lint and the `.claude/README.md`, learnings-index and backlog checks.
+- `make tooling` also runs the roster lint, the `.claude/README.md`, learnings-index and backlog checks, and
+  the digest-pin check on `deploy/` (§Deploy).
 - CLI commands are covered by the suites of the spec they call (07); the CLI adds only argument-parsing
   and exit-code tests.
 
@@ -110,10 +111,11 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 |---|---|
 | `lint` → `lint` | `make lint` (ruff format/check, mypy --strict once `backend/src` exists, shellcheck, frontend prettier/eslint/tsc), then actionlint |
 | `test` → `test` | pytest under pytest-xdist at the `pr` Hypothesis profile (200 examples, 2 s deadline) (unit, golden, differential@200, contract; the 2,000-example `ci` profile runs nightly, TASK-127); vitest; `next build` (the standalone server must exist); OpenAPI snapshot and TS types freshness (`make openapi`, then `git diff --exit-code` on `backend/tests/contract/openapi.json` and `frontend/src/api/schema.ts`; unconditional, TASK-040) |
-| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`) |
+| `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`) |
 | `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha |
 | `nightly` (scheduled, not a PR check) | Four parallel jobs, each with its own time limit: the whole backend suite at the `ci` profile (2,000 examples) under pytest-xdist; the oracle-backed properties at 50,000 examples; the exhaustive tokenizer check (`OP_EXHAUSTIVE=1`) plus every other property at 50,000; and `make mutate` (every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent). Differential@50k gets its own job in task-057 (M4); full-corpus parity stays local (decision-004) |
 | `bench` → `bench` (advisory: not a required check yet) | pytest-benchmark on the 5k fixture index (`backend/tests/bench`, task-031): the PR's base and head on one runner; a minimum time over 20% slower than the base fails, and each benchmark asserts its spec 03 budget (p95). It becomes required once it has run green on a few PRs without false failures (runner noise); a maintainer adds it to `dev`'s required checks |
+| `web-image` → `web-image` (advisory: not a required check) | Only on PRs into, and pushes to, `dev` and `main` that touch `deploy/**`, `frontend/**`, `package.json`, `package-lock.json`, `.dockerignore` or the workflow itself (a workflow-level `paths` filter; TASK-148). `docker build -f deploy/web.Dockerfile .` three times on the runner's Docker, pushing nothing: a `private` image, a `public` one with the placeholder contact `takedown@example.org`, and a `public` one with no contact, which passes only when the build fails at `web-build-gate.sh` with its message. It stays advisory because the filter skips it on other PRs, and a required check that never starts stays pending forever; making it required means dropping the filter for a changed-files step inside the job, so it always reports |
 | `e2e` → `playwright` (advisory: not a required check yet) | `make e2e`: Playwright against the deterministic 5k fixture API (`backend/tests/e2e/`) and the standalone frontend: the spec 05 review flow, keyboard focus behavior, axe WCAG 2.2 AA in both themes at 1280 and 320 px, root reflow at 320 px, and platform-specific `/search` visual baselines in both themes on the fixed `ubuntu-24.04` CI label |
 
 `review-attested` is an **honesty check** against forgetting to review, not an access control. Anyone who
@@ -137,7 +139,7 @@ checks the head repo, so a fork branch named `dev` cannot use it.
 - **No AI authorship** in commits or PRs (project decision 2026-09-25). `.claude/` is committed.
 - Secrets (OpenReview credentials) live only in `.env` (gitignored, mode 600). `data/` is never committed.
 
-## Deploy (M6: the web image built, TASK-136; compose and the api image planned, TASK-065)
+## Deploy (M6: the web image built, TASK-136, and built in CI, TASK-148; compose and the api image planned, TASK-065)
 
 `deploy/compose.yml`: `api` (uvicorn, loads `data/indexes/current`) and `web` (Next.js standalone), with
 Caddy in front for TLS. Caddy must not log query strings: `GET /api/v1/search?q=…` carries the query
@@ -240,6 +242,20 @@ docker build -f deploy/web.Dockerfile --build-arg OPENPROCEEDINGS_INSTANCE=publi
 ```
 
 `.dockerignore` sends only what the image copies (never `data/`, a `takedowns/` directory or a `.env` file).
+CI's advisory `web-image` workflow builds the image on every PR that touches it, the frontend or the lockfile
+(§CI): the private build, a public build with a placeholder contact, and a public build with no contact that
+must fail at `web-build-gate.sh` (TASK-148).
+
+**Base images are digest-pinned (TASK-149).** Every `FROM` in `deploy/` names its base image as
+`name:tag@sha256:<digest>`, the tag kept for readers and the digest that of the multi-arch index (not of one
+platform's manifest), so a rebuild uses the image that was reviewed; a `FROM` naming an earlier build stage, or
+`scratch`, needs none. `.claude/scripts/check_digest_pins.py` (`make tooling`, CI `claude-tooling`; case rows
+in `test-tooling-scripts.sh`) fails on a `FROM` without one, or with an `ARG` in the image name. Dependabot's
+`docker` entry for `/deploy` (weekly, prefix `build`) bumps the digests; a new Node major (`22-…` → `24-…`) is
+ignored there, since it moves with `.nvmrc` and CI and is done by hand. A digest is resolved from the registry,
+e.g. `docker buildx imagetools inspect node:22-bookworm-slim` (its top-level `Digest:`, with media type
+`…image.index…`), which needs no running daemon.
+
 The e2e suite
 builds with the placeholder `takedown@example.org` (`frontend/playwright.config.ts`); `frontend/.env.example`
 documents both variables.
@@ -356,7 +372,7 @@ hosted (00, question 5). The first release is tagged once TASK-065 (deploy) is d
 |---|---|---|
 | app `X.Y.Z` | `backend/pyproject.toml` and `frontend/package.json` `version`, kept equal (also recorded in `uv.lock` and `package-lock.json`); `op --version` and the snapshot manifest's `openproceedings_version` report it | once per release, on its release branch |
 | `TOKENIZER_VERSION`, `SCHEMA_VERSION` | the code; inputs to `index_version` (03 §Versioning) | the `index-versioning` bump rules |
-| Tantivy | `uv.lock`; each index manifest's `tantivy_version` (not an `index_version` input) | a dependency upgrade, which always bumps `SCHEMA_VERSION` too, so the release gets a new `index_version` it can build and serve (a replay reports it as `schema_version`) |
+| Tantivy | the exact `tantivy==` pin in `backend/pyproject.toml` and `uv.lock`; each index manifest's `tantivy_version` (not an `index_version` input) | a dependency upgrade, which always bumps `SCHEMA_VERSION` too, so the release gets a new `index_version` it can build and serve (a replay reports it as `schema_version`). Always by hand: Dependabot's `uv` entry ignores `tantivy` (below) |
 | `QUERY_VERSION` | the code; in `canonical_hash` and every search record (04) | the `index-versioning` bump rules |
 | `index_version` | the data: `data/indexes/<index_version>/` | a new snapshot, or a tokenizer, schema or ranking change |
 
@@ -367,6 +383,16 @@ hosted (00, question 5). The first release is tagged once TASK-065 (deploy) is d
   `reproduced` (guarantee 4 is kept by saying so, never by hiding it).
 - **PATCH:** fixes that change none of those four.
 - The first tag is `v0.1.0`. Versions stay `0.y.z` until the owner declares the v1 release (M6), `1.0.0`.
+
+**Upgrading Tantivy (TASK-150).** Dependabot's `uv` entry in `.github/dependabot.yml` has `ignore:
+[{dependency-name: tantivy}]`, so it never opens a PR that bumps the pin on its own: merged alone, such a PR
+would leave `dev` unable to serve the current index (`unservable`, `tantivy_version_mismatch`) or to build a new
+`index_version` for it, and only `changelog.py --release` would notice, at release time. An `ignore` was chosen
+over a CI check that compares `uv.lock`'s Tantivy with `SCHEMA_VERSION`: it closes the gap with no new gate to
+maintain, and the upgrade is rare and needs a person anyway (a rebuilt index, parity). The upgrade is one
+hand-made PR: bump the `tantivy==` pin in `backend/pyproject.toml`, `uv lock`, bump `SCHEMA_VERSION`
+(`engine/index.py`), then rebuild and verify an index with the new code (§Deploy runbook; index-versioning
+skill).
 
 The app version never enters `index_version` or `canonical_hash`. A search record pins `index_version`,
 `tokenizer_version` and `query_version`, not the app version. It replays as `reproduced` while its index is
@@ -449,9 +475,10 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    --notes X.Y.Z > notes.md` (the same `--data-dir`); `gh release create vX.Y.Z --target
    "$(git rev-parse origin/main)" --title X.Y.Z --notes-file notes.md`, which creates the tag on GitHub
    (`require-review.sh` blocks an agent's `git push` of a tag, since `main`'s merge commit has no per-sha
-   record; `block-ai-attribution.sh` scans the notes). The `v*` tag ruleset (§Branch protection) must already
-   be in place: `gh api repos/<owner>/<name>/rulesets --jq '.[] | select(.target == "tag") | .name'` lists
-   it; paste the output into the promotion PR. No assets. Then `git fetch origin --tags` and check that
+   record; `block-ai-attribution.sh` scans the notes). The `v*` tag rulesets (§Branch protection; applied
+   2026-10-01) must be in place: `gh api repos/<owner>/<name>/rulesets --jq '.[] | select(.target == "tag")
+   | .name'` lists them, one name per line and possibly more than one (today `Release tags: immutable` and
+   `Release tags: maintainers only create`); paste the output into the promotion PR. No assets. Then `git fetch origin --tags` and check that
    `git rev-parse vX.Y.Z^{commit}` is that sha.
 7. **Back-merge.** `main` now holds the promotion's merge commit, which `dev` lacks, and the next promotion
    can't merge until `dev` has it. `git switch -c release/X.Y.Z-back-merge origin/dev && git merge --no-ff
@@ -598,6 +625,10 @@ the reason. Mutants run in parallel: the full set takes minutes, and `--changed`
 resolved. `main` additionally requires 1 approving review and the branch up to date with it (so each
 promotion is followed by §Release step 7's back-merge). This was applied on 2026-09-25, after the repo was
 made public (free-plan orgs can't protect private repos). `dev` is the default branch, and merged feature
-branches are deleted automatically. **Before the first release tag**, a maintainer adds a tag ruleset on `v*`:
-only maintainers create one, and none is updated or deleted (a moved tag would silently re-section
-`CHANGELOG.md`); §Release step 6 checks it is in place.
+branches are deleted automatically. Release tags are protected by two active tag rulesets on `refs/tags/v*`, applied
+by a maintainer on 2026-10-01 (TASK-151), before the first release tag: **`Release tags: maintainers only
+create`** restricts creating a matching tag (bypass: the maintain and admin repository roles), and **`Release
+tags: immutable`** blocks updating and deleting one, with no bypass actor (a ruleset's bypass list covers every
+rule in it, hence two rulesets). A moved tag would silently re-section `CHANGELOG.md` and break "run that
+release's tag" for an old search record. §Release step 6 checks they are in place; its check prints one name
+per tag ruleset, so more than one name is expected.

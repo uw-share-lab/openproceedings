@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016  # commands under test are single-quoted on purpose: $(…), $(( )) and backticks must reach the hooks unexpanded
-# Case table for the CI tooling scripts: learnings_index.py, check_backlog.py, lint_tooling.py and
-# roster_index.py. Each case copies the real .claude/ (and CLAUDE.md / CONTRIBUTING.md) into a throwaway
+# Case table for the CI tooling scripts: learnings_index.py, check_backlog.py, check_digest_pins.py,
+# lint_tooling.py and roster_index.py. Each case copies the real .claude/ (and CLAUDE.md / CONTRIBUTING.md) into a throwaway
 # tree, confirms the script passes on it, then breaks exactly one thing and confirms the script fails —
 # so a regression in a check can't hide behind the repo's own content being clean (review round 2).
 # Usage: ./test-tooling-scripts.sh
@@ -64,6 +64,41 @@ fresh; printf -- "---\nid: task-1\nstatus: 'Done'\n---\n" > "$TMP/r/backlog/task
 expect err "a quoted 'Done' status"                                     check_backlog.py
 fresh; printf -- '---\nid: task-1\nstatus: Done\n---\n' > "$TMP/r/backlog/completed/task-1 - x.md"
 expect ok  "a Done task in completed/"                                  check_backlog.py
+
+echo "== check_digest_pins.py"
+W="$TMP/r/deploy/web.Dockerfile"
+D="sha256:$(printf 'a%.0s' $(seq 1 64))"
+deploy() { fresh; cp -R "$SRC/deploy" "$TMP/r/deploy"; }
+fresh; expect ok  "no deploy/ directory"                                check_digest_pins.py
+deploy; expect ok  "the repo's own deploy/ passes"                      check_digest_pins.py
+deploy; printf 'FROM node:22-bookworm-slim\n' > "$W"
+expect err "a FROM with only a tag"                                     check_digest_pins.py
+deploy; printf 'FROM node@%s\n' "$D" > "$W"
+expect err "a digest with no tag (the tag is kept for readers)"         check_digest_pins.py
+deploy; printf 'FROM node:22@sha256:abc\n' > "$W"
+expect err "a truncated digest"                                         check_digest_pins.py
+deploy; printf 'from node:22 as build\n' > "$W"
+expect err "lowercase from is still checked"                            check_digest_pins.py
+deploy; printf 'FROM --platform=linux/amd64 node:22\n' > "$W"
+expect err "a --platform flag does not hide the image"                  check_digest_pins.py
+deploy; printf 'ARG BASE=node:22\nFROM ${BASE}\n' > "$W"
+expect err "an ARG-named image"                                         check_digest_pins.py
+deploy; printf 'ARG TAG=22\nFROM node:${TAG}@%s\n' "$D" > "$W"
+expect err "an ARG-named tag, even with a digest"                       check_digest_pins.py
+deploy; printf 'FROM --platform=linux/amd64 node:22@%s\n' "$D" > "$W"
+expect ok  "a pinned image after a --platform flag"                     check_digest_pins.py
+deploy; printf 'FROM node:22@%s AS build\nFROM build\nFROM node:22\n' "$D" > "$W"
+expect err "the second of three FROMs pinned, the third not"            check_digest_pins.py
+deploy; printf 'FROM node:22@%s AS Build\nFROM build\nFROM scratch\n' "$D" > "$W"
+expect ok  "an earlier stage (any case) and scratch need no digest"     check_digest_pins.py
+deploy; printf 'FROM node:22@%s AS build extra\n' "$D" > "$W"
+expect err "a FROM it can't read (trailing words) is refused"           check_digest_pins.py
+deploy; printf 'FROM build\nFROM node:22@%s AS build\n' "$D" > "$W"
+expect err "a stage named before it is defined is an image"             check_digest_pins.py
+deploy; mkdir -p "$TMP/r/deploy/api"; printf 'FROM python:3.12-slim\n' > "$TMP/r/deploy/api/Dockerfile"
+expect err "a Dockerfile in a subdirectory of deploy/"                  check_digest_pins.py
+deploy; printf 'FROM python:3.12-slim\n' > "$TMP/r/deploy/api.dockerfile"
+expect err "a lowercase .dockerfile name"                               check_digest_pins.py
 
 echo "== lint_tooling.py"
 C="$TMP/r/.claude"

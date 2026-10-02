@@ -1,11 +1,11 @@
 ---
 id: TASK-148
 title: 'CI builds deploy/web.Dockerfile on PRs that touch it, the frontend or deploy/'
-status: To Do
+status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-09-30 20:04'
-updated_date: '2026-09-30 20:11'
+updated_date: '2026-10-02 00:03'
 labels:
   - ci
   - ops

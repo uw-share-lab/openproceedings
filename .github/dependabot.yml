@@ -8,8 +8,22 @@ updates:
     directory: /
     schedule: { interval: weekly }
     commit-message: { prefix: "deps" }
+    # A Tantivy upgrade must bump SCHEMA_VERSION in the same change (decision-023; spec 08 §Release): the engine
+    # refuses an index another Tantivy built, so a bump merged alone leaves dev unable to serve or build one.
+    # The exact tantivy== pin is upgraded by hand (index-versioning skill), never by Dependabot (TASK-150).
+    ignore:
+      - dependency-name: tantivy
   # the npm workspace: one package-lock.json at the root holds the frontend's dependencies (TASK-067)
   - package-ecosystem: npm
     directory: /
     schedule: { interval: weekly }
     commit-message: { prefix: "deps" }
+  # deploy/*.Dockerfile base images, pinned name:tag@sha256:<index digest> (TASK-149): Dependabot bumps the
+  # digest when the tag moves. A new Node major (22-… → 24-…) moves with .nvmrc and CI, so it is done by hand.
+  - package-ecosystem: docker
+    directory: /deploy
+    schedule: { interval: weekly }
+    commit-message: { prefix: "build" }
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
