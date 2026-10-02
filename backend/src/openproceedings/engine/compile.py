@@ -10,7 +10,7 @@ names), so the differential suite (task-028) compares two independent implementa
 | Wildcard | `SHOULD` of a `TermQuery` per expansion, per field (each scores as its own term); no expansions → `EmptyQuery` (never a dropped clause) |
 | Phrase of terms | `PhraseQuery(f, tokens, slop=0)`, per field: never across fields |
 | Near(a, b, n), a ≠ b single terms | `PhraseQuery([a,b], slop=n) OR PhraseQuery([b,a], slop=n)`, per field |
-| Phrase with a wildcard item; Near of a phrase, a wildcard or a term with itself | verified: the candidates (every item present in the field) are fetched and their stored token streams checked by position in Python; the verified ids become a `TermSetQuery` on `id` (with the candidate query kept for scoring) |
+| Phrase with a wildcard item; Near of a phrase, a wildcard or a term with itself | verified: the candidates (every item present in the field) are fetched and their stored token streams checked by position in Python; the verified ids become a `TermSetQuery` on `id` (with the candidate query kept for scoring), or the candidates that failed, excluded, when they are fewer (`Compiler.exact`) |
 | Filter | `ConstScoreQuery(0)` of a `TermSetQuery` on the facet, or of year `RangeQuery`s: never scores |
 | And / Or / Not | `BooleanQuery` MUST / SHOULD; Not → `MUST const-score-0 all_docs, MUST_NOT x` (a MUST_NOT-only query matches nothing; the all-docs clause adds no score) |
 
@@ -109,6 +109,7 @@ class Compiler:
         gate: Callable[[], AbstractContextManager[object]] = nullcontext,
         store: Callable[[tuple[str, str], list[str]], None] | None = None,
         count: Callable[[tantivy.Query], int] | None = None,
+        members: Callable[[tantivy.Query], frozenset[str]] | None = None,
     ) -> None:
         self.schema = schema
         self.weights = weights if weights is not None else dict.fromkeys(FIELDS, 1.0)
@@ -130,6 +131,9 @@ class Compiler:
         self.count = (
             count  # how many documents a query matches (the engine's): a clause with none takes no slot
         )
+        # the ids a query matches (the engine's): with `count`, lets a verified clause name the candidates that
+        # don't hold it instead of the ids that do, when they are fewer (`exact`)
+        self.members = members
         self.out = Compiled(tantivy.Query.empty_query())
         self._allowed: dict[tuple[str, str], frozenset[str]] = {}  # per item: `allowed`
 
@@ -244,15 +248,32 @@ class Compiler:
         if ids is None:
             ids = self.verify(n, f, candidates)
             self.store(key, ids)  # stored complete, never changed after
-        # twice: the Tantivy query's own copy of the ids, and the Python list `Compiled.ids` keeps (round 5)
-        self.out.held += 2 * len(ids)
+        # the Python list `Compiled.ids` keeps (round 5); the Tantivy query's own id set is charged by `exact`
+        self.out.held += len(ids)
         self.out.ids[key] = ids
         what = f"NEAR/{n.distance}" if isinstance(n, Near) else "phrase"
         self.line(depth, f"{f}: {what} verified by position ({len(ids)} documents)")
         self.out.verified.append(f"{f}: {what}")
         if not ids:
             return tantivy.Query.empty_query()
-        exact = tantivy.Query.const_score_query(tantivy.Query.term_set_query(self.schema, "id", ids), 0.0)
+        return self.exact(candidates, ids)
+
+    def exact(self, candidates: tantivy.Query, ids: list[str]) -> tantivy.Query:
+        """`candidates` narrowed to the verified `ids`, naming whichever list is shorter (TASK-076): Tantivy
+        resolves an id term set on every search, so a clause most of whose candidates hold it would pay for
+        every id it matched. The ids are a subset of the candidates, so the candidates less those that failed
+        the check are exactly the ids; the exclusion adds no score and the term set adds 0.0, so either form
+        scores each match as its candidate query alone."""
+        if self.count is not None and self.members is not None and self.count(candidates) - len(ids) < len(ids):
+            failed = sorted(self.members(candidates).difference(ids))
+            self.out.held += len(failed)
+            if not failed:
+                return candidates
+            return tantivy.Query.boolean_query(
+                [(tantivy.Occur.Must, candidates), (tantivy.Occur.MustNot, id_set(self.schema, failed))]
+            )
+        self.out.held += len(ids)
+        exact = tantivy.Query.const_score_query(id_set(self.schema, ids), 0.0)
         return tantivy.Query.boolean_query([(tantivy.Occur.Must, candidates), (tantivy.Occur.Must, exact)])
 
     def verify(self, n: Phrase | Near, f: TextField, candidates: tantivy.Query) -> list[str]:
@@ -353,6 +374,11 @@ def _starts(parts: Parts, tokens: list[str], positions: dict[str, list[int]]) ->
         for at in first
         if at + width <= len(tokens) and all(tokens[at + k] in parts[k] for k in range(1, width))
     ]
+
+
+def id_set(schema: tantivy.Schema, ids: list[str]) -> tantivy.Query:
+    """The documents with these ids (a term set on `id`)."""
+    return tantivy.Query.term_set_query(schema, "id", ids)
 
 
 def combine(occur: tantivy.Occur, queries: list[tantivy.Query]) -> tantivy.Query:

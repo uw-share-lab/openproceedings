@@ -437,6 +437,7 @@ class TantivyEngine:
             gate=gate,
             store=store,
             count=self._count,
+            members=self.ids_of,
         ).compile(ast)
         self.compiled[key] = compiled
         self.charges["compiled"].append(compiled.held + 1)
