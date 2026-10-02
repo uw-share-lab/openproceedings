@@ -133,8 +133,9 @@ testing).
 5. **`/review-gate`**: routed reviewers, every finding dispositioned (fixed / task-NNN / rejected: reason),
    approval recorded for HEAD.
 6. **Push, then `/open-pr`** into `dev`. CI must pass: `lint`, `test`, `claude-tooling`, `attribution`,
-   `learnings`, `review-attested`. A green PR goes into `dev`'s merge queue (`gh pr merge <n> --auto`), with
-   no rebase because `dev` moved (`pr-workflow` skill §Merge method).
+   `learnings`, `review-attested`. Once `dev`'s merge queue is active, a green PR goes into the queue
+   (`gh pr merge <n> --auto`) without a rebase because `dev` moved. Until then, it is rebased onto `dev` and
+   merged with `--merge` (`pr-workflow` skill §Merge method).
 7. **After it merges**, remove the PR's worktree (`git worktree remove`) and local branch. A worktree with
    uncommitted work is archived as a patch first, never deleted blind.
 

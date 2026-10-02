@@ -28,9 +28,10 @@ description: The openproceedings branch and PR flow (feature → PR → dev → 
 4. `/record-learnings` → commit the entry and regenerated `INDEX.md`.
 5. `/review-gate` → routed reviewers, every finding dispositioned, `record-review.py APPROVE` for HEAD.
 6. `git push -u origin <branch>`, then `/open-pr` (writes the body, creates the PR, `--attest`s it).
-7. Once its checks are green, the PR goes into the merge queue (§Merge method). Once it merges: `git worktree remove <its worktree>` and `git branch -d <branch>` (GitHub deletes the
-   remote branch). A worktree left behind goes stale; one with uncommitted work is archived as a patch before
-   it is removed, never deleted blind.
+7. Once its checks are green, the PR goes into the merge queue (§Merge method). Once it merges:
+   `git worktree remove <its worktree>` and `git branch -d <branch>` (GitHub deletes the remote branch). A
+   worktree left behind goes stale; one with uncommitted work is archived as a patch before it is removed,
+   never deleted blind.
 
 ## Local test runs (by risk; owner's rule, 2026-09-29, TASK-121)
 CI's required `test` job runs the full backend and frontend suite on every PR (backend under pytest-xdist, properties
@@ -115,11 +116,14 @@ PRs go into `dev` as **merge commits**, not squashes: review dispositions and le
 commit SHAs, and a squash would leave those references pointing at commits that aren't on `dev`.
 
 **With the merge queue** (once the `dev: merge queue` ruleset is applied; spec 08 §Branch protection), add a
-green PR to the queue with `gh pr merge <n> --auto`. The queue's MERGE method makes the merge commit, and
-GitHub deletes the branch. Don't rebase a PR because `dev` moved. Its review record and attestation cover
+green PR to the queue with `gh pr merge <n> --auto`. That needs the repository's "Allow auto-merge" setting;
+spec 08 §Git and PR rules gives the GraphQL `enqueuePullRequest` call that works without it. The queue's
+MERGE method makes the merge commit, and GitHub deletes the branch. Don't rebase a PR because `dev` moved. Its review record and attestation cover
 its head, and the queue tests that head on top of `dev` plus the PRs ahead of it. Several PRs can wait in
 the queue at once. Rebase only when the queue drops a PR, either for a conflict or for a red queue build.
 Then fix the cause, run the review round on the new head, `--attest` it, and queue it again. A push to a
 queued PR also drops it from the queue. Before the ruleset is applied, `dev` still requires up-to-date
-branches: merge with `gh pr merge <n> --merge --delete-branch`, rebasing each PR after the previous merge. To change a PR body, use `gh api -X PATCH repos/{owner}/{repo}/pulls/<n>`;
+branches: merge with `gh pr merge <n> --merge --delete-branch`, rebasing each PR after the previous merge.
+
+To change a PR body, use `gh api -X PATCH repos/{owner}/{repo}/pulls/<n>`;
 `gh pr edit` fails here on the retired Projects (classic) API.

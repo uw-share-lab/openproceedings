@@ -134,11 +134,13 @@ are one two-parent merge per queued PR, oldest first: parent 1 is the previous q
 one's is `base_sha`) and parent 2 is the PR's head. The script names each merge's PR from GitHub's subject,
 `Merge pull request #N from …`, or else from the one open PR into `dev` whose head is parent 2. It checks
 that the newest merge's PR is the `N` in the head ref, `refs/heads/gh-readonly-queue/dev/pr-N-<sha>`. Then,
-for **each** PR in the group:
+for **each** PR in the group. A PR ahead in the group may already be merged when a build's jobs run, for
+example on a re-run, because GitHub merges an entry as soon as its own build is green. Such a PR counts only
+if this group's own queue commit merged it (`merged` and `merge_commit_sha` = that merge):
 
 | Job | Passes when |
 |---|---|
-| `review-attested` | the PR is open, targets `dev`, its head is still parent 2, and its current body (read through the API, not an event snapshot) holds `<!-- op-review: <parent 2> APPROVE -->` |
+| `review-attested` | the PR is open (or merged by this group's queue commit), targets `dev`, its head is still parent 2, and its current body (read through the API, not an event snapshot) holds `<!-- op-review: <parent 2> APPROVE -->` |
 | `learnings` | the PR is labelled `no-learning`, or its own diff (`parent 1...parent 2`) adds or extends a `YYYY-MM-DD-<slug>.md` entry directly in `.claude/learnings/`, the same rule as the `pull_request` job |
 | `attribution` | no commit message in `base_sha..head_sha` (the queue's merges included), and no PR title or body, matches the attribution pattern |
 
@@ -147,8 +149,11 @@ The checks fail closed. Each of these fails the job: a head ref that isn't `dev`
 `base_sha`, a PR named twice, a merge with no resolvable PR, a failed `gh` call, and JSON of the wrong
 shape. Each job starts with a step that fails on any event other than `pull_request` and `merge_group`, so
 a job whose gate steps all skip can't pass. The jobs widen `permissions` to `pull-requests: read` to read
-the PRs. The case table is `.claude/scripts/tests/test-merge-group-gate.sh`, and its mutants are in
-`.claude/scripts/mutants/merge-group.json`.
+the PRs. The case table is `.claude/scripts/tests/test-merge-group-gate.sh`. Its last row checks this
+wiring in `pr-gates.yml`, `test.yml`, `lint.yml` and `claude-tooling.yml`. The mutants are in
+`.claude/scripts/mutants/merge-group.json`. The advisory `e2e`, `bench` and `web-image` workflows don't run
+on `merge_group`, so the queue never waits for them. The combined result is first e2e-tested on `dev`'s
+push run.
 
 **Dependabot** (`.github/dependabot.yml`, weekly) watches `github-actions` (prefix `ci`), `uv` and `npm` (prefix
 `deps`) and the `docker` base images in `deploy/` (prefix `build`). For each, minor and patch version updates
@@ -165,7 +170,10 @@ Tantivy fix, shows up as a Dependabot alert and is fixed by a hand-made PR.
 - `feature → PR → dev → PR → main`. No direct commits, pushes or merges on `dev` or `main`
   (`enforce-pr-workflow.sh`, from Kreate). `main` also needs a second person's approval.
 - **Merging into `dev` goes through the merge queue** once it is enabled (§Branch protection). Once a PR's
-  checks are green, add it to the queue with `gh pr merge <n> --auto`. Don't rebase it onto a newer `dev`
+  checks are green, add it to the queue with `gh pr merge <n> --auto`. That needs the repository's
+  "Allow auto-merge" setting. Without it, enqueue with GraphQL: `gh api graphql -f query='mutation($id:
+  ID!) { enqueuePullRequest(input: {pullRequestId: $id}) { mergeQueueEntry { position } } }' -f id="$(gh
+  pr view <n> --json id -q .id)"`. Don't rebase it onto a newer `dev`
   first. A PR that is behind `dev` needs no rebase, new review record or new attestation; the queue tests
   it on top of `dev`. Rebase only for a real conflict or a failed queue build, and then re-review and
   re-attest the new head as usual. A push to a queued PR removes it from the queue.
@@ -533,8 +541,9 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    origin/main` (no file changes), `/review-gate`, `git push -u origin release/X.Y.Z-back-merge` (the review
    record covers the merge commit), then `gh pr create --base dev --title "chore: back-merge main after
    X.Y.Z" --body-file <file> --label no-learning` and `record-review.py APPROVE <dispositions> --attest`.
-   Merge it with a merge commit (`gh pr merge <n> --merge`, never `--squash` or `--rebase`, which would leave
-   `main`'s commit out of `dev`), then check `git fetch origin && git merge-base --is-ancestor origin/main
+   Merge it with a merge commit, never `--squash` or `--rebase`, which would leave `main`'s commit out of
+   `dev`. Once `dev`'s merge queue is active, that means adding it to the queue (`gh pr merge <n> --auto`;
+   the queue's method is MERGE). Before the queue is active, use `gh pr merge <n> --merge`. Then check `git fetch origin && git merge-base --is-ancestor origin/main
    origin/dev`. On `dev`, `python3 .claude/scripts/changelog.py --check` then passes.
 8. **Retention.** Keep every index and snapshot a search record pins (`op index retire` refuses a pinned
    index; §CLI). After a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy, its code
@@ -671,16 +680,23 @@ the reason. Mutants run in parallel: the full set takes minutes, and `--changed`
 `dev` and `main` require a PR, with these checks green: `lint`, `test`, `claude-tooling`, `attribution`,
 `learnings`, `review-attested`. No force-push, no deletion, admins included, and conversations must be
 resolved. `main` additionally requires 1 approving review and the branch up to date with it (so each
-promotion is followed by §Release step 7's back-merge). `dev` gets a **merge queue** in place of
-"require branches to be up to date" (TASK-161, decision-027). A maintainer applies it after TASK-161's PR
-merges, with the commands in decision-027: a branch ruleset `dev: merge queue` on `refs/heads/dev` with
-one `merge_queue` rule (merge method MERGE, ALLGREEN grouping, up to 5 entries built and merged at once, a
-60-minute check timeout), and `strict: false` on `dev`'s classic required checks. The six required checks
-are unchanged and apply to the queue's builds. Until the ruleset is in place, `dev` still requires PRs to be
-up to date. `gh api repos/<owner>/<name>/rules/branches/dev` shows whether the `merge_queue` rule is
-active. This was applied on 2026-09-25, after the repo was
-made public (free-plan orgs can't protect private repos). `dev` is the default branch, and merged feature
-branches are deleted automatically. Release tags are protected by two active tag rulesets on `refs/tags/v*`, applied
+promotion is followed by §Release step 7's back-merge). This protection was applied on 2026-09-25, after
+the repo was made public (free-plan orgs can't protect private repos). `dev` is the default branch, and
+merged feature branches are deleted automatically.
+
+**`dev`'s merge queue** (TASK-161, decision-027) replaces "require branches to be up to date" on `dev`. A
+maintainer applies it after TASK-161's PR merges, with the commands in decision-027:
+
+- the repository setting "Allow auto-merge", which `gh pr merge <n> --auto` needs;
+- a branch ruleset `dev: merge queue` on `refs/heads/dev` with one `merge_queue` rule: merge method MERGE,
+  ALLGREEN grouping, up to 5 entries built and merged at once, and a 60-minute check timeout;
+- `strict: false` on `dev`'s classic required checks.
+
+The six required checks don't change, and they apply to the queue's builds too. Until the ruleset is in
+place, `dev` still requires PRs to be up to date. `gh api repos/<owner>/<name>/rules/branches/dev` shows
+whether the `merge_queue` rule is active.
+
+Release tags are protected by two active tag rulesets on `refs/tags/v*`, applied
 by a maintainer on 2026-10-01 (TASK-151), before the first release tag: **`Release tags: maintainers only
 create`** restricts creating a matching tag (bypass: the maintain and admin repository roles), and **`Release
 tags: immutable`** blocks updating and deleting one, with no bypass actor (a ruleset's bypass list covers every

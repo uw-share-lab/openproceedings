@@ -22,9 +22,10 @@ branch under the `merge_group` event and fast-forwards `dev` when they pass. The
 a repository ruleset. Classic branch protection has no merge-queue setting in its API. Rulesets and classic
 protection stack, so the six required checks stay where they are.
 
-The three `pr-gates` jobs read `github.event.pull_request`, and a `merge_group` event doesn't have it. Taught
-nothing, those jobs would never start, and the queue would wait for the checks forever. Made to pass on
-`merge_group`, they would become no-ops. The owner asked for neither. The queue's builds must still prove
+The three `pr-gates` jobs read `github.event.pull_request`, and a `merge_group` event doesn't have it.
+Without a `merge_group` trigger, a workflow never starts on a queue build, and the queue waits for its
+checks until the timeout. With the trigger but no other change, the steps would read empty `pull_request`
+fields. Made to pass on `merge_group`, the jobs would become no-ops. The owner asked for neither. The queue's builds must still prove
 that each PR in the group was reviewed (an APPROVE attested for that PR's head), has a learnings entry, and
 carries no AI attribution.
 
@@ -58,7 +59,13 @@ review|learnings|attribution` with the event's `base_sha`, `head_sha` and `head_
   merge's PR must be the head ref's `N`.
 - **review-attested.** For each PR, the API copy must be `open`, have base `dev` and head sha = parent 2, and
   the current body must contain `<!-- op-review: <parent 2> APPROVE -->`. The body is read when the queue
-  build runs, so the stale-snapshot race of the `pull_request` job doesn't apply.
+  build runs, so the stale-snapshot race of the `pull_request` job doesn't apply. One exception covers a PR
+  that is already merged. GitHub's docs don't say whether a later entry's `base_sha` is `dev`'s tip or the
+  previous entry's queue commit. If it is `dev`'s tip, an entry's range also holds the PRs ahead of it. With
+  ALLGREEN, an entry ahead merges as soon as its own build is green, so a later entry's jobs (or a re-run of
+  them) can find that PR closed. A closed PR therefore passes only when `merged` is true and its
+  `merge_commit_sha` is this group's own merge for it. GitHub fast-forwards `dev` to the queue commit, so
+  that is the merge it records. Every other check still applies to that PR.
 - **learnings.** For each PR: the `no-learning` label (an exact name), or an added or extended
   `.claude/learnings/YYYY-MM-DD-<slug>.md` in `git diff parent1...parent2`. That diff starts at the merge base
   of the PR and the queue commit before it, so it is the PR's own change. The rule is the `pull_request` job's,
@@ -78,10 +85,13 @@ merged at once, minimum 1, no wait, and a 60-minute check timeout (the `test` jo
 `strict` is turned off on `dev`'s classic required checks, because the queue provides the up-to-date
 guarantee. `main` is unchanged.
 
-Commands, for a maintainer to run after TASK-161's PR merges. Run the ruleset first, so there is no window
-with neither the queue nor the strict check:
+Commands, for a maintainer to run after TASK-161's PR merges. "Allow auto-merge" comes first, because
+`gh pr merge <n> --auto` (the documented way to queue a PR) enables auto-merge, and that needs the setting;
+it is `false` today. The ruleset comes before `strict=false`, so there is never a window with neither the
+queue nor the strict check:
 
 ```sh
+gh api -X PATCH repos/uw-share-lab/openproceedings -F allow_auto_merge=true
 gh api -X POST repos/uw-share-lab/openproceedings/rulesets --input - <<'JSON'
 {
   "name": "dev: merge queue",
@@ -105,15 +115,21 @@ gh api -X POST repos/uw-share-lab/openproceedings/rulesets --input - <<'JSON'
 }
 JSON
 gh api -X PATCH repos/uw-share-lab/openproceedings/branches/dev/protection/required_status_checks -F strict=false
-# verify: prints merge_queue, then false and the six contexts
+# verify: prints true, then merge_queue, then false and the six contexts
+gh api repos/uw-share-lab/openproceedings --jq .allow_auto_merge
 gh api repos/uw-share-lab/openproceedings/rules/branches/dev --jq '.[].type'
 gh api repos/uw-share-lab/openproceedings/branches/dev/protection/required_status_checks --jq '.strict, .contexts'
 ```
 
-Rollback, if the queue's builds misbehave:
+If auto-merge is to stay off, a PR can be queued directly instead:
+`gh api graphql -f query='mutation($id: ID!) { enqueuePullRequest(input: {pullRequestId: $id}) {
+mergeQueueEntry { position } } }' -f id="$(gh pr view <n> --json id -q .id)"`.
+
+Rollback, if the queue's builds misbehave (auto-merge can stay on):
 
 ```sh
 id=$(gh api repos/uw-share-lab/openproceedings/rulesets --jq '.[] | select(.name == "dev: merge queue") | .id')
+[ "$(printf '%s\n' "$id" | grep -c .)" -eq 1 ] || { echo "no single 'dev: merge queue' ruleset: $id"; exit 1; }
 gh api -X PATCH repos/uw-share-lab/openproceedings/branches/dev/protection/required_status_checks -F strict=true
 gh api -X DELETE "repos/uw-share-lab/openproceedings/rulesets/$id"
 ```
@@ -131,7 +147,9 @@ gh api -X DELETE "repos/uw-share-lab/openproceedings/rulesets/$id"
   `gh-readonly-queue/dev/pr-N-<sha>` ref. If GitHub changes that shape, the jobs fail closed and the queue
   stops merging. It does not wave PRs through. The rollback above then restores the old flow while the
   script is updated. The table `.claude/scripts/tests/test-merge-group-gate.sh` builds the expected shape with
-  real merges. The first queued PR after the ruleset is applied is the live check of that shape.
+  real merges and checks the workflow wiring as text. The first queued PR after the ruleset is applied is the
+  live check of that shape. Its run log should be read for the `merge group …: #N @ …` line, to see whether
+  `base_sha` is `dev`'s tip (several PRs listed) or the previous entry (one PR). Record the answer here.
 - Every queue entry runs the full `test` job again on the combined result. That doubles CI minutes per PR,
   which is the price of never merging an untested combination.
 - Release promotions (`dev → main`) and back-merges keep their existing procedure (spec 08 §Release). The

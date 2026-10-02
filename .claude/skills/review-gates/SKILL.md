@@ -13,7 +13,7 @@ misses:
 | 1. Specialist review of the diff | before every push | `require-review.sh` (blocks push/PR without an APPROVE record for the exact sha) |
 | 2. Finding disposition | before the record is written | `record-review.py` (refuses undispositioned findings, rejected must-fixes, dirty trees) |
 | 3. CI gates | on every PR to `dev`/`main`, and on every merge-queue build | `.github/workflows/*` — lint, test, claude-tooling, pr-gates (attribution, learnings, review attestation; in a queue build, for each queued PR via `merge_group_gate.py`) |
-| 4. Branch protection | merge | GitHub: `dev` and `main` accept only PRs with green required checks; `dev` merges through a merge queue that reruns them on the combined result; `main` additionally needs an approving review |
+| 4. Branch protection | merge | GitHub: `dev` and `main` accept only PRs with green required checks; `dev` merges through a merge queue that reruns them on the combined result (once the `dev: merge queue` ruleset is applied; spec 08 §Branch protection); `main` additionally needs an approving review |
 
 ## Routing — which reviewers a diff needs
 

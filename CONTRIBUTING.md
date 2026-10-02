@@ -49,6 +49,8 @@ API answers every request with an HTML browser-check page instead of JSON (check
 5. CI must pass: `lint`, `test`, `claude-tooling`, `attribution`, `learnings`, `review-attested`.
    Once it's green, add it to `dev`'s merge queue yourself: `gh pr merge <n> --auto`. The queue re-runs the
    checks on `dev` plus your PR and merges it, so you don't rebase when `dev` moves (spec 08 §Merge queue).
+   Until a maintainer has turned the queue on (spec 08 §Branch protection), rebase onto `dev` and merge with
+   `gh pr merge <n> --merge --delete-branch`.
 6. Promote `dev → main` with a PR (`--base main --head dev`). It needs a second person's approval. A release
    (version bump, generated `CHANGELOG.md`, tag) follows the checklist in spec 08 §Release (decision-023).
 
