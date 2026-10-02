@@ -8,10 +8,10 @@ about what a "word" is. In this order, and nothing else:
 3. Diacritic fold: NFD, drop combining marks whose base letter is Latin, Greek, Cyrillic, Hebrew or
    Arabic (accents and optional vowel points: `naïve` → `naive`, `שָׁלוֹם` → `שלום`), recompose with NFC.
    Marks that spell a different word are KEPT: Thai tones (`ป่า` ≠ `ปา`), kana voicing (`が` ≠ `か`),
-   Indic viramas and vowel signs. A stray combining mark (class ≠ 0) with no base letter is dropped; a
-   class-0 Mn/Mc mark (such as an Indic vowel sign, U+0CE2) is a word character (step 5): alone it makes no
-   token, but a letter after it joins it (U+0CE2 + `x` is one word). The invisible marks of step 5 (enclosing
-   marks, variation selectors, the combining grapheme joiner) join instead.
+   Indic viramas and vowel signs. A stray combining mark (class ≠ 0) with no base letter is dropped;
+   after NFKC, a class-0 Mn/Mc mark that step 5 doesn't make invisible is a word character (e.g. U+0CE2):
+   alone it makes no token, but a letter after it joins it (U+0CE2 + `x` is one word); marks NFKC decomposes
+   into combining marks are stray.
 4. LaTeX: `\\cmd{X}` → `X`; a bare `\\cmd` outside math is dropped. Math regions are `$…$` (Pandoc's
    tex_math_dollars rule: the opener is followed by a non-space, the closer is preceded by a non-space and
    not followed by a digit, so `$5` and `US$ 5` are currency), `$$…$$`, `\\(…\\)` and `\\[…\\]`; inside

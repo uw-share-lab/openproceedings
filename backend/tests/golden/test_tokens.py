@@ -153,6 +153,8 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ("\u0ce2", []),
     ("\u0ce2x", ["\u0ce2x"]),
     ("abcd-\u0ce2x", ["abcd", "\u0ce2x"]),
+    ("-\ufe0fx", ["x"]),  # but a variation selector is invisible (step 5), not a word character
+    ("-\u0f73x", ["x"]),  # and NFKC decomposes U+0F73 into combining marks: stray, dropped
     # --- CJK: no word segmentation, so a run is one token (spec 02 §Known limits)
     ("信頼性", ["信頼性"]),  # does NOT contain the token 信頼
     # --- currency dollar is not math (spec 02 §Token semantics step 3)

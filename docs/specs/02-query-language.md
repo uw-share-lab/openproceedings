@@ -21,10 +21,10 @@ The query side and the index side run the **same** normalization function (`norm
    that spell a *different letter* are kept: Cyrillic breve (`мой` ≠ `мои`), Arabic hamza (`سؤال`), Thai
    tone marks (`ป่า` "forest" ≠ `ปา` "throw"), kana voicing (`が` ≠ `か`), and Indic viramas and vowel
    signs. A stray combining mark (class ≠ 0) with no base (a letter, digit or class-0 mark before it) is
-   dropped. A class-0 Mn/Mc mark, such as an Indic vowel sign (U+0CE2 KANNADA VOWEL SIGN VOCALIC L), is a word
-   character (step 4), so a run made only of marks (a lone vowel sign) is not a token on its own, but a letter
-   written after it joins it (U+0CE2 + `x` is one word). The invisible marks of step 4 (enclosing marks,
-   variation selectors, the combining grapheme joiner) are not word characters: they join.
+   dropped. After NFKC, a class-0 Mn/Mc mark that step 4 doesn't make invisible is a word character (e.g.
+   U+0CE2 KANNADA VOWEL SIGN VOCALIC L), so a run made only of marks (a lone vowel sign) is not a token on its
+   own, but a letter written after it joins it (U+0CE2 + `x` is one word); marks NFKC decomposes into
+   combining marks are stray.
 3. LaTeX, by classifying characters (so raw offsets survive):
    - `\cmd{X}` → `X`; a bare `\cmd` outside math is dropped.
    - Math regions are `$…$` (Pandoc's rule: the opening `$` is followed by a non-space, the closing `$` is
