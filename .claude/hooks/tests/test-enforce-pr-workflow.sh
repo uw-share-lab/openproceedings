@@ -63,6 +63,40 @@ check_cwd() {
   fi
 }
 
+# check_msg <branch> <expect> <hint: yes|no> <command> -- `check`, and the refusal says (yes) or doesn't say (no)
+# to name the target with an absolute `git -C` path, not a `cd ~/…` (TASK-173).
+check_msg() {
+  local on_branch="$1" expect="$2" hint="$3" cmd="$4" out got said
+  git -C "$REPO" checkout -q "$on_branch" 2>/dev/null || git -C "$REPO" checkout -q -b "$on_branch"
+  local json
+  json=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]}}))' "$cmd")
+  out=$(cd "$REPO" && printf '%s' "$json" | "$HOOK" 2>&1 >/dev/null); local rc=$?
+  case $rc in 0) got=allow ;; 2) got=block ;; *) got="crash(rc=$rc)" ;; esac
+  case "$out" in *"git -C /absolute/path"*) said=yes ;; *) said=no ;; esac
+  if [ "$got" = "$expect" ] && [ "$said" = "$hint" ]; then
+    pass=$((pass + 1))
+    printf '  ok   [%s] %-52.160s -> %s, hint=%s\n' "$on_branch" "$cmd" "$got" "$said"
+  else
+    fail=$((fail + 1))
+    printf '  FAIL [%s] %-52.160s -> %s, hint=%s (want %s, hint=%s)\n' "$on_branch" "$cmd" "$got" "$said" "$expect" "$hint"
+  fi
+}
+
+# check_json <branch> <expect> <label> <json> -- `check` with the payload built already (one too big for argv)
+check_json() {
+  local on_branch="$1" expect="$2" label="$3" json="$4" got
+  git -C "$REPO" checkout -q "$on_branch" 2>/dev/null || git -C "$REPO" checkout -q -b "$on_branch"
+  (cd "$REPO" && printf '%s' "$json" | "$HOOK" >/dev/null 2>&1); local rc=$?
+  case $rc in 0) got=allow ;; 2) got=block ;; *) got="crash(rc=$rc)" ;; esac
+  if [ "$got" = "$expect" ]; then
+    pass=$((pass + 1))
+    printf '  ok   [%s] %-52s -> %s\n' "$on_branch" "$label" "$got"
+  else
+    fail=$((fail + 1))
+    printf '  FAIL [%s] %-52s -> %s (want %s)\n' "$on_branch" "$label" "$got" "$expect"
+  fi
+}
+
 # check_warn <branch> <command> -- expects allow AND a "Review gate warning" on stderr.
 check_warn() {
   local on_branch="$1" cmd="$2" out got warned
@@ -193,8 +227,8 @@ git push origin HEAD:dev"                                              # body en
 check feature/x block "n=\$((echo a) | wc -l)
 # don't worry
 git push origin HEAD:dev"                                              # \$((cmd) | …) is not arithmetic: fail closed
-check feature/x block "$(printf 'git pu\\\nsh origin HEAD:dev')"      # backslash-newline joins with nothing
-check feature/x block "$(printf 'git push origin HEAD:d\\\nev')"     # ... even inside the ref
+check feature/x block $'git pu\\\nsh origin HEAD:dev'      # backslash-newline joins with nothing
+check feature/x block $'git push origin HEAD:d\\\nev'     # ... even inside the ref
 check feature/x allow 'git push origin feat
 echo main'                                                              # separators split commands: 'main' is not a refspec
 check main  allow 'bash --norc -c "git status"'            # positive control: long opt + safe cmd
@@ -504,7 +538,8 @@ check feature/x allow 'git checkout main -- README && git commit -m x'   # resto
 check main      allow 'git switch -c feature/y && git commit -m x'   # off main before the commit
 check main      allow 'git checkout -b feature/z && git commit -m x'
 check main      allow 'git switch --detach && git commit -m x'
-check main      allow "git checkout $(git -C "$REPO" rev-parse HEAD) && git commit -m x"   # a commit: detached
+HEAD_SHA=$(git -C "$REPO" rev-parse HEAD)
+check main      allow "git checkout $HEAD_SHA && git commit -m x"   # a commit: detached
 check main      block 'git checkout HEAD && git commit -m x'          # HEAD: still on main
 check main      block 'git checkout notes.txt && git commit -m x'     # a path: still on main
 
@@ -625,7 +660,28 @@ echo "TASK-156: a quoted command substitution is a command, and every git comman
 check dev       block 'x="$(git commit -m x)"'
 check dev       block 'cd ~ && git commit -m x'                             # HOME '': the cd stays on dev
 check feature/x block 'git push --force- origin HEAD:feature/x'           # ambiguous: --force-with-lease or --force-if-includes
-HOME="$(dirname "$REPO")" check feature/x allow "cd ~/$(basename "$REPO") && git commit -m x"   # HOME '': a failed cd stays
+REPO_NAME=$(basename "$REPO")
+HOME="$(dirname "$REPO")" check feature/x allow "cd ~/$REPO_NAME && git commit -m x"   # HOME '': a failed cd stays
+
+echo "TASK-173: a commit refused after a cd ~/… that fails with HOME '' says to use an absolute path:"
+WT_NAME=$(basename "$WT")
+HOME="$(dirname "$WT")" check_msg dev block yes "cd ~/$WT_NAME && git commit -m x"   # HOME '': stays on dev
+HOME="$(dirname "$WT")" check_msg dev block yes "cd ~/$WT_NAME; git commit -m x"
+check_msg dev block no 'git commit -m x'                                         # no cd: no hint
+check_msg dev block no 'cd ~ && git commit -m x'                                 # cd ~ stays put: no failed cd
+HOME="$(dirname "$WT")" check_msg dev block no "cd ~/$WT_NAME && cd ~ && git commit -m x"   # a later cd clears it
+HOME="$(dirname "$WT")" check_msg dev allow no "cd ~/$WT_NAME && git -C $WT commit -m x"        # absolute -C
+HOME="$(dirname "$WT")" check_msg dev block no "cd ~/$WT_NAME && git push origin HEAD:dev"      # not a commit
+
+echo "TASK-172: the payload reaches Python on stdin, so a command past ARG_MAX is parsed, not text-checked:"
+BIG=$(python3 -c 'import json; print(json.dumps({"tool_input":{"command":"git commit -m \"" + "x" * 1100000 + "\""}}))')
+check_json feature/x allow "1.1 MB git commit -m on a feature branch" "$BIG"
+check_json dev       block "1.1 MB git commit -m on dev"              "$BIG"
+
+echo "TASK-164: the parse-failure text check joins continuations as bash does (cmdparse.join_continuations):"
+check feature/x block $'git log \'; git pu\\\nsh origin feature/x'    # a stray quote: every continuation joined
+check feature/x allow $'git log --grep=\'pu\\\nsh\' {1..5000}'       # a parse failure; quoted: not joined
+check feature/x allow $'git log --stdin <<\'EOF\'\npu\\\nsh\nEOF\necho {1..5000}'   # a quoted heredoc body: not joined
 
 echo
 echo "passed: $pass  failed: $fail"

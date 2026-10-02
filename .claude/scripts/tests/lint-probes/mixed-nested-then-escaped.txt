@@ -1,0 +1,2 @@
+check $R block "l" "$(payload_bash "$(printf 'x "')")"
+check $P block "echo \`case y in y) rm -rf data/snapshots;; esac\`" "$(payload_bash 'echo `case y in y) :;; esac`')"

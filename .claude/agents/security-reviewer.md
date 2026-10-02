@@ -60,9 +60,13 @@ A change must not widen evasion: parsing via `lib/cmdparse.py`, not substring ma
 wrappers still recursed; fail-closed where it did before; every case added to `.claude/hooks/tests/`.
 `record-review.py`, `learnings_index.py` and `check_backlog.py` must not accept anything they used to
 refuse. Run `make tooling` (it runs every hook case table).
-**Probe a hook only with payloads written to files** (the Write tool, or `python3 -c` with `json.dumps`), never
-through a shell heredoc of test commands: a test holding the heredoc's delimiter closes it early, and every
-later line runs for real (2026-10-02: `cd ~ && rm -rf data` ran in the home folder).
+**Probe a hook only as data** (TASK-169): write the probe with the Write tool, then
+`python3 .claude/scripts/probe_hook.py <hook>.sh --file <probe>` (or `cmdparse --file <probe>` to see how the
+gates read it); never put a probe in a shell heredoc or a double-quoted shell string: a heredoc that closes early
+runs every later line for real (2026-10-02: `cd ~ && rm -rf data` ran in the home folder), and bash runs a
+`$(…)` or backquote in double quotes. To see what bash itself does, `probe_hook.py sandbox --file <probe>` runs it
+in a removed mktemp directory that is also HOME (read it first: an absolute path still reaches the real disk).
+New case-table rows pass `lint_probes.py`.
 
 ## Output
 The `review-gates` contract: **Must / Should / Nit**, `file:line — risk — fix` (every Must with the

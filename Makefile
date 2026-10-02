@@ -49,6 +49,7 @@ tooling:
 	python3 .claude/scripts/learnings_index.py --check
 	python3 .claude/scripts/check_backlog.py
 	python3 .claude/scripts/check_digest_pins.py
+	python3 .claude/scripts/lint_probes.py
 	@# case tables run in parallel; each writes its output to a temp file, and any failure prints in full
 	@d=$$(mktemp -d); pids=""; for t in .claude/hooks/tests/*.sh .claude/scripts/tests/*.sh; do \
 	  ( bash "$$t" > "$$d/$$(basename $$t).out" 2>&1; echo $$? > "$$d/$$(basename $$t).rc" ) & pids="$$pids $$!"; done; \

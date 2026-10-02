@@ -260,5 +260,41 @@ fresh; cp "$C/agents/ci-engineer.md" "$C/agents/new-engineer.md"; sed -i.bak 's/
 python3 "$TMP/r/.claude/scripts/roster_index.py" >/dev/null 2>&1   # regenerate, so only the no-area rule can fail
 expect err "a new agent with no area"                                   roster_index.py --check
 
+echo "== lint_probes.py (a case-table probe reaches the hook only as data, TASK-169)"
+fresh; expect ok  "clean copy passes"                                   lint_probes.py
+F="$SRC/.claude/scripts/tests/lint-probes"   # one table fragment per case, kept as data (*.txt: never run)
+for f in "$F"/bad-*.txt; do expect err "$(basename "$f" .txt)" lint_probes.py "$f"; done
+for f in "$F"/good-*.txt; do expect ok "$(basename "$f" .txt)" lint_probes.py "$f"; done
+# line 1 is a real finding; line 2's \`…\` is escaped (literal), and the scan of line 1 must not run on into it
+out=$(python3 "$TMP/r/.claude/scripts/lint_probes.py" "$F/mixed-nested-then-escaped.txt" 2>&1)
+case "$out" in
+  *":1: "*":2: "*|*":2: "*) fail=$((fail+1)); echo "  FAIL lint_probes.py        escaped backquotes after a nested wrapper flagged: $out" ;;
+  *":1: "*) pass=$((pass+1)); echo "  ok   lint_probes.py         only the real finding of mixed-nested-then-escaped" ;;
+  *) fail=$((fail+1)); echo "  FAIL lint_probes.py        line 1 of mixed-nested-then-escaped not flagged: $out" ;;
+esac
+
+echo "== probe_hook.py (feeds one probe to a hook or cmdparse as data, TASK-169)"
+# expect_out <label> <ERE> <args...> -- probe_hook.py exits 0 and prints a line matching <ERE>
+expect_out() {
+  local label="$1" ere="$2" out; shift 2
+  if out=$(cd "$TMP" && python3 "$TMP/r/.claude/scripts/probe_hook.py" "$@" 2>&1) && printf '%s\n' "$out" | grep -Eq "$ere"; then
+    pass=$((pass+1)); printf '  ok   %-22s %-58s\n' probe_hook.py "$label"
+  else fail=$((fail+1)); printf '  FAIL %-22s %-58s -> %s\n' probe_hook.py "$label" "$out"; fi
+}
+fresh
+printf 'git push origin HEAD:dev' > "$TMP/probe-push.txt"
+printf 'ls' > "$TMP/probe-ls.txt"
+printf 'git pu\\\nsh origin x' > "$TMP/probe-split.txt"
+printf 'touch op-probe-made' > "$TMP/probe-touch.txt"
+expect_out "a push to dev is blocked"            '^enforce-pr-workflow.sh: block$' enforce-pr-workflow.sh --file "$TMP/probe-push.txt" --cwd "$TMP"
+expect_out "ls is allowed"                       '^enforce-pr-workflow.sh: allow$' enforce-pr-workflow.sh --file "$TMP/probe-ls.txt" --cwd "$TMP"
+expect_out "--command takes the probe as one word" '^enforce-pr-workflow.sh: block$' enforce-pr-workflow.sh --command 'git push origin HEAD:dev' --cwd "$TMP"
+expect_out "cmdparse shows the joined text"      "^joined: 'git push origin x'$" cmdparse --file "$TMP/probe-split.txt" --cwd "$TMP"
+expect_out "cmdparse shows the walk"             "\['git', 'push', 'origin', 'x'\]" cmdparse --file "$TMP/probe-split.txt" --cwd "$TMP"
+expect err "a path outside .claude/hooks is no hook" probe_hook.py ../scripts/lint_probes.py --command ls
+expect_out "sandbox runs it in a removed mktemp dir" '^exit 0 \(in .*op-probe-.*, removed\)$' sandbox --file "$TMP/probe-touch.txt"
+if [ ! -e "$TMP/op-probe-made" ]; then pass=$((pass+1)); echo "  ok   probe_hook.py          sandbox wrote nothing where it was run"
+else fail=$((fail+1)); echo "  FAIL probe_hook.py          sandbox wrote op-probe-made where it was run"; fi
+
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
