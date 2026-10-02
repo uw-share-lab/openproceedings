@@ -119,7 +119,7 @@ Every gate fails closed: a command it can't parse is refused where it matters, a
 also exit 2 when Python can't run (no python3), and read the payload on stdin, so a command past ARG_MAX is still
 read; enforce-pr-workflow falls back to its text check (a git write word is refused). A command inside a `"$(…)"`,
 backquotes or an unquoted heredoc body is checked like any other, and one with `~` or `$` is read again with
-HOME/TMPDIR/USER as '' in every gate, so `cd ~/x && git commit` is refused when the HOME '' reading of the path doesn't exist (TASK-156). The case tables count only exit 2 as a block.
+HOME/TMPDIR/USER as '' in every gate (`cd ~` stays put, and a `cd ~/<path>` that doesn't exist that way is a failed cd) (TASK-156). The case tables count only exit 2 as a block.
 
 After editing any hook or tooling script, run `make tooling`. It runs every case table in
 `.claude/hooks/tests/` and `.claude/scripts/tests/`, in parallel, in about 15 seconds. Then run

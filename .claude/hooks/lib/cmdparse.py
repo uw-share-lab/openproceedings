@@ -779,9 +779,12 @@ def _substitution_end(text: str, k: int, closer: str) -> int:
         elif c == "#" and (k == 0 or text[k - 1] in " \t\n;&|()"):
             e = text.find("\n", k)
             k = e if e >= 0 else n
-        elif at_word and (m := CASE_WORD.match(text, k)):
-            # a `case` pattern's `)` doesn't end the body; its `esac` does end the case (TASK-156 review)
-            cases += 1 if m.group(1) == "case" else -1 if cases else 0
+        elif (
+            at_word and (m := CASE_WORD.match(text, k)) and (m.group(2) or _command_position(text, start, k))
+        ):
+            # a `case` statement's patterns end in `)`, which doesn't end the body; its `esac` ends the case (TASK-156
+            # review); a `case` that is only an argument (`echo use case`) is a word
+            cases += 1 if m.group(1) else -1 if cases else 0
             k = m.end()
         elif c == ")" and depth == 0 and cases:
             k += 1
@@ -794,7 +797,21 @@ def _substitution_end(text: str, k: int, closer: str) -> int:
 
 
 # `case` and `esac` as words in a substitution body
-CASE_WORD = re.compile(r"(case|esac)(?=[\s;&|()]|$)")
+CASE_WORD = re.compile(r"(case)(?=\s)|(esac)(?=[\s;&|()]|$)")
+# words after which the next word is a command name
+COMMAND_LEADERS = frozenset({"then", "do", "else", "elif", "if", "while", "until", "!", "{", "time"})
+
+
+def _command_position(text: str, start: int, k: int) -> bool:
+    """Is `text[k]` where a command name goes: the start of the body, or after a separator or a reserved word?"""
+    before = text[start:k].rstrip(" \t")
+    if not before or before[-1] in ";&|(\n":
+        return True
+    return before.split()[-1] in COMMAND_LEADERS
+
+
+# a `cd` word that starts at $HOME: `~`, `~/…`, `$HOME…`, `${HOME}…`
+HOME_WORD = re.compile(r"~(/|$)|\$\{?HOME(?![A-Za-z0-9_])")
 
 
 def _double_quoted_end(text: str, k: int) -> int:
@@ -1311,6 +1328,17 @@ def _change_dir(head: str, words: list[str], state: dict, assigns: dict[str, str
         cdpath = builtin_vars["CDPATH"] if "CDPATH" in builtin_vars else os.environ.get("CDPATH", "")
         if target is not None and cdpath and not re.match(r"(/|\.\.?(/|$))", target):
             target = None  # CDPATH may send it elsewhere
+        if (
+            target is not None
+            and env_empty
+            and "HOME" not in variables
+            and "HOME" in os.environ
+            and HOME_WORD.match(words[0])
+            and not os.path.isdir(_resolve(target, cur))
+        ):
+            # read with HOME '', `~/x` is `/x`, at the root, which this command can't have made: the cd fails and
+            # the shell stays where it was (TASK-156 review: `cd ~/<repo> && git commit` was refused)
+            return
     if head == "pushd" and target is not None:
         stack.append((cur, unknown))
     new = None

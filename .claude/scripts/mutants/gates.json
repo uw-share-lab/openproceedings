@@ -3206,5 +3206,41 @@
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "                if not out_dirs and git_config_opaque(argv) and has_data:",
   "new": "                if False:"
+ },
+ {
+  "label": "cmdparse: a cd ~/<missing> read with HOME '' leaves the directory unknown (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            and HOME_WORD.match(words[0])\n",
+  "new": "            and False\n"
+ },
+ {
+  "label": "cmdparse: any word case counted as a case statement (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": " and (m.group(2) or _command_position(text, start, k))",
+  "new": ""
+ },
+ {
+  "label": "cmdparse: bash -c substitutions not walked (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "tokenize(argv[k + 1], state[\"subs\"])",
+  "new": "tokenize(argv[k + 1])"
+ },
+ {
+  "label": "cmdparse: eval substitutions not walked (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "tokenize(\" \".join(rest), state[\"subs\"])",
+  "new": "tokenize(\" \".join(rest))"
+ },
+ {
+  "label": "cmdparse: nested substitutions not walked (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "tokenize(body, state[\"subs\"])",
+  "new": "tokenize(body)"
+ },
+ {
+  "label": "block-ai: an unparseable command's text not scanned without quotes (TASK-156)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if PATTERN.search(re.sub(r\"[\\\"'\\\\]\", \"\", cmd)):",
+  "new": "        if False:"
  }
 ]

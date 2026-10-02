@@ -565,6 +565,10 @@ except Exception as exc:  # a crash exits 1, which Claude Code lets through: ref
     refuse(f"Blocked: protect-data-dir.sh could not check this command ({type(exc).__name__}). Write it more plainly "
            "(no deep brace nesting, no undecodable characters) and retry.")
 PY
+if [ -z "$PROG" ]; then  # the heredoc couldn't be read: an empty program would exit 0
+  echo "Blocked: protect-data-dir.sh could not load its check; refusing rather than letting the command through." >&2
+  exit 2
+fi
 python3 -c "$PROG" "$HOOK_DIR"
 rc=$?
 if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then

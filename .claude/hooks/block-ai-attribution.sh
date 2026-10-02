@@ -66,6 +66,8 @@ def main():
     except ParseError:
         if PATTERN.search(cmd):  # unbalanced quotes: bash won't run it, but don't let it look approved
             blocked()
+        if PATTERN.search(re.sub(r"[\"'\\]", "", cmd)):  # and with its quotes gone: `'Cl''aude'` (TASK-156 review)
+            blocked()
         try:  # a git command it can't classify (FailClosed) still has words: `'Cl''aude'` (TASK-156 review)
             if PATTERN.search(" ".join(tokenize(cmd))):
                 blocked()
@@ -114,6 +116,10 @@ except Exception as exc:  # a crash exits 1, which Claude Code lets through: blo
           "plainly and retry.", file=sys.stderr)
     sys.exit(2)
 PY
+if [ -z "$PROG" ]; then  # the heredoc couldn't be read: an empty program would exit 0
+  echo "Blocked: block-ai-attribution.sh could not load its check; refusing rather than letting the command through." >&2
+  exit 2
+fi
 python3 -c "$PROG" "$HOOK_DIR"
 rc=$?
 if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then

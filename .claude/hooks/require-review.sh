@@ -382,6 +382,10 @@ except Exception as exc:  # a crash exits 1, which Claude Code lets through: blo
     block([f"Review gate: this command could not be checked ({type(exc).__name__}); refusing rather than letting it",
            "through unexamined. Write it more plainly (no deep nesting, no undecodable characters) and retry."])
 PY
+if [ -z "$PROG" ]; then  # the heredoc couldn't be read: an empty program would exit 0
+  echo "Blocked: require-review.sh could not load its check; refusing rather than letting the command through." >&2
+  exit 2
+fi
 python3 -c "$PROG" "$HOOK_DIR"
 rc=$?
 if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then

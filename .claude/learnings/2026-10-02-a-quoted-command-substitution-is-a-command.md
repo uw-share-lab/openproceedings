@@ -31,7 +31,9 @@ a trailer split by quoting, `~` with HOME '' outside a push, a payload past ARG_
 - **Two bash shapes end a body somewhere a paren count doesn't**: a `case` pattern's `)` and `"$((cmd) )"`,
   which bash runs as a subshell inside a substitution, not arithmetic (review round 1: both let
   `git push origin HEAD:dev` through). The scanner counts `case`/`esac`, and a quoted `$((` is walked like `$(`:
-  real arithmetic reads as harmless words.
+  real arithmetic reads as harmless words. Only a `case` in command position counts (`echo use case` is a word:
+  review round 2), and `bash -c`/`eval`/nested bodies share the walk's `subs` list (a mutant that dropped it
+  survived every row until the round-2 rows).
 
 ## Dead ends — don't repeat these
 - **A reviewer probing hooks with an inline heredoc ran the probes for real.** A qa-auditor piped its test
@@ -43,10 +45,10 @@ a trailer split by quoting, `~` with HOME '' outside a push, a payload past ARG_
 - Marking unquoted `$(…)` too: its parentheses already split it into commands, so it would be walked twice.
 
 ## Decisions (and what would change them)
-- A command with `~` or `$` is read both ways in every gate, so `cd ~/x && rm -rf build` is refused where data/
-  exists, and `cd ~/x && git commit` by enforce-pr-workflow (in the HOME '' reading `/x` doesn't exist and the
-  directory is unknown; bash's `&&` would stop there, but the walk doesn't model a failed `cd`). Fail closed is
-  the rule; if it bites in practice, write absolute paths, or teach the walk that a failed `cd` ends its `&&` chain.
+- A command with `~` or `$` is read both ways in every gate. In the HOME '' reading a `cd ~/x` whose `/x` doesn't
+  exist is a failed cd (the shell stays), not an unknown directory: a path at the root is one the command can't
+  have made. Review round 2 caught the first version, which refused `cd ~/<worktree> && git commit` everywhere;
+  if a real case needs it, track `mkdir` before treating a missing target as a failed cd.
 - Without python3 the three Python gates refuse every Bash call (exit 127 → 2), unlike enforce-pr-workflow's
   text fallback: the repo needs python3 (uv) anyway.
 

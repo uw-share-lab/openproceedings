@@ -1103,6 +1103,11 @@ check $A block "A=Cl; -m \"Co-Authored-By: \${A}aude …\""   "$(payload_bash 'A
 check $A block "git config alias.ci commit; -m '…Cl''aude…' (unclassifiable)" "$(payload_bash "git config alias.ci commit; git commit -m 'Co-Authored-By: Cl''aude <noreply@anthr''opic.com>'")"
 HOOK_INPUT='{}' check $P block "an inherited HOOK_INPUT is not read: rm -rf data/snapshots" "$(payload_bash 'rm -rf data/snapshots')"
 check $R allow "git commit -m '… \`git push origin other2\`' (single quotes: text)" "$(payload_bash "git commit -m 'docs: \`git push origin other2\`'")"
+check $P allow "git commit -m \"\$(echo use case)\" (case as a word)" "$(payload_bash 'git commit -m "$(echo use case)"')"
+check $R block "bash -c 'x=\"\$(git push origin other2)\"'"  "$(payload_bash "bash -c 'x=\"\$(git push origin other2)\"'")"
+check $R block "eval 'x=\"\$(git push origin other2)\"'"     "$(payload_bash "eval 'x=\"\$(git push origin other2)\"'")"
+check $R block "x=\"\$(echo \"\$(git push origin other2)\")\"" "$(payload_bash 'x="$(echo "$(git push origin other2)")"')"
+check $A block "git config alias.ci commit; -m \"\$(echo '…Cl''aude…')\"" "$(payload_bash "git config alias.ci commit; git commit -m \"\$(echo 'Co-Authored-By: Cl''aude <noreply@anthr''opic.com>')\"")"
 check $P block "x=\"\$(cd /tmp)\"; rm -rf data (a subshell's cd stays in it)" "$(payload_bash 'x="$(cd /tmp)"; rm -rf data')"
 # a body ends where bash ends it: not at a `)` in its heredoc or in its own quotes
 check $P allow "git commit -m \"\$(cat <<'EOF' … a) b … EOF)\"" "$(payload_bash "git commit -m \"\$(cat <<'EOF'
@@ -1114,8 +1119,11 @@ check $P allow "x=\"\$(echo \"a)\")\"; echo ok"             "$(payload_bash 'x="
 check $R allow "git push origin mut && git branch -f op-x mut; echo \$PATH" "$(payload_bash 'git push origin mut && git branch -f op-x mut; echo $PATH')"
 # HOME '' in the agent's shell: `cd ~` stays put, for every gate (not only a push)
 check $P block "cd ~ && rm -rf data"                        "$(payload_bash 'cd ~ && rm -rf data')"
-FROM_ENV_HOME=$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], os.environ["HOME"]))' "$REPO")
-check $R block "cd ~ && cd <repo rel to HOME> && git push origin mut" "$(payload_bash "cd ~ && cd '$FROM_ENV_HOME' && git push origin mut")"
+# HOME is a repo whose HEAD is reviewed; with HOME '' the push runs where it is, on an unreviewed HEAD
+g worktree add -q --detach "$TMP/wt156" other2 && approve
+HOME="$REPO" check $R block "HOME=<reviewed repo>: cd ~ && git push origin HEAD:op-x (from other2)" "$(payload_at "$TMP/wt156" 'cd ~ && git push origin HEAD:op-x')"
+# with HOME '' a `cd ~/<path>` to nothing is a failed cd: the shell stays (not an unknown directory)
+HOME="$TMP" check $P allow "HOME=\$TMP: cd ~/<repo> && ls > op-out.txt" "$(payload_bash 'cd ~/"R&D repo" && ls > op-out.txt')"
 printf 'x\n\n%s\n' "$TRAILER" > "$REPO/op-msg.txt"
 check $A block "cd ~ && git commit -F op-msg.txt (a trailer)" "$(payload_bash 'cd ~ && git commit -F op-msg.txt')"
 rm -f "$REPO/op-msg.txt"
