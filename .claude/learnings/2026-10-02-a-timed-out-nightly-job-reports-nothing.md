@@ -62,3 +62,4 @@ cap to the wildcard strategies.
   never sees `cmd` fail (docs-reviewer caught it in the mutate step; `bash -e -c '(exit 1) | tee log || echo hit'`
   prints nothing). A step that pipes needs `shell: bash` (`-eo pipefail`).
 - Propagated to: `backend/tests/conftest.py` (`_EarlyFailures`), spec 08 §CI and §Mutation testing.
+- Test added: `backend/tests/unit/test_early_failures.py` (case table `test-early-failures.sh`, 4 gates.json mutants).

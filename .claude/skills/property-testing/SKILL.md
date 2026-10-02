@@ -93,7 +93,9 @@ profile (200) in parallel; the nightly workflow runs the whole suite at `ci` (2,
 `nightly` (50,000), the latter as a 5-part matrix under pytest-xdist split by measured time per test (the near-cap
 replay property alone, the other oracle-backed ones, `unit/engine`, `unit/ingest`, the rest), and the
 differential's own 8-way split. Those steps set `OP_EARLY_FAILURES=1` (`conftest.py`): a failure's falsifying
-example and blob are printed when it fails, so a step later interrupted at its time limit still shows them. Counterexamples found so
+example and blob are printed when it fails, so a step later interrupted at its time limit still shows them
+(`backend/tests/unit/test_early_failures.py`, case table `.claude/scripts/tests/test-early-failures.sh`, mutants in
+`gates.json`). Counterexamples found so
 far are golden rows (`("0", "0")` in test_canonical.py; `trust (trust OR track:main)` in test_defaults.py).
 Stems at the 200-expansion cap: the 5k corpus's stems jump from 117 terms to 278, so `synthetic_5k.cap_records()`
 adds 20 records whose words make `qca*` expand to 199 terms, `qcb*` to 200 and `qcc*` to 201 (refused), and

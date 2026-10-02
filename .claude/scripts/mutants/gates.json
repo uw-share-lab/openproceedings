@@ -3032,5 +3032,29 @@
   "file": ".claude/scripts/check_digest_pins.py",
   "old": "        elif re.match(r\"^RUN\\s\", inst, re.IGNORECASE):",
   "new": "        elif False:"
+ },
+ {
+  "label": "early failures: the variable's name drifts",
+  "file": "backend/tests/conftest.py",
+  "old": "os.environ.get(\"OP_EARLY_FAILURES\") == \"1\"",
+  "new": "os.environ.get(\"OP_EARLY_FAILURE\") == \"1\""
+ },
+ {
+  "label": "early failures: registered on the xdist workers instead of the controller",
+  "file": "backend/tests/conftest.py",
+  "old": "and not hasattr(config, \"workerinput\")",
+  "new": "and hasattr(config, \"workerinput\")"
+ },
+ {
+  "label": "early failures: passes reported instead of failures",
+  "file": "backend/tests/conftest.py",
+  "old": "        if report.failed:\n            terminal",
+  "new": "        if report.passed:\n            terminal"
+ },
+ {
+  "label": "early failures: the annotation shares the progress line",
+  "file": "backend/tests/conftest.py",
+  "old": "terminal.write(\"\\n\")",
+  "new": "terminal.write(\"\")"
  }
 ]

@@ -8,7 +8,7 @@ whole test session (limits: `pytest_configure`). Crawler tests use recorded HTTP
 Select with HYPOTHESIS_PROFILE or `--hypothesis-profile`: `dev` (200 examples, no wall-clock checks: the local
 default), `pr` (200 examples, 2 s deadline: the `test` workflow under pytest-xdist), `ci` (2,000, the `nightly` workflow's whole-suite job) and `nightly` (50,000,
 the `nightly` workflow's property and differential jobs). `OP_EARLY_FAILURES=1` prints a failure's report when the
-test fails (`_EarlyFailures`, below). `print_blob=True` so a CI failure prints a
+test fails (`_EarlyFailures`, below; tested by `unit/test_early_failures.py`). `print_blob=True` so a CI failure prints a
 `@reproduce_failure` blob; the example database (`.hypothesis/`) is gitignored.
 
 Wall-clock checks run only on CI runners (decision-024, TASK-146): `dev` has no deadline and suppresses
@@ -132,6 +132,8 @@ class _EarlyFailures:
             terminal = self.config.pluginmanager.get_plugin("terminalreporter")
             if terminal is None:  # `-p no:terminal`: nowhere to write
                 return
+            # end the progress line (under -q its dots don't), so the annotation starts a line
+            terminal.write("\n")
             terminal.write_line(f"::error::{report.nodeid} failed ({report.when}); its report follows")
             terminal.write_line(report.longreprtext)
 
