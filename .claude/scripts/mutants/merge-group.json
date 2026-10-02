@@ -1,0 +1,206 @@
+[
+ {
+  "label": "merge group: any base branch's queue ref accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "QUEUE_REF = re.compile(r\"refs/heads/gh-readonly-queue/dev/pr-",
+  "new": "QUEUE_REF = re.compile(r\"refs/heads/gh-readonly-queue/[a-z]+/pr-"
+ },
+ {
+  "label": "merge group: queue ref prefix-matched, not full",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "ref = QUEUE_REF.fullmatch(head_ref)",
+  "new": "ref = QUEUE_REF.match(head_ref)"
+ },
+ {
+  "label": "merge group: base/head shas not validated",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if not (SHA.fullmatch(base) and SHA.fullmatch(head)):",
+  "new": "if False:"
+ },
+ {
+  "label": "merge group: octopus merge accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if len(parents) != 2:",
+  "new": "if len(parents) < 2:"
+ },
+ {
+  "label": "merge group: non-merge commit accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if len(parents) != 2:",
+  "new": "if len(parents) > 2:"
+ },
+ {
+  "label": "merge group: chain not anchored at base",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if parents[0] != prev:",
+  "new": "if False:"
+ },
+ {
+  "label": "merge group: duplicate PR allowed",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if len(set(numbers)) != len(numbers):",
+  "new": "if False:"
+ },
+ {
+  "label": "merge group: head ref PR number not cross-checked",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if numbers[-1] != int(ref.group(1)):",
+  "new": "if False:"
+ },
+ {
+  "label": "merge group: merge subject ignored (always looked up)",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    if m := MERGE_SUBJECT.match(subject):\n        return int(m.group(1))\n",
+  "new": ""
+ },
+ {
+  "label": "merge group: lookup takes closed PRs",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "        and p.get(\"state\") == \"open\"\n        and (p.get(\"base\") or {}).get(\"ref\") == \"dev\"",
+  "new": "        and (p.get(\"base\") or {}).get(\"ref\") == \"dev\""
+ },
+ {
+  "label": "merge group: lookup takes any base",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "        and (p.get(\"base\") or {}).get(\"ref\") == \"dev\"\n        and (p.get(\"head\") or {}).get(\"sha\") == pr_head",
+  "new": "        and (p.get(\"head\") or {}).get(\"sha\") == pr_head"
+ },
+ {
+  "label": "merge group: lookup takes the first of several PRs",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if len(hits) != 1 or not isinstance(hits[0], int):",
+  "new": "if len(hits) < 1 or not isinstance(hits[0], int):"
+ },
+ {
+  "label": "merge group: lookup result type unchecked",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    if not isinstance(pulls, list):\n        raise GateError",
+  "new": "    if False:\n        raise GateError"
+ },
+ {
+  "label": "merge group: closed PR accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if p.get(\"state\") != \"open\":",
+  "new": "if False:"
+ },
+ {
+  "label": "merge group: PR into main accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if (p.get(\"base\") or {}).get(\"ref\") != \"dev\":",
+  "new": "if False:"
+ },
+ {
+  "label": "merge group: moved PR head accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if (p.get(\"head\") or {}).get(\"sha\") != e.pr_head:",
+  "new": "if False:"
+ },
+ {
+  "label": "merge group: review checks only the head ref's PR",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    for e in group:\n        if f\"<!-- op-review:",
+  "new": "    for e in group[-1:]:\n        if f\"<!-- op-review:"
+ },
+ {
+  "label": "merge group: review marker loses APPROVE",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "f\"<!-- op-review: {e.pr_head} APPROVE -->\"",
+  "new": "f\"<!-- op-review: {e.pr_head}\""
+ },
+ {
+  "label": "merge group: review marker sha prefix",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "f\"<!-- op-review: {e.pr_head} APPROVE -->\"",
+  "new": "f\"<!-- op-review: {e.pr_head[:12]}\""
+ },
+ {
+  "label": "merge group: learnings label substring",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "lb.get(\"name\") == \"no-learning\"",
+  "new": "\"no-learning\" in str(lb.get(\"name\"))"
+ },
+ {
+  "label": "merge group: learnings labels type unchecked",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "        if not isinstance(labels, list):\n            raise GateError",
+  "new": "        if False:\n            raise GateError"
+ },
+ {
+  "label": "merge group: learnings counts removed-only lines",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "if added.isdigit() and int(added) > 0 and LEARNING.fullmatch(path):",
+  "new": "if added.isdigit() and LEARNING.fullmatch(path):"
+ },
+ {
+  "label": "merge group: learnings name prefix-matched",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "and LEARNING.fullmatch(path):",
+  "new": "and LEARNING.match(path):"
+ },
+ {
+  "label": "merge group: learnings rename reads the old path",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "path, i = fields[i + 2], i + 3",
+  "new": "path, i = fields[i + 1], i + 3"
+ },
+ {
+  "label": "merge group: learnings checks only the head ref's PR",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    for e in group:\n        labels = pull(repo, e)",
+  "new": "    for e in group[-1:]:\n        labels = pull(repo, e)"
+ },
+ {
+  "label": "merge group: attribution skips commits",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "git(\"log\", \"--format=%B\", f\"{base}..{head}\")",
+  "new": "git(\"log\", \"--format=%B\", f\"{head}..{head}\")"
+ },
+ {
+  "label": "merge group: attribution skips titles",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "f\"{text(p, 'title')}\\n{text(p, 'body')}\"",
+  "new": "text(p, 'body')"
+ },
+ {
+  "label": "merge group: attribution skips bodies",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "f\"{text(p, 'title')}\\n{text(p, 'body')}\"",
+  "new": "text(p, 'title')"
+ },
+ {
+  "label": "merge group: attribution case-sensitive",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    re.IGNORECASE,\n)",
+  "new": ")"
+ },
+ {
+  "label": "merge group: attribution checks only the head ref's PR",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    for e in group:\n        p = pull(repo, e)",
+  "new": "    for e in group[-1:]:\n        p = pull(repo, e)"
+ },
+ {
+  "label": "merge group: non-string body accepted",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "        raise GateError(f\"#{p.get('number')}: {key} isn't a string\")",
+  "new": "        return str(v)"
+ },
+ {
+  "label": "merge group: PR JSON type unchecked",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    if not isinstance(p, dict):\n        raise GateError(f\"#{e.number}: the PR isn't a JSON object\")",
+  "new": "    if False:\n        pass"
+ },
+ {
+  "label": "merge group: errors don't fail the gate",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    sys.exit(1 if bad else 0)",
+  "new": "    sys.exit(0)"
+ },
+ {
+  "label": "merge group: gh failure ignored",
+  "file": ".claude/scripts/merge_group_gate.py",
+  "old": "    if r.returncode != 0:\n        raise GateError(f\"gh api",
+  "new": "    if False:\n        raise GateError(f\"gh api"
+ }
+]
