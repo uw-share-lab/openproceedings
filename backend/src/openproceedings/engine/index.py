@@ -169,8 +169,14 @@ def schema(version: str | None = None) -> tantivy.Schema:
 
 
 def open_index(path: Path) -> tantivy.Index:
-    """An existing index, with `exact_v1` registered (a query must be analysed the same way)."""
+    """An existing index, with `exact_v1` registered (a query must be analysed the same way), read with a
+    manual reload policy: a built index never changes, so nothing reloads it. tantivy-py's `Index.open` starts
+    a reader that reloads whenever a meta.json watcher thread polls (once at once, then on every change), and
+    each reload takes `.tantivy-meta.lock`, creating the file again; such a reload could land after the call
+    that opened the index returned, even after the engine was dropped, and write into a directory being
+    removed (TASK-165). Dropping that reader at once leaves the watcher no one to reload."""
     index = tantivy.Index.open(str(path))
+    index.config_reader(reload_policy="manual")
     index.register_tokenizer(ANALYZER, analyzer())
     return index
 
@@ -425,6 +431,7 @@ def build_index(
         writer: Any = None
         try:
             index = tantivy.Index(schema(schema_version), path=str(tmp))
+            index.config_reader(reload_policy="manual")  # reloaded once, below; never by a watcher (TASK-165)
             exact = analyzer()
             index.register_tokenizer(ANALYZER, exact)
             writer = index.writer(num_threads=1)  # one thread: documents keep id order, deterministically

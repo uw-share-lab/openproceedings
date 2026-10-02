@@ -4,10 +4,10 @@ title: >-
   Fix the race behind
   test_replay_with_the_pinned_index_gone_is_drifted_and_exits_0's rmtree
   'Directory not empty' under xdist
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-02 09:27'
-updated_date: '2026-10-02 09:52'
+updated_date: '2026-10-02 18:12'
 labels:
   - tests
   - bug
@@ -33,3 +33,12 @@ Source: a local full-suite run on a heavily loaded machine (2026-10-02). backend
 - [ ] #3 A regression check reproduces the old failure deterministically if practical (for example by holding a reader open), or the notes say why it can't be made deterministic
 - [ ] #4 The one test (or its module) passes in a loop of at least 200 runs under -n auto while the machine is under load, and the run is recorded in the notes
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Cause (2026-10-02): the writer is tantivy's meta.json watcher thread, which tantivy-py's Index.open starts with the default (OnCommitWithDelay) reader. Its first poll reloads the reader, and the reload takes META_LOCK, creating .tantivy-meta.lock again. That reload runs on its own thread holding its own Arc on the reader, so it can land after open returns and even after the Python engine is dropped. In test_replay_with_the_pinned_index_gone_is_drifted_and_exits_0 the in-process 'op record save' opens indexes/<big> (verify_index's throwaway open plus the engine's), and under load the watcher's reload lands inside shutil.rmtree, which then fails with ENOTEMPTY. Measured on the test index: 190 of 200 opens re-created the lock after open returned (0.1-54 ms later). After a del, none. A meta.json content change triggers no reload (tantivy 0.26). The facets pool is not involved.
+Fix: engine/index.py open_index calls index.config_reader(reload_policy='manual') at once (indexes are immutable; nothing needs a reload), and build_index does the same (it already reloads explicitly). This brings it to 12 of 200, all within 9 ms: only a first poll that beats config_reader can still reload, and tantivy-py offers no way to open without the watcher, so that window can't be closed from Python. So the three test_record_cli tests that removed an index right after an op call now take it away with an atomic rename out of the data dir (take_away). A late lock write lands in the moved directory, so there is no overlap at all. No retry, sleep or ignore_errors.
+Regression check: test_an_opened_index_is_read_with_a_manual_reload_policy pins the config_reader call. The race itself can't be made deterministic (the watcher is a Rust thread whose timing Python can't observe); the 190/200 vs 12/200 measurement is the evidence.
+Loop: the test, parametrized 200x, run with -n auto while other agents' suites were running (load average 117 -> 151): 200 passed in 27.2 s.
+<!-- SECTION:NOTES:END -->

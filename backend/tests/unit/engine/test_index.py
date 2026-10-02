@@ -470,3 +470,25 @@ def test_a_placed_index_that_fails_verification_says_to_retire_it(
             idx, "verify_index", lambda p: (_ for _ in ()).throw(IndexBuildError("still broken"))
         )
         build_index(tmp_path / "snap", tmp_path / "indexes", BUILT)
+
+
+def test_an_opened_index_is_read_with_a_manual_reload_policy(
+    built: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TASK-165: tantivy-py's `Index.open` starts a reader that a meta.json watcher thread reloads, and each
+    reload creates `.tantivy-meta.lock` again, a write that lands in the directory after `open` returns
+    (measured: 190 of 200 opens) and failed an `rmtree` of it. `open_index` replaces that reader at once with a
+    manual one, so a built index is never reloaded behind the caller's back (the watcher's first poll can still
+    beat it: 12 of 200, within 9 ms; tests remove an index by renaming it away, `test_record_cli.take_away`).
+    The watcher's timing can't be observed from Python, so this checks the call, not the race."""
+    calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    real = tantivy.Index.config_reader
+
+    def spy(self: tantivy.Index, *args: Any, **kwargs: Any) -> None:
+        calls.append((args, kwargs))
+        real(self, *args, **kwargs)
+
+    monkeypatch.setattr(tantivy.Index, "config_reader", spy)
+    index = open_index(built)
+    assert calls == [((), {"reload_policy": "manual"})]
+    assert index.searcher().num_docs == len(CORPUS)
