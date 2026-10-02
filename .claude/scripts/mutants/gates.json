@@ -3278,5 +3278,11 @@
   "file": ".claude/hooks/lib/cmdparse.py",
   "old": "            if cases or _case_cut_short(text[start:k], text[k + 1 :]):",
   "new": "            if cases:"
+ },
+ {
+  "label": "cmdparse: a \\-newline inside case hides it from the cut-short check (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    body, rest = body.replace(\"\\\\\\n\", \"\"), rest.replace(\"\\\\\\n\", \"\")",
+  "new": "    pass"
  }
 ]

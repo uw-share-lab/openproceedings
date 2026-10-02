@@ -825,6 +825,7 @@ def _case_cut_short(body: str, rest: str) -> bool:
     """Was a case statement cut short at one of its patterns' `)`: a `case` word in the body with no `esac` after
     it there, and an `esac` later in the command? Whatever way the `case <word> in` is spelt (a comment, `${x:- a}`,
     a `\\`-newline before `in`), its `esac` comes after the cut (TASK-156 review; fail closed)."""
+    body, rest = body.replace("\\\n", ""), rest.replace("\\\n", "")  # `ca\<newline>se` is `case` to bash
     last_case = max((m.start() for m in CASE_ANY.finditer(body)), default=-1)
     return last_case >= 0 and not ESAC_ANY.search(body, last_case) and ESAC_ANY.search(rest) is not None
 
