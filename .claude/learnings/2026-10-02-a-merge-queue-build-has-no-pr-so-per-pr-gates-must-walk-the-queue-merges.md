@@ -25,6 +25,17 @@ keep working.
   `git diff parent1...parent2` is that PR's own diff, so the `pull_request` learnings rule carries over as it
   is. Reading the PR's current body through the API, not an event snapshot, also avoids the stale-body race
   that the `pull_request` `review-attested` job has.
+- `gh pr merge <n> --auto` queues a PR by enabling auto-merge, so it needs the repository's "Allow auto-merge"
+  setting, which was off here (`gh api repos/uw-share-lab/openproceedings --jq .allow_auto_merge` → `false`).
+  Enabling a merge queue is therefore three settings, not two. GraphQL `enqueuePullRequest` works without it.
+- A per-PR gate that requires every PR in the range to be open can eject good entries. GitHub merges an entry
+  ahead as soon as its own build is green, so a later entry's jobs (or a re-run of them) may find that PR
+  closed. Accept exactly "merged by this group's own queue commit" (`merged` and `merge_commit_sha`).
+- A case table that checks only the exit status lets mutants survive behind incidental failures. A removed
+  type check still fails, just later, on an `AttributeError` that `main` catches. Every err row now names the
+  `::error::` text it expects. Before that change, 9 of 33 mutants survived.
+- A row that compares two separately built merge commits passes only when both land in the same second.
+  Take the commit from the chain under test (`$Q2^1`), not from a sibling branch.
 - The repo's `fake gh on PATH` pattern (from `test-changelog.sh`) plus real `git merge --no-ff` commits gives a
   table that covers the GitHub shape without network access.
 
