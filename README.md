@@ -173,7 +173,10 @@ mkdir -p data/takedowns && touch data/takedowns/withheld.txt
 OP_DATA_HOST=$PWD/data OP_INSTANCE=private docker compose -f deploy/compose.yml up -d --build --wait
 ```
 
-With the default `OP_DOMAIN=localhost`, Caddy serves https://localhost from its own local CA. A real domain
+If `data/records/` already holds a store from step 5's `op serve`, its files are yours, not uid 10001's, and
+the API can't open them: give the whole directory to the API (`sudo chown -R 10001:10001 data/records`) or
+start from an empty one. With the default `OP_DOMAIN=localhost`, Caddy serves https://localhost from its own
+local CA. A real domain
 gets a Let's Encrypt certificate. The runbook,
 [`deploy/README.md`](deploy/README.md), covers the settings, promoting and retiring an index, takedowns, and
 what remains for a real host. `deploy/smoke-test.sh` runs the whole stack over a throwaway fixture and checks
@@ -226,8 +229,8 @@ the suite at 2,000 examples, every property and the differential (Tantivy agains
 ## Citing
 
 If you use openproceedings in a review, cite it with [`CITATION.cff`](CITATION.cff) (GitHub's "Cite this
-repository" button renders it). Save each search as a search record, and report the record's link and its
-`index_version` (records and exports name it). A saved record keeps its index from being retired, so the
+repository" button renders it). Save each search as a search record, and report the record's link, its
+`index_version` (records and exports name it) and the openproceedings release (`op --version`). A saved record keeps its index from being retired, so the
 search can be replayed on that instance. A version no record pins may be retired, and a later release that
 changes the tokenizer or schema replays older records as `drifted`, saying what changed.
 

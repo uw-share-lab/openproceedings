@@ -35,15 +35,20 @@ query=zzsmokequeryword # must never reach a log line
 linux=false
 [ "$(uname -s)" = Linux ] && linux=true
 
-# as root in a throwaway container of the api image (no network): what an operator does with sudo
+# as root in a throwaway container of the api image (no network, never a pulled image): what an operator
+# does with sudo. Usage: as_root '<sh script using "$1"…>' <args…> (paths go in as arguments, never into
+# the script text)
 as_root() {
-  docker run --rm --user 0:0 --network none --entrypoint sh -v "$work:$work" \
-    -v "$PWD/deploy/index-permissions.sh:/index-permissions.sh:ro" "$api_image" -c "$1"
+  local script=$1
+  shift
+  docker run --pull never --rm --user 0:0 --network none --entrypoint sh -v "$work:$work" \
+    -v "$PWD/deploy/index-permissions.sh:/index-permissions.sh:ro" "$api_image" -c "$script" sh "$@"
 }
 
 cleanup() {
   "${dc[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
-  if $linux; then as_root "rm -rf '$work/data/records'" >/dev/null 2>&1 || true; fi # op-api's, 0700
+  # shellcheck disable=SC2016 # "$1" expands inside the container's sh, on purpose
+  if $linux; then as_root 'rm -rf "$1"' "$work/data/records" >/dev/null 2>&1 || true; fi # op-api's, 0700
   docker image rm "openproceedings-api:$OP_IMAGE_TAG" "openproceedings-web:$OP_IMAGE_TAG" \
     "openproceedings-caddy:$OP_IMAGE_TAG" >/dev/null 2>&1 || true
   chmod -R u+w "$work" 2>/dev/null || true
@@ -80,7 +85,8 @@ echo "current -> $big; also built $small and $spare"
 read -r listed neighbour < <(python3 -c '
 import json, sys
 ids = [r["id"] for r in map(json.loads, open(sys.argv[1], encoding="utf-8")) if r.get("abstract")]
-print(ids[0], ids[1])' "$OP_DATA_HOST/snapshots/small/records.jsonl")
+print(ids[0], ids[1])' "$OP_DATA_HOST/snapshots/small/records.jsonl") \
+  || fail "the fixture has fewer than two records with abstracts"
 printf '%s\n' "$listed" >"$OP_DATA_HOST/takedowns/withheld.txt"
 export OP_TAKEDOWN_LOG_HOST="$work/takedown-log"
 (umask 077 && mkdir "$OP_TAKEDOWN_LOG_HOST" && printf '{"record_id": "%s", "received": "2026-10-02", "requester": "smoke test", "basis": "smoke test", "decision": "withheld", "applied": "2026-10-02", "first_index_version": null}\n' "$listed" >"$OP_TAKEDOWN_LOG_HOST/log.jsonl")
@@ -91,9 +97,11 @@ step "build the images ($OP_IMAGE_TAG)"
 
 step "host setup: the record store and index permissions (as root, as an operator would with sudo)"
 if $linux; then
-  as_root "install -d -o 10001 -g 10001 -m 0700 '$OP_DATA_HOST/records'"
+  # shellcheck disable=SC2016 # "$1" expands inside the container's sh, on purpose
+  as_root 'install -d -o 10001 -g 10001 -m 0700 "$1"' "$OP_DATA_HOST/records"
   for v in "$big" "$small" "$spare"; do
-    as_root "/index-permissions.sh '$OP_DATA_HOST/indexes' $v"
+    # shellcheck disable=SC2016 # "$1" expands inside the container's sh, on purpose
+    as_root '/index-permissions.sh "$1" "$2"' "$OP_DATA_HOST/indexes" "$v"
   done
 else
   mkdir -m 0700 "$OP_DATA_HOST/records"
@@ -181,11 +189,14 @@ grep -q "\"index_version\":\"$small\"" <<<"$health" || fail "healthz after retir
 replay=$("${curl_tls[@]}" "$base/api/v1/records/$record" | json 'd["replay"]["status"]') || fail "the record after retire"
 echo "record $record on its pinned $big replays: $replay"
 [ "$replay" = reproduced ] || fail "record $record replays as $replay, not reproduced"
-# the ops container ran as root on the record store: every file there must still be op-api's
-owners=$("${dc[@]}" exec -T api sh -c 'stat -c "%u %n" /data/records/*')
-echo "$owners"
-if grep -qv '^10001 ' <<<"$owners"; then
-  fail "a file in the record store is not op-api's after retire"
+# the ops container ran as root on the record store: every file there must still be op-api's (Linux only:
+# Docker Desktop reports its file server's owner, not the file's)
+if $linux; then
+  owners=$("${dc[@]}" exec -T api sh -c 'stat -c "%u %n" /data/records/*')
+  echo "$owners"
+  if grep -qv '^10001 ' <<<"$owners"; then
+    fail "a file in the record store is not op-api's after retire"
+  fi
 fi
 "${curl_tls[@]}" -o /dev/null -X POST -H 'content-type: application/json' -d '{"q":"model"}' "$base/api/v1/records" \
   || fail "saving a search record after retire"

@@ -34,8 +34,13 @@ fi
 chgrp -R -h "$gid" "$dir"
 chmod 0750 "$dir"
 for lock in "$dir/.tantivy-meta.lock" "$dir/.tantivy-writer.lock"; do
-  [ -f "$lock" ] || : >"$lock"
+  if [ -L "$lock" ]; then # checked again right before use: chmod follows a symlink
+    echo "$0: $lock is a symlink" >&2
+    exit 1
+  fi
+  [ -e "$lock" ] || : >"$lock"
   chgrp -h "$gid" "$lock"
-  chmod 0660 "$lock"
 done
+# -type f never matches a symlink, so a lock swapped for one after the check above is left alone
+find "$dir" -maxdepth 1 -type f -name '.tantivy-*.lock' -exec chmod 0660 {} +
 echo "$dir: group $gid, directory 0750, lock files 0660"

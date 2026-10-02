@@ -39,6 +39,7 @@ gitignored, like every `.env`).
 | `OP_HSTS` | `max-age=63072000` | the `Strict-Transport-Security` value. Leave `includeSubDomains` out until TASK-064 decides the domain (`Caddyfile`) |
 | `OP_HTTP_PORT`, `OP_HTTPS_PORT` | `80`, `443` | the host ports |
 | `OP_TAKEDOWN_LOG_HOST` | none | the directory that holds the takedown log, used only by `takedown-check` |
+| `OP_API_UID`, `OP_API_GID` | `10001`, `10001` | the `api` user's uid and gid, built into the image; ids no host account or group uses (§Permissions) |
 | `OP_IMAGE_TAG` | `local` | the tag of the images compose builds (`smoke-test.sh` uses its own, so it never replaces these) |
 | `OP_INTERNAL_SUBNET`, `OP_INTERNAL_IP_RANGE`, `OP_PROXY_ADDRESS` | `172.30.80.0/24`, `172.30.80.128/25`, `172.30.80.2` | the internal network, the part of it `api` and `web` get addresses from, and Caddy's fixed address outside that part: the one address `op serve --trusted-proxy` believes `X-Forwarded-For` from. Change them only if the subnet clashes with the host's |
 
@@ -56,8 +57,13 @@ $OP_DATA_HOST/
   because an editor that saves by renaming would otherwise leave the container reading the old list after a
   SIGHUP. It must never contain the log. Keep the takedown log (decision-022 and its 2026-10-02 addendum) in
   its own directory outside the data directory, for example `/srv/openproceedings/takedown-log/log.jsonl`,
-  with the directory 0700 and the file 0600, both owned by the operator's account. Name the directory with
-  `OP_TAKEDOWN_LOG_HOST`. On a fresh instance `withheld.txt` is an empty file. It must exist, because
+  with the directory 0700 and the file 0600, both owned by the operator's account (the owner's requirements: a
+  host file outside the repository that only the operator can read). Set it up once, as the operator:
+  ```bash
+  install -d -m 0700 /srv/openproceedings/takedown-log
+  (umask 077 && touch /srv/openproceedings/takedown-log/log.jsonl)   # 0600
+  ```
+  Name the directory with `OP_TAKEDOWN_LOG_HOST`. On a fresh instance `withheld.txt` is an empty file. It must exist, because
   `op serve` behind the proxy refuses to load without it (`takedowns_missing`). Give it mode 0644 and the
   directory 0755.
 - **`records/` is the only copy of every saved search.** It belongs to `op-api`: create it once with
@@ -74,8 +80,14 @@ $OP_DATA_HOST/
 
 ## Permissions
 
-`api` runs as `op-api` (uid 10001), which is neither root nor the operator's account that owns the log
-(TASK-065 AC #3). Tantivy can't open an index without writing its lock file, `.tantivy-meta.lock`, so the
+`api` runs as `op-api` (uid and gid 10001 by default), which is neither root nor the operator's account that
+owns the log (TASK-065 AC #3). File modes on the host see only the numbers, so **no host account or group may
+already have them**: one that did could read the record store and open the indexes. Check once on the host:
+```bash
+getent passwd 10001; getent group 10001   # both must print nothing
+```
+If either is taken, pick free ids, set `OP_API_UID` and `OP_API_GID`, rebuild (`dc build`), and use those ids
+below in place of 10001 (`index-permissions.sh` takes the gid as its third argument). Tantivy can't open an index without writing its lock file, `.tantivy-meta.lock`, so the
 `indexes/` mount can't be read-only. Plain file modes keep the API from changing the index instead:
 
 - `indexes/` itself: owned by the operator, mode 0755. The API can't add, remove or repoint anything there.
@@ -136,8 +148,10 @@ served, and promoting an index is its own procedure (next section).
 2. Confirm `/api/v1/healthz` and `/api/v1/meta` (the same `index_version` as before) over TLS.
 3. **A release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy** can't serve an index built by
    older code (`unservable`). Build and verify the new index first, with that release's checkout
-   (§Promoting an index, steps 1 to 3). Then switch `current` to it and deploy the code in one step:
-   `ln -sfn` as in step 4 below, then `dc up -d --build --wait`. Keep the older indexes that records pin: the
+   (§Promoting an index, steps 1 to 3, run on the host from the release's checkout). Then build the images
+   first (`dc build`, which takes minutes), switch `current` to the new index as in §Promoting an index,
+   step 4 (without the SIGHUP), and start the new code at once with `dc up -d --wait`. Building first keeps
+   the old code from ever running against an index it can't serve. Keep the older indexes that records pin: the
    release each was saved under still serves them (spec 08 §Release, step 8).
 4. **Rollback:** check out the previous tag and `dc up -d --build --wait`. If the release also changed
    `current`, point it back first.
@@ -155,11 +169,14 @@ index.
    - `uv run pytest backend/tests/golden backend/tests/contract`;
    - `uv run op index parity --index <new_version>`;
    - `uv run op eval coverage --index <new_version> --check --out "$(mktemp -d)"` (the M4 gate; no report
-     lands in the tree);
-   - replay a sample of saved searches on the API's own store:
-     `dc exec api op record replay <id> --index <new_version> --json`. A record whose own index is kept
-     replays on it (`reproduced`, unless the code changed); `mismatch` (exit 3) blocks the promotion.
-3. **Permissions:** `sudo deploy/index-permissions.sh "$OP_DATA_HOST/indexes" <new_version>`.
+     lands in the tree).
+   For a release that changes `TOKENIZER_VERSION`, `SCHEMA_VERSION` or Tantivy, run all of these from the
+   release's checkout on the host: the running images can't serve the new index.
+3. **Permissions:** `sudo deploy/index-permissions.sh "$OP_DATA_HOST/indexes" <new_version>`. Then replay a
+   sample of saved searches on the API's own store, `dc exec api op record replay <id> --json`. This checks
+   the running code, not the new index: a record replays on its own index whenever that index is kept, so
+   every sampled record whose index is kept must report `reproduced`, and `mismatch` (exit 3) blocks the
+   promotion. `--index <new_version>` applies only to a record whose own index is gone.
 4. **Switch `current` atomically and reload:**
    ```bash
    cd "$OP_DATA_HOST/indexes" && ln -sfn <new_version> current.tmp && mv -T current.tmp current && cd -
@@ -186,7 +203,7 @@ refuses, since the operator can't read the store.
 
 1. Confirm the new version is served (§Promoting an index, step 5), and that no other instance serves the
    old one by name (`op serve --index <v>`): retire can't see that.
-2. `grep -rn <old_version> docs/results data/embeddings`: a version a committed report cites is a decision
+2. `grep -rn <old_version> docs/results "$OP_DATA_HOST/embeddings"` (from a checkout): a version a committed report cites is a decision
    to retire, not a default.
 3. Retire:
    ```bash
@@ -210,15 +227,16 @@ outside the data directory, at `$OP_TAKEDOWN_LOG_HOST/log.jsonl`.
 1. **Log** the request in the log (one JSON object: `record_id`, `received`, `requester`, `basis`,
    `decision`, `applied`, `first_index_version`).
 2. **Withhold:** add the id to `$OP_DATA_HOST/takedowns/withheld.txt`, then `dc kill -s HUP api`. Every
-   loaded version withholds the abstract from that reload on. Look for `takedowns_reloaded` in the API's log.
+   loaded version withholds the abstract from that reload on. Look for `takedowns_reloaded` in the API's log,
+   then set the entry's `applied` date.
 3. **Check**, as the operator's account, against the API itself (on the internal network, not through the
    proxy):
    ```bash
    dc run --rm --user "$(id -u):$(id -g)" takedown-check
    ```
    It exits 0 when no loaded version serves a listed abstract and the log agrees with the list.
-4. **Rebuild and promote** (§Promoting an index): the new snapshot no longer holds the abstract. Fill in the
-   entry's `applied` and `first_index_version`.
+4. **Rebuild and promote** (§Promoting an index): the new snapshot no longer holds the abstract. Set the
+   entry's `first_index_version` to the version just promoted.
 5. **Check again** (step 3), and after every promotion while the list names anything.
 
 **Lifting a takedown:** append a `lifted` entry (with its `applied` date), remove the line from

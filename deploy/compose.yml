@@ -6,7 +6,7 @@
 #
 # Settings (environment, or an `.env` file beside this one; deploy/README.md §Settings):
 #   OP_DATA_HOST          required: the host's data directory, holding indexes/ (with `current`), snapshots/,
-#                         records/ (0700, owned by uid 10001) and takedowns/withheld.txt (and nothing else in
+#                         records/ (0700, owned by OP_API_UID) and takedowns/withheld.txt (and nothing else in
 #                         takedowns/: the log lives elsewhere)
 #   OP_INSTANCE           required: public | private (the web image's build gate; public needs a contact)
 #   OP_TAKEDOWN_CONTACT   the takedown contact, compiled into the web image (required when public)
@@ -18,6 +18,7 @@
 #                         172.30.80.0/24, 172.30.80.128/25 and 172.30.80.2): the one address the API believes
 #                         X-Forwarded-For from
 #   OP_IMAGE_TAG          the tag of the three images built here (default local); smoke-test.sh uses its own
+#   OP_API_UID, OP_API_GID  the api user's uid and gid (default 10001): ids no host account or group has
 #
 # Needs Docker Engine 26.0.0 or later (or 25.0.4 / 23.0.11): before those, the embedded DNS forwarded lookups
 # from an `internal` network to outside resolvers (CVE-2024-29018), a way out of the no-egress network below.
@@ -36,9 +37,13 @@ services:
     build:
       context: ..
       dockerfile: deploy/api.Dockerfile
+      args:
+        OP_API_UID: ${OP_API_UID:-10001}
+        OP_API_GID: ${OP_API_GID:-10001}
     image: openproceedings-api:${OP_IMAGE_TAG:-local}
-    # neither root nor the operator's account: the image's op-api (uid and gid 10001; TASK-065 AC #3)
-    user: "10001:10001"
+    # neither root nor the operator's account: the image's op-api (TASK-065 AC #3). Its uid and gid must be
+    # unused on the host, or that account could read the record store and open the indexes
+    user: "${OP_API_UID:-10001}:${OP_API_GID:-10001}"
     command:
       - serve
       - --host

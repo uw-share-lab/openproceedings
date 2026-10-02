@@ -213,7 +213,8 @@ Tantivy fix, shows up as a Dependabot alert and is fixed by a hand-made PR.
 name from `OP_DOMAIN`, Caddy's local CA for `localhost` and ACME for a real name. The operator's runbook (settings,
 first start, promotion, retire, takedowns, what remains for the host) is `deploy/README.md`; nothing in `deploy/`
 names a host or provider (00, question 5; TASK-064). Every container runs as a non-root user (`api` as `op-api`,
-uid 10001, never the operator's account; `web` as `node`; `caddy` as uid 10002, binding 80 and 443 through
+uid and gid 10001 by default, `OP_API_UID`/`OP_API_GID` when a host account already has them, never the
+operator's account; `web` as `node`; `caddy` as uid 10002, binding 80 and 443 through
 the container's `net.ipv4.ip_unprivileged_port_start`) with a read-only root filesystem, every capability dropped
 and `no-new-privileges`; `api` and `web` are on an `internal` network with no route out, and `--trusted-proxy`
 names Caddy's fixed address on it. `deploy/smoke-test.sh` runs the whole stack over a fixture (TLS, the users and
@@ -286,7 +287,7 @@ the WAL files SQLite writes beside it; spec 04 §Search records), and `indexes/`
 group `op-api` and only its two lock files group-writable (`deploy/index-permissions.sh`, run after each `op index
 build`), and `indexes/` itself stays the operator's, 0755: the API can open an index and can't add, remove or
 repoint anything. `snapshots/` holds each served index's snapshot (`/papers/{id}` reads provenance from it). Run
-`op record save` and `op record replay` as the API's service user (`docker compose exec api op record …`, or
+`op record save` and `op record replay` as the API's service user (`docker compose -f deploy/compose.yml exec api op record …`, or
 `sudo -u <api user> op record …` outside compose): the store's directory is 0700 and `records.sqlite` 0600, so a record
 saved as another user leaves a store (and WAL files) the API can't write, or can't read at all. Refreshing the index
 means building a new `index_version` offline, switching the `current` symlink, and sending SIGHUP; an old
@@ -472,7 +473,7 @@ hosted (00, question 5). The first release is tagged once TASK-065 (deploy) is d
 
 | Version | Lives in | Changes when |
 |---|---|---|
-| app `X.Y.Z` | `backend/pyproject.toml` and `frontend/package.json` `version`, kept equal (also recorded in `uv.lock` and `package-lock.json`); `op --version` and the snapshot manifest's `openproceedings_version` report it | once per release, on its release branch |
+| app `X.Y.Z` | `backend/pyproject.toml` and `frontend/package.json` `version`, kept equal (also recorded in `uv.lock` and `package-lock.json`), and `CITATION.cff`'s `version` with its `date-released`; `op --version` and the snapshot manifest's `openproceedings_version` report it | once per release, on its release branch |
 | `TOKENIZER_VERSION`, `SCHEMA_VERSION` | the code; inputs to `index_version` (03 §Versioning) | the `index-versioning` bump rules |
 | Tantivy | the exact `tantivy==` pin in `backend/pyproject.toml` and `uv.lock`; each index manifest's `tantivy_version` (not an `index_version` input) | a dependency upgrade, which always bumps `SCHEMA_VERSION` too, so the release gets a new `index_version` it can build and serve (a replay reports it as `schema_version`). Always by hand: Dependabot's `uv` entry ignores `tantivy` (below) |
 | `QUERY_VERSION` | the code; in `canonical_hash` and every search record (04) | the `index-versioning` bump rules |
@@ -558,7 +559,9 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    naming exactly the changed inputs; a `mismatch` (exit 3, `API_REPLAY_MISMATCH`) blocks the release.
 4. **Release branch.** From here until the tag exists, nothing else merges into `dev`. `git switch -c
    release/X.Y.Z origin/dev`; set `version` to `X.Y.Z` in `backend/pyproject.toml` and
-   `frontend/package.json`, then `uv lock` and `npm install --package-lock-only --ignore-scripts`; add
+   `frontend/package.json`, then `uv lock` and `npm install --package-lock-only --ignore-scripts`; in
+   `CITATION.cff` set `version: X.Y.Z` and `date-released:` to the day the tag is planned for (step 6; if the
+   tag lands on another day, the back-merge in step 7 corrects the date on `dev`); add
    `[releases."X.Y.Z"]` to `docs/releases.toml` from step 3's index manifest
    (`data/indexes/<v>/manifest.json`) and the code's `QUERY_VERSION` (never edit a released table); `make
    changelog RELEASE=X.Y.Z`, which checks the table against that manifest (so run it in the checkout that
@@ -585,7 +588,7 @@ the record pins, which is why tags and retention (step 8) matter (guarantee 4).
    `git rev-parse vX.Y.Z^{commit}` is that sha.
 7. **Back-merge.** `main` now holds the promotion's merge commit, which `dev` lacks, and the next promotion
    can't merge until `dev` has it. `git switch -c release/X.Y.Z-back-merge origin/dev && git merge --no-ff
-   origin/main` (no file changes), `/review-gate`, `git push -u origin release/X.Y.Z-back-merge` (the review
+   origin/main` (no file changes, unless `CITATION.cff`'s `date-released` needs the tag's actual date), `/review-gate`, `git push -u origin release/X.Y.Z-back-merge` (the review
    record covers the merge commit), then `gh pr create --base dev --title "chore: back-merge main after
    X.Y.Z" --body-file <file> --label no-learning` and `record-review.py APPROVE <dispositions> --attest`.
    Merge it with a merge commit, never `--squash` or `--rebase`, which would leave `main`'s commit out of

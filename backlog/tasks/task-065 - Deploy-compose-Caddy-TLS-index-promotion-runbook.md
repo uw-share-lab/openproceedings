@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-02 19:21'
+updated_date: '2026-10-02 19:33'
 labels:
   - ops
 milestone: m-6
@@ -42,6 +42,8 @@ Host-agnostic: nothing names a host (TASK-064 decides).
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
+From the task-023 review (2026-09-26): a Tantivy index directory must be writable to open (readers take .tantivy-meta.lock), so an index can't be served from a read-only mount as built; the deploy needs a writable volume, or an overlay, for data/indexes/<v>/ (files stay read-only and hash-verified). (2026-10-02: confirmed, but only the lock files need write access; deploy/index-permissions.sh, below.)
+
 2026-10-02, host-agnostic build. Nothing names a host; TASK-064 is the owner's.
 
 - deploy/compose.yml runs three services:

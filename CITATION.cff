@@ -14,7 +14,10 @@ abstract: >-
 authors:
   - given-names: Jeevan
     family-names: Parmar
-    affiliation: "SHARE Lab, University of Waterloo"
+    affiliation: "University of Waterloo, SHARE Lab"
+  - given-names: Sharon
+    family-names: Ferguson
+    affiliation: "University of Waterloo, SHARE Lab"
 repository-code: "https://github.com/uw-share-lab/openproceedings"
 license: MIT
 keywords:

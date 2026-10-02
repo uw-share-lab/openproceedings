@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@jeevan'
 created_date: '2026-09-26 01:06'
-updated_date: '2026-10-02 18:57'
+updated_date: '2026-10-02 19:33'
 labels:
   - docs
 milestone: m-6
@@ -31,7 +31,7 @@ README and CONTRIBUTING as-built for external users; citation info.
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 README quickstart verified on a clean machine
-- [ ] #2 CITATION.cff added
+- [x] #2 CITATION.cff added
 - [ ] #3 Repo visibility is public and README links the instance (spec 00 §Milestones M6)
 - [ ] #4 Public instance reachable over TLS with the current index_version on /healthz
 - [ ] #5 The outcome of the copyright-office consultation (TASK-135, recommended, not blocking), if any, is recorded before launch
@@ -50,4 +50,6 @@ README and CONTRIBUTING as-built for external users; citation info.
 - make lint passed in the same container.
 README fixes from the run: the quickstart had no clone step (added: git clone … && cd openproceedings); git and make were missing from the prerequisites (added); shellcheck now names apt-get too; uv provides Python 3.12 when it is missing (said); the search example now says what a 2013-only crawl returns, and the export example uses a real query instead of a placeholder.
 AC#2: CITATION.cff added and valid against the CFF 1.2.0 schema (uvx cffconvert --validate: 'Citation metadata are valid according to schema version 1.2.0'). The author list is pending from team-lead: Jeevan Parmar plus a placeholder entry. Left unchecked until the real list is in.
+
+2026-10-02, AC#2: CITATION.cff lists the authors the owner gave (via team-lead): Jeevan Parmar and Sharon Ferguson, both with affiliation 'University of Waterloo, SHARE Lab', no ORCIDs. It validates against CFF 1.2.0 (cffconvert --validate). The message asks users to cite the saved record's link, its index_version and the release (op --version). Spec 08 §Release step 4 now sets CITATION.cff version and date-released on each release branch.
 <!-- SECTION:NOTES:END -->

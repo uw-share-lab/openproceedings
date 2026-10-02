@@ -135,13 +135,20 @@ spec 08's proposal and were settled in TASK-136.
 
 ## Addendum (2026-10-02, TASK-065: where the log lives under compose)
 
-- **The API's takedown mount holds only the list.** Under `deploy/compose.yml`, the `api` container mounts
-  `<data-dir>/takedowns/` read-only. It mounts the directory, not the file, so a list that an editor saves by
-  renaming is still re-read on SIGHUP. That directory holds only `withheld.txt`. The log moves out of it, to a
-  directory of its own outside the data directory: for example `/srv/openproceedings/takedown-log/log.jsonl`,
-  with the directory 0700 and the file 0600, both the operator's. Nothing else in §2 changes: the API never reads
-  the log, and `op takedown check` reads it as the operator's account, with `--log` naming that path (the compose
-  `takedown-check` service passes it). The list keeps its default path, so `op snapshot build` and `op export`
-  need no flag. The default log path, `<data-dir>/takedowns/log.jsonl`, stays valid for a deployment without
-  compose that keeps the log away from the API's user. This is the hosting-model change that "What would reopen
-  it" anticipated, limited to where the file sits. It doesn't change who reads it.
+- **What the owner decided on 2026-09-30, and what was only an example.** The owner set two requirements for
+  the takedown log: it is a file **on the deployment host, outside the repository**, and **only the operator's
+  account can read it** (§2). The path `<data-dir>/takedowns/log.jsonl`, next to the list, was an example
+  location that meets both. It was not a third requirement.
+- **Why the example path moves under compose.** TASK-065 AC #3 (also owner-approved) has the `api` container
+  mount, read-only, a directory that holds only `withheld.txt`. It mounts the directory, not the file, so a
+  list an editor saves by renaming is still re-read on SIGHUP. A log beside the list would sit inside that
+  mount, readable from the API's container. So under `deploy/compose.yml` the log lives in a directory of its
+  own outside the data directory, for example `/srv/openproceedings/takedown-log/log.jsonl`. The directory is
+  0700 and the file 0600, both owned by the operator's account. Both owner requirements still hold: the file is
+  on the host, outside the repository, and only the operator can read it. The API can't reach it at all.
+- **Nothing else in §2 changes.** The API never reads the log. `op takedown check` reads it as the operator's
+  account, with `--log` naming that path (the compose `takedown-check` service passes it, running as the
+  operator's uid). The list keeps its default path, so `op snapshot build` and `op export` need no flag. The
+  default log path, `<data-dir>/takedowns/log.jsonl`, stays valid for a deployment without compose whose API
+  user can't read it. Approved by team-lead on 2026-10-02, with no further owner sign-off needed, since both
+  of the owner's requirements are kept.
