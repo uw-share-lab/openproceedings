@@ -11,12 +11,12 @@ description: The openproceedings test pyramid from spec 07 — unit, golden, dif
 | Unit | `backend/tests/unit/` | inline values | 100% pass |
 | Golden tokens | `backend/tests/golden/test_tokens.py` | 02 table + ≥100 cases | 100% pass |
 | Golden queries | `backend/tests/golden/` | hand-built **200-record** fixture | 100% pass, exact ID sets |
-| Differential | `backend/tests/differential/` | **5k fixture snapshot** | `TantivyEngine == ReferenceEngine`, 0 counterexamples in 200 (PR CI) / 2,000 (nightly `suite-ci`) / 50k (nightly, its own job: task-057) |
+| Differential | `backend/tests/differential/` | **5k fixture snapshot** | `TantivyEngine == ReferenceEngine`, 0 counterexamples in 200 (PR CI) / 50k (nightly, its own 8-way split `differential` job: TASK-057) |
 | Contract | `backend/tests/contract/` | 5k fixture index via `TestClient` | every endpoint, OpenAPI snapshot, export round-trips, record replay (reproduced + drifted + mismatch) |
 | Frontend unit | `frontend/**/*.test.ts(x)` (Vitest) | mocked API from generated types | builder↔AST, URL reducer |
 | e2e | Playwright | `backend/tests/e2e/fixture_server.py` builds/serves the temporary 5k index; production frontend build | the 05 §Testing flow end to end |
 | Bench | pytest-benchmark | fixture index (`bench` workflow, advisory), 80k report (`report_80k.py`) | >20% regression of the minimum fails the `bench` check |
-| Nightly | property/golden fixtures and exhaustive Unicode inputs | no full corpus | the whole backend suite at the `ci` profile (2,000), oracle-backed and remaining properties at 50k, exhaustive tokenizer check, full gate/tooling mutation run; differential@50k is deferred to TASK-057 |
+| Nightly | property/golden fixtures and exhaustive Unicode inputs | no full corpus | the whole backend suite at the `ci` profile (2,000), oracle-backed and remaining properties at 50k, exhaustive tokenizer check, differential@50k (8 parallel jobs), spec 03 benchmarks with their budgets plus the ~80k report, full gate/tooling mutation run (TASK-057) |
 
 ## Fixtures (`backend/tests/fixtures/`)
 - **Golden 200:** hand-built records whose text is written to be tricky (benchmark/benchmarking,

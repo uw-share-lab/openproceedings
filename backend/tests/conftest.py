@@ -7,7 +7,7 @@ whole test session (limits: `pytest_configure`). Crawler tests use recorded HTTP
 
 Select with HYPOTHESIS_PROFILE or `--hypothesis-profile`: `dev` (200 examples, no wall-clock checks: the local
 default), `pr` (200 examples, 2 s deadline: the `test` workflow under pytest-xdist), `ci` (2,000, the `nightly` workflow's whole-suite job) and `nightly` (50,000,
-the `nightly` workflow's property jobs). `print_blob=True` so a CI failure prints a
+the `nightly` workflow's property and differential jobs). `print_blob=True` so a CI failure prints a
 `@reproduce_failure` blob; the example database (`.hypothesis/`) is gitignored.
 
 Wall-clock checks run only on CI runners (decision-024, TASK-146): `dev` has no deadline and suppresses

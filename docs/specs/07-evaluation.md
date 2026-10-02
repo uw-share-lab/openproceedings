@@ -13,7 +13,7 @@ build). Others are reports (they're regenerated and committed as dated results, 
 |---|---|---|
 | Golden tokens | 02's table plus 100 or more normalization cases | 100% pass |
 | Golden queries | Query → expected ID set on a hand-built 200-record fixture, with the cases written to be tricky (benchmark/benchmarking, trust/trustworthy, hyphens, LaTeX, phrases that span fields, NEAR ordering) | 100% pass |
-| Differential | Hypothesis random ASTs: `TantivyEngine == ReferenceEngine` on the synthetic 5k fixture snapshot (decision-004) | 0 counterexamples in 200 examples per PR CI run, 2,000 and 50k nightly |
+| Differential | Hypothesis random ASTs: `TantivyEngine == ReferenceEngine` on the synthetic 5k fixture snapshot (decision-004) | 0 counterexamples in 200 examples per PR CI run, 50k nightly |
 | Tokenizer parity | Stored text, positions (phrase read-back) and every term's document frequency in the index == `normalize.py`, over the whole corpus (term frequency only as far as the phrases imply) | 0 diffs |
 | Semantic invariant (deferred with 06, decision-017; not a v1 gate) | Search results identical with 06 on and off | 0 diffs, once 06 is built |
 | Determinism | Same canonical query + `index_version` → identical order and scores | 0 diffs |
@@ -28,8 +28,11 @@ all-negative ones included, it compares:
 - `total` for every sort, and the `year_asc` order;
 - for trees that parse, the exclusion counts.
 
-Shrunk counterexamples are kept in `differential-regressions.json` and replayed on every run. The 50k
-nightly job is task-057.
+Shrunk counterexamples are kept in `differential-regressions.json` and replayed on every run. The `nightly`
+workflow's `differential` job runs 50,000 examples as 8 parallel jobs of 6,250, each with its own seed
+(TASK-057). Wildcard stems include ones at the 200-expansion cap's edge: 20 records added to the corpus the
+engines search give `qca*` 199 terms, `qcb*` 200 and `qcc*` 201 (refused), since the 5k corpus's own stems
+jump from 117 terms to 278.
 
 ## B. Scholar comparison (report, `op eval scholar`)
 
@@ -129,7 +132,9 @@ free of false failures on shared runners (spec 08); sub-millisecond calls repeat
 (verified clauses, expansions, compiled queries) every round, so it is cold.
 The ~80k numbers, and the position-verified cases spec 03 exempts, are a report
 (`backend/tests/bench/report_80k.py` → `docs/results/<date>-bench.md`), from the same synthetic generator at
-80k with abstracts of realistic length. The nightly full-index run is task-057.
+80k with abstracts of realistic length. The `nightly` workflow's `bench` job runs the 5k benchmarks with their
+budgets and then this report, into the run summary and a `bench-80k` artifact (TASK-057); the real corpus is
+local only (decision-004), so its numbers are a local run.
 
 The `/search` endpoint rows (`test_search_endpoint_first_page`) run over the 5k corpus as the API serves it
 (`attributed` records: authors and abstract claims) and include each hit's `abstract_source`, a lookup in

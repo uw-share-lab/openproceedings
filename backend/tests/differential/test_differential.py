@@ -3,7 +3,9 @@ task-028). The oracle is the definition of correct, so every generated tree must
 the same wildcard expansions (or the same refusal), the same disjunctive facets, the same `total` for every
 sort (and, for `year_asc`, the (year, id) order), and, for trees that parse, the same exclusion counts as a
 brute-force count. Trees draw on the corpus's own term dictionary (`synthetic_5k.vocab()`), rare terms
-weighted up. 200 examples per PR (`pr` profile), 2,000 nightly (`ci`); 50,000 nightly with task-057.
+weighted up, and stems at the 200-expansion cap's edge (`cap_records()`, 20 records added to the corpus the
+engines search: `qca*` expands to 199 terms, `qcb*` to 200, `qcc*` to 201 and is refused; TASK-057). 200
+examples per PR (`pr` profile); 50,000 in the nightly workflow's own `differential` job (`nightly`; TASK-057).
 
 Saving a counterexample: every failure message ends with `regression: <the shrunk AST as JSON>`. Add
 `{"ast": <that JSON>, "note": "<what broke>"}` to `differential-regressions.json`, which
@@ -16,12 +18,14 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
 from hypothesis import given, settings
+from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.exclusions import excluded
-from openproceedings.engine.protocol import FACET_FIELDS, EngineInputError
+from openproceedings.engine.protocol import FACET_FIELDS, MAX_EXPANSIONS, EngineInputError
 from openproceedings.engine.reference import ReferenceEngine, _conjuncts, _own_field
 from openproceedings.engine.tantivy_engine import SORTS, TantivyEngine
 from openproceedings.query.ast import Node, Wildcard
@@ -30,17 +34,18 @@ from openproceedings.query.defaults import DEFAULT_CLAUSES
 from openproceedings.query.parser import ParseResult, parse
 from pydantic import TypeAdapter
 
-from tests.fixtures.corpus.synthetic_5k import records, vocab
+from tests.fixtures.corpus.synthetic_5k import CAP_STEMS, cap_records, cap_vocab, records
 from tests.golden.test_tantivy_200 import as_paper
 from tests.strategies import engine_asts
 from tests.unit.engine.test_exclusions import tantivy_of
 
 REGRESSIONS = Path(__file__).parent / "differential-regressions.json"
 NODE: TypeAdapter[Node] = TypeAdapter(Node)
-RECORDS = list(records())
+RECORDS = [*records(), *cap_records()]
 BACK = {as_paper(r).id: r.id for r in RECORDS}
 BY_ID = {r.id: r for r in RECORDS}
 CORPUS_HASH = "c401aedfa0b5149d"
+REFUSED = ("refused", DiagnosticCode.WILDCARD_TOO_MANY_EXPANSIONS)
 
 
 @pytest.fixture(scope="module")
@@ -142,9 +147,15 @@ def expected_facets(
     return out
 
 
+# The nightly `differential` job splits the profile's examples across parallel jobs (TASK-057): with
+# OP_DIFFERENTIAL_SHARDS=n, each job runs 1/n of them under its own `--hypothesis-seed`.
+SHARDS = int(os.environ.get("OP_DIFFERENTIAL_SHARDS", "1"))
+assert SHARDS >= 1, "OP_DIFFERENTIAL_SHARDS is a positive count of jobs"
+
+
 # the oracle over 5k records, every sort and the facets per example: no per-example deadline
-@settings(deadline=None)
-@given(ast=engine_asts(vocab()))
+@settings(deadline=None, max_examples=max(1, settings().max_examples // SHARDS))
+@given(ast=engine_asts(cap_vocab()))
 def test_tantivy_agrees_with_the_oracle(engines: tuple[ReferenceEngine, TantivyEngine], ast: Node) -> None:
     agree(engines, ast)
 
@@ -156,15 +167,26 @@ def test_saved_regressions_still_agree(engines: tuple[ReferenceEngine, TantivyEn
         agree(engines, NODE.validate_python(case["ast"]))
 
 
+def test_the_cap_stems_sit_at_the_cap(engines: tuple[ReferenceEngine, TantivyEngine]) -> None:
+    for engine in engines:
+        for stem, n in CAP_STEMS.items():
+            got = outcome(engine.expand, Wildcard(span=(0, 0), stem=stem, op="*"))
+            assert (len(got) if isinstance(got, list) else got) == (n if n <= MAX_EXPANSIONS else REFUSED), (
+                stem
+            )
+        assert outcome(engine.expand, Wildcard(span=(0, 0), stem="qc", op="*")) == REFUSED
+
+
 def test_the_corpus_covers_every_filter_combination() -> None:
     from openproceedings.vocab import STATUSES, TRACKS
 
     from tests.fixtures.corpus.synthetic_5k import VENUES, YEARS
 
-    seen = {(r.venue, r.year, r.track, r.status) for r in RECORDS}
-    corpus = json.dumps([dataclasses.asdict(r) for r in RECORDS], ensure_ascii=False)
+    corpus_5k = records()
+    seen = {(r.venue, r.year, r.track, r.status) for r in corpus_5k}
+    corpus = json.dumps([dataclasses.asdict(r) for r in corpus_5k], ensure_ascii=False)
     # pinned: a change here (to the generator, the golden fixture's n-grams or normalize()) is deliberate,
     # and saved regressions must be re-checked against the new corpus
     assert hashlib.sha256(corpus.encode()).hexdigest()[:16] == CORPUS_HASH
     assert len(seen) == len(VENUES) * len(YEARS) * len(TRACKS) * len(STATUSES)
-    assert len(RECORDS) == 5_000 and any(r.abstract is None for r in RECORDS)
+    assert len(corpus_5k) == 5_000 and any(r.abstract is None for r in corpus_5k)
