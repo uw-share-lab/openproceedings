@@ -317,7 +317,7 @@ RIS_BRIDGE = [
     paper("AbCd1234", source="ris", urls_pdf=f"https://papers.nips.cc/paper/2021/file/{H[2]}-Paper.pdf"),
     paper(f"nips-{H[2]}", source="neurips_proceedings"),
 ]
-# the same where the note itself names the listed paper (a `content.pdf` on the proceedings site)
+# the same where the note itself names the listed paper (no crawler emits this; the generator draws it)
 NOTE_BRIDGE = [
     paper("AbCd1234", source="openreview_v2", track="unknown", urls_proceedings=nips(2)),
     paper(f"nips-{H[2]}", source="neurips_proceedings"),
