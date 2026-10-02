@@ -8,17 +8,20 @@
 # command text is scanned — not individual flags — so -m, -am, -qm, --message=, --trailer, heredoc
 # bodies (`-F - <<EOF`, `-m "$(cat <<'EOF' …)"`), --body and --notes are all covered — plus the contents of
 # any -F/--file/--body-file/--notes-file that is a regular file (≤1 MB), and of any file a `cat`, `< file`,
-# `$(cat file)`, `$(< file)` or backquoted `cat` in the command reads. `git commit` with no message opens
+# `$(cat file)`, `$(< file)` or backquoted `cat` in the command reads, and every word as bash makes it
+# (`'Co-Authored-By: Cl''aude'`, `$'…'`, variables set in the command: TASK-156), the command walked a second
+# time with HOME/TMPDIR/USER read as '' (`cd ~` then stays put). `git commit` with no message opens
 # an editor; that path is covered by .githooks/commit-msg (scripts/setup-dev.sh installs it) and CI
 # (pr-gates.yml).
 # A command it can't parse is scanned as raw text; one it can't check at all (an internal error) is blocked.
 # Exit 2 blocks the call and feeds stderr back to the agent.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
-input=$(cat)
-HOOK_INPUT="$input" python3 - "$HOOK_DIR" <<'PY'
+# The program goes to Python as an argument and the payload on stdin, never in an environment variable: past
+# ARG_MAX (about 1 MB) exec fails with 126, which Claude Code lets through. Any exit but 0 blocks (TASK-156).
+IFS= read -r -d '' PROG <<'PY' || true
 import os, re, shlex, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
-from cmdparse import ParseError, gh_subcommand, git_subcommand, opt_values, read_payload, redirect_targets, simple_commands
+from cmdparse import ParseError, expand_known, gh_subcommand, git_subcommand, opt_values, read_payload, walk
 
 PATTERN = re.compile(
     r"co-authored-by[:=][^\n]*(claude|anthropic)|generated with \[?claude|🤖 generated|noreply@anthropic\.com",
@@ -55,12 +58,16 @@ def main():
     if not cmd:  # no raw-text prefilter: `gi\<newline>t push` only becomes `git` after parsing (review round 6)
         sys.exit(0)
     try:
-        commands = list(simple_commands(cmd, cwd))
+        walked = list(walk(cmd, cwd))
+        if "~" in cmd or "$" in cmd:
+            # and with HOME/TMPDIR/USER read as '', which the agent's shell may have: `cd ~` then stays put (TASK-156)
+            walked += walk(cmd, cwd, env_empty=True)
     except ParseError:
         if PATTERN.search(cmd):  # unbalanced quotes: bash won't run it, but don't let it look approved
             blocked()
         sys.exit(0)
 
+    commands = [(argv, d) for argv, d, _ in walked if argv]
     texts, relevant = [], False
     for argv, d in commands:
         g = git_subcommand(argv, d)
@@ -76,9 +83,11 @@ def main():
             texts += [file_text(f, d) for f in opt_values(h[2], "--notes-file", "-F")]
     if relevant:
         # A message fed on stdin: `git commit -F - < msg.txt` (input redirect) or `cat msg.txt | git commit -F -`.
-        for op, target, d in redirect_targets(cmd, cwd):
-            if "<" in op and target:
-                texts.append(file_text(target, d))
+        for _, d, redirects in walked:
+            texts += [file_text(target, d) for op, target in redirects if "<" in op and target]
+        # every word as bash makes it, with the variables this gate can tell put in: a trailer split by quoting
+        # (`'Co-Authored-By: Cl''aude'`), written with `$'…'` escapes or in a variable reads whole here (TASK-156)
+        texts += [" ".join(expand_known(w, argv, d) for w in argv) for argv, d in commands]
         for argv, d in commands:
             if argv and argv[0] == "cat":
                 texts += [file_text(a, d) for a in argv[1:] if not a.startswith("-")]
@@ -99,3 +108,9 @@ except Exception as exc:  # a crash exits 1, which Claude Code lets through: blo
           "plainly and retry.", file=sys.stderr)
     sys.exit(2)
 PY
+python3 -c "$PROG" "$HOOK_DIR"
+rc=$?
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
+  echo "Blocked: block-ai-attribution.sh could not run its check (exit $rc); refusing rather than letting the command through." >&2
+fi
+[ "$rc" -eq 0 ] || exit 2

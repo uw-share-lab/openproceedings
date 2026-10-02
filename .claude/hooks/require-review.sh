@@ -22,6 +22,8 @@
 #    rev-parse, add, push, config, a fetch without `<src>:<dst>`, …: REF_SAFE_GIT): a commit, checkout, reset,
 #    `branch -f`, `fetch . +x:feat` or `worktree add -B` moves what is pushed after this gate read it. A remote
 #    or refspec word it can't resolve (`$UNSET`, `$(…)`), or a push after a `cd` it couldn't follow, is blocked.
+#    A push inside a command substitution (`x="$(git push …)"`) is checked like any other (TASK-156), and a
+#    command with `~` or `$` is checked a second time with HOME/TMPDIR/USER read as '' (`cd ~` then stays put).
 # 2. `gh pr create` (and its alias `gh pr new`) is blocked unless (1) holds for the PR head AND the branch
 #    adds or extends a `.claude/learnings/` entry relative to the PR base (default: the repo default
 #    branch, `dev`). Opt out only for a PR that genuinely taught nothing by passing `--label no-learning`;
@@ -55,13 +57,15 @@
 # Writing/deleting main or dev directly is enforce-pr-workflow.sh's job; this gate adds the review
 # requirement on top. Guardrail, not a security boundary (see lib/cmdparse.py). Exit 2 blocks.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
-input=$(cat)
-HOOK_INPUT="$input" python3 - "$HOOK_DIR" <<'PY'
-import glob, json, os, re, sys
+# The program goes to Python as an argument and the payload on stdin, never in an environment variable: past
+# ARG_MAX (about 1 MB) exec fails with 126, which Claude Code lets through. Any exit but 0 blocks (TASK-156).
+IFS= read -r -d '' PROG <<'PY' || true
+import glob, os, re, sys
 sys.path.insert(0, os.path.join(sys.argv[1], "lib"))
 from cmdparse import (ASSIGNMENT, FailClosed, ParseError, expand_known, expand_word, gh_subcommand, git, git_anchored,
                       git_bool, git_config, git_config_opaque, git_dir, git_subcommand, opt_value, opt_values,
                       push_config, push_config_risk, read_payload, tokenize, walk, xargs_hides_args)
+from cmdparse import payload as hook_payload
 
 ENTRY_NAME = re.compile(r"^\.claude/learnings/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$")  # same rule as learnings_index.py
 PUSH_VALUE_OPTS = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
@@ -205,10 +209,7 @@ def forged_record_block():
            "after /review-gate. Don't write, copy, move or delete one by hand or with a file tool."])
 
 def main():
-    try:
-        payload = json.loads(os.environ.get("HOOK_INPUT") or "{}")
-    except ValueError:
-        payload = {}
+    payload = hook_payload()
     if payload.get("tool_name") in FILE_TOOLS:
         tool_input = payload.get("tool_input") or {}
         target = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
@@ -223,6 +224,8 @@ def main():
         sys.exit(0)
     try:
         walked = list(walk(cmd, cwd))
+        # and with HOME/TMPDIR/USER read as '', which the agent's shell may have: `cd ~` then stays put (TASK-156)
+        passes = [walked, list(walk(cmd, cwd, env_empty=True))] if "~" in cmd or "$" in cmd else [walked]
     except FailClosed as exc:
         block([f"Review gate: this git command can't be read reliably ({exc}). Write abbreviated options out in",
                "full, and run the git subcommand by its own name rather than an alias set by --config-env,",
@@ -236,7 +239,7 @@ def main():
                    "touch a review record — refusing rather than letting it through unexamined. Fix the quoting, or",
                    "write the command more plainly, and retry."])
         sys.exit(0)
-    commands = [(argv, d) for argv, d, _ in walked if argv]
+    commands = [(argv, d) for p in passes for argv, d, _ in p if argv]
 
     def text_words(argv):
         """The words of `argv` that may name a path: the command word as written, then every argument but an inline
@@ -255,7 +258,7 @@ def main():
     touched = any(RECORD_WORD.search(p) for argv, d in commands for w in text_words(argv)
                   for x in readings(w, argv, d) for p in named_paths(x, dirs))
     targets = [words[k + 1] for k in range(len(words) - 1) if words[k] in ("cd", "pushd")]
-    redirects = [(op, x) for argv, d, rs in walked for op, t in rs for x in readings(t, argv, d)]
+    redirects = [(op, x) for p in passes for argv, d, rs in p for op, t in rs for x in readings(t, argv, d)]
     targets += [t for op, t in redirects if ">" in op]
     touched = touched or any(RECORD_WORD.search(t) for t in targets)
     # and every word of a writing command (`tee "$(git rev-parse --git-common-dir)"/op-revie?s/<sha>`), the command
@@ -272,7 +275,11 @@ def main():
             forged_record_block()
 
     moved = None  # a git command earlier in this call that may move a ref (`moves_refs`)
-    for argv, d in commands:
+    # each pass's commands in turn (None starts a pass: what an earlier pass moved doesn't count)
+    for argv, d in [x for p in passes for x in [(None, None), *((a, d_) for a, d_, _ in p if a)]]:
+        if argv is None:
+            moved = None
+            continue
         g = git_subcommand(argv, d)
         pushes = (g and g[0] == "push") or ((h := gh_subcommand(argv)) and h[:2] == ("pr", "create"))
         if pushes and moved:
@@ -375,3 +382,9 @@ except Exception as exc:  # a crash exits 1, which Claude Code lets through: blo
     block([f"Review gate: this command could not be checked ({type(exc).__name__}); refusing rather than letting it",
            "through unexamined. Write it more plainly (no deep nesting, no undecodable characters) and retry."])
 PY
+python3 -c "$PROG" "$HOOK_DIR"
+rc=$?
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
+  echo "Blocked: require-review.sh could not run its check (exit $rc); refusing rather than letting the command through." >&2
+fi
+[ "$rc" -eq 0 ] || exit 2

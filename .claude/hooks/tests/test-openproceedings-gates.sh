@@ -1087,6 +1087,48 @@ check $A allow "git commit -F - <<EOF (clean heredoc)"   "$(payload_bash "git co
 fix: {a,b} \$X op-reviews
 EOF")"
 
+echo "== TASK-156 rows (quoted substitutions, split trailers, HOME '' for every gate, ARG_MAX, format-patch -o)"
+# the parsed words are scanned too: a trailer split by quoting is whole once bash reads it
+check $A block "-m 'Co-Authored-By: Cl''aude <…anthr''opic.com>'" "$(payload_bash "git commit -m 'Co-Authored-By: Cl''aude <noreply@anthr''opic.com>'")"
+# a command substitution inside double quotes, in backquotes or in an unquoted heredoc body is a command too
+check $R block "x=\"\$(git push origin other2)\""           "$(payload_bash 'x="$(git push origin other2)"')"
+check $P block "echo \`rm -rf data/snapshots\`"             "$(payload_bash 'echo `rm -rf data/snapshots`')"
+check $P block "cat <<EOF with \$(rm -rf data/snapshots) in the body" "$(payload_bash 'cat <<EOF
+$(rm -rf data/snapshots)
+EOF')"
+check $R allow "git commit -m '… \`git push origin other2\`' (single quotes: text)" "$(payload_bash "git commit -m 'docs: \`git push origin other2\`'")"
+check $P block "x=\"\$(cd /tmp)\"; rm -rf data (a subshell's cd stays in it)" "$(payload_bash 'x="$(cd /tmp)"; rm -rf data')"
+# a body ends where bash ends it: not at a `)` in its heredoc or in its own quotes
+check $P allow "git commit -m \"\$(cat <<'EOF' … a) b … EOF)\"" "$(payload_bash "git commit -m \"\$(cat <<'EOF'
+fix: a) b
+EOF
+)\"")"
+check $P allow "x=\"\$(echo \"a)\")\"; echo ok"             "$(payload_bash 'x="$(echo "a)")"; echo ok')"
+# the HOME '' pass starts afresh: a ref moved after the push in the first pass is no move before it
+check $R allow "git push origin mut && git branch -f op-x mut; echo \$PATH" "$(payload_bash 'git push origin mut && git branch -f op-x mut; echo $PATH')"
+# HOME '' in the agent's shell: `cd ~` stays put, for every gate (not only a push)
+check $P block "cd ~ && rm -rf data"                        "$(payload_bash 'cd ~ && rm -rf data')"
+FROM_ENV_HOME=$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], os.environ["HOME"]))' "$REPO")
+check $R block "cd ~ && cd <repo rel to HOME> && git push origin mut" "$(payload_bash "cd ~ && cd '$FROM_ENV_HOME' && git push origin mut")"
+printf 'x\n\n%s\n' "$TRAILER" > "$REPO/op-msg.txt"
+check $A block "cd ~ && git commit -F op-msg.txt (a trailer)" "$(payload_bash 'cd ~ && git commit -F op-msg.txt')"
+rm -f "$REPO/op-msg.txt"
+# a payload past ARG_MAX reaches Python on stdin, and any exit but 0 or 2 (no python3 here) blocks
+BIG=$(python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","cwd":sys.argv[1],"tool_input":{"command":"echo ok # " + "x" * 1100000}}))' "$REPO")
+NOPY="$TMP/nopy"; mkdir -p "$NOPY"
+for tool in bash dirname; do ln -s "$(command -v "$tool")" "$NOPY/$tool"; done
+check_nopy() { local saved="$PATH"; PATH="$NOPY"; check "$@"; PATH="$saved"; }
+for h in $A $R $P; do
+  check "$h" allow "1.1 MB command (echo ok # …)"          "$BIG"
+  check_nopy "$h" block "no python3: echo ok"                "$(payload_bash 'echo ok')"
+done
+# git format-patch writes its patches into -o/--output-directory, format.outputDirectory or where it runs
+check $P block "git format-patch -o data/snapshots -1"      "$(payload_bash 'git format-patch -o data/snapshots -1')"
+check $P block "git format-patch --output-dir=data/indexes/abc -1" "$(payload_bash 'git format-patch --output-dir=data/indexes/abc -1')"
+check $P block "git -c format.outputDirectory=data/snapshots format-patch -1" "$(payload_bash 'git -c format.outputDirectory=data/snapshots format-patch -1')"
+check $P block "git -C data/snapshots format-patch -1"      "$(payload_bash 'git -C data/snapshots format-patch -1')"
+check $P allow "git format-patch -o /tmp/op-patches -1"     "$(payload_bash 'git format-patch -o /tmp/op-patches -1')"
+
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")
 case "$out" in *TOKENIZER_VERSION*) pass=$((pass+1)); echo "  ok   reminder on normalize.py";; *) fail=$((fail+1)); echo "  FAIL no reminder on normalize.py";; esac

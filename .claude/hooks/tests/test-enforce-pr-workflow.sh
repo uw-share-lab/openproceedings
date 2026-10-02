@@ -618,8 +618,12 @@ check feature/x block 'git push origin $TMPDIR'
 check feature/x block 'git push origin "$TMPDIR"'
 check feature/x allow 'E=feat; git push origin $E'
 check feature/x block 'B=main; git checkout $B && git commit -m x'          # a checkout target is resolved too
-check feature/x allow 'cd "$HOME" && cd - && git commit -m x'          # only a push is read with HOME ''
+check feature/x allow 'cd "$HOME" && cd - && git commit -m x'          # read with HOME '' too: cd - is here
 git -C "$REPO" config --unset remote.origin.push
+
+echo "TASK-156: a quoted command substitution is a command, and every git command is read with HOME '' too:"
+check dev       block 'x="$(git commit -m x)"'
+check dev       block 'cd ~ && git commit -m x'                             # HOME '': the cd stays on dev
 
 echo
 echo "passed: $pass  failed: $fail"
