@@ -76,8 +76,9 @@ and so does `describeNotice` (and `noticeText`) for a URL notice's parameter and
 the backend's `diagnostics.clip`, with the same escapes (a backtick as `\x60`, a control, format or surrogate
 character as its Python escape, whitespace runs as one space, at most 40 code points; 120 for `BAD_SPAN`'s span
 error, as the backend's parser messages), so `Coded` still pairs the backticks and the message stays one visible
-line (TASK-144). An empty value is written `""`, and two repeated URL values that clip alike are each shown from a
-little before where they first differ (`…ration OR appropriate)`). Clipping changes only the message: `q`, the URL
+line (TASK-144). An empty value or parameter name is written `""`, and two repeated URL values that clip alike are each shown from a
+little before where they first differ (`…ration OR appropriate)`; values that differ only in whitespace still
+read alike). Clipping changes only the message: `q`, the URL
 and a saved record are never clipped.
 
 **Year** has its own actions (TASK-092), since a year clause is ranges, not values:

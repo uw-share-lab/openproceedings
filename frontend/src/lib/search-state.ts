@@ -185,21 +185,30 @@ const codeList = (values: readonly string[]): NoticeRun[] =>
 /** A value as a message quotes it: through `clip`, and an empty one as `""` so it can't read as missing. */
 const shown = (v: string): string => (v === "" ? '""' : clip(v));
 
-/** How many code points of context `apart` keeps before the first difference. */
+/** At most how many code points of context `apart` keeps before the first difference. */
 const APART_CONTEXT = 10;
 
 /**
  * Two values as a notice quotes them side by side. Clipped alike they could read the same (two long `q`
  * values that differ only after the first 40 code points), so then each is shown from a little before the
- * first difference, the cut start marked `…`.
+ * first difference, a cut start marked `…`: the most context, up to `APART_CONTEXT`, that still shows them
+ * apart (escapes are wide). Values that still read alike (they differ only in whitespace) are shown as is.
  */
 function apart(a: string, b: string): readonly [string, string] {
-  if (a === b || shown(a) !== shown(b)) return [shown(a), shown(b)];
+  const plain = [shown(a), shown(b)] as const;
+  // only values clip shortened can hide their difference; shorter ones differ only in whitespace
+  if (a === b || plain[0] !== plain[1] || !plain[0].endsWith("…")) return plain;
   const [x, y] = [[...a], [...b]];
   let i = 0;
   while (x[i] === y[i]) i += 1;
-  const from = (cps: readonly string[]) => `…${clip(cps.slice(Math.max(0, i - APART_CONTEXT)).join(""), 39)}`;
-  return [from(x), from(y)];
+  const from = (cps: readonly string[], start: number) =>
+    start > 0 ? `…${clip(cps.slice(start).join(""), 39)}` : clip(cps.join(""));
+  for (let back = APART_CONTEXT; back >= 0; back -= 1) {
+    const start = Math.max(0, i - back);
+    const pair = [from(x, start), from(y, start)] as const;
+    if (pair[0] !== pair[1]) return pair;
+  }
+  return plain;
 }
 
 /**

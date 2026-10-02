@@ -1242,6 +1242,33 @@ describe("refusals quote values they did not write through clip (TASK-144)", () 
     );
   });
 
+  it("keeps two repeated values apart after a run of escapes, and leaves alike ones as they are", () => {
+    const repeated = (a: string, b: string) => {
+      const [n] = fromURL(
+        new URLSearchParams([
+          ["q", a],
+          ["q", b],
+        ]),
+      ).notices;
+      return n && noticeText(n);
+    };
+    const nul = "\x00".repeat(45);
+    const shownNul = "\\x00".repeat(9); // nine 4-character escapes and the difference fit in 39
+    expect(repeated(`${nul}a`, `${nul}b`)).toBe(
+      `\`q\` appears more than once; using the first value \`…${shownNul}a\` and ignoring \`…${shownNul}b\`.`,
+    );
+    const long = "x".repeat(60);
+    expect(repeated(long, long)).toBe(
+      `\`q\` appears more than once; using the first value \`${"x".repeat(39)}…\` and ignoring \`${"x".repeat(39)}…\`.`,
+    );
+    expect(repeated("a  b", "a b")).toBe(
+      "`q` appears more than once; using the first value `a b` and ignoring `a b`.",
+    );
+    expect(repeated("", '""')).toBe(
+      '`q` appears more than once; using the first value `""` and ignoring `""`.',
+    );
+  });
+
   it.each(HOSTILE)("noticeText quotes a URL value %j as %j", (value, shown) => {
     const texts = [
       ...fromURL(
