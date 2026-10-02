@@ -84,10 +84,11 @@ $OP_DATA_HOST/
 owns the log (TASK-065 AC #3). File modes on the host see only the numbers, so **no host account or group may
 already have them**: one that did could read the record store and open the indexes. Check once on the host:
 ```bash
-getent passwd 10001; getent group 10001   # both must print nothing
+getent passwd 10001; getent group 10001   # nothing, or a reserved nologin system account for the API
 ```
-If either is taken, pick free ids, set `OP_API_UID` and `OP_API_GID`, rebuild (`dc build`), and use those ids
-below in place of 10001 (`index-permissions.sh` takes the gid as its third argument). Tantivy can't open an index without writing its lock file, `.tantivy-meta.lock`, so the
+If either belongs to a person (the operator included) or another service, pick free ids, set `OP_API_UID` and
+`OP_API_GID` (in `deploy/.env`, so every command sees them), rebuild (`dc build`), and use those ids below in
+place of 10001. `index-permissions.sh` reads `OP_API_GID` for its default gid. Tantivy can't open an index without writing its lock file, `.tantivy-meta.lock`, so the
 `indexes/` mount can't be read-only. Plain file modes keep the API from changing the index instead:
 
 - `indexes/` itself: owned by the operator, mode 0755. The API can't add, remove or repoint anything there.
@@ -250,12 +251,12 @@ every index, so they could be retired. Make a consistent copy through SQLite's b
 streamed out of the container:
 
 ```bash
-dc exec -T api python -c "
+(umask 077; dc exec -T api python -c "
 import sqlite3, sys, tempfile
 with tempfile.NamedTemporaryFile(dir='/tmp') as f:
     sqlite3.connect('/data/records/records.sqlite').backup(sqlite3.connect(f.name))
     sys.stdout.buffer.write(open(f.name, 'rb').read())
-" > records-backup-$(date +%F).sqlite
+" > records-backup-$(date +%F).sqlite)   # umask 077: the file is 0600
 ```
 
 The temporary copy is deleted inside the container. Keep the backups somewhere only the operator can read:
@@ -288,7 +289,8 @@ Linux host. No CI job runs it.
 - Set `OP_DOMAIN`, `OP_INSTANCE=public`, `OP_TAKEDOWN_CONTACT` and `OP_TAKEDOWN_LOG_HOST`. Once the domain is
   known, decide about `includeSubDomains` in `OP_HSTS`.
 - Set up the host's accounts: the operator's account, and sudo (or a host group with gid 10001) for
-  `index-permissions.sh` and `records/`.
+  `index-permissions.sh` and `records/`. Check that uid and gid 10001 are unused on the host, or a reserved
+  nologin account for the API; if not, set `OP_API_UID`/`OP_API_GID` and rebuild (§Permissions).
 - Do the first start and its checks on the host: client addresses (First start, step 4), and the rate limit
   and CORS (TASK-067 AC #2).
 - Schedule the record-store backup (§Backups).

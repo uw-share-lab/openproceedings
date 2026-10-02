@@ -1,6 +1,6 @@
 #!/bin/sh
 # Let the `api` container open an index version and nothing more (deploy/README.md §Permissions; TASK-065).
-#   deploy/index-permissions.sh <indexes directory> <index_version> [gid]
+#   deploy/index-permissions.sh <indexes directory> <index_version> [gid]   (default $OP_API_GID, else 10001)
 # Run it after `op index build`, before pointing `current` at the version, as root or as an account in the
 # group (default gid 10001, the api image's op-api). `op index build` leaves a version directory 0700, its files
 # 0444 and Tantivy's two lock files 0644, all owned by the account that built it. Tantivy opens an index only
@@ -14,7 +14,7 @@ if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
 fi
 indexes=$1
 version=$2
-gid=${3:-10001}
+gid=${3:-${OP_API_GID:-10001}} # the api image's gid: compose.yml's OP_API_GID
 case "$version" in
   *[!0-9a-f-]* | -* | "")
     echo "$0: $version is not an index_version name (0-9, a-f and -)" >&2
