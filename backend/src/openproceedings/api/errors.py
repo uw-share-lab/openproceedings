@@ -32,10 +32,12 @@ from openproceedings.diagnostics import (
     DiagnosticCode,
     InternalError,
     OpenProceedingsError,
+    clip,
     http_status,
 )
 
 log = logging.getLogger(__name__)
+MAX_NAMED_PARAMS = 5  # bad parameters (or body locations) a 422 refusal names; more are counted
 ACCESS = "openproceedings.access"  # scope key: the request's access-line fields (api/middleware.py)
 # the same dict, for code that has no request (the verification slot, `state.IndexState.verification_slot`):
 # set by `AccessLog` for the request's task, so its worker threads see it too (each runs in a copy of the context)
@@ -183,17 +185,28 @@ async def _api_error(request: Request, exc: Exception) -> JSONResponse:
 
 
 async def _validation(request: Request, exc: Exception) -> JSONResponse:
-    """A malformed parameter or body: 422 `API_BAD_PARAM`, naming each bad location and what is wrong
-    (pydantic's own text). The offending *value* is left out, but a location can name a key the client
-    sent (an unexpected body key). The message goes to that client only; the log gets the code alone."""
+    """A malformed parameter or body: 422 `API_BAD_PARAM`, naming the bad locations and what is wrong
+    (pydantic's own text), clipped and capped by `bad_param_message`. The offending *value* is left out, but
+    a location can name a key the client sent (an unexpected body key). The message goes to that client
+    only; the log gets the code alone."""
     assert isinstance(exc, RequestValidationError)
-    problems = [
-        f"{'.'.join(str(p) for p in e.get('loc', ()))}: {e.get('msg', 'invalid')}" for e in exc.errors()
-    ]
     refused(request.scope, DiagnosticCode.API_BAD_PARAM)
-    return error_response(
-        DiagnosticCode.API_BAD_PARAM, "Check the request's parameters — " + "; ".join(problems) + "."
-    )
+    return error_response(DiagnosticCode.API_BAD_PARAM, bad_param_message(exc.errors()))
+
+
+def bad_param_message(errors: Sequence[Mapping[str, object]]) -> str:
+    """The 422 message for pydantic's `errors`: each location between backticks, every part of it through
+    `clip` (a body key is the client's own text, TASK-143), with pydantic's text escaped the same way; the
+    first `MAX_NAMED_PARAMS` are named and the rest counted, so the message never grows with the body."""
+    problems = []
+    for e in errors[:MAX_NAMED_PARAMS]:
+        loc = e.get("loc", ())
+        parts = loc if isinstance(loc, Sequence) and not isinstance(loc, str) else (loc,)
+        path = ".".join(clip(p, 30) if isinstance(p, str) else str(p) for p in parts)
+        problems.append(f"`{path}`: {clip(str(e.get('msg', 'invalid')), 200)}")
+    if len(errors) > MAX_NAMED_PARAMS:
+        problems.append(f"{len(errors) - MAX_NAMED_PARAMS} more")
+    return "Check the request's parameters — " + "; ".join(problems) + "."
 
 
 async def _http(request: Request, exc: Exception) -> JSONResponse:

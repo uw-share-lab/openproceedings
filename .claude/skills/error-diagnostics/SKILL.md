@@ -87,6 +87,11 @@ use them exactly as named there.
   it quotes the query only when `diagnostics.verbatim(text)` holds (no escape needed); otherwise it says what
   to do in words (`` −foo`bar `` → "type an ASCII hyphen `-` in its place", not `-foo\x60bar`). A property
   (`test_every_message_quotes_query_text_on_one_visible_line`) and goldens (`test_parser.py::QUOTED`) pin it.
+  **Request locations too:** an `API_BAD_PARAM` message quotes each parameter name and body-key location
+  (pydantic's `loc`, `api/errors.py::bad_param_message`; an unknown query parameter, `api/deps.py::strict_query`)
+  through `clip` (30 code points a part; pydantic's own text is escaped too, at 200), between backticks, since a
+  key is the client's own text, and names at most `MAX_NAMED_PARAMS` problems, counting the rest (TASK-143; `test_422_message_is_one_visible_line_whatever_the_keys`, `test_422_message_is_bounded_whatever_the_key_or_text`
+  and `test_422_names_a_few_problems_and_counts_the_rest` pin it).
 - Message text is prose, not contract: codes, spans and `reading` are what clients use (they never parse
   `message`), so rewording a message is not a breaking change under `/api/v1`. Update the goldens that quote
   it deliberately (`frontend/src/help/syntax-golden.json` via `help_golden.py`, the copy deck).
