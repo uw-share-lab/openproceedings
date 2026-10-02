@@ -67,7 +67,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Sync workspace
         run: uv sync --locked
-      - name: Exhaustive tokenizer check (every Unicode code point, 8 contexts; ~2.5 min)
+      - name: Exhaustive tokenizer check (every Unicode code point in 8 contexts, and its Unicode forms in 16; ~4 min)
         if: matrix.part == 'rest'
         timeout-minutes: 10
         run: OP_EXHAUSTIVE=1 uv run --locked pytest -q backend/tests/unit/test_normalize_exhaustive.py

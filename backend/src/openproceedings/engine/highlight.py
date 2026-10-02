@@ -42,29 +42,31 @@ from openproceedings.query.ast import (
     Wildcard,
     YearRange,
 )
-from openproceedings.query.normalize import Token, tokenize
+from openproceedings.query.normalize import TOKENIZER_VERSION, Token, tokenize
 from openproceedings.vocab import TEXT_FIELDS
 
 Spans = dict[TextField, set[tuple[int, int]]]
 
 
 def highlights(
-    ast: Node, record: Searchable, expansions: Expansions
+    ast: Node, record: Searchable, expansions: Expansions, tokenizer: str = TOKENIZER_VERSION
 ) -> dict[TextField, list[tuple[int, int]]]:
     """Each text field's highlight spans for `record`, one of the engine's hits: sorted, every field present,
     possibly empty. `expansions` are the engine's (`Engine.expansions(ast)`). A hit this evaluation doesn't
     match means the engine and the AST disagree: an internal error, never silently empty highlights. For
-    a page of hits, build one `Highlighter` and call it on each."""
-    return Highlighter(ast, expansions)(record)
+    a page of hits, build one `Highlighter` and call it on each. `tokenizer` is the engine's index's version."""
+    return Highlighter(ast, expansions, tokenizer)(record)
 
 
 class Highlighter:
     """`highlights` for one query over many records: what each leaf can match (its terms, its wildcards'
     expansions) is worked out here, once, not per hit. Built per request and never shared, so it holds no
-    lock; it is never written to after construction."""
+    lock; it is never written to after construction. A record is tokenized by `tokenizer`, the version the
+    engine's index was built with (and `ast` parsed with), so a hit's spans are its matched tokens."""
 
-    def __init__(self, ast: Node, expansions: Expansions) -> None:
+    def __init__(self, ast: Node, expansions: Expansions, tokenizer: str = TOKENIZER_VERSION) -> None:
         self.ast = ast
+        self.tokenizer = tokenizer
         self.allowed: _Allowed = {}
         for leaf in _leaves(ast):
             _allowed(leaf, expansions, self.allowed)
@@ -82,7 +84,9 @@ class Highlighter:
         """The spans `__call__` gives `record`, or None when the query doesn't match it: for one record that
         need not be a hit (`GET /papers/{id}?q=`, task-087). A record the query matches gets exactly the
         spans it gets as a hit of `/search`, from the same evaluation."""
-        matched, spans = _Highlighter(record, _Tokens(record), self.expansions, self.allowed).node(self.ast)
+        matched, spans = _Highlighter(
+            record, _Tokens(record, self.tokenizer), self.expansions, self.allowed
+        ).node(self.ast)
         if not matched:
             return None
         return {f: _merged(spans.get(f, set())) for f in TEXT_FIELDS}
@@ -96,12 +100,13 @@ class _Tokens(dict[TextField, list[Token]]):
     """A record's tokens per field, each field tokenized on first use: a query that never reads a field
     doesn't pay for it (its spans are empty either way)."""
 
-    def __init__(self, record: Searchable) -> None:
+    def __init__(self, record: Searchable, tokenizer: str = TOKENIZER_VERSION) -> None:
         super().__init__()
         self.record = record
+        self.tokenizer = tokenizer
 
     def __missing__(self, f: TextField) -> list[Token]:
-        tokens = self[f] = tokenize(_text(self.record, f))
+        tokens = self[f] = tokenize(_text(self.record, f), self.tokenizer)
         return tokens
 
 

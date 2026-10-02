@@ -74,7 +74,6 @@ from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.compile import verified_clauses
 from openproceedings.engine.exclusions import identified_total, unclassified_total
 from openproceedings.engine.tantivy_engine import TantivyEngine
-from openproceedings.query.parser import parse
 from openproceedings.records import (
     RECORDS_DIR,
     PinnedLoader,
@@ -215,15 +214,14 @@ def stored_record(request: Request, record_id: str) -> SearchRecord:
 def _replayed(request: Request, engine: TantivyEngine, record: SearchRecord) -> tuple[Replay, int | None]:
     """The replay, and its canonical's position-verified clause count (None when it doesn't parse)."""
     records = _records(request)
-    # parsed once: counted, capped and charged like a search's by `admit_replay` on the engine the replay runs
-    # on, before it compiles anything; over a limit the replay is withheld (`refused`, 200), never a 422
-    parsed = parse(record.canonical, "native")
+    # parsed once, by `replay`, with the tokenizer of the index it runs on: counted, capped and charged like a
+    # search's by `admit_replay` on that engine, before it compiles anything; over a limit the replay is
+    # withheld (`refused`, 200), never a 422
     result = replay(
         record,
         engine,
         records.pinned,
         records.data_dir,
-        parsed=parsed,
         admit=lambda ran_on, p: admit_replay(request, ran_on, p),
     )
     annotate(
@@ -232,7 +230,7 @@ def _replayed(request: Request, engine: TantivyEngine, record: SearchRecord) -> 
         canonical_hash=record.canonical_hash,
         total=len(result.identified.ids) if result.identified is not None else None,
     )
-    ast = parsed.effective_ast
+    ast = result.parsed.effective_ast
     return result, (len(verified_clauses(ast)) if ast is not None else None)
 
 
@@ -273,7 +271,7 @@ def create_record(
             "The index changed after this search: this instance now serves another index_version, so the "
             "record wasn't saved. Search again, then save.",
         )
-    parsed = searchable(request, body.q, body.mode)
+    parsed = searchable(request, body.q, body.mode, engine.tokenizer_version)
     assert parsed.effective_ast is not None  # searchable refuses a query that doesn't parse
     check_candidates(request, engine, parsed.effective_ast)  # 422 API_QUERY_TOO_COSTLY before a save is taken
     records = _records(request)
@@ -287,7 +285,7 @@ def create_record(
     annotate(request, total=record.total)
     response.headers["Location"] = RECORD_RESOURCE.format(record_id=record.record_id)
     return RecordCreated(
-        **versions(engine.index_version),
+        **versions(engine.index_version, engine.tokenizer_version),
         record_id=record.record_id,
         page=RECORD_PAGE.format(record_id=record.record_id),
     )
@@ -310,10 +308,14 @@ def get_record(
     shown = record if include == "ids" else record.model_copy(update={"ids": None})
     if not replay:
         annotate(request, canonical_hash=record.canonical_hash)
-        return RecordResponse(**versions(engine.index_version), record=shown, replay=None)
+        return RecordResponse(
+            **versions(engine.index_version, engine.tokenizer_version), record=shown, replay=None
+        )
     result, clauses = _replayed(request, engine, record)
     return RecordResponse(
-        **versions(result.engine.index_version), record=shown, replay=replay_info(result, clauses)
+        **versions(result.engine.index_version, result.engine.tokenizer_version),
+        record=shown,
+        replay=replay_info(result, clauses),
     )
 
 
@@ -336,7 +338,7 @@ def get_record_diff(
     wanted = [*added, *removed]
     titles = {i: str(r["title"]) for i, r in result.engine.display(wanted).items()} if wanted else {}
     return RecordDiff(
-        **versions(result.engine.index_version),
+        **versions(result.engine.index_version, result.engine.tokenizer_version),
         record_id=record.record_id,
         status=result.status,
         recorded_index_version=record.index_version,

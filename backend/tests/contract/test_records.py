@@ -683,6 +683,79 @@ def test_a_record_id_never_starts_with_a_csv_formula_character(
     assert rows and {row["record_id"] for row in rows} == {record_id}  # round-trips as itself
 
 
+# --- replay across a tokenizer bump (tokenizer 3): a record pinned to a tokenizer-2 index still reproduces -----
+# Text the two tokenizers read differently: a backslash and an accent in NFD (tokenizer 2 split it), and a
+# full-width dollar (LaTeX math only to tokenizer 3)
+FORMS_CORPUS = [
+    Rec("fx:9001", "Erd\\H{ő}s graphs and trust", "trust in NFC"),
+    Rec("fx:9002", "Erd\\H{ő}s graphs and trust", "trust in NFD"),
+    Rec("fx:9003", "Calibrated trust", "costs ＄\\alpha＄ in trust"),
+]
+
+
+def test_a_record_saved_on_a_tokenizer_2_index_reproduces_after_the_tokenizer_3_build(tmp_path: Path) -> None:
+    """Guarantee 4 across the tokenizer 3 bump: this code serves the tokenizer-2 index a record pins beside a
+    tokenizer-3 build of the same snapshot. On each, a query is parsed (and its canonical hashed) with the index's
+    own tokenizer, so records saved on the tokenizer-2 index replay `reproduced` on it after `current` moves to
+    the tokenizer-3 one, though the two indexes match different ids for text the tokenizers read differently.
+    With the tokenizer-2 index gone, the replay is `drifted`, naming the tokenizer as the changed input."""
+    data_dir = tmp_path / "data"
+    corpus = [*records(), *FORMS_CORPUS]
+    old = build(corpus, data_dir / "snapshots", "snap", data_dir / "indexes", tokenizer_version="2")
+    new = build(corpus, data_dir / "snapshots", "snap", data_dir / "indexes")
+    assert old != new  # the tokenizer is an index_version input
+    point_current(data_dir, old)
+    nfd = "Erd\\H{ő}s"  # typed in NFD: `erd o s` to tokenizer 2, `erdos` to tokenizer 3
+    queries = [
+        ("erdos", "native"),
+        (nfd, "native"),
+        ("α", "native"),
+        ("trust AND calibrat*", "native"),
+        ('"large language model$" OR "AI agent$"', "native"),
+        *((q, "scholar") for q in STRINGS.values() if q.strip()),
+    ]
+    app = make_app(data_dir, record_saves_network_burst=100)  # every query saved twice, in one test
+    with TestClient(app) as client:
+        assert client.get("/api/v1/meta").json()["tokenizer_version"] == "2"  # the served index's
+        saved = [save(client, q, mode) for q, mode in queries]
+        point_current(data_dir, new)
+        state: IndexState = app.state.index
+        assert state.load() and state.engine is not None and state.engine.index_version == new
+        assert client.get("/api/v1/meta").json()["tokenizer_version"] == TOKENIZER_VERSION == "3"
+        on_new = [save(client, q, mode) for q, mode in queries]
+        bodies = {}
+        for (q, _mode), record_id, other in zip(queries, saved, on_new, strict=True):
+            body, again = replayed(client, record_id, ids=True), replayed(client, other, ids=True)
+            assert body["replay"]["status"] == "reproduced", (q, body["replay"])
+            assert body["replay"]["index_version"] == old and body["tokenizer_version"] == "2"
+            assert again["replay"]["status"] == "reproduced" and again["replay"]["index_version"] == new
+            assert again["tokenizer_version"] == "3"
+            mine, theirs = body["record"], again["record"]
+            assert (mine["tokenizer_version"], theirs["tokenizer_version"]) == ("2", "3")
+            assert mine["canonical_hash"] != theirs["canonical_hash"]  # the tokenizer is hashed with it
+            bodies[q] = mine, theirs
+    ids = {q: (set(mine["ids"]), set(theirs["ids"])) for q, (mine, theirs) in bodies.items()}
+    nfc_id, nfd_id, dollar_id = (f"op:iclr:2024:Fx900{n}" for n in (1, 2, 3))
+    assert ids["erdos"][1] - ids["erdos"][0] == {nfd_id} and nfc_id in ids["erdos"][0]  # NFD found by 3 only
+    assert ids[nfd] == ({nfd_id}, ids["erdos"][1])  # the NFD query: three words to 2, `erdos` to 3
+    assert bodies[nfd][0]["canonical"].startswith('("erd o s" AND ')
+    assert ids["α"][1] - ids["α"][0] == {dollar_id}  # `＄\alpha＄` is math to tokenizer 3 only
+    for q in ("trust AND calibrat*", '"large language model$" OR "AI agent$"', *STRINGS.values()):
+        if q.strip():
+            assert ids[q][0] == ids[q][1], q  # text both read alike matches alike
+    # the tokenizer-2 index gone (moved aside, as only a test may): the replay is a drift in the tokenizer
+    second = tmp_path / "second"
+    shutil.copytree(data_dir / "snapshots", second / "snapshots")
+    shutil.copytree(data_dir / "indexes" / new, second / "indexes" / new)
+    (second / "indexes" / "current").symlink_to(new)
+    shutil.copytree(data_dir / RECORDS_DIR, second / RECORDS_DIR)
+    with TestClient(make_app(second)) as client:
+        drift = replayed(client, saved[0])["replay"]
+    assert drift["status"] == "drifted" and drift["index_version"] == new
+    assert [c["input"] for c in drift["changed"]] == ["tokenizer_version"]
+    assert (drift["changed"][0]["recorded"], drift["changed"][0]["current"]) == ("2", "3")
+
+
 # --- replay across a schema bump (TASK-167): a record pinned to a schema-2 index still reproduces ----------
 def test_a_record_saved_on_a_schema_2_index_reproduces_after_the_schema_3_build(tmp_path: Path) -> None:
     """Guarantee 4 across TASK-167's SCHEMA_VERSION bump: this code serves the schema-2 index a record pins (its

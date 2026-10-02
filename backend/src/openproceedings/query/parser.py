@@ -62,7 +62,7 @@ from openproceedings.query.compat import (
 )
 from openproceedings.query.defaults import apply_defaults
 from openproceedings.query.lexer import FIELDS, Kind, Lexeme, lex
-from openproceedings.query.normalize import tokenize
+from openproceedings.query.normalize import SERVED_TOKENIZERS, TOKENIZER_VERSION, tokenize
 from openproceedings.vocab import STATUSES, TEXT_FIELDS, TRACKS, VENUES
 
 Mode = Literal["native", "scholar"]
@@ -91,6 +91,7 @@ class ParseResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     mode: Mode = "native"
+    tokenizer_version: str = TOKENIZER_VERSION  # the tokenizer `q` was read with: the index's it runs on
     ast: Node | None  # the tree as typed, spans into q (the UI's parse tree)
     effective_ast: Node | None = None  # canonical, with default filters: what the engine runs
     canonical: str | None = (
@@ -159,10 +160,16 @@ def filter_value(field: FilterField, v: Lexeme) -> str | YearRange | None:
 
 class _Parser:
     def __init__(
-        self, q: str, lexemes: tuple[Lexeme, ...], lex_errors: tuple[Diagnostic, ...], mode: Mode = "native"
+        self,
+        q: str,
+        lexemes: tuple[Lexeme, ...],
+        lex_errors: tuple[Diagnostic, ...],
+        mode: Mode = "native",
+        tokenizer: str = TOKENIZER_VERSION,
     ) -> None:
         self.q = q
         self.mode = mode
+        self.tokenizer = tokenizer
         self.in_source = False  # parsing a Scholar `source:` clause: values translate to venues
         self.translations: list[Diagnostic] = []
         self.toks = lexemes
@@ -709,7 +716,7 @@ class _Parser:
     # --- leaves -------------------------------------------------------------------------------------
     def items(self, w: Lexeme, field: TextField | None) -> list[Term | Wildcard]:
         """The normalised tokens of one word, with the wildcard (if any) on the last."""
-        toks = tokenize(w.stem or "")
+        toks = tokenize(w.stem or "", self.tokenizer)
         items: list[Term | Wildcard] = [
             Term(span=(w.start + t.start, w.start + t.end), token=t.text, field=field) for t in toks
         ]
@@ -882,24 +889,28 @@ def _field_groups(lexemes: Sequence[Lexeme]) -> bool:
     return any(a.kind is Kind.FIELD and b.kind is Kind.LPAREN for a, b in pairwise(lexemes))
 
 
-def parse(q: str, mode: Mode = "native") -> ParseResult:
+def parse(q: str, mode: Mode = "native", tokenizer: str = TOKENIZER_VERSION) -> ParseResult:
     """Parse `q`. Never raises; `ast`, `canonical` and `canonical_hash` are None exactly when `errors` is
-    non-empty. `mode="scholar"` accepts Scholar/PoP syntax and reports every rewrite in `translations`."""
+    non-empty. `mode="scholar"` accepts Scholar/PoP syntax and reports every rewrite in `translations`.
+    `tokenizer` (a served version, `normalize.SERVED_TOKENIZERS`) is the one the index the query runs on was
+    built with: a query against, or the replay of a record pinned to, an older index reads text as it did."""
+    if tokenizer not in SERVED_TOKENIZERS:  # a caller's bug, never the user's: refused before any work
+        raise ValueError(f"tokenizer version {tokenizer!r} is not one this code serves")
     over = too_long(q)  # checked before any work, so an oversized query costs nothing
     if over is not None:
-        return ParseResult(mode=mode, ast=None, warnings=[], errors=[over])
-    lexed = lex(q)
+        return ParseResult(mode=mode, tokenizer_version=tokenizer, ast=None, warnings=[], errors=[over])
+    lexed = lex(q, tokenizer)
     lexemes, lex_errors = lexed.lexemes, lexed.errors
     translations: list[Diagnostic] = []
     if mode == "scholar":
-        lexemes, translations, cleared = group_phrases(q, lexemes)
+        lexemes, translations, cleared = group_phrases(q, lexemes, tokenizer)
         lex_errors = tuple(
             e
             for e in lex_errors
             if not (e.code is DiagnosticCode.WILDCARD_STEM_TOO_SHORT and e.span in cleared)
         )
         translations += dollar_notices(lexemes)
-    p = _Parser(q, lexemes, lex_errors, mode)
+    p = _Parser(q, lexemes, lex_errors, mode, tokenizer)
     try:
         ast = p.run()
     except _TooDeep:
@@ -916,7 +927,14 @@ def parse(q: str, mode: Mode = "native") -> ParseResult:
             )
         ]
     if errors or ast is None:
-        return ParseResult(mode=mode, ast=None, warnings=warnings, errors=errors, translations=notes)
+        return ParseResult(
+            mode=mode,
+            tokenizer_version=tokenizer,
+            ast=None,
+            warnings=warnings,
+            errors=errors,
+            translations=notes,
+        )
     if mode == "scholar":
         notes = sorted([*notes, *_stemming_notice(ast, len(q))], key=by_position)
     d = apply_defaults(ast, len(q))
@@ -931,14 +949,22 @@ def parse(q: str, mode: Mode = "native") -> ParseResult:
         field_groups=_field_groups(lexemes),
     )
     if overflow is not None:  # it could be saved but never replayed or pasted back (decision-008)
-        return ParseResult(mode=mode, ast=None, warnings=warnings, errors=[overflow], translations=notes)
+        return ParseResult(
+            mode=mode,
+            tokenizer_version=tokenizer,
+            ast=None,
+            warnings=warnings,
+            errors=[overflow],
+            translations=notes,
+        )
     return ParseResult(
         mode=mode,
+        tokenizer_version=tokenizer,
         translations=notes,
         ast=ast,
         effective_ast=d.effective,
         canonical=canonical,
-        canonical_hash=canonical_hash(canonical),
+        canonical_hash=canonical_hash(canonical, tokenizer),
         identification_query=render(d.identification) if d.identification is not None else "",
         identification_ast=d.identification,
         defaults=list(d.defaults),

@@ -229,12 +229,15 @@ def test_identical_texts_score_equally_across_union_windows(tmp_path: Path, q: s
 def test_an_index_from_other_versions_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import openproceedings.engine.index as idx
     from openproceedings.engine.protocol import EngineError
+    from openproceedings.query.normalize import SERVED_TOKENIZERS, TokenizerForm
 
     for name, value in (("SCHEMA_VERSION", "1"), ("TOKENIZER_VERSION", "1")):
         with monkeypatch.context() as m:
             m.setattr(idx, name, value)
             # an old code that built schema 1
             m.setattr(idx, "SERVED_SCHEMAS", {**idx.SERVED_SCHEMAS, "1": idx.SchemaForm(ord_indexed=False)})
+            # a tokenizer this code doesn't serve (only while building it: served, it would be refused)
+            m.setitem(SERVED_TOKENIZERS, "1", TokenizerForm(nfkc_first=True))
             path = build_index(snapshot_of(CORPUS, tmp_path / name), tmp_path / f"i-{name}", BUILT).path
         with pytest.raises(EngineError, match="build a new index"):
             TantivyEngine(path)

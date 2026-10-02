@@ -25,7 +25,7 @@ def get_meta(request: Request, engine: EngineDep) -> MetaResponse:
     state: IndexState = request.app.state.index
     config: ApiConfig = request.app.state.config
     return MetaResponse(
-        **versions(engine.index_version),
+        **versions(engine.index_version, engine.tokenizer_version),
         index_versions=state.available(engine),
         text_fields=list(TEXT_FIELDS),
         filter_fields=list(FILTER_FIELDS),

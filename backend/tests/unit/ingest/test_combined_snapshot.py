@@ -39,8 +39,10 @@ BUILT = datetime(2026, 9, 28, tzinfo=UTC)
 # SNAPSHOT_HASH is TASK-101's. TASK-159/157 changed FILES_HASH: record schema v4 (the `twin` and `invitation`
 # claim fields, decision-029) changed the manifest's record_schema_version, and the RIS report's parser_version
 # is scholarmend 0.1.5. No record here is a twin or carries an invitation, so SNAPSHOT_HASH is unchanged.
+# Tokenizer 3 changed FILES_HASH: the manifest's tokenizer_version is "3"; with it set back to "2" the files hash to
+# the hash before (checked when it changed). Dedup's title keys here are the same under both tokenizers.
 SNAPSHOT_HASH = "94c07048e05de79db6c622f6e266195ef698d1ac6a82bc68aab9cd7213168bdd"
-FILES_HASH = "47196ae4c38c7e3bd924a461d91f503f42863959430709e5f22091e4139a2cdb"
+FILES_HASH = "7bd50d624d41edad56d819d8898b028359b71d0589dd701c042479e57c2a1e2a"
 
 
 def combined(tmp_path: Path) -> snap.BuildResult:

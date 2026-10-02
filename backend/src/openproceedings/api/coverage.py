@@ -86,7 +86,9 @@ def compute(engine: TantivyEngine, records: RecordFile, listed: Withheld = NONE)
             "the snapshot's records and the index's documents differ", reason="doc_count_mismatch"
         )
     _withhold_listed(data, records, listed)
-    coverage = CoverageResponse.model_validate({**versions(engine.index_version), **data})
+    coverage = CoverageResponse.model_validate(
+        {**versions(engine.index_version, engine.tokenizer_version), **data}
+    )
     log.info(
         "coverage_computed",
         extra={

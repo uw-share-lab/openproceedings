@@ -3717,7 +3717,7 @@
                 }
               },
               "X-Tokenizer-Version": {
-                "description": "This code's tokenizer_version",
+                "description": "The tokenizer_version of the index the export ran on",
                 "schema": {
                   "type": "string"
                 }

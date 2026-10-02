@@ -62,6 +62,8 @@ from enum import StrEnum
 from openproceedings.diagnostics import Diagnostic, DiagnosticCode, by_position, clip, verbatim
 from openproceedings.query.mathsyms import GREEK, OPERATORS
 from openproceedings.query.normalize import (
+    SERVED_TOKENIZERS,
+    TOKENIZER_VERSION,
     Tail,
     Token,
     first_math_end,
@@ -97,7 +99,11 @@ PIPES = frozenset("|｜")
 COLONS = frozenset(":：﹕︓")
 MINUSES = frozenset("-－﹣")
 STARS = frozenset("*＊﹡")
-DOLLARS = frozenset("$＄﹩")  # only the ASCII `$` can delimit LaTeX math (spec 02 §Token semantics)
+DOLLARS = frozenset("$＄﹩")
+# Tokenizer 3 reads the NFKC form of the text, so the characters whose NFKC form is `$` or `\\` are LaTeX syntax
+# there (`＄x＄` is math); tokenizer 2 read only the ASCII ones as LaTeX. The lexer finds math as the
+# tokenizer it parses for does (`_Lexer.scan`).
+_LATEX_LOOKALIKES = str.maketrans({"＄": "$", "﹩": "$", "＼": "\\", "﹨": "\\"})
 # Every dash (Unicode category Pd) that is not an ASCII-equivalent MINUSES entry, plus the minus sign
 # U+2212: not operators, but easily meant as `-`. A test re-derives this set from the Unicode database.
 _LOOKALIKE_MINUS = frozenset(
@@ -189,9 +195,9 @@ def _wordy(c: str) -> bool:
     return unicodedata.category(c)[0] in "LMN"
 
 
-def letters(text: str) -> int:
+def letters(text: str, tokenizer: str = TOKENIZER_VERSION) -> int:
     """How many letters and digits `text` keeps after the token contract (the wildcard stem measure)."""
-    return sum(len(t.text) for t in tokenize(text))
+    return sum(len(t.text) for t in tokenize(text, tokenizer))
 
 
 def _small_int(digits: str, max_len: int) -> int | None:
@@ -206,8 +212,14 @@ def _step(q: str, j: int) -> int:
 
 
 class _Lexer:
-    def __init__(self, q: str) -> None:
+    def __init__(self, q: str, tokenizer: str) -> None:
         self.q = q
+        self.tokenizer = tokenizer
+        self.nfkc = SERVED_TOKENIZERS[tokenizer].nfkc_first  # LaTeX look-alikes are LaTeX (tokenizer 3)
+        # `q` with each LaTeX look-alike as the `$` or `\\` its tokenizer reads it as (the same length, so offsets
+        # hold): every test for LaTeX syntax reads it, every other test reads `q`
+        self.scan = q.translate(_LATEX_LOOKALIKES) if self.nfkc else q
+        scan = self.scan
         # next_quote[k]: index of the first quote at or after k (len(q) if none), computed once so lexing
         # stays linear however many words the query has
         self._chunk: tuple[int, int, dict[int, int]] | None = None  # see chunk()
@@ -225,7 +237,7 @@ class _Lexer:
         for k in range(len(q) - 1, -1, -1):
             c = q[k]
             self.next_stop[k] = k if c.isspace() or c in QUOTES or c in _BREAKS else self.next_stop[k + 1]
-            self.next_mathish[k] = k if c in "$\\" else self.next_mathish[k + 1]
+            self.next_mathish[k] = k if scan[k] in "$\\" else self.next_mathish[k + 1]
         # Every unescaped `$` that ends an inline-math scan, found once so math_run is a lookup, not a scan:
         # one followed by `$` stops it without closing (`$$` inside inline math); one preceded by a non-space
         # and not followed by a digit closes it (Pandoc). normalize.first_math_end is the one-scan reference
@@ -233,13 +245,13 @@ class _Lexer:
         self.dollar_stops: list[int] = []
         self.dollar_closes: list[bool] = []
         backslashes = 0
-        for k, c in enumerate(q):
+        for k, c in enumerate(scan):
             if c == "$" and backslashes % 2 == 0:
-                nxt = q[k + 1] if k + 1 < len(q) else ""
+                nxt = scan[k + 1] if k + 1 < len(q) else ""
                 if nxt == "$":
                     self.dollar_stops.append(k)
                     self.dollar_closes.append(False)
-                elif k > 0 and not q[k - 1].isspace() and not nxt.isdigit():
+                elif k > 0 and not self.space(q[k - 1], last=True) and not (nxt and self.digit(nxt)):
                     self.dollar_stops.append(k)
                     self.dollar_closes.append(True)
             backslashes = backslashes + 1 if c == "\\" else 0
@@ -250,6 +262,21 @@ class _Lexer:
             str | None
         ] = []  # per open `(`: the filter field whose values it holds (`year:(…)`)
         self.filter_values: dict[int, str] = {}  # index in `out` of each filter value → its field
+
+    def space(self, c: str, *, last: bool = False) -> bool:
+        """Is `c` a space as its tokenizer's math rule (Pandoc) reads it? Under tokenizer 3 that is the first
+        (or `last`) character of its NFKC form: a spacing accent (`´`) is a space and a mark there."""
+        if not self.nfkc or c.isascii():
+            return c.isspace()
+        folded = unicodedata.normalize("NFKC", c)
+        return (folded[-1] if last else folded[0]).isspace()
+
+    def digit(self, c: str) -> bool:
+        """Is `c` a digit as its tokenizer's math rule reads it (the first character of its NFKC form under
+        tokenizer 3: `½` is `1⁄2`)?"""
+        if not self.nfkc or c.isascii():
+            return c.isdigit()
+        return unicodedata.normalize("NFKC", c)[0].isdigit()
 
     def error(self, code: DiagnosticCode, message: str, start: int, end: int) -> None:
         self.errors.append(_diag(code, message, start, end))
@@ -328,7 +355,7 @@ class _Lexer:
         j = i + 1
         closers = CLOSERS[q[i]]
         while j < n and q[j] not in closers:
-            j = _step(q, j)
+            j = _step(self.scan, j)
         j = min(j, n)
         closed = j < n
         if not closed:
@@ -361,7 +388,11 @@ class _Lexer:
                     m += 1
             before = counted  # letters and digits of the earlier words (a running total: linear)
             part = self.word(k, m, in_phrase=True, before=before)
-            if not part.wildcard and any(c.isalnum() for c in part.text) and not tokenize(part.text):
+            if (
+                not part.wildcard
+                and any(c.isalnum() for c in part.text)
+                and not tokenize(part.text, self.tokenizer)
+            ):
                 self.warn(  # `"\\epsilon greedy"` must not silently become the single word `greedy`
                     DiagnosticCode.WARN_SYMBOLS_DROPPED,
                     f"`{clip(part.text)}` in this phrase has nothing searchable (LaTeX commands outside math and "
@@ -372,7 +403,7 @@ class _Lexer:
             else:
                 self.check_dropped(part.text, part.stem or "", k, m)
             parts.append(part)
-            counted += letters(part.text)
+            counted += letters(part.text, self.tokenizer)
             k = m
         self.out.append(Lexeme(Kind.PHRASE, i, end, q[i:end], parts=tuple(parts), closed=closed))
         return end
@@ -381,16 +412,16 @@ class _Lexer:
         """If LaTeX math opens at `i` and closes before `limit` at the end of a word (`$\\alpha + \\beta$`),
         the index after it; else -1. So math with spaces stays one word, while `behavio$r colo$r` (the `$`
         not at a word's start) never pairs across words."""
-        q = self.q
-        if q[i] != "$":
+        q, scan = self.q, self.scan
+        if scan[i] != "$":
             return -1
-        if i + 1 < limit and q[i + 1] == "$":  # `$$…$$` (rare): the one-scan rule
-            found = first_math_end(q[i:limit])
+        if i + 1 < limit and scan[i + 1] == "$":  # `$$…$$` (rare): the one-scan rule
+            found = first_math_end(q[i:limit], self.tokenizer)
             if found < 0:
                 return -1
             end = i + found
         else:
-            if i + 1 >= limit or q[i + 1].isspace():  # Pandoc: an opener is followed by a non-space
+            if i + 1 >= limit or self.space(q[i + 1]):  # Pandoc: an opener is followed by a non-space
                 return -1
             k = bisect.bisect_right(self.dollar_stops, i)
             if k == len(self.dollar_stops) or self.dollar_stops[k] >= limit or not self.dollar_closes[k]:
@@ -410,9 +441,9 @@ class _Lexer:
         q, n = self.q, len(self.q)
         end = i
         while end < n and not q[end].isspace() and q[end] not in QUOTES:
-            end = _step(q, end)
+            end = _step(self.scan, end)
         end = min(end, n)
-        self._chunk = (i, end, {i + a: i + b for a, b in math_regions(q[i:end])})
+        self._chunk = (i, end, {i + a: i + b for a, b in math_regions(q[i:end], self.tokenizer)})
         return self._chunk
 
     def word_end(self, i: int) -> int:
@@ -433,7 +464,7 @@ class _Lexer:
             elif q[j] in _BREAKS:
                 break
             else:
-                j = _step(q, j)
+                j = _step(self.scan, j)
         return min(j, chunk_end)
 
     def word_or_operator(self, i: int) -> int:
@@ -468,12 +499,12 @@ class _Lexer:
         """A WORD over `q[start:end]`, with its wildcard split off and checked. `before` is the number of
         letters and digits of the phrase words before it, which count toward a wildcard's stem."""
         raw = self.q[start:end]
-        regions = math_regions(raw)
+        regions = math_regions(raw, self.tokenizer)
         wild: list[int] = []  # offsets in `raw` of `*`/`$` that act as wildcards (outside math, not currency)
         k = 0
         while k < len(raw):
             c = raw[k]
-            if c == "\\":
+            if self.scan[start + k] == "\\":
                 k += 2
                 continue
             in_math = any(a <= k < b for a, b in regions)
@@ -505,7 +536,7 @@ class _Lexer:
                 "the exact run"
                 + (
                     f" — `{clip(stem)}*` also finds longer runs that start with it"
-                    if letters(stem) >= MIN_STEM
+                    if letters(stem, self.tokenizer) >= MIN_STEM
                     else "; search the whole run as written in the abstract"
                 )
                 + ".",
@@ -521,7 +552,7 @@ class _Lexer:
     def check_stem(
         self, raw: str, stem: str, wildcard: str, start: int, end: int, before: int, *, in_phrase: bool
     ) -> None:
-        toks, tail = tokenize_with_tail(stem)
+        toks, tail = tokenize_with_tail(stem, self.tokenizer)
         if not toks or before + len("".join(t.text for t in toks)) < MIN_STEM:
             self.error(
                 DiagnosticCode.WILDCARD_STEM_TOO_SHORT,
@@ -541,7 +572,7 @@ class _Lexer:
         # Judged on the folded pieces (spec 02, decision-008): `abcd⒈*` is `abcd1.*`, so its `*` follows `.`,
         # whatever the raw character looked like or whether a U+0338 sits on it
         elif tail.pieces:
-            fixed = self.attached(stem, toks, tail, wildcard, in_phrase=in_phrase)
+            fixed = self.attached(stem, toks, tail, wildcard, in_phrase=in_phrase, tokenizer=self.tokenizer)
             self.error(
                 DiagnosticCode.PARSE_WILDCARD_DETACHED,
                 f"The `{wildcard}` in `{clip(raw)}` follows {self.tail_name(stem, tail)}, not a letter or digit, so "
@@ -560,14 +591,16 @@ class _Lexer:
         return f"`{clip(shown)}`" + (f" (from `{clip(written)}`)" if written != shown else "")
 
     @staticmethod
-    def attached(stem: str, toks: list[Token], tail: Tail, wildcard: str, *, in_phrase: bool) -> str:
+    def attached(
+        stem: str, toks: list[Token], tail: Tail, wildcard: str, *, in_phrase: bool, tokenizer: str
+    ) -> str:
         """The fix hint: the wildcard on the stem without its tail, as written when the tail is whole
         characters outside LaTeX math (`vision-*` → `vision*`), else from its tokens (`abcd⒈*` → `abcd1*`,
         `abcd⑴*` → `"abcd 1*"`, `abcd$x$*` → `"abcd x*"`: cutting before the closing `$` would leave the
         math open). Several tokens are quoted as a phrase, except inside a phrase already (`"x y⑴*"` →
         `y 1*`), where the words simply replace the word."""
         cut = tail.start
-        if cut >= toks[-1].end and not any(a < cut < b for a, b in math_regions(stem)):
+        if cut >= toks[-1].end and not any(a < cut < b for a, b in math_regions(stem, tokenizer)):
             return stem[:cut] + wildcard
         words = " ".join(t.text for t in toks) + wildcard
         return words if len(toks) == 1 or in_phrase else f'"{words}"'
@@ -666,17 +699,17 @@ class _Lexer:
         """WARN_SYMBOLS_DROPPED when part of a word or phrase part silently disappears: leading or trailing
         symbols (`C++`, `.NET`), or a bare LaTeX command outside math (`\\epsilon-greedy` → `greedy`)."""
         symbols = stem.endswith(("+", "#")) or stem.startswith((".", "#", "+", "@"))
-        if not symbols and not _COMMAND.search(stem):
+        if not symbols and not _COMMAND.search(self.latex(stem)):
             return  # the common case: no tokenizing at all (it is a full LaTeX scan)
         if self.filter_field():
             return  # a filter value (`year:..2022`) is never searched as text: its own check refuses it
-        toks = tokenize(stem)
+        toks = tokenize(stem, self.tokenizer)
         if not toks:
             return  # nothing left at all: an error or the phrase-part warning says so
         searched = " ".join(t.text for t in toks)
         if symbols:
             dropped = "symbols such as `+`, `#` and `.` are not indexed"
-        elif self.bare_command(stem):
+        elif self.bare_command(stem, self.tokenizer):
             dropped = (
                 "a LaTeX command outside math is not indexed (type the character itself, or put a math command "
                 "inside `$…$` to search it)"
@@ -698,17 +731,22 @@ class _Lexer:
             q[k] == "’" and (k + 1 == len(q) or not _wordy(q[k + 1])) for k in range(start + 1, len(q))
         )
 
+    def latex(self, text: str) -> str:
+        """`text` as its tokenizer reads LaTeX syntax in it (`self.scan`'s rule)."""
+        return text.translate(_LATEX_LOOKALIKES) if self.nfkc else text
+
     @staticmethod
-    def bare_command(stem: str) -> bool:
+    def bare_command(stem: str, tokenizer: str) -> bool:
         """A `\\cmd` outside math that isn't an accent macro or `\\cmd{…}` with content (which is kept);
         `\\cmd{}` keeps nothing, so it counts as bare (`\\alpha{}-divergence` → `divergence`)."""
         regions: list[tuple[int, int]] | None = None  # computed only once a command is found
-        for m in _COMMAND.finditer(stem):
+        scan = stem.translate(_LATEX_LOOKALIKES) if SERVED_TOKENIZERS[tokenizer].nfkc_first else stem
+        for m in _COMMAND.finditer(scan):
             accent = len(m.group(1)) == 1 and m.group(1) in "uvHcdbrkij"
             braced = stem[m.end() : m.end() + 1] == "{" and not _EMPTY_BRACES.match(stem, m.end())
             if accent or braced:
                 continue
-            regions = math_regions(stem) if regions is None else regions
+            regions = math_regions(stem, tokenizer) if regions is None else regions
             if not any(a <= m.start() < b for a, b in regions):
                 return True
         return False
@@ -824,9 +862,10 @@ class _Lexer:
                 )
 
 
-def lex(q: str) -> LexResult:
-    """Split `q` into lexemes. Never raises: problems come back as `errors` and `warnings`, in order."""
-    lexer = _Lexer(q)
+def lex(q: str, tokenizer: str = TOKENIZER_VERSION) -> LexResult:
+    """Split `q` into lexemes, finding LaTeX math and measuring wildcard stems as `tokenizer` (a served
+    tokenizer version) reads them. Never raises: problems come back as `errors` and `warnings`, in order."""
+    lexer = _Lexer(q, tokenizer)
     lexer.run()
     return LexResult(
         tuple(lexer.out),

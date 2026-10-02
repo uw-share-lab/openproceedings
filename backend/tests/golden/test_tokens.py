@@ -1,10 +1,14 @@
 """Golden token table: the token contract (spec 02 §Token semantics, token-contract skill), pinned case by case.
 
 Add a row for every bug ever found; never delete one. A change that alters any row is a TOKENIZER_VERSION bump.
+Every row runs under every served tokenizer version (`SERVED_TOKENIZERS`): a row whose tokens changed in a later
+version keeps its old tokens here and names its new ones in that version's table (`CHANGED_IN_3`).
 """
 
+import unicodedata
+
 import pytest
-from openproceedings.query.normalize import normalize
+from openproceedings.query.normalize import SERVED_TOKENIZERS, TOKENIZER_VERSION, normalize
 
 GOLDEN: list[tuple[str, list[str]]] = [
     # --- the token-contract skill's own table --------------------------------------------------------
@@ -171,7 +175,10 @@ GOLDEN: list[tuple[str, list[str]]] = [
     ("$$\\alpha$$", ["α"]),
     ("\\(\\epsilon\\)-DP", ["ε", "dp"]),
     ("\\[\\alpha\\]", ["α"]),
-    ("＄\\alpha＄", []),  # full-width dollar is not a math delimiter (LaTeX never sees it)
+    (
+        "＄\\alpha＄",
+        [],
+    ),  # tokenizer 2: full-width dollar is not a math delimiter (3: it is `$`, CHANGED_IN_3)
     ("$x$\\emph{w}$ end", ["x", "w", "end"]),  # a closing $ must never re-open math
     ("$$x$$\\emph{w}$$", ["x", "w"]),  # nor a closing $$
     # --- each Pandoc delimiter condition, pinned by a row that changes if it is dropped
@@ -279,10 +286,10 @@ GOLDEN: list[tuple[str, list[str]]] = [
         "$\\not\\subset$ $\\nsubset$ $\\not\\leq$ $\\nleq$ $\\nexists$",
         ["nsubset", "nsubset", "nleq", "nleq", "nexists"],
     ),
-    ("$\\not =$", ["neq"]),  # TeX allows a space after \\not
+    ("$\\not =$", ["neq"]),  # TeX allows a space after \not
     ("$\\in\u0338$", ["notin"]),  # a slash after an operator command negates it
     ("ก×\u0e48ข", ["ก", "times", "ข"]),  # an operator ends the word: the tone mark after it is stray
-    ("a\ufe68b", ["a", "b"]),  # small reverse solidus is text, not LaTeX (like full-width ＼)
+    ("a\ufe68b", ["a", "b"]),  # tokenizer 2: small reverse solidus is text, not LaTeX (3: it is `\`)
     ("∈\u0338", ["notin"]),  # a decomposed ∉ is ∉, never `in`
     ("=\u0338", ["neq"]),
     ("∉ and ≠", ["notin", "and", "neq"]),
@@ -306,11 +313,47 @@ GOLDEN: list[tuple[str, list[str]]] = [
 ]
 
 
+# Tokenizer 3 reads the NFKC form of the whole text before LaTeX (decision-030), so a character whose NFKC form
+# is LaTeX syntax is that syntax: full-width `＄` and `＼` and small `﹩` and `﹨` are `$` and `\`.
+CHANGED_IN_3: dict[str, list[str]] = {
+    "＄\\alpha＄": ["α"],
+    "a\ufe68b": ["a"],  # `\b`: a command outside math, dropped
+}
+
+# Backslash + accent in every Unicode form (TASK-168's finding): tokenizer 2 read the raw form, so NFD `Caf\e`
+# + U+0301 was the command `\e` and NFC `Caf\é` a backslash before a letter. Tokenizer 3 gives each row's
+# tokens for its NFC, NFD, NFKC and NFKD forms alike.
+FORMS: list[tuple[str, list[str]]] = [
+    ("Caf\\é", ["caf", "e"]),  # 2 in NFD: `caf`
+    ("Erd\\H{ő}s", ["erdos"]),  # 2 in NFD: `erd`, `o`, `s`
+    ('G\\"{ö}del', ["godel"]),
+    ('na\\"{ï}ve', ["naive"]),
+    ("\\'école", ["ecole"]),
+    ("Pr\\'{é}cis \\v{š}", ["precis", "s"]),
+    ("\\c{ç}a", ["ca"]),
+    ("\\ö and \\ő", ["o", "and", "o"]),  # 2 in NFD: `and`
+    ("$\\é$ y", ["e", "y"]),
+    ("x \\ﬁne y", ["x", "y"]),  # NFKC `\fine`: a command outside math (2 in NFC: `fine`)
+    ("$x^²$", ["x2"]),  # NFKC `$x^2$` (2 in NFC: `x`, `2`)
+    ("＼emph{x} and ＄\\alpha＄", ["x", "and", "α"]),  # NFKC `\emph{x} and $\alpha$`
+]
+
+
 def test_table_has_at_least_100_cases() -> None:
     assert len(GOLDEN) >= 100
     assert len({text for text, _ in GOLDEN}) == len(GOLDEN), "duplicate inputs in the golden table"
+    assert set(CHANGED_IN_3) <= {text for text, _ in GOLDEN}
 
 
+@pytest.mark.parametrize("version", SERVED_TOKENIZERS)
 @pytest.mark.parametrize(("text", "tokens"), GOLDEN, ids=[repr(t)[:40] for t, _ in GOLDEN])
-def test_golden(text: str, tokens: list[str]) -> None:
-    assert normalize(text) == tokens
+def test_golden(text: str, tokens: list[str], version: str) -> None:
+    expected = CHANGED_IN_3.get(text, tokens) if version == "3" else tokens
+    assert normalize(text, version) == expected
+
+
+@pytest.mark.parametrize("form", ["NFC", "NFD", "NFKC", "NFKD"])
+@pytest.mark.parametrize(("text", "tokens"), FORMS, ids=[repr(t)[:40] for t, _ in FORMS])
+def test_every_unicode_form_tokenizes_alike(text: str, tokens: list[str], form: str) -> None:
+    assert TOKENIZER_VERSION == "3"  # these rows are tokenizer 3's; a later version adds its own
+    assert normalize(unicodedata.normalize(form, text)) == tokens

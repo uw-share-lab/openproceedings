@@ -24,6 +24,7 @@ from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.export import Provenance, bibtex_key, write
 from openproceedings.ingest.dedup import Attribution, Origin
 from openproceedings.ingest.record import PaperRecord
+from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import parse
 from pydantic import ValidationError
 from refaudit.bibtex import parse_string
@@ -476,6 +477,7 @@ def test_an_expansion_line_says_term_or_terms_and_where_the_rest_are(data_dir: P
 
     engine = SimpleNamespace(
         index_version="x" * 12,
+        tokenizer_version=TOKENIZER_VERSION,
         expansions=lambda _ast: {("a", "*"): tuple(f"a{i:02d}" for i in range(12)), ("b", "$"): ("b",)},
     )
     result = parse("a* b$")

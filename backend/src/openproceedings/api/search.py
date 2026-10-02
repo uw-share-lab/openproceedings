@@ -58,9 +58,9 @@ def parse_query(request: Request, engine: EngineDep, body: ParseRequest) -> Pars
     """02's ParseResult for `q` (debounced as the user types). It reports a parse: any well-formed body is
     a 200 whose `errors` say why the query doesn't parse (`PARSE_TOO_LONG` included); only a malformed body
     is refused (422 `API_BAD_PARAM`)."""
-    result = parsed(request, body.q, body.mode)
+    result = parsed(request, body.q, body.mode, engine.tokenizer_version)
     return ParseResponse(
-        **versions(engine.index_version),
+        **versions(engine.index_version, engine.tokenizer_version),
         mode=result.mode,
         ast=result.ast,
         effective_ast=result.effective_ast,
@@ -89,7 +89,7 @@ def search(
     highlights. `limit` over 200 is a 422 (never clamped); a query that doesn't parse is a 422 with its
     diagnostics."""
     engine = served.engine  # the request's one read of the served index: its records are this engine's
-    result = searchable(request, q, mode)
+    result = searchable(request, q, mode, engine.tokenizer_version)
     assert result.effective_ast is not None  # searchable refuses a query that doesn't parse
     check_candidates(
         request, engine, result.effective_ast
@@ -101,7 +101,7 @@ def search(
     assert result.canonical is not None and result.canonical_hash is not None  # it parsed
     assert result.identification_query is not None and found.facets is not None
     return SearchResponse(
-        **versions(engine.index_version),
+        **versions(engine.index_version, engine.tokenizer_version),
         query=QueryInfo(
             input=q,
             canonical=result.canonical,

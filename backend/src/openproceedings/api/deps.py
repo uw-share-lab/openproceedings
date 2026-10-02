@@ -3,7 +3,7 @@ privacy-safe fields a route adds to its access line.
 
     @router.get("/search")
     def search(request: Request, engine: EngineDep, q: str, ...) -> SearchResponse:
-        result = searchable(request, q, mode)    # PARSE_TOO_LONG before parsing; 422 if it doesn't parse;
+        result = searchable(request, q, mode, engine.tokenizer_version)  # PARSE_TOO_LONG first; 422 if it doesn't parse;
                                                  # canonical_hash, token count, codes on the line, never q
         found = run(engine, result, ...)         # openproceedings.search, as `op search` runs it
         annotate(request, total=found.total)
@@ -169,23 +169,44 @@ def checked_query(q: str) -> str:
     return q
 
 
-def parsed(request: Request, q: str, mode: Mode) -> ParseResult:
-    """`parse(q, mode)`, annotated on the access line: a report, never a refusal (`POST /parse`). `parse`
+def parsed(request: Request, q: str, mode: Mode, tokenizer: str) -> ParseResult:
+    """`parse(q, mode, tokenizer)`, annotated on the access line: a report, never a refusal (`POST /parse`).
+    `tokenizer` is the version of the index the query runs on (`TantivyEngine.tokenizer_version`). `parse`
     checks the length cap first, in O(1), so an over-long query is `errors=[PARSE_TOO_LONG]`, never lexed."""
-    result = parse(q, mode)
+    result = parse(q, mode, tokenizer)
     annotate_parse(request, result)
     return result
 
 
-def searchable(request: Request, q: str, mode: Mode) -> ParseResult:
+def searchable(request: Request, q: str, mode: Mode, tokenizer: str) -> ParseResult:
     """`parsed`, refusing a query that doesn't parse: 422 with the first error's code and every error as a
     diagnostic, spans into `q` (spec 04 §Error handling). The engine never sees it (spec 03)."""
-    result = parsed(request, checked_query(q), mode)
+    result = parsed(request, checked_query(q), mode, tokenizer)
+    _refuse_errors(result)
+    charge_verified(request, result.effective_ast)  # every route that runs a query parses it here
+    return result
+
+
+def searchable_on(
+    request: Request, result: ParseResult, q: str, mode: Mode, engine: TantivyEngine
+) -> ParseResult:
+    """`result`, a `searchable` parse of `q` for the served index, as the query reads on `engine` (an export's
+    pinned index): itself when `engine`'s index was built with the tokenizer it was parsed with, else `q`
+    parsed again with `engine`'s and refused as `searchable` refuses. Charged once, by `searchable`, for the
+    larger of the two counts of verified clauses (and capped on the second)."""
+    if result.tokenizer_version == engine.tokenizer_version:
+        return result
+    again = parse(q, mode, engine.tokenizer_version)
+    _refuse_errors(again)
+    assert result.effective_ast is not None and again.effective_ast is not None  # both parsed
+    charge_verified(request, again.effective_ast, already=len(verified_clauses(result.effective_ast)))
+    return again
+
+
+def _refuse_errors(result: ParseResult) -> None:
     if result.effective_ast is None:
         first = result.errors[0]
         raise ApiError(first.code, first.message, diagnostics=result.errors)
-    charge_verified(request, result.effective_ast)  # every route that runs a query parses it here
-    return result
 
 
 def too_many_verified(clauses: Sequence[Phrase | Near], cap: int) -> ApiError:
@@ -206,21 +227,22 @@ def too_many_verified(clauses: Sequence[Phrase | Near], cap: int) -> ApiError:
     return ApiError(DiagnosticCode.API_TOO_MANY_VERIFIED_CLAUSES, message, diagnostics=diagnostics)
 
 
-def charge_verified(request: Request, ast: Node | None) -> None:
+def charge_verified(request: Request, ast: Node | None, already: int = 0) -> None:
     """A query's position-verified clauses (spec 03), counted from the AST before anything compiles it: more
     than `ApiConfig.max_verified_clauses` is 422 `API_TOO_MANY_VERIFIED_CLAUSES` (each is a cold
     verification holding a slot for seconds, so one request could otherwise hold the slots for a minute);
     otherwise the query costs `ApiConfig.verified_cost` per clause: the rest is charged now, or 429
     `API_RATE_LIMITED` (spec 04 §Rate limit). Every route that runs the client's query calls this, through
-    `searchable`, and then `check_candidates` once it has its engine; a replay calls `admit_replay`."""
+    `searchable`, and then `check_candidates` once it has its engine; a replay calls `admit_replay`. `already`:
+    clauses this request was charged for already (`searchable_on`'s second parse), not charged again."""
     clauses = verified_clauses(ast)
     access_fields(request)["verified_clauses"] = len(clauses)
-    if not clauses:
+    if len(clauses) <= already:
         return
     config = request.app.state.config
     if len(clauses) > config.max_verified_clauses:
         raise too_many_verified(clauses, config.max_verified_clauses)
-    _charge(request, len(clauses))
+    _charge(request, len(clauses) - already)
 
 
 def _charge(request: Request, clauses: int) -> None:

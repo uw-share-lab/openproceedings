@@ -266,7 +266,7 @@ def test_build_writes_the_layout(cache: Path, tmp_path: Path) -> None:
     assert (manifest["format_version"], manifest["record_schema_version"], manifest["tokenizer_version"]) == (
         "2",
         "4",
-        "2",
+        "3",
     )
     assert manifest["openproceedings_version"]
     for name in ("merges.csv", "conflicts.csv"):

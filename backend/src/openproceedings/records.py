@@ -63,7 +63,6 @@ from openproceedings.engine.protocol import EngineInputError
 from openproceedings.engine.tantivy_engine import TantivyEngine
 from openproceedings.ingest.snapshot import SnapshotError, indexed_snapshot, utc_query_sources
 from openproceedings.query import QUERY_VERSION
-from openproceedings.query.normalize import TOKENIZER_VERSION
 from openproceedings.query.parser import Mode, ParseResult, parse
 from openproceedings.search import expansions_json, run
 from openproceedings.timestamps import CrawlWindow, Timestamp
@@ -358,8 +357,10 @@ def freeze(
     if parsed.canonical is None or parsed.canonical_hash is None or parsed.identification_query is None:
         raise InternalError(DiagnosticCode.API_INTERNAL, "a record needs a query that parsed")
     inputs = index_inputs(data_dir, engine.index_version)  # the instance's own facts first: no search on a
-    if inputs["tokenizer_version"] != TOKENIZER_VERSION:  # broken instance (the engine refuses such an index)
+    if inputs["tokenizer_version"] != engine.tokenizer_version:  # broken instance (its manifest changed)
         raise InternalError(DiagnosticCode.API_INTERNAL, "the served index has another tokenizer_version")
+    if parsed.tokenizer_version != engine.tokenizer_version:  # the caller parsed for another index: a bug
+        raise InternalError(DiagnosticCode.API_INTERNAL, "a record's query was parsed with another tokenizer")
     facts = snapshot_facts(data_dir, inputs)
     found = identify(engine, parsed)
     fields: dict[str, Any] = {
@@ -370,7 +371,7 @@ def freeze(
         "canonical_hash": parsed.canonical_hash,
         "identification_query": parsed.identification_query,
         "index_version": engine.index_version,
-        "tokenizer_version": TOKENIZER_VERSION,
+        "tokenizer_version": engine.tokenizer_version,  # the index's: the query was read with it
         "query_version": QUERY_VERSION,
         "schema_version": inputs["schema_version"],
         "ranking_params": inputs["ranking_params"],
@@ -637,6 +638,7 @@ class Changed:
 class Replay:
     status: Status
     engine: TantivyEngine  # the index it ran on
+    parsed: ParseResult  # the record's canonical, read with that index's tokenizer
     query_version: str
     identified: Identified | None  # None when the canonical string no longer runs (see `refused`)
     refused: DiagnosticCode | None  # the first error, when the canonical doesn't parse or is refused
@@ -739,8 +741,10 @@ def replay(
     - otherwise `drifted`, naming each changed input (only the query version, when its own index is here).
     A canonical that no longer runs (`refused`) compares nothing: `added` and `removed` are None.
 
-    `parsed` is `parse(record.canonical, "native")` when the caller already has it (the API, which counted its
-    verified clauses on it). `admit(engine, parsed)`, called with the engine the replay runs on, is a serving
+    `parsed` is `parse(record.canonical, "native", tokenizer)` when the caller already has it, with the tokenizer
+    of the index the replay runs on; otherwise (or when it was parsed with another one) the canonical is parsed
+    here, with that index's tokenizer: a record pinned to an index built with an older served tokenizer re-reads
+    its query as it was saved (guarantee 4). `Replay.parsed` is the parse that ran. `admit(engine, parsed)`, called with the engine the replay runs on, is a serving
     policy (the API's verified-clause cap and candidate ceiling, `deps.admit_replay`): a code it returns
     withholds the run. Nothing is compiled, `refused` is that code, and on its own index under its own query
     version the status is `drifted` with no changed input, never `reproduced` and never `mismatch` for the
@@ -756,8 +760,9 @@ def replay(
         engine = None
     on_own_index = engine is not None
     ran_on = engine if engine is not None else served
-    if parsed is None:  # the canonical string is native syntax, translations applied
-        parsed = parse(record.canonical, "native")
+    if parsed is None or parsed.tokenizer_version != ran_on.tokenizer_version:
+        # the canonical string is native syntax, translations applied
+        parsed = parse(record.canonical, "native", ran_on.tokenizer_version)
     found, refused, not_run = _run(ran_on, parsed, admit)
     # a refused replay compares nothing: both null, never a false that reads as "compared and differed"
     ids_match = found.ids_hash == record.ids_hash if found is not None else None
@@ -823,6 +828,7 @@ def replay(
     return Replay(
         status=status,
         engine=ran_on,
+        parsed=parsed,
         query_version=QUERY_VERSION,
         identified=found,
         refused=refused,

@@ -43,9 +43,8 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
-from itertools import pairwise
 
-from openproceedings.query.mathsyms import (
+from tests.unit.tokenizer_v2.mathsyms import (  # frozen: the only line changed from 433399a9
     GREEK,
     LETTER_LOOKALIKES,
     NEGATED,
@@ -54,26 +53,7 @@ from openproceedings.query.mathsyms import (
     OPERATORS,
 )
 
-TOKENIZER_VERSION = "3"  # 3: NFKC of the whole text before LaTeX, so every Unicode form tokenizes alike
-# 2: math spelled in LaTeX or Unicode gives one token (decision-006)
-
-
-@dataclass(frozen=True, slots=True)
-class TokenizerForm:
-    """What a served tokenizer version does differently: code branches on this, never on a version string."""
-
-    nfkc_first: bool  # step 1 on the whole text before step 4 (3), or one raw character at a time after it (2)
-
-
-# The tokenizer versions this code serves: the current one, which new indexes are built with, and the one before
-# it, so a query against (and the replay of a record pinned to) an index built with "2" still reads text as that
-# index did (guarantee 4). Retire "2" (drop it here, with its form's branches and its frozen copy,
-# `tests/unit/tokenizer_v2/`) only once no record pins an index built with it (`op index retire` refuses a pinned
-# one; index-versioning skill).
-SERVED_TOKENIZERS: dict[str, TokenizerForm] = {
-    "2": TokenizerForm(nfkc_first=False),
-    TOKENIZER_VERSION: TokenizerForm(nfkc_first=True),
-}
+TOKENIZER_VERSION = "2"  # 2: math spelled in LaTeX or Unicode gives one token (decision-006)
 # Base letters whose combining marks fold (accents, optional vowel points): matched on the Unicode name.
 FOLDING_SCRIPTS = ("LATIN", "GREEK", "CYRILLIC", "HEBREW", "ARABIC", "EXTENDED ARABIC", "DIGIT")
 # Marks that spell a distinct letter even in those scripts, so they are kept: Cyrillic breve (й ≠ и) and
@@ -466,15 +446,10 @@ def _latex_mask(
     return mask
 
 
-def first_math_end(text: str, version: str = TOKENIZER_VERSION) -> int:
+def first_math_end(text: str) -> int:
     """If LaTeX math opens at the start of `text` (`$…$` by the Pandoc rule, or `$$…$$`), the index just after
     its closing delimiter; else -1. Exactly the decision step 4 makes at position 0 (so it agrees with
-    `math_regions`), in one scan to the closer instead of a pass over the whole text. Under tokenizer 3 a
-    text that NFKC changes is read as its NFKC form (`＄x＄` is `$x$`), and the index is the raw one."""
-    view = _view(text, version)
-    if view is not None:
-        regions = view.regions(math_regions(view.norm, "2"))
-        return regions[0][1] if regions and regions[0][0] == 0 else -1
+    `math_regions`), in one scan to the closer instead of a pass over the whole text."""
     if not text.startswith("$"):
         return -1
     if text.startswith("$$"):
@@ -484,12 +459,9 @@ def first_math_end(text: str, version: str = TOKENIZER_VERSION) -> int:
     return close + 1 if close >= 0 else -1
 
 
-def math_regions(text: str, version: str = TOKENIZER_VERSION) -> list[tuple[int, int]]:
-    """The LaTeX math regions of `text` exactly as step 4 finds them (half-open, delimiters included, raw
-    offsets). The query lexer uses this so that it and the tokenizer never disagree about what `$…$` is."""
-    view = _view(text, version)
-    if view is not None:
-        return view.regions(math_regions(view.norm, "2"))
+def math_regions(text: str) -> list[tuple[int, int]]:
+    """The LaTeX math regions of `text` exactly as step 4 finds them (half-open, delimiters included).
+    The query lexer uses this so that it and the tokenizer never disagree about what `$…$` is."""
     regions: list[tuple[int, int]] = []
     _latex_mask(text, regions)
     return regions
@@ -505,14 +477,10 @@ _NON_ASCII = re.compile(r"[^\x00-\x7f]")
 _MARKED = re.compile(rb"[^\x00]")
 
 
-def tokenize(text: str, version: str = TOKENIZER_VERSION) -> list[Token]:
-    """Tokens of `text` with their raw code-point spans, as tokenizer `version` (one of SERVED_TOKENIZERS)
-    reads it."""
-    if _plain_ascii(text, version):
+def tokenize(text: str) -> list[Token]:
+    """Tokens of `text` with their raw code-point spans."""
+    if _plain_ascii(text):
         return [Token(m.group().lower(), m.start(), m.end()) for m in _ASCII_WORD.finditer(text)]
-    view = _view(text, version)
-    if view is not None:
-        return view.tokens(_tokenize_each_char(view.norm))
     return _tokenize_each_char(text)
 
 
@@ -528,148 +496,21 @@ class Tail:
     pieces: str
 
 
-def tokenize_with_tail(text: str, version: str = TOKENIZER_VERSION) -> tuple[list[Token], Tail]:
-    """`tokenize(text, version)` plus its `Tail`, from the same pass: the lexer's detached-wildcard test
-    (spec 02: a wildcard goes directly after a letter or digit, judged on the folded pieces)."""
-    if _plain_ascii(text, version):
-        tokens = tokenize(text, version)
+def tokenize_with_tail(text: str) -> tuple[list[Token], Tail]:
+    """`tokenize(text)` plus its `Tail`, from the same pass: the lexer's detached-wildcard test (spec 02:
+    a wildcard goes directly after a letter or digit, judged on the folded pieces)."""
+    if _plain_ascii(text):
+        tokens = tokenize(text)
         end = tokens[-1].end if tokens else 0
         return tokens, Tail(end, text[end:])
     out: list[Tail] = []
-    view = _view(text, version)
-    if view is not None:
-        tokens = view.tokens(_tokenize_each_char(view.norm, out))
-        return tokens, Tail(view.raw_start(out[0].start), out[0].pieces)
     tokens = _tokenize_each_char(text, out)
     return tokens, out[0]
 
 
-def _plain_ascii(text: str, version: str) -> bool:
-    """ASCII with no LaTeX: every character is a word character or a separator, as it stands (task-073).
-    Checks `version` too, so every entry point refuses one this code doesn't serve."""
-    if version not in SERVED_TOKENIZERS:
-        raise ValueError(
-            f"tokenizer version {version!r} is not one this code serves ({', '.join(SERVED_TOKENIZERS)})"
-        )
+def _plain_ascii(text: str) -> bool:
+    """ASCII with no LaTeX: every character is a word character or a separator, as it stands (task-073)."""
     return text.isascii() and "\\" not in text and "$" not in text
-
-
-# --- tokenizer 3: NFKC of the whole text first ------------------------------------------------------------
-# Tokenizer 2 ran step 1 (NFKC) one raw character at a time, after step 4 (LaTeX) had read the raw text, so a
-# LaTeX decision could turn on the Unicode form: NFD `Caf\e` + U+0301 is the command `\e` (dropped, `caf`)
-# where NFC `Caf\é` is a backslash before a non-ASCII letter (`caf`, `e`). Tokenizer 3 reads the NFKC form of
-# the whole text, so a text and its NFC, NFD, NFKC and NFKD forms (all of which have that one NFKC form) give the
-# same tokens. Spans stay raw (`_View`). A text NFKC leaves alone (most, and every ASCII one) is its own form.
-@dataclass(frozen=True, slots=True)
-class _View:
-    """A text's NFKC form `norm`, and for each of its characters the raw characters it came from, as a
-    half-open range: `lo[k]`, `hi[k]`. A character NFKC composes from several (`e` + U+0301 is `é`) spans them
-    all; several that one raw character expands to (`½` is `1⁄2`) each span it alone."""
-
-    raw: str
-    norm: str
-    lo: list[int]
-    hi: list[int]
-
-    def raw_start(self, k: int) -> int:
-        """The raw offset where `norm[k]` starts (the raw text's end for `len(norm)`)."""
-        return self.lo[k] if k < len(self.norm) else len(self.raw)
-
-    def regions(self, regions: list[tuple[int, int]]) -> list[tuple[int, int]]:
-        """`norm`'s half-open regions as raw ones."""
-        return [(self.lo[a], max(self.hi[a:b])) for a, b in regions]
-
-    def tokens(self, tokens: list[Token]) -> list[Token]:
-        """`norm`'s tokens with raw spans: each covers the raw characters its own characters came from. Spans
-        never go backwards and two overlap only on one raw character NFKC expands into pieces of both (`½`):
-        when composition interleaves them (`=` + U+0345 + U+0338 is `≠` + U+0345: `neq`, then `ι`), the first
-        ends where the second starts and the second takes the rest, as tokenizer 2's spans do (task-075)."""
-        spans = [[min(self.lo[t.start : t.end]), max(self.hi[t.start : t.end])] for t in tokens]
-        for a, b in pairwise(spans):
-            b[0] = max(b[0], a[0])
-            if b[0] < a[1] and not self._shared(b[0], a[1]):
-                a[1], b[1] = max(b[0], a[0] + 1), max(b[1], a[1])
-        return [Token(t.text, s, e, t.op) for t, (s, e) in zip(tokens, spans, strict=True)]
-
-    def _shared(self, start: int, end: int) -> bool:
-        """Is raw `[start, end)` one character that NFKC expands to several (`½`), so two tokens may share it?"""
-        return end - start == 1 and len(unicodedata.normalize("NFKC", self.raw[start])) > 1
-
-
-def _view(text: str, version: str) -> _View | None:
-    """`text`'s `_View` under tokenizer 3 when NFKC changes it; None when `text` is read as it stands (tokenizer 2,
-    or a text already in NFKC)."""
-    if not SERVED_TOKENIZERS[version].nfkc_first or unicodedata.is_normalized("NFKC", text):
-        return None
-    norm = unicodedata.normalize("NFKC", text)
-    lo: list[int] = []
-    hi: list[int] = []
-    # NFKC acts on a raw segment as on its own when the segment starts at a character of combining class 0 that
-    # doesn't compose with the one before it: so segments are such clusters (a class-0 character and the marks
-    # after it), joined to the one before whenever their NFKC forms don't simply concatenate (Hangul jamo)
-    segments: list[tuple[int, int, str]] = []
-    n, i = len(text), 0
-    while i < n:
-        j = i + 1
-        while j < n and unicodedata.combining(text[j]):
-            j += 1
-        piece = text[i:j] if j - i == 1 and text[i] < "\x80" else unicodedata.normalize("NFKC", text[i:j])
-        if segments and text[i] >= "\x80":
-            a, _, before = segments[-1]
-            joined = unicodedata.normalize("NFKC", text[a:j])
-            if joined != before + piece:
-                segments[-1] = (a, j, joined)
-                i = j
-                continue
-        segments.append((i, j, piece))
-        i = j
-    if "".join(p for _, _, p in segments) != norm:  # never seen: every character spans the whole text
-        return _View(text, norm, [0] * len(norm), [n] * len(norm))
-    for a, b, piece in segments:
-        owners = _owners(text[a:b], a, piece)
-        lo.extend(o[0] for o in owners)
-        hi.extend(o[1] for o in owners)
-    return _View(text, norm, lo, hi)
-
-
-def _owners(segment: str, at: int, nfkc: str) -> list[tuple[int, int]]:
-    """For each character of `nfkc` (the NFKC form of the raw `segment`, which starts at raw offset `at`), the
-    raw characters it came from: NFKC is compatibility decomposition, canonical reordering, then canonical
-    composition, replayed here on (character, raw range) pairs. Each character's range is the whole segment
-    when the replay doesn't give `nfkc` (never seen)."""
-    if len(segment) == 1:
-        return [(at, at + 1)] * len(nfkc)
-    pieces = [
-        (d, at + k, at + k + 1) for k, c in enumerate(segment) for d in unicodedata.normalize("NFKD", c)
-    ]
-    k = 0
-    while k < len(pieces):  # canonical reordering: a run of marks sorts stably by combining class
-        if unicodedata.combining(pieces[k][0]):
-            m = k
-            while m < len(pieces) and unicodedata.combining(pieces[m][0]):
-                m += 1
-            pieces[k:m] = sorted(pieces[k:m], key=lambda p: unicodedata.combining(p[0]))
-            k = m
-        else:
-            k += 1
-    out: list[tuple[str, int, int]] = []
-    starter = -1  # index in `out` of the last character of combining class 0
-    for d, lo, hi in pieces:
-        cls = unicodedata.combining(d)
-        if starter >= 0:
-            between = len(out) - 1 > starter
-            if not between or unicodedata.combining(out[-1][0]) < cls:  # not blocked
-                composed = unicodedata.normalize("NFC", out[starter][0] + d)
-                if len(composed) == 1:
-                    s = out[starter]
-                    out[starter] = (composed, min(s[1], lo), max(s[2], hi))
-                    continue
-        out.append((d, lo, hi))
-        if cls == 0:
-            starter = len(out) - 1
-    if "".join(c for c, _, _ in out) != nfkc:
-        return [(at, at + len(segment))] * len(nfkc)
-    return [(lo, hi) for _, lo, hi in out]
 
 
 def latex_mask(text: str) -> list[int]:
@@ -841,6 +682,6 @@ def _tokenize_each_char(text: str, tail: list[Tail] | None = None) -> list[Token
     return out
 
 
-def normalize(text: str, version: str = TOKENIZER_VERSION) -> list[str]:
+def normalize(text: str) -> list[str]:
     """The tokens of `text` (spec 02 §Token semantics). The index is fed `" ".join(normalize(field))`."""
-    return [t.text for t in tokenize(text, version)]
+    return [t.text for t in tokenize(text)]

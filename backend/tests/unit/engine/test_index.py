@@ -26,6 +26,7 @@ from openproceedings.engine.index import (
 from openproceedings.ingest.dedup import DedupResult
 from openproceedings.ingest.record import PaperRecord
 from openproceedings.ingest.snapshot import SnapshotError, render
+from openproceedings.query.normalize import TOKENIZER_VERSION
 
 from tests.unit.ingest.test_dedup import H, paper
 
@@ -138,7 +139,7 @@ def test_build_writes_a_verified_manifest(built: Path) -> None:
     assert built.name == manifest["index_version"]
     assert (
         manifest["doc_count"] == 3
-        and manifest["tokenizer_version"] == "2"
+        and manifest["tokenizer_version"] == TOKENIZER_VERSION == "3"
         and manifest["schema_version"] == "3"
     )
     assert manifest["ranking_params"] == RANKING_PARAMS and manifest["tantivy_version"] == "0.26.2"
