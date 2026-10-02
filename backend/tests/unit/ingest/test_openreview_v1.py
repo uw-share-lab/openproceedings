@@ -309,7 +309,7 @@ def iclr_2017(tmp_path: Path, conference: list[dict[str, Any]], workshop: list[d
 def test_a_workshop_copy_and_its_conference_twin_are_linked_both_ways(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """TASK-159 (decision-029): a copy on ICLR 2017's workshop listing whose `_bibtex` names its conference twin,
+    """TASK-159 (DECISION-TASK159): a copy on ICLR 2017's workshop listing whose `_bibtex` names its conference twin,
     the one main-track submission with its title, stays its own record (different submissions, different
     outcomes); each record gets a `twin` claim naming the other's id. Track, status and content_hash don't change."""
     rejected = v1_note("iclr-2017/note-rejected-bare-venueid.json")
@@ -331,7 +331,8 @@ def test_a_workshop_copy_and_its_conference_twin_are_linked_both_ways(
     assert [c.url for c in ws.claims("twin")] == [
         c.url for c in ws.claims("title")
     ]  # the copy's listing page
-    assert crawl.report.to_manifest()["twins_linked"] == 1
+    report = crawl.report.to_manifest()
+    assert report["twins_linked"] == 1 and "twins_ambiguous" not in report
     [line] = [r for r in caplog.records if r.getMessage() == "openreview_v1_twin_linked"]
     assert (line.levelno, line.__dict__["forum"], line.__dict__["twin"]) == (
         logging.DEBUG,
@@ -370,7 +371,8 @@ def test_no_title_match_or_two_leaves_a_workshop_note_unlinked(
     with caplog.at_level(logging.DEBUG, logger="openproceedings.ingest.sources"):
         crawl = iclr_2017(tmp_path, [rejected, same], [alone, ambiguous])
     assert all(r.claims("twin") == () for r in crawl.records)
-    assert "twins_linked" not in crawl.report.to_manifest()
+    report = crawl.report.to_manifest()
+    assert "twins_linked" not in report and report["twins_ambiguous"] == 1  # auditable without the DEBUG line
     [line] = [r for r in caplog.records if r.getMessage() == "openreview_v1_twin_ambiguous"]
     assert (line.__dict__["forum"], line.__dict__["candidates"]) == ("WsTwoMatch", 2)
 

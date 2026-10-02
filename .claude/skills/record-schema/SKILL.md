@@ -91,7 +91,7 @@ in Scholar. The abstract is never Scholar's (`null` instead).
 ## Versions
 `RECORD_SCHEMA_VERSION` (`record.py`) names this shape: the fields, native-id forms and content_hash
 rule. It is `4` since TASK-159/157 added two provenance-only claim fields, `twin` (a v1 copy's linked twins, a tuple of
-record ids, decision-029) and `invitation` (scholarmend 0.1.5's v1 submission invitation); it was `3` from TASK-118,
+record ids, DECISION-TASK159) and `invitation` (scholarmend 0.1.5's v1 submission invitation); it was `3` from TASK-118,
 which added the round-qualified `nips-<hash>-round1`/`-round2` form, and `2` from TASK-096, which added the
 `iclr_archive` provenance source. Change any of them and bump it;
 every snapshot manifest records it. A derived field (`DERIVED`, never in `records.jsonl`) is not part of the

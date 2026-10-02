@@ -101,10 +101,10 @@ Parse venueids through `.claude/skills/openreview-venueids/SKILL.md`.
   (`judge`, counted in the report's `twin_outcome`; the 18 ICLR 2017 workshop copies of rejected papers that say
   `Submitted to ICLR 2017`, TASK-152). The RIS importer applies the same rule (`is_twin_outcome`) to scholarmend
   0.1.5's `invitation` claim (TASK-157).
-- A copy and its main-track twin stay two records, linked (rule 6, `link_twins`, TASK-159, decision-029). A copy
+- A copy and its main-track twin stay two records, linked (rule 6, `link_twins`, TASK-159, DECISION-TASK159). A copy
   is a record from a non-main submission listing whose dedup title key matches exactly one main-track submission,
   or several of which its `_bibtex` names one. Each side gets a `twin` claim naming the other's id, counted in the
-  report's `twins_linked`. ICLR 2017's 35 `Invite to Workshop` notes' `_bibtex` all name one unrelated forum
+  report's `twins_linked` (`twins_ambiguous` counts a copy left unlinked by an ambiguous title). ICLR 2017's 35 `Invite to Workshop` notes' `_bibtex` all name one unrelated forum
   (`B1akgy9xx`), so `_bibtex` counts only when it names the copy's title. Only ICLR 2017 has copies: 53, linked
   to 51 conference notes.
 - Status per v1 year (the submission invitation lists what was **submitted**, never what was accepted):

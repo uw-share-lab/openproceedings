@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@jeevanp03'
 created_date: '2026-10-02 00:41'
-updated_date: '2026-10-02 04:52'
+updated_date: '2026-10-02 05:45'
 labels:
   - ingest
   - dedup
@@ -33,7 +33,7 @@ Source: a TASK-152 (PR #63) deferral (`docs/results/2026-10-01-iclr-2017-worksho
 <!-- AC:BEGIN -->
 - [ ] #1 A decision record says whether a workshop copy and its conference twin are collapsed into one record (in the crawler, as TASK-125/TASK-132 do, or in dedup) or stay two records linked to each other, and how the link is shown and exported; it cites dedup-rules §Never merge, the track rule (for the 18) and decision-005, and may decide the 18 and the 34 differently
 - [ ] #2 The pairs are found by evidence that names the twin (the `_bibtex` forum id for the 18) and, if the decision allows it, by exact normalized title within ICLR 2017 for the 34; a test over recorded fixtures covers a `_bibtex` pair, a title-only pair (linked or left unlinked, as the decision says), and a workshop note with no twin that stays unlinked
-- [ ] #3 No two records with different forum ids become one record unless the decision says so, and every pair the rule links or refuses is in the audit files (dedup-rules §Audit files)
-- [ ] #4 A real-data before/after snapshot (`op snapshot diff`) shows only ICLR 2017 pairs change, with the counts in the notes (including the 34 twins' venue strings, re-measured), and a default-filters-off query that matches some pairs shows "identified" before and after (unchanged if the decision is link-only)
-- [ ] #5 spec 01, the record-schema and dedup-rules skills and the openreview-venueids 2013/2017 row describe the rule as built
+- [ ] #3 A real-data before/after snapshot (`op snapshot diff`) shows only ICLR 2017 pairs change, with the counts in the notes (including the 34 twins' venue strings, re-measured), and a default-filters-off query that matches some pairs shows "identified" before and after (unchanged if the decision is link-only)
+- [ ] #4 spec 01, the record-schema and dedup-rules skills and the openreview-venueids 2013/2017 row describe the rule as built
+- [ ] #5 No two records with different forum ids become one record (the owner chose link, not merge); every link is recorded on both records as a `twin` claim with its evidence and counted in the crawl report's `twins_linked`, and a copy left unlinked because several main-track submissions share its title (its `_bibtex` naming none) is counted in `twins_ambiguous`, so refusals are auditable from the manifest
 <!-- AC:END -->

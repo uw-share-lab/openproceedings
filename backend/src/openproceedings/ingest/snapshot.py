@@ -484,7 +484,7 @@ def render(
     if any(not r.provenance for r in records):
         raise SnapshotError("a record has no provenance claims; every value must say where it came from")
     by_id = {r.id: r for r in records}
-    for r in records:  # a `twin` claim names records of the same crawl (decision-029): never a dangling link
+    for r in records:  # a `twin` claim names records of the same crawl (DECISION-TASK159): never a dangling link
         for t in (t for c in r.claims("twin") if isinstance(c.value, tuple) for t in c.value):
             if t not in by_id:
                 raise SnapshotError(f"record {r.id}'s twin claim names {t}, which this snapshot doesn't hold")

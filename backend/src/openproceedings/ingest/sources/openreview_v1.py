@@ -59,14 +59,16 @@ The authority rules (never broken):
    non-null `venue` or `venueid` (even `''`) is not, so which of two identical notes has the lower number never
    decides whether the paper's third, accepted note absorbs them.
 
-6. **A copy and its main-track twin are two linked records** (TASK-159, decision-029). A record from a non-main
+6. **A copy and its main-track twin are two linked records** (TASK-159, DECISION-TASK159). A record from a non-main
    submission listing whose dedup title key is that of exactly one record from the main-track submission listing
    (or of several, one of which its `_bibtex` url names) is a copy of it: ICLR 2017's workshop listing holds 53,
    18 saying `Submitted to ICLR 2017` (their `_bibtex` names the twin), 34 `Invite to Workshop` (all 35 such
    notes' `_bibtex` name one unrelated forum, so a `_bibtex` counts only when its forum has the copy's title) and
    1 with no venue. They link to 51 conference records (two have two copies), 104 records in all.
    They are different submissions with their own outcomes, so they are never merged; each gets a `twin` claim
-   naming the other's id (`link_twins`, after rule 5), counted in the report's `twins_linked`. No other v1
+   naming the other's id (`link_twins`, after rule 5), counted in the report's `twins_linked`. A copy whose title
+   several main-track submissions share, none named by its `_bibtex`, stays unlinked, counted in
+   `twins_ambiguous` (0 on the 2026-09-29 crawl). No other v1
    venue-year has such a title match on the 2026-09-29 crawl.
 
 `content.authors` is split into names only by decision-019's count-checked rule (`split_authors`): a list with
@@ -379,6 +381,7 @@ class CrawlReport(Report):
     )
     twin_outcome: int = 0  # notes whose main-track outcome was their conference twin's: `unknown` (TASK-152)
     twins_linked: int = 0  # copies on a non-main listing linked to their main-track twin (TASK-159)
+    twins_ambiguous: int = 0  # copies whose title several main-track submissions share, none named: unlinked
     track_status: dict[str, Counter[str]] = field(default_factory=dict)
     gaps: tuple[str, ...] = ()
     conflicts: list[Conflict] = field(default_factory=list)
@@ -414,6 +417,7 @@ class CrawlReport(Report):
             **({"withdrawn_by_twin": self.withdrawn_by_twin} if self.withdrawn_by_twin else {}),
             **({"twin_outcome": self.twin_outcome} if self.twin_outcome else {}),
             **({"twins_linked": self.twins_linked} if self.twins_linked else {}),
+            **({"twins_ambiguous": self.twins_ambiguous} if self.twins_ambiguous else {}),
             "conflicts": len(self.conflicts),
             "track_status": {t: dict(sorted(s.items())) for t, s in sorted(self.track_status.items())},
             "coverage_gaps": list(self.gaps),
@@ -845,9 +849,11 @@ def crawl(client: OpenReviewClient, venue: str, year: int, *, dry_run: bool = Fa
         report.skipped[DUPLICATE_SUBMISSION] += 1
         log.debug("openreview_duplicate_submission", extra={"forum": dropped, "kept": kept})
     # rule 6 (TASK-159): link each copy on a non-main listing to its main-track twin, after both collapses
-    for copy, twin in link_twins(records, listed):
+    linked, ambiguous = link_twins(records, listed)
+    for copy, twin in linked:
         report.twins_linked += 1
         log.debug("openreview_v1_twin_linked", extra={"forum": copy, "twin": twin})
+    report.twins_ambiguous = len(ambiguous)
     for r in records.values():
         report.track_status.setdefault(r.track, Counter())[r.status] += 1
     report.imported = len(records)
@@ -945,7 +951,7 @@ def _listing(client: OpenReviewClient, ad: Adapter, listing: Listing, report: Cr
     report.listings[listing.invitation] = rows
 
 
-# --- a copy and its main-track twin (rule 6, TASK-159, decision-029) -------------------------------------------
+# --- a copy and its main-track twin (rule 6, TASK-159, DECISION-TASK159) -------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -966,7 +972,9 @@ def _bibtex_forum(note: Mapping[str, Any]) -> str | None:
     return found.group(1) if found else None
 
 
-def link_twins(records: dict[str, PaperRecord], listed: Mapping[str, Listed]) -> list[tuple[str, str]]:
+def link_twins(
+    records: dict[str, PaperRecord], listed: Mapping[str, Listed]
+) -> tuple[list[tuple[str, str]], list[str]]:
     """Link, in place, each copy (a record from a non-main submission listing) to its twin: the main-track
     submission listing's record with the same dedup title key. The copy's `_bibtex` decides between several such
     records when it names one of them; otherwise there must be exactly one. A title whose key is empty
@@ -976,14 +984,16 @@ def link_twins(records: dict[str, PaperRecord], listed: Mapping[str, Listed]) ->
     the other records' ids, sorted, its url and fetched_at its own title claim's (the listing page it came from).
     Run after rule 5's collapses, so a dropped note is never named. On the 2026-09-29 crawl only ICLR 2017 has
     such copies: 53 of its 161 workshop notes (docs/results/2026-10-02-iclr-2017-twins.md). Return the (copy,
-    twin) native ids, sorted."""
+    twin) native ids, sorted, and the copies left unlinked because several main-track submissions share their title
+    and their `_bibtex` names none (native ids, sorted)."""
     mains: defaultdict[str, list[str]] = defaultdict(list)
     for rid, at in listed.items():
         main = rid in records and at.listing.role == "submission" and at.listing.track == "main"
         if main and (key := title_key(records[rid].title)):
             mains[key].append(rid)
     links: defaultdict[str, list[tuple[str, str]]] = defaultdict(list)  # record id → (other id, evidence)
-    pairs = []
+    pairs: list[tuple[str, str]] = []
+    ambiguous: list[str] = []
     for rid in sorted(listed):  # in id order, so each record's links are too
         at = listed[rid]
         if rid not in records or at.listing.role != "submission" or at.listing.track == "main":
@@ -1001,6 +1011,7 @@ def link_twins(records: dict[str, PaperRecord], listed: Mapping[str, Listed]) ->
             theirs = "the only main-track submission with its title"
         else:
             if same:  # several main-track submissions share the title and its _bibtex names none: no link
+                ambiguous.append(copy.native)
                 log.debug(
                     "openreview_v1_twin_ambiguous", extra={"forum": copy.native, "candidates": len(same)}
                 )
@@ -1017,7 +1028,7 @@ def link_twins(records: dict[str, PaperRecord], listed: Mapping[str, Listed]) ->
         claim = Claim(field="twin", value=tuple(o for o, _ in named_by), source=SOURCE, url=title.url,
                       fetched_at=title.fetched_at, evidence="; ".join(e for _, e in named_by))  # fmt: skip
         records[rid] = record.model_copy(update={"provenance": (*record.provenance, claim)})
-    return sorted(pairs)
+    return sorted(pairs), ambiguous
 
 
 # --- two notes of one paper (rule 5) -------------------------------------------------------------------------
