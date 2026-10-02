@@ -30,11 +30,11 @@ labels() {  # labels <mutate.py> <args...> — the selected labels on one line; 
   out=$(python3 "$script" --list "$@" 2>/dev/null); rc=$?
   if [ "$rc" -ne 0 ]; then echo "rc=$rc"; else printf '%s\n' "$out" | paste -sd' ' -; fi
 }
-refused() {  # refused <label> <shard> — exits 1 with a "--shard" message on stderr, and lists nothing
+refused() {  # refused <label> <shard> <expected message> — exits 1 with that message on stderr, lists nothing
   local out err rc
   # `--shard=`, so argparse hands -1/3 to parse_shard rather than reading it as an option
   out=$(python3 "$FIX" --list --shard="$2" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err")
-  if [ "$rc" -eq 1 ] && [ -z "$out" ] && printf '%s' "$err" | grep -qE '^--shard .*: (expected i/n|need 1 <= i <= n)'; then
+  if [ "$rc" -eq 1 ] && [ -z "$out" ] && printf '%s' "$err" | grep -qF -- "--shard '$2': $3"; then
     pass=$((pass+1)); printf '  ok   refused: %s\n' "$1"
   else fail=$((fail+1)); printf '  FAIL refused: %s: rc=%s out=[%s] err=[%s]\n' "$1" "$rc" "$out" "$err"; fi
 }
@@ -51,34 +51,47 @@ check "leading zeros: 02/03 is 2/3"         "$(labels "$FIX" --shard 02/03)" "b2
 check "--match first, then the split"       "$(labels "$FIX" --match 1 --shard 2/2)" "c1 g1"
 check "--list prints no shard header"       "$(python3 "$FIX" --list --shard 1/3 2>&1 | head -1)" "a1"
 
-echo "== the real mutant set: n shards partition it, the same way every run"
-all=$(python3 "$REAL" --list | sort)
-total=$(printf '%s\n' "$all" | grep -c .)
+echo "== the real mutant set: n shards partition it, the same way on every runner"
+# The reference order, computed here and not by mutate.py: the files sorted by name, each in file order. Every
+# shard job builds its own list, so the order must not depend on the directory listing.
+python3 -c 'import json, pathlib, sys
+for f in sorted(pathlib.Path(sys.argv[1]).glob("*.json")):
+    for m in json.loads(f.read_text()):
+        print(m["label"])' "$SRC/.claude/scripts/mutants" > "$TMP/ref"
+total=$(grep -c . "$TMP/ref")
+check "the reference is not empty"             "$([ "$total" -gt 0 ] && echo yes)" "yes"
+python3 "$REAL" --list > "$TMP/all"; rc=$?
+check "--list: exit 0"                         "$rc" "0"
+check "--list: every mutant, in sorted-file order" "$(cat "$TMP/all")" "$(cat "$TMP/ref")"
 for n in 3 8; do
-  : > "$TMP/union"
-  for i in $(seq 1 "$n"); do python3 "$REAL" --list --shard "$i/$n" >> "$TMP/union"; done
-  check "$n shards: complete (every label)"      "$(sort -u "$TMP/union")"   "$all"
-  check "$n shards: disjoint (none twice)"       "$(grep -c . "$TMP/union")" "$total"
+  : > "$TMP/union"; bad=0
+  for i in $(seq 1 "$n"); do python3 "$REAL" --list --shard "$i/$n" >> "$TMP/union" || bad=1; done
+  check "$n shards: every one exits 0"           "$bad" "0"
+  # one multiset comparison: each label as often as in the reference, so complete and disjoint
+  check "$n shards: complete and disjoint"       "$(sort "$TMP/union")" "$(sort "$TMP/ref")"
 done
 check "8 shards: sizes differ by at most 1" \
   "$(for i in $(seq 1 8); do python3 "$REAL" --list --shard "$i/8" | grep -c .; done | sort -n | sed -n '1p;$p' | paste -sd' ' - \
      | awk '{print ($2 - $1 <= 1) ? "yes" : "no"}')" "yes"
-check "stable: shard 5/8 twice is the same"    "$(labels "$REAL" --shard 5/8)" "$(labels "$REAL" --shard 5/8)"
+first=$(labels "$REAL" --shard 5/8)
+check "stable: shard 5/8 lists mutants"        "$(case "$first" in ''|rc=*) echo no;; *) echo yes;; esac)" "yes"
+check "stable: shard 5/8 twice is the same"    "$(labels "$REAL" --shard 5/8)" "$first"
 
 echo "== a bad i/n is refused"
-refused "0/3 (shards count from 1)"   0/3
-refused "4/3 (i past n)"              4/3
-refused "1/0 (no shards)"             1/0
-refused "0/0"                         0/0
-refused "-1/3 (negative)"             -1/3
-refused "3 (no slash)"                3
-refused "1/2/3 (two slashes)"         1/2/3
-refused "a/b (not numbers)"           a/b
-refused "empty"                       ""
-refused "/3 (no i)"                   /3
-refused "' 1/3' (a space)"            " 1/3"
-refused "superscript digit"           "²/3"
-refused "Arabic-Indic digits"         "١/٣"
+form="expected i/n, e.g. 2/8"; range="need 1 <= i <= n"
+refused "0/3 (shards count from 1)"   0/3    "$range"
+refused "4/3 (i past n)"              4/3    "$range"
+refused "1/0 (no shards)"             1/0    "$range"
+refused "0/0"                         0/0    "$range"
+refused "-1/3 (negative)"             -1/3   "$form"
+refused "3 (no slash)"                3      "$form"
+refused "1/2/3 (two slashes)"         1/2/3  "$form"
+refused "a/b (not numbers)"           a/b    "$form"
+refused "empty"                       ""     "$form"
+refused "/3 (no i)"                   /3     "$form"
+refused "' 1/3' (a space)"            " 1/3" "$form"
+refused "superscript digit"           "²/3"  "$form"
+refused "Arabic-Indic digits"         "١/٣"  "$form"
 
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]

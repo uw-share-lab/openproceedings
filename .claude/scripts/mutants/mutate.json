@@ -76,5 +76,11 @@
   "file": ".claude/scripts/mutate.py",
   "old": "        if not a.list:\n            print(f\"shard",
   "new": "        if True:\n            print(f\"shard"
+ },
+ {
+  "label": "mutate shard: mutant files not sorted (each shard job could build a different list)",
+  "file": ".claude/scripts/mutate.py",
+  "old": "for f in sorted((ROOT / \".claude/scripts/mutants\").glob(\"*.json\"))",
+  "new": "for f in (ROOT / \".claude/scripts/mutants\").glob(\"*.json\")"
  }
 ]

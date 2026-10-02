@@ -14,7 +14,7 @@ help:
 	@echo "openapi  - regenerate the OpenAPI snapshot and frontend/src/api/schema.ts (commit both; CI checks)"
 	@echo "changelog - regenerate CHANGELOG.md from merged PRs (RELEASE=X.Y.Z [DATA_DIR=<dir>] on a release branch; spec 08 §Release)"
 	@echo "hooks    - install git hooks (commit-msg, pre-push) via scripts/setup-dev.sh"
-	@echo "mutate   - mutation-test every gate check in parallel (nightly CI; after changing a gate)"
+	@echo "mutate   - mutation-test every gate check in parallel (after changing a gate; nightly CI runs it as 8 --shard jobs)"
 	@echo "mutate-changed - only mutants in files changed vs origin/dev (what reviews run)"
 
 # The npm workspace root is the repo root (package.json, package-lock.json); dependencies are hoisted to

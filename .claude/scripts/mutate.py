@@ -112,7 +112,8 @@ def main() -> None:
             )
         mutants = [m for m in mutants if m["file"] in files]
         if not mutants:
-            print("no mutants cover the changed files — if you changed gate logic, add mutants", flush=True)
+            msg = "no mutants cover the changed files — if you changed gate logic, add mutants"
+            print(msg, file=sys.stderr if a.list else sys.stdout, flush=True)
     if a.shard is not None:
         i, n = parse_shard(a.shard)
         selected = len(mutants)
