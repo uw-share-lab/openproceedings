@@ -70,7 +70,7 @@ times make each `crawl_window`; `op ingest` writes each source's markers through
 marker lands where the replay reads it), and adds the conflicts a v1 crawl found inside one source to
 `conflicts.csv` (`with_crawl_conflicts`). **Ingest caps** (TASK-155, decision-026): `load_sources` runs every
 record through `caps.cap_records` before dedup. A run of combining marks in a title or abstract keeps 8 marks
-(only a letter or digit ends a run), and an abstract keeps 20,000 characters. Each trimmed claim's evidence
+(only a letter or digit ends a run), a title keeps 1,000 characters and an abstract 20,000. Each trimmed claim's evidence
 carries the note `trimmed at ingest (decision-026): …`, after any source evidence in parentheses. The manifest's
 `trimmed` lists, sorted, the records with any trimmed title or abstract claim left after withholding. The key is
 written only when there is one, so a corpus within the caps has the manifest and `records.jsonl` it had.

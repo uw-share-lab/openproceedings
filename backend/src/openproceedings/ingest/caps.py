@@ -1,5 +1,5 @@
 """The ingest caps on indexed text (spec 01 §Pipeline 2; decision-026, TASK-155): a run of combining marks keeps
-at most `MAX_MARKS` marks, and an abstract at most `MAX_ABSTRACT` characters.
+at most `MAX_MARKS` marks, a title at most `MAX_TITLE` characters and an abstract at most `MAX_ABSTRACT`.
 
 CPython's NFKC canonical reordering is superlinear in a run of marks whose combining classes alternate
 (`a` + `\\u0301\\u0338` × n), so one hostile abstract would cost the index build and every search that
@@ -22,8 +22,9 @@ in canonical order (`_decomposed`), and keeps its first `MAX_MARKS` non-starters
 character is kept as it was. So every form of the same text (NFC, NFD, marks stored in another order) trims to
 the same characters, and two sources whose titles shared a dedup key still share it. Trimmed text is then made
 one a record accepts (`_tidy`): dropping marks can leave two spaces together, or a space or `…` at an end. A
-title is whitespace-collapsed, and an abstract is stripped of whitespace and `…` at both ends. An abstract past
-its cap is cut there and tidied the same way.
+title is whitespace-collapsed, and an abstract is stripped of whitespace and `…` at both ends. A title or
+abstract past its length cap is cut there and tidied the same way. The title cap (the owner, 2026-10-02) bounds
+every shape of run the mark rule might miss; real titles are at most 192 characters.
 
 Nothing is trimmed silently: each claim whose value changed says what and why in its evidence (`TRIMMED`, shown
 on the paper page), and the snapshot manifest names the records (`trimmed`). Text within both caps is returned
@@ -42,10 +43,12 @@ from openproceedings.query.normalize import KEEP, SUB, latex_mask
 
 MAX_MARKS = 8  # combining marks (NFKD non-starters) kept per run
 MAX_ABSTRACT = 20_000  # characters (code points) kept of an abstract
+MAX_TITLE = 1_000  # characters (code points) kept of a title (the owner, 2026-10-02)
+_LENGTH = {"title": MAX_TITLE, "abstract": MAX_ABSTRACT}
 TRIMMED = "trimmed at ingest (decision-026):"  # how a claim's evidence says its value was trimmed
 # the note as `_claim` writes it, ending the evidence: the whole of it, or after the source's own in parentheses
 _NOTE = re.compile(rf"(?:^|\s\(){re.escape(TRIMMED)} [0-9a-z ,;]+\)?\Z")
-CAPPED = ("title", "abstract")  # the indexed text fields; only the abstract has a length cap
+CAPPED = ("title", "abstract")  # the indexed text fields
 
 
 @lru_cache(maxsize=4096)
@@ -154,8 +157,8 @@ def cap(field: str, text: str) -> tuple[str, str | None]:
     notes = [f"{dropped} combining marks dropped past {MAX_MARKS} in a run"] if dropped else []
     if dropped:
         capped = _tidy(field, capped)
-    if field == "abstract" and len(capped) > MAX_ABSTRACT:
-        cut = _tidy(field, capped[:MAX_ABSTRACT])
+    if len(capped) > (most := _LENGTH[field]):
+        cut = _tidy(field, capped[:most])
         notes.append(f"cut from {len(capped):,} to {len(cut):,} characters")
         capped = cut
     return (capped, f"{TRIMMED} {'; '.join(notes)}") if notes else (text, None)

@@ -33,6 +33,9 @@ The owner decided both caps on 2026-10-01:
 - **Marks.** We cap every run of combining marks in a title or abstract at 8 marks per base character and
   drop the extras.
 - **Length.** We cap every abstract at 20,000 characters (code points) and truncate it.
+- **Title length** (the owner, 2026-10-02, after the security review). We cap every title at 1,000 characters
+  and truncate it, trimmed and flagged as abstracts are. Evidence: the longest of the snapshot's 95,877 titles
+  (title claims included) is 192 characters, and none is over 300.
 
 Both trims are flagged, never silent:
 - **In the record.** Each claim whose value was trimmed carries a note in its `evidence`:
@@ -88,9 +91,9 @@ Details:
   the note, and the manifest names the record.
 - **Cut ends.** A cut abstract is stripped of trailing whitespace and `…`, since a record refuses either. The
   note gives the length kept.
-- **Titles.** They get the mark cap only. A title length cap would bound every shape of bypass, including ones
-  not yet found. The security review recommends one (1,000 code points). It is with the owner (asked
-  2026-10-02), and this decision does not add it.
+- **Titles.** Titles get both the mark cap and the 1,000-character cap. The length cap bounds the tokenizer's
+  cost on every shape of run the mark rule might still miss. Before it, three such shapes were found in review,
+  and titles had no other bound. A cut title is whitespace-collapsed.
 
 ## Consequences
 
@@ -116,8 +119,8 @@ Details:
 - **Where else.** Recorded in spec 01 §Pipeline 2 and §Record schema, the record-schema skill, the snapshots
   skill (the manifest's `trimmed`) and the logging-standards skill (the log fields). The caps are applied by the
   snapshot build. `PaperRecord` itself does not refuse text over them.
-- **Revisit** if a real source carries an abstract near 20,000 characters, or a script that needs more than 8
-  marks on one base.
+- **Revisit** if a real source carries a title near 1,000 characters or an abstract near 20,000, or a script
+  that needs more than 8 marks on one base.
 - **Out of scope.** Authors and keywords are neither tokenized nor highlighted, so they are not capped.
   `conflicts.csv` rows a crawl found inside one source (`with_crawl_conflicts`) keep that source's raw texts,
   since they are not indexed.

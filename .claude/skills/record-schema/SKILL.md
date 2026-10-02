@@ -14,7 +14,7 @@ hash; loading a record whose stored hash doesn't match its fields fails (a hash 
 | Field | Rule |
 |---|---|
 | `id` | `op:<venue>:<year>:<native>`, with venue lower-cased: `op:iclr:2024:iilhN2MycO`. Never changes once a snapshot has shipped it. |
-| `title` | Raw, whitespace-collapsed. **No** search normalization here (spec 03 owns it). Capped by the snapshot build at 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
+| `title` | Raw, whitespace-collapsed. **No** search normalization here (spec 03 owns it). Capped by the snapshot build at 1,000 characters and 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
 | `abstract` | Raw text or `null` (never an empty or whitespace-only string). Reject a value that starts or ends with `…`: that's a Scholar snippet. An ellipsis inside a real abstract (`x₁, …, x_n`) is allowed. HTML stripped, LaTeX kept verbatim. Capped by the snapshot build at 20,000 characters and 8 combining marks per run (the ingest caps, below); the model doesn't check it. |
 | `authors` | Display order, as the source gives them. |
 | `venue` | `NeurIPS` \| `ICLR` \| `ICML` (enum; extensible later). |
@@ -132,8 +132,8 @@ canonical reordering is superlinear in a long run of marks with alternating comb
     the double space. Trimmed text is then tidied (title collapsed, abstract stripped of whitespace and `…`).
     So every Unicode form of the same text trims alike, and dedup title keys stay equal.
   - This keeps every token's run of non-starters within 8.
-- **Length.** An abstract keeps at most 20,000 code points. A cut one is stripped of trailing whitespace and
-  `…`.
+- **Length.** A title keeps at most 1,000 code points (the owner, 2026-10-02; the longest real one is 192), and
+  an abstract at most 20,000. A cut title is collapsed, and a cut abstract is stripped of whitespace and `…`.
 - **Where.** The caps run once, in `snapshot.load_sources`, before dedup, on the record's field and on every
   claim of it alike.
 - **Flagged.** Never silent: a trimmed claim's `evidence` carries `trimmed at ingest (decision-026): <what>`,

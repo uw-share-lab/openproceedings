@@ -13,7 +13,7 @@ build.
 | Field | Type | Notes |
 |---|---|---|
 | `id` | str | Stable ID `op:<venue>:<year>:<native>`, e.g. `op:iclr:2024:iilhN2MycO`. `native` is the OpenReview forum ID, or `pmlr-v202-<key>` (ICML) / `nips-<hash>` (NeurIPS; `nips-<hash>-round1`/`-round2` on the 2021 Datasets and Benchmarks host: the suffix is the link's round token, because that host numbers each round and the main track separately, so its hash alone can name three papers; a D&B link without a round, or dated other than 2021, gets no id (miner `no_round`, RIS `unresolved`), never a bare `nips-<hash>`; `urls.proceedings_native` is the one rule) / `iclr-<hash>` (ICLR) for proceedings-only papers. |
-| `title` | str | Raw, whitespace-collapsed. Normalization for search happens in 03, not here. The snapshot build caps it at 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
+| `title` | str | Raw, whitespace-collapsed. Normalization for search happens in 03, not here. The snapshot build caps it at 1,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
 | `abstract` | str \| null | Raw. `null` if no source has it. Never a Scholar snippet (reject values that start or end with `…`; an ellipsis inside is allowed). Never an empty string. The snapshot build caps it at 20,000 characters and 8 combining marks per run (§Pipeline 2, decision-026); the model doesn't check this. |
 | `authors` | list[str] | Display order. |
 | `venue` | enum | `NeurIPS` \| `ICLR` \| `ICML`. Extensible. |
@@ -189,8 +189,9 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
        requires.
        So every Unicode form of the same text trims alike, and dedup title keys that matched still match.
      - No token holds more than 8 consecutive non-starters, so NFC stays linear.
-   - **Length.** An abstract keeps its first 20,000 characters (code points), then trailing whitespace and `…`
-     are stripped.
+   - **Length.** A title keeps its first 1,000 characters (code points) and is whitespace-collapsed. An
+     abstract keeps its first 20,000 and is stripped of whitespace and `…` at both ends. The title cap was the
+     owner's decision of 2026-10-02. The longest real title is 192 characters.
 
    The record's field and every claim of it are trimmed alike. A trimmed claim's `evidence` carries the note
    `trimmed at ingest (decision-026): <what>`: the marks dropped, and the length it was cut from and to. The

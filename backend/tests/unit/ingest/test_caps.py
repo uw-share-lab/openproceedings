@@ -19,6 +19,7 @@ from openproceedings.ingest.caps import (
     CAPPED,
     MAX_ABSTRACT,
     MAX_MARKS,
+    MAX_TITLE,
     TRIMMED,
     cap,
     cap_marks,
@@ -168,7 +169,7 @@ def test_a_capped_title_or_abstract_is_still_one_a_record_accepts(text: str) -> 
     assert built.title == capped_title and built.abstract == capped_abstract
 
 
-@pytest.mark.parametrize("accent", ["\u00b4", "\u00a8", "\u2026", "\u2103", "\uff01"])
+@pytest.mark.parametrize("accent", ["\u00b4", "\u00a8", "\u02d8", "\u1fbd", "\u2026", "\u2103", "\uff01"])
 def test_a_trimmed_run_keeps_every_character_but_its_marks_as_it_was(accent: str) -> None:
     title = "\u0e01" + "\u0316\u0301" * 5 + f" {accent} title"
     capped, note = cap("title", title)
@@ -180,8 +181,8 @@ def test_an_accent_macro_doesnt_end_a_run() -> None:
     # the round-2 security probe: `\H{` + an invisible character + `}` is markup the tokenizer joins across, so
     # its letter is no base; uncapped, 4,000 of these made one word with a run of 32,000 marks
     marks = "\u0316\u0301" * 4
-    capped, note = cap("title", "\u0e01" + (marks + "\\H{\u200d}") * 4_000)
-    assert note is not None and len(capped) == 9 + 5 * 4_000  # every mark after the first 8 dropped
+    capped, dropped = cap_marks("\u0e01" + (marks + "\\H{\u200d}") * 4_000)
+    assert dropped == 8 * 3_999 and len(capped) == 9 + 5 * 4_000  # every mark after the first 8 dropped
     assert cap_marks("\u0e01" + marks + "\\H{x}" + marks)[1] == 0  # a kept letter inside the braces is a base
 
 
@@ -228,9 +229,12 @@ def test_a_cut_abstract_never_ends_in_whitespace_or_an_ellipsis() -> None:
     assert note == f"{TRIMMED} cut from 20,011 to 19,997 characters"
 
 
-def test_a_title_has_no_length_cap() -> None:
-    title = "word " * 5_000 + "end"
-    assert cap("title", title) == (title, None)
+def test_a_long_title_is_cut_collapsed_and_noted() -> None:
+    title = "word " * 300 + "end"  # 1,503 characters
+    out, note = cap("title", title)
+    assert out == ("word " * 200).strip() and len(out) == 999  # cut at 1,000, then the trailing space
+    assert note == f"{TRIMMED} cut from 1,503 to 999 characters"
+    assert cap("title", "x" * MAX_TITLE) == ("x" * MAX_TITLE, None)  # at the cap: unchanged
 
 
 def test_both_caps_are_noted_together() -> None:

@@ -55,6 +55,9 @@ Bound the tokenizer's superlinear NFKC reordering on stored text (TASK-067's sec
   function of the text's equivalence class, not its bytes.
 
 ## Decisions (and what would change them)
+- Titles also get a length cap of 1,000 characters (the owner, 2026-10-02). Each review round found another
+  shape of mark run the run rule missed, so a plain length bound backs the rule up. Real titles are at most 192
+  characters.
 - A run ends only at a letter or digit, so marks after a space or punctuation are capped with the run before.
   It is stricter than "per base character", and real text (longest run 1) never needs more. Revisit if a script
   legitimately stacks marks after punctuation.
