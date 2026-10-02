@@ -45,10 +45,11 @@ def pair(tmp_path_factory: pytest.TempPathFactory) -> Pair:
 
 
 def test_the_current_and_the_previous_schema_are_served_and_no_other() -> None:
-    assert SCHEMA_VERSION == "3" and SERVED_SCHEMAS == ("2", "3")
+    assert SCHEMA_VERSION == "3" and list(SERVED_SCHEMAS) == ["2", "3"]
+    assert [f.ord_indexed for f in SERVED_SCHEMAS.values()] == [False, True]
     for served in SERVED_SCHEMAS:
         assert unservable({**MANIFEST, "schema_version": served}) is None
-    for refused in ("1", "4", None, 3):
+    for refused in ("1", "4", None, 3, [], {}, ["3"]):
         why = unservable({**MANIFEST, "schema_version": refused})
         assert why is not None and why[0] == "schema_version_mismatch" and "build a new index" in why[1]
 

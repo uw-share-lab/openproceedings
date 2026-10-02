@@ -32,7 +32,7 @@ from openproceedings.engine.compile import (
     verified_clauses,
     wildcards,
 )
-from openproceedings.engine.index import IDS, SERVED_SCHEMAS, open_index, record_of, verify_index
+from openproceedings.engine.index import IDS, SERVED_SCHEMAS, SchemaForm, open_index, record_of, verify_index
 from openproceedings.engine.protocol import (
     FACET_FIELDS,
     MAX_EXPANSIONS,
@@ -72,7 +72,9 @@ def unservable(manifest: dict[str, Any]) -> tuple[str, str] | None:
     without re-hashing, so the API's `/meta` can leave such versions out (task-036 review)."""
     name = manifest.get("index_version")
     schema = manifest.get("schema_version")
-    if schema not in SERVED_SCHEMAS:  # the current schema and the one before it (guarantee 4: pinned indexes)
+    # the current schema and the one before it (guarantee 4: pinned indexes); a manifest is read here before
+    # it is re-hashed (`/meta`), so a value of any JSON type is refused, never looked up
+    if not isinstance(schema, str) or schema not in SERVED_SCHEMAS:
         served = ", ".join(SERVED_SCHEMAS)
         return (
             "schema_version_mismatch",
@@ -192,9 +194,11 @@ class TantivyEngine:
         self.index = open_index(path)
         self.searcher = self.index.searcher()
         self.ids = (path / IDS).read_text(encoding="utf-8").splitlines()
-        # schema 3 indexes `ord`, so a verified clause names its ids as a u64 term set; a schema-2 index (one a
-        # record may pin) keeps the term set on the text `id` it was served with (TASK-167, `id_set`)
-        self.ord_indexed: bool = manifest["schema_version"] != "2"
+        # what this index's schema differs in (`SERVED_SCHEMAS`): schema 3 indexes `ord`, so a verified clause
+        # names its ids as a u64 term set; a schema-2 index (one a record may pin) keeps the term set on the text
+        # `id` it was served with (TASK-167, `id_set`)
+        self.form: SchemaForm = SERVED_SCHEMAS[manifest["schema_version"]]
+        self.ord_indexed: bool = self.form.ord_indexed
         self.compiled: dict[str, Compiled] = {}  # per tree (bounded), see compile()
         self.verified: Verified = {}  # position-verified clauses, per engine
         # each wildcard's terms, or just the count of an over-cap one

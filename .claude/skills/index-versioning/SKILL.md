@@ -71,8 +71,9 @@ data/indexes/current            symlink → the served version
 
 ## Two served schemas (TASK-167)
 A `SCHEMA_VERSION` bump changes every new `index_version`, but it must not strand the indexes that search records
-pin. So `engine/index.py` lists `SERVED_SCHEMAS`, the current schema and the one before it, and `unservable`
-accepts both. New builds use the current schema. An index of the previous schema is opened as it was built, and
+pin. So `engine/index.py` maps each served schema to its `SchemaForm` in `SERVED_SCHEMAS` (the current schema
+and the one before it: what differs between them, such as `ord_indexed`), and `unservable` accepts both. The engine
+reads its index's form once (`TantivyEngine.form`) and branches on it, never on a version string. New builds use the current schema. An index of the previous schema is opened as it was built, and
 the engine takes that schema's path for it (schema 2: a verified clause's ids as a term set on the text `id`;
 schema 3: on the indexed `ord`; `TantivyEngine.ord_indexed`). The two paths must give the same ids and the same
 float scores for every query (`test_served_schemas.py`). A record saved on the old schema must replay

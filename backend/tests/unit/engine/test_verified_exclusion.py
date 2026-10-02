@@ -39,14 +39,14 @@ CORPUS = [
 ]
 
 
-@pytest.fixture(scope="module", params=SERVED_SCHEMAS)
+@pytest.fixture(scope="module", params=list(SERVED_SCHEMAS))
 def small(tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest) -> TantivyEngine:
     engine = tantivy_of(CORPUS, tmp_path_factory.mktemp("exclusion"), request.param)
     assert engine.ord_indexed == (request.param != "2")
     return engine
 
 
-@pytest.fixture(scope="module", params=SERVED_SCHEMAS)
+@pytest.fixture(scope="module", params=list(SERVED_SCHEMAS))
 def synthetic(tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest) -> TantivyEngine:
     return tantivy_of(list(records()), tmp_path_factory.mktemp("exclusion-5k"), request.param)
 

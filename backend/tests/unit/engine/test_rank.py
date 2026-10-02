@@ -233,7 +233,8 @@ def test_an_index_from_other_versions_is_refused(tmp_path: Path, monkeypatch: py
     for name, value in (("SCHEMA_VERSION", "1"), ("TOKENIZER_VERSION", "1")):
         with monkeypatch.context() as m:
             m.setattr(idx, name, value)
-            m.setattr(idx, "SERVED_SCHEMAS", (*idx.SERVED_SCHEMAS, "1"))  # an old code that built schema 1
+            # an old code that built schema 1
+            m.setattr(idx, "SERVED_SCHEMAS", {**idx.SERVED_SCHEMAS, "1": idx.SchemaForm(ord_indexed=False)})
             path = build_index(snapshot_of(CORPUS, tmp_path / name), tmp_path / f"i-{name}", BUILT).path
         with pytest.raises(EngineError, match="build a new index"):
             TantivyEngine(path)
