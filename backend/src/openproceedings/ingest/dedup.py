@@ -20,10 +20,10 @@ a review, a duplicate only shows in the hit count.
    separate records.
 
 The track rule, wherever a listing (a record with a proceedings id or a proceedings source) is involved: every
-record is on a `PROCEEDINGS_TRACKS` track (a listing's own `unknown` included), or every record is NeurIPS
-Creative AI (`is_creative_ai`, TASK-137: track `other` that each claiming source backs with the Creative AI
-venueid or proceedings URL). The two never mix, and nothing else (workshop, tiny papers, blogposts,
-competition, any other `other`, a note's `unknown`) ever merges with a listing.
+record is on a `PROCEEDINGS_TRACKS` track (a listing's own `unknown` included, never one an OpenReview claim
+gives: TASK-174), or every record is NeurIPS Creative AI (`is_creative_ai`, TASK-137: track `other` that each
+claiming source backs with the Creative AI venueid or proceedings URL). The two never mix, and nothing else
+(workshop, tiny papers, blogposts, competition, any other `other`, a note's `unknown`) ever merges with a listing.
 
 A merged record's fields are re-resolved from the union of its claims by `PRECEDENCE` (held as data),
 never "whichever came first". Track is OpenReview's wherever the record carries an OpenReview track claim (so
@@ -56,9 +56,12 @@ _ACCEPTANCE: tuple[Source, ...] = (
 # content.venueid, so a record carrying one is on a track OpenReview holds, and that claim wins; a record with
 # none takes its listing's track, whether OpenReview doesn't hold the track (ICLR 2016 main) or holds it but the
 # paper's note didn't merge (the owner's second answer, 2026-09-29). The OpenReview crawlers claim no proceedings
-# URL, so a note is never a listing, and `_mergeable`'s track rule keeps a note apart from every listing unless
-# both are on `PROCEEDINGS_TRACKS` or both are NeurIPS Creative AI (TASK-137): in a merged record OpenReview's
-# track is in `PROCEEDINGS_TRACKS`, or is `other` on a Creative AI record whose listing says `other` too.
+# URL (`content.pdf` is kept only as an openreview.net `/pdf/` path), so a crawled note alone is never a listing; a
+# same-id RIS row naming a proceedings paper can make its cluster one, and `_family` still reads that cluster's
+# `unknown` as the note's (TASK-174; a note naming one itself, which no crawler emits, is held to the same rule).
+# `_mergeable`'s track rule keeps a note apart from every listing unless both are on `PROCEEDINGS_TRACKS` or both
+# are NeurIPS Creative AI (TASK-137): in a merged record OpenReview's track is in `PROCEEDINGS_TRACKS`, or is
+# `other` on a Creative AI record whose listing says `other` too.
 PRECEDENCE: dict[ClaimField, tuple[Source, ...]] = {
     **dict.fromkeys(
         ("title", "abstract", "authors", "keywords", "presentation", "venue", "year", "track", "venue_id_raw"),
@@ -75,6 +78,7 @@ CONFLICT_FIELDS: tuple[ClaimField, ...] = ("title", "track", "status")
 # (Education_Program, High_School_Projects_Track, …), so it is not listed here: dedup's track rule admits Creative
 # AI by its own evidence (`is_creative_ai`, TASK-137), and reconcile never judges it.
 PROCEEDINGS_SOURCES: frozenset[str] = frozenset({"iclr_archive", "neurips_proceedings", "pmlr"})
+OPENREVIEW_SOURCES: frozenset[str] = frozenset({"openreview_v2", "openreview_v1"})
 PROCEEDINGS_TRACKS: frozenset[str] = frozenset({"main", "datasets_benchmarks", "position"})
 _URL_FIELDS = ("urls.proceedings", "urls.pdf")
 ABSENT = "unknown"  # the status a crawled listing gives a paper it doesn't hold (`is_absence`)
@@ -441,10 +445,15 @@ def _cluster(members: Sequence[PaperRecord], rid: str | None = None) -> _Cluster
 def _family(c: _Cluster) -> str | None:
     """The cluster's side of the track rule: `creative_ai` (NeurIPS Creative AI, TASK-137), `proceedings` (a
     `PROCEEDINGS_TRACKS` track, or a listing's own `unknown`: a PMLR volume holding main and position papers),
-    or None: a track no listing may merge with (an unknown track waits for evidence)."""
+    or None: a track no listing may merge with (an unknown track waits for evidence). A cluster holding an
+    OpenReview record has OpenReview's track (every record claims one, and OpenReview ranks first), so its
+    `unknown` is the note's, never a listing's own, even where the cluster is a listing because a same-id RIS
+    row, or the note itself, names a proceedings paper (TASK-174)."""
     if is_creative_ai(c.summary):
         return "creative_ai"
-    if c.summary.track in PROCEEDINGS_TRACKS or (c.listed and c.summary.track == "unknown"):
+    if c.summary.track in PROCEEDINGS_TRACKS:
+        return "proceedings"
+    if c.listed and c.summary.track == "unknown" and c.sources.isdisjoint(OPENREVIEW_SOURCES):
         return "proceedings"
     return None
 

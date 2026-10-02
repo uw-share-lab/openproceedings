@@ -309,6 +309,43 @@ def test_an_openreview_note_with_no_track_never_merges_into_a_listing() -> None:
     assert resolutions(result) == ["track_not_merged"]
 
 
+OLD_PDF = f"https://papers.nips.cc/paper/2021/file/{H[2]}-Paper.pdf"
+
+
+@pytest.mark.parametrize(
+    "bridge",
+    [
+        [
+            paper("AbCd1234", source="openreview_v1", track="unknown"),
+            paper("AbCd1234", source="ris", urls_pdf=OLD_PDF),
+        ],
+        [paper("AbCd1234", source="openreview_v1", track="unknown", urls_pdf=OLD_PDF)],
+        [paper("AbCd1234", source="openreview_v2", track="unknown", urls_proceedings=nips(2))],
+    ],
+    ids=["ris-row-names-it", "note-names-it-v1", "note-names-it-v2"],
+)
+def test_a_note_with_no_track_never_merges_into_a_listing_it_names(bridge: list[PaperRecord]) -> None:
+    """TASK-174: a same-id RIS row, or the note itself, naming the listing's paper makes the note's cluster a
+    listing, but its `unknown` is still the note's (OpenReview's track claim), not a listing's own: it stays apart."""
+    listing = paper(f"nips-{H[2]}", source="neurips_proceedings")
+    result = dedup([listing, *bridge])
+    note = bridge[0].id
+    assert {r.id: r.track for r in result.records} == {listing.id: "main", note: "unknown"}
+    assert [(m.rule, m.merged_id) for m in result.merges] == [("forum_id", note)] * (len(bridge) - 1)
+    assert ("title_key", note, listing.id, "track_not_merged") in {
+        (c.field, c.value_a, c.value_b, c.resolution) for c in result.conflicts
+    }
+
+
+def test_a_main_note_bridged_by_a_ris_row_still_merges_into_its_listing() -> None:
+    """The other side of TASK-174: OpenReview's `main` is a proceedings track, so the bridge merges and keeps it."""
+    listing = paper(f"nips-{H[2]}", source="neurips_proceedings")
+    note = paper("AbCd1234", source="openreview_v1")
+    ris = paper("AbCd1234", source="ris", track="unknown", urls_pdf=OLD_PDF)
+    (merged,) = dedup([listing, note, ris]).records
+    assert (merged.id, merged.track) == (note.id, "main")
+
+
 @pytest.mark.parametrize(
     ("why", "a", "b"),
     [

@@ -19,7 +19,6 @@ from openproceedings.ingest.dedup import (
     DedupResult,
     dedup,
     is_creative_ai,
-    proceedings_ids,
 )
 from openproceedings.ingest.record import PaperRecord
 
@@ -311,6 +310,18 @@ ICLR_2016 = [
     archive(2016),
     paper("AbCd1234", venue="ICLR", year=2016, source="openreview_v1", track="workshop", status="unknown"),
 ]
+# TASK-174 (nightly 37017691575): a RIS row with the note's id and the listing's PDF hash must not carry the note's
+# `unknown` track into the listing as if it were a listing's own
+RIS_BRIDGE = [
+    paper("AbCd1234", source="openreview_v1", track="unknown"),
+    paper("AbCd1234", source="ris", urls_pdf=f"https://papers.nips.cc/paper/2021/file/{H[2]}-Paper.pdf"),
+    paper(f"nips-{H[2]}", source="neurips_proceedings"),
+]
+# the same where the note itself names the listed paper (no crawler emits this; the generator draws it)
+NOTE_BRIDGE = [
+    paper("AbCd1234", source="openreview_v2", track="unknown", urls_proceedings=nips(2)),
+    paper(f"nips-{H[2]}", source="neurips_proceedings"),
+]
 
 
 @given(pools)
@@ -321,6 +332,8 @@ ICLR_2016 = [
 @example(LINK_OTHER_YEAR)
 @example(LINK_AGAINST_TITLE)
 @example(ICLR_2016)
+@example(RIS_BRIDGE)
+@example(NOTE_BRIDGE)
 def test_idempotent(xs: list[PaperRecord]) -> None:
     once = dedup(xs)
     note(once)
@@ -442,6 +455,8 @@ OPENREVIEW, OFFICIAL = ("openreview_v2", "openreview_v1"), ("iclr_archive", "neu
 @given(pools)
 @example(ICLR_2016)
 @example(LINK_OTHER_TITLE)
+@example(RIS_BRIDGE)
+@example(NOTE_BRIDGE)
 def test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings(xs: list[PaperRecord]) -> None:
     """decision-005 §Track, per track (owner, 2026-09-29; TASK-130): a record carrying an OpenReview track claim
     is on a track OpenReview holds, and takes it; one without takes the proceedings' track; RIS only alone."""
@@ -451,9 +466,8 @@ def test_track_is_openreview_where_it_holds_the_paper_else_the_proceedings(xs: l
         official = [claims[s] for s in OFFICIAL if s in claims]
         assert r.track == (orv or official or [claims["ris"]])[0]
         event("track:" + ("openreview" if orv else "proceedings" if official else "ris"))
-        # a real OpenReview note names no proceedings paper; such a note merges into a listing only on a
-        # track in PROCEEDINGS_TRACKS, or as NeurIPS Creative AI beside a Creative AI listing (TASK-137)
-        note_urls = [c for c in r.provenance if c.source in OPENREVIEW]
-        if orv and official and not proceedings_ids(note_urls):
+        # a note merges into a listing only on a track in PROCEEDINGS_TRACKS, or as NeurIPS Creative AI beside a
+        # Creative AI listing (TASK-137), even where it, or a same-id RIS row, names the listed paper (TASK-174)
+        if orv and official:
             event("track:openreview-over-proceedings")
             assert orv[0] in PROCEEDINGS_TRACKS or (is_creative_ai(r) and set(official) == {"other"})
