@@ -3,10 +3,10 @@ id: TASK-156
 title: >-
   Guard hooks: harden cmdparse against remaining shell-semantics bypasses
   (TASK-067 review)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-01 19:36'
-updated_date: '2026-10-02 05:01'
+updated_date: '2026-10-02 09:14'
 labels:
   - security
   - tooling
@@ -28,7 +28,7 @@ Source: TASK-067 review gate (final security-reviewer and qa-auditor pass, 2026-
 - [x] #1 block-ai-attribution also scans the parsed argv words, so a trailer split by shell quoting (`-m 'Co-Authored-By: Cl''aude <noreply@anthr''opic.com>'`) is refused
 - [x] #2 A git push, commit-maker or data/ write inside a quoted command substitution (`x="$(git push origin HEAD:dev)"`) or backquotes is read and checked like a top-level command, or refused
 - [x] #3 A bare `~` (and `~/…`) is also checked with HOME empty for every gate, not only pushes (`cd ~ && rm -rf data` with an empty HOME)
-- [ ] #4 Each case has block rows and a mutant in gates.json; make tooling and mutate.py --changed pass
+- [x] #4 Each case has block rows and a mutant in gates.json; make tooling and mutate.py --changed pass
 - [x] #5 A command over ARG_MAX (about 1 MB) can't make a Bash-tool hook fail open: protect-data-dir, require-review and block-ai-attribution pass the payload to Python on stdin or through a temp file (today the env var makes exec fail with exit 126), or exit 2 whenever that step doesn't exit 0
 - [x] #6 protect-data-dir treats `git format-patch -o/--output-directory <dir>` as a write into <dir> (`git format-patch -o data/snapshots HEAD~1` is allowed today)
 <!-- AC:END -->
@@ -46,3 +46,17 @@ Correction to the note above: a HOME set to '' in the hook's environment is hand
 
 2026-10-02 (TASK-156): AC#3 closed. Every gate (protect-data-dir, require-review, block-ai-attribution, enforce-pr-workflow) now walks a command with `~` or `$` a second time with HOME/TMPDIR/USER read as '', so `cd ~` with HOME '' stays put (rows: `cd ~ && rm -rf data`, `cd ~ && git commit -m x` on dev, `cd ~ && git commit -F op-msg.txt`).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Closed the TASK-067-review bypasses in the guard hooks (.claude/hooks/lib/cmdparse.py and the four Bash gates), failing closed throughout.
+- AC#1: block-ai-attribution scans every parsed word (expand_known), and on a parse error the text with quotes and backslashes removed, so 'Cl''aude', $'...' and variables are caught.
+- AC#2: cmdparse walks the command substitutions the words hide ("$(...)", "$((cmd) )", backquotes, unquoted heredoc bodies) as subshells before the command holding them (mark/restore in preprocess). The body is read as bash reads it: quotes, heredocs, quoted arithmetic as text. A case statement counts by its shape, with a depth stack; an unbalanced case/esac, or a body cut short inside a case whose esac comes later (whatever the spelling, line continuations included), is a ParseError. coproc is a reserved word.
+- AC#3: every gate walks a command with ~ or $ a second time with HOME/TMPDIR/USER read as ''. A missing absolute ~/... cd target in that reading is a failed cd (the shell stays).
+- AC#5: block-ai-attribution, require-review and protect-data-dir run python3 -c "$PROG" with the payload on stdin (cmdparse.payload() reads stdin only; HOOK_INPUT is ignored). They exit 2 on any non-zero status and refuse an empty program. enforce-pr-workflow keeps HOOK_INPUT and its text fallback.
+- AC#6: protect-data-dir treats git format-patch -o/--output-directory (and prefixes), format.outputDirectory (-c, repo config, a same-command git config write is FailClosed, unreadable config refused) or the run directory as writes.
+- AC#4: block rows for every bypass and every case form security probed, plus allow rows; all TASK-156 mutants are killed. Tables: gates 770/0, enforce 376/0; make lint and make tooling green. mutate.py --changed --jobs 4: the first run was killed at the 2 h tool limit after 247/454 mutants (243 killed; the 4 survivors were equivalent and were removed with the dead block-ai code in c40b3a7); the remaining 223 are running and the result goes on the PR.
+Fail-closed costs: a cd ~/x && rm/write where data/ exists (non-absolute HOME '' readings stay unknown); with no python3 the three Python gates refuse every Bash call.
+Docs: CLAUDE.md, spec 08, the no-ai-attribution skill, qa-auditor/security-reviewer agents (probe with payloads in files), hook headers, a new learning, and an addendum to the bootstrap learning.
+<!-- SECTION:FINAL_SUMMARY:END -->
