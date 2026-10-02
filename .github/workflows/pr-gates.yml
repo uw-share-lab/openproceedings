@@ -5,7 +5,7 @@ name: pr-gates
 # can edit the PR body could paste it. The access control is branch protection plus human review.
 # In a merge-queue build (merge_group) there is no PR: .claude/scripts/merge_group_gate.py resolves every PR
 # in the group from the queue's merge commits and runs the same three checks on each, failing closed
-# (decision-030). Its jobs read the PRs through the API, hence pull-requests: read.
+# (decision-027). Its jobs read the PRs through the API, hence pull-requests: read.
 on:
   pull_request:
     branches: [dev, main]

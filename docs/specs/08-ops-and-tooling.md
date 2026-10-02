@@ -112,7 +112,7 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 | `lint` → `lint` | `make lint` (ruff format/check, mypy --strict once `backend/src` exists, shellcheck, frontend prettier/eslint/tsc), then actionlint |
 | `test` → `test` | pytest under pytest-xdist at the `pr` Hypothesis profile (200 examples, 2 s deadline) (unit, golden, differential@200, contract; the 2,000-example `ci` profile runs nightly, TASK-127); vitest; `next build` (the standalone server must exist); OpenAPI snapshot and TS types freshness (`make openapi`, then `git diff --exit-code` on `backend/tests/contract/openapi.json` and `frontend/src/api/schema.ts`; unconditional, TASK-040) |
 | `claude-tooling` → `claude-tooling` | `make tooling`: roster lint, `.claude/README.md` and learnings index freshness, backlog hygiene (no Done task left in `tasks/`), digest-pinned `FROM`s in `deploy/` (`check_digest_pins.py`, §Deploy), every case table under `.claude/hooks/tests/` and `.claude/scripts/tests/` (the tooling scripts, the network guard, `changelog.py`) |
-| `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha |
+| `pr-gates` → `attribution`, `learnings`, `review-attested` | no AI authorship in commits or PR text; the branch adds or extends a learnings entry (unless labelled `no-learning`); the PR body attests APPROVE for the head sha. In a merge-queue build, `merge_group_gate.py` runs the same three checks on every PR in the group (§Merge queue) |
 | `nightly` (scheduled, not a PR check) | Four parallel jobs, each with its own time limit: the whole backend suite at the `ci` profile (2,000 examples) under pytest-xdist; the oracle-backed properties at 50,000 examples; the exhaustive tokenizer check (`OP_EXHAUSTIVE=1`) plus every other property at 50,000; and `make mutate` (every mutant in `.claude/scripts/mutants/*.json` killed or documented as equivalent). Differential@50k gets its own job in task-057 (M4); full-corpus parity stays local (decision-004) |
 | `bench` → `bench` (advisory: not a required check yet) | pytest-benchmark on the 5k fixture index (`backend/tests/bench`, task-031): the PR's base and head on one runner; a minimum time over 20% slower than the base fails, and each benchmark asserts its spec 03 budget (p95). It becomes required once it has run green on a few PRs without false failures (runner noise); a maintainer adds it to `dev`'s required checks |
 | `web-image` → `web-image` (advisory: not a required check) | Only on PRs into, and pushes to, `dev` and `main` that touch `deploy/**`, `frontend/**`, `package.json`, `package-lock.json`, `.dockerignore` or the workflow itself (a workflow-level `paths` filter; TASK-148). `docker build -f deploy/web.Dockerfile .` three times on the runner's Docker, pushing nothing: a `private` image, a `public` one with the placeholder contact `takedown@example.org`, and a `public` one with no contact, which passes only when the build fails at `web-build-gate.sh` with its message. It stays advisory because the filter skips it on other PRs, and a required check that never starts stays pending forever; making it required means dropping the filter for a changed-files step inside the job, so it always reports |
@@ -122,6 +122,33 @@ DEBUG, INFO, WARNING or ERROR in any case; anything else is a usage error (exit 
 can edit the PR body could paste the marker. The access control is branch protection plus human review on
 `main`. A same-repo `dev → main` promotion is exempt from `learnings` and `review-attested`. The exemption
 checks the head repo, so a fork branch named `dev` cannot use it.
+
+### Merge queue (TASK-161, decision-027)
+
+`lint`, `test`, `claude-tooling` and `pr-gates` also run on `merge_group`, so a merge-queue build reports
+all six required checks under the same names. `test` takes its OpenAPI baseline from the group's
+`base_sha`. A `merge_group` event carries no PR, so the three `pr-gates` jobs run
+`.claude/scripts/merge_group_gate.py` (`review`, `learnings`, `attribution`) in place of their
+`pull_request` steps. With the queue's MERGE method, the commits in `base_sha..head_sha` along first parents
+are one two-parent merge per queued PR, oldest first: parent 1 is the previous queue commit (the first
+one's is `base_sha`) and parent 2 is the PR's head. The script names each merge's PR from GitHub's subject,
+`Merge pull request #N from …`, or else from the one open PR into `dev` whose head is parent 2. It checks
+that the newest merge's PR is the `N` in the head ref, `refs/heads/gh-readonly-queue/dev/pr-N-<sha>`. Then,
+for **each** PR in the group:
+
+| Job | Passes when |
+|---|---|
+| `review-attested` | the PR is open, targets `dev`, its head is still parent 2, and its current body (read through the API, not an event snapshot) holds `<!-- op-review: <parent 2> APPROVE -->` |
+| `learnings` | the PR is labelled `no-learning`, or its own diff (`parent 1...parent 2`) adds or extends a `YYYY-MM-DD-<slug>.md` entry directly in `.claude/learnings/`, the same rule as the `pull_request` job |
+| `attribution` | no commit message in `base_sha..head_sha` (the queue's merges included), and no PR title or body, matches the attribution pattern |
+
+The checks fail closed. Each of these fails the job: a head ref that isn't `dev`'s queue, a sha that isn't
+40 hex characters, an empty range, a commit with other than two parents, a chain that doesn't start at
+`base_sha`, a PR named twice, a merge with no resolvable PR, a failed `gh` call, and JSON of the wrong
+shape. Each job starts with a step that fails on any event other than `pull_request` and `merge_group`, so
+a job whose gate steps all skip can't pass. The jobs widen `permissions` to `pull-requests: read` to read
+the PRs. The case table is `.claude/scripts/tests/test-merge-group-gate.sh`, and its mutants are in
+`.claude/scripts/mutants/merge-group.json`.
 
 **Dependabot** (`.github/dependabot.yml`, weekly) watches `github-actions` (prefix `ci`), `uv` and `npm` (prefix
 `deps`) and the `docker` base images in `deploy/` (prefix `build`). For each, minor and patch version updates
@@ -137,6 +164,11 @@ Tantivy fix, shows up as a Dependabot alert and is fixed by a hand-made PR.
 
 - `feature → PR → dev → PR → main`. No direct commits, pushes or merges on `dev` or `main`
   (`enforce-pr-workflow.sh`, from Kreate). `main` also needs a second person's approval.
+- **Merging into `dev` goes through the merge queue** once it is enabled (§Branch protection). Once a PR's
+  checks are green, add it to the queue with `gh pr merge <n> --auto`. Don't rebase it onto a newer `dev`
+  first. A PR that is behind `dev` needs no rebase, new review record or new attestation; the queue tests
+  it on top of `dev`. Rebase only for a real conflict or a failed queue build, and then re-review and
+  re-attest the new head as usual. A push to a queued PR removes it from the queue.
 - Branch names: `<type>/<slug>` (`feat/`, `fix/`, `chore/`, `docs/`, `test/`).
 - **Review before push:** `/review-gate` sends the diff to the required reviewers (routing table in the
   `review-gates` skill). Every finding is dispositioned, and `record-review.py` writes an APPROVE record for
@@ -639,7 +671,14 @@ the reason. Mutants run in parallel: the full set takes minutes, and `--changed`
 `dev` and `main` require a PR, with these checks green: `lint`, `test`, `claude-tooling`, `attribution`,
 `learnings`, `review-attested`. No force-push, no deletion, admins included, and conversations must be
 resolved. `main` additionally requires 1 approving review and the branch up to date with it (so each
-promotion is followed by §Release step 7's back-merge). This was applied on 2026-09-25, after the repo was
+promotion is followed by §Release step 7's back-merge). `dev` gets a **merge queue** in place of
+"require branches to be up to date" (TASK-161, decision-027). A maintainer applies it after TASK-161's PR
+merges, with the commands in decision-027: a branch ruleset `dev: merge queue` on `refs/heads/dev` with
+one `merge_queue` rule (merge method MERGE, ALLGREEN grouping, up to 5 entries built and merged at once, a
+60-minute check timeout), and `strict: false` on `dev`'s classic required checks. The six required checks
+are unchanged and apply to the queue's builds. Until the ruleset is in place, `dev` still requires PRs to be
+up to date. `gh api repos/<owner>/<name>/rules/branches/dev` shows whether the `merge_queue` rule is
+active. This was applied on 2026-09-25, after the repo was
 made public (free-plan orgs can't protect private repos). `dev` is the default branch, and merged feature
 branches are deleted automatically. Release tags are protected by two active tag rulesets on `refs/tags/v*`, applied
 by a maintainer on 2026-10-01 (TASK-151), before the first release tag: **`Release tags: maintainers only

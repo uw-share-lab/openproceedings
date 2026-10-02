@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The pr-gates checks for a merge-queue build (the `merge_group` event; decision-030, TASK-161).
+"""The pr-gates checks for a merge-queue build (the `merge_group` event; decision-027, TASK-161).
 
     python3 .claude/scripts/merge_group_gate.py review|learnings|attribution \
         --base <merge_group.base_sha> --head <merge_group.head_sha> --head-ref <merge_group.head_ref> \

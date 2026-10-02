@@ -4,7 +4,7 @@ on:
     branches: [dev, main]
   push:
     branches: [dev, main]
-  merge_group:  # the merge queue's builds must report this required check too (decision-030)
+  merge_group:  # the merge queue's builds must report this required check too (decision-027)
     types: [checks_requested]
 permissions:
   contents: read

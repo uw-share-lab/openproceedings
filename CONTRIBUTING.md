@@ -47,7 +47,8 @@ API answers every request with an HTML browser-check page instead of JSON (check
      can't be done yet becomes a task, with the reason.
    - `/open-pr` (pushes, opens the PR into `dev`, attests the review).
 5. CI must pass: `lint`, `test`, `claude-tooling`, `attribution`, `learnings`, `review-attested`.
-   Merge into `dev` yourself once it's green.
+   Once it's green, add it to `dev`'s merge queue yourself: `gh pr merge <n> --auto`. The queue re-runs the
+   checks on `dev` plus your PR and merges it, so you don't rebase when `dev` moves (spec 08 §Merge queue).
 6. Promote `dev → main` with a PR (`--base main --head dev`). It needs a second person's approval. A release
    (version bump, generated `CHANGELOG.md`, tag) follows the checklist in spec 08 §Release (decision-023).
 
@@ -63,7 +64,8 @@ API answers every request with an HTML browser-check page instead of JSON (check
 ## Working without Claude Code
 Every gate is also in git or CI:
 - `.githooks/commit-msg` rejects attribution.
-- The `pr-gates` workflow checks attribution, the learnings entry and the review attestation.
+- The `pr-gates` workflow checks attribution, the learnings entry and the review attestation, on the PR
+  and again for each PR in a merge-queue build.
 - Branch protection enforces the flow.
 To run a review round by hand, do what `.claude/commands/review-gate.md` describes, then record it with
 `python3 .claude/scripts/record-review.py`.

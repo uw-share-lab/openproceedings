@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Case table for .claude/scripts/merge_group_gate.py, the pr-gates checks in a merge-queue build (decision-030,
+# Case table for .claude/scripts/merge_group_gate.py, the pr-gates checks in a merge-queue build (decision-027,
 # TASK-161). Builds a throwaway repo whose queue branches are real two-parent merges in the shape GitHub's
 # merge queue makes with the MERGE method, and serves the PRs from a fake `gh` on PATH (REST-shaped JSON under
 # $TMP/gh; a path with no file fails like a 404), so no case reaches GitHub. Every gate must fail closed:

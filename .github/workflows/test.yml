@@ -4,7 +4,7 @@ on:
     branches: [dev, main]
   push:
     branches: [dev, main]
-  merge_group:  # the merge queue's builds must report this required check too (decision-030)
+  merge_group:  # the merge queue's builds must report this required check too (decision-027)
     types: [checks_requested]
 permissions:
   contents: read
@@ -26,7 +26,7 @@ jobs:
           # The additive OpenAPI check compares against the commit this change builds on: the PR's base commit,
           # or the pushed branch's previous tip. The shallow checkout lacks it, so fetch it by SHA, and make an
           # unreadable baseline fail rather than skip (TASK-129). A merge-queue build compares against the commit
-          # its group is built on (decision-030).
+          # its group is built on (decision-027).
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           OPENAPI_BASELINE_REQUIRED: "1"
         run: |
