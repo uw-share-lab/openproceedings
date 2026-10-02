@@ -2716,10 +2716,11 @@
   "new": "    if not any("
  },
  {
-  "label": "protect-data-dir: a crash exits 1",
+  "label": "protect-data-dir: a crash exits 1 (equivalent since TASK-156: the wrapper turns any exit but 0 into 2, its own mutant is killed by the no-python3 rows, and the crash rows still assert 2)",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "    main()\nexcept Exception as exc:",
-  "new": "    main()\nexcept ZeroDivisionError as exc:"
+  "new": "    main()\nexcept ZeroDivisionError as exc:",
+  "equivalent": true
  },
  {
   "label": "require-review: message values exempt for every command",
@@ -2752,16 +2753,18 @@
   "new": "        return False"
  },
  {
-  "label": "require-review: a crash exits 1",
+  "label": "require-review: a crash exits 1 (equivalent since TASK-156: the wrapper turns any exit but 0 into 2, its own mutant is killed by the no-python3 rows, and the crash rows still assert 2)",
   "file": ".claude/hooks/require-review.sh",
   "old": "    main()\nexcept Exception as exc:",
-  "new": "    main()\nexcept ZeroDivisionError as exc:"
+  "new": "    main()\nexcept ZeroDivisionError as exc:",
+  "equivalent": true
  },
  {
-  "label": "block-ai-attribution: a crash exits 1",
+  "label": "block-ai-attribution: a crash exits 1 (equivalent since TASK-156: the wrapper turns any exit but 0 into 2, its own mutant is killed by the no-python3 rows, and the crash rows still assert 2)",
   "file": ".claude/hooks/block-ai-attribution.sh",
   "old": "    main()\nexcept Exception as exc:",
-  "new": "    main()\nexcept ZeroDivisionError as exc:"
+  "new": "    main()\nexcept ZeroDivisionError as exc:",
+  "equivalent": true
  },
  {
   "label": "enforce-backlog-cli: an internal error allowed",

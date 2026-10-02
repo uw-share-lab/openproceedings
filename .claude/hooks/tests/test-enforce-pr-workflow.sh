@@ -624,6 +624,7 @@ git -C "$REPO" config --unset remote.origin.push
 echo "TASK-156: a quoted command substitution is a command, and every git command is read with HOME '' too:"
 check dev       block 'x="$(git commit -m x)"'
 check dev       block 'cd ~ && git commit -m x'                             # HOME '': the cd stays on dev
+check feature/x block 'git push --force- origin HEAD:feature/x'           # ambiguous: --force-with-lease or --force-if-includes
 HOME="$(dirname "$REPO")" check feature/x allow "cd ~/$(basename "$REPO") && git commit -m x"   # HOME '': a failed cd stays
 
 echo
