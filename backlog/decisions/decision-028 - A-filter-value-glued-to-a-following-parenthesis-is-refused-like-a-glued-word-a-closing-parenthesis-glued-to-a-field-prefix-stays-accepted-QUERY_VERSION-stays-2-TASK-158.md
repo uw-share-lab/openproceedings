@@ -1,10 +1,10 @@
 ---
-id: decision-027
+id: decision-028
 title: >-
   A filter value glued to a following parenthesis is refused like a glued word;
   a closing parenthesis glued to a field prefix stays accepted; QUERY_VERSION
   stays 2 (TASK-158)
-date: '2026-10-02 04:13'
+date: '2026-10-02 06:49'
 status: accepted
 ---
 ## Context

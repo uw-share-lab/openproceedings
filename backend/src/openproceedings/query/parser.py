@@ -171,7 +171,7 @@ class _Parser:
         self.lex_errors = lex_errors
         self.covered = bytearray(len(q) + 2)  # 1 where an error already points: O(1) "already reported?"
         # 1 where only a glued parenthesis points: it says nothing about the filter value it covers, so a value's
-        # own check still reports (`year:..2022(x)` is both; spec 02 §Grammar, decision-027)
+        # own check still reports (`year:..2022(x)` is both; spec 02 §Grammar, decision-028)
         self.glued = bytearray(len(q) + 2)
         for e in lex_errors:
             if e.span is not None:

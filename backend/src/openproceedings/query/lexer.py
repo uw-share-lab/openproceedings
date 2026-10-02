@@ -12,7 +12,7 @@ Lexical rules, in the order they are tried at the start of each lexeme:
   `"GPT-4"'s`, a decomposed accent) is PARSE_AMBIGUOUS_QUOTE, once per unbroken run; a `(` glued to a
   preceding word, phrase or range, or a `)` to a following word or phrase (`model(s)`, `year:2020..2022(x)`), is
   PARSE_PAREN_TOUCHES_WORD; a `)` glued to a field prefix (`(x)year:2021`) splits nothing and is fine
-  (decision-027).
+  (decision-028).
 - `-` is `NOT` when it starts the query or follows whitespace, `(`, `|` or a field's `:`, and a primary
   follows it directly. Any other word that starts with `-` (`a - b`, `"x"-based`, `--x`) is
   PARSE_AMBIGUOUS_MINUS: it would otherwise silently mean either NOT or a literal hyphen.
@@ -126,7 +126,7 @@ class Kind(StrEnum):
 
 # what a glued parenthesis would silently AND with: a `(` after a word, a phrase or a range (`year:2020..2022(x)`),
 # a `)` before a word or a phrase; not a `)` before a field prefix (`(x)year:2021`), which splits nothing (spec 02
-# §Grammar, decision-027)
+# §Grammar, decision-028)
 _BEFORE_LPAREN = frozenset({Kind.WORD, Kind.PHRASE, Kind.RANGE})
 _AFTER_RPAREN = frozenset({Kind.WORD, Kind.PHRASE})
 _OPERATORS = {"AND": Kind.AND, "OR": Kind.OR, "NOT": Kind.NOT}

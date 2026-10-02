@@ -224,7 +224,7 @@ ERRORS: list[tuple[str, DiagnosticCode, tuple[int, int]]] = [
     ("LLM(s)", C.PARSE_PAREN_TOUCHES_WORD, (0, 4)),
     ("(a)b", C.PARSE_PAREN_TOUCHES_WORD, (2, 4)),
     ("a(-a)", C.PARSE_PAREN_TOUCHES_WORD, (0, 2)),
-    # a range before `(` too, like every other filter value (decision-027, TASK-158)
+    # a range before `(` too, like every other filter value (decision-028, TASK-158)
     ("year:2020..2022(x)", C.PARSE_PAREN_TOUCHES_WORD, (5, 16)),
 ]
 
@@ -512,7 +512,7 @@ def test_a_parenthesis_glued_to_a_phrase_is_an_error_too() -> None:
 
 
 def test_a_close_paren_glued_to_a_field_prefix_is_not_an_error() -> None:
-    """A field name ends at its `:`, so `(x)year:2021` splits nothing (decision-027)."""
+    """A field name ends at its `:`, so `(x)year:2021` splits nothing (decision-028)."""
     assert lex("(x)year:2021").errors == ()
     assert lex("(x)title:(y)").errors == ()
 

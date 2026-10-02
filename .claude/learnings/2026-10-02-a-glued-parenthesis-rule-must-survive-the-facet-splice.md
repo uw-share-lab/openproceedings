@@ -5,7 +5,7 @@
 - **Date:** 2026-10-02 · **Task:** TASK-158, TASK-160 · **Area:** query
 - **Artifacts:** `backend/src/openproceedings/query/lexer.py` (`after_pass`, `filter_value_next`),
   `backend/src/openproceedings/query/parser.py` (`reported(glue=False)`), `backend/tests/unit/test_parser.py`
-  (`GLUED_CLAUSES`), decision-027, `backend/tests/contract/test_frontend_clip_golden.py`,
+  (`GLUED_CLAUSES`), decision-028, `backend/tests/contract/test_frontend_clip_golden.py`,
   `frontend/src/lib/clip-golden.json`, `frontend/src/test/hostile.ts`.
 
 ## What we set out to do

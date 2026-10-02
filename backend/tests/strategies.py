@@ -597,7 +597,7 @@ def wrap_cases(draw: st.DrawFn) -> ParseCase:
 
 
 # A part that ends in a word or a range, not a `)`: written directly before a group it is PARSE_PAREN_TOUCHES_WORD
-# (a group, `abstract:(a OR b)(x)`, is not; a full range, `year:2020..2022(x)`, is, decision-027)
+# (a group, `abstract:(a OR b)(x)`, is not; a full range, `year:2020..2022(x)`, is, decision-028)
 _BEFORE_A_GROUP = st.sampled_from(
     [
         *(f"{f}:{v}" for f, values in CLAUSE_VALUES.items() for v in values),

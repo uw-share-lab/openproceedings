@@ -991,7 +991,7 @@ def test_a_canonical_overflow_suggests_shortening_not_splitting() -> None:
 
 
 # A filter value glued to a following `(` is refused like a glued word, whatever the value (spec 02 §Grammar,
-# decision-027, TASK-158): `year:2020..2022(x)` once parsed as `x AND year:2020..2022` while `year:2021(x)` was
+# decision-028, TASK-158): `year:2020..2022(x)` once parsed as `x AND year:2020..2022` while `year:2021(x)` was
 # refused. A `)` glued to a following field prefix still parses: a field name ends at its `:`, so nothing is
 # split, and a facet click splices `field:(…)` straight after a `)` (`…)(source:ICLR OR …)`, the Trust-Evals
 # strings)
@@ -1037,7 +1037,7 @@ def test_a_parenthesis_glued_to_a_filter_clause(
 )
 def test_a_spaced_or_accepted_glued_clause_has_a_canonical_string_that_replays(q: str) -> None:
     """The message's fix parses; and no canonical string writes a value before `(` (clauses and groups are
-    joined by ` AND `), so every saved record's canonical string re-parses unchanged (decision-027)."""
+    joined by ` AND `), so every saved record's canonical string re-parses unchanged (decision-028)."""
     result = parse(q)
     assert result.errors == [] and result.canonical is not None
     again = parse(result.canonical)
@@ -1108,7 +1108,7 @@ def test_a_glued_value_message_says_where_the_space_goes() -> None:
 
 
 def test_a_group_glued_to_a_group_is_not_this_rule() -> None:
-    """No value is split by `)(`, so the rule doesn't cover it (decision-027)."""
+    """No value is split by `)(`, so the rule doesn't cover it (decision-028)."""
     assert parsed("year:(2020..2022)(x)") == "(AND year:2020..2022 x)"
     assert parsed("(a)(b)") == "(AND a b)"
 

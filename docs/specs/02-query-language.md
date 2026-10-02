@@ -158,7 +158,7 @@ Rules:
     value is no exception, whatever its form or place: `year:2021(x)`, `venue:iclr(x)`, the range
     `year:2020..2022(x)` and a value inside its group (`year:(2021(x))`, one error) are all refused, and the
     message names the field and says to put a space before the `(`, or, inside the group, to close the group
-    first (decision-027); a text field's word
+    first (decision-028); a text field's word
     (`title:model(s)`) keeps the plural hint. A `)` glued to a
     following field prefix (`(x)year:2021`) and a group glued to a group (`year:(2021)(x)`, `(a)(b)`) split no
     word or value and are accepted, as they must be: a facet click splices `field:(…)` over a clause that may
@@ -313,7 +313,7 @@ A nested clause beside a single top-level one doesn't block it (`track:main (tra
 the same canonical form and hash as `field:v`), so its `)` ends every edit and no edit can touch a group
 that follows the clause (`track:(main OR workshop)(x OR y)` → `track:(workshop)(x OR y)`, where a bare
 `track:workshop(x OR y)` would be `PARSE_PAREN_TOUCHES_WORD`, as would any value glued to a `(`, a full year range
-included; decision-027). A toggleable clause is checked by making the
+included; decision-028). A toggleable clause is checked by making the
 widest edit a click can make and parsing it in the query's mode: every vocabulary value (for year,
 `MAX_YEAR_RANGES` = 4 disjoint `dddd..dddd` ranges, the most a year action writes; see below), spliced over
 the span or wrapped around `q`, exactly as the reducer writes it. Every narrower edit is then sound too: a
@@ -405,7 +405,7 @@ keep their written order; a bare term that a sibling filter's field could read a
 (`title:(a OR b)` → `(title:a OR title:b)`). `gpt-4*` prints as `"gpt 4*"` (in a phrase the earlier
 words count toward a wildcard's stem). Semantically equal spellings
 (`trust venue:ICLR`, `venue:iclr Trust`) therefore share one hash. `QUERY_VERSION`
-(`openproceedings.query`) is `"2"` (decision-008: canonical overflow and folded-piece wildcard detachment; decision-027 left it at
+(`openproceedings.query`) is `"2"` (decision-008: canonical overflow and folded-piece wildcard detachment; decision-028 left it at
 `"2"`, since refusing a range glued to `(` changes no canonical string).
 
 ## Error handling
