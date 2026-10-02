@@ -188,6 +188,7 @@ ERRORS: list[tuple[str, DiagnosticCode, tuple[int, int]]] = [
     ("x∉*", C.PARSE_WILDCARD_DETACHED, (0, 3)),
     ("abcŀ*", C.PARSE_WILDCARD_DETACHED, (0, 5)),  # ŀ is l + the operator ·
     ("gpt-$", C.PARSE_WILDCARD_DETACHED, (0, 5)),
+    ("\u0ce2*", C.WILDCARD_STEM_TOO_SHORT, (0, 2)),  # a lone vowel sign is no word, so no stem
     # phrases
     ('"trust in AI', C.PARSE_UNTERMINATED_PHRASE, (0, 12)),
     ('a "', C.PARSE_UNTERMINATED_PHRASE, (2, 3)),
