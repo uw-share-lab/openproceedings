@@ -59,8 +59,10 @@ non-empty string's warm p95 is 19.3–36.3 ms and p99 38.7–63.3 ms. Load 5.9 �
 5 minutes: the run's cold columns swing with it (`main-2-pop` 10.9 s to search, and 19.0 s for `match_ids` +
 exclusions where the first run of this change, at `01e8632`, read 10.8 s; `main-3-sources`' exclusions 103 ms
 against 37 ms), so read its warm p99s as upper bounds. The first run read `main-2-pop` warm p95 27.8 ms and
-p99 31.7 ms (load 10.1 → 3.5; the task's notes cite it). The highlight and `/search` columns of this report
-include TASK-088's tokenizer.
+p99 31.7 ms (load 10.1 → 3.5; the task's notes cite it, as the CLI can't edit a completed task). The
+highlight and `/search` columns of this report include TASK-088's tokenizer; `main-3-sources`' "with
+highlights" p95 of 138.9 ms is a load outlier of this run (69.7 ms in the first run, and its `/search` first
+page, highlights included, read 62.2 ms in the same run; this change touches no highlighting).
 
 ## Old vs new compile, 200 warm rounds each, interleaved (`backend/tests/bench/warm_verified.py`)
 
