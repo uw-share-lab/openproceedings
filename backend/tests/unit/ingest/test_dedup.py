@@ -107,7 +107,9 @@ _FORM_PIECES = st.one_of(
 @example("Erd\\H{ő}s")  # NFD's `{o\u030b}` was no accent macro
 @example("\\ḡx")
 @example("x \u5d69\u0345\U00010376y")  # U+0345 (ypogegrammeni, NFKC ι) before a letter
-@example("Caf\\e\u0301\u0323 x")  # two marks: the swapped order is canonically equivalent, so it is checked too
+@example(
+    "Caf\\e\u0301\u0323 x"
+)  # two marks: the swapped order is canonically equivalent, so it is checked too
 def test_every_canonically_equivalent_title_has_one_key(title: str) -> None:
     """TASK-168: two copies of one paper that differ only in Unicode form (NFC, NFD, or marks stored in another
     canonical order) share a dedup title key, so they merge."""

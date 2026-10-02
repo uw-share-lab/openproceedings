@@ -278,7 +278,9 @@ def test_a_pinned_older_version_withholds_the_twins_by_the_served_snapshots_clai
     assert "See also" not in text and "openproceedings_twins" not in text  # plain's own records name none
 
 
-def test_a_record_export_pinned_to_the_older_version_withholds_the_twins(data: Path, twins_store: Twins) -> None:
+def test_a_record_export_pinned_to_the_older_version_withholds_the_twins(
+    data: Path, twins_store: Twins
+) -> None:
     _, conf, copy, copy2, _ = twins_store
     plain, twins = _versions(data)
     point_current(data, plain)
@@ -311,7 +313,7 @@ def test_op_export_says_so_when_the_current_snapshot_cant_be_read(
     data: Path, twins_store: Twins, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """The exported snapshot's own links still apply (here none): a warning on stderr and one ERROR line."""
-    _, conf, copy, copy2, _ = twins_store
+    _, conf, _copy, copy2, _ = twins_store
     plain, _ = _versions(data)
     records = data / "snapshots" / "twins" / "records.jsonl"
     records.chmod(0o644)
