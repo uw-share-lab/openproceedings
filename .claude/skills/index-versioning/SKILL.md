@@ -12,8 +12,8 @@ index_version = sha256( snapshot_hash, TOKENIZER_VERSION, SCHEMA_VERSION, rankin
 - Hash a **canonical serialization** of the four inputs (for example, JSON with sorted keys and no
   whitespace, and ranking floats written the same way every time). Pin the serialization with a unit test
   on known inputs. If it changes, every version id changes.
-- `canonical_hash = sha256(canonical + "\0" + TOKENIZER_VERSION + "\0" + QUERY_VERSION)` (decision-003)
-  identifies the *query*. `index_version`
+- `canonical_hash = sha256(canonical + "\0" + tokenizer_version + "\0" + QUERY_VERSION)` (decision-003), where
+  `tokenizer_version` is the one the query was parsed with, the index's (§Two served tokenizers), identifies the *query*. `index_version`
   identifies the *index*. A search record stores both, plus `ids_hash = sha256(sorted matched ids)`.
 
 ## `query_version` (spec 04 §Conventions)
@@ -23,7 +23,8 @@ index_version = sha256( snapshot_hash, TOKENIZER_VERSION, SCHEMA_VERSION, rankin
 instead. It is bumped by the same rule as `TOKENIZER_VERSION`: whenever some query could mean something
 different. `TOKENIZER_VERSION` covers normalization (shared by both sides, and inside `index_version`);
 `query_version` covers everything the query side adds on top. Every response carries all three:
-`index_version`, `tokenizer_version`, `query_version`, and a search record stores all three.
+`index_version`, `tokenizer_version` (the index's: the one the response's query was read with), `query_version`,
+and a search record stores all three.
 
 ## Layout and lifecycle
 ```
@@ -61,7 +62,7 @@ data/indexes/current            symlink → the served version
 ## Bump rules
 | Change | Bump |
 |---|---|
-| Any input could tokenize differently (`normalize.py`, LaTeX rules, the analyzer) | `TOKENIZER_VERSION` (rule in `.claude/skills/token-contract/SKILL.md`) |
+| Any input could tokenize differently (`normalize.py`, LaTeX rules, the analyzer) | `TOKENIZER_VERSION` (rule in `.claude/skills/token-contract/SKILL.md`), and keep serving the previous one (§Two served tokenizers) |
 | Index field set, field type, index options (positions, freqs), stored layout, analyzer registration, how a field is populated (e.g. missing abstract → `""`) | `SCHEMA_VERSION`, and keep serving the previous one (§Two served schemas) |
 | Weights, k1, b, sort definitions | nothing to bump. They are in `ranking_params` already, so `index_version` changes |
 | A tantivy-py upgrade | `SCHEMA_VERSION`, always: Tantivy is not an `index_version` input, and the engine refuses an index built with another Tantivy (`unservable`), so without the bump the new code could neither serve the old index nor build a new id (`op index build` finds the id and keeps the old directory). `changelog.py --release` refuses a release that changes Tantivy alone (spec 08 §Release). Upgraded by hand only: Dependabot's `uv` entry ignores `tantivy` (TASK-150), because a bump merged alone would leave `dev` unable to serve or build an index; an `ignore` was chosen over a CI check as the simpler gate for a rare, hand-verified upgrade. The path: bump the `tantivy==` pin in `backend/pyproject.toml`, `uv lock`, bump `SCHEMA_VERSION` in `engine/index.py`, rebuild and verify an index (spec 08 §Deploy runbook) |
@@ -83,6 +84,26 @@ real index, checked locally. Retiring the old schema: rebuild every served index
 `SERVED_SCHEMAS`, with its path and its tests. A third schema while two are served first retires the oldest.
 A tantivy-py upgrade is different: the engine refuses an index built by another Tantivy, so it strands old
 indexes whatever `SERVED_SCHEMAS` holds.
+
+## Two served tokenizers (decision-031)
+A `TOKENIZER_VERSION` bump changes every new `index_version`, and an index's terms are its tokenizer's, so a query
+must be read with the tokenizer its index was built with. `query/normalize.py` maps each served version to its
+`TokenizerForm` in `SERVED_TOKENIZERS` (now "2" and "3": `nfkc_first`), and `unservable` accepts both. The engine
+reads its index's version from the manifest (`TantivyEngine.tokenizer_version`), and everything that reads text
+for that index takes it: `parse` (so `ParseResult.tokenizer_version`), the lexer, `canonical_hash`, the
+highlighter, the reference oracle, `freeze` (a record stores the index's version) and `replay`, which parses the
+record's canonical with the tokenizer of the index it runs on. The API parses with the served engine's version
+(an export pinned to another index re-parses with that one's, `searchable_on`), and `search.run` refuses a parse
+made for another tokenizer (an internal error). So a record saved on a tokenizer-2 index replays `reproduced`
+on it after the bump, its canonical_hash included (`test_records.py::…tokenizer_2…`, and against the real
+`05a0541717f6` index, `docs/results/2026-10-02-tokenizer-3.md`); with only a tokenizer-3 index here it is
+`drifted`, naming `tokenizer_version`. Version 2 is held byte-stable by a frozen copy of its code
+(`tests/unit/tokenizer_v2/`).
+
+**Retiring "2":** build every served index with tokenizer 3, repoint `current`, then `op index retire` each
+tokenizer-2 version, which it refuses while any record pins it. Once none is pinned, drop "2" from
+`SERVED_TOKENIZERS` with its branches (`nfkc_first` False), its frozen copy, its golden column and its tests. A
+later bump retires the oldest first, so at most two tokenizers are ever served.
 
 When in doubt, bump. A needless bump makes an old record report `drifted` when it didn't have to. A missed
 bump makes a record claim `reproduced` when its results changed, which is the one failure that invalidates

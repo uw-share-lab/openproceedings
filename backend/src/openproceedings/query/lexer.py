@@ -32,9 +32,12 @@ Lexical rules, in the order they are tried at the start of each lexeme:
   PARSE_WILDCARD_NOT_SUFFIX, except a `$` before a digit (currency, `US$5`).
 
 Characters whose NFKC form is one of these syntax characters (full-width `（`, `－`, `＂`, `＊`, …) act as
-that character, since the tokenizer applies NFKC too. Super/subscript parentheses (math notation) and the
-full-width backslash (ordinary text, spec 02) are deliberately excluded; a test re-derives this table
-from the Unicode database.
+that character, since the tokenizer applies NFKC too. Super/subscript parentheses (math notation) are
+deliberately excluded; a test re-derives this table from the Unicode database. LaTeX is found as the tokenizer
+the query is read with finds it (`lex(q, tokenizer)`, the index's version): tokenizer 3 reads the NFKC form of
+the text, so the full-width and small `＄`, `﹩`, `＼`, `﹨` are `$` and `\\` there (`LATEX_LOOKALIKES`), and
+Pandoc's space and digit tests read a character's NFKC form (a spacing accent `´` is a space and a mark);
+tokenizer 2 read them as ordinary text.
 
 Warnings, raised where an operator would have made sense: a lowercase `and`/`or`/`not`/`near/n` between
 two terms (WARN_LOWERCASE_OPERATOR); a word that starts with a dash or single quote that only looks like
@@ -100,10 +103,11 @@ COLONS = frozenset(":：﹕︓")
 MINUSES = frozenset("-－﹣")
 STARS = frozenset("*＊﹡")
 DOLLARS = frozenset("$＄﹩")
-# Tokenizer 3 reads the NFKC form of the text, so the characters whose NFKC form is `$` or `\\` are LaTeX syntax
+# Tokenizer 3 reads the NFKC form of the text, so the characters whose NFKC form is `$` or `\` are LaTeX syntax
 # there (`＄x＄` is math); tokenizer 2 read only the ASCII ones as LaTeX. The lexer finds math as the
 # tokenizer it parses for does (`_Lexer.scan`).
-_LATEX_LOOKALIKES = str.maketrans({"＄": "$", "﹩": "$", "＼": "\\", "﹨": "\\"})
+LATEX_LOOKALIKES = {"＄": "$", "﹩": "$", "＼": "\\", "﹨": "\\"}
+_LATEX_TRANSLATION = str.maketrans(LATEX_LOOKALIKES)
 # Every dash (Unicode category Pd) that is not an ASCII-equivalent MINUSES entry, plus the minus sign
 # U+2212: not operators, but easily meant as `-`. A test re-derives this set from the Unicode database.
 _LOOKALIKE_MINUS = frozenset(
@@ -218,7 +222,7 @@ class _Lexer:
         self.nfkc = SERVED_TOKENIZERS[tokenizer].nfkc_first  # LaTeX look-alikes are LaTeX (tokenizer 3)
         # `q` with each LaTeX look-alike as the `$` or `\\` its tokenizer reads it as (the same length, so offsets
         # hold): every test for LaTeX syntax reads it, every other test reads `q`
-        self.scan = q.translate(_LATEX_LOOKALIKES) if self.nfkc else q
+        self.scan = q.translate(_LATEX_TRANSLATION) if self.nfkc else q
         scan = self.scan
         # next_quote[k]: index of the first quote at or after k (len(q) if none), computed once so lexing
         # stays linear however many words the query has
@@ -733,14 +737,14 @@ class _Lexer:
 
     def latex(self, text: str) -> str:
         """`text` as its tokenizer reads LaTeX syntax in it (`self.scan`'s rule)."""
-        return text.translate(_LATEX_LOOKALIKES) if self.nfkc else text
+        return text.translate(_LATEX_TRANSLATION) if self.nfkc else text
 
     @staticmethod
     def bare_command(stem: str, tokenizer: str) -> bool:
         """A `\\cmd` outside math that isn't an accent macro or `\\cmd{…}` with content (which is kept);
         `\\cmd{}` keeps nothing, so it counts as bare (`\\alpha{}-divergence` → `divergence`)."""
         regions: list[tuple[int, int]] | None = None  # computed only once a command is found
-        scan = stem.translate(_LATEX_LOOKALIKES) if SERVED_TOKENIZERS[tokenizer].nfkc_first else stem
+        scan = stem.translate(_LATEX_TRANSLATION) if SERVED_TOKENIZERS[tokenizer].nfkc_first else stem
         for m in _COMMAND.finditer(scan):
             accent = len(m.group(1)) == 1 and m.group(1) in "uvHcdbrkij"
             braced = stem[m.end() : m.end() + 1] == "{" and not _EMPTY_BRACES.match(stem, m.end())

@@ -54,6 +54,13 @@ const DOLLARS = set(tables.dollars);
 const FIELDS: ReadonlySet<string> = new Set(tables.fields);
 const ACCENT_SYMBOLS = set(tables.accent_symbols);
 const ACCENT_LETTERS = set(tables.accent_letters);
+const LATEX_LOOKALIKES: Readonly<Record<string, string>> = tables.latex_lookalikes;
+// `[first, last, class]` runs of code points whose canonical combining class isn't 0
+const COMBINING: ReadonlyMap<number, number> = new Map(
+  (tables.combining as [number, number, number][]).flatMap(([first, last, cls]) =>
+    Array.from({ length: last - first + 1 }, (_, k): [number, number] => [first + k, cls]),
+  ),
+);
 const SPACE = set(tables.space);
 const DIGIT_NOT_ND = set(tables.digit_not_nd);
 const BREAKS: ReadonlySet<string> = new Set([...LPARENS, ...RPARENS, ...PIPES]);
@@ -71,6 +78,35 @@ const has = (s: ReadonlySet<string>, c: string | undefined): boolean => c !== un
 /** Python's regex `[^\W\d_]` (a letter, or a number that is not a decimal digit) and `\w`. */
 const isFieldStart = (c: string | undefined): boolean => c !== undefined && /^[\p{L}\p{Nl}\p{No}]$/u.test(c);
 const isWordChar = (c: string | undefined): boolean => c !== undefined && /^[\p{L}\p{N}_]$/u.test(c);
+
+/** Python's `unicodedata.combining`: the canonical combining class (0 for a starter). */
+const combining = (c: string): number => COMBINING.get(c.codePointAt(0)!) ?? 0;
+
+/**
+ * `_Lexer.scan`: `q` with each LaTeX look-alike as the `$` or `\` the tokenizer reads it as (tokenizer 3 reads the
+ * NFKC form: `＄x＄` is math). The same positions, so every test for LaTeX syntax reads it.
+ */
+function latexSource(q: Source): Source {
+  return {
+    at: (k) => {
+      const c = q.at(k);
+      return c === undefined ? c : (LATEX_LOOKALIKES[c] ?? c);
+    },
+  };
+}
+
+/** `_Lexer.space`: a space as the math rule reads it, the first (or `last`) character of the NFKC form. */
+function mathSpace(c: string | undefined, last = false): boolean {
+  if (c === undefined || isAscii(c)) return isSpace(c);
+  const folded = Array.from(c.normalize("NFKC"));
+  return isSpace(last ? folded[folded.length - 1] : folded[0]);
+}
+
+/** `_Lexer.digit`: a digit as the math rule reads it, the first character of the NFKC form (`½` is `1⁄2`). */
+function mathDigit(c: string | undefined): boolean {
+  if (c === undefined || isAscii(c)) return isDigit(c);
+  return isDigit(Array.from(c.normalize("NFKC"))[0]);
+}
 
 /** `q[from:to]` as a string. */
 function slice(q: Source, from: number, to: number): string {
@@ -132,12 +168,118 @@ function scriptJoin(text: Source, i: number, limit: number): number {
   return k > i + 2 && k < limit && text.at(k) === "}" ? k : -1;
 }
 
+/** A text's NFKC form and, per character of it, the raw characters it came from (`normalize._View`). */
+interface View {
+  norm: string[];
+  lo: number[];
+  hi: number[];
+}
+
+/**
+ * `normalize._view`: `text`'s NFKC form with each character's raw range, or null when NFKC leaves `text` alone.
+ * Segments are a starter and the marks after it, joined to the one before when their NFKC forms don't
+ * concatenate; each segment's characters get their raw ranges from a replay of NFKC (`owners`).
+ */
+function nfkcView(text: string): View | null {
+  const nfkc = text.normalize("NFKC");
+  if (nfkc === text) return null;
+  const cps = Array.from(text);
+  const norm = Array.from(nfkc);
+  const segments: [number, number, string][] = [];
+  let i = 0;
+  while (i < cps.length) {
+    let j = i + 1;
+    while (j < cps.length && combining(cps[j]!)) j++;
+    const piece = j - i === 1 && isAscii(cps[i]) ? cps[i]! : cps.slice(i, j).join("").normalize("NFKC");
+    const last = segments[segments.length - 1];
+    if (last !== undefined && !isAscii(cps[i])) {
+      const joined = cps.slice(last[0], j).join("").normalize("NFKC");
+      if (joined !== last[2] + piece) {
+        segments[segments.length - 1] = [last[0], j, joined];
+        i = j;
+        continue;
+      }
+    }
+    segments.push([i, j, piece]);
+    i = j;
+  }
+  if (segments.map(([, , p]) => p).join("") !== nfkc) {
+    return { norm, lo: norm.map(() => 0), hi: norm.map(() => cps.length) };
+  }
+  const lo: number[] = [];
+  const hi: number[] = [];
+  for (const [a, b, piece] of segments) {
+    for (const [l, h] of owners(cps.slice(a, b), a, piece)) {
+      lo.push(l);
+      hi.push(h);
+    }
+  }
+  return { norm, lo, hi };
+}
+
+/** `normalize._owners`: compatibility decomposition, canonical ordering and composition, replayed with ranges. */
+function owners(segment: string[], at: number, nfkc: string): [number, number][] {
+  const size = Array.from(nfkc).length;
+  if (segment.length === 1) return Array.from({ length: size }, (): [number, number] => [at, at + 1]);
+  const pieces: [string, number, number][] = segment.flatMap((c, k) =>
+    Array.from(c.normalize("NFKD"), (d): [string, number, number] => [d, at + k, at + k + 1]),
+  );
+  for (let k = 0; k < pieces.length;) {
+    if (!combining(pieces[k]![0])) {
+      k++;
+      continue;
+    }
+    let m = k;
+    while (m < pieces.length && combining(pieces[m]![0])) m++;
+    const run = pieces.slice(k, m).sort((x, y) => combining(x[0]) - combining(y[0])); // stable
+    pieces.splice(k, m - k, ...run);
+    k = m;
+  }
+  const out: [string, number, number][] = [];
+  let starter = -1;
+  for (const [d, l, h] of pieces) {
+    const cls = combining(d);
+    if (starter >= 0) {
+      const between = out.length - 1 > starter;
+      if (!between || combining(out[out.length - 1]![0]) < cls) {
+        const s = out[starter]!;
+        const composed = (s[0] + d).normalize("NFC");
+        if (Array.from(composed).length === 1) {
+          out[starter] = [composed, Math.min(s[1], l), Math.max(s[2], h)];
+          continue;
+        }
+      }
+    }
+    out.push([d, l, h]);
+    if (cls === 0) starter = out.length - 1;
+  }
+  if (out.map(([c]) => c).join("") !== nfkc) {
+    return Array.from({ length: size }, (): [number, number] => [at, at + segment.length]);
+  }
+  return out.map(([, l, h]): [number, number] => [l, h]);
+}
+
 /**
  * `normalize.math_regions(q[from:to])`, as absolute `[start, end)` pairs: the LaTeX math regions (`$…$`,
- * `$$…$$`, `\(…\)`, `\[…\]`) exactly as the tokenizer's scan finds them. Only the steps that move the scan
- * position are mirrored; how each character is classified doesn't change where a region starts or ends.
+ * `$$…$$`, `\(…\)`, `\[…\]`) exactly as the tokenizer (version 3) finds them, in the NFKC form of the text
+ * mapped back to raw positions.
  */
 export function mathRegions(q: Source, from: number, to: number): [number, number][] {
+  const view = nfkcView(slice(q, from, to));
+  if (view === null) return rawMathRegions(q, from, to);
+  const norm = stringSource(view.norm.join(""));
+  return rawMathRegions(norm, 0, view.norm.length).map(([a, b]): [number, number] => [
+    from + view.lo[a]!,
+    from + Math.max(...view.hi.slice(a, b)),
+  ]);
+}
+
+/**
+ * Step 4's scan of `q[from:to]` as it stands (tokenizer 2's reading, and tokenizer 3's of a text in NFKC). Only
+ * the steps that move the scan position are mirrored; how each character is classified doesn't change where a
+ * region starts or ends.
+ */
+function rawMathRegions(q: Source, from: number, to: number): [number, number][] {
   const regions: [number, number][] = [];
   let mathUntil = -1;
   let closeLen = 0;
@@ -230,23 +372,25 @@ export function mathRegions(q: Source, from: number, to: number): [number, numbe
 
 /** `_Lexer.math_run`: the end of LaTeX math opening at `i` and closing at a word boundary before `limit`, or -1. */
 function mathRun(q: Source, i: number, limit: number): number {
-  if (q.at(i) !== "$") return -1;
+  const scan = latexSource(q);
+  if (scan.at(i) !== "$") return -1;
   let end: number;
-  if (i + 1 < limit && q.at(i + 1) === "$") {
-    const close = findCloser(q, i + 2, limit, "$$");
-    if (close < 0) return -1;
-    end = close + 2;
+  if (i + 1 < limit && scan.at(i + 1) === "$") {
+    // `$$…$$` (rare): `normalize.first_math_end`, the region opening at `i`
+    const region = mathRegions(q, i, limit).find(([a]) => a === i);
+    if (region === undefined) return -1;
+    end = region[1];
   } else {
-    if (i + 1 >= limit || isSpace(q.at(i + 1))) return -1;
+    if (i + 1 >= limit || mathSpace(q.at(i + 1))) return -1;
     // the first unescaped `$` after `i` that ends an inline-math scan (`dollar_stops`)
     end = -1;
     let backslashes = 0;
     for (let k = i + 1; k < limit; k++) {
-      const c = q.at(k);
+      const c = scan.at(k);
       if (c === "$" && backslashes % 2 === 0) {
-        const next = q.at(k + 1);
+        const next = scan.at(k + 1);
         if (next === "$") return -1; // `$$` inside inline math stops it without closing
-        if (!isSpace(q.at(k - 1)) && !isDigit(next)) {
+        if (!mathSpace(q.at(k - 1), true) && !mathDigit(next)) {
           end = k + 1;
           break;
         }
@@ -261,8 +405,9 @@ function mathRun(q: Source, i: number, limit: number): number {
 
 /** `_Lexer.word_end`: the end of the word at `i`. */
 function wordEnd(q: Source, i: number): number {
+  const scan = latexSource(q);
   const stop = firstFrom(q, i, (c) => isSpace(c) || QUOTES.has(c) || BREAKS.has(c));
-  const mathish = firstFrom(q, i, (c) => c === "$" || c === "\\");
+  const mathish = firstFrom(scan, i, (c) => c === "$" || c === "\\");
   if (mathish >= stop) return stop;
   const limit = firstFrom(q, i, (c) => QUOTES.has(c));
   const math = mathRun(q, i, limit);
@@ -270,7 +415,7 @@ function wordEnd(q: Source, i: number): number {
   // the whitespace- and quote-delimited chunk holding `i`, and its math regions
   let chunkEnd = i;
   for (let c = q.at(chunkEnd); c !== undefined && !isSpace(c) && !QUOTES.has(c); c = q.at(chunkEnd)) {
-    chunkEnd = step(q, chunkEnd);
+    chunkEnd = step(scan, chunkEnd);
   }
   const mathEnds = new Map(mathRegions(q, i, chunkEnd));
   let j = i;
@@ -278,7 +423,7 @@ function wordEnd(q: Source, i: number): number {
     const end = mathEnds.get(j);
     if (end !== undefined) j = end;
     else if (has(BREAKS, q.at(j))) break;
-    else j = step(q, j);
+    else j = step(scan, j);
   }
   return Math.min(j, chunkEnd);
 }
@@ -286,11 +431,12 @@ function wordEnd(q: Source, i: number): number {
 /** `_Lexer.word`'s wildcard test: a `*` or `$` (outside math, not currency) as the word's last character. */
 function isWildcard(q: Source, start: number, end: number): boolean {
   const regions = mathRegions(q, start, end);
+  const scan = latexSource(q);
   let last = -1;
   let k = start;
   while (k < end) {
     const c = q.at(k);
-    if (c === "\\") {
+    if (scan.at(k) === "\\") {
       k += 2;
       continue;
     }
@@ -343,7 +489,7 @@ function fieldEnd(q: Source, i: number): number {
 function phraseEnd(q: Source, i: number): number {
   const closers = CLOSERS.get(q.at(i) ?? "") ?? QUOTES;
   let j = i + 1;
-  for (let c = q.at(j); c !== undefined && !closers.has(c); c = q.at(j)) j = step(q, j);
+  for (let c = q.at(j); c !== undefined && !closers.has(c); c = q.at(j)) j = step(latexSource(q), j);
   return q.at(j) === undefined ? j : j + 1;
 }
 

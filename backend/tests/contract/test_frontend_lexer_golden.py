@@ -52,6 +52,10 @@ PROBES = [
     "a b c　d e\x1cf",
     "2020..2026 2020.. ..2026 20x",
     "trust\\ calibration \\",
+    # tokenizer 3 reads the NFKC form: full-width and small `$` and `\` are LaTeX, a spacing accent after an
+    # opener is a space, `½` after a closer a digit, and an NFD accent after a backslash is that letter
+    "＄f(x)＄ OR ＼(a|b＼) OR ﹩x﹩ model＄ caf\\e\u0301 Erd\\H{o\u030b}s",
+    "$\u00b4x$ $x$\u00bd $x$ \u00bd ＄a (b)＄ \uff3c\u00e9 x\uff3c(y)",
 ]
 
 
@@ -67,6 +71,12 @@ _ALPHABET = [
     "x:",
     "20..21",
     "𝐱",
+    "＼",
+    "﹩",
+    "\u00b4",
+    "\u00bd",
+    "e\u0301",
+    "\u1100\u1161",
 ]
 
 
@@ -120,6 +130,21 @@ def _chars(pred: Any) -> str:
     return "".join(chr(c) for c in range(sys.maxunicode + 1) if pred(chr(c)))
 
 
+def _combining_ranges() -> list[list[int]]:
+    """Every code point's canonical combining class that isn't 0, as `[first, last, class]` runs (tokenizer 3's
+    NFKC view replays canonical ordering and composition, `normalize._owners`, which JavaScript can't ask)."""
+    runs: list[list[int]] = []
+    for cp in range(sys.maxunicode + 1):
+        cls = unicodedata.combining(chr(cp))
+        if not cls:
+            continue
+        if runs and runs[-1][1] == cp - 1 and runs[-1][2] == cls:
+            runs[-1][1] = cp
+        else:
+            runs.append([cp, cp, cls])
+    return runs
+
+
 GENERATED = (
     "by (cd backend && uv run python -m tests.contract.test_frontend_lexer_golden --write); do not edit"
 )
@@ -141,6 +166,8 @@ def build_tables() -> dict[str, Any]:
         "max_near": lexer.MAX_NEAR,
         "accent_symbols": "".join(sorted(ACCENT_SYMBOLS)),
         "accent_letters": "".join(sorted(ACCENT_LETTERS)),
+        "latex_lookalikes": {k: v for k, v in sorted(lexer.LATEX_LOOKALIKES.items())},
+        "combining": _combining_ranges(),
         "space": _chars(str.isspace),
         "digit_not_nd": _chars(lambda c: c.isdigit() and unicodedata.category(c) != "Nd"),
     }

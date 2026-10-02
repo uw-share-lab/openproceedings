@@ -58,7 +58,9 @@ def test_parse_is_02s_parse_result_without_identification_ast_plus_filters(
     body = r.json()
     versions_of(body, store)
     result = parse(q, mode)  # type: ignore[arg-type]
-    expected = result.model_dump(mode="json", exclude={"identification_ast"})
+    # the tokenizer it was read with is the served index's, among the response's versions
+    assert body["tokenizer_version"] == result.tokenizer_version
+    expected = result.model_dump(mode="json", exclude={"identification_ast", "tokenizer_version"})
     filters = filter_clauses(q, result)  # TASK-078: served beside the ParseResult
     expected["filters"] = None if filters is None else filters.model_dump(mode="json")
     assert {k: v for k, v in body.items() if k not in VERSIONS} == expected

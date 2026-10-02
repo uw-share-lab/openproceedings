@@ -605,3 +605,28 @@ def test_spelled_greek_advice_fits_a_negation() -> None:
     assert "add `-α` to exclude it too" in w.message
     [w] = [d for d in parse("alpha").warnings if d.code is C.WARN_SPELLED_GREEK]
     assert "search `alpha OR α`" in w.message
+
+
+def test_the_latex_lookalikes_are_every_character_whose_nfkc_form_is_a_dollar_or_backslash() -> None:
+    """Re-derived from the Unicode database: what tokenizer 3 reads as `$` or `\\` (it reads the NFKC form)."""
+    import sys
+    import unicodedata
+
+    from openproceedings.query.lexer import LATEX_LOOKALIKES
+
+    derived = {
+        chr(cp): unicodedata.normalize("NFKC", chr(cp))
+        for cp in range(sys.maxunicode + 1)
+        if not 0xD800 <= cp <= 0xDFFF
+        and chr(cp) not in "$\\"
+        and unicodedata.normalize("NFKC", chr(cp)) in ("$", "\\")
+    }
+    assert derived == LATEX_LOOKALIKES
+    # nor does any character's NFKC form hold one among other characters (the lexer maps one to one)
+    assert not [
+        cp
+        for cp in range(sys.maxunicode + 1)
+        if not 0xD800 <= cp <= 0xDFFF
+        and len(unicodedata.normalize("NFKC", chr(cp))) > 1
+        and any(c in "$\\" for c in unicodedata.normalize("NFKC", chr(cp)))
+    ]

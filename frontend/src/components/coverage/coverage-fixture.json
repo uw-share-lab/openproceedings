@@ -1,6 +1,6 @@
 {
-  "index_version": "f0e201b7f0e9",
-  "tokenizer_version": "2",
+  "index_version": "2c80566570fe",
+  "tokenizer_version": "3",
   "query_version": "2",
   "snapshot": {
     "name": "slice",

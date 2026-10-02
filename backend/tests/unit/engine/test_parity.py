@@ -193,7 +193,9 @@ def test_a_failure_prints_the_token_but_never_logs_it(
     capsys: pytest.CaptureFixture[str],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    monkeypatch.setattr(index_module, "normalize", lambda text, version: [*normalize(text, version), "leakedtoken"])
+    monkeypatch.setattr(
+        index_module, "normalize", lambda text, version: [*normalize(text, version), "leakedtoken"]
+    )
     monkeypatch.setattr(parity, "_cpus", lambda: 1)  # in-process, so the patched normalize is used
     index, snapshot = built
     args = [

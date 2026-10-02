@@ -13,7 +13,9 @@ reviews without the UI.
 - Base path `/api/v1`. JSON. Pydantic v2 models are the contract. The OpenAPI schema is exported to
   `frontend/src/api/schema.ts` via codegen, so the two sides can't drift. CI fails if the generated file is
   stale.
-- Every response carries `index_version`, `tokenizer_version` and `query_version`. A JSON response carries
+- Every response carries `index_version`, `tokenizer_version` and `query_version`; `tokenizer_version` is the one
+  the response's index was built with, which its query was read with (03 §Versioning: a pinned older index keeps
+  its own; `/healthz` gives this code's current one until an index loads). A JSON response carries
   them in the body. A non-JSON response (an export) carries them as `X-Index-Version`, `X-Tokenizer-Version`
   and `X-Query-Version` headers, exposed to CORS. `query_version` versions
   the query *semantics* that live outside the index: the parser, the compiler (NEAR/slop, wildcard rules),

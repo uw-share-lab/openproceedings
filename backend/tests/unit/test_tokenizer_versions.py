@@ -9,6 +9,7 @@ index built with it may be pinned by a search record, and version 3 reads every 
 """
 
 import unicodedata
+from itertools import pairwise
 
 import pytest
 from hypothesis import example, given
@@ -22,6 +23,7 @@ from openproceedings.query.normalize import (
     tokenize,
     tokenize_with_tail,
 )
+from openproceedings.query.parser import parse
 
 from tests.unit.test_normalize import full
 from tests.unit.tokenizer_v2 import normalize as frozen_v2
@@ -94,18 +96,23 @@ def test_version_3_is_version_2_on_the_nfkc_form(text: str) -> None:
 
 
 @given(ANY_TEXT)
-@example("$\\alpha$́ ＄x＄")
+@example("$\\alpha$\u0301 \uff04x\uff04")
+@example("\\(\\)")
 def test_version_3_math_regions_are_the_nfkc_forms_in_raw_offsets(text: str) -> None:
+    """Each region is one of the NFKC form's, in raw offsets: in order, disjoint, and its raw text's NFKC form
+    opens and closes math (`$`, `$$`, `\\(`, `\\[` … their closers)."""
+    nfkc = unicodedata.normalize("NFKC", text)
     regions = math_regions(text)
-    nfkc_regions = math_regions(unicodedata.normalize("NFKC", text))
-    assert len(regions) == len(nfkc_regions)
+    assert len(regions) == len(math_regions(nfkc))
+    for (_, end), (start, _) in pairwise(regions):
+        assert end <= start
     for start, end in regions:
         assert 0 <= start < end <= len(text)
-        # each region, read on its own, is math from its first character to its last
-        assert first_math_end(text[start:end]) in (end - start, -1) or text[start] == "\\"
-    starts = [s for s, _ in regions]
-    assert starts == sorted(starts)
-    assert first_math_end(text) == next((e for s, e in regions if s == 0), -1)
+        inner = unicodedata.normalize("NFKC", text[start:end])
+        assert inner.startswith(("$", "\\(", "\\[")) and inner.endswith(("$", "\\)", "\\]")), (text, inner)
+    # `first_math_end` is the decision at position 0 for `$…$` and `$$…$$`
+    at_zero = next((e for s, e in regions if s == 0), -1)
+    assert first_math_end(text) == (at_zero if nfkc.startswith("$") else -1)
 
 
 @given(ANY_TEXT)
@@ -132,3 +139,19 @@ def test_version_3_tails_read_the_nfkc_form(text: str) -> None:
 )
 def test_version_3_spans_are_raw(text: str, spans: list[tuple[int, int]]) -> None:
     assert [(t.start, t.end) for t in tokenize(text)] == spans
+
+
+# --- the query side: a query typed in NFC or NFD means the same --------------------------------------------
+QUERY_PIECES = [*PIECES, '"', "(", ")", "|", "*", "OR", "AND", "-", "title:", "NEAR/2", "trust", "model"]
+
+
+@given(st.lists(st.sampled_from(QUERY_PIECES), max_size=14).map(" ".join))
+@example("Caf\\é OR Erd\\H{ő}s")
+@example('"na\\"{ï}ve model$"')
+def test_a_query_parses_alike_in_nfc_and_nfd(q: str) -> None:
+    """Canonical equivalence changes no syntax character the lexer reads (quotes, parentheses, `|`, `:`, `-`,
+    `*`, `$`, `\\`, spaces, digits), so a query and its NFC and NFD forms lex to the same words; tokenizer 3 then
+    reads each word alike, so they parse to the same canonical string (or fail with the same errors)."""
+    nfc, nfd = (parse(unicodedata.normalize(f, q)) for f in ("NFC", "NFD"))
+    assert nfc.canonical == nfd.canonical
+    assert [e.code for e in nfc.errors] == [e.code for e in nfd.errors]

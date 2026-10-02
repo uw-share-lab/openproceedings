@@ -3,7 +3,10 @@
 The query side and the index side both call this, so a query term and an indexed word can never disagree
 about what a "word" is. In this order, and nothing else:
 
-1. Unicode NFKC (`ﬁ` → `fi`, full-width → ASCII, `²` → `2`).
+1. Unicode NFKC (`ﬁ` → `fi`, full-width → ASCII, `²` → `2`), of the whole text before anything else reads it
+   (tokenizer 3), so a text's NFC, NFD, NFKC and NFKD forms tokenize alike: `\\é` is the same in NFC and NFD, and
+   full-width `＄` and `＼` are `$` and `\\`. Tokenizer 2, still served for the indexes built with it
+   (`SERVED_TOKENIZERS`), ran this step one raw character at a time, after step 4.
 2. Case-fold (`str.casefold()`: `ß` → `ss`).
 3. Diacritic fold: NFD, drop combining marks whose base letter is Latin, Greek, Cyrillic, Hebrew or
    Arabic (accents and optional vowel points: `naïve` → `naive`, `שָׁלוֹם` → `שלום`), recompose with NFC.
@@ -28,10 +31,13 @@ about what a "word" is. In this order, and nothing else:
    U+2061–2064 separate.
 
 Never: stemming, lemmatization, stopword removal, synonyms, spelling correction, n-grams, number
-normalization. Changing what ANY input tokenizes to requires bumping TOKENIZER_VERSION.
+normalization. Changing what ANY input tokenizes to requires bumping TOKENIZER_VERSION, and keeping the version
+before it served (`SERVED_TOKENIZERS`, its frozen copy in `tests/unit/tokenizer_v2/`): an index built with it,
+and every record pinned to that index, is read with it.
 
 `tokenize` works character by character so every token carries the half-open code-point span of the RAW
-text it came from (spec 04 §Conventions); highlights use those spans. A single raw character can produce
+text it came from (spec 04 §Conventions); highlights use those spans. Tokenizer 3 runs the same loop on the NFKC
+form and maps each span back to the raw characters its characters came from (`_View`). A single raw character can produce
 more than one token (`½` → `1`, `2`), in which case they share its span; two spans overlap only on exactly
 one such code point (a combining-slash cluster gives each piece the raw characters it came from:
 `_cluster_spans`). What a query parses to never depends on those spans: the lexer's detached-wildcard test
@@ -62,7 +68,8 @@ TOKENIZER_VERSION = "3"  # 3: NFKC of the whole text before LaTeX, so every Unic
 class TokenizerForm:
     """What a served tokenizer version does differently: code branches on this, never on a version string."""
 
-    nfkc_first: bool  # step 1 on the whole text before step 4 (3), or one raw character at a time after it (2)
+    # step 1 on the whole text before step 4 (3), or one raw character at a time after it (2)
+    nfkc_first: bool
 
 
 # The tokenizer versions this code serves: the current one, which new indexes are built with, and the one before
@@ -473,7 +480,9 @@ def first_math_end(text: str, version: str = TOKENIZER_VERSION) -> int:
     text that NFKC changes is read as its NFKC form (`＄x＄` is `$x$`), and the index is the raw one."""
     view = _view(text, version)
     if view is not None:
-        regions = view.regions(math_regions(view.norm, "2"))
+        if not view.norm.startswith("$"):
+            return -1
+        regions = view.regions(_regions(view.norm))
         return regions[0][1] if regions and regions[0][0] == 0 else -1
     if not text.startswith("$"):
         return -1
@@ -488,8 +497,11 @@ def math_regions(text: str, version: str = TOKENIZER_VERSION) -> list[tuple[int,
     """The LaTeX math regions of `text` exactly as step 4 finds them (half-open, delimiters included, raw
     offsets). The query lexer uses this so that it and the tokenizer never disagree about what `$…$` is."""
     view = _view(text, version)
-    if view is not None:
-        return view.regions(math_regions(view.norm, "2"))
+    return _regions(text) if view is None else view.regions(_regions(view.norm))
+
+
+def _regions(text: str) -> list[tuple[int, int]]:
+    """Step 4's math regions of `text` as it stands."""
     regions: list[tuple[int, int]] = []
     _latex_mask(text, regions)
     return regions
