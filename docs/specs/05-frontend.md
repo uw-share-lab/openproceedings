@@ -70,7 +70,12 @@ decision-008),
 `TOO_DEEP` (`/parse` reported `too_deep`: the wrap would nest `q` past the instance's `max_query_depth`, 64,
 also from `/meta`'s `limits` and `default-limits.json`),
 `ALREADY_INCLUDED` and `BAD_PAGE`. The golden cases in `frontend/src/lib/filter-clause-golden.json` pin
-`/parse`'s report and the reducer's result together.
+`/parse`'s report and the reducer's result together. A message quotes every value the reducer did not write
+itself (a facet, action or clause value or field, year text, a page, a span) through `frontend/src/lib/clip.ts`,
+and so does `describeNotice` (and `noticeText`) for a URL notice's parameter and value: the frontend twin of
+the backend's `diagnostics.clip`, with the same escapes (a backtick as `\x60`, a control, format or surrogate
+character as its Python escape, whitespace runs as one space, at most 40 code points), so `Coded` still pairs
+the backticks and the message stays one visible line (TASK-144).
 
 **Year** has its own actions (TASK-092), since a year clause is ranges, not values:
 `yearClauseFromParse(filters.year, q, mode)` narrows `/parse`'s `ParsedYearClause` as `clauseFromParse` does,

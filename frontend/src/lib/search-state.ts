@@ -14,6 +14,7 @@
  */
 import type { components } from "@/api/schema";
 import { codePointLength, codePointSpanToUtf16 } from "@/api/spans";
+import { clip } from "./clip";
 import defaultLimits from "./default-limits.json";
 
 export const MODES = ["native", "scholar"] as const;
@@ -172,7 +173,10 @@ export function fromURL(params: URLSearchParams): { state: SearchState; notices:
   return { state: { q, mode, sort, page }, notices };
 }
 
-/** A notice as text runs; `code` runs are URL values, shown in monospace and quoted in plain text. */
+/**
+ * A notice as text runs; `code` runs are URL values, shown in monospace and quoted in plain text. A value
+ * from the URL is shown through `clip` (TASK-144): one visible line, its backticks escaped.
+ */
 export type NoticeRun = { readonly text: string } | { readonly code: string };
 
 const codeList = (values: readonly string[]): NoticeRun[] =>
@@ -184,13 +188,13 @@ const codeList = (values: readonly string[]): NoticeRun[] =>
  * same constants the reducer checks against.
  */
 export function describeNotice(n: UrlNotice): NoticeRun[] {
-  const shown = (v: string) => (v === "" ? '""' : v);
+  const shown = (v: string) => (v === "" ? '""' : clip(v));
   switch (n.reason) {
     case "unknown_param":
       return [
-        { code: `${n.param}=${n.value}` },
+        { code: `${clip(n.param)}=${clip(n.value)}` },
         { text: " was ignored — " },
-        { code: n.param },
+        { code: clip(n.param) },
         { text: " is not a search parameter. Search parameters are " },
         ...codeList(KNOWN_PARAMS),
         { text: "." },
@@ -205,7 +209,7 @@ export function describeNotice(n: UrlNotice): NoticeRun[] {
         { text: "." },
       ];
     case "invalid_value": {
-      const head: NoticeRun[] = [{ code: `${n.param}=${n.value}` }];
+      const head: NoticeRun[] = [{ code: `${n.param}=${clip(n.value)}` }];
       const used = n.used ?? "";
       if (n.param === "mode") {
         return [
@@ -485,7 +489,7 @@ type ClauseField = FilterField | "year";
 function negatedClause(field: ClauseField): SearchStateError {
   return new SearchStateError(
     "NEGATED_CLAUSE",
-    `The \`${field}:\` clause is negated — changing its values would flip which papers it removes. ` +
+    `The \`${clip(field)}:\` clause is negated — changing its values would flip which papers it removes. ` +
       "Edit it in the query text instead.",
   );
 }
@@ -496,7 +500,7 @@ function noEditableClause(
   reason: ClauseReason | null | undefined,
   limits: QueryLimits,
 ): SearchStateError {
-  const head = `The ${field} filter cannot be changed here — `;
+  const head = `The ${clip(field)} filter cannot be changed here — `;
   const refuse = (why: string) =>
     new SearchStateError("NO_EDITABLE_CLAUSE", `${head}${why} Edit it in the query text.`);
   switch (reason) {
@@ -515,16 +519,16 @@ function noEditableClause(
           "Remove a level of parentheses first.",
       );
     case "multiple_clauses":
-      return refuse(`the query has more than one top-level \`${field}:\` clause.`);
+      return refuse(`the query has more than one top-level \`${clip(field)}:\` clause.`);
     case "nested":
-      return refuse(`its only \`${field}:\` clause is inside an OR or NOT.`);
+      return refuse(`its only \`${clip(field)}:\` clause is inside an OR or NOT.`);
     case "mixed_fields":
-      return refuse(`its \`${field}:\` clause is ORed with another field's clause.`);
+      return refuse(`its \`${clip(field)}:\` clause is ORed with another field's clause.`);
     case "unparsable_edit":
       return refuse("the changed query would not parse.");
     default: // no reason given, or one this code doesn't know (an open set)
       return refuse(
-        `the query has more than one top-level \`${field}:\` clause, or one inside an OR or NOT.`,
+        `the query has more than one top-level \`${clip(field)}:\` clause, or one inside an OR or NOT.`,
       );
   }
 }
@@ -569,15 +573,15 @@ function checkClause(state: SearchState, field: ClauseField, clause: FilterClaus
   if (clause.source !== stateQ || clause.mode !== stateMode) {
     throw new SearchStateError(
       "STALE_CLAUSE",
-      `The ${field} filter was read from an earlier query — the query or mode changed after it was parsed. ` +
-        "Wait for the current query to be parsed, then try again.",
+      `The ${clip(field)} filter was read from an earlier query — the query or mode changed after it was ` +
+        "parsed. Wait for the current query to be parsed, then try again.",
     );
   }
   if (clause.field !== field) {
     throw new SearchStateError(
       "WRONG_FIELD",
-      `This is a \`${clause.field}:\` clause, not \`${field}:\` — a clause is only edited as its own field. ` +
-        `Use the \`${field}:\` clause from the parse result.`,
+      `This is a \`${clip(clause.field)}:\` clause, not \`${clip(field)}:\` — a clause is only edited as its own ` +
+        `field. Use the \`${clip(field)}:\` clause from the parse result.`,
     );
   }
   // Checked at runtime too: a caller holding untyped /parse data could pass `negated: true`.
@@ -591,11 +595,12 @@ function spliceClause(
   values: readonly string[],
 ): string {
   checkClause(state, field, clause);
+  const name = clip(field);
   for (const v of [...clause.values, ...values]) {
     if (!FILTER_VALUE.test(v)) {
       throw new SearchStateError(
         "BAD_VALUE",
-        `\`${v}\` is not a ${field} value — ${field} values are single words of letters, digits and \`_\`. ` +
+        `\`${clip(v)}\` is not a ${name} value — ${name} values are single words of letters, digits and \`_\`. ` +
           "Use a value listed by /meta.",
       );
     }
@@ -603,8 +608,8 @@ function spliceClause(
   if (values.length === 0) {
     throw new SearchStateError(
       "LAST_VALUE",
-      `Removing the last ${field} value would exclude every record — the \`${field}:\` clause would admit nothing. ` +
-        "Select another value first.",
+      `Removing the last ${name} value would exclude every record — the \`${name}:\` clause would admit ` +
+        "nothing. Select another value first.",
     );
   }
   return placeClause(state.q, field, clause.span, formatClause(field, values));
@@ -621,8 +626,8 @@ function placeClause(q: string, field: ClauseField, span: readonly [number, numb
     if (end !== qLength) {
       throw new SearchStateError(
         "BAD_SPAN",
-        `The ${field} filter's span [${start}, ${end}) is empty but not at the end of q — only an applied ` +
-          "default has an empty span, at the end. Parse the query again.",
+        `The ${clip(field)} filter's span [${clip(String(start))}, ${clip(String(end))}) is empty but not at ` +
+          "the end of q — only an applied default has an empty span, at the end. Parse the query again.",
       );
     }
     // Unreachable through /parse (an empty query is a parse error, so no clause is reported), but an
@@ -648,8 +653,8 @@ function placeClause(q: string, field: ClauseField, span: readonly [number, numb
   } catch (e) {
     throw new SearchStateError(
       "BAD_SPAN",
-      `The ${field} filter's span does not fit the query — ${e instanceof Error ? e.message : String(e)}. ` +
-        "Parse the query again.",
+      `The ${clip(field)} filter's span does not fit the query — ` +
+        `${clip(e instanceof Error ? e.message : String(e), 120)}. Parse the query again.`,
     );
   }
   return q.slice(0, utf16[0]) + text + q.slice(utf16[1]);
@@ -677,8 +682,9 @@ function checkedRange(r: YearRange): YearRange {
   if (!year(r.lo) || !year(r.hi) || r.lo > r.hi) {
     throw new SearchStateError(
       "BAD_VALUE",
-      `\`${String(r.lo)}..${String(r.hi)}\` is not a year range — a range runs from a four-digit year to the ` +
-        `same or a later one, between ${MIN_YEAR} and ${MAX_YEAR}. Choose two years in that range, the earlier first.`,
+      `\`${clip(String(r.lo))}..${clip(String(r.hi))}\` is not a year range — a range runs from a ` +
+        `four-digit year to the same or a later one, between ${MIN_YEAR} and ${MAX_YEAR}. ` +
+        "Choose two years in that range, the earlier first.",
     );
   }
   return { lo: r.lo, hi: r.hi };
@@ -817,7 +823,8 @@ export function reduce(
       if (values.includes(action.value)) {
         throw new SearchStateError(
           "ALREADY_INCLUDED",
-          `\`${action.field}:${action.value}\` is already included — the \`${action.field}:\` clause admits it. ` +
+          `\`${clip(action.field)}:${clip(action.value)}\` is already included — the \`${clip(action.field)}:\` ` +
+            "clause admits it. " +
             "Nothing needs to change.",
         );
       }
@@ -837,7 +844,8 @@ export function reduce(
       if (!isPage(action.page)) {
         throw new SearchStateError(
           "BAD_PAGE",
-          `${action.page} is not a page number — a page is ${PAGE_RANGE_TEXT}. Choose a page in that range.`,
+          `${clip(String(action.page))} is not a page number — a page is ${PAGE_RANGE_TEXT}. ` +
+            "Choose a page in that range.",
         );
       }
       return { ...state, page: action.page };

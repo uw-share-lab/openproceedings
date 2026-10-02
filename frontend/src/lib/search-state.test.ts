@@ -1040,3 +1040,141 @@ describe("toSearchRequest", () => {
     expect(PAGE_SIZE).toBe(50);
   });
 });
+
+describe("refusals quote values they did not write through clip (TASK-144)", () => {
+  // A value holding a backtick would shift every later code span `Coded` draws; a control or bidi character
+  // would reach the page as is. Each is quoted the way the backend's `diagnostics.clip` quotes it.
+  const HOSTILE: readonly (readonly [string, string])[] = [
+    ["a`b", "a\\x60b"],
+    ["a\nb", "a b"],
+    ["a\x00b", "a\\x00b"],
+    ["a\x1bb", "a\\x1bb"],
+    [`a${String.fromCodePoint(0x202e)}b`, "a\\u202eb"],
+  ];
+
+  /** Every backtick pairs up, and the message is one line of visible characters. */
+  function quotedSafely(message: string): void {
+    expect(message.split("`").length % 2, message).toBe(1);
+    for (const c of message) {
+      expect(c === " " || !/\s/u.test(c), message).toBe(true);
+      expect(/[\p{Cc}\p{Cf}\p{Cs}]/u.test(c), message).toBe(false);
+    }
+  }
+
+  const year = (source: string, field = "year"): YearClause =>
+    ({ field, negated: false, source, mode: "native", span: [5, 5], ranges: [EVERY_YEAR] }) as YearClause;
+
+  it.each(HOSTILE)("BAD_VALUE quotes a facet value %j as %j", (value, shown) => {
+    const e = refused(
+      () =>
+        reduce(at("trust"), {
+          type: "facetToggle",
+          field: "venue",
+          value,
+          clause: atEnd("venue", "trust", ["ICML"]),
+        }),
+      "BAD_VALUE",
+    );
+    expect(e.message).toBe(
+      `\`${shown}\` is not a venue value — venue values are single words of letters, digits and \`_\`. ` +
+        "Use a value listed by /meta.",
+    );
+    quotedSafely(e.message);
+  });
+
+  it.each(HOSTILE)("ALREADY_INCLUDED quotes an included value %j as %j", (value, shown) => {
+    const e = refused(
+      () =>
+        reduce(at("trust"), {
+          type: "includeExcluded",
+          field: "track",
+          value,
+          clause: atEnd("track", "trust", [value]),
+        }),
+      "ALREADY_INCLUDED",
+    );
+    expect(e.message).toBe(
+      `\`track:${shown}\` is already included — the \`track:\` clause admits it. Nothing needs to change.`,
+    );
+    quotedSafely(e.message);
+  });
+
+  it.each(HOSTILE)("BAD_VALUE quotes year text %j as %j", (text, shown) => {
+    const range = { lo: text, hi: 2020 } as unknown as YearRange;
+    const e = refused(
+      () => reduce(at("trust"), { type: "yearSet", range, clause: year("trust"), reason: null }),
+      "BAD_VALUE",
+    );
+    expect(e.message.startsWith(`\`${shown}..2020\` is not a year range — `)).toBe(true);
+    quotedSafely(e.message);
+  });
+
+  it.each(HOSTILE)("BAD_PAGE quotes a page %j as %j", (page, shown) => {
+    const e = refused(() => reduce(at("a"), { type: "page", page: page as unknown as number }), "BAD_PAGE");
+    expect(e.message.startsWith(`${shown} is not a page number — `)).toBe(true);
+    quotedSafely(e.message);
+  });
+
+  it.each(HOSTILE)("a clause field %j (untyped /parse data) is quoted as %j", (field, shown) => {
+    const wrong = { ...atEnd("venue", "trust", ["ICML"]), field } as unknown as FilterClause;
+    const e = refused(
+      () => reduce(at("trust"), { type: "facetToggle", field: "venue", value: "ICLR", clause: wrong }),
+      "WRONG_FIELD",
+    );
+    expect(e.message.startsWith(`This is a \`${shown}:\` clause, not \`venue:\` — `)).toBe(true);
+    quotedSafely(e.message);
+    const action = { type: "facetToggle", field, value: "x", clause: null, reason: "negated" };
+    quotedSafely(refused(() => reduce(at("trust"), action as SearchAction), "NEGATED_CLAUSE").message);
+    for (const reason of [...Object.keys(REASON_WORDING), null] as (ClauseReason | null)[]) {
+      const blocked = whyBlocked(at("trust"), { ...action, reason } as SearchAction);
+      expect(blocked).not.toBeNull();
+      quotedSafely(blocked?.message ?? "");
+    }
+  });
+
+  it.each(HOSTILE)("noticeText quotes a URL value %j as %j", (value, shown) => {
+    const texts = [
+      ...fromURL(
+        new URLSearchParams([
+          ["q", "a"],
+          [value, value],
+        ]),
+      ).notices,
+      ...fromURL(
+        new URLSearchParams([
+          ["q", value],
+          ["q", value],
+        ]),
+      ).notices,
+      ...fromURL(
+        new URLSearchParams([
+          ["q", "a"],
+          ["mode", value],
+          ["sort", value],
+          ["page", value],
+        ]),
+      ).notices,
+    ].map(noticeText);
+    expect(texts[0]).toBe(
+      `\`${shown}=${shown}\` was ignored — \`${shown}\` is not a search parameter. ` +
+        "Search parameters are `q`, `mode`, `sort`, `page`.",
+    );
+    expect(texts[1]).toBe(
+      `\`q\` appears more than once; using the first value \`${shown}\` and ignoring \`${shown}\`.`,
+    );
+    expect(texts[2]?.startsWith(`\`mode=${shown}\` is not a mode — `)).toBe(true);
+    for (const t of texts) quotedSafely(t);
+  });
+
+  it("shortens a long URL value as the backend does, so a notice never grows with the URL", () => {
+    const [n] = fromURL(
+      new URLSearchParams([
+        ["q", "a"],
+        ["q", "b".repeat(100)],
+      ]),
+    ).notices;
+    expect(n && noticeText(n)).toBe(
+      `\`q\` appears more than once; using the first value \`a\` and ignoring \`${"b".repeat(39)}…\`.`,
+    );
+  });
+});
