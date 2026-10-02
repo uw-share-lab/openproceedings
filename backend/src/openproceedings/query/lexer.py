@@ -757,7 +757,8 @@ class _Lexer:
         # `-year:2021(x)`, `year:-2021(x)`: a rewrite would drop the `-`
         negated = before[-2:] in ([Kind.FIELD, Kind.NOT], [Kind.NOT, Kind.FIELD])
         x = self.out[k]
-        if negated or not verbatim(x.text) or len(x.text) > 40:
+        # `source:` is Scholar mode's only, and the lexer has no mode: a rewrite could itself be refused
+        if negated or field == "source" or not verbatim(x.text) or len(x.text) > 40:
             return (
                 f"{lead} — put a space before the `(`; for several values write a group, `{field}:(… OR …)`."
             )

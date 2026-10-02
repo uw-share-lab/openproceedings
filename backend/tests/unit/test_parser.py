@@ -1074,11 +1074,13 @@ def test_a_glued_value_message_says_where_the_space_goes() -> None:
         "values joined by OR (`year:(… OR …)`) — end the group with `)` before the `(`."
     )
     # a negated value gets no rewrite that would drop its `-`; a NOT further back is not this value's
-    for q in ("-year:2021(x)", "year:-2021(x)"):
+    # nor does a `source:` value, whose rewrite native mode would refuse (FIELD_COMPAT_ONLY)
+    for q in ("-year:2021(x)", "year:-2021(x)", "source:neurips(x)"):
         message = next(e.message for e in parse(q).errors if e.code is _P)
+        field = q.lstrip("-").split(":")[0]
         assert message.endswith(
-            "— put a space before the `(`; for several values write a group, `year:(… OR …)`."
-        )
+            f"— put a space before the `(`; for several values write a group, `{field}:(… OR …)`."
+        ), q
     assert "`year:2021 AND (…)`" in parse("NOT a year:2021(x)").errors[0].message
     # a text word, a text field's word and a word after `)` keep the plural hint
     for q in ("model(s)", "trust model(s)", "title:model(s)", "(a)b"):
