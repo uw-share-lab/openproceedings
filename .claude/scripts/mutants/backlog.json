@@ -126,10 +126,10 @@
     "new": "^id:(.*)$"
   },
   {
-    "label": "backlog: missing frontmatter falls back to the filename",
+    "label": "backlog: missing frontmatter not reported",
     "file": ".claude/scripts/check_backlog.py",
-    "old": "    if fm is None:\n        return None, ",
-    "new": "    if fm is None:\n        return from_name, "
+    "old": "    if fm is None:\n        return None, \"has no frontmatter",
+    "new": "    if fm is None:\n        return None, \"\"\n    if False:\n        return None, \"has no frontmatter"
   },
   {
     "label": "backlog: 12.1x read back as 12",
