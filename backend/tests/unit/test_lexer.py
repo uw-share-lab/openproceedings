@@ -224,6 +224,8 @@ ERRORS: list[tuple[str, DiagnosticCode, tuple[int, int]]] = [
     ("LLM(s)", C.PARSE_PAREN_TOUCHES_WORD, (0, 4)),
     ("(a)b", C.PARSE_PAREN_TOUCHES_WORD, (2, 4)),
     ("a(-a)", C.PARSE_PAREN_TOUCHES_WORD, (0, 2)),
+    # a range before `(` too, like every other filter value (decision-028, TASK-158)
+    ("year:2020..2022(x)", C.PARSE_PAREN_TOUCHES_WORD, (5, 16)),
 ]
 
 
@@ -308,6 +310,14 @@ WARNINGS: list[tuple[str, DiagnosticCode, list[tuple[int, int]]]] = [
     ("title:alpha", C.WARN_SPELLED_GREEK, [(6, 11)]),
     ("alpha OR α", C.WARN_SPELLED_GREEK, []),  # the letter is already searched
     ("venue:pi", C.WARN_SPELLED_GREEK, []),  # a filter value is never text
+    ("venue:(iclr OR pi)", C.WARN_SPELLED_GREEK, []),  # nor one in a filter group
+    ("venue:(iclr) alpha", C.WARN_SPELLED_GREEK, [(13, 18)]),  # after the group, text again
+    ("(x OR venue:(pi))", C.WARN_SPELLED_GREEK, []),  # the innermost group decides
+    ("venue:(iclr OR title:(alpha))", C.WARN_SPELLED_GREEK, [(22, 27)]),
+    ("venue:\u4e2d\u6587", C.WARN_CJK_RUN, []),  # no text warning on a filter value (TASK-158)
+    ("track:a\u2228b", C.WARN_LOOKALIKE_OPERATOR, []),
+    ("status:(\u00acx)", C.WARN_LOOKALIKE_OPERATOR, []),
+    ("year:-..2022", C.WARN_SYMBOLS_DROPPED, []),  # negated, still the field's value
     ("alpha* x", C.WARN_SPELLED_GREEK, []),  # a wildcard word isn't the name alone
     ("Epsilon-DP", C.WARN_SPELLED_GREEK, []),  # a hyphenated word is not the name alone
     ("epsilon greedy", C.WARN_SPELLED_GREEK, [(0, 7)]),
@@ -323,6 +333,11 @@ WARNINGS: list[tuple[str, DiagnosticCode, list[tuple[int, int]]]] = [
     ("trust ﹘bias", C.WARN_LOOKALIKE_OPERATOR, [(6, 11)]),
     ("``trust in AI''", C.WARN_LOOKALIKE_OPERATOR, [(0, 7)]),
     ("F# code", C.WARN_SYMBOLS_DROPPED, [(0, 2)]),
+    ("year:..2022", C.WARN_SYMBOLS_DROPPED, []),  # never text: its own check refuses it (TASK-158)
+    ("year:(2021 OR (..2022))", C.WARN_SYMBOLS_DROPPED, []),  # nested in a filter group too
+    ("..2022", C.WARN_SYMBOLS_DROPPED, [(0, 6)]),
+    ("title:(.NET)", C.WARN_SYMBOLS_DROPPED, [(7, 11)]),  # a text field's value is text
+    ("year:(2021) .NET", C.WARN_SYMBOLS_DROPPED, [(12, 16)]),
     ('"C++ code"', C.WARN_SYMBOLS_DROPPED, [(1, 4)]),  # phrase parts too (M1 re-review)
     ('".NET framework"', C.WARN_SYMBOLS_DROPPED, [(1, 5)]),
     ("\\epsilon-greedy", C.WARN_SYMBOLS_DROPPED, [(0, 15)]),  # a bare command dropped from a word
@@ -494,6 +509,12 @@ def test_m1_gate_mutant_rows() -> None:
 def test_a_parenthesis_glued_to_a_phrase_is_an_error_too() -> None:
     assert [e.code for e in lex('"a b"(c)').errors] == [C.PARSE_PAREN_TOUCHES_WORD]
     assert [e.code for e in lex('(c)"a b"').errors] == [C.PARSE_PAREN_TOUCHES_WORD]
+
+
+def test_a_close_paren_glued_to_a_field_prefix_is_not_an_error() -> None:
+    """A field name ends at its `:`, so `(x)year:2021` splits nothing (decision-028)."""
+    assert lex("(x)year:2021").errors == ()
+    assert lex("(x)title:(y)").errors == ()
 
 
 @pytest.mark.parametrize(

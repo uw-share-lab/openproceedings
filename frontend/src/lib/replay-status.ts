@@ -1,13 +1,16 @@
 /**
  * What a record's replay says (spec 05 §Pages `/record/[id]`; spec 04 §Search records; design R1–R4; copy
  * RC-2–RC-7, RC-3a). Pure: every count is the replay's or the record's as the API sent it. Strings hold query
- * text and codes in backticks (drawn by `Coded`).
+ * text and codes in backticks (drawn by `Coded`); every value the API sent that a string quotes, in backticks or
+ * bare (`refused`, the index and query versions), goes through `clip`, since a stored record or an index
+ * manifest could hold a backtick, a newline or a bidi character (TASK-160).
  *
  * Statuses: `reproduced`; `drifted` with its changed inputs and `+added / −removed` ("membership-identical" on
  * `+0 / −0`); `drifted` that could not be re-run (`refused`: counts null, never "membership-identical");
  * withheld (`refused` is `API_TOO_MANY_VERIFIED_CLAUSES` or `API_QUERY_TOO_COSTLY`: this instance won't run
  * it); and `mismatch`, the blocking "do not cite" state.
  */
+import { clip } from "./clip";
 import type { RecordResponse, SearchRecord } from "./methods-text";
 import { utcDate } from "./methods-text";
 
@@ -104,7 +107,7 @@ export function replayView(record: SearchRecord, replay: Replay, today: string):
   if (replay.refused !== null || replay.total === null) {
     return {
       kind: "refused",
-      text: `Drifted — could not be re-run: \`${replay.refused ?? "unknown"}\`. No counts were compared.`,
+      text: `Drifted — could not be re-run: \`${replay.refused === null ? "unknown" : clip(replay.refused)}\`. No counts were compared.`,
     };
   }
   const added = replay.added_total ?? 0;
@@ -113,10 +116,10 @@ export function replayView(record: SearchRecord, replay: Replay, today: string):
   const onlyRules =
     replay.index_version === record.index_version && replay.changed.every((c) => c.input === "query_version");
   const text = onlyRules
-    ? `Drifted: the query rules changed (query version ${record.query_version} → ${replay.query_version}). ` +
+    ? `Drifted: the query rules changed (query version ${clip(record.query_version)} → ${clip(replay.query_version)}). ` +
       `Re-run on the record's own index, it finds ${plural(replay.total, "paper")}: ${tally} against the record.`
-    : `Drifted: this instance no longer has index \`${record.index_version}\`, so the search was re-run on ` +
-      `index \`${replay.index_version}\`. It now finds ${plural(replay.total, "paper")}: ${tally} against the record.`;
+    : `Drifted: this instance no longer has index \`${clip(record.index_version)}\`, so the search was re-run on ` +
+      `index \`${clip(replay.index_version)}\`. It now finds ${plural(replay.total, "paper")}: ${tally} against the record.`;
   const exclusions =
     replay.excluded_match === false && replay.excluded !== null
       ? `Removed before screening on re-run: ${bucketsText(replay.excluded)} (recorded: ${bucketsText(record.excluded)})`
@@ -145,7 +148,7 @@ export function replayView(record: SearchRecord, replay: Replay, today: string):
 /** The saved panel's status line (SV-4; any other status uses the record page's line). */
 export function savedLine(record: SearchRecord, replay: Replay, today: string): string | null {
   const view = replayView(record, replay, today);
-  if (view.kind === "reproduced") return `Reproduced just now on index \`${replay.index_version}\`.`;
+  if (view.kind === "reproduced") return `Reproduced just now on index \`${clip(replay.index_version)}\`.`;
   if (view.kind === "mismatch") return null;
   return view.text;
 }

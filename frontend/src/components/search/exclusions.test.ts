@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ParsedFilters } from "@/lib/search-state";
-import { bannerOf, clauseText, limitsOf } from "./exclusions";
+import { HOSTILE, quotedSafely } from "@/test/hostile";
+import { bannerOf, clauseText, defaultsText, includedText, limitsOf } from "./exclusions";
 
 const clause = (
   field: "venue" | "track" | "status",
@@ -186,5 +187,71 @@ describe("clauseText", () => {
   it("writes one value bare and several grouped", () => {
     expect(clauseText("status", ["accepted"])).toBe("status:accepted");
     expect(clauseText("track", ["a", "b"])).toBe("track:(a OR b)");
+  });
+});
+
+describe("values the API sent are clipped wherever a message quotes them (TASK-160)", () => {
+  it.each(HOSTILE)(
+    "an include's description quotes a bucket %j as %j, bare and in its clause",
+    (value, shown) => {
+      const b = bannerOf(
+        { total: 5, track: { [value]: 5, unknown: 0 }, status: { unknown: 0 } },
+        { ...FACETS, track: { [value]: 3 } },
+        ["track", "status"],
+        TRUST,
+      );
+      const description = b.includes[0]?.description ?? "";
+      expect(description).toBe(
+        `Adds ${shown} to the track filter, \`track:(… OR ${shown})\`; the track filter then becomes a limit you wrote.`,
+      );
+      quotedSafely(description);
+      expect(b.includes[0]?.value).toBe(value); // the click still writes the value itself
+      // the plain-text places name it clipped too: line 1, the label, its accessible name, the announcement
+      expect(b.excluded).toBe(`excluded: 5 ${shown}`);
+      expect(b.includes[0]?.label).toBe(`include 3 ${shown}`);
+      expect(b.includes[0]?.name).toBe(`Include 3 ${shown} papers`);
+      expect(includedText("track", value)).toBe(`Track: ${shown} included.`);
+      for (const text of [b.excluded, b.includes[0]?.label ?? "", b.includes[0]?.name ?? ""]) {
+        quotedSafely(text);
+      }
+    },
+  );
+
+  it("announces an ordinary include as before", () => {
+    expect(includedText("track", "workshop")).toBe("Track: workshop included.");
+    expect(includedText("status", "unknown")).toBe("Status: unknown included.");
+  });
+
+  it.each(HOSTILE)("an include that adds 0 names the other default's value %j as %j", (value, shown) => {
+    const b = bannerOf(
+      { total: 3, track: { workshop: 3, unknown: 0 }, status: { unknown: 0 } },
+      { ...FACETS, track: { main: 1 } },
+      ["track", "status"],
+      { ...TRUST, status: clause("status", [5, 5], [value]) },
+    );
+    // the label strips the clause's backticks; a clipped value has none of its own to lose
+    const label = b.includes[0]?.label ?? "";
+    expect(label).toBe(`include workshop (adds 0: all 3 also fail status:${shown})`);
+    quotedSafely(label);
+  });
+
+  it.each(HOSTILE)("clauseText quotes a value %j as %j and keeps the field as written", (value, shown) => {
+    expect(clauseText("status", [value])).toBe(`status:${shown}`);
+    expect(clauseText("track", [value, "main"])).toBe(`track:(${shown} OR main)`);
+  });
+
+  it.each(HOSTILE)("the PRISMA disclosure quotes each default clause's value %j as %j", (value, shown) => {
+    const b = bannerOf(EXCLUDED, FACETS, ["track", "status"], {
+      ...TRUST,
+      track: clause("track", [5, 5], [value, "main"]),
+      status: clause("status", [5, 5], [value]),
+    });
+    const text = defaultsText(b.defaultClauses);
+    expect(text).toBe(`The default filters \`track:(${shown} OR main)\` and \`status:${shown}\``);
+    quotedSafely(text);
+  });
+
+  it("names the default filters in words when /parse has not reported them", () => {
+    expect(defaultsText([])).toBe("The default filters");
   });
 });
