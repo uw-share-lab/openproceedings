@@ -229,6 +229,16 @@ def test_a_cut_abstract_never_ends_in_whitespace_or_an_ellipsis() -> None:
     assert note == f"{TRIMMED} cut from 20,011 to 19,997 characters"
 
 
+def test_a_length_cap_counts_and_cuts_the_nfc_form() -> None:
+    # the dedup review's Nit: counted in code points as sent, an NFD title was cut where its NFC twin was not
+    nfc = "Title " + "\u00e9" * 600  # 606 characters
+    nfd = unicodedata.normalize("NFD", nfc)  # 1,206
+    assert cap("title", nfc) == (nfc, None) and cap("title", nfd) == (nfd, None)
+    long_nfc, long_nfd = nfc + "\u00e9" * 900, nfd + "e\u0301" * 900
+    assert cap("title", long_nfc)[0] == cap("title", long_nfd)[0] == ("Title " + "\u00e9" * 994)
+    assert cap("title", long_nfd)[1] == f"{TRIMMED} cut from 1,506 to 1,000 characters"
+
+
 def test_a_long_title_is_cut_collapsed_and_noted() -> None:
     title = "word " * 300 + "end"  # 1,503 characters
     out, note = cap("title", title)

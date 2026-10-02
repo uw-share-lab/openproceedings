@@ -19,8 +19,11 @@ as one, which real text never needs: its longest run is 1. So no word the tokeni
 
 A run within the cap is left as it is. One over it has its base (NFD) and its marks (NFKD) decomposed and put
 in canonical order (`_decomposed`), and keeps its first `MAX_MARKS` non-starters (`_trimmed`). Every other
-character is kept as it was. So every form of the same text (NFC, NFD, marks stored in another order) trims to
-the same characters, and two sources whose titles shared a dedup key still share it. Trimmed text is then made
+character is kept as it was. So every canonical form of the same text (NFC, NFD, marks stored in another order)
+trims to the same characters, and two sources whose titles shared a dedup key still share it. The length caps count
+code points in NFC and cut the NFC form, so an NFD title is cut as its NFC twin is. One limit holds, for hostile
+text only: an NFKD source, whose spacing accents are already a space and a mark, can trim differently from its
+composed form (`_decomposed` keeps canonical forms alike, NFC and NFD). Trimmed text is then made
 one a record accepts (`_tidy`): dropping marks can leave two spaces together, or a space or `…` at an end. A
 title is whitespace-collapsed, and an abstract is stripped of whitespace and `…` at both ends. A title or
 abstract past its length cap is cut there and tidied the same way. The title cap (the owner, 2026-10-02) bounds
@@ -81,7 +84,8 @@ def _segments(text: str) -> list[str]:
 
 
 def _decomposed(segment: str) -> list[str]:
-    """The characters of `segment` that make its run, decomposed: the base in NFD (a precomposed `ệ` brings its 2
+    """The characters of `segment` that make its run, decomposed, alike for its canonical forms (NFC, NFD; not an
+    NFKD source's split spacing accents): the base in NFD (a precomposed `ệ` brings its 2
     marks; its canonical form, so `ﬁ` stays `ﬁ`) and each mark in NFKD (so U+FF9E and U+0F73 are the marks NFKC
     makes of them). Every other character, such as a space, punctuation or an invisible one, is kept as it is
     and holds no mark here: a spacing accent such as `´` is a space and a mark to NFKC, but a starter comes
@@ -157,7 +161,12 @@ def cap(field: str, text: str) -> tuple[str, str | None]:
     notes = [f"{dropped} combining marks dropped past {MAX_MARKS} in a run"] if dropped else []
     if dropped:
         capped = _tidy(field, capped)
-    if len(capped) > (most := _LENGTH[field]):
+    # measured and cut in NFC, so the same text in NFC and NFD is cut alike (NFC is linear once marks are capped)
+    if (
+        len(capped) > (most := _LENGTH[field])
+        and len(composed := unicodedata.normalize("NFC", capped)) > most
+    ):
+        capped = composed
         cut = _tidy(field, capped[:most])
         notes.append(f"cut from {len(capped):,} to {len(cut):,} characters")
         capped = cut

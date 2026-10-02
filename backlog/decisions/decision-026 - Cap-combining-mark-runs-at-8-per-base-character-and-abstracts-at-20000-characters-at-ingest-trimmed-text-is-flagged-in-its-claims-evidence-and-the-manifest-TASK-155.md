@@ -73,8 +73,12 @@ Details:
 - **How a run over the cap is trimmed.** Its base is decomposed in NFD and its marks in NFKD, and each run of
   non-starters is put in canonical order. Then its first 8 non-starters are kept. Every other character in it
   is kept as it was. A run within the cap is
-  left as it is. So every form of the same text trims to the same characters, whether NFC, NFD or marks stored
-  in another order. Two sources whose titles shared a dedup title key still share it after the cap.
+  left as it is. So every canonical form of the same text trims to the same characters, whether NFC, NFD or
+  marks stored in another order. Two sources whose titles shared a dedup title key still share it after the
+  cap. The length caps likewise count and cut code points in NFC, so an NFD title is cut as its NFC twin is.
+  NFC is linear once the marks are capped. One limit remains, for hostile text only: a source that sends NFKD
+  text has already split each spacing accent into a space and a mark, so it can trim differently from the
+  composed form. The dedup-auditor found both; real titles are at most 192 characters with runs of 1.
   - **Why.** The dedup and track-classifier reviews found that keeping the first 8 marks in stored order split
     such keys. For example, 276 of 500 random marked titles split against their NFD form. That stops dedup
     merging the two records, or reconcile matching a listing, which would turn the record `unknown`.

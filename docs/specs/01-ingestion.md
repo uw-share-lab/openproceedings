@@ -189,8 +189,9 @@ facts in this table were checked live on 2026-09-27 (`docs/research/2026-09-27-o
        requires.
        So every Unicode form of the same text trims alike, and dedup title keys that matched still match.
      - No token holds more than 8 consecutive non-starters, so NFC stays linear.
-   - **Length.** A title keeps its first 1,000 characters (code points) and is whitespace-collapsed. An
-     abstract keeps its first 20,000 and is stripped of whitespace and `…` at both ends. The title cap was the
+   - **Length.** A title keeps its first 1,000 characters (code points, counted and cut in NFC, so an NFD twin
+     is cut alike) and is whitespace-collapsed. An abstract keeps its first 20,000, counted the same way, and is
+     stripped of whitespace and `…` at both ends. The title cap was the
      owner's decision of 2026-10-02. The longest real title is 192 characters.
 
    The record's field and every claim of it are trimmed alike. A trimmed claim's `evidence` carries the note
