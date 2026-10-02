@@ -33,15 +33,22 @@ Write `--final-summary` before `backlog task complete`: 1.53 can't edit a task o
 The CLI numbers a new task or decision from the files in the branch's own checkout. `dev` merges through
 a queue that doesn't require a PR to be up to date (decision-027), so two PRs that each create task-162
 write different filenames, git sees no conflict, and both would merge with one id. So:
-- **Create ids last.** Run `backlog task create` / `backlog decision create` after rebasing onto the latest
-  `dev`, at the end of the branch's work: before the final `/review-gate` (whose dispositions cite the new
-  ids), in a commit that holds only the CLI's files and the edits that name the new ids. Until then, keep a
-  follow-up in the current task's notes (`--append-notes`).
+- **The branch's own task** is created (or picked) on a freshly pulled `dev` before branching, as
+  CONTRIBUTING.md §Flow says; if another PR takes its id first, the check below catches it.
+- **Ids created during the work are created last**: follow-up tasks, `task-NNN` dispositions and decision
+  records. Run `backlog task create` / `backlog decision create` after rebasing onto the latest `dev`, at the
+  end of the branch's work and before the final `/review-gate` (whose dispositions cite the new ids), in a
+  commit that holds only the CLI's files and the edits that name the new ids. Until then, keep each follow-up
+  in the current task's notes (`--append-notes`), or, with no current task, in the PR draft. A deferral
+  raised in the final review round is filed the same way, then reviewed and attested as a new head.
 - **`check_backlog.py` enforces uniqueness**, in `claude-tooling` on the PR (whose merge ref already holds
   `dev`) and again in every queue build (`merge_group`), where two PRs that raced first meet. It fails, naming
   the files, when two files in `tasks/` + `completed/` share a task id, or two in `decisions/` share a decision
-  id. The id is the frontmatter `id:` (else the filename prefix), compared by number (`TASK-075` = `task-75`);
-  a file whose id it can't read fails too. `archive/` is not compared (the 1.53 reuse above).
+  id. The id is the frontmatter `id:` (else the filename prefix), compared by number (`TASK-075` = `task-75`;
+  a subtask `12.1` is not `12`). A file with no readable id, two `id:` fields, or a frontmatter id that
+  disagrees with its filename fails too, as does a missing `tasks/` or `completed/`. `archive/` is not
+  compared (the 1.53 reuse above). Rows: `.claude/scripts/tests/test-tooling-scripts.sh`; mutants:
+  `.claude/scripts/mutants/backlog.json`.
 - **On a clash**, the PR that hasn't merged renumbers: rebase onto `dev`, drop the commit that created the id,
   create it again with the CLI (it gets the next free id), update whatever named the old one, then re-review
   and re-attest the new head.

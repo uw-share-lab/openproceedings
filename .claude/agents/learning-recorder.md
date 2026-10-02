@@ -41,5 +41,5 @@ personal data, and people's names (use roles: "the second reviewer").
 
 ## Output
 The entry path (or the entry you extended), the key-lesson line verbatim, what you propagated where, and
-any follow-up task ids. Remind the caller that the new entry must be committed **before** `/review-gate`,
+any follow-ups (filed as tasks later, after rebasing onto `dev`: task-hygiene §Ids). Remind the caller that the new entry must be committed **before** `/review-gate`,
 because approvals are per-commit.

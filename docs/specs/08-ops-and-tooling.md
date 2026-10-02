@@ -157,13 +157,16 @@ push run.
 
 Because the queue doesn't require a PR to be up to date, two PRs that each ran `backlog task create` (or
 `backlog decision create`) on the same `dev` get the same id under different filenames, and git sees no
-conflict. `check_backlog.py`, in `claude-tooling` and so in every queue build, fails when two files in
-`backlog/tasks/` + `backlog/completed/` share a task id or two in `backlog/decisions/` share a decision id,
-naming the files. It reads the frontmatter `id:`, else the filename prefix, and compares numbers
-(`TASK-075` = `task-75`); a file whose id it can't read fails it too. `backlog/archive/` is not compared,
-because Backlog.md 1.53 gives an archived task's id to the next new task. New ids are therefore created last,
-after rebasing onto `dev`, and on a clash the unmerged PR drops its id commit and creates the id again (skill
-`task-hygiene`, §Ids). The rows are in `.claude/scripts/tests/test-tooling-scripts.sh`.
+conflict. `check_backlog.py` runs in `claude-tooling` on the PR (whose merge ref already holds `dev`) and
+again in every queue build. It fails when two files in `backlog/tasks/` + `backlog/completed/` share a task
+id or two in `backlog/decisions/` share a decision id, naming the files. It reads the frontmatter `id:`, else
+the filename prefix, and compares numbers (`TASK-075` = `task-75`; a subtask `12.1` is not `12`). A file with
+no readable id, with two `id:` fields, or whose frontmatter id disagrees with its filename also fails the
+check, and so does a missing `tasks/` or `completed/`. `backlog/archive/` is not compared, because Backlog.md
+1.53 gives an archived task's id to the next new task. Ids created during a branch's work are therefore
+created last, after rebasing onto `dev`, and on a clash the unmerged PR drops its id commit and creates the id
+again (skill `task-hygiene`, §Ids). The rows are in `.claude/scripts/tests/test-tooling-scripts.sh` and the
+mutants in `.claude/scripts/mutants/backlog.json`.
 
 **Dependabot** (`.github/dependabot.yml`, weekly) watches `github-actions` (prefix `ci`), `uv` and `npm` (prefix
 `deps`) and the `docker` base images in `deploy/` (prefix `build`). For each, minor and patch version updates
@@ -196,7 +199,7 @@ Tantivy fix, shows up as a Dependabot alert and is fixed by a hand-made PR.
   labelled `no-learning`. Every session starts with the index loaded.
 - **Keep everything current** (skill: `task-hygiene`): tasks, docs, specs and READMEs change in the same
   commit as the behaviour. Finished tasks leave `backlog/tasks/` via `backlog task complete <id>`. New task
-  and decision ids are created last, after rebasing onto `dev` (§Merge queue).
+  and decision ids created during the work are created last, after rebasing onto `dev` (§Merge queue).
 - **No AI authorship** in commits or PRs (project decision 2026-09-25). `.claude/` is committed.
 - Secrets (OpenReview credentials) live only in `.env` (gitignored, mode 600). `data/` is never committed.
 

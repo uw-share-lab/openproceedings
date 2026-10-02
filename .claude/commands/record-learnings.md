@@ -15,7 +15,8 @@ It must:
    from `_TEMPLATE.md`, with every `<placeholder>` replaced, a standalone `**Key lesson:**` line and
    evidence for every lesson.
 3. Fold behaviour-changing lessons into the owning skill/agent/CLAUDE.md and note it under "Propagated to".
-4. Create Backlog tasks for follow-ups.
+4. List follow-ups in the task's notes; they are filed as Backlog tasks last, after rebasing onto `dev`
+   (task-hygiene §Ids).
 5. Regenerate the index (`python3 .claude/scripts/learnings_index.py`) and verify `--check` passes (it
    also rejects non-dates, leftover template `<placeholders>` and entries in subfolders).
 

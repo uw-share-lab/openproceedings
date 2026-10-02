@@ -154,7 +154,7 @@ closing an interactive terminal:
   live check of that shape. Its run log should be read for the `merge group …: #N @ …` line, to see whether
   `base_sha` is `dev`'s tip (several PRs listed) or the previous entry (one PR). Once it merges, confirm
   that its `merge_commit_sha` (`gh api repos/<owner>/<name>/pulls/<n> --jq .merge_commit_sha`) is its
-  `gh-readonly-queue` commit, which the merged-ahead exception assumes. Record both answers here.
+  `gh-readonly-queue` commit, which the merged-ahead exception assumes. The answers are in §Verified live.
 - Every queue entry runs the full `test` job again on the combined result. That doubles CI minutes per PR,
   which is the price of never merging an untested combination.
 - Release promotions (`dev → main`) and back-merges keep their existing procedure (spec 08 §Release). The
