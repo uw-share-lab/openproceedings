@@ -155,7 +155,7 @@ class TantivyEngine:
     # index, ~5 MB on 80k): it is cleared once the weights charged to it since its last clear pass its budget.
     # Weights, in ids/terms (~60 bytes each as Python strings): a verified clause, its ids + 1; an expansion,
     # its terms + 1 (an over-cap count, 1); a compiled query, `Compiled.held` + 1 (the ids and terms inside its
-    # Tantivy query, each verified id twice as `Compiled.ids` keeps a list too, plus its explain lines); a base's facet combos, their number + 1. So ≲ 30 + 30 + 6 + a few MB per
+    # Tantivy query: each verified clause's ids once for the list `Compiled.ids` keeps, plus whichever id list its query holds, the ids or the candidates that failed, none when none failed (TASK-076); plus its explain lines); a base's facet combos, their number + 1. So ≲ 30 + 30 + 6 + a few MB per
     # engine, and the API holds the served engine plus `pinned_indexes` more. Every memo is checked before each
     # entry is stored and charged right after (`verified` clause by clause, inside a compile: `_store_verified`),
     # so it exceeds its budget by at most one entry per thread storing concurrently (each thread's check may
@@ -410,8 +410,8 @@ class TantivyEngine:
         if hit is not None:
             # the request holds the tree's verified ids as if it had compiled it (round 4). Carried in the entry
             # rather than skipping the memo for a scope: a skip would recompile every search (task-076's
-            # headroom), while these lists are charged to the entry's `held` (twice per id: the Tantivy
-            # query's copy and this one), so the compiled memo's budget stays honest
+            # headroom), while these lists are charged to the entry's `held` (each id once for this list,
+            # plus whichever id list the Tantivy query holds), so the compiled memo's budget stays honest
             if scope is not None:
                 for clause, ids in hit.ids.items():  # the entry's own dict, complete and never changed
                     scope.ids[clause] = ids

@@ -508,5 +508,65 @@
    ]
   },
   "note": "verification (task-028): only a default: identification is the whole corpus (status:accepted)"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    25
+   ],
+   "kind": "near",
+   "left": {
+    "span": [
+     10,
+     11
+    ],
+    "kind": "term",
+    "token": "2",
+    "field": "abstract"
+   },
+   "right": {
+    "span": [
+     20,
+     24
+    ],
+    "kind": "wildcard",
+    "stem": "age",
+    "op": "*",
+    "field": "abstract"
+   },
+   "distance": 10
+  },
+  "note": "TASK-076: a verified clause most of whose candidates hold it compiles with the failures excluded (94 candidates, 25 fail)"
+ },
+ {
+  "ast": {
+   "span": [
+    0,
+    30
+   ],
+   "kind": "near",
+   "left": {
+    "span": [
+     10,
+     16
+    ],
+    "kind": "wildcard",
+    "stem": "trust",
+    "op": "*",
+    "field": "abstract"
+   },
+   "right": {
+    "span": [
+     26,
+     29
+    ],
+    "kind": "term",
+    "token": "the",
+    "field": "abstract"
+   },
+   "distance": 100
+  },
+  "note": "TASK-076: a verified clause every candidate holds compiles to its candidate query alone (950 candidates)"
  }
 ]

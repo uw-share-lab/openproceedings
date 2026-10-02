@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 from hypothesis import given, settings
 from openproceedings.engine.compile import Compiler
+from openproceedings.engine.protocol import EngineInputError
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.engine.tantivy_engine import TantivyEngine, _ord
 from openproceedings.query.ast import Node
@@ -16,8 +17,9 @@ from openproceedings.query.parser import parse
 
 from tests.corpus import Rec
 from tests.fixtures.corpus.synthetic_5k import records, vocab
+from tests.golden.test_tantivy_200 import as_paper
 from tests.strategies import engine_asts
-from tests.unit.engine.test_exclusions import as_paper, tantivy_of
+from tests.unit.engine.test_exclusions import tantivy_of
 
 TEXTS = {
     "Ac01": "large language models",
@@ -83,7 +85,19 @@ def test_a_clause_every_candidate_holds_needs_no_id_set(
 
 
 @pytest.mark.parametrize(
-    "q", ['"large language model*"', '"large model*"', '"small model*"', '"lang* large"']
+    "q",
+    [
+        '"large language model*"',
+        '"large model*"',
+        '"small model*"',
+        '"lang* large"',
+        # the exclusion form inside a tree: under AND, OR and NOT, and beside an unverified clause
+        '"large language model*" AND NOT small',
+        '"large language model*" OR small',
+        'study AND NOT "large language model*"',
+        'title:"large language model*" AND large',
+        '("large language model*" OR "large model*") AND model*',
+    ],
 )
 def test_each_form_matches_and_scores_as_the_term_set_did(small: TantivyEngine, q: str) -> None:
     ast = parse(q).ast
@@ -115,8 +129,35 @@ def collected(engine: TantivyEngine, ast: Node, *, members: bool) -> list[tuple[
 def test_generated_trees_match_and_score_the_same_either_way(synthetic: TantivyEngine, ast: Node) -> None:
     try:
         expected = collected(synthetic, ast, members=False)
-    except Exception as refused:  # an over-cap wildcard: refused the same way either way
+    except EngineInputError as refused:  # an over-cap wildcard: refused the same way either way
         with pytest.raises(type(refused)):
             collected(synthetic, ast, members=True)
         return
     assert collected(synthetic, ast, members=True) == expected
+
+
+# drawn trees rarely reach a clause most of whose candidates hold it, so each form also has 5k cases of its own
+@pytest.mark.parametrize(
+    ("q", "form"),
+    [
+        ("abstract:(2 NEAR/10 age*)", "failed"),  # 94 candidates, 69 hold it
+        ("abstract:(trust* NEAR/100 the)", "none"),  # 950 candidates, every one holds it
+        ('"trust trust*"', "ids"),  # title 16 of 318, abstract 70 of 1,479
+        ("(abstract:(2 NEAR/10 age*) OR trust) AND NOT abstract:(trust* NEAR/100 the)", "failed"),
+    ],
+)
+def test_each_form_on_the_5k_corpus(
+    synthetic: TantivyEngine, monkeypatch: pytest.MonkeyPatch, q: str, form: str
+) -> None:
+    sets = id_sets(synthetic, q, monkeypatch)
+    ast = parse(q).ast
+    assert ast is not None
+    holding = synthetic.compile(ast).ids.values()
+    if form == "failed":  # a set, and shorter than the ids that held
+        assert sets and min(map(len, sets)) < max(map(len, holding))
+        assert not any(sorted(i.rsplit(":", 1)[1] for i in ids) in sets for ids in holding if ids)
+    elif form == "none":
+        assert sets == []
+    else:
+        assert sets == [sorted(i.rsplit(":", 1)[1] for i in ids) for ids in holding if ids]
+    assert collected(synthetic, ast, members=True) == collected(synthetic, ast, members=False)
