@@ -78,6 +78,8 @@ fresh; printf -- '---\nid: task-1\nstatus: Done\n---\n' > "$B/completed/task-1 -
 expect ok  "a Done task in completed/"                                  check_backlog.py
 fresh; rm -rf "$B/completed"
 expect_msg "a missing completed/ fails (not 0 files)"                   "backlog/completed/ is missing"
+fresh; rm -rf "$B/tasks"
+expect_msg "a missing tasks/ fails (not 0 files)"                       "backlog/tasks/ is missing"
 # duplicate ids (decision-027: the queue merges two PRs that each created task-N under different filenames)
 fresh; task "tasks/task-1 - a.md" TASK-1; task "tasks/task-2 - b.md" TASK-2; task "completed/task-3 - c.md" TASK-3
 expect ok  "distinct ids across tasks/ and completed/"                  check_backlog.py
@@ -89,7 +91,7 @@ fresh; task "tasks/task-75 - a.md" task-75; task "completed/task-075 - b.md" TAS
 expect_clash "TASK-075 and task-75 are one id"                          task-75
 fresh; task "tasks/task-8 - a.md" "'TASK-8'"; task "tasks/task-8 - b.md" '"task-8"'
 expect_clash "quoted ids are read"                                      task-8
-fresh; printf 'no frontmatter\n' > "$B/tasks/task-4 - a.md"; printf -- '---\nstatus: To Do\n---\n' > "$B/completed/task-4 - b.md"
+fresh; printf -- '---\nstatus: To Do\n---\n' > "$B/tasks/task-4 - a.md"; printf -- '---\ntitle: b\n---\n' > "$B/completed/task-4 - b.md"
 expect_clash "no id field: the filename prefix is the id"               task-4
 fresh; task "tasks/x - a.md" TASK-3; task "tasks/y - b.md" TASK-3
 expect_clash "no filename prefix: the frontmatter id is the id"         task-3
@@ -110,12 +112,22 @@ fresh; task "tasks/task-6 - b.md" TASK-5; task "tasks/task-5 - a.md" TASK-5
 expect_msg "frontmatter id and filename disagree"                       "'tasks/task-6 - b.md' has a frontmatter .id:. that disagrees"
 fresh; printf -- '---\nid: TASK-6\nid: TASK-5\n---\n' > "$B/tasks/task-6 - b.md"
 expect_msg "two id: fields in one frontmatter"                          "'tasks/task-6 - b.md' has 2 .id:. fields"
-fresh; task "tasks/task-3 - a.md" TASK-3x
+fresh; task "tasks/task-3 - a.md" TASK-3-old
 expect_msg "an id with trailing junk fails closed"                      "'tasks/task-3 - a.md' has no readable task id in its frontmatter"
+fresh; task "tasks/task-5 - a.md" TASK-5; task "tasks/task-6 - b.md" "'TASK-5' # moved"
+expect_msg "a quoted id with a trailing comment fails closed"           "'tasks/task-6 - b.md' has no readable task id in its frontmatter"
+fresh; task "tasks/task-5 - a.md" TASK-5; printf -- '---\n{id: TASK-5, status: To Do}\n---\n' > "$B/tasks/task-6 - b.md"
+expect_msg "a flow-mapping frontmatter fails closed"                    "'tasks/task-6 - b.md' has frontmatter this check can't read"
+fresh; task "tasks/task-5 - a.md" TASK-5; printf -- '---\n? id\n: TASK-5\n---\n' > "$B/tasks/task-6 - b.md"
+expect_msg "an explicit ? key fails closed"                             "'tasks/task-6 - b.md' has frontmatter this check can't read"
+fresh; printf '\n---\nid: TASK-5\n---\n' > "$B/tasks/task-6 - b.md"
+expect_msg "no frontmatter at the top fails closed"                     "'tasks/task-6 - b.md' has no frontmatter"
 fresh; task "tasks/notes.md" "some note"
 expect_msg "a file with no readable id fails closed"                    "'tasks/notes.md' has no readable task id in its frontmatter"
-fresh; printf 'no frontmatter\n' > "$B/tasks/task-12abc.md"
+fresh; printf -- '---\ntitle: x\n---\n' > "$B/tasks/task-12abc.md"
 expect_msg "a filename prefix glued to letters is not an id"            "'tasks/task-12abc.md' has no readable task id \(frontmatter"
+fresh; task "tasks/task-12 - a.md" TASK-12; printf -- '---\ntitle: x\n---\n' > "$B/tasks/task-12.1x.md"
+expect_msg "task-12.1x is not read back as task-12"                     "'tasks/task-12.1x.md' has no readable task id \(frontmatter"
 fresh; task "tasks/task-3 - a.md" decision-3
 expect_msg "a decision id in tasks/ fails closed"                       "'tasks/task-3 - a.md' has no readable task id"
 fresh; printf -- '---\nid: TASK-1\n---\n\377\376\n' > "$B/tasks/task-1 - a.md"

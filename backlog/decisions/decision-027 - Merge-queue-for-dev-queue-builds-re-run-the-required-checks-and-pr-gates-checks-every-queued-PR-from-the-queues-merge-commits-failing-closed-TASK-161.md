@@ -169,8 +169,8 @@ closing an interactive terminal:
 - The first queued PR, #81 (2026-10-02), passed the `merge_group` gate: `review-attested`, `learnings` and
   `attribution`. The run log line was `merge group 8980b290a1: #81 @ 4d9b3722f8`.
 - For a single queue entry, `base_sha` was `dev`'s tip (`0bcc9e8`), the queue commit's parent 1.
-- The PR's `merge_commit_sha` equals the `gh-readonly-queue` head sha (`8980b29`), and `dev` now points at
-  that commit. What merged is exactly what was tested, as the merged-ahead exception assumes.
+- The PR's `merge_commit_sha` equals the `gh-readonly-queue` head sha (`8980b29`), and that commit is on
+  `dev`'s first-parent history. What merged is exactly what was tested, as the merged-ahead exception assumes.
 - Still unverified: `base_sha` for a second entry queued at the same time (`dev`'s tip, or the previous
   entry's queue commit). Read the log of the next build that holds two PRs.
 

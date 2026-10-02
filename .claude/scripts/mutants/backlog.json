@@ -26,26 +26,20 @@
   {
     "label": "backlog: frontmatter id ignored",
     "file": ".claude/scripts/check_backlog.py",
-    "old": "    fields = ID_FIELD.findall(fm.group(1)) if fm else []\n",
+    "old": "    fields = ID_FIELD.findall(fm.group(1))\n",
     "new": "    fields: list[str] = []\n"
   },
   {
     "label": "backlog: whole file searched for id:",
     "file": ".claude/scripts/check_backlog.py",
-    "old": "    fields = ID_FIELD.findall(fm.group(1)) if fm else []\n",
+    "old": "    fields = ID_FIELD.findall(fm.group(1))\n",
     "new": "    fields = ID_FIELD.findall(text)\n"
   },
   {
     "label": "backlog: filename fallback skipped",
     "file": ".claude/scripts/check_backlog.py",
-    "old": "        return from_name, \"\"\n    from_field",
-    "new": "        return None, \"no id\"\n    from_field"
-  },
-  {
-    "label": "backlog: id field matched as a prefix (TASK-3x read as 3)",
-    "file": ".claude/scripts/check_backlog.py",
-    "old": "from_field = number(pattern.fullmatch(fields[0].strip()))",
-    "new": "from_field = number(pattern.match(fields[0].strip()))"
+    "old": "        return from_name, \"\"\n    value = fields",
+    "new": "        return None, \"no id\"\n    value = fields"
   },
   {
     "label": "backlog: frontmatter/filename disagreement allowed",
@@ -72,28 +66,16 @@
     "new": "FRONTMATTER = re.compile(r\"\\A---\\n(.*?)\\n---(?:\\n|\\Z)\", re.DOTALL)"
   },
   {
-    "label": "backlog: quoted or spaced id key not read",
-    "file": ".claude/scripts/check_backlog.py",
-    "old": "ID_FIELD = re.compile(r\"\"\"^[ \\t]*['\"]?id['\"]?[ \\t]*:",
-    "new": "ID_FIELD = re.compile(r\"\"\"^id:"
-  },
-  {
-    "label": "backlog: quotes kept on the id value",
-    "file": ".claude/scripts/check_backlog.py",
-    "old": "[ \\t]*:[ \\t]*['\"]?([^'\"\\n]*?)['\"]?[ \\t]*$",
-    "new": "[ \\t]*:[ \\t]*([^\\n]*?)[ \\t]*$"
-  },
-  {
     "label": "backlog: filename prefix glued to letters accepted",
     "file": ".claude/scripts/check_backlog.py",
-    "old": "(?![0-9A-Za-z])",
-    "new": ""
+    "old": "(?![0-9A-Za-z]|",
+    "new": "(?!"
   },
   {
     "label": "backlog: kind matched case-sensitively",
     "file": ".claude/scripts/check_backlog.py",
-    "old": "(?![0-9A-Za-z])\", re.IGNORECASE)",
-    "new": "(?![0-9A-Za-z])\")"
+    "old": "[0-9])\", re.IGNORECASE)",
+    "new": "[0-9])\")"
   },
   {
     "label": "backlog: one shared id map for tasks and decisions",
@@ -114,12 +96,6 @@
     "new": "                    pass\n"
   },
   {
-    "label": "backlog: missing tasks/ or completed/ passes",
-    "file": ".claude/scripts/check_backlog.py",
-    "old": "problems = [f\"backlog/{d}/ is missing\" for d in REQUIRED if not (BACKLOG / d).is_dir()]",
-    "new": "problems: list[str] = []"
-  },
-  {
     "label": "backlog: undecodable file not reported",
     "file": ".claude/scripts/check_backlog.py",
     "old": "                problems.append(f\"'{d}/{p.name}' can't be read as UTF-8 ({type(e).__name__})\")\n",
@@ -136,5 +112,59 @@
     "file": ".claude/scripts/check_backlog.py",
     "old": "GROUPS = {\"task\": (\"tasks\", \"completed\"), \"decision\": (\"decisions\",)}",
     "new": "GROUPS = {\"task\": (\"tasks\", \"completed\", \"archive/tasks\"), \"decision\": (\"decisions\",)}"
+  },
+  {
+    "label": "backlog: id field matched as a prefix (TASK-3-old read as 3)",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "from_field = number(pattern.fullmatch(value))",
+    "new": "from_field = number(pattern.match(value))"
+  },
+  {
+    "label": "backlog: quotes kept on the id value",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "        value = value[1:-1].strip()\n",
+    "new": "        pass\n"
+  },
+  {
+    "label": "backlog: id value of another shape skips the line",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "ID_FIELD = re.compile(r\"\"\"^[ \\t]*['\"]?id['\"]?[ \\t]*:(.*)$",
+    "new": "ID_FIELD = re.compile(r\"\"\"^[ \\t]*['\"]?id['\"]?[ \\t]*:[ \\t]*['\"]?(TASK-[0-9]+|task-[0-9]+|decision-[0-9]+)['\"]?[ \\t]*$"
+  },
+  {
+    "label": "backlog: quoted or spaced id key not read",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "^[ \\t]*['\"]?id['\"]?[ \\t]*:(.*)$",
+    "new": "^id:(.*)$"
+  },
+  {
+    "label": "backlog: flow mapping / ? key not refused",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "    if UNREAD_YAML.search(fm.group(1)):\n",
+    "new": "    if False:\n"
+  },
+  {
+    "label": "backlog: missing frontmatter falls back to the filename",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "    if fm is None:\n        return None, ",
+    "new": "    if fm is None:\n        return from_name, "
+  },
+  {
+    "label": "backlog: 12.1x read back as 12",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "(?![0-9A-Za-z]|\\.[0-9])",
+    "new": "(?![0-9A-Za-z])"
+  },
+  {
+    "label": "backlog: missing tasks/ passes",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "REQUIRED = (\"tasks\", \"completed\")",
+    "new": "REQUIRED = (\"completed\",)"
+  },
+  {
+    "label": "backlog: missing completed/ passes",
+    "file": ".claude/scripts/check_backlog.py",
+    "old": "REQUIRED = (\"tasks\", \"completed\")",
+    "new": "REQUIRED = (\"tasks\",)"
   }
 ]

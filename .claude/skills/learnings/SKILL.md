@@ -44,7 +44,8 @@ and says what changed; never edit the old entry's claims (the journal is append-
 ## Where things go
 - Measured numbers → `docs/results/` (with the command that produced them).
 - Hard-to-reverse design choices → `backlog decision create`, linked from the entry.
-- Follow-ups → Backlog tasks, ids in the entry. Never "noted for later".
+- Follow-ups → Backlog tasks (created last, after rebasing: task-hygiene §Ids), ids in the entry. Never
+  "noted for later".
 - Anything that should change behaviour → also the owning skill/agent/CLAUDE.md ("Propagated to").
 
 ## Privacy
