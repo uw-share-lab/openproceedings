@@ -112,15 +112,19 @@ def build(
     name: str,
     indexes: Path,
     paper: Callable[[Rec], PaperRecord] = as_paper,
+    schema_version: str | None = None,
 ) -> str:
     """A snapshot `<snapshots>/<name>` of `corpus` (each record made a snapshot record by `paper`) and its index
-    under `indexes`; the index_version."""
+    under `indexes` (at `schema_version`, the current one by default; the snapshot is reused when it exists);
+    the index_version."""
     snap = snapshots / name
+    if snap.exists():
+        return build_index(snap, indexes, BUILT, schema_version=schema_version).index_version
     snap.mkdir(parents=True)
     papers = tuple(sorted((paper(r) for r in corpus), key=lambda p: p.id))
     for file, data in render(DedupResult(papers, (), ()), [], BUILT).items():
         (snap / file).write_bytes(data)
-    return build_index(snap, indexes, BUILT).index_version
+    return build_index(snap, indexes, BUILT, schema_version=schema_version).index_version
 
 
 @pytest.fixture(scope="session")

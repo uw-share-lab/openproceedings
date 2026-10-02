@@ -10,7 +10,7 @@ names), so the differential suite (task-028) compares two independent implementa
 | Wildcard | `SHOULD` of a `TermQuery` per expansion, per field (each scores as its own term); no expansions → `EmptyQuery` (never a dropped clause) |
 | Phrase of terms | `PhraseQuery(f, tokens, slop=0)`, per field: never across fields |
 | Near(a, b, n), a ≠ b single terms | `PhraseQuery([a,b], slop=n) OR PhraseQuery([b,a], slop=n)`, per field |
-| Phrase with a wildcard item; Near of a phrase, a wildcard or a term with itself | verified: the candidates (every item present in the field) are fetched and their stored token streams checked by position in Python; the verified ids become a `TermSetQuery` on `id` (with the candidate query kept for scoring), or the candidates that failed, excluded, when they are fewer (`Compiler.exact`) |
+| Phrase with a wildcard item; Near of a phrase, a wildcard or a term with itself | verified: the candidates (every item present in the field) are fetched and their stored token streams checked by position in Python; the verified ids become a `TermSetQuery` (the engine's `id_query`: on the indexed `ord` from schema 3, on the text `id` in a schema-2 index; TASK-167) (with the candidate query kept for scoring), or the candidates that failed, excluded, when they are fewer (`Compiler.exact`) |
 | Filter | `ConstScoreQuery(0)` of a `TermSetQuery` on the facet, or of year `RangeQuery`s: never scores |
 | And / Or / Not | `BooleanQuery` MUST / SHOULD; Not → `MUST const-score-0 all_docs, MUST_NOT x` (a MUST_NOT-only query matches nothing; the all-docs clause adds no score) |
 
@@ -26,6 +26,7 @@ from bisect import bisect_left
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Protocol
 
 import tantivy
@@ -110,6 +111,7 @@ class Compiler:
         store: Callable[[tuple[str, str], list[str]], None] | None = None,
         count: Callable[[tantivy.Query], int] | None = None,
         members: Callable[[tantivy.Query], frozenset[str]] | None = None,
+        id_query: Callable[[list[str]], tantivy.Query] | None = None,
     ) -> None:
         self.schema = schema
         self.weights = weights if weights is not None else dict.fromkeys(FIELDS, 1.0)
@@ -134,6 +136,9 @@ class Compiler:
         # the ids a query matches (the engine's): with `count`, lets a verified clause name the candidates that
         # don't hold it instead of the ids that do, when they are fewer (`exact`)
         self.members = members
+        # the documents with given ids (the engine's: a u64 term set on `ord` from schema 3, TASK-167); a term
+        # set on the text `id` when none is given
+        self.id_query = id_query if id_query is not None else partial(id_set, schema)
         self.out = Compiled(tantivy.Query.empty_query())
         self._allowed: dict[tuple[str, str], frozenset[str]] = {}  # per item: `allowed`
 
@@ -274,10 +279,10 @@ class Compiler:
             if not failed:
                 return candidates
             return tantivy.Query.boolean_query(
-                [(tantivy.Occur.Must, candidates), (tantivy.Occur.MustNot, id_set(self.schema, failed))]
+                [(tantivy.Occur.Must, candidates), (tantivy.Occur.MustNot, self.id_query(failed))]
             )
         self.out.held += len(ids)
-        exact = tantivy.Query.const_score_query(id_set(self.schema, ids), 0.0)
+        exact = tantivy.Query.const_score_query(self.id_query(ids), 0.0)
         return tantivy.Query.boolean_query([(tantivy.Occur.Must, candidates), (tantivy.Occur.Must, exact)])
 
     def verify(self, n: Phrase | Near, f: TextField, candidates: tantivy.Query) -> list[str]:
@@ -381,7 +386,8 @@ def _starts(parts: Parts, tokens: list[str], positions: dict[str, list[int]]) ->
 
 
 def id_set(schema: tantivy.Schema, ids: list[str]) -> tantivy.Query:
-    """The documents with these ids (a term set on `id`)."""
+    """The documents with these ids (a term set on the text `id`: a schema-2 index's form, and a Compiler's
+    default when no engine gives it `id_query`)."""
     return tantivy.Query.term_set_query(schema, "id", ids)
 
 

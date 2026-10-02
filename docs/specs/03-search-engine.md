@@ -58,6 +58,8 @@ never logged. It runs on the synthetic 5k corpus in CI; on the real corpus it ru
 | `abstract` | text, positions | ✓ | ✓ | |
 | `venue`, `track`, `status` | text (raw, facet) | ✓ | ✓ | ✓ |
 | `year` | u64 | ✓ | ✓ | ✓ |
+| `ord` | u64: the record's position in id order (`ids.txt` maps it back) | ✓ from schema 3 | | ✓ |
+| `title_rank` | u64: the record's position in display-title order (`sort=title`) | | | ✓ |
 | `record` | bytes: compact JSON of the display fields (original title and abstract, authors, urls, presentation, keywords, venue_id_raw); stored, never indexed (a JSON field would be) | | ✓ | |
 
 ## AST → Tantivy compilation
@@ -189,6 +191,17 @@ index_version = sha256( snapshot_hash, TOKENIZER_VERSION, SCHEMA_VERSION, rankin
 
 Indexes live at `data/indexes/<index_version>/`, are immutable, and several can be kept. The API serves one
 as "current" and can load a pinned older version to replay a search record.
+
+As built (TASK-167, SCHEMA_VERSION 3): new indexes index `ord`, so a position-verified clause names its ids as
+a u64 term set on `ord`, which Tantivy resolves about 2.6–9.5x faster than the term set on the text `id` that
+schema 2 uses (measured in `docs/results/2026-10-02-exclusions-and-verified-forms.md`). The code serves both
+schemas (`index.SERVED_SCHEMAS`: the current one and the one before it). A schema-2 index keeps the text-`id`
+path, so a record pinned to one still replays `reproduced` on it (guarantee 4). Every query gets the same ids
+and the same float scores on either schema: the differential suite, the Trust-Evals strings, every verified
+clause's form, and records saved by the pre-change code on the real M4 index and replayed by this code. Schema
+2 is retired, and dropped from `SERVED_SCHEMAS`, only once no search record pins a schema-2 index. `op index
+retire` refuses a pinned one, so the order is: rebuild at schema 3, repoint `current`, and retire each schema-2
+version once its pins are gone. Any other schema is refused (`unservable`).
 
 ## Performance budgets (for the M4 corpus, about 80k docs; CI benchmarks the 5k fixture and nightly reports a synthetic 80k, 07 §E)
 

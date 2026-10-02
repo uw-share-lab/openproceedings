@@ -44,6 +44,7 @@ from tests.contract.conftest import SECRET, Store, build, make_app, point_curren
 from tests.corpus import Rec
 from tests.fixtures.corpus.synthetic_5k import records
 from tests.golden.test_tantivy_200 import as_paper
+from tests.golden.test_trust_evals import STRINGS
 
 Logs = Callable[[], list[dict[str, Any]]]
 SPEC_FIELDS = {  # spec 04 §Search records, every row of the table
@@ -680,3 +681,41 @@ def test_a_record_id_never_starts_with_a_csv_formula_character(
     body = client.get("/api/v1/export", params={"record_id": record_id, "format": "csv"}).text
     rows = list(csv.DictReader(io.StringIO(body)))
     assert rows and {row["record_id"] for row in rows} == {record_id}  # round-trips as itself
+
+
+# --- replay across a schema bump (TASK-167): a record pinned to a schema-2 index still reproduces ----------
+def test_a_record_saved_on_a_schema_2_index_reproduces_after_the_schema_3_build(tmp_path: Path) -> None:
+    """Guarantee 4 across TASK-167's SCHEMA_VERSION bump: this code serves the schema-2 index a record pins (its
+    verified ids still filtered by a text-`id` term set) beside a schema-3 build of the same snapshot (a u64
+    term set on `ord`). Records saved on the schema-2 index replay `reproduced` on it after `current` moves
+    to the schema-3 one, and both indexes match the same ids for every query, verified clauses included."""
+    data_dir = tmp_path / "data"
+    corpus = list(records())
+    old = build(corpus, data_dir / "snapshots", "snap", data_dir / "indexes", schema_version="2")
+    new = build(corpus, data_dir / "snapshots", "snap", data_dir / "indexes")
+    assert old != new
+    point_current(data_dir, old)
+    queries = [
+        ("trust AND calibrat*", "native"),
+        ('"large language model$" OR "AI agent$"', "native"),
+        ("agent NEAR/2 trust*", "native"),
+        *((q, "scholar") for q in STRINGS.values() if q.strip()),
+    ]
+    app = make_app(data_dir, record_saves_network_burst=100)  # every query saved twice, in one test
+    with TestClient(app) as client:
+        saved = [save(client, q, mode) for q, mode in queries]
+        point_current(data_dir, new)
+        state: IndexState = app.state.index
+        assert state.load() and state.engine is not None and state.engine.index_version == new
+        assert state.engine.ord_indexed
+        on_new = [save(client, q, mode) for q, mode in queries]
+        for record_id, other in zip(saved, on_new, strict=True):
+            body, again = replayed(client, record_id, ids=True), replayed(client, other, ids=True)
+            assert body["replay"]["status"] == "reproduced", body["replay"]
+            assert body["replay"]["index_version"] == old
+            assert again["replay"]["status"] == "reproduced" and again["replay"]["index_version"] == new
+            # the same membership and exclusion counts on either schema
+            mine, theirs = body["record"], again["record"]
+            assert theirs["schema_version"] == "3" and mine["schema_version"] == "2"
+            assert theirs["ids_hash"] == mine["ids_hash"] and theirs["ids"] == mine["ids"]
+            assert theirs["excluded"] == mine["excluded"] and theirs["expansions"] == mine["expansions"]

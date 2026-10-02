@@ -12,6 +12,7 @@ from __future__ import annotations
 import dataclasses
 import heapq
 import json
+from bisect import bisect_left
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
@@ -22,8 +23,16 @@ from typing import Any
 import tantivy
 
 from openproceedings.diagnostics import DiagnosticCode, clip
-from openproceedings.engine.compile import FIELDS, Compiled, Compiler, Expansions, verified_clauses, wildcards
-from openproceedings.engine.index import IDS, SCHEMA_VERSION, open_index, record_of, verify_index
+from openproceedings.engine.compile import (
+    FIELDS,
+    Compiled,
+    Compiler,
+    Expansions,
+    id_set,
+    verified_clauses,
+    wildcards,
+)
+from openproceedings.engine.index import IDS, SERVED_SCHEMAS, open_index, record_of, verify_index
 from openproceedings.engine.protocol import (
     FACET_FIELDS,
     MAX_EXPANSIONS,
@@ -61,12 +70,18 @@ def unservable(manifest: dict[str, Any]) -> tuple[str, str] | None:
     """Why this code can't serve an index with `manifest` (another schema, tokenizer or Tantivy version, or
     BM25 parameters Tantivy doesn't apply), as `(reason, message)`, or None. Read from the manifest alone,
     without re-hashing, so the API's `/meta` can leave such versions out (task-036 review)."""
+    name = manifest.get("index_version")
+    schema = manifest.get("schema_version")
+    if schema not in SERVED_SCHEMAS:  # the current schema and the one before it (guarantee 4: pinned indexes)
+        served = ", ".join(SERVED_SCHEMAS)
+        return (
+            "schema_version_mismatch",
+            f"index {name} has schema_version {schema}, this code serves {served}: build a new index",
+        )
     stale = {
-        "schema_version": (manifest.get("schema_version"), SCHEMA_VERSION),
         "tokenizer_version": (manifest.get("tokenizer_version"), TOKENIZER_VERSION),
         "tantivy_version": (manifest.get("tantivy_version"), version("tantivy")),  # scoring may differ
     }
-    name = manifest.get("index_version")
     for field, (built, current) in stale.items():
         if built != current:  # queries are normalized and compiled for the current versions
             return (
@@ -177,6 +192,9 @@ class TantivyEngine:
         self.index = open_index(path)
         self.searcher = self.index.searcher()
         self.ids = (path / IDS).read_text(encoding="utf-8").splitlines()
+        # schema 3 indexes `ord`, so a verified clause names its ids as a u64 term set; a schema-2 index (one a
+        # record may pin) keeps the term set on the text `id` it was served with (TASK-167, `id_set`)
+        self.ord_indexed: bool = manifest["schema_version"] != "2"
         self.compiled: dict[str, Compiled] = {}  # per tree (bounded), see compile()
         self.verified: Verified = {}  # position-verified clauses, per engine
         # each wildcard's terms, or just the count of an over-cap one
@@ -458,6 +476,7 @@ class TantivyEngine:
             store=store,
             count=self._count,
             members=self.ids_of,
+            id_query=self.id_set,
         ).compile(ast)
         self.compiled[key] = compiled
         self.charges["compiled"].append(compiled.held + 1)
@@ -519,6 +538,20 @@ class TantivyEngine:
         return "\n".join(lines)
 
     # --- reading the index ---------------------------------------------------------------------------
+    def id_set(self, ids: list[str]) -> tantivy.Query:
+        """The documents with these ids, as a verified clause names them (`Compiler.exact`): a term set on the
+        indexed `ord` (schema 3; each id's position in `ids.txt`, which is in id order), or on the text `id`
+        for a schema-2 index. The same documents either way; Tantivy resolves the u64 set faster (TASK-167)."""
+        if not self.ord_indexed:
+            return id_set(self.index.schema, ids)
+        ords = []
+        for i in ids:
+            at = bisect_left(self.ids, i)
+            if at == len(self.ids) or self.ids[at] != i:
+                raise EngineInternalError(DiagnosticCode.API_INTERNAL, "a verified id is not in the index")
+            ords.append(at)
+        return tantivy.Query.term_set_query(self.index.schema, "ord", ords)
+
     def hits(self, query: tantivy.Query) -> list[tantivy.DocAddress]:
         limit = max(1, self.searcher.num_docs)
         return [address for _score, address in self.searcher.search(query, limit).hits]

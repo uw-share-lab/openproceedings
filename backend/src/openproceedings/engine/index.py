@@ -49,7 +49,13 @@ log = logging.getLogger(__name__)
 
 # The schema table below, the analyzer and how fields are populated (a missing abstract is ""). Any
 # change to them is a new SCHEMA_VERSION (index-versioning skill).
-SCHEMA_VERSION = "2"  # 2: the ord and title_rank fast columns (task-024/025)
+SCHEMA_VERSION = "3"  # 3: `ord` indexed too, so a verified clause's ids are a u64 term set (TASK-167)
+# 2: the ord and title_rank fast columns (task-024/025). The schema versions this code serves: the current one,
+# which new indexes are built at, and the one before it, so an index a search record pins keeps replaying
+# (guarantee 4). A schema-2 index filters verified ids by a term set on the text `id`, as it always did
+# (`TantivyEngine.ord_indexed`). Retire "2" (drop it here) only once no record pins a schema-2 index
+# (`op index retire` refuses a pinned one; index-versioning skill).
+SERVED_SCHEMAS: tuple[str, ...] = ("2", SCHEMA_VERSION)
 ANALYZER = "exact_v1"
 TEXT: tuple[str, ...] = TEXT_FIELDS  # the searched fields (vocab), as the schema's field names
 FACETS = ("venue", "track", "status")
@@ -126,9 +132,13 @@ def analyzer() -> tantivy.TextAnalyzer:
     return tantivy.TextAnalyzerBuilder(tantivy.Tokenizer.whitespace()).build()
 
 
-def schema() -> tantivy.Schema:
-    """Spec 03 §Index schema. `record` is stored bytes (canonical JSON), not a JSON field: tantivy-py
-    indexes a JSON field's text by default, and the record must never be searchable (guarantee 2)."""
+def schema(version: str | None = None) -> tantivy.Schema:
+    """Spec 03 §Index schema at `version` (one of SERVED_SCHEMAS; the schema-2 form only for tests that build
+    an index as it was). `record` is stored bytes (canonical JSON), not a JSON field: tantivy-py indexes a
+    JSON field's text by default, and the record must never be searchable (guarantee 2)."""
+    version = SCHEMA_VERSION if version is None else version
+    if version not in SERVED_SCHEMAS:
+        raise ValueError(f"schema version {version} is not one this code builds")
     b = tantivy.SchemaBuilder()
     b.add_text_field("id", stored=True, tokenizer_name="raw")
     for field in TEXT:
@@ -137,8 +147,9 @@ def schema() -> tantivy.Schema:
         b.add_text_field(field, stored=True, fast=True, tokenizer_name="raw")
     b.add_unsigned_field("year", stored=True, indexed=True, fast=True)
     # the record's position in id order (a fast column), so a match set reads back as ids without
-    # fetching stored documents: ids.txt holds the ids in that order
-    b.add_unsigned_field("ord", stored=False, indexed=False, fast=True)
+    # fetching stored documents: ids.txt holds the ids in that order. Indexed from schema 3, so a verified
+    # clause names its ids as a u64 term set, which Tantivy resolves faster than one on the text `id`
+    b.add_unsigned_field("ord", stored=False, indexed=version != "2", fast=True)
     # the record's position in (title_key(display title), id) order: `sort=title` without fetching documents
     b.add_unsigned_field("title_rank", stored=False, indexed=False, fast=True)
     b.add_bytes_field("record", stored=True, indexed=False)
@@ -371,6 +382,7 @@ def build_index(
     built_at: datetime | None = None,
     workers: int | None = None,
     commit_every: int | None = None,  # tests only: commit every N documents, to build several segments
+    schema_version: str | None = None,  # tests only: build at an older served schema (a pinned index)
 ) -> IndexBuildResult:
     """Build `indexes/<index_version>/` from a snapshot, or verify and report the one that exists. Records
     stream through in chunks, never all loaded at once."""
@@ -380,7 +392,10 @@ def build_index(
         snapshot_hash = snapshot_manifest["snapshot_hash"]
     except (OSError, ValueError, KeyError, TypeError) as e:
         raise IndexBuildError(f"{snapshot.name} is not a snapshot ({type(e).__name__})") from None
-    version_id = index_version(snapshot_hash)
+    schema_version = SCHEMA_VERSION if schema_version is None else schema_version  # read when called
+    if schema_version not in SERVED_SCHEMAS:
+        raise IndexBuildError(f"schema version {schema_version} is not one this code builds")
+    version_id = index_version(snapshot_hash, schema_version=schema_version)
     target = indexes / version_id
     with storage.exclusive(indexes):
         storage.sweep(indexes)
@@ -397,7 +412,7 @@ def build_index(
         index: tantivy.Index | None = None
         writer: Any = None
         try:
-            index = tantivy.Index(schema(), path=str(tmp))
+            index = tantivy.Index(schema(schema_version), path=str(tmp))
             exact = analyzer()
             index.register_tokenizer(ANALYZER, exact)
             writer = index.writer(num_threads=1)  # one thread: documents keep id order, deterministically
@@ -416,7 +431,7 @@ def build_index(
                 "snapshot": snapshot.name,
                 "snapshot_hash": snapshot_hash,
                 "tokenizer_version": TOKENIZER_VERSION,
-                "schema_version": SCHEMA_VERSION,
+                "schema_version": schema_version,
                 "ranking_params": RANKING_PARAMS,
                 "tantivy_version": version("tantivy"),
                 "doc_count": count,

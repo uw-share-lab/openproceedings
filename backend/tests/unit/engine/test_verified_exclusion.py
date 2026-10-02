@@ -2,13 +2,18 @@
 term set beside its candidate query, or the candidates that don't, excluded from it. The candidates are a
 superset of the verified ids, so either form matches exactly the verified ids, and the exclusion adds no score
 where the term set added 0.0: the scores are the same floats. Tantivy re-resolves an id term set on every
-search, so a clause most of whose candidates hold it was the warm search's main cost (`main-2-pop`)."""
+search, so a clause most of whose candidates hold it was the warm search's main cost (`main-2-pop`).
+
+Every case runs on both served schemas (TASK-167): a schema-3 index names the ids as a u64 term set on `ord`
+(`TantivyEngine.id_set`), a schema-2 one as a term set on the text `id`, with the same matches and scores."""
 
 from __future__ import annotations
 
 import pytest
+import tantivy
 from hypothesis import given, settings
 from openproceedings.engine.compile import Compiler
+from openproceedings.engine.index import SERVED_SCHEMAS
 from openproceedings.engine.protocol import EngineInputError
 from openproceedings.engine.reference import ReferenceEngine
 from openproceedings.engine.tantivy_engine import TantivyEngine, _ord
@@ -34,28 +39,28 @@ CORPUS = [
 ]
 
 
-@pytest.fixture(scope="module")
-def small(tmp_path_factory: pytest.TempPathFactory) -> TantivyEngine:
-    return tantivy_of(CORPUS, tmp_path_factory.mktemp("exclusion"))
+@pytest.fixture(scope="module", params=SERVED_SCHEMAS)
+def small(tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest) -> TantivyEngine:
+    engine = tantivy_of(CORPUS, tmp_path_factory.mktemp("exclusion"), request.param)
+    assert engine.ord_indexed == (request.param != "2")
+    return engine
 
 
-@pytest.fixture(scope="module")
-def synthetic(tmp_path_factory: pytest.TempPathFactory) -> TantivyEngine:
-    return tantivy_of(list(records()), tmp_path_factory.mktemp("exclusion-5k"))
+@pytest.fixture(scope="module", params=SERVED_SCHEMAS)
+def synthetic(tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest) -> TantivyEngine:
+    return tantivy_of(list(records()), tmp_path_factory.mktemp("exclusion-5k"), request.param)
 
 
 def id_sets(engine: TantivyEngine, q: str, monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     """The id lists `q`'s compile puts in Tantivy term sets, compiled afresh."""
-    import openproceedings.engine.compile as comp
-
     seen: list[list[str]] = []
-    real = comp.id_set
+    real = engine.id_set
 
-    def spy(schema: object, ids: list[str]) -> object:
+    def spy(ids: list[str]) -> tantivy.Query:
         seen.append(sorted(i.rsplit(":", 1)[1] for i in ids))
-        return real(schema, ids)  # type: ignore[arg-type]
+        return real(ids)
 
-    monkeypatch.setattr(comp, "id_set", spy)
+    monkeypatch.setattr(engine, "id_set", spy)
     engine.verified.clear()
     engine.compiled.clear()
     ast = parse(q).ast
@@ -117,6 +122,7 @@ def collected(engine: TantivyEngine, ast: Node, *, members: bool) -> list[tuple[
         weights=engine.ranking["field_weights"],
         count=engine._count,
         members=engine.ids_of if members else None,
+        id_query=engine.id_set,
     ).compile(ast)
     hits = engine.searcher.search(compiled.query, max(1, engine.searcher.num_docs)).hits
     ords = engine.searcher.fast_field_values("ord", [address for _score, address in hits])
