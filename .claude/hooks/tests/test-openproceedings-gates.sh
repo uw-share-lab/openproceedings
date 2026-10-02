@@ -1087,6 +1087,104 @@ check $A allow "git commit -F - <<EOF (clean heredoc)"   "$(payload_bash "git co
 fix: {a,b} \$X op-reviews
 EOF")"
 
+echo "== TASK-156 rows (quoted substitutions, split trailers, HOME '' for every gate, ARG_MAX, format-patch -o)"
+# the parsed words are scanned too: a trailer split by quoting is whole once bash reads it
+check $A block "-m 'Co-Authored-By: Cl''aude <…anthr''opic.com>'" "$(payload_bash "git commit -m 'Co-Authored-By: Cl''aude <noreply@anthr''opic.com>'")"
+# a command substitution inside double quotes, in backquotes or in an unquoted heredoc body is a command too
+check $R block "x=\"\$(git push origin other2)\""           "$(payload_bash 'x="$(git push origin other2)"')"
+check $P block "echo \`rm -rf data/snapshots\`"             "$(payload_bash 'echo `rm -rf data/snapshots`')"
+check $P block "cat <<EOF with \$(rm -rf data/snapshots) in the body" "$(payload_bash 'cat <<EOF
+$(rm -rf data/snapshots)
+EOF')"
+check $R block "x=\"\$(case y in y) git push origin other2;; esac)\"" "$(payload_bash 'x="$(case y in y) git push origin other2;; esac)"')"
+check $P block "x=\"\$((rm -rf data/snapshots) )\" (a subshell, not arithmetic)" "$(payload_bash 'x="$((rm -rf data/snapshots) )"')"
+check $A block "-m \$'Co-Authored-By: \\x43laude …'"        "$(payload_bash "git commit -m \$'Co-Authored-By: \\x43laude <x@y>'")"
+check $A block "A=Cl; -m \"Co-Authored-By: \${A}aude …\""   "$(payload_bash 'A=Cl; git commit -m "Co-Authored-By: ${A}aude <x@y>"')"
+check $A block "git config alias.ci commit; -m '…Cl''aude…' (unclassifiable)" "$(payload_bash "git config alias.ci commit; git commit -m 'Co-Authored-By: Cl''aude <noreply@anthr''opic.com>'")"
+HOOK_INPUT='{}' check $P block "an inherited HOOK_INPUT is not read: rm -rf data/snapshots" "$(payload_bash 'rm -rf data/snapshots')"
+check $R allow "git commit -m '… \`git push origin other2\`' (single quotes: text)" "$(payload_bash "git commit -m 'docs: \`git push origin other2\`'")"
+check $R block "x=\"\$( (case y in y) :;; esac); git push origin other2 )\"" "$(payload_bash 'x="$( (case y in y) :;; esac); git push origin other2 )"')"
+check $R block "x=\"\$(case a in a) case b in b) :;; esac;; c) :;; esac; git push origin other2)\"" "$(payload_bash 'x="$(case a in a) case b in b) :;; esac;; c) :;; esac; git push origin other2)"')"
+check $R block "x=\"\$(if true; then case a in a) git push origin other2;; esac; fi)\"" "$(payload_bash 'x="$(if true; then case a in a) git push origin other2;; esac; fi)"')"
+check $P block "echo \`case y in y) rm -rf data/snapshots;; esac\`" "$(payload_bash 'echo `case y in y) rm -rf data/snapshots;; esac`')"
+check $P block "cat <<EOF with \$(case y in y) rm -rf data/snapshots;; esac)" "$(payload_bash 'cat <<EOF
+$(case y in y) rm -rf data/snapshots;; esac)
+EOF')"
+# every case shape the security review probed (rounds 1-4): the body ends where bash ends it
+check $P block "case form: 3-level nested case" "$(payload_bash 'x="$(case a in a) case b in b) case c in c) :;; esac;; esac;; d) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: case a in a) esac" "$(payload_bash 'x="$(case a in a) esac; rm -rf data/snapshots)"')"
+check $P block "case form: … c) esac" "$(payload_bash 'x="$(case a in b) :;; c) esac; rm -rf data/snapshots)"')"
+check $P block "case form: (a|b) pattern" "$(payload_bash 'x="$(case a in (a|b) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: case … <newline> in" "$(payload_bash 'x="$(case a
+in a) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: f() case …" "$(payload_bash 'x="$(f() case a in a) :;; esac; f; rm -rf data/snapshots)"')"
+check $P block "case form: while case …" "$(payload_bash 'x="$(while case a in a) false;; esac; do :; done; rm -rf data/snapshots)"')"
+check $P block "case form: { case …; }" "$(payload_bash 'x="$({ case a in a) :;; esac; }; rm -rf data/snapshots)"')"
+check $P block "case form: ( case … ) in a pattern" "$(payload_bash 'x="$(case a in a) ( case b in b) :;; esac );; esac; rm -rf data/snapshots)"')"
+check $P block "case form: heredoc: nested case after a pattern" "$(payload_bash 'cat <<EOF
+$(case a in a) case b in b) :;; esac;; c) :;; esac; rm -rf data/snapshots)
+EOF')"
+check $P block "case form: coproc case …" "$(payload_bash 'x="$(coproc case a in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: function g case …" "$(payload_bash 'x="$(function g case a in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: time -p case …" "$(payload_bash 'x="$(time -p case a in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: case $(…) in …" "$(payload_bash 'x="$(case $(echo a) in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: a comment before in" "$(payload_bash 'x="$(case a # c
+in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: \${x:- a} as the word" "$(payload_bash 'x="$(case ${x:- a} in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: \\-newline before in" "$(payload_bash 'x="$(case a \
+in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: ca\\-newline-se (split keyword)" "$(payload_bash 'x="$(ca\
+se a in a) :;; c) :;; esac; rm -rf data/snapshots)"')"
+# a case is told by its shape, and an `esac` after a pattern's `)` closes it: real cases stay allowed
+check $P allow "x=\"\$(git log --grep case -1)\" (case as an argument)" "$(payload_bash 'x="$(git log --grep case -1)"; echo "$x"')"
+check $P allow "x=\"\$(case a in a) esac)\" (esac after a pattern)" "$(payload_bash 'x="$(case a in a) esac)"; echo ok')"
+check $P allow "x=\"\$(time -p case a in a) echo ok;; esac)\"" "$(payload_bash 'x="$(time -p case a in a) echo ok;; esac)"; echo "$x"')"
+check $A block "git config alias.ci commit; -m \$'…\\x43laude…' (unclassifiable)" "$(payload_bash "git config alias.ci commit; git commit -m \$'Co-Authored-By: \\x43laude <x@y>'")"
+check $R block "coproc git push origin other2"           "$(payload_bash 'coproc git push origin other2')"
+check $P allow "x=\"\$(case \"\$1\" in -h) …;; *) …;; esac)\" (a real case)" "$(payload_bash 'x="$(case "$1" in -h) echo h;; *) echo o;; esac)"; echo "$x"')"
+check $P allow "echo \"\$((1<<n))\" (arithmetic, not a body)"  "$(payload_bash 'echo "$((1<<n))"')"
+check $P allow "git commit -m \"\$(echo use case)\" (case as a word)" "$(payload_bash 'git commit -m "$(echo use case)"')"
+check $R block "bash -c 'x=\"\$(git push origin other2)\"'"  "$(payload_bash "bash -c 'x=\"\$(git push origin other2)\"'")"
+check $R block "eval 'x=\"\$(git push origin other2)\"'"     "$(payload_bash "eval 'x=\"\$(git push origin other2)\"'")"
+check $R block "x=\"\$(echo \"\$(git push origin other2)\")\"" "$(payload_bash 'x="$(echo "$(git push origin other2)")"')"
+check $A block "git config alias.ci commit; -m \"\$(echo '…Cl''aude…')\"" "$(payload_bash "git config alias.ci commit; git commit -m \"\$(echo 'Co-Authored-By: Cl''aude <noreply@anthr''opic.com>')\"")"
+check $P block "x=\"\$(cd /tmp)\"; rm -rf data (a subshell's cd stays in it)" "$(payload_bash 'x="$(cd /tmp)"; rm -rf data')"
+# a body ends where bash ends it: not at a `)` in its heredoc or in its own quotes
+check $P allow "git commit -m \"\$(cat <<'EOF' … a) b … EOF)\"" "$(payload_bash "git commit -m \"\$(cat <<'EOF'
+fix: a) b
+EOF
+)\"")"
+check $P allow "x=\"\$(echo \"a)\")\"; echo ok"             "$(payload_bash 'x="$(echo "a)")"; echo ok')"
+# the HOME '' pass starts afresh: a ref moved after the push in the first pass is no move before it
+check $R allow "git push origin mut && git branch -f op-x mut; echo \$PATH" "$(payload_bash 'git push origin mut && git branch -f op-x mut; echo $PATH')"
+# HOME '' in the agent's shell: `cd ~` stays put, for every gate (not only a push)
+check $P block "cd ~ && rm -rf data"                        "$(payload_bash 'cd ~ && rm -rf data')"
+# HOME is a repo whose HEAD is reviewed; with HOME '' the push runs where it is, on an unreviewed HEAD
+g worktree add -q --detach "$TMP/wt156" other2 && approve
+HOME="$REPO" check $R block "HOME=<reviewed repo>: cd ~ && git push origin HEAD:op-x (from other2)" "$(payload_at "$TMP/wt156" 'cd ~ && git push origin HEAD:op-x')"
+# with HOME '' a `cd ~/<path>` to nothing is a failed cd: the shell stays (not an unknown directory)
+HOME="$TMP" check $P allow "HOME=\$TMP: cd ~/<repo> && ls > op-out.txt" "$(payload_bash 'cd ~/"R&D repo" && ls > op-out.txt')"
+printf 'x\n\n%s\n' "$TRAILER" > "$REPO/op-msg.txt"
+check $A block "cd ~ && git commit -F op-msg.txt (a trailer)" "$(payload_bash 'cd ~ && git commit -F op-msg.txt')"
+rm -f "$REPO/op-msg.txt"
+# a payload past ARG_MAX reaches Python on stdin, and any exit but 0 or 2 (no python3 here) blocks
+BIG=$(python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","cwd":sys.argv[1],"tool_input":{"command":"echo ok # " + "x" * 1100000}}))' "$REPO")
+NOPY="$TMP/nopy"; mkdir -p "$NOPY"
+for tool in bash dirname; do ln -s "$(command -v "$tool")" "$NOPY/$tool"; done
+check_nopy() { local saved="$PATH"; PATH="$NOPY"; check "$@"; PATH="$saved"; }
+for h in $A $R $P; do
+  check "$h" allow "1.1 MB command (echo ok # …)"          "$BIG"
+  check_nopy "$h" block "no python3: echo ok"                "$(payload_bash 'echo ok')"
+done
+# git format-patch writes its patches into -o/--output-directory, format.outputDirectory or where it runs
+check $P block "git format-patch -o data/snapshots -1"      "$(payload_bash 'git format-patch -o data/snapshots -1')"
+check $P block "git format-patch --output-dir=data/indexes/abc -1" "$(payload_bash 'git format-patch --output-dir=data/indexes/abc -1')"
+check $P block "git -c format.outputDirectory=data/snapshots format-patch -1" "$(payload_bash 'git -c format.outputDirectory=data/snapshots format-patch -1')"
+check $P block "git -C data/snapshots format-patch -1"      "$(payload_bash 'git -C data/snapshots format-patch -1')"
+check $P block "GIT_CONFIG_* … git format-patch -1 (unreadable config)" "$(payload_bash 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=format.outputDirectory GIT_CONFIG_VALUE_0=data/snapshots git format-patch -1')"
+check $P block "git config format.outputDirectory …; git format-patch -1" "$(payload_bash 'git config format.outputDirectory data/snapshots; git format-patch -1')"
+check $P allow "git format-patch -o /tmp/op-patches -1"    "$(payload_bash 'git format-patch -o /tmp/op-patches -1')"
+
 echo "== remind-token-contract.sh (non-blocking; must emit context on contract files only)"
 out=$(payload_file Edit "$REPO/backend/src/openproceedings/query/normalize.py" | "$HOOKS/remind-token-contract.sh")
 case "$out" in *TOKENIZER_VERSION*) pass=$((pass+1)); echo "  ok   reminder on normalize.py";; *) fail=$((fail+1)); echo "  FAIL no reminder on normalize.py";; esac

@@ -92,7 +92,7 @@
  {
   "label": "bash -c not recursed",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "                    for inner in _walk(tokenize(argv[k + 1]), state):",
+  "old": "                    for inner in _walk(tokenize(argv[k + 1], state[\"subs\"]), state):",
   "new": "                    for inner in []:"
  },
  {
@@ -212,20 +212,14 @@
  {
   "label": "stdin redirect not read",
   "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        if \"<\" in op and target:",
-  "new": "        if False:"
+  "old": "            texts += [file_text(target, d) for op, target in redirects if \"<\" in op and target]",
+  "new": "            texts += [file_text(target, d) for op, target in redirects if False]"
  },
  {
   "label": "cat pipe not read",
   "file": ".claude/hooks/block-ai-attribution.sh",
   "old": "        if argv and argv[0] == \"cat\":",
   "new": "        if False:"
- },
- {
-  "label": "parse error not blocked",
-  "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "    if PATTERN.search(cmd):  # unbalanced",
-  "new": "    if False:  # unbalanced"
  },
  {
   "label": "dd branch removed",
@@ -398,8 +392,8 @@
  {
   "label": "quote state reset per line (round-3 regression)",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    for line in cmd.split(\"\\n\"):\n        if pending:",
-  "new": "    for line in cmd.split(\"\\n\"):\n        quote = None\n        if pending:"
+  "old": "    for li, line in enumerate(lines):\n        if li < resume_line:",
+  "new": "    for li, line in enumerate(lines):\n        quote = None\n        if li < resume_line:"
  },
  {
   "label": "comment cut on any # (not word start)",
@@ -561,8 +555,8 @@
  {
   "label": "backslash-newline joined before heredoc handling",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    text = preprocess(cmd)",
-  "new": "    text = preprocess(cmd.replace(\"\\\\\\n\", \" \"))"
+  "old": "    text = preprocess(cmd, marks)",
+  "new": "    text = preprocess(cmd.replace(\"\\\\\\n\", \" \"), marks)"
  },
  {
   "label": "<<- tab rule applied to plain <<",
@@ -1217,24 +1211,6 @@
   "file": ".claude/hooks/require-review.sh",
   "old": "|op-?rev|review\", cmd.replace(",
   "new": "\", cmd.replace("
- },
- {
-  "label": "attribution: $(cat file) words not read",
-  "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "        for m in (m for word in argv for m in SUBST_READ.finditer(word)):",
-  "new": "        for m in ():"
- },
- {
-  "label": "attribution: $(< file) form dropped",
-  "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "|<\\s*([^()]*?))",
-  "new": ")"
- },
- {
-  "label": "attribution: backquoted cat dropped",
-  "file": ".claude/hooks/block-ai-attribution.sh",
-  "old": "|`\\s*cat\\s+([^`]*?)\\s*`\")",
-  "new": "\")"
  },
  {
   "label": "backlog: path not normalised",
@@ -2501,8 +2477,8 @@
  {
   "label": "cmdparse: branch.<b>.merge not a key that steers git",
   "file": ".claude/hooks/lib/cmdparse.py",
-  "old": "    r\"|branch\\..+\\.(merge|remote|pushremote)\",",
-  "new": "    r\"\","
+  "old": "    r\"|branch\\..+\\.(merge|remote|pushremote)|format\\.outputdirectory\",",
+  "new": "    r\"|format\\.outputdirectory\","
  },
  {
   "label": "cmdparse: git_anchored ignores an absolute -C",
@@ -2531,7 +2507,7 @@
  {
   "label": "protect-data-dir: the '' reading of HOME/TMPDIR/USER not checked",
   "file": ".claude/hooks/protect-data-dir.sh",
-  "old": "    if \"$\" in cmd:\n        check(walked_or_refuse(True))",
+  "old": "    if \"$\" in cmd or \"~\" in cmd:  # `cd ~` with HOME '' stays put (TASK-156)\n        check(walked_or_refuse(True))",
   "new": "    if False:\n        check(walked_or_refuse(True))"
  },
  {
@@ -2603,8 +2579,8 @@
  {
   "label": "enforce: words not resolved",
   "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "                r = resolved(call, cd_)\n",
-  "new": "                r = call\n"
+  "old": "            v = git_verdict(resolved(call, cd_, env_empty), cd_, state)\n",
+  "new": "            v = git_verdict(call, cd_, state)\n"
  },
  {
   "label": "enforce: checkout -p read as a switch",
@@ -2740,10 +2716,11 @@
   "new": "    if not any("
  },
  {
-  "label": "protect-data-dir: a crash exits 1",
+  "label": "protect-data-dir: a crash exits 1 (equivalent since TASK-156: the wrapper turns any exit but 0 into 2, its own mutant is killed by the no-python3 rows, and the crash rows still assert 2)",
   "file": ".claude/hooks/protect-data-dir.sh",
   "old": "    main()\nexcept Exception as exc:",
-  "new": "    main()\nexcept ZeroDivisionError as exc:"
+  "new": "    main()\nexcept ZeroDivisionError as exc:",
+  "equivalent": true
  },
  {
   "label": "require-review: message values exempt for every command",
@@ -2776,16 +2753,18 @@
   "new": "        return False"
  },
  {
-  "label": "require-review: a crash exits 1",
+  "label": "require-review: a crash exits 1 (equivalent since TASK-156: the wrapper turns any exit but 0 into 2, its own mutant is killed by the no-python3 rows, and the crash rows still assert 2)",
   "file": ".claude/hooks/require-review.sh",
   "old": "    main()\nexcept Exception as exc:",
-  "new": "    main()\nexcept ZeroDivisionError as exc:"
+  "new": "    main()\nexcept ZeroDivisionError as exc:",
+  "equivalent": true
  },
  {
-  "label": "block-ai-attribution: a crash exits 1",
+  "label": "block-ai-attribution: a crash exits 1 (equivalent since TASK-156: the wrapper turns any exit but 0 into 2, its own mutant is killed by the no-python3 rows, and the crash rows still assert 2)",
   "file": ".claude/hooks/block-ai-attribution.sh",
   "old": "    main()\nexcept Exception as exc:",
-  "new": "    main()\nexcept ZeroDivisionError as exc:"
+  "new": "    main()\nexcept ZeroDivisionError as exc:",
+  "equivalent": true
  },
  {
   "label": "enforce-backlog-cli: an internal error allowed",
@@ -2798,12 +2777,6 @@
   "file": ".claude/hooks/enforce-pr-workflow.sh",
   "old": "    words = [r for w in argv[1:] if (r := one(w)) != \"\" or w == \"\"]",
   "new": "    words = [one(w) for w in argv[1:]]"
- },
- {
-  "label": "enforce: HOME/TMPDIR/USER never read as ''",
-  "file": ".claude/hooks/enforce-pr-workflow.sh",
-  "old": "                if v == \"allow\" and alt != r and (git_subcommand(alt, cd_) or (\"\",))[0] == \"push\":",
-  "new": "                if False:"
  },
  {
   "label": "enforce: a parse failure with a git write allowed",
@@ -3032,6 +3005,265 @@
   "file": ".claude/scripts/check_digest_pins.py",
   "old": "        elif re.match(r\"^RUN\\s\", inst, re.IGNORECASE):",
   "new": "        elif False:"
+ },
+ {
+  "label": "cmdparse: a $(…) in double quotes not read (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                (quote == '\"' and line.startswith(\"$(\", i)) or (quote in (None, '\"') and c == \"`\")",
+  "new": "                False or (quote in (None, '\"') and c == \"`\")"
+ },
+ {
+  "label": "cmdparse: backquotes not read (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                (quote == '\"' and line.startswith(\"$(\", i)) or (quote in (None, '\"') and c == \"`\")",
+  "new": "                (quote == '\"' and line.startswith(\"$(\", i)) or False"
+ },
+ {
+  "label": "cmdparse: backquotes read inside single quotes (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(quote in (None, '\"') and c == \"`\")",
+  "new": "(c == \"`\")"
+ },
+ {
+  "label": "cmdparse: substitution bodies not walked (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    yield from _subshell(body, state)",
+  "new": "                    pass"
+ },
+ {
+  "label": "cmdparse: substitutions in an unquoted heredoc body not read (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                    subs[entry][0].extend(_heredoc_substitutions(\"\\n\".join(body)))",
+  "new": "                    pass"
+ },
+ {
+  "label": "cmdparse: a substitution's cd and variables leak out of its subshell (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        for key in SUBSHELL_STATE:\n            state.pop(key, None)\n        state.update(saved)\n\n\ndef _walk",
+  "new": "        pass\n\n\ndef _walk"
+ },
+ {
+  "label": "cmdparse: a substitution body ends at a ) in its heredoc (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        if c == \"\\n\" and heredocs:",
+  "new": "        if False:"
+ },
+ {
+  "label": "cmdparse: a substitution body ends at a ) in its own quotes (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif c == '\"':\n            k = _double_quoted_end(text, k + 1)\n",
+  "new": ""
+ },
+ {
+  "label": "block-ai: parsed words not scanned (TASK-156)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        texts += [\" \".join(expand_known(w, argv, d) for w in argv) for argv, d in commands]",
+  "new": "        pass"
+ },
+ {
+  "label": "block-ai: HOME '' pass skipped (TASK-156)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if \"~\" in cmd or \"$\" in cmd:\n            # and with HOME",
+  "new": "        if False:\n            # and with HOME"
+ },
+ {
+  "label": "require-review: HOME '' pass skipped (TASK-156)",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "passes = [walked, list(walk(cmd, cwd, env_empty=True))] if \"~\" in cmd or \"$\" in cmd else [walked]",
+  "new": "passes = [walked]"
+ },
+ {
+  "label": "require-review: a ref moved in one pass counts in the next (TASK-156)",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "            moved = None\n            continue",
+  "new": "            continue"
+ },
+ {
+  "label": "protect-data-dir: ~ alone doesn't start the '' pass (TASK-156)",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "    if \"$\" in cmd or \"~\" in cmd:",
+  "new": "    if \"$\" in cmd:"
+ },
+ {
+  "label": "protect-data-dir: format-patch --output-directory not read (TASK-156)",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "if len(name) >= len(\"--output-d\") and \"--output-directory\".startswith(name):",
+  "new": "if False:"
+ },
+ {
+  "label": "protect-data-dir: format-patch -o not read (TASK-156)",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "elif a_.startswith(\"-\") and not a_.startswith(\"--\") and \"o\" in a_[1:]:",
+  "new": "elif False:"
+ },
+ {
+  "label": "protect-data-dir: format-patch -c format.outputDirectory not read (TASK-156)",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "out_dirs = [git_config(argv).get(\"format.outputdirectory\")",
+  "new": "out_dirs = [None"
+ },
+ {
+  "label": "protect-data-dir: format-patch's own directory not read (TASK-156)",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "or git(gm[2], \"config\", \"--get\", \"format.outputDirectory\") or \".\"]",
+  "new": "or git(gm[2], \"config\", \"--get\", \"format.outputDirectory\") or \"/tmp\"]"
+ },
+ {
+  "label": "enforce: HOME/TMPDIR/USER never read as ''",
+  "file": ".claude/hooks/enforce-pr-workflow.sh",
+  "old": "        for env_empty in (False, True) if \"~\" in cmd or \"$\" in cmd else (False,):",
+  "new": "        for env_empty in (False,):"
+ },
+ {
+  "label": "block-ai: payload in an environment variable, past ARG_MAX (TASK-156)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "python3 -c \"$PROG\" \"$HOOK_DIR\"",
+  "new": "HOOK_INPUT=\"$(cat)\" python3 -c \"$PROG\" \"$HOOK_DIR\""
+ },
+ {
+  "label": "block-ai: a check that didn't run exits as it did (TASK-156)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "[ \"$rc\" -eq 0 ] || exit 2",
+  "new": "exit \"$rc\""
+ },
+ {
+  "label": "require-review: payload in an environment variable, past ARG_MAX (TASK-156)",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "python3 -c \"$PROG\" \"$HOOK_DIR\"",
+  "new": "HOOK_INPUT=\"$(cat)\" python3 -c \"$PROG\" \"$HOOK_DIR\""
+ },
+ {
+  "label": "require-review: a check that didn't run exits as it did (TASK-156)",
+  "file": ".claude/hooks/require-review.sh",
+  "old": "[ \"$rc\" -eq 0 ] || exit 2",
+  "new": "exit \"$rc\""
+ },
+ {
+  "label": "protect-data-dir: payload in an environment variable, past ARG_MAX (TASK-156)",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "python3 -c \"$PROG\" \"$HOOK_DIR\"",
+  "new": "HOOK_INPUT=\"$(cat)\" python3 -c \"$PROG\" \"$HOOK_DIR\""
+ },
+ {
+  "label": "protect-data-dir: a check that didn't run exits as it did (TASK-156)",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "[ \"$rc\" -eq 0 ] || exit 2",
+  "new": "exit \"$rc\""
+ },
+ {
+  "label": "cmdparse: a case pattern's ) ends a substitution body (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        elif c == \")\" and cases and cases[-1] == depth:",
+  "new": "        elif False:"
+ },
+ {
+  "label": "cmdparse: a quoted $(( read as arithmetic only (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "                (quote == '\"' and line.startswith(\"$(\", i)) or (quote in (None, '\"') and c == \"`\")",
+  "new": "                (quote == '\"' and line.startswith(\"$(\", i) and not line.startswith(\"$((\", i)) or (quote in (None, '\"') and c == \"`\")"
+ },
+ {
+  "label": "cmdparse: an inherited HOOK_INPUT read in place of stdin (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "        data = json.load(sys.stdin)",
+  "new": "        data = json.loads(os.environ[\"HOOK_INPUT\"]) if \"HOOK_INPUT\" in os.environ else json.load(sys.stdin)"
+ },
+ {
+  "label": "cmdparse: a git config write of format.outputDirectory not refused (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "|format\\.outputdirectory\"",
+  "new": "\""
+ },
+ {
+  "label": "block-ai: an unclassifiable git command's words not scanned (TASK-156)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "            if PATTERN.search(\" \".join(tokenize(cmd))):",
+  "new": "            if False:"
+ },
+ {
+  "label": "protect-data-dir: format-patch under unreadable config not refused (TASK-156)",
+  "file": ".claude/hooks/protect-data-dir.sh",
+  "old": "                if not out_dirs and git_config_opaque(argv) and has_data:",
+  "new": "                if False:"
+ },
+ {
+  "label": "cmdparse: a cd ~/<missing> read with HOME '' leaves the directory unknown (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            and HOME_WORD.match(words[0])\n",
+  "new": "            and False\n"
+ },
+ {
+  "label": "cmdparse: any word case counted as a case statement (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(_case_shape(text, m.end()) if m.group(1) else _command_position(text, start, k))",
+  "new": "True"
+ },
+ {
+  "label": "cmdparse: bash -c substitutions not walked (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "tokenize(argv[k + 1], state[\"subs\"])",
+  "new": "tokenize(argv[k + 1])"
+ },
+ {
+  "label": "cmdparse: eval substitutions not walked (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "tokenize(\" \".join(rest), state[\"subs\"])",
+  "new": "tokenize(\" \".join(rest))"
+ },
+ {
+  "label": "cmdparse: nested substitutions not walked (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "tokenize(body, state[\"subs\"])",
+  "new": "tokenize(body)"
+ },
+ {
+  "label": "block-ai: an unparseable command's text not scanned without quotes (TASK-156)",
+  "file": ".claude/hooks/block-ai-attribution.sh",
+  "old": "        if PATTERN.search(re.sub(r\"[\\\"'\\\\]\", \"\", cmd)):",
+  "new": "        if False:"
+ },
+ {
+  "label": "cmdparse: a case pattern's ) inside a subshell ends the body (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "elif c == \")\" and cases and cases[-1] == depth:",
+  "new": "elif c == \")\" and cases and depth == 0:"
+ },
+ {
+  "label": "cmdparse: quoted arithmetic walked as a substitution body (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "if c == \"$\" and _is_arithmetic(written[2:-1]):",
+  "new": "if False:"
+ },
+ {
+  "label": "cmdparse: a case right after a pattern's ) not counted (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    if not before or before[-1] in \";&|()\\n\":",
+  "new": "    if not before or before[-1] in \";&|(\\n\":"
+ },
+ {
+  "label": "cmdparse: a case counted by its position, not its shape (equivalent since TASK-156: with coproc, function NAME and time -p as leaders, position finds every case statement shape does, and _case_cut_short, whose own mutant is killed, refuses any case either misses; 12 legitimate case forms give the same verdict either way)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "(_case_shape(text, m.end()) if m.group(1) else _command_position(text, start, k))",
+  "new": "_command_position(text, start, k)",
+  "equivalent": true
+ },
+ {
+  "label": "cmdparse: coproc not a reserved word (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    \"coproc\",  # `coproc git push …` runs the push (TASK-156)\n",
+  "new": ""
+ },
+ {
+  "label": "cmdparse: a case cut short at a pattern's ) not refused (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "            if cases or _case_cut_short(text[start:k], text[k + 1 :]):",
+  "new": "            if cases:"
+ },
+ {
+  "label": "cmdparse: a \\-newline inside case hides it from the cut-short check (TASK-156)",
+  "file": ".claude/hooks/lib/cmdparse.py",
+  "old": "    body, rest = body.replace(\"\\\\\\n\", \"\"), rest.replace(\"\\\\\\n\", \"\")",
+  "new": "    pass"
  },
  {
   "label": "early failures: the variable's name drifts",

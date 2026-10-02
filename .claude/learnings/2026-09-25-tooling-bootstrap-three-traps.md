@@ -1,6 +1,6 @@
 # A heredoc in a hook eats the payload, free private repos can't be protected, and /code-review is taken
 
-**Key lesson:** In a hook, capture stdin with `input=$(cat)` before any `python3 - <<'PY'`, because the heredoc *is* Python's stdin. Check that GitHub can protect a branch before you design gates around it. Give project commands names that no built-in uses.
+**Key lesson:** In a hook, a `python3 - <<'PY'` heredoc *is* Python's stdin: pass the program as `python3 -c "$PROG"` and the payload on stdin (not in an environment variable, which fails past ARG_MAX: 2026-10-02 addendum), and turn every exit but 0 into 2. Check that GitHub can protect a branch before you design gates around it. Give project commands names that no built-in uses.
 
 - **Date:** 2026-09-25 · **Task:** n/a (M0 tooling bootstrap, branch `chore/claude-tooling`) · **Area:** tooling
 - **Artifacts:** `.claude/hooks/lib/cmdparse.py` (`read_payload`), `.claude/hooks/*.sh`,
@@ -14,7 +14,8 @@ Backlog.md, and branch protection on `dev` and `main`.
 - **A `python3 - <<'PY'` heredoc replaces the hook's stdin.** The first draft of `block-ai-attribution.sh`
   called `json.load(sys.stdin)` inside the heredoc script, so it would have read its own source, never the
   tool payload, and allowed everything. Kreate's `enforce-pr-workflow.sh` avoids this with
-  `input=$(cat)` + `HOOK_INPUT="$input"`. `cmdparse.read_payload()` now reads `$HOOK_INPUT` first.
+  `input=$(cat)` + `HOOK_INPUT="$input"`. `cmdparse.read_payload()` then read `$HOOK_INPUT` first (superseded for the Python gates: see the
+  2026-10-02 addendum).
   (Evidence: caught while reviewing the code, before the first run. All 39 cases in
   `test-openproceedings-gates.sh` now pass.)
 - **GitHub free-plan orgs cannot protect branches on private repos.**
@@ -49,3 +50,12 @@ Backlog.md, and branch protection on `dev` and `main`.
 - Hook pattern → `.claude/hooks/lib/cmdparse.py` docstring, plus the "must-block" cases in
   `.claude/hooks/tests/test-openproceedings-gates.sh`.
 - Command name → `.claude/skills/review-gates/SKILL.md`, `docs/specs/08-ops-and-tooling.md` §Commands.
+
+## Addendum — 2026-10-02 (TASK-156)
+`HOOK_INPUT="$input" python3 - <<'PY'` fails open on a command past ARG_MAX (about 1 MB with the environment):
+exec returns E2BIG, bash exits 126, and Claude Code lets any exit but 2 through (reproduced: the 1.1 MB rows in
+`test-openproceedings-gates.sh` gave `crash(rc=126)` on origin/dev). block-ai-attribution, require-review and
+protect-data-dir now read the program into `PROG` with `IFS= read -r -d '' PROG <<'PY'`, run `python3 -c "$PROG"`
+with the payload on the hook's own stdin (`cmdparse.payload()`: stdin only; an inherited HOOK_INPUT is ignored), and exit 2 on any status but 0 (no python3 is
+127). enforce-pr-workflow still uses `HOOK_INPUT`; its text fallback refuses a git write word when the verdict is
+empty.
