@@ -165,7 +165,10 @@ Counting rules (so the PRISMA number is never double-counted):
   `|identified|` is the first default's facet total, and `total` is the search's own count, passed in, so
   the query runs no third time (no default applied: 0, with no evaluation). Buckets that don't sum to
   `|identified| − total` are an `EngineInternalError` (`API_INTERNAL`, a 5xx), never a silent report. Tested against a brute-force count on the 200-record fixture,
-  for both engines, including an `identification_query` of `""` and an all-negative one.
+  for both engines, including an `identification_query` of `""` and an all-negative one. A search that
+  shows facets reads both buckets from the facet combos it already collected; one that doesn't (`op search`,
+  a record's save or replay) aggregates only track and status (`TantivyEngine.facets(over=…)`; TASK-166), so
+  it reads a few dozen combos rather than hundreds. The counts are the same (`test_facets_equal.py`).
 
 ## Error handling
 

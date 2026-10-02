@@ -59,7 +59,7 @@ cost 0.1–0.3 s on 80k. `facets` collects the query once, without its top-level
 fast columns can't be read per document in tantivy-py), then counts every field in Python: a combo counts for
 F when it passes every set-aside filter not on F (task-086; equal to one collection per kept set and to the
 oracle, `test_facets_equal.py`). The combos are memoised per base (`faceted`, keyed by its span-less, sorted
-conjuncts), so exclusion accounting, later pages and queries differing only in filters never collect again.
+conjuncts), so exclusion accounting, later pages and queries differing only in filters never collect again. A caller that counts only some fields can narrow the aggregation to them (`facets(over=…)`: only their top-level filters are set aside, the others stay in the collected query); `search.run` without facets counts exclusions over track and status alone (TASK-166).
 The memos (`compiled`, `verified`, `expanded`, `faceted`) are bounded by what they hold, not
 by entry count (one verified clause can hold every id): `TantivyEngine.MAX_VERIFIED_IDS`, `MAX_EXPANDED_TERMS`,
 `MAX_COMPILED_UNITS` and `MAX_FACET_COMBOS` budget the ids/terms charged to each, and a memo is cleared once its append-only ledger

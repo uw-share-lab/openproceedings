@@ -19,6 +19,7 @@ from __future__ import annotations
 import time
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +28,7 @@ from openproceedings import search
 from openproceedings.api.search import page_attributions
 from openproceedings.diagnostics import DiagnosticCode
 from openproceedings.engine.compile import FIELDS
-from openproceedings.engine.exclusions import excluded
+from openproceedings.engine.exclusions import ORDER, excluded
 from openproceedings.engine.highlight import Highlighter
 from openproceedings.engine.protocol import MAX_EXPANSIONS, EngineInputError
 from openproceedings.engine.tantivy_engine import TantivyEngine
@@ -200,7 +201,9 @@ def test_match_ids_with_exclusions_on_a_broad_query(benchmark: Any, engine: Tant
     result = parse(BROAD)  # exclusions need the default filters, so the effective tree
     ast = result.effective_ast
     assert ast is not None
-    measure(benchmark, lambda: excluded(engine, result, len(engine.match_ids(ast))))
+    # what a search without facets runs (`search.run`): only the default fields aggregated (TASK-166)
+    count = partial(engine.facets, over=ORDER)
+    measure(benchmark, lambda: excluded(engine, result, len(engine.match_ids(ast)), facets=count))
     time_ = p95(benchmark)
     assert time_ is None or time_ < 0.300, f"p95 {time_ * 1000:.1f} ms"
 

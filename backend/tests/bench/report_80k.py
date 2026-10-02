@@ -28,6 +28,7 @@ import sys
 import tempfile
 import time
 from datetime import UTC, datetime
+from functools import partial
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -112,7 +113,7 @@ def _remove(root: Path) -> None:
 
 def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
     from openproceedings.engine.compile import FIELDS
-    from openproceedings.engine.exclusions import excluded
+    from openproceedings.engine.exclusions import ORDER, excluded
     from openproceedings.engine.protocol import EngineInputError
     from openproceedings.engine.tantivy_engine import TantivyEngine
     from openproceedings.query.ast import Wildcard
@@ -163,7 +164,10 @@ def _report(corpus: tuple[Any, ...], generated: float, root: Path) -> None:
             engine.verified.clear()
             engine.compiled.clear()  # the compiled query holds verified results too
             engine.expanded.clear()
-            excluded(engine, result, len(engine.match_ids(ast)))  # type: ignore[arg-type]
+            engine.faceted.clear()
+            # as a search without facets counts them (`search.run`): the default fields only (TASK-166)
+            count = partial(engine.facets, over=ORDER)
+            excluded(engine, result, len(engine.match_ids(ast)), facets=count)  # type: ignore[arg-type]
 
         engine.verified.clear()
         engine.compiled.clear()  # the compiled query holds verified results too
