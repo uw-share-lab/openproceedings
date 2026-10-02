@@ -3,10 +3,10 @@ id: TASK-156
 title: >-
   Guard hooks: harden cmdparse against remaining shell-semantics bypasses
   (TASK-067 review)
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-01 19:36'
-updated_date: '2026-10-01 22:16'
+updated_date: '2026-10-02 04:46'
 labels:
   - security
   - tooling
@@ -25,12 +25,12 @@ Source: TASK-067 review gate (final security-reviewer and qa-auditor pass, 2026-
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 block-ai-attribution also scans the parsed argv words, so a trailer split by shell quoting (`-m 'Co-Authored-By: Cl''aude <noreply@anthr''opic.com>'`) is refused
-- [ ] #2 A git push, commit-maker or data/ write inside a quoted command substitution (`x="$(git push origin HEAD:dev)"`) or backquotes is read and checked like a top-level command, or refused
-- [ ] #3 A bare `~` (and `~/…`) is also checked with HOME empty for every gate, not only pushes (`cd ~ && rm -rf data` with an empty HOME)
+- [x] #1 block-ai-attribution also scans the parsed argv words, so a trailer split by shell quoting (`-m 'Co-Authored-By: Cl''aude <noreply@anthr''opic.com>'`) is refused
+- [x] #2 A git push, commit-maker or data/ write inside a quoted command substitution (`x="$(git push origin HEAD:dev)"`) or backquotes is read and checked like a top-level command, or refused
+- [x] #3 A bare `~` (and `~/…`) is also checked with HOME empty for every gate, not only pushes (`cd ~ && rm -rf data` with an empty HOME)
 - [ ] #4 Each case has block rows and a mutant in gates.json; make tooling and mutate.py --changed pass
-- [ ] #5 A command over ARG_MAX (about 1 MB) can't make a Bash-tool hook fail open: protect-data-dir, require-review and block-ai-attribution pass the payload to Python on stdin or through a temp file (today the env var makes exec fail with exit 126), or exit 2 whenever that step doesn't exit 0
-- [ ] #6 protect-data-dir treats `git format-patch -o/--output-directory <dir>` as a write into <dir> (`git format-patch -o data/snapshots HEAD~1` is allowed today)
+- [x] #5 A command over ARG_MAX (about 1 MB) can't make a Bash-tool hook fail open: protect-data-dir, require-review and block-ai-attribution pass the payload to Python on stdin or through a temp file (today the env var makes exec fail with exit 126), or exit 2 whenever that step doesn't exit 0
+- [x] #6 protect-data-dir treats `git format-patch -o/--output-directory <dir>` as a write into <dir> (`git format-patch -o data/snapshots HEAD~1` is allowed today)
 <!-- AC:END -->
 
 ## Implementation Notes
