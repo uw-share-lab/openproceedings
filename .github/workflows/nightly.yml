@@ -148,8 +148,8 @@ jobs:
           retention-days: 30
   # make mutate, time-boxed: the full run (548 mutants) needs ~6.5 h on a 4-CPU runner, past GitHub's 6 h job
   # cap (63 in 45 min in 36972065571), until mutate.py can be sharded across jobs (deferred, TASK-057). A
-  # surviving or stale mutant still fails the job at once; a run cut off at 140 min with none is a pass with a
-  # "partial run" warning naming how many mutants it checked. Reviews run `make mutate-changed` in full.
+  # surviving or stale mutant still fails the job; a run cut off at 140 min with none is a pass with a
+  # "partial run" warning giving about how many mutants it checked. Reviews run `make mutate-changed` in full.
   mutate:
     runs-on: ubuntu-latest
     timeout-minutes: 150
@@ -175,7 +175,8 @@ jobs:
             fi
             checked=$(grep -cE '^  (ok  |FAIL) ' "$log" || true)
             total=$(python3 -c 'import glob, json; print(sum(len(json.load(open(f))) for f in glob.glob(".claude/scripts/mutants/*.json")))')
-            echo "::warning::partial run: $checked of $total mutants checked in 140 min, every one killed or documented"
+            # "about": a table interrupted by the time limit can report the mutant it was testing as killed
+            echo "::warning::partial run: about $checked of $total mutants checked in 140 min, every one killed or documented"
             exit 0
           fi
           exit "$status"
