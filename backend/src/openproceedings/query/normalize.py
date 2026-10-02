@@ -144,7 +144,8 @@ def _fold(c: str, base: str | None) -> tuple[list[str | _Op], str | None]:
 # Hebrew, digits), Cyrillic (keeps the breve), Arabic (keeps hamza) and any other script (keeps every mark).
 # `_fold` reads its `base` only through `_folds_marks`, and returns it when no piece replaces it (so None and
 # "a" are both here: they fold alike but differ when passed through). A character whose `_fold` is the same
-# after each of these is the same after any base (TASK-088).
+# after each of these is the same after any base (TASK-088). (None and Thai alone would catch any mark that
+# reads the base, as one folds every mark and the other none; Cyrillic and Arabic stay for plain reading.)
 _BASES = (None, "a", "\u0438", "\u0628", "\u0e01")
 # `_fold` of a raw character whose fold doesn't depend on the base; None for one whose fold does
 _FOLDED: dict[str, tuple[list[str | _Op], str | None] | None] = {}
@@ -157,10 +158,11 @@ def _fold_char(c: str, base: str | None) -> tuple[list[str | _Op], str | None]:
     if c in _FOLDED:
         known = _FOLDED[c]
         return _fold(c, base) if known is None else known
+    if len(_FOLDED) >= _FOLDED_MAX:  # full: learning what can't be kept would cost five folds, not one
+        return _fold(c, base)
     folds = [_fold(c, b) for b in _BASES]
     same = all(f == folds[0] for f in folds)
-    if len(_FOLDED) < _FOLDED_MAX:
-        _FOLDED[c] = folds[0] if same else None
+    _FOLDED[c] = folds[0] if same else None
     return folds[0] if same else _fold(c, base)
 
 

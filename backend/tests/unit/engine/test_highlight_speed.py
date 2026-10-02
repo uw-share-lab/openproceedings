@@ -92,27 +92,28 @@ LATIN = st.lists(
 @example("\\\"{O}del \\'etude \\-x $^2x$")  # markup that opens a word: its span starts there (task-074)
 def test_tokenize_gives_exactly_the_old_tokens(text: str) -> None:
     assert full(tokenize(text)) == full(tokenize_before(text))
-    assert same_as_before_088(text)
+    now, before = against_088(text)
+    assert now == before
 
 
-def same_as_before_088(text: str) -> bool:
-    """The loop and `tokenize_with_tail` give the loop's tokens and `Tail` from before TASK-088."""
+Tokenized = tuple[list[tuple[str, int, int, bool]], list[Tail]]
+
+
+def against_088(text: str) -> tuple[tuple[Tokenized, Tokenized], tuple[Tokenized, Tokenized]]:
+    """What the loop and `tokenize_with_tail` give now (tokens and `Tail`), and what the loop gave before
+    TASK-088 (twice, to line up)."""
     old: list[Tail] = []
-    expected = full(each_char_before_088(text, old))
+    before = (full(each_char_before_088(text, old)), old)
     new: list[Tail] = []
+    looped = full(normalize._tokenize_each_char(text, new))
     tokens, tail = tokenize_with_tail(text)
-    return (full(normalize._tokenize_each_char(text, new)), new, full(tokens), [tail]) == (
-        expected,
-        old,
-        expected,
-        old,
-    )
+    return ((looped, new), (full(tokens), [tail])), (before, before)
 
 
 def test_tokenize_gives_exactly_the_old_tokens_on_every_fixture_text() -> None:
     texts = [t for r in [*RECORDS, *SYNTHETIC] for t in (r.title, r.abstract or "")]
     assert [full(tokenize(t)) for t in texts] == [full(tokenize_before(t)) for t in texts]
-    assert [t for t in texts if not same_as_before_088(t)] == []
+    assert [t for t in texts if (pair := against_088(t))[0] != pair[1]] == []
 
 
 @pytest.mark.parametrize("unit", ["a\\-", "x$", "ab\u0301 ", "\\'e "])
@@ -140,9 +141,20 @@ def test_a_character_is_folded_once_however_often_it_occurs(monkeypatch: pytest.
     monkeypatch.setattr(normalize, "_fold", lambda c, b: calls.append(c) or fold(c, b))
     monkeypatch.setattr(normalize, "_FOLDED", {})
     assert normalize.normalize("caf\u00e9 " * 200) == ["cafe"] * 200
-    assert len(calls) <= len(
-        normalize._BASES
-    )  # once per class of base, to learn the fold doesn't depend on it
+    # once per class of base, to learn the fold doesn't depend on it
+    assert len(calls) <= len(normalize._BASES)
+
+
+def test_a_full_table_costs_one_fold_per_character(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    fold = normalize._fold
+    monkeypatch.setattr(normalize, "_fold", lambda c, b: calls.append(c) or fold(c, b))
+    monkeypatch.setattr(
+        normalize, "_FOLDED", dict.fromkeys(map(chr, range(0x4E00, 0x4E00 + normalize._FOLDED_MAX)))
+    )
+    assert normalize.normalize("caf\u00e9") == ["cafe"]
+    assert calls == ["\u00e9"]  # no table to learn for, so no fold after each class of base
+    assert "\u00e9" not in normalize._FOLDED
 
 
 @given(st.characters(), st.one_of(st.none(), st.characters()))
@@ -152,8 +164,12 @@ def test_a_character_is_folded_once_however_often_it_occurs(monkeypatch: pytest.
 @example("\u200b", "a")  # an invisible joiner: no pieces, the base passes through
 @example("\u0345", "\u03b1")  # folds to a letter whatever the base
 def test_a_cached_fold_is_the_fold_after_any_base(c: str, base: str | None) -> None:
-    assert normalize._fold_char(c, base) == normalize._fold(c, base)
-    assert normalize._fold_char(c, base) == normalize._fold(c, base)  # from the cache, when it caches
+    with (
+        pytest.MonkeyPatch.context() as patch
+    ):  # a table of its own: the shared one stays as other tests left it
+        patch.setattr(normalize, "_FOLDED", {})
+        assert normalize._fold_char(c, base) == normalize._fold(c, base)
+        assert normalize._fold_char(c, base) == normalize._fold(c, base)  # from the table, when it holds c
 
 
 def test_only_plain_ascii_takes_the_whole_text_path(monkeypatch: pytest.MonkeyPatch) -> None:
