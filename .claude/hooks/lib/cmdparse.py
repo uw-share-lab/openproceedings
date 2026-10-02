@@ -1309,7 +1309,9 @@ def _change_dir(head: str, words: list[str], state: dict, assigns: dict[str, str
     `pushd data; rm -rf snapshots` was read from the old directory). Review gate round 3: `cd -P` resolves
     symlinks; a target that doesn't exist leaves the directory unknown (the `cd` fails and the shell stays,
     or `&&` stops: this parser can't tell which), and so is the directory before it unless it was already the
-    current one; with CDPATH set a relative target is unknown; `cd -` to an unknown directory is unknown.
+    current one, except in the HOME '' reading, where a missing `~/…` target (a path at the root) is a failed cd
+    and the shell stays (TASK-156); with CDPATH set a relative target is unknown; `cd -` to an unknown directory
+    is unknown.
     `assigns`, the command's own `VAR=val` prefix (`HOME=data cd`), counts first: the shell reads it."""
     opts = [w for w in words if len(w) > 1 and w[0] == "-" and w[1] in "LPen@"]  # cd -P, pushd -n
     words = [w for w in words if w not in opts]
@@ -1360,7 +1362,8 @@ def _change_dir(head: str, words: list[str], state: dict, assigns: dict[str, str
             and "HOME" not in variables
             and "HOME" in os.environ
             and HOME_WORD.match(words[0])
-            and not os.path.isdir(_resolve(target, cur))
+            and os.path.isabs(target)
+            and not os.path.isdir(target)
         ):
             # read with HOME '', `~/x` is `/x`, at the root, which this command can't have made: the cd fails and
             # the shell stays where it was (TASK-156 review: `cd ~/<repo> && git commit` was refused)

@@ -1105,6 +1105,26 @@ HOOK_INPUT='{}' check $P block "an inherited HOOK_INPUT is not read: rm -rf data
 check $R allow "git commit -m '… \`git push origin other2\`' (single quotes: text)" "$(payload_bash "git commit -m 'docs: \`git push origin other2\`'")"
 check $R block "x=\"\$( (case y in y) :;; esac); git push origin other2 )\"" "$(payload_bash 'x="$( (case y in y) :;; esac); git push origin other2 )"')"
 check $R block "x=\"\$(case a in a) case b in b) :;; esac;; c) :;; esac; git push origin other2)\"" "$(payload_bash 'x="$(case a in a) case b in b) :;; esac;; c) :;; esac; git push origin other2)"')"
+check $R block "x=\"\$(if true; then case a in a) git push origin other2;; esac; fi)\"" "$(payload_bash 'x="$(if true; then case a in a) git push origin other2;; esac; fi)"')"
+check $P block "echo \`case y in y) rm -rf data/snapshots;; esac\`" "$(payload_bash 'echo `case y in y) rm -rf data/snapshots;; esac`')"
+check $P block "cat <<EOF with \$(case y in y) rm -rf data/snapshots;; esac)" "$(payload_bash 'cat <<EOF
+$(case y in y) rm -rf data/snapshots;; esac)
+EOF')"
+# every case shape the security review probed (rounds 1-4): the body ends where bash ends it
+check $P block "case form: 3-level nested case" "$(payload_bash 'x="$(case a in a) case b in b) case c in c) :;; esac;; esac;; d) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: case a in a) esac" "$(payload_bash 'x="$(case a in a) esac; rm -rf data/snapshots)"')"
+check $P block "case form: … c) esac" "$(payload_bash 'x="$(case a in b) :;; c) esac; rm -rf data/snapshots)"')"
+check $P block "case form: (a|b) pattern" "$(payload_bash 'x="$(case a in (a|b) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: case … <newline> in" "$(payload_bash 'x="$(case a
+in a) :;; esac; rm -rf data/snapshots)"')"
+check $P block "case form: f() case …" "$(payload_bash 'x="$(f() case a in a) :;; esac; f; rm -rf data/snapshots)"')"
+check $P block "case form: while case …" "$(payload_bash 'x="$(while case a in a) false;; esac; do :; done; rm -rf data/snapshots)"')"
+check $P block "case form: { case …; }" "$(payload_bash 'x="$({ case a in a) :;; esac; }; rm -rf data/snapshots)"')"
+check $P block "case form: ( case … ) in a pattern" "$(payload_bash 'x="$(case a in a) ( case b in b) :;; esac );; esac; rm -rf data/snapshots)"')"
+check $P block "case form: heredoc: nested case after a pattern" "$(payload_bash 'cat <<EOF
+$(case a in a) case b in b) :;; esac;; c) :;; esac; rm -rf data/snapshots)
+EOF')"
+check $P allow "x=\"\$(case \"\$1\" in -h) …;; *) …;; esac)\" (a real case)" "$(payload_bash 'x="$(case "$1" in -h) echo h;; *) echo o;; esac)"; echo "$x"')"
 check $P allow "echo \"\$((1<<n))\" (arithmetic, not a body)"  "$(payload_bash 'echo "$((1<<n))"')"
 check $P allow "git commit -m \"\$(echo use case)\" (case as a word)" "$(payload_bash 'git commit -m "$(echo use case)"')"
 check $R block "bash -c 'x=\"\$(git push origin other2)\"'"  "$(payload_bash "bash -c 'x=\"\$(git push origin other2)\"'")"

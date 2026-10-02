@@ -54,6 +54,11 @@ a trailer split by quoting, `~` with HOME '' outside a push, a payload past ARG_
   exist is a failed cd (the shell stays), not an unknown directory: a path at the root is one the command can't
   have made. Review round 2 caught the first version, which refused `cd ~/<worktree> && git commit` everywhere;
   if a real case needs it, track `mkdir` before treating a missing target as a failed cd.
+- The empty-`PROG` guard in the three Python gates has no row or mutant: there is no cheap way to make the
+  heredoc fail inside a case table.
+- A blanket "any `case` in a substitution is a parse error" rule was tried and dropped (lead decision): it refused
+  the everyday `x="$(case "$1" in …)"`, and the depth-aware count plus the parse error on an unbalanced
+  `case`/`esac` already fails closed.
 - Without python3 the three Python gates refuse every Bash call (exit 127 → 2), unlike enforce-pr-workflow's
   text fallback: the repo needs python3 (uv) anyway.
 
